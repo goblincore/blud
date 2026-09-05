@@ -38,9 +38,16 @@ async function writeIncompleteVerdict() {
   let intactEvidence=null;
   try { intactEvidence=JSON.parse(readFileSync(resolve('docs/dev-notes/2026-09-05-zombie-analytic-normals/intact.json'),'utf8')); }
   catch(error) { if(error.code!=='ENOENT') throw error; }
+  let woundEvidence=null;
+  try { woundEvidence=JSON.parse(readFileSync(resolve('docs/dev-notes/2026-09-05-zombie-analytic-normals/wounds.json'),'utf8')); }
+  catch(error) { if(error.code!=='ENOENT') throw error; }
   const hasGameplay=intactEvidence?.gpuExecuted===true;
+  const hasWoundGameplay=woundEvidence?.gpuExecuted===true&&woundEvidence?.sceneComparisons?.length>0;
+  const woundSceneReason=hasWoundGameplay
+    ? `${woundEvidence.sceneComparisons.length} retained wound scene comparisons include actual impact/stagger/sever evidence, but ${woundEvidence.reason}`
+    : 'No wound gameplay evidence is available.';
   const gameplayReason=hasGameplay
-    ? `${intactEvidence.sceneComparisons} real gameplay scene comparisons exist. First run failed: ${intactEvidence.firstRunFailure}. Corrected validation: ${intactEvidence.correctedValidation}. ${intactEvidence.beautyValid ? "Corrected beauty is valid technical evidence; owner review remains pending." : "Original beauty/motion are not acceptance evidence."} No paired timing records exist.`
+    ? `${intactEvidence.sceneComparisons} real gameplay intact scene comparisons exist. First run failed: ${intactEvidence.firstRunFailure}. Corrected validation: ${intactEvidence.correctedValidation}. ${intactEvidence.beautyValid ? "Corrected intact beauty is valid technical evidence." : "Original beauty/motion are not acceptance evidence."} ${woundSceneReason} Full owner review and paired timing remain pending.`
     : 'Zero real gameplay GPU samples, coverage captures, motion frames, or paired timing records are available.';
   const reason = `${blockers.join('; ')}. ${gameplayReason}`;
   const gatePatch = {
@@ -56,7 +63,34 @@ async function writeIncompleteVerdict() {
     artifact: relative(repoRoot, summaryPath),
     reason,
   });
-  const skippedReason = before.intact==='pass' ? 'Task4 wound-surface and impact/sever validation has not run; Task3 mixed lower-body support does not validate wounded head or torso acceleration.' : 'Dependent gameplay evidence was skipped because intact validation is deferred and wounds did not run.';
+  const skippedReason = before.intact==='pass'
+    ? hasWoundGameplay
+      ? `Task4 produced retained partial wound evidence, including exact depth/fallback comparisons, but its gate is ${before.wounds}; final chunk proof and updated capture harness validation remain unresolved.`
+      : 'Task4 wound-surface and impact/sever validation has not run; Task3 mixed lower-body support does not validate wounded head or torso acceleration.'
+    : 'Dependent gameplay evidence was skipped because intact validation is deferred and wounds did not run.';
+  const woundSceneStatus=hasWoundGameplay?'partial-evidence-validation-deferred':'skipped-by-gate';
+  const woundMotionSources=Object.values(woundEvidence?.motion??{}).flat().map(item=>item.source).filter(Boolean);
+  const intactOwnerReview=intactEvidence?.ownerLookScope?.intact??'not-recorded';
+  const woundScenes=(woundEvidence?.sceneComparisons??[]).map(({
+    name,pieceKey,total,reasons,analyticFraction,depthMax,depthChanged,fallbackMax,
+    scalarMax,nonFinite,angularDegrees,woundROI,maxAngleReview,sameMode,
+  })=>({
+    name,pieceKey,total,reasons,analyticFraction,depthMax,depthChanged,fallbackMax,
+    scalarMax,nonFinite,angularDegrees,woundROI,maxAngleReview,sameMode,
+  }));
+  const localizedProofs=(woundEvidence?.localizedReviews??[]).map(({
+    scene,pixel,state,cpuGradientError,gpuCentralErrors,tetraOwners,noiseDecompositionError,
+  })=>({scene,pixel,state,cpuGradientError,gpuCentralErrors,tetraOwners,noiseDecompositionError}));
+  const countValue=value=>Array.isArray(value)?value.length:value??null;
+  const eventEvidence=Object.fromEntries(Object.entries(woundEvidence?.events??{}).map(([group,events])=>[
+    group,
+    events.map(event=>({
+      name:event.name,
+      source:event.source,
+      before:{wounds:countValue(event.before?.wounds),pieces:countValue(event.before?.pieces),pieceKeys:Array.isArray(event.before?.pieces)?event.before.pieces:[]},
+      after:{wounds:countValue(event.after?.wounds),pieces:countValue(event.after?.pieces),pieceKeys:Array.isArray(event.after?.pieces)?event.after.pieces:[]},
+    })),
+  ]));
   const summary = {
     commit,
     gates: {
@@ -70,10 +104,10 @@ async function writeIncompleteVerdict() {
     },
     scenes: [
       { name: 'intact-head-and-torso', status: before.intact==='pass'?'pass':hasGameplay?'partial':'missing', reason: hasGameplay?`Real GPU compile, raw depth/normal and anatomical coverage results exist. ${intactEvidence.correctedValidation}. Beauty valid: ${intactEvidence.beautyValid===true}.`:'No real gameplay WebGPU compile, numeric, coverage, image, or motion sample ran.' },
-      { name: 'wounded-head-and-torso', status: 'skipped-by-gate', reason: skippedReason },
+      { name: 'wounded-head-and-torso', status: woundSceneStatus, reason: skippedReason },
       { name: 'two-body-close-up-with-surrounding-actors', status: 'skipped-by-gate', reason: skippedReason },
       { name: 'walking-and-flashlight-motion', status: intactEvidence?.motionValid?'technical-visual-evidence':hasGameplay?'non-acceptance-evidence':'skipped-by-gate', reason: hasGameplay?`${intactEvidence.motionFrames??0} frames; matched intact motion valid: ${intactEvidence.motionValid===true}. Historical rejected captures remain recorded separately.`:skippedReason },
-      { name: 'impact-stagger-sever-sequence', status: 'skipped-by-gate', reason: skippedReason },
+      { name: 'impact-stagger-sever-sequence', status: woundSceneStatus, reason: hasWoundGameplay?`${skippedReason} Motion scope: ${woundMotionSources.join('; ')}.`:skippedReason },
       { name: 'unsupported-control', status: hasGameplay?'numeric-evidence':'skipped-by-gate', reason: hasGameplay?'First GPU bare-bones control used full legacy fallback with exact raw normal/depth equality.':skippedReason },
     ],
     timings: {
@@ -82,17 +116,43 @@ async function writeIncompleteVerdict() {
       reason: 'No eligible paired runs were attempted; no frame-time or compile-time claim is available.',
     },
     coverage: {
-      status: hasGameplay?'partial':'unavailable',
+      status: hasWoundGameplay?'incomplete-wounds-deferred':hasGameplay?'partial':'unavailable',
+      scope: {
+        intactValidation: before.intact==='pass'?'complete':hasGameplay?'partial':'unavailable',
+        fullWoundGameplayValidation: before.wounds==='pass'?'complete':before.wounds==='deferred'?'deferred':'not-run',
+      },
       measurements: hasGameplay?intactEvidence.numericResults:null,
-      reason: hasGameplay?`Historical raw numerical/anatomical coverage is preserved. ${intactEvidence.correctedValidation}.`:'No real gameplay eligibility readback ran, so analytic and fallback pixel shares are unknown.',
+      wounds: hasWoundGameplay?woundScenes:null,
+      reason: hasGameplay?`Historical raw numerical/anatomical coverage is preserved. ${intactEvidence.correctedValidation}. Wound ROI and piece coverage are retained separately; coverage percentages do not establish performance or acceptance.`:'No real gameplay eligibility readback ran, so analytic and fallback pixel shares are unknown.',
+    },
+    woundEvidence: hasWoundGameplay?{
+      status: woundEvidence.status,
+      oracleCases: woundEvidence.woundNumerics?.length??0,
+      firstReadControl: woundEvidence.firstReadControl??null,
+      localizedReviews: localizedProofs,
+      events: eventEvidence,
+      motion: woundEvidence.motion??{},
+      unresolved: woundEvidence.remaining??[],
+      reason: woundEvidence.reason,
+    }:null,
+    appearance: {
+      intactOwnerReview,
+      woundTechnicalReview: hasWoundGameplay?'partial-historical-artifacts-only':'unavailable',
+      fullOwnerLook: gates.ownerLook,
+      visualEvidenceGate: gates.visualEvidence,
+      woundMotionScope: woundMotionSources.length>0?woundMotionSources.join('; '):'No wound motion evidence recorded.',
+      reason: hasWoundGameplay?'Specific retained wound captures have controller review. Final settling, chunk proof and initial impact capture changes have not run on GPU, so full visual acceptance is unavailable.':'No wound visual evidence recorded.',
     },
     artifacts: {
       kernel: 'docs/dev-notes/2026-09-05-zombie-analytic-normals/kernel.json',
       intact: 'docs/dev-notes/2026-09-05-zombie-analytic-normals/intact.json',
+      wounds: hasWoundGameplay?'docs/dev-notes/2026-09-05-zombie-analytic-normals/wounds.json':null,
       summary: relative(repoRoot, summaryPath),
       images: hasGameplay?(intactEvidence.diagnosticImages??[]):[],
+      woundImages: woundEvidence?.trackedBeautyImages??[],
       reel: intactEvidence?.motionValid ? intactEvidence.motionArtifactDirectory : null,
       runs: intactEvidence?.runs ?? [],
+      woundRuns: woundEvidence?.historicalRuns??[],
     },
     conclusion: 'incomplete',
   };

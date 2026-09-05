@@ -104,3 +104,15 @@ Investigation established that the torso wound's centerY1.020 and reach0.8796 ex
 The final guarded owned5251/9251 launch passed load1=6.46875, ran seven named cases with no failures or shader-console errors, and cleaned up both ports. Head/torso anatomicalcoverage83.58%/86.61%; all depths and fallback normals exactly equal. Controller inspected fresh mixed beauty and eligibility plus corrected head/torso and motion0/6/11 with no obvious regression. A transient missingbody claim was retracted after samehash freshviews confirmed both actor and weapon; no capture wait or shader fix was needed.
 
 Task3 `intact` now passes; ownerLook remains pending and Task4/performance remain unstarted. Offline verdict preserves all20scene comparisons across three runs and remains incomplete for those later gates. Twelve focused Node tests and syntax checks pass after observedRED/GREEN coverage/report regressions. No TypeScript changed; prior tsc remained valid. See latest `verdict.md`, `intact.json`, and the Task3 report for commands and limitations.
+
+## Task 5 wound checkpoint — incomplete verdict
+
+Task 4 now has retained partial real-GPU evidence rather than being unstarted. The offline verdict consumes `wounds.json` alongside the intact history and distinguishes `intactValidation: complete` from `fullWoundGameplayValidation: deferred`. It keeps `wounds: deferred`, `visualEvidence: skipped-by-gate`, `timing: skipped-by-gate`, and full `ownerLook: pending`. The owner-approved intact look is recorded as a narrower completed scope.
+
+The tracked wound evidence preserves 11 production GPU oracle cases, 13 scene comparisons, exact completed depth/fallback comparisons, actual affected wall/rim coverage, exposed curved-internal fallback, seven real `fireSlug` event records, one demonstrated sever to `chunk:1`, localized body/torso derivative-owner-noise proofs, and the unresolved detached-chunk p99 5.8465-degree proof. It also corrects the moving-shoulder result to a reproduced first-read legacy-to-legacy settling confound: 3,666 depth pixels changed with max 0.084325075 before the settled legacy-to-hybrid comparison became exact.
+
+Motion evidence is limited to 24 subsequent stagger frames and 12 sever-flight frames. The original two initial flight/impact ticks were not fully paired, and earlier background-shadow differences limit the moving-light visual statement to actor appearance. Four representative wound beauty PNGs remain tracked; historical review applies only to those exact artifacts.
+
+Ten historical wound JSON reports are archived byte-identically as deterministic gzip files under `wound-raw/`. Their original `/tmp` paths and SHA256 values remain in `wounds.json`, which also records each durable archive path. No large raw RGBA32F or PNG history was added.
+
+The final Task 4 harness changes remain unvalidated on GPU because the last preflights were 26.50 and 55.74, above the required 12. No server/browser was launched and no more GPU attempts were made. Coverage percentages remain correctness/fallback evidence only; there is no performance or full acceptance claim.

@@ -3,6 +3,10 @@
   "phase": "intact",
   "status": "pass",
   "passed": true,
+  "ownerLookScope": {
+    "intact": "pass",
+    "fullCandidate": "pending"
+  },
   "gpuExecuted": true,
   "sceneComparisons": 20,
   "hitPixelComparisons": 621632,

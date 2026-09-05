@@ -36,7 +36,7 @@ test('verdict writes an offline incomplete summary and exits nonzero when prereq
   assert.doesNotMatch(result.stderr, /fetch failed|ECONNREFUSED/);
 
   const summary = JSON.parse(readFileSync(join(outDir, 'summary.json'), 'utf8'));
-  assert.deepEqual(Object.keys(summary), ['commit', 'gates', 'scenes', 'timings', 'coverage', 'artifacts', 'conclusion']);
+  assert.deepEqual(Object.keys(summary), ['commit', 'gates', 'scenes', 'timings', 'coverage', 'woundEvidence', 'appearance', 'artifacts', 'conclusion']);
   assert.equal(summary.commit, execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim());
   assert.equal(summary.conclusion, 'incomplete');
   assert.equal(summary.gates.reference, 'pass');
@@ -100,4 +100,52 @@ test('offline verdict preserves historical failure and corrected valid images wi
   assert.equal(summary.gates.ownerLook,'pending');
   assert.equal(summary.scenes.find(s=>s.name==='intact-head-and-torso').status,'pass');
   assert.doesNotMatch(JSON.stringify(summary),/intact validation is deferred/);
+});
+
+test('offline verdict reports partial wound evidence without claiming full acceptance or timing', () => {
+  const fixture=mkdtempSync(join(tmpdir(),'zombie-ng-wound-verdict-'));
+  const evidenceDir=join(fixture,'docs/dev-notes/2026-09-05-zombie-analytic-normals'),outDir=join(fixture,'out');
+  mkdirSync(evidenceDir,{recursive:true});
+  writeFileSync(join(evidenceDir,'gates.json'),JSON.stringify({version:1,reference:'pass',gpuKernel:'pass',intact:'pass',wounds:'deferred',visualEvidence:'skipped-by-gate',timing:'skipped-by-gate',ownerLook:'pending',evidence:[]}));
+  writeFileSync(join(evidenceDir,'intact.json'),JSON.stringify({gpuExecuted:true,sceneComparisons:20,numericResults:[{name:'head',depthChanged:0}],beautyValid:true,motionValid:true,motionFrames:24,ownerLookScope:{intact:'pass',fullCandidate:'pending'},runs:[{artifact:'intact-failed.json',passed:false}]}));
+  writeFileSync(join(evidenceDir,'wounds.json'),JSON.stringify({
+    status:'deferred',gpuExecuted:true,timing:'not measured; Task5 gated',
+    reason:'Detached chunk proof and final harness validation remain pending.',
+    woundNumerics:Array.from({length:11},(_,index)=>({name:`case-${index}`})),
+    sceneComparisons:[
+      {name:'torso-after-impact',pieceKey:'body:1',depthChanged:0,fallbackMax:0,angularDegrees:{p99:2.6408748541301628,max:40.37185923534368},woundROI:{wall:{hits:2627,analytic:2074},rim:{hits:11993,analytic:11015}},maxAngleReview:'localized proof reviewed'},
+      {name:'detached-chunk-1',pieceKey:'chunk:1',depthChanged:0,fallbackMax:0,total:1283,reasons:{ok:1183},angularDegrees:{p99:5.846497950334507,max:8.913515243743647}},
+    ],
+    firstReadControl:{legacyToLegacy:{changedFloats:14670,depthChanged:3666,depthMax:.08432507514953613},settledLegacyToHybrid:{depthChanged:0,fallbackMax:0,p99:1.6930036341187737,max:7.610726023748462}},
+    events:{'elbow-controlled':[{name:'elbow-slug-sever',source:'actual fireSlug projectile/impact/impulse',before:{wounds:0,pieces:['body:1']},after:{wounds:[{},{}],pieces:['body:1','chunk:1']}}]},
+    motion:{'final-events':[{name:'impact-stagger-moving-light',frames:24,source:'every subsequent simulation frame captured in both modes'}]},
+    remaining:['Run detached-piece worst-point proof.','Validate final bounded settling and initial impact hooks on real WebGPU.'],
+    historicalRuns:[{path:'/tmp/failed/wounds.json',sha256:'abc',archive:'docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-raw/failed.json.gz',note:'failed history'}],
+  }));
+  const result=spawnSync(process.execPath,[driver,'--phase','verdict','--out',outDir,'--vite','1','--cdp','1'],{cwd:fixture,encoding:'utf8'});
+  assert.equal(result.status,1);
+  assert.doesNotMatch(result.stderr,/fetch failed|ECONNREFUSED/i);
+  const summary=JSON.parse(readFileSync(join(outDir,'summary.json'),'utf8'));
+  assert.equal(summary.conclusion,'incomplete');
+  assert.equal(summary.gates.intact,'pass');
+  assert.equal(summary.gates.wounds,'deferred');
+  assert.equal(summary.gates.visualEvidence,'skipped-by-gate');
+  assert.equal(summary.gates.timing,'skipped-by-gate');
+  assert.equal(summary.gates.ownerLook,'pending');
+  assert.equal(summary.coverage.status,'incomplete-wounds-deferred');
+  assert.equal(summary.coverage.scope.intactValidation,'complete');
+  assert.equal(summary.coverage.scope.fullWoundGameplayValidation,'deferred');
+  assert.equal(summary.coverage.wounds[0].woundROI.wall.analytic,2074);
+  assert.equal(summary.coverage.wounds[1].pieceKey,'chunk:1');
+  assert.equal(summary.scenes.find(scene=>scene.name==='wounded-head-and-torso').status,'partial-evidence-validation-deferred');
+  assert.equal(summary.scenes.find(scene=>scene.name==='impact-stagger-sever-sequence').status,'partial-evidence-validation-deferred');
+  assert.equal(summary.timings.measurements,null);
+  assert.equal(summary.artifacts.wounds,'docs/dev-notes/2026-09-05-zombie-analytic-normals/wounds.json');
+  assert.equal(summary.woundEvidence.oracleCases,11);
+  assert.equal(summary.woundEvidence.unresolved[0],'Run detached-piece worst-point proof.');
+  assert.equal(summary.woundEvidence.firstReadControl.legacyToLegacy.depthChanged,3666);
+  assert.equal(summary.appearance.intactOwnerReview,'pass');
+  assert.equal(summary.appearance.fullOwnerLook,'pending');
+  assert.match(summary.appearance.woundMotionScope,/subsequent simulation frame/i);
+  assert.doesNotMatch(JSON.stringify(summary),/speedup|performance pass|full acceptance/i);
 });

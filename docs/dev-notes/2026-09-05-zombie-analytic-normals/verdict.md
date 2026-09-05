@@ -1,33 +1,35 @@
-# Zombie analytic normals — Task3 passes; overall verdict incomplete
+# Zombie analytic normals — incomplete after partial wound validation
 
-Updated 2026-09-05 after the resumed guarded GPU validation. `reference`, `gpuKernel` and `intact` pass. Owner look remains pending. Task4 wound-surface work and performance have not run; the experiment remains default off.
+Updated 2026-09-05 from the retained Task 4 evidence. The overall verdict is **incomplete**. `reference`, `gpuKernel`, and `intact` pass; `wounds` is deferred; `visualEvidence` and `timing` are skipped by that gate; full `ownerLook` remains pending. The feature stays default off. No performance or acceptance conclusion can be derived from analytic-pixel percentages.
 
-Three real gameplay runs are preserved independently: `intact-first-run.json` (six comparisons, failed mixed coverage, contaminated beauty), `intact-corrected-1738.json` (seven comparisons, valid corrected beauty/motion, failed torso control and wider mixed coverage), and `intact-head-wound.json` (seven comparisons, all numerical criteria passed). `intact.json` links all three and contains the latest numerical results. Twenty scene comparisons are repeated measurements across runs, not twenty distinct actors or a performance sample.
+The intact scope is complete and its appearance was approved by the owner. That approval does not extend to the full wounded candidate. Task 4 produced substantial real-GPU wound evidence, but the final bounded-settling, detached-piece point-probe, and initial-impact capture changes have not run on GPU. The last permitted preflights were load1 26.50 and 55.74, above the required 12, so no server or browser was started and GPU retries stopped.
 
-| Latest scene | Analytic coverage | Numerical result |
-| --- | ---: | --- |
-| Whole body | 8,337/9,376 = 88.92% | Exact depth/fallback |
-| Anatomical torso | 10,840/12,516 = 86.61% | Exact depth/fallback |
-| Anatomical head | 7,270/8,698 = 83.58% | Exact depth/fallback |
-| Animated/scaled body | 34,322/37,440 = 91.67% | Exact depth/fallback |
-| Bare-bones control | 0%; 37,440 unsupported | Exact complete legacy result |
-| Torso-slug control | 23/16,477 = 0.14% | 16,452 wound-pending, 2 owner-unstable; exact fallback |
-| Fresh head-wound whole body | 1,702/9,469 = 17.97% | 7,645 wound-pending, 122 owner-unstable; exact fallback |
+## Retained wound evidence
 
-All seven scenes have depthChanged=0, depthMax=0, fallbackMax=0 and nonFinite=0. Maximum eligible scalar error is 1.0361e-8; legacy finite-stencil comparison p99 stays below1.50°, maximum6.59° in the animated case. These angle tolerances compare against the finite stencil and do not independently prove exact differentiation. Shader console is clean.
+The production wound oracle contains 11 real RGBA32F cases and matches independent CPU scalar/finite-difference checks. Thirteen retained scene comparisons cover actual `fireSlug` impacts, stagger, overlap, head wounds, a real sever, the remaining body, and detached `chunk:1`. Completed comparisons preserve exact depth and fallback parity.
 
-The torso slug's actual centerY1.020 and production reach0.8796m exclude almost the whole body. Moving the camera back did not create useful eligibility; the second failed run preserves that result. The torso control now requires actual wound-pending pixels and exact fallback parity, not mathematically unjustified100% fallback. Its acceleration is negligible and cost is unknown.
+- Torso impact affected-wall coverage is 2,074 analytic / 2,627 hits; affected rim coverage is 11,015 / 11,993. Its p99 is 2.6409 degrees and max is 40.3719 degrees. Independent GPU central differences, CPU geometric gradients, stable owner 5, and the geometric-plus-noise decomposition localize the max. The controller reviewed that specific artifact and accepted the benign technical appearance exception; the raw max and failed history remain recorded.
+- The real elbow shot changed the actor from 10 to 11 pieces and created two wounds, an impact wound and stump wound. The surviving `body:1` has exact depth/fallback, p99 1.7301 degrees, and max 44.3470 degrees. Five localized points have CPU gradient error at most 5.2e-5, GPU central error at most 8.9e-4 at the useful epsilon, stable owner 10, and matching noise decomposition. The controller accepted the specific retained body artifact exception.
+- Detached `chunk:1` has 1,183 analytic pixels / 1,283 hits, exact depth/fallback, p99 5.8465 degrees, and max 8.9135 degrees. Its p99 remains an explicit unresolved proof and review item. It is not waived by the body review or by any threshold change.
+- Exposed curved internals fall back conservatively: stagger has 101 pixels, all unsupported; overlap has 429 pixels, 374 unsupported and 55 hard-boundary; head impact has 61 pixels, all unsupported. None is counted as analytic.
 
-The separate mixed fixture starts a fresh page, reapplies shipped settings and verifies zero preexisting wounds. A single shipped0.16m slug anchors at world(-4.7335875,1.5806372,-4.6493816), primitive2, limb`head`. Production reach remains0.8796m. Including the stencil margin, geometry belowY0.698439 lies beyond its vertical reach; six leg primitive endpoint rows extend below it. Raw eligibility confirms analytic lower-body skin. **The wounded scene's anatomical head and torso are both0% analytic.** This demonstrates local supported/unsupported coexistence, not wounded head/torso acceleration. The mixed>=10% and>=100analytic-pixel criteria remain unchanged.
+Seven retained event records use the real `fireSlug` path. Only the elbow-controlled event is a demonstrated sever: wounds 0 to 2 and pieces 10 to 11. Other event records preserve their actual impact, overlap, repeat, or non-sever outcomes rather than inferring severing from a shot name.
 
-Corrected beauty preserves shipped smear0.25, flushes20 identical zero-dt frames, fences through raw target readback and compares paired debug/material/camera/actor/light states. The twelve motion pairs advance simulation once per pair, before any wound, and freeze for both modes. Controller inspected head/torso, motion0/6/11, torso-wound pairs and fresh-head-wound beauty/eligibility with no obvious regression. The brief disappearance concern was retracted after identical file hashes and fresh individual views confirmed body and weapon; no rendering or screenshot-delay fix was made. Original first-run beauty/motion remain non-acceptance evidence.
+## Historical failures and motion scope
 
-The durable owner viewer is `.superpowers/sdd/2026-09-05-zombie-analytic-normals/owner-review/review.html`. Latest raw artifacts are `/tmp/zombie-ng-intact-head-wound`. HUD times and image RGB differences are not performance evidence. Owner look is pending separately from the controller's technical image inspection.
+All ten historical raw JSON reports remain listed with their original `/tmp` paths and SHA256 values in `wounds.json`. Byte-identical deterministic gzip archives now live under `wound-raw/`; decompression reproduces each recorded SHA. Failed runs, bad ROI evidence, wrapper mismatches, timeouts, and later controls remain separate.
 
-Twelve focused Node tests and both driver/helper syntax checks pass. Fixture and offline-report regressions were observed RED then GREEN. No TypeScript or shader changed in this correction; prior TypeScript checks passed. The final GPU launch passed load1=6.46875, used owned5251/9251 and exited0; trap cleanup completed and both ports were verified free.
+The moving-shoulder first read was a legacy-to-legacy confound: 14,670 floats changed, including exactly 3,666 depth pixels, with depth max 0.084325075. Packed rows, config, camera, and captured CPU state were unchanged. The first legacy raw was byte-identical to the earlier failed arm-run legacy raw. After settling, legacy-to-hybrid depth and fallback are exact, with p99 1.6930 degrees and max 7.6107 degrees. This corrects the earlier interpretation without deleting the failure.
 
-Chunk-containing eligibility captures remain rejected until piece identity/masks are extended. A future combined zoned-cache build must force full legacy normals while `zonedCfg.x` is active; that uniform is absent here. No Task4, performance run, merge, push or default enablement occurred. Next step is owner intact-look review.
+Motion evidence covers 24 paired frames after the torso impact/stagger and 12 paired frames of detached-piece flight. The 24-frame sequence captures every subsequent simulation frame after the original event setup, and the 12-frame sequence captures every sever-flight frame. The original evidence stepped two initial projectile/impact ticks before its first post-impact pair, so those ticks are not fully paired. Earlier moving-light review applies to actor appearance; background-shadow differences prevent a full-frame motion-equivalence claim.
 
-## Owner feedback after intact review
+Four representative paired beauty images are tracked for the torso impact and detached chunk. Their controller review is artifact-specific. The driver must not infer approval for future captures from a scene name.
 
-The owner inspected the A/B viewer and said it looks good, like exactly the same, and explicitly does not require such close visual parity. Intact appearance is accepted; small benign appearance differences are acceptable while preserving the wet skin and wound read. This is not acceptance of the unimplemented wound-gradient stage. The full ownerLook gate remains pending for that later result. Next implementation step is Task 4 after scoped review completes.
+## Remaining gates
+
+1. On a load1 <=12 opportunity, run the final bounded settling and detached-piece point adapter on real WebGPU. Prove the worst detached-chunk pixels independently and review p99 5.8465 degrees without changing the threshold.
+2. Validate the newly paired initial projectile/impact ticks and stronger full-state beauty signatures. Preserve the earlier shadow-motion limitation.
+3. If Task 4 then passes, run the full paired Task 5 gameplay timing protocol. Until those measurements exist, timing stays `skipped-by-gate` and no speedup claim is valid.
+4. Obtain full wounded-candidate owner review before changing `ownerLook`. Intact approval remains recorded as its own completed scope.
+
+`summary.json` is generated offline by `--phase verdict`; it carries the explicit `intactValidation: complete` and `fullWoundGameplayValidation: deferred` coverage scopes, retained wound measurements and unresolved work. The offline command exits 1 by design for this incomplete verdict and does not contact dummy Vite/CDP ports.

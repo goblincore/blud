@@ -79,6 +79,18 @@
       "command": "node scripts/zombie-normal-gradient-check.mjs --phase wounds --arm-smoke --vite 5251 --cdp 9251 --out /tmp/zombie-ng-wounds-sever-proof (guarded launch deferred: load1 26.50 then 55.74)",
       "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wounds.json",
       "reason": "Real 11-case production wound oracle, actual head/torso walls, overlap, exposed curved fallback, impact/stagger and actual detached forearm evidence exist. Old moving-shoulder depth failure is reproduced legacy-to-legacy first-read settling; settled candidate has exact depth/fallback. Detached-piece p99=5.846 remains pending localized correctness proof and review; final bounded settling/chunk/initial-flight harness GPU run blocked by load. No Task4 completion or timing/ownerLook claim."
+    },
+    {
+      "commit": "verdict based on 6737ba8",
+      "command": "node scripts/zombie-normal-gradient-check.mjs --phase verdict --out docs/dev-notes/2026-09-05-zombie-analytic-normals --vite 1 --cdp 1",
+      "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/summary.json",
+      "reason": "wounds gate is deferred. 20 real gameplay intact scene comparisons exist. First run failed: mixed-wounded: analytic coverage below 10% probe floor. Corrected validation: Corrected1738 ran7cases with valid beauty/motion but failed torso control and mixed coverage. Fresh-head-wound rerun passed7numeric cases; controller inspected clean paired beauty, eligibility and matched intact motion with no obvious regression. Wounded head and torso remain fully legacy.. Corrected intact beauty is valid technical evidence. 13 retained wound scene comparisons include actual impact/stagger/sever evidence, but Procedural wounds implemented and independently probed; actual wall, internal fallback, impact and sever evidence exists. Detached chunk p99=5.846 degrees remains a review flag awaiting independent point proof. Final updated settling/chunk/flight capture harness has not run on GPU because load preflights were 26.50 and 55.74 (>12). Full owner review and paired timing remain pending."
+    },
+    {
+      "commit": "verdict based on 6737ba8",
+      "command": "node scripts/zombie-normal-gradient-check.mjs --phase verdict --out docs/dev-notes/2026-09-05-zombie-analytic-normals --vite 1 --cdp 1",
+      "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/summary.json",
+      "reason": "wounds gate is deferred. 20 real gameplay intact scene comparisons exist. First run failed: mixed-wounded: analytic coverage below 10% probe floor. Corrected validation: Corrected1738 ran7cases with valid beauty/motion but failed torso control and mixed coverage. Fresh-head-wound rerun passed7numeric cases; controller inspected clean paired beauty, eligibility and matched intact motion with no obvious regression. Wounded head and torso remain fully legacy.. Corrected intact beauty is valid technical evidence. 13 retained wound scene comparisons include actual impact/stagger/sever evidence, but Procedural wounds implemented and independently probed; actual wall, internal fallback, impact and sever evidence exists. Detached chunk p99=5.846 degrees remains a review flag awaiting independent point proof. Final updated settling/chunk/flight capture harness has not run on GPU because load preflights were 26.50 and 55.74 (>12). Full owner review and paired timing remain pending."
     }
   ]
 }

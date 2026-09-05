@@ -1,10 +1,10 @@
 {
-  "commit": "8260b57",
+  "commit": "6737ba8",
   "gates": {
     "reference": "pass",
     "gpuKernel": "pass",
     "intact": "pass",
-    "wounds": "skipped-by-gate",
+    "wounds": "deferred",
     "visualEvidence": "skipped-by-gate",
     "timing": "skipped-by-gate",
     "ownerLook": "pending"
@@ -17,13 +17,13 @@
     },
     {
       "name": "wounded-head-and-torso",
-      "status": "skipped-by-gate",
-      "reason": "Task4 wound-surface and impact/sever validation has not run; Task3 mixed lower-body support does not validate wounded head or torso acceleration."
+      "status": "partial-evidence-validation-deferred",
+      "reason": "Task4 produced retained partial wound evidence, including exact depth/fallback comparisons, but its gate is deferred; final chunk proof and updated capture harness validation remain unresolved."
     },
     {
       "name": "two-body-close-up-with-surrounding-actors",
       "status": "skipped-by-gate",
-      "reason": "Task4 wound-surface and impact/sever validation has not run; Task3 mixed lower-body support does not validate wounded head or torso acceleration."
+      "reason": "Task4 produced retained partial wound evidence, including exact depth/fallback comparisons, but its gate is deferred; final chunk proof and updated capture harness validation remain unresolved."
     },
     {
       "name": "walking-and-flashlight-motion",
@@ -32,8 +32,8 @@
     },
     {
       "name": "impact-stagger-sever-sequence",
-      "status": "skipped-by-gate",
-      "reason": "Task4 wound-surface and impact/sever validation has not run; Task3 mixed lower-body support does not validate wounded head or torso acceleration."
+      "status": "partial-evidence-validation-deferred",
+      "reason": "Task4 produced retained partial wound evidence, including exact depth/fallback comparisons, but its gate is deferred; final chunk proof and updated capture harness validation remain unresolved. Motion scope: actual slug before reel; every subsequent simulation frame captured in both modes; actual elbow slug; every simulation frame captured."
     },
     {
       "name": "unsupported-control",
@@ -47,7 +47,11 @@
     "reason": "No eligible paired runs were attempted; no frame-time or compile-time claim is available."
   },
   "coverage": {
-    "status": "partial",
+    "status": "incomplete-wounds-deferred",
+    "scope": {
+      "intactValidation": "complete",
+      "fullWoundGameplayValidation": "deferred"
+    },
     "measurements": [
       {
         "name": "whole-body",
@@ -365,16 +369,2341 @@
         }
       }
     ],
-    "reason": "Historical raw numerical/anatomical coverage is preserved. Corrected1738 ran7cases with valid beauty/motion but failed torso control and mixed coverage. Fresh-head-wound rerun passed7numeric cases; controller inspected clean paired beauty, eligibility and matched intact motion with no obvious regression. Wounded head and torso remain fully legacy.."
+    "wounds": [
+      {
+        "name": "torso-before-impact",
+        "pieceKey": "body:1",
+        "total": 36302,
+        "reasons": {
+          "ok": 32071,
+          "unsupported": 0,
+          "degenerate": 0,
+          "hard-boundary": 0,
+          "owner-unstable": 4231,
+          "wound-pending": 0,
+          "sampled-cache": 0,
+          "inactive": 0
+        },
+        "analyticFraction": 0.8834499476612859,
+        "depthMax": 0,
+        "depthChanged": 0,
+        "fallbackMax": 0,
+        "scalarMax": 1.0360963642597198e-8,
+        "nonFinite": 0,
+        "angularDegrees": {
+          "count": 32071,
+          "p50": 0.36300432583018233,
+          "p95": 1.0317487699403654,
+          "p99": 1.4644109182188143,
+          "max": 2.4434079451216735
+        },
+        "woundROI": {
+          "wall": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "rim": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "internal": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "curvedInternal": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "headWound": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "torsoWound": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        "sameMode": null
+      },
+      {
+        "name": "torso-after-impact",
+        "pieceKey": "body:1",
+        "total": 37662,
+        "reasons": {
+          "ok": 33830,
+          "unsupported": 362,
+          "degenerate": 0,
+          "hard-boundary": 785,
+          "owner-unstable": 2685,
+          "wound-pending": 0,
+          "sampled-cache": 0,
+          "inactive": 0
+        },
+        "analyticFraction": 0.8982528808878976,
+        "depthMax": 0,
+        "depthChanged": 0,
+        "fallbackMax": 0,
+        "scalarMax": 1.594889909029007e-8,
+        "nonFinite": 0,
+        "angularDegrees": {
+          "count": 33830,
+          "p50": 0.47964992596219297,
+          "p95": 1.4672380466281993,
+          "p99": 2.6408748541301628,
+          "max": 40.37185923534368
+        },
+        "woundROI": {
+          "wall": {
+            "hits": 2627,
+            "analytic": 2074,
+            "reasons": [
+              2074,
+              104,
+              0,
+              223,
+              226,
+              0,
+              0,
+              0
+            ]
+          },
+          "rim": {
+            "hits": 11993,
+            "analytic": 11015,
+            "reasons": [
+              11015,
+              169,
+              0,
+              484,
+              325,
+              0,
+              0,
+              0
+            ]
+          },
+          "internal": {
+            "hits": 579,
+            "analytic": 390,
+            "reasons": [
+              390,
+              89,
+              0,
+              78,
+              22,
+              0,
+              0,
+              0
+            ]
+          },
+          "curvedInternal": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "headWound": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "torsoWound": {
+            "hits": 5692,
+            "analytic": 5010,
+            "reasons": [
+              5010,
+              239,
+              0,
+              312,
+              131,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        "maxAngleReview": "Controller accepted localized derivative/owner/noise proof and benign technical beauty; retain original max and failed run. No ownerLook gate change.",
+        "sameMode": null
+      },
+      {
+        "name": "torso-after-stagger",
+        "pieceKey": "body:1",
+        "total": 23752,
+        "reasons": {
+          "ok": 20917,
+          "unsupported": 634,
+          "degenerate": 0,
+          "hard-boundary": 215,
+          "owner-unstable": 1986,
+          "wound-pending": 0,
+          "sampled-cache": 0,
+          "inactive": 0
+        },
+        "analyticFraction": 0.8806416301785113,
+        "depthMax": 0,
+        "depthChanged": 0,
+        "fallbackMax": 0,
+        "scalarMax": 1.83936208486557e-8,
+        "nonFinite": 0,
+        "angularDegrees": {
+          "count": 20917,
+          "p50": 0.48644391925749864,
+          "p95": 1.1454968659388582,
+          "p99": 2.509179889758333,
+          "max": 13.63955273444947
+        },
+        "woundROI": {
+          "wall": {
+            "hits": 363,
+            "analytic": 237,
+            "reasons": [
+              237,
+              48,
+              0,
+              40,
+              38,
+              0,
+              0,
+              0
+            ]
+          },
+          "rim": {
+            "hits": 5876,
+            "analytic": 4975,
+            "reasons": [
+              4975,
+              388,
+              0,
+              152,
+              361,
+              0,
+              0,
+              0
+            ]
+          },
+          "internal": {
+            "hits": 242,
+            "analytic": 13,
+            "reasons": [
+              13,
+              198,
+              0,
+              23,
+              8,
+              0,
+              0,
+              0
+            ]
+          },
+          "curvedInternal": {
+            "hits": 101,
+            "analytic": 0,
+            "reasons": [
+              0,
+              101,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "headWound": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "torsoWound": {
+            "hits": 2316,
+            "analytic": 1599,
+            "reasons": [
+              1599,
+              294,
+              0,
+              117,
+              306,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        "sameMode": null
+      },
+      {
+        "name": "torso-overlap",
+        "pieceKey": "body:1",
+        "total": 35852,
+        "reasons": {
+          "ok": 27538,
+          "unsupported": 4124,
+          "degenerate": 0,
+          "hard-boundary": 1151,
+          "owner-unstable": 3039,
+          "wound-pending": 0,
+          "sampled-cache": 0,
+          "inactive": 0
+        },
+        "analyticFraction": 0.7681021979248019,
+        "depthMax": 0,
+        "depthChanged": 0,
+        "fallbackMax": 0,
+        "scalarMax": 2.3865140974521637e-8,
+        "nonFinite": 0,
+        "angularDegrees": {
+          "count": 27538,
+          "p50": 0.40220836975323354,
+          "p95": 1.0360588893474163,
+          "p99": 2.345205993176661,
+          "max": 6.256629350915651
+        },
+        "woundROI": {
+          "wall": {
+            "hits": 1549,
+            "analytic": 633,
+            "reasons": [
+              633,
+              492,
+              0,
+              322,
+              102,
+              0,
+              0,
+              0
+            ]
+          },
+          "rim": {
+            "hits": 8727,
+            "analytic": 4977,
+            "reasons": [
+              4977,
+              2929,
+              0,
+              493,
+              328,
+              0,
+              0,
+              0
+            ]
+          },
+          "internal": {
+            "hits": 1092,
+            "analytic": 28,
+            "reasons": [
+              28,
+              701,
+              0,
+              336,
+              27,
+              0,
+              0,
+              0
+            ]
+          },
+          "curvedInternal": {
+            "hits": 429,
+            "analytic": 0,
+            "reasons": [
+              0,
+              374,
+              0,
+              55,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "headWound": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "torsoWound": {
+            "hits": 8552,
+            "analytic": 4175,
+            "reasons": [
+              4175,
+              3421,
+              0,
+              623,
+              333,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        "sameMode": null
+      },
+      {
+        "name": "head-before-impact",
+        "pieceKey": "body:1",
+        "total": 44426,
+        "reasons": {
+          "ok": 39122,
+          "unsupported": 0,
+          "degenerate": 0,
+          "hard-boundary": 0,
+          "owner-unstable": 5304,
+          "wound-pending": 0,
+          "sampled-cache": 0,
+          "inactive": 0
+        },
+        "analyticFraction": 0.8806104533381354,
+        "depthMax": 0,
+        "depthChanged": 0,
+        "fallbackMax": 0,
+        "scalarMax": 1.0360963642597198e-8,
+        "nonFinite": 0,
+        "angularDegrees": {
+          "count": 39122,
+          "p50": 0.3261955650399728,
+          "p95": 0.9974142709787623,
+          "p99": 1.420853933281607,
+          "max": 2.684353066036229
+        },
+        "woundROI": {
+          "wall": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "rim": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "internal": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "curvedInternal": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "headWound": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "torsoWound": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        "sameMode": null
+      },
+      {
+        "name": "head-after-impact",
+        "pieceKey": "body:1",
+        "total": 47598,
+        "reasons": {
+          "ok": 40843,
+          "unsupported": 790,
+          "degenerate": 0,
+          "hard-boundary": 709,
+          "owner-unstable": 5256,
+          "wound-pending": 0,
+          "sampled-cache": 0,
+          "inactive": 0
+        },
+        "analyticFraction": 0.8580822723643851,
+        "depthMax": 0,
+        "depthChanged": 0,
+        "fallbackMax": 0,
+        "scalarMax": 1.7695128917694092e-8,
+        "nonFinite": 0,
+        "angularDegrees": {
+          "count": 40843,
+          "p50": 0.3899686335478655,
+          "p95": 1.0776823780789329,
+          "p99": 1.8880495511322215,
+          "max": 13.799753735900877
+        },
+        "woundROI": {
+          "wall": {
+            "hits": 2545,
+            "analytic": 1399,
+            "reasons": [
+              1399,
+              478,
+              0,
+              199,
+              469,
+              0,
+              0,
+              0
+            ]
+          },
+          "rim": {
+            "hits": 15366,
+            "analytic": 13364,
+            "reasons": [
+              13364,
+              251,
+              0,
+              404,
+              1347,
+              0,
+              0,
+              0
+            ]
+          },
+          "internal": {
+            "hits": 1516,
+            "analytic": 1125,
+            "reasons": [
+              1125,
+              61,
+              0,
+              106,
+              224,
+              0,
+              0,
+              0
+            ]
+          },
+          "curvedInternal": {
+            "hits": 61,
+            "analytic": 0,
+            "reasons": [
+              0,
+              61,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "headWound": {
+            "hits": 2015,
+            "analytic": 1475,
+            "reasons": [
+              1475,
+              0,
+              0,
+              28,
+              512,
+              0,
+              0,
+              0
+            ]
+          },
+          "torsoWound": {
+            "hits": 8901,
+            "analytic": 7151,
+            "reasons": [
+              7151,
+              727,
+              0,
+              347,
+              676,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        "sameMode": null
+      },
+      {
+        "name": "head-after-repeat",
+        "pieceKey": "body:1",
+        "total": 33008,
+        "reasons": {
+          "ok": 29874,
+          "unsupported": 48,
+          "degenerate": 0,
+          "hard-boundary": 396,
+          "owner-unstable": 2690,
+          "wound-pending": 0,
+          "sampled-cache": 0,
+          "inactive": 0
+        },
+        "analyticFraction": 0.905053320407174,
+        "depthMax": 0,
+        "depthChanged": 0,
+        "fallbackMax": 0,
+        "scalarMax": 2.2351741790771484e-8,
+        "nonFinite": 0,
+        "angularDegrees": {
+          "count": 29874,
+          "p50": 0.4032474056778568,
+          "p95": 1.1122547997831878,
+          "p99": 2.0663558576803505,
+          "max": 9.100439102961401
+        },
+        "woundROI": {
+          "wall": {
+            "hits": 195,
+            "analytic": 168,
+            "reasons": [
+              168,
+              0,
+              0,
+              0,
+              27,
+              0,
+              0,
+              0
+            ]
+          },
+          "rim": {
+            "hits": 5421,
+            "analytic": 4667,
+            "reasons": [
+              4667,
+              48,
+              0,
+              396,
+              310,
+              0,
+              0,
+              0
+            ]
+          },
+          "internal": {
+            "hits": 40,
+            "analytic": 24,
+            "reasons": [
+              24,
+              0,
+              0,
+              0,
+              16,
+              0,
+              0,
+              0
+            ]
+          },
+          "curvedInternal": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "headWound": {
+            "hits": 1889,
+            "analytic": 1573,
+            "reasons": [
+              1573,
+              0,
+              0,
+              177,
+              139,
+              0,
+              0,
+              0
+            ]
+          },
+          "torsoWound": {
+            "hits": 2076,
+            "analytic": 1796,
+            "reasons": [
+              1796,
+              48,
+              0,
+              160,
+              72,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        "sameMode": null
+      },
+      {
+        "name": "arm-before-sever",
+        "pieceKey": "body:1",
+        "total": 23853,
+        "reasons": {
+          "ok": 21333,
+          "unsupported": 0,
+          "degenerate": 0,
+          "hard-boundary": 0,
+          "owner-unstable": 2520,
+          "wound-pending": 0,
+          "sampled-cache": 0,
+          "inactive": 0
+        },
+        "analyticFraction": 0.8943529115834487,
+        "depthMax": 0,
+        "depthChanged": 0,
+        "fallbackMax": 0,
+        "scalarMax": 9.080395102500916e-9,
+        "nonFinite": 0,
+        "angularDegrees": {
+          "count": 21333,
+          "p50": 0.3670936795277125,
+          "p95": 0.9657273608249101,
+          "p99": 1.3864239558722193,
+          "max": 2.611000913351167
+        },
+        "woundROI": {
+          "wall": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "rim": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "internal": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "curvedInternal": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "headWound": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "torsoWound": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        "sameMode": null
+      },
+      {
+        "name": "arm-before-sever",
+        "pieceKey": "body:1",
+        "total": 21285,
+        "reasons": {
+          "ok": 18957,
+          "unsupported": 0,
+          "degenerate": 0,
+          "hard-boundary": 0,
+          "owner-unstable": 2328,
+          "wound-pending": 0,
+          "sampled-cache": 0,
+          "inactive": 0
+        },
+        "analyticFraction": 0.8906272022551093,
+        "depthMax": 0,
+        "depthChanged": 0,
+        "fallbackMax": 0,
+        "scalarMax": 1.0477378964424133e-8,
+        "nonFinite": 0,
+        "angularDegrees": {
+          "count": 18957,
+          "p50": 0.3603451006568344,
+          "p95": 0.9895667374440172,
+          "p99": 1.411744798971307,
+          "max": 2.4055136713233707
+        },
+        "woundROI": {
+          "wall": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "rim": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "internal": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "curvedInternal": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "headWound": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "torsoWound": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        "sameMode": {
+          "changed": 0,
+          "max": 0,
+          "stateStable": true,
+          "hybridStateStable": true
+        }
+      },
+      {
+        "name": "body-after-arm-sever",
+        "pieceKey": "body:1",
+        "total": 19990,
+        "reasons": {
+          "ok": 17103,
+          "unsupported": 247,
+          "degenerate": 0,
+          "hard-boundary": 523,
+          "owner-unstable": 2117,
+          "wound-pending": 0,
+          "sampled-cache": 0,
+          "inactive": 0
+        },
+        "analyticFraction": 0.8555777888944472,
+        "depthMax": 0,
+        "depthChanged": 0,
+        "fallbackMax": 0,
+        "scalarMax": 1.4901161193847656e-8,
+        "nonFinite": 0,
+        "angularDegrees": {
+          "count": 17103,
+          "p50": 0.3465349435805266,
+          "p95": 1.0480168916399277,
+          "p99": 1.730060113392933,
+          "max": 44.347012605663544
+        },
+        "woundROI": {
+          "wall": {
+            "hits": 167,
+            "analytic": 163,
+            "reasons": [
+              163,
+              0,
+              0,
+              2,
+              2,
+              0,
+              0,
+              0
+            ]
+          },
+          "rim": {
+            "hits": 3597,
+            "analytic": 2585,
+            "reasons": [
+              2585,
+              247,
+              0,
+              200,
+              565,
+              0,
+              0,
+              0
+            ]
+          },
+          "internal": {
+            "hits": 73,
+            "analytic": 73,
+            "reasons": [
+              73,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "curvedInternal": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "headWound": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "torsoWound": {
+            "hits": 2212,
+            "analytic": 1568,
+            "reasons": [
+              1568,
+              191,
+              0,
+              107,
+              346,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        "maxAngleReview": "Controller accepted localized derivative/owner/noise proof and benign technical beauty; retain original max and failed run. No ownerLook gate change.",
+        "sameMode": {
+          "changed": 0,
+          "max": 0,
+          "stateStable": true,
+          "hybridStateStable": true
+        }
+      },
+      {
+        "name": "detached-chunk-1",
+        "pieceKey": "chunk:1",
+        "total": 1283,
+        "reasons": {
+          "ok": 1183,
+          "unsupported": 0,
+          "degenerate": 0,
+          "hard-boundary": 19,
+          "owner-unstable": 81,
+          "wound-pending": 0,
+          "sampled-cache": 0,
+          "inactive": 0
+        },
+        "analyticFraction": 0.9220576773187841,
+        "depthMax": 0,
+        "depthChanged": 0,
+        "fallbackMax": 0,
+        "scalarMax": 7.916241884231567e-9,
+        "nonFinite": 0,
+        "angularDegrees": {
+          "count": 1183,
+          "p50": 0.5986793199124677,
+          "p95": 2.6655866263851844,
+          "p99": 5.846468578011772,
+          "max": 8.913456378042234
+        },
+        "woundROI": null,
+        "sameMode": {
+          "changed": 0,
+          "max": 0,
+          "stateStable": true,
+          "hybridStateStable": true
+        }
+      },
+      {
+        "name": "shoulder-before-impact",
+        "pieceKey": "body:1",
+        "total": 23853,
+        "reasons": {
+          "ok": 21333,
+          "unsupported": 0,
+          "degenerate": 0,
+          "hard-boundary": 0,
+          "owner-unstable": 2520,
+          "wound-pending": 0,
+          "sampled-cache": 0,
+          "inactive": 0
+        },
+        "analyticFraction": 0.8943529115834487,
+        "depthMax": 0,
+        "depthChanged": 0,
+        "fallbackMax": 0,
+        "scalarMax": 9.080395102500916e-9,
+        "nonFinite": 0,
+        "angularDegrees": {
+          "count": 21333,
+          "p50": 0.3670936795277125,
+          "p95": 0.9657273608249101,
+          "p99": 1.3864239558722193,
+          "max": 2.611000913351167
+        },
+        "woundROI": {
+          "wall": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "rim": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "internal": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "curvedInternal": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "headWound": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "torsoWound": {
+            "hits": 0,
+            "analytic": 0,
+            "reasons": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        "sameMode": {
+          "changed": 0,
+          "max": 0,
+          "stateStable": true,
+          "hybridStateStable": true
+        }
+      },
+      {
+        "name": "moving-shoulder-after-impact",
+        "pieceKey": "body:1",
+        "total": 26407,
+        "reasons": {
+          "ok": 23147,
+          "unsupported": 245,
+          "degenerate": 0,
+          "hard-boundary": 334,
+          "owner-unstable": 2681,
+          "wound-pending": 0,
+          "sampled-cache": 0,
+          "inactive": 0
+        },
+        "analyticFraction": 0.8765478850304843,
+        "depthMax": 0,
+        "depthChanged": 0,
+        "fallbackMax": 0,
+        "scalarMax": 1.7695128917694092e-8,
+        "nonFinite": 0,
+        "angularDegrees": {
+          "count": 23147,
+          "p50": 0.37039433954870943,
+          "p95": 1.0779619216498937,
+          "p99": 1.6930036341187737,
+          "max": 7.610726023748462
+        },
+        "woundROI": {
+          "wall": {
+            "hits": 631,
+            "analytic": 468,
+            "reasons": [
+              468,
+              0,
+              0,
+              36,
+              127,
+              0,
+              0,
+              0
+            ]
+          },
+          "rim": {
+            "hits": 5864,
+            "analytic": 4710,
+            "reasons": [
+              4710,
+              214,
+              0,
+              241,
+              699,
+              0,
+              0,
+              0
+            ]
+          },
+          "internal": {
+            "hits": 111,
+            "analytic": 9,
+            "reasons": [
+              9,
+              31,
+              0,
+              8,
+              63,
+              0,
+              0,
+              0
+            ]
+          },
+          "curvedInternal": {
+            "hits": 39,
+            "analytic": 0,
+            "reasons": [
+              0,
+              31,
+              0,
+              8,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "headWound": {
+            "hits": 972,
+            "analytic": 740,
+            "reasons": [
+              740,
+              0,
+              0,
+              50,
+              182,
+              0,
+              0,
+              0
+            ]
+          },
+          "torsoWound": {
+            "hits": 3460,
+            "analytic": 2754,
+            "reasons": [
+              2754,
+              212,
+              0,
+              127,
+              367,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        "sameMode": {
+          "changed": 14670,
+          "max": 0.8546689450740814,
+          "stateStable": true,
+          "hybridStateStable": true
+        }
+      }
+    ],
+    "reason": "Historical raw numerical/anatomical coverage is preserved. Corrected1738 ran7cases with valid beauty/motion but failed torso control and mixed coverage. Fresh-head-wound rerun passed7numeric cases; controller inspected clean paired beauty, eligibility and matched intact motion with no obvious regression. Wounded head and torso remain fully legacy.. Wound ROI and piece coverage are retained separately; coverage percentages do not establish performance or acceptance."
+  },
+  "woundEvidence": {
+    "status": "deferred",
+    "oracleCases": 11,
+    "firstReadControl": {
+      "path": "/tmp/zombie-ng-wounds-shoulder-controlled/moving-shoulder-after-impact-capture-state.json",
+      "cpuStateExact": true,
+      "legacyToLegacy": {
+        "changedFloats": 14670,
+        "depthChanged": 3666,
+        "depthMax": 0.08432507514953613
+      },
+      "firstLegacyMatchesHistoricalFailedLegacy": "byte-identical (0 changed floats)",
+      "settledLegacyToHybrid": {
+        "depthChanged": 0,
+        "fallbackMax": 0,
+        "p99": 1.6930036341187737,
+        "max": 7.610726023748462
+      },
+      "boundedPolicy": "Final driver requires two identical legacy raw/state reads, four-read maximum; rejected frames retained. Final helper GPU run blocked; Node control tests pass."
+    },
+    "localizedReviews": [
+      {
+        "scene": "torso-after-impact",
+        "pixel": [
+          451,
+          254
+        ],
+        "state": [
+          0,
+          5,
+          1.0011239051818848,
+          0
+        ],
+        "cpuGradientError": 0.000016674640015490617,
+        "gpuCentralErrors": [
+          {
+            "epsilon": 0.0015,
+            "error": 0.00023625660022377044
+          },
+          {
+            "epsilon": 0.0005,
+            "error": 0.000047337049582423526
+          },
+          {
+            "epsilon": 0.0002,
+            "error": 0.00012134049616373271
+          },
+          {
+            "epsilon": 0.0001,
+            "error": 0.0007204597111494188
+          }
+        ],
+        "tetraOwners": [
+          [
+            5,
+            5
+          ],
+          [
+            5,
+            5
+          ],
+          [
+            5,
+            5
+          ],
+          [
+            5,
+            5
+          ]
+        ],
+        "noiseDecompositionError": 0.000012214328550367924
+      },
+      {
+        "scene": "torso-after-impact",
+        "pixel": [
+          452,
+          255
+        ],
+        "state": [
+          0,
+          5,
+          1.001312255859375,
+          0
+        ],
+        "cpuGradientError": 0.000004460205045338127,
+        "gpuCentralErrors": [
+          {
+            "epsilon": 0.0015,
+            "error": 0.0019595590117712515
+          },
+          {
+            "epsilon": 0.0005,
+            "error": 0.0000437258152633755
+          },
+          {
+            "epsilon": 0.0002,
+            "error": 0.0003298276603982011
+          },
+          {
+            "epsilon": 0.0001,
+            "error": 0.0007106730298620856
+          }
+        ],
+        "tetraOwners": [
+          [
+            5,
+            5
+          ],
+          [
+            5,
+            5
+          ],
+          [
+            5,
+            5
+          ],
+          [
+            5,
+            5
+          ]
+        ],
+        "noiseDecompositionError": 0.00004002071111599187
+      },
+      {
+        "scene": "torso-after-impact",
+        "pixel": [
+          452,
+          256
+        ],
+        "state": [
+          0,
+          5,
+          1.001726508140564,
+          0
+        ],
+        "cpuGradientError": 0.000013524039938560395,
+        "gpuCentralErrors": [
+          {
+            "epsilon": 0.0015,
+            "error": 0.0000429823670845699
+          },
+          {
+            "epsilon": 0.0005,
+            "error": 0.0000863036605889335
+          },
+          {
+            "epsilon": 0.0002,
+            "error": 0.0003384359606001809
+          },
+          {
+            "epsilon": 0.0001,
+            "error": 0.0009245314707811364
+          }
+        ],
+        "tetraOwners": [
+          [
+            5,
+            5
+          ],
+          [
+            5,
+            5
+          ],
+          [
+            5,
+            5
+          ],
+          [
+            5,
+            5
+          ]
+        ],
+        "noiseDecompositionError": 0.000046512896764630284
+      },
+      {
+        "scene": "torso-after-impact",
+        "pixel": [
+          452,
+          257
+        ],
+        "state": [
+          0,
+          5,
+          1.0022261142730713,
+          0
+        ],
+        "cpuGradientError": 0.00001869091843436158,
+        "gpuCentralErrors": [
+          {
+            "epsilon": 0.0015,
+            "error": 0.00011051896142982761
+          },
+          {
+            "epsilon": 0.0005,
+            "error": 0.0000872898885804116
+          },
+          {
+            "epsilon": 0.0002,
+            "error": 0.00012019053392110641
+          },
+          {
+            "epsilon": 0.0001,
+            "error": 0.0002681551619420463
+          }
+        ],
+        "tetraOwners": [
+          [
+            5,
+            5
+          ],
+          [
+            5,
+            5
+          ],
+          [
+            5,
+            5
+          ],
+          [
+            5,
+            5
+          ]
+        ],
+        "noiseDecompositionError": 0.000040506646826666774
+      },
+      {
+        "scene": "torso-after-impact",
+        "pixel": [
+          453,
+          258
+        ],
+        "state": [
+          0,
+          5,
+          1.0025883913040161,
+          0
+        ],
+        "cpuGradientError": 0.0000041511571775871795,
+        "gpuCentralErrors": [
+          {
+            "epsilon": 0.0015,
+            "error": 0.00015564540636136718
+          },
+          {
+            "epsilon": 0.0005,
+            "error": 0.00020189702078933982
+          },
+          {
+            "epsilon": 0.0002,
+            "error": 0.0003169524250589609
+          },
+          {
+            "epsilon": 0.0001,
+            "error": 0.0004809768432839912
+          }
+        ],
+        "tetraOwners": [
+          [
+            5,
+            5
+          ],
+          [
+            5,
+            5
+          ],
+          [
+            5,
+            5
+          ],
+          [
+            5,
+            5
+          ]
+        ],
+        "noiseDecompositionError": 0.00003632524599800133
+      },
+      {
+        "scene": "torso-after-impact",
+        "pixel": [
+          454,
+          258
+        ],
+        "state": [
+          0,
+          5,
+          1.0023266077041626,
+          0
+        ],
+        "cpuGradientError": 0.000008842681053990062,
+        "gpuCentralErrors": [
+          {
+            "epsilon": 0.0015,
+            "error": 0.00014361639484032821
+          },
+          {
+            "epsilon": 0.0005,
+            "error": 0.00007792876185152244
+          },
+          {
+            "epsilon": 0.0002,
+            "error": 0.00020208812781082495
+          },
+          {
+            "epsilon": 0.0001,
+            "error": 0.0004559458408491685
+          }
+        ],
+        "tetraOwners": [
+          [
+            5,
+            5
+          ],
+          [
+            5,
+            5
+          ],
+          [
+            5,
+            5
+          ],
+          [
+            5,
+            5
+          ]
+        ],
+        "noiseDecompositionError": 1.7773078054928252e-8
+      },
+      {
+        "scene": "body-after-arm-sever",
+        "pixel": [
+          401,
+          314
+        ],
+        "state": [
+          0,
+          10,
+          4.030343532562256,
+          1
+        ],
+        "cpuGradientError": 0.000021260434884187147,
+        "gpuCentralErrors": [
+          {
+            "epsilon": 0.0015,
+            "error": 0.0026781214003152904
+          },
+          {
+            "epsilon": 0.0005,
+            "error": 0.00025931570507338133
+          },
+          {
+            "epsilon": 0.0002,
+            "error": 0.0008367305557819412
+          },
+          {
+            "epsilon": 0.0001,
+            "error": 0.001263105017288857
+          }
+        ],
+        "tetraOwners": [
+          [
+            10,
+            10
+          ],
+          [
+            10,
+            10
+          ],
+          [
+            10,
+            10
+          ],
+          [
+            10,
+            10
+          ]
+        ],
+        "noiseDecompositionError": 0.000008452913030141612
+      },
+      {
+        "scene": "body-after-arm-sever",
+        "pixel": [
+          402,
+          315
+        ],
+        "state": [
+          0,
+          10,
+          3.95371150970459,
+          1
+        ],
+        "cpuGradientError": 0.00005186433383102138,
+        "gpuCentralErrors": [
+          {
+            "epsilon": 0.0015,
+            "error": 0.002124786606691917
+          },
+          {
+            "epsilon": 0.0005,
+            "error": 0.0004766751143919103
+          },
+          {
+            "epsilon": 0.0002,
+            "error": 0.00041193921979789836
+          },
+          {
+            "epsilon": 0.0001,
+            "error": 0.0012043661274998899
+          }
+        ],
+        "tetraOwners": [
+          [
+            10,
+            10
+          ],
+          [
+            10,
+            10
+          ],
+          [
+            10,
+            10
+          ],
+          [
+            10,
+            10
+          ]
+        ],
+        "noiseDecompositionError": 0.000007291340021384559
+      },
+      {
+        "scene": "body-after-arm-sever",
+        "pixel": [
+          405,
+          318
+        ],
+        "state": [
+          0,
+          10,
+          3.563020706176758,
+          1
+        ],
+        "cpuGradientError": 0.00001785695572043026,
+        "gpuCentralErrors": [
+          {
+            "epsilon": 0.0015,
+            "error": 0.007000480858301002
+          },
+          {
+            "epsilon": 0.0005,
+            "error": 0.0008880147310202968
+          },
+          {
+            "epsilon": 0.0002,
+            "error": 0.0011765046194194897
+          },
+          {
+            "epsilon": 0.0001,
+            "error": 0.0013057002649995008
+          }
+        ],
+        "tetraOwners": [
+          [
+            10,
+            10
+          ],
+          [
+            10,
+            10
+          ],
+          [
+            10,
+            10
+          ],
+          [
+            10,
+            10
+          ]
+        ],
+        "noiseDecompositionError": 0.000014538855661062284
+      },
+      {
+        "scene": "body-after-arm-sever",
+        "pixel": [
+          392,
+          319
+        ],
+        "state": [
+          0,
+          10,
+          3.4303531646728516,
+          1
+        ],
+        "cpuGradientError": 0.000008355622263225055,
+        "gpuCentralErrors": [
+          {
+            "epsilon": 0.0015,
+            "error": 0.06206187945677721
+          },
+          {
+            "epsilon": 0.0005,
+            "error": 0.006994164812573423
+          },
+          {
+            "epsilon": 0.0002,
+            "error": 0.00019345598733287289
+          },
+          {
+            "epsilon": 0.0001,
+            "error": 0.0007935235280576403
+          }
+        ],
+        "tetraOwners": [
+          [
+            10,
+            10
+          ],
+          [
+            10,
+            10
+          ],
+          [
+            10,
+            10
+          ],
+          [
+            10,
+            10
+          ]
+        ],
+        "noiseDecompositionError": 0.00004014195466112176
+      },
+      {
+        "scene": "body-after-arm-sever",
+        "pixel": [
+          391,
+          328
+        ],
+        "state": [
+          0,
+          10,
+          3.5961380004882812,
+          1
+        ],
+        "cpuGradientError": 0.000012288320364556421,
+        "gpuCentralErrors": [
+          {
+            "epsilon": 0.0015,
+            "error": 0.07442893970725782
+          },
+          {
+            "epsilon": 0.0005,
+            "error": 0.015445499782206992
+          },
+          {
+            "epsilon": 0.0002,
+            "error": 0.0013335351084907676
+          },
+          {
+            "epsilon": 0.0001,
+            "error": 0.0007891266722405856
+          }
+        ],
+        "tetraOwners": [
+          [
+            10,
+            10
+          ],
+          [
+            10,
+            10
+          ],
+          [
+            10,
+            10
+          ],
+          [
+            10,
+            10
+          ]
+        ],
+        "noiseDecompositionError": 0.0000055069989791239935
+      }
+    ],
+    "events": {
+      "final-events": [
+        {
+          "name": "torso-slug-impact",
+          "source": "actual fireSlug projectile/impact/impulse",
+          "before": {
+            "wounds": 0,
+            "pieces": 10,
+            "pieceKeys": [
+              "body:1",
+              "body:2",
+              "body:3",
+              "body:4",
+              "body:5",
+              "body:6",
+              "body:7",
+              "body:8",
+              "body:9",
+              "body:10"
+            ]
+          },
+          "after": {
+            "wounds": 1,
+            "pieces": 10,
+            "pieceKeys": [
+              "body:1",
+              "body:2",
+              "body:3",
+              "body:4",
+              "body:5",
+              "body:6",
+              "body:7",
+              "body:8",
+              "body:9",
+              "body:10"
+            ]
+          }
+        },
+        {
+          "name": "torso-overlap-impact",
+          "source": "actual fireSlug projectile/impact/impulse",
+          "before": {
+            "wounds": 1,
+            "pieces": 10,
+            "pieceKeys": [
+              "body:1",
+              "body:2",
+              "body:3",
+              "body:4",
+              "body:5",
+              "body:6",
+              "body:7",
+              "body:8",
+              "body:9",
+              "body:10"
+            ]
+          },
+          "after": {
+            "wounds": 2,
+            "pieces": 10,
+            "pieceKeys": [
+              "body:1",
+              "body:2",
+              "body:3",
+              "body:4",
+              "body:5",
+              "body:6",
+              "body:7",
+              "body:8",
+              "body:9",
+              "body:10"
+            ]
+          }
+        },
+        {
+          "name": "head-slug-impact",
+          "source": "actual fireSlug projectile/impact/impulse",
+          "before": {
+            "wounds": 0,
+            "pieces": 10,
+            "pieceKeys": [
+              "body:1",
+              "body:2",
+              "body:3",
+              "body:4",
+              "body:5",
+              "body:6",
+              "body:7",
+              "body:8",
+              "body:9",
+              "body:10"
+            ]
+          },
+          "after": {
+            "wounds": 1,
+            "pieces": 10,
+            "pieceKeys": [
+              "body:1",
+              "body:2",
+              "body:3",
+              "body:4",
+              "body:5",
+              "body:6",
+              "body:7",
+              "body:8",
+              "body:9",
+              "body:10"
+            ]
+          }
+        },
+        {
+          "name": "head-repeat-impact",
+          "source": "actual fireSlug projectile/impact/impulse",
+          "before": {
+            "wounds": 1,
+            "pieces": 10,
+            "pieceKeys": [
+              "body:1",
+              "body:2",
+              "body:3",
+              "body:4",
+              "body:5",
+              "body:6",
+              "body:7",
+              "body:8",
+              "body:9",
+              "body:10"
+            ]
+          },
+          "after": {
+            "wounds": 2,
+            "pieces": 10,
+            "pieceKeys": [
+              "body:1",
+              "body:2",
+              "body:3",
+              "body:4",
+              "body:5",
+              "body:6",
+              "body:7",
+              "body:8",
+              "body:9",
+              "body:10"
+            ]
+          }
+        },
+        {
+          "name": "shoulder-slug-sever",
+          "source": "actual fireSlug projectile/impact/impulse",
+          "before": {
+            "wounds": 0,
+            "pieces": 10,
+            "pieceKeys": [
+              "body:1",
+              "body:2",
+              "body:3",
+              "body:4",
+              "body:5",
+              "body:6",
+              "body:7",
+              "body:8",
+              "body:9",
+              "body:10"
+            ]
+          },
+          "after": {
+            "wounds": 1,
+            "pieces": 10,
+            "pieceKeys": [
+              "body:1",
+              "body:2",
+              "body:3",
+              "body:4",
+              "body:5",
+              "body:6",
+              "body:7",
+              "body:8",
+              "body:9",
+              "body:10"
+            ]
+          }
+        }
+      ],
+      "elbow-controlled": [
+        {
+          "name": "elbow-slug-sever",
+          "source": "actual fireSlug projectile/impact/impulse",
+          "before": {
+            "wounds": 0,
+            "pieces": 10,
+            "pieceKeys": [
+              "body:1",
+              "body:2",
+              "body:3",
+              "body:4",
+              "body:5",
+              "body:6",
+              "body:7",
+              "body:8",
+              "body:9",
+              "body:10"
+            ]
+          },
+          "after": {
+            "wounds": 2,
+            "pieces": 11,
+            "pieceKeys": [
+              "body:1",
+              "body:2",
+              "body:3",
+              "body:4",
+              "body:5",
+              "body:6",
+              "body:7",
+              "body:8",
+              "body:9",
+              "body:10",
+              "chunk:1"
+            ]
+          }
+        }
+      ],
+      "shoulder-controlled": [
+        {
+          "name": "moving-shoulder-control",
+          "source": "actual fireSlug projectile/impact/impulse",
+          "before": {
+            "wounds": 0,
+            "pieces": 10,
+            "pieceKeys": [
+              "body:1",
+              "body:2",
+              "body:3",
+              "body:4",
+              "body:5",
+              "body:6",
+              "body:7",
+              "body:8",
+              "body:9",
+              "body:10"
+            ]
+          },
+          "after": {
+            "wounds": 1,
+            "pieces": 10,
+            "pieceKeys": [
+              "body:1",
+              "body:2",
+              "body:3",
+              "body:4",
+              "body:5",
+              "body:6",
+              "body:7",
+              "body:8",
+              "body:9",
+              "body:10"
+            ]
+          }
+        }
+      ]
+    },
+    "motion": {
+      "final-events": [
+        {
+          "name": "impact-stagger-moving-light",
+          "frames": 24,
+          "simDt": 0.016666666666666666,
+          "source": "actual slug before reel; every subsequent simulation frame captured in both modes"
+        }
+      ],
+      "elbow-controlled": [
+        {
+          "name": "sever-flight",
+          "frames": 12,
+          "simDt": 0.016666666666666666,
+          "source": "actual elbow slug; every simulation frame captured"
+        }
+      ],
+      "shoulder-controlled": []
+    },
+    "unresolved": [
+      "Run detached-piece worst-point CPU/GPU finite-difference and owner/noise proof, then controller review of p99=5.846 degrees; never silently raise threshold.",
+      "Run the final bounded settling and piece-point adapter on real WebGPU. Its focused Node tests and tsc pass, but the last GPU launch was blocked.",
+      "Capture both initial projectile flight/impact simulation ticks in both modes using the added driver hook. Existing event runs step two ticks before their first post-impact capture; full-rate subsequent 24-frame stagger and 12-frame sever flight evidence exists.",
+      "Validate stronger full-state beauty signatures and refreshHull control across moving-light reel. Earlier motion review was scoped to actor appearance because background shadows differed."
+    ],
+    "reason": "Procedural wounds implemented and independently probed; actual wall, internal fallback, impact and sever evidence exists. Detached chunk p99=5.846 degrees remains a review flag awaiting independent point proof. Final updated settling/chunk/flight capture harness has not run on GPU because load preflights were 26.50 and 55.74 (>12)."
+  },
+  "appearance": {
+    "intactOwnerReview": "pass",
+    "woundTechnicalReview": "partial-historical-artifacts-only",
+    "fullOwnerLook": "pending",
+    "visualEvidenceGate": "skipped-by-gate",
+    "woundMotionScope": "actual slug before reel; every subsequent simulation frame captured in both modes; actual elbow slug; every simulation frame captured",
+    "reason": "Specific retained wound captures have controller review. Final settling, chunk proof and initial impact capture changes have not run on GPU, so full visual acceptance is unavailable."
   },
   "artifacts": {
     "kernel": "docs/dev-notes/2026-09-05-zombie-analytic-normals/kernel.json",
     "intact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/intact.json",
+    "wounds": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wounds.json",
     "summary": "docs/dev-notes/2026-09-05-zombie-analytic-normals/summary.json",
     "images": [
       "docs/dev-notes/2026-09-05-zombie-analytic-normals/head-eligibility-first-run.png",
       "docs/dev-notes/2026-09-05-zombie-analytic-normals/torso-eligibility-first-run.png",
       "docs/dev-notes/2026-09-05-zombie-analytic-normals/head-base-normal-first-run.png"
+    ],
+    "woundImages": [
+      "docs/dev-notes/2026-09-05-zombie-analytic-normals/wounds-torso-after-impact-legacy-beauty.png",
+      "docs/dev-notes/2026-09-05-zombie-analytic-normals/wounds-torso-after-impact-hybrid-beauty.png",
+      "docs/dev-notes/2026-09-05-zombie-analytic-normals/wounds-detached-chunk-1-legacy-beauty.png",
+      "docs/dev-notes/2026-09-05-zombie-analytic-normals/wounds-detached-chunk-1-hybrid-beauty.png"
     ],
     "reel": "/Users/donny/.codex/visualizations/2026/09/04/01a06e0c-6c42-7da3-89ce-0d4ae5cc15b2/zombie-normal-review/review.html",
     "runs": [
@@ -403,6 +2732,68 @@
         "sceneComparisons": 7,
         "beautyValid": true,
         "failures": []
+      }
+    ],
+    "woundRuns": [
+      {
+        "path": "/tmp/zombie-ng-wounds-first/wounds.json",
+        "sha256": "5cc39c7457cb09144f6813c18e046cbf9e4ac315ae5e87543b0604f07f007937",
+        "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-raw/first.json.gz",
+        "note": "WGSL reserved meta keyword; fixed before numeric validation"
+      },
+      {
+        "path": "/tmp/zombie-ng-wounds-second/wounds.json",
+        "sha256": "e63895673d15cfa64a61d5a45c827280998976075c2cc62b5344a82c7f0a09cc",
+        "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-raw/second.json.gz",
+        "note": "11 production WGSL wound cases pass; stamped crater only, not impulse evidence"
+      },
+      {
+        "path": "/tmp/zombie-ng-wounds-events/wounds.json",
+        "sha256": "9646b2048dffdb4858eacdec33a591685b3f4d347fed8aabd26d6e5441afbcbf",
+        "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-raw/events.json.gz",
+        "note": "Initial actual event run; ROI unprojection incorrect, do not use ROI from this run"
+      },
+      {
+        "path": "/tmp/zombie-ng-wounds-localized/wounds.json",
+        "sha256": "6232089e9c2d2ddafae34dcdee4c81c52d088054584b60396d5f9c0ea507755a",
+        "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-raw/localized.json.gz",
+        "note": "Corrected clip-depth ROI; torso-only partial"
+      },
+      {
+        "path": "/tmp/zombie-ng-wounds-point-proof/wounds.json",
+        "sha256": "d5f02c45923ba21c080afc80adc98b4cdb46cf3be118a196becfe82533b9ec16",
+        "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-raw/point-proof.json.gz",
+        "note": "Actual GPU central finite differences at torso outliers"
+      },
+      {
+        "path": "/tmp/zombie-ng-wounds-final-events/wounds.json",
+        "sha256": "5e3b64a7d6a51ab7de1def0a27742f5938048b1eee1fd5d60a4d6b21f3241e1a",
+        "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-raw/final-events.json.gz",
+        "note": "Actual torso/head impacts and overlap; torso max-angle flag later reviewed; arm point proof timeout; background shadow motion confound"
+      },
+      {
+        "path": "/tmp/zombie-ng-wounds-arm-proof/wounds.json",
+        "sha256": "cca2683a45ec6110f09efef92620b1e809c5dd9ec36d79495da96e0374bc3224",
+        "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-raw/arm-proof.json.gz",
+        "note": "Moving shoulder initially failed depth/fallback/angular parity; later reproduced as first legacy read settling, independent of gradient mode"
+      },
+      {
+        "path": "/tmp/zombie-ng-wounds-elbow-state/wounds.json",
+        "sha256": "b865af53a133f8d09201282aa3ff82a489b5e2b396308364005ea2e247dcda17",
+        "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-raw/elbow-state.json.gz",
+        "note": "Harness wrapper API mismatch; stopped before gameplay comparisons"
+      },
+      {
+        "path": "/tmp/zombie-ng-wounds-elbow-controlled/wounds.json",
+        "sha256": "31ee87af51389e1c22e6919dc0fb42b8ec8446d01670f9b58615210f0d4fcfed",
+        "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-raw/elbow-controlled.json.gz",
+        "note": "Actual elbow sever, exact body/chunk depth/fallback and stable full state; body max reviewed, chunk p99 pending"
+      },
+      {
+        "path": "/tmp/zombie-ng-wounds-shoulder-controlled/wounds.json",
+        "sha256": "aa9289af224e498f79e7ee47f1c538f10c026f1a7e045468d81c6bb71ddc98ef",
+        "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-raw/shoulder-controlled.json.gz",
+        "note": "Original moving shoulder repeated; first legacy raw byte-identical to failed arm run; subsequent legacy/hybrid exact depth/fallback"
       }
     ]
   },

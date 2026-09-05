@@ -6,6 +6,12 @@
   "defaultMode": 0,
   "timing": "not measured; Task5 gated",
   "ownerLook": "unchanged",
+  "trackedBeautyImages": [
+    "docs/dev-notes/2026-09-05-zombie-analytic-normals/wounds-torso-after-impact-legacy-beauty.png",
+    "docs/dev-notes/2026-09-05-zombie-analytic-normals/wounds-torso-after-impact-hybrid-beauty.png",
+    "docs/dev-notes/2026-09-05-zombie-analytic-normals/wounds-detached-chunk-1-legacy-beauty.png",
+    "docs/dev-notes/2026-09-05-zombie-analytic-normals/wounds-detached-chunk-1-hybrid-beauty.png"
+  ],
   "reason": "Procedural wounds implemented and independently probed; actual wall, internal fallback, impact and sever evidence exists. Detached chunk p99=5.846 degrees remains a review flag awaiting independent point proof. Final updated settling/chunk/flight capture harness has not run on GPU because load preflights were 26.50 and 55.74 (>12).",
   "woundNumerics": [
     {
@@ -3647,51 +3653,61 @@
     {
       "path": "/tmp/zombie-ng-wounds-first/wounds.json",
       "sha256": "5cc39c7457cb09144f6813c18e046cbf9e4ac315ae5e87543b0604f07f007937",
+      "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-raw/first.json.gz",
       "note": "WGSL reserved meta keyword; fixed before numeric validation"
     },
     {
       "path": "/tmp/zombie-ng-wounds-second/wounds.json",
       "sha256": "e63895673d15cfa64a61d5a45c827280998976075c2cc62b5344a82c7f0a09cc",
+      "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-raw/second.json.gz",
       "note": "11 production WGSL wound cases pass; stamped crater only, not impulse evidence"
     },
     {
       "path": "/tmp/zombie-ng-wounds-events/wounds.json",
       "sha256": "9646b2048dffdb4858eacdec33a591685b3f4d347fed8aabd26d6e5441afbcbf",
+      "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-raw/events.json.gz",
       "note": "Initial actual event run; ROI unprojection incorrect, do not use ROI from this run"
     },
     {
       "path": "/tmp/zombie-ng-wounds-localized/wounds.json",
       "sha256": "6232089e9c2d2ddafae34dcdee4c81c52d088054584b60396d5f9c0ea507755a",
+      "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-raw/localized.json.gz",
       "note": "Corrected clip-depth ROI; torso-only partial"
     },
     {
       "path": "/tmp/zombie-ng-wounds-point-proof/wounds.json",
       "sha256": "d5f02c45923ba21c080afc80adc98b4cdb46cf3be118a196becfe82533b9ec16",
+      "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-raw/point-proof.json.gz",
       "note": "Actual GPU central finite differences at torso outliers"
     },
     {
       "path": "/tmp/zombie-ng-wounds-final-events/wounds.json",
       "sha256": "5e3b64a7d6a51ab7de1def0a27742f5938048b1eee1fd5d60a4d6b21f3241e1a",
+      "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-raw/final-events.json.gz",
       "note": "Actual torso/head impacts and overlap; torso max-angle flag later reviewed; arm point proof timeout; background shadow motion confound"
     },
     {
       "path": "/tmp/zombie-ng-wounds-arm-proof/wounds.json",
       "sha256": "cca2683a45ec6110f09efef92620b1e809c5dd9ec36d79495da96e0374bc3224",
+      "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-raw/arm-proof.json.gz",
       "note": "Moving shoulder initially failed depth/fallback/angular parity; later reproduced as first legacy read settling, independent of gradient mode"
     },
     {
       "path": "/tmp/zombie-ng-wounds-elbow-state/wounds.json",
       "sha256": "b865af53a133f8d09201282aa3ff82a489b5e2b396308364005ea2e247dcda17",
+      "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-raw/elbow-state.json.gz",
       "note": "Harness wrapper API mismatch; stopped before gameplay comparisons"
     },
     {
       "path": "/tmp/zombie-ng-wounds-elbow-controlled/wounds.json",
       "sha256": "31ee87af51389e1c22e6919dc0fb42b8ec8446d01670f9b58615210f0d4fcfed",
+      "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-raw/elbow-controlled.json.gz",
       "note": "Actual elbow sever, exact body/chunk depth/fallback and stable full state; body max reviewed, chunk p99 pending"
     },
     {
       "path": "/tmp/zombie-ng-wounds-shoulder-controlled/wounds.json",
       "sha256": "aa9289af224e498f79e7ee47f1c538f10c026f1a7e045468d81c6bb71ddc98ef",
+      "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-raw/shoulder-controlled.json.gz",
       "note": "Original moving shoulder repeated; first legacy raw byte-identical to failed arm run; subsequent legacy/hybrid exact depth/fallback"
     }
   ],
