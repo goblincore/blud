@@ -20,6 +20,16 @@ interface PrimBind {
   armFrame?: { head: number; tail: number; restDir: Vec3 };
 }
 
+/** The upper-arm / forearm bone for a side, under either naming convention:
+ *  the zombie's `upperArm`/`foreArm` or the `.blob` idiom `upperarm`/`forearm`. */
+function armBoneName(body: BuildResult, part: 'upper' | 'fore', side: 'l' | 'r'): string | null {
+  for (const n of part === 'upper' ? ['upperArm', 'upperarm'] : ['foreArm', 'forearm']) {
+    if (body.bones.has(`${n}.${side}`)) return `${n}.${side}`;
+  }
+  return null;
+}
+const ARM_BONE_RE = /^(upperArm|upperarm|foreArm|forearm)\.[lr]$/;
+
 /**
  * The head as ONE RIGID UNIT (motion-polish fix, X1.22 playtest).
  *
@@ -135,12 +145,15 @@ export function bindRig(body: BuildResult): BoundRig {
   // The mirrored shoulders establish the authored body's lateral axis.
   // Flexion is toward body-forward, not toward the rest forearm: its inward
   // carrying angle otherwise lets sideways motion mask backward extension.
-  const leftShoulder = body.bones.get('upperArm.l')?.head;
-  const rightShoulder = body.bones.get('upperArm.r')?.head;
+  const leftShoulderName = armBoneName(body, 'upper', 'l');
+  const rightShoulderName = armBoneName(body, 'upper', 'r');
+  const leftShoulder = leftShoulderName ? body.bones.get(leftShoulderName)?.head : undefined;
+  const rightShoulder = rightShoulderName ? body.bones.get(rightShoulderName)?.head : undefined;
   const bodyForward = leftShoulder && rightShoulder
     ? normalize(cross(sub(leftShoulder, rightShoulder), [0, 1, 0])) : [0, 0, 1] as Vec3;
-  for (const side of ['l', 'r']) {
-    const upperName = `upperArm.${side}`, foreName = `foreArm.${side}`;
+  for (const side of ['l', 'r'] as const) {
+    const upperName = armBoneName(body, 'upper', side), foreName = armBoneName(body, 'fore', side);
+    if (!upperName || !foreName) continue;
     const live = (name: string) => body.prims.some(p => p.bone === name && !p.dead &&
       (p.op === undefined || p.op === 'add') && len(sub(p.b, p.a)) > KEY_EPS &&
       body.clusters[p.cluster]?.alive);
@@ -231,7 +244,7 @@ export function bindRig(body: BuildResult): BoundRig {
 
   const bindPrim = (p: Primitive): PrimBind => {
     const binding: PrimBind = { a: bindEnd(p.a), b: bindEnd(p.b) };
-    const bone = p.bone && /^(upperArm|foreArm)\.[lr]$/.test(p.bone) ? body.bones.get(p.bone) : undefined;
+    const bone = p.bone && ARM_BONE_RE.test(p.bone) ? body.bones.get(p.bone) : undefined;
     if (bone) binding.armFrame = { head: indexOf(bone.head), tail: indexOf(bone.tail),
       restDir: normalize(sub(bone.tail, bone.head)) };
     return binding;

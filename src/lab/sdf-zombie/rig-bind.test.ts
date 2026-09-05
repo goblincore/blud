@@ -6,6 +6,12 @@ import { headingDir } from './wander';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { ZOMBIE } from './body';
 import { stepRig } from './rig';
+import { jointNamesForBody } from './gait';
+import { compileBlob } from './blob-compile';
+import { parseBlob } from './blob-parse';
+import { makeMotionJoints } from './motion';
+import { collapseRopes } from './collapse';
+import soldierSrc from './characters/soldier.blob?raw';
 import { sdPrimitive } from './validate';
 import { add, dot, len, normalize, qRotate, scale as vscale, sub } from './vec';
 import type { Primitive, Vec3 } from './types';
@@ -385,5 +391,25 @@ describe('bone prims ride the rig (wound pass r2)', () => {
       rig = stepRig(rig, 1 / 60, { gravity: [0, -9.8, 0], damping: 0.04, iterations: 4, restStiffness: 0.2 });
     const out = applyRig(body, { ...bound, rig });
     for (const p of out.bonePrims) for (const v of [...p.a, ...p.b]) expect(Number.isFinite(v)).toBe(true);
+  });
+});
+
+describe('rig-bind on .blob bone names (soldier)', () => {
+  const body = buildBody(compileBlob(parseBlob(soldierSrc)));
+  const bound = bindRig(body);
+  it('both elbows get a bend constraint', () => {
+    expect(bound.rig.bends?.length).toBe(2);
+  });
+  it('upperarm/forearm prims carry an arm frame', () => {
+    const armPrims = body.prims.map((p, i) => [p, i] as const).filter(([p]) => /^(upperarm|forearm)\.[lr]$/.test(p.bone ?? ''));
+    expect(armPrims.length).toBeGreaterThan(0);
+    for (const [, i] of armPrims) expect(bound.binding[i]!.armFrame, `prim ${i}`).toBeDefined();
+  });
+  it('collapse ropes anchor the offset clavicle heads to the chest', () => {
+    const names = jointNamesForBody(body);
+    const ropes = collapseRopes(names, bound.rig.restPose);
+    const iC = names.indexOf('chest'), iL = names.indexOf('clavicleL'), iR = names.indexOf('clavicleR');
+    expect(ropes.some(r => (r.a === iL && r.b === iC) || (r.a === iC && r.b === iL))).toBe(true);
+    expect(ropes.some(r => (r.a === iR && r.b === iC) || (r.a === iC && r.b === iR))).toBe(true);
   });
 });
