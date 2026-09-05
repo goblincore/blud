@@ -761,6 +761,20 @@ async function main() {
    *  flips it live for A/B. */
   const GAME_WOUND_EARLY_OUT = 1;
 
+  /** Close-up task 2 (2026-09-05) — how the shading normal is built
+   *  (march.wgsl.ts's post-hit mode select, perfCfg.z):
+   *    0 = tetrahedron stencil (four mapBody evals — the shipped behaviour),
+   *    1 = 3-tap forward difference reusing the walk's own hit eval (one
+   *        eval of six deleted, base reconstructed against the silhouette
+   *        fbm so it differentiates the same field calcNormal does),
+   *    2 = screen-space derivative normals (zero evals) with a
+   *        length(pdx)+length(pdy) magnitude-threshold stencil fallback.
+   *  GAME_NORMAL_THRESH (perfCfg.w, world metres) is mode 2's straddle
+   *  threshold. The boot default is decided by the interleaved wounded
+   *  fill-screen A/B plus the specular close-up visual gate, not before. */
+  const GAME_NORMAL_MODE = 0;
+  const GAME_NORMAL_THRESH = 0.02;
+
   /**
    * Step multiplier for the game page's march (marchCfg.y). The lab ships
    * 0.6 (under-relaxed) to survive the fbm shell displacement, which this
@@ -1030,6 +1044,8 @@ async function main() {
     view.uniforms.woundCfg2.value.y = GAME_RELAX;
     view.uniforms.perfCfg.value.x = GAME_HULL_EXIT_BOUND;
     view.uniforms.perfCfg.value.y = GAME_WOUND_EARLY_OUT;
+    view.uniforms.perfCfg.value.z = GAME_NORMAL_MODE;
+    view.uniforms.perfCfg.value.w = GAME_NORMAL_THRESH;
     view.uniforms.marchCfg.value.y = GAME_OMEGA;
     view.uniforms.aaCfg.value.y = GAME_AA;
     view.uniforms.aaCfg.value.x = sdfLayer.pixelConeK;
@@ -3675,6 +3691,22 @@ async function main() {
     /** Wound-loop early-out (perf round 2 task 3, perfCfg.y). */
     setWoundEarlyOut(on: boolean) { for (const a of actors) a.view.uniforms.perfCfg.value.y = on ? 1 : 0; },
     get woundEarlyOut() { return (actors[0]?.view.uniforms.perfCfg.value.y ?? 0) > 0.5; },
+    /** Shading-normal mode (close-up task 2, perfCfg.z / perfCfg.w — see
+     *  GAME_NORMAL_MODE). Chunks follow the bodies — a chunk shaded by a
+     *  different normal rule than the body it tore from is the
+     *  setFlatAlbedo inconsistency again. */
+    setNormalMode(mode: number, thresh?: number) {
+      for (const a of actors) {
+        a.view.uniforms.perfCfg.value.z = mode;
+        if (thresh !== undefined) a.view.uniforms.perfCfg.value.w = thresh;
+      }
+      for (const c of chunkViews) {
+        c.uniforms.perfCfg.value.z = mode;
+        if (thresh !== undefined) c.uniforms.perfCfg.value.w = thresh;
+      }
+    },
+    get normalMode() { return actors[0]?.view.uniforms.perfCfg.value.z ?? 0; },
+    get normalThresh() { return actors[0]?.view.uniforms.perfCfg.value.w ?? 0; },
     /** Step multiplier (marchCfg.y). Ships at GAME_OMEGA. */
     setOmega(v: number) {
       const n = Math.max(0.1, Math.min(1.0, v));

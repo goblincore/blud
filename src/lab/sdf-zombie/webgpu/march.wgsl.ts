@@ -2118,13 +2118,93 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // suppression of the flesh's own texture, so meltCfg passes through
   // untouched. At gloss 0 / metal 0 / melt 0 the vec4 is byte-identical to
   // the pre-both-changes call.
-  var n = calcNormal(p, data, counts, counts2, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
   // The hit pixel's REST-space noise anchor (task 6): every fbm below —
   // micro-detail, gore mottle — samples the dominant prim's rest frame, so
   // the surface texture rides the limb through gait and jiggle. Computed
   // once here; the fallback keeps the old root-shift anchor for bodies with
   // no rest rows (the FPV hands view).
+  // HOISTED above the shading normal (close-up task 2) — the forward-
+  // difference mode rebuilds its stencil base from this anchor, so the
+  // anchor must exist before the normal runs. restPoint and noiseLocal are
+  // pure reads, so hoisting them cannot move a pixel, and the mode-0 branch
+  // below is byte-for-byte the pre-task-2 call.
   let anchor = restPoint(p, data, hitBest, noiseLocal(p, noiseShift));
+  // NORMAL MODE (close-up task 2, perfCfg.z — ship default 0). The post-hit
+  // chain spends four of its six field evaluations building the shading
+  // normal; this lever selects how the normal is built.
+  //
+  // mode 0 — the tetrahedron stencil, four mapBody evals. The shipped
+  // behaviour; byte-for-byte the pre-task-2 call, guarded so the lever-off
+  // render is bit-identical to it.
+  //
+  // mode 1 — a 3-tap forward difference reusing the walk's own eval. The
+  // loop accepted this t because mapBody returned d < hitEps AT p, so f(p)
+  // is already evaluated — hitField.x. One eval of six deleted. What
+  // remains is a first-order stencil instead of a tetrahedral one — a
+  // different truncation error at the same scale, not a new artifact class;
+  // both stencils sample the same field at the same 1.5 mm.
+  //
+  // THE NOISE TRAP the naive version falls into — mapBody adds the
+  // silhouette fbm INTERNALLY, scaled by noiseCfg.x, and the WALK evaluates
+  // it at 0 (the noise lives on the normal — see the loop above). So
+  // hitField.x is the SMOOTH field, while calcNormal's four taps each carry
+  // the fbm. Mixing a smooth base with fbm-carrying taps divides the ENTIRE
+  // fbm by e (0.0015) — a hugely amplified noise gradient, not a normal.
+  // The base must therefore be reconstructed exactly as mapBody would have
+  // built it at p — the same fold hitField.x came from, the same dominant
+  // prim's rest frame, the same fbm at frequency 3 — which costs one fbm,
+  // not one mapBody eval. The anchor hoisted above is exactly that
+  // reconstruction input, and MAP_BODY's detail line is
+  // fbm(anchor * 3.0) * noiseCfg.x.
+  //
+  // mode 2 — screen-space derivative normals, ZERO field evals (below).
+  var n = vec3<f32>(0.0, 1.0, 0.0);
+  if (perfCfg.z < 0.5) {
+    n = calcNormal(p, data, counts, counts2, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
+  } else if (perfCfg.z < 1.5) {
+    // The silhouette amp, the same scalar the mode-0 vec4 inlines above —
+    // a polished or machined prim has no pits, so the gloss/metal kill
+    // rides the amplitude, exactly as it does in mode 0.
+    let nAmp = marchCfg.z * (1.0 - max(gloss, metal));
+    let nBase = hitField.x + fbm(anchor * 3.0) * nAmp;
+    // The 1/e division is left out on purpose — the vector is normalised
+    // immediately, and a shared positive scale cannot change direction.
+    let nx = mapBody(p + vec3<f32>(0.0015, 0.0, 0.0), data, counts, counts2, vec4<f32>(nAmp, 0.0, 0.0, 0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x;
+    let ny = mapBody(p + vec3<f32>(0.0, 0.0015, 0.0), data, counts, counts2, vec4<f32>(nAmp, 0.0, 0.0, 0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x;
+    let nz = mapBody(p + vec3<f32>(0.0, 0.0, 0.0015), data, counts, counts2, vec4<f32>(nAmp, 0.0, 0.0, 0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x;
+    n = normalize(vec3<f32>(nx - nBase, ny - nBase, nz - nBase));
+  } else {
+    // DERIVATIVE NORMALS (close-up task 2 step 2). cross(dpdx, dpdy) of the
+    // hit position is a surface normal for zero field evals — the 2x2 quad
+    // already differentiated the interpolated position for free. Two known
+    // failure modes, both handled explicitly here.
+    //
+    // STRADDLING — at silhouettes and depth discontinuities the quad spans
+    // two different surfaces and the derivative is garbage. Guard: a quad
+    // sitting on ONE smooth surface can only move p by its own footprint,
+    // so length(pdx) + length(pdy) beyond perfCfg.w (world metres) means
+    // the quad straddles — those pixels fall back to the stencil. The
+    // minority case by design — a fill-screen body keeps its silhouette to
+    // a one-pixel band.
+    //
+    // FACETING — dpdx is constant per quad, so this normal is piecewise
+    // flat at 2 px granularity. Whether that reads under the specular
+    // highlight on curved flesh is the VISUAL gate for this mode, not a
+    // counter — see the task report.
+    //
+    // Orientation — the cross product's sign is a screen-parity coin flip,
+    // so it is pointed at the camera (against rd) before use — a normal
+    // facing INTO the surface shades the body black. perfCfg.z is a
+    // uniform, so this branch is uniform control flow and dpdx is legal.
+    let pdx = dpdx(p);
+    let pdy = dpdy(p);
+    let dn = cross(pdx, pdy);
+    if (length(pdx) + length(pdy) > perfCfg.w) {
+      n = calcNormal(p, data, counts, counts2, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
+    } else {
+      n = normalize(select(-dn, dn, dot(dn, rd) < 0.0));
+    }
+  }
   // Micro-detail perturbs the normal only — costs no march safety. Three more
   // fbm calls though, so it is guarded: once per hit pixel rather than per
   // step, but still six noise lookups a body does not always need. The

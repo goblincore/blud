@@ -2126,3 +2126,82 @@ describe('flat-albedo seam (close-up diagnostics task 1)', () => {
     expect((rest.match(/mapBody\(p \+/g) ?? []).length).toBeGreaterThanOrEqual(2);
   });
 });
+
+describe('shading normal modes (close-up task 2)', () => {
+  // perfCfg.z selects how the shading normal is built — 0 the tetrahedron
+  // stencil (the shipped behaviour), 1 a 3-tap forward difference reusing
+  // the walk's hit eval, 2 screen-space derivative normals with a
+  // magnitude-threshold stencil fallback (perfCfg.w). Same contract as the
+  // flat-albedo seam above — inert when off, independently toggleable —
+  // held from text because nothing here can compile WGSL.
+
+  // Comment-stripped source, so these pins cannot trip on their own prose.
+  const code = MARCH_BODY.split('\n').filter(l => !l.trim().startsWith('//')).join('\n');
+
+  it('gates on perfCfg.z — only as the two mode-select comparisons', () => {
+    // Exactly two reads, both the if-chain's range checks — a third use
+    // (a stray default or a second consumer) would make the modes share
+    // state, the melt-literal incident's failure class. perfCfg.w is read
+    // once, as mode 2's threshold. The cone keeps its own contract.
+    expect((code.match(/perfCfg\.z/g) ?? []).length).toBe(2);
+    expect((code.match(/perfCfg\.z </g) ?? []).length).toBe(2);
+    expect((code.match(/perfCfg\.w/g) ?? []).length).toBe(1);
+    expect(CONE_MARCH).not.toContain('perfCfg.z');
+  });
+
+  it('mode 0 is byte-for-byte the pre-task-2 calcNormal call', () => {
+    // The lever-off render must be bit-identical to the base branch, and
+    // the strongest text-level proof is that the off branch IS the old
+    // call — amp inlined, same argument order, no refactor. (Only the
+    // declaration moved out of the branch — a pure rename, pinned by the
+    // anchor-hoist test below.)
+    const legacy = 'n = calcNormal(p, data, counts, counts2, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);';
+    const mode0 = code.indexOf('if (perfCfg.z < 0.5)');
+    expect(mode0).toBeGreaterThan(-1);
+    const branch = code.slice(mode0, code.indexOf('} else if', mode0));
+    expect(branch).toContain(legacy);
+  });
+
+  it('mode 1 reconstructs the fbm the walk never evaluated', () => {
+    // The walk evaluates mapBody with noise 0, so hitField.x is the SMOOTH
+    // field while the taps carry the silhouette fbm. A smooth base with
+    // fbm taps divides the whole fbm by e — the noise trap. The base must
+    // add fbm(anchor * 3.0) * nAmp back, exactly as MAP_BODY's detail line
+    // builds it (same anchor rule, same frequency 3).
+    expect(code).toContain('let nBase = hitField.x + fbm(anchor * 3.0) * nAmp;');
+    // Three forward taps, each carrying the same amp vec4 as mode 0.
+    expect((code.match(/vec4<f32>\(nAmp, 0\.0, 0\.0, 0\.0\)/g) ?? []).length).toBe(3);
+    // ...at axis offsets of the stencil's own 0.0015 scale.
+    expect((code.match(/p \+ vec3<f32>\(0\.0015, 0\.0, 0\.0\)/g) ?? []).length).toBe(1);
+    expect((code.match(/p \+ vec3<f32>\(0\.0, 0\.0015, 0\.0\)/g) ?? []).length).toBe(1);
+    expect((code.match(/p \+ vec3<f32>\(0\.0, 0\.0, 0\.0015\)/g) ?? []).length).toBe(1);
+  });
+
+  it('the anchor is hoisted above the mode select', () => {
+    // Mode 1's base reads the anchor, so the restPoint call must precede
+    // the first perfCfg.z read. restPoint/noiseLocal are pure, so the
+    // hoist cannot move a pixel — this pin holds the ordering that makes
+    // that true.
+    const anchor = code.indexOf('let anchor = restPoint(p, data, hitBest, noiseLocal(p, noiseShift));');
+    const mode = code.indexOf('if (perfCfg.z < 0.5)');
+    expect(anchor).toBeGreaterThan(-1);
+    expect(anchor).toBeLessThan(mode);
+  });
+
+  it('mode 2 — derivatives gated by the magnitude threshold, stencil fallback', () => {
+    // dpdx is only legal in uniform control flow — the branch condition
+    // reads the perfCfg uniform, and the derivative must live inside the
+    // mode-2 branch, not hoisted above the select.
+    const mode2 = code.indexOf('perfCfg.z < 1.5');
+    expect(mode2).toBeGreaterThan(-1);
+    const block = code.slice(code.indexOf('} else', mode2));
+    expect(block).toContain('let pdx = dpdx(p);');
+    expect(block).toContain('let pdy = dpdy(p);');
+    // Straddle guard — the stencil fallback and the camera-facing select.
+    expect(block).toContain('length(pdx) + length(pdy) > perfCfg.w');
+    expect((code.match(/dpdx\(/g) ?? []).length).toBe(1);
+    expect((code.match(/dpdy\(/g) ?? []).length).toBe(1);
+    expect(block).toContain('select(-dn, dn, dot(dn, rd) < 0.0)');
+    expect(block).toContain('calcNormal(p,');
+  });
+});
