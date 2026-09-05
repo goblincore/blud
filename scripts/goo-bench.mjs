@@ -225,7 +225,7 @@ if (MODE === 'phase0') {
     console.log(`  ${leg.padEnd(10)} ${segName} ${s[segName].p50.toFixed(2)} ms  cov ${(s.cov * 100).toFixed(1)}%  live ${s.live}  drop ${s.droplets}`);
   }
 }
-const file = `${OUT}/goo-${MODE}${MODE === 'ab' ? `-${ITEM}` : ''}.json`;
+const file = `${OUT}/goo-${MODE}${MODE === 'ab' ? `-${ITEM}` : ''}${CLOSE ? '-close' : ''}${FLOOR ? '-floor' : ''}.json`;
 writeFileSync(file, JSON.stringify({ meta: { url, MODE, ITEM, ROOM, repeats: REPEATS, when: new Date().toISOString(), bench: BENCH }, rows, summary, stability: { kept, crashRetries, loadRejected, makeupReps } }, null, 2));
 console.log(`\nwrote ${file}`);
 process.exit(0);
