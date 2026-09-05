@@ -188,18 +188,18 @@ body
 # ============================================================
 face
   headRadius 0.075
-  headWidth  0.98
-  headHeight 1.15
-  headDepth  1.05
-  jawWidth   1.00
-  jawHeight  0.90
+  headWidth  0.980
+  headHeight 1.150
+  headDepth  1.050
+  jawWidth   1.000
+  jawHeight  0.900
   jawDrop    0.060
-  jawJut     0.038
-  noseLength 0.004
-  noseWidth  0.34
-  noseDrop   0.020
-  browHeavy  0.010
-  browRise   0.020
+  jawJut     0.023
+  noseLength 0.034
+  noseWidth  0.531
+  noseDrop   0.014
+  browHeavy  0.001
+  browRise   0.050
   headBlend  0.005
 
 # The mesh's own face, baked flat (npm run blob:face-bake -- soldier) and
@@ -218,7 +218,7 @@ sheet
   projScaleX  0.180
   projScaleY  0.200
   projCentreX 0.50
-  projCentreY 0.500
+  projCentreY 0.490
   # Owner-tuned in the lab, 2026-09-04. THE COLOUR BAKE IS THE FACE -- the
   # greyscale-map experiment was tried and reverted: luma modulation threw
   # away the brow, nose and beard definition the colour bake carries, and the
