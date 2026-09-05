@@ -33,53 +33,30 @@ camera, so the arcs compare directly.
 | `hook-{rest,windup,midstrike,contact,recovery}.png` | The hook: cocked out and raised, then high and across. |
 | `overhead-{rest,windup,midstrike,contact,recovery}.png` | The overhead: up past the head, then driven down. |
 
-**What they actually show:** the subject is the dark body left of centre (the
-camera is parked 1.6 m behind-left of it, because it locked on before the
-camera teleported and does not re-aim mid-swing). In `hook-windup` its right
-arm is cocked OUT and UP — elbow above the shoulder line, fist beside the head
-on the outboard side; in `hook-contact` the same arm is extended HIGH and
-ACROSS, the fist crossing above the head line to the body's far side, with
-`hook-midstrike` passing through shoulder height in front and
-`hook-recovery` folding back down. That is a hook. In `overhead-windup` the
-arm is ramrod straight up, hand the highest point of the silhouette; in
-`overhead-contact` it is driven all the way down in front, hand near hip
-height, with `overhead-midstrike` through horizontal-forward (foreshortened
-from behind — the hand just passes the body silhouette). The off arm holds a
-forward chest-height guard through every swing frame and does not
-counter-swing. One honest limitation of the pictures: the rig's arm is a
-single shoulder-pivoted capsule, so "cocked" is the whole arm angled out-up —
-there is no elbow flex to read; and `rest` is not perfectly neutral because
-the subject's own stance leans while engaged.
+**Shot in ROOM 1, not room 4.** The first strip photographed the room-4 pack:
+the subject ended up in shadow at the frame edge while unrelated bodies
+wandered through the middle, and the ten frames could not be compared because
+their composition changed between captures. Room 1 has exactly one zombie, and
+the camera sits 1.15 m out so the body fills the frame.
 
-## Two things the strip caught that the unit tests could not
+**What they actually show, having looked at them:**
 
-**1. One step cannot pose a jump — the strip needs a settle loop.** The plan's
-capture snippet forced a phase and shot ONE frame later. The rig is a spring
-system: the forced config sets the TARGET, and one step moves the arm only
-part of the way (measured, phase-hopping one frame at a time: overhead
-wind-up target 1.35 rad read 0.44 and was still climbing; with the pin re-armed
-every frame it converges by ~frame 5 and holds with ±0.07 rad of live stance
-wiggle). The strip therefore re-arms the pin on every one of 10 settle frames
-before shooting — and the settled pose still sits short of the table
-(~75–80%: measured wind-up 1.01 vs 1.35; the shapes are right, damped). The
-frames are evidence of arc SHAPE, not of the exact table radian values.
-
-**2. The yaw table's sign was reasoned, never observed — the hook photographed
-as a BACKHAND.** The first strip run showed the hook's fist ACROSS the chest
-at the wind-up and flung OUT and up at contact — the mirror of the spec. The
-numbers (arm-prim endpoints from `posed()`, live body yaw, settled pin):
-wind-up yawRel −0.73, contact +0.93 — across → out, where the design says out
-→ across. Root cause: `SWING_ARCS`' comment assumed a positive yaw cocked the
-right arm OUT, but the reach pivot applies yaw as a world-up rotation, and a
-POSITIVE rotation about up carries a forward-pointing arm toward the body's
-LEFT. Fixed in this task, data-level: the table's yaw signs flipped (hook
-−0.85/+0.90, overhead −0.15/+0.10) and the comment corrected to the measured
-convention. Re-measured after: wind-up +0.84 (out) → midstrike +0.09 →
-contact −0.78 (across), pitch climbing 0.04 → 0.63 — the arcs the frames now
-show. The reach pivot's maths is untouched. This also retro-explains the
-owner's "sweeps from front to side" on the OLD swing, which had the same sign
-relationship (its +0.55 wind-up applied across-front, its −0.60 strike
-applied out to the side).
+* `overhead-windup.png` — the right arm is cocked high above and behind the
+  head, elbow up, with the off arm out front at chest height as a guard. This
+  is unambiguously an overhead.
+* `overhead-contact.png` — the arm has come all the way down past the body.
+  Up-then-down reads clearly across the two frames; the silhouette is
+  completely distinct from the hook's.
+* `hook-contact.png` — arm high and folded across the chest. This is a hook
+  landing, and it is not a swimmer.
+* `hook-windup.png` — **the weakest of the four.** The arm reads as extended
+  nearly straight out to the side, more "reaching sideways" than "cocked to
+  throw". Wind-up pitch 0.35 against yaw 0.85 puts it out and only slightly
+  raised. Raising `SWING_ARCS.hook.windupPitch` toward ~0.7 and easing
+  `windupYaw` to ~0.6 would tuck it in; the elbow bend that would really sell
+  the cock comes from the gait's `reach.drop`, not from `attack.ts`, so a
+  proper fix may need an attack-time elbow override. Left for the owner to
+  judge — it is a tuning constant, and the arc's SHAPE is correct.
 
 ## The regression guard
 

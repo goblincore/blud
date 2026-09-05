@@ -103,7 +103,13 @@ await evaluate('typeof __sdfGame.gooPanel === "function" ? (__sdfGame.gooPanel(f
 await evaluate('__sdfGame.setLoopRunning(false)');
 
 // Walk into room 4 and wake the room, so a body comes to melee range.
-await evaluate('__sdfGame.setPose(-4.8, 2.0, 0, 0, 0)');
+// ROOM 1, NOT ROOM 4. Room 4 holds four bodies and the first version of this
+// strip photographed all of them: the subject ended up in shadow at the frame
+// edge while unrelated zombies wandered through the middle, and the ten frames
+// could not be compared because their composition changed between captures.
+// Room 1 has exactly ONE zombie (game-level.ts SPAWN_TABLE), so the subject is
+// the only thing in shot and the only thing that changes.
+await evaluate('__sdfGame.setPose(-4.8, -2.5, 0, 0, 0)');
 await evaluate('__sdfGame.fire(1)');
 
 // Find a body that reaches melee, and park the camera 1.6 m from it looking
@@ -113,14 +119,17 @@ let subject = null;
 for (let i = 0; i < 60 && !subject; i++) {
   await evaluate('__sdfGame.step(10, 1 / 60)');
   const bs = await evaluate('__sdfGame.brains()');
-  subject = bs.find((b) => b.state === 'attack' || b.state === 'recover') ?? null;
+  subject = bs.find((b) => b.room === 1
+    && (b.state === 'attack' || b.state === 'recover')) ?? null;
 }
 if (!subject) fail('no body reached melee range — nothing to photograph');
 const zs = await evaluate('__sdfGame.zombies()');
 const me = zs.find((z) => z.id === subject.id);
 if (!me) fail(`zombie ${subject.id} vanished between reads`);
-const cx = me.pos[0] - 1.6;
-const cz = me.pos[2] - 1.6;
+// 1.15 m out, not 1.6: the body has to FILL the frame or the arc is a few
+// pixels of arm against a dark wall.
+const cx = me.pos[0] - 0.81;
+const cz = me.pos[2] - 0.81;
 const yaw = Math.atan2(me.pos[0] - cx, -(me.pos[2] - cz));
 const CAM = `__sdfGame.setPose(${cx}, ${cz}, ${yaw}, -0.10, 0)`;
 await evaluate(CAM);
