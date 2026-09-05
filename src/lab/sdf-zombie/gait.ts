@@ -22,6 +22,8 @@ import type { Vec3 } from './types';
 import type { BuildResult } from './build-body';
 import { add, len, sub } from './vec';
 import { blendCurves, sampleCurve, sampleStance, type GaitCurves } from './gait-curves';
+import { SOLDIER_WALK } from './gait-curves/soldier-walk';
+import { SOLDIER_RUN } from './gait-curves/soldier-run';
 
 const TAU = Math.PI * 2;
 const Z: Vec3 = [0, 0, 0];
@@ -182,11 +184,18 @@ export type GaitProfile = {
 
 export const SHAMBLE: GaitProfile = GAIT_TUNING as unknown as GaitProfile;
 
+// CURVE MODE: MARCH and RUN carry a sampled reference clip (curves), and
+// when the caller passes the body's rest leg vectors the knee/foot offsets
+// and hip bob are rebuilt from those curves — strideLen, footLift, kneeBend,
+// kneeLift, kneeTrack, footPush, stanceDuty and bobAmp are then UNUSED for
+// the legs and root (they only remain as the no-limbs fallback).
+
 /** An upright patrol walk: gun carried low, short quiet steps. */
 export const MARCH: GaitProfile = {
   ...SHAMBLE,
   name: 'march',
-  strideFreq: 1.6,
+  strideFreq: SOLDIER_WALK.freq,
+  curves: SOLDIER_WALK,
   // 0.34, not the 0.45 first shipped: on 0.84 m legs a 0.45 reach nearly
   // straightens the swing leg (same lesson as RUN's strideLen).
   strideLen: 0.34,
@@ -207,7 +216,8 @@ export const MARCH: GaitProfile = {
 export const RUN: GaitProfile = {
   ...SHAMBLE,
   name: 'run',
-  strideFreq: 2.4,
+  strideFreq: SOLDIER_RUN.freq,
+  curves: SOLDIER_RUN,
   // The first cut ran 0.75 m strides on 0.84 m legs, so the swing leg had to
   // STRAIGHTEN to reach and the run read as stiff-legged stretching (owner,
   // 2026-09-05: "he doesn't bend his knees"). A runner's reach is well under

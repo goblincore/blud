@@ -50,7 +50,7 @@ import type { Wound, WoundType } from './damage';
 import type { LimbId, Vec3 } from './types';
 import { add, len, normalize, qFromAxisAngle, qRotate, scale, sub } from './vec';
 import type { RigPoint } from './rig';
-import type { GaitJointName, GaitProfile } from './gait';
+import type { GaitJointName, GaitLimbs, GaitProfile } from './gait';
 import { blendProfiles, GAIT_TUNING, jointNamesForBody, rotateYaw, stepGait, type ArmStyle } from './gait';
 import { runWeight, ZOMBIE_PROFILE, type MotionProfile } from './motion-profile';
 import {
@@ -130,11 +130,12 @@ export const MOTION_TUNING = {
 /** Hip-fire knobs. */
 export const FIRE = {
   /** How long the fire carry holds after the last shot (s). The plan said
-   *  0.6, but measured against the run gait's phase (strideFreq 2.4 → the
-   *  first full-amplitude swing after a frame-0 shot starts at frame 36,
-   *  exactly when a 0.6 s hold expires) that left the prescribed stride-cut
-   *  gate unsatisfiable — the swing it measures must still be held. 0.85 s
-   *  (51 frames) covers that whole swing; a pure feel knob otherwise. */
+   *  0.6, but measured against the run gait's phase (the first full-amplitude
+   *  swing after a frame-0 shot must start while the hold is still up or the
+   *  stride-cut gate is unsatisfiable — the swing it measures must still be
+   *  held). 0.85 s (51 frames) covers that swing; a pure feel knob
+   *  otherwise. Still true at the clip-driven 1.5 Hz: the first
+   *  full-amplitude footL swing runs frames ~15-43, inside the hold. */
   holdSec: 0.85,
   /** Stride amplitude while holding (a burst on the move shortens the step). */
   strideScale: 0.4,
@@ -551,9 +552,20 @@ export function stepMotion(
     wounded: sig.wounded,
   };
   const armStyle = pickArmStyle(cfg, gaitProfile);
+  // The body's REST leg segment vectors (body-local) — curve-mode gaits
+  // rebuild their knee/foot offsets from the clip angles with THESE lengths.
+  // The zombie gets limbs too, but SHAMBLE.curves is undefined so nothing
+  // changes (the gait pins prove it).
+  const limbs: GaitLimbs | undefined = idx.hipL !== undefined && idx.kneeL !== undefined && idx.footL !== undefined
+    && idx.hipR !== undefined && idx.kneeR !== undefined && idx.footR !== undefined
+    ? {
+      L: { thigh: sub(joints.base[idx.kneeL]!, joints.base[idx.hipL]!), shin: sub(joints.base[idx.footL]!, joints.base[idx.kneeL]!) },
+      R: { thigh: sub(joints.base[idx.kneeR]!, joints.base[idx.hipR]!), shin: sub(joints.base[idx.footR]!, joints.base[idx.kneeR]!) },
+    }
+    : undefined;
   const gait = stepGait(
     { time: state.gait.time + stagger.phaseKnock, seed: state.gait.seed },
-    skew, dt, armStyle, gaitProfile,
+    skew, dt, armStyle, gaitProfile, limbs,
   );
 
   // --- assemble the standing rest targets ----------------------------------

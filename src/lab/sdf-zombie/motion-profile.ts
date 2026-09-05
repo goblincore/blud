@@ -36,8 +36,14 @@ export const ZOMBIE_PROFILE: MotionProfile = {
 export const SOLDIER_PROFILE: MotionProfile = {
   name: 'soldier',
   gait: { walk: MARCH, run: RUN },
-  runBand: { from: 1.6, to: 3.0 },
-  cruise: 3.4,
+  // Cruise and the walk→run band come from the reference clips' implied
+  // speeds (Task 1's sampling, for a 0.84 m leg):
+  //   soldier-walk: freq 0.937 Hz, duty 0.63, travel 0.746 m → implied speed 1.12 m/s
+  //   soldier-run:  freq 1.500 Hz, duty 0.31, travel 0.670 m → implied speed 3.22 m/s
+  // The band brackets between the two clips (±0.2 inside the implied
+  // speeds); cruise is the run clip's implied speed rounded to 0.1.
+  runBand: { from: 1.32, to: 3.02 },
+  cruise: 3.2,
   armStyle: 'carry',
   carries: { walk: 'low', run: 'chest', fire: 'hip' },
   prop: { url: '/assets/lab/shorty-double.glb' },

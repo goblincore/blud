@@ -17,7 +17,7 @@ import { applyRig, bindRig } from './rig-bind';
 import { stepRig, type RigPoint } from './rig';
 import { relaxRopeConstraints, COLLAPSE_TUNING } from './collapse';
 import { makeRng, WANDER_TUNING, headingDir, type WanderBounds } from './wander';
-import { len, sub, dot } from './vec';
+import { len, normalize, sub, dot } from './vec';
 import type { LimbId, Vec3 } from './types';
 import type { Wound } from './damage';
 import { compileBlob } from './blob-compile';
@@ -25,7 +25,7 @@ import { parseBlob } from './blob-parse';
 import soldierSrc from './characters/soldier.blob?raw';
 import { SOLDIER_PROFILE } from './motion-profile';
 import { CARRIES, GUN_GRIP, gunPoseFromArm, gunPoint } from './carry';
-import { RUN, rotateYaw } from './gait';
+import { MARCH, RUN, rotateYaw } from './gait';
 
 const DT = 1 / 60;
 const BOUNDS: WanderBounds = { minX: -1.5, maxX: 1.5, minZ: -1.5, maxZ: 1.5 };
@@ -697,13 +697,45 @@ describe('fire signal', () => {
     const lift = (fire: boolean) => {
       let best = 0;
       let state = makeMotionState(3, [0, 0, 0]); let points = stubPoints(j);
-      for (let i = 0; i < 60; i++) {
+      for (let i = 0; i < 46; i++) {
         const s = stepMotion(state, j, CFG, { ...NO_SIGNALS(), fire: fire && i === 0 }, points, BOUNDS, makeRng(1));
         state = s.state; points = s.frame.restPose.map(p => ({ pos: [...p] as Vec3, prev: [...p] as Vec3, pinned: false }));
-        if (i > 30) best = Math.max(best, s.frame.restPose[j.index.footL]![1] - j.groundY);
+        // The measured swing must sit INSIDE the hold (strideFreq-timing,
+        // not frame counts — the motion-polish lesson). At the run clip's
+        // 1.5 Hz (40-frame cycle) the first full-amplitude footL swing is
+        // frames ~15-43 (blend full by 24, peak 28), fully inside the
+        // 51-frame hold; the old i>30/60-frame window was tuned to the
+        // pre-curve 2.4 Hz and caught the hold's expiry instead.
+        if (i > 14) best = Math.max(best, s.frame.restPose[j.index.footL]![1] - j.groundY);
       }
       return best;
     };
     expect(lift(true)).toBeLessThan(lift(false) * 0.6);
+  });
+});
+
+describe('soldier walks on the clip curves', () => {
+  const CFG: MotionConfig = { enabled: true, wander: false, profile: SOLDIER_PROFILE, forceSpeed: 1.0 };
+  it('a march step lifts the knee well forward of the hip→ankle line', () => {
+    const j = soldierJoints();
+    let state = makeMotionState(3, [0, 0, 0]); let points = stubPoints(j);
+    let best = 0;
+    for (let i = 0; i < 120; i++) {
+      const s = stepMotion(state, j, CFG, NO_SIGNALS(), points, BOUNDS, makeRng(1));
+      state = s.state; points = s.frame.restPose.map(p => ({ pos: [...p] as Vec3, prev: [...p] as Vec3, pinned: false }));
+      const P = s.frame.restPose;
+      const hip = P[j.index.hipL]!, knee = P[j.index.kneeL]!, foot = P[j.index.footL]!;
+      const d = normalize(sub(foot, hip)); const v = sub(knee, hip);
+      const along = dot(d, v);
+      best = Math.max(best, len(sub(v, [d[0] * along, d[1] * along, d[2] * along])));
+    }
+    expect(best).toBeGreaterThan(0.06);
+    expect(state.runWeight).toBe(0);
+  });
+  it('MARCH and RUN carry the curves and their frequencies', () => {
+    expect(MARCH.curves?.name).toBe('soldier-walk');
+    expect(RUN.curves?.name).toBe('soldier-run');
+    expect(MARCH.strideFreq).toBeCloseTo(MARCH.curves!.freq, 9);
+    expect(RUN.strideFreq).toBeCloseTo(RUN.curves!.freq, 9);
   });
 });
