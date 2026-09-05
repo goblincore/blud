@@ -109,6 +109,8 @@ async function boot(vitePort) {
   if (backend !== 'webgpu') fail(`backend is ${backend}, not webgpu`);
   await sleep(2500);
   await evaluate('__sdfGame.installDebugProbe()');
+  // The bake ships ON since the look verdict; the off legs below need it OFF explicitly.
+  await evaluate('__sdfGame.setChunkBake(false)');
 }
 
 /**

@@ -1143,13 +1143,15 @@ async function main() {
   // is a rigid static field that will never change again; when the seam is
   // on, it is extracted ONCE into a static mesh and RETIRED from the march:
   // its proxy box stops being drawn and stepped, and the mesh draws in the
-  // main scene (a real early-Z occluder) instead. Off by default
-  // (GAME_CHUNK_BAKE); off must be pixel-identical, and it is — every line
-  // below the seam is behind `chunkBakeEnabled` and the lists stay empty.
+  // main scene (a real early-Z occluder) instead. ON by default since the
+  // owner's look verdict (2026-09-05: "looks great, nothing off from non
+  // baked"); GAME_CHUNK_BAKE=0 must be pixel-identical to main, and it is —
+  // every line below the seam is behind `chunkBakeEnabled` and the lists
+  // stay empty.
   // STATE ONLY here — this must run BEFORE the bone-instancer light-seed
   // block below reads bakedChunkMat (declaration order is execution order
   // in this boot). The bake/gib/free functions live in the chunk section.
-  const GAME_CHUNK_BAKE: 0 | 1 = 0;
+  const GAME_CHUNK_BAKE: 0 | 1 = 1;
   let chunkBakeEnabled = (GAME_CHUNK_BAKE as 0 | 1) === 1;
   interface ChunkTemplate { uniforms: import('./zombie-gpu').MarchUniforms; volumeTexture: THREE.Texture }
   interface BakedChunk {
@@ -3182,12 +3184,18 @@ async function main() {
       // GUT ROPES first, so stepBlood's skip of 'gut' droplets this frame
       // sees this frame's chain positions (see stepGutRopes).
       stepGutRopes(cdt);
+      // ONE bake per frame: a bake is ~5 ms of CPU (gate: lastBakeMs 5.3 on
+      // a 128-vert piece) and a double-barrel gib lands several chunks that
+      // settle within a few frames of each other. A settled chunk stays
+      // settled, so the others simply bake on the following frames.
+      let bakedThisFrame = false;
       for (let ci = liveChunks.length - 1; ci >= 0; ci--) {
         const c = liveChunks[ci]!;
         c.state = stepChunk(c.state, cdt);
-        if (chunkBakeEnabled && chunkSettled(c.state)) {
+        if (chunkBakeEnabled && !bakedThisFrame && chunkSettled(c.state)) {
           liveChunks.splice(ci, 1);
           bakeSettled(c);
+          bakedThisFrame = true;
           continue;
         }
         c.view.update(c.state);
@@ -5090,7 +5098,7 @@ async function main() {
       );
       return prims.length;
     },
-    /** Settled-chunk bake (close-up task 5). OFF at boot (GAME_CHUNK_BAKE);
+    /** Settled-chunk bake (close-up task 5). ON at boot (GAME_CHUNK_BAKE);
      *  off is pixel-identical. Toggling mid-session only affects FUTURE
      *  settles — baked pieces stay baked until shot or recycled. */
     setChunkBake(on: boolean) {

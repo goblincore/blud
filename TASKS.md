@@ -666,6 +666,26 @@ fallback while the twin wrote real starts) — positional call sites must be
 re-counted when a parameter is added.
 [notes](docs/dev-notes/2026-09-04-closeup-3-depth-prepass/notes.md).
 
+**CLOSE-UP TASK 5 (settled-chunk bake) — LANDED, SHIPS ON (2026-09-05,
+cherry-picked from `dispatch/2026-09-04-closeup-task-5`, never merged: its
+history carries the 116 MB glb).** A chunk that passes `chunkSettled` is
+extracted ONCE on the CPU (field + albedo mirror of the march's tissue ramp,
+noise, bone/organ attribution, torn gore) into a static lit mesh in the MAIN
+scene (early-Z occluder), its `ChunkGpuView` recycled through a 12-view ring.
+Nine gates green: seam-off parity with main pixel-identical (c76adada), bake
+5.3 ms one-shot on a 128-vert piece, baked piece hittable (pellet loop tests
+baked pieces BEFORE the floor kill — a settled piece rests at y 0.02, exactly
+the kill plane; this ordering cost the dispatch hours and is pinned with
+ORDER comments), leak soak bounded (views cap 12, 25 bakes recycle clean).
+Dispatch timed out before the look capture and the firefight bench; **owner
+look verdict in-game: "looks great, nothing off from non baked"** → ships
+ON (`GAME_CHUNK_BAKE = 1`), with ONE bake per frame added on landing so a
+double-barrel's settling chunks cannot stack 5 ms bakes into one frame.
+**Owed:** the on/off firefight bench number (rooms 3/4). Seams
+`__sdfGame.setChunkBake/chunkBake/chunkStats/spawnTestChunk`; drivers
+`scripts/sdf-chunk-bake-gate.sh`, `scripts/sdf-chunk-bake-look.mjs`.
+[notes](docs/dev-notes/2026-09-04-closeup-5-bake-settled/notes.md).
+
 **CLOSE-UP TASK 4 (goo) — DONE, NEGATIVE RESULT (2026-09-05).** The premise
 ("the goo layer is the blood cost") does NOT reproduce. Measured with the
 item seams landed on `dispatch/2026-09-04-closeup-task-4-attempt1` (parity-
