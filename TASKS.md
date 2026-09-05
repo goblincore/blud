@@ -20,6 +20,35 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**[ ] A-female — FEMALE CHARACTER, described-authoring RUNNING (2026-09-05).**
+Second run of the method the soldier proved: proportions from a plate, style
+from the approved cast (goblin/soldier/zombie/clown), identity left to the
+agent, no measurement step.
+[plan](docs/superpowers/plans/2026-09-05-female-described.md). Reference is a
+NUDE A-pose body -- proportions only; its Rigify rig has 722 joints of IK/MCH
+helpers so the fitting tools cannot read it regardless, and its dress/belt/
+necklace/watch meshes are out of scope per the owner.
+
+**QUEUED BEHIND HER, in order:**
+1. **`hairlock`** (Selfie Girl item 4) aimed at the SCHOOLGIRL, not this
+   character -- her head is 7 prims, 5 of them hair, and loose. The female
+   reference wears a BUN, which is the one case the technique suits least: it
+   is for flowing wavy strands, and a compact updo is two or three ordinary
+   prims. Deferred deliberately -- radiusRamp was built ahead of a character
+   that needed it and two of its four face features shipped at zero.
+2. **Her WAM kit: armour, and SOFT CLOTHES.** The soft half has a real fork
+   and it is not obvious which way it goes. `.blob` ALREADY does cloth --
+   the schoolgirl's skirt and sailor collar are `shell` prims (`thick=` /
+   `clip=` / `rim=`), a thin onioned surface clipped to a hem. So the choice
+   is: put drape in WAM, which cuts against goblin-kit.wam's own argument that
+   WAM exists for HARD things because smooth-min rounds the edges a buckle
+   needs; or extend the shell with Selfie Girl item 5 -- domain-warp it with
+   low-frequency sines for wrinkles, plus the rim trick where the shell meets
+   its clipping plane, `length(vec2(dShell, dPlane)) - r`. Decide before
+   authoring, not during.
+
+
+
 **[x] A-soldier — SOLDIER SHIPPED (2026-09-05), and the method changed on the
 way.** `characters/soldier.blob` (15 prims, body only) + `soldier-kit.wam`
 compiled to `public/assets/lab/soldier-kit.gltf` (pauldrons, cuirass, belt +
