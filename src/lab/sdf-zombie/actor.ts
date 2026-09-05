@@ -121,7 +121,8 @@ export interface ActorStepInput {
   current: BuildResult;
   dt: number;
   wander: boolean;
-  armStyle: ArmStyle;
+  /** Arm-style override; undefined lets the profile/gait pick (task 13). */
+  armStyle: ArmStyle | undefined;
   headingFollow: number;
   gazeFollow: number;
   bounds: WanderBounds;

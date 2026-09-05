@@ -42,22 +42,33 @@ export function segmentQuat(restDir: Vec3, dir: Vec3, bodyYaw: number): Quat {
 const KEY_EPS = 1e-4;
 
 /**
- * Frames for every bone in `body.bones`, keyed by bone name. Each bone's
- * head and tail are looked up in the rig's REST pose (bindRig dedups rig
- * points by position, so a bone end is found by position, not index) and
- * the same indices read the CURRENT points.
+ * Frames for every bone in `body.bones`, keyed by bone name.
+ *
+ * Bone ends are mapped to rig point indices by rebuilding bindRig's OWN
+ * dedup — rest-space positions, in `body.bones` order, same KEY_EPS — never
+ * by looking ends up in `bound.rig.restPose`. stepActorMotion REWRITES
+ * restPose with world-space rest targets every sub-step (rootShift baked
+ * in, motion.ts's MotionFrame contract), so after the body takes a single
+ * step no rest-space bone end would match and every frame would go
+ * missing — the kit fell back to the bind pose at the origin while the
+ * body stood a wander away (task-13 smoke shot). The same indices then
+ * read the CURRENT points, which ARE world space, so frames are world.
  */
 export function boneFrames(body: BuildResult, bound: BoundRig, bodyYaw: number): Map<string, BoneFrame3> {
-  const rest = bound.rig.restPose;
   const pts = bound.rig.points;
+  const positions: Vec3[] = [];
   const indexAt = (p: Vec3): number => {
-    for (let i = 0; i < rest.length; i++) if (len(sub(rest[i]!, p)) < KEY_EPS) return i;
-    return -1;
+    for (let i = 0; i < positions.length; i++)
+      if (len(sub(positions[i]!, p)) < KEY_EPS) return i;
+    positions.push(p);
+    return positions.length - 1;
   };
   const out = new Map<string, BoneFrame3>();
   for (const [name, bone] of body.bones) {
     const iH = indexAt(bone.head), iT = indexAt(bone.tail);
-    if (iH < 0 || iT < 0 || iH === iT) continue;
+    // Out-of-range means this bound was built from a DIFFERENT body — skip
+    // rather than pose from a stranger's points.
+    if (iH === iT || iH >= pts.length || iT >= pts.length) continue;
     const head = pts[iH]!.pos, tail = pts[iT]!.pos;
     const restDir = normalize(sub(bone.tail, bone.head));
     const dir = normalize(sub(tail, head));

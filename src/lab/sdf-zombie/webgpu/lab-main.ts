@@ -29,7 +29,8 @@
 import * as THREE from 'three/webgpu';
 import { createLabRenderer } from './lab-renderer';
 import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER } from './sdf-layer';
-import { loadKit } from './kit-overlay';
+import { loadKit, type KitOverlay } from './kit-overlay';
+import { loadHeldProp, type HeldProp } from './held-prop';
 import { createPostAa, POST_AA_SMEAR_MAX } from './post-aa';
 import {
   createZombieGpuView, createChunkGpuView, createSharedChunkGpuMaterial,
@@ -85,9 +86,8 @@ const CHARACTERS: Record<string, string> = {
  * props authored in a sibling `.wam` and compiled to a self-contained glTF.
  * Absent means flesh only, which is every character but the goblin today.
  *
- * See kit-overlay.ts for what this does and does not do yet: the kit is placed
- * once at the body root and does NOT follow the rig, so it is only honest with
- * motion frozen.
+ * The kit RIDES THE RIG: every frame the hero loop re-poses it from
+ * rig-frames.ts's per-bone transforms (see the `kit?.pose(frames)` call).
  */
 const KITS: Record<string, string> = {
   goblin: '/assets/lab/goblin-kit.gltf',
@@ -145,14 +145,17 @@ import {
 import {
   applyFloorContact, makeMotionJoints, makeMotionState, MOTION_TUNING,
   planSubSteps, STANDING_RIG, stepMotion,
-  type MotionJoints, type MotionSignals,
+  type MotionFrame, type MotionJoints, type MotionSignals,
 } from '../motion';
 import {
   CROWD_DT, crowdSeed, crowdRng, emptyActorSignals,
   makeActorMotion, stepActorMotion,
   type ActorMotion, type ActorSignals,
 } from '../actor';
-import { GAIT_TUNING, type ArmStyle } from '../gait';
+import { rotateYaw, type ArmStyle } from '../gait';
+import { boneFrames } from '../rig-frames';
+import { motionProfileFor, type MotionProfile } from '../motion-profile';
+import type { CarryName } from '../carry';
 import { makeRng, type Rng, type WanderBounds } from '../wander';
 import { add, sub } from '../vec';
 import { makeChunk, stepChunk, type Chunk, type ChunkKind } from '../gib-chunks';
@@ -582,20 +585,9 @@ async function main() {
   // preparation for things that have not happened yet (gibs, goo, FPV).
   boot.bodyInScene = bootMark();
 
-  // The character's polygon kit, on the DEFAULT layer with the floor and the
-  // reference cube — NOT SDF_LAYER. That is what puts it in the polygonal pass
-  // whose depth the march already composites against (sdf-layer.ts's header),
-  // so armour occludes and is occluded by flesh with nothing added here.
-  //
-  // Fire-and-forget: a kit that fails to load must not take the lab down with
-  // it, and there is nothing to fall back to — the character is simply
-  // undressed, which is exactly how it rendered before kits existed.
-  const kitUrl = KITS[activeCharacterName()];
-  if (kitUrl) {
-    loadKit(kitUrl, handle.renderer, [0, 0, 0])
-      .then(kit => scene.add(kit.object))
-      .catch(e => console.error(`[kit] ${kitUrl} failed to load; rendering the body undressed`, e));
-  }
+  // The character's polygon kit (and the soldier's held prop) load further
+  // down, beside the motion state — the prop load reads motionProfile.prop,
+  // which does not exist yet at this point in the bootstrap (TDZ).
   const u = view.uniforms;
 
   // One node graph for every gib. Three r185 still runs its expensive
@@ -1093,14 +1085,56 @@ async function main() {
    *  shots raycast against. Authored rest-space raycasting stopped being
    *  valid the moment the body could wander or fall. */
   let lastPosed = current;
+  /** The hero's latest motion frame (null in statue mode) — the gun pose,
+   *  gait name and fire kicks the kit/prop posing and the panel read. */
+  let lastMotionFrame: MotionFrame | null = null;
   let motionEnabled = true;
   let wanderOn = true;
-  let armStyle: ArmStyle = GAIT_TUNING.armStyle;
+  // No default arm style: undefined lets the motion profile pick (the
+  // soldier's carry); the panel's arms button cycles profile/swing/reach.
+  let armStyle: ArmStyle | undefined = undefined;
   let headingFollow: number = MOTION_TUNING.headingFollow;
   /** Gaze-follow gain — 1 looks where the body walks, 0 pins the gaze to the
    *  wander target (the creepy variant the owner wants kept reachable). */
   let gazeFollow: number = MOTION_TUNING.gazeFollow;
   let forcedCollapse = false;
+
+  /** This character's motion profile — gaits, cruise, carries, prop. */
+  const motionProfile: MotionProfile = motionProfileFor(activeCharacterName());
+  /** Lab speed band: which cruise the wanderer uses. ',' walk, '.' run. */
+  let speedBand: 'walk' | 'run' = 'walk';
+  /** Treadmill speed for pose captures (holdPose); undefined = wander speed. */
+  let forceSpeed: number | undefined;
+  /** Carry pin for pose captures. */
+  let carryOverride: CarryName | undefined;
+  let pendingFire = false;
+  /** Seconds since the hero last fired; feeds the prop's muzzle rise. */
+  let sinceFire = Infinity;
+  const cruiseFor = (band: 'walk' | 'run') =>
+    band === 'run' ? motionProfile.cruise : Math.min(motionProfile.cruise, motionProfile.runBand.from * 0.75);
+
+  // The character's polygon kit and held prop, on the DEFAULT layer with the
+  // floor and the reference cube — NOT SDF_LAYER. That is what puts them in
+  // the polygonal pass whose depth the march already composites against
+  // (sdf-layer.ts's header), so armour and gun occlude and are occluded by
+  // flesh with nothing added here.
+  //
+  // Fire-and-forget: a kit or prop that fails to load must not take the lab
+  // down with it, and there is nothing to fall back to — the character is
+  // simply undressed/unarmed, which is exactly how it rendered before.
+  let kit: KitOverlay | null = null;
+  let heldProp: HeldProp | null = null;
+  const kitUrl = KITS[activeCharacterName()];
+  if (kitUrl) {
+    loadKit(kitUrl, handle.renderer, [0, 0, 0])
+      .then(k => { kit = k; scene.add(k.object); })
+      .catch(e => console.error(`[kit] ${kitUrl} failed to load; rendering the body undressed`, e));
+  }
+  if (motionProfile.prop) {
+    loadHeldProp(motionProfile.prop.url)
+      .then(p => { heldProp = p; scene.add(p.object); })
+      .catch(e => console.error(`[prop] ${motionProfile.prop!.url} failed to load; rendering unarmed`, e));
+  }
 
   // ——— MELT (2026-09-03) ————————————————————————————————————————————————
   // The zombie liquefies where it stands: flesh sags into a puddle and the
@@ -1344,6 +1378,9 @@ async function main() {
     pendingWounds.length = 0;
     pendingSevered.length = 0;
     forcedCollapse = false;
+    // A fresh body gets its armour back; the released gun stays on the
+    // floor — that is the expected debris.
+    if (kit) kit.object.visible = true;
     // Clear any melt on reset. stopMelt() owns the full teardown (progress,
     // held flag, released bone chunks and the shader uniform) — the melt
     // spike this replaced cleared three of its own variables by hand here,
@@ -1885,6 +1922,10 @@ async function main() {
     wounds = [];
     view.update(current);
     refreshWounds();
+    // The gibbed body leaves its armour and drops its gun (task 13): the
+    // kit hides with the body it clothed; the prop tumbles as debris.
+    if (kit) kit.object.visible = false;
+    heldProp?.release([0, 2.5, 0], MOTION_SEED);
     resetMotion(); // a gibbed body is done shambling — fresh state for whatever spawns next
   }
 
@@ -2427,6 +2468,11 @@ async function main() {
     if (ev.key === '[') { setCrowdCount(Math.max(0, crowd.length - 1)); return; }
     if (ev.key === 'g' || ev.key === 'G') { gibEverything(); return; }
     if (ev.key === 'k' || ev.key === 'K') { forcedCollapse = true; return; }
+    // Speed band + fire (soldier-class; no-ops without carries). ','/'.'
+    // rather than '1'/'2': SEVER_KEYS already owns '1' (head sever).
+    if (ev.key === ',') { speedBand = 'walk'; return; }
+    if (ev.key === '.') { speedBand = 'run'; return; }
+    if (ev.key === 'f' || ev.key === 'F') { if (motionProfile.carries) pendingFire = true; return; }
     // MELT: 'm' starts it, 'M' (shift) clears it back to a solid body. Melting
     // IS the death — no forcedCollapse here; a ragdoll would topple it.
     if (ev.key === 'm') { startMelt(); return; }
@@ -2762,19 +2808,27 @@ async function main() {
       // severed/freshWounds ARE pendingSevered/pendingWounds (same array
       // references): drained in place after the first sub-step.
       heroSignals.severed = pendingSevered;
+      heroSignals.fire = pendingFire;
       const f = stepActorMotion(heroMotion, {
         current, dt,
         wander: wanderOn, armStyle, headingFollow, gazeFollow,
         bounds: WANDER_BOUNDS, rng: motionRng, signals: heroSignals,
+        profile: { ...motionProfile, cruise: cruiseFor(speedBand) },
+        forceSpeed, carryOverride,
       });
-      // shot/forcedCollapse are values — read the drained state back.
+      lastMotionFrame = f;
+      // shot/forcedCollapse/fire are values — read the drained state back.
       pendingShot = heroSignals.shot;
       forcedCollapse = heroSignals.forcedCollapse;
+      pendingFire = heroSignals.fire;
+      // The muzzle rise clocks off the fire kicks landing, not the keypress.
+      sinceFire = f ? (f.kicks.length ? 0 : sinceFire + dt) : sinceFire;
       if (f) {
         if (motionReadEl) {
           motionReadEl.textContent =
             `meter ${f.meter.toFixed(2)} · ${f.phase}${f.hop ? ' · hop' : ''}` +
-            (f.staggerKind ? ` · ${f.staggerKind}` : '');
+            (f.staggerKind ? ` · ${f.staggerKind}` : '') +
+            ` · ${f.gaitName}${f.carry ? ' · ' + f.carry : ''}`;
         }
         // Keep the shambler framed: the orbit target drifts after the body
         // (fast enough to follow a walk, slow enough to leave the orbit feel).
@@ -2805,6 +2859,7 @@ async function main() {
         }),
       };
       view.setRootShift(0, 0); // statue: world-anchored noise, as before
+      lastMotionFrame = null; // no motion frame in statue mode — the prop holds its last pose
     }
     if (meltState && !meltHeld) meltState = stepMelt(meltState, Math.min(dt, 1 / 30));
     // The wet-red material ramp (melt task 6): meltCfg.x tracks progress so
@@ -2813,6 +2868,21 @@ async function main() {
     view.setMelt(meltState ? meltState.t : 0);
     const posed = applyRig(current, heroMotion.bound, heroMotion.lastBodyYaw);
     lastPosed = posed;
+    // Polygon halves ride the rig: the kit from per-bone frames, the gun from
+    // the motion frame's gun pose (right forearm). Collapse and gib release
+    // the gun; the kit simply keeps following the (fallen) rig.
+    if (kit || heldProp) {
+      const frames = boneFrames(current, heroMotion.bound, heroMotion.lastBodyYaw);
+      kit?.pose(frames);
+      if (heldProp) {
+        const lastFrame = heroMotion.motionState ? lastMotionFrame : null;
+        if (lastFrame?.gun && !heldProp.released) {
+          heldProp.pose(lastFrame.gun, sinceFire, rotateYaw([1, 0, 0], heroMotion.lastBodyYaw));
+        }
+        if (lastFrame?.collapsed && !heldProp.released) heldProp.release([0, 0, 0], MOTION_SEED);
+        heldProp.step(Math.min(dt, 1 / 30), 0);
+      }
+    }
     // Rest-space noise anchor (motion-polish task 6): `current` is the
     // authored, un-rigged body — the rest pose the noise texture is baked
     // into. Prim indices correspond 1:1 with the posed body (applyRig maps
@@ -2906,6 +2976,10 @@ async function main() {
           bounds: a.bounds,
           rng: a.rng,
           signals: CROWD_SIGNALS,
+          // Crowd bodies share the hero's character, so they share its
+          // profile — crowd soldiers march too. No prop: crowd bodies don't
+          // get kits or guns in this phase.
+          profile: motionProfile,
         });
         const cPosed = applyRig(a.current, a.motion.bound, a.motion.lastBodyYaw);
         a.lastPosed = cPosed;
@@ -3516,10 +3590,19 @@ async function main() {
   const wanderBtn = addButton(motionBox, `wander: ${wanderOn ? 'on' : 'off'}`, () => {
     setWander(!wanderOn);
   });
-  const armStyleBtn = addButton(motionBox, `arms: ${armStyle}`, () => {
-    setArmStyle(armStyle === 'reach' ? 'swing' : 'reach');
+  const armStyleBtn = addButton(motionBox, `arms: ${armStyle ?? 'profile'}`, () => {
+    setArmStyle(armStyle === undefined ? 'swing' : armStyle === 'swing' ? 'reach' : undefined);
   });
   addButton(motionBox, 'force collapse', () => { forcedCollapse = true; });
+  // Soldier-class controls (soldier-animation task 13) — only a character
+  // whose motion profile carries a weapon gets them.
+  if (motionProfile.carries) {
+    const bandBtn = addButton(motionBox, `speed: ${speedBand} (,/.)`, () => {
+      speedBand = speedBand === 'walk' ? 'run' : 'walk';
+      bandBtn.textContent = `speed: ${speedBand} (,/.)`;
+    });
+    addButton(motionBox, 'fire (F)', () => { pendingFire = true; });
+  }
   motionReadEl = document.createElement('div');
   motionReadEl.style.cssText = 'font:11px monospace;color:#9c9;';
   motionBox.appendChild(motionReadEl);
@@ -3750,10 +3833,11 @@ async function main() {
     wanderOn = on;
     wanderBtn.textContent = `wander: ${on ? 'on' : 'off'}`;
   }
-  /** Arm style: 'reach' (mummy-arms, the default) or 'swing' (counter-swing). */
-  function setArmStyle(s: ArmStyle) {
+  /** Arm style override: undefined lets the motion profile decide (the
+   *  soldier's carry); 'reach' is mummy-arms, 'swing' counter-swing. */
+  function setArmStyle(s: ArmStyle | undefined) {
     armStyle = s;
-    armStyleBtn.textContent = `arms: ${s}`;
+    armStyleBtn.textContent = `arms: ${s ?? 'profile'}`;
   }
   /** Heading-follow gain 0..1 — 0 is the strafe-walker (body never turns). */
   function setHeadingFollow(v: number) {
@@ -4353,6 +4437,37 @@ async function main() {
     },
     /** The K key's console twin: forces the collapse next frame. */
     forceCollapse() { forcedCollapse = true; },
+    /** Soldier-class controls (no-ops for characters without carries). */
+    setSpeedBand(b: 'walk' | 'run') { speedBand = b; },
+    fire() { if (motionProfile.carries) pendingFire = true; },
+    get motionProfile() { return motionProfile.name; },
+    /**
+     * Deterministic pose for captures: treadmill at `speed` m/s (0 = stand),
+     * optionally pinned to a carry, stepped `frames` times at 1/60 with the
+     * body standing still, then motion is frozen so the rig holds it.
+     * 'walk' | 'run' | 'hip' are the turntable's presets.
+     */
+    holdPose(preset: 'walk' | 'run' | 'hip' | 'rest', frames = 90) {
+      setWander(false);
+      setMotionEnabled(true);
+      forceSpeed = preset === 'walk' ? cruiseFor('walk') : preset === 'run' ? cruiseFor('run') : 0;
+      carryOverride = preset === 'hip' ? 'hip' : undefined;
+      if (preset === 'hip') pendingFire = true;
+      const sig = heroSignals;
+      for (let i = 0; i < frames; i++) {
+        sig.fire = pendingFire; pendingFire = false;
+        const f = stepActorMotion(heroMotion, {
+          current, dt: 1 / 60, wander: false, armStyle, headingFollow, gazeFollow,
+          bounds: WANDER_BOUNDS, rng: motionRng, signals: sig,
+          profile: motionProfile, forceSpeed, carryOverride,
+        });
+        lastMotionFrame = f;
+        if (f) sinceFire = f.kicks.length ? 0 : sinceFire + 1 / 60;
+      }
+      sinceFire = Infinity; // a held pose is judged without the muzzle rise
+      setMotionEnabled(false);
+      return lastMotionFrame ? { gait: lastMotionFrame.gaitName, carry: lastMotionFrame.carry } : null;
+    },
     /**
      * The X1.25 post chain (FXAA / temporal smear / sharp-bilinear upscale)
      * — the panel's post section, from the console. All-off is an exact
