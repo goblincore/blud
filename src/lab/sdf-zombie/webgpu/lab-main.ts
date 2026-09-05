@@ -858,6 +858,53 @@ async function main() {
    * the caller falls back to the shared zombie sheet — which is what every
    * character wore before this existed.
    */
+  /**
+   * Measures a face sheet's mean luminance off its decoded pixels and
+   * re-uploads the texture with it. The mean is the level the shader divides
+   * out (`tex.rgb / faceCfg2.y`), so it has to be the sheet's own average or
+   * the multiply lands at the wrong level. Transparent texels are skipped so
+   * the surrounding alpha does not drag the average down; a tainted or
+   * undecodable image keeps mean 1, which is the pre-measurement behaviour.
+   * Hoisted out of loadGeneratedFace so the upload path (face panel) can
+   * measure the same way.
+   */
+  function applyMeanOf(t: THREE.Texture) {
+    let mean = 1;
+    try {
+      const img = t.image as HTMLImageElement;
+      const cv = document.createElement('canvas');
+      cv.width = img.width; cv.height = img.height;
+      const cx = cv.getContext('2d', { willReadFrequently: true });
+      if (cx !== null && cv.width > 0 && cv.height > 0) {
+        cx.drawImage(img, 0, 0);
+        const d = cx.getImageData(0, 0, cv.width, cv.height).data;
+        let sum = 0, n = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          if (d[i + 3]! < 8) continue;
+          sum += (0.2126 * d[i]! + 0.7152 * d[i + 1]! + 0.0722 * d[i + 2]!) / 255;
+          n++;
+        }
+        if (n > 0) mean = Math.max(sum / n, 1e-3);
+      }
+    } catch { /* tainted or undecodable: fall back to 1, which is the old behaviour */ }
+    if (faceSheet !== null) faceSheet.mean = mean;
+    for (const v of [view, ...crowd]) v.setFaceTexture(t, faceSheet!.atlas, mean);
+  }
+
+  /** Wear an already-loaded image as the face sheet: whole-image atlas, mean
+   *  measured off the pixels, decal mode as the character's sheet block says. */
+  function wearFaceImage(tex: THREE.Texture, decal: boolean) {
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
+    tex.generateMipmaps = false;
+    tex.flipY = true;
+    faceSheet?.tex.dispose();
+    faceSheet = { tex, atlas: new THREE.Vector4(1, 1, 0, 0), mean: 1 };
+    faceMode = decal ? 2 : 1;
+    for (const v of [view, ...crowd]) v.setFaceTexture(tex, faceSheet.atlas, 1);
+    applyMeanOf(tex);
+  }
+
   function loadGeneratedFace(): boolean {
     let params;
     try {
@@ -904,39 +951,10 @@ async function main() {
     // so the surrounding alpha does not drag the average down.
     const image = compileSheetImage(parseBlob(activeCharacterSrc()));
     if (image !== null) {
-      const applyMean = (t: THREE.Texture) => {
-        let mean = 1;
-        try {
-          const img = t.image as HTMLImageElement;
-          const cv = document.createElement('canvas');
-          cv.width = img.width; cv.height = img.height;
-          const cx = cv.getContext('2d', { willReadFrequently: true });
-          if (cx !== null && cv.width > 0 && cv.height > 0) {
-            cx.drawImage(img, 0, 0);
-            const d = cx.getImageData(0, 0, cv.width, cv.height).data;
-            let sum = 0, n = 0;
-            for (let i = 0; i < d.length; i += 4) {
-              if (d[i + 3]! < 8) continue;
-              sum += (0.2126 * d[i]! + 0.7152 * d[i + 1]! + 0.0722 * d[i + 2]!) / 255;
-              n++;
-            }
-            if (n > 0) mean = Math.max(sum / n, 1e-3);
-          }
-        } catch { /* tainted or undecodable: fall back to 1, which is the old behaviour */ }
-        if (faceSheet !== null) faceSheet.mean = mean;
-        for (const v of [view, ...crowd]) v.setFaceTexture(t, faceSheet!.atlas, mean);
-      };
-      const tex = new THREE.TextureLoader().load(`/assets/lab/faces/${image}`, applyMean);
-      tex.magFilter = THREE.NearestFilter;   // PSX: texels, not a blur
-      tex.minFilter = THREE.NearestFilter;
-      tex.generateMipmaps = false;
-      tex.flipY = true;                      // as the PNG registry path
-      faceSheet?.tex.dispose();
-      faceSheet = { tex, atlas: new THREE.Vector4(1, 1, 0, 0), mean: 1 };
-      faceMode = params.decal > 0.5 ? 2 : 1;
-      // Mean 1 until the image decodes, then applyMean re-uploads with the
+      const tex = new THREE.TextureLoader().load(`/assets/lab/faces/${image}`, applyMeanOf);
+      // Mean 1 until the image decodes, then applyMeanOf re-uploads with the
       // measured value. One frame of the old level is not worth blocking on.
-      for (const v of [view, ...crowd]) v.setFaceTexture(tex, faceSheet.atlas, 1);
+      wearFaceImage(tex, params.decal > 0.5);
       return true;
     }
     faceMode = 1;
@@ -3254,6 +3272,43 @@ async function main() {
   }
   rebuildMaterialSliders();
 
+  // Skin tone (owner, 2026-09-05). The picker speaks sRGB, the material linear.
+  const toLinear = (c: number) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+  const toSrgb = (c: number) => (c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055);
+  const hex = (rgb: readonly number[]) => '#' + rgb.map(v => Math.round(Math.min(1, Math.max(0, toSrgb(v))) * 255).toString(16).padStart(2, '0')).join('');
+  let skinBase: Vec3 = [flesh.baseColor[0], flesh.baseColor[1], flesh.baseColor[2]];
+  let skinLight = 0;
+  const applySkin = () => {
+    const lift = (v: number) => Math.min(1, Math.max(0, v * (1 + skinLight)));
+    flesh.baseColor = [lift(skinBase[0]), lift(skinBase[1]), lift(skinBase[2])];
+    reapply();
+  };
+  const skinRow = document.createElement('label');
+  skinRow.style.cssText = 'display:flex;gap:6px;align-items:center;font:11px monospace;margin:4px 0;';
+  skinRow.textContent = 'skin ';
+  const skinPick = document.createElement('input');
+  skinPick.type = 'color'; skinPick.value = hex(skinBase);
+  skinPick.addEventListener('input', () => {
+    const h = skinPick.value;
+    skinBase = [
+      toLinear(parseInt(h.slice(1, 3), 16) / 255),
+      toLinear(parseInt(h.slice(3, 5), 16) / 255),
+      toLinear(parseInt(h.slice(5, 7), 16) / 255),
+    ];
+    applySkin();
+  });
+  skinRow.appendChild(skinPick);
+  matBox.appendChild(skinRow);
+  addSlider(matBox, { label: 'skin lightness', min: -0.5, max: 0.5, step: 0.01, get: () => skinLight, set: v => { skinLight = v; applySkin(); } });
+  const saveSkinBtn = addButton(matBox, 'save skin → repo', async () => {
+    const r = await fetch(`/__lab/save-palette?character=${encodeURIComponent(activeCharacterName())}`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ baseColor: flesh.baseColor.map(v => Math.round(v * 1000) / 1000) }),
+    });
+    const j = await r.json() as { ok: boolean; path?: string; error?: string };
+    saveSkinBtn.textContent = j.ok ? `saved ${j.path}` : `save failed: ${j.error}`;
+  });
+
   const bodyBox = addSection(panelEl, 'body');
   addSlider(bodyBox, {
     label: 'global blendK', min: 0.004, max: 0.05, step: 0.001,
@@ -3317,6 +3372,36 @@ async function main() {
     faceTexName = v as FaceTexName;
     loadFaceTexture(faceTexName);
   });
+
+  // Face upload (lab dressing room, 2026-09-05). Pick any PNG/JPEG off disk
+  // and the character wears it immediately — same whole-image path the baked
+  // sheet uses. A PNG can then be saved into the repo via the dev-only
+  // endpoint, landing at the file the character's `sheet image` line names.
+  let uploadedFace: Uint8Array<ArrayBuffer> | null = null;
+  const faceFile = document.createElement('input');
+  faceFile.type = 'file'; faceFile.accept = 'image/png,image/jpeg';
+  faceFile.style.cssText = 'display:block;width:100%;margin:4px 0;font:11px monospace;';
+  faceFile.addEventListener('change', async () => {
+    const f = faceFile.files?.[0]; if (!f) return;
+    const buf = new Uint8Array(await f.arrayBuffer());
+    const url = URL.createObjectURL(new Blob([buf], { type: f.type }));
+    let decal = true;
+    try { decal = (compileSheet(parseBlob(activeCharacterSrc()))?.decal ?? 1) > 0.5; } catch { /* keep decal */ }
+    const tex = new THREE.TextureLoader().load(url, t => { applyMeanOf(t); URL.revokeObjectURL(url); });
+    wearFaceImage(tex, decal);
+    uploadedFace = f.type === 'image/png' ? buf : null; // save only PNGs (the endpoint checks magic bytes)
+    saveFaceBtn.disabled = uploadedFace === null;
+    saveFaceBtn.textContent = uploadedFace ? 'save face → repo' : 'save face (PNG only)';
+  });
+  faceBox.appendChild(faceFile);
+  const saveFaceBtn = addButton(faceBox, 'save face (upload first)', async () => {
+    if (!uploadedFace) return;
+    const r = await fetch(`/__lab/save-face?character=${encodeURIComponent(activeCharacterName())}`, { method: 'POST', body: uploadedFace });
+    const j = await r.json() as { ok: boolean; path?: string; error?: string };
+    saveFaceBtn.textContent = j.ok ? `saved ${j.path}` : `save failed: ${j.error}`;
+  });
+  saveFaceBtn.disabled = true;
+
   const texBtn = addButton(faceBox, 'face tex: on', () => {
     // Goes through faceEnabled rather than the uniform, because applyLod
     // rewrites faceCfg.x every frame and would undo a direct poke.

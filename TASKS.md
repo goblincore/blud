@@ -43,6 +43,9 @@ soldier's `Walking` clip and the Meshy zombie-biped `running` clip
 (`gait-curves/`, `scripts/gait-from-clip.ts`); the zombie stays on the
 sinusoid shamble, pinned
 ([clip-gait spec](docs/superpowers/specs/2026-09-05-clip-driven-gait-design.md)).
+Lab dressing room: upload a face PNG / pick a skin tone, save both into the
+repo via the dev-only `/__lab/save-*` endpoints
+([spec](docs/superpowers/specs/2026-09-05-lab-dressing-room-design.md)).
 [spec](docs/superpowers/specs/2026-09-05-soldier-animation-design.md) ·
 [plan](docs/superpowers/plans/2026-09-05-soldier-animation.md) ·
 [strips](docs/dev-notes/2026-09-05-soldier-animation/notes.md)

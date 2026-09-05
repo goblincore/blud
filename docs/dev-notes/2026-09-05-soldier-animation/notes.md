@@ -91,3 +91,29 @@ bent and feet on the ground plane; the run frames show the swing leg
 folded up behind (deep knee flexion off the running clip) with the stance
 foot planted. No feet through the floor; the kit (vest, pauldrons, boots)
 and gun stay on the body through the stride in both strips.
+
+## Lab dressing room
+
+(2026-09-05, dispatch task 3 of the lab-dressing-room plan.) The WebGPU lab
+panel can now dress a character live and save the result into the repo:
+
+- **Face upload** (face section): pick any PNG/JPEG off disk and the
+  character wears it on the spot — whole-image atlas, mean measured off the
+  decoded pixels, decal mode taken from the character's own `sheet` block
+  (the `loadGeneratedFace` image branch is now a shared `wearFaceImage` /
+  `applyMeanOf` pair so upload and boot go through the same code). A
+  `save face → repo` button (enabled only for PNGs — the endpoint checks
+  the magic bytes) POSTs to the dev-only `/__lab/save-face` endpoint, which
+  writes the file the character's `sheet image` line names under
+  `public/assets/lab/faces/` (default `<name>-face.png`).
+- **Skin tone** (material section): a colour picker (sRGB in, linear into
+  `flesh.baseColor`) plus a `skin lightness` slider (−0.5..0.5, a multiplier
+  on the picked base) re-tone the body live. `save skin → repo` POSTs the
+  resulting baseColor to `/__lab/save-palette`, which splices the ONE
+  `baseColor` line in the character's `.blob` in place via `emitBlob`'s
+  palette override — the diff is a single line.
+
+Both endpoints are serve-only Vite middleware (`vite.config.ts`), so the
+production build carries none of it; saves are plain file writes, meant to
+be reviewed as an ordinary `git diff`. Handlers live in `src/lab/dev-save.ts`
+and are unit-tested against a temp dir.
