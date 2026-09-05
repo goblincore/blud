@@ -37,6 +37,18 @@
       "command": "node scripts/zombie-normal-gradient-check.mjs --phase verdict --out docs/dev-notes/2026-09-05-zombie-analytic-normals --vite 5251 --cdp 9251",
       "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/summary.json",
       "reason": "intact gate is deferred; wounds gate is pending. Zero real gameplay GPU samples, coverage captures, motion frames, or paired timing records are available."
+    },
+    {
+      "commit": "95e9206 GPU run plus pending capture/fixture fixes",
+      "command": "Real WebGPU --phase intact on owned5251/9251 at load1 7.4165; corrected single rerun blocked at17.7056; focused Node10/10+tsc",
+      "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/intact-first-run.json",
+      "reason": "Six real scene comparisons: clean shader compile, exact depth/fallback, strong anatomical intact coverage. First run passed:false because upper-body wound closeup was100% fallback. Raw data valid; beauty history contaminated. Corrected capture/fixture has not run, so intact remains deferred."
+    },
+    {
+      "commit": "verdict based on 95e9206",
+      "command": "node scripts/zombie-normal-gradient-check.mjs --phase verdict --out docs/dev-notes/2026-09-05-zombie-analytic-normals --vite 1 --cdp 1",
+      "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/summary.json",
+      "reason": "intact gate is deferred; wounds gate is skipped-by-gate. 6 real gameplay scene comparisons exist. First run failed: mixed-wounded: analytic coverage below 10% probe floor. Corrected validation: No GPU run: the single authorized corrected rerun stopped at load1 17.70556640625 >12 before servers started.. Raw numbers remain valid; original beauty/motion are not acceptance evidence. No paired timing records exist."
     }
   ]
 }

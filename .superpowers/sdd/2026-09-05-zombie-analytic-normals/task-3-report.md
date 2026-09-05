@@ -1,8 +1,8 @@
-# Task 3 report — BLOCKED on real gameplay WebGPU validation
+# Task 3 report — incomplete after first gameplay GPU evidence
 
 Date: 2026-09-05, 14:55 EDT. Worktree `/Users/donny/Projects/blud/.worktrees/zombie-analytic-normals`, branch `codex/zombie-analytic-normals`, implementation base `edeca69`.
 
-Task 3 code is implemented and focused tests pass. Task 3 is **not complete**: the required real game WebGPU compilation, numeric readback, head/torso coverage and moving-light/body reel have not run. `intact` is `deferred`, not pass or a shader correctness failure. No GPU data is represented as available. Task 4 must not begin on this evidence.
+**Current status, updated 15:22 EDT:** Task 3 is incomplete. A real game GPU run at `95e9206` compiled cleanly and produced six valid raw numerical comparisons, including head/torso coverage above 50% and exact depth/fallback parity. It failed the original mixed-wound coverage floor, and its beauty was contaminated by temporal diagnostic history. Corrected fixtures/capture are implemented but their rerun was blocked by load1 17.7056. `intact` remains deferred and Task 4 must not begin. The original checkpoint account below is historical; the final section records new evidence and remaining work.
 
 ## Implementation
 
@@ -36,7 +36,7 @@ git diff --check
 
 Logs: `/tmp/zombie-ng-task3-red.txt`, `/tmp/zombie-ng-carve-red.txt`, `/tmp/zombie-ng-task3-final-tests.txt`. No full-repository suite, no parallel test workers and no subagents were used.
 
-## Real GPU gate / exact environmental blocker
+## Initial checkpoint: real GPU gate / environmental blocker
 
 The authorized launch command was prepared and attempted three times behind the required free-port/load guard:
 
@@ -53,7 +53,7 @@ node scripts/zombie-normal-gradient-check.mjs --phase intact --out /tmp/zombie-n
 
 All three attempts stopped before `lab_servers_up`, exit 2: load1 **20.4717**, **27.2534**, **25.7822**. A lightweight intermediate observation reached **83.7939**. The controller identified concurrent user workload and explicitly authorized bounded retries only, followed by a deferred handoff. Ports 5251/9251 were free. No Vite/Chrome/GPU device was started; no foreign process was touched or stopped. The shell escalation was authorized; this was a load-gate stop, not an automatic approval rejection.
 
-**Task 3 GPU samples: zero. Task 3 coverage pixels: unavailable. Task 3 motion artifacts: unavailable.** The previous Task 2 real GPU kernel pass remains valid as prior evidence; it is not a substitute for this new full-game pipeline.
+**At the initial 14:55 checkpoint only: GPU samples were zero, coverage unavailable, and motion artifacts unavailable. The later first-run section supersedes these counts.** The previous Task 2 real GPU kernel pass remains valid as prior evidence; it is not a substitute for this new full-game pipeline.
 
 ## Predeclared intact criteria and remaining work
 
@@ -94,3 +94,37 @@ git diff --check
 ```
 
 GREEN output: `/tmp/zombie-ng-fix-green.txt`. The offline process test proves prerequisites still produce an incomplete summary/nonzero exit without touching CDP. No full suite, browser/GPU launch, load retry, subagent, or external-memory operation ran. `verdict.md` and notes now distinguish implemented fixes from pending static re-review. `intact` remains deferred; gameplay GPU samples/captures remain zero; Task 4 remains skipped. Runtime sentinel preservation, owner mapping and the real readback path still need the required game GPU gate when authorized on a quiet machine. The prior exact resume command and numerical/coverage criteria remain applicable after static re-review.
+
+## Real gameplay run and capture correction — 15:10–15:22 EDT
+
+After the controller observed improved external machine state and authorized a new attempt, the exact guarded owned5251/9251 command from this report passed preflight at load1 **7.41650390625**. It ran current `95e9206` with `--phase intact --out /tmp/zombie-ng-intact-resume`. Full game WGSL compiled/executed on real WebGPU with a clean console. The run exited **1**, not success: `INTACT FAIL: mixed-wounded: analytic coverage below 10% probe floor`. Both owned processes were reaped by the trap; ports are free and `/tmp/chrome-lab-9251` was cleaned. No foreign process was touched.
+
+Tracked exact original output: `docs/dev-notes/2026-09-05-zombie-analytic-normals/intact-first-run.json`. All six cases had **depthChanged=0, depthMax=0, fallbackMax=0, nonFinite=0**. Total comparison count is 208,795 hit pixels across scenes, not distinct body samples or a performance counter. Whole-body 88.92% analytic; anatomical torso 10,840/12,516=86.61%; anatomical head 7,270/8,698=83.58%; animated/scaled body 91.67% analytic (10 anisotropic, 4 rotated rows). Maximum scalar error 1.0361e-8. Base-normal p99 remained below 1.50 degrees; animated max was 6.59 degrees. Actual unsupported bare-bones state produced 37,440/37,440 `unsupported` hits with exact legacy normals. Narrow wounded upper body produced 26,935/26,935 `wound-pending` hits and exact legacy normals.
+
+The first-run raw eligibility/normal PNGs remain valid, and representative head/torso diagnostics are tracked. **Beauty does not remain valid:** controller inspection found violet primitive patches and horizontal bands much larger than the raw normal differences. Root cause is the shipped `post-aa.ts` temporal accumulation, `mix(current, history, .25)`: the driver rendered just one beauty frame after eligibility, retaining 25% diagnostic RGB in legacy and then 6.25% in hybrid. This is capture-state contamination, not evidence of gradient look differences. All original PNGs and 24 motion frames remain under `/tmp/zombie-ng-intact-resume/` as explicitly **non-acceptance evidence**. The original motion followed the crater and therefore exercised legacy wound fallback.
+
+Within the controller-authorized bounded correction:
+
+- Added a read-only `__sdfGame.smear` getter. The driver asserts the actual shipped 0.25 value; no material or temporal tuning is changed. Twenty identical zero-dt beauty frames attenuate even owner-channel intensity128 below `128*.25^20=1.1642e-10`. Other smear settings are rejected; this is not a blanket guarantee for 0.6.
+- Every beauty capture fences with raw target readback and records actual standard debugCfg, normalGradientCfg, baseColor, march/surface/face/wound settings, fxaa and smear. Both legs must match after ignoring only the requested normal mode. Standard debug and flat-albedo must be zero, gradient diagnostic zero.
+- Moved the reel before the crater. For each pair, advance4 simulation frames once, freeze, capture both modes at the same body/camera/light pose with only zero-dt history flushing, then advance to the next pair.
+- Retained the narrow wound view as a full wound-pending control. Added wider 2.4 m wounded-body framing and the unchanged >=10% mixed floor, with actual wound rows/bounds/settings recorded. The 0.16 m slug plus the previously recorded shipped settings yield production reach `0.16*(2*1.15+3*.42)+4*.015+.25 = .8796 m`; the original closeup was entirely inside it. No shader, reach or threshold was changed. Mixed wide coverage is not a wounded-closeup optimization claim.
+
+The **single authorized corrected rerun** stopped at preflight load1 **17.70556640625 >12**, exit2, before starting any server. No more waiting or GPU attempts followed. The corrected capture/fixture code is therefore **not GPU-verified**. Keep `intact: deferred` while preserving first-run `passed:false` and its explicit coverage failure.
+
+TDD: temporal-history regression was observed RED before implementation (`/tmp/zombie-ng-beauty-red.txt`). Offline verdict regression was observed RED on the stale claim of zero gameplay GPU samples (`/tmp/zombie-ng-partial-red.txt`). The updated offline verdict consumes the partial `intact.json` record, preserves numerical coverage and no longer fabricates zero samples. `--phase verdict` still runs entirely offline and exits1 with an incomplete summary. Updated `verdict.md`, `summary.json`, `intact.json`, notes and gate evidence distinguish valid raw results, contaminated beauty, and unexecuted corrections.
+
+Final checks (all success unless the expected verdict exit1 is stated):
+
+```text
+node --test --test-concurrency=1 scripts/lib/normal-gradient-intact.test.mjs scripts/lib/normal-gradient-gates.test.mjs scripts/zombie-normal-gradient-check.test.mjs
+# 10 passed /0 failed; /tmp/zombie-ng-capture-fixes-green.txt
+node --check scripts/zombie-normal-gradient-check.mjs
+node --check scripts/lib/normal-gradient-intact.mjs
+npx tsc --noEmit
+# all exit0
+node scripts/zombie-normal-gradient-check.mjs --phase verdict --out docs/dev-notes/2026-09-05-zombie-analytic-normals --vite 1 --cdp 1
+# expected exit1, incomplete; reports6 real scene comparisons, not zero
+```
+
+Remaining: scoped review of these latest capture fixes; an authorized load-guarded corrected GPU run; actual narrow-control/wider-mixed checks; clean paired beauty and intact-motion inspection. No default enablement, Task4 implementation, performance run, merge, push or external memory save occurred.

@@ -1,5 +1,5 @@
 {
-  "commit": "8637914",
+  "commit": "95e9206",
   "gates": {
     "reference": "pass",
     "gpuKernel": "pass",
@@ -12,8 +12,8 @@
   "scenes": [
     {
       "name": "intact-head-and-torso",
-      "status": "missing",
-      "reason": "No real gameplay WebGPU compile, numeric, coverage, image, or motion sample ran."
+      "status": "partial",
+      "reason": "Real GPU compile, raw depth/normal and anatomical coverage results exist; beauty was contaminated and corrected validation has not run."
     },
     {
       "name": "wounded-head-and-torso",
@@ -27,8 +27,8 @@
     },
     {
       "name": "walking-and-flashlight-motion",
-      "status": "skipped-by-gate",
-      "reason": "Dependent gameplay evidence was skipped because intact validation is deferred and wounds did not run."
+      "status": "non-acceptance-evidence",
+      "reason": "24 original frames exist but use wound fallback and contaminated history; corrected intact reel has not run."
     },
     {
       "name": "impact-stagger-sever-sequence",
@@ -37,8 +37,8 @@
     },
     {
       "name": "unsupported-control",
-      "status": "skipped-by-gate",
-      "reason": "Dependent gameplay evidence was skipped because intact validation is deferred and wounds did not run."
+      "status": "numeric-evidence",
+      "reason": "First GPU bare-bones control used full legacy fallback with exact raw normal/depth equality."
     }
   ],
   "timings": {
@@ -47,15 +47,290 @@
     "reason": "No eligible paired runs were attempted; no frame-time or compile-time claim is available."
   },
   "coverage": {
-    "status": "unavailable",
-    "measurements": null,
-    "reason": "No real gameplay eligibility readback ran, so analytic and fallback pixel shares are unknown."
+    "status": "partial",
+    "measurements": [
+      {
+        "name": "whole-body",
+        "bodyId": 1,
+        "anatomy": {
+          "head": {
+            "hits": 872,
+            "analytic": 732,
+            "fallback": 140,
+            "analyticFraction": 0.8394495412844036
+          },
+          "torso": {
+            "hits": 2978,
+            "analytic": 2570,
+            "fallback": 408,
+            "analyticFraction": 0.8629952988582942
+          }
+        },
+        "anatomyMask": "staged-body owner limb; foreign bodies retain depth with negative RGB sentinel",
+        "w": 800,
+        "h": 600,
+        "total": 9376,
+        "reasons": {
+          "ok": 8337,
+          "unsupported": 0,
+          "degenerate": 0,
+          "hard-boundary": 0,
+          "owner-unstable": 1039,
+          "wound-pending": 0,
+          "sampled-cache": 0,
+          "inactive": 0
+        },
+        "analyticFraction": 0.8891851535836177,
+        "depthMax": 0,
+        "depthChanged": 0,
+        "fallbackMax": 0,
+        "scalarMax": 7.916241884231567e-9,
+        "nonFinite": 0,
+        "angularDegrees": {
+          "count": 8337,
+          "p50": 0.3688899651924996,
+          "p95": 0.9875855580548479,
+          "p99": 1.3981344135413811,
+          "max": 2.3079658810787644
+        }
+      },
+      {
+        "name": "torso",
+        "bodyId": 1,
+        "anatomy": {
+          "head": {
+            "hits": 5258,
+            "analytic": 4392,
+            "fallback": 866,
+            "analyticFraction": 0.8352985926207683
+          },
+          "torso": {
+            "hits": 12516,
+            "analytic": 10840,
+            "fallback": 1676,
+            "analyticFraction": 0.8660914030041547
+          }
+        },
+        "anatomyMask": "staged-body owner limb; foreign bodies retain depth with negative RGB sentinel",
+        "w": 800,
+        "h": 600,
+        "total": 36258,
+        "reasons": {
+          "ok": 32036,
+          "unsupported": 0,
+          "degenerate": 0,
+          "hard-boundary": 0,
+          "owner-unstable": 4222,
+          "wound-pending": 0,
+          "sampled-cache": 0,
+          "inactive": 0
+        },
+        "analyticFraction": 0.8835567323073529,
+        "depthMax": 0,
+        "depthChanged": 0,
+        "fallbackMax": 0,
+        "scalarMax": 9.080395102500916e-9,
+        "nonFinite": 0,
+        "angularDegrees": {
+          "count": 32036,
+          "p50": 0.3631246538330874,
+          "p95": 1.0261224157216922,
+          "p99": 1.4656661168421756,
+          "max": 2.4490010251536187
+        }
+      },
+      {
+        "name": "head",
+        "bodyId": 1,
+        "anatomy": {
+          "head": {
+            "hits": 8698,
+            "analytic": 7270,
+            "fallback": 1428,
+            "analyticFraction": 0.8358243274315935
+          },
+          "torso": {
+            "hits": 29978,
+            "analytic": 25635,
+            "fallback": 4343,
+            "analyticFraction": 0.8551270932016812
+          }
+        },
+        "anatomyMask": "staged-body owner limb; foreign bodies retain depth with negative RGB sentinel",
+        "w": 800,
+        "h": 600,
+        "total": 61346,
+        "reasons": {
+          "ok": 53213,
+          "unsupported": 0,
+          "degenerate": 0,
+          "hard-boundary": 0,
+          "owner-unstable": 8133,
+          "wound-pending": 0,
+          "sampled-cache": 0,
+          "inactive": 0
+        },
+        "analyticFraction": 0.8674241189319597,
+        "depthMax": 0,
+        "depthChanged": 0,
+        "fallbackMax": 0,
+        "scalarMax": 1.0186340659856796e-8,
+        "nonFinite": 0,
+        "angularDegrees": {
+          "count": 53213,
+          "p50": 0.29595428111727445,
+          "p95": 1.042159195669072,
+          "p99": 1.4993663920574332,
+          "max": 2.3994794218673974
+        }
+      },
+      {
+        "name": "animated-scaled-flesh",
+        "bodyId": 1,
+        "anatomy": {
+          "head": {
+            "hits": 1986,
+            "analytic": 1868,
+            "fallback": 118,
+            "analyticFraction": 0.9405840886203424
+          },
+          "torso": {
+            "hits": 8656,
+            "analytic": 7582,
+            "fallback": 1074,
+            "analyticFraction": 0.8759242144177449
+          }
+        },
+        "anatomyMask": "staged-body owner limb; foreign bodies retain depth with negative RGB sentinel",
+        "w": 800,
+        "h": 600,
+        "total": 37440,
+        "reasons": {
+          "ok": 34322,
+          "unsupported": 0,
+          "degenerate": 0,
+          "hard-boundary": 0,
+          "owner-unstable": 3118,
+          "wound-pending": 0,
+          "sampled-cache": 0,
+          "inactive": 0
+        },
+        "analyticFraction": 0.9167200854700854,
+        "depthMax": 0,
+        "depthChanged": 0,
+        "fallbackMax": 0,
+        "scalarMax": 1.0360963642597198e-8,
+        "nonFinite": 0,
+        "angularDegrees": {
+          "count": 34322,
+          "p50": 0.37841003790979416,
+          "p95": 0.9425206847868722,
+          "p99": 1.3797651232322092,
+          "max": 6.59031908045587
+        }
+      },
+      {
+        "name": "unsupported-bare-bones",
+        "bodyId": 1,
+        "anatomy": {
+          "head": {
+            "hits": 1723,
+            "analytic": 0,
+            "fallback": 1723,
+            "analyticFraction": 0
+          },
+          "torso": {
+            "hits": 8656,
+            "analytic": 0,
+            "fallback": 8656,
+            "analyticFraction": 0
+          }
+        },
+        "anatomyMask": "staged-body owner limb; foreign bodies retain depth with negative RGB sentinel",
+        "w": 800,
+        "h": 600,
+        "total": 37440,
+        "reasons": {
+          "ok": 0,
+          "unsupported": 37440,
+          "degenerate": 0,
+          "hard-boundary": 0,
+          "owner-unstable": 0,
+          "wound-pending": 0,
+          "sampled-cache": 0,
+          "inactive": 0
+        },
+        "analyticFraction": 0,
+        "depthMax": 0,
+        "depthChanged": 0,
+        "fallbackMax": 0,
+        "scalarMax": 0,
+        "nonFinite": 0,
+        "angularDegrees": {
+          "count": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0
+        }
+      },
+      {
+        "name": "mixed-wounded",
+        "bodyId": 1,
+        "anatomy": {
+          "head": {
+            "hits": 1499,
+            "analytic": 0,
+            "fallback": 1499,
+            "analyticFraction": 0
+          },
+          "torso": {
+            "hits": 6337,
+            "analytic": 0,
+            "fallback": 6337,
+            "analyticFraction": 0
+          }
+        },
+        "anatomyMask": "staged-body owner limb; foreign bodies retain depth with negative RGB sentinel",
+        "w": 800,
+        "h": 600,
+        "total": 26935,
+        "reasons": {
+          "ok": 0,
+          "unsupported": 0,
+          "degenerate": 0,
+          "hard-boundary": 0,
+          "owner-unstable": 0,
+          "wound-pending": 26935,
+          "sampled-cache": 0,
+          "inactive": 0
+        },
+        "analyticFraction": 0,
+        "depthMax": 0,
+        "depthChanged": 0,
+        "fallbackMax": 0,
+        "scalarMax": 0,
+        "nonFinite": 0,
+        "angularDegrees": {
+          "count": 0,
+          "p50": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0
+        }
+      }
+    ],
+    "reason": "First-run raw numerical/anatomical coverage is preserved; mixed-wounded fixture failed and corrected validation is pending."
   },
   "artifacts": {
     "kernel": "docs/dev-notes/2026-09-05-zombie-analytic-normals/kernel.json",
     "intact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/intact.json",
     "summary": "docs/dev-notes/2026-09-05-zombie-analytic-normals/summary.json",
-    "images": [],
+    "images": [
+      "docs/dev-notes/2026-09-05-zombie-analytic-normals/head-eligibility-first-run.png",
+      "docs/dev-notes/2026-09-05-zombie-analytic-normals/torso-eligibility-first-run.png",
+      "docs/dev-notes/2026-09-05-zombie-analytic-normals/head-base-normal-first-run.png"
+    ],
     "reel": null
   },
   "conclusion": "incomplete"

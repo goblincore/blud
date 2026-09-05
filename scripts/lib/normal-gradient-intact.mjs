@@ -62,3 +62,11 @@ export async function withNormalBodyMask(evaluate, bodyId, readFrame) {
     })()`);
   }
 }
+
+// The largest emitted owner index is below 128. At the shipped smear .25,
+// 20 identical zero-dt frames attenuate any diagnostic color history below
+// 128*.25^20 < 1.2e-10. Other smear settings require a separate capture contract.
+export function normalBeautyFrames(smear) {
+  if (smear !== .25) throw new Error(`expected shipped smear 0.25, got ${smear}`);
+  return 20;
+}

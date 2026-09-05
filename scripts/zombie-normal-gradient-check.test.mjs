@@ -62,3 +62,23 @@ test('verdict writes an offline incomplete summary and exits nonzero when prereq
   assert.equal(gates.evidence.length, 2);
   assert.match(gates.evidence[1].reason, /zero real gameplay GPU samples/i);
 });
+
+test('offline verdict preserves partial real GPU evidence without claiming zero gameplay samples', () => {
+  const fixture = mkdtempSync(join(tmpdir(), 'zombie-ng-partial-'));
+  const evidenceDir = join(fixture, 'docs/dev-notes/2026-09-05-zombie-analytic-normals');
+  const outDir = join(fixture, 'out');
+  mkdirSync(evidenceDir, { recursive: true });
+  writeFileSync(join(evidenceDir,'gates.json'),JSON.stringify({version:1,reference:'pass',gpuKernel:'pass',intact:'deferred',wounds:'skipped-by-gate',visualEvidence:'skipped-by-gate',timing:'skipped-by-gate',ownerLook:'pending',evidence:[]}));
+  writeFileSync(join(evidenceDir,'intact.json'),JSON.stringify({gpuExecuted:true,sceneComparisons:6,numericResults:[{name:'head',depthChanged:0,anatomy:{head:{analyticFraction:.83}}}],firstRunFailure:'mixed closeup coverage failed',correctedValidation:'blocked by load guard',diagnosticImages:['head-eligibility.png'],motionFrames:24,beautyValid:false}));
+  const result=spawnSync(process.execPath,[driver,'--phase','verdict','--out',outDir,'--vite','1','--cdp','1'],{cwd:fixture,encoding:'utf8'});
+  assert.equal(result.status,1);
+  assert.doesNotMatch(result.stderr,/zero real gameplay GPU samples|fetch failed|ECONNREFUSED/i);
+  assert.match(result.stderr,/6 real gameplay/);
+  const summary=JSON.parse(readFileSync(join(outDir,'summary.json'),'utf8'));
+  assert.equal(summary.coverage.status,'partial');
+  assert.equal(summary.coverage.measurements[0].name,'head');
+  assert.equal(summary.scenes.find(s=>s.name==='intact-head-and-torso').status,'partial');
+  assert.equal(summary.timings.measurements,null);
+  assert.equal(summary.artifacts.reel,null);
+  assert.equal(summary.conclusion,'incomplete');
+});

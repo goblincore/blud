@@ -1,9 +1,9 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { applyShipDefaults } from './lib/sdf-closeup-stage.mjs';
-import { normalAnatomyCoverage, normalOrbitPose, stageNormalCloseup, stampNormalWounds, withNormalBodyMask } from './lib/normal-gradient-intact.mjs';
+import { normalAnatomyCoverage, normalOrbitPose, stageNormalCloseup, stampNormalWounds, withNormalBodyMask, normalBeautyFrames } from './lib/normal-gradient-intact.mjs';
 import { readNormalGates, writeNormalGates } from './lib/normal-gradient-gates.mjs';
 
 const argv = process.argv.slice(2);
@@ -35,7 +35,14 @@ async function writeIncompleteVerdict() {
     cwd: repoRoot,
     encoding: 'utf8',
   }).trim();
-  const reason = `${blockers.join('; ')}. Zero real gameplay GPU samples, coverage captures, motion frames, or paired timing records are available.`;
+  let intactEvidence=null;
+  try { intactEvidence=JSON.parse(readFileSync(resolve('docs/dev-notes/2026-09-05-zombie-analytic-normals/intact.json'),'utf8')); }
+  catch(error) { if(error.code!=='ENOENT') throw error; }
+  const hasGameplay=intactEvidence?.gpuExecuted===true;
+  const gameplayReason=hasGameplay
+    ? `${intactEvidence.sceneComparisons} real gameplay scene comparisons exist. First run failed: ${intactEvidence.firstRunFailure}. Corrected validation: ${intactEvidence.correctedValidation}. Raw numbers remain valid; original beauty/motion are not acceptance evidence. No paired timing records exist.`
+    : 'Zero real gameplay GPU samples, coverage captures, motion frames, or paired timing records are available.';
+  const reason = `${blockers.join('; ')}. ${gameplayReason}`;
   const gatePatch = {
     ...(before.intact === 'pass' ? {} : { wounds: 'skipped-by-gate' }),
     visualEvidence: 'skipped-by-gate',
@@ -62,12 +69,12 @@ async function writeIncompleteVerdict() {
       ownerLook: gates.ownerLook,
     },
     scenes: [
-      { name: 'intact-head-and-torso', status: 'missing', reason: 'No real gameplay WebGPU compile, numeric, coverage, image, or motion sample ran.' },
+      { name: 'intact-head-and-torso', status: hasGameplay?'partial':'missing', reason: hasGameplay?'Real GPU compile, raw depth/normal and anatomical coverage results exist; beauty was contaminated and corrected validation has not run.':'No real gameplay WebGPU compile, numeric, coverage, image, or motion sample ran.' },
       { name: 'wounded-head-and-torso', status: 'skipped-by-gate', reason: skippedReason },
       { name: 'two-body-close-up-with-surrounding-actors', status: 'skipped-by-gate', reason: skippedReason },
-      { name: 'walking-and-flashlight-motion', status: 'skipped-by-gate', reason: skippedReason },
+      { name: 'walking-and-flashlight-motion', status: hasGameplay?'non-acceptance-evidence':'skipped-by-gate', reason: hasGameplay?`${intactEvidence.motionFrames??0} original frames exist but use wound fallback and contaminated history; corrected intact reel has not run.`:skippedReason },
       { name: 'impact-stagger-sever-sequence', status: 'skipped-by-gate', reason: skippedReason },
-      { name: 'unsupported-control', status: 'skipped-by-gate', reason: skippedReason },
+      { name: 'unsupported-control', status: hasGameplay?'numeric-evidence':'skipped-by-gate', reason: hasGameplay?'First GPU bare-bones control used full legacy fallback with exact raw normal/depth equality.':skippedReason },
     ],
     timings: {
       status: 'skipped-by-gate',
@@ -75,15 +82,15 @@ async function writeIncompleteVerdict() {
       reason: 'No eligible paired runs were attempted; no frame-time or compile-time claim is available.',
     },
     coverage: {
-      status: 'unavailable',
-      measurements: null,
-      reason: 'No real gameplay eligibility readback ran, so analytic and fallback pixel shares are unknown.',
+      status: hasGameplay?'partial':'unavailable',
+      measurements: hasGameplay?intactEvidence.numericResults:null,
+      reason: hasGameplay?'First-run raw numerical/anatomical coverage is preserved; mixed-wounded fixture failed and corrected validation is pending.':'No real gameplay eligibility readback ran, so analytic and fallback pixel shares are unknown.',
     },
     artifacts: {
       kernel: 'docs/dev-notes/2026-09-05-zombie-analytic-normals/kernel.json',
       intact: 'docs/dev-notes/2026-09-05-zombie-analytic-normals/intact.json',
       summary: relative(repoRoot, summaryPath),
-      images: [],
+      images: hasGameplay?(intactEvidence.diagnosticImages??[]):[],
       reel: null,
     },
     conclusion: 'incomplete',
@@ -194,6 +201,23 @@ async function runIntact() {
   await evaluate(`__sdfGame.freeze(true); __sdfGame.setLoopRunning(false); __sdfGame.installDebugProbe()`);
   await applyShipDefaults(evaluate);
   await evaluate(`__sdfGame.step(1); window.__ngClockOriginal = performance.now.bind(performance); window.__ngClock = performance.now(); performance.now = () => window.__ngClock`);
+  const smear=await evaluate('__sdfGame.smear');
+  const beautyFrames=normalBeautyFrames(smear);
+  report.capture={smear,beautySettleFrames:beautyFrames,diagnosticHistoryMaxResidual:128*smear**beautyFrames,beautyStates:[]};
+  const beauty = async (mode, bodyId, name) => {
+    const state=await evaluate(`(async()=> {
+      __sdfGame.setNormalGradient(${mode});__sdfGame.setNormalGradientDebug(0);
+      __sdfGame.step(${beautyFrames},0);
+      await __sdfGameDebug.readMarchTarget();
+      const u=__sdfGame.zombie(${bodyId}).view.uniforms;
+      return {smear:__sdfGame.smear,fxaa:__sdfGame.fxaa,debug:u.debugCfg.value.toArray(),normal:u.normalGradientCfg.value.toArray(),baseColor:u.baseColor.value.toArray(),march:u.marchCfg.value.toArray(),surface:u.surfCfg.value.toArray(),surface2:u.surfCfg2.value.toArray(),face:u.faceCfg.value.toArray(),faceClock:u.faceCfg3.value.toArray(),counts2:u.counts2.value.toArray(),spotPos:u.spotPos.value.toArray(),spotAxis:u.spotAxis.value.toArray(),spotCfg:u.spotCfg.value.toArray(),spotColor:u.spotColor.value.toArray(),camera:__sdfGame.pose(),actor:__sdfGame.zombie(${bodyId}).pose(),wound:u.woundCfg.value.toArray(),wound2:u.woundCfg2.value.toArray()};
+    })()`);
+    if(state.smear!==.25||state.debug[0]!==0||state.debug[1]!==0||state.normal[0]!==mode||state.normal[1]!==0) throw new Error(`invalid beauty capture state ${JSON.stringify(state)}`);
+    report.capture.beautyStates.push({name,mode,...state});
+    const shot=await send('Page.captureScreenshot',{format:'png'});
+    writeFileSync(resolve(outDir,`${name}.png`),Buffer.from(shot.result.data,'base64'));
+    return {...state,normal:[0,...state.normal.slice(1)]};
+  };
   const frame = async (mode, diagnostic, name) => {
     const r = await evaluate(`__sdfGame.setNormalGradient(${mode}); __sdfGame.setNormalGradientDebug(${diagnostic}); __sdfGameDebug.readMarchTarget()`);
     if (!r?.rgba32f || !(r.w>0 && r.h>0)) throw new Error('missing raw float target');
@@ -257,12 +281,9 @@ async function runIntact() {
       if(result.angularDegrees.p99>5||result.angularDegrees.max>25) report.failures.push(`${name}: base-normal angular error exceeds 5deg p99 /25deg max`);
     }
     console.log(JSON.stringify(result));
-    for(const mode of [0,1]) {
-      await evaluate(`__sdfGame.setNormalGradient(${mode});__sdfGame.setNormalGradientDebug(0);__sdfGame.step(1,0)`);
-      await sleep(100);
-      const shot=await send('Page.captureScreenshot',{format:'png'});
-      writeFileSync(resolve(outDir,`${name}-${mode===0?'legacy':'hybrid'}-beauty.png`),Buffer.from(shot.result.data,'base64'));
-    }
+    const legacyBeauty=await beauty(0,bodyId,`${name}-legacy-beauty`);
+    const hybridBeauty=await beauty(1,bodyId,`${name}-hybrid-beauty`);
+    if(JSON.stringify(legacyBeauty)!==JSON.stringify(hybridBeauty)) report.failures.push(`${name}: beauty material/debug state changed between modes`);
   };
   try {
     report.initialStatus=await evaluate('__sdfGame.normalGradientStatus()');
@@ -281,11 +302,6 @@ async function runIntact() {
     await evaluate(`__sdfGame.zombie(${body}).view.uniforms.counts2.value.y = 1`);
     await compare('unsupported-bare-bones',body,'unsupported');
     await evaluate(`__sdfGame.zombie(${body}).view.uniforms.counts2.value.y = 0`);
-    const stage=await stageNormalCloseup(evaluate,{aimY:1.1,ladder:[1.45]});
-    report.wounds=await stampNormalWounds(evaluate,{offsets:[[0,0,'slug']],minStamped:1});
-    await evaluate('__sdfGame.step(30)');
-    await compare('mixed-wounded',stage.body);
-    if(!(report.results.at(-1).reasons['wound-pending']>0)) report.failures.push('mixed-wounded: no wound fallback pixels');
     // Shipped-look paired moving-body/flashlight reel, same frozen pose per pair.
     // Clock increments are explicit and restored before this driver exits.
     for(let i=0;i<12;i++) {
@@ -294,14 +310,22 @@ async function runIntact() {
       const ang=.2*Math.sin(i*.4), distance=1.8;
       const cameraPose=normalOrbitPose(z.pos,ang,distance,1.1,1.62);
       await evaluate(`__sdfGame.setPose(${cameraPose.x},${cameraPose.z},${cameraPose.yaw},${cameraPose.pitch},0)`);
-      for(const mode of [0,1]) {
-        await evaluate(`__sdfGame.setNormalGradient(${mode});__sdfGame.setNormalGradientDebug(0);__sdfGame.step(1,0)`);
-        await sleep(65);
-        const shot=await send('Page.captureScreenshot',{format:'png'});
-        writeFileSync(resolve(outDir,`motion-${mode}-${String(i).padStart(3,'0')}.png`),Buffer.from(shot.result.data,'base64'));
-      }
+      const legacyMotion=await beauty(0,body,`motion-0-${String(i).padStart(3,'0')}`);
+      const hybridMotion=await beauty(1,body,`motion-1-${String(i).padStart(3,'0')}`);
+      if(JSON.stringify(legacyMotion)!==JSON.stringify(hybridMotion)) report.failures.push(`motion ${i}: body/camera/light/material state changed between modes`);
     }
-    report.motion={frames:12,simFramesPerPose:4,legacy:'motion-0-%03d.png',hybrid:'motion-1-%03d.png',description:'Moving rig and camera flashlight around one slug crater; shipped noise/gloss/metal suppression'};
+    report.motion={frames:12,simFramesPerPose:4,legacy:'motion-0-%03d.png',hybrid:'motion-1-%03d.png',scene:'intact-before-crater',description:'Moving intact rig and camera flashlight; shipped noise/gloss/metal suppression, history flushed between paired poses'};
+    const stage=await stageNormalCloseup(evaluate,{aimY:1.1,ladder:[1.45]});
+    report.wounds=await stampNormalWounds(evaluate,{offsets:[[0,0,'slug']],minStamped:1});
+    await evaluate('__sdfGame.step(30)');
+    report.woundSupport=await evaluate(`(()=>{const a=__sdfGame.zombie(${body}),u=a.view.uniforms;return {radii:a.woundList().map(w=>w.radius),bound:u.woundBound.value.toArray(),wound:u.woundCfg.value.toArray(),wound2:u.woundCfg2.value.toArray(),perf:u.perfCfg.value.toArray()};})()`);
+    report.staging.push({name:'wounded-upper-body-control',...stage});
+    await compare('wounded-upper-body-control',stage.body,'wound-pending');
+    const wideWounded=await stageNormalCloseup(evaluate,{aimY:.95,ladder:[2.4]});
+    report.staging.push({name:'mixed-wounded',...wideWounded});
+    await compare('mixed-wounded',wideWounded.body);
+    if(!(report.results.at(-1).reasons['wound-pending']>0)) report.failures.push('mixed-wounded: no wound fallback pixels');
+
   } finally {
     await evaluate(`if(window.__ngClockOriginal)performance.now=window.__ngClockOriginal;__sdfGame.setNormalGradient(0);__sdfGame.setNormalGradientDebug(0);__sdfGame.setLoopRunning(false)`);
   }

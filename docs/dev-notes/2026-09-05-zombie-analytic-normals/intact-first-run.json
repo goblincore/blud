@@ -1,19 +1,13 @@
 {
   "version": 1,
   "phase": "intact",
-  "status": "deferred",
+  "negativeControl": false,
+  "vite": 5251,
+  "cdp": 9251,
+  "backend": "webgpu",
+  "referenceGate": "pass",
   "passed": false,
-  "gpuExecuted": true,
-  "sceneComparisons": 6,
-  "hitPixelComparisons": 208795,
-  "firstRunCommit": "95e9206",
-  "firstRunArtifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/intact-first-run.json",
-  "firstRunFailure": "mixed-wounded: analytic coverage below 10% probe floor",
-  "correctedValidation": "No GPU run: the single authorized corrected rerun stopped at load1 17.70556640625 >12 before servers started.",
-  "firstRunLoad": 7.41650390625,
-  "correctedLaunchLoad": 17.70556640625,
-  "shaderConsoleClean": true,
-  "numericResults": [
+  "results": [
     {
       "name": "whole-body",
       "bodyId": 1,
@@ -285,22 +279,19 @@
       }
     }
   ],
-  "beautyValid": false,
-  "beautyRejection": "Original screenshots retained 25% and 6.25% raw eligibility-color history through shipped temporal smear. They are non-acceptance evidence, not analytic-normal visual differences.",
-  "motionFrames": 24,
-  "motionValid": false,
-  "motionRejection": "Original motion followed the crater and exercised wound fallback; history was not flushed per pair. Corrected intact-before-crater reel is implemented but unexecuted.",
-  "diagnosticImages": [
-    "docs/dev-notes/2026-09-05-zombie-analytic-normals/head-eligibility-first-run.png",
-    "docs/dev-notes/2026-09-05-zombie-analytic-normals/torso-eligibility-first-run.png",
-    "docs/dev-notes/2026-09-05-zombie-analytic-normals/head-base-normal-first-run.png"
+  "failures": [
+    "mixed-wounded: analytic coverage below 10% probe floor"
   ],
-  "rawArtifactDirectory": "/tmp/zombie-ng-intact-resume",
-  "tests": {
-    "nodeFocused": 10,
-    "tsc": "pass",
-    "driverSyntax": "pass"
-  },
+  "console": [
+    {
+      "type": "debug",
+      "text": "[vite] connecting..."
+    },
+    {
+      "type": "debug",
+      "text": "[vite] connected."
+    }
+  ],
   "criteria": {
     "depth": "exact float alpha equality",
     "fallbackMax": 0.000001,
@@ -315,11 +306,91 @@
     "ownerLook": "pending",
     "timing": "not measured"
   },
-  "remaining": [
-    "Corrected full-game capture with actual smear=0.25 assertion and 20 zero-dt history-flush frames",
-    "Retain narrow wounded closeup as full wound-pending control; add wider wounded body containing skin outside actual reach with >=10% mixed coverage",
-    "Inspect clean paired beauty and intact-before-crater motion",
-    "Owner look and future performance verdict remain pending"
+  "initialStatus": {
+    "mode": 0,
+    "diagnostic": 0,
+    "supportedBodies": 10,
+    "legacyBodies": 0
+  },
+  "staging": [
+    {
+      "name": "whole-body",
+      "d": 2.4,
+      "cov": 0.019533333333333333,
+      "body": 1
+    },
+    {
+      "name": "torso",
+      "d": 1.1,
+      "cov": 0.0755375,
+      "body": 1
+    },
+    {
+      "name": "head",
+      "d": 0.8,
+      "cov": 0.12780416666666666,
+      "body": 1
+    }
   ],
-  "report": ".superpowers/sdd/2026-09-05-zombie-analytic-normals/task-3-report.md"
+  "material": {
+    "march": [
+      96,
+      1,
+      0.016
+    ],
+    "surface": [
+      0.95,
+      0.12,
+      0.85,
+      0.45
+    ],
+    "surface2": [
+      1,
+      0.06,
+      0,
+      1.2
+    ],
+    "wound": [
+      0,
+      0.015,
+      0.55,
+      1.15
+    ],
+    "wound2": [
+      0.42,
+      1,
+      0,
+      0
+    ],
+    "perf": [
+      0,
+      1,
+      1,
+      0
+    ]
+  },
+  "animatedGeometry": {
+    "count": 23,
+    "anisotropic": 10,
+    "rotated": 4
+  },
+  "wounds": {
+    "stamped": 1,
+    "wounds": 1,
+    "bleed": {
+      "enabled": true,
+      "emitters": 0,
+      "droplets": 0,
+      "splats": 0
+    },
+    "chunks": 0,
+    "bodies": {}
+  },
+  "motion": {
+    "frames": 12,
+    "simFramesPerPose": 4,
+    "legacy": "motion-0-%03d.png",
+    "hybrid": "motion-1-%03d.png",
+    "description": "Moving rig and camera flashlight around one slug crater; shipped noise/gloss/metal suppression"
+  }
 }

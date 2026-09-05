@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { normalAnatomyCoverage, normalOrbitPose, stageNormalCloseup, stampNormalWounds, withNormalBodyMask } from './normal-gradient-intact.mjs';
+import { normalAnatomyCoverage, normalOrbitPose, stageNormalCloseup, stampNormalWounds, withNormalBodyMask, normalBeautyFrames } from './normal-gradient-intact.mjs';
 
 test('anatomy has independent head/torso denominators and excludes foreign-body sentinel, background, arms and unknown owners', () => {
   const pixels = new Float32Array([
@@ -62,4 +62,10 @@ test('body mask preserves all original values and restores them when readback fa
   assert.deepEqual(views.get(8).uniforms.baseColor.value.toArray(),[.4,.5,.6]);
   assert.equal(views.get(8).uniforms.debugCfg.value.y,.25);
   assert.equal(window.__ngBodyMask,undefined);
+});
+
+test('shipped temporal history is flushed below diagnostic-color contamination before beauty capture', () => {
+  const frames=normalBeautyFrames(.25);
+  assert.ok(128 * .25 ** frames < 1e-6);
+  assert.throws(()=>normalBeautyFrames(.6),/shipped smear/);
 });

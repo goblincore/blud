@@ -3535,6 +3535,7 @@ async function main() {
     setFxaa: (on: boolean) => postAa.setFxaa(on),
     get fxaa() { return postAa.fxaa; },
     setSmear: (v: number) => postAa.setSmear(v),
+    get smear() { return postAa.smear; },
     // ---------------------------------------------------------------
     // THE FISHEYE. setFisheye(deg) sets the apparent vertical FOV at
     // screen CENTRE; setRenderFov(deg) sets what the camera actually
