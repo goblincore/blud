@@ -85,3 +85,14 @@ of base, hue within 12% per channel. Measured at 64px: plain 428.8, crown
 7. **Finer, greener, darker.** Skin tile 60 -> 42 mm (asset UVs); fpvTone
    exposure 0.86 -> 0.72 with a hue nudge (red x0.80, blue x1.08) so it reads
    green rather than yellow-green. Owner: "good job for now, merge after".
+8. **Bend floor.** Camera-space shoulders fixed the floating end but, with
+   free aim pitched up, the hand rides high on the fore-end while the
+   shoulder stays low behind, and the straight line between them ran through
+   the receiver ("the left arm clips completely through the weapon"). `armIk`
+   now takes `minBend` (ARM_MIN_BEND_RAD 0.6, ~34 deg): the forearm always
+   leaves the hand at least that far off the hand-shoulder line toward the
+   hint, which is a camera-space OUTWARD direction (`BEND_L/R_VIEW`, converted
+   to rig space per frame). The upper arm then aims at the shoulder and may
+   fall short of it -- invisible, the shoulder is behind the eye.
+   `pitch-up-aimup.png`: the arm exits left past the receiver. Shoulders
+   nudged closer: (-0.22, -0.26, 0.06) / (0.26, -0.30, 0.06).

@@ -149,8 +149,10 @@ showed its end at extreme pitch), skin re-toned to the character's face
 darkening tried first), chrome spike studs on the bracer, warts moved off the
 fist, knuckle nubs removed (they read as warts). 3177 tests, tsc, gate green. Second look: shoulders moved to CAMERA space (a rig-space shoulder swung in
 front of the eye under free-aim pitch), grain moved into the normal +
-roughness maps (pit field), finer tile, greener/darker tone. Owner: "good
-job for now" — **merged.** Follow-up **F-arm.2 — the watch
+roughness maps (pit field), finer tile, greener/darker tone. Then: with free aim pitched up the
+straight hand-to-shoulder line ran THROUGH the receiver — the IK now has a
+bend floor (34°) toward a camera-space outward hint, so the forearm always
+leaves the hand past the gun. Owner: "good job for now" — **merged.** Follow-up **F-arm.2 — the watch
 as an in-game device** (shells / health / timer drawn on the screen canvas).
 Owner, 2026-09-04: "the arm itself probably needs some work to more
 accurately resemble the goblin SDF model (I guess that will be the main

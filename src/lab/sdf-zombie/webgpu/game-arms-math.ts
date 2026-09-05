@@ -72,16 +72,21 @@ export function armBasis(dir: V3, dorsalHint: V3): { x: V3; y: V3; z: V3 } {
 /**
  * Two-bone IK: where the elbow is for a hand at `hand` and a shoulder at
  * `shoulder`, given the two bone lengths and a direction the elbow should
- * bend toward (down and outward for an arm holding a gun). Rig space.
+ * bend toward (outward, away from the gun). Rig space.
  *
- * In reach: the law of cosines puts the elbow on the circle where both bones
- * meet, on the side of the hand-shoulder line nearest `bendHint`. Out of
- * reach: the arm is straight, the elbow exactly `lenFore` from the hand, and
- * the upper arm falls short of the shoulder -- which is behind the camera,
- * so nobody sees it. Too close (hand nearer the shoulder than the bones can
- * fold): the elbow is pushed fully out along the hint.
+ * The elbow always sits `lenFore` from the hand, at an angle `phi` off the
+ * hand-shoulder line on the hint's side. In reach, phi comes from the law of
+ * cosines so the upper arm meets the shoulder exactly; but phi is never less
+ * than `minBend`. That floor is the point: with the shoulder fixed behind
+ * the camera and the hand riding the gun under free aim, the straight
+ * hand-shoulder line can pass THROUGH the receiver (owner's screenshots at a
+ * hard look up). A guaranteed bend sends the forearm out past the gun first;
+ * the upper arm then aims at the shoulder and may fall short of it, which
+ * nobody sees -- the shoulder is behind the eye.
  */
-export function armIk(hand: V3, shoulder: V3, lenFore: number, lenUpper: number, bendHint: V3): V3 {
+export function armIk(
+  hand: V3, shoulder: V3, lenFore: number, lenUpper: number, bendHint: V3, minBend = 0,
+): V3 {
   const dx = shoulder[0] - hand[0], dy = shoulder[1] - hand[1], dz = shoulder[2] - hand[2];
   const d = Math.hypot(dx, dy, dz);
   if (d < 1e-6) return [hand[0] + bendHint[0] * lenFore, hand[1] + bendHint[1] * lenFore, hand[2] + bendHint[2] * lenFore];
@@ -96,16 +101,18 @@ export function armIk(hand: V3, shoulder: V3, lenFore: number, lenUpper: number,
     if (pl < 1e-6) { px = 0; py = -uz; pz = uy; pl = Math.hypot(px, py, pz); }
   }
   px /= pl; py /= pl; pz /= pl;
-  if (d >= lenFore + lenUpper) {
-    return [hand[0] + ux * lenFore, hand[1] + uy * lenFore, hand[2] + uz * lenFore];
+  let phi = 0;
+  if (d < lenFore + lenUpper) {
+    // Law of cosines: the elbow's foot on the line is `a` from the hand.
+    let a = (lenFore * lenFore - lenUpper * lenUpper + d * d) / (2 * d);
+    a = Math.max(-lenFore, Math.min(lenFore, a));
+    phi = Math.acos(a / lenFore);
   }
-  // Distance from the hand to the elbow's foot on the line, and its height.
-  let a = (lenFore * lenFore - lenUpper * lenUpper + d * d) / (2 * d);
-  a = Math.max(-lenFore, Math.min(lenFore, a));
-  const h = Math.sqrt(Math.max(0, lenFore * lenFore - a * a));
+  phi = Math.max(phi, minBend);
+  const c = Math.cos(phi) * lenFore, h = Math.sin(phi) * lenFore;
   return [
-    hand[0] + ux * a + px * h,
-    hand[1] + uy * a + py * h,
-    hand[2] + uz * a + pz * h,
+    hand[0] + ux * c + px * h,
+    hand[1] + uy * c + py * h,
+    hand[2] + uz * c + pz * h,
   ];
 }

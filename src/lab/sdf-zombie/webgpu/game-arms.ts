@@ -147,12 +147,17 @@ function upperOf(arm: THREE.Object3D): THREE.Object3D | null {
  * always ends behind the camera, straight or bent -- which is what removes
  * the detached-arm end the one-piece stick showed at extreme view pitch.
  */
+/** The bend floor, radians (~34 deg): the forearm always leaves the hand at
+ *  least this far off the hand-shoulder line, toward the hint. */
+export const ARM_MIN_BEND_RAD = 0.6;
+
 export function aimArm(arm: THREE.Object3D, shoulder: THREE.Vector3, bendHint: THREE.Vector3): void {
   const e = armIk(
     [arm.position.x, arm.position.y, arm.position.z],
     [shoulder.x, shoulder.y, shoulder.z],
     FORE_LEN_M, UPPER_LEN_M,
     [bendHint.x, bendHint.y, bendHint.z],
+    ARM_MIN_BEND_RAD,
   );
   _elbow.set(e[0], e[1], e[2]);
   _dir.copy(_elbow).sub(arm.position);

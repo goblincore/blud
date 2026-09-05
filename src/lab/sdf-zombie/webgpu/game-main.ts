@@ -1291,25 +1291,44 @@ async function main() {
   //  crossed the near plane, was cut off, and the hand read as floating
   //  (owner's screenshot). The body does not turn with the gun; the shoulders
   //  stay put behind the eye and the arms are re-aimed at them every frame.
-  const SHOULDER_L_VIEW = new THREE.Vector3(-0.24, -0.30, 0.12);
-  const SHOULDER_R_VIEW = new THREE.Vector3(0.26, -0.32, 0.12);
-  const BEND_L = new THREE.Vector3(-1, -0.6, 0);
-  const BEND_R = new THREE.Vector3(1, -0.6, 0);
-  const _sh = new THREE.Vector3();
-  /** A view-space shoulder, expressed in the aim rig's space RIGHT NOW. Refresh
+  //
+  //  The BEND HINTS are view-space directions too: OUTWARD (away from the gun,
+  //  left for the left arm) and a little down. game-arms.ts floors the bend
+  //  at ARM_MIN_BEND_RAD, so under a hard look up -- hand high on the
+  //  fore-end, shoulder low behind -- the forearm leaves the hand sideways
+  //  past the receiver instead of straight through it (owner's screenshots).
+  const SHOULDER_L_VIEW = new THREE.Vector3(-0.22, -0.26, 0.06);
+  const SHOULDER_R_VIEW = new THREE.Vector3(0.26, -0.30, 0.06);
+  const BEND_L_VIEW = new THREE.Vector3(-1, -0.4, 0);
+  const BEND_R_VIEW = new THREE.Vector3(1, -0.4, 0);
+  const _sh = new THREE.Vector3(), _bd = new THREE.Vector3(), _o = new THREE.Vector3();
+  /** A view-space point, expressed in the aim rig's space RIGHT NOW. Refresh
    *  the anchor's world matrices first when the rig moved this frame. */
-  function shoulderInRig(view: THREE.Vector3): THREE.Vector3 {
-    _sh.copy(view);
-    viewModelAnchor.localToWorld(_sh);
-    (aimRig ?? viewModelAnchor).worldToLocal(_sh);
-    return _sh;
+  function viewToRig(view: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
+    out.copy(view);
+    viewModelAnchor.localToWorld(out);
+    (aimRig ?? viewModelAnchor).worldToLocal(out);
+    return out;
+  }
+  /** A view-space DIRECTION in rig space (two points, subtracted). */
+  function viewDirToRig(view: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
+    viewToRig(_o.set(0, 0, 0), out);
+    const tip = viewToRig(view, _bd);
+    return out.sub(tip).negate().normalize();
   }
   /** Aim both arms at their shoulders. Called every frame after the rig pose
    *  is set, and again wherever a hand is moved. */
+  const _bendR = new THREE.Vector3(), _bendL = new THREE.Vector3();
   function aimArms(): void {
     viewModelAnchor.updateMatrixWorld(true);
-    if (gripHandGroup) aimArm(gripHandGroup, shoulderInRig(SHOULDER_R_VIEW), BEND_R);
-    if (foreHandGroup) aimArm(foreHandGroup, shoulderInRig(SHOULDER_L_VIEW), BEND_L);
+    if (gripHandGroup) {
+      viewDirToRig(BEND_R_VIEW, _bendR);
+      aimArm(gripHandGroup, viewToRig(SHOULDER_R_VIEW, _sh), _bendR);
+    }
+    if (foreHandGroup) {
+      viewDirToRig(BEND_L_VIEW, _bendL);
+      aimArm(foreHandGroup, viewToRig(SHOULDER_L_VIEW, _sh), _bendL);
+    }
   }
   /** The gun's resting pose. Every per-frame offset -- reload, recoil -- is a
    *  DELTA from here, so nothing has to remember where "home" was. */

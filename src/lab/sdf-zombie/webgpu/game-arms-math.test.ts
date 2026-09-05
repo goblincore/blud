@@ -101,6 +101,33 @@ describe('armIk', () => {
     const line = sub(shoulder, hand); const L = len(line);
     expect(dot(sub(e, hand), [line[0] / L, line[1] / L, line[2] / L])).toBeCloseTo(FORE_LEN_M, 9);
   });
+  it('never bends less than minBend, even with the shoulder out of reach', () => {
+    // The clip: hand high on a pitched-up gun, shoulder low behind -- the
+    // straight line runs through the receiver. With a floor on the bend the
+    // forearm leaves the hand at least that far off the line, hint-ward.
+    const hand: V3 = [-0.04, 0.20, -0.35];
+    const shoulder: V3 = [-0.22, -0.26, 0.04];
+    const out: V3 = [-1, -0.4, 0];
+    const minBend = 0.6;
+    expect(len(sub(shoulder, hand))).toBeGreaterThan(FORE_LEN_M + UPPER_LEN_M);   // out of reach
+    const e = armIk(hand, shoulder, FORE_LEN_M, UPPER_LEN_M, out, minBend);
+    const line = sub(shoulder, hand); const L = len(line);
+    const u: V3 = [line[0] / L, line[1] / L, line[2] / L];
+    const eh = sub(e, hand);
+    expect(len(eh)).toBeCloseTo(FORE_LEN_M, 9);
+    const cosPhi = dot(eh, u) / FORE_LEN_M;
+    expect(Math.acos(cosPhi)).toBeCloseTo(minBend, 6);
+    const along = dot(eh, u);
+    const perp: V3 = [eh[0] - u[0] * along, eh[1] - u[1] * along, eh[2] - u[2] * along];
+    expect(dot(perp, out)).toBeGreaterThan(0);
+  });
+  it('leaves a natural bend alone when it already exceeds minBend', () => {
+    const hand: V3 = [-0.05, -0.05, -0.18];
+    const shoulder: V3 = [-0.22, -0.30, 0.10];
+    const free = armIk(hand, shoulder, FORE_LEN_M, UPPER_LEN_M, down);
+    const floored = armIk(hand, shoulder, FORE_LEN_M, UPPER_LEN_M, down, 0.2);
+    for (let i = 0; i < 3; i++) expect(floored[i]).toBeCloseTo(free[i]!, 9);
+  });
   it('does not blow up with the hint along the arm or the hand on the shoulder', () => {
     const e1 = armIk([0, 0, 0], [0, 0, 0.4], FORE_LEN_M, UPPER_LEN_M, [0, 0, 1]);
     expect(len(e1)).toBeCloseTo(FORE_LEN_M, 9);
