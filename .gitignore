@@ -34,3 +34,7 @@ public/assets/audio-placeholder
 
 # Local scratch — throwaway probe scripts, never shipped
 .scratch/
+
+# Reference models are dev-only and untracked: a dispatch worktree auto-commit once swept a 116 MB .glb into main (2026-09-05).
+# The nine models already tracked on origin stay tracked (ignore rules do not untrack).
+docs/dev-notes/refs/**/*.glb
