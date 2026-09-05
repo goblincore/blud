@@ -84,7 +84,10 @@ try {
     onRow: async (row, { evaluate: ev }) => {
       // Post-run readback on the LAST benched frame: the density field's
       // covered area (the "area, not count" axis) and the sim census.
-      const probe = await ev('JSON.stringify(await __sdfGame.gooProbe())').then(JSON.parse).catch(() => null);
+      // Runtime.evaluate has no top-level await — the bare `await` version of
+      // this threw a syntax error that the .catch swallowed as `cov ?` on
+      // every row. Wrap it; keep it single-line (the multiline-evaluate trap).
+      const probe = await ev('(async () => JSON.stringify(await __sdfGame.gooProbe()))()').then(JSON.parse).catch(() => null);
       const bleed = await ev('JSON.stringify(__sdfGame.bleed)').then(JSON.parse).catch(() => null);
       const goo = await ev('JSON.stringify(__sdfGame.goo)').then(JSON.parse).catch(() => null);
       row.probe = probe && {
