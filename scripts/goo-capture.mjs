@@ -166,6 +166,12 @@ const seamOnFor = (item) => item === 'surface' ? '__sdfGame.setGooPerf({ surface
  *  seam JS, shot. Returns the staging record. */
 async function captureScene(conn, scene, seamJs, name, tag) {
   const { send, evaluate } = conn;
+  // A backgrounded tab throttles rAF to ~1fps, and the AA smear that needs
+  // ~2500 ms of RENDERED frames never converges there — the first parity run
+  // measured 2.35% phantom diff on every item-on capture once the MAIN tab
+  // (opened later, foreground) had stolen focus. Bring this tab forward
+  // before staging so the settle inside shot() actually settles.
+  await send('Page.bringToFront');
   await bootCloseupPage({ send, evaluate, url: `http://localhost:${conn.vite}/sdf-game.html?frozen=1`, fail });
   await applyShipDefaults(evaluate);
   if (seamJs) await evaluate(seamJs);
