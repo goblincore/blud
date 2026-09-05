@@ -320,6 +320,35 @@ time — concurrent benches are what spoiled the tile table and the r2 sweep):
 **1b → 4 (goo) → 2 → 3 → 5**, all `pending` except 1b, which is the manual
 trigger.
 
+**CLOSE-UP TASK 1B — DONE (2026-09-04).** Harness extracted to
+`scripts/lib/sdf-closeup-stage.mjs` (staging record byte-identical pre/post
+extraction — proven by diff across four runs, not by reading). **Question A
+ANSWERED at decision grade** (two genuinely-quiet windows out of ~10
+attempts, ranges quoted): of the wounded fill-screen frame — clean walk
+~29%, **wound-adjacent walk ~41% (the stablest number: wound shadow + wound
+fold near craters)**, post-hit shading chain ~30%, shading on the clean body
+alone ~5%; wound total ~66%. Tasks 2/3 are NOT aimed at the wrong half, but
+the biggest single column is the wound WALK, which lever 3's early-out
+(≈0) doesn't bite and lever 2's probes don't touch — task 2's scope should
+absorb the wound-shadow walk, and everything must be measured on the WOUNDED
+fill-screen staging. Stability machinery now load-gated (reject >+8 rise /
+>24 abs loadavg, counted makeup reps, 16 rejections in the final run), crash
+retry re-connects (fixed: ws death used to pend forever — one run lost).
+Instrument findings: `hashMarchTarget` is NOT a live-frame parity hash
+(stale target outside debug-mode renders; poisons the next occupancy read);
+the bare `teleport` seam drops the player inside the frozen spawn cluster
+where the mode-4 depth-winner bias reads hits=0 for a room the canvas
+renders — stand off 4 m (bench framing) before censing a crowd.
+[notes](docs/dev-notes/2026-09-04-closeup-1b/notes.md)
+**STEP 3 DONE — `GAME_HULL_EXIT_BOUND` SHIPS 1 (`6a514a0`).** Re-taken
+census clean at five views (room 1 at 0.5/3/9 m + rooms 3/4 standoff):
+hits/rasterised/meanStepsHit bit-identical on/off, pixel diffs at noise,
+state-clean — the historical body-deletion was the fog and it is gone.
+Step win by counter: missStepShare 0.58 → 0.46, meanStepsHit unchanged.
+Timing A/B unresolvable on that night's machine (spreads 11–40%, load
+quoted per row) — the flip rests on exactness + counters + r2's −0.28 ms.
+Gates: tsc 0, vitest src/lab 2457/2457.
+
 **CLOSE-UP FRAME RATE + GORE COST — SPEC WRITTEN, 5 TASKS QUEUED INERT
 (2026-09-04).** Successor program to perf r2, aimed at the owner's restated
 problem: **a body filling the screen**, and heavy blood spray. Spec
