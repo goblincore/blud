@@ -2316,7 +2316,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // to that far before the field's nearest surface), and shellAmp is the
   // shell displacement the coarse test also stopped short of — the same two
   // slack terms CONE_MARCH's stop carries, handed back to the ray here.
-  let preT = DEPTH_PRE_FETCH(depthPreTex, screenUV, depthPreCfg);
+  let preT = depthPreFetch(depthPreTex, screenUV, depthPreCfg);
   let preStart = select(0.0, max(preT - (preT * depthPreCfg.y + 0.0012 + woundCfg2.z), 0.0), preT > 0.0);
   var t = clamp(max(max(startT, shellIn), preStart), 0.0, tMax);
   var hit = false;
