@@ -739,8 +739,24 @@ async function main() {
    *  figure-shaped component) while the occupancy hit set stays bit-identical
    *  — a cross-body hull-texture effect, not a per-ray loss. Do not raise
    *  until task 1c's shell-exit diagnosis explains the deletion and both
-   *  rooms pass the parity gate with the bound on. */
-  const GAME_HULL_EXIT_BOUND = 0;
+   *  rooms pass the parity gate with the bound on.
+   *
+   *  FLIPPED TO 1 (close-up task 1b, 2026-09-04). Task 1c's diagnosis IS the
+   *  deletion's explanation: the shell-out target was written through the
+   *  scene fog (mix(dist, fogColor, smoothstep(near, far, viewZ))), so far
+   *  bodies' exit distances read ~2.8 m at a true 9 m and the bound cut the
+   *  march short of them — 4 of 9 bodies vanished from the census. With
+   *  material.fog = false (occluder-hull.ts / shell-hull-outer.ts) the
+   *  written distance is exact, and the re-taken census (scripts/
+   *  sdf-exit-bound-census.mjs, five views: room 1 at 0.5/3/9 m + rooms 3/4
+   *  standoff) reads hits/rasterised/meanStepsHit BIT-IDENTICAL on/off with
+   *  pixel diffs at/below the noise floor — including the multi-body rooms
+   *  where the deletion historically happened. The step win survives:
+   *  missStepShare 0.58 → 0.46 (room-4 standoff), meanStepsHit unchanged;
+   *  r2's timed −0.28 ms stands, and the frame-time A/B could not resolve
+   *  ±1 ms on that night's machine (spread 11-40%, load quoted per row) —
+   *  the flip rests on exactness + counters, not on that timing. */
+  const GAME_HULL_EXIT_BOUND = 1;
 
   /** Perf round 2, task 3: skip a wound's meta/cap texel loads when the
    *  sample is beyond the wound's reach (perfCfg.y). Exact-by-construction —
