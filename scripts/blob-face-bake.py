@@ -33,6 +33,29 @@ ap.add_argument('--front', default='+z', choices=['+z', '-z'],
                 help='which way the mesh faces (glTF convention is +z)')
 ap.add_argument('--size', type=int, default=512)
 ap.add_argument('--out')
+ap.add_argument('--eye-band', type=float, default=0.55,
+                help="How far down the covered face --eye-glow will look for "
+                     "eyes, as a fraction. Default 0.55 because an open mouth "
+                     "is red as well: on the soldier the eyes sit at 40-50%% and "
+                     "the mouth at 65-100%%, so anything in 0.5-0.6 splits them.")
+ap.add_argument('--eye-grow', type=int, default=2,
+                help="Dilate the eye mask by this many texels. The source red is "
+                     "sparse and the shader samples NEAREST, so an undilated mask "
+                     "reads as specks rather than eyes. 0 disables.")
+ap.add_argument('--grey', action='store_true',
+                help="Bake a GREYSCALE MODULATION MAP instead of a colour decal. "
+                     "The colour bake is meant for `decal 1` (replace the albedo); "
+                     "under `decal 0` (multiply) a full-colour skin bake tints as "
+                     "well as shades, which reads warm and orange. Luma modulates "
+                     "only, which is how the zombie's face has always worked.")
+ap.add_argument('--eye-glow', action='store_true',
+                help="Punch red-dominant texels to white so the shader's glow mask "
+                     "(smoothstep(eyeGlowCut, 1, luma)) catches them. The source "
+                     "mesh paints its eyes red, so this finds them without hand-"
+                     "placed coordinates. Only meaningful with --grey: a colour "
+                     "bake's eyes are already red but sit BELOW the cut (the "
+                     "soldier's max luma is 0.855 against a 0.88 default), which is "
+                     "why nothing glowed.")
 a = ap.parse_args()
 
 root = Path(__file__).resolve().parent.parent
@@ -116,7 +139,48 @@ for t in range(len(tris)):
     col = np.concatenate([atlas[py, px], np.full(px.shape + (1,), 255, np.uint8)], -1)
     sub[m] = zz[m]; img[y0:y1 + 1, x0:x1 + 1][m] = col[m]
 
+eye_n = 0
+if a.grey:
+    rgb = img[:, :, :3].astype(np.float32)
+    r, g, b = rgb[:, :, 0], rgb[:, :, 1], rgb[:, :, 2]
+    lum = (0.2126 * r + 0.7152 * g + 0.0722 * b)
+    if a.eye_glow:
+        # Red-dominant AND bright enough to be a lit eye rather than a shadow.
+        cov = img[:, :, 3] > 8
+        red = (r > 90) & (r > g * 1.7) & (r > b * 1.7) & cov
+        # POSITION GATE, and it is not optional: the inside of an open mouth is
+        # red too. Measured on the soldier, the split is unambiguous -- eye
+        # texels land 40-50% down the covered face (758 of them) and the mouth
+        # 65-100% (about 1100). Without this the whole jaw glows, which is a
+        # different character.
+        yy = np.arange(img.shape[0])[:, None] * np.ones((1, img.shape[1]))
+        cy = np.where(cov)[0]
+        if cy.size:
+            top, bot = cy.min(), cy.max()
+            red &= (yy - top) < (bot - top) * a.eye_band
+        # DILATE. The red texels are scattered through the eye region rather
+        # than solid, and the shader samples NEAREST (PSX texels, no blur), so
+        # undilated they render as a handful of specks instead of two eyes.
+        # Grown by --eye-grow texels with a square structuring element, which
+        # is enough to close the gaps without reaching the brow.
+        eyes = red
+        for _ in range(max(0, a.eye_grow)):
+            e = eyes
+            eyes = (e
+                    | np.roll(e, 1, 0) | np.roll(e, -1, 0)
+                    | np.roll(e, 1, 1) | np.roll(e, -1, 1))
+        eyes &= cov
+        eye_n = int(eyes.sum())
+        lum = np.where(eyes, 255.0, lum)
+    v = np.clip(lum, 0, 255).astype(np.uint8)
+    img = np.dstack([v, v, v, img[:, :, 3]])
+
 out.parent.mkdir(parents=True, exist_ok=True)
 Image.fromarray(img).save(out)
+if a.grey:
+    cov_m = img[:, :, 3] > 8
+    ml = (img[:, :, 0][cov_m] / 255.0).mean() if cov_m.any() else 0.0
+    print(f'  greyscale modulation map, mean luma {ml:.3f}'
+          + (f', {eye_n} eye texels punched to white' if a.eye_glow else ''))
 cov = (img[:, :, 3] > 0).mean()
 print(f'wrote {out.relative_to(root)} ({R}x{R}, {cov:.0%} covered, head {xmax - xmin:.3f} wide x {ymax - ymin:.3f} tall)')

@@ -205,12 +205,12 @@ face
 # centre 0.50/0.27. The bake's bottom third is shoulders, so centreY sits
 # far below the sheet default — that is the bake's framing, not a mistake.
 sheet
-  image       soldier-face.png
-  decal       1
-  projScaleX  0.24
-  projScaleY  0.33
+  image       soldier-face-grey.png
+  decal       0
+  projScaleX  0.180
+  projScaleY  0.200
   projCentreX 0.50
-  projCentreY 0.27
+  projCentreY 0.500
 
 # Skin around #cb956a as briefed (sRGB -> linear). Drier than the zombie
 # (wetness 0.15 vs latex-wet), warmer mottle. Wounds stay red.
