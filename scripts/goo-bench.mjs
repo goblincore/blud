@@ -40,6 +40,8 @@ const ROOM = Number(process.env.GOO_ROOM ?? 4);
 
 const fail = (msg) => { console.error(`FAIL: ${msg}`); process.exit(1); };
 const WATCHDOG_MIN = Number(process.env.BENCH_WATCHDOG_MIN ?? 75);
+const CLOSE = process.argv.includes('--close');
+const FLOOR = process.argv.includes('--floor');
 setTimeout(() => { console.error(`FAIL: watchdog (${WATCHDOG_MIN} min)`); process.exit(3); }, WATCHDOG_MIN * 60_000).unref();
 mkdirSync(OUT, { recursive: true });
 
@@ -52,25 +54,92 @@ console.log(`goo-bench ${MODE}${MODE === 'ab' ? ` item=${ITEM}` : ''} ${url}  ro
 // schedule — see game-bench-scenario.ts), one slug.
 const BENCH = { kind: 'firefight', room: ROOM, walkFrames: 120, fireFrames: 120, gibFrames: 150 };
 
+// --close / --floor: the SPEC's scene is the close-up (room-4 gameplay range
+// carries ~1% goo coverage, and the phase-0 legs there moved less than their
+// own spread). Same legs and seam machinery; the STAGING swaps to a
+// deterministic close-range state and the bench falls back to the harness's
+// closeup defaults (freeze at frame 0, no actions, 240 frames). Mirrors
+// goo-capture.mjs's STAGE.burst / STAGE.floor so bench rows and captures
+// photograph the same scene. closeupFrames 240 ≈ 4 s of spray decay.
+const CLOSE_STAGE = `
+  __sdfGame.teleport(1);
+  const z = __sdfGame.zombies().find(q => q.room === 1);
+  if (!z) return { error: 'no body in room 1' };
+  const d = 1.1;
+  __sdfGame.setPose(z.pos[0], z.pos[2] + d, 0, 0.05, 0);
+  __sdfGame.step(10);
+  __sdfGame.fireSlug();
+  __sdfGame.step(12);
+  __sdfGame.setBleed(true);
+  __sdfGame.setGoo(true);
+  __sdfGame.step(14);
+  return { scene: 'burst-close', dist: d };
+`;
+const FLOOR_STAGE = `
+  __sdfGame.teleport(1);
+  const z = __sdfGame.zombies().find(q => q.room === 1);
+  if (!z) return { error: 'no body in room 1' };
+  __sdfGame.setPose(z.pos[0], z.pos[2] + 2.2, 0, -0.15, 0);
+  __sdfGame.step(5);
+  const base = __sdfGame.pose();
+  let stamped = 0;
+  for (let k = 0; k < 12; k++) {
+    const yaw = base.yaw + (k - 5.5) * 0.045;
+    __sdfGame.setPose(base.pos[0], base.pos[2], yaw, base.pitch, 0);
+    const p = __sdfGame.predictSlugHit();
+    if (p.actorId < 0 || !p.hit) continue;
+    if (__sdfGame.stampWoundAt(p.origin[0], p.origin[1], p.origin[2],
+      p.dir[0], p.dir[1], p.dir[2], 'slug', p.actorId)) stamped++;
+    __sdfGame.step(30);
+  }
+  __sdfGame.step(2400);
+  __sdfGame.setGoo(true);
+  __sdfGame.setPose(base.pos[0], base.pos[2], base.yaw, -0.35, 0);
+  __sdfGame.step(3);
+  return { scene: 'floor-close', stamped, splats: __sdfGame.bleed.splats, droplets: __sdfGame.bleed.droplets };
+`;
+
 // Every leg: no closeup staging (the firefight stages itself), flat albedo
 // OFF, and its own seam application in legJs.
 const noStage = { wounds: false, flat: false, stageJs: 'return { d: null, cov: null, body: null, scene: "firefight" };' };
-const LEGS = MODE === 'ab' ? {
-  off:  { ...noStage, benchArgs: BENCH },
-  on:   {
+const LEGS = (CLOSE || FLOOR ? closeLegs() : MODE === 'ab' ? abLegs() : phase0Legs());
+function abLegs() {
+  const on = {
     ...noStage, benchArgs: BENCH,
     legJs: ITEM === 'surface' ? '__sdfGame.setGooPerf({ surfaceAtDensityRes: true });'
       : ITEM === 'minmax' ? '__sdfGame.setGooPerf({ minTexelRadius: 1, areaPriority: true });'
       : '__sdfGame.setGooPerf({ splatFadeTail: 128 });',
-  },
-} : {
-  goooff:     { ...noStage, benchArgs: BENCH, legJs: '__sdfGame.setGoo(false);' },
-  ship:       { ...noStage, benchArgs: BENCH },
-  nosurface:  { ...noStage, benchArgs: BENCH, legJs: '__sdfGame.setGooPerf({ passGate: { surface: false } });' },
-  nodensity:  { ...noStage, benchArgs: BENCH, legJs: '__sdfGame.setGooPerf({ passGate: { density: false } });' },
-  bluron:     { ...noStage, benchArgs: BENCH, legJs: '__sdfGame.setGooTuning({ blurPx: 2.5 });' },
-  bigblobs:   { ...noStage, benchArgs: { ...BENCH, room: 2 }, legJs: '__sdfGame.setGooTuning({ sizeScale: 0.28 });' },
-};
+  };
+  return { off: { ...noStage, benchArgs: BENCH }, on };
+}
+function phase0Legs() {
+  return {
+    goooff:     { ...noStage, benchArgs: BENCH, legJs: '__sdfGame.setGoo(false);' },
+    ship:       { ...noStage, benchArgs: BENCH },
+    nosurface:  { ...noStage, benchArgs: BENCH, legJs: '__sdfGame.setGooPerf({ passGate: { surface: false } });' },
+    nodensity:  { ...noStage, benchArgs: BENCH, legJs: '__sdfGame.setGooPerf({ passGate: { density: false } });' },
+    bluron:     { ...noStage, benchArgs: BENCH, legJs: '__sdfGame.setGooTuning({ blurPx: 2.5 });' },
+    bigblobs:   { ...noStage, benchArgs: { ...BENCH, room: 2 }, legJs: '__sdfGame.setGooTuning({ sizeScale: 0.28 });' },
+  };
+}
+// Close-range variants: NO benchArgs — the harness's closeup defaults apply
+// (freeze at frame 0, no actions; the staging already built the scene).
+function closeLegs() {
+  const base = () => ({ ...noStage });
+  if (MODE === 'ab') {
+    const on = { ...base(), legJs: ITEM === 'surface' ? '__sdfGame.setGooPerf({ surfaceAtDensityRes: true });'
+      : ITEM === 'minmax' ? '__sdfGame.setGooPerf({ minTexelRadius: 1, areaPriority: true });'
+      : '__sdfGame.setGooPerf({ splatFadeTail: 128 });' };
+    return { off: base(), on };
+  }
+  return {
+    goooff:     { ...base(), legJs: '__sdfGame.setGoo(false);' },
+    ship:       base(),
+    nosurface:  { ...base(), legJs: '__sdfGame.setGooPerf({ passGate: { surface: false } });' },
+    nodensity:  { ...base(), legJs: '__sdfGame.setGooPerf({ passGate: { density: false } });' },
+    bluron:     { ...base(), legJs: '__sdfGame.setGooTuning({ blurPx: 2.5 });' },
+  };
+}
 
 let out;
 try {
@@ -81,6 +150,7 @@ try {
     loadGate: { maxRise: 8.0, maxAbs: 24.0 },
     minKept: REPEATS,
     makeupCap: 3,
+    ...(CLOSE || FLOOR ? { stageJs: FLOOR ? FLOOR_STAGE : CLOSE_STAGE } : {}),
     onRow: async (row, { evaluate: ev }) => {
       // Post-run readback on the LAST benched frame: the density field's
       // covered area (the "area, not count" axis) and the sim census.
@@ -108,12 +178,13 @@ const { rows, crashRetries, loadRejected, makeupReps, kept } = out;
 console.log(`\nstability: kept ${JSON.stringify(kept)}  crashRetries ${crashRetries}  loadRejected ${loadRejected}  makeupReps ${makeupReps}`);
 
 const med = (xs) => { const s = [...xs].sort((a, b) => a - b); return s[s.length >> 1]; };
+const SEGNAMES = [...new Set(rows.flatMap((r) => Object.keys(r.segs ?? {})))];
 const summary = {};
 for (const leg of Object.keys(LEGS)) {
   const rs = rows.filter((r) => r.leg === leg);
   if (rs.length === 0) { console.warn(`  (leg ${leg}: zero rows survived)`); continue; }
   summary[leg] = {};
-  for (const seg of ['walk', 'fire', 'gib']) {
+  for (const seg of SEGNAMES) {
     const vals = rs.map((r) => r.segs?.[seg]?.p50).filter((v) => v != null);
     if (vals.length) summary[leg][seg] = { p50: med(vals), min: Math.min(...vals), max: Math.max(...vals), spread: +(((Math.max(...vals) - Math.min(...vals)) / Math.min(...vals)) * 100).toFixed(1) };
   }
@@ -125,14 +196,14 @@ for (const leg of Object.keys(LEGS)) {
 
 console.log(`\n## per-segment p50 (ms)${MODE === 'ab' ? ` — item ${ITEM}` : ''}`);
 for (const [leg, s] of Object.entries(summary)) {
-  const seg = (k) => s[k] ? `${s[k].p50.toFixed(2)} [${s[k].min.toFixed(2)}..${s[k].max.toFixed(2)}] sp${s[k].spread}%` : '—';
-  console.log(`  ${leg.padEnd(10)} walk ${seg('walk')}\n  ${''.padEnd(10)} fire ${seg('fire')}\n  ${''.padEnd(10)} gib  ${seg('gib')}  cov ${s.cov != null ? (s.cov * 100).toFixed(1) + '%' : '?'}  live ${s.live}  drop ${s.droplets}  splat ${s.splats}`);
+  const segStr = SEGNAMES.map((k) => `${k} ${s[k] ? `${s[k].p50.toFixed(2)} [${s[k].min.toFixed(2)}..${s[k].max.toFixed(2)}] sp${s[k].spread}%` : '—'}`).join('  ');
+  console.log(`  ${leg.padEnd(10)} ${segStr}  cov ${s.cov != null ? (s.cov * 100).toFixed(1) + '%' : '?'}  live ${s.live}  drop ${s.droplets}  splat ${s.splats}`);
 }
 if (MODE === 'phase0') {
   const d = (a, b, seg) => summary[a]?.[seg]?.p50 != null && summary[b]?.[seg]?.p50 != null
     ? +(summary[a][seg].p50 - summary[b][seg].p50).toFixed(2) : null;
-  console.log('\n## attribution (deltas of p50, ms; room-4 legs only)');
-  for (const seg of ['walk', 'fire', 'gib']) {
+  console.log('\n## attribution (deltas of p50, ms)');
+  for (const seg of SEGNAMES) {
     const shipSeg = summary.ship?.[seg]?.p50;
     if (shipSeg == null) continue;
     const parts = [
@@ -145,8 +216,9 @@ if (MODE === 'phase0') {
   }
   console.log('\n## area-vs-count (correlate cost with covFrac and live/droplets)');
   for (const [leg, s] of Object.entries(summary)) {
-    if (s[ 'fire' ] == null) continue;
-    console.log(`  ${leg.padEnd(10)} fire ${s.fire.p50.toFixed(2)} ms  cov ${(s.cov * 100).toFixed(1)}%  live ${s.live}  drop ${s.droplets}`);
+    const segName = SEGNAMES.find((k) => s[k] != null);
+    if (!segName) continue;
+    console.log(`  ${leg.padEnd(10)} ${segName} ${s[segName].p50.toFixed(2)} ms  cov ${(s.cov * 100).toFixed(1)}%  live ${s.live}  drop ${s.droplets}`);
   }
 }
 const file = `${OUT}/goo-${MODE}${MODE === 'ab' ? `-${ITEM}` : ''}.json`;
