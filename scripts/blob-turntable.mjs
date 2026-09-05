@@ -48,6 +48,8 @@
 // is an env var rather than a positional argument so the four positions above
 // — which the authoring skill documents verbatim — keep their meaning.
 // BLOB_DIST, BLOB_PITCH and BLOB_TARGET_Y override the camera framing the same way.
+// BLOB_POSE=walk|run|hip (and BLOB_POSE_FRAMES, default 90) shoot a held
+// motion pose instead of the rest pose — see the pose block below.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { inflateSync } from 'node:zlib';
 import { execFileSync } from 'node:child_process';
@@ -187,17 +189,27 @@ await evaluate(`(() => {
   return true;
 })()`);
 
-// Freeze the rig into its authored rest pose so the same document produces
-// the same silhouette on every run, independent of wall-clock timing.
-await evaluate(`(() => {
-  window.__sdfLab.setMotionEnabled(false);
-  window.__sdfLab.setWander(false);
+// Pose. Default: freeze the rig into its authored rest pose so the same
+// document produces the same silhouette on every run, independent of
+// wall-clock timing. BLOB_POSE=walk|run|hip steps the motion deterministically
+// on a treadmill instead (lab-main's holdPose: fixed 1/60 steps, wander off,
+// then motion frozen) so a capture shows a mid-stride or a carry from every
+// yaw, and the same document still yields the same frames.
+const POSE = process.env.BLOB_POSE ?? 'rest';
+const POSE_FRAMES = Number(process.env.BLOB_POSE_FRAMES ?? 90);
+const poseResult = await evaluate(`(() => {
   // Dynamic resolution would change the SDF pixel count between frames and
   // runs; frames are judged by eye, so pin it.
   if (window.__sdfLab.setAdaptive) window.__sdfLab.setAdaptive(false);
   window.__sdfLab.focusBody();
-  return true;
+  if (${JSON.stringify(POSE)} === 'rest' || !window.__sdfLab.holdPose) {
+    window.__sdfLab.setMotionEnabled(false);
+    window.__sdfLab.setWander(false);
+    return 'rest';
+  }
+  return JSON.stringify(window.__sdfLab.holdPose(${JSON.stringify(POSE)}, ${POSE_FRAMES}));
 })()`);
+console.log('pose:', poseResult);
 await sleep(4000);
 
 const errors = await evaluate('JSON.stringify(window.__sdfLab.current.errors ?? [])');
