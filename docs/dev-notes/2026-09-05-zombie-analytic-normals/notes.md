@@ -89,3 +89,8 @@ This supersedes the earlier zero-gameplay-sample checkpoint above. At `95e9206`,
 Original beauty images are **non-acceptance evidence**: shipped temporal smear0.25 retained raw eligibility colors after only one beauty frame. Valid raw numbers/diagnostic PNGs are separate from those contaminated screenshots and24 original motion frames. The corrected driver preserves smear0.25, asserts actual state, flushes20 zero-dt frames and fences before each beauty screenshot, checks paired material/debug state, and captures the intact motion reel before stamping. It retains the narrow wound fallback control and adds wider body framing outside the production0.8796m wound reach, with unchanged mixed floor. This is not a wounded-closeup acceleration claim.
 
 That correction's one guarded rerun was stopped immediately at load1 17.7056>12; no servers started and no retry followed. Ten focused Node tests, syntax checks and tsc pass; latest capture corrections still require scoped review and actual GPU validation. `intact` remains deferred; first-run `passed:false` is preserved. The incomplete verdict/summary generator now reports real partial gameplay evidence rather than zero samples. Task4, valid visual evidence, performance timing and owner look remain pending or skipped by prerequisite as recorded in gates.
+
+
+## Final checkpoint review
+
+Scoped static review of `95e9206..fcd4978` approved the capture/fixture corrections with no Critical or Important findings. The reviewer checked zero-dt drawing, temporal history advancement and readback ordering in the existing renderer. This is approval of an unfinished checkpoint; corrected GPU validation, Task 4 and gameplay performance remain deferred. `TASKS.md` now reflects the valid partial gameplay evidence.

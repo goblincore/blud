@@ -37,11 +37,11 @@ The shipped 0.16 m slug radius and recorded wound settings imply a conservative 
 | visualEvidence / timing | skipped-by-gate |
 | ownerLook | pending |
 
-The updated offline verdict generator preserves partial GPU coverage and explains the first-run failure; it no longer claims zero gameplay samples. Ten focused Node tests, driver syntax and TypeScript pass. There are no valid paired timings or owner acceptance. Static review of the prior three driver fixes passed; the latest capture/fixture fixes still need review and the required GPU run.
+The updated offline verdict generator preserves partial GPU coverage and explains the first-run failure; it no longer claims zero gameplay samples. Ten focused Node tests, driver syntax and TypeScript pass. There are no valid paired timings or owner acceptance. Static review of the prior three driver fixes and the latest capture/fixture checkpoint passed with no outstanding findings. The corrected path still requires its GPU run; review does not complete Task 3.
 
 Anatomical coverage uses the intended actor's primitive-owner limb masks. Other actors keep geometry/depth but emit a temporary negative RGB sentinel; exact look values restore in `finally`. Chunk-containing eligibility captures are rejected until Task 4 extends piece identity/masks before any impact/sever coverage claim. A future combined zoned-cache build must force complete legacy normals while `zonedCfg.x` is active; that uniform is absent here.
 
-After review and an authorized quiet-machine attempt, run from the isolated worktree:
+On a quiet machine, resume from the isolated worktree:
 
 ```bash
 export LAB_VITE_PORT=5251 LAB_CDP_PORT=9251

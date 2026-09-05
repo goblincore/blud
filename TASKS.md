@@ -20,8 +20,8 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
-**[!] Zombie analytic normals — Tasks 1–2 passed; default-off intact prototype is deferred without gameplay GPU evidence; wounds skipped and verdict incomplete (2026-09-05).**
-[Verdict](docs/dev-notes/2026-09-05-zombie-analytic-normals/verdict.md); resume intact validation on a quiet machine before wounds, visual evidence, timing or owner review.
+**[!] Zombie analytic normals — Tasks 1–2 passed; default-off intact prototype has partial real gameplay GPU evidence; corrected visual/mixed-coverage validation deferred, wounds skipped and verdict incomplete (2026-09-05).**
+[Verdict](docs/dev-notes/2026-09-05-zombie-analytic-normals/verdict.md); first-run anatomical analytic coverage was 83.58% head / 86.61% torso with exact depth/fallback parity. Resume corrected intact validation on a quiet machine before wounds, timing or owner review; no speedup measured.
 
 **[~] Zoned baked wounds — Task 3 resumed from saved work (2026-09-05); Tasks 1–2 done, 4–6 pending behind numerical/memory gates.**
 [Plan](docs/superpowers/plans/2026-09-04-zoned-baked-wounds.md); defer expensive GPU verification under load; current shipping baseline and actual close-up coverage still require matched comparison.
