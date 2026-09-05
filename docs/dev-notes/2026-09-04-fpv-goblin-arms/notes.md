@@ -74,3 +74,14 @@ of base, hue within 12% per channel. Measured at 64px: plain 428.8, crown
    colour at a quarter share; pits darken floors 18%. Tests pin pit coverage
    (25-55%), floors darker than ridges, coarse colour variation under 6%,
    and the roughness map on the same field. `fist-960.png`.
+6. **Shoulders in camera space.** "The left hand still can appear floating at
+   very extreme angles": the shoulder anchors lived in the aim rig's space,
+   and free aim pitches the rig about the grip, so on a hard look up the
+   shoulder swung in front of the camera and the upper arm was cut by the
+   near plane. `SHOULDER_L/R_VIEW` are now view-space points converted into
+   rig space every frame (`shoulderInRig`, `aimArms()` after the rig pose is
+   set). `pitch-*.png`: continuous arms at pitch +-1.45 with the reticle at
+   either edge.
+7. **Finer, greener, darker.** Skin tile 60 -> 42 mm (asset UVs); fpvTone
+   exposure 0.86 -> 0.72 with a hue nudge (red x0.80, blue x1.08) so it reads
+   green rather than yellow-green. Owner: "good job for now, merge after".

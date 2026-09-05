@@ -147,8 +147,10 @@ nodes, `armIk` to shoulder anchors behind the camera — the one-piece stick
 showed its end at extreme pitch), skin re-toned to the character's face
 (saturated, wet, fine dark speckle via a fleck lattice; NOT the matte
 darkening tried first), chrome spike studs on the bracer, warts moved off the
-fist, knuckle nubs removed (they read as warts). 3177 tests, tsc, gate green. **Awaiting the owner's second look before
-merge.** Follow-up **F-arm.2 — the watch
+fist, knuckle nubs removed (they read as warts). 3177 tests, tsc, gate green. Second look: shoulders moved to CAMERA space (a rig-space shoulder swung in
+front of the eye under free-aim pitch), grain moved into the normal +
+roughness maps (pit field), finer tile, greener/darker tone. Owner: "good
+job for now" — **merged.** Follow-up **F-arm.2 — the watch
 as an in-game device** (shells / health / timer drawn on the screen canvas).
 Owner, 2026-09-04: "the arm itself probably needs some work to more
 accurately resemble the goblin SDF model (I guess that will be the main

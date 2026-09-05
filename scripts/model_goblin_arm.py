@@ -39,7 +39,7 @@ UPPER_IK_LEN, UPPER_MESH_LEN = 0.30, 0.46
 UPPER_R0, UPPER_R1, SHOULDER_R = 0.042, 0.052, 0.060
 BRACER_Z0, BRACER_Z1 = 0.075, 0.180
 STRAP_Z = (0.100, 0.155)
-TILE_M   = 0.060          # one tile of the generated skin maps per 60 mm of arm
+TILE_M   = 0.042          # one tile of the generated skin maps per 42 mm of arm (finer grain, owner)
 TRI_CAP  = 14000
 
 REQUIRED_NODES = ["Arm_L", "Arm_R", "Hand_L", "Hand_R", "Wrist_L", "Wrist_R",

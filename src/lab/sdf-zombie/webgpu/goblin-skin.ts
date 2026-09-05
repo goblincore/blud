@@ -41,8 +41,11 @@ export const GOBLIN_SKIN = {
    *  darkening read as matte olive (the second). So the FPV albedo is the
    *  palette pushed AWAY from grey by fpvSaturation and scaled by
    *  fpvExposure -- matched by eye to the character render, not derived. */
-  fpvExposure: 0.86,
+  fpvExposure: 0.72,
   fpvSaturation: 1.35,
+  /** Per-channel nudge after saturation: less red (the palette's green is a
+   *  yellow-green; the owner wants it GREEN) and a touch more blue. */
+  fpvHue: [0.80, 1.0, 1.08] as const,
   /** FPV finish: close to the blob's specRoughness 0.42 -- the goblin is
    *  wet-shiny, and that sheen is most of what "looks like the face" means.
    *  (0.68 was tried for "rougher" and read as dull olive rubber.) */
@@ -94,10 +97,11 @@ export function goblinSkinSrgbHex(): number {
 export function fpvTone(c: readonly [number, number, number]): [number, number, number] {
   const lum = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
   const s = GOBLIN_SKIN.fpvSaturation, e = GOBLIN_SKIN.fpvExposure;
+  const [hr, hg, hb] = GOBLIN_SKIN.fpvHue;
   return [
-    Math.max(0, (lum + (c[0] - lum) * s) * e),
-    Math.max(0, (lum + (c[1] - lum) * s) * e),
-    Math.max(0, (lum + (c[2] - lum) * s) * e),
+    Math.max(0, (lum + (c[0] - lum) * s) * e * hr),
+    Math.max(0, (lum + (c[1] - lum) * s) * e * hg),
+    Math.max(0, (lum + (c[2] - lum) * s) * e * hb),
   ];
 }
 
@@ -139,6 +143,12 @@ function tileNoise(x: number, y: number, period: number, seed: number): number {
  * octave >= 10 px/cell at 64, while 0.65+ wart amplitude keeps the warts
  * reading as warts (normals tilt up to ~60 deg, then z-softening caps them).
  */
+/** The height field the normal map differentiates, exported so its
+ *  periodicity can be pinned exactly (every lattice wraps). */
+export function goblinHeightField(u: number, v: number, size: number): number {
+  return height(u, v, pitCellsFor(size));
+}
+
 function height(u: number, v: number, pitCells: number): number {
   const base = 3;                       // lattice cells across the texture
   let h = 0;

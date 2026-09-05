@@ -1284,10 +1284,33 @@ async function main() {
    *  aimArm): forearm to an IK elbow, upper arm on to the shoulder, whose
    *  ball ends behind the eye whatever the view pitch. The elbows bend down
    *  and OUTWARD (the hints), the way arms holding a gun at the hip do. */
-  const SHOULDER_L = new THREE.Vector3(-0.24, -0.30, 0.12);
-  const SHOULDER_R = new THREE.Vector3(0.26, -0.32, 0.12);
+  //
+  //  IN VIEW SPACE (the camera's frame, viewModelAnchor), NOT the aim rig's.
+  //  Free aim pitches the rig about the grip, and a shoulder that rode the
+  //  rig swung round in front of the camera on a hard look up: the upper arm
+  //  crossed the near plane, was cut off, and the hand read as floating
+  //  (owner's screenshot). The body does not turn with the gun; the shoulders
+  //  stay put behind the eye and the arms are re-aimed at them every frame.
+  const SHOULDER_L_VIEW = new THREE.Vector3(-0.24, -0.30, 0.12);
+  const SHOULDER_R_VIEW = new THREE.Vector3(0.26, -0.32, 0.12);
   const BEND_L = new THREE.Vector3(-1, -0.6, 0);
   const BEND_R = new THREE.Vector3(1, -0.6, 0);
+  const _sh = new THREE.Vector3();
+  /** A view-space shoulder, expressed in the aim rig's space RIGHT NOW. Refresh
+   *  the anchor's world matrices first when the rig moved this frame. */
+  function shoulderInRig(view: THREE.Vector3): THREE.Vector3 {
+    _sh.copy(view);
+    viewModelAnchor.localToWorld(_sh);
+    (aimRig ?? viewModelAnchor).worldToLocal(_sh);
+    return _sh;
+  }
+  /** Aim both arms at their shoulders. Called every frame after the rig pose
+   *  is set, and again wherever a hand is moved. */
+  function aimArms(): void {
+    viewModelAnchor.updateMatrixWorld(true);
+    if (gripHandGroup) aimArm(gripHandGroup, shoulderInRig(SHOULDER_R_VIEW), BEND_R);
+    if (foreHandGroup) aimArm(foreHandGroup, shoulderInRig(SHOULDER_L_VIEW), BEND_L);
+  }
   /** The gun's resting pose. Every per-frame offset -- reload, recoil -- is a
    *  DELTA from here, so nothing has to remember where "home" was. */
   const GUN_REST = {
@@ -1494,9 +1517,8 @@ async function main() {
     foreHandGroup = arms.left;
     gripHandGroup.position.copy(GRIP_HAND_REST);
     foreHandGroup.position.copy(FORE_HAND_REST);
-    aimArm(gripHandGroup, SHOULDER_R, BEND_R);
-    aimArm(foreHandGroup, SHOULDER_L, BEND_L);
     (aimRig ?? viewModelAnchor).add(gripHandGroup, foreHandGroup);
+    aimArms();
 
     // SHOTGUN CASES. Red hull, brass head -- the read the owner asked for.
     // Four meshes, all built now: two thrown out of the breech on the eject
@@ -2483,6 +2505,8 @@ async function main() {
         o.z,
       );
       aimRig.rotation.set(pitch, yaw, roll);
+      // The rig just moved; the shoulders did not. Re-aim the arms at them.
+      aimArms();
     }
     if (reticleEl) {
       reticleEl.style.display = freeAimOn ? 'block' : 'none';
@@ -2589,7 +2613,7 @@ async function main() {
         FORE_HAND_REST.y + sh.dy,
         FORE_HAND_REST.z + sh.dz,
       );
-      if (foreHandGroup) { foreHandGroup.position.copy(handNow); aimArm(foreHandGroup, SHOULDER_L, BEND_L); }
+      if (foreHandGroup) { foreHandGroup.position.copy(handNow); aimArms(); }
 
       // ——— STAGE 1: EXTRACTION, and the INSERT that mirrors it ————————
       // The seated cases are children of Barrels, so they are already carrying
@@ -2684,7 +2708,7 @@ async function main() {
           gunGroup.rotation.x = THREE.MathUtils.degToRad(GUN_REST.pitchDeg);
           gunGroup.position.copy(GUN_REST.pos);
         }
-        if (foreHandGroup) { foreHandGroup.position.copy(FORE_HAND_REST); aimArm(foreHandGroup, SHOULDER_L, BEND_L); }
+        if (foreHandGroup) { foreHandGroup.position.copy(FORE_HAND_REST); aimArms(); }
         for (const m of ejectedShells) m.visible = false;
         for (const m of loadShells) m.visible = false;
         updateHud();

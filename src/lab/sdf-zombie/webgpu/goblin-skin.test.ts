@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/webgpu/goblin-skin.test.ts
 import { describe, expect, it } from 'vitest';
-import { GOBLIN_SKIN, goblinAlbedoPixels, goblinNormalPixels, goblinFpvSkinSrgbHex, goblinPitField, goblinRoughnessPixels, pitCellsFor, goblinSkinSrgbHex, goblinWartField } from './goblin-skin';
+import { GOBLIN_SKIN, goblinAlbedoPixels, goblinNormalPixels, goblinFpvSkinSrgbHex, goblinHeightField, goblinPitField, goblinRoughnessPixels, pitCellsFor, goblinSkinSrgbHex, goblinWartField } from './goblin-skin';
 
 describe('goblinSkinSrgbHex', () => {
   it('matches the goblin.blob palette, not the old orb colour', () => {
@@ -43,16 +43,22 @@ describe('goblinNormalPixels', () => {
     for (let i = 0; i < px.length; i += 4) xs.add(px[i]!);
     expect(xs.size).toBeGreaterThan(20);
   });
-  it('tiles — the left and right edge columns agree', () => {
-    // Adjacent texels across the seam. The fine pit field (8 px/cell) adds a
-    // legitimate per-texel step of up to ~26 on a pit rim, so the bound is
-    // 32 rather than the old smooth-only 24; periodicity itself is pinned by
-    // the pit-field lattice test in the albedo block.
+  it('tiles — the height field is exactly periodic, and the seam step is a pit rim, not a seam', () => {
+    // Exact: every lattice wraps, so the field repeats to the bit.
+    for (const [u, v] of [[0.13, 0.71], [0.5, 0.02], [0.97, 0.33], [0.0, 0.0]] as const) {
+      expect(goblinHeightField(u + 1, v, 64)).toBeCloseTo(goblinHeightField(u, v, 64), 12);
+      expect(goblinHeightField(u, v + 1, 64)).toBeCloseTo(goblinHeightField(u, v, 64), 12);
+    }
+    // Adjacent texels across the seam: the fine pit field (8 px/cell) puts a
+    // rim step of up to ~50 on the encoded x-normal, the same as any rim in
+    // the interior. Bound it so a real seam (a jump on every row) is caught.
     const n = 64, px = goblinNormalPixels(n);
+    let big = 0;
     for (let y = 0; y < n; y++) {
       const l = (y * n) * 4, r = (y * n + n - 1) * 4;
-      expect(Math.abs(px[l]! - px[r]!)).toBeLessThan(32);
+      if (Math.abs(px[l]! - px[r]!) > 32) big++;
     }
+    expect(big / n).toBeLessThan(0.25);
   });
 });
 
