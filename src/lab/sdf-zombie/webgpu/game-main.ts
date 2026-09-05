@@ -778,6 +778,13 @@ async function main() {
    * `__sdfGame.setOmega()` flips it live for A/B.
    */
   const GAME_OMEGA = 1.0;
+  /** Near-wound step multiplier the GAME ships (perfCfg.z; 0 would mean the
+   *  shader's sound constant WOUND_STEP_MUL 0.6). 1.0 on the owner's look
+   *  verdict (2026-09-05, own tab, stacked craters at close and mid range:
+   *  "1.0 seems fine, no major visual differences"); the wounds bench prices
+   *  the 0.6 zone at 6–30% of a wounded fill-screen frame. The lab keeps the
+   *  sound constant — march-step-soundness.test.ts pins it below 0.6. */
+  const GAME_WOUND_STEP = 1.0;
 
   /** Perf round 2, task 6: the footprint-AA strength (aaCfg.y). When > 0 the
    *  march may accept a sample once the field is within the ray's projected
@@ -1039,6 +1046,7 @@ async function main() {
     view.uniforms.perfCfg.value.x = GAME_HULL_EXIT_BOUND;
     view.uniforms.perfCfg.value.y = GAME_WOUND_EARLY_OUT;
     view.uniforms.marchCfg.value.y = GAME_OMEGA;
+    view.uniforms.perfCfg.value.z = GAME_WOUND_STEP;
     view.uniforms.aaCfg.value.y = GAME_AA;
     view.uniforms.aaCfg.value.x = sdfLayer.pixelConeK;
     view.uniforms.levelShadowCfg.value.x = GAME_LEVEL_SHADOW;
