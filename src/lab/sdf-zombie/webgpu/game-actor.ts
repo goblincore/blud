@@ -38,6 +38,10 @@ import {
   type MotionJoints, type MotionState, type MotionSignals,
 } from '../motion';
 import { makeRng, type Rng, type WanderBounds } from '../wander';
+import {
+  makeBrain, staggerNow, stepBrain, type Brain, type BrainPlayer,
+} from '../brain';
+import type { SwingVariant } from '../attack';
 import type { MissingLimbs } from '../collapse';
 import type { ZombieGpuView } from './zombie-gpu';
 import type { Aabb } from './game-level';
@@ -73,11 +77,6 @@ const IMPULSE: Record<WoundType, number> = { pellet: 0.07, blast: 0.18, burn: 0.
  *  Pellets send no gain: eight arrive together and re-flinch the body. */
 const SLUG_GAIN = 1.3;
 
-/** Heavy-hit walk stop: after a blast-profile hit the zombie HALTS for this
- *  long (the lurch plays on a stopped walker — a stagger that never
- *  interrupts locomotion reads weightless), then resumes its wander. */
-const BLAST_HOLD_SEC = 0.55;
-
 /** Heavy-hit root knockback: initial ground-plane speed (m/s) along the
  *  shot's horizontal direction — the body's ROOT actually travels back
  *  (a real stumble, not just a joint offsets), decaying at BLAST_KNOCK_DECAY
@@ -100,6 +99,119 @@ export interface DetachedPiece {
 /** How far outside a furniture AABB a wanderer's centre must stay. */
 const FURNITURE_MARGIN = 0.55;
 
+// ---- chase routing (ground-plane, furniture-aware) ------------------------
+// Pure helpers behind the actor's chase-target wiring. brain.ts stays pure
+// geometry (self/player/room only), so obstacle knowledge lives HERE, next
+// to the furniture rejection that already lives here.
+
+/** Does the ground-plane segment p→q cross this furniture box, fattened by
+ *  `margin` (the same fattening insideFurniture rejects at)? 2D slab test on
+ *  x/z; y is ignored — bodies walk on the plane. Conservative: a segment
+ *  that only TOUCHES the fattened boundary counts as crossing, so routing
+ *  keeps a step of slack instead of shaving the corner. */
+export function segmentCrossesBox(
+  p: Vec3, q: Vec3, box: Aabb, margin = FURNITURE_MARGIN,
+): boolean {
+  let t0 = 0;
+  let t1 = 1;
+  const axes: [number, number, number, number][] = [
+    [p[0], q[0] - p[0], box.min[0] - margin, box.max[0] + margin],
+    [p[2], q[2] - p[2], box.min[2] - margin, box.max[2] + margin],
+  ];
+  for (const [a, d, lo, hi] of axes) {
+    if (Math.abs(d) < 1e-9) {
+      if (a < lo || a > hi) return false;   // parallel, outside the slab
+      continue;
+    }
+    let ta = (lo - a) / d;
+    let tb = (hi - a) / d;
+    if (ta > tb) [ta, tb] = [tb, ta];
+    t0 = Math.max(t0, ta);
+    t1 = Math.min(t1, tb);
+    if (t0 > t1) return false;
+  }
+  return true;
+}
+
+/** Push a position that ended up inside a fattened furniture box back out
+ *  along its shallowest axis, per box in injection order. Depths here are
+ *  sub-step-sized (the rejection fires per 1/60 s step), so this is a
+ *  slide-to-the-face, not a teleport — which is the point: a body pressing
+ *  a face keeps the TANGENTIAL component of its step and slides along it,
+ *  and that slide is what lets the chase router round a corner. */
+export function pushOutOfFurniture(
+  p: Vec3, furniture: readonly Aabb[], margin = FURNITURE_MARGIN,
+): Vec3 {
+  let x = p[0]!;
+  let z = p[2]!;
+  for (const f of furniture) {
+    const minX = f.min[0] - margin, maxX = f.max[0] + margin;
+    const minZ = f.min[2] - margin, maxZ = f.max[2] + margin;
+    if (x <= minX || x >= maxX || z <= minZ || z >= maxZ) continue;
+    const west = x - minX, east = maxX - x;
+    const north = maxZ - z, south = z - minZ;
+    const min = Math.min(west, east, north, south);
+    if (min === west) x = minX;
+    else if (min === east) x = maxX;
+    else if (min === north) z = maxZ;
+    else z = minZ;
+  }
+  return [x, 0, z];
+}
+
+/** The first furniture box the segment p→q crosses (injection order), or
+ *  null when the way is clear. */
+export function firstBlockingBox(
+  p: Vec3, q: Vec3, furniture: readonly Aabb[], margin = FURNITURE_MARGIN,
+): Aabb | null {
+  for (const f of furniture) {
+    if (segmentCrossesBox(p, q, f, margin)) return f;
+  }
+  return null;
+}
+
+/** How far to the side of the goal the avoid way-point aims (m). Must exceed
+ *  the level's widest furniture half-extent (room 2's crate: 0.9) plus the
+ *  body margin (0.55), so the way-point sits outside the box's shadow along
+ *  the avoid axis and the arc can actually round the blocker. */
+const AVOID_OFFSET = 2.5;
+
+/** The avoid way-point: `goal` pushed `offset` to `side`, along the
+ *  perpendicular of (goal − p). Re-aimed every sub-step — it rotates with
+ *  the body, which is what makes the chase ARC around the blocker instead of
+ *  pressing into it. Not a parking spot: the wander's arrival branch cannot
+ *  trap the body here because the point moves as the body moves. */
+export function avoidPoint(
+  p: Vec3, goal: Vec3, side: -1 | 1, offset = AVOID_OFFSET,
+): Vec3 {
+  const dx = goal[0] - p[0];
+  const dz = goal[2] - p[2];
+  const d = Math.hypot(dx, dz) || 1;
+  // (goal − p) rotated ±90°: side +1 → (dz, −dx), side −1 → (−dz, dx).
+  return [goal[0] + side * (dz / d) * offset, 0, goal[2] + side * (-dx / d) * offset];
+}
+
+/** Committed avoid side for a blocked chase line: prefer the side whose
+ *  way-point gives a clear first leg, tie-broken by the shorter total path
+ *  (first leg + side-hop); +1 when everything ties. Computed ONCE per
+ *  blocked episode (the caller keeps the answer) — re-picking every sub-step
+ *  would flip sides as the body moves and jitter in place. */
+export function pickAvoidSide(
+  p: Vec3, goal: Vec3, furniture: readonly Aabb[], offset = AVOID_OFFSET,
+): -1 | 1 {
+  const scores = ([-1, 1] as const).map((side) => {
+    const w = avoidPoint(p, goal, side, offset);
+    const clear = firstBlockingBox(p, w, furniture) === null;
+    const cost = Math.hypot(w[0] - p[0], w[2] - p[2])
+      + Math.hypot(goal[0] - w[0], goal[2] - w[2]);
+    return { side, clear, cost };
+  });
+  const clear = scores.filter(s => s.clear);
+  const pool = clear.length ? clear : scores;
+  pool.sort((a, b) => a.cost - b.cost);
+  return pool[0]!.side;   // pool is non-empty by construction
+}
+
 export interface ZombieActor {
   readonly id: number;
   readonly room: number;
@@ -111,9 +223,29 @@ export interface ZombieActor {
   readonly boundRig: () => BoundRig;
   /** Current ground position + facing. */
   readonly pose: () => { pos: Vec3; yaw: number };
+  /** Ground-plane shove from crowd separation (crowd.ts), bounds- and
+   *  furniture-clamped. */
+  nudge(dx: number, dz: number): void;
+  /** The per-frame brain input from game-main: where the player is (null when
+   *  he is in a tunnel or the void) and whether a shot just went off in this
+   *  actor's room. Set BEFORE step(). */
+  setBrainInput(player: BrainPlayer | null, alerted: boolean): void;
+  /** Live brain state — the debug seam and the capture driver's oracle. */
+  brain(): Brain;
+  /** This frame's melee-ring verdict for this body (melee-ring.ts). Set
+   *  BEFORE step(), like setBrainInput. */
+  setRingInput(hasToken: boolean, drift: -1 | 0 | 1): void;
+  /** True while game-main should submit this body to crowd separation at the
+   *  wider engaged radius. */
+  engagedForCrowd(): boolean;
+  /** True while the ring may not revoke this body's token (mid-swing). */
+  committed(): boolean;
   step(dt: number): void;
   /** Live wound ring (for HUD/debug). */
   wounds: () => readonly Wound[];
+  /** CAPTURE SEAM: pin the next step()'s swing pose. Overwritten by the brain
+   *  on the following step; null clears it. Never used by the game itself. */
+  forceSwing(phase: number, side: 'L' | 'R', variant: SwingVariant): void;
   /** Choreography + motion diagnostics from the LAST step() — the heavy-hit
    *  tuning seam (is the hold engaged? did the knock decay? did the meter
    *  cross?) and the capture driver's oracle. Not a simulation input. */
@@ -127,6 +259,12 @@ export interface ZombieActor {
     staggerKind: string | null;
     target: Vec3 | null;
     idle: number;
+    state: string;
+    side: 'L' | 'R';
+    variant: string;
+    hasToken: boolean;
+    alert: boolean;
+    swingT: number;
   };
   /**
    * One pellet lands at `hitWorld`, travelling along `dirWorld`.
@@ -146,6 +284,19 @@ export interface ZombieActor {
    * Returns the stamped wound — see hit().
    */
   hitSlug(hitWorld: Vec3, dirWorld: Vec3): Wound | null;
+  /**
+   * HIT BATCHING (2026-09-05). Between beginHits() and endHits(), hit() /
+   * hitSlug() stamp the wound and apply the shove but DEFER the expensive
+   * tail — sever checks, rig re-solve, the whole-body repack + upload, and
+   * the wound-row rewrite — to ONE flush in endHits(). A double-barrel burst
+   * at point blank lands ~16 pellets in one frame; unbatched that was 16
+   * repacks in one frame (12–18 ms CPU per landing frame, the owner's
+   * "50 ms spike when I shoot up close" — hit-profile.mjs, 2026-09-05).
+   * Callers that land ONE projectile need not batch: outside a batch the
+   * tail runs inline exactly as before.
+   */
+  beginHits(): void;
+  endHits(): void;
   /**
    * Diagnostic blast: push a resolver-provided bundle of blast wounds
    * (resolveExplosion ran against this actor's POSED body) with no shove,
@@ -185,6 +336,11 @@ export function createZombieActor(opts: {
   // Starting-phase variety: seed the initial heading so spawns don't parade.
   state = { ...state, wander: { ...state.wander, heading: (opts.seed % 8) * (Math.PI / 4) } };
   const rng: Rng = makeRng(opts.seed);
+  /** A SECOND, independent RNG for swing-variant rolls. It must not share the
+   *  wander/motion generator: drawing an extra value per frame from that one
+   *  would shift every subsequent wander decision and change trajectories
+   *  that existing tests and captures pin. */
+  const swingRng: Rng = makeRng((opts.seed ^ 0x5eed5eed) >>> 0);
   // `current` is the LIVE body — severLimb/severDistal hand back a new
   // BuildResult with alive flags moved (prims are never removed/reordered).
   let current = body;
@@ -200,18 +356,35 @@ export function createZombieActor(opts: {
   let lastDebug: ReturnType<ZombieActor['debug']> | null = null;
   let lastFrame: ReturnType<typeof stepMotion>['frame'] | null = null;
 
-  // Heavy-hit choreography state (blast-profile hits — the slug). A stagger
-  // that never interrupts locomotion reads weightless: after a blast hit the
-  // zombie HALTS for BLAST_HOLD_SEC (the lurch plays on a stopped walker;
-  // MotionConfig.wander=false fades the stride out and it resumes after),
-  // while its ROOT is knocked back along the shot's ground-plane direction
-  // from BLAST_KNOCK_MPS, decaying exponentially at BLAST_KNOCK_DECAY/s
-  // (total travel ≈ v0/k). Actor-owned on purpose: MotionConfig.wander and a
-  // wander.pos delta already express both, so the shared motion modules and
-  // the lab's wiring — which must stay bit-identical — are untouched.
-  let holdSecs = 0;
+  // Heavy-hit choreography state (blast-profile hits — the slug): the ROOT
+  // knock. Knocked back along the shot's ground-plane direction from
+  // BLAST_KNOCK_MPS, decaying exponentially at BLAST_KNOCK_DECAY/s (total
+  // travel ≈ v0/k). Actor-owned on purpose: a wander.pos delta already
+  // expresses it, so the shared motion modules and the lab's wiring — which
+  // must stay bit-identical — are untouched. The walk STOP is not here: a
+  // blast calls staggerNow() and the brain's stagger state gates cfg.wander
+  // for blastHoldSec — locomotion is gated in exactly one place.
   let knockV = 0;
   let knockDir: Vec3 = [0, 0, 0];
+
+  // ---- brain state --------------------------------------------------------
+  // The decision layer (brain.ts) runs INSIDE the sub-step loop so a chase
+  // target is refreshed at the same cadence the locomotion integrates at.
+  // Its target overrides wander.target; its halt IS the single cfg.wander
+  // gate (the blast hold is a brain state now); its swing phase becomes
+  // cfg.attack. The melee ring's verdict and the blast flag arrive as inputs.
+  let brain: Brain = makeBrain();
+  let brainPlayer: BrainPlayer | null = null;
+  let brainAlerted = false;
+  let ringToken = false;
+  let ringDrift: -1 | 0 | 1 = 0;
+  let forcedSwing: { phase: number; side: 'L' | 'R'; variant: SwingVariant } | null = null;
+  let lastEngaged = false;
+  let lastCommitted = false;
+  // Committed avoid side while the direct chase line is blocked (0 = direct,
+  // walking at the goal). Chosen once per blocked episode; see the routing
+  // block inside step().
+  let detourSide: -1 | 0 | 1 = 0;
 
   function woundedLimbs() {
     const w = { armL: false, armR: false, legL: false, legR: false };
@@ -345,12 +518,18 @@ export function createZombieActor(opts: {
 
   function step(dt: number) {
     let firstSub = true;
+    // Consume the capture pin ONCE PER FRAME, before the sub-step loop: every
+    // sub-step of THIS step() carries the forced pose, and the brain's own
+    // swing config resumes on the next step(). (Read-then-clear, not clear
+    // per sub-step — a mid-frame clear would let later sub-steps compose the
+    // pose without the attack, and the photographed frame would not show it.)
+    const swingPin = forcedSwing;
+    forcedSwing = null;
     for (const sdt of planSubSteps(dt)) {
       // Heavy-hit choreography (see the state block): knock the ROOT before
-      // the motion step so this sub-step's targets ride the moved root, and
-      // gate the wander off while the hold lasts. Bounds-clamped like
-      // stepWander's own integration, so a knock cannot shove the body
-      // through a room wall.
+      // the motion step so this sub-step's targets ride the moved root.
+      // Bounds-clamped like stepWander's own integration, so a knock cannot
+      // shove the body through a room wall.
       if (knockV > 1e-4) {
         const w = state.wander;
         const nx = w.pos[0] + knockDir[0] * knockV * sdt;
@@ -368,7 +547,6 @@ export function createZombieActor(opts: {
         };
         knockV *= Math.exp(-BLAST_KNOCK_DECAY * sdt);
       }
-      holdSecs = Math.max(0, holdSecs - sdt);
       // Real signals on the damaged path; CALM otherwise. severed/freshWounds
       // alias the pending arrays and drain after the FIRST sub-step, exactly
       // like the lab's hero signals.
@@ -385,20 +563,95 @@ export function createZombieActor(opts: {
         }
         : { ...CALM, dt: sdt };
       firstSub = false;
-      const prevPos: Vec3 = [...state.wander.pos] as Vec3;
+      // Decide before locomotion integrates, so the target this sub-step walks
+      // toward is this sub-step's target.
+      const think = stepBrain(brain, {
+        dt: sdt,
+        self: {
+          x: state.wander.pos[0], z: state.wander.pos[2],
+          yaw: bodyYaw, room: opts.room,
+        },
+        player: brainPlayer,
+        alerted: brainAlerted,
+        hasToken: ringToken,
+        drift: ringDrift,
+        roll: swingRng(),
+      });
+      brain = think.brain;
+      brainAlerted = false;   // one-shot: the first sub-step consumes it
+      lastEngaged = think.engaged;
+      lastCommitted = think.committed;
+      if (think.target) {
+        // CHASE ROUTING. The furniture rejection's escape hatch (drop the
+        // target, stepWander picks another) cannot work for a chaser: the
+        // brain re-aims every sub-step, so a body whose straight line to him
+        // crossed a crate was rejected, restored and re-aimed into the crate
+        // forever. Wired here because this is where the furniture AABBs
+        // live; brain.ts stays pure geometry: when the straight line to the
+        // goal is blocked, aim at the goal pushed to one COMMITTED side
+        // (pickAvoidSide) so the body arcs around the blocker; the furniture
+        // rejection's min-axis push-out lets it SLIDE along the face instead
+        // of pressing it. The side is re-picked only per blocked episode —
+        // re-picking every sub-step would jitter in place.
+        // The brain now emits the point it actually wants walked to — the
+        // player for pursue/engage, a ring point for encircle — so the
+        // router must NOT substitute the player, or an encircling body would
+        // be routed straight into the melee it is waiting outside of.
+        const goal: Vec3 = think.target;
+        if (firstBlockingBox(state.wander.pos, goal, opts.furniture)) {
+          if (detourSide === 0) {
+            detourSide = pickAvoidSide(state.wander.pos, goal, opts.furniture);
+          }
+        } else {
+          detourSide = 0;
+        }
+        // idle 0 as well: a chaser must never take a wander pause mid-pursuit.
+        const target = detourSide === 0
+          ? goal
+          : avoidPoint(state.wander.pos, goal, detourSide);
+        state = {
+          ...state,
+          wander: { ...state.wander, target, idle: 0 },
+        };
+      } else {
+        detourSide = 0;
+      }
       const stepR = stepMotion(
         state, joints,
-        { enabled: true, wander: holdSecs <= 0 },
+        {
+          enabled: true,
+          wander: !think.halt,
+          // Spread, not `attack: think.attack ?? undefined`: motion.ts's
+          // bit-identity contract is about the key being ABSENT.
+          // swingPin is forceSwing()'s one-frame capture pin (see step());
+          // null on every frame the game itself runs.
+          ...(swingPin !== null
+            ? { attack: swingPin }
+            : think.attack !== null ? { attack: think.attack } : {}),
+        },
         signals,
         bound.rig.points, opts.bounds, rng,
       );
       state = stepR.state;
       lastFrame = stepR.frame;
       const f = stepR.frame;
-      // Furniture rejection: restore the position, drop the target. The
-      // heading stays, so the body turns as it picks the next target.
+      // Furniture rejection. A step that lands inside a fattened box is
+      // pushed back out along its shallowest axis (pushOutOfFurniture), so
+      // the tangential component of the step survives and a body pressing a
+      // face SLIDES along it — the chase router's committed-side arc needs
+      // that slide to get round a corner; a full restore would cancel it and
+      // the body would press the same spot forever. A plain wanderer (no
+      // brain target) additionally drops its target and pauses: the next leg
+      // starts somewhere else, the designed unstick.
       if (insideFurniture(state.wander.pos)) {
-        state = { ...state, wander: { ...state.wander, pos: prevPos, target: null, idle: 0.2 } };
+        let w = {
+          ...state.wander,
+          pos: pushOutOfFurniture(state.wander.pos, opts.furniture),
+        };
+        if (!think.target) {
+          w = { ...w, target: null, idle: 0.2 };
+        }
+        state = { ...state, wander: w };
       }
       bodyYaw = f.bodyYaw;
       view.setRootShift(f.rootShift[0], f.rootShift[2], f.bodyYaw);
@@ -437,7 +690,7 @@ export function createZombieActor(opts: {
     refreshWounds();
     const d = lastFrame;
     if (d) lastDebug = {
-      holdSecs,
+      holdSecs: brain.holdSecs,
       knockV,
       phase: d.phase,
       meter: d.meter,
@@ -446,7 +699,24 @@ export function createZombieActor(opts: {
       staggerKind: d.staggerKind,
       target: state.wander.target ? [...state.wander.target] as Vec3 : null,
       idle: state.wander.idle,
+      state: brain.state, alert: brain.alert, swingT: brain.swingT,
+      side: brain.swing.side, variant: brain.swing.variant, hasToken: ringToken,
     };
+  }
+
+  /** Ground-plane displacement from crowd separation, clamped exactly like a
+   *  wander step: room bounds, then the furniture rejection. Separation must
+   *  never be able to push a body into a crate or through a wall. */
+  function nudge(dx: number, dz: number) {
+    if (dx === 0 && dz === 0) return;
+    const w = state.wander;
+    const next: Vec3 = [
+      Math.min(Math.max(w.pos[0] + dx, opts.bounds.minX), opts.bounds.maxX),
+      0,
+      Math.min(Math.max(w.pos[2] + dz, opts.bounds.minZ), opts.bounds.maxZ),
+    ];
+    if (insideFurniture(next)) return;
+    state = { ...state, wander: { ...w, pos: next } };
   }
 
   function hit(hitWorld: Vec3, dirWorld: Vec3): Wound | null {
@@ -478,6 +748,23 @@ export function createZombieActor(opts: {
   /** Shared post-impact choreography: stamp wound, flinch signal, recoil
    *  shove, sever checks, pose + upload refresh. `field`/"posed" snapshot is
    *  the actor's CURRENT posed body at call time. Returns the stamped wound. */
+  let hitBatching = false;
+  let hitPending = false;
+  /** The expensive post-impact tail; once per pellet unbatched, once per
+   *  batch inside beginHits/endHits. */
+  function flushHitTail(): void {
+    runSeverChecks();
+    posed = applyRig(current, bound, bodyYaw);
+    view.update(posed, current);
+    view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
+    refreshWounds();
+  }
+  function beginHits(): void { hitBatching = true; hitPending = false; }
+  function endHits(): void {
+    hitBatching = false;
+    if (hitPending) { hitPending = false; flushHitTail(); }
+  }
+
   function applyProjectileHit(wound: Wound, hitWorld: Vec3, dirWorld: Vec3): Wound {
     const field = posed;
     wounds = pushWound(wounds, wound, MAX_WOUNDS);
@@ -493,8 +780,12 @@ export function createZombieActor(opts: {
       ...(wound.type === 'blast' ? { gain: SLUG_GAIN } : {}),
     };
     if (wound.type === 'blast') {
-      // Heavy-hit choreography: stop the walk, knock the ROOT back.
-      holdSecs = BLAST_HOLD_SEC;
+      // Heavy-hit choreography: the flag is one-shot into the brain, whose
+      // stagger state stops the walk for blastHoldSec. The ROOT knock stays
+      // here — moving the root is a different thing from gating locomotion.
+      // Lurch on the frame the slug lands, not the next one — see
+      // brain.ts's staggerNow for what the one-step deferral cost.
+      brain = staggerNow(brain);
       const l = Math.hypot(dirWorld[0], dirWorld[2]);
       if (l > 1e-6) {
         knockV = BLAST_KNOCK_MPS;
@@ -513,11 +804,7 @@ export function createZombieActor(opts: {
     ]);
     // Sever checks BEFORE the pose re-apply so a severed limb is gone from
     // the very next rendered frame.
-    runSeverChecks();
-    posed = applyRig(current, bound, bodyYaw);
-    view.update(posed, current);
-    view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
-    refreshWounds();
+    if (hitBatching) { hitPending = true; } else { flushHitTail(); }
     return wound;
   }
 
@@ -526,14 +813,35 @@ export function createZombieActor(opts: {
     room: opts.room,
     get body() { return current; },
     view,
+    beginHits,
+    endHits,
     posed: () => posed,
     boundRig: () => bound,
     pose: () => ({ pos: [...state.wander.pos] as Vec3, yaw: bodyYaw }),
+    nudge,
+    setBrainInput: (p: BrainPlayer | null, alerted: boolean) => {
+      brainPlayer = p;
+      // Sticky until a step consumes it: the shot may land between frames.
+      if (alerted) brainAlerted = true;
+    },
+    brain: () => brain,
+    setRingInput: (hasToken: boolean, drift: -1 | 0 | 1) => {
+      ringToken = hasToken;
+      ringDrift = drift;
+    },
+    forceSwing: (phase: number, side: 'L' | 'R', variant: SwingVariant) => {
+      forcedSwing = { phase, side, variant };
+    },
+    engagedForCrowd: () => lastEngaged,
+    committed: () => lastCommitted,
     step,
     wounds: () => wounds,
     debug: () => lastDebug ?? {
-      holdSecs, knockV, phase: 'standing', meter: 0, blend: 0, speed: 0,
+      holdSecs: brain.holdSecs, knockV, phase: 'standing', meter: 0,
+      blend: 0, speed: 0,
       staggerKind: null, target: null, idle: 0,
+      state: brain.state, alert: brain.alert, swingT: brain.swingT,
+      side: brain.swing.side, variant: brain.swing.variant, hasToken: ringToken,
     },
     hit,
     hitSlug,

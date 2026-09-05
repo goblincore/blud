@@ -171,7 +171,12 @@ body
   blob leg on thigh at=0.00 r=0.075 deep=1.05 blend=0.008 mirror core color=5c5d41
   bar  leg on thigh from=0.02 to=1.00 r=0.072 r2=0.058 deep=1.05 blend=0.007 mirror color=5c5d41
   # Knee plate — hard box proud of the knee.
-  bar  leg on shin from=0.08 to=0.68 r=0.056 r2=0.050 blend=0.006 mirror color=676549
+  # to 0.68 -> 1.00 (main, 2026-09-05): the shin used to stop at 68% of its
+  # bone because the BOOT covered the rest. With no flesh foot at all now, the
+  # shin runs to the ankle so the leg has an end inside the boot shaft rather
+  # than a blunt stump above it. Tapered harder (r2 0.050 -> 0.044) so the
+  # ankle narrows.
+  bar  leg on shin from=0.08 to=1.00 r=0.056 r2=0.044 blend=0.006 mirror color=676549
 
   # ============================================================
   # BOOTS — heavy, muted red (the second red accent), with a darker sole.

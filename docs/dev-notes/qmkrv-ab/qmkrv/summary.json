@@ -1,0 +1,14 @@
+{
+  "label": "qmkrv",
+  "fsm_mode": 2,
+  "duration_sec": 3601,
+  "exit_code": 124,
+  "goal_triplet_count": 0
+0,
+  "qmkrv_count": 0
+0,
+  "think_opens": 0
+0,
+  "tool_calls": 0
+0
+}

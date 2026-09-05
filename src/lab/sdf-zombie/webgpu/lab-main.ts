@@ -48,6 +48,8 @@ import mouseBlobSrc from '../characters/mouse.blob?raw';
 import cyclopsBlobSrc from '../characters/cyclops.blob?raw';
 import schoolgirlBlobSrc from '../characters/schoolgirl.blob?raw';
 import schoolgirlAltBlobSrc from '../characters/schoolgirl-alt.blob?raw';
+import schoolgirlDescribedBlobSrc from '../characters/schoolgirl-described.blob?raw';
+import strandFixtureBlobSrc from '../characters/strand-fixture.blob?raw';
 import bonewalkerBlobSrc from '../characters/bonewalker.blob?raw';
 import dragonBlobSrc from '../characters/dragon.blob?raw';
 import boxFixtureBlobSrc from '../characters/box-fixture.blob?raw';
@@ -56,6 +58,7 @@ import boxFixtureBlobSrc from '../characters/box-fixture.blob?raw';
 // and may come and go with the comparison).
 import minotaurBlobSrc from '../characters/minotaur.blob?raw';
 import soldierBlobSrc from '../characters/soldier.blob?raw';
+import femaleBlobSrc from '../characters/female.blob?raw';
 
 /**
  * Every authored .blob character, by the name you pass as `?character=`.
@@ -74,11 +77,15 @@ const CHARACTERS: Record<string, string> = {
   cyclops: cyclopsBlobSrc,
   schoolgirl: schoolgirlBlobSrc,
   'schoolgirl-alt': schoolgirlAltBlobSrc,
+  'schoolgirl-described': schoolgirlDescribedBlobSrc,
+  // Not a character — the strand primitive's acceptance case. See its header.
+  'strand-fixture': strandFixtureBlobSrc,
   bonewalker: bonewalkerBlobSrc,
   dragon: dragonBlobSrc,
   'box-fixture': boxFixtureBlobSrc,
   minotaur: minotaurBlobSrc,
   soldier: soldierBlobSrc,
+  female: femaleBlobSrc,
 };
 
 /**
@@ -819,7 +826,8 @@ async function main() {
    * than poked into the uniform because applyLod rewrites faceCfg.x every
    * frame from this.
    */
-  let faceMode: 1 | 2 = 1;
+  // 1 = sheet/multiply rgb, 2 = decal/replace, 3 = multiply by LUMA.
+  let faceMode: 1 | 2 | 3 = 1;
 
   function loadFaceTexture(name: FaceTexName) {
     faceMode = 1;
@@ -893,14 +901,14 @@ async function main() {
 
   /** Wear an already-loaded image as the face sheet: whole-image atlas, mean
    *  measured off the pixels, decal mode as the character's sheet block says. */
-  function wearFaceImage(tex: THREE.Texture, decal: boolean) {
+  function wearFaceImage(tex: THREE.Texture, mode: 1 | 2 | 3) {
     tex.magFilter = THREE.NearestFilter;
     tex.minFilter = THREE.NearestFilter;
     tex.generateMipmaps = false;
     tex.flipY = true;
     faceSheet?.tex.dispose();
     faceSheet = { tex, atlas: new THREE.Vector4(1, 1, 0, 0), mean: 1 };
-    faceMode = decal ? 2 : 1;
+    faceMode = mode;
     for (const v of [view, ...crowd]) v.setFaceTexture(tex, faceSheet.atlas, 1);
     applyMeanOf(tex);
   }
@@ -954,7 +962,7 @@ async function main() {
       const tex = new THREE.TextureLoader().load(`/assets/lab/faces/${image}`, applyMeanOf);
       // Mean 1 until the image decodes, then applyMeanOf re-uploads with the
       // measured value. One frame of the old level is not worth blocking on.
-      wearFaceImage(tex, params.decal > 0.5);
+      wearFaceImage(tex, params.decal > 0.5 ? 2 : (params.blendLuma > 0.5 ? 3 : 1));
       return true;
     }
     faceMode = 1;
@@ -2608,7 +2616,30 @@ async function main() {
     adaptiveState = next;
   }
 
+  // Wind velocity (m/s) and the offset it has accumulated (m). Plain arrays
+  // rather than THREE.Vector3 because they are written every frame and read
+  // straight into a uniform; see setWind.
+  const windVel: [number, number, number] = [0, 0, 0];
+  const windOffset: [number, number, number] = [0, 0, 0];
+
   handle.setRenderCallback((dt) => {
+    // WIND. Accumulated as a world-space OFFSET in metres rather than handing
+    // the shader a clock: the fold lattice of every warped shell drifts
+    // through the world at this velocity, so a breeze travels across hanging
+    // cloth. Accumulating on the host means the march and the cone pre-pass
+    // read one number and cannot disagree about where the surface is.
+    //
+    // NOT gated on motionEnabled: cloth moves in a breeze whether or not the
+    // character is walking, and the turntable and render-check both run with
+    // motion off. They leave wind at zero, which is the authored field
+    // exactly — see setWind.
+    if (windVel[0] !== 0 || windVel[1] !== 0 || windVel[2] !== 0) {
+      windOffset[0] += windVel[0] * dt;
+      windOffset[1] += windVel[1] * dt;
+      windOffset[2] += windVel[2] * dt;
+      for (const x of [view, ...crowd])
+        x.uniforms.windDrift.value.set(windOffset[0], windOffset[1], windOffset[2]);
+    }
     const now = performance.now();
     frames.push(now - lastStamp);
     lastStamp = now;
@@ -3385,10 +3416,15 @@ async function main() {
     const f = faceFile.files?.[0]; if (!f) return;
     const buf = new Uint8Array(await f.arrayBuffer());
     const url = URL.createObjectURL(new Blob([buf], { type: f.type }));
-    let decal = true;
-    try { decal = (compileSheet(parseBlob(activeCharacterSrc()))?.decal ?? 1) > 0.5; } catch { /* keep decal */ }
+    // Blend mode as the character's sheet block says: replace (decal 1),
+    // else luma multiply (blendLuma 1, main's default), else plain multiply.
+    let mode: 1 | 2 | 3 = 2;
+    try {
+      const sp = compileSheet(parseBlob(activeCharacterSrc()));
+      if (sp) mode = sp.decal > 0.5 ? 2 : (sp.blendLuma > 0.5 ? 3 : 1);
+    } catch { /* keep replace */ }
     const tex = new THREE.TextureLoader().load(url, t => { applyMeanOf(t); URL.revokeObjectURL(url); });
-    wearFaceImage(tex, decal);
+    wearFaceImage(tex, mode);
     uploadedFace = f.type === 'image/png' ? buf : null; // save only PNGs (the endpoint checks magic bytes)
     saveFaceBtn.disabled = uploadedFace === null;
     saveFaceBtn.textContent = uploadedFace ? 'save face → repo' : 'save face (PNG only)';
@@ -3461,10 +3497,17 @@ async function main() {
   // The label starts from the ACTUAL mode. It used to be hardcoded to
   // 'replace', so a character wearing decal 0 showed a button claiming the
   // opposite of what it was doing.
-  const blendBtn = addButton(faceBox, `face blend: ${u.faceCfg.value.x > 1.5 ? 'replace' : 'multiply'}`, () => {
-    const mult = u.faceCfg.value.x > 1.5;
-    u.faceCfg.value.x = mult ? 1 : 2;
-    blendBtn.textContent = `face blend: ${mult ? 'multiply' : 'replace'}`;
+  // Cycles REPLACE -> MULTIPLY -> MULTIPLY (LUMA). The third exists because
+  // multiplying two coloured values compounds hue: a skin bake over skin
+  // flesh reads more saturated than either. Luma keeps the shading and drops
+  // the tint. Whatever you settle on is `decal` plus `blendLuma` in the
+  // character's sheet block.
+  const MODE_NAME: Record<number, string> = { 1: 'multiply', 2: 'replace', 3: 'multiply (luma)' };
+  const blendBtn = addButton(faceBox, `face blend: ${MODE_NAME[Math.round(u.faceCfg.value.x)] ?? 'off'}`, () => {
+    const cur = Math.round(u.faceCfg.value.x);
+    const next = cur === 2 ? 1 : (cur === 1 ? 3 : 2);
+    u.faceCfg.value.x = next;
+    blendBtn.textContent = `face blend: ${MODE_NAME[next]}`;
   });
 
   const projBtn = addButton(faceBox, 'proj: planar', () => {
@@ -3970,7 +4013,12 @@ async function main() {
       .map(k => `  ${pad(k)} ${n(face[k], 4)}`);
     const p = u.faceProj.value;
     const sheetLines = [
-      ['decal', u.faceCfg.value.x > 1.5 ? 1 : 0],
+      // faceCfg.x is a THREE-way mode and this used to test `> 1.5`, which
+      // reported mode 3 (luma multiply) as `decal 1` (replace) -- the exact
+      // opposite blend -- and never emitted blendLuma at all. A copy button
+      // that cannot describe the mode you are looking at is worse than none.
+      ['decal', Math.round(u.faceCfg.value.x) === 2 ? 1 : 0],
+      ['blendLuma', Math.round(u.faceCfg.value.x) === 3 ? 1 : 0],
       ['projScaleX', p.x], ['projScaleY', p.y],
       ['projCentreX', p.z], ['projCentreY', p.w],
       ['eyeGlowAmp', u.faceCfg2.value.w], ['eyeGlowCut', u.faceCfg2.value.z],
@@ -4612,6 +4660,42 @@ async function main() {
     setSilhouetteNoise(v: number) { for (const x of [view, ...crowd]) x.uniforms.marchCfg.value.z = v; },
     /** Over-relaxation factor; <= 1 disables the relaxed tracer. */
     setRelax(v: number) { for (const x of [view, ...crowd]) x.uniforms.woundCfg2.value.y = v; },
+    /**
+     * WIND VELOCITY in metres per second, world space. Drives the fold
+     * lattice of every `warp=` shell across the world, so cloth sways.
+     * `setWind(0.35, 0, 0.12)` is a light breeze on the schoolgirl's skirt;
+     * anything past ~1 m/s reads as a strobe rather than a breeze, because
+     * the folds are only centimetres apart.
+     *
+     * Zero (the default) is the authored field EXACTLY — a zero offset
+     * subtracts to nothing — which is what keeps the turntable and
+     * blob:render-check comparing the same surface the CPU field describes.
+     */
+    setWind(x: number, y: number, z: number) {
+      windVel[0] = x; windVel[1] = y; windVel[2] = z;
+      if (x === 0 && y === 0 && z === 0) {
+        windOffset[0] = 0; windOffset[1] = 0; windOffset[2] = 0;
+        for (const v of [view, ...crowd]) v.uniforms.windDrift.value.set(0, 0, 0);
+      }
+    },
+    /**
+     * THE BODY'S NOISE FRAME as (rootShiftX, bodyYaw, rootShiftZ), the frame
+     * a warped shell's folds are anchored to. Normally driven by the motion
+     * system through `view.setRootShift`; exposed here so a capture can hold
+     * the body still and turn only the FRAME, which is how you see that the
+     * folds ride the body rather than the world (they should rotate on the
+     * cloth, and by exactly the yaw given).
+     */
+    setBodyAnchor(x: number, yaw: number, z: number) {
+      for (const v of [view, ...crowd]) v.uniforms.bodyAnchor.value.set(x, yaw, z);
+    },
+    /** The accumulated wind offset in metres, for a test or a capture that
+     *  wants a specific instant of the sway rather than whatever the clock
+     *  had reached. */
+    setWindOffset(x: number, y: number, z: number) {
+      windOffset[0] = x; windOffset[1] = y; windOffset[2] = z;
+      for (const v of [view, ...crowd]) v.uniforms.windDrift.value.set(x, y, z);
+    },
     /** Near-wound step multiplier (perfCfg.z); 0 = the compiled
      *  WOUND_STEP_MUL, 0.6 = the value that shipped before 2026-09-04. The
      *  twin of `__sdfGame.setWoundStep` — see WOUND_STEP_MUL in march.wgsl.ts. */

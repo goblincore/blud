@@ -31,9 +31,9 @@ import {
 import type { TileGroupInput } from './tile-cull';
 import type { ComputeTileBinding } from './tile-bin-compute';
 import {
-  HELPERS, MARCH_BODY, CONE_MARCH, DATA_ROWS,
+  HELPERS, MARCH_BODY, CONE_MARCH, DEPTH_PREPASS_MARCH, DATA_ROWS,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE,
-  ROW_PRIM_BEND, ROW_PRIM_COLOR, ROW_PRIM_SHELL, ROW_PRIM_CLIP,
+  ROW_PRIM_BEND, ROW_PRIM_COLOR, ROW_PRIM_SHELL, ROW_PRIM_WARP, ROW_PRIM_STRAND, ROW_PRIM_CLIP,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
   ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS,
 } from './march.wgsl';
@@ -42,6 +42,12 @@ export interface ZombieGpuView {
   object: THREE.Object3D;
   /** The coarse cone-march twin, rendered into the pre-pass targets. */
   coneObject: THREE.Object3D;
+  /** The quarter-res depth-prepass twin (close-up task 3) — same proxy
+   *  geometry, distance-writing material, rendered into the layer's
+   *  depthPre target only when the caller passes opts.depthPre. Present but
+   *  never rendered when omitted, so callers may add it to the scene
+   *  unconditionally. */
+  depthPreObject?: THREE.Object3D;
   /** Live uniforms — the WebGPU stand-in for `ShaderMaterial.uniforms`. */
   uniforms: MarchUniforms;
   /** The 3D texture bound to the march's volume slot (X1.26). The shared
@@ -66,6 +72,12 @@ export interface ZombieGpuView {
   setWounds(worldPositions: Vec3[], radii: number[], types: number[], ages: number[],
     splayScales?: number[], offsetScales?: number[],
     caps?: readonly ({ n: Vec3; depth: number } | null)[]): void;
+  /** Wound union-reach cull gate (close-up wound-cull task, 2026-09-05).
+   *  Ships ON — the cull is a value no-op (outside the bound every per-wound
+   *  reach test would `continue`). false parks the bound's radius at 1e9 (the
+   *  no-cull identity) for the bench A/B; the computed radius is kept, so
+   *  true restores it without a re-upload. */
+  setWoundCull(on: boolean): void;
   /** The skull's centre and semi-axes, which the face projection normalises by. */
   setHeadShape(centre: Vec3, axes: Vec3): void;
   /** The rigid head rotation (rig-bind headQuatOf); identity resets it. */
@@ -163,6 +175,17 @@ const coneMarch = (() => {
     (acc, src) => [...acc, wgslFn(src, acc.slice(-1))], [],
   );
   return wgslFn(CONE_MARCH, nodes.slice(-1));
+})();
+
+/** The quarter-res depth-prepass entry (close-up task 3), same helper chain.
+ *  Its own chain rather than coneMarch's final node — buildMarchFn's edge
+ *  structure is load-bearing and boot-profiled, and this page is not the
+ *  place to optimise node sharing away from a shipping path. */
+const depthPreMarch = (() => {
+  const nodes = HELPERS.reduce<ReturnType<typeof wgslFn>[]>(
+    (acc, src) => [...acc, wgslFn(src, acc.slice(-1))], [],
+  );
+  return wgslFn(DEPTH_PREPASS_MARCH, nodes.slice(-1));
 })();
 
 /**
@@ -389,6 +412,37 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      * Defaults describe the lab's Cornell box but contribute NOTHING until
      * probeWeight moves, so this whole block is inert on arrival.
      */
+    /**
+     * WIND (shell cloth). The world-space offset in METRES that a warped
+     * shell's fold lattice has drifted — the host accumulates wind velocity
+     * times elapsed time and writes the result, so the shader needs no clock
+     * and every pass reads one number.
+     *
+     * A NEW uniform rather than a packed spare, for the reason woundShadowCfg
+     * gives above: nothing in woundCfg/woundCfg2/surfCfg/lodCfg is free, and
+     * `woundCfg2.w` in particular is the volume hitEps override despite what
+     * an older comment in march.wgsl.ts called it.
+     *
+     * ZERO by default, which is exactly the field as authored: sdShell skips
+     * the drift entirely when the warp branch is off, and subtracting a zero
+     * vector is a no-op when it is on.
+     */
+    windDrift: uniform(new THREE.Vector3(0, 0, 0)),
+    /**
+     * THE BODY'S NOISE FRAME as (rootShiftX, bodyYaw, rootShiftZ) — the same
+     * triple `noiseLocal` takes, and written by the same `setRootShift` that
+     * already feeds faceCfg3.zw and lodCfg.z.
+     *
+     * It exists as its own uniform because the CONE PRE-PASS needs it and
+     * has neither faceCfg3 nor lodCfg. Rebuilding the triple independently in
+     * each entry point is how the two would drift apart, and a cone anchored
+     * to a different frame than the march certifies emptiness against a
+     * surface the march does not have.
+     *
+     * Zero is world-anchored, which is the pre-2026-09-05 behaviour and what
+     * a statue wants.
+     */
+    bodyAnchor: uniform(new THREE.Vector3(0, 0, 0)),
     bounceCfg: uniform(new THREE.Vector4(0, 1, 1, 1)),
     boxMin: uniform(new THREE.Vector3(-2, 0, -2)),
     boxMax: uniform(new THREE.Vector3(2, 3.2, 2)),
@@ -422,6 +476,16 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      *  compiled WOUND_STEP_MUL), w spare. All zero = the pre-plan shader,
      *  which is what the lab binds. */
     perfCfg: uniform(new THREE.Vector4(0, 0, 0, 0)),
+    /** Wound union-reach bound (close-up wound-cull task, 2026-09-05): xyz
+     *  centre, w radius — one sphere covering every wound's reach, computed
+     *  by setWounds from the live woundCfg/woundCfg2 (woundReachBound below).
+     *  applyWounds tests it BEFORE the wound loop; outside it, every loop
+     *  iteration would early-out anyway, so the skip is a value no-op.
+     *  Default w = 1e9 is the NO-CULL identity: views whose wounds are
+     *  written without a bound (chunk torn ends, the hands view) pay the
+     *  loop exactly as before. __sdfGame.setWoundCull flips w between the
+     *  computed radius and 1e9 for the A/B bench. */
+    woundBound: uniform(new THREE.Vector4(0, 0, 0, 1e9)),
     /** Half extents of the view's proxy box, world space (perf round 2 task
      *  5): the accumulated-depth gate's conservative per-body ray entry —
      *  box ⊇ hull ⊇ flesh, so nothing of this body is nearer than the
@@ -692,6 +756,64 @@ export interface ConeSource {
   uniforms: ConeUniforms;
 }
 
+/**
+ * The quarter-res depth pre-pass's uniforms (close-up task 3). Same shape as
+ * the cone's — the texture binds unconditionally, the uniforms gate and size.
+ * enabled 0 is the full identity — the pass does not run and the march's
+ * fetch hands back 0, which folds away inside the ray start's max().
+ */
+export function createDepthPreUniforms() {
+  return {
+    /** ONE vec4 — x enabled, y the coarse block footprint — and NOT two
+     *  scalar uniforms composed with vec4(a, b, 0, 0) in the material
+     *  literal: a JoinNode over uniform SCALARS breaks three's WGSL
+     *  generation (WGSLNodeBuilder.getTypeFromLength null deref), the
+     *  console error is easy to miss, and the material falls back to a
+     *  pipeline with NO working uniforms — bodies render unlit-black and
+     *  every uniform write goes dead (2026-09-05, boot-screenshot bisect).
+     *  A vec4 uniform passed WHOLE is the house pattern in this file, and
+     *  it is load-bearing. x 0 is the full identity — the pass does not
+     *  run and the march's fetch hands back 0, folding away inside the ray
+     *  start's max(). y is consumed twice on purpose: the coarse march's
+     *  cone radius (the proof's own radius) and the full march's start
+     *  backoff (insurance beyond the proof). One number, one source. */
+    cfg: uniform(new THREE.Vector4(0, 0, 0, 0)),
+  };
+}
+export type DepthPreUniforms = ReturnType<typeof createDepthPreUniforms>;
+
+/** The quarter-res depth pre-pass's output, as the march material needs it.
+ *  Same shape as OccluderSource/ConeSource. */
+export interface DepthPreSource {
+  texture: THREE.Texture;
+  uniforms: DepthPreUniforms;
+}
+
+/**
+ * The 1×1 depth-prepass texture views bind when their caller passes no
+ * DepthPreSource — same contract as fallbackLevelShadowTexture. The binding
+ * must exist (MARCH_BODY declares the input), the fetch never reads it:
+ * cfg.x 0 returns before the load. Zero-valued so even a stray read is the
+ * "no start" identity rather than garbage.
+ */
+let fallbackDepthPre: THREE.DataTexture | null = null;
+let fallbackDepthPreCfg: { value: THREE.Vector4 } | null = null;
+function fallbackDepthPreTexture() {
+  if (!fallbackDepthPre) {
+    const t = new THREE.DataTexture(new Float32Array([0]), 1, 1, THREE.RedFormat, THREE.FloatType);
+    t.needsUpdate = true;
+    fallbackDepthPre = t;
+  }
+  return fallbackDepthPre;
+}
+/** The no-source cfg identity — a shared all-zero vec4 UNIFORM, not a
+ *  composed constant node (see createDepthPreUniforms for the JoinNode
+ *  trap that forces this shape). */
+function fallbackDepthPreUniform() {
+  if (!fallbackDepthPreCfg) fallbackDepthPreCfg = uniform(new THREE.Vector4(0, 0, 0, 0));
+  return fallbackDepthPreCfg;
+}
+
 /** Hull-refine (phase 0): per-fragment ray overrides so the SHIPPED march
  *  does a short band walk from a rasterised hull instead of a proxy-box
  *  march. `worldPos` feeds tMaxBox = length(worldPos - camPos) — pass the
@@ -723,6 +845,7 @@ export function createMarchMaterial(
   prev?: PrevSource,
   levelShadow?: { light: THREE.SpotLight },
   rays?: MarchRayOverride,
+  depthPre?: DepthPreSource,
 ) {
   const dataNode = dataTex instanceof THREE.Texture
     ? texture(dataTex)
@@ -890,6 +1013,25 @@ export function createMarchMaterial(
     levelShadowTex: levelShadowTexNode,
     levelShadowMatrix: u.levelShadowMatrix,
     levelShadowCfg: u.levelShadowCfg,
+    // Wind drift and the body frame, POSITIONALLY LAST and in this order —
+    // appended after the level-shadow slots in MARCH_BODY's signature too.
+    // Bound in the same commit as the WGSL inputs, which is the rule the
+    // meltCfg note above exists to enforce.
+    windDrift: u.windDrift,
+    bodyAnchor: u.bodyAnchor,
+    // Wound union-reach cull (close-up wound-cull task, 2026-09-05). Bound
+    // POSITIONALLY last — MARCH_BODY's tail is bodyCentre, bodyHalf, meltCfg,
+    // levelShadow*, woundBound, in this order (see the ORDER MATTERS note
+    // above).
+    woundBound: u.woundBound,
+    // Quarter-res depth prepass (close-up task 3) — POSITIONALLY LAST after
+    // windDrift, bound in the same commit as the WGSL input (the meltCfg
+    // rule). Without a source the fallback 1×1 texture and the all-zero cfg
+    // keep the fetch at its "no start" identity — the disabled march is
+    // bit-identical, and cfg.y (the block footprint) is only read after the
+    // enabled test in DEPTH_PRE_FETCH's consumer.
+    depthPreTex: texture(depthPre ? depthPre.texture : fallbackDepthPreTexture()),
+    depthPreCfg: (depthPre ? depthPre.uniforms.cfg : fallbackDepthPreUniform()) as never,
   }) as unknown as Swizzled;
 
   const material = new MeshBasicNodeMaterial();
@@ -1106,6 +1248,51 @@ export function writeWounds(
   return n;
 }
 
+/**
+ * Bounding sphere of every wound's REACH (close-up wound-cull task,
+ * 2026-09-05). For each wound i the reach sphere is (centre worldPositions[i],
+ * radius reach_i), where reach_i is EXACTLY the formula applyWounds' per-wound
+ * early-out uses (march.wgsl.ts, pinned by test):
+ *
+ *   reach = radius * max(2, 2*rimOffset + 3*rimWidth) + 4*blendK + 0.25
+ *
+ * read here off the LIVE uniforms (woundCfg.y blendK, woundCfg.w rimOffset,
+ * woundCfg2.x rimWidth) rather than hardcoded. The union bound is C = the
+ * wound centroid and R = max_i(|w_i - C| + reach_i); containment is the
+ * triangle inequality, exact for any centre, so this is a value no-op cull —
+ * a sample outside it is outside every per-wound reach and the loop would
+ * have `continue`d on all of them (d unchanged, near 0). Zero wounds return
+ * radius 0 (the loop never runs, as before).
+ *
+ * CAVEAT: computed at upload time. A live wound-panel edit of blendK /
+ * rimOffset / rimWidth WITHOUT a re-upload leaves the bound stale (too tight
+ * if the knob grew) — re-stamp or nudge wounds to refresh. The game's wound
+ * settings are boot constants, so this never bites in play.
+ */
+export function woundReachBound(
+  worldPositions: Vec3[], radii: number[], count: number,
+  blendK: number, rimOffset: number, rimWidth: number,
+): [number, number, number, number] {
+  const n = Math.min(count, worldPositions.length, radii.length);
+  if (n <= 0) return [0, 0, 0, 0];
+  const f = Math.max(2, 2 * rimOffset + 3 * rimWidth);
+  const margin = 4 * blendK + 0.25;
+  let cx = 0, cy = 0, cz = 0;
+  for (let i = 0; i < n; i++) {
+    const p = worldPositions[i]!;
+    cx += p[0]; cy += p[1]; cz += p[2];
+  }
+  cx /= n; cy /= n; cz /= n;
+  let r = 0;
+  for (let i = 0; i < n; i++) {
+    const p = worldPositions[i]!;
+    const reach = radii[i]! * f + margin;
+    const d = Math.hypot(p[0] - cx, p[1] - cy, p[2] - cz) + reach;
+    if (d > r) r = d;
+  }
+  return [cx, cy, cz, r];
+}
+
 export interface GpuViewOpts {
   /** Coarse cone pre-pass to start the march from. Omit to march from the camera. */
   cone?: ConeSource;
@@ -1121,6 +1308,10 @@ export interface GpuViewOpts {
   /** Accumulated colour+depth for the front-to-back per-body passes (perf
    *  round 2 task 5). Omit for the ungated march — 1e9 is the identity. */
   prev?: PrevSource;
+  /** Quarter-resolution depth prepass (close-up task 3): this view's coarse
+   *  twin renders into it, and the march starts from its nearest-touch
+   *  distance. Omit for the from-camera march — the fetch identity is 0. */
+  depthPre?: DepthPreSource;
   /** Level-only shadow light (perf round 2 task 7) — the twin of the
    *  flashlight. Omit in the lab/hands: the binding falls back to a 1×1
    *  depth texture and levelShadowCfg.x = 0 keeps the march inert. */
@@ -1198,6 +1389,15 @@ export function createZombieGpuView(
   // violates.
   let bareBones = false;
 
+  // Wound union-reach cull (close-up wound-cull task, 2026-09-05). SHIPS ON:
+  // setWounds computes the bound from the live uniforms and writes it to
+  // u.woundBound; the seam flips only the radius (1e9 = no-cull identity) so
+  // the bench can A/B without re-uploading. woundBoundR starts at the
+  // no-cull identity — before the first setWounds there are no wound rows to
+  // cull anyway (woundCfg.x = 0).
+  let woundCullOn = true;
+  let woundBoundR = 1e9;
+
   function upload(next: BuildResult, rest?: BuildResult) {
     const p = packBody(next, rest, { packBones });
     lastGroups = [];
@@ -1224,6 +1424,8 @@ export function createZombieGpuView(
     writeRow(ROW_PRIM_BEND, p.primBend, MAX_PRIMS);
     writeRow(ROW_PRIM_COLOR, p.primColor, MAX_PRIMS);
     writeRow(ROW_PRIM_SHELL, p.primShell, MAX_PRIMS);
+    writeRow(ROW_PRIM_WARP, p.primWarp, MAX_PRIMS);
+    writeRow(ROW_PRIM_STRAND, p.primStrand, MAX_PRIMS);
     writeRow(ROW_PRIM_CLIP, p.primClip, MAX_PRIMS);
     writeRow(ROW_CLUSTER_BOUNDS, p.clusterBounds, p.clusterCount);
     writeRow(ROW_CLUSTER_RANGE, p.clusterRange, p.clusterCount);
@@ -1249,7 +1451,8 @@ export function createZombieGpuView(
   const material = createMarchMaterial(
     dataTex, volumeTex, u,
     marchBody,
-    opts.cone, opts.occluder, tileNodes, opts.shell, opts.prev, opts.levelShadow);
+    opts.cone, opts.occluder, tileNodes, opts.shell, opts.prev, opts.levelShadow,
+    undefined, opts.depthPre);
 
   // The coarse twin: same field, same proxy box, no shading, its own mesh on
   // its own layer. Writes the conservative start distance into .x, and the
@@ -1293,6 +1496,16 @@ export function createZombieGpuView(
     // ORDER MATTERS note in createMarchMaterial). The cone twin sees the
     // same seams the march does.
     perfCfg: u.perfCfg,
+    // ...and the same WIND and BODY FRAME. Unlike the noise, which the cone
+    // deliberately passes as 0 because it lives on the normal, both of these
+    // move the FIELD: a cone marching the no-wind, world-anchored surface
+    // would certify space the real cloth occupies.
+    windDrift: u.windDrift,
+    bodyAnchor: u.bodyAnchor,
+    // Wound union-reach cull (close-up wound-cull task) — the cone marches
+    // the same field, so it takes the same bound; positionally last, after
+    // perfCfg, matching CONE_MARCH's signature.
+    woundBound: u.woundBound,
   }) as unknown as { div: (d: unknown) => unknown };
 
   const coneMaterial = new MeshBasicNodeMaterial();
@@ -1342,9 +1555,58 @@ export function createZombieGpuView(
   coneMesh.frustumCulled = false;
   coneMesh.position.copy(mesh.position);
 
+  // The quarter-res depth-prepass twin (close-up task 3): same proxy box,
+  // a distance-writing material, its own layer. The coarse march inside it
+  // stops at the first touch of a BLOCK-radius cone — a provable lower bound
+  // on the first hit of every full-res ray in the block (proof on
+  // DEPTH_PREPASS_MARCH). frag_depth is the touch distance normalised exactly
+  // like the cone twin's, so where proxy boxes overlap the hardware depth
+  // test keeps the NEAREST touch — the one value safe for every body at that
+  // pixel. FOG IS OFF, and must stay off: this material renders through the
+  // main scene, and the fog fix (8da0bdd) exists because scene fog was
+  // smoothstep-mixing exactly such a written distance toward fogColor with
+  // range — the decay that killed the occluder pre-pass.
+  let depthPreMesh: THREE.Mesh | undefined;
+  let depthPreMaterial: MeshBasicNodeMaterial | undefined;
+  if (opts.depthPre) {
+    const depthPreT = depthPreMarch({
+      worldPos: positionWorld,
+      camPos: cameraPosition,
+      data: texture(dataTex),
+      volumeTex: texture3D(volumeTex),
+      volumePose0: u.volumePose0,
+      volumePose1: u.volumePose1,
+      volumeMin: u.volumeMin,
+      volumeInvExtent: u.volumeInvExtent,
+      volumeWarp: u.volumeWarp,
+      volumeClip: u.volumeClip,
+      counts: u.counts,
+      counts2: u.counts2,
+      marchCfg: u.marchCfg,
+      woundCfg: u.woundCfg,
+      woundCfg2: u.woundCfg2,
+      depthPreCfg: opts.depthPre.uniforms.cfg,
+      // Bound POSITIONALLY last, matching DEPTH_PREPASS_MARCH's WGSL
+      // signature (the ORDER MATTERS note in createMarchMaterial).
+      perfCfg: u.perfCfg,
+      windDrift: u.windDrift,
+    }) as unknown as { div: (d: unknown) => unknown };
+    depthPreMaterial = new MeshBasicNodeMaterial();
+    depthPreMaterial.side = THREE.BackSide;
+    depthPreMaterial.fog = false;
+    depthPreMaterial.outputNode = vec4(depthPreT as never, 0, 0, 1);
+    depthPreMaterial.depthNode = depthPreT.div(CONE_DEPTH_RANGE) as never;
+    depthPreMaterial.depthWrite = true;
+    depthPreMaterial.depthTest = true;
+    depthPreMesh = new THREE.Mesh(mesh.geometry, depthPreMaterial);
+    depthPreMesh.frustumCulled = false;
+    depthPreMesh.position.copy(mesh.position);
+  }
+
   return {
     object: mesh,
     coneObject: coneMesh,
+    depthPreObject: depthPreMesh,
     uniforms: u,
     volumeTexture: volumeTex,
     dataTexture: dataTex,
@@ -1365,10 +1627,26 @@ export function createZombieGpuView(
       u.bodyHalf.value.set(f.size.x / 2, f.size.y / 2, f.size.z / 2);
       coneMesh.position.copy(mesh.position);
       coneMesh.scale.copy(mesh.scale);
+      if (depthPreMesh) {
+        depthPreMesh.position.copy(mesh.position);
+        depthPreMesh.scale.copy(mesh.scale);
+      }
     },
     setWounds(worldPositions, radii, types, ages, splayScales, offsetScales, caps) {
       u.woundCfg.value.x = writeWounds(texels, worldPositions, radii, types, ages, splayScales, offsetScales, {}, caps);
+      // Union-reach bound, from the LIVE woundCfg/woundCfg2 channels the
+      // reach formula reads (blendK, rimOffset, rimWidth) — see
+      // woundReachBound. Stale only under a live panel edit without a
+      // re-upload; the game's values are boot constants.
+      const b = woundReachBound(worldPositions, radii, worldPositions.length,
+        u.woundCfg.value.y, u.woundCfg.value.w, u.woundCfg2.value.x);
+      woundBoundR = b[3];
+      u.woundBound.value.set(b[0], b[1], b[2], woundCullOn ? b[3] : 1e9);
       dataTex.needsUpdate = true;
+    },
+    setWoundCull(on) {
+      woundCullOn = on;
+      u.woundBound.value.w = on ? woundBoundR : 1e9;
     },
     setHeadShape(centre, axes) {
       u.headCentre.value.set(...centre);
@@ -1380,6 +1658,10 @@ export function createZombieGpuView(
       u.faceCfg3.value.z = x; u.faceCfg3.value.w = z;
       // Free lodCfg channel: the noise frame's yaw (see NOISE_LOCAL).
       u.lodCfg.value.z = bodyYaw;
+      // The same frame, as one vec3, for the shell warp and the cone
+      // pre-pass. Written HERE so there is a single place that decides what
+      // "the body's frame" is — see bodyAnchor's declaration.
+      u.bodyAnchor.value.set(x, bodyYaw, z);
     },
     setFaceTexture(tex, atlas, mean) {
       u.faceTex.value = tex;
@@ -1416,6 +1698,7 @@ export function createZombieGpuView(
       mesh.geometry.dispose();
       material.dispose();
       coneMaterial.dispose();
+      if (depthPreMaterial) depthPreMaterial.dispose();
       dataTex.dispose();
       if (ownsVolume) volumeTex.dispose();
       // viewTiles' underlying binding is owned by its creator, not the view.
@@ -1717,6 +2000,8 @@ export function createChunkGpuView(
     writeRow(ROW_PRIM_BEND, packed.primBend, MAX_PRIMS);
     writeRow(ROW_PRIM_COLOR, packed.primColor, MAX_PRIMS);
     writeRow(ROW_PRIM_SHELL, packed.primShell, MAX_PRIMS);
+    writeRow(ROW_PRIM_WARP, packed.primWarp, MAX_PRIMS);
+    writeRow(ROW_PRIM_STRAND, packed.primStrand, MAX_PRIMS);
     writeRow(ROW_PRIM_CLIP, packed.primClip, MAX_PRIMS);
     writeRow(ROW_CLUSTER_RANGE, packed.clusterRange, 1);
     writeRow(ROW_GROUP_RANGE, packed.groupRange, MAX_PRIMS);

@@ -1,6 +1,12 @@
 // src/lab/sdf-zombie/extent.ts
-import type { BoxParams, Primitive, Vec3 } from './types';
+import type { BoxParams, Primitive, ShellParams, Vec3 } from './types';
 import { bendCtrl, len, sub } from './vec';
+import { strandReach } from './strand';
+
+// strandReach lives in strand.ts with the field it bounds; re-exported here
+// so the eight outer-bound sites import both reach factors from the one
+// module this file's header enumerates.
+export { strandReach };
 
 /**
  * How far a primitive's surface reaches from its segment, in units of
@@ -34,6 +40,13 @@ import { bendCtrl, len, sub } from './vec';
  * Note this is the opposite risk from occluder-hull.ts, which builds an INNER
  * hull and needs no change: a rounded box strictly contains the capsule of
  * the same semi-axes, so spheres sized for the capsule stay inside the box.
+ *
+ * STRANDS (hairlock, 2026-09-05): a strand bundle reaches PAST its parent
+ * radius — the outermost strand centres sit at ceil(n/2)·2r/n from the axis
+ * plus wobble, jitter and the strand radius — so every site below multiplies
+ * strandReach in beside boxReach. `grep -rn "strandReach"` must find all
+ * eight outer-bound sites; occluder-hull.ts is the INNER hull and handles
+ * strands the opposite way (no sphere is safely inside a sparse bundle).
  */
 export function boxReach(box: BoxParams | undefined): number {
   if (box === undefined) return 1;
@@ -50,18 +63,40 @@ export function boxReach(box: BoxParams | undefined): number {
  * would pull a second copy of three into the bundle, which is the trap that
  * makes every standard material render black — see lab-renderer.ts.
  */
+/**
+ * How far a SHELL pushes its surface PROUD of the base capsule it onions.
+ *
+ * A shell's surface sits where `abs(dBase) == thickness`, so the outer face is
+ * `thickness` beyond the base capsule — and a warp displaces that face by up
+ * to `warpAmp` further out again (the sine triple's product is bounded by 1).
+ * Both terms are additive on the outside, so the reach is their sum.
+ *
+ * Exists as a function rather than an inlined `p.shell ? p.shell.thickness : 0`
+ * because that expression was inlined at THREE of the bound sites and simply
+ * absent at the other five — thickness is a few millimetres, so the gap never
+ * bit, and a wrinkle amplitude is an order of magnitude larger and would have.
+ * Every outer-bound site now calls this; `grep -c shellReach` is the count.
+ *
+ * Returns 0 for a non-shell, so it is inert on every prim that is not one.
+ */
+export function shellReach(prim: { shell?: ShellParams }): number {
+  const sh = prim.shell;
+  if (sh === undefined) return 0;
+  return sh.thickness + Math.abs(sh.warpAmp ?? 0);
+}
+
 export function chunkExtent(prims: Primitive[], origin: Vec3): number {
   let r = 0;
   for (const p of prims) {
     if (p.op === 'sub') continue;
     const ms = Math.max(p.scale[0], p.scale[1], p.scale[2]);
-    const rMax = Math.max(p.radius, p.radiusB ?? p.radius) * boxReach(p.box);
+    const rMax = Math.max(p.radius, p.radiusB ?? p.radius) * boxReach(p.box) * strandReach(p.strand);
     // A bent prim swings out to its ctrl — include it or the proxy box clips
     // the very horn that prompted the bend.
     const ends = p.bend === undefined
       ? [p.a, p.b] : [p.a, p.b, bendCtrl(p.a, p.b, p.bend)];
     for (const e of ends)
-      r = Math.max(r, len(sub(e, origin)) + rMax * ms);
+      r = Math.max(r, len(sub(e, origin)) + rMax * ms + shellReach(p));
   }
   return r;
 }

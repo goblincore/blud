@@ -65,6 +65,23 @@ export interface FaceSheetParams {
    */
   eyeGlowAmp: number;
   /**
+   * With `decal 0` (multiply), modulate by the bake's LUMINANCE instead of its
+   * rgb. Multiplying two coloured values compounds their hue -- a skin-toned
+   * bake over skin-toned flesh reads more saturated than either -- so this
+   * keeps the brightness modulation and drops the tint.
+   *
+   * DEFAULTS TO 1 (owner, 2026-09-05, on seeing it: "that should be the
+   * default"). Set 0 for the old plain-rgb multiply.
+   *
+   * This changes nothing for a GENERATED sheet: those are written as four
+   * equal channels, and luma of a grey is that grey exactly
+   * (0.2126 + 0.7152 + 0.0722 = 1), so the two paths are bit-identical there.
+   * It only bites where a COLOURED bake is being multiplied -- which is the
+   * case it exists for. Ignored under `decal 1`, which replaces the albedo
+   * outright and never multiplies.
+   */
+  blendLuma: number;
+  /**
    * Face-texture relief (faceCfg.w) and strength (faceCfg.y). PANEL-ONLY
    * until 2026-09-04, which meant a character's tuned face could not be saved
    * and the same .blob rendered differently in the lab and in a capture --
@@ -199,6 +216,7 @@ export const DEFAULT_SHEET: FaceSheetParams = {
   eyeGlow: 1.0,
   eyeGlowCut: 0.88,
   eyeGlowAmp: 1.6,
+  blendLuma: 1,
   texRelief: 1.4,
   texStrength: 1.0,
   projSpherical: 0,

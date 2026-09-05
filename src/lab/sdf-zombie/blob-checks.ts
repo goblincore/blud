@@ -376,3 +376,100 @@ export function checkStance(
   }
   return errs;
 }
+
+/**
+ * The worst STRANDED primitive in a cluster: one whose surface never reaches
+ * the rest of its own cluster's flesh, so it renders as a lump hanging in the
+ * air beside the body it belongs to.
+ *
+ * Returns the gap in metres — positive means stranded by that much, negative
+ * or zero means every primitive touches something. `null` when the cluster has
+ * fewer than two additive primitives, which is not a failure: a one-prim limb
+ * has nothing to be stranded from.
+ *
+ * WHY THIS IS NOT COVERED BY `fusedOf`. That check works between CLUSTERS, so
+ * it asks whether the head joins the torso — never whether the pieces INSIDE
+ * the head join each other. The soldier's flat-top was authored floating 13.5
+ * mm clear of his cranium and shipped that way: it sits in the head cluster
+ * alongside the skull, `fusedOf` was satisfied by the neck, and nothing looked
+ * any closer. It only became visible when the pauldrons that hid it were
+ * removed, weeks later.
+ *
+ * That is the second time. `lab-main.ts`'s reset button carries the first, from
+ * 2026-08-23: "the schoolgirl's cranium stayed a skin dome above her hair".
+ * Same shape of defect, found the same way — by eye, long after authoring.
+ *
+ * WHAT THIS DOES NOT CATCH, measured rather than assumed. It probes the
+ * BLENDED field, which is what renders — so a gap that smooth-min bridges
+ * reads as contact, correctly. The soldier's flat-top, the defect that
+ * prompted this, measures −0.1 mm here: its box corner is close enough to the
+ * cranium that the field never separates, and what looked like a floating
+ * block was a shading artefact, not a disconnection. So this is a guard
+ * against GROSS strands, not a visual-float detector. The 142 mm gap it did
+ * catch — a flesh foot left hanging when the boots moved to the kit — is the
+ * class it exists for.
+ *
+ * SUBTRACTIVE PRIMITIVES ARE SKIPPED. A carve is a hole; it is supposed to sit
+ * where there is no flesh, and asking whether it touches anything is the wrong
+ * question.
+ *
+ * The probe is the field of the cluster WITHOUT the primitive under test,
+ * evaluated at points on that primitive's own surface. Sampling the surface
+ * rather than the centre is what makes the number a real gap: a fat prim whose
+ * centre is far from its neighbours can still be touching them.
+ */
+export function strandedOf(body: Field, c: ClusterInfo): number | null {
+  const all = body.prims.slice(c.start, c.start + c.count);
+  const additive = all.filter(p => p.op !== 'sub');
+  if (additive.length < 2) return null;
+  // Probed against the WHOLE body's additive flesh, not just this cluster's.
+  // Restricting to the cluster looks tighter and is wrong: a primitive can
+  // legitimately fuse to a NEIGHBOURING cluster and never touch its own
+  // siblings -- the cyclops's brow sits 58 cm forward of the rest of its head
+  // cluster and joins the torso, which a cluster-local probe reports as a
+  // 422 mm strand. The question worth asking is "does this piece touch any
+  // flesh at all", and that is a whole-body question.
+  const everything = body.prims.filter(p => p.op !== 'sub');
+
+  let worst = -Infinity;
+  for (const p of additive) {
+    const rest = everything.filter(q => q !== p);
+    // One cluster holding every other additive primitive, with the cull sphere
+    // opened right up: sdBody culls against it, and any bound tight enough to
+    // be meaningful would drop real flesh and report false strands. This is a
+    // check, not a hot path.
+    const restField: Field = {
+      prims: rest,
+      clusters: [{ ...c, start: 0, count: rest.length, center: c.center, radius: 1e3 }],
+    };
+    // Surface points: along the primitive's own axis, pushed out to its
+    // radius on each of the three axes. Cheap, and it brackets the surface
+    // closely enough that the reported gap is the real one rather than a
+    // centre-to-centre distance wearing a disguise.
+    let nearest = Infinity;
+    for (let i = 0; i <= 4; i++) {
+      const t = i / 4;
+      const c0: Vec3 = [
+        p.a[0] + (p.b[0] - p.a[0]) * t,
+        p.a[1] + (p.b[1] - p.a[1]) * t,
+        p.a[2] + (p.b[2] - p.a[2]) * t,
+      ];
+      // 26 DIRECTIONS, not 6 axis-aligned ones. The nearest point between two
+      // primitives that are offset from each other is almost never on an axis:
+      // with 6 samples the soldier's foot and shin read as 28 mm apart while
+      // they overlap by centimetres, because every probe missed the contact.
+      for (const dx of [-1, 0, 1]) for (const dy of [-1, 0, 1]) for (const dz of [-1, 0, 1]) {
+        if (dx === 0 && dy === 0 && dz === 0) continue;
+        const n = Math.hypot(dx, dy, dz);
+        const q: Vec3 = [
+          c0[0] + (dx / n) * p.radius * (p.scale?.[0] ?? 1),
+          c0[1] + (dy / n) * p.radius * (p.scale?.[1] ?? 1),
+          c0[2] + (dz / n) * p.radius * (p.scale?.[2] ?? 1),
+        ];
+        nearest = Math.min(nearest, sdBody(q, restField));
+      }
+    }
+    worst = Math.max(worst, nearest);
+  }
+  return worst;
+}

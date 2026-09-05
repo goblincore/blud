@@ -1,7 +1,8 @@
 // src/lab/sdf-zombie/validate.ts
 import type { ClusterInfo, Primitive, Vec3 } from './types';
 import type { Quat } from './vec';
-import { boxReach } from './extent';
+import { boxReach, shellReach, strandReach } from './extent';
+import { sdStrand, strandLipschitz } from './strand';
 import { add, bendCtrl, cross, dot, len, lerp, normalize, qMul, qNormalize, qRotate, scale as vscale, sub } from './vec';
 
 /**
@@ -119,6 +120,20 @@ export function sdPrimitive(p: Vec3, prim: Primitive): number {
   const t = abLen2 === 0 ? 0 : Math.max(0, Math.min(1, (ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / abLen2));
   const closest = add(a, vscale(ab, t));
   const minScale = Math.min(prim.scale[0], prim.scale[1], prim.scale[2]);
+  // STRAND before every other branch (hairlock, 2026-09-05): a strand prim
+  // is its own field construction — the bundle of windowed tangent capsules
+  // in strand.ts — and box/shell are rejected on it at compile time, so it
+  // cannot belong to any branch below. The result is divided by the
+  // Lipschitz bound BOTH fields compute with the same formula: the fold and
+  // the wobble lift |grad| past 1, and the division restores the bound the
+  // sphere tracer needs, at the cost of shorter steps near hair.
+  if (prim.strand) {
+    const cScaled: Vec3 | undefined = cv === undefined
+      ? undefined : [cv[0] * inv[0], cv[1] * inv[1], cv[2] * inv[2]];
+    const r2 = prim.radiusB ?? -1;
+    const raw = sdStrand(q, a, b, cScaled, prim.radius, r2, prim.strand);
+    return raw * minScale / strandLipschitz(a, b, cScaled, prim.radius, r2, prim.strand);
+  }
   // Bent before tapered: a curved horn of CONSTANT radius is legitimate, so
   // the bend branch cannot sit below the untapered shortcut.
   let base: number;
@@ -142,7 +157,7 @@ export function sdPrimitive(p: Vec3, prim: Primitive): number {
   // plane with a rounded rim — the exact construction sdShellWrap below. Only
   // when the prim carries `shell` params; every other prim keeps the bare
   // capsule field bit-identical, which is what the zombie pin demands.
-  if (prim.shell) return sdShellWrap(base, p, prim.shell.thickness, prim.shell.clipNormal, prim.shell.clipOffset, prim.shell.rim);
+  if (prim.shell) return sdShellWrap(base, p, prim.shell.thickness, prim.shell.clipNormal, prim.shell.clipOffset, prim.shell.rim, prim.shell.warpAmp, prim.shell.warpFreq);
   return base;
 }
 
@@ -171,13 +186,66 @@ export function sdPrimitive(p: Vec3, prim: Primitive): number {
  * within the careful margin — the author's job is to cut the sheet close to
  * perpendicular, which is how cloth is actually cut.
  */
+const ZERO3: Vec3 = [0, 0, 0];
+
 export function sdShellWrap(
   dBase: number, p: Vec3, thickness: number,
   clipNormal: Vec3, clipOffset: number, rim: number,
+  warpAmp = 0, warpFreq: Vec3 = ZERO3, warpDrift: Vec3 = ZERO3, bodyAnchor: Vec3 = ZERO3,
 ): number {
-  const d = Math.abs(dBase) - thickness;
+  // WRINKLES. Three sines with offset phases so the pattern does not repeat
+  // visibly along any axis, added to the BASE distance before the sheet is
+  // taken -- warping the base makes the whole sheet undulate, where warping
+  // the sheet would only roughen its faces.
+  //
+  // The frequency is PER AXIS. Zeroing one freezes that sine to a constant,
+  // which is how a pleat is made: a skirt varies around the body and not down
+  // it, and a single scalar frequency can only ever produce an egg-carton.
+  //
+  // Each partial derivative is at most |A|*|F_axis|, so the gradient grows by
+  // up to |A| * length(F) and the result is divided by that to stay a
+  // conservative bound. Isotropic (f,f,f) recovers the sqrt(3)*A*f this
+  // started as. At warpAmp 0 the multiplier is exactly 1 and every term
+  // vanishes, so an unwarped shell is bit-identical.
+  let base = dBase;
+  let lip = 1;
+  const fLen = Math.hypot(warpFreq[0], warpFreq[1], warpFreq[2]);
+  if (warpAmp !== 0 && fLen !== 0) {
+    // WIND. `warpDrift` is a world-space offset in metres that the fold
+    // lattice has travelled — the host accumulates wind velocity times time
+    // and hands the result over, so nothing here needs a clock. Subtracting
+    // it inside the sines drifts the WRINKLES through the world while the
+    // sheet and its clip plane stay where the author put them.
+    //
+    // It costs the Lipschitz bound NOTHING: d/dx of sin(F*(x - c)) is still
+    // F*cos(...), so a constant offset cannot change the spatial gradient.
+    // Sway is therefore free of the pinch cap — only amplitude and frequency
+    // buy into that.
+    // BODY-ANCHORED. `bodyAnchor` is (rootShiftX, bodyYaw, rootShiftZ) — the
+    // same triple noiseLocal takes for the body's surface noise, and for the
+    // same reason: evaluated at the raw world point, the fold lattice is
+    // fixed in the world and the character turns UNDERNEATH it, so the folds
+    // swim across the cloth as she walks. Undoing the root shift and the body
+    // yaw first attaches the pattern to her.
+    //
+    // The wind drift is subtracted BEFORE the transform, not after, which is
+    // what keeps a breeze blowing in WORLD directions: noiseLocal is affine,
+    // so local(p - drift) = local(p) - R(-yaw)*drift, and the drift gets
+    // rotated into her frame for free. Subtracting it afterwards would nail
+    // the wind to her hips and turn the breeze with her.
+    const dx = p[0] - warpDrift[0], dy = p[1] - warpDrift[1], dz = p[2] - warpDrift[2];
+    const lx = dx - bodyAnchor[0], lz = dz - bodyAnchor[2];
+    const ch = Math.cos(bodyAnchor[1]), sh = Math.sin(bodyAnchor[1]);
+    const qx = lx * ch - lz * sh, qy = dy, qz = lx * sh + lz * ch;
+    base += warpAmp
+      * Math.sin(warpFreq[0] * qx)
+      * Math.sin(warpFreq[1] * qy + 1.3)
+      * Math.sin(warpFreq[2] * qz + 2.6);
+    lip = 1 + Math.abs(warpAmp) * fLen;
+  }
+  const d = Math.abs(base) - thickness;
   const dPlane = clipNormal[0] * p[0] + clipNormal[1] * p[1] + clipNormal[2] * p[2] - clipOffset;
-  return Math.max(Math.max(d, dPlane), rim - Math.hypot(d, dPlane));
+  return Math.max(Math.max(d, dPlane), rim - Math.hypot(d, dPlane)) / lip;
 }
 
 /**
@@ -634,8 +702,11 @@ export function validateBody(body: Body, opts: ValidateOpts): string[] {
       const ends = prim.bend === undefined
         ? [prim.a, prim.b]
         : [prim.a, prim.b, bendCtrl(prim.a, prim.b, prim.bend)];
-      const rMax = Math.max(prim.radius, prim.radiusB ?? prim.radius) * boxReach(prim.box);
-      const reach = rMax * maxScale + (prim.shell ? prim.shell.thickness : 0);
+      const rMax = Math.max(prim.radius, prim.radiusB ?? prim.radius) * boxReach(prim.box) * strandReach(prim.strand);
+      // shellReach, not the inlined thickness the strand branch reintroduced:
+      // it also carries the WARP amplitude, an order of magnitude larger than
+      // a sheet's thickness and the term that actually bites.
+      const reach = rMax * maxScale + shellReach(prim);
       for (const end of ends)
         if (len(sub(end, c.center)) + reach > c.radius + 1e-6)
           errs.push(`primitive in cluster "${c.limb}" escapes its bounding sphere`);

@@ -90,6 +90,9 @@ export interface BlobPart {
    * where the sheet meets the plane (0 = a razor edge). Null = not a shell.
    */
   thickness: number;
+  /** Wrinkle amplitude (metres) and frequency (rad/m); 0 = smooth. */
+  warpAmp?: number;
+  warpFreq?: readonly [number, number, number] | null;
   clipNormal: readonly [number, number, number] | null;
   clipOffset: number;
   rim: number;
@@ -129,6 +132,20 @@ export interface BlobPart {
    * unequal wide/tall/deep. Ignored unless `box`.
    */
   round: number;
+  /**
+   * `strand=n` — the strand-bundle modifier (hairlock, 2026-09-05): this
+   * two-ended prim renders as `n` wavy strands across its diameter instead
+   * of one solid sweep. NULL means off, and off is bit-identical to before
+   * the modifier existed. `strandWave`/`strandCycles`/`strandFat` carry
+   * `wave=`/`cycles=`/`fat=`; they are parsed unconditionally (a written
+   * `wave=` with no `strand=` is a compile error — silently doing nothing
+   * is how an author loses an hour) but only mean anything beside `strand=`.
+   * See StrandParams (types.ts) and strand.ts for the field.
+   */
+  strand: number | null;
+  strandWave: number;
+  strandCycles: number;
+  strandFat: number;
   src: BlobLine;
 }
 

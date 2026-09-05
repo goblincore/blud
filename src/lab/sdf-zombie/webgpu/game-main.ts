@@ -27,7 +27,8 @@ import {
 import {
   initialAdaptiveState, stepAdaptive, scaleForRung, SCALE_LADDER,
 } from '../adaptive-scale';
-import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHADOW_HULL_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER } from './sdf-layer';
+import { WOUND_STEP_MUL } from './march.wgsl';
+import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHADOW_HULL_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER, DEPTH_PREPASS_LAYER } from './sdf-layer';
 import { createFlashlight, DUNGEON_RIG, GALLERY_RIG, type AmbientRig } from './dungeon-lighting';
 import { GOBLIN_SKIN } from './goblin-skin';
 import { GOBLIN_ARM_GLB, aimArm, loadGoblinArms, type GoblinArms } from './game-arms';
@@ -64,6 +65,9 @@ import {
 } from './game-level';
 import { stepPlayer, eyeOf, PLAYER, type PlayerState, type MoveInput } from './game-player';
 import { createZombieActor, type ZombieActor } from './game-actor';
+import { separate, minPairDistance, type CrowdAgent } from '../crowd';
+import { arbitrate, RING_TUNING, type RingClaimant } from '../melee-ring';
+import { ATTACK_TUNING, type SwingVariant } from '../attack';
 import { buildFirefight, buildCloseup, validateScenario } from './game-bench-scenario';
 // TSL nodes for the texRoundTrip diagnostic (close-up task 1, question B).
 // Named with a Tsl suffix where the name collides with anything in this file.
@@ -522,7 +526,10 @@ async function main() {
   //
   // It is still a FLOOR, not an answer: it buys frames by making the flesh
   // coarser during exactly the moments that matter most.
-  let adaptiveEnabled = true;
+  // OFF by default (owner, 2026-09-04/05): the resolution drop is visible and
+  // unwelcome up close, and a renderer A/B under a moving rung compares two
+  // resolutions, not two renderers. __sdfGame.setAdaptive(true) re-arms it.
+  let adaptiveEnabled = false;
   let adaptiveBudgetMs = 1000 / 30;
   let adaptiveState = initialAdaptiveState(performance.now());
   const ADAPTIVE_WINDOW = 30;
@@ -758,11 +765,27 @@ async function main() {
    *  the flip rests on exactness + counters, not on that timing. */
   const GAME_HULL_EXIT_BOUND = 1;
 
+  /** Close-up task 3: the quarter-resolution depth prepass — a coarse march
+   *  of the same field at one texel per 4x4 SDF-pixel block (~1/16 of the
+   *  marching work), whose first cone-touch distance the full-res ray starts
+   *  from. The start is a PROVABLE lower bound on every block ray's own
+   *  first surface (DEPTH_PREPASS_MARCH carries the proof), so too-aggressive
+   *  a start is not a tuning risk — but it is the failure mode that DELETES
+   *  geometry, silently and range-dependently, exactly like the exit bound's
+   *  historical body deletion. So this ships OFF until the task-3 census
+   *  (zero missing bodies at 0.5/3/9 m, zero missing thin geometry) and the
+   *  interleaved bench EARN the flip — a timing table alone is not evidence:
+   *  the exit bound once "won" 0.28 ms by deleting 4 of 9 bodies.
+   *  `__sdfGame.setDepthPrepass()` flips it live for A/B; OFF is bit-identical
+   *  to the pre-task-3 march (the fetch hands back 0 and the max() folds). */
+  const GAME_DEPTH_PREPASS = 0;
+
   /** Perf round 2, task 3: skip a wound's meta/cap texel loads when the
    *  sample is beyond the wound's reach (perfCfg.y). Exact-by-construction —
    *  see the march.wgsl.ts reach comment; `__sdfGame.setWoundEarlyOut()`
    *  flips it live for A/B. */
   const GAME_WOUND_EARLY_OUT = 1;
+
 
   /**
    * Step multiplier for the game page's march (marchCfg.y). The lab ships
@@ -773,6 +796,13 @@ async function main() {
    * `__sdfGame.setOmega()` flips it live for A/B.
    */
   const GAME_OMEGA = 1.0;
+  /** Near-wound step multiplier the GAME ships (perfCfg.z; 0 would mean the
+   *  shader's sound constant WOUND_STEP_MUL 0.6). 1.0 on the owner's look
+   *  verdict (2026-09-05, own tab, stacked craters at close and mid range:
+   *  "1.0 seems fine, no major visual differences"); the wounds bench prices
+   *  the 0.6 zone at 6–30% of a wounded fill-screen frame. The lab keeps the
+   *  sound constant — march-step-soundness.test.ts pins it below 0.6. */
+  const GAME_WOUND_STEP = 1.0;
 
   /** Perf round 2, task 6: the footprint-AA strength (aaCfg.y). When > 0 the
    *  march may accept a sample once the field is within the ray's projected
@@ -864,6 +894,7 @@ async function main() {
    *  live for A/B. */
   const GAME_DEPTH_GATE = 0;
   sdfLayer.setDepthGate(GAME_DEPTH_GATE > 0.5);
+  sdfLayer.setDepthPreEnabled(GAME_DEPTH_PREPASS > 0.5);
   // Headless A/B seams (2026-08-27 hull-holes diagnosis): ship defaults stay
   // ON/ON; the driver flips these between captures. Mirrors the lab's
   // __sdfLab.setOccluder.
@@ -894,6 +925,9 @@ async function main() {
   const actors: ZombieActor[] = [];
   const errors: string[] = [];
   let nextId = 1;
+  /** Requested state of the wound union-reach cull (ships ON) — tracked
+   *  because the uniform alone cannot say it (see the woundCull getter). */
+  let woundCullRequested = true;
 
   // The wound panel's tuning state (wound-panel.ts). Lives HERE — before the
   // boot loop — because one of its eight keys, boneRatio, shapes buildBody's
@@ -1018,6 +1052,14 @@ async function main() {
           uniforms: sdfLayer.shellEntry.uniforms,
         },
         prev: sdfLayer.prev,
+        // The quarter-res depth prepass (close-up task 3). Passed
+        // unconditionally like the shell bounds — the fetch identities make
+        // the march bit-identical while sdfLayer.depthPreEnabled is false,
+        // which is the ship default. Chunks get NO twin: a missing start is
+        // conservative (they march from today's start), and the shared chunk
+        // material's single-node-graph trick is not worth rethinking for a
+        // few dozen boxes.
+        depthPre: sdfLayer.depthPre,
         levelShadow: { light: flashlight.levelShadow },
       });
     // Bone tubes: with the mesh ON the field stops packing bone rows (task 5).
@@ -1034,6 +1076,7 @@ async function main() {
     view.uniforms.perfCfg.value.x = GAME_HULL_EXIT_BOUND;
     view.uniforms.perfCfg.value.y = GAME_WOUND_EARLY_OUT;
     view.uniforms.marchCfg.value.y = GAME_OMEGA;
+    view.uniforms.perfCfg.value.z = GAME_WOUND_STEP;
     view.uniforms.aaCfg.value.y = GAME_AA;
     view.uniforms.aaCfg.value.x = sdfLayer.pixelConeK;
     view.uniforms.levelShadowCfg.value.x = GAME_LEVEL_SHADOW;
@@ -1055,6 +1098,10 @@ async function main() {
     view.uniforms.bounceCfg.value.set(probeWeight, 4, 1, 1);
     view.object.layers.set(SDF_LAYER);
     view.coneObject.layers.set(CONE_LAYER);
+    if (view.depthPreObject) {
+      view.depthPreObject.layers.set(DEPTH_PREPASS_LAYER);
+      scene.add(view.depthPreObject);
+    }
     scene.add(view.object);
     scene.add(view.coneObject);
     const zombieId = nextId++;
@@ -1145,6 +1192,40 @@ async function main() {
     probeWeight = Math.min(1, Math.max(0, v));
     for (const a of actors) a.view.uniforms.bounceCfg.value.x = probeWeight;
   }
+
+  /** Ground radius the crowd separates zombies at — the same 0.35 m the
+   *  player's soft-obstacle boxes already use, so the two agree. */
+  const ZOMBIE_RADIUS = 0.35;
+  /** Separation radius for any body in the melee ring — attacking, closing,
+   *  recovering or waiting.
+   *
+   *  IT IS DERIVED, NOT PICKED. Two circles of radius r settle 2r apart, and
+   *  an arm reaches ~0.6 m, so clearing two facing arms needs 2r > 1.2, i.e.
+   *  r > 0.6. The first value here was 0.55 — 1.10 m apart, which does NOT
+   *  clear 1.2 m of arms — specified from "wider than 0.35" rather than from
+   *  the arm reach the 90-degree ring spacing was computed from. A 12 s hand
+   *  probe caught it: minHandGap still went to -0.06 m with only ONE body at
+   *  melee radius, because the pair clipping was two WAITERS, not two
+   *  attackers.
+   *
+   *  RAISED AGAIN 0.70 -> 0.80 when origin/main's arm work landed (elbow
+   *  flexion constraints, the removed wound-clutch reach, constrainRigBends):
+   *  those move where an arm sits, and the measured room-4 gap went 0.435 ->
+   *  0.210 -> -0.031 across two merges without this file changing at all. The
+   *  ceiling is meleeRadius (1.25) minus the player's 0.32 anchor = 0.93, so
+   *  there is room for one more bump before the melee radius has to move too;
+   *  the gate is what tells us. */
+  const ENGAGED_RADIUS = 0.80;
+  const ROOM_ID_BY_NAME = new Map(ROOMS.map(r => [r.name, r.id] as const));
+  /** The player's room id, or -1 in a tunnel / the void. Zombies only notice
+   *  a player who shares their room. */
+  function playerRoomId(): number {
+    return ROOM_ID_BY_NAME.get(enclosureKeyAt(player.pos[0], player.pos[2])) ?? -1;
+  }
+  /** Set when the weapon fires; consumed by the next tick to turn heads in
+   *  the player's room. Sticky rather than instantaneous because a shot lands
+   *  in an event handler, not in the frame callback. */
+  let shotAlert = false;
 
   // -----------------------------------------------------------------------
   // Player: pointer lock + WASD + gravity + capsule-vs-AABB.
@@ -1783,6 +1864,10 @@ async function main() {
     if (!gunReady || cooldown > 0) return false;
     if (reloadAge <= RELOAD.totalSec) return false;   // busy breaking/loading
     if (shells <= 0) { startReload(); return false; } // click -> start reloading
+    // Gunfire in a room turns every head in it, cone or no cone. Placed after
+    // the guards on purpose: a dry click or a shot during a reload must not
+    // alert anything, or the flag fires on inputs that made no noise.
+    shotAlert = true;
     cooldown = GRAPESHOT.fireCooldownSec;
     recoilPitch += GRAPESHOT.kickRadPerBarrel * barrels;
     shells = magazineAfterFire(shells, barrels);
@@ -2331,6 +2416,10 @@ async function main() {
         ? ` · HALF30 ${sdfLayer.halfRateMode === 1 ? 'reproj' : 'hold'}`
         : '') +
       (freeAimOn ? ' · FREE-AIM (G)' : ' · mouselook (G)') +
+      // The wound-zone step multiplier, so a setWoundStep() flip is visible
+      // (owner: "hard to tell"). 0 = the shipped constant.
+      ` · wstep ${(() => { const z = actors[0]?.view.uniforms.perfCfg.value.z ?? 0; return z > 0 ? z.toFixed(2) : `${WOUND_STEP_MUL} (ship)`; })()}` +
+      (adaptiveEnabled ? ` · ADAPTIVE r${adaptiveState.rung}` : '') +
       (reloadSpeed !== 1 ? ` · RELOAD x${reloadSpeed} (T)` : '') +
       (hud.lockHint ? ' · click to lock' : '') +
       (wanderFrozen ? ' · FROZEN' : '');
@@ -2417,6 +2506,57 @@ async function main() {
 
     if (!wanderFrozen) {
       frozenHullBuilt = false;
+      // --- brain input + crowd separation, BEFORE the actors step ----------
+      // Order matters: separating first means this frame's step() and its
+      // view.update() render the corrected positions, so a resolved overlap
+      // is never a frame late on screen.
+      const pRoom = playerRoomId();
+      const pInfo = pRoom > 0
+        ? { x: player.pos[0], z: player.pos[2], room: pRoom }
+        : null;
+      const alertRoom = shotAlert ? pRoom : -1;
+      shotAlert = false;
+      for (const a of actors) a.setBrainInput(pInfo, a.room === alertRoom);
+
+      // --- melee ring: who may swing this frame ---------------------------
+      // Claimants are the alert bodies that are actually in the encounter; an
+      // idle wanderer must not take a token it cannot use and starve a body
+      // that is closing. Runs BEFORE the actors step, so a body's brain sees
+      // this frame's verdict rather than last frame's.
+      if (pInfo) {
+        const claimants: RingClaimant[] = actors
+          .filter(a => a.brain().alert && a.brain().state !== 'idle')
+          .map(a => {
+            const p = a.pose().pos;
+            return {
+              id: a.id, x: p[0], z: p[2],
+              committed: a.committed(),
+              incumbent: a.debug().hasToken,
+            };
+          });
+        const verdict = arbitrate({ x: pInfo.x, z: pInfo.z }, claimants);
+        for (const a of actors) {
+          a.setRingInput(verdict.holders.has(a.id), verdict.drift.get(a.id) ?? 0);
+        }
+      } else {
+        for (const a of actors) a.setRingInput(false, 0);
+      }
+
+      const agents: CrowdAgent[] = actors.map(a => {
+        const p = a.pose().pos;
+        return {
+          x: p[0], z: p[2],
+          r: a.engagedForCrowd() ? ENGAGED_RADIUS : ZOMBIE_RADIUS,
+          mobile: true,
+        };
+      });
+      // The player is an ANCHOR: zombies slide off him rather than shove him.
+      // His own capsule already resolves against the per-frame zombie boxes
+      // above (stepPlayer), which is the other half of the same contact.
+      agents.push({ x: player.pos[0], z: player.pos[2], r: PLAYER.radius, mobile: false });
+      const push = separate(agents);
+      actors.forEach((a, i) => a.nudge(push[i]![0], push[i]![1]));
+
       for (const a of actors) a.step(dt);
       const now = performance.now() / 1000;
       for (const a of actors) {
@@ -2752,6 +2892,9 @@ async function main() {
     {
       const prevs = pellets.map(p => [...p.pos] as Vec3);
       stepProjectiles(pellets, dt);
+      // Hit batching: every actor hit this frame flushes its rig/repack/
+      // wound-row tail ONCE after the loop (ZombieActor.beginHits).
+      const hitThisFrame = new Set<ZombieActor>();
       for (let i = pellets.length - 1; i >= 0; i--) {
         const p = pellets[i]!;
         const from = prevs[i]!;
@@ -2795,6 +2938,7 @@ async function main() {
             // hit/hitSlug RETURN the wound this impact stamped (pre-sever),
             // so the bleed emitter binds the exact wound instead of sniffing
             // the ring tail (a hit that also severs puts a stump there).
+            if (!hitThisFrame.has(hitActor)) { hitActor.beginHits(); hitThisFrame.add(hitActor); }
             const stamped = p.kind === 'slug'
               ? hitActor.hitSlug(hitPoint, dirN)
               : hitActor.hit(hitPoint, dirN);
@@ -2804,6 +2948,7 @@ async function main() {
         }
         if (dead) pellets.splice(i, 1);
       }
+      for (const a of hitThisFrame) a.endHits();
       // Sync the mesh pool to the sim list — growing it on demand (the
       // pool is ONLY grown here; fire() must not touch meshes because it
       // runs from an evaluate() with no frame in between).
@@ -3053,6 +3198,111 @@ async function main() {
     get probeWeight() { return probeWeight; },
     /** Every zombie: id, room, live ground pose. */
     zombies: () => actors.map(a => ({ id: a.id, room: a.room, ...a.pose() })),
+    /** Per-actor brain readout — the crowd/AI capture driver's oracle. */
+    brains: () => actors.map(a => {
+      const b = a.brain();
+      const p = a.pose().pos;
+      return {
+        id: a.id, room: a.room, state: b.state, alert: b.alert,
+        swingT: b.swingT, side: b.swing.side, variant: b.swing.variant,
+        hasToken: a.debug().hasToken,
+        dist: Math.hypot(p[0] - player.pos[0], p[2] - player.pos[2]),
+        bearing: Math.atan2(p[0] - player.pos[0], p[2] - player.pos[2]),
+      };
+    }),
+    /** Ring tuning, so a capture driver asserts against the real numbers
+     *  rather than duplicating them. */
+    ringTuning: () => ({ ...RING_TUNING }),
+    /** attack.ts's beat boundaries, so a capture driver derives its phases
+     *  from the real numbers instead of duplicating them. */
+    attackTuning: () => ({ ...ATTACK_TUNING }),
+    /** CAPTURE SEAM: force one actor into a specific swing pose and step it,
+     *  so a strip can photograph the same body at chosen phases. Not a
+     *  simulation input — it drives the actor's motion config directly for
+     *  one frame and the brain overwrites it on the next step. */
+    poseSwing: (id: number, phase: number, side: 'L' | 'R', variant: string) => {
+      actors.find(a => a.id === id)?.forceSwing(phase, side, variant as SwingVariant);
+    },
+    /** Smallest centre-to-centre distance between any two zombies (m).
+     *  Two 0.35 m bodies touch at 0.70; below that they are interpenetrating. */
+    crowdMinDist: () => minPairDistance(actors.map(a => {
+      const p = a.pose().pos;
+      return { x: p[0], z: p[2], r: ZOMBIE_RADIUS, mobile: true };
+    })),
+    /** Closest surface gap (m) between arm primitives belonging to DIFFERENT
+     *  bodies. Negative means interpenetration — which is exactly the defect
+     *  the owner photographed on 2026-09-04, so it is a number now rather
+     *  than something we look at. Endpoint-to-endpoint minus the two radii:
+     *  a conservative under-estimate of the true capsule gap, which is the
+     *  right direction for a gate (it can cry wolf, it cannot miss a clip).
+     *  O(n^2 k^2) over ten bodies — only the capture driver calls it. */
+    minHandGap: () => {
+      const arms = actors.map(a => {
+        const posed = a.posed();
+        const pts: { p: Vec3; r: number }[] = [];
+        for (const prim of posed.prims) {
+          if (prim.limb !== 'armL' && prim.limb !== 'armR') continue;
+          pts.push({ p: prim.a, r: prim.radius }, { p: prim.b, r: prim.radius });
+        }
+        return pts;
+      });
+      let best = Infinity;
+      let bestPair: [number, number] = [-1, -1];
+      for (let i = 0; i < arms.length; i++) {
+        for (let j = i + 1; j < arms.length; j++) {
+          for (const u of arms[i]!) {
+            for (const v of arms[j]!) {
+              const g = Math.hypot(u.p[0] - v.p[0], u.p[1] - v.p[1], u.p[2] - v.p[2])
+                - u.r - v.r;
+              if (g < best) { best = g; bestPair = [actors[i]!.id, actors[j]!.id]; }
+            }
+          }
+        }
+      }
+      return best;
+    },
+    /** Which two bodies produced minHandGap()'s number, and what rooms they
+     *  are in. Diagnostic: the metric is GLOBAL, so a negative can come from
+     *  two idle wanderers in a distant room rather than from the melee ring
+     *  around the player — which is exactly what it did on 2026-09-05. */
+    minHandGapPair: () => {
+      const arms = actors.map(a => {
+        const posed = a.posed();
+        const pts: { p: Vec3; r: number }[] = [];
+        for (const prim of posed.prims) {
+          if (prim.limb !== 'armL' && prim.limb !== 'armR') continue;
+          pts.push({ p: prim.a, r: prim.radius }, { p: prim.b, r: prim.radius });
+        }
+        return pts;
+      });
+      let best = Infinity;
+      let pair: { a: number; b: number; roomA: number; roomB: number } | null = null;
+      for (let i = 0; i < arms.length; i++) {
+        for (let j = i + 1; j < arms.length; j++) {
+          for (const u of arms[i]!) {
+            for (const v of arms[j]!) {
+              const g = Math.hypot(u.p[0] - v.p[0], u.p[1] - v.p[1], u.p[2] - v.p[2])
+                - u.r - v.r;
+              if (g < best) {
+                best = g;
+                pair = {
+                  a: actors[i]!.id, b: actors[j]!.id,
+                  roomA: actors[i]!.room, roomB: actors[j]!.room,
+                };
+              }
+            }
+          }
+        }
+      }
+      return { gap: best, ...(pair ?? {}) };
+    },
+    /** Debug seam for the crowd capture driver: the separation nudge, by id,
+     *  with the same bounds clamp and furniture rejection. Lets a driver
+     *  PLACE bodies (e.g. coincident, to watch separate() push them apart)
+     *  without a separate teleport path that could dodge the clamps. */
+    zombieNudge: (id: number, dx: number, dz: number) => {
+      actors.find(a => a.id === id)?.nudge(dx, dz);
+    },
     /** One zombie's internals — the weapon seam: view (uniforms/wounds),
      *  posed() (raycast target), boundRig() (impulse/recoil entry). */
     zombie: (id: number) => {
@@ -3379,6 +3629,13 @@ async function main() {
           rim: gooLayer.rim,
           stretch: gooLayer.stretch,
           shadowRed: gooLayer.shadowRed,
+          perf: {
+            surfaceAtDensityRes: gooLayer.surfaceAtDensityRes,
+            minTexelRadius: gooLayer.minTexelRadius,
+            areaPriority: gooLayer.areaPriority,
+            splatFadeTail: gooLayer.splatFadeTail,
+            passGate: gooLayer.passGate,
+          },
         }
         : { enabled: false, unavailable: true };
     },
@@ -3521,6 +3778,36 @@ async function main() {
       if (o.shadowRed !== undefined) gooLayer.setShadowRed(o.shadowRed);
     },
 
+    /**
+     * Close-up task 4's PERF SEAMS (goo-layer.ts) — all default to the
+     * shipped state; the goo A/B driver flips them per leg. Deliberately NOT
+     * part of setGooTuning: these are bench levers, not look knobs, and the
+     * goo panel's copy button emits tuning keys (see the emit-key warning on
+     * the panel) — mixing the two would let a paste silently move a perf
+     * seam.
+     */
+    setGooPerf(o: {
+      surfaceAtDensityRes?: boolean;
+      minTexelRadius?: number;
+      areaPriority?: boolean;
+      splatFadeTail?: number;
+      passGate?: { density?: boolean; blur?: boolean; surface?: boolean };
+    }) {
+      if (!gooLayer) return { unavailable: true };
+      if (o.surfaceAtDensityRes !== undefined) gooLayer.setSurfaceAtDensityRes(o.surfaceAtDensityRes);
+      if (o.minTexelRadius !== undefined) gooLayer.setMinTexelRadius(o.minTexelRadius);
+      if (o.areaPriority !== undefined) gooLayer.setAreaPriority(o.areaPriority);
+      if (o.splatFadeTail !== undefined) gooLayer.setSplatFadeTail(o.splatFadeTail);
+      if (o.passGate !== undefined) gooLayer.setPassGate(o.passGate);
+      return {
+        surfaceAtDensityRes: gooLayer.surfaceAtDensityRes,
+        minTexelRadius: gooLayer.minTexelRadius,
+        areaPriority: gooLayer.areaPriority,
+        splatFadeTail: gooLayer.splatFadeTail,
+        passGate: gooLayer.passGate,
+      };
+    },
+
     /** Sweep gout density/shape without a rebuild. Mutates the shared table,
      *  so it affects every later impact of that kind. */
     setGoutTuning(kind: 'pellet' | 'slug' | 'stump', o: Partial<ImpactGoutProfile>) {
@@ -3542,6 +3829,11 @@ async function main() {
      *  accumulated-depth gate. OFF restores the single-pass march. */
     setDepthGate(on: boolean) { sdfLayer.setDepthGate(on); },
     get depthGate() { return sdfLayer.depthGate; },
+    /** Close-up task 3: the quarter-res depth prepass and the march's
+     *  consumption of it. OFF (ship default) is bit-identical to the
+     *  pre-task-3 frame; the census and the bench decide the flip. */
+    setDepthPrepass(on: boolean) { sdfLayer.setDepthPreEnabled(on); },
+    get depthPrepass() { return sdfLayer.depthPreEnabled; },
     get shell() {
       return {
         enabled: sdfLayer.shellEnabled,
@@ -3759,8 +4051,32 @@ async function main() {
     setWoundStep(v: number) {
       const n = v <= 0 ? 0 : Math.max(0.1, Math.min(1.0, v));
       for (const a of actors) a.view.uniforms.perfCfg.value.z = n;
+      updateHud();
     },
     get woundStep() { return actors[0]?.view.uniforms.perfCfg.value.z ?? 0; },
+    /** Wound union-reach cull (close-up wound-cull task, 2026-09-05) —
+     *  applyWounds' one-sphere test before the wound loop. SHIPS ON; a value
+     *  no-op by construction, so ON vs OFF is a pixel-parity gate, and the
+     *  bench's cullOff leg prices what the loop cost. Bodies only: chunk
+     *  torn-end wounds ride writeWounds directly and keep the 1e9 no-cull
+     *  identity (a chunk's proxy box is already tight). */
+    setWoundCull(on: boolean) {
+      woundCullRequested = on;
+      for (const a of actors) a.view.setWoundCull(on);
+    },
+    // Tracks the REQUESTED state, not the uniform: an unwounded body never
+    // uploads wounds, so its bound radius stays at the 1e9 identity even
+    // with the cull on, and reading the uniform back would lie.
+    get woundCull() { return woundCullRequested; },
+    /** Diagnostic read: every actor's wound bound [x, y, z, radius]. Proves
+     *  the wire end-to-end — a radius in (0, 1e8) is a COMPUTED bound; 1e9
+     *  is the no-cull identity; 0 means no wounds uploaded. */
+    woundBound() {
+      return actors.map(a => {
+        const v = a.view.uniforms.woundBound.value;
+        return [v.x, v.y, v.z, v.w];
+      });
+    },
     /** Step multiplier (marchCfg.y). Ships at GAME_OMEGA. */
     setOmega(v: number) {
       const n = Math.max(0.1, Math.min(1.0, v));
@@ -3791,6 +4107,39 @@ async function main() {
       for (const a of actors) a.view.uniforms.marchCfg.value.x = n;
     },
     get marchSteps() { return actors[0]?.view.uniforms.marchCfg.value.x ?? 0; },
+
+    /**
+     * DEPTH-PREPASS STATS (close-up task 3) — is the coarse pass actually
+     * writing starts? Same readback contract as occupancy() (one paused
+     * step, row-padded float read) on the quarter-res target. A pass that
+     * writes nothing (meshes not staged, clear-colour trap, fetch wrong)
+     * is invisible in the frame and shows up here as nonZero 0.
+     */
+    async depthPreStats() {
+      handle.setLoopRunning(false);
+      handle.step(1 / 60);
+      await handle.resolveGpu();
+      const t = sdfLayer.depthPreTarget;
+      const w = t.width;
+      const h = t.height;
+      const buf = new Float32Array(
+        await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h),
+      );
+      const floatsPerRow = Math.ceil((w * 16) / 256) * 256 / 4;
+      let nonZero = 0;
+      let min = Infinity;
+      let max = 0;
+      let sum = 0;
+      for (let row = 0; row < h; row++) {
+        const base = row * floatsPerRow;
+        for (let col = 0; col < w; col++) {
+          const v = buf[base + col * 4]!;
+          if (v > 0) { nonZero++; sum += v; if (v < min) min = v; if (v > max) max = v; }
+        }
+      }
+      handle.setLoopRunning(true);
+      return { w, h, texels: w * h, nonZero, min: nonZero ? +min.toFixed(3) : 0, max: +max.toFixed(3), mean: nonZero ? +(sum / nonZero).toFixed(3) : 0 };
+    },
 
     /**
      * PROXY-BOX OCCUPANCY — the shell-march decision measurement.

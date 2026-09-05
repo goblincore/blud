@@ -328,7 +328,7 @@ blob head on skull at=0.41 offset=(0.035,0.0,0.183) r=0.012 blend=0.004 both col
   this. A glowing SHELL (cloth) glows like any other prim; both pack branches
   carry it.
 
-## Face decal: `sheet image` + `decal 1` (added 2026-08-23)
+## Face decal: `sheet image` + `decal 0` (added 2026-08-23; multiply since 2026-09-04)
 
 Agents cannot paint a face. Three dispatches proved it: prims for eyes and a
 mouth read as a navy visor band; the generated greyscale sheet reads as a
@@ -347,12 +347,34 @@ into a 512 square with alpha off the head, and prints the head box it used
 ```
 sheet
   image       schoolgirl-face.png   # under public/assets/lab/faces/
-  decal       1                     # paste as albedo; no glow, no relief
-  projScaleX  0.35                  # uv = hs * scale + centre, uv.y from the BOTTOM
-  projScaleY  0.54
-  projCentreX 0.5
-  projCentreY 1.00
+  decal       0                     # MULTIPLY -- see below; 1 REPLACES albedo
+  projScaleX  0.19                  # uv = hs * scale + centre; LOWER = BIGGER
+  projScaleY  0.22
+  projCentreX 0.50
+  projCentreY 0.47
+  eyeGlowCut  0.70                  # below the bake's max luma or nothing glows
 ```
+
+**START AT ~0.19 / 0.22, NOT AT THE DEFAULTS.** `DEFAULT_SHEET` is
+0.45 / 0.58, and those are right for the GENERATED sheet — where the drawn
+face fills a 64-square texture, and which five characters rely on. They are
+wrong by about 2.4x for a BAKED face, which occupies part of a 512-square
+atlas surrounded by alpha. Every character authored from a bake so far started
+far too small and had to be enlarged by hand; the soldier converged at
+0.180/0.200 and the Widow at 0.19/0.23. `npm run blob:face-bake` now prints a
+paste-ready block with these values, so take them from there.
+
+**`projScale` is a FREQUENCY, not a size — lower means bigger.** That is the
+other half of why the face kept coming out small: the number reads backwards,
+and the lab's sliders are labelled `(down = bigger)` for the same reason.
+
+**PREFER `decal 0` (MULTIPLY) over `decal 1` (REPLACE).** Replace pastes the
+bake on as albedo, so the face is UNLIT while the body is lit: measured on the
+soldier, face `#cc9f69` against a correctly-lit body at `#954821`, 1.83x too
+bright, reading as a pale card stuck on the head. Multiply lets the face take
+the body's light. This only became usable on 2026-09-04 — before that the
+loader fetched the baked PNG only when `decal > 0.5`, so `decal 0` silently
+dropped the bake and multiplied the generated sheet instead.
 
 `hs` is head space: the offset from the FATTEST head prim's centre, divided
 by its semi-axes. On a character with hair that prim is the crown shell,

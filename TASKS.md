@@ -50,6 +50,65 @@ repo via the dev-only `/__lab/save-*` endpoints
 [plan](docs/superpowers/plans/2026-09-05-soldier-animation.md) ·
 [strips](docs/dev-notes/2026-09-05-soldier-animation/notes.md)
 
+**[ ] Zombie analytic normals — design approved, five-task implementation plan ready (2026-09-05); zombie first with legacy fallback.**
+[Plan](docs/superpowers/plans/2026-09-05-zombie-analytic-normals.md); reference → GPU kernels → intact/detail → wounds → gameplay verdict; no implementation dispatched.
+
+**[~] Zoned baked wounds — Task 3 resumed from saved work (2026-09-05); Tasks 1–2 done, 4–6 pending behind numerical/memory gates.**
+[Plan](docs/superpowers/plans/2026-09-04-zoned-baked-wounds.md); defer expensive GPU verification under load; current shipping baseline and actual close-up coverage still require matched comparison.
+
+**[x] A-schoolgirl-described — SCHOOLGIRL, describe-and-judge arm SHIPPED (2026-09-05).**
+`characters/schoolgirl-described.blob`: the same subject as schoolgirl.blob,
+authored from the plate alone (no blob:rings/measure — fitting is the control
+this run compares against). The exchange student from the wrong genre: three
+beats = oversized glossy BOB, RED neckerchief (real knot+tails, not paint),
+white SLOUCH BOOTS (vs the measured version's socks+mary-janes). Face = the
+schoolgirl's own bake re-baked to schoolgirl-described-face.png; sheet
+0.34/0.40/0.49 (the bake's printed 0.19/0.237 is generic — this bake is the
+schoolgirl's, whose solve is 0.38/0.42). Render-check exit 0, 2565 tests
+green, controls (schoolgirl.blob / schoolgirl-alt.blob) untouched.
+
+**[ ] A-female — FEMALE CHARACTER, described-authoring RUNNING (2026-09-05).**
+Second run of the method the soldier proved: proportions from a plate, style
+from the approved cast (goblin/soldier/zombie/clown), identity left to the
+agent, no measurement step.
+[plan](docs/superpowers/plans/2026-09-05-female-described.md). Reference is a
+NUDE A-pose body -- proportions only; its Rigify rig has 722 joints of IK/MCH
+helpers so the fitting tools cannot read it regardless, and its dress/belt/
+necklace/watch meshes are out of scope per the owner.
+
+**QUEUED BEHIND HER, in order:**
+1. **`hairlock`** (Selfie Girl item 4) aimed at the SCHOOLGIRL, not this
+   character -- her head is 7 prims, 5 of them hair, and loose. The female
+   reference wears a BUN, which is the one case the technique suits least: it
+   is for flowing wavy strands, and a compact updo is two or three ordinary
+   prims. Deferred deliberately -- radiusRamp was built ahead of a character
+   that needed it and two of its four face features shipped at zero.
+2. **Her WAM kit: armour, and SOFT CLOTHES.** The soft half has a real fork
+   and it is not obvious which way it goes. `.blob` ALREADY does cloth --
+   the schoolgirl's skirt and sailor collar are `shell` prims (`thick=` /
+   `clip=` / `rim=`), a thin onioned surface clipped to a hem. So the choice
+   was: put drape in WAM, or extend the SDF shell. **DECIDED (owner,
+   2026-09-05): extend the SDF SHELL.** Selfie Girl item 5 -- domain-warp it
+   with low-frequency sines for wrinkles, plus the rim trick where the shell
+   meets its clipping plane, `length(vec2(dShell, dPlane)) - r`.
+   The leverage is why: the shell prim already ships and the schoolgirl's
+   skirt and sailor collar already use it, so wrinkles land on EXISTING
+   garments for free rather than only on new ones -- and it keeps WAM for the
+   hard things goblin-kit.wam argues it exists for. Warp amplitude must
+   default to 0 so no current character moves.
+   **LICENCE, unchanged:** the Selfie Girl shader forbids reuse of the Work.
+   Re-derive; implement from iq's own articles. Do not read the shader.
+
+
+**[x] A-female — THE WIDOW SHIPPED (2026-09-05), describe-and-judge again.**
+`characters/female.blob` (33 prims, clothed, no kit): the cast's gothic
+mourning widow — black dress/gloves/stockings as paint, wasp waist, oversized
+dark bun, pale skin, one red cameo choker. Baked face decal from the
+reference's head meshes only (its 722-joint Rigify rig and clothes ignored).
+One pipeline fix: `blob-face-bake.py` now REPEAT-wraps UVs (`% 1.0`) before
+atlas sampling — the female mesh's UVs run outside 0..1 and clipping smeared
+the atlas edge in streaks.
+
 **[x] A-soldier — SOLDIER SHIPPED (2026-09-05), and the method changed on the
 way.** `characters/soldier.blob` (15 prims, body only) + `soldier-kit.wam`
 compiled to `public/assets/lab/soldier-kit.gltf` (pauldrons, cuirass, belt +
@@ -144,6 +203,102 @@ maths) or clamp `moveAim` in screen space and renormalise `deadzonePush`.
 [spec](docs/superpowers/specs/2026-09-02-bone-tubes-design.md) · [plan](docs/superpowers/plans/2026-09-02-bone-tubes.md) · [notes](docs/dev-notes/2026-09-02-bone-tubes/notes.md)
 
 **ZOMBIE SKELETON RE-AUTHORED — AWAITING OWNER LOOK (2026-09-03).** Tubes showed the field skeleton was six 12 cm rib stubs over 20 cm of a 34 cm spine; the owner's reference is a standard human torso. Now: twelve rib pairs as HOOPS (two Bezier bars per rib meeting at the flank), cage half-width 0.167 in a 0.19 chest, upper ribs short/flat, 7 widest, 8-10 on the costal margin, 11-12 floating; kyphotic spine at the BACK; sternum; clavicles; a pelvis with iliac-wing fans, crest arcs, sacrum and a closed pubic ring. Flesh 23 + bone 90 = 113/128, containment clean at 4 mm. Emitted by `scripts/zombie-skeleton-gen.ts` (`--check --write`), which owns the per-rib table. `rig-bind.ts` torso/head bones now bind to the nearest AXIAL joint (a hoop's midpoint is nearer the hip/shoulder, which shear). Instancer cap 512 → 1024 (820 tubes live). Captures + notes: [docs/dev-notes/2026-09-03-zombie-skeleton/](docs/dev-notes/2026-09-03-zombie-skeleton/notes.md). Owner's first look drove round 2 (same day): the cage sheared because point-binds carry no rotation — torso bones now pose as ONE rigid frame per axial segment (`BoneFrame` in rig-bind.ts, shear test pinned); six thicker ribs instead of twelve; pelvis as fat blades + ring; noise mottle + blood flecks in the tube shader (helpers split into their own WGSL strings — wgslFn takes one fn per string, silently draws nothing otherwise). 23 + 68 = 91 prims, 600 tubes. Owner verdict: an improvement, merged to main as-is; tubes are NOT yet good enough to replace the field bones (a capsule pelvis is 'a messy line drawing', the cage reads as spiky tubes going in and out of sync) — `setBoneMesh` stays OFF. Follow-ups in the notes: a solid-mass primitive for the pelvis, one continuous loop per rib.
+
+**Post-dispatch verification found three defects, all fixed (2026-09-05):**
+the ring's arm-gap measure excluded `encircle`, so the pair actually
+interpenetrating (an attacker and a WAITER, -0.051 m) was invisible to a gate
+that reported everything clear; `ENGAGED_RADIUS` was 0.55, which settles two
+bodies 1.10 m apart against a 1.20 m arm span (the 90-degree ring spacing was
+derived from the arm reach, this number was not); and raising it to 0.70 then
+put `meleeRadius` 1.0 INSIDE the separation equilibrium (0.70 + the player's
+0.32 anchor = 1.02 m), so a body stood in `engage` for ten seconds without
+swinging. Now 0.70 / 1.25, waiters included, gate window 12 s instead of 3 s
+and refusing to report if it never saw an `attack`. Gate: room-4 arm gap
++0.435 m shipped, -0.020 m with waiters put back on the walking circle.
+**Known and NOT fixed:** idle wanderers in other rooms still clip (they use the
+base 0.35 m circle; raising it spreads every crowd — owner's call), and one
+token-holder stays pinned by furniture at 2.85 m, so two nominal attackers are
+really one until navigation lands.
+
+**SWING VARIANTS — LANDED (2026-09-05), awaiting owner look.** The owner read
+the one-arm hook as "a swimmer's motion", correctly: every arm angle was
+`attackDrive × magnitude`, and that scalar runs 0 → −1 → +1 → 0, so pitch is
+FORCED negative at the wind-up and positive at the strike — the arm must travel
+from behind the body to in front of it, and a hook needs it raised at both
+ends. The body keeps the signed drive (its weight shift was never wrong); the
+arm now rides `armArc`, interpolating between explicit per-variant angles.
+Two swings: a hook whose pitch CLIMBS 0.35 → 0.95 while yaw sweeps across, and
+an overhead that is 2.1 rad of near-pure pitch. The off arm holds a raised
+guard instead of counter-swinging — two arms in opposition through a
+near-horizontal plane is the crawl. Variant is rolled at swing start from a
+SECOND per-body RNG (sharing the wander generator would shift every subsequent
+wander decision); the arm keeps alternating underneath, so a pack shows four
+silhouettes. Guard: `flatArcRatio` 0.6, pinned by a test the shipped swing
+fails, plus a gate assertion that both variants actually fire. Frames:
+[docs/dev-notes/2026-09-05-swing-variants/](docs/dev-notes/2026-09-05-swing-variants/notes.md).
+[spec](docs/superpowers/specs/2026-09-05-zombie-swing-variants-design.md) ·
+[plan](docs/superpowers/plans/2026-09-05-zombie-swing-variants.md)
+
+**ZOMBIE COMBAT CHOREOGRAPHY — LANDED (2026-09-05), awaiting owner look.**
+The owner's play-test of the crowd/brain build: arms clip when several
+surround you, and the two-arm slam is "merely… okay". `melee-ring.ts` caps the
+swingers at two and requires 90° of bearing separation between them — angles
+are the claimants' CURRENT bearings, NOT fixed slots, which would orbit the
+ring as the player turns. The arithmetic: separation's 0.35 m circles touch at
+0.70 m while an arm reaches 0.6 m, so the circles are satisfied and the arms
+always overlap; two holders 90° apart at 1.0 m are 1.41 m apart, clear with
+0.2 m to spare (75° gives 1.22 m, which clears by 2 cm — not clearing).
+`brain.ts` is now seven named states and absorbed the blast hold that used to
+be a private timer in `game-actor.ts`. `attack.ts` is an alternating one-arm
+hook; `motion.ts`'s reach pivot gained a world-up sweep to carry it, with the
+lab's bit-identity pin untouched. Gate: `minHandGap()` — the owner's
+screenshot as a number — plus the token cap and the spacing, all proven to
+fail. Notes + frames:
+[docs/dev-notes/2026-09-05-zombie-choreography/](docs/dev-notes/2026-09-05-zombie-choreography/notes.md).
+**Still open:** getting stuck on furniture — navigation is its own spec and is
+NOT in this change.
+[spec](docs/superpowers/specs/2026-09-05-zombie-combat-choreography-design.md) ·
+[plan](docs/superpowers/plans/2026-09-05-zombie-combat-choreography.md)
+
+**ZOMBIE CROWD + BRAIN — LANDED (2026-09-04), awaiting owner look.** The two
+reports from the same session: bodies clipped through each other constantly,
+and nothing in the level cared where the player was. Three pure modules —
+`crowd.ts` (soft ground-plane circle separation, the player entering the set as
+an immobile anchor), `brain.ts` (same-room + 70° facing-cone aggro that locks on
+with a 4 s grace; a gunshot bypasses the cone), `attack.ts` (wind-up / strike /
+hold / recovery off ONE signed scalar, so the lunge and the arms cannot peak on
+different frames). `MotionConfig` gains one optional `attack` field that
+BRANCHES rather than adding a zero — `x + 0` turns `-0` into `+0` — so the lab's
+motion is bit-identical, pinned by a 30-frame exact-pose test.
+**Two spec defects the gate found end-to-end, both invisible to unit tests:**
+(1) a chaser aiming at the brain's standoff point could NEVER engage —
+`arriveRadius` 0.4 stops it 1.4 m out, outside `attackRange` 1.0 — so the walk
+goal is now the player himself and the engage latch halts it on the way in;
+(2) the furniture rejection deadlocks a chaser (a wanderer picks a new leg, a
+chaser re-aims into the same crate forever), so the rejection now pushes out
+along the shallowest axis and a blocked line arcs around one COMMITTED side.
+`brain.ts` stayed pure geometry through both. Gate:
+`scripts/sdf-game-crowd-gate.mjs` — probe pair settles at 0.700 m wired,
+0.437 m with the nudge removed (proven to FAIL). Notes + 6 frames:
+[docs/dev-notes/2026-09-04-zombie-crowd/](docs/dev-notes/2026-09-04-zombie-crowd/notes.md).
+**Deliberate gaps:** the swing does NO damage (owner's call — rhythm first, no
+player health this round); chasers stop at their room's doorway because
+`stepWander` clamps to room bounds, so cross-room pursuit needs navigation.
+[spec](docs/superpowers/specs/2026-09-04-zombie-crowd-and-brain-design.md) ·
+[plan](docs/superpowers/plans/2026-09-04-zombie-crowd-and-brain.md)
+
+**[ ] F-eject.1 — spent cases clip through the frame, and every reload throws
+them identically.** Owner, 2026-09-03, after the breech merge: "the shells
+eject but seem to clip through the gun frame so there needs to be some tweaking
+there. also they always eject the same animation would be better to have some
+randomness but not a blocker." Two separate things. The clip is a collision the
+hand-off does not test for — `ejectedShell()` is a pure ballistic arc from the
+breech with no awareness of the receiver it passes over, and the gate only
+checks where a case STARTS (within 5 cm of a chamber mouth), not where it
+travels. The sameness is `ejectedShell()` being deterministic by design
+(`game-viewmodel.ts`: "same reload, same arc, every time") — which was the right
+call for gating and the wrong one for feel. Randomising it means the eject gate
+needs a seed it can pin, or it becomes flaky.
 
 **SHELLS: EJECT CLIP + LOAD INSERTION — DONE (2026-09-04), F-eject.1 and
 F-eject.2** — [notes + before/after strip](docs/dev-notes/2026-09-04-shell-reload/notes.md).
@@ -479,8 +634,57 @@ severed something. Rotates the starting leg per rep against thermal ramp. Task
 1b extracts it to `scripts/lib/sdf-closeup-stage.mjs`; every later task imports
 it rather than re-deriving a scene. Chain is now fully serial (one bench at a
 time — concurrent benches are what spoiled the tile table and the r2 sweep):
-**1b → 4 (goo) → 2 → 3 → 5**, all `pending` except 1b, which is the manual
-trigger.
+**1b → 4 (goo) → 2 → 3 → 5**, all `pending` except 1b and 4.
+
+**CLOSE-UP WOUND CULL — DONE, SHIPS ON (2026-09-05, `dispatch/2026-09-05-closeup-wound-cull`, commit 8c03342).** `applyWounds` now tests ONE bounding sphere of every wound's reach (`woundBound` uniform, computed by `woundReachBound` at `setWounds` from the live woundCfg/woundCfg2 — not a hardcoded copy) BEFORE its 16-slot loop; outside it the loop would early-out per wound anyway, so the cull is a value no-op by construction. Parity PROVEN, not hoped: 0 changed pixels, wounded ON/OFF + ON/ON + both unwounded pairs (`scripts/closeup-woundcull-capture.mjs` — note it pins `performance.now`, because the fire flicker ticks off wall-clock even frozen and jitters ~19% of pixels at d>0 between same-state captures). Bound proven live in-page (r 0.933 m on the 5-wound staging). Bench (BENCH_REPEATS=4, quiet machine, 0 rejects): cullOff − ship = **+1.4 ms median** (rep deltas 3.0 / −2.1 / 2.5 / 0.5 — one inversion inside rep noise) of the ~25.3 ms (ship − unwounded) wound gap; stepFull re-confirmed at −7.8 ms. The far-sample loop was ~5% of the wound cost on the fill-screen staging because the camera-facing wound cluster sits where the march steps concentrate. **Step 2 (per-cluster wound lists) spec'd in the notes and deliberately NOT built** — it attacks a sub-slice of the remaining in-bound loads (≪1.4 ms) while 69% of the gap is lever-1 stepping + intrinsic in-reach maths. Next real lever: re-gate the 0.6 near-wound factor at ω 1.0 (look-gated, separate task). Seam `__sdfGame.setWoundCull(on)` / `.woundCull` / `.woundBound()`. Suite 3141/3141, tsc clean.
+[notes](docs/dev-notes/2026-09-04-closeup-2-probes/notes.md#wound-union-reach-cull-2026-09-05-dispatch2026-09-05-closeup-wound-cull)
+
+**CLOSE-UP TASK 3 (depth prepass) — BUILT, CENSUS-CLEAN, DOES NOT SHIP
+(2026-09-05).** The quarter-res coarse march of the field exists and works:
+one texel per 4x4 SDF-pixel block, cone radius = the block's half-diagonal
+(the proof the start is a lower bound), per-body twins resolving to the
+NEAREST touch via frag_depth, consumed as a third max() term at the ray
+start. Census CLEAN at six views (0.5/3/9 m + head/thin + rooms 3/4): hits
+kept 99.99-100.02%, state-clean, pixel diffs at/below noise; meanStepsHit
+-5% to -45%. But Question A's walk share did not survive its own baseline:
+re-measured at today's 13.9 ms wounded fill-screen frame the walk is
+**15.9%** (normal 13.86 vs flat 11.65), so halving the walk buys ~1 ms while
+the pass costs ~0.5-2 ms (growing with bodies - the coarse rays march long
+distances at standoff). Bench: fill-screen +0.5 ms, room3 +0.95, room4 +1.94.
+**Verdict: ships OFF** (`GAME_DEPTH_PREPASS = 0`,
+`__sdfGame.setDepthPrepass`); the seam, the census
+(`scripts/sdf-depth-prepass-census.mjs`) and `depthPreStats()` stay. Three
+new shader-wiring traps found and pinned, all rendering as "every body
+unlit-black with every uniform dead": a PAREN in a WGSL-signature comment
+truncates three's parameter parse exactly like the known colon hazard;
+calling a helper by its CONST name instead of its source name is an
+unresolved call target; and `vec4(a, b, 0, 0)` composed from two SCALAR
+uniforms in a wgslFn literal breaks WGSL generation outright — pass ONE vec4
+uniform whole. Also: `createZombieGpuView`'s positional createMarchMaterial
+call silently dropped the new argument (the march sampled the 1x1 zero
+fallback while the twin wrote real starts) — positional call sites must be
+re-counted when a parameter is added.
+[notes](docs/dev-notes/2026-09-04-closeup-3-depth-prepass/notes.md).
+
+**CLOSE-UP TASK 4 (goo) — DONE, NEGATIVE RESULT (2026-09-05).** The premise
+("the goo layer is the blood cost") does NOT reproduce. Measured with the
+item seams landed on `dispatch/2026-09-04-closeup-task-4-attempt1` (parity-
+pinned default-off, suite green): whole goo chain (density + blurs + surface
+composite) = **~0.26 ms idle, ~0.1–0.5 ms in a room-4 firefight (cov ~1%),
+~0.14 ms at the saturated-pool worst case (256-ring, 6.3% cov)**. Coverage
+caps at ~6% even staring into an accumulated pool at 1.6 m. All three items
+→ **no-ship, seams stay default-off**: item 1 has a real look cost in the
+shipped depth mode (depth-tested upsample drops the flying-spray fusion —
+recovered in overlay mode, so the fix path is known: packed-depth
+reconstruction for sparse texels); item 2 is invisible + cost-neutral by
+construction; item 3's `fallMask` still submits every splat (saving ~0 by
+construction) and the pools survive anyway. Parity vs MAIN: CLEAN all three
+scenes (idle exact 0%). Item A/B medians storm-blocked (sibling dispatch
+load 70–160 half the session) and moot given the bound. Notes + numbers:
+[docs/dev-notes/2026-09-04-closeup-4-goo/notes.md](docs/dev-notes/2026-09-04-closeup-4-goo/notes.md).
+If the owner's "blood spray causes issues" needs chasing, it is NOT this
+layer — candidate suspects outside task 4's scope: billboard blood view,
+chunk physics, sim step.
 
 **CLOSE-UP TASK 1B — DONE (2026-09-04).** Harness extracted to
 `scripts/lib/sdf-closeup-stage.mjs` (staging record byte-identical pre/post
@@ -2376,3 +2580,7 @@ Key reference docs (open these before touching their area):
 - **Task rows are ≤2 lines.** If context needs more, put it in a linked dev-note / plan doc and leave a bare link on the row.
 - **Milestone rollup:** when a milestone lands, collapse per-task detail into a single line with the commit range; the plan file + git log hold the rest.
 - **Design questions:** re-read the design spec above before adjusting scope. **Real problem restated (owner, 2026-09-04): frame dips when a body FILLS the screen (and under heavy blood particles).** Next levers, pixel-scaling only: (1) post-hit probes → derivative normals + reduced-rate AO/thin (6 → ~1 evals/pixel), (2) quarter-res depth prepass to start rays near the skin without vertex cost. Adaptive resolution REJECTED for close-up (visible res drop). Tile binning measured nil — not the cost. Plan note: Obsidian `Claude Notes/Planning/2026-09-04-sdf-close-up-frame-rate-plan.md`.
+
+**Hit batching SHIPPED (2026-09-05):** pellet impacts batched per actor per frame (`beginHits/endHits`) — landing frame with 16 pellets 6.7 ms CPU (was 12–18 ms for 4 pellets; ~16 whole-body repacks on a point-blank double barrel). Left: per-pellet CPU flesh probes (~6 ms/16 pellets), first-shot 131 ms pipeline compile (prewarm). Notes: docs/dev-notes/2026-09-04-closeup-2-probes/notes.md.
+
+**Close-up wounded frame, quiet-machine verdict (2026-09-05):** ship 25.6 ms (step 1.0 + cull), step 0.6 = 32.2 (+26%), cull off = +1%, bones out of field = −16% (4.2 ms; the planned baked-bone replacement collects it), unwounded 15.1. Wound step 1.0 was THE lever and is shipped; the cull is a harmless no-op; the earlier 50 ms readings were machine load. Notes: docs/dev-notes/2026-09-04-closeup-2-probes/notes.md.

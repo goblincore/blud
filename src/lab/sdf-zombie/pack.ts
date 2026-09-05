@@ -2,7 +2,7 @@
 import type { BuiltBody, Primitive } from './types';
 import { bendCtrl } from './vec';
 import { MAX_CLUSTERS, MAX_PRIMS } from './validate';
-import { boxReach } from './extent';
+import { boxReach, shellReach, strandReach } from './extent';
 
 export const PRIM_STRIDE = 4;    // vec4
 export const CLUSTER_STRIDE = 4; // vec4
@@ -33,7 +33,8 @@ export interface PackedBody {
   /** x = radius at endpoint B, NEGATIVE when untapered; y = fold profile
    *  BITFIELD: bit 0 (1) chamfer, bit 1 (2) bent, bit 2 (4) shell,
    *  bit 3 (8) box, bit 4 (16) metal (SHADING-ONLY — every fold read of
-   *  prof is a bit mask, so the bit never changes geometry); zw spare
+   *  prof is a bit mask, so the bit never changes geometry), bit 5 (32)
+   *  STRAND (hairlock — the strand bundle; strand.ts); zw spare
    *  (groove depth/width). Negative is the sentinel rather than "equal to radius"
    *  because 0 is a LEGITIMATE taper target — a true point is the whole
    *  reason the taper exists. */
@@ -55,6 +56,14 @@ export interface PackedBody {
    *  see the primClip.set call below). Kept in step with ROW_PRIM_CLIP's
    *  docstring in march.wgsl.ts, which is the row table this mirrors. */
   primClip: Float32Array;
+  /** x = wrinkle amplitude (m), yzw = per-axis wrinkle frequency (rad/m).
+   *  All-zero for every prim that is not a warped shell, which is what makes
+   *  this row's arrival invisible to every existing character. */
+  primWarp: Float32Array;
+  /** x = strand count, y = wave, z = cycles, w = fat (hairlock 2026-09-05).
+   *  All zeros = no strand bundle — the exact no-op every pre-strand
+   *  character packs. Read only by prims with profile bit 5 (value 32). */
+  primStrand: Float32Array;
   restA: Float32Array;         // xyz = REST endpoint A, w = radius (0 = unwritten)
   restB: Float32Array;         // xyz = REST endpoint B, w = blendK
   clusterBounds: Float32Array; // xyz = centre, w = radius
@@ -154,6 +163,8 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
   const primColor = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const primShell = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const primClip = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
+  const primWarp = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
+  const primStrand = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const restA = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const restB = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
 
@@ -202,7 +213,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
     // (& 7) == 1) that leaves bit 4 clear. The shader folds any prof >= 4
     // as a shell ONLY through the (& 4) mask; the low bits still mean
     // chamfer/bend for the non-shell range and are ignored on a shell.
-    const prof = (p.blendProfile === 'chamfer' ? 1 : 0) + bent + (p.shell ? 4 : 0) + (p.box ? 8 : 0) + (p.metal ? 16 : 0);
+    const prof = (p.blendProfile === 'chamfer' ? 1 : 0) + bent + (p.shell ? 4 : 0) + (p.box ? 8 : 0) + (p.metal ? 16 : 0) + (p.strand ? 32 : 0);
     // primBend.w carries a BOX's corner-rounding fraction. Safe to share the
     // row: the shader reads ROW_PRIM_BEND only when prof & 2, and `bend=` on a
     // box is rejected at compile time, so a box never sets that bit and the
@@ -230,6 +241,20 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
     primClip.set(sh
       ? [sh.clipNormal[0], sh.clipNormal[1], sh.clipNormal[2], p.glow ?? 0]
       : [0, 0, 0, p.glow ?? 0], o);
+    // WRINKLES. Its own row, for the reason ROW_PRIM_WARP's doc gives. Zeros
+    // unless the author wrote `warp=`, and the shader's warp branch is gated
+    // on both being non-zero, so an unwarped shell takes the exact same code
+    // path it took before this row existed.
+    const wf = sh?.warpFreq ?? [0, 0, 0];
+    primWarp.set(sh
+      ? [sh.warpAmp ?? 0, wf[0]!, wf[1]!, wf[2]!]
+      : [0, 0, 0, 0], o);
+    // The strand bundle's four parameters ride their own row (hairlock).
+    // Zeros for everything else, so a body with no strand= packs rows
+    // bit-identical to before the row existed.
+    primStrand.set(p.strand === undefined
+      ? [0, 0, 0, 0]
+      : [p.strand.count, p.strand.wave, p.strand.cycles, p.strand.fat], o);
     primShape.set([
       p.radiusB === undefined ? -1 : p.radiusB,
       prof,
@@ -302,7 +327,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
     const shaped = own.some(p =>
       p.radiusB !== undefined || p.blendProfile === 'chamfer' || p.op === 'groove'
       || p.bend !== undefined || p.shell !== undefined || p.box !== undefined
-      || p.metal !== undefined);
+      || p.metal !== undefined || p.strand !== undefined);
     clusterRange.set(
       [c.start, c.count, c.alive ? 1 : 0, (oriented ? 1 : 0) + (shaped ? 2 : 0)], o);
   });
@@ -337,7 +362,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
       const shaped = gOwn.some(p =>
         p.radiusB !== undefined || p.blendProfile === 'chamfer' || p.op === 'groove'
         || p.bend !== undefined || p.shell !== undefined || p.box !== undefined
-        || p.metal !== undefined);
+        || p.metal !== undefined || p.strand !== undefined);
       groupRange.set([g.start, g.count, g.distort, (oriented ? 1 : 0) + (shaped ? 2 : 0)], o);
       groupCount++;
     }
@@ -345,7 +370,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
   });
 
   return {
-    primA, primB, primScale, primQuat, primShape, primBend, primColor, primShell, primClip, restA, restB, clusterBounds, clusterRange,
+    primA, primB, primScale, primQuat, primShape, primBend, primColor, primShell, primClip, primWarp, primStrand, restA, restB, clusterBounds, clusterRange,
     groupBounds, groupRange, clusterGroups, groupCount,
     primCount: body.prims.length,
     clusterCount: body.clusters.length,
@@ -404,8 +429,8 @@ function fitSphere(prims: Primitive[]): { center: [number, number, number]; radi
   const center: [number, number, number] = [sum[0] / pts, sum[1] / pts, sum[2] / pts];
   let radius = 0;
   for (const p of fitTo) {
-    const reach = Math.max(p.radius, p.radiusB ?? p.radius) * boxReach(p.box) * Math.max(p.scale[0], p.scale[1], p.scale[2])
-      + (p.shell ? p.shell.thickness : 0);
+    const reach = Math.max(p.radius, p.radiusB ?? p.radius) * boxReach(p.box) * strandReach(p.strand) * Math.max(p.scale[0], p.scale[1], p.scale[2])
+      + shellReach(p);
     if (p.orient && Math.abs(1 - p.orient[3]) > 1e-6) {
       // An oriented prim rotates about its MIDPOINT, so its endpoints move:
       // bound by the rotation-invariant ball around the midpoint instead of

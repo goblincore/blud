@@ -1,7 +1,14 @@
 // src/lab/sdf-zombie/blob-compile.ts
 import { type BlobDoc, type BlobPart, BlobError } from './blob-ast';
+import {
+  STRAND_COUNT_MAX, STRAND_CYCLES_MAX, STRAND_CYCLES_MIN,
+  STRAND_FAT_MAX, STRAND_FAT_MIN, STRAND_WAVE_MAX,
+} from './strand';
 import type { BodyDef, BoneDef, PrimDef, Vec3 } from './types';
 import { DEFAULT_FACE, facePrims, type FaceParams } from './face';
+
+/** No wrinkles. Typed so the ?? fallbacks below stay a Vec3, not a number[]. */
+const ZERO_FREQ: Vec3 = [0, 0, 0];
 import { DEFAULT_SHEET, type FaceSheetParams } from './blob-face-sheet';
 import { FLESH_PRESETS, type FleshMaterial } from './material';
 
@@ -283,6 +290,53 @@ function partToPrim(p: BlobPart): PrimDef {
     // mismatch, not an argument mismatch, and `box` is the thing to drop —
     // if the bend= check ran first it would tell the author to drop `bend`,
     // which does not fix anything.
+    // WRINKLES are gated on BOTH parameters being non-zero — that is what
+    // keeps an unwarped shell bit-identical — so half a pair is a silent
+    // no-op: the author writes `warp=0.012`, the emitter echoes it back, and
+    // the cloth comes out flat. Fail with the line instead. This is the same
+    // class as `chamfer` on a shell, and it is caught here rather than
+    // clamped because there is no sensible frequency to guess.
+    const wf = p.warpFreq ?? ZERO_FREQ;
+    const wfLen = Math.hypot(wf[0]!, wf[1]!, wf[2]!);
+    const wa = p.warpAmp ?? 0;
+    if (wa !== 0 && wfLen === 0)
+      throw new BlobError(
+        'warp= needs a warpFreq= to go with it — amplitude alone is a silent '
+        + 'no-op. Wrinkles are metres of displacement at radians per metre; '
+        + 'try warpFreq=40 for a fine weave, 15 for a heavy drape, or '
+        + 'warpFreq=(20,0,20) for pleats that run vertically',
+        p.src.line, p.src.indent + 1);
+    if (wfLen !== 0 && wa === 0)
+      throw new BlobError(
+        'warpFreq= without warp= does nothing — set warp= to the wrinkle '
+        + 'amplitude in metres', p.src.line, p.src.indent + 1);
+    // Wrinkles live on the SHEET. On anything else the parser still reads the
+    // arguments and the compiler would drop them, which is the silent-echo
+    // failure again.
+    if ((wa !== 0 || wfLen !== 0) && p.kind !== 'shell')
+      throw new BlobError(
+        `warp= is only supported on a shell — a ${p.kind} is a solid mass, not `
+        + 'cloth. Author the garment as a shell, or drop warp=',
+        p.src.line, p.src.indent + 1);
+    // THE CAP IS ON THE PRODUCT, not on either factor. The sheet is the level
+    // set of `base + warp`, and a displaced level set does not tear however
+    // large the displacement — what breaks it is the warp's GRADIENT growing
+    // enough to cancel the base's. That gradient is bounded by |A| * |F|, so
+    // at |A| * |F| >= 1 the combined gradient can reach zero: the surface
+    // pinches, and the Lipschitz divisor the field is scaled by hits 2 and
+    // the march halves its step everywhere the cloth is on screen. Both are
+    // the same number, which is why one check covers them.
+    //
+    // Wide amplitude at low frequency is a heavy drape and is fine; the
+    // combination this rejects is deep AND fine, which is not a fabric.
+    const warpLip = Math.abs(wa) * wfLen;
+    if (warpLip >= 1)
+      throw new BlobError(
+        `warp=${wa} at warpFreq length ${wfLen.toFixed(1)} gives a warp gradient `
+        + `of ${warpLip.toFixed(2)}, which can cancel the surface's own: the `
+        + 'sheet pinches and the march halves its step. Keep warp * '
+        + 'length(warpFreq) under 1 — deep wrinkles want a LOW frequency',
+        p.src.line, p.src.indent + 1);
     if (p.box && p.kind === 'shell')
       throw new BlobError(
         'box is not supported on a shell — a shell thins a closed capsule; '
@@ -311,6 +365,56 @@ function partToPrim(p: BlobPart): PrimDef {
       throw new BlobError(
         `round= must be between 0 and 1 (a fraction of r), got ${p.round}`,
         p.src.line, p.src.indent + 1);
+    // STRAND (hairlock, 2026-09-05): the bundle-of-strands modifier. Every
+    // rejection names the line and NONE clamps — a clamped wave or count is
+    // a number whose authored value stopped being the value in effect.
+    if (p.strand !== null) {
+      // A strand bundle needs two ends to run between (its strands wave along
+      // the curve parameter); a `blob` with no `tip=` has one point, and the
+      // cross-section plane the strands repeat across is defined from a
+      // tangent that does not exist. Same shape as the bend= rejection above.
+      if (p.kind === 'blob' && p.tip === null)
+        throw new BlobError(
+          'strand= needs two distinct ends to run strands BETWEEN: use it on a '
+          + 'bar, or give the blob a tip=(x,y,z) so its far end sits somewhere else',
+          p.src.line, p.src.indent + 1);
+      // A strand prim IS its own field construction (the tangent-capsule
+      // fold in strand.ts); on a carve or groove it would silently never be
+      // the cutter the words ask for, and on a shell or box it has no
+      // meaning the field defines — so all four fail loudly.
+      if (p.kind === 'carve' || p.kind === 'groove')
+        throw new BlobError(
+          'strand= is not supported on a carve/groove — strands are additive; '
+          + 'a cutting bundle is a shape nobody has defined', p.src.line, p.src.indent + 1);
+      if (p.kind === 'shell')
+        throw new BlobError(
+          'strand= is not supported on a shell — a shell thins a closed sweep; '
+          + 'a bundle of strands is not one', p.src.line, p.src.indent + 1);
+      if (p.box)
+        throw new BlobError(
+          'strand= is not supported on a box — strands repeat a swept tube, '
+          + 'not a slab', p.src.line, p.src.indent + 1);
+      if (!Number.isInteger(p.strand) || p.strand < 1 || p.strand > STRAND_COUNT_MAX)
+        throw new BlobError(
+          `strand= is an integer strand count, 1..${STRAND_COUNT_MAX}, got ${p.strand}`,
+          p.src.line, p.src.indent + 1);
+      // The 0.39 coverage budget is strand.ts's: past it the nearest strand
+      // can sit outside the evaluated 3x3 neighbourhood and the repetition
+      // stops being the union of strands. The static jitter spends
+      // 0.4*wave of it, hence wave + 0.4*wave <= 0.39.
+      if (p.strandWave < 0 || p.strandWave > STRAND_WAVE_MAX)
+        throw new BlobError(
+          `wave= is 0..${STRAND_WAVE_MAX} (the fold-coverage budget 0.39 less the `
+          + `0.4x jitter), got ${p.strandWave}`, p.src.line, p.src.indent + 1);
+      if (p.strandCycles < STRAND_CYCLES_MIN || p.strandCycles > STRAND_CYCLES_MAX)
+        throw new BlobError(
+          `cycles= is ${STRAND_CYCLES_MIN}..${STRAND_CYCLES_MAX}, got ${p.strandCycles}`,
+          p.src.line, p.src.indent + 1);
+      if (p.strandFat < STRAND_FAT_MIN || p.strandFat > STRAND_FAT_MAX)
+        throw new BlobError(
+          `fat= is ${STRAND_FAT_MIN}..${STRAND_FAT_MAX} (a fraction of the cell), got ${p.strandFat}`,
+          p.src.line, p.src.indent + 1);
+    }
     return {
       bone: p.bone,
       src: p.src.line,
@@ -344,10 +448,20 @@ function partToPrim(p: BlobPart): PrimDef {
               clipNormal: p.clipNormal as Vec3,
               clipOffset: p.clipOffset,
               rim: p.rim,
+              warpAmp: p.warpAmp ?? 0,
+              warpFreq: p.warpFreq ?? ZERO_FREQ,
             },
           }
         : {}),
       ...(p.box ? { box: { round: p.round } } : {}),
+      ...(p.strand === null ? {} : {
+        strand: {
+          count: p.strand,
+          wave: p.strandWave,
+          cycles: p.strandCycles,
+          fat: p.strandFat,
+        },
+      }),
     } satisfies PrimDef;
 }
 
