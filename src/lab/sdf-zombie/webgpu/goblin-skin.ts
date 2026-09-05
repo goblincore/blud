@@ -29,6 +29,8 @@ export const GOBLIN_SKIN = {
   mottleScale: 1.6,
   /** `mottleAmp 0.65`. */
   mottleAmp: 0.65,
+  /** `mottleColor 0.21 0.19 0.06` -- the patch colour, LINEAR rgb. */
+  mottleColorLinear: [0.21, 0.19, 0.06] as const,
   /** How far the warts push the normal. Tuned so the silhouette stays smooth
    *  AND every texel's blue byte stays >= 160 with the seams agreeing -- the
    *  plan's contingency for the normal-map tests (lower until z dominates). */
@@ -111,6 +113,55 @@ export function goblinNormalPixels(size: number): Uint8Array {
       px[i]     = Math.round((nx + 1) * 127.5);
       px[i + 1] = Math.round((ny + 1) * 127.5);
       px[i + 2] = Math.round((nz / len + 1) * 127.5);
+      px[i + 3] = 255;
+    }
+  }
+  return px;
+}
+
+/** The wart layer of the height field on its own, 0..1, on the same lattice
+ *  and seed `height()` uses -- so the colour map can darken exactly where the
+ *  normal map bumps. Exported for the test that pins that agreement. */
+export function goblinWartField(u: number, v: number): number {
+  const base = 3;
+  return tileNoise(u * base * 2, v * base * 2, base * 2, 7);
+}
+
+/**
+ * A tiling sRGB colour map, RGBA, `size` x `size`: the goblin's base green
+ * with the blob's mottle patches mixed in, and a soft dark ring on each wart.
+ *
+ * WHY A COLOUR MAP. With only a normal map the hand was one flat green that
+ * a 0.30 emissive then washed out completely (the owner's "thin green
+ * tubes"). Colour variation at mottleScale is what the marched goblin has
+ * and what reads at arm's length; the normal map alone reads only in
+ * specular. Same lattice and seeds as the height field, so the two agree.
+ */
+export function goblinAlbedoPixels(size: number): Uint8Array {
+  const px = new Uint8Array(size * size * 4);
+  const [br, bg, bb] = GOBLIN_SKIN.baseLinear;
+  const [mr, mg, mb] = GOBLIN_SKIN.mottleColorLinear;
+  const base = 3;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const u = x / size, v = y / size;
+      // Mottle: two octaves, centred on 0 so the MEAN stays the base colour.
+      let m = tileNoise(u * base, v * base, base, 1) * 0.65
+            + tileNoise(u * base * 2, v * base * 2, base * 2, 2) * 0.35;
+      m = (m - 0.5) * 2 * GOBLIN_SKIN.mottleAmp;          // -amp .. +amp
+      const k = Math.max(0, m) * 4.5;                     // only the dark half mixes toward mottleColor
+      // Warts: a soft ring of darkening, strongest at the wart's crown.
+      const w = Math.pow(Math.max(0, goblinWartField(u, v) - 0.55) / 0.45, 1.5) * 0.45;
+      const mix = Math.min(1, k + w);
+      const lin = [
+        br + (mr - br) * mix + Math.min(0, m) * 0.10 * br,
+        bg + (mg - bg) * mix + Math.min(0, m) * 0.10 * bg,
+        bb + (mb - bb) * mix + Math.min(0, m) * 0.10 * bb,
+      ];
+      const i = (y * size + x) * 4;
+      px[i]     = linearToSrgbByte(lin[0]!);
+      px[i + 1] = linearToSrgbByte(lin[1]!);
+      px[i + 2] = linearToSrgbByte(lin[2]!);
       px[i + 3] = 255;
     }
   }
