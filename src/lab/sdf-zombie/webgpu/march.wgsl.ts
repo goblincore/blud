@@ -1979,12 +1979,20 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   levelShadowMatrix: mat4x4<f32>,
   levelShadowCfg: vec4<f32>,
   windDrift: vec3<f32>,
-  // Quarter-res depth prepass (close-up task 3) — bound POSITIONALLY LAST,
-  // in the same commit as the WGSL input (the meltCfg rule). cfg is
-  // x enabled, y the coarse block footprint (radius per unit distance — the
-  // 2*sqrt(2) SDF-pixel half-diagonal), zw spare. Disabled or untouched, the
-  // fetch hands back 0 and the max() at the ray start folds it away, so
+  // Quarter-res depth prepass - close-up task 3. Bound POSITIONALLY LAST,
+  // in the same commit as the WGSL input - the meltCfg rule. cfg is
+  // x enabled, y the coarse block footprint - radius per unit distance, the
+  // 2*sqrt2 SDF-pixel half-diagonal - zw spare. Disabled or untouched, the
+  // fetch hands back 0 and the max at the ray start folds it away, so
   // every view that never opts in marches bit-identical.
+  // HAZARD - WIDER THAN THE COLON WARNING AT THE TOP OF THIS LIST - three
+  // captures the parameter list UP TO THE FIRST CLOSE-PAREN, so a paren in
+  // any comment here also truncates the parsed inputs; the missing params
+  // then get float 0 substituted at the call, WGSL generation dies with a
+  // JoinNode null deref, and every body renders unlit-black behind a
+  // console-only error - 2026-09-05. A stray name-colon-type pattern in a
+  // comment is the OLDER failure - the phantom input shifts every binding
+  // by one slot. NO PARENS and NO COLONS in any comment in this list. Ever.
   depthPreTex: texture_2d<f32>,
   depthPreCfg: vec4<f32>
 ) -> vec4<f32> {
