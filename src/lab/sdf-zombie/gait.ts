@@ -20,38 +20,52 @@
 // it reads hand-posed rather than sinusoidal.
 import type { Vec3 } from './types';
 import type { BuildResult } from './build-body';
+import { add, len, sub } from './vec';
+import { blendCurves, sampleCurve, sampleStance, type GaitCurves } from './gait-curves';
+import { SOLDIER_WALK } from './gait-curves/soldier-walk';
+import { SOLDIER_RUN } from './gait-curves/soldier-run';
 
 const TAU = Math.PI * 2;
 const Z: Vec3 = [0, 0, 0];
 
-/** The two authored arm styles — see GAIT_TUNING.armStyle. */
-export type ArmStyle = 'swing' | 'reach';
+/** The three authored arm styles — see GAIT_TUNING.armStyle. */
+export type ArmStyle = 'swing' | 'reach' | 'carry';
 
 // ---------------------------------------------------------------------------
 // Joint schema — one name per rig point.
 // ---------------------------------------------------------------------------
 
-/** One name per rig point, mirroring the zombie's authored bones (body.ts).
- *  Mirrored bones use the `.l`/`.r` suffix convention from mirror.ts. */
+/** One name per rig point. The first 17 are the PRIMARY joints (the zombie's
+ *  authored bones). The rest are SECONDARY: extra rig points that richer
+ *  skeletons have (a two- or three-bone spine, clavicles that start off the
+ *  spine, hand and foot bones with free tips). A secondary joint carries a
+ *  derived offset (rigid with its parent) — nothing in the gait is authored
+ *  against it, so a body without one loses nothing. */
 export type GaitJointName =
   | 'pelvis' | 'hips' | 'chest' | 'neck' | 'head'
   | 'shoulderL' | 'shoulderR' | 'elbowL' | 'elbowR' | 'handL' | 'handR'
-  | 'hipL' | 'hipR' | 'kneeL' | 'kneeR' | 'footL' | 'footR';
+  | 'hipL' | 'hipR' | 'kneeL' | 'kneeR' | 'footL' | 'footR'
+  | 'spineA' | 'spineB' | 'clavicleL' | 'clavicleR'
+  | 'handTipL' | 'handTipR' | 'toeL' | 'toeR';
 
-/** The 17 joints in rig-point order. bindRig emits points as dedup'd bone
- *  head/tail positions in body.bones iteration order; jointNamesForBody
- *  reproduces that order with names, so `pose.offsets[names[i]]` lines up
- *  with `rig.points[i]`. */
+/** Every joint, primary first — the ORDER is the naming priority when two
+ *  bone ends share a position (jointNamesForBody). */
 export const GAIT_JOINTS: readonly GaitJointName[] = [
   'pelvis', 'hips', 'chest', 'neck', 'head',
   'shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'handL', 'handR',
-  'hipL', 'kneeL', 'hipR', 'kneeR', 'footL', 'footR',
+  'hipL', 'hipR', 'kneeL', 'kneeR', 'footL', 'footR',
+  'spineA', 'spineB', 'clavicleL', 'clavicleR', 'handTipL', 'handTipR', 'toeL', 'toeR',
 ];
 
+/** A GAIT PROFILE — every knob of one way of walking. The zombie's numbers
+ *  are `SHAMBLE` (=== GAIT_TUNING, the historical name, kept for every
+ *  caller and test that reads it). Other characters get their own. */
 /** All gait frequencies and amplitudes in one place — the "motion DNA".
  *  Frequencies are per-stride ratios of the master stride clock so sway/bob
  *  never beat against the steps. */
 export const GAIT_TUNING = {
+  /** Profile name, for readouts. */
+  name: 'shamble',
   /** Stride cycles per second — the master clock. Low on purpose (shamble). */
   strideFreq: 1.05,
   /** Hip-sway cycles per stride (0.5 = one sway per stride cycle). */
@@ -95,6 +109,10 @@ export const GAIT_TUNING = {
    *  (both arms raised toward the heading, slight bob/sway). Default reach:
    *  it is a zombie. */
   armStyle: 'reach' as ArmStyle,
+  /** Forward pitch of the whole upper body about the hips (degrees). The
+   *  motion layer rotates every joint above the hips by this — a rotation
+   *  of targets, never a displacement (the reach-pose lesson). */
+  torsoLean: 0,
   /** Reach style: shoulder pivot pitch (rad) — 0 is the authored hang,
    *  π/2 is straight at the horizon. The reach pose is a ROTATION about the
    *  shoulder anchor, never an additive displacement (see GaitPose.reach):
@@ -151,6 +169,93 @@ export const GAIT_TUNING = {
   /** Damage: lurch wobble frequency (Hz). */
   damageLurchFreq: 0.7,
 } as const;
+
+/** The body's REST leg segment vectors, body-local — what curve mode needs
+ *  to turn clip angles back into positions with THIS body's lengths. */
+export interface GaitLimbs {
+  L: { thigh: Vec3; shin: Vec3 };
+  R: { thigh: Vec3; shin: Vec3 };
+}
+
+export type GaitProfile = {
+  -readonly [K in keyof typeof GAIT_TUNING]: (typeof GAIT_TUNING)[K] extends number ? number
+    : (typeof GAIT_TUNING)[K] extends string ? string : (typeof GAIT_TUNING)[K];
+} & { armStyle: ArmStyle; curves?: GaitCurves };
+
+export const SHAMBLE: GaitProfile = GAIT_TUNING as unknown as GaitProfile;
+
+// CURVE MODE: MARCH and RUN carry a sampled reference clip (curves), and
+// when the caller passes the body's rest leg vectors the knee/foot offsets
+// and hip bob are rebuilt from those curves — strideLen, footLift, kneeBend,
+// kneeLift, kneeTrack, footPush, stanceDuty and bobAmp are then UNUSED for
+// the legs and root (they only remain as the no-limbs fallback).
+
+/** An upright patrol walk: gun carried low, short quiet steps. */
+export const MARCH: GaitProfile = {
+  ...SHAMBLE,
+  name: 'march',
+  strideFreq: SOLDIER_WALK.freq,
+  curves: SOLDIER_WALK,
+  // 0.34, not the 0.45 first shipped: on 0.84 m legs a 0.45 reach nearly
+  // straightens the swing leg (same lesson as RUN's strideLen).
+  strideLen: 0.34,
+  footLift: 0.10,
+  footPush: 0.06,
+  stanceDuty: 0.58,
+  bobAmp: 0.02,
+  rockAmp: 0.01,
+  swayAmp: 0.03,
+  shoulderSway: 0.35,
+  armSwing: 0.06,
+  asymJitter: 0.08,
+  armStyle: 'carry',
+  torsoLean: 0,
+};
+
+/** A run: long stride, real foot lift, a flight phase in the bob, a lean. */
+export const RUN: GaitProfile = {
+  ...SHAMBLE,
+  name: 'run',
+  strideFreq: SOLDIER_RUN.freq,
+  curves: SOLDIER_RUN,
+  // The first cut ran 0.75 m strides on 0.84 m legs, so the swing leg had to
+  // STRAIGHTEN to reach and the run read as stiff-legged stretching (owner,
+  // 2026-09-05: "he doesn't bend his knees"). A runner's reach is well under
+  // half the leg; the speed reads from cadence and the lean, not the reach.
+  strideLen: 0.42,
+  // Knees high and well FORWARD of the hip->ankle line: the bow is what the
+  // verlet folds the leg around, so it has to be big enough to be seen.
+  footLift: 0.28,
+  footPush: 0.10,
+  stanceDuty: 0.45,
+  kneeBend: 0.26,
+  kneeLift: 0.14,
+  kneeTrack: 0.35,
+  bobAmp: 0.04,
+  rockAmp: 0.02,
+  swayAmp: 0.03,
+  shoulderSway: 0.5,
+  armSwing: 0.10,
+  asymJitter: 0.06,
+  armStyle: 'carry',
+  torsoLean: 12,
+};
+
+/** Lerp every numeric knob; strings (name, armStyle) snap at w = 0.5 so the
+ *  hands never hover between two grips. */
+export function blendProfiles(a: GaitProfile, b: GaitProfile, w: number): GaitProfile {
+  const t = w < 0 ? 0 : w > 1 ? 1 : w;
+  if (t === 0) return a;
+  if (t === 1) return b;
+  const out = { ...(t < 0.5 ? a : b) } as Record<string, unknown>;
+  for (const k of Object.keys(a) as (keyof GaitProfile)[]) {
+    const av = a[k], bv = b[k];
+    if (typeof av === 'number' && typeof bv === 'number') out[k] = av + (bv - av) * t;
+  }
+  if (a.curves && b.curves) out.curves = blendCurves(a.curves, b.curves, t);
+  else out.curves = (t < 0.5 ? a : b).curves;
+  return out as GaitProfile;
+}
 
 // ---------------------------------------------------------------------------
 // Public types.
@@ -216,6 +321,8 @@ export interface GaitPose {
   offsets: Record<Exclude<GaitJointName, 'pelvis'>, Vec3>;
   /** The reach-style arm pivot spec — present only when armStyle === 'reach'. */
   reach?: ReachPose;
+  /** Upper-body forward lean (rad), from the profile's torsoLean. */
+  lean: number;
   /** Normalised stride phase in [0, 1) — 0 = left-foot stance start. */
   phase: number;
   /** Which feet are currently planted. */
@@ -290,10 +397,12 @@ function stanceProgress(phi: number, duty: number): { stance: boolean; u: number
 export function stepGait(
   state: GaitState, skew: GaitSkew, dt: number,
   armStyle: ArmStyle = GAIT_TUNING.armStyle,
+  profile: GaitProfile = SHAMBLE,
+  limbs?: GaitLimbs,
 ): GaitStep {
   const time = state.time + Math.max(dt, 0);
   const s = state.seed;
-  const T = GAIT_TUNING;
+  const T = profile;
 
   const missingL = !!skew.missing.legL;
   const missingR = !!skew.missing.legR;
@@ -306,6 +415,7 @@ export function stepGait(
   // Exactly one leg missing ⇒ hop-limp. Both or neither ⇒ regular gait.
   const hop = missingL !== missingR;
   const damage = clamp01(skew.damageMeter);
+  const curves = !hop && limbs ? T.curves : undefined;
 
   // Master clock. Legs alternate π apart; sway/bob/rock derive from the same
   // phase so they never beat against the steps.
@@ -330,7 +440,10 @@ export function stepGait(
   const survivor = missingL ? phiR : phiL;
   const bobCurve = hop ? (1 + Math.cos(survivor)) / 2 : (1 + Math.cos(T.bobPerStride * phiL)) / 2;
   const sway = swayAmp * Math.sin(swayPhase);
-  const bob = -bobAmp * (hop ? T.hopBobScale : 1) * bobCurve;
+  const legLen = limbs ? len(limbs.L.thigh) + len(limbs.L.shin) : 0;
+  const bob = curves
+    ? sampleCurve(curves.hipsY, ((phiL % TAU) + TAU) % TAU / TAU) * legLen * (1 - damage * T.damageBobScale)
+    : -bobAmp * (hop ? T.hopBobScale : 1) * bobCurve;
   const rock = T.rockAmp * bobCurve;
   const lurch =
     damage * T.damageLurchAmp * Math.sin(time * T.damageLurchFreq * TAU + asym(s, 'lurch') * Math.PI);
@@ -354,6 +467,32 @@ export function stepGait(
     const missing = side === 'L' ? missingL : missingR;
     if (missing) return { foot: Z, knee: Z, stance: false };
     const wounded = side === 'L' ? woundedL : woundedR;
+    if (curves) {
+      const c = side === 'L' ? curves.L : curves.R;
+      const rest = side === 'L' ? limbs!.L : limbs!.R;
+      const p = ((phiL % TAU) + TAU) % TAU / TAU; // the LEFT clock; the R curves are already half a cycle off
+      const scaleA = (side === 'L' ? aL : aR) * (wounded ? T.woundedSwingScale : 1);
+      const thigh = sampleCurve(c.thigh, p) * scaleA;
+      const flex = Math.max(0, sampleCurve(c.knee, p) * scaleA);
+      // Pitch the REST segment about x (the sagittal plane): x keeps the
+      // body's lateral tilt, and the segment length is preserved exactly —
+      // the plan's `[x, -L*cos, L*sin]` form overshoots by x²/L (~0.26 mm
+      // here), which the length-preservation test rejects at 1e-6.
+      const pitch = (v: Vec3, a: number): Vec3 => [
+        v[0],
+        v[1] * Math.cos(a) + v[2] * Math.sin(a),
+        v[2] * Math.cos(a) - v[1] * Math.sin(a),
+      ];
+      const knee = pitch(rest.thigh, thigh);
+      const shin = pitch(rest.shin, thigh - flex);
+      const ankle = add(knee, shin);
+      const restAnkle = add(rest.thigh, rest.shin);
+      return {
+        foot: sub(ankle, restAnkle),
+        knee: sub(knee, rest.thigh),
+        stance: sampleStance(c.stance, p),
+      };
+    }
     const sideScale =
       (side === 'L' ? aL : aR) *
       (wounded ? T.woundedSwingScale : 1) *
@@ -385,7 +524,7 @@ export function stepGait(
     if (missing) return { elbow: Z, hand: Z };
     const wounded = side === 'L' ? woundedArmL : woundedArmR;
     const aSide = side === 'L' ? aL : aR;
-    if (armStyle === 'reach') return { elbow: Z, hand: Z };
+    if (armStyle !== 'swing') return { elbow: Z, hand: Z };
     const boost = (side === 'L' ? missingArmR : missingArmL) ? T.missingArmSwingBoost : 1;
     const sideScale = aSide * boost * (wounded ? T.woundedArmSwingScale : 1);
     const swing = Math.sin(Math.PI * stanceProgress(legPhi, duty(side)).u);
@@ -448,6 +587,16 @@ export function stepGait(
     kneeR: legB.knee,
     footL: legA.foot,
     footR: legB.foot,
+    // Secondary joints — rigid with their parents. Nothing is authored
+    // against them; they exist so richer skeletons have a target per point.
+    spineA: [sway * 0.75, bob * 0.75, 0],
+    spineB: [sway * 0.65, bob * 0.65, 0],
+    clavicleL: [sway * 0.6, bob * 0.6, 0],
+    clavicleR: [sway * 0.6, bob * 0.6, 0],
+    handTipL: armA.hand,
+    handTipR: armB.hand,
+    toeL: legA.foot,
+    toeR: legB.foot,
   };
 
   let p = (phiL % TAU) / TAU;
@@ -458,6 +607,7 @@ export function stepGait(
       rootOffset,
       offsets,
       reach,
+      lean: T.torsoLean * Math.PI / 180,
       phase: p,
       stance: { legL: legA.stance, legR: legB.stance },
       hop,
@@ -470,23 +620,32 @@ export function stepGait(
 // ---------------------------------------------------------------------------
 
 // Bone-name → joint-name table. Mirrored bones (suffix `.l`/`.r`) map to the
-// sided head/tail names; centerline bones stay unsided. Matches body.ts.
-// Values use the unsuffixed base names ('shoulder', 'hip', …) that become
-// sided once the `.l`/`.r` suffix is applied — see jointForBoneEnd.
-const JOINT_AT: Record<string, { head?: string; tail?: string }> = {
-  pelvis: { head: 'pelvis', tail: 'hips' },
-  spine: { head: 'hips', tail: 'chest' },
-  neck: { head: 'chest', tail: 'neck' },
-  skull: { head: 'neck', tail: 'head' },
-  clavicle: { head: 'chest', tail: 'shoulder' },
+// sided names. The zombie's names (spine, upperArm, foreArm) and the newer
+// `.blob` names (spine1/chest/spine2, upperarm/forearm/hand, foot) both
+// resolve. A bone end absent here is a wiring error (makeMotionJoints nulls).
+const JOINT_AT: Record<string, { head: string; tail: string }> = {
+  pelvis:   { head: 'pelvis',   tail: 'hips' },
+  spine:    { head: 'hips',     tail: 'chest' },
+  spine1:   { head: 'hips',     tail: 'spineA' },
+  chest:    { head: 'spineA',   tail: 'spineB' },
+  spine2:   { head: 'spineB',   tail: 'chest' },
+  neck:     { head: 'chest',    tail: 'neck' },
+  skull:    { head: 'neck',     tail: 'head' },
+  clavicle: { head: 'clavicle', tail: 'shoulder' },
   upperArm: { head: 'shoulder', tail: 'elbow' },
-  foreArm: { head: 'elbow', tail: 'hand' },
-  thigh: { head: 'hip', tail: 'knee' },
-  shin: { head: 'knee', tail: 'foot' },
+  upperarm: { head: 'shoulder', tail: 'elbow' },
+  foreArm:  { head: 'elbow',    tail: 'hand' },
+  forearm:  { head: 'elbow',    tail: 'hand' },
+  hand:     { head: 'hand',     tail: 'handTip' },
+  thigh:    { head: 'hip',      tail: 'knee' },
+  shin:     { head: 'knee',     tail: 'foot' },
+  foot:     { head: 'foot',     tail: 'toe' },
 };
 
 /** The joint names that carry a per-side suffix (centerline joints never do). */
-const SIDED: ReadonlySet<string> = new Set(['shoulder', 'elbow', 'hand', 'hip', 'knee', 'foot']);
+const SIDED: ReadonlySet<string> = new Set([
+  'clavicle', 'shoulder', 'elbow', 'hand', 'handTip', 'hip', 'knee', 'foot', 'toe',
+]);
 
 /** Joint name for a resolved bone's head/tail, or null for unknown bones.
  *  e.g. jointForBoneEnd('thigh.l', 'tail') === 'kneeL'. */
@@ -500,21 +659,47 @@ export function jointForBoneEnd(bone: string, end: 'head' | 'tail'): GaitJointNa
   return at as GaitJointName;
 }
 
+/** Same tolerance bindRig dedups rig points with. */
+const KEY_EPS = 1e-4;
+
 /** Joint names in rig-point order for a built body — the exact zip key for
- *  task-4 wiring: `pose.offsets[names[i]]` (or pose.rootOffset when the name
- *  is 'pelvis') applies to `rig.points[i]`'s rest target. Same iteration and
- *  dedup semantics as bindRig, so the order always matches. */
+ *  the wiring: `pose.offsets[names[i]]` applies to `rig.points[i]`'s target.
+ *
+ *  Dedup is by POSITION, exactly as bindRig does it: a bone's tail and its
+ *  child's head are one rig point and get ONE name. When several bone ends
+ *  share a position (the zombie's spine.tail, neck.head, clavicle.l.head and
+ *  clavicle.r.head are all `chest`), the name earliest in GAIT_JOINTS wins —
+ *  so `chest` beats `spineB` on the goblin, whose chest bone runs straight
+ *  into the neck. A name is never used twice; a candidate already taken
+ *  falls through to the next, and a point left nameless shows up as a
+ *  count mismatch in makeMotionJoints (null), never as a scrambled pose. */
 export function jointNamesForBody(body: BuildResult): GaitJointName[] {
-  const names: GaitJointName[] = [];
-  const seen = new Set<GaitJointName>();
+  const positions: Vec3[] = [];
+  const candidates: GaitJointName[][] = [];
+  const indexOf = (p: Vec3): number => {
+    for (let i = 0; i < positions.length; i++) {
+      const q = positions[i]!;
+      if (Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]) < KEY_EPS) return i;
+    }
+    positions.push(p);
+    candidates.push([]);
+    return positions.length - 1;
+  };
   for (const [boneName, bone] of body.bones.entries()) {
     for (const end of ['head', 'tail'] as const) {
+      const i = indexOf(bone[end]);
       const name = jointForBoneEnd(boneName, end);
-      if (name && !seen.has(name)) {
-        seen.add(name);
-        names.push(name);
-      }
+      if (name && !candidates[i]!.includes(name)) candidates[i]!.push(name);
     }
+  }
+  const rank = (n: GaitJointName) => GAIT_JOINTS.indexOf(n);
+  const used = new Set<GaitJointName>();
+  const names: GaitJointName[] = [];
+  for (const cands of candidates) {
+    const pick = cands.slice().sort((a, b) => rank(a) - rank(b)).find(n => !used.has(n));
+    if (!pick) continue;
+    used.add(pick);
+    names.push(pick);
   }
   return names;
 }

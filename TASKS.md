@@ -20,8 +20,38 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
-**[~] Zombie analytic normals — Tasks 1–3 technical checks passed; owner approved intact appearance; wound gradients and timing remain pending (2026-09-05).**
-[Verdict](docs/dev-notes/2026-09-05-zombie-analytic-normals/verdict.md); intact head/torso analytic coverage 83.58% / 86.61%, exact depth/fallback parity. Head-wounded scene accelerates lower-body skin only; default off, no speedup measured.
+**SOLDIER ANIMATION — BUILT, AWAITING OWNER LOOK (2026-09-05).** The soldier
+marches, runs, carries the shorty and hip-fires it in the lab; the skinned
+kit and the gun ride the rig (`rig-frames.ts` → `KitOverlay.pose`,
+`held-prop.ts`). Gait is now a PROFILE (`SHAMBLE` = the zombie verbatim,
+pinned bit-exact in `gait-pins.test.ts`; `MARCH`/`RUN` blended by speed);
+arms have a third style, `carry` (right arm authored rotations, left hand
+FABRIK'd onto the gun's fore-end — `carry.ts`). Found and fixed on the way:
+the goblin and soldier had NO motion at all (rig points the gait could not
+name → `makeMotionJoints` null); the joint schema grew eight secondary names
+and dedups by position. Two dispatch misses fixed by hand after the chain:
+three's GLTFLoader strips the dots from `clavicle.l`-style node names
+(`kitBoneKey`), and `setMotionEnabled(false)` snaps the rest pose to the
+authored base, so holdPose now freezes with `poseHeld` instead. Lab:
+`,`/`.` speed band (`1` is a sever key), `F` fire, `K` collapse;
+`__sdfLab.holdPose('walk'|'run'|'hip')` for captures; `BLOB_POSE=` on the
+turntable. Known pre-existing: a WebGPU "binding size is zero" validation
+error on lab boot, on the zombie page too — not from this work. Phase 2
+(shoot-back AI in sdf-game) and phase 3 (shouldered aim) are separate specs.
+Round 3: the march and run legs now follow per-phase curves sampled from the
+soldier's `Walking` clip and the Meshy zombie-biped `running` clip
+(`gait-curves/`, `scripts/gait-from-clip.ts`); the zombie stays on the
+sinusoid shamble, pinned
+([clip-gait spec](docs/superpowers/specs/2026-09-05-clip-driven-gait-design.md)).
+Lab dressing room: upload a face PNG / pick a skin tone, save both into the
+repo via the dev-only `/__lab/save-*` endpoints
+([spec](docs/superpowers/specs/2026-09-05-lab-dressing-room-design.md)).
+[spec](docs/superpowers/specs/2026-09-05-soldier-animation-design.md) ·
+[plan](docs/superpowers/plans/2026-09-05-soldier-animation.md) ·
+[strips](docs/dev-notes/2026-09-05-soldier-animation/notes.md)
+
+**[~] Zombie analytic normals — Tasks 1–3 passed; owner approved wound/gameplay appearance; final Task 4 checks and timing pending (2026-09-05).**
+[Verdict](docs/dev-notes/2026-09-05-zombie-analytic-normals/verdict.md); procedural wound gradients implemented with retained GPU evidence; integrating settled-chunk baking into the default-off candidate. No measured speedup.
 
 **[~] Zoned baked wounds — Task 3 resumed from saved work (2026-09-05); Tasks 1–2 done, 4–6 pending behind numerical/memory gates.**
 [Plan](docs/superpowers/plans/2026-09-04-zoned-baked-wounds.md); defer expensive GPU verification under load; current shipping baseline and actual close-up coverage still require matched comparison.
@@ -635,6 +665,26 @@ call silently dropped the new argument (the march sampled the 1x1 zero
 fallback while the twin wrote real starts) — positional call sites must be
 re-counted when a parameter is added.
 [notes](docs/dev-notes/2026-09-04-closeup-3-depth-prepass/notes.md).
+
+**CLOSE-UP TASK 5 (settled-chunk bake) — LANDED, SHIPS ON (2026-09-05,
+cherry-picked from `dispatch/2026-09-04-closeup-task-5`, never merged: its
+history carries the 116 MB glb).** A chunk that passes `chunkSettled` is
+extracted ONCE on the CPU (field + albedo mirror of the march's tissue ramp,
+noise, bone/organ attribution, torn gore) into a static lit mesh in the MAIN
+scene (early-Z occluder), its `ChunkGpuView` recycled through a 12-view ring.
+Nine gates green: seam-off parity with main pixel-identical (c76adada), bake
+5.3 ms one-shot on a 128-vert piece, baked piece hittable (pellet loop tests
+baked pieces BEFORE the floor kill — a settled piece rests at y 0.02, exactly
+the kill plane; this ordering cost the dispatch hours and is pinned with
+ORDER comments), leak soak bounded (views cap 12, 25 bakes recycle clean).
+Dispatch timed out before the look capture and the firefight bench; **owner
+look verdict in-game: "looks great, nothing off from non baked"** → ships
+ON (`GAME_CHUNK_BAKE = 1`), with ONE bake per frame added on landing so a
+double-barrel's settling chunks cannot stack 5 ms bakes into one frame.
+**Owed:** the on/off firefight bench number (rooms 3/4). Seams
+`__sdfGame.setChunkBake/chunkBake/chunkStats/spawnTestChunk`; drivers
+`scripts/sdf-chunk-bake-gate.sh`, `scripts/sdf-chunk-bake-look.mjs`.
+[notes](docs/dev-notes/2026-09-04-closeup-5-bake-settled/notes.md).
 
 **CLOSE-UP TASK 4 (goo) — DONE, NEGATIVE RESULT (2026-09-05).** The premise
 ("the goo layer is the blood cost") does NOT reproduce. Measured with the

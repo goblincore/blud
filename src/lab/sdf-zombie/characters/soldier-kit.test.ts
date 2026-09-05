@@ -17,6 +17,8 @@ import { parseBlob } from '../blob-parse';
 import { compileBlob, compileFace } from '../blob-compile';
 import { buildBody } from '../build-body';
 import { sdBody } from '../validate';
+import { boneFrames } from '../rig-frames';
+import { bindRig } from '../rig-bind';
 import type { Vec3 } from '../types';
 
 interface Gltf {
@@ -25,7 +27,7 @@ interface Gltf {
   accessors: { bufferView: number; byteOffset?: number; count: number; type: string; componentType: number }[];
   meshes: { primitives: { attributes: Record<string, number>; indices: number; material: number }[] }[];
   materials: { name: string }[];
-  nodes: { name?: string; translation?: number[] }[];
+  nodes: { name?: string; translation?: number[]; children?: number[] }[];
 }
 
 const gltf = JSON.parse(kitJson) as Gltf;
@@ -140,8 +142,43 @@ describe('soldier-kit.gltf fits soldier.blob', () => {
     const all = [...groups.values()].flat();
     const bottom = Math.min(...all.map(v => v[1]));
     expect(bottom).toBeLessThan(0.012);
+    // ...and not THROUGH the floor either: a round-2 boot authored in metres
+    // inside a height-fraction file sank its sole 50 mm under y=0 and this
+    // test waved it through. Both bounds, or "on the ground" means nothing.
+    expect(bottom).toBeGreaterThan(-0.008);
     const lowest = all.reduce((a, b) => (b[1] < a[1] ? b : a));
     expect(Math.abs(lowest[0]), `lowest vertex at (${lowest.map(n => n.toFixed(3)).join(', ')})`)
       .toBeGreaterThan(0.04); // out at a foot (ankle x=0.097), not the body axis
+  });
+});
+
+describe('the kit skeleton transcribes the blob skeleton (rest identity)', () => {
+  const body = buildBody(compileBlob(parseBlob(blobSrc), compileFace(parseBlob(blobSrc))));
+  const bound = bindRig(body);
+  // World position of every glTF node by walking translations root→leaf.
+  const parent = new Map<number, number>();
+  gltf.nodes.forEach((n, i) => (n.children ?? []).forEach(c => parent.set(c, i)));
+  const worldOf = (i: number): Vec3 => {
+    let x = 0, y = 0, z = 0;
+    for (let k: number | undefined = i; k !== undefined; k = parent.get(k)) {
+      const t = gltf.nodes[k]!.translation ?? [0, 0, 0];
+      x += t[0]!; y += t[1]!; z += t[2]!;
+    }
+    return [x, y, z];
+  };
+  it('every named kit bone sits at its blob bone head, within 1 mm', () => {
+    const frames = boneFrames(body, bound, 0);
+    let checked = 0;
+    gltf.nodes.forEach((n, i) => {
+      const f = n.name ? frames.get(n.name) : undefined;
+      if (!f) return;
+      const w = worldOf(i);
+      for (let k = 0; k < 3; k++) expect(Math.abs(w[k]! - f.pos[k]!), `${n.name}[${k}]`).toBeLessThan(1e-3);
+      checked++;
+    });
+    expect(checked).toBe(body.bones.size);
+  });
+  it('rest frames are the identity rotation', () => {
+    for (const [name, f] of boneFrames(body, bound, 0)) expect(f.quat, name).toEqual([0, 0, 0, 1]);
   });
 });

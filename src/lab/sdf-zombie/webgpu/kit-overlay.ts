@@ -44,6 +44,7 @@ import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { Vec3 } from '../types';
+import { kitBoneKey } from '../rig-frames';
 
 /**
  * How each WAM material should actually look in the lab.
@@ -174,6 +175,17 @@ export interface KitOverlay {
    *  will drive. Exposed now so the shape of that work is visible, and so a
    *  render can be sanity-checked against the .blob skeleton by name. */
   bones: Map<string, THREE.Bone>;
+  /**
+   * Pose the skinned kit from the rig's bone frames (rig-frames.ts). A
+   * frame is WORLD position + rotation for a blob bone; the matching bone
+   * node's matrixWorld is written directly. Bone nodes with no frame (the
+   * .wam's extra `hips` under `pelvis`, and anything a kit adds) take their
+   * parent's world matrix composed with their own bind-local matrix.
+   *
+   * At rest every frame is (bind head, identity) and the result is exactly
+   * the static placement this overlay had before it could move.
+   */
+  pose(frames: ReadonlyMap<string, { pos: Vec3; quat: readonly number[] }>): void;
   dispose(): void;
 }
 
@@ -240,9 +252,51 @@ export async function loadKit(
     }
   });
 
+  // Bones are driven by absolute world matrices, so three's own hierarchy
+  // update must not overwrite them. Capture each bone's BIND-local matrix
+  // first (translation only in a WAM export) for the no-frame fallback.
+  const bindLocal = new Map<THREE.Bone, THREE.Matrix4>();
+  const ordered: THREE.Bone[] = [];
+  gltf.scene.traverse(o => {
+    if (!(o as THREE.Bone).isBone) return;
+    const b = o as THREE.Bone;
+    b.updateMatrix();
+    bindLocal.set(b, b.matrix.clone());
+    b.matrixAutoUpdate = false;
+    b.matrixWorldAutoUpdate = false;
+    ordered.push(b); // traverse is parent-before-child
+  });
+  object.updateMatrixWorld(true);
+
+  const tmpPos = new THREE.Vector3(), tmpQ = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1);
+  // GLTFLoader sanitises node names (`clavicle.l` -> `claviclel`), so frames
+  // keyed by blob bone name are matched through kitBoneKey, never by b.name.
+  const byKey = new Map<string, THREE.Bone>();
+  for (const b of ordered) byKey.set(b.name, b);
+  const frameFor = new Map<THREE.Bone, { pos: Vec3; quat: readonly number[] }>();
+  const pose: KitOverlay['pose'] = (frames) => {
+    frameFor.clear();
+    for (const [name, f] of frames) {
+      const b = byKey.get(kitBoneKey(name));
+      if (b) frameFor.set(b, f);
+    }
+    for (const b of ordered) {
+      const f = frameFor.get(b);
+      if (f) {
+        tmpPos.set(f.pos[0], f.pos[1], f.pos[2]);
+        tmpQ.set(f.quat[0]!, f.quat[1]!, f.quat[2]!, f.quat[3]!);
+        b.matrixWorld.compose(tmpPos, tmpQ, one);
+      } else {
+        const parentWorld = (b.parent as THREE.Object3D | null)?.matrixWorld;
+        if (parentWorld) b.matrixWorld.multiplyMatrices(parentWorld, bindLocal.get(b)!);
+      }
+    }
+  };
+
   return {
     object,
     bones,
+    pose,
     dispose() {
       env.dispose();
       object.traverse(o => {

@@ -6,7 +6,7 @@
 // the per-frame pipeline — stepMotion never touches the renderer.
 import { describe, it, expect } from 'vitest';
 import {
-  applyFloorContact, makeMotionJoints, makeMotionState, MOTION_TUNING,
+  applyFloorContact, FIRE, makeMotionJoints, makeMotionState, MOTION_TUNING,
   planSubSteps, STANDING_RIG, stepMotion, SUBSTEP_TUNING,
   type MotionConfig, type MotionJoints, type MotionSignals, type MotionState,
 } from './motion';
@@ -18,9 +18,15 @@ import { stepRig, type RigPoint } from './rig';
 import { relaxRopeConstraints, COLLAPSE_TUNING } from './collapse';
 import { makeRng, WANDER_TUNING, headingDir, type WanderBounds } from './wander';
 import { attackPose, ATTACK_TUNING } from './attack';
-import { len, sub, dot } from './vec';
+import { len, normalize, sub, dot } from './vec';
 import type { LimbId, Vec3 } from './types';
 import type { Wound } from './damage';
+import { compileBlob } from './blob-compile';
+import { parseBlob } from './blob-parse';
+import soldierSrc from './characters/soldier.blob?raw';
+import { SOLDIER_PROFILE } from './motion-profile';
+import { CARRIES, GUN_GRIP, gunPoseFromArm, gunPoint } from './carry';
+import { MARCH, RUN, rotateYaw } from './gait';
 
 const DT = 1 / 60;
 const BOUNDS: WanderBounds = { minX: -1.5, maxX: 1.5, minZ: -1.5, maxZ: 1.5 };
@@ -37,6 +43,7 @@ function realJoints(): MotionJoints {
 const NO_SIGNALS = (): MotionSignals => ({
   dt: DT,
   shot: null,
+  fire: false,
   wounded: { armL: false, armR: false, legL: false, legR: false },
   severed: [],
   missing: { legL: false, legR: false, armL: false, armR: false },
@@ -44,8 +51,6 @@ const NO_SIGNALS = (): MotionSignals => ({
   forcedCollapse: false,
   freshWounds: [],
 });
-
-const INTACT: MotionSignals['missing'] = { legL: false, legR: false, armL: false, armR: false };
 
 const CALM_SIGNALS = {
   dt: 1 / 60,
@@ -56,7 +61,10 @@ const CALM_SIGNALS = {
   headAlive: true,
   forcedCollapse: false,
   freshWounds: [],
+  fire: false,
 } as const;
+
+const INTACT: MotionSignals['missing'] = { legL: false, legR: false, armL: false, armR: false };
 
 /** A stub rig that perfectly tracks its targets (infinite rest pull). */
 function stubPoints(joints: MotionJoints): RigPoint[] {
@@ -96,6 +104,14 @@ function cruising(seed: number): MotionState {
 
 function blastWound(): Wound {
   return { primIdx: 0, local: [0, 0, 0], radius: 0.13, type: 'blast', ageSec: 0 };
+}
+
+function soldierJoints(): MotionJoints {
+  const body = buildBody(compileBlob(parseBlob(soldierSrc)));
+  const bound = bindRig(body);
+  const j = makeMotionJoints(body, bound.rig.restPose);
+  if (!j) throw new Error('soldier has no motion joints');
+  return j;
 }
 
 describe('makeMotionJoints', () => {
@@ -525,6 +541,75 @@ describe('applyFloorContact', () => {
   });
 });
 
+describe('soldier motion — profile, lean, carry', () => {
+  const CFG: MotionConfig = { enabled: true, wander: false, profile: SOLDIER_PROFILE, forceSpeed: 3.4 };
+
+  it('forceSpeed drives the blend and the run weight without wander', () => {
+    const j = soldierJoints();
+    const { frame, state } = run(j, makeMotionState(3, [0, 0, 0]), CFG, 120);
+    expect(frame.blend).toBeCloseTo(1, 3);
+    expect(state.runWeight).toBe(1);
+    expect(frame.gaitName).toBe('run');
+    const walk = run(j, makeMotionState(3, [0, 0, 0]), { ...CFG, forceSpeed: 1.0 }, 120);
+    expect(walk.state.runWeight).toBe(0);
+    expect(walk.frame.gaitName).toBe('march');
+  });
+
+  it('the run lean pitches the head forward of the hips by ~sin(12°)·height', () => {
+    const j = soldierJoints();
+    // headAlive false isolates the lean from the head aim: the soldier's
+    // rest skull points straight UP (unlike the zombie's hunch), so the
+    // horizon gaze drives the head to its 0.5 rad pitch clamp and would
+    // swamp the lean measurement (the composition is additive — no ordering
+    // or cone re-anchoring separates them). Cf. the idle-pose test above.
+    const { frame } = run(j, makeMotionState(3, [0, 0, 0]), CFG, 90,
+      () => ({ ...NO_SIGNALS(), headAlive: false }));
+    const hips = frame.restPose[j.index.hips]!, head = frame.restPose[j.index.head]!;
+    const dz = head[2] - hips[2];
+    const rise = head[1] - hips[1];
+    const expected = Math.sin(RUN.torsoLean * Math.PI / 180) * Math.hypot(rise, dz);
+    expect(dz).toBeGreaterThan(expected * 0.6);
+    expect(dz).toBeLessThan(expected * 1.6);
+  });
+
+  it('carry: the left hand lands on the gun fore-end; no arm segment stretches', () => {
+    const j = soldierJoints();
+    const cfg: MotionConfig = { enabled: true, wander: false, profile: SOLDIER_PROFILE, forceSpeed: 0, carryOverride: 'hip' };
+    const { frame } = run(j, makeMotionState(3, [0, 0, 0]), cfg, 30);
+    const P = frame.restPose;
+    const right = rotateYaw([1, 0, 0], frame.bodyYaw);
+    const gun = gunPoseFromArm(P[j.index.elbowR]!, P[j.index.handR]!, right, CARRIES.hip.gunPitch);
+    const fore = gunPoint(gun, GUN_GRIP.foreHand);
+    expect(len(sub(P[j.index.handL]!, fore))).toBeLessThan(0.02);
+    for (const [s, e, h, lens] of [
+      ['shoulderL', 'elbowL', 'handL', j.arm.L], ['shoulderR', 'elbowR', 'handR', j.arm.R],
+    ] as const) {
+      expect(len(sub(P[j.index[e]]!, P[j.index[s]]!))).toBeLessThan(lens[0] * 1.01);
+      expect(len(sub(P[j.index[h]]!, P[j.index[e]]!))).toBeLessThan(lens[1] * 1.01);
+    }
+    expect(frame.gun).not.toBeNull();
+    expect(len(sub(frame.gun!.root, gun.root))).toBeLessThan(1e-9);
+  });
+
+  it('hand tips and toes follow their parents', () => {
+    const j = soldierJoints();
+    const { frame } = run(j, makeMotionState(3, [0, 0, 0]), CFG, 45);
+    const P = frame.restPose;
+    const restTip = sub(j.base[j.index.handTipR]!, j.base[j.index.handR]!);
+    expect(len(sub(P[j.index.handTipR]!, P[j.index.handR]!))).toBeCloseTo(len(restTip), 6);
+    const restToe = sub(j.base[j.index.toeL]!, j.base[j.index.footL]!);
+    expect(len(sub(P[j.index.toeL]!, P[j.index.footL]!))).toBeCloseTo(len(restToe), 6);
+  });
+
+  it('the zombie with no profile is unchanged (pins cover the numbers; this covers the fields)', () => {
+    const j = realJoints();
+    const { frame, state } = run(j, makeMotionState(3, [0, 0, 0]), CFG_ON, 10);
+    expect(frame.gun).toBeNull();
+    expect(frame.gaitName).toBe('shamble');
+    expect(state.runWeight).toBe(0);
+  });
+});
+
 describe('one-frame pipeline with a stub rig (end-to-end)', () => {
   it('standing: the verlet rig tracks the moving targets and stays upright', () => {
     const j = realJoints();
@@ -587,6 +672,84 @@ describe('one-frame pipeline with a stub rig (end-to-end)', () => {
     const c = bound.rig.constraints[0]!;
     const d = len(sub(bound.rig.points[c.a]!.pos, bound.rig.points[c.b]!.pos));
     expect(Math.abs(d - c.rest)).toBeLessThan(0.05);
+  });
+});
+
+describe('fire signal', () => {
+  const CFG: MotionConfig = { enabled: true, wander: false, profile: SOLDIER_PROFILE, forceSpeed: 3.4 };
+  const fireAt = (n: number) => (i: number): MotionSignals => ({ ...NO_SIGNALS(), fire: i === n });
+
+  it('switches to the hip carry for fireHoldSec, then releases to the run carry', () => {
+    const j = soldierJoints();
+    let state = makeMotionState(3, [0, 0, 0]);
+    let points = stubPoints(j);
+    const carries: string[] = [];
+    for (let i = 0; i < 90; i++) {
+      const s = stepMotion(state, j, CFG, fireAt(10)(i), points, BOUNDS, makeRng(1));
+      state = s.state; points = s.frame.restPose.map(p => ({ pos: [...p] as Vec3, prev: [...p] as Vec3, pinned: false }));
+      carries.push(s.frame.carry ?? '-');
+    }
+    expect(carries[9]).toBe('chest');
+    expect(carries[10]).toBe('hip');
+    expect(carries[10 + Math.round(FIRE.holdSec * 60) - 2]).toBe('hip');
+    expect(carries[10 + Math.round(FIRE.holdSec * 60) + 2]).toBe('chest');
+  });
+
+  it('emits hand and shoulder kicks backward along body forward on the fire frame only', () => {
+    const j = soldierJoints();
+    const { frame } = run(j, makeMotionState(3, [0, 0, 0]), CFG, 20, fireAt(19));
+    const fwd = headingDir(frame.bodyYaw);
+    expect(frame.kicks.map(k => k.joint).sort()).toEqual(['handL', 'handR', 'shoulderR']);
+    for (const k of frame.kicks) expect(dot(k.delta, fwd)).toBeLessThan(0);
+    const calm = run(j, makeMotionState(3, [0, 0, 0]), CFG, 20, fireAt(5));
+    expect(calm.frame.kicks).toEqual([]);
+  });
+
+  it('cuts the stride while holding', () => {
+    const j = soldierJoints();
+    const lift = (fire: boolean) => {
+      let best = 0;
+      let state = makeMotionState(3, [0, 0, 0]); let points = stubPoints(j);
+      for (let i = 0; i < 46; i++) {
+        const s = stepMotion(state, j, CFG, { ...NO_SIGNALS(), fire: fire && i === 0 }, points, BOUNDS, makeRng(1));
+        state = s.state; points = s.frame.restPose.map(p => ({ pos: [...p] as Vec3, prev: [...p] as Vec3, pinned: false }));
+        // The measured swing must sit INSIDE the hold (strideFreq-timing,
+        // not frame counts — the motion-polish lesson). At the run clip's
+        // 1.5 Hz (40-frame cycle) the first full-amplitude footL swing is
+        // frames ~15-43 (blend full by 24, peak 28), fully inside the
+        // 51-frame hold; the old i>30/60-frame window was tuned to the
+        // pre-curve 2.4 Hz and caught the hold's expiry instead.
+        if (i > 14) best = Math.max(best, s.frame.restPose[j.index.footL]![1] - j.groundY);
+      }
+      return best;
+    };
+    expect(lift(true)).toBeLessThan(lift(false) * 0.6);
+  });
+});
+
+describe('soldier walks on the clip curves', () => {
+  const CFG: MotionConfig = { enabled: true, wander: false, profile: SOLDIER_PROFILE, forceSpeed: 1.0 };
+  it('a march step lifts the knee well forward of the hip→ankle line', () => {
+    const j = soldierJoints();
+    let state = makeMotionState(3, [0, 0, 0]); let points = stubPoints(j);
+    let best = 0;
+    for (let i = 0; i < 120; i++) {
+      const s = stepMotion(state, j, CFG, NO_SIGNALS(), points, BOUNDS, makeRng(1));
+      state = s.state; points = s.frame.restPose.map(p => ({ pos: [...p] as Vec3, prev: [...p] as Vec3, pinned: false }));
+      const P = s.frame.restPose;
+      const hip = P[j.index.hipL]!, knee = P[j.index.kneeL]!, foot = P[j.index.footL]!;
+      const d = normalize(sub(foot, hip)); const v = sub(knee, hip);
+      const along = dot(d, v);
+      best = Math.max(best, len(sub(v, [d[0] * along, d[1] * along, d[2] * along])));
+    }
+    expect(best).toBeGreaterThan(0.06);
+    expect(state.runWeight).toBe(0);
+  });
+  it('MARCH and RUN carry the curves and their frequencies', () => {
+    expect(MARCH.curves?.name).toBe('soldier-walk');
+    expect(RUN.curves?.name).toBe('soldier-run');
+    expect(MARCH.strideFreq).toBeCloseTo(MARCH.curves!.freq, 9);
+    expect(RUN.strideFreq).toBeCloseTo(RUN.curves!.freq, 9);
   });
 });
 

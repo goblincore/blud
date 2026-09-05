@@ -21,7 +21,7 @@
 //   - crowd callers pass a fixed dt, not rAF's jittery real dt.
 
 import type { BuildResult } from './build-body';
-import { bindRig, type BoundRig } from './rig-bind';
+import { bindRig, impulseAt, pinTips, type BoundRig } from './rig-bind';
 import {
   applyFloorContact, makeMotionJoints, makeMotionState, MOTION_TUNING,
   planSubSteps, STANDING_RIG, stepMotion,
@@ -30,6 +30,8 @@ import {
 import { constrainRigBends, stepRig } from './rig';
 import { relaxRopeConstraints, type MissingLimbs } from './collapse';
 import type { ArmStyle } from './gait';
+import type { CarryName } from './carry';
+import type { MotionProfile } from './motion-profile';
 import { makeRng, type Rng, type WanderBounds } from './wander';
 import type { Wound } from './damage';
 import type { LimbId, Vec3 } from './types';
@@ -91,6 +93,8 @@ export function makeActorMotion(body: BuildResult, init: ActorMotionInit): Actor
  */
 export interface ActorSignals {
   shot: MotionSignals['shot'];
+  /** The body fired its weapon this frame (drained like the other events). */
+  fire: boolean;
   wounded: WoundedLimbs;
   severed: LimbId[];
   missing: MissingLimbs;
@@ -103,6 +107,7 @@ export interface ActorSignals {
 export function emptyActorSignals(): ActorSignals {
   return {
     shot: null,
+    fire: false,
     wounded: { armL: false, armR: false, legL: false, legR: false },
     severed: [],
     missing: { legL: false, legR: false, armL: false, armR: false },
@@ -116,12 +121,19 @@ export interface ActorStepInput {
   current: BuildResult;
   dt: number;
   wander: boolean;
-  armStyle: ArmStyle;
+  /** Arm-style override; undefined lets the profile/gait pick (task 13). */
+  armStyle: ArmStyle | undefined;
   headingFollow: number;
   gazeFollow: number;
   bounds: WanderBounds;
   rng: Rng;
   signals: ActorSignals;
+  /** Per-character profile (carry gaits, fire carries) — see MotionConfig. */
+  profile?: MotionProfile;
+  /** Treadmill speed for lab captures — see MotionConfig. */
+  forceSpeed?: number;
+  /** Hold this carry regardless of gait/fire state — see MotionConfig. */
+  carryOverride?: CarryName;
 }
 
 /**
@@ -146,10 +158,13 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
       {
         enabled: true, wander: input.wander, armStyle: input.armStyle,
         headingFollow: input.headingFollow, gazeFollow: input.gazeFollow,
+        profile: input.profile, forceSpeed: input.forceSpeed,
+        carryOverride: input.carryOverride,
       },
       {
         dt: sdt,
         shot: signals.shot,
+        fire: signals.fire,
         wounded: signals.wounded,
         severed: signals.severed,
         missing: signals.missing,
@@ -165,6 +180,7 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
       first = false;
       // Drain in place: array fields belong to the caller's accumulators.
       signals.shot = null;
+      signals.fire = false;
       signals.severed.length = 0;
       signals.freshWounds.length = 0;
       signals.forcedCollapse = false;
@@ -182,6 +198,8 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
       },
     ).points;
     if (f.ropes.length) points = relaxRopeConstraints(points, f.ropes);
+    // Hand tips and toes ride their anchor rigidly (rig-bind.ts RigidTip).
+    points = pinTips(points, m.bound.tips, f.bodyYaw);
     if (f.collapsed) {
       points = applyFloorContact(points, m.motionJoints.groundY - MOTION_TUNING.floorPad);
     }
@@ -190,6 +208,14 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
       rig: constrainRigBends({ ...m.bound.rig, points, restPose: f.restPose, bodyYaw: f.bodyYaw },
         f.collapsed ? m.motionJoints.groundY - MOTION_TUNING.floorPad : undefined),
     };
+    // Fire kicks: point shoves THROUGH the rig, after the bend constraints
+    // for the sub-step. Only the first sub-step's frame carries them (fire
+    // is drained with the other events).
+    for (const k of f.kicks) {
+      const i = m.motionJoints.index[k.joint];
+      if (i === undefined) continue;
+      m.bound = impulseAt(m.bound, m.bound.rig.points[i]!.pos, k.delta);
+    }
   }
   return f;
 }

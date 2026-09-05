@@ -29,7 +29,8 @@
 import * as THREE from 'three/webgpu';
 import { createLabRenderer } from './lab-renderer';
 import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER } from './sdf-layer';
-import { loadKit } from './kit-overlay';
+import { loadKit, type KitOverlay } from './kit-overlay';
+import { loadHeldProp, type HeldProp } from './held-prop';
 import { createPostAa, POST_AA_SMEAR_MAX } from './post-aa';
 import {
   createZombieGpuView, createChunkGpuView, createSharedChunkGpuMaterial,
@@ -92,9 +93,8 @@ const CHARACTERS: Record<string, string> = {
  * props authored in a sibling `.wam` and compiled to a self-contained glTF.
  * Absent means flesh only, which is every character but the goblin today.
  *
- * See kit-overlay.ts for what this does and does not do yet: the kit is placed
- * once at the body root and does NOT follow the rig, so it is only honest with
- * motion frozen.
+ * The kit RIDES THE RIG: every frame the hero loop re-poses it from
+ * rig-frames.ts's per-bone transforms (see the `kit?.pose(frames)` call).
  */
 const KITS: Record<string, string> = {
   goblin: '/assets/lab/goblin-kit.gltf',
@@ -152,14 +152,17 @@ import {
 import {
   applyFloorContact, makeMotionJoints, makeMotionState, MOTION_TUNING,
   planSubSteps, STANDING_RIG, stepMotion,
-  type MotionJoints, type MotionSignals,
+  type MotionFrame, type MotionJoints, type MotionSignals,
 } from '../motion';
 import {
   CROWD_DT, crowdSeed, crowdRng, emptyActorSignals,
   makeActorMotion, stepActorMotion,
   type ActorMotion, type ActorSignals,
 } from '../actor';
-import { GAIT_TUNING, type ArmStyle } from '../gait';
+import { rotateYaw, type ArmStyle } from '../gait';
+import { boneFrames } from '../rig-frames';
+import { motionProfileFor, type MotionProfile } from '../motion-profile';
+import type { CarryName } from '../carry';
 import { makeRng, type Rng, type WanderBounds } from '../wander';
 import { add, sub } from '../vec';
 import { makeChunk, stepChunk, type Chunk, type ChunkKind } from '../gib-chunks';
@@ -589,20 +592,9 @@ async function main() {
   // preparation for things that have not happened yet (gibs, goo, FPV).
   boot.bodyInScene = bootMark();
 
-  // The character's polygon kit, on the DEFAULT layer with the floor and the
-  // reference cube — NOT SDF_LAYER. That is what puts it in the polygonal pass
-  // whose depth the march already composites against (sdf-layer.ts's header),
-  // so armour occludes and is occluded by flesh with nothing added here.
-  //
-  // Fire-and-forget: a kit that fails to load must not take the lab down with
-  // it, and there is nothing to fall back to — the character is simply
-  // undressed, which is exactly how it rendered before kits existed.
-  const kitUrl = KITS[activeCharacterName()];
-  if (kitUrl) {
-    loadKit(kitUrl, handle.renderer, [0, 0, 0])
-      .then(kit => scene.add(kit.object))
-      .catch(e => console.error(`[kit] ${kitUrl} failed to load; rendering the body undressed`, e));
-  }
+  // The character's polygon kit (and the soldier's held prop) load further
+  // down, beside the motion state — the prop load reads motionProfile.prop,
+  // which does not exist yet at this point in the bootstrap (TDZ).
   const u = view.uniforms;
 
   // One node graph for every gib. Three r185 still runs its expensive
@@ -874,6 +866,53 @@ async function main() {
    * the caller falls back to the shared zombie sheet — which is what every
    * character wore before this existed.
    */
+  /**
+   * Measures a face sheet's mean luminance off its decoded pixels and
+   * re-uploads the texture with it. The mean is the level the shader divides
+   * out (`tex.rgb / faceCfg2.y`), so it has to be the sheet's own average or
+   * the multiply lands at the wrong level. Transparent texels are skipped so
+   * the surrounding alpha does not drag the average down; a tainted or
+   * undecodable image keeps mean 1, which is the pre-measurement behaviour.
+   * Hoisted out of loadGeneratedFace so the upload path (face panel) can
+   * measure the same way.
+   */
+  function applyMeanOf(t: THREE.Texture) {
+    let mean = 1;
+    try {
+      const img = t.image as HTMLImageElement;
+      const cv = document.createElement('canvas');
+      cv.width = img.width; cv.height = img.height;
+      const cx = cv.getContext('2d', { willReadFrequently: true });
+      if (cx !== null && cv.width > 0 && cv.height > 0) {
+        cx.drawImage(img, 0, 0);
+        const d = cx.getImageData(0, 0, cv.width, cv.height).data;
+        let sum = 0, n = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          if (d[i + 3]! < 8) continue;
+          sum += (0.2126 * d[i]! + 0.7152 * d[i + 1]! + 0.0722 * d[i + 2]!) / 255;
+          n++;
+        }
+        if (n > 0) mean = Math.max(sum / n, 1e-3);
+      }
+    } catch { /* tainted or undecodable: fall back to 1, which is the old behaviour */ }
+    if (faceSheet !== null) faceSheet.mean = mean;
+    for (const v of [view, ...crowd]) v.setFaceTexture(t, faceSheet!.atlas, mean);
+  }
+
+  /** Wear an already-loaded image as the face sheet: whole-image atlas, mean
+   *  measured off the pixels, decal mode as the character's sheet block says. */
+  function wearFaceImage(tex: THREE.Texture, mode: 1 | 2 | 3) {
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
+    tex.generateMipmaps = false;
+    tex.flipY = true;
+    faceSheet?.tex.dispose();
+    faceSheet = { tex, atlas: new THREE.Vector4(1, 1, 0, 0), mean: 1 };
+    faceMode = mode;
+    for (const v of [view, ...crowd]) v.setFaceTexture(tex, faceSheet.atlas, 1);
+    applyMeanOf(tex);
+  }
+
   function loadGeneratedFace(): boolean {
     let params;
     try {
@@ -920,39 +959,10 @@ async function main() {
     // so the surrounding alpha does not drag the average down.
     const image = compileSheetImage(parseBlob(activeCharacterSrc()));
     if (image !== null) {
-      const applyMean = (t: THREE.Texture) => {
-        let mean = 1;
-        try {
-          const img = t.image as HTMLImageElement;
-          const cv = document.createElement('canvas');
-          cv.width = img.width; cv.height = img.height;
-          const cx = cv.getContext('2d', { willReadFrequently: true });
-          if (cx !== null && cv.width > 0 && cv.height > 0) {
-            cx.drawImage(img, 0, 0);
-            const d = cx.getImageData(0, 0, cv.width, cv.height).data;
-            let sum = 0, n = 0;
-            for (let i = 0; i < d.length; i += 4) {
-              if (d[i + 3]! < 8) continue;
-              sum += (0.2126 * d[i]! + 0.7152 * d[i + 1]! + 0.0722 * d[i + 2]!) / 255;
-              n++;
-            }
-            if (n > 0) mean = Math.max(sum / n, 1e-3);
-          }
-        } catch { /* tainted or undecodable: fall back to 1, which is the old behaviour */ }
-        if (faceSheet !== null) faceSheet.mean = mean;
-        for (const v of [view, ...crowd]) v.setFaceTexture(t, faceSheet!.atlas, mean);
-      };
-      const tex = new THREE.TextureLoader().load(`/assets/lab/faces/${image}`, applyMean);
-      tex.magFilter = THREE.NearestFilter;   // PSX: texels, not a blur
-      tex.minFilter = THREE.NearestFilter;
-      tex.generateMipmaps = false;
-      tex.flipY = true;                      // as the PNG registry path
-      faceSheet?.tex.dispose();
-      faceSheet = { tex, atlas: new THREE.Vector4(1, 1, 0, 0), mean: 1 };
-      faceMode = params.decal > 0.5 ? 2 : (params.blendLuma > 0.5 ? 3 : 1);
-      // Mean 1 until the image decodes, then applyMean re-uploads with the
+      const tex = new THREE.TextureLoader().load(`/assets/lab/faces/${image}`, applyMeanOf);
+      // Mean 1 until the image decodes, then applyMeanOf re-uploads with the
       // measured value. One frame of the old level is not worth blocking on.
-      for (const v of [view, ...crowd]) v.setFaceTexture(tex, faceSheet.atlas, 1);
+      wearFaceImage(tex, params.decal > 0.5 ? 2 : (params.blendLuma > 0.5 ? 3 : 1));
       return true;
     }
     faceMode = 1;
@@ -1101,14 +1111,60 @@ async function main() {
    *  shots raycast against. Authored rest-space raycasting stopped being
    *  valid the moment the body could wander or fall. */
   let lastPosed = current;
+  /** The hero's latest motion frame (null in statue mode) — the gun pose,
+   *  gait name and fire kicks the kit/prop posing and the panel read. */
+  let lastMotionFrame: MotionFrame | null = null;
   let motionEnabled = true;
   let wanderOn = true;
-  let armStyle: ArmStyle = GAIT_TUNING.armStyle;
+  // No default arm style: undefined lets the motion profile pick (the
+  // soldier's carry); the panel's arms button cycles profile/swing/reach.
+  let armStyle: ArmStyle | undefined = undefined;
   let headingFollow: number = MOTION_TUNING.headingFollow;
   /** Gaze-follow gain — 1 looks where the body walks, 0 pins the gaze to the
    *  wander target (the creepy variant the owner wants kept reachable). */
   let gazeFollow: number = MOTION_TUNING.gazeFollow;
   let forcedCollapse = false;
+
+  /** This character's motion profile — gaits, cruise, carries, prop. */
+  const motionProfile: MotionProfile = motionProfileFor(activeCharacterName());
+  /** Lab speed band: which cruise the wanderer uses. ',' walk, '.' run. */
+  let speedBand: 'walk' | 'run' = 'walk';
+  /** Treadmill speed for pose captures (holdPose); undefined = wander speed. */
+  let forceSpeed: number | undefined;
+  /** Carry pin for pose captures. */
+  let carryOverride: CarryName | undefined;
+  let pendingFire = false;
+  /** holdPose's freeze: the rig, kit and prop keep their last state and NOTHING
+   *  steps — unlike setMotionEnabled(false), which snaps the rest pose back
+   *  to the authored base (a turntable of a held pose showed the A-pose). */
+  let poseHeld = false;
+  /** Seconds since the hero last fired; feeds the prop's muzzle rise. */
+  let sinceFire = Infinity;
+  const cruiseFor = (band: 'walk' | 'run') =>
+    band === 'run' ? motionProfile.cruise : Math.min(motionProfile.cruise, motionProfile.runBand.from * 0.75);
+
+  // The character's polygon kit and held prop, on the DEFAULT layer with the
+  // floor and the reference cube — NOT SDF_LAYER. That is what puts them in
+  // the polygonal pass whose depth the march already composites against
+  // (sdf-layer.ts's header), so armour and gun occlude and are occluded by
+  // flesh with nothing added here.
+  //
+  // Fire-and-forget: a kit or prop that fails to load must not take the lab
+  // down with it, and there is nothing to fall back to — the character is
+  // simply undressed/unarmed, which is exactly how it rendered before.
+  let kit: KitOverlay | null = null;
+  let heldProp: HeldProp | null = null;
+  const kitUrl = KITS[activeCharacterName()];
+  if (kitUrl) {
+    loadKit(kitUrl, handle.renderer, [0, 0, 0])
+      .then(k => { kit = k; scene.add(k.object); })
+      .catch(e => console.error(`[kit] ${kitUrl} failed to load; rendering the body undressed`, e));
+  }
+  if (motionProfile.prop) {
+    loadHeldProp(motionProfile.prop.url)
+      .then(p => { heldProp = p; scene.add(p.object); })
+      .catch(e => console.error(`[prop] ${motionProfile.prop!.url} failed to load; rendering unarmed`, e));
+  }
 
   // ——— MELT (2026-09-03) ————————————————————————————————————————————————
   // The zombie liquefies where it stands: flesh sags into a puddle and the
@@ -1309,6 +1365,7 @@ async function main() {
    *  the live arrays so the in-place drain reaches them. */
   const heroSignals: ActorSignals = {
     shot: null,
+    fire: false,
     wounded: { armL: false, armR: false, legL: false, legR: false },
     severed: pendingSevered,
     missing: { legL: false, legR: false, armL: false, armR: false },
@@ -1339,6 +1396,7 @@ async function main() {
    *  (rebuild/respawn/gib) spawn a new shambler rather than springing an old
    *  pose across the arena. */
   function resetMotion() {
+    poseHeld = false;
     heroMotion.bound = bindRig(current);
     heroMotion.motionJoints = makeMotionJoints(current, heroMotion.bound.rig.restPose);
     if (heroMotion.motionJoints) {
@@ -1351,6 +1409,9 @@ async function main() {
     pendingWounds.length = 0;
     pendingSevered.length = 0;
     forcedCollapse = false;
+    // A fresh body gets its armour back; the released gun stays on the
+    // floor — that is the expected debris.
+    if (kit) kit.object.visible = true;
     // Clear any melt on reset. stopMelt() owns the full teardown (progress,
     // held flag, released bone chunks and the shader uniform) — the melt
     // spike this replaced cleared three of its own variables by hand here,
@@ -1892,6 +1953,10 @@ async function main() {
     wounds = [];
     view.update(current);
     refreshWounds();
+    // The gibbed body leaves its armour and drops its gun (task 13): the
+    // kit hides with the body it clothed; the prop tumbles as debris.
+    if (kit) kit.object.visible = false;
+    heldProp?.release([0, 2.5, 0], MOTION_SEED);
     resetMotion(); // a gibbed body is done shambling — fresh state for whatever spawns next
   }
 
@@ -2434,6 +2499,11 @@ async function main() {
     if (ev.key === '[') { setCrowdCount(Math.max(0, crowd.length - 1)); return; }
     if (ev.key === 'g' || ev.key === 'G') { gibEverything(); return; }
     if (ev.key === 'k' || ev.key === 'K') { forcedCollapse = true; return; }
+    // Speed band + fire (soldier-class; no-ops without carries). ','/'.'
+    // rather than '1'/'2': SEVER_KEYS already owns '1' (head sever).
+    if (ev.key === ',') { speedBand = 'walk'; return; }
+    if (ev.key === '.') { speedBand = 'run'; return; }
+    if (ev.key === 'f' || ev.key === 'F') { if (motionProfile.carries) pendingFire = true; return; }
     // MELT: 'm' starts it, 'M' (shift) clears it back to a solid body. Melting
     // IS the death — no forcedCollapse here; a ragdoll would topple it.
     if (ev.key === 'm') { startMelt(); return; }
@@ -2777,7 +2847,9 @@ async function main() {
     // keeps rendering through the same posed-prims path (still shootable,
     // severable, gibbable — it is just horizontal now).
     const rdt = Math.min(dt, 1 / 30);
-    if (motionEnabled && heroMotion.motionJoints) {
+    if (poseHeld) {
+      // Held for a capture: the last stepped pose stays put, verbatim.
+    } else if (motionEnabled && heroMotion.motionJoints) {
       // Sub-stepped integration (X1.22.1): consume the frame's real elapsed
       // time in ≤1/30-sized steps instead of the old flat 33 ms clamp, so a
       // stalled or hidden frame cannot stretch the fall into a death spiral.
@@ -2792,19 +2864,27 @@ async function main() {
       // severed/freshWounds ARE pendingSevered/pendingWounds (same array
       // references): drained in place after the first sub-step.
       heroSignals.severed = pendingSevered;
+      heroSignals.fire = pendingFire;
       const f = stepActorMotion(heroMotion, {
         current, dt,
         wander: wanderOn, armStyle, headingFollow, gazeFollow,
         bounds: WANDER_BOUNDS, rng: motionRng, signals: heroSignals,
+        profile: { ...motionProfile, cruise: cruiseFor(speedBand) },
+        forceSpeed, carryOverride,
       });
-      // shot/forcedCollapse are values — read the drained state back.
+      lastMotionFrame = f;
+      // shot/forcedCollapse/fire are values — read the drained state back.
       pendingShot = heroSignals.shot;
       forcedCollapse = heroSignals.forcedCollapse;
+      pendingFire = heroSignals.fire;
+      // The muzzle rise clocks off the fire kicks landing, not the keypress.
+      sinceFire = f ? (f.kicks.length ? 0 : sinceFire + dt) : sinceFire;
       if (f) {
         if (motionReadEl) {
           motionReadEl.textContent =
             `meter ${f.meter.toFixed(2)} · ${f.phase}${f.hop ? ' · hop' : ''}` +
-            (f.staggerKind ? ` · ${f.staggerKind}` : '');
+            (f.staggerKind ? ` · ${f.staggerKind}` : '') +
+            ` · ${f.gaitName}${f.carry ? ' · ' + f.carry : ''}`;
         }
         // Keep the shambler framed: the orbit target drifts after the body
         // (fast enough to follow a walk, slow enough to leave the orbit feel).
@@ -2835,6 +2915,7 @@ async function main() {
         }),
       };
       view.setRootShift(0, 0); // statue: world-anchored noise, as before
+      lastMotionFrame = null; // no motion frame in statue mode — the prop holds its last pose
     }
     if (meltState && !meltHeld) meltState = stepMelt(meltState, Math.min(dt, 1 / 30));
     // The wet-red material ramp (melt task 6): meltCfg.x tracks progress so
@@ -2843,6 +2924,21 @@ async function main() {
     view.setMelt(meltState ? meltState.t : 0);
     const posed = applyRig(current, heroMotion.bound, heroMotion.lastBodyYaw);
     lastPosed = posed;
+    // Polygon halves ride the rig: the kit from per-bone frames, the gun from
+    // the motion frame's gun pose (right forearm). Collapse and gib release
+    // the gun; the kit simply keeps following the (fallen) rig.
+    if (kit || heldProp) {
+      const frames = boneFrames(current, heroMotion.bound, heroMotion.lastBodyYaw);
+      kit?.pose(frames);
+      if (heldProp) {
+        const lastFrame = heroMotion.motionState ? lastMotionFrame : null;
+        if (lastFrame?.gun && !heldProp.released) {
+          heldProp.pose(lastFrame.gun, sinceFire, rotateYaw([1, 0, 0], heroMotion.lastBodyYaw));
+        }
+        if (lastFrame?.collapsed && !heldProp.released) heldProp.release([0, 0, 0], MOTION_SEED);
+        heldProp.step(Math.min(dt, 1 / 30), 0);
+      }
+    }
     // Rest-space noise anchor (motion-polish task 6): `current` is the
     // authored, un-rigged body — the rest pose the noise texture is baked
     // into. Prim indices correspond 1:1 with the posed body (applyRig maps
@@ -2925,7 +3021,7 @@ async function main() {
     //    centred on each spawn, and a FIXED dt so poses are a pure function
     //    of frame count. motionEnabled gates EVERY actor — that is what makes
     //    setMotionEnabled(false) a real freeze for captures.
-    if (motionEnabled) {
+    if (motionEnabled && !poseHeld) {
       for (const a of crowdActors) {
         if (!a.motion.motionJoints) continue;
         stepActorMotion(a.motion, {
@@ -2936,6 +3032,10 @@ async function main() {
           bounds: a.bounds,
           rng: a.rng,
           signals: CROWD_SIGNALS,
+          // Crowd bodies share the hero's character, so they share its
+          // profile — crowd soldiers march too. No prop: crowd bodies don't
+          // get kits or guns in this phase.
+          profile: motionProfile,
         });
         const cPosed = applyRig(a.current, a.motion.bound, a.motion.lastBodyYaw);
         a.lastPosed = cPosed;
@@ -3203,6 +3303,43 @@ async function main() {
   }
   rebuildMaterialSliders();
 
+  // Skin tone (owner, 2026-09-05). The picker speaks sRGB, the material linear.
+  const toLinear = (c: number) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+  const toSrgb = (c: number) => (c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055);
+  const hex = (rgb: readonly number[]) => '#' + rgb.map(v => Math.round(Math.min(1, Math.max(0, toSrgb(v))) * 255).toString(16).padStart(2, '0')).join('');
+  let skinBase: Vec3 = [flesh.baseColor[0], flesh.baseColor[1], flesh.baseColor[2]];
+  let skinLight = 0;
+  const applySkin = () => {
+    const lift = (v: number) => Math.min(1, Math.max(0, v * (1 + skinLight)));
+    flesh.baseColor = [lift(skinBase[0]), lift(skinBase[1]), lift(skinBase[2])];
+    reapply();
+  };
+  const skinRow = document.createElement('label');
+  skinRow.style.cssText = 'display:flex;gap:6px;align-items:center;font:11px monospace;margin:4px 0;';
+  skinRow.textContent = 'skin ';
+  const skinPick = document.createElement('input');
+  skinPick.type = 'color'; skinPick.value = hex(skinBase);
+  skinPick.addEventListener('input', () => {
+    const h = skinPick.value;
+    skinBase = [
+      toLinear(parseInt(h.slice(1, 3), 16) / 255),
+      toLinear(parseInt(h.slice(3, 5), 16) / 255),
+      toLinear(parseInt(h.slice(5, 7), 16) / 255),
+    ];
+    applySkin();
+  });
+  skinRow.appendChild(skinPick);
+  matBox.appendChild(skinRow);
+  addSlider(matBox, { label: 'skin lightness', min: -0.5, max: 0.5, step: 0.01, get: () => skinLight, set: v => { skinLight = v; applySkin(); } });
+  const saveSkinBtn = addButton(matBox, 'save skin → repo', async () => {
+    const r = await fetch(`/__lab/save-palette?character=${encodeURIComponent(activeCharacterName())}`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ baseColor: flesh.baseColor.map(v => Math.round(v * 1000) / 1000) }),
+    });
+    const j = await r.json() as { ok: boolean; path?: string; error?: string };
+    saveSkinBtn.textContent = j.ok ? `saved ${j.path}` : `save failed: ${j.error}`;
+  });
+
   const bodyBox = addSection(panelEl, 'body');
   addSlider(bodyBox, {
     label: 'global blendK', min: 0.004, max: 0.05, step: 0.001,
@@ -3266,6 +3403,41 @@ async function main() {
     faceTexName = v as FaceTexName;
     loadFaceTexture(faceTexName);
   });
+
+  // Face upload (lab dressing room, 2026-09-05). Pick any PNG/JPEG off disk
+  // and the character wears it immediately — same whole-image path the baked
+  // sheet uses. A PNG can then be saved into the repo via the dev-only
+  // endpoint, landing at the file the character's `sheet image` line names.
+  let uploadedFace: Uint8Array<ArrayBuffer> | null = null;
+  const faceFile = document.createElement('input');
+  faceFile.type = 'file'; faceFile.accept = 'image/png,image/jpeg';
+  faceFile.style.cssText = 'display:block;width:100%;margin:4px 0;font:11px monospace;';
+  faceFile.addEventListener('change', async () => {
+    const f = faceFile.files?.[0]; if (!f) return;
+    const buf = new Uint8Array(await f.arrayBuffer());
+    const url = URL.createObjectURL(new Blob([buf], { type: f.type }));
+    // Blend mode as the character's sheet block says: replace (decal 1),
+    // else luma multiply (blendLuma 1, main's default), else plain multiply.
+    let mode: 1 | 2 | 3 = 2;
+    try {
+      const sp = compileSheet(parseBlob(activeCharacterSrc()));
+      if (sp) mode = sp.decal > 0.5 ? 2 : (sp.blendLuma > 0.5 ? 3 : 1);
+    } catch { /* keep replace */ }
+    const tex = new THREE.TextureLoader().load(url, t => { applyMeanOf(t); URL.revokeObjectURL(url); });
+    wearFaceImage(tex, mode);
+    uploadedFace = f.type === 'image/png' ? buf : null; // save only PNGs (the endpoint checks magic bytes)
+    saveFaceBtn.disabled = uploadedFace === null;
+    saveFaceBtn.textContent = uploadedFace ? 'save face → repo' : 'save face (PNG only)';
+  });
+  faceBox.appendChild(faceFile);
+  const saveFaceBtn = addButton(faceBox, 'save face (upload first)', async () => {
+    if (!uploadedFace) return;
+    const r = await fetch(`/__lab/save-face?character=${encodeURIComponent(activeCharacterName())}`, { method: 'POST', body: uploadedFace });
+    const j = await r.json() as { ok: boolean; path?: string; error?: string };
+    saveFaceBtn.textContent = j.ok ? `saved ${j.path}` : `save failed: ${j.error}`;
+  });
+  saveFaceBtn.disabled = true;
+
   const texBtn = addButton(faceBox, 'face tex: on', () => {
     // Goes through faceEnabled rather than the uniform, because applyLod
     // rewrites faceCfg.x every frame and would undo a direct poke.
@@ -3553,10 +3725,19 @@ async function main() {
   const wanderBtn = addButton(motionBox, `wander: ${wanderOn ? 'on' : 'off'}`, () => {
     setWander(!wanderOn);
   });
-  const armStyleBtn = addButton(motionBox, `arms: ${armStyle}`, () => {
-    setArmStyle(armStyle === 'reach' ? 'swing' : 'reach');
+  const armStyleBtn = addButton(motionBox, `arms: ${armStyle ?? 'profile'}`, () => {
+    setArmStyle(armStyle === undefined ? 'swing' : armStyle === 'swing' ? 'reach' : undefined);
   });
   addButton(motionBox, 'force collapse', () => { forcedCollapse = true; });
+  // Soldier-class controls (soldier-animation task 13) — only a character
+  // whose motion profile carries a weapon gets them.
+  if (motionProfile.carries) {
+    const bandBtn = addButton(motionBox, `speed: ${speedBand} (,/.)`, () => {
+      speedBand = speedBand === 'walk' ? 'run' : 'walk';
+      bandBtn.textContent = `speed: ${speedBand} (,/.)`;
+    });
+    addButton(motionBox, 'fire (F)', () => { pendingFire = true; });
+  }
   motionReadEl = document.createElement('div');
   motionReadEl.style.cssText = 'font:11px monospace;color:#9c9;';
   motionBox.appendChild(motionReadEl);
@@ -3787,10 +3968,11 @@ async function main() {
     wanderOn = on;
     wanderBtn.textContent = `wander: ${on ? 'on' : 'off'}`;
   }
-  /** Arm style: 'reach' (mummy-arms, the default) or 'swing' (counter-swing). */
-  function setArmStyle(s: ArmStyle) {
+  /** Arm style override: undefined lets the motion profile decide (the
+   *  soldier's carry); 'reach' is mummy-arms, 'swing' counter-swing. */
+  function setArmStyle(s: ArmStyle | undefined) {
     armStyle = s;
-    armStyleBtn.textContent = `arms: ${s}`;
+    armStyleBtn.textContent = `arms: ${s ?? 'profile'}`;
   }
   /** Heading-follow gain 0..1 — 0 is the strafe-walker (body never turns). */
   function setHeadingFollow(v: number) {
@@ -4395,6 +4577,38 @@ async function main() {
     },
     /** The K key's console twin: forces the collapse next frame. */
     forceCollapse() { forcedCollapse = true; },
+    /** Soldier-class controls (no-ops for characters without carries). */
+    setSpeedBand(b: 'walk' | 'run') { speedBand = b; },
+    fire() { if (motionProfile.carries) pendingFire = true; },
+    get motionProfile() { return motionProfile.name; },
+    /**
+     * Deterministic pose for captures: treadmill at `speed` m/s (0 = stand),
+     * optionally pinned to a carry, stepped `frames` times at 1/60 with the
+     * body standing still, then motion is frozen so the rig holds it.
+     * 'walk' | 'run' | 'hip' are the turntable's presets.
+     */
+    holdPose(preset: 'walk' | 'run' | 'hip' | 'rest', frames = 90) {
+      setWander(false);
+      setMotionEnabled(true); // resetMotion: fresh state at the origin, poseHeld off
+      forceSpeed = preset === 'walk' ? cruiseFor('walk') : preset === 'run' ? cruiseFor('run') : 0;
+      carryOverride = preset === 'hip' ? 'hip' : undefined;
+      if (preset === 'hip') pendingFire = true;
+      const sig = heroSignals;
+      for (let i = 0; i < frames; i++) {
+        sig.fire = pendingFire; pendingFire = false;
+        const f = stepActorMotion(heroMotion, {
+          current, dt: 1 / 60, wander: false, armStyle, headingFollow, gazeFollow,
+          bounds: WANDER_BOUNDS, rng: motionRng, signals: sig,
+          profile: motionProfile, forceSpeed, carryOverride,
+        });
+        lastMotionFrame = f;
+        if (f) sinceFire = f.kicks.length ? 0 : sinceFire + 1 / 60;
+      }
+      sinceFire = Infinity; // a held pose is judged without the muzzle rise
+      poseHeld = true; // NOT setMotionEnabled(false): that rebinds to the authored rest
+      forceSpeed = undefined; carryOverride = undefined;
+      return lastMotionFrame ? { gait: lastMotionFrame.gaitName, carry: lastMotionFrame.carry } : null;
+    },
     /**
      * The X1.25 post chain (FXAA / temporal smear / sharp-bilinear upscale)
      * — the panel's post section, from the console. All-off is an exact

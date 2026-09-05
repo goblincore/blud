@@ -47,6 +47,13 @@ export const CHUNK_TUNING = {
   toppleSpeed: 0.6,
   /** Radians/sec the long axis eases toward horizontal (~90deg in 0.4s). */
   toppleRate: 4.0,
+  /** Below this speed a grounded, finished-toppling chunk counts SETTLED
+   *  (close-up task 5). The freeze is invisible by construction: at 0.05 m/s
+   *  a chunk moves under a millimetre per 60 Hz frame, and nothing in the
+   *  lab ever pushes a chunk again once it is down (pellets do not test
+   *  chunks), so a chunk that passes the settled predicate never moves
+   *  again — we simply stop stepping it and bake its field into a mesh. */
+  settleSpeed: 0.05,
 } as const;
 
 /** What the chunk IS — limbs tumble heavy, gobs chaotic (CHUNK_TUNING),
@@ -168,6 +175,54 @@ export function stepChunk(c: Chunk, dt: number): Chunk {
   return finite(out) ? out : {
     ...c, vel: [0, 0, 0], angVel: [0, 0, 0], squash: 0,
   };
+}
+
+/**
+ * How far the chunk's long axis still is from lying flat, in radians — the
+ * SAME quantity stepChunk's topple block eases toward zero, recomputed read-
+ * only. The topple loop runs while `angle > 0.01`, so a chunk whose angle is
+ * at or below that bound will never rotate again unless it speeds back up.
+ * Exported for chunkSettled (and its tests) so the predicate cannot drift
+ * from the integrator's own stopping condition.
+ */
+export function toppleAngleToFlat(c: Chunk): number {
+  const worldLong = qRotate(c.quat, c.longAxis);
+  const horizLen = Math.hypot(worldLong[0], worldLong[2]);
+  const target: Vec3 = horizLen < 1e-3
+    ? [c.quat[0] >= 0 ? 1 : -1, 0, 0]
+    : normalize([worldLong[0], 0, worldLong[2]]);
+  const cosA = Math.min(1, Math.max(-1, dot(worldLong, target)));
+  return Math.acos(cosA);
+}
+
+/**
+ * TRUE when the chunk is done moving and will never move again. The close-up
+ * task 5 bake fires on this, so every clause is a "has already stopped"
+ * test, never a prediction:
+ *
+ *   grounded        — y is pinned to radius only while in floor contact;
+ *                     an airborne chunk always has y > radius.
+ *   angVel == 0     — stepChunk zeroes angVel EXACTLY (the len < 0.05 clamp)
+ *                     when grounded, so this is the integrator's own
+ *                     "spin has stopped" flag, not an epsilon.
+ *   squash == 0     — the squash decay clamps at exactly 0; a non-zero squash
+ *                     is still relaxing (the field is still changing shape).
+ *   topple finished — angle <= the topple loop's own exit bound (0.01, + a
+ *                     float margin). A chunk mid-topple is still rotating.
+ *   speed < settleSpeed — sub-millimetre creep; freezing it is invisible.
+ *
+ * NOT settleSpeed < TOPPLE_SPEED alone: between 0.6 and 0.05 m/s the topple
+ * is still easing the axis flat, so both gates must agree. A chunk still
+ * SLIDING (grounded but fast) fails the speed clause; an airborne chunk
+ * fails grounded; one mid-topple fails the angle.
+ */
+export function chunkSettled(c: Chunk): boolean {
+  if (!(c.pos[1] <= c.radius + 1e-4)) return false;              // grounded
+  if (c.angVel[0] !== 0 || c.angVel[1] !== 0 || c.angVel[2] !== 0) return false;
+  if (c.squash > 0) return false;                                 // still relaxing
+  if (toppleAngleToFlat(c) > 0.011) return false;                 // still toppling
+  const speed = Math.hypot(c.vel[0], c.vel[1], c.vel[2]);
+  return speed < CHUNK_TUNING.settleSpeed;
 }
 
 /** Squash factors: flatten y, bulge xz — applied in WORLD axes after rotation. */

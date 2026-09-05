@@ -87,7 +87,7 @@ function walk(heading: number): Walk {
     const step = stepMotion(
       state, joints, { enabled: true, wander: true },
       {
-        dt: DT, shot: null,
+        dt: DT, shot: null, fire: false,
         wounded: { armL: false, armR: false, legL: false, legR: false },
         severed: [],
         missing: { legL: false, legR: false, armL: false, armR: false },

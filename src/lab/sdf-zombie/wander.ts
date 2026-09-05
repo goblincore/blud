@@ -114,6 +114,8 @@ export function stepWander(
   rng: Rng,
   dt: number,
   bounds: WanderBounds,
+  /** Cruise speed (m/s). Defaults to WANDER_TUNING.speed — the zombie. */
+  cruiseSpeed: number = WANDER_TUNING.speed,
 ): WanderState {
   const dtc = Math.min(Math.max(dt, 0), 0.25);
   const T = WANDER_TUNING;
@@ -157,7 +159,7 @@ export function stepWander(
   heading = wrapPi(heading + clamp(wrapPi(desired - heading), -maxTurn, maxTurn));
 
   // Speed: accelerate toward cruise, brake as the target nears.
-  const cruise = T.speed * Math.min(1, dist / T.brakeDist);
+  const cruise = cruiseSpeed * Math.min(1, dist / T.brakeDist);
   speed = approach(speed, cruise, accel);
 
   const dir = headingDir(heading);

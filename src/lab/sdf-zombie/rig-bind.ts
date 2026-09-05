@@ -6,8 +6,9 @@ import { boxReach, shellReach, strandReach } from './extent';
 import { constrainRigBends, makeRig, type RigPoint, type RigState } from './rig';
 import { IK_TUNING, clampDir } from './ik';
 import { rotateYaw } from './gait';
+import { segmentQuat } from './rig-frames';
 import {
-  add, bendCtrl, cross, dot, len, normalize, qFromAxisAngle, qFromTo, qIdentity, qMul, qRotate,
+  add, bendCtrl, cross, dot, len, normalize, qRotate,
   scale as vscale, sub,
 } from './vec';
 
@@ -19,6 +20,16 @@ interface PrimBind {
   /** Arm endpoint insets rotate with their bone, including at full extension. */
   armFrame?: { head: number; tail: number; restDir: Vec3 };
 }
+
+/** The upper-arm / forearm bone for a side, under either naming convention:
+ *  the zombie's `upperArm`/`foreArm` or the `.blob` idiom `upperarm`/`forearm`. */
+function armBoneName(body: BuildResult, part: 'upper' | 'fore', side: 'l' | 'r'): string | null {
+  for (const n of part === 'upper' ? ['upperArm', 'upperarm'] : ['foreArm', 'forearm']) {
+    if (body.bones.has(`${n}.${side}`)) return `${n}.${side}`;
+  }
+  return null;
+}
+const ARM_BONE_RE = /^(upperArm|upperarm|foreArm|forearm)\.[lr]$/;
 
 /**
  * The head as ONE RIGID UNIT (motion-polish fix, X1.22 playtest).
@@ -81,6 +92,25 @@ export interface BoundRig {
   boneFrames: Map<number, BoneFrame>;
   /** Null when the body has no `skull` bone or no skull-owned spheres. */
   head: HeadRigid | null;
+  /** Extremity tips (hand and foot bone tails) held RIGID to their anchor
+   *  joint — see pinTips. Empty for bodies without hand/foot bones. */
+  tips: RigidTip[];
+}
+
+/**
+ * A hand tip or toe: a leaf rig point that nothing in the gait drives. Left
+ * free, it is a verlet point on a length constraint — it sags under gravity
+ * and swings in the stride, so a boot posed from ankle→toe (rig-frames.ts)
+ * pitched toe-down while the flesh foot, bound to the ankle, stayed level,
+ * and the heel slid out under the boot (owner, 2026-09-05). Pinned, it is the
+ * anchor plus its yawed rest offset every step: boot and flesh agree, the
+ * gun's grip frame stops jiggling.
+ */
+export interface RigidTip {
+  point: number;
+  anchor: number;
+  /** Bind-time tip − anchor, body-local (yaw 0). */
+  rest: Vec3;
 }
 
 /** Head-rigidity knobs — the loose-neck creature is a TUNING, not a code path. */
@@ -135,12 +165,15 @@ export function bindRig(body: BuildResult): BoundRig {
   // The mirrored shoulders establish the authored body's lateral axis.
   // Flexion is toward body-forward, not toward the rest forearm: its inward
   // carrying angle otherwise lets sideways motion mask backward extension.
-  const leftShoulder = body.bones.get('upperArm.l')?.head;
-  const rightShoulder = body.bones.get('upperArm.r')?.head;
+  const leftShoulderName = armBoneName(body, 'upper', 'l');
+  const rightShoulderName = armBoneName(body, 'upper', 'r');
+  const leftShoulder = leftShoulderName ? body.bones.get(leftShoulderName)?.head : undefined;
+  const rightShoulder = rightShoulderName ? body.bones.get(rightShoulderName)?.head : undefined;
   const bodyForward = leftShoulder && rightShoulder
     ? normalize(cross(sub(leftShoulder, rightShoulder), [0, 1, 0])) : [0, 0, 1] as Vec3;
-  for (const side of ['l', 'r']) {
-    const upperName = `upperArm.${side}`, foreName = `foreArm.${side}`;
+  for (const side of ['l', 'r'] as const) {
+    const upperName = armBoneName(body, 'upper', side), foreName = armBoneName(body, 'fore', side);
+    if (!upperName || !foreName) continue;
     const live = (name: string) => body.prims.some(p => p.bone === name && !p.dead &&
       (p.op === undefined || p.op === 'add') && len(sub(p.b, p.a)) > KEY_EPS &&
       body.clusters[p.cluster]?.alive);
@@ -231,7 +264,7 @@ export function bindRig(body: BuildResult): BoundRig {
 
   const bindPrim = (p: Primitive): PrimBind => {
     const binding: PrimBind = { a: bindEnd(p.a), b: bindEnd(p.b) };
-    const bone = p.bone && /^(upperArm|foreArm)\.[lr]$/.test(p.bone) ? body.bones.get(p.bone) : undefined;
+    const bone = p.bone && ARM_BONE_RE.test(p.bone) ? body.bones.get(p.bone) : undefined;
     if (bone) binding.armFrame = { head: indexOf(bone.head), tail: indexOf(bone.tail),
       restDir: normalize(sub(bone.tail, bone.head)) };
     return binding;
@@ -281,7 +314,31 @@ export function bindRig(body: BuildResult): BoundRig {
       return frames;
     })(),
     head,
+    tips: (() => {
+      const tips: RigidTip[] = [];
+      const heads = new Set<number>();
+      for (const b of body.bones.values()) heads.add(indexOf(b.head));
+      for (const [name, b] of body.bones) {
+        if (!/^(hand|foot)\.[lr]$/.test(name)) continue;
+        const tip = indexOf(b.tail), anchor = indexOf(b.head);
+        if (tip === anchor || heads.has(tip)) continue; // not a leaf
+        tips.push({ point: tip, anchor, rest: sub(positions[tip]!, positions[anchor]!) });
+      }
+      return tips;
+    })(),
   };
+}
+
+/** Snap every rigid tip to anchor + yawed rest offset (pos AND prev, so the
+ *  verlet carries no velocity into the next step). Pure; returns new points. */
+export function pinTips(points: readonly RigPoint[], tips: readonly RigidTip[], bodyYaw = 0): RigPoint[] {
+  if (tips.length === 0) return points as RigPoint[];
+  const out = points.slice();
+  for (const t of tips) {
+    const pos = add(out[t.anchor]!.pos, bodyYaw === 0 ? t.rest : rotateYaw(t.rest, bodyYaw));
+    out[t.point] = { ...out[t.point]!, pos, prev: pos };
+  }
+  return out;
 }
 
 /**
@@ -316,14 +373,12 @@ export function bindRig(body: BuildResult): BoundRig {
 export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): BuildResult {
   const pos = bound.rig.points;
   const rigid = bound.head ? headTransform(bound.head, pos, bodyYaw) : null;
-  const qYaw = bodyYaw === 0 ? qIdentity() : qFromAxisAngle([0, 1, 0], bodyYaw);
   const poseEnds = (bind: PrimBind): { a: Vec3; b: Vec3 } => {
     let a = bind.a.offset, b = bind.b.offset;
     if (bind.armFrame) {
       const frame = bind.armFrame;
       const dir = normalize(sub(pos[frame.tail]!.pos, pos[frame.head]!.pos));
-      const rest = bodyYaw === 0 ? frame.restDir : rotateYaw(frame.restDir, bodyYaw);
-      const q = qMul(qFromTo(rest, dir), qYaw);
+      const q = segmentQuat(frame.restDir, dir, bodyYaw);
       a = qRotate(q, a); b = qRotate(q, b);
     }
     return { a: add(pos[bind.a.point]!.pos, a), b: add(pos[bind.b.point]!.pos, b) };
@@ -355,8 +410,7 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
       // and current direction would drop the azimuth), then the residual tilt.
       const h = pos[frame.head]!.pos;
       const dir = normalize(sub(pos[frame.tail]!.pos, h));
-      const rest = bodyYaw === 0 ? frame.restDir : rotateYaw(frame.restDir, bodyYaw);
-      const q = qMul(qFromTo(rest, dir), qYaw);
+      const q = segmentQuat(frame.restDir, dir, bodyYaw);
       return { ...p, a: add(h, qRotate(q, frame.restA)), b: add(h, qRotate(q, frame.restB)), orient: q };
     }
     return { ...p, ...poseEnds(bound.boneBinding[i]!) };
@@ -424,9 +478,8 @@ function headTransform(h: HeadRigid, pos: readonly RigPoint[], bodyYaw = 0): {
   // The cone anchor turns with the body: at yaw 0 this is exactly h.restDir.
   const rest = bodyYaw === 0 ? h.restDir : rotateYaw(h.restDir, bodyYaw);
   const clamped = clampDir(dir, rest, IK_TUNING.headMaxYaw, IK_TUNING.headMaxPitch);
-  const qYaw = bodyYaw === 0 ? qIdentity() : qFromAxisAngle([0, 1, 0], bodyYaw);
   // qMul(a, b) applies b first: the body turn, then the in-cone residual.
-  const q = qMul(qFromTo(rest, clamped), qYaw);
+  const q = segmentQuat(h.restDir, clamped, bodyYaw);
 
   // Translation: the neck pivot plus a bounded share of the drift the rigid
   // rotation does not explain (verlet lag, gait bob, whatever pulled the head
@@ -462,8 +515,7 @@ export function headQuatOf(bound: BoundRig, bodyYaw = 0): Quat | null {
   const rest = bodyYaw === 0 ? h.restDir : rotateYaw(h.restDir, bodyYaw);
   const clamped = clampDir(
     normalize(sub(tip, pivot)), rest, IK_TUNING.headMaxYaw, IK_TUNING.headMaxPitch);
-  const qYaw = bodyYaw === 0 ? qIdentity() : qFromAxisAngle([0, 1, 0], bodyYaw);
-  return qMul(qFromTo(rest, clamped), qYaw);
+  return segmentQuat(h.restDir, clamped, bodyYaw);
 }
 
 /** Shoves the rig point nearest a world position — used to make hits push flesh. */

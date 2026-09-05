@@ -17,7 +17,8 @@
     "test:watch": "vitest",
     "blob:face-bake": "python3 scripts/blob-face-bake.py",
     "bench:sdf": "scripts/sdf-bench.sh",
-    "blob:relief": "tsx scripts/blob-relief.ts"
+    "blob:relief": "tsx scripts/blob-relief.ts",
+    "gait:curves": "tsx scripts/gait-from-clip.ts"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.14.0",

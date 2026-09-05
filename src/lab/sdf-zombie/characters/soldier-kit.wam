@@ -150,15 +150,21 @@ parts
     # the neck. side=0.0118 then pushes every ring 20 mm outward to hold the
     # forced inner-rim tuck (see the header) inside anatomy's bound — the
     # levelled ray pulls the rim further into the chest and this buys it back.
+    #
+    # ORB, NOT TABLE (owner, 2026-09-05: "shoulder pads should be more orb
+    # shaped"). Same ray, same 20 mm outward shift, same reach down the arm;
+    # the rings now start narrow under a DOME cap, swell to the widest ring a
+    # third of the way down (where the flat top used to be widest), and
+    # round off below — a shell riding the deltoid orb, the goblin's read.
     loft pauldron bone=upperarm at=0.0 offset=(-0.0074,0.0529,-0.0019) dir=down pitch=-2 tilt=3 len=0.1324 material=plate
-      ring 0.00 w=0.159 d=0.141 side=0.0118
-      ring 0.15 w=0.156 d=0.144 side=0.0118
-      ring 0.30 w=0.150 d=0.141 side=0.0118
-      ring 0.45 w=0.147 d=0.138 side=0.0118
-      ring 0.60 w=0.135 d=0.130 side=0.0118
-      ring 0.80 w=0.121 d=0.118 side=0.0118
-      ring 1.00 w=0.112 d=0.109 side=0.0118
-      cap start=flat end=none
+      ring 0.00 w=0.095 d=0.088 side=0.0118
+      ring 0.12 w=0.138 d=0.126 side=0.0118
+      ring 0.30 w=0.156 d=0.144 side=0.0118
+      ring 0.48 w=0.152 d=0.141 side=0.0118
+      ring 0.65 w=0.138 d=0.130 side=0.0118
+      ring 0.82 w=0.121 d=0.116 side=0.0118
+      ring 1.00 w=0.104 d=0.100 side=0.0118
+      cap start=dome end=none
 
     # KNEE PLATE — a hard box-section shell over the knee, proud at the front
     # (dtop) and snug at the back of the joint (dbot) so it reads as a pad
@@ -182,8 +188,9 @@ parts
       ring 0.00 w=0.0671 d=0.0671
       ring 0.25 w=0.0647 d=0.0647
       ring 0.50 w=0.0635 d=0.0635
-      ring 0.75 w=0.0618 d=0.0618
-      ring 1.00 w=0.0541 d=0.0541
+      ring 0.75 w=0.0760 d=0.0760
+      # Flares into the (now bigger) boot instead of narrowing into it.
+      ring 1.00 w=0.0900 d=0.0900
       cap start=none end=flat
 
     # BOOT FOOT — over the bare flesh foot that IS in the .blob; no foot is
@@ -193,14 +200,40 @@ parts
     # — the foot bone runs at ankle height, 95 mm above it). frame=up so d is
     # HEIGHT: every ring's bottom sits on y=0 and he stands on his boots.
     # Soles rise a touch toward the toe, the way a boot rocks.
-    loft foot bone=shin at=1.0 dir=fwd len=0.088 frame=up offset=(0,-0.0559,0) material=plate
-      ring 0.00 w=0.0612 d=0.0424
-      ring 0.15 w=0.0565 d=0.0424
-      ring 0.35 w=0.0588 d=0.0424
-      ring 0.55 w=0.0576 d=0.0424
-      ring 0.75 w=0.0524 d=0.0400
-      ring 0.90 w=0.0353 d=0.0388
-      ring 1.00 w=0.0294 d=0.0324
+    #
+    # ON THE FOOT BONE, NOT THE SHIN (owner, 2026-09-05: "his feet clip
+    # through his boots"). The flesh foot rides the foot bone, whose frame
+    # stays level under the gait (the toe follows the ankle rigidly), while a
+    # shell on the shin tilts with the shin every stride — so the two parted
+    # at every step. `bone=foot at=0.0` is the same point (the shin's tail IS
+    # the foot's head) in the frame that actually carries the foot.
+    #
+    # CARTOON-BIG (same owner note): every ring ~1.45x the measured foot and
+    # 25 mm taller, dropped a further 9 mm so the sole still sits on y=0.
+    # The heel ring is wider than the shaft's bottom ring on purpose now —
+    # the shaft tucks INTO the boot, the way a boot swallows a trouser leg.
+    # Round 3 (owner: "the feet still show through the boots, and the join
+    # between the two parts should be more seamless"). The round-2 numbers
+    # were written in METRES in a file whose unit is height fractions (1.70 m),
+    # so the shell came out 12 cm tall with its sole 5 cm UNDER the floor,
+    # its top a centimetre into the shaft, and nothing behind the ankle — the
+    # flesh heel showed at the back and the shaft/foot met at a step.
+    #
+    # Now, in height fractions: the shell starts 50 mm BEHIND the ankle
+    # (offset z -0.0294) and runs 280 mm to past the toe (len 0.165); the
+    # heel section is 150 mm tall (d 0.088), sole on y=0 (centre y=0.075 m
+    # -> offset y -0.0324 from the 0.130 m ankle), so its top reaches 20 mm
+    # ABOVE the ankle and swallows the shaft's bottom 90 mm — the shaft
+    # (0.09 wide at its foot) tucks inside the 0.10-wide heel, one boot, no
+    # seam. The toe half steps down so the sole still rocks.
+    loft foot bone=foot at=0.0 dir=fwd len=0.165 frame=up offset=(0,-0.0324,-0.0294) material=plate
+      ring 0.00 w=0.1000 d=0.0880
+      ring 0.20 w=0.1000 d=0.0880
+      ring 0.40 w=0.0980 d=0.0880
+      ring 0.55 w=0.0960 d=0.0760
+      ring 0.75 w=0.0900 d=0.0620
+      ring 0.90 w=0.0700 d=0.0520
+      ring 1.00 w=0.0560 d=0.0440
       cap start=flat end=flat
 
   # CUIRASS — machined plate over the bare chest, from just above the belt to
@@ -214,13 +247,25 @@ parts
   # It stops at y=1.09, leaving a band of BARE MIDRIFF between plate and
   # belt — the reference's midriff break, which used to be a dark vest in
   # the .blob before the shirt left for the kit.
+  #
+  # A VEST, NOT A SHELL (owner, 2026-09-05: "chest armor clipping through the
+  # body, make it bigger and more like a vest"). Under the run's 12-degree
+  # lean and the stride the verlet spine bends where the rigid chest frame
+  # does not, and a plate 10 mm off the flesh showed skin through it. Every
+  # ring now stands ~25 mm off the measured flesh, the plate runs down to
+  # the belt line (0.30) so there is no bare midriff for the bend to open,
+  # and it keeps its width at the top so the shoulders read as a vest yoke
+  # under the pauldrons rather than a cone tapering into the neck.
   loft cuirass bones=hips..spine2 material=plate frame=fwd shape=squarish
-    ring 0.45 w=0.1412 d=0.1106
-    ring 0.55 w=0.1459 d=0.1153
-    ring 0.70 w=0.1424 d=0.1165
-    ring 0.82 w=0.1447 d=0.1194
-    ring 0.92 w=0.1424 d=0.1165
-    ring 1.00 w=0.1212 d=0.1012
+    # Round 2 (owner: "still some clipping, make it a little thicker or
+    # bigger"): another +15 mm on every ring, ~40 mm off the measured flesh.
+    ring 0.30 w=0.1710 d=0.1450
+    ring 0.45 w=0.1750 d=0.1480
+    ring 0.55 w=0.1790 d=0.1520
+    ring 0.70 w=0.1770 d=0.1540
+    ring 0.82 w=0.1790 d=0.1570
+    ring 0.92 w=0.1770 d=0.1540
+    ring 1.00 w=0.1650 d=0.1400
     cap start=none end=none
 
   # FRONT PLATE — the distinct raised plate on the cuirass's face. A box,
@@ -228,7 +273,7 @@ parts
   # body): narrow enough (0.12 m) that the cuirass's curvature only pulls its
   # side edges ~3 mm off the shell behind it, standing 12 mm proud at the
   # centre. Checked by the fit test, not by eye.
-  attach frontplate bone=chest kind=box at=0.45 offset=(0,0,0.0588) size=0.0941 w=0.0706 h=0.0941 d=0.0141 material=plate
+  attach frontplate bone=chest kind=box at=0.45 offset=(0,0,0.0940) size=0.0941 w=0.0706 h=0.0941 d=0.0141 material=plate
 
   # BELT — a wide webbing slab breaking the torso's line. Sized WIDER than
   # the flesh both above it (0.133 at y1.13) and below it (0.135 at y0.92),

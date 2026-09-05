@@ -3,18 +3,32 @@ import { describe, it, expect } from 'vitest';
 import {
   GAIT_JOINTS,
   GAIT_TUNING,
+  MARCH,
+  RUN,
+  SHAMBLE,
+  blendProfiles,
   jointForBoneEnd,
   jointNamesForBody,
   makeGaitState,
   rotateYaw,
   stepGait,
+  type GaitLimbs,
   type GaitPose,
+  type GaitProfile,
   type GaitSkew,
 } from './gait';
+import { SOLDIER_WALK } from './gait-curves/soldier-walk';
+import { SOLDIER_RUN } from './gait-curves/soldier-run';
 import { bindRig } from './rig-bind';
 import { buildBody } from './build-body';
 import { makeZombie } from './body';
-import { len, sub } from './vec';
+import { compileBlob } from './blob-compile';
+import { parseBlob } from './blob-parse';
+import { makeMotionJoints } from './motion';
+import soldierSrc from './characters/soldier.blob?raw';
+import goblinSrc from './characters/goblin.blob?raw';
+import zombieSrc from './characters/zombie.blob?raw';
+import { add, len, normalize, sub } from './vec';
 import type { Vec3 } from './types';
 
 const NONE: GaitSkew = { damageMeter: 0, missing: {}, wounded: {} };
@@ -276,7 +290,7 @@ describe('GAIT_TUNING', () => {
     expect(GAIT_TUNING.stanceDuty).toBeGreaterThan(0.4);
     expect(GAIT_TUNING.stanceDuty).toBeLessThan(0.8);
     for (const v of Object.values(GAIT_TUNING))
-      if (typeof v === 'number') expect(v).toBeGreaterThan(0);
+      if (typeof v === 'number') expect(v).toBeGreaterThanOrEqual(0);
   });
 });
 
@@ -287,7 +301,13 @@ describe('body ↔ joint wiring contract', () => {
     const bound = bindRig(body);
     const names = jointNamesForBody(body);
     expect(names).toHaveLength(17);
-    expect(names).toEqual([...GAIT_JOINTS]);
+    // The zombie's 17 primary names, in rig-point order (mirrored bones emit
+    // as adjacent .l/.r pairs, so the sides interleave bone-by-bone).
+    expect(names).toEqual([
+      'pelvis', 'hips', 'chest', 'neck', 'head',
+      'shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'handL', 'handR',
+      'hipL', 'kneeL', 'hipR', 'kneeR', 'footL', 'footR',
+    ]);
     expect(bound.rig.points).toHaveLength(17);
     // every resolved bone joint lands on the named rig point at the right spot
     for (const [boneName, bone] of body.bones.entries()) {
@@ -295,6 +315,7 @@ describe('body ↔ joint wiring contract', () => {
         const name = jointForBoneEnd(boneName, end);
         if (!name) continue;
         const idx = names.indexOf(name);
+        if (idx < 0) continue; // a primary name won this point's position
         expect(len(sub(bound.rig.points[idx]!.pos, bone[end]))).toBeLessThan(1e-4);
       }
     }
@@ -306,7 +327,7 @@ describe('body ↔ joint wiring contract', () => {
     expect(jointForBoneEnd('spine', 'tail')).toBe('chest');
     expect(jointForBoneEnd('thigh.l', 'head')).toBe('hipL');
     expect(jointForBoneEnd('shin.r', 'tail')).toBe('footR');
-    expect(jointForBoneEnd('clavicle.l', 'head')).toBe('chest');
+    expect(jointForBoneEnd('clavicle.l', 'head')).toBe('clavicleL');
     expect(jointForBoneEnd('foreArm.r', 'tail')).toBe('handR');
     expect(jointForBoneEnd('mysteryBone', 'tail')).toBeNull();
   });
@@ -323,5 +344,144 @@ describe('rotateYaw', () => {
     const v: Vec3 = [0.3, 0.7, -0.2];
     const back = rotateYaw(rotateYaw(v, 1.3), -1.3);
     expect(close(back, v, 1e-9)).toBe(true);
+  });
+});
+
+describe('joint naming — every rig point of every character gets a name', () => {
+  const load = (src: string) => {
+    const body = buildBody(compileBlob(parseBlob(src)));
+    return { body, bound: bindRig(body), names: jointNamesForBody(body) };
+  };
+  it('zombie: the 17 primary names in rig-point order', () => {
+    const { names } = load(zombieSrc);
+    // compileBlob emits each mirrored bone as an adjacent .l/.r pair, so the
+    // rig points (and their names) interleave the sides bone-by-bone — this
+    // is the order bindRig has always emitted for the blob-compiled zombie.
+    expect(names).toEqual([
+      'pelvis', 'hips', 'chest', 'neck', 'head',
+      'shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'handL', 'handR',
+      'hipL', 'kneeL', 'hipR', 'kneeR', 'footL', 'footR',
+    ]);
+  });
+  it.each([['soldier', soldierSrc], ['goblin', goblinSrc]])('%s: names == rig points, makeMotionJoints is live', (_n, src) => {
+    const { bound, names, body } = load(src);
+    expect(names.length).toBe(bound.rig.points.length);
+    expect(new Set(names).size).toBe(names.length);
+    expect(makeMotionJoints(body, bound.rig.restPose)).not.toBeNull();
+    for (const j of ['shoulderL', 'elbowL', 'handL', 'hipL', 'kneeL', 'footL', 'chest', 'neck', 'head'])
+      expect(names, j).toContain(j);
+  });
+  it('soldier: the secondary names land on the right points', () => {
+    const { body, bound, names } = load(soldierSrc);
+    const at = (n: string) => bound.rig.points[names.indexOf(n as never)]!.pos;
+    expect(at('spineA')).toEqual(body.bones.get('spine1')!.tail);
+    expect(at('spineB')).toEqual(body.bones.get('chest')!.tail);
+    expect(at('chest')).toEqual(body.bones.get('neck')!.head);
+    expect(at('clavicleL')).toEqual(body.bones.get('clavicle.l')!.head);
+    expect(at('handTipR')).toEqual(body.bones.get('hand.r')!.tail);
+    expect(at('toeL')).toEqual(body.bones.get('foot.l')!.tail);
+  });
+  it('goblin: chest.tail and neck.head coincide and the PRIMARY name wins', () => {
+    const { names } = load(goblinSrc);
+    expect(names).toContain('chest');
+    expect(names).not.toContain('spineB');
+  });
+  it('jointForBoneEnd aliases', () => {
+    expect(jointForBoneEnd('upperarm.l', 'head')).toBe('shoulderL');
+    expect(jointForBoneEnd('forearm.r', 'tail')).toBe('handR');
+    expect(jointForBoneEnd('hand.r', 'tail')).toBe('handTipR');
+    expect(jointForBoneEnd('foot.l', 'tail')).toBe('toeL');
+    expect(jointForBoneEnd('clavicle.l', 'head')).toBe('clavicleL');
+    expect(jointForBoneEnd('spine2', 'tail')).toBe('chest');
+  });
+  it('the pose carries every secondary joint, rigid with its parent', () => {
+    const p = stepGait(makeGaitState(3), NONE, 0.2, 'swing').pose;
+    expect(p.offsets.handTipL).toEqual(p.offsets.handL);
+    expect(p.offsets.toeR).toEqual(p.offsets.footR);
+    expect(p.offsets.clavicleL).toEqual(p.offsets.chest);
+    expect(p.offsets.spineA[1]).not.toBe(0);
+  });
+});
+
+describe('gait profiles', () => {
+  it('SHAMBLE is GAIT_TUNING by identity and the default', () => {
+    expect(SHAMBLE).toBe(GAIT_TUNING);
+    const a = stepGait(makeGaitState(1), NONE, 0.1, 'swing').pose;
+    const b = stepGait(makeGaitState(1), NONE, 0.1, 'swing', SHAMBLE).pose;
+    expect(b).toEqual(a);
+  });
+  it('run lifts the foot higher and strides longer than march', () => {
+    const lift = (p: GaitProfile) => {
+      let st = makeGaitState(5); let best = 0; let reach = 0;
+      for (let i = 0; i < 240; i++) {
+        const s = stepGait(st, NONE, 1 / 240, 'swing', p); st = s.state;
+        best = Math.max(best, s.pose.offsets.footL[1]); reach = Math.max(reach, s.pose.offsets.footL[2]);
+      }
+      return { best, reach };
+    };
+    expect(lift(RUN).best).toBeGreaterThan(lift(MARCH).best);
+    expect(lift(RUN).reach).toBeGreaterThan(lift(MARCH).reach);
+  });
+  it('blendProfiles lerps scalars and snaps armStyle at 0.5', () => {
+    const half = blendProfiles(MARCH, RUN, 0.5);
+    expect(half.strideLen).toBeCloseTo((MARCH.strideLen + RUN.strideLen) / 2, 9);
+    expect(blendProfiles(MARCH, RUN, 0.49).armStyle).toBe(MARCH.armStyle);
+    expect(blendProfiles(MARCH, RUN, 0.5).armStyle).toBe(RUN.armStyle);
+    expect(blendProfiles(MARCH, RUN, 0).torsoLean).toBe(0);
+    expect(blendProfiles(MARCH, RUN, 1).torsoLean).toBe(RUN.torsoLean);
+  });
+  it('the pose reports the profile lean; shamble reports 0', () => {
+    expect(stepGait(makeGaitState(1), NONE, 0.1, 'swing').pose.lean).toBe(0);
+    expect(stepGait(makeGaitState(1), NONE, 0.1, 'swing', RUN).pose.lean).toBeCloseTo(RUN.torsoLean * Math.PI / 180, 9);
+  });
+});
+
+describe('curve-mode gait', () => {
+  // The soldier's rest legs: dead straight, 0.42 + 0.42, tilt 2°.
+  const LIMBS: GaitLimbs = {
+    L: { thigh: [0.0147, -0.4197, 0], shin: [0.0147, -0.4197, 0] },
+    R: { thigh: [-0.0147, -0.4197, 0], shin: [-0.0147, -0.4197, 0] },
+  };
+  const walk: GaitProfile = { ...MARCH, curves: SOLDIER_WALK, strideFreq: SOLDIER_WALK.freq };
+  const runP: GaitProfile = { ...RUN, curves: SOLDIER_RUN, strideFreq: SOLDIER_RUN.freq };
+  const cycle = (p: GaitProfile, limbs?: GaitLimbs) => {
+    let st = makeGaitState(9); const out: GaitPose[] = [];
+    const n = Math.round(1 / p.strideFreq / DT) + 1;
+    for (let i = 0; i < n; i++) { const s = stepGait(st, NONE, DT, 'carry', p, limbs); st = s.state; out.push(s.pose); }
+    return out;
+  };
+  const kneeOffLine = (pose: GaitPose, limbs: GaitLimbs) => {
+    // Distance of the posed knee from the posed hip→ankle line, left leg.
+    const hip: Vec3 = [0, 0, 0];
+    const knee = add(limbs.L.thigh, pose.offsets.kneeL);
+    const ankle = add(add(limbs.L.thigh, limbs.L.shin), pose.offsets.footL);
+    const d = normalize(sub(ankle, hip));
+    const v = sub(knee, hip);
+    const along = d[0] * v[0] + d[1] * v[1] + d[2] * v[2];
+    return len(sub(v, [d[0] * along, d[1] * along, d[2] * along]));
+  };
+  it('the knee leaves the hip→ankle line by more than 8 cm at peak swing', () => {
+    expect(Math.max(...cycle(walk, LIMBS).map(p => kneeOffLine(p, LIMBS)))).toBeGreaterThan(0.08);
+  });
+  it('segment lengths are preserved by construction', () => {
+    for (const p of cycle(runP, LIMBS)) {
+      const knee = add(LIMBS.L.thigh, p.offsets.kneeL);
+      const ankle = add(add(LIMBS.L.thigh, LIMBS.L.shin), p.offsets.footL);
+      expect(len(knee)).toBeCloseTo(len(LIMBS.L.thigh), 6);
+      expect(len(sub(ankle, knee))).toBeCloseTo(len(LIMBS.L.shin), 6);
+    }
+  });
+  it('walk never has both feet in the air; run has a flight phase', () => {
+    expect(cycle(walk, LIMBS).some(p => !p.stance.legL && !p.stance.legR)).toBe(false);
+    expect(cycle(runP, LIMBS).some(p => !p.stance.legL && !p.stance.legR)).toBe(true);
+  });
+  it('without limbs the profile falls back to the sinusoid path', () => {
+    const a = cycle(walk)[10]!, b = cycle({ ...walk, curves: undefined })[10]!;
+    expect(a.offsets.kneeL).toEqual(b.offsets.kneeL);
+  });
+  it('blendProfiles blends the curves sample-wise', () => {
+    const half = blendProfiles(walk, runP, 0.5);
+    expect(half.curves!.L.knee[3]).toBeCloseTo((SOLDIER_WALK.L.knee[3]! + SOLDIER_RUN.L.knee[3]!) / 2, 9);
+    expect(blendProfiles(walk, runP, 0).curves).toBe(SOLDIER_WALK);
   });
 });

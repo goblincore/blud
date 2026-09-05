@@ -250,6 +250,12 @@ const ROPE_SPEC: ReadonlyArray<{ a: GaitJointName; b: GaitJointName; factor: num
   // constraint, and collapse releases the rest-pull that held the legs on.
   { a: 'hipL', b: 'hips', factor: COLLAPSE_TUNING.anchorSlack },
   { a: 'hipR', b: 'hips', factor: COLLAPSE_TUNING.anchorSlack },
+  // Clavicle anchors — a clavicle that starts OFF the spine (side= offset,
+  // the goblin and soldier) has no rig constraint to the chest; the rest
+  // pull held it there while standing, and collapse releases the rest pull.
+  // collapseRopes skips names a body lacks, so the zombie is untouched.
+  { a: 'clavicleL', b: 'chest', factor: COLLAPSE_TUNING.anchorSlack },
+  { a: 'clavicleR', b: 'chest', factor: COLLAPSE_TUNING.anchorSlack },
   // Knee keepers — legs may fold freely but never fully straighten: a
   // corpse keeps a slack bend instead of rigid plank limbs.
   { a: 'hipL', b: 'footL', factor: COLLAPSE_TUNING.legSlack },
