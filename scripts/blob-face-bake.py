@@ -42,6 +42,10 @@ ap.add_argument('--eye-grow', type=int, default=2,
                 help="Dilate the eye mask by this many texels. The source red is "
                      "sparse and the shader samples NEAREST, so an undilated mask "
                      "reads as specks rather than eyes. 0 disables.")
+ap.add_argument('--eye-soft', type=int, default=4,
+                help="Blur passes on the eye mask, so the glow reads as a light "
+                     "with a bright centre rather than a hard red sticker. 0 "
+                     "gives the old binary punch.")
 ap.add_argument('--grey', action='store_true',
                 help="Bake a GREYSCALE MODULATION MAP instead of a colour decal. "
                      "The colour bake is meant for `decal 1` (replace the albedo); "
@@ -171,7 +175,22 @@ if a.grey:
                     | np.roll(e, 1, 1) | np.roll(e, -1, 1))
         eyes &= cov
         eye_n = int(eyes.sum())
-        lum = np.where(eyes, 255.0, lum)
+        # SOFT, WITH A HOT CENTRE. A binary punch to white gives hard-edged
+        # blobs; blurring the mask and using it to lerp toward white gives a
+        # core that clears eyeGlowCut and edges that fall under it, so the
+        # shader's own smoothstep does the falloff. That reads as a glowing
+        # light rather than a red sticker. --eye-soft 0 restores the hard punch.
+        soft = eyes.astype(np.float32)
+        for _ in range(max(0, a.eye_soft)):
+            soft = (soft
+                    + np.roll(soft, 1, 0) + np.roll(soft, -1, 0)
+                    + np.roll(soft, 1, 1) + np.roll(soft, -1, 1)) / 5.0
+        if a.eye_soft > 0 and soft.max() > 0:
+            # Renormalise so the centre still reaches white after blurring,
+            # then bias with a gamma < 1 to keep the core broad and the
+            # shoulder quick -- a raw gaussian is too dim to clear the cut.
+            soft = np.clip(soft / soft.max(), 0, 1) ** 0.55
+        lum = lum * (1 - soft) + 255.0 * soft
     v = np.clip(lum, 0, 255).astype(np.uint8)
     img = np.dstack([v, v, v, img[:, :, 3]])
 
