@@ -27,6 +27,7 @@ import {
 import {
   initialAdaptiveState, stepAdaptive, scaleForRung, SCALE_LADDER,
 } from '../adaptive-scale';
+import { WOUND_STEP_MUL } from './march.wgsl';
 import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHADOW_HULL_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER } from './sdf-layer';
 import { createFlashlight, DUNGEON_RIG, GALLERY_RIG, type AmbientRig } from './dungeon-lighting';
 import { GOBLIN_SKIN } from './goblin-skin';
@@ -2335,6 +2336,10 @@ async function main() {
         ? ` · HALF30 ${sdfLayer.halfRateMode === 1 ? 'reproj' : 'hold'}`
         : '') +
       (freeAimOn ? ' · FREE-AIM (G)' : ' · mouselook (G)') +
+      // The wound-zone step multiplier, so a setWoundStep() flip is visible
+      // (owner: "hard to tell"). 0 = the shipped constant.
+      ` · wstep ${(() => { const z = actors[0]?.view.uniforms.perfCfg.value.z ?? 0; return z > 0 ? z.toFixed(2) : `${WOUND_STEP_MUL} (ship)`; })()}` +
+      (adaptiveEnabled ? ` · ADAPTIVE r${adaptiveState.rung}` : '') +
       (reloadSpeed !== 1 ? ` · RELOAD x${reloadSpeed} (T)` : '') +
       (hud.lockHint ? ' · click to lock' : '') +
       (wanderFrozen ? ' · FROZEN' : '');
@@ -3800,6 +3805,7 @@ async function main() {
     setWoundStep(v: number) {
       const n = v <= 0 ? 0 : Math.max(0.1, Math.min(1.0, v));
       for (const a of actors) a.view.uniforms.perfCfg.value.z = n;
+      updateHud();
     },
     get woundStep() { return actors[0]?.view.uniforms.perfCfg.value.z ?? 0; },
     /** Step multiplier (marchCfg.y). Ships at GAME_OMEGA. */
