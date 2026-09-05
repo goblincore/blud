@@ -2030,7 +2030,8 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // comment is the OLDER failure - the phantom input shifts every binding
   // by one slot. NO PARENS and NO COLONS in any comment in this list. Ever.
   depthPreTex: texture_2d<f32>,
-  depthPreCfg: vec4<f32>
+  depthPreCfg: vec4<f32>,
+  normalGradientCfg: vec4<f32>
 ) -> vec4<f32> {
   // FIRST STATEMENT, before anything folds. gWindDrift is read inside
   // sdShell, which is reached from foldGroup on every mapBody call in this
@@ -2642,7 +2643,32 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // pure reads, so hoisting them cannot move a pixel, and the mode-0 branch
   // below is byte-for-byte the pre-task-2 call.
   let anchor = restPoint(p, data, hitBest, noiseLocal(p, noiseShift));
-  var n = calcNormal(p, data, counts, counts2, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg, woundBound);
+  var n = vec3<f32>(0.0);
+  var ngValid = false;
+  var ngReason = 7;
+  var ngScalar = 0.0;
+  if (normalGradientCfg.x > 0.5) {
+    let noiseAmplitude = marchCfg.z * (1.0 - max(gloss, metal));
+    let ng = ngBody(p, data, counts, counts2, vec4<f32>(noiseAmplitude, 0.0, 0.0, 0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg, woundBound);
+    ngReason = gNgReason;
+    ngScalar = ng.x;
+    if (ngReason == 0) {
+      let candidate = ng.yzw + ngDetail(p, data, gNgOwner, noiseShift, noiseAmplitude);
+      let magnitude2 = dot(candidate, candidate);
+      // Comparisons reject NaN and infinity as well as a collapsed gradient.
+      ngValid = magnitude2 > 1e-12 && magnitude2 < 1e12;
+      if (ngValid) { n = normalize(candidate); } else { ngReason = 2; }
+    }
+  }
+  if (!ngValid) {
+    n = calcNormal(p, data, counts, counts2, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg, woundBound);
+  }
+  // Raw diagnostic RGB bypasses later detail/shading; outputNode still writes
+  // the identical clip depth. Eligibility 0 is background, 1 is analytic.
+  if (normalGradientCfg.y > 1.5) {
+    return vec4<f32>(f32(ngReason + 1), select(0.0, ngScalar - hitField.x, ngValid), f32(hitBest), t);
+  }
+  if (normalGradientCfg.y > 0.5) { return vec4<f32>(n * 0.5 + 0.5, t); }
   let detailAmp = surfCfg2.y * (1.0 - max(gloss, metal));
   if (detailAmp > 0.0) {
     n = normalize(n + vec3<f32>(

@@ -59,3 +59,13 @@ Eleven named cases ran on the real WebGPU backend: unit sphere, capsule interior
 The negative control set a diagnostic uniform that negated GPU `gx` after kernel evaluation. The same driver failed 16 CPU/oracle component comparisons; its first failure was the unit sphere's `gx` error `2 > 0.012`. The mutation is confined to the diagnostic entry and is off by default.
 
 Tracked results are in `kernel.json` and `kernel-visualization.svg`. Raw reports and the runtime screenshot are `/tmp/zombie-ng-kernel/` and `/tmp/zombie-ng-kernel-negative/`.
+
+## Task 3 — integration implemented; real gameplay gate deferred
+
+The final-hit hybrid is default-off. It combines unnormalized supported geometry gradients with four production noise-only samples under a conservative radius-`sqrt(3)*.0015` rest-owner certificate. Invalid local regions execute complete legacy `calcNormal`; procedural wound reaches are expanded by that full radius. Curved internal ribs do not globally reject intact flesh. The independent uniform is bound for full march variants and propagated to new actors/chunks. Scalar tracing is unchanged.
+
+Focused verification: 233 Vitest tests, 2 Node gate tests, TypeScript and driver syntax all pass. The required actual gameplay run did **not** start: bounded owned-server launch attempts were rejected by the load preflight at load1 20.47, 27.25 and 25.78, above the required 12. No new GPU device, samples, coverage images or motion reel exists. `intact: deferred` records that absence honestly; Task 2 kernel evidence cannot stand in for the full new game pipeline.
+
+Criteria fixed before gameplay data: independently >=50% eligible intact head and torso hit pixels; report whole body separately; other scene 10% is a probe floor only. Use raw Float32 target reason/depth/normal data, before antialias/color conversion. Require exact depth equality, fallback component error <=1e-6, geometric scalar error <=1e-5, and legacy finite-stencil angle p99<=5 degrees /max<=25 degrees. Angle comparison is distinct from mathematical derivative correctness and owner look. No timing claim or owner acceptance follows.
+
+Future combination with the independent zoned-wound experiment must force full legacy normals while `zonedCfg.x` is active until separate cached-gradient work passes. This baseline has no such uniform and does not speculate one into its interfaces. Detailed handoff: `.superpowers/sdd/2026-09-05-zombie-analytic-normals/task-3-report.md`; machine-readable missing evidence: `intact.json`.

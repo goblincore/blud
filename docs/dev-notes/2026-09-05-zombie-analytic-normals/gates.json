@@ -2,7 +2,7 @@
   "version": 1,
   "reference": "pass",
   "gpuKernel": "pass",
-  "intact": "pending",
+  "intact": "deferred",
   "wounds": "pending",
   "visualEvidence": "pending",
   "timing": "pending",
@@ -25,6 +25,12 @@
       "command": "vitest reference+kernel; tsc --noEmit; WebGPU kernel phase on owned ports 5251/9251; corrupted-gradient negative control",
       "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/kernel.json",
       "reason": "11 real RGBA32F GPU readbacks matched CPU and scalar oracles; explicit fallback reasons passed; negative control produced 16 required failures"
+    },
+    {
+      "commit": "Task 3 worktree based on edeca69",
+      "command": "Focused Vitest 233/233, Node gates 2/2, tsc and driver syntax pass; guarded actual intact launch stopped before servers at load1 20.47,27.25,25.78 >12",
+      "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/intact.json",
+      "reason": "Real game GPU compilation, numeric readback, coverage and motion are unexecuted due to bounded environmental load gate; not a correctness pass."
     }
   ]
 }

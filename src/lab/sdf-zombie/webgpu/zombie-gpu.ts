@@ -28,6 +28,7 @@ import { createFallbackHandVolumeTexture } from './hand-volume';
 import {
   TILE_SIZE_PX,
 } from './tile-cull';
+import { NORMAL_GRADIENT_HELPERS, NORMAL_GRADIENT_GAME_HELPERS } from './normal-gradient.wgsl';
 import type { TileGroupInput } from './tile-cull';
 import type { ComputeTileBinding } from './tile-bin-compute';
 import {
@@ -152,7 +153,7 @@ function buildMarchFn() {
   // would have to go in the SAME slot or WGSL's declaration-before-use rule
   // breaks. (The specialiser that used that slot was retired 2026-09-01,
   // perf r2 task 4: its emitted call signature had rotted against SD_PRIM's.)
-  const sources = HELPERS;
+  const sources = [...HELPERS, ...NORMAL_GRADIENT_HELPERS, ...NORMAL_GRADIENT_GAME_HELPERS];
   // EACH HELPER DEPENDS ON THE PREVIOUS ONE ONLY, not on every earlier one.
   // wgslFn includes a dependency's code transitively, and HELPERS is already a
   // strict declaration order, so a chain emits exactly the same WGSL as the
@@ -476,6 +477,8 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      *  compiled WOUND_STEP_MUL), w spare. All zero = the pre-plan shader,
      *  which is what the lab binds. */
     perfCfg: uniform(new THREE.Vector4(0, 0, 0, 0)),
+    /** x legacy/hybrid, y beauty/normal/eligibility, zw reserved. */
+    normalGradientCfg: uniform(new THREE.Vector4(0, 0, 0, 0)),
     /** Wound union-reach bound (close-up wound-cull task, 2026-09-05): xyz
      *  centre, w radius — one sphere covering every wound's reach, computed
      *  by setWounds from the live woundCfg/woundCfg2 (woundReachBound below).
@@ -1032,6 +1035,7 @@ export function createMarchMaterial(
     // enabled test in DEPTH_PRE_FETCH's consumer.
     depthPreTex: texture(depthPre ? depthPre.texture : fallbackDepthPreTexture()),
     depthPreCfg: (depthPre ? depthPre.uniforms.cfg : fallbackDepthPreUniform()) as never,
+    normalGradientCfg: u.normalGradientCfg,
   }) as unknown as Swizzled;
 
   const material = new MeshBasicNodeMaterial();
@@ -1839,6 +1843,7 @@ export function createChunkGpuView(
     u.woundCfg2.value.copy(template.woundCfg2.value);
     u.woundShadowCfg.value.copy(template.woundShadowCfg.value);
     u.perfCfg.value.copy(template.perfCfg.value);
+    u.normalGradientCfg.value.copy(template.normalGradientCfg.value);
     u.bodyHalf.value.copy(template.bodyHalf.value);
     u.faceCfg.value.copy(template.faceCfg.value);
     u.faceCfg2.value.copy(template.faceCfg2.value);

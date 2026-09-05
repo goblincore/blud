@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 // @ts-expect-error — deep three source import for the real parser used by wgslFn
 import WGSLNodeFunction from 'three/src/renderers/webgpu/nodes/WGSLNodeFunction.js';
 import {
-  NORMAL_GRADIENT_HELPERS,
+  NORMAL_GRADIENT_HELPERS, NORMAL_GRADIENT_GAME_HELPERS, NG_BODY,
   NORMAL_GRADIENT_PROBE,
   buildNormalGradientFn,
 } from './normal-gradient.wgsl';
@@ -63,5 +63,22 @@ describe('normal-gradient WGSL registration', () => {
     expect(call.isNode).toBe(true);
     const fn = call.functionNode as unknown as { includes: unknown[] };
     expect(fn.includes).toHaveLength(1);
+  });
+});
+
+// These guard structure; the intact phase is the actual shader/numeric gate.
+describe('final-hit helper isolation', () => {
+  it('parses game helpers without modifying the production fold state', () => {
+    for (const source of NORMAL_GRADIENT_GAME_HELPERS) {
+      expect(new WGSLNodeFunction(source).name).toMatch(/^ng/);
+      expect(source).not.toMatch(/gFold(?:Best|BestIdx|BestDistort)\s*=/);
+      expect(source).not.toContain('mapBody(');
+    }
+    expect(NG_BODY).toContain('gTileActive');
+    expect(NG_BODY).toContain('if (!listed)');
+    expect(NG_BODY).toContain('reach + R');
+    expect(NG_BODY).toContain('volumePose0.w > 0.5');
+    expect(NG_BODY).toContain('counts2.y > 0.5');
+    expect(NG_BODY).toContain('d.x + cutter.x <= 4.0 * B.w + 2.0 * R');
   });
 });

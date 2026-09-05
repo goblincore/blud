@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "phase": "intact",
+  "status": "deferred",
+  "passed": false,
+  "gpuExecuted": false,
+  "gpuSamples": 0,
+  "coverage": null,
+  "motionArtifacts": [],
+  "reason": "Required load1 <=12 gate failed during bounded launch window; no browser/server started.",
+  "launchLoads": [
+    20.4716796875,
+    27.25341796875,
+    25.7822265625
+  ],
+  "intermediateLoadPeak": 83.7939453125,
+  "tests": {
+    "vitest": 233,
+    "node": 2,
+    "tsc": "pass",
+    "driverSyntax": "pass"
+  },
+  "criteria": {
+    "intactHeadCoverage": 0.5,
+    "intactTorsoCoverage": 0.5,
+    "otherSceneProbeFloor": 0.1,
+    "depth": "exact float alpha equality",
+    "fallbackMaxComponent": 0.000001,
+    "scalarMax": 0.00001,
+    "legacyStencilAngleDegrees": {
+      "p99": 5,
+      "max": 25
+    },
+    "ownerLook": "pending",
+    "performance": "not measured"
+  },
+  "report": ".superpowers/sdd/2026-09-05-zombie-analytic-normals/task-3-report.md"
+}

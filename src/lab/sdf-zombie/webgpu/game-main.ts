@@ -1,3 +1,4 @@
+import { classifyNormalSupport } from './normal-gradient-support';
 // src/lab/sdf-zombie/webgpu/game-main.ts
 //
 // sdf-game.html — the grey-box ring the owner walks to judge on-screen enemy
@@ -923,6 +924,8 @@ async function main() {
   let onSeverDispatch: ((a: ZombieActor, piece: { limb: string; origin: Vec3; prims: Primitive[]; tornAt: Vec3[]; bones: Primitive[] }, stumpWound: Wound | null) => void) | null = null;
 
   const actors: ZombieActor[] = [];
+  let normalGradientMode: 0 | 1 = 0;
+  let normalGradientDebug: 0 | 1 | 2 = 0;
   const errors: string[] = [];
   let nextId = 1;
   /** Requested state of the wound union-reach cull (ships ON) — tracked
@@ -1077,6 +1080,7 @@ async function main() {
     view.uniforms.perfCfg.value.y = GAME_WOUND_EARLY_OUT;
     view.uniforms.marchCfg.value.y = GAME_OMEGA;
     view.uniforms.perfCfg.value.z = GAME_WOUND_STEP;
+    view.uniforms.normalGradientCfg.value.set(normalGradientMode, normalGradientDebug, 0, 0);
     view.uniforms.aaCfg.value.y = GAME_AA;
     view.uniforms.aaCfg.value.x = sdfLayer.pixelConeK;
     view.uniforms.levelShadowCfg.value.x = GAME_LEVEL_SHADOW;
@@ -4026,6 +4030,21 @@ async function main() {
      *  nodes" — createChunkGpuView), so they are looped too: a gib-frame A/B
      *  with flying chunks must not read chunks shaded by a different rule
      *  than the bodies. */
+    setNormalGradient(mode: 0 | 1) {
+      normalGradientMode = mode === 1 ? 1 : 0;
+      for (const a of actors) a.view.uniforms.normalGradientCfg.value.x = normalGradientMode;
+      for (const c of chunkViews) c.uniforms.normalGradientCfg.value.x = normalGradientMode;
+    },
+    setNormalGradientDebug(mode: 0 | 1 | 2) {
+      normalGradientDebug = mode === 1 || mode === 2 ? mode : 0;
+      for (const a of actors) a.view.uniforms.normalGradientCfg.value.y = normalGradientDebug;
+      for (const c of chunkViews) c.uniforms.normalGradientCfg.value.y = normalGradientDebug;
+    },
+    normalGradientStatus() {
+      const supportedBodies = actors.filter(a => classifyNormalSupport(a.posed()).commonFlesh).length;
+      return { mode: normalGradientMode, diagnostic: normalGradientDebug,
+        supportedBodies, legacyBodies: actors.length - supportedBodies };
+    },
     setFlatAlbedo(on: boolean) {
       const v = on ? 1 : 0;
       for (const a of actors) a.view.uniforms.debugCfg.value.y = v;
@@ -4559,6 +4578,23 @@ async function main() {
      *  gate calls it. */
     installDebugProbe: () => {
       (window as unknown as { __sdfGameDebug: unknown }).__sdfGameDebug = {
+        /** Raw float readback, row padding removed. The driver compares these
+         * bytes before any composite, color conversion or antialias filtering. */
+        async readMarchTarget() {
+          handle.setLoopRunning(false);
+          handle.step(0);
+          await handle.resolveGpu();
+          const t = sdfLayer.marchTarget;
+          const w = t.width, h = t.height;
+          const raw = new Float32Array(await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h));
+          const stride = Math.ceil(w * 16 / 256) * 64;
+          const dense = new Float32Array(w * h * 4);
+          for (let y = 0; y < h; y++) dense.set(raw.subarray(y * stride, y * stride + w * 4), y * w * 4);
+          const bytes = new Uint8Array(dense.buffer);
+          let binary = '';
+          for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+          return { w, h, rgba32f: btoa(binary) };
+        },
         async hashMarchTarget() {
           const t = sdfLayer.marchTarget;
           const w = t.width, h = t.height;

@@ -723,8 +723,8 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     // the phantom-input bug. +1 windDrift, +1 bodyAnchor (shell warp), +1 woundBound
     // (wound-cull), +2 depth prepass (depthPreTex, depthPreCfg) - all appended after
     // the level-shadow tail, in that order.
-    expect(names.length).toBe(80);
-    expect(names.slice(-5)).toEqual(['windDrift', 'bodyAnchor', 'woundBound', 'depthPreTex', 'depthPreCfg']);
+    expect(names.length).toBe(81);
+    expect(names.slice(-6)).toEqual(['windDrift', 'bodyAnchor', 'woundBound', 'depthPreTex', 'depthPreCfg', 'normalGradientCfg']);
     // meltCfg sits between bodyHalf and the level-shadow tail, matching the
     // JS binding object in createMarchMaterial (positional — a swap silently
     // hands the shader the wrong uniform).
@@ -2243,3 +2243,24 @@ describe('flat-albedo seam (close-up diagnostics task 1)', () => {
   });
 });
 
+
+describe('final-hit analytic normal integration', () => {
+  it('binds an independent default-off uniform and propagates actor/chunk requests', async () => {
+    const gpu = (await import('./zombie-gpu?raw')).default;
+    const game = (await import('./game-main?raw')).default;
+    expect(gpu).toContain('normalGradientCfg: uniform(new THREE.Vector4(0, 0, 0, 0))');
+    expect(gpu).toContain('normalGradientCfg: u.normalGradientCfg');
+    expect(gpu).toContain('u.normalGradientCfg.value.copy(template.normalGradientCfg.value)');
+    expect(game).toContain('setNormalGradient(mode: 0 | 1)');
+    expect(game).toContain('setNormalGradientDebug(mode: 0 | 1 | 2)');
+    expect(game).toContain('normalGradientStatus()');
+    expect(game).toContain('view.uniforms.normalGradientCfg.value.set(normalGradientMode, normalGradientDebug, 0, 0)');
+  });
+  it('runs the new fold only after the hit, preserving the complete legacy fallback and later detail', () => {
+    expect(MARCH_BODY.indexOf('ngBody(')).toBeGreaterThan(MARCH_BODY.indexOf('let anchor = restPoint'));
+    expect(MARCH_BODY).toContain('if (!ngValid)');
+    expect(MARCH_BODY).toContain('normalGradientCfg.x > 0.5');
+    expect((MARCH_BODY.match(/let detailAmp = surfCfg2.y/g) ?? []).length).toBe(1);
+    for (const src of [MAP_BODY, CONE_MARCH, DEPTH_PREPASS_MARCH, WOUND_SHADOW]) expect(src).not.toContain('ngBody(');
+  });
+});
