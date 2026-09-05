@@ -658,20 +658,20 @@ describe('stepMotion — the attack seam', () => {
 
   it('moves the pose once cfg.attack is set', () => {
     const calm = poses({ enabled: true, wander: true }, 1);
-    const swung = poses({ enabled: true, wander: true, attack: { phase: STRIKE, side: 'R' } }, 1);
+    const swung = poses({ enabled: true, wander: true, attack: { phase: STRIKE, side: 'R', variant: 'hook' } }, 1);
     expect(swung).not.toEqual(calm);
   });
 
   it('phase 0 leaves the pose exactly where no attack leaves it', () => {
     const calm = poses({ enabled: true, wander: true }, 5);
-    const zero = poses({ enabled: true, wander: true, attack: { phase: 0, side: 'R' } }, 5);
+    const zero = poses({ enabled: true, wander: true, attack: { phase: 0, side: 'R', variant: 'hook' } }, 5);
     expect(zero).toEqual(calm);
   });
 
   it('drives the pelvis forward at the strike peak', () => {
     const calm = poses({ enabled: true, wander: false }, 1)[0]!;
     const swung = poses(
-      { enabled: true, wander: false, attack: { phase: STRIKE, side: 'R' } }, 1,
+      { enabled: true, wander: false, attack: { phase: STRIKE, side: 'R', variant: 'hook' } }, 1,
     )[0]!;
     const body = buildBody(makeZombie());
     const bound = bindRig(body);
@@ -681,7 +681,7 @@ describe('stepMotion — the attack seam', () => {
       swung[iPelvis]![0] - calm[iPelvis]![0],
       swung[iPelvis]![2] - calm[iPelvis]![2],
     );
-    expect(moved).toBeCloseTo(attackPose(STRIKE, 'R').rootOffset[2], 6);
+    expect(moved).toBeCloseTo(attackPose(STRIKE, 'R', 'hook').rootOffset[2], 6);
   });
 
   it('a right-side swing moves the right hand further than the left', () => {
@@ -691,7 +691,7 @@ describe('stepMotion — the attack seam', () => {
     const calm = poses({ enabled: true, wander: false }, 1)[0]!;
     const dist = (side: 'L' | 'R', j: 'handL' | 'handR') => {
       const swung = poses(
-        { enabled: true, wander: false, attack: { phase: STRIKE, side } }, 1,
+        { enabled: true, wander: false, attack: { phase: STRIKE, side, variant: 'hook' } }, 1,
       )[0]!;
       const i = joints.index[j];
       return Math.hypot(
@@ -708,10 +708,34 @@ describe('stepMotion — the attack seam', () => {
     const joints = makeMotionJoints(body, bound.rig.restPose)!;
     const calm = poses({ enabled: true, wander: false }, 1)[0]!;
     const swung = poses(
-      { enabled: true, wander: false, attack: { phase: STRIKE, side: 'R' } }, 1,
+      { enabled: true, wander: false, attack: { phase: STRIKE, side: 'R', variant: 'hook' } }, 1,
     )[0]!;
     const i = joints.index.handR;
     // Body yaw is ~0 in this fixture, so body-local x is world x.
     expect(Math.abs(swung[i]![0] - calm[i]![0])).toBeGreaterThan(0.05);
+  });
+
+  it('the two variants produce different poses through the same seam', () => {
+    const hook = poses(
+      { enabled: true, wander: false, attack: { phase: STRIKE, side: 'R', variant: 'hook' } }, 1,
+    );
+    const over = poses(
+      { enabled: true, wander: false, attack: { phase: STRIKE, side: 'R', variant: 'overhead' } }, 1,
+    );
+    expect(over).not.toEqual(hook);
+  });
+
+  it('the overhead lifts the hand higher than the hook does', () => {
+    const body = buildBody(makeZombie());
+    const bound = bindRig(body);
+    const joints = makeMotionJoints(body, bound.rig.restPose)!;
+    const i = joints.index.handR;
+    const yAt = (variant: 'hook' | 'overhead', phase: number) => poses(
+      { enabled: true, wander: false, attack: { phase, side: 'R', variant } }, 1,
+    )[0]![i]![1];
+    // At the wind-up peak the overhead's arm is up past the head (pitch 1.35)
+    // while the hook is only cocked (0.35).
+    expect(yAt('overhead', ATTACK_TUNING.windupEnd))
+      .toBeGreaterThan(yAt('hook', ATTACK_TUNING.windupEnd));
   });
 });

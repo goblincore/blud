@@ -75,7 +75,7 @@ import type { CollapsePhase, CollapseState, MissingLimbs, RopeLimit } from './co
 import {
   COLLAPSE_TUNING, collapseRopes, makeCollapseState, stepCollapse,
 } from './collapse';
-import { attackPose, type AttackPose } from './attack';
+import { attackPose, type AttackPose, type SwingVariant } from './attack';
 
 /** Motion knobs owned by the wiring (the modules own their own). */
 export const MOTION_TUNING = {
@@ -322,12 +322,13 @@ export interface MotionConfig {
   /** Gaze-follow gain override 0..1 — defaults to MOTION_TUNING.gazeFollow.
    *  0 pins the gaze to the wander target (the creepy variant). */
   gazeFollow?: number;
-  /** Melee swing: phase 0..1 plus which arm swings (brain.ts drives both
-   *  through game-actor). UNDEFINED IS NOT "phase 0": undefined skips the
-   *  composition branches entirely, so the lab's wiring — which never sets
-   *  this — produces bit-identical motion. attack.ts's pose is exactly zero
-   *  at phase 0 and 1, so setting either is also a no-op, just a slower one. */
-  attack?: { phase: number; side: 'L' | 'R' };
+  /** Melee swing: phase 0..1 plus which arm swings, throwing which variant
+   *  (brain.ts drives all three through game-actor). UNDEFINED IS NOT
+   *  "phase 0": undefined skips the composition branches entirely, so the
+   *  lab's wiring — which never sets this — produces bit-identical motion.
+   *  attack.ts's pose is exactly zero at phase 0 and 1, so setting either is
+   *  also a no-op, just a slower one. */
+  attack?: { phase: number; side: 'L' | 'R'; variant: SwingVariant };
 }
 
 /** What happened since the last frame — collected by the wiring between
@@ -511,7 +512,7 @@ export function stepMotion(
   // stagger composes — see attack.ts's header. A collapsed body never swings.
   const attack: AttackPose | null =
     cfg.attack !== undefined && !collapsed
-      ? attackPose(cfg.attack.phase, cfg.attack.side)
+      ? attackPose(cfg.attack.phase, cfg.attack.side, cfg.attack.variant)
       : null;
 
   // --- assemble the standing rest targets ----------------------------------
