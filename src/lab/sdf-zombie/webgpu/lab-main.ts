@@ -877,6 +877,10 @@ async function main() {
     // The character's own glow threshold, so a baked face keeps its eyes
     // without the panel being set by hand every reload.
     u.faceCfg2.value.z = params.eyeGlowCut;
+    u.faceCfg2.value.w = params.eyeGlowAmp;
+    u.faceCfg2.value.x = params.projSpherical;
+    u.faceCfg.value.w  = params.texRelief;
+    u.faceCfg.value.z  = params.faceForward;
 
     // A BAKED IMAGE (npm run blob:face-bake) IS LOADED WHATEVER `decal` SAYS.
     //
@@ -1009,7 +1013,13 @@ async function main() {
       + String(e instanceof Error ? e.message : e));
   }
   u.faceCfg.value.x = faceEnabled ? faceMode : 0;   // face on (unless the sheet says no)
-  u.faceCfg.value.y = 1.0;    // strength
+  // strength: the character's own value if its sheet block names one. This
+  // was a hardcoded 1.0, which silently overrode anything the panel or a
+  // .blob had to say about it.
+  try {
+    const sp = compileSheet(parseBlob(activeCharacterSrc()));
+    u.faceCfg.value.y = sp ? sp.texStrength : 1.0;
+  } catch { u.faceCfg.value.y = 1.0; }
 
   /**
    * The skull's centre and its three SEMI-AXES: the fattest additive primitive
