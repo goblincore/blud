@@ -522,7 +522,10 @@ async function main() {
   //
   // It is still a FLOOR, not an answer: it buys frames by making the flesh
   // coarser during exactly the moments that matter most.
-  let adaptiveEnabled = true;
+  // OFF by default (owner, 2026-09-04/05): the resolution drop is visible and
+  // unwelcome up close, and a renderer A/B under a moving rung compares two
+  // resolutions, not two renderers. __sdfGame.setAdaptive(true) re-arms it.
+  let adaptiveEnabled = false;
   let adaptiveBudgetMs = 1000 / 30;
   let adaptiveState = initialAdaptiveState(performance.now());
   const ADAPTIVE_WINDOW = 30;
