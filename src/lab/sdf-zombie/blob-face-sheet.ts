@@ -43,6 +43,17 @@ export interface FaceSheetParams {
   /** Eye brightness, 0..1. This is what keys the emissive glow. */
   eyeGlow: number;
   /**
+   * Luma above which a texel EMITS. The shader's glow mask is
+   * smoothstep(eyeGlowCut, 1, luma), so this is what decides whether a baked
+   * face's painted eyes light up at all -- and it was panel-only until
+   * 2026-09-04, which meant a character could not keep its own value.
+   *
+   * The soldier is the case that forced it: his bake's max luma is 0.855, so
+   * at the 0.88 default NOTHING clears the mask and his eyes are dead. 0.67
+   * lights them with no second image and no punched mask.
+   */
+  eyeGlowCut: number;
+  /**
    * Vertical squash. 1 is a round eye; above 1 narrows it into a slit or an
    * almond, below 1 makes it a tall oval. The old hardcoded 1.25 is the
    * default, so an unspecified eye is unchanged.
@@ -158,6 +169,7 @@ export const DEFAULT_SHEET: FaceSheetParams = {
   eyeGap: 0.34,
   eyeSize: 0.075,
   eyeGlow: 1.0,
+  eyeGlowCut: 0.88,
   eyeSquash: 1.25,
   eyePupil: 0,
   eyeRise: 0.42,
