@@ -142,6 +142,10 @@ describe('soldier-kit.gltf fits soldier.blob', () => {
     const all = [...groups.values()].flat();
     const bottom = Math.min(...all.map(v => v[1]));
     expect(bottom).toBeLessThan(0.012);
+    // ...and not THROUGH the floor either: a round-2 boot authored in metres
+    // inside a height-fraction file sank its sole 50 mm under y=0 and this
+    // test waved it through. Both bounds, or "on the ground" means nothing.
+    expect(bottom).toBeGreaterThan(-0.008);
     const lowest = all.reduce((a, b) => (b[1] < a[1] ? b : a));
     expect(Math.abs(lowest[0]), `lowest vertex at (${lowest.map(n => n.toFixed(3)).join(', ')})`)
       .toBeGreaterThan(0.04); // out at a foot (ankle x=0.097), not the body axis

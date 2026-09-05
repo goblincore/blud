@@ -206,17 +206,28 @@ parts
     # 25 mm taller, dropped a further 9 mm so the sole still sits on y=0.
     # The heel ring is wider than the shaft's bottom ring on purpose now —
     # the shaft tucks INTO the boot, the way a boot swallows a trouser leg.
-    # Round 2 (owner: "feet still poke through, make boots chunkier"): rings
-    # another ~18% wider and 12 mm taller, and the shell now reaches 20 mm
-    # past the flesh toe (len 0.118 -> 0.135) so the toe cannot lead it.
-    loft foot bone=foot at=0.0 dir=fwd len=0.135 frame=up offset=(0,-0.0707,0) material=plate
-      ring 0.00 w=0.1050 d=0.0720
-      ring 0.15 w=0.0980 d=0.0720
-      ring 0.35 w=0.1010 d=0.0720
-      ring 0.55 w=0.0990 d=0.0720
-      ring 0.75 w=0.0900 d=0.0690
-      ring 0.90 w=0.0640 d=0.0650
-      ring 1.00 w=0.0540 d=0.0560
+    # Round 3 (owner: "the feet still show through the boots, and the join
+    # between the two parts should be more seamless"). The round-2 numbers
+    # were written in METRES in a file whose unit is height fractions (1.70 m),
+    # so the shell came out 12 cm tall with its sole 5 cm UNDER the floor,
+    # its top a centimetre into the shaft, and nothing behind the ankle — the
+    # flesh heel showed at the back and the shaft/foot met at a step.
+    #
+    # Now, in height fractions: the shell starts 50 mm BEHIND the ankle
+    # (offset z -0.0294) and runs 280 mm to past the toe (len 0.165); the
+    # heel section is 150 mm tall (d 0.088), sole on y=0 (centre y=0.075 m
+    # -> offset y -0.0324 from the 0.130 m ankle), so its top reaches 20 mm
+    # ABOVE the ankle and swallows the shaft's bottom 90 mm — the shaft
+    # (0.09 wide at its foot) tucks inside the 0.10-wide heel, one boot, no
+    # seam. The toe half steps down so the sole still rocks.
+    loft foot bone=foot at=0.0 dir=fwd len=0.165 frame=up offset=(0,-0.0324,-0.0294) material=plate
+      ring 0.00 w=0.1000 d=0.0880
+      ring 0.20 w=0.1000 d=0.0880
+      ring 0.40 w=0.0980 d=0.0880
+      ring 0.55 w=0.0960 d=0.0760
+      ring 0.75 w=0.0900 d=0.0620
+      ring 0.90 w=0.0700 d=0.0520
+      ring 1.00 w=0.0560 d=0.0440
       cap start=flat end=flat
 
   # CUIRASS — machined plate over the bare chest, from just above the belt to
