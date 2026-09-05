@@ -199,7 +199,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseBlob } from './sdf-zombie/blob-parse';
 import { emitBlob } from './sdf-zombie/blob-emit';
-import { compileSheetImage } from './sdf-zombie/blob-face-sheet';
+import { compileSheetImage } from './sdf-zombie/blob-compile';
 
 export interface SaveResult { ok: boolean; path?: string; error?: string }
 
@@ -254,7 +254,7 @@ export function savePalette(root: string, name: string, payload: { baseColor: nu
 }
 ```
 
-Check `compileSheetImage` exists in `blob-face-sheet.ts` with that name (lab-main imports it); if it is named differently, use the real name.
+`compileSheetImage` and `compileSheet` live in `blob-compile.ts` (lab-main imports both from there).
 
 - [ ] **Step 4: The Vite plugin** — in `vite.config.ts`:
 
@@ -362,7 +362,7 @@ Hoist the existing `applyMean` closure to a sibling function `applyMeanOf(t: THR
   saveFaceBtn.disabled = true;
 ```
 
-`compileSheet` is already imported in lab-main (check; else import from `../blob-face-sheet`).
+`compileSheet` is already imported in lab-main from `../blob-compile`.
 
 - [ ] **Step 3: Skin colour + lightness + save** — in the material section, right after the flesh sliders loop (~3255):
 
