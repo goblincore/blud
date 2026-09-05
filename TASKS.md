@@ -20,6 +20,17 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**[x] A-schoolgirl-described — SCHOOLGIRL, describe-and-judge arm SHIPPED (2026-09-05).**
+`characters/schoolgirl-described.blob`: the same subject as schoolgirl.blob,
+authored from the plate alone (no blob:rings/measure — fitting is the control
+this run compares against). The exchange student from the wrong genre: three
+beats = oversized glossy BOB, RED neckerchief (real knot+tails, not paint),
+white SLOUCH BOOTS (vs the measured version's socks+mary-janes). Face = the
+schoolgirl's own bake re-baked to schoolgirl-described-face.png; sheet
+0.34/0.40/0.49 (the bake's printed 0.19/0.237 is generic — this bake is the
+schoolgirl's, whose solve is 0.38/0.42). Render-check exit 0, 2565 tests
+green, controls (schoolgirl.blob / schoolgirl-alt.blob) untouched.
+
 **[ ] A-female — FEMALE CHARACTER, described-authoring RUNNING (2026-09-05).**
 Second run of the method the soldier proved: proportions from a plate, style
 from the approved cast (goblin/soldier/zombie/clown), identity left to the
