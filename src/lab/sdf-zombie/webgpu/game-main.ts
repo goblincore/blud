@@ -100,7 +100,10 @@ import {
   createWoundPanel, defaultsFrom, WOUND_KEYS,
   type WoundPanel, type WoundTuningValues,
 } from './wound-panel';
-import { makeChunk, stepChunk } from '../gib-chunks';
+import { chunkSettled, makeChunk, stepChunk } from '../gib-chunks';
+import {
+  bakeChunkGeometry, createBakedChunkMaterial, type BakedChunkMaterial,
+} from './baked-chunks';
 import { chunkExtent } from '../extent';
 import { createChunkGpuView, createSharedChunkGpuMaterial, type ChunkGpuView } from './zombie-gpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -653,6 +656,15 @@ async function main() {
       boneInstancer.uniforms.spotCfg.value.set(spotOn, cosInner, cosOuter, flashlight.spot.distance);
       boneInstancer.uniforms.spotColor.value.copy(flashlight.spot.color);
       boneInstancer.uniforms.spotCfg2.value.set(beamTuning.gain, beamTuning.shoulder, beamTuning.keyFloor, 0);
+      // Baked chunks ride the same beam — same values, same formula.
+      if (bakedChunkMat) {
+        const bu = bakedChunkMat.uniforms;
+        bu.spotPos.value.copy(flashlight.spot.position);
+        bu.spotAxis.value.copy(sAxis);
+        bu.spotCfg.value.set(spotOn, cosInner, cosOuter, flashlight.spot.distance);
+        bu.spotColor.value.copy(flashlight.spot.color);
+        bu.spotCfg2.value.set(beamTuning.gain, beamTuning.shoulder, beamTuning.keyFloor, 0);
+      }
     }
     // Fire flicker. Cheap and deliberately not random per frame — a smooth
     // two-rate wobble reads as flame; white noise reads as a broken light.
@@ -1127,6 +1139,38 @@ async function main() {
   if (errors.length > 0) {
     console.error('[sdf-game] body errors:', errors.join(' | '));
   }
+  // --- SETTLED-CHUNK BAKE (close-up task 5). A chunk that has come to rest
+  // is a rigid static field that will never change again; when the seam is
+  // on, it is extracted ONCE into a static mesh and RETIRED from the march:
+  // its proxy box stops being drawn and stepped, and the mesh draws in the
+  // main scene (a real early-Z occluder) instead. Off by default
+  // (GAME_CHUNK_BAKE); off must be pixel-identical, and it is — every line
+  // below the seam is behind `chunkBakeEnabled` and the lists stay empty.
+  // STATE ONLY here — this must run BEFORE the bone-instancer light-seed
+  // block below reads bakedChunkMat (declaration order is execution order
+  // in this boot). The bake/gib/free functions live in the chunk section.
+  const GAME_CHUNK_BAKE: 0 | 1 = 0;
+  let chunkBakeEnabled = (GAME_CHUNK_BAKE as 0 | 1) === 1;
+  interface ChunkTemplate { uniforms: import('./zombie-gpu').MarchUniforms; volumeTexture: THREE.Texture }
+  interface BakedChunk {
+    id: number;
+    mesh: THREE.Mesh;
+    view: ChunkGpuView;
+    centre: Vec3;
+    radius: number;
+    bakeMs: number;
+    /** The origin body's uniform set + volume texture, so a gib of this
+     *  piece spawns meat that shades like the body it came off. */
+    template: ChunkTemplate;
+  }
+  const bakedChunks: BakedChunk[] = [];
+  // One material for every baked chunk — one pipeline, N meshes. Lighting
+  // uniforms are LIVE (refreshed per frame beside the bone instancer's);
+  // albedo is per-vertex so sharing costs nothing.
+  let bakedChunkMat: BakedChunkMaterial | null = null;
+  let bakedChunkSeed: ((m: BakedChunkMaterial) => void) | null = null;
+  let totalBakes = 0;
+  let lastBakeMs = 0;
   // Bone tubes (task 5): the instancer owns its own light set — seed it once
   // from body 1's view, which just took the LIGHT_PRESETS apply above, so
   // the tube pass cannot drift from the march's key.
@@ -1148,6 +1192,27 @@ async function main() {
       boneInstancer.uniforms.ambient.value.setRGB(
         fill * key.r + pw * mr * 0.5, fill * key.g + pw * mg * 0.5, fill * key.b + pw * mb * 0.5);
     }
+  }
+  // Baked chunks (close-up task 5): same seed from body 1's view — the
+  // mesh shade fn is boneShade's formula, so it takes the same diet. The
+  // per-frame FLASHLIGHT refresh happens in the render callback beside the
+  // bone instancer's; this seed is the room's key/ambient.
+  {
+    const v = actors[0]!.view.uniforms;
+    const seedBaked = (m: BakedChunkMaterial) => {
+      m.uniforms.lightDir.value.copy(v.lightDir.value);
+      m.uniforms.keyColor.value.copy(v.keyColor.value);
+      m.uniforms.lightCfg.value.copy(v.lightCfg.value);
+      m.uniforms.deepColor.value.copy(v.deepColor.value);
+      const walls = [v.wallNegX, v.wallPosX, v.wallNegY, v.wallPosY, v.wallNegZ, v.wallPosZ].map(w => w.value);
+      let mr = 0, mg = 0, mb = 0;
+      for (const c of walls) { mr += c.r / 6; mg += c.g / 6; mb += c.b / 6; }
+      const fill = v.lightCfg.value.y, key = v.keyColor.value, pw = v.bounceCfg.value.x;
+      m.uniforms.ambient.value.setRGB(
+        fill * key.r + pw * mr * 0.5, fill * key.g + pw * mg * 0.5, fill * key.b + pw * mb * 0.5);
+    };
+    bakedChunkSeed = seedBaked;
+    if (bakedChunkMat) bakedChunkSeed(bakedChunkMat);
   }
 
   /** The wound panel's boneRatio lever (applyWoundTuning calls this). Bones
@@ -1926,7 +1991,82 @@ async function main() {
   const MAX_CHUNKS = 12;
   const chunkMaterial = createSharedChunkGpuMaterial(sdfLayer.prev);
   const chunkViews: ChunkGpuView[] = [];
-  const liveChunks: { id: number; state: ReturnType<typeof makeChunk>; view: ChunkGpuView }[] = [];
+  const liveChunks: { id: number; state: ReturnType<typeof makeChunk>; view: ChunkGpuView; template: ChunkTemplate }[] = [];
+  // The bake STATE (seam, bakedChunks, material) is declared near the boot's
+  // light-seed block; here live only the bake/gib/free functions.
+  /** Free a baked piece's mesh and return its view to the ring. The view is
+   *  NOT disposed — the ring recycles it in place via reset(), exactly as
+   *  it always has (the leak gate counts these: bounded by MAX_CHUNKS). */
+  function freeBaked(b: BakedChunk): ChunkGpuView {
+    const i = bakedChunks.indexOf(b);
+    if (i >= 0) bakedChunks.splice(i, 1);
+    scene.remove(b.mesh);
+    b.mesh.geometry.dispose(); // material is shared; geometry is per-bake
+    return b.view;
+  }
+  /** Extract + swap one settled chunk. Runs inside the frame loop, so the
+   *  CPU cost is a real frame hitch — measured, reported in chunkStats,
+   *  and paid once per chunk. A bone-only chunk (the melt's released
+   *  skeleton groups) has an EMPTY CPU flesh field (validate.ts never
+   *  folds bones outside the near-wound gate) — keep those marched. */
+  function bakeSettled(entry: { id: number; state: ReturnType<typeof makeChunk>; view: ChunkGpuView; template: ChunkTemplate }): void {
+    const data = entry.view.bakeData();
+    if (data.flesh.length === 0) {
+      entry.view.update(entry.state);
+      liveChunks.push(entry);
+      return;
+    }
+    if (!bakedChunkMat) {
+      bakedChunkMat = createBakedChunkMaterial();
+      // The boot seed block ran before any bake existed — apply it now.
+      bakedChunkSeed?.(bakedChunkMat);
+    }
+    const baked = bakeChunkGeometry(data);
+    const mesh = new THREE.Mesh(baked.geometry, bakedChunkMat.material);
+    mesh.frustumCulled = true; // it is a static bounded mesh — let three cull it
+    scene.add(mesh);
+    entry.view.object.visible = false; // the proxy box leaves the SDF passes
+    bakedChunks.push({
+      id: entry.id, mesh, view: entry.view,
+      centre: baked.centre, radius: baked.radius, bakeMs: baked.bakeMs,
+      template: entry.template,
+    });
+    totalBakes++;
+    lastBakeMs = baked.bakeMs;
+    if (baked.overflow || baked.droppedQuads > 0) {
+      console.warn(`[chunk-bake] chunk ${entry.id}: overflow=${baked.overflow} droppedQuads=${baked.droppedQuads} — geometry holes`);
+    }
+  }
+  /** A slug/pellet INTO a baked piece: the piece GIBS. Fresh small chunks
+   *  spawn at the impact (its own origin body's template, so the meat
+   *  matches), a blood gout sprays, and the mesh is deleted. No reverse
+   *  path — the design question settled for option 2 (simpler: no dual
+   *  representation to keep in sync, and closer to the feel). */
+  function gibBakedPiece(b: BakedChunk, at: Vec3): void {
+    const template = b.template;
+    freeBaked(b);
+    const rng = mulberry32(nextSeed++);
+    const gobs = 2 + (rng() < 0.5 ? 1 : 0);
+    for (let i = 0; i < gobs; i++) {
+      const theta = rng() * Math.PI * 2;
+      const spread = 0.01 + rng() * 0.02;
+      const r = 0.016 + rng() * 0.02;
+      const a: Vec3 = [at[0] + Math.cos(theta) * spread, at[1] + 0.005, at[2] + Math.sin(theta) * spread];
+      const bEnd: Vec3 = [a[0] + (rng() - 0.5) * 0.04, a[1] + rng() * 0.03, a[2] + (rng() - 0.5) * 0.04];
+      spawnChunkPiece({
+        limb: 'torso',
+        origin: a,
+        prims: [{
+          limb: 'torso', cluster: 0, op: 'add', a, b: bEnd, radius: r,
+          scale: [1, 1, 1], blendK: 0.008,
+        } as unknown as Primitive],
+        tornAt: [], bones: [],
+      }, template);
+    }
+    if (bleedEnabled) {
+      spawnImpactGout(bloodSim, 'slug', at, [0, 1, 0], bleedRng);
+    }
+  }
   // Now that the array exists, the frame draw can read it directly.
   chunkObjects = () => liveChunks.map(c => c.view.object);
   let nextChunkId = 1;
@@ -1956,12 +2096,26 @@ async function main() {
       chunkExtent(piece.prims, piece.origin), primsLongAxis(piece.prims, piece.origin),
       rng, 'limb',
     );
-    const oldest = liveChunks.length >= MAX_CHUNKS ? liveChunks.shift() : undefined;
-    if (oldest) {
-      oldest.view.reset(state, piece.prims,
+    // View budget. Order matters with the bake on: a BAKED piece is the
+    // oldest, least-relevant gore, so its view recycles FIRST; only when
+    // every view is live-and-flying does the old oldest-live rule apply.
+    // Either way views stay bounded at MAX_CHUNKS — the leak gate.
+    let recycled: ChunkGpuView | undefined;
+    if (chunkViews.length >= MAX_CHUNKS) {
+      const oldestBaked = bakedChunks.shift();
+      if (oldestBaked) {
+        recycled = freeBaked(oldestBaked);
+      } else {
+        const oldest = liveChunks.shift();
+        if (oldest) recycled = oldest.view;
+      }
+    }
+    if (recycled) {
+      recycled.reset(state, piece.prims,
         piece.tornAt.length ? piece.tornAt : undefined, piece.bones);
-      oldest.view.setPackBones(!boneMesh);
-      liveChunks.push({ id: nextChunkId++, state, view: oldest.view });
+      recycled.setPackBones(!boneMesh);
+      recycled.object.visible = true; // may be arriving from a baked retirement
+      liveChunks.push({ id: nextChunkId++, state, view: recycled, template });
     } else {
       const view = createChunkGpuView(
         state, piece.prims, template.uniforms,
@@ -1972,7 +2126,7 @@ async function main() {
       view.object.layers.set(SDF_LAYER);
       scene.add(view.object);
       chunkViews.push(view);
-      liveChunks.push({ id: nextChunkId++, state, view });
+      liveChunks.push({ id: nextChunkId++, state, view, template });
     }
   }
 
@@ -2946,6 +3100,28 @@ async function main() {
             dead = true;
           }
         }
+        if (!dead && bakedChunks.length > 0) {
+          // A BAKED piece is still hittable (close-up task 5 gate): the
+          // pre-bake page tested NOTHING against chunks, so the bake would
+          // have shipped floor pieces that silently ate slugs. A segment
+          // passing inside the piece's baked bounding sphere GIBS it —
+          // option 2 from the design: spawn fresh chunks and delete the
+          // mesh, no reverse path, no dual-representation invariant.
+          const segX = p.pos[0] - from[0], segY = p.pos[1] - from[1], segZ = p.pos[2] - from[2];
+          const segLen2 = segX * segX + segY * segY + segZ * segZ || 1;
+          for (let bi = bakedChunks.length - 1; bi >= 0; bi--) {
+            const b = bakedChunks[bi]!;
+            const t = Math.max(0, Math.min(1,
+              ((b.centre[0] - from[0]) * segX + (b.centre[1] - from[1]) * segY + (b.centre[2] - from[2]) * segZ) / segLen2));
+            const qx = from[0] + segX * t - b.centre[0];
+            const qy = from[1] + segY * t - b.centre[1];
+            const qz = from[2] + segZ * t - b.centre[2];
+            if (qx * qx + qy * qy + qz * qz > b.radius * b.radius) continue;
+            gibBakedPiece(b, p.pos);
+            dead = true;
+            break;
+          }
+        }
         if (dead) pellets.splice(i, 1);
       }
       for (const a of hitThisFrame) a.endHits();
@@ -2971,12 +3147,24 @@ async function main() {
         }
       }
       // Chunks: ballistic step + world-space field repack, lab contract.
+      // With the bake seam on, a chunk that has come to rest is retired
+      // from the sim HERE (chunkSettled fires only on a grounded,
+      // spin-free, flat, sub-millimetre-per-frame chunk — see gib-chunks.ts
+      // for the clause-by-clause "has already stopped" argument) and its
+      // march proxy is replaced by a static mesh. Reverse iteration: bake
+      // SPLICES entries out of liveChunks.
       const cdt = Math.min(dt, 1 / 30);
       // GUT ROPES first, so stepBlood's skip of 'gut' droplets this frame
       // sees this frame's chain positions (see stepGutRopes).
       stepGutRopes(cdt);
-      for (const c of liveChunks) {
+      for (let ci = liveChunks.length - 1; ci >= 0; ci--) {
+        const c = liveChunks[ci]!;
         c.state = stepChunk(c.state, cdt);
+        if (chunkBakeEnabled && chunkSettled(c.state)) {
+          liveChunks.splice(ci, 1);
+          bakeSettled(c);
+          continue;
+        }
         c.view.update(c.state);
       }
       // BLEED — emitters spray (anchors recomputed from the CURRENT posed
@@ -4833,6 +5021,24 @@ async function main() {
       ageSec: p.ageSec,
     })),
     get chunkCount() { return liveChunks.length; },
+    /** Settled-chunk bake (close-up task 5). OFF at boot (GAME_CHUNK_BAKE);
+     *  off is pixel-identical. Toggling mid-session only affects FUTURE
+     *  settles — baked pieces stay baked until shot or recycled. */
+    setChunkBake(on: boolean) {
+      chunkBakeEnabled = on;
+      if (on && bakedChunkMat) bakedChunkSeed?.(bakedChunkMat);
+    },
+    get chunkBake() { return chunkBakeEnabled; },
+    /** Leak/observability census: live (stepped/marched) chunks, baked
+     *  meshes, ring views, bake cost. The long-firefight gate reads this. */
+    chunkStats: () => ({
+      live: liveChunks.length,
+      baked: bakedChunks.length,
+      views: chunkViews.length,
+      totalBakes,
+      lastBakeMs,
+      pieces: bakedChunks.map(b => ({ id: b.id, centre: [...b.centre] as [number, number, number], radius: b.radius })),
+    }),
     /** SDF-pass scale relative to the capped buffer (1.0 = 1:1). */
     setSdfScale: (v: number) => applySdfScale(v),
     get sdfScale() { return sdfScale; },

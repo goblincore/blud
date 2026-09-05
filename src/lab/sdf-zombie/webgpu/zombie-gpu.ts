@@ -22,7 +22,7 @@ import { MAX_WOUNDS } from '../damage';
 import { chunkPoint, squashFactors, type Chunk } from '../gib-chunks';
 import type { FleshMaterial, LightPreset } from '../material';
 import type { Primitive, Vec3 } from '../types';
-import { bendCtrl, sub as vsub } from '../vec';
+import { bendCtrl, qRotate, sub as vsub } from '../vec';
 import { chunkExtent, tornEndRadius } from '../extent';
 import { createFallbackHandVolumeTexture } from './hand-volume';
 import {
@@ -1723,10 +1723,34 @@ export interface ChunkGpuView {
   /** Bone tubes: flip the packBones layout (pack.ts PackOpts.packBones).
    *  Re-packs immediately from the last reset() args. */
   setPackBones(on: boolean): void;
+  /** Everything the settled-chunk BAKE needs (close-up task 5): the
+   *  CURRENT world-space field inputs of this view — flesh prims, bone
+   *  prims, torn ends with their girth radii — plus the transform and the
+   *  look values the albedo bake reads. Computed from the same local
+   *  arrays `apply()` writes rows from, so the bake cannot disagree with
+   *  what the march was drawing (the hull spike's extraction-order bug,
+   *  fixed at the source: the bake reads the view's own state). */
+  bakeData(): ChunkGpuBakeData;
   /** This frame's bone prims in WORLD space with the chunk's rotation + squash
    *  applied — what the bone instancer draws (bone-tubes spec §7). */
   posedBones(): Primitive[];
   dispose(): void;
+}
+
+/** The settled-chunk bake input set (close-up task 5), as produced by
+ *  ChunkGpuView.bakeData. World-space field inputs + the transform/look the
+ *  albedo bake reads. Structurally the ChunkBakeData baked-chunks.ts
+ *  consumes; declared here so the view's contract carries it. */
+export interface ChunkGpuBakeData {
+  flesh: Primitive[];
+  bones: Primitive[];
+  torn: { at: Vec3; radius: number }[];
+  carveK: number;
+  centre: Vec3;
+  extent: number;
+  quat: import('../gib-chunks').Chunk['quat'];
+  look: import('./baked-chunks').ChunkBakeData['look'];
+  gore: number;
 }
 
 /**
@@ -2044,6 +2068,57 @@ export function createChunkGpuView(
       // Re-pack from the stored reset() args so counts2.x and the packed
       // rows flip NOW, not on the next sever.
       if (lastReset) reset(lastReset.c, lastReset.prims, lastReset.tornAt, lastReset.bones);
+    },
+    bakeData() {
+      const c = current;
+      const { sx, sy, sz } = squashFactors(c);
+      // A prim's bend displacement is MID-RELATIVE (types.ts), so its world
+      // transform is rotate-then-scale with NO translate — exactly
+      // chunkPoint's map minus the pos term. At settle the predicate has
+      // squash = 0, so this is a pure rotation either way.
+      const xfVec = (v: Vec3): Vec3 => {
+        const r = qRotate(c.quat, v);
+        return [r[0] * sx, r[1] * sy, r[2] * sz];
+      };
+      const xf = (p: Primitive): Primitive => ({
+        ...p,
+        cluster: 0,
+        a: chunkPoint(c, p.a, sx, sy, sz),
+        b: chunkPoint(c, p.b, sx, sy, sz),
+        bend: p.bend === undefined ? undefined : xfVec(p.bend),
+      });
+      const col = (u2: { value: THREE.Color }): Vec3 =>
+        [u2.value.r, u2.value.g, u2.value.b];
+      return {
+        flesh: local.filter(p => p.op !== 'sub').map(xf),
+        bones: localBones.map(xf),
+        torn: tornLocals.map((t, i) => ({
+          at: chunkPoint(c, t, sx, sy, sz),
+          radius: tornRadii[i]!,
+        })),
+        carveK: u.woundCfg.value.y,
+        centre: [c.pos[0], c.pos[1], c.pos[2]],
+        extent,
+        quat: c.quat,
+        look: {
+          baseColor: col(u.baseColor),
+          deepColor: col(u.deepColor),
+          fatColor: col(u.fatColor),
+          mottleColor: col(u.mottleColor),
+          organColor: col(u.organColor),
+          visceraColor: col(u.visceraColor),
+          woundDepthAmp: u.surfCfg3.value.x,
+          fatDepth: u.surfCfg3.value.y,
+          muscleDepth: u.surfCfg3.value.z,
+          visceraAmp: u.surfCfg3.value.w,
+          visceraDepth: u.visceraDepth.value,
+          mottleAmp: u.surfCfg2.value.z,
+          mottleScale: u.surfCfg2.value.w,
+          organAmp: u.organAmp.value,
+          goreStrength: u.lodCfg.value.w,
+        },
+        gore: u.lodCfg.value.w,
+      };
     },
     posedBones(): Primitive[] {
       const { sx, sy, sz } = squashFactors(current);

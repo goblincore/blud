@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  makeChunk, stepChunk, chunkPoint, squashFactors, type Chunk,
+  makeChunk, stepChunk, chunkPoint, squashFactors, chunkSettled, toppleAngleToFlat,
+  type Chunk,
 } from './gib-chunks';
 import { qRotate, qFromAxisAngle } from './vec';
 import type { Vec3 } from './types';
@@ -91,5 +92,54 @@ describe('chunkPoint / squashFactors', () => {
     expect(sx).toBeCloseTo(1.35, 5);
     expect(sy).toBeCloseTo(0.5, 5);
     expect(sz).toBeCloseTo(1.35, 5);
+  });
+});
+
+describe('chunkSettled (close-up task 5 bake predicate)', () => {
+  it('a chunk stepped to rest becomes settled and STAYS settled', () => {
+    let c = makeChunk('armL', [0.3, 1.5, -0.2], [1.4, 0.5, 0.9], 0.09, [0.3, 1, 0.1], rng);
+    for (let i = 0; i < 60 * 6; i++) c = stepChunk(c, 1 / 60);
+    expect(chunkSettled(c)).toBe(true);
+    // Idempotent: a settled chunk re-judged is still settled (nothing steps it).
+    expect(chunkSettled(c)).toBe(true);
+  });
+
+  it('is never settled while airborne', () => {
+    const c = makeChunk('armL', [0, 3, 0], [0, 0, 0], 0.2, [0, 1, 0], rng);
+    const still = { ...c, vel: [0, 0, 0] as Vec3, angVel: [0, 0, 0] as Vec3 };
+    expect(chunkSettled(still)).toBe(false); // y = 3 >> radius: in the air
+  });
+
+  it('is never settled while sliding fast on the floor', () => {
+    // Grounded (y == radius) but moving at 3 m/s: a slide, not a rest.
+    const c = makeChunk('armL', [0, 0.15, 0], [3, 0, 0], 0.15, [1, 0, 0], rng, 'gob');
+    const sliding: Chunk = { ...c, pos: [0, c.radius, 0], angVel: [0, 0, 0] as Vec3 };
+    expect(chunkSettled(sliding)).toBe(false);
+  });
+
+  it('is never settled mid-topple even when slow and grounded', () => {
+    // Slow, grounded, angVel zeroed, squash done — but the long axis still
+    // pointing straight UP, 90deg from flat. The topple has not finished.
+    const c = makeChunk('legL', [0, 0.2, 0], [0.01, 0, 0], 0.2, [0, 1, 0], rng);
+    const poised: Chunk = { ...c, angVel: [0, 0, 0] as Vec3, squash: 0 };
+    expect(toppleAngleToFlat(poised)).toBeGreaterThan(0.011);
+    expect(chunkSettled(poised)).toBe(false);
+  });
+
+  it('is never settled while the squash is still relaxing', () => {
+    const c = makeChunk('armL', [0, 0.2, 0], [0, 0, 0], 0.2, [1, 0, 0], rng);
+    const wet: Chunk = { ...c, angVel: [0, 0, 0] as Vec3, squash: 0.4 };
+    expect(chunkSettled(wet)).toBe(false);
+  });
+
+  it('settle time from a hot spawn is bounded (~2s) — the bake must not wait forever', () => {
+    let c = makeChunk('armL', [0.3, 1.5, -0.2], [2.5, 3.5, 1.9], 0.09, [0.3, 1, 0.1], rng);
+    let settledAt = -1;
+    for (let i = 0; i < 60 * 10 && settledAt < 0; i++) {
+      c = stepChunk(c, 1 / 60);
+      if (chunkSettled(c)) settledAt = i;
+    }
+    expect(settledAt).toBeGreaterThan(0);
+    expect(settledAt).toBeLessThan(60 * 4);
   });
 });
