@@ -130,9 +130,12 @@ const LOOK: Record<string, {
   // THIS weak because of the turntable's back views: in the key's shadow the
   // diffuse term dies and any stronger env turns the plate into pale-blue
   // fresnel sheen, which reads as plastic, not worn metal.
-  plate:   { metalness: 0.55, roughness: 0.55, envIntensity: 0.30 },
-  // Belt and pouches: olive webbing, matte and thirsty like the leathers.
-  webbing: { metalness: 0.05, roughness: 0.55, envIntensity: 0.35 },
+  plate:   { metalness: 0.45, roughness: 0.60, envIntensity: 0.25 },
+  // Belt and pouches: olive webbing, matte and thirsty. Roughness 0.7, not
+  // the leathers' 0.5: the belt's front face sits exactly at the key's
+  // mirror height, and at 0.55 the broad white dielectric sheen turned the
+  // whole slab pale grey — the opposite of "dull".
+  webbing: { metalness: 0.05, roughness: 0.70, envIntensity: 0.25 },
 
   // --- mouse kit (mouse-kit.wam): cotton and vinyl, not metal. These
   // entries exist mostly for the ENV MAP — without one, a rough dielectric's
