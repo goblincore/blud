@@ -117,6 +117,17 @@ const gunOk = await evaluate(`
 if (!gunOk.hasAnchor) fail('no viewModelAnchor');
 if (!gunOk.barrels) fail('Barrels node not present under the view-model anchor');
 
+// 2b. THE ARMS — goblin-arm.glb loaded, both arms parented, the skin has NO
+//     emissive (the 0.30 glow was what flattened the old hands), and the
+//     watch screen exists on the left arm. game-arms.ts throws on a missing
+//     node, so a clean boot already proved the node contract; this proves
+//     the dressing.
+const armsOk = await evaluate('__sdfGame.arms');
+if (!armsOk || !armsOk.left || !armsOk.right) fail(`arms not loaded: ${JSON.stringify(armsOk)}`);
+if (armsOk.skinEmissive !== 0) fail(`skin emissive is ${armsOk.skinEmissive}, expected 0 — the glow is back`);
+if (!armsOk.watch) fail('Watch_Screen missing from the left arm');
+console.log('arms: both present, skin emissive 0, watch present');
+
 // Give the first frames a beat to settle, then capture the rest pose.
 // Dismiss the tuning panels BEFORE any screenshot. game-main.ts:380 says this
 // seam exists for exactly this reason ("guarded typeof-style in capture
