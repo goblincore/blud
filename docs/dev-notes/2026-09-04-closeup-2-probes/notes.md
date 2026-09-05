@@ -181,3 +181,25 @@ so on merging main the normal-mode shader block, `setNormalMode`, `GAME_NORMAL_*
 mode tests and `closeup-probes-{bench,capture}.mjs` were removed rather than remapped;
 the sign-trick stepping diagnostic (`setWoundStepDiag`) is superseded by `setWoundStep`.
 The wounds bench (`closeup-wounds-bench.mjs`) survives and is the tool for the cull.
+
+## The shot spike: hit batching (2026-09-05)
+
+Owner: "when I'm close and I shoot a zombie it goes up to ~50 ms spikes". Root cause
+(`scripts/hit-profile.mjs`, landing-frame profile): `applyProjectileHit` ran the whole
+post-impact tail PER PELLET — sever checks, `applyRig`, `view.update` (= `packBody`
+repack + upload of the whole prim texture), `refreshWounds` (rewrite of every wound
+row). A point-blank double barrel lands ~16 pellets in one frame → 16 repacks.
+
+Fix: `ZombieActor.beginHits()/endHits()`; the pellet loop in game-main batches per
+actor per frame and flushes the tail once. Test: 16 pellets → 1 `update` + 1
+`setWounds` (unbatched reference: one per pellet).
+
+| landing frame CPU | before | after |
+| --- | --- | --- |
+| 4 pellets landed | 12–18 ms | — |
+| 16 pellets landed | (not measured; ~4× the above) | **6.7 ms** (5/5 frames, load ~38) |
+
+What is left in the landing frame is the per-pellet CPU field probe
+(`woundFromPellet` → `probeFlesh` → `sdBody`/`sdPrimitive`, ~6 ms per 16 pellets) —
+the next lever if the shot still registers, plus the one-time 131 ms first-shot
+pipeline compile (prewarm).
