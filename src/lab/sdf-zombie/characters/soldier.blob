@@ -121,11 +121,17 @@ body
   # lower edge and the forearm must be visibly fatter than a shirted wrist.
   # Unpainted = flesh, so the palette's skin carries them.
   # ============================================================
-  blob arm on upperarm at=0.06 r=0.060 tall=1.10 blend=0.008 mirror
-  bar  arm on upperarm from=0.12 to=0.95 r=0.048 r2=0.042 blend=0.006 mirror
-  blob arm on forearm  at=0.00 r=0.042 blend=0.005 mirror
+  # THICKER ARMS (owner, 2026-09-04: "more muscular"). Deltoid 0.060 -> 0.072,
+  # upper arm 0.048/0.042 -> 0.060/0.048, forearm cap 0.042 -> 0.050 and the
+  # shaft 0.044/0.038 -> 0.054/0.042. The taper is kept STEEPER on the upper
+  # arm than before (0.060 -> 0.048 rather than 0.048 -> 0.042) so the mass
+  # reads as a deltoid falling into a narrower elbow rather than a uniform
+  # tube -- a thicker cylinder alone reads as fat, not muscle.
+  blob arm on upperarm at=0.06 r=0.072 tall=1.10 blend=0.008 mirror
+  bar  arm on upperarm from=0.12 to=0.95 r=0.060 r2=0.048 blend=0.006 mirror
+  blob arm on forearm  at=0.00 r=0.050 blend=0.005 mirror
   # The issued-grunt forearm: fatter than the upper arm's lower end.
-  bar  arm on forearm  from=0.05 to=0.95 r=0.044 r2=0.038 blend=0.006 mirror
+  bar  arm on forearm  from=0.05 to=0.95 r=0.054 r2=0.042 blend=0.006 mirror
   # Fist — a blunt mitt, no fingers (house rule: the goblin's grabby hand is
   # the only articulated one in the cast).
   blob arm on hand at=0.50 offset=(0,0,0.010) r=0.044 wide=0.90 tall=1.00 deep=1.20 blend=0.006 mirror
@@ -187,11 +193,11 @@ face
   jawHeight  0.90
   jawDrop    0.060
   jawJut     0.038
-  noseLength 0.004
-  noseWidth  0.34
-  noseDrop   0.020
-  browHeavy  0.010
-  browRise   0.020
+  noseLength 0.031
+  noseWidth  0.500
+  noseDrop   0.039
+  browHeavy  0.019
+  browRise   0.039
   headBlend  0.005
 
 # The mesh's own face, baked flat (npm run blob:face-bake -- soldier) and
@@ -205,12 +211,25 @@ face
 # centre 0.50/0.27. The bake's bottom third is shoulders, so centreY sits
 # far below the sheet default — that is the bake's framing, not a mistake.
 sheet
-  image       soldier-face-grey.png
+  image       soldier-face.png
   decal       0
   projScaleX  0.180
   projScaleY  0.200
   projCentreX 0.50
   projCentreY 0.500
+  # Owner-tuned in the lab, 2026-09-04. THE COLOUR BAKE IS THE FACE -- the
+  # greyscale-map experiment was tried and reverted: luma modulation threw
+  # away the brow, nose and beard definition the colour bake carries, and the
+  # result read flatter, not more like the zombie.
+  #
+  # eyeGlowCut 0.670 is what makes the eyes glow, and it is the whole trick.
+  # The bake's max luma is 0.855, so at the 0.880 default NOTHING clears the
+  # glow mask -- which is why the eyes were dead. Dropping the cut below 0.855
+  # lets the bake's own painted red eyes light up, with no mask, no punched
+  # texels and no second image. decal 0 (multiply) is what lets them read as
+  # light rather than paint.
+  eyeGlow     0.500
+  eyeGlowCut  0.670
 
 # Skin around #cb956a as briefed (sRGB -> linear). Drier than the zombie
 # (wetness 0.15 vs latex-wet), warmer mottle. Wounds stay red.
