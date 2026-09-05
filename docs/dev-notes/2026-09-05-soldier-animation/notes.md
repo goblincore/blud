@@ -40,3 +40,23 @@ elbow high. Both are pitch/fold numbers, not code.
 
 Pre-existing, not from this work: a WebGPU "Binding size for Buffer is zero"
 validation error on lab boot, present on the zombie page too.
+
+## Round 2 (owner's first look, 2026-09-05)
+
+Owner: firing and aiming look good; the run "doesn't bend his knees, his
+legs just stretch out"; the chest armour clips through the body ("make it
+bigger and more like a vest"); feet clip through the boots ("make the boots
+bigger, cartoonishly").
+
+- **Run knees.** `RUN.strideLen` 0.75 → 0.42 on 0.84 m legs (the reach was
+  nearly the whole leg, so the swing leg had to straighten to get there),
+  `footLift` 0.22 → 0.28, `kneeBend` 0.12 → 0.26, `kneeLift` 0.14,
+  `kneeTrack` 0.35. `MARCH.strideLen` 0.45 → 0.34 for the same reason.
+- **Vest.** Cuirass rings ~25 mm off the flesh (was 10), runs down to the
+  belt line (ring 0.30), keeps its width at the top. Front plate moved 20 mm
+  forward to stay proud of it.
+- **Boots.** The boot's foot shell moved from the SHIN bone to the FOOT bone
+  (the flesh foot rides the foot frame, which stays level; a shell on the
+  shin tilted with every stride). Rings ~1.45x wider, 25 mm taller, sole
+  still on y=0; the shaft flares into the boot instead of narrowing.
+- Strips re-shot: `rest/`, `walk/`, `run/`. Kit fit test still green.

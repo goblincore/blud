@@ -178,7 +178,9 @@ export const MARCH: GaitProfile = {
   ...SHAMBLE,
   name: 'march',
   strideFreq: 1.6,
-  strideLen: 0.45,
+  // 0.34, not the 0.45 first shipped: on 0.84 m legs a 0.45 reach nearly
+  // straightens the swing leg (same lesson as RUN's strideLen).
+  strideLen: 0.34,
   footLift: 0.10,
   footPush: 0.06,
   stanceDuty: 0.58,
@@ -197,11 +199,19 @@ export const RUN: GaitProfile = {
   ...SHAMBLE,
   name: 'run',
   strideFreq: 2.4,
-  strideLen: 0.75,
-  footLift: 0.22,
+  // The first cut ran 0.75 m strides on 0.84 m legs, so the swing leg had to
+  // STRAIGHTEN to reach and the run read as stiff-legged stretching (owner,
+  // 2026-09-05: "he doesn't bend his knees"). A runner's reach is well under
+  // half the leg; the speed reads from cadence and the lean, not the reach.
+  strideLen: 0.42,
+  // Knees high and well FORWARD of the hip->ankle line: the bow is what the
+  // verlet folds the leg around, so it has to be big enough to be seen.
+  footLift: 0.28,
   footPush: 0.10,
   stanceDuty: 0.45,
-  kneeBend: 0.12,
+  kneeBend: 0.26,
+  kneeLift: 0.14,
+  kneeTrack: 0.35,
   bobAmp: 0.04,
   rockAmp: 0.02,
   swayAmp: 0.03,

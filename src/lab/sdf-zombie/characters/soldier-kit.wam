@@ -182,8 +182,9 @@ parts
       ring 0.00 w=0.0671 d=0.0671
       ring 0.25 w=0.0647 d=0.0647
       ring 0.50 w=0.0635 d=0.0635
-      ring 0.75 w=0.0618 d=0.0618
-      ring 1.00 w=0.0541 d=0.0541
+      ring 0.75 w=0.0680 d=0.0680
+      # Flares into the (now bigger) boot instead of narrowing into it.
+      ring 1.00 w=0.0760 d=0.0760
       cap start=none end=flat
 
     # BOOT FOOT — over the bare flesh foot that IS in the .blob; no foot is
@@ -193,14 +194,26 @@ parts
     # — the foot bone runs at ankle height, 95 mm above it). frame=up so d is
     # HEIGHT: every ring's bottom sits on y=0 and he stands on his boots.
     # Soles rise a touch toward the toe, the way a boot rocks.
-    loft foot bone=shin at=1.0 dir=fwd len=0.088 frame=up offset=(0,-0.0559,0) material=plate
-      ring 0.00 w=0.0612 d=0.0424
-      ring 0.15 w=0.0565 d=0.0424
-      ring 0.35 w=0.0588 d=0.0424
-      ring 0.55 w=0.0576 d=0.0424
-      ring 0.75 w=0.0524 d=0.0400
-      ring 0.90 w=0.0353 d=0.0388
-      ring 1.00 w=0.0294 d=0.0324
+    #
+    # ON THE FOOT BONE, NOT THE SHIN (owner, 2026-09-05: "his feet clip
+    # through his boots"). The flesh foot rides the foot bone, whose frame
+    # stays level under the gait (the toe follows the ankle rigidly), while a
+    # shell on the shin tilts with the shin every stride — so the two parted
+    # at every step. `bone=foot at=0.0` is the same point (the shin's tail IS
+    # the foot's head) in the frame that actually carries the foot.
+    #
+    # CARTOON-BIG (same owner note): every ring ~1.45x the measured foot and
+    # 25 mm taller, dropped a further 9 mm so the sole still sits on y=0.
+    # The heel ring is wider than the shaft's bottom ring on purpose now —
+    # the shaft tucks INTO the boot, the way a boot swallows a trouser leg.
+    loft foot bone=foot at=0.0 dir=fwd len=0.118 frame=up offset=(0,-0.0647,0) material=plate
+      ring 0.00 w=0.0888 d=0.0600
+      ring 0.15 w=0.0820 d=0.0600
+      ring 0.35 w=0.0853 d=0.0600
+      ring 0.55 w=0.0835 d=0.0600
+      ring 0.75 w=0.0760 d=0.0570
+      ring 0.90 w=0.0512 d=0.0550
+      ring 1.00 w=0.0426 d=0.0460
       cap start=flat end=flat
 
   # CUIRASS — machined plate over the bare chest, from just above the belt to
@@ -214,13 +227,23 @@ parts
   # It stops at y=1.09, leaving a band of BARE MIDRIFF between plate and
   # belt — the reference's midriff break, which used to be a dark vest in
   # the .blob before the shirt left for the kit.
+  #
+  # A VEST, NOT A SHELL (owner, 2026-09-05: "chest armor clipping through the
+  # body, make it bigger and more like a vest"). Under the run's 12-degree
+  # lean and the stride the verlet spine bends where the rigid chest frame
+  # does not, and a plate 10 mm off the flesh showed skin through it. Every
+  # ring now stands ~25 mm off the measured flesh, the plate runs down to
+  # the belt line (0.30) so there is no bare midriff for the bend to open,
+  # and it keeps its width at the top so the shoulders read as a vest yoke
+  # under the pauldrons rather than a cone tapering into the neck.
   loft cuirass bones=hips..spine2 material=plate frame=fwd shape=squarish
-    ring 0.45 w=0.1412 d=0.1106
-    ring 0.55 w=0.1459 d=0.1153
-    ring 0.70 w=0.1424 d=0.1165
-    ring 0.82 w=0.1447 d=0.1194
-    ring 0.92 w=0.1424 d=0.1165
-    ring 1.00 w=0.1212 d=0.1012
+    ring 0.30 w=0.1560 d=0.1300
+    ring 0.45 w=0.1600 d=0.1330
+    ring 0.55 w=0.1640 d=0.1370
+    ring 0.70 w=0.1620 d=0.1390
+    ring 0.82 w=0.1640 d=0.1420
+    ring 0.92 w=0.1620 d=0.1390
+    ring 1.00 w=0.1500 d=0.1250
     cap start=none end=none
 
   # FRONT PLATE — the distinct raised plate on the cuirass's face. A box,
@@ -228,7 +251,7 @@ parts
   # body): narrow enough (0.12 m) that the cuirass's curvature only pulls its
   # side edges ~3 mm off the shell behind it, standing 12 mm proud at the
   # centre. Checked by the fit test, not by eye.
-  attach frontplate bone=chest kind=box at=0.45 offset=(0,0,0.0588) size=0.0941 w=0.0706 h=0.0941 d=0.0141 material=plate
+  attach frontplate bone=chest kind=box at=0.45 offset=(0,0,0.0790) size=0.0941 w=0.0706 h=0.0941 d=0.0141 material=plate
 
   # BELT — a wide webbing slab breaking the torso's line. Sized WIDER than
   # the flesh both above it (0.133 at y1.13) and below it (0.135 at y0.92),
