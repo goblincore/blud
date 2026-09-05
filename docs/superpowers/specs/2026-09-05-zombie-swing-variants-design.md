@@ -55,11 +55,12 @@ and strike angles over a 0..1 progress through the same beats:
 ```ts
 export type SwingVariant = 'hook' | 'overhead';
 
-/** Arm progress through the beats: 0 at rest, 1 at the wind-up peak, then
- *  0 -> 1 again across the strike, held through contact, back to 0 in
- *  recovery. Unlike attackDrive this is UNSIGNED and paired with a `beat`
- *  saying which leg of the swing it belongs to, which is what lets an angle
- *  be positive at both ends. */
+/** The swinging arm's angles at `phase`. Unlike attackDrive this does NOT
+ *  multiply one magnitude by a signed scalar: it interpolates between the
+ *  variant's explicit wind-up and strike angles, which is the whole point —
+ *  an angle can be positive at BOTH ends, so a hook can keep its elbow up.
+ *  Rest -> wind-up angles across the wind-up beat, wind-up -> strike angles
+ *  across the strike, held through contact, back to rest through recovery. */
 export function armArc(
   phase: number, variant: SwingVariant, tuning?: AttackTuning,
 ): { pitch: number; yaw: number };
