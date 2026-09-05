@@ -99,8 +99,14 @@ function diffPngs(a, b, skipTopPx = 0) {
   return { changed, changedPct: +((changed / n) * 100).toFixed(4), meanD: +(sum / n).toFixed(2), maxD };
 }
 
-const shot = async (send, name, tag) => {
-  await sleep(400); // capture-vs-presented race guard (inherited)
+const shot = async (send, name, tag, settle = 2500) => {
+  // 2500 ms default — the FPV weapon spring is still settling at 400 ms, and
+  // its pose at shot time is timing-sensitive (one extra CDP round-trip
+  // shifts it): idle off1/off2 matched at 0% but any capture with an extra
+  // eval diverged ~2.4% clustered in the gun/arm rows. At 2500 ms the spring
+  // is converged and the pose is timing-insensitive (measured 2026-09-05).
+  // The LIVE look strips pass the old 400 ms — they shoot a decaying burst.
+  await sleep(settle);
   const s = await send('Page.captureScreenshot', { format: 'png' });
   if (!s.result?.data) fail(`${name}: screenshot ${tag} returned no data`);
   const file = `${OUT}/${name}-${tag}.png`;
@@ -209,7 +215,7 @@ if (MODE === 'parity') {
       await evaluate(`(async () => { ${STAGE[scene]} })()`);
       await evaluate('__sdfGame.setLoopRunning(true)');
       for (let f = 0; f < 4; f++) {
-        await shot(send, `live-${scene}-${item}`, `f${f}`);
+        await shot(send, `live-${scene}-${item}`, `f${f}`, 400);
         await sleep(160);
       }
       console.log(`  live strip: ${scene} ${item} (4 frames, unfrozen)`);
