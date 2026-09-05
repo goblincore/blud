@@ -2747,8 +2747,17 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // own shading, and real shading on top drew hard shadow lines from the
   // fringe and killed the mouth on the down-sloping jaw. 0.85 keeps a whisper
   // of real light so the head still turns.
+  //
+  // The DIFFUSE CONSTANT was 0.52 and is 0.30 (2026-09-04). At 0.52 the decal
+  // rendered effectively UNLIT: measured on the soldier, face #cc9f69 --
+  // almost exactly his raw atlas skin -- against a correctly-lit body at
+  // #954821, a 1.83x mismatch that read as a pale card stuck on the head.
+  // 0.30 brings it to 1.22x, about right for a face catching light. The 0.85
+  // MIX is deliberately untouched: that is what keeps the fringe shadow off
+  // the mouth, which is the failure this comment records. Swept for
+  // regressions -- the zombie sits at 1.18x face/torso, contrast sd 41.4.
   fleshLit = mix(fleshLit,
-                 albedo * (amb + 0.52 * lightCfg.x * keyColor),
+                 albedo * (amb + 0.30 * lightCfg.x * keyColor),
                  faceFlat * 0.85);
   if (spotCfg.x > 0.0 && spotCfg2.y > 0.0) {
     let knee = clamp(1.0 - spotCfg2.y, 0.05, 0.99);
