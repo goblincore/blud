@@ -233,14 +233,21 @@ parts
     cap start=none end=none
 
   # POUCHES — issued webbing is RECTANGULAR: boxes, not lozenges. Two on the
-  # front flanking the centreline, one on each hip. Authored explicitly per
-  # side rather than in `mirror` — they hang off a CENTRAL bone, and a
+  # front flanking the centreline, one on each hip CORNER. Authored explicitly
+  # per side rather than in `mirror` — they hang off a CENTRAL bone, and a
   # mirrored attach with a zero x-offset is a coincidence, not a plan. Each
   # back face sits ~7 mm into the belt slab so the pouch hangs ON it.
+  #
+  # The hip pouches are NOT on the flank: the first version put them at
+  # x=±0.135, z=0.01, and the hanging forearm (flesh x 0.116..0.246 at belt
+  # height) swallowed 29 mm of a 35 mm pouch — the fit test caught it as the
+  # deepest webbing vertex. The arm owns the whole flank, so the pouch pair
+  # slid forward to the belt's front corner (x=±0.085, z=0.085), where the
+  # belt's ellipse puts its surface at z=0.073 and the forearm never reaches.
   attach pouchFL bone=spine1 kind=box at=0.32 offset=(0.0294,0,0.0647) size=0.0412 w=0.0294 h=0.0412 d=0.0206 material=webbing
   attach pouchFR bone=spine1 kind=box at=0.32 offset=(-0.0294,0,0.0647) size=0.0412 w=0.0294 h=0.0412 d=0.0206 material=webbing
-  attach pouchL  bone=spine1 kind=box at=0.32 offset=(0.0794,0,0.0059) size=0.0412 w=0.0206 h=0.0412 d=0.0294 material=webbing
-  attach pouchR  bone=spine1 kind=box at=0.32 offset=(-0.0794,0,0.0059) size=0.0412 w=0.0206 h=0.0412 d=0.0294 material=webbing
+  attach pouchL  bone=spine1 kind=box at=0.32 offset=(0.0500,0,0.0500) size=0.0412 w=0.0206 h=0.0412 d=0.0294 material=webbing
+  attach pouchR  bone=spine1 kind=box at=0.32 offset=(-0.0500,0,0.0500) size=0.0412 w=0.0206 h=0.0412 d=0.0294 material=webbing
 
 textures
   # Plate: worn, not hammered — issued kit that has seen use. A quiet painted
