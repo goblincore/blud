@@ -65,14 +65,23 @@ describe('goblinAlbedoPixels', () => {
     for (let i = 3; i < px.length; i += 4) expect(px[i]).toBe(255);
   });
 
-  it('averages to the goblin base colour, within 8% — mottle darkens, it does not recolour', () => {
+  it('averages to the goblin base colour — mottle and warts darken it, they do not recolour it', () => {
+    // Luminance may drop up to 8% (patches and wart shade are both darker
+    // than base); hue is held by a looser 12% per-channel bound, because
+    // the base's blue is small (121) and the same absolute shift reads as a
+    // larger fraction of it.
     const base = goblinSkinSrgbHex();
     const want = [(base >> 16) & 255, (base >> 8) & 255, base & 255];
-    for (let c = 0; c < 3; c++) {
+    const means = [0, 1, 2].map((c) => {
       let sum = 0;
       for (let i = c; i < px.length; i += 4) sum += px[i]!;
-      const mean = sum / (size * size);
-      expect(Math.abs(mean - want[c]!) / want[c]!, `channel ${c} mean ${mean} vs ${want[c]}`).toBeLessThan(0.08);
+      return sum / (size * size);
+    });
+    const lumWant = want[0]! + want[1]! + want[2]!;
+    const lumMean = means[0]! + means[1]! + means[2]!;
+    expect(Math.abs(lumMean - lumWant) / lumWant, `luminance ${lumMean} vs ${lumWant}`).toBeLessThan(0.08);
+    for (let c = 0; c < 3; c++) {
+      expect(Math.abs(means[c]! - want[c]!) / want[c]!, `channel ${c} mean ${means[c]} vs ${want[c]}`).toBeLessThan(0.12);
     }
   });
 
@@ -102,15 +111,22 @@ describe('goblinAlbedoPixels', () => {
   });
 
   it('darkens where the normal map has a wart, so bumps and blotches agree', () => {
-    // The wart layer is tileNoise(u*6, v*6, 6, seed 7) > 0.55 in height(). Find
-    // the darkest texel and the brightest; the darkest must sit on a wart.
-    let dark = Infinity, darkAt = 0;
-    for (let i = 0; i < px.length; i += 4) {
-      const lum = px[i]! + px[i + 1]! + px[i + 2]!;
-      if (lum < dark) { dark = lum; darkAt = i / 4; }
+    // Statistical, not "the single darkest texel is a wart": the mottle
+    // patches saturate to the full mottle colour and can out-darken any one
+    // wart. What must hold is that wart crowns (wart field > 0.85, the same
+    // field height() bumps) are darker ON AVERAGE than plain skin (< 0.55).
+    let onSum = 0, onN = 0, offSum = 0, offN = 0;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const i = (y * size + x) * 4;
+        const lum = px[i]! + px[i + 1]! + px[i + 2]!;
+        const wart = goblinWartField(x / size, y / size);
+        if (wart > 0.85) { onSum += lum; onN++; }
+        else if (wart < 0.55) { offSum += lum; offN++; }
+      }
     }
-    const u = (darkAt % size) / size, v = Math.floor(darkAt / size) / size;
-    expect(goblinWartField(u, v)).toBeGreaterThan(0.55);
+    expect(onN).toBeGreaterThan(20);
+    expect(onSum / onN).toBeLessThan((offSum / offN) * 0.93);
   });
 });
 

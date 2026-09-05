@@ -125,14 +125,25 @@ same class of bug: cases handled in RIG space with no idea where the bore was.
   the near side only (loft is symmetric; both-side renders in the notes) —
   tray now a constant 0.040 half-width under the tubes.
 
-**[ ] F-arm.1 — the FPV forearms should resemble the goblin SDF character.**
+**[x] F-arm.1 — the FPV forearms should resemble the goblin SDF character.**
 Spec written 2026-09-04 (approach B, owner-approved in conversation):
 [docs/superpowers/specs/2026-09-04-fpv-goblin-arms-design.md](docs/superpowers/specs/2026-09-04-fpv-goblin-arms-design.md)
 — Blender-authored arm GLB (thicker skin with ball joints, leather bracer
 with brass hardware matching the gun, a SMARTWATCH on the left wrist with a
 drawable glowing screen), generated albedo + normal skin maps with no
-emissive, kit parity for the watch. Follow-up once built: use the watch
-screen as an in-game device (shells / health / timer).
+emissive, kit parity for the watch. **BUILT 2026-09-05** via the dispatch UI
+on kimi/k3 (8 tasks, branch `dispatch/2026-09-04-fpv-goblin-arms-task-8`):
+`goblin-arm.glb` (8942 tris) from `scripts/model_goblin_arm.py`, `game-arms.ts`
+dresses it (generated albedo + normals, NO emissive, gun env map), smartwatch
+on the left wrist with a drawable glowing screen (`__sdfGame.watchScreen`),
+kit parity in `goblin-kit.wam`, gate check 2b. Task 1's agent stopped on a
+plan defect of mine (the albedo's own tests were unsatisfiable as written);
+fixed by hand after the chain: wart darkening is a multiplicative shade, the
+mottle mix is linear (0..80%), the mean test budgets luminance at 8% and hue
+at 12% per channel. 3169 tests, tsc, gate all green. Evidence:
+[docs/dev-notes/2026-09-04-fpv-goblin-arms/](docs/dev-notes/2026-09-04-fpv-goblin-arms/notes.md).
+**Awaiting the owner's look before merge.** Follow-up **F-arm.2 — the watch
+as an in-game device** (shells / health / timer drawn on the screen canvas).
 Owner, 2026-09-04: "the arm itself probably needs some work to more
 accurately resemble the goblin SDF model (I guess that will be the main
 player character)". Today each arm is one skin-coloured capsule from the hand

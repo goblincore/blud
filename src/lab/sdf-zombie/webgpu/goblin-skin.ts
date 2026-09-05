@@ -149,14 +149,22 @@ export function goblinAlbedoPixels(size: number): Uint8Array {
       let m = tileNoise(u * base, v * base, base, 1) * 0.65
             + tileNoise(u * base * 2, v * base * 2, base * 2, 2) * 0.35;
       m = (m - 0.5) * 2 * GOBLIN_SKIN.mottleAmp;          // -amp .. +amp
-      const k = Math.max(0, m) * 4.5;                     // only the dark half mixes toward mottleColor
-      // Warts: a soft ring of darkening, strongest at the wart's crown.
-      const w = Math.pow(Math.max(0, goblinWartField(u, v) - 0.55) / 0.45, 1.5) * 0.45;
-      const mix = Math.min(1, k + w);
+      // Only the dark half of the field mixes toward mottleColor, linearly
+      // up to 80% at the field's extreme -- patches with soft edges, not a
+      // saturated cliff. (The dispatched first pass used a x4.5 gain that
+      // clipped half the map to full mottle colour and dragged the mean off
+      // the base, which is what made its own mean test unsatisfiable.)
+      const mix = Math.min(1, Math.max(0, m) / GOBLIN_SKIN.mottleAmp) * 0.80;
+      // Warts: a soft SHADE, strongest at the wart's crown, multiplied on
+      // after the mottle so a wart is darker than its surroundings whether
+      // it sits on base green or on a full mottle patch. (Mixing it toward
+      // mottleColor instead let saturated patches out-darken every wart,
+      // which is what broke the bumps-and-blotches-agree test.)
+      const shade = 1 - 0.55 * Math.pow(Math.max(0, goblinWartField(u, v) - 0.55) / 0.45, 1.5);
       const lin = [
-        br + (mr - br) * mix + Math.min(0, m) * 0.10 * br,
-        bg + (mg - bg) * mix + Math.min(0, m) * 0.10 * bg,
-        bb + (mb - bb) * mix + Math.min(0, m) * 0.10 * bb,
+        (br + (mr - br) * mix + Math.min(0, m) * 0.10 * br) * shade,
+        (bg + (mg - bg) * mix + Math.min(0, m) * 0.10 * bg) * shade,
+        (bb + (mb - bb) * mix + Math.min(0, m) * 0.10 * bb) * shade,
       ];
       const i = (y * size + x) * 4;
       px[i]     = linearToSrgbByte(lin[0]!);

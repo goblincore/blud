@@ -24,3 +24,16 @@ Plan: docs/superpowers/plans/2026-09-04-fpv-goblin-arms.md
 ## Numbers
 * tris: 8942 / 14000 cap
 * skin envMapIntensity: 1.1 (same as the gun)
+
+## After the chain (2026-09-05, by hand)
+
+Task 1's agent stopped: the plan's albedo formula and its tests could not
+both hold — a `x4.5` mottle gain clipped half the map to full mottle colour,
+which out-darkened every wart (the "darkest texel is a wart" test) and dragged
+the blue mean past the 8% bound. Fixed: the mottle mix is linear in the dark
+half of the field (0..80% toward `mottleColor`), wart darkening is a
+multiplicative SHADE (up to 55% at the crown) applied after the mix so a wart
+is darker than its surroundings on any ground, and the tests now assert
+crown texels are >7% darker on average than plain skin, luminance within 8%
+of base, hue within 12% per channel. Measured at 64px: plain 428.8, crown
+367.1 (summed sRGB bytes). Suite 3169, tsc clean, gate + arms check green.
