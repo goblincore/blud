@@ -33,6 +33,10 @@ Death is out of scope: collapse and gib are inherited as-is.
 | Shot | Hip fire first. The carry table is shaped so shouldered aim is a fourth row later. |
 | Death | Inherit collapse and gib unchanged. Kit follows the rig down; the gun drops. |
 | Weapon | `public/assets/lab/shorty-double.glb`, the FPV double shotgun, as a placeholder. |
+| Joint schema | Grows by eight SECONDARY names (spineA, spineB, clavicleL/R, handTipL/R, toeL/R). Discovered in planning: the goblin and soldier get NO motion today — bindRig makes a rig point for every bone end, jointNamesForBody could not name them all, and makeMotionJoints returned null on the count mismatch. |
+| Gun frame | The gun rides the right FOREARM frame (elbow→hand), not the hand bone: a 24 cm lever is steadier than a 9.5 cm bone whose tip is a free verlet point. |
+| Left hand | IK-solved (FABRIK, segment lengths preserved) onto the gun's Fore_Hand locator. Lengths are exact, so this is not an additive displacement. |
+| Lab keys | `1` walk band, `2` run band, `F` fire. Collapse stays on the existing `K`. |
 
 ## 1. Bone frames drive the kit and the prop
 
