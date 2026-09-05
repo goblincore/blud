@@ -3805,7 +3805,12 @@ async function main() {
       .map(k => `  ${pad(k)} ${n(face[k], 4)}`);
     const p = u.faceProj.value;
     const sheetLines = [
-      ['decal', u.faceCfg.value.x > 1.5 ? 1 : 0],
+      // faceCfg.x is a THREE-way mode and this used to test `> 1.5`, which
+      // reported mode 3 (luma multiply) as `decal 1` (replace) -- the exact
+      // opposite blend -- and never emitted blendLuma at all. A copy button
+      // that cannot describe the mode you are looking at is worse than none.
+      ['decal', Math.round(u.faceCfg.value.x) === 2 ? 1 : 0],
+      ['blendLuma', Math.round(u.faceCfg.value.x) === 3 ? 1 : 0],
       ['projScaleX', p.x], ['projScaleY', p.y],
       ['projCentreX', p.z], ['projCentreY', p.w],
       ['eyeGlowAmp', u.faceCfg2.value.w], ['eyeGlowCut', u.faceCfg2.value.z],
