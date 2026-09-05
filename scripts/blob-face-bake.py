@@ -207,3 +207,29 @@ if a.grey:
           + (f', {eye_n} eye texels punched to white' if a.eye_glow else ''))
 cov = (img[:, :, 3] > 0).mean()
 print(f'wrote {out.relative_to(root)} ({R}x{R}, {cov:.0%} covered, head {xmax - xmin:.3f} wide x {ymax - ymin:.3f} tall)')
+
+# HOW TO WEAR IT. Printed because every character authored so far started with
+# the face far too small and needed it enlarged by hand.
+#
+# DEFAULT_SHEET's projScaleX/Y are 0.45/0.58, and those are RIGHT for the
+# generated 64x64 sheet, where the drawn face fills the texture -- five
+# characters rely on them. They are wrong by about 2.4x for a BAKED face, which
+# occupies part of a 512-square atlas surrounded by alpha. Both characters
+# tuned against a render converged near 0.19 / 0.22 instead: the soldier at
+# 0.180/0.200 and the Widow at 0.19/0.23.
+#
+# projScale is uv-per-unit-head-space -- a FREQUENCY, so LOWER means a BIGGER
+# face. That is the other half of why it kept coming out small: the number
+# reads backwards.
+aspect = (ymax - ymin) / max(xmax - xmin, 1e-6)
+sx = 0.19
+sy = round(sx * (1.15 if aspect < 1 else 1.25), 3)
+print()
+print('  paste into the character\'s sheet block, then tune on a render:')
+print(f'    image       {out.name}')
+print('    decal       0            # MULTIPLY -- the face takes the body\'s light')
+print(f'    projScaleX  {sx}         # lower = BIGGER face')
+print(f'    projScaleY  {sy}')
+print('    projCentreX 0.50')
+print('    projCentreY 0.47')
+print('    eyeGlowCut  0.70         # must sit BELOW the bake\'s max luma or nothing glows')
