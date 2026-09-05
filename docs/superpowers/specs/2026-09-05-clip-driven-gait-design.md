@@ -35,7 +35,7 @@ normalises by leg length so units and proportions cancel.
 ### The curve table (`GaitCurves`)
 
 Sampled at `N = 32` evenly spaced phases over one cycle, phase 0 = LEFT heel
-strike (the sample where the left foot is furthest forward of the hips).
+strike (the sample where the left thigh is pitched furthest forward).
 Angles are in the sagittal plane (radians), lengths as fractions of the
 reference leg length (thigh + shin):
 
