@@ -171,3 +171,13 @@ Two levers, both untried: (1) a less conservative near-wound factor (0.6 was cho
 against wound halos at ω 1.4; the game ships ω 1.0 — re-gate the halo look at 0.8);
 (2) cull the carve loop per cluster/group bounds so an eval far from every crater
 pays nothing — the same shape as the group-sphere cull the prim fold already has.
+
+## Retired at the main merge (2026-09-05)
+
+Main's 2026-09-04 retune gave the wound zone its own step multiplier (`WOUND_STEP_MUL`,
+live seam `__sdfGame.setWoundStep` on **perfCfg.z**) — the same slot task 2's normal
+mode used. The normal mode measured ~1 ms (3-tap) and the derivative mode was no-ship,
+so on merging main the normal-mode shader block, `setNormalMode`, `GAME_NORMAL_*`, the
+mode tests and `closeup-probes-{bench,capture}.mjs` were removed rather than remapped;
+the sign-trick stepping diagnostic (`setWoundStepDiag`) is superseded by `setWoundStep`.
+The wounds bench (`closeup-wounds-bench.mjs`) survives and is the tool for the cull.

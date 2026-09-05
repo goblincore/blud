@@ -33,7 +33,7 @@ import type { ComputeTileBinding } from './tile-bin-compute';
 import {
   HELPERS, MARCH_BODY, CONE_MARCH, DATA_ROWS,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE,
-  ROW_PRIM_BEND, ROW_PRIM_COLOR, ROW_PRIM_SHELL, ROW_PRIM_CLIP,
+  ROW_PRIM_BEND, ROW_PRIM_COLOR, ROW_PRIM_SHELL, ROW_PRIM_WARP, ROW_PRIM_STRAND, ROW_PRIM_CLIP,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
   ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS,
 } from './march.wgsl';
@@ -389,6 +389,22 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      * Defaults describe the lab's Cornell box but contribute NOTHING until
      * probeWeight moves, so this whole block is inert on arrival.
      */
+    /**
+     * WIND (shell cloth). The world-space offset in METRES that a warped
+     * shell's fold lattice has drifted — the host accumulates wind velocity
+     * times elapsed time and writes the result, so the shader needs no clock
+     * and every pass reads one number.
+     *
+     * A NEW uniform rather than a packed spare, for the reason woundShadowCfg
+     * gives above: nothing in woundCfg/woundCfg2/surfCfg/lodCfg is free, and
+     * `woundCfg2.w` in particular is the volume hitEps override despite what
+     * an older comment in march.wgsl.ts called it.
+     *
+     * ZERO by default, which is exactly the field as authored: sdShell skips
+     * the drift entirely when the warp branch is off, and subtracting a zero
+     * vector is a no-op when it is on.
+     */
+    windDrift: uniform(new THREE.Vector3(0, 0, 0)),
     bounceCfg: uniform(new THREE.Vector4(0, 1, 1, 1)),
     boxMin: uniform(new THREE.Vector3(-2, 0, -2)),
     boxMax: uniform(new THREE.Vector3(2, 3.2, 2)),
@@ -418,8 +434,9 @@ export function defaultUniforms(faceTex: THREE.Texture) {
     aaCfg: uniform(new THREE.Vector2(0.02, 0)),
     debugCfg: uniform(new THREE.Vector2(0, 0)),
     /** Perf round 2 seams (plan 2026-09-01): x hull-exit tMax bound, y wound
-     *  early-out, zw spare. All zero = the pre-plan shader, which is what the
-     *  lab binds. */
+     *  early-out, z near-wound step multiplier override (2026-09-04; 0 = the
+     *  compiled WOUND_STEP_MUL), w spare. All zero = the pre-plan shader,
+     *  which is what the lab binds. */
     perfCfg: uniform(new THREE.Vector4(0, 0, 0, 0)),
     /** Half extents of the view's proxy box, world space (perf round 2 task
      *  5): the accumulated-depth gate's conservative per-body ray entry —
@@ -889,6 +906,10 @@ export function createMarchMaterial(
     levelShadowTex: levelShadowTexNode,
     levelShadowMatrix: u.levelShadowMatrix,
     levelShadowCfg: u.levelShadowCfg,
+    // Wind drift, POSITIONALLY LAST — appended after the level-shadow slots
+    // in MARCH_BODY's signature too. Bound in the same commit as the WGSL
+    // input, which is the rule the meltCfg note above exists to enforce.
+    windDrift: u.windDrift,
   }) as unknown as Swizzled;
 
   const material = new MeshBasicNodeMaterial();
@@ -1223,6 +1244,8 @@ export function createZombieGpuView(
     writeRow(ROW_PRIM_BEND, p.primBend, MAX_PRIMS);
     writeRow(ROW_PRIM_COLOR, p.primColor, MAX_PRIMS);
     writeRow(ROW_PRIM_SHELL, p.primShell, MAX_PRIMS);
+    writeRow(ROW_PRIM_WARP, p.primWarp, MAX_PRIMS);
+    writeRow(ROW_PRIM_STRAND, p.primStrand, MAX_PRIMS);
     writeRow(ROW_PRIM_CLIP, p.primClip, MAX_PRIMS);
     writeRow(ROW_CLUSTER_BOUNDS, p.clusterBounds, p.clusterCount);
     writeRow(ROW_CLUSTER_RANGE, p.clusterRange, p.clusterCount);
@@ -1292,6 +1315,11 @@ export function createZombieGpuView(
     // ORDER MATTERS note in createMarchMaterial). The cone twin sees the
     // same seams the march does.
     perfCfg: u.perfCfg,
+    // ...and the same WIND. Unlike the noise, which the cone deliberately
+    // passes as 0 because it lives on the normal, wind moves the FIELD: a
+    // cone marching the no-wind surface would certify space the drifted
+    // cloth occupies.
+    windDrift: u.windDrift,
   }) as unknown as { div: (d: unknown) => unknown };
 
   const coneMaterial = new MeshBasicNodeMaterial();
@@ -1716,6 +1744,8 @@ export function createChunkGpuView(
     writeRow(ROW_PRIM_BEND, packed.primBend, MAX_PRIMS);
     writeRow(ROW_PRIM_COLOR, packed.primColor, MAX_PRIMS);
     writeRow(ROW_PRIM_SHELL, packed.primShell, MAX_PRIMS);
+    writeRow(ROW_PRIM_WARP, packed.primWarp, MAX_PRIMS);
+    writeRow(ROW_PRIM_STRAND, packed.primStrand, MAX_PRIMS);
     writeRow(ROW_PRIM_CLIP, packed.primClip, MAX_PRIMS);
     writeRow(ROW_CLUSTER_RANGE, packed.clusterRange, 1);
     writeRow(ROW_GROUP_RANGE, packed.groupRange, MAX_PRIMS);

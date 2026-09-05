@@ -55,6 +55,11 @@ import { MAX_PRIMS } from '../validate';
 //                       w = hasClip (shell-fold prims only)
 //   row 17 primClip     xyz = clip plane normal (shell-fold prims only),
 //                       w = per-prim glow 0..1 (hard-surface task 3)
+//   row 20 primWarp     x = wrinkle amplitude (m), yzw = per-axis wrinkle
+//                       frequency (rad/m) (shell-fold prims only)
+//   row 21 primStrand   x = strand count, y = wave, z = cycles, w = fat
+//                       (hairlock 2026-09-05; zeros = no bundle — the exact
+//                       no-op every pre-strand character packs)
 //
 // DIVERGENCE NOTE (2026-08-17, motion-polish task 3): row 7 / per-prim
 // orientation exists ONLY here. The GLSL twin (march.glsl.ts) is FROZEN per
@@ -79,7 +84,7 @@ import { MAX_PRIMS } from '../validate';
 //     build for any of them, so this is a test failure rather than a
 //     pipeline-creation error nobody reads.
 
-export const DATA_ROWS = 20;
+export const DATA_ROWS = 22;
 export const ROW_PRIM_A = 0;
 export const ROW_PRIM_B = 1;
 export const ROW_PRIM_SCALE = 2;
@@ -128,6 +133,35 @@ export const ROW_PRIM_SHELL = 16;
  *  the glow COLOUR is the prim's own ROW_PRIM_COLOR albedo, so the lane is
  *  inert (w = 0) unless the author writes `glow=`. See ROW_PRIM_SHELL. */
 export const ROW_PRIM_CLIP = 17;
+/** WRINKLES (shell cloth spike): x = warp amplitude in metres,
+ *  yzw = per-axis frequency in radians per metre. Read only by prims with a
+ *  shell fold, and only when the amplitude and the frequency are both
+ *  non-zero — a shell authored without
+ *  `warp=` packs zeros here and takes the untouched branch in sdShell, which
+ *  is why every existing character is bit-identical across this row's
+ *  arrival.
+ *
+ *  Its OWN row rather than a lane on ROW_PRIM_SHELL: that row is full
+ *  (x thickness, y rim, z clip offset, w hasClip) and w is genuinely read —
+ *  `hasClip < 0.5` is an early return in sdShell — even though pack.ts
+ *  happens to write 1 there for every shell today. Aliasing a lane that is
+ *  constant by accident rather than by contract is how the box/shell profile
+ *  bit went wrong. One row costs MAX_PRIMS * 16 bytes = 2 KiB per body, the
+ *  same bargain ROW_WOUND_FLAGS took. */
+export const ROW_PRIM_WARP = 20;
+/** Strand bundle parameters (hairlock, 2026-09-05): x = strand count,
+ *  y = wave (wobble amplitude, fraction of cell), z = cycles, w = fat
+ *  (strand diameter as a fraction of the cell). Read only where the prim's
+ *  profile carries bit 5 (value 32). The CPU mirror of everything this row
+ *  drives is strand.ts; see its header for the construction and the
+ *  Lipschitz argument.
+ *
+ *  21, NOT 20: hairlock and the shell cloth spike each added "the next row"
+ *  on their own branch and both landed on 20. A textual merge would have
+ *  reported success with two names for one row — every warped shell reading
+ *  the strand bundle's parameters as its wrinkle frequency. Same class as
+ *  the meltCfg collision the noiseCfg comment records. */
+export const ROW_PRIM_STRAND = 21;
 
 
 // iq quadratic polynomial smooth-min: rigid, and conservative (never
@@ -321,7 +355,155 @@ export const CONE_BEND = /* wgsl */ `fn coneBend(q: vec3<f32>, a: vec3<f32>, b: 
   return best * minScale;
 }`;
 
-// Rounded box — the exact CPU mirror of sdRoundBox in validate.ts. `e` is the
+// STRAND BUNDLE (hairlock, 2026-09-05) — the GPU mirror of sdStrand in
+// strand.ts, whose header carries the full construction and the Lipschitz
+// argument. Edit both in the same commit: the CPU field backs
+// click-to-shoot and the render-check mask, so a drift here is a shot that
+// lands where no strand is drawn.
+//
+// One curve evaluation (the exact closest point t*), then a 3x3 jittered
+// grid fold of WINDOWED TANGENT CAPSULES in the cross-section plane — iq's
+// limited repetition with a per-strand wobble phase. The hashes use SMALL
+// COEFFICIENTS ONLY, so f32 (here) and f64 (validate.ts) agree to ~1e-6 and
+// the two fields wobble the same strands the same way.
+export const STRAND_HASH4 = /* wgsl */ `fn strandHash4(ix: f32, iy: f32) -> vec4<f32> {
+  return fract(vec4<f32>(
+    0.371 * ix + 0.733 * iy,
+    0.531 * ix + 0.297 * iy + 0.41,
+    0.617 * ix + 0.173 * iy + 0.73,
+    0.229 * ix + 0.859 * iy + 0.19));
+}`;
+
+// The conservative Lipschitz bound the strand field is divided by — the GPU
+// mirror of strandLipschitz in strand.ts. bent is 1.0 when the prim carries
+// a curve (profile bit 1), in which case `c` is the packed control point;
+// a straight strand passes c = vec3(0) and must not read it.
+export const STRAND_LIPSCHITZ = /* wgsl */ `fn strandLip(a: vec3<f32>, b: vec3<f32>, c: vec3<f32>, r1: f32, r2: f32, bent: f32, st: vec4<f32>) -> f32 {
+  let n = st.x;
+  let wave = st.y;
+  let cycles = st.z;
+  let fat = st.w;
+  let rb = select(r2, r1, r2 < 0.0);
+  var e1 = b - a;
+  var bb = vec3<f32>(0.0);
+  if (bent > 0.5) {
+    e1 = (c - a) * 2.0;
+    bb = a - 2.0 * c + b;
+    if (dot(bb, bb) < 1e-12) { e1 = b - a; bb = vec3<f32>(0.0); }
+  }
+  let bbLen = length(bb);
+  var spdMin = length(e1);
+  if (bbLen >= 1e-9) {
+    let dd = 2.0 * bb;
+    let tMin = clamp(-dot(e1, dd) / dot(dd, dd), 0.0, 1.0);
+    spdMin = length(e1 + dd * tMin);
+  }
+  // A degenerate (zero-length) strand has no curve to wave along.
+  if (spdMin < 1e-9) { return 1.0; }
+  let m = ceil(n * 0.5);
+  let rMax = max(r1, rb);
+  let cellMax = 2.0 * rMax / n;
+  let cellRate = 2.0 * abs(rb - r1) / n;
+  // STRAND_JITTER: keep in step with strand.ts (0.4 of the wobble).
+  let centreMax = m * cellMax + wave * 1.4 * cellMax;
+  let rhoMax = centreMax + fat * cellMax * 0.5;
+  let kappa = 2.0 * bbLen / (spdMin * spdMin);
+  let rate = 1.0 / (spdMin * max(1.0 - rhoMax * kappa, 0.25));
+  let dCentre = m * cellRate + wave * 1.4 * cellRate + wave * 6.2831853 * cycles * cellMax;
+  let spin = 2.0 * bbLen / spdMin;
+  let dSdir = spin + wave * 6.2831853 * cycles * (cellRate + 6.2831853 * cycles * cellMax) / spdMin;
+  let win = 2.0 * cellMax;
+  let dRad = fat * cellRate * 0.5;
+  return 1.0 + rate * (dCentre + spin * centreMax + win * dSdir + dRad);
+}`;
+
+// The bundle field itself. Same contract as coneBend: scale-divided sample
+// and endpoints, raw radii, minScale applied at the end — PLUS the Lipschitz
+// division, which is what makes the folded, wobbling field safe to sphere
+// trace (at a step cost). The bound is NEARLY exact rather than exact — the
+// strand-grid seams are isolated sub-millimetre jumps — and strand.ts's
+// header carries the measurements. The gate is strand-wiring.test.ts, not
+// the render check: losing the bundle draws the parent capsule, which is
+// MORE material, and render-check only reports holes.
+export const CONE_STRAND = /* wgsl */ `fn coneStrand(q: vec3<f32>, a: vec3<f32>, b: vec3<f32>, c: vec3<f32>, r1: f32, r2: f32, minScale: f32, bent: f32, st: vec4<f32>) -> f32 {
+  let n = st.x;
+  let wave = st.y;
+  let cycles = st.z;
+  let fat = st.w;
+  let rb = select(r2, r1, r2 < 0.0);
+  var e1 = b - a;
+  var bb = vec3<f32>(0.0);
+  if (bent > 0.5) {
+    e1 = (c - a) * 2.0;
+    bb = a - 2.0 * c + b;
+    if (dot(bb, bb) < 1e-12) { e1 = b - a; bb = vec3<f32>(0.0); }
+  }
+  // t*: the EXACT closest point on the base curve. Straight: the clamped
+  // projection. Bent: the cubic roots are every interior distance extremum,
+  // so roots + ends suffice — no quarters, no refinement (those exist in
+  // coneBend for the radius term, which the strand fold applies AFTER t*).
+  let abLen2 = dot(b - a, b - a);
+  var tStar = 0.0;
+  if (abLen2 >= 1e-12) {
+    if (dot(bb, bb) < 1e-12) {
+      tStar = clamp(dot(q - a, b - a) / abLen2, 0.0, 1.0);
+    } else {
+      let cand = sdBezierT(q, a, c, b);
+      var bestD = 1e9;
+      var ts = array<f32, 5>(cand.x, cand.y, cand.z, 0.0, 1.0);
+      for (var i = 0; i < 5; i = i + 1) {
+        if (f32(i) >= cand.w && i < 3) { continue; }
+        let t = ts[i];
+        let p0 = a + e1 * t + bb * (t * t);
+        let dd = dot(q - p0, q - p0);
+        if (dd < bestD) { bestD = dd; tStar = t; }
+      }
+    }
+  }
+  let pt = a + e1 * tStar + bb * (tStar * tStar);
+  let dC = e1 + 2.0 * bb * tStar;
+  let spd = max(length(dC), 1e-9);
+  let tan = dC / spd;
+  // Cross-section basis off the axis LEAST aligned with the tangent.
+  let seedAxis = select(vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(0.0, 1.0, 0.0), abs(tan.y) < 0.9);
+  let u = normalize(cross(tan, seedAxis));
+  let v = cross(tan, u);
+  let rT = r1 + (rb - r1) * tStar;
+  let cell = max(2.0 * rT / n, 1e-6);
+  let rS = fat * cell * 0.5;
+  let m = ceil(n * 0.5);
+  let win = 2.0 * cell;
+  let rel = q - pt;
+  let pl = vec2<f32>(dot(rel, u), dot(rel, v));
+  let id0 = round(pl / cell);
+  var best = 1e9;
+  for (var di = -1; di <= 1; di = di + 1) {
+    for (var dj = -1; dj <= 1; dj = dj + 1) {
+      let idc = clamp(id0 + vec2<f32>(f32(di), f32(dj)), vec2<f32>(-m), vec2<f32>(m));
+      let h = strandHash4(idc.x, idc.y);
+      let phx = 6.2831853 * (cycles * tStar + h.x);
+      let phy = 6.2831853 * (cycles * tStar + h.y + 0.25);
+      let wob = wave * cell;
+      let ctr = idc * cell + wob * vec2<f32>(sin(phx), sin(phy)) + 0.4 * wob * (2.0 * h.zw - vec2<f32>(1.0));
+      // The strand's local direction: the curve's plus the wobble's slope,
+      // so the windowed capsule lies ALONG the wavy strand rather than
+      // beading at every sample station.
+      let dw = wob * 6.2831853 * cycles * vec2<f32>(cos(phx), cos(phy));
+      let sd3 = normalize(dC + dw.x * u + dw.y * v);
+      let m3 = pt + ctr.x * u + ctr.y * v;
+      let w3 = q - m3;
+      let dl = dot(w3, sd3);
+      // The window kills the ghost ridge a curve-length tangent line would
+      // leave, and never runs past the curve's own ends: a pointed lock
+      // ENDS at t = 1.
+      let dlc = clamp(dl, max(-win, -tStar * spd), min(win, (1.0 - tStar) * spd));
+      let dI = length(w3 - dlc * sd3) - rS;
+      best = min(best, dI);
+    }
+  }
+  return best * minScale / strandLip(a, b, c, r1, r2, bent, st);
+}`;
+
 // half-extent BEFORE rounding; the caller insets it by `r` so total half-extent
 // is unchanged. Edit both in the same commit or click-to-shoot drifts from
 // what is drawn.
@@ -336,6 +518,22 @@ export const SD_PRIM = /* wgsl */ `fn sdPrim(p: vec3<f32>, i: i32, data: texture
   let S = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_SCALE} + band), 0);
   let inv = 1.0 / S.xyz;
   let minScale = min(S.x, min(S.y, S.z));
+  // STRAND before every other branch, mirroring sdPrimitive in validate.ts:
+  // a strand prim is its own field construction, and box/shell are rejected
+  // on it at compile time, so it cannot belong to any branch below. The
+  // strand row is fetched HERE rather than by the caller — the same
+  // on-demand discipline the box branch uses for ROW_PRIM_BEND — so a prim
+  // without strands never pays for the fetch.
+  //
+  // The bent flag selects whether coneStrand reads the control point: a
+  // straight strand is passed c = vec3(0) and must not use it. (No backticks
+  // in this comment -- it lives inside a TEMPLATE LITERAL, and one would end
+  // the WGSL string mid-function.)
+  if ((i32(prof) & 32) != 0) {
+    let ST = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_STRAND} + band), 0);
+    let bent = select(0.0, 1.0, (i32(prof) & 2) != 0);
+    return coneStrand(p * inv, A.xyz * inv, B.xyz * inv, cpos * inv, A.w, r2, minScale, bent, ST);
+  }
   // BOX before BENT: bend= is rejected on a box at compile time, so the two
   // never coexist; testing box first means the bend row is never fetched for
   // one, which is what makes sharing primBend.w safe. The bend row is
@@ -414,6 +612,22 @@ export const SD_PRIM_ORIENTED = /* wgsl */ `fn sdPrimO(p: vec3<f32>, i: i32, dat
   a = a * inv;
   b = b * inv;
   let minScale = min(S.x, min(S.y, S.z));
+  // STRAND before every other branch, mirroring sdPrimitive in validate.ts:
+  // a strand prim is its own field construction, and box/shell are rejected
+  // on it at compile time, so it cannot belong to any branch below. The
+  // strand row is fetched HERE rather than by the caller — the same
+  // on-demand discipline the box branch uses for ROW_PRIM_BEND — so a prim
+  // without strands never pays for the fetch.
+  //
+  // The bent flag selects whether coneStrand reads the control point: a
+  // straight strand is passed c = vec3(0) and must not use it. (No backticks
+  // in this comment -- it lives inside a TEMPLATE LITERAL, and one would end
+  // the WGSL string mid-function.)
+  if ((i32(prof) & 32) != 0) {
+    let ST = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_STRAND} + band), 0);
+    let bent = select(0.0, 1.0, (i32(prof) & 2) != 0);
+    return coneStrand(qq, a, b, c * inv, A.w, r2, minScale, bent, ST);
+  }
   // BOX before BENT — same reasoning as sdPrim: bend= and box never coexist,
   // so testing box first means the bend row is fetched only here, on demand.
   if ((i32(prof) & 8) != 0) {
@@ -438,11 +652,48 @@ export const SD_PRIM_ORIENTED = /* wgsl */ `fn sdPrimO(p: vec3<f32>, i: i32, dat
 // - rim` is the distance to the sheet/plane intersection CURVE, so
 // `max(max(sheet, plane), rim - length(...))` rounds that edge — a cloth hem
 // instead of a cut. `rim` 0 degenerates to the hard clip.
-export const SD_SHELL = /* wgsl */ `fn sdShell(dBase: f32, p: vec3<f32>, thick: f32, rim: f32, clipO: f32, hasClip: f32, clipN: vec3<f32>) -> f32 {
-  let d = abs(dBase) - thick;
-  if (hasClip < 0.5) { return d; }
+// WRINKLES (shell cloth spike). Three sines with offset phases displace the
+// BASE distance before the sheet is taken, so the whole sheet undulates like
+// hanging cloth rather than its two faces getting independently roughened.
+//
+// The frequency is PER AXIS: zeroing one freezes that sine to a constant, so
+// the folds run along it. That is how a pleat is made — a skirt varies around
+// the body and not down it — and a scalar frequency can only ever produce an
+// egg-carton.
+//
+// This costs the exactness of the field. Each partial derivative of the warp
+// term is at most |A|*|F_axis|, so the gradient magnitude grows to at most
+// 1 + |A|*length(F) and the result is divided by exactly that: the field
+// stays a conservative distance BOUND, which is all a sphere tracer needs,
+// and no plain-step flag is required. Mirrors sdShellWrap in validate.ts —
+// the two must agree or the CPU checks pass a body the GPU tears.
+//
+// WIND. `drift` is a world-space offset in metres the fold lattice has
+// travelled — the host accumulates wind velocity times time, so the shader
+// needs no clock and every path (march, cone pre-pass, normals, AO) reads the
+// same uniform and therefore the same surface. Subtracting it inside the
+// sines moves the WRINKLES through the world while the sheet and its clip
+// plane stay put, which is what a breeze looks like on hanging cloth.
+//
+// It is free of the pinch cap: d/dx of sin(F*(x - c)) is F*cos(...), so a
+// constant offset cannot change the spatial gradient and `lip` is untouched.
+//
+// With warpA or warpF zero the branch is skipped, `lip` is exactly 1.0, and
+// division by 1.0 is exact in IEEE — an unwarped shell is bit-identical to
+// before this existed, which shell-warp.test.ts pins.
+export const SD_SHELL = /* wgsl */ `fn sdShell(dBase: f32, p: vec3<f32>, thick: f32, rim: f32, clipO: f32, hasClip: f32, clipN: vec3<f32>, warpA: f32, warpF: vec3<f32>, drift: vec3<f32>) -> f32 {
+  var base = dBase;
+  var lip = 1.0;
+  let fLen = length(warpF);
+  if (warpA != 0.0 && fLen != 0.0) {
+    let q = p - drift;
+    base = base + warpA * sin(warpF.x * q.x) * sin(warpF.y * q.y + 1.3) * sin(warpF.z * q.z + 2.6);
+    lip = 1.0 + abs(warpA) * fLen;
+  }
+  let d = abs(base) - thick;
+  if (hasClip < 0.5) { return d / lip; }
   let dPlane = dot(p, clipN) - clipO;
-  return max(max(d, dPlane), rim - length(vec2(d, dPlane)));
+  return max(max(d, dPlane), rim - length(vec2(d, dPlane))) / lip;
 }`;
 
 export const HASH13 = /* wgsl */ `fn hash13(pIn: vec3<f32>) -> f32 {
@@ -963,7 +1214,8 @@ export const FOLD_GROUP = /* wgsl */ `fn foldGroup(dIn: f32, p: vec3<f32>, data:
     if ((i32(prof) & 4) != 0) {
       let S2 = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SHELL} + band), 0);
       let C2 = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_CLIP} + band), 0);
-      sd = sdShell(sd, p, S2.x, S2.y, S2.z, S2.w, C2.xyz);
+      let W2 = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_WARP} + band), 0);
+      sd = sdShell(sd, p, S2.x, S2.y, S2.z, S2.w, C2.xyz, W2.x, W2.yzw, gWindDrift);
     }
     if (sd < gFoldBest) { gFoldBest = sd; gFoldBestIdx = f32(idx); gFoldBestDistort = grp.z; }
     // Chamfer is profile bit 0 (value 1); bend is bit 1 (value 2); shell is
@@ -1008,6 +1260,15 @@ var<private> gFoldBestIdx: f32 = -1.0;
 // straight after its mapBody call. 1.0 default: groups without distortion
 // and the volume branch (which never folds) are exact no-ops.
 var<private> gFoldBestDistort: f32 = 1.0;
+// WIND DRIFT, metres, world space. A private global rather than another
+// parameter on foldGroup because foldGroup is reached from mapBody, which has
+// TEN call sites — threading a uniform through all of them to serve one
+// primitive kind is the churn ROW_PRIM_WARP's own doc warns about. Both entry
+// points (marchBody and coneMarch) set it from the same uniform before they
+// fold anything, so the cone pre-pass certifies emptiness against exactly the
+// surface the march then walks. A path that forgot to set it would see 0,
+// which is the no-wind field — wrong, but never a tear.
+var<private> gWindDrift: vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
 var<private> gTileActive: f32 = 0.0;
 var<private> gTileN: f32 = 0.0;
 var<private> gTileBounds: array<vec4<f32>, ${TILE_MAX_ENTRIES}>;
@@ -1307,8 +1568,15 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
   woundCfg2: vec4<f32>,
   coneK: f32,
   startT: f32,
-  perfCfg: vec4<f32>
+  perfCfg: vec4<f32>,
+  windDrift: vec3<f32>
 ) -> f32 {
+  // The cone pre-pass certifies "empty up to t" for the march that follows.
+  // It passes noiseCfg 0 deliberately (the noise lives on the normal), but
+  // wind is NOT like the noise: it moves the FIELD. A cone that marched the
+  // no-wind surface would certify space the drifted cloth actually occupies
+  // and the march would start inside it. Same uniform, same surface.
+  gWindDrift = windDrift;
   let rd = normalize(worldPos - camPos);
   let tMax = length(worldPos - camPos);
   // Chained levels: this cone begins where the coarser one stopped. Safe
@@ -1476,6 +1744,66 @@ export const MELT_SKIN_KEEP = 1.30;
  * had no pink left at all).
  */
 export const MELT_SKIN_CONTRAST = 2.8;
+
+/**
+ * Sphere-trace step multiplier inside applyWounds' nearWound zone.
+ *
+ * The wounded field is NOT a distance bound — the smax fillet overstates, the
+ * lip understates, and `rimLocal` ties the lip's amplitude to the pre-wound
+ * field so the two move together — and a step of `mul * d` only stays outside
+ * the surface while `mul <= 1 / max|grad d|`. Measured (march-step-soundness
+ * test, planar flesh, shipped rim constants): a single stock blast wound
+ * reaches |grad| 2.06 and a single pellet 2.09, so the largest sound
+ * multiplier is ~0.48 — for ONE wound. Overlapping craters compound through
+ * the sequential per-wound loop: a blast plus a six-pellet spread measured
+ * 3.92, i.e. 0.26.
+ *
+ * IT STAYS AT 0.6, WHICH IS ABOVE THAT BOUND, AND THAT IS A DECISION — not an
+ * oversight, which is what it was until 2026-09-04, when it shared the literal
+ * with the shell's under-relaxation and had never been checked against a
+ * crater. The owner A/B'd 0.6 against 0.4 on screen (`setWoundStep`, below)
+ * and could not tell them apart, so the frame budget wins. Everything below is
+ * what that costs, so the next person can re-take the decision with the
+ * numbers instead of re-deriving them.
+ *
+ * WHAT 0.6 LOOKS LIKE, counted over every pixel of a real frame on a torso
+ * carrying a blast + a six-pellet spread (game settings: omega 1.0, AA 1.0,
+ * outer-hull start, cone off):
+ *
+ *            mis-shaded px   of hits   normals > 45 deg wrong
+ *   1.5 m        10731        4.32%
+ *   2.5 m         2903        2.16%            686
+ *   4.0 m          649        0.97%
+ *
+ * "Mis-shaded" = the march accepted a sample further behind the first
+ * crossing than the hit epsilon, so the pixel takes its normal from inside
+ * the carve blend and its tissue-ramp depth from up to 13.7 mm too deep —
+ * far enough to shift a patch a whole band down fat -> muscle -> clot. They
+ * are CONTIGUOUS (99% have an affected 4-neighbour), and STABLE: turning the
+ * camera 0.23 degrees keeps 2892 of 2903. A stable wrong patch inside a
+ * crater reads as "that is what the crater looks like", which is why this sat
+ * unreported for as long as it did.
+ *
+ * ONE WOUND IS FINE at any of these values — a single stock blast produced
+ * zero mis-shaded pixels at every range. This is a STACKING artifact; it
+ * needs a body someone emptied a shotgun into.
+ *
+ * WHAT FIXING IT WOULD COST. The zone is large (r < 2 * wound radius), so the
+ * ray pays over its whole approach, not just at the lip. Marched pixels only,
+ * on that same shotgunned body, against 0.6:
+ *
+ *          extra march steps (2 m / 4 m / 8 m)   what it removes
+ *   0.4          +23% / +18% / +16%              every > 45 deg error, 92% of the pixels
+ *   0.3          +45% / +36% / +32%              all of them, at both ranges measured
+ *
+ * Unwounded bodies are untouched at any value — nothing raises nearWound —
+ * and hit counts are unchanged, so nothing drops out of the image. Flip it
+ * live with `__sdfGame.setWoundStep(0.4)` / `__sdfLab.setWoundStep(0.4)`
+ * (perfCfg.z, see the marchBody loop; 0 = this constant). If it is ever worth
+ * paying for, the cheap direction is a SMALLER zone or a per-sample count of
+ * overlapping wounds — not a longer step.
+ */
+export const WOUND_STEP_MUL = 0.6;
 export const MARCH_BODY = /* wgsl */ `fn marchBody(
   worldPos: vec3<f32>,
   camPos: vec3<f32>,
@@ -1561,8 +1889,15 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // binding by one slot and the pipeline dies on a type mismatch.
   levelShadowTex: texture_depth_2d,
   levelShadowMatrix: mat4x4<f32>,
-  levelShadowCfg: vec4<f32>
+  levelShadowCfg: vec4<f32>,
+  windDrift: vec3<f32>
 ) -> vec4<f32> {
+  // FIRST STATEMENT, before anything folds. gWindDrift is read inside
+  // sdShell, which is reached from foldGroup on every mapBody call in this
+  // invocation — the march steps, calcNormal, the AO and scatter probes. Set
+  // it late and the normal would be taken against a different surface than
+  // the one the march hit.
+  gWindDrift = windDrift;
   let rd = normalize(worldPos - camPos);
   // PERF INSTRUMENTATION (task 2): debugCfg.x 0 = off, 1 = steps-per-pixel
   // heatmap, 2 = prims-per-pixel. Everything below is guarded so the
@@ -1854,6 +2189,12 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // smooth field until it is inside a thin shell of the surface, and only
   // there does the fbm displace the stepped distance — see the loop body.
   var omega = select(marchCfg.y, woundCfg2.y, relax);
+  // Near-wound step multiplier, with a live override on perfCfg.z for A/B
+  // (__sdfGame.setWoundStep). ZERO IS THE IDENTITY: every view that never
+  // writes the lane gets the compiled constant, bit for bit. The lane is on
+  // perfCfg and not counts2 because counts2 is re-set on every pack — an
+  // override parked there would evaporate on the next body rebuild.
+  let woundMul = select(${WOUND_STEP_MUL}, perfCfg.z, perfCfg.z > 0.0);
   // Start where the cone pre-pass proved the tile is still empty, rather than
   // at the camera. Clamped to tMax so a stale or over-eager coarse value can
   // never push the ray straight out the back of the proxy box.
@@ -1974,11 +2315,18 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
           break;
         }
       } else {
-        // DIAGNOSTIC (close-up wound bench, 2026-09-05): a NEGATIVE
-        // woundShadowCfg.y walks the near-wound zone at full omega instead
-        // of 0.6x, so the bench can price the conservative stepping alone.
-        // The shadow reads abs(woundShadowCfg.y), so the sign is free.
-        stepLen = d * select(omega, 0.6, conservative || (nearWound && woundShadowCfg.y >= 0.0));
+        // TWO INDEPENDENT REASONS TO UNDER-RELAX, and the stricter one wins.
+        // The shell's 0.6 pays for the fbm; the wound zone's own multiplier
+        // pays for a field that is not a distance bound (WOUND_STEP_MUL).
+        // They used to share the 0.6 literal, which is how the wound side
+        // went unexamined for as long as it did — the shell's figure was
+        // never measured against a crater.
+        //
+        // At WOUND_STEP_MUL 0.6 this is the old select() exactly, for every
+        // omega the pages ship (all >= 0.6). It differs only BELOW 0.6, where
+        // the old form LENGTHENED the step to 0.6 in the very zones that
+        // wanted it shortest; min() keeps omega there instead.
+        stepLen = d * min(select(omega, 0.6, conservative), select(omega, woundMul, nearWound));
       }
     }
     prevRadius = radius;
@@ -2133,90 +2481,7 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // pure reads, so hoisting them cannot move a pixel, and the mode-0 branch
   // below is byte-for-byte the pre-task-2 call.
   let anchor = restPoint(p, data, hitBest, noiseLocal(p, noiseShift));
-  // NORMAL MODE (close-up task 2, perfCfg.z — ship default 0). The post-hit
-  // chain spends four of its six field evaluations building the shading
-  // normal; this lever selects how the normal is built.
-  //
-  // mode 0 — the tetrahedron stencil, four mapBody evals. The shipped
-  // behaviour; byte-for-byte the pre-task-2 call, guarded so the lever-off
-  // render is bit-identical to it.
-  //
-  // mode 1 — a 3-tap forward difference reusing the walk's own eval. The
-  // loop accepted this t because mapBody returned d < hitEps AT p, so f(p)
-  // is already evaluated — hitField.x. One eval of six deleted. What
-  // remains is a first-order stencil instead of a tetrahedral one — a
-  // different truncation error at the same scale, not a new artifact class;
-  // both stencils sample the same field at the same 1.5 mm.
-  //
-  // THE NOISE TRAP the naive version falls into — mapBody adds the
-  // silhouette fbm INTERNALLY, scaled by noiseCfg.x, and the WALK evaluates
-  // it at 0 (the noise lives on the normal — see the loop above). So
-  // hitField.x is the SMOOTH field, while calcNormal's four taps each carry
-  // the fbm. Mixing a smooth base with fbm-carrying taps divides the ENTIRE
-  // fbm by e (0.0015) — a hugely amplified noise gradient, not a normal.
-  // The base must therefore be reconstructed exactly as mapBody would have
-  // built it at p — the same fold hitField.x came from, the same dominant
-  // prim's rest frame, the same fbm at frequency 3 — which costs one fbm,
-  // not one mapBody eval. The anchor hoisted above is exactly that
-  // reconstruction input, and MAP_BODY's detail line is
-  // fbm(anchor * 3.0) * noiseCfg.x.
-  //
-  // mode 2 — screen-space derivative normals, ZERO field evals (below).
-  var n = vec3<f32>(0.0, 1.0, 0.0);
-  if (perfCfg.z < 0.5) {
-    n = calcNormal(p, data, counts, counts2, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
-  } else if (perfCfg.z < 1.5) {
-    // The silhouette amp, the same scalar the mode-0 vec4 inlines above —
-    // a polished or machined prim has no pits, so the gloss/metal kill
-    // rides the amplitude, exactly as it does in mode 0.
-    let nAmp = marchCfg.z * (1.0 - max(gloss, metal));
-    let nBase = hitField.x + fbm(anchor * 3.0) * nAmp;
-    // The 1/e division is left out on purpose — the vector is normalised
-    // immediately, and a shared positive scale cannot change direction.
-    let nx = mapBody(p + vec3<f32>(0.0015, 0.0, 0.0), data, counts, counts2, vec4<f32>(nAmp, 0.0, 0.0, 0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x;
-    let ny = mapBody(p + vec3<f32>(0.0, 0.0015, 0.0), data, counts, counts2, vec4<f32>(nAmp, 0.0, 0.0, 0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x;
-    let nz = mapBody(p + vec3<f32>(0.0, 0.0, 0.0015), data, counts, counts2, vec4<f32>(nAmp, 0.0, 0.0, 0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg).x;
-    n = normalize(vec3<f32>(nx - nBase, ny - nBase, nz - nBase));
-  } else {
-    // DERIVATIVE NORMALS (close-up task 2 step 2). cross(dpdx, dpdy) of the
-    // hit position is a surface normal for zero field evals — the 2x2 quad
-    // already differentiated the interpolated position for free. Two known
-    // failure modes, both handled explicitly here.
-    //
-    // STRADDLING — at silhouettes and depth discontinuities the quad spans
-    // two different surfaces and the derivative is garbage. Guard: a quad
-    // sitting on ONE smooth surface can only move p by its own footprint,
-    // so length(pdx) + length(pdy) beyond perfCfg.w (world metres) means
-    // the quad straddles — those pixels fall back to the stencil. The
-    // minority case by design — a fill-screen body keeps its silhouette to
-    // a one-pixel band.
-    //
-    // FACETING — dpdx is constant per quad, so this normal is piecewise
-    // flat at 2 px granularity. Whether that reads under the specular
-    // highlight on curved flesh is the VISUAL gate for this mode, not a
-    // counter — see the task report.
-    //
-    // Orientation — the cross product's sign is a screen-parity coin flip,
-    // so it is pointed at the camera (against rd) before use — a normal
-    // facing INTO the surface shades the body black. perfCfg.z is a
-    // uniform, so this branch is uniform control flow and dpdx is legal.
-    let pdx = dpdx(p);
-    let pdy = dpdy(p);
-    let dn = cross(pdx, pdy);
-    if (length(pdx) + length(pdy) > perfCfg.w) {
-      n = calcNormal(p, data, counts, counts2, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
-    } else {
-      n = normalize(select(-dn, dn, dot(dn, rd) < 0.0));
-    }
-  }
-  // Micro-detail perturbs the normal only — costs no march safety. Three more
-  // fbm calls though, so it is guarded: once per hit pixel rather than per
-  // step, but still six noise lookups a body does not always need. The
-  // guard wraps the CALL (entrails post-mortem: skip the work, not just the
-  // output) and now also folds the gloss/metal kill — a full-gloss or metal
-  // prim skips the six lookups outright instead of computing them and
-  // multiplying to 0. At gloss 0 / metal 0 the product is exactly
-  // surfCfg2.y, so flesh shades bit-for-bit as before.
+  var n = calcNormal(p, data, counts, counts2, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);
   let detailAmp = surfCfg2.y * (1.0 - max(gloss, metal));
   if (detailAmp > 0.0) {
     n = normalize(n + vec3<f32>(
@@ -2422,7 +2687,15 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     // shell, centred well above the face -- the schoolgirl's mouth sat at
     // |hs| 1.55 and faded out at every projection setting. The decal's own
     // alpha and the facing fade bound it instead.
-    let decal = select(0.0, 1.0, faceCfg.x > 1.5);
+    // FACE MODE, faceCfg.x: 1 = sheet (MULTIPLY the rgb), 2 = decal (REPLACE
+    // the albedo), 3 = LUMA multiply. Mode 3 exists because multiplying two
+    // COLOURED values compounds their hue -- a skin-toned bake times skin-toned
+    // flesh reads more saturated than either, which the owner spotted as the
+    // face looking "more saturated from the surrounding skin". Using the
+    // decal's LUMINANCE as a scalar modulates brightness and leaves hue alone.
+    // Modes 1 and 2 are untouched and bit-identical.
+    let decal = select(0.0, 1.0, abs(faceCfg.x - 2.0) < 0.5);
+    let lumaOnly = abs(faceCfg.x - 3.0) < 0.5;
     let reach = 1.0 + 0.5 * decal;
     facing = facing * (1.0 - smoothstep(1.30 * reach, 1.70 * reach, length(hs)));
     if (facing > 0.0 && uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) {
@@ -2445,7 +2718,10 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
       // baked lighting, so pasting it in as albedo and lighting it again
       // double-shades. Dividing by its measured mean keeps the pattern and
       // throws away level.
-      let detail = tex.rgb / max(faceCfg2.y, 1e-3);
+      // Luma mode divides by the same mean, so an average texel still
+      // multiplies by ~1 and the level is unchanged -- only the hue shift goes.
+      let detailSrc = select(tex.rgb, vec3<f32>(dot(tex.rgb, W)), lumaOnly);
+      let detail = detailSrc / max(faceCfg2.y, 1e-3);
       // Skip the multiply where it glows: an eye is not tinted flesh, and the
       // emissive term below supplies its colour outright.
       albedo = mix(albedo, mix(albedo * detail, tex.rgb, decal),
@@ -2754,8 +3030,17 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   // own shading, and real shading on top drew hard shadow lines from the
   // fringe and killed the mouth on the down-sloping jaw. 0.85 keeps a whisper
   // of real light so the head still turns.
+  //
+  // The DIFFUSE CONSTANT was 0.52 and is 0.30 (2026-09-04). At 0.52 the decal
+  // rendered effectively UNLIT: measured on the soldier, face #cc9f69 --
+  // almost exactly his raw atlas skin -- against a correctly-lit body at
+  // #954821, a 1.83x mismatch that read as a pale card stuck on the head.
+  // 0.30 brings it to 1.22x, about right for a face catching light. The 0.85
+  // MIX is deliberately untouched: that is what keeps the fringe shadow off
+  // the mouth, which is the failure this comment records. Swept for
+  // regressions -- the zombie sits at 1.18x face/torso, contrast sd 41.4.
   fleshLit = mix(fleshLit,
-                 albedo * (amb + 0.52 * lightCfg.x * keyColor),
+                 albedo * (amb + 0.30 * lightCfg.x * keyColor),
                  faceFlat * 0.85);
   if (spotCfg.x > 0.0 && spotCfg2.y > 0.0) {
     let knee = clamp(1.0 - spotCfg2.y, 0.05, 0.99);
@@ -2933,7 +3218,14 @@ export const HELPERS = [
   // ordering test below only checks what is IN the list, so an omitted helper
   // passes every unit test and fails at pipeline creation with a bare WGSL
   // parse error pointing at the call site.
-  SMIN, SMIN_CHAMFER, SMAX, SD_GROOVE, CONE_CAP, SD_BEZIER_T, CONE_BEND, SD_ROUND_BOX, SD_PRIM, SD_PRIM_ORIENTED,
+  SMIN, SMIN_CHAMFER, SMAX, SD_GROOVE, CONE_CAP, SD_BEZIER_T, CONE_BEND,
+  // Strand bundle, BEFORE SD_PRIM because both sdPrim and sdPrimO call
+  // coneStrand, and coneStrand itself calls strandHash4 and strandLip — so
+  // all three must be declared ahead of it. Omitting a helper from this list
+  // is the quiet failure this comment block warns about: it passes every
+  // unit test and dies at pipeline creation with a bare WGSL parse error.
+  STRAND_HASH4, STRAND_LIPSCHITZ, CONE_STRAND,
+  SD_ROUND_BOX, SD_PRIM, SD_PRIM_ORIENTED,
   SD_SHELL,
   HASH13, NOISE3, FBM, NOISE_LOCAL,
   Q_ROT, Q_MUL, Q_FROM_TO, REST_POINT,

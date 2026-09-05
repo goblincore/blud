@@ -19,7 +19,7 @@
 
 import type { BuildResult } from '../build-body';
 import { bindRig, applyRig, headQuatOf, impulseAt, type BoundRig } from '../rig-bind';
-import { stepRig } from '../rig';
+import { constrainRigBends, stepRig } from '../rig';
 import { relaxRopeConstraints } from '../collapse';
 import {
   MAX_WOUNDS, pushWound, WOUND_PROFILES, woundCarveNormal, woundWorldPos,
@@ -279,7 +279,7 @@ export function createZombieActor(opts: {
     if (keep.length === next.rig.points.length) {
       next = {
         ...next,
-        rig: { ...next.rig, points: keep.map(p => ({ ...p, pinned: false })) },
+        rig: { ...next.rig, bodyYaw, points: keep.map(p => ({ ...p, pinned: false })) },
       };
     }
     bound = next;
@@ -402,7 +402,7 @@ export function createZombieActor(opts: {
       bodyYaw = f.bodyYaw;
       view.setRootShift(f.rootShift[0], f.rootShift[2], f.bodyYaw);
       let points = stepRig(
-        { ...bound.rig, restPose: f.restPose }, sdt,
+        { ...bound.rig, restPose: f.restPose, bodyYaw: f.bodyYaw }, sdt,
         {
           gravity: f.gravity,
           damping: 0.06,
@@ -416,7 +416,8 @@ export function createZombieActor(opts: {
       }
       bound = {
         ...bound,
-        rig: { points, constraints: bound.rig.constraints, restPose: f.restPose },
+        rig: constrainRigBends({ ...bound.rig, points, restPose: f.restPose, bodyYaw: f.bodyYaw },
+          f.collapsed ? joints.groundY - MOTION_TUNING.floorPad : undefined),
       };
     }
     // Drain the frame's one-shot signals (values are read back by the motion

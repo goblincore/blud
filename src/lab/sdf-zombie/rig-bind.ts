@@ -2,18 +2,23 @@
 import type { BuildResult } from './build-body';
 import type { ClusterInfo, Primitive, Vec3 } from './types';
 import type { Quat } from './vec';
-import { boxReach } from './extent';
-import { makeRig, type RigPoint, type RigState } from './rig';
+import { boxReach, shellReach, strandReach } from './extent';
+import { constrainRigBends, makeRig, type RigPoint, type RigState } from './rig';
 import { IK_TUNING, clampDir } from './ik';
 import { rotateYaw } from './gait';
 import {
-  add, bendCtrl, len, normalize, qFromAxisAngle, qFromTo, qIdentity, qMul, qRotate,
+  add, bendCtrl, cross, dot, len, normalize, qFromAxisAngle, qFromTo, qIdentity, qMul, qRotate,
   scale as vscale, sub,
 } from './vec';
 
 /** Which rig point an endpoint follows, and its fixed offset from that point. */
 interface EndpointBind { point: number; offset: Vec3 }
-interface PrimBind { a: EndpointBind; b: EndpointBind }
+interface PrimBind {
+  a: EndpointBind;
+  b: EndpointBind;
+  /** Arm endpoint insets rotate with their bone, including at full extension. */
+  armFrame?: { head: number; tail: number; restDir: Vec3 };
+}
 
 /**
  * The head as ONE RIGID UNIT (motion-polish fix, X1.22 playtest).
@@ -123,6 +128,30 @@ export function bindRig(body: BuildResult): BoundRig {
     positions.map((pos, i) => ({ pos, pinned: i === lowest })),
     constraints,
   );
+  // Only intact upper-arm/forearm chains get an elbow stop. Dead distal
+  // prims retain bone metadata for wound anchoring, so bone names alone
+  // cannot tell us whether the joint is still attached.
+  rig.bends = [];
+  // The mirrored shoulders establish the authored body's lateral axis.
+  // Flexion is toward body-forward, not toward the rest forearm: its inward
+  // carrying angle otherwise lets sideways motion mask backward extension.
+  const leftShoulder = body.bones.get('upperArm.l')?.head;
+  const rightShoulder = body.bones.get('upperArm.r')?.head;
+  const bodyForward = leftShoulder && rightShoulder
+    ? normalize(cross(sub(leftShoulder, rightShoulder), [0, 1, 0])) : [0, 0, 1] as Vec3;
+  for (const side of ['l', 'r']) {
+    const upperName = `upperArm.${side}`, foreName = `foreArm.${side}`;
+    const live = (name: string) => body.prims.some(p => p.bone === name && !p.dead &&
+      (p.op === undefined || p.op === 'add') && len(sub(p.b, p.a)) > KEY_EPS &&
+      body.clusters[p.cluster]?.alive);
+    const upper = body.bones.get(upperName), fore = body.bones.get(foreName);
+    if (!upper || !fore || !live(upperName) || !live(foreName)) continue;
+    const restUpper = normalize(sub(upper.tail, upper.head));
+    const restPole = normalize(sub(bodyForward, vscale(restUpper, dot(bodyForward, restUpper))));
+    if (len(restPole) < 1e-8) continue; // no forward flexion axis for this rest arm
+    rig.bends.push({ root: indexOf(upper.head), mid: indexOf(upper.tail),
+      end: indexOf(fore.tail), restUpper, restPole, maxFlex: 150 * Math.PI / 180 });
+  }
 
   // Joints of the unmirrored (centreline) bones: pelvis, spine, neck, skull.
   // Mirrored bones expand to `name.l` / `name.r` (mirror.ts), so the suffix is
@@ -200,9 +229,17 @@ export function bindRig(body: BuildResult): BoundRig {
     }
   }
 
+  const bindPrim = (p: Primitive): PrimBind => {
+    const binding: PrimBind = { a: bindEnd(p.a), b: bindEnd(p.b) };
+    const bone = p.bone && /^(upperArm|foreArm)\.[lr]$/.test(p.bone) ? body.bones.get(p.bone) : undefined;
+    if (bone) binding.armFrame = { head: indexOf(bone.head), tail: indexOf(bone.tail),
+      restDir: normalize(sub(bone.tail, bone.head)) };
+    return binding;
+  };
+
   return {
     rig,
-    binding: body.prims.map(p => ({ a: bindEnd(p.a), b: bindEnd(p.b) })),
+    binding: body.prims.map(bindPrim),
     // BONE prims: torso and head bones bind BOTH ends to the ONE joint nearest
     // the bone's midpoint, so a rib is rigid with its spine segment. Per-end
     // nearest-joint binding put a rib's tip on a hip or shoulder joint (zombie:
@@ -220,7 +257,7 @@ export function bindRig(body: BuildResult): BoundRig {
     // the per-end bind did. A rib belongs to a vertebra (2026-09-03 skeleton
     // re-author, which is what made hoops wide enough to need this).
     boneBinding: body.bonePrims.map(p => {
-      if (p.limb !== 'torso' && p.limb !== 'head') return { a: bindEnd(p.a), b: bindEnd(p.b) };
+      if (p.limb !== 'torso' && p.limb !== 'head') return bindPrim(p);
       const mid: Vec3 = [(p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2];
       const j = bindAxial(mid);
       return { a: { point: j, offset: sub(p.a, positions[j]!) }, b: { point: j, offset: sub(p.b, positions[j]!) } };
@@ -279,6 +316,18 @@ export function bindRig(body: BuildResult): BoundRig {
 export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): BuildResult {
   const pos = bound.rig.points;
   const rigid = bound.head ? headTransform(bound.head, pos, bodyYaw) : null;
+  const qYaw = bodyYaw === 0 ? qIdentity() : qFromAxisAngle([0, 1, 0], bodyYaw);
+  const poseEnds = (bind: PrimBind): { a: Vec3; b: Vec3 } => {
+    let a = bind.a.offset, b = bind.b.offset;
+    if (bind.armFrame) {
+      const frame = bind.armFrame;
+      const dir = normalize(sub(pos[frame.tail]!.pos, pos[frame.head]!.pos));
+      const rest = bodyYaw === 0 ? frame.restDir : rotateYaw(frame.restDir, bodyYaw);
+      const q = qMul(qFromTo(rest, dir), qYaw);
+      a = qRotate(q, a); b = qRotate(q, b);
+    }
+    return { a: add(pos[bind.a.point]!.pos, a), b: add(pos[bind.b.point]!.pos, b) };
+  };
   const prims: Primitive[] = body.prims.map((p, i) => {
     const face = rigid?.prims.get(i);
     if (face && rigid) {
@@ -288,16 +337,12 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
       // headTransform derived; reused, not recomputed.
       return { ...p, a: add(rigid.origin, face.a), b: add(rigid.origin, face.b), orient: rigid.q };
     }
-    const bind = bound.binding[i]!;
-    const pa = pos[bind.a.point]!;
-    const pb = pos[bind.b.point]!;
-    return { ...p, a: add(pa.pos, bind.a.offset), b: add(pb.pos, bind.b.offset) };
+    return { ...p, ...poseEnds(bound.binding[i]!) };
   });
 
   // Bones pose in the SAME pass with the SAME machinery — a bone left at rest
   // would float while its limb moves. Skull-owned bones take the rigid-head
   // branch exactly as the face prims do.
-  const qYaw = bodyYaw === 0 ? qIdentity() : qFromAxisAngle([0, 1, 0], bodyYaw);
   const bonePrims: Primitive[] = body.bonePrims.map((p, i) => {
     const face = rigid?.bones.get(i);
     if (face && rigid) {
@@ -314,10 +359,7 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
       const q = qMul(qFromTo(rest, dir), qYaw);
       return { ...p, a: add(h, qRotate(q, frame.restA)), b: add(h, qRotate(q, frame.restB)), orient: q };
     }
-    const bind = bound.boneBinding[i]!;
-    const pa = pos[bind.a.point]!;
-    const pb = pos[bind.b.point]!;
-    return { ...p, a: add(pa.pos, bind.a.offset), b: add(pb.pos, bind.b.offset) };
+    return { ...p, ...poseEnds(bound.boneBinding[i]!) };
   });
 
   const clusters: ClusterInfo[] = body.clusters.map(c => {
@@ -337,9 +379,9 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
       const maxScale = Math.max(m.scale[0], m.scale[1], m.scale[2]);
       const ends = m.bend === undefined
         ? [m.a, m.b] : [m.a, m.b, bendCtrl(m.a, m.b, m.bend)];
-      const rMax = Math.max(m.radius, m.radiusB ?? m.radius) * boxReach(m.box);
+      const rMax = Math.max(m.radius, m.radiusB ?? m.radius) * boxReach(m.box) * strandReach(m.strand);
       for (const end of ends)
-        radius = Math.max(radius, len(sub(end, center)) + rMax * maxScale);
+        radius = Math.max(radius, len(sub(end, center)) + rMax * maxScale + shellReach(m));
     }
     return { ...c, center, radius };
   });
@@ -434,9 +476,9 @@ export function impulseAt(bound: BoundRig, world: Vec3, delta: Vec3): BoundRig {
   });
   return {
     ...bound,
-    rig: {
+    rig: constrainRigBends({
       ...bound.rig,
       points: bound.rig.points.map((p, i) => i === best ? { ...p, pos: add(p.pos, delta) } : p),
-    },
+    }),
   };
 }

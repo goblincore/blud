@@ -35,9 +35,9 @@ const url = `http://localhost:${VITE}/sdf-game.html?frozen=1`;
 console.log(`closeup-wounds-bench ${url}  (repeats=${REPEATS}, deriv thresh=${THRESH})`);
 
 const LEGS = {
-  ship:      { wounds: true,  legJs: `__sdfGame.setWoundStepDiag(false);` },
-  stepFull:  { wounds: true,  legJs: `__sdfGame.setWoundStepDiag(true);` },
-  unwounded: { wounds: false, legJs: `__sdfGame.setWoundStepDiag(false);` },
+  ship:      { wounds: true,  legJs: `__sdfGame.setWoundStep(0);` },
+  stepFull:  { wounds: true,  legJs: `__sdfGame.setWoundStep(1.0);` },
+  unwounded: { wounds: false, legJs: `__sdfGame.setWoundStep(0);` },
 };
 
 let out;

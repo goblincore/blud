@@ -22,7 +22,7 @@ import {
   SAMPLE_VOLUME, APPLY_CARVES, APPLY_WOUNDS, CONE_CAP, SMIN_CHAMFER, SD_GROOVE, CONE_BEND, SD_BEZIER_T,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META, ROW_PRIM_SHAPE,
-  ROW_PRIM_BEND, ROW_PRIM_SHELL, ROW_PRIM_CLIP, WOUND_MASK, WOUND_SHADOW, SD_SHELL,
+  ROW_PRIM_BEND, ROW_PRIM_SHELL, ROW_PRIM_WARP, ROW_PRIM_STRAND, ROW_PRIM_CLIP, WOUND_MASK, WOUND_SHADOW, SD_SHELL,
   ROW_WOUND_CAP, APPLY_BONES, ROW_WOUND_FLAGS, TISSUE_RAMP, SD_ROUND_BOX, LEVEL_SHADOW,
   FACE_MELT_SAG, FACE_MELT_STRETCH, FACE_MELT_FADE_LO,
 } from './march.wgsl';
@@ -429,7 +429,10 @@ describe('ported features reach the entry point', () => {
     // could tunnel — 0.6 under-relaxation pays for the noise instead. And the
     // overshoot retraction assumes the un-displaced field (it rewinds by the
     // omega excess), so it must be suppressed whenever d carries the shell.
-    expect(MARCH_BODY).toContain('select(omega, 0.6, conservative || (nearWound && woundShadowCfg.y >= 0.0))');
+    // The wound zone has its OWN, stricter multiplier (WOUND_STEP_MUL, since
+    // 2026-09-04) and the two are combined with min, so the shell's figure is
+    // still the shell's — see march-step-soundness.test.ts for why they split.
+    expect(MARCH_BODY).toContain('select(omega, 0.6, conservative)');
     expect(MARCH_BODY).toMatch(/let overshot = !conservative &&/);
   });
 
@@ -636,9 +639,11 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     // (kept) and the parked melt spike's amp/freq/time slot (removed) — so
     // this count is +1, not +2. That collision is exactly what this pin is
     // for. Re-pin when a slot is added ON PURPOSE — a silent change here is
-    // the phantom-input bug.
-    expect(names.length).toBe(75);
-    expect(names.slice(-3)).toEqual(['levelShadowTex', 'levelShadowMatrix', 'levelShadowCfg']);
+    // the phantom-input bug. +1 for windDrift (shell cloth sway, 2026-09-05),
+    // appended after the level-shadow tail rather than inserted anywhere.
+    expect(names.length).toBe(76);
+    expect(names.slice(-4)).toEqual(
+      ['levelShadowTex', 'levelShadowMatrix', 'levelShadowCfg', 'windDrift']);
     // meltCfg sits between bodyHalf and the level-shadow tail, matching the
     // JS binding object in createMarchMaterial (positional — a swap silently
     // hands the shader the wrong uniform).
@@ -904,6 +909,7 @@ describe('data texture layout', () => {
       ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE, ROW_PRIM_BEND, ROW_PRIM_COLOR,
       ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
       ROW_PRIM_SHELL, ROW_PRIM_CLIP, ROW_WOUND_CAP, ROW_WOUND_FLAGS,
+      ROW_PRIM_WARP, ROW_PRIM_STRAND,
     ];
     expect(new Set(rows).size).toBe(rows.length);
     expect(Math.max(...rows)).toBe(DATA_ROWS - 1);
@@ -1083,7 +1089,7 @@ describe('arc capsule — bent primitives', () => {
 describe('shell fold — the thin clipped sheet (2026-08-25)', () => {
   it('sdShell is in HELPERS and implements abs(dBase)-thick with the rounded-rim clip', () => {
     expect(HELPERS).toContain(SD_SHELL);
-    expect(SD_SHELL).toContain('let d = abs(dBase) - thick;');
+    expect(SD_SHELL).toContain('let d = abs(base) - thick;');
     // The rim: distance to the sheet/plane intersection curve + rounding.
     expect(SD_SHELL).toContain('rim - length(vec2(d, dPlane))');
   });
@@ -1102,7 +1108,8 @@ describe('shell fold — the thin clipped sheet (2026-08-25)', () => {
     expect(fold).toContain(`textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SHELL} + band), 0)`);
     expect(fold).toContain(`textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_CLIP} + band), 0)`);
     expect(fold).toContain('if ((i32(prof) & 4) != 0) {');
-    expect(fold).toContain('sd = sdShell(sd, p, S2.x, S2.y, S2.z, S2.w, C2.xyz);');
+    expect(fold).toContain(`textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_WARP} + band), 0)`);
+    expect(fold).toContain('sd = sdShell(sd, p, S2.x, S2.y, S2.z, S2.w, C2.xyz, W2.x, W2.yzw, gWindDrift);');
     const profGate = fold.indexOf('if ((i32(prof) & 4) != 0) {');
     const bendGate = fold.indexOf('if ((i32(prof) & 2) != 0) {');
     // The shell wrap must come AFTER the base field is computed (sdPrim) and
@@ -1164,9 +1171,13 @@ describe('sdRoundBox in WGSL (task 6 — the GPU field)', () => {
   });
 
   it('sdPrim and sdPrimO both branch on the box bit (& 8), and it appears before the bend bit (& 2)', () => {
+    // Matched with the `if (` prefix, not on the bit test alone: the STRAND
+    // branch above these reads the same bit inside a select() to decide
+    // whether coneStrand may use the control point, and a bare substring
+    // search finds THAT first and reports the gates as mis-ordered.
     for (const src of [SD_PRIM, SD_PRIM_ORIENTED]) {
-      const boxGate = src.indexOf('(i32(prof) & 8) != 0');
-      const bendGate = src.indexOf('(i32(prof) & 2) != 0');
+      const boxGate = src.indexOf('if ((i32(prof) & 8) != 0)');
+      const bendGate = src.indexOf('if ((i32(prof) & 2) != 0)');
       expect(boxGate).toBeGreaterThan(-1);
       expect(bendGate).toBeGreaterThan(-1);
       expect(boxGate).toBeLessThan(bendGate);
@@ -1181,7 +1192,8 @@ describe('sdRoundBox in WGSL (task 6 — the GPU field)', () => {
     for (const src of [SD_PRIM, SD_PRIM_ORIENTED]) {
       expect(src).toContain('sdRoundBox(');
       expect(src).toContain(`textureLoad(data, vec2<i32>(i, ${ROW_PRIM_BEND} + band), 0).w`);
-      const boxBranch = src.slice(src.indexOf('(i32(prof) & 8) != 0'), src.indexOf('(i32(prof) & 2) != 0'));
+      const boxBranch = src.slice(
+        src.indexOf('if ((i32(prof) & 8) != 0)'), src.indexOf('if ((i32(prof) & 2) != 0)'));
       expect(boxBranch).toContain('* minScale');
     }
   });
@@ -1277,8 +1289,10 @@ describe('per-prim orientation (motion-polish task 3)', () => {
     // ROW_CLUSTER_GROUPS, and the shell fold added ROW_PRIM_SHELL/ROW_PRIM_CLIP
     // — each without displacing any existing row. The wound depth slab added
     // ROW_WOUND_CAP (2026-08-27, pale-wound fix). The entrails cavity flag
-    // added ROW_WOUND_FLAGS (2026-09-02).
-    expect(DATA_ROWS).toBe(20);
+    // added ROW_WOUND_FLAGS (2026-09-02). The shell cloth spike added
+    // ROW_PRIM_WARP and hairlock ROW_PRIM_STRAND (both 2026-09-05 — they
+    // collided on index 20 across two branches; see ROW_PRIM_STRAND's doc).
+    expect(DATA_ROWS).toBe(22);
     expect(SD_PRIM_ORIENTED).toContain('abs(1.0 - O.w) > 1e-6');
   });
 
@@ -1452,6 +1466,14 @@ describe('adjacent-slab clip sampling (X1.27 task C2)', () => {
       'sampleHandVolume(p, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip)');
     expect(MARCH_BODY).toContain('volumeClip: vec4<f32>');
     expect(CONE_MARCH).toContain('volumeClip: vec4<f32>');
+    // WIND PARITY. The cone certifies emptiness for the march that follows,
+    // so it must march the SAME surface. Unlike the noise (which the cone
+    // passes as 0 by design, because it lives on the normal), wind moves the
+    // field: a cone without this slot would certify space the drifted cloth
+    // occupies and the march would start inside it.
+    expect(CONE_MARCH).toContain('windDrift: vec3<f32>');
+    expect(CONE_MARCH).toContain('gWindDrift = windDrift;');
+    expect(MARCH_BODY).toContain('gWindDrift = windDrift;');
     const calcNormal = HELPERS.find(h => declaredName(h) === 'calcNormal')!;
     expect(calcNormal).toContain('volumeClip: vec4<f32>');
     // Every calcNormal mapBody tap (4 of them) carries it — and the perfCfg
@@ -2127,81 +2149,3 @@ describe('flat-albedo seam (close-up diagnostics task 1)', () => {
   });
 });
 
-describe('shading normal modes (close-up task 2)', () => {
-  // perfCfg.z selects how the shading normal is built — 0 the tetrahedron
-  // stencil (the shipped behaviour), 1 a 3-tap forward difference reusing
-  // the walk's hit eval, 2 screen-space derivative normals with a
-  // magnitude-threshold stencil fallback (perfCfg.w). Same contract as the
-  // flat-albedo seam above — inert when off, independently toggleable —
-  // held from text because nothing here can compile WGSL.
-
-  // Comment-stripped source, so these pins cannot trip on their own prose.
-  const code = MARCH_BODY.split('\n').filter(l => !l.trim().startsWith('//')).join('\n');
-
-  it('gates on perfCfg.z — only as the two mode-select comparisons', () => {
-    // Exactly two reads, both the if-chain's range checks — a third use
-    // (a stray default or a second consumer) would make the modes share
-    // state, the melt-literal incident's failure class. perfCfg.w is read
-    // once, as mode 2's threshold. The cone keeps its own contract.
-    expect((code.match(/perfCfg\.z/g) ?? []).length).toBe(2);
-    expect((code.match(/perfCfg\.z </g) ?? []).length).toBe(2);
-    expect((code.match(/perfCfg\.w/g) ?? []).length).toBe(1);
-    expect(CONE_MARCH).not.toContain('perfCfg.z');
-  });
-
-  it('mode 0 is byte-for-byte the pre-task-2 calcNormal call', () => {
-    // The lever-off render must be bit-identical to the base branch, and
-    // the strongest text-level proof is that the off branch IS the old
-    // call — amp inlined, same argument order, no refactor. (Only the
-    // declaration moved out of the branch — a pure rename, pinned by the
-    // anchor-hoist test below.)
-    const legacy = 'n = calcNormal(p, data, counts, counts2, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg);';
-    const mode0 = code.indexOf('if (perfCfg.z < 0.5)');
-    expect(mode0).toBeGreaterThan(-1);
-    const branch = code.slice(mode0, code.indexOf('} else if', mode0));
-    expect(branch).toContain(legacy);
-  });
-
-  it('mode 1 reconstructs the fbm the walk never evaluated', () => {
-    // The walk evaluates mapBody with noise 0, so hitField.x is the SMOOTH
-    // field while the taps carry the silhouette fbm. A smooth base with
-    // fbm taps divides the whole fbm by e — the noise trap. The base must
-    // add fbm(anchor * 3.0) * nAmp back, exactly as MAP_BODY's detail line
-    // builds it (same anchor rule, same frequency 3).
-    expect(code).toContain('let nBase = hitField.x + fbm(anchor * 3.0) * nAmp;');
-    // Three forward taps, each carrying the same amp vec4 as mode 0.
-    expect((code.match(/vec4<f32>\(nAmp, 0\.0, 0\.0, 0\.0\)/g) ?? []).length).toBe(3);
-    // ...at axis offsets of the stencil's own 0.0015 scale.
-    expect((code.match(/p \+ vec3<f32>\(0\.0015, 0\.0, 0\.0\)/g) ?? []).length).toBe(1);
-    expect((code.match(/p \+ vec3<f32>\(0\.0, 0\.0015, 0\.0\)/g) ?? []).length).toBe(1);
-    expect((code.match(/p \+ vec3<f32>\(0\.0, 0\.0, 0\.0015\)/g) ?? []).length).toBe(1);
-  });
-
-  it('the anchor is hoisted above the mode select', () => {
-    // Mode 1's base reads the anchor, so the restPoint call must precede
-    // the first perfCfg.z read. restPoint/noiseLocal are pure, so the
-    // hoist cannot move a pixel — this pin holds the ordering that makes
-    // that true.
-    const anchor = code.indexOf('let anchor = restPoint(p, data, hitBest, noiseLocal(p, noiseShift));');
-    const mode = code.indexOf('if (perfCfg.z < 0.5)');
-    expect(anchor).toBeGreaterThan(-1);
-    expect(anchor).toBeLessThan(mode);
-  });
-
-  it('mode 2 — derivatives gated by the magnitude threshold, stencil fallback', () => {
-    // dpdx is only legal in uniform control flow — the branch condition
-    // reads the perfCfg uniform, and the derivative must live inside the
-    // mode-2 branch, not hoisted above the select.
-    const mode2 = code.indexOf('perfCfg.z < 1.5');
-    expect(mode2).toBeGreaterThan(-1);
-    const block = code.slice(code.indexOf('} else', mode2));
-    expect(block).toContain('let pdx = dpdx(p);');
-    expect(block).toContain('let pdy = dpdy(p);');
-    // Straddle guard — the stencil fallback and the camera-facing select.
-    expect(block).toContain('length(pdx) + length(pdy) > perfCfg.w');
-    expect((code.match(/dpdx\(/g) ?? []).length).toBe(1);
-    expect((code.match(/dpdy\(/g) ?? []).length).toBe(1);
-    expect(block).toContain('select(-dn, dn, dot(dn, rd) < 0.0)');
-    expect(block).toContain('calcNormal(p,');
-  });
-});

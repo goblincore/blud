@@ -47,6 +47,8 @@ import mouseBlobSrc from '../characters/mouse.blob?raw';
 import cyclopsBlobSrc from '../characters/cyclops.blob?raw';
 import schoolgirlBlobSrc from '../characters/schoolgirl.blob?raw';
 import schoolgirlAltBlobSrc from '../characters/schoolgirl-alt.blob?raw';
+import schoolgirlDescribedBlobSrc from '../characters/schoolgirl-described.blob?raw';
+import strandFixtureBlobSrc from '../characters/strand-fixture.blob?raw';
 import bonewalkerBlobSrc from '../characters/bonewalker.blob?raw';
 import dragonBlobSrc from '../characters/dragon.blob?raw';
 import boxFixtureBlobSrc from '../characters/box-fixture.blob?raw';
@@ -54,6 +56,8 @@ import boxFixtureBlobSrc from '../characters/box-fixture.blob?raw';
 // judged against (dispatch/blobforge-task-10 A/B; minotaur-r1 is untracked
 // and may come and go with the comparison).
 import minotaurBlobSrc from '../characters/minotaur.blob?raw';
+import soldierBlobSrc from '../characters/soldier.blob?raw';
+import femaleBlobSrc from '../characters/female.blob?raw';
 
 /**
  * Every authored .blob character, by the name you pass as `?character=`.
@@ -72,10 +76,15 @@ const CHARACTERS: Record<string, string> = {
   cyclops: cyclopsBlobSrc,
   schoolgirl: schoolgirlBlobSrc,
   'schoolgirl-alt': schoolgirlAltBlobSrc,
+  'schoolgirl-described': schoolgirlDescribedBlobSrc,
+  // Not a character — the strand primitive's acceptance case. See its header.
+  'strand-fixture': strandFixtureBlobSrc,
   bonewalker: bonewalkerBlobSrc,
   dragon: dragonBlobSrc,
   'box-fixture': boxFixtureBlobSrc,
   minotaur: minotaurBlobSrc,
+  soldier: soldierBlobSrc,
+  female: femaleBlobSrc,
 };
 
 /**
@@ -91,6 +100,7 @@ const KITS: Record<string, string> = {
   goblin: '/assets/lab/goblin-kit.gltf',
   clown: '/assets/lab/clown-kit.gltf',
   'clown-alt': '/assets/lab/clown-alt-kit.gltf',
+  soldier: '/assets/lab/soldier-kit.gltf',
   // No mouse: its whole outfit is painted SDF geometry (color= on prims).
 };
 
@@ -824,7 +834,8 @@ async function main() {
    * than poked into the uniform because applyLod rewrites faceCfg.x every
    * frame from this.
    */
-  let faceMode: 1 | 2 = 1;
+  // 1 = sheet/multiply rgb, 2 = decal/replace, 3 = multiply by LUMA.
+  let faceMode: 1 | 2 | 3 = 1;
 
   function loadFaceTexture(name: FaceTexName) {
     faceMode = 1;
@@ -867,25 +878,80 @@ async function main() {
     let params;
     try {
       params = compileSheet(parseBlob(activeCharacterSrc()));
-    } catch {
-      return false; // a broken sheet block is reported by the body compile path
+    } catch (e) {
+      // SECOND SILENT CATCH, same lie as the one at the faceEnabled block: the
+      // body compile path does NOT report this, because the body compiles fine
+      // with a broken SHEET. Returning false here sends the caller to
+      // loadFaceTexture('zombie-flat') -- so one bad key in a sheet block put
+      // the ZOMBIE'S FACE on the character with nothing said anywhere. That is
+      // exactly how the soldier lost his face on 2026-09-04.
+      console.error(
+        `[lab] ${activeCharacterName()}: \`sheet\` block failed to compile, so this `
+        + `character is falling back to the ZOMBIE face texture. Fix the sheet block:\n  `
+        + String(e instanceof Error ? e.message : e));
+      return false;
     }
     if (params === null) return false;
     u.faceProj.value.set(params.projScaleX, params.projScaleY, params.projCentreX, params.projCentreY);
+    // The character's own glow threshold, so a baked face keeps its eyes
+    // without the panel being set by hand every reload.
+    u.faceCfg2.value.z = params.eyeGlowCut;
+    u.faceCfg2.value.w = params.eyeGlowAmp;
+    u.faceCfg2.value.x = params.projSpherical;
+    u.faceCfg.value.w  = params.texRelief;
+    u.faceCfg.value.z  = params.faceForward;
 
-    // DECAL: a baked colour image (npm run blob:face-bake), pasted on as
-    // albedo. The mean is irrelevant to the decal branch but set to 1 so the
-    // multiplier path, if the panel flips to it, does not blow the level out.
+    // A BAKED IMAGE (npm run blob:face-bake) IS LOADED WHATEVER `decal` SAYS.
+    //
+    // It used to be gated on `params.decal > 0.5`, which made `decal 0` mean
+    // something nobody wanted: the bake was silently dropped and the shader
+    // multiplied the GENERATED procedural sheet instead. That is not a blend
+    // mode, it is a different image, and it measured as featureless mud
+    // (face/arm 0.72x, contrast sd 20.8 against the arm's 35.8). `decal` now
+    // does only what the shader says it does — pick REPLACE (1) or MULTIPLY
+    // (0) in `mix(albedo * detail, tex.rgb, decal)`.
+    //
+    // THE MEAN IS MEASURED FROM THE IMAGE, not assumed to be 1. `detail` is
+    // `tex.rgb / faceCfg2.y`, so the divisor has to be the bake's own average
+    // or the multiply lands at the wrong level — a full-colour skin bake
+    // divided by 1 darkens everything it touches. Measuring it makes an
+    // average texel multiply by ~1, i.e. neutral, and the face then takes the
+    // body's lighting instead of replacing it. Transparent texels are skipped
+    // so the surrounding alpha does not drag the average down.
     const image = compileSheetImage(parseBlob(activeCharacterSrc()));
-    if (params.decal > 0.5 && image !== null) {
-      const tex = new THREE.TextureLoader().load(`/assets/lab/faces/${image}`);
+    if (image !== null) {
+      const applyMean = (t: THREE.Texture) => {
+        let mean = 1;
+        try {
+          const img = t.image as HTMLImageElement;
+          const cv = document.createElement('canvas');
+          cv.width = img.width; cv.height = img.height;
+          const cx = cv.getContext('2d', { willReadFrequently: true });
+          if (cx !== null && cv.width > 0 && cv.height > 0) {
+            cx.drawImage(img, 0, 0);
+            const d = cx.getImageData(0, 0, cv.width, cv.height).data;
+            let sum = 0, n = 0;
+            for (let i = 0; i < d.length; i += 4) {
+              if (d[i + 3]! < 8) continue;
+              sum += (0.2126 * d[i]! + 0.7152 * d[i + 1]! + 0.0722 * d[i + 2]!) / 255;
+              n++;
+            }
+            if (n > 0) mean = Math.max(sum / n, 1e-3);
+          }
+        } catch { /* tainted or undecodable: fall back to 1, which is the old behaviour */ }
+        if (faceSheet !== null) faceSheet.mean = mean;
+        for (const v of [view, ...crowd]) v.setFaceTexture(t, faceSheet!.atlas, mean);
+      };
+      const tex = new THREE.TextureLoader().load(`/assets/lab/faces/${image}`, applyMean);
       tex.magFilter = THREE.NearestFilter;   // PSX: texels, not a blur
       tex.minFilter = THREE.NearestFilter;
       tex.generateMipmaps = false;
       tex.flipY = true;                      // as the PNG registry path
       faceSheet?.tex.dispose();
       faceSheet = { tex, atlas: new THREE.Vector4(1, 1, 0, 0), mean: 1 };
-      faceMode = 2;
+      faceMode = params.decal > 0.5 ? 2 : (params.blendLuma > 0.5 ? 3 : 1);
+      // Mean 1 until the image decodes, then applyMean re-uploads with the
+      // measured value. One frame of the old level is not worth blocking on.
       for (const v of [view, ...crowd]) v.setFaceTexture(tex, faceSheet.atlas, 1);
       return true;
     }
@@ -945,12 +1011,34 @@ async function main() {
   // a headless character's stub skull would otherwise project the face rows
   // as stripes across its body. Goes through faceEnabled so the panel toggle
   // and applyLod agree with it.
+  // A BROKEN SHEET BLOCK IS LOUD NOW. This used to swallow the error on the
+  // grounds that "the body compile path reports it" -- it does not, because
+  // the body compiles fine with a bad SHEET. What actually happened (and cost
+  // an hour on 2026-09-04): one invalid key in the soldier's sheet block made
+  // compileSheet throw, the whole block was discarded, the lab silently fell
+  // back to the GENERATED procedural sheet, and the character rendered with
+  // the zombie's face and head. Nothing anywhere said why. The keys are
+  // validated against a fixed list, so a typo or a guessed-at parameter --
+  // `eyeGlowCut`, which is panel-only -- lands here, and silence is the worst
+  // possible response to it.
   try {
     const sheetParams = compileSheet(parseBlob(activeCharacterSrc()));
     if (sheetParams && sheetParams.enabled === 0) faceEnabled = false;
-  } catch { /* a broken sheet block is reported by the body compile path */ }
+  } catch (e) {
+    console.error(
+      `[lab] ${activeCharacterName()}: its \`sheet\` block FAILED TO COMPILE, so the `
+      + `baked face is being ignored and this character is wearing the generated `
+      + `sheet instead (which reads as the zombie's face). Fix the sheet block:\n  `
+      + String(e instanceof Error ? e.message : e));
+  }
   u.faceCfg.value.x = faceEnabled ? faceMode : 0;   // face on (unless the sheet says no)
-  u.faceCfg.value.y = 1.0;    // strength
+  // strength: the character's own value if its sheet block names one. This
+  // was a hardcoded 1.0, which silently overrode anything the panel or a
+  // .blob had to say about it.
+  try {
+    const sp = compileSheet(parseBlob(activeCharacterSrc()));
+    u.faceCfg.value.y = sp ? sp.texStrength : 1.0;
+  } catch { u.faceCfg.value.y = 1.0; }
 
   /**
    * The skull's centre and its three SEMI-AXES: the fattest additive primitive
@@ -968,7 +1056,21 @@ async function main() {
     let best: Vec3 | null = null;
     let bestAxes: Vec3 | null = null;
     let bestR = -Infinity;
-    for (const p of b.prims.slice(head.start, head.start + head.count)) {
+    // PAINTED HEAD PRIMS ARE SKIPPED, and this is load-bearing: the face
+    // projects onto whichever prim wins here, and hair/hats/helmets can
+    // always out-size the skull they COVER. The soldier's flat-top did
+    // exactly that (hair 0.1758 vs cranium 0.1634 on radius*maxScale) and his
+    // face vanished — projected onto the hair's frame, centred in the hair.
+    // There is no tuning escape, because any covering prim is by definition
+    // at least as large as the thing it covers. Flesh is unpainted, so
+    // `color === undefined` selects the cranium.
+    //
+    // FALLBACK: a character whose cranium is itself painted has no unpainted
+    // head prim, so the second pass restores the old all-prims behaviour
+    // rather than returning null and dropping the face entirely.
+    const headPrims = b.prims.slice(head.start, head.start + head.count);
+    const flesh = headPrims.filter(p => p.op !== 'sub' && p.color === undefined);
+    for (const p of (flesh.length > 0 ? flesh : headPrims)) {
       if (p.op === 'sub') continue;
       const r = p.radius * Math.max(p.scale[0], p.scale[1], p.scale[2]);
       if (r > bestR) {
@@ -1227,7 +1329,8 @@ async function main() {
     if (keep && keep.length === heroMotion.bound.rig.points.length) {
       heroMotion.bound = {
         ...heroMotion.bound,
-        rig: { ...heroMotion.bound.rig, points: keep.map(p => ({ ...p, pinned: false })) },
+        rig: { ...heroMotion.bound.rig, bodyYaw: heroMotion.lastBodyYaw,
+          points: keep.map(p => ({ ...p, pinned: false })) },
       };
     }
   }
@@ -1562,8 +1665,8 @@ async function main() {
       p => sdBody(p, lastPosed));
     wounds = pushWound(wounds, wound, MAX_WOUNDS);
     pendingWounds.push(wound);
-    // The shot feeds stagger (profile + direction) and, for torso blasts,
-    // the wound clutch — both consumed by the next motion step.
+    // The shot feeds stagger (profile + direction) and localized hit recoil,
+    // both consumed by the next motion step.
     pendingShot = {
       type,
       dirWorld: [d.x, d.y, d.z],
@@ -2443,7 +2546,30 @@ async function main() {
     adaptiveState = next;
   }
 
+  // Wind velocity (m/s) and the offset it has accumulated (m). Plain arrays
+  // rather than THREE.Vector3 because they are written every frame and read
+  // straight into a uniform; see setWind.
+  const windVel: [number, number, number] = [0, 0, 0];
+  const windOffset: [number, number, number] = [0, 0, 0];
+
   handle.setRenderCallback((dt) => {
+    // WIND. Accumulated as a world-space OFFSET in metres rather than handing
+    // the shader a clock: the fold lattice of every warped shell drifts
+    // through the world at this velocity, so a breeze travels across hanging
+    // cloth. Accumulating on the host means the march and the cone pre-pass
+    // read one number and cannot disagree about where the surface is.
+    //
+    // NOT gated on motionEnabled: cloth moves in a breeze whether or not the
+    // character is walking, and the turntable and render-check both run with
+    // motion off. They leave wind at zero, which is the authored field
+    // exactly — see setWind.
+    if (windVel[0] !== 0 || windVel[1] !== 0 || windVel[2] !== 0) {
+      windOffset[0] += windVel[0] * dt;
+      windOffset[1] += windVel[1] * dt;
+      windOffset[2] += windVel[2] * dt;
+      for (const x of [view, ...crowd])
+        x.uniforms.windDrift.value.set(windOffset[0], windOffset[1], windOffset[2]);
+    }
     const now = performance.now();
     frames.push(now - lastStamp);
     lastStamp = now;
@@ -2678,8 +2804,7 @@ async function main() {
         if (motionReadEl) {
           motionReadEl.textContent =
             `meter ${f.meter.toFixed(2)} · ${f.phase}${f.hop ? ' · hop' : ''}` +
-            (f.staggerKind ? ` · ${f.staggerKind}` : '') +
-            (f.clutchArm ? ` · clutch ${f.clutchArm}` : '');
+            (f.staggerKind ? ` · ${f.staggerKind}` : '');
         }
         // Keep the shambler framed: the orbit target drifts after the body
         // (fast enough to follow a walk, slow enough to leave the orbit feel).
@@ -3169,11 +3294,19 @@ async function main() {
     get: () => u.faceCfg.value.y, set: (v) => { u.faceCfg.value.y = v; },
   });
   addSlider(faceBox, {
-    label: 'texScaleX', min: 0.4, max: 2.5, step: 0.01,
+    // texScale is uv-per-unit-head-space -- a FREQUENCY, not a size -- so
+    // DOWN makes the face bigger. The label says so because the slider reads
+    // backwards otherwise, and the range starts at 0.10 because the useful
+    // values live BELOW the old 0.4 floor: the soldier ships at 0.24 / 0.33,
+    // i.e. the old slider could not reach his own values, let alone anything
+    // larger than them. Every drag made the face smaller and there was no way
+    // back. The displayed number is deliberately still the raw faceProj value
+    // so it can be copied straight into a .blob's projScaleX/Y.
+    label: 'texScaleX (down = bigger)', min: 0.10, max: 2.5, step: 0.01,
     get: () => u.faceProj.value.x, set: (v) => { u.faceProj.value.x = v; },
   });
   addSlider(faceBox, {
-    label: 'texScaleY', min: 0.4, max: 2.5, step: 0.01,
+    label: 'texScaleY (down = bigger)', min: 0.10, max: 2.5, step: 0.01,
     get: () => u.faceProj.value.y, set: (v) => { u.faceProj.value.y = v; },
   });
   addSlider(faceBox, {
@@ -3183,6 +3316,28 @@ async function main() {
   // Spherical spreads longitude evenly round the skull, so it needs a wider
   // scale than planar to put the face in the same place — swap the scales with
   // the mode rather than making you retune by hand.
+  // REPLACE vs MULTIPLY, live. faceCfg.x is the face mode: 2 = decal
+  // (replace the albedo), 1 = sheet (multiply into it). Now that the baked
+  // image loads for BOTH modes with a measured mean, flipping this is a real
+  // A/B of the blend and not a swap to a different texture. Whatever you
+  // settle on is the `decal` line in the character's sheet block: 1 = replace,
+  // 0 = multiply.
+  // The label starts from the ACTUAL mode. It used to be hardcoded to
+  // 'replace', so a character wearing decal 0 showed a button claiming the
+  // opposite of what it was doing.
+  // Cycles REPLACE -> MULTIPLY -> MULTIPLY (LUMA). The third exists because
+  // multiplying two coloured values compounds hue: a skin bake over skin
+  // flesh reads more saturated than either. Luma keeps the shading and drops
+  // the tint. Whatever you settle on is `decal` plus `blendLuma` in the
+  // character's sheet block.
+  const MODE_NAME: Record<number, string> = { 1: 'multiply', 2: 'replace', 3: 'multiply (luma)' };
+  const blendBtn = addButton(faceBox, `face blend: ${MODE_NAME[Math.round(u.faceCfg.value.x)] ?? 'off'}`, () => {
+    const cur = Math.round(u.faceCfg.value.x);
+    const next = cur === 2 ? 1 : (cur === 1 ? 3 : 2);
+    u.faceCfg.value.x = next;
+    blendBtn.textContent = `face blend: ${MODE_NAME[next]}`;
+  });
+
   const projBtn = addButton(faceBox, 'proj: planar', () => {
     const spherical = u.faceCfg2.value.x < 0.5;
     u.faceCfg2.value.x = spherical ? 1 : 0;
@@ -3617,6 +3772,7 @@ async function main() {
         ...heroMotion.bound,
         rig: {
           ...heroMotion.bound.rig,
+          bodyYaw: 0,
           restPose: heroMotion.motionJoints.base.map(
             v => [v[0] + heroMotion.lastRootShift[0], v[1], v[2] + heroMotion.lastRootShift[2]] as Vec3),
         },
@@ -3658,6 +3814,40 @@ async function main() {
   });
   addButton(actionBox, 'copy override JSON', () => {
     void navigator.clipboard.writeText(serializeOverride(override));
+  });
+  // COPY THE TUNED FACE AS .blob LINES. The panel cannot write the character
+  // file from a browser, but it can hand back exactly what to paste -- and
+  // that only became honest on 2026-09-04, when the last panel-only controls
+  // (texRelief, texStrength, eyeGlowAmp, eyeGlowCut, projSpherical,
+  // faceForward) grew real sheet parameters. Before that this button would
+  // have emitted a face that could not be reproduced from its own file.
+  //
+  // Emitted in the .blob's own key order and indentation so it can replace the
+  // face and sheet blocks wholesale.
+  addButton(actionBox, 'copy face+sheet as .blob', () => {
+    const n = (v: number, dp = 3) => v.toFixed(dp).replace(/\.?0+$/, '') || '0';
+    const pad = (k: string) => k.padEnd(11);
+    const faceLines = (Object.keys(DEFAULT_FACE) as (keyof FaceParams)[])
+      .map(k => `  ${pad(k)} ${n(face[k], 4)}`);
+    const p = u.faceProj.value;
+    const sheetLines = [
+      // faceCfg.x is a THREE-way mode and this used to test `> 1.5`, which
+      // reported mode 3 (luma multiply) as `decal 1` (replace) -- the exact
+      // opposite blend -- and never emitted blendLuma at all. A copy button
+      // that cannot describe the mode you are looking at is worse than none.
+      ['decal', Math.round(u.faceCfg.value.x) === 2 ? 1 : 0],
+      ['blendLuma', Math.round(u.faceCfg.value.x) === 3 ? 1 : 0],
+      ['projScaleX', p.x], ['projScaleY', p.y],
+      ['projCentreX', p.z], ['projCentreY', p.w],
+      ['eyeGlowAmp', u.faceCfg2.value.w], ['eyeGlowCut', u.faceCfg2.value.z],
+      ['texRelief', u.faceCfg.value.w], ['texStrength', u.faceCfg.value.y],
+      ['projSpherical', u.faceCfg2.value.x], ['faceForward', u.faceCfg.value.z],
+    ].map(([k, v]) => `  ${pad(String(k))} ${n(v as number, 3)}`);
+    void navigator.clipboard.writeText(
+      `# ${activeCharacterName()} — copied from the lab panel\nface\n`
+      + faceLines.join('\n')
+      + `\n\nsheet\n  image       <keep the existing image line>\n`
+      + sheetLines.join('\n') + '\n');
   });
   addButton(actionBox, 'reset overrides', () => {
     clearOverride(activeCharacterName());
@@ -4079,7 +4269,6 @@ async function main() {
         hop: ms.collapse.phase === 'standing'
           && (missingLimbs().legL !== missingLimbs().legR),
         stagger: ms.stagger.kind,
-        clutch: ms.clutch.arm,
         heading: ms.wander.heading,
         bodyYaw: ms.bodyYaw,
         armStyle,
@@ -4257,6 +4446,38 @@ async function main() {
     setSilhouetteNoise(v: number) { for (const x of [view, ...crowd]) x.uniforms.marchCfg.value.z = v; },
     /** Over-relaxation factor; <= 1 disables the relaxed tracer. */
     setRelax(v: number) { for (const x of [view, ...crowd]) x.uniforms.woundCfg2.value.y = v; },
+    /**
+     * WIND VELOCITY in metres per second, world space. Drives the fold
+     * lattice of every `warp=` shell across the world, so cloth sways.
+     * `setWind(0.35, 0, 0.12)` is a light breeze on the schoolgirl's skirt;
+     * anything past ~1 m/s reads as a strobe rather than a breeze, because
+     * the folds are only centimetres apart.
+     *
+     * Zero (the default) is the authored field EXACTLY — a zero offset
+     * subtracts to nothing — which is what keeps the turntable and
+     * blob:render-check comparing the same surface the CPU field describes.
+     */
+    setWind(x: number, y: number, z: number) {
+      windVel[0] = x; windVel[1] = y; windVel[2] = z;
+      if (x === 0 && y === 0 && z === 0) {
+        windOffset[0] = 0; windOffset[1] = 0; windOffset[2] = 0;
+        for (const v of [view, ...crowd]) v.uniforms.windDrift.value.set(0, 0, 0);
+      }
+    },
+    /** The accumulated wind offset in metres, for a test or a capture that
+     *  wants a specific instant of the sway rather than whatever the clock
+     *  had reached. */
+    setWindOffset(x: number, y: number, z: number) {
+      windOffset[0] = x; windOffset[1] = y; windOffset[2] = z;
+      for (const v of [view, ...crowd]) v.uniforms.windDrift.value.set(x, y, z);
+    },
+    /** Near-wound step multiplier (perfCfg.z); 0 = the compiled
+     *  WOUND_STEP_MUL, 0.6 = the value that shipped before 2026-09-04. The
+     *  twin of `__sdfGame.setWoundStep` — see WOUND_STEP_MUL in march.wgsl.ts. */
+    setWoundStep(v: number) {
+      const n = v <= 0 ? 0 : Math.max(0.1, Math.min(1.0, v));
+      for (const x of [view, ...crowd]) x.uniforms.perfCfg.value.z = n;
+    },
     /** 1 = full resolution for the raymarched layer, 0.5 = quarter the pixels. */
     setSdfScale(v: number) { sdfLayer.setScale(v); sizeSdfLayer(); },
     /** Dynamic resolution: drives the SDF scale to hold the frame budget. */

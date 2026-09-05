@@ -119,6 +119,21 @@ const LOOK: Record<string, {
   grey:    { metalness: 0.10, roughness: 0.28, envIntensity: 1.1 },
   gold:    { metalness: 0.70, roughness: 0.22, envIntensity: 1.3 },
 
+  // ---- soldier ----
+  // SHINY METAL GREY, the goblin's iron exactly (owner, 2026-09-05). This
+  // shipped as a dull worn plate (0.45 / 0.60 / 0.25) and the owner asked for
+  // the goblin's look instead, so it reuses `iron`'s numbers verbatim rather
+  // than a fresh approximation -- the two characters' plate should read as the
+  // same material under the same key, and independently-picked values drift.
+  //
+  // NOTE what this overrides: the dull version's weak env was chosen because
+  // "in the key's shadow the diffuse term dies and any stronger env turns the
+  // plate into pale-blue fresnel sheen". That risk was real for a TEAL albedo;
+  // a neutral grey has no hue to go blue. Judge the back views anyway -- that
+  // is where it showed.
+  plate:   { metalness: 0.72, roughness: 0.16, envIntensity: 1.15 },
+  webbing: { metalness: 0.05, roughness: 0.70, envIntensity: 0.25 },
+
   // --- mouse kit (mouse-kit.wam): cotton and vinyl, not metal. These
   // entries exist mostly for the ENV MAP — without one, a rough dielectric's
   // shadow side falls to near-black under the lab's single key, and the

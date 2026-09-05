@@ -43,6 +43,62 @@ export interface FaceSheetParams {
   /** Eye brightness, 0..1. This is what keys the emissive glow. */
   eyeGlow: number;
   /**
+   * Luma above which a texel EMITS. The shader's glow mask is
+   * smoothstep(eyeGlowCut, 1, luma), so this is what decides whether a baked
+   * face's painted eyes light up at all -- and it was panel-only until
+   * 2026-09-04, which meant a character could not keep its own value.
+   *
+   * The soldier is the case that forced it: his bake's max luma is 0.855, so
+   * at the 0.88 default NOTHING clears the mask and his eyes are dead. 0.67
+   * lights them with no second image and no punched mask.
+   */
+  eyeGlowCut: number;
+  /**
+   * SHADER-SIDE glow multiplier (faceCfg2.w) -- how hard an emitting texel
+   * actually burns. Distinct from `eyeGlow` above, which is how bright
+   * generateFaceSheet PAINTS the eyes into a procedural sheet: that one is
+   * baked into the image and does nothing for a character wearing a BAKED
+   * face, because there is no procedural draw step. This one applies to both.
+   *
+   * Defaults to 1.6 to match the faceCfg2 uniform's initial value, so adding
+   * it moves no existing character.
+   */
+  eyeGlowAmp: number;
+  /**
+   * With `decal 0` (multiply), modulate by the bake's LUMINANCE instead of its
+   * rgb. Multiplying two coloured values compounds their hue -- a skin-toned
+   * bake over skin-toned flesh reads more saturated than either -- so this
+   * keeps the brightness modulation and drops the tint.
+   *
+   * DEFAULTS TO 1 (owner, 2026-09-05, on seeing it: "that should be the
+   * default"). Set 0 for the old plain-rgb multiply.
+   *
+   * This changes nothing for a GENERATED sheet: those are written as four
+   * equal channels, and luma of a grey is that grey exactly
+   * (0.2126 + 0.7152 + 0.0722 = 1), so the two paths are bit-identical there.
+   * It only bites where a COLOURED bake is being multiplied -- which is the
+   * case it exists for. Ignored under `decal 1`, which replaces the albedo
+   * outright and never multiplies.
+   */
+  blendLuma: number;
+  /**
+   * Face-texture relief (faceCfg.w) and strength (faceCfg.y). PANEL-ONLY
+   * until 2026-09-04, which meant a character's tuned face could not be saved
+   * and the same .blob rendered differently in the lab and in a capture --
+   * exactly what blob-compile.ts warns about for palettes.
+   */
+  texRelief: number;
+  texStrength: number;
+  /**
+   * Projection mode (faceCfg2.x): 0 planar, 1 spherical. Spherical wraps the
+   * sheet round the skull instead of projecting it flat, and needs wider
+   * scales to put the face in the same place -- the panel's toggle swaps them
+   * for you, so a character switching modes must save its own scales too.
+   */
+  projSpherical: number;
+  /** Which way the face points along z (faceCfg.z): +1 or -1. */
+  faceForward: number;
+  /**
    * Vertical squash. 1 is a round eye; above 1 narrows it into a slit or an
    * almond, below 1 makes it a tall oval. The old hardcoded 1.25 is the
    * default, so an unspecified eye is unchanged.
@@ -158,6 +214,13 @@ export const DEFAULT_SHEET: FaceSheetParams = {
   eyeGap: 0.34,
   eyeSize: 0.075,
   eyeGlow: 1.0,
+  eyeGlowCut: 0.88,
+  eyeGlowAmp: 1.6,
+  blendLuma: 1,
+  texRelief: 1.4,
+  texStrength: 1.0,
+  projSpherical: 0,
+  faceForward: 1,
   eyeSquash: 1.25,
   eyePupil: 0,
   eyeRise: 0.42,

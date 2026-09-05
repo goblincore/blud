@@ -315,7 +315,11 @@ guess, and guesses are what `blob:measure` exists to replace.
   the lab panel.
 - **Do not paint a face with prims or the generated sheet when a reference
   mesh exists.** Bake it: `npm run blob:face-bake -- <name>` and wear it
-  with `sheet` / `image <name>-face.png` / `decal 1` (reference.md, "Face
+  with `sheet` / `image <name>-face.png` / `decal 0` — MULTIPLY, so the face
+  takes the body's light instead of sitting on it unlit, and START the
+  projection near 0.19/0.22 rather than the 0.45/0.58 defaults, which are for
+  the GENERATED sheet and put a baked face at ~40% of the size it wants.
+  `blob:face-bake` prints a paste-ready block (reference.md, "Face
   decal"). Three dispatches of painted faces read as a visor band or a
   zombie; the mesh's own face pasted flat reads as the character.
 

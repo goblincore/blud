@@ -1,11 +1,12 @@
 // src/lab/sdf-zombie/blob-checks.test.ts
 import { describe, expect, it, vi } from 'vitest';
-import { compileBlob } from './blob-compile';
+import { compileBlob, compileFace } from './blob-compile';
 import { clusterCore } from './validate';
-import { clearOf, daylightOf, fusedOf, worstFieldOnSegment , kneeOffset, checkStance } from './blob-checks';
+import { clearOf, daylightOf, fusedOf, strandedOf, worstFieldOnSegment , kneeOffset, checkStance } from './blob-checks';
 import { parseBlob } from './blob-parse';
 import { buildBody } from './build-body';
 import type { ClusterInfo, Primitive, Vec3 } from './types';
+type Field = { prims: Primitive[]; clusters: ClusterInfo[] };
 import src from './characters/zombie.blob?raw';
 
 const zombie = () => buildBody(compileBlob(parseBlob(src)));
@@ -356,5 +357,68 @@ describe('clusterCore and the `core` mark', () => {
     const members = b.prims.slice(leg.start, leg.start + leg.count).filter(p => p.op !== 'sub');
     const fat = members.reduce((m, p) => (p.radius * Math.min(...p.scale) > m.radius * Math.min(...m.scale) ? p : m));
     expect(clusterCore(b, leg)).toEqual([(fat.a[0] + fat.b[0]) / 2, (fat.a[1] + fat.b[1]) / 2, (fat.a[2] + fat.b[2]) / 2]);
+  });
+});
+
+describe('strandedOf', () => {
+  // Two overlapping spheres in one cluster: nothing is stranded.
+  const touching = (): Field => ({
+    prims: [
+      { a: [0, 0, 0], b: [0, 0, 0], radius: 0.10, scale: [1, 1, 1], blendK: 0.004, limb: 'head', cluster: 0 },
+      { a: [0, 0.14, 0], b: [0, 0.14, 0], radius: 0.08, scale: [1, 1, 1], blendK: 0.004, limb: 'head', cluster: 0 },
+    ] as unknown as Primitive[],
+    clusters: [{ id: 0, limb: 'head', start: 0, count: 2, center: [0, 0.07, 0], radius: 0.6, alive: true } as unknown as ClusterInfo],
+  });
+
+  // The same pair pulled apart: the second sphere hangs in the air.
+  const floating = (): Field => {
+    const f = touching();
+    (f.prims[1] as { a: Vec3; b: Vec3 }).a = [0, 0.34, 0];
+    (f.prims[1] as { a: Vec3; b: Vec3 }).b = [0, 0.34, 0];
+    return f;
+  };
+
+  it('reports no gap when the primitives overlap', () => {
+    expect(strandedOf(touching(), touching().clusters[0]!)).toBeLessThanOrEqual(0);
+  });
+
+  it('reports the gap when one primitive floats clear', () => {
+    const gap = strandedOf(floating(), floating().clusters[0]!)!;
+    // centres 0.34 apart, radii 0.10 and 0.08 -> ~0.16 of air between surfaces
+    expect(gap).toBeGreaterThan(0.10);
+  });
+
+  it('returns null for a cluster with nothing to be stranded from', () => {
+    const one = touching();
+    one.prims = one.prims.slice(0, 1);
+    one.clusters = [{ ...one.clusters[0]!, count: 1 }];
+    expect(strandedOf(one, one.clusters[0]!)).toBeNull();
+  });
+
+  // THE REGRESSION THIS EXISTS FOR: a flesh foot left hanging 142 mm below the
+  // leg when the soldier's boots moved to the WAM kit. fusedOf works between
+  // clusters, so nothing asks whether the pieces INSIDE a limb reach each
+  // other, and it shipped.
+  //
+  // The 15 mm bound is set from the cast as it stands, not from theory:
+  // schoolgirl-alt's arm is the current worst at 11.2 mm and everything else
+  // is under 3 mm. It is a GROSS-strand guard -- smooth-min legitimately
+  // bridges small gaps, and the check reads the blended field, so tightening
+  // this toward zero would flag geometry that renders as solid.
+  it('finds no stranded primitive in any shipped character', () => {
+    // import.meta.glob rather than node:fs: this suite runs through Vite (see
+    // the `?raw` import at the top), where node's fs types are not available.
+    const sources = import.meta.glob('./characters/*.blob', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+    expect(Object.keys(sources).length).toBeGreaterThan(8);
+    for (const [path, text] of Object.entries(sources)) {
+      const doc = parseBlob(text);
+      const body = buildBody(compileBlob(doc, compileFace(doc)));
+      for (const c of body.clusters) {
+        const gap = strandedOf(body, c);
+        if (gap === null) continue;
+        expect(gap, `${path} / ${c.limb}: a primitive floats ${(gap * 1000).toFixed(1)} mm clear of the body`)
+          .toBeLessThanOrEqual(0.015);
+      }
+    }
   });
 });

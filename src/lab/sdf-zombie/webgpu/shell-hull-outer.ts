@@ -69,7 +69,7 @@ import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { positionWorld, cameraPosition, vec4, length, sub } from 'three/tsl';
 import { bendCtrl } from '../vec';
-import { boxReach } from '../extent';
+import { boxReach, shellReach, strandReach } from '../extent';
 import type { BuiltBody, Vec3 } from '../types';
 
 /**
@@ -151,10 +151,10 @@ export function buildOuterHullInstances(
       if (!live.has(p.cluster)) continue;
 
       const maxScale = Math.max(p.scale[0], p.scale[1], p.scale[2]);
-      const rMax = Math.max(p.radius, p.radiusB ?? p.radius) * boxReach(p.box);
+      const rMax = Math.max(p.radius, p.radiusB ?? p.radius) * boxReach(p.box) * strandReach(p.strand);
       const reach =
         rMax * maxScale
-        + (p.shell ? p.shell.thickness : 0)
+        + shellReach(p)
         + blendReach(p.blendK ?? 0, p.blendProfile)
         + shellAmp
         + margin;

@@ -1,0 +1,82 @@
+# STRAND FIXTURE — the acceptance case for `strand=` (hairlock, 2026-09-05).
+#
+# WHY THIS FILE EXISTS, and it is not a nice-to-have: strand.ts's header and
+# march.wgsl.ts both cite "the relax-1.4 render gate on
+# characters/strand-fixture.blob" as the evidence that the Lipschitz bound
+# suffices. The file was never written, so that gate was never run — and what
+# it would have caught is that the whole GPU half was disconnected: the strand
+# helpers were absent from HELPERS, the fold never tested profile bit 5, and
+# ROW_PRIM_STRAND was packed but never uploaded. A strand prim grew strands on
+# the CPU and rendered as a plain capsule on the GPU, which is precisely the
+# CPU/GPU divergence blob:render-check exists to find.
+#
+# So this is deliberately NOT a character. It is a head-sized ball wearing the
+# two cases the brief scoped the primitive to, sized and lit so both are the
+# whole frame:
+#
+#   FRINGE  — a straight bundle across the brow, many fine strands.
+#   LOCKS   — a bent, tapered pair in front of the ears, the case
+#             schoolgirl-described's own header called "the ONE place strands
+#             would beat masses".
+#
+# The bare bundles are the point; nothing here is styled. If a character ever
+# adopts strands, judge it there — judge the FIELD here.
+
+model strand-fixture
+  height 0.60
+  stance humanoid
+
+skeleton
+  # A bust on a plinth, not a character. The column exists only so the
+  # clusters fuse and something reaches the floor; the skull carries the two
+  # cases under test and is framed to fill the shot.
+  root pelvis at 0.08 len=0.05
+  bone spine1 parent=pelvis dir=up pitch=0 len=0.11
+  bone chest  parent=spine1 dir=up pitch=0 len=0.08
+  bone spine2 parent=chest  dir=up pitch=0 len=0.03
+  bone neck   parent=spine2 dir=up pitch=0 len=0.05
+  bone skull  parent=neck   dir=up pitch=0 len=0.20
+
+body
+  # The plinth, in three overlapping bars. Radii are chosen so each overlaps
+  # the next — a gap here fails the disconnected-cluster check, which is how
+  # the first draft of this fixture died.
+  bar torso on pelvis from=0.00 to=1.00 r=0.075 blend=0.006 color=3a3a42
+  bar torso on spine1 from=0.00 to=1.00 r=0.055 blend=0.006 color=3a3a42
+  bar torso on neck   from=0.00 to=1.00 r=0.060 blend=0.006 color=3a3a42
+
+  # The scalp. Flat dark grey so the strands read against it and nothing
+  # about the fixture's colour is load-bearing.
+  blob head on skull at=0.50 r=0.090 wide=1.00 tall=1.00 deep=1.00 blend=0.006 color=3a3a42
+
+  # ============================================================
+  # THE FRINGE — one straight bundle across the brow, 9 strands. STRAIGHT, so
+  # it exercises the clamped-projection path for t*; the locks below take the
+  # cubic-roots path instead. `fat` is left at its default so adjacent
+  # strands very nearly touch, which is the hardest case for the 3x3
+  # neighbourhood the fold searches.
+  # ============================================================
+  blob head on skull at=0.60 offset=(0,0.020,0.078) tip=(0,-0.072,0.006) r=0.028 strand=9 wave=0.16 cycles=3 blend=0.003 color=b8862c
+
+  # ============================================================
+  # THE LOCKS — a mirrored pair in front of the ears, BENT and TAPERED. That
+  # combination is what the brief actually asked for and the hardest field to
+  # bound: the cross-section frame spins along a curved path and the cell
+  # size follows the taper, and both feed strandLipschitz.
+  # ============================================================
+  blob head on skull at=0.50 offset=(0.076,0.010,0.030) tip=(0.010,-0.150,0.020) bend=(0.020,0.010,0.026) r=0.026 r2=0.010 strand=6 wave=0.18 cycles=4 fat=0.72 blend=0.003 both color=b8862c
+
+palette
+  baseColor     0.30 0.30 0.34
+  deepColor     0.50 0.08 0.08
+  charColor     0.22 0.13 0.10
+  specIntensity 0.30
+  specRoughness 0.45
+  fresnelBoost  0.20
+  translucency  0.10
+  surfaceNoiseAmp    0.0
+  silhouetteNoiseAmp 0.0
+  wetness       0.05
+  mottleAmp     0.0
+  mottleScale   1.0
+  mottleColor   0.55 0.38 0.24

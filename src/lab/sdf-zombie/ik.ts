@@ -7,7 +7,7 @@
 // root back to its anchor (backward pass), preserving every segment length
 // exactly, until the end effector converges. No rotations, no quaternions.
 //
-// Three consumers, all PURE functions of their inputs — no Date.now, no
+// Two consumers, all PURE functions of their inputs — no Date.now, no
 // Math.random (determinism is load-bearing; the solver runs every frame):
 //
 //  - Foot plant (stepPlant / solvePlantedLeg): during the gait's stance phase
@@ -16,9 +16,6 @@
 //    and the gait oscillator carries the foot to the next plant.
 //  - Head look-at (stepAim): 1-2 segment aim at a world target with clamped
 //    max yaw/pitch off the rest forward and rate-limited (damped) tracking.
-//  - Wound clutch (stepClutch): a blast-sized torso wound makes the nearest
-//    surviving arm reach for it for one beat — pure gating/state; the arm
-//    solve itself is just solveChain at the wound target.
 //
 // Axes: +y up. Yaw follows the wander heading convention (0 = facing +z,
 // positive = clockwise seen from above — see wander.ts). Everything here is
@@ -42,8 +39,6 @@ export const IK_TUNING = {
   headMaxPitch: 0.5,
   /** Head look-at: damped tracking turn rate (rad/s). */
   headTurnRate: 2.4,
-  /** Wound clutch: how long an arm presses a fresh wound (s). */
-  clutchBeat: 0.9,
   /** Pole bias deadband (m): a mid joint this close to the root→end axis on
    *  the WRONG side is left alone — a near-straight chain reads neutral, not
    *  "bent", and the AUTHORED rest knee sits ~1 cm behind the hip→ankle
@@ -333,83 +328,4 @@ function dampedRotate(cur: Vec3, want: Vec3, rate: number, dt: number): Vec3 {
     if (len(axis) < 1e-9) axis = [1, 0, 0];
   }
   return qRotate(qFromAxisAngle(axis, step), cur);
-}
-
-// ---------------------------------------------------------------------------
-// Wound clutch.
-// ---------------------------------------------------------------------------
-
-export type ArmSide = 'armL' | 'armR';
-
-/** A surviving arm candidate — the wiring filters out severed arms. */
-export interface ClutchArm {
-  side: ArmSide;
-  /** Shoulder position (world) — used for the nearest-arm pick. */
-  shoulder: Vec3;
-  /** Hand position (world) — the current chain end. */
-  hand: Vec3;
-}
-
-/** Pure clutch state: which arm is pressing a wound, and for how much longer. */
-export interface ClutchState {
-  /** The clutching arm, or null when idle. */
-  arm: ArmSide | null;
-  /** World position the arm reaches for (the wound). */
-  target: Vec3;
-  /** Seconds of clutch remaining; ≤ 0 while idle. */
-  remaining: number;
-}
-
-/** Per-frame input from the damage + body wiring. */
-export interface ClutchSignal {
-  /** Fresh blast-sized wound this frame? (pellets never trigger a clutch.) */
-  blast: boolean;
-  /** Wound world position. */
-  wound: Vec3;
-  /** Surviving arm candidates — pass in a fixed order (armL, armR); ties
-   *  resolve to the first. */
-  arms: ClutchArm[];
-  /** True while staggering — interrupts any active clutch. */
-  staggered: boolean;
-}
-
-/** A fresh clutch state: idle. */
-export function makeClutch(): ClutchState {
-  return { arm: null, target: Z, remaining: 0 };
-}
-
-/**
- * One clutch step. Gating rules:
- *  - staggered → any active clutch is interrupted (released to idle);
- *  - idle + blast + a surviving arm → the NEAREST arm clutches the wound for
- *    one IK_TUNING.clutchBeat beat — one clutch at a time (new requests are
- *    ignored while one is active);
- *  - the beat counts down with dt and the clutch releases at zero.
- * The arm solve itself is just solveChain at `target` — this module only
- * decides WHEN and WHICH arm reaches. Pure and deterministic.
- */
-export function stepClutch(state: ClutchState, sig: ClutchSignal, dt: number): ClutchState {
-  if (state.arm !== null) {
-    if (sig.staggered) return makeClutch();
-    const remaining = state.remaining - Math.max(dt, 0);
-    return remaining <= 0 ? makeClutch() : { ...state, remaining };
-  }
-  if (!sig.blast) return state;
-  const arm = nearestArm(sig.arms, sig.wound);
-  if (!arm) return state;
-  return { arm: arm.side, target: [sig.wound[0], sig.wound[1], sig.wound[2]], remaining: IK_TUNING.clutchBeat };
-}
-
-/** The surviving arm whose shoulder is closest to the wound (ties → first). */
-function nearestArm(arms: ClutchArm[], wound: Vec3): ClutchArm | null {
-  let best: ClutchArm | null = null;
-  let bestD = Infinity;
-  for (const a of arms) {
-    const d = len(sub(a.shoulder, wound));
-    if (d < bestD) {
-      best = a;
-      bestD = d;
-    }
-  }
-  return best;
 }

@@ -20,6 +20,113 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**[x] A-schoolgirl-described — SCHOOLGIRL, describe-and-judge arm SHIPPED (2026-09-05).**
+`characters/schoolgirl-described.blob`: the same subject as schoolgirl.blob,
+authored from the plate alone (no blob:rings/measure — fitting is the control
+this run compares against). The exchange student from the wrong genre: three
+beats = oversized glossy BOB, RED neckerchief (real knot+tails, not paint),
+white SLOUCH BOOTS (vs the measured version's socks+mary-janes). Face = the
+schoolgirl's own bake re-baked to schoolgirl-described-face.png; sheet
+0.34/0.40/0.49 (the bake's printed 0.19/0.237 is generic — this bake is the
+schoolgirl's, whose solve is 0.38/0.42). Render-check exit 0, 2565 tests
+green, controls (schoolgirl.blob / schoolgirl-alt.blob) untouched.
+
+**[ ] A-female — FEMALE CHARACTER, described-authoring RUNNING (2026-09-05).**
+Second run of the method the soldier proved: proportions from a plate, style
+from the approved cast (goblin/soldier/zombie/clown), identity left to the
+agent, no measurement step.
+[plan](docs/superpowers/plans/2026-09-05-female-described.md). Reference is a
+NUDE A-pose body -- proportions only; its Rigify rig has 722 joints of IK/MCH
+helpers so the fitting tools cannot read it regardless, and its dress/belt/
+necklace/watch meshes are out of scope per the owner.
+
+**QUEUED BEHIND HER, in order:**
+1. **`hairlock`** (Selfie Girl item 4) aimed at the SCHOOLGIRL, not this
+   character -- her head is 7 prims, 5 of them hair, and loose. The female
+   reference wears a BUN, which is the one case the technique suits least: it
+   is for flowing wavy strands, and a compact updo is two or three ordinary
+   prims. Deferred deliberately -- radiusRamp was built ahead of a character
+   that needed it and two of its four face features shipped at zero.
+2. **Her WAM kit: armour, and SOFT CLOTHES.** The soft half has a real fork
+   and it is not obvious which way it goes. `.blob` ALREADY does cloth --
+   the schoolgirl's skirt and sailor collar are `shell` prims (`thick=` /
+   `clip=` / `rim=`), a thin onioned surface clipped to a hem. So the choice
+   was: put drape in WAM, or extend the SDF shell. **DECIDED (owner,
+   2026-09-05): extend the SDF SHELL.** Selfie Girl item 5 -- domain-warp it
+   with low-frequency sines for wrinkles, plus the rim trick where the shell
+   meets its clipping plane, `length(vec2(dShell, dPlane)) - r`.
+   The leverage is why: the shell prim already ships and the schoolgirl's
+   skirt and sailor collar already use it, so wrinkles land on EXISTING
+   garments for free rather than only on new ones -- and it keeps WAM for the
+   hard things goblin-kit.wam argues it exists for. Warp amplitude must
+   default to 0 so no current character moves.
+   **LICENCE, unchanged:** the Selfie Girl shader forbids reuse of the Work.
+   Re-derive; implement from iq's own articles. Do not read the shader.
+
+
+**[x] A-female — THE WIDOW SHIPPED (2026-09-05), describe-and-judge again.**
+`characters/female.blob` (33 prims, clothed, no kit): the cast's gothic
+mourning widow — black dress/gloves/stockings as paint, wasp waist, oversized
+dark bun, pale skin, one red cameo choker. Baked face decal from the
+reference's head meshes only (its 722-joint Rigify rig and clothes ignored).
+One pipeline fix: `blob-face-bake.py` now REPEAT-wraps UVs (`% 1.0`) before
+atlas sampling — the female mesh's UVs run outside 0..1 and clipping smeared
+the atlas edge in streaks.
+
+**[x] A-soldier — SOLDIER SHIPPED (2026-09-05), and the method changed on the
+way.** `characters/soldier.blob` (15 prims, body only) + `soldier-kit.wam`
+compiled to `public/assets/lab/soldier-kit.gltf` (pauldrons, cuirass, belt +
+pouches, knee plates, boots) in the goblin's iron. Bare weightlifter arms, orb
+hands, trousers and hips as paint, baked face decal with glowing eyes.
+
+**THE RESULT WORTH KEEPING: describe-and-judge beat measure-and-fit.** The
+mesh-fitting route ran a 10-task chain plus a day and produced a pot-bellied
+egg with an unreadable face — while `blob:rings` reported clean, 2524 tests
+passed and `render-check` exited 0. The measurements passed things that looked
+wrong, because the bones that mattered were SKIPPED and a skipped bone is
+indistinguishable from a converged one. Re-authored from a written description
+with NO measurement step, it took **22 minutes and 24 prims**. Brief:
+[plan](docs/superpowers/plans/2026-09-04-soldier-described.md); the abandoned
+attempt is preserved at tag `blobforge-experiment-2026-09-04`. The lesson is
+not "prose drifts" — it is that UNBOUNDED prose drifts. A spec that pins the
+three beats carrying the read and frees everything else works fine.
+
+**Five renderer/lab bugs found by shipping one character**, all fixed:
+* `headShape()` anchored the face projection to the largest head prim, so hair
+  or a hat could steal it — by definition a covering prim out-sizes what it
+  covers, so there was no tuning escape.
+* TWO silent catches around the sheet block, both claiming "reported by the
+  body compile path" (it is not — the body compiles fine with a bad sheet).
+  One invalid key put the ZOMBIE'S face and head on the character with nothing
+  said anywhere. Both are loud now.
+* Six face-panel controls had no `.blob` home (`texRelief`, `texStrength`,
+  `eyeGlowAmp`, `eyeGlowCut`, `projSpherical`, `faceForward`), and
+  `texStrength` was worse — a hardcoded assignment ran AFTER the sheet and
+  overrode it. A `copy face+sheet as .blob` button closes the loop.
+* The face-texture sliders read backwards AND could not reach their own
+  character's values (floor 0.4, soldier ships at 0.18).
+* The decal is gated by surface NORMAL, not distance — `face.ts`'s "juts past
+  the projection plane" framing is wrong.
+
+**Method note that cost four rounds:** headless `blob:shot` captures are
+reliable for SILHOUETTE and useless for anything lighting-dependent. The
+turntable exposes darker than the lab, so glow and tone read differently —
+judge look in the lab, use captures for shape.
+
+**NOT DONE, handed off:** walk cycle, carrying/firing animations, and the
+shotgun. He is intended as the first non-zombie enemy that shoots back.
+
+
+
+**SOLDIER AUTHORED FROM DESCRIPTION — AWAITING OWNER TURNTABLE VERDICT
+(2026-09-04, branch dispatch/soldier-described).** `characters/soldier.blob`
+(~30 prims): green flat-top box cap, pauldron yoke, belt+pouches, grey-green
+cuirass with muted-red front plate, two-block olive fatigues, red boots,
+baked face decal (`blob:face-bake -- soldier`). Registered in lab-main
+CHARACTERS. Gates: render-check exit 0, vitest 2510 green, tsc clean.
+Lesson of record: big plates take `color=`+`gloss`, NOT `metal` (reads black
+under the single key); box prims take no `r2=`/`tip=`.
+
 **FISHEYE LENS — SHIPPED ON sdf-game, AWAITING PLAY VERDICT (2026-09-03).**
 The game view now renders WIDER than the player sees and the canvas blit
 squeezes it back: `renderFovDeg` 90 (up from 75), `centerFovDeg` 60, and the
@@ -61,31 +168,109 @@ maths) or clamp `moveAim` in screen space and renormalise `deadzonePush`.
 
 **ZOMBIE SKELETON RE-AUTHORED — AWAITING OWNER LOOK (2026-09-03).** Tubes showed the field skeleton was six 12 cm rib stubs over 20 cm of a 34 cm spine; the owner's reference is a standard human torso. Now: twelve rib pairs as HOOPS (two Bezier bars per rib meeting at the flank), cage half-width 0.167 in a 0.19 chest, upper ribs short/flat, 7 widest, 8-10 on the costal margin, 11-12 floating; kyphotic spine at the BACK; sternum; clavicles; a pelvis with iliac-wing fans, crest arcs, sacrum and a closed pubic ring. Flesh 23 + bone 90 = 113/128, containment clean at 4 mm. Emitted by `scripts/zombie-skeleton-gen.ts` (`--check --write`), which owns the per-rib table. `rig-bind.ts` torso/head bones now bind to the nearest AXIAL joint (a hoop's midpoint is nearer the hip/shoulder, which shear). Instancer cap 512 → 1024 (820 tubes live). Captures + notes: [docs/dev-notes/2026-09-03-zombie-skeleton/](docs/dev-notes/2026-09-03-zombie-skeleton/notes.md). Owner's first look drove round 2 (same day): the cage sheared because point-binds carry no rotation — torso bones now pose as ONE rigid frame per axial segment (`BoneFrame` in rig-bind.ts, shear test pinned); six thicker ribs instead of twelve; pelvis as fat blades + ring; noise mottle + blood flecks in the tube shader (helpers split into their own WGSL strings — wgslFn takes one fn per string, silently draws nothing otherwise). 23 + 68 = 91 prims, 600 tubes. Owner verdict: an improvement, merged to main as-is; tubes are NOT yet good enough to replace the field bones (a capsule pelvis is 'a messy line drawing', the cage reads as spiky tubes going in and out of sync) — `setBoneMesh` stays OFF. Follow-ups in the notes: a solid-mass primitive for the pelvis, one continuous loop per rib.
 
-**[ ] F-eject.1 — spent cases clip through the frame, and every reload throws
-them identically.** Owner, 2026-09-03, after the breech merge: "the shells
-eject but seem to clip through the gun frame so there needs to be some tweaking
-there. also they always eject the same animation would be better to have some
-randomness but not a blocker." Two separate things. The clip is a collision the
-hand-off does not test for — `ejectedShell()` is a pure ballistic arc from the
-breech with no awareness of the receiver it passes over, and the gate only
-checks where a case STARTS (within 5 cm of a chamber mouth), not where it
-travels. The sameness is `ejectedShell()` being deterministic by design
-(`game-viewmodel.ts`: "same reload, same arc, every time") — which was the right
-call for gating and the wrong one for feel. Randomising it means the eject gate
-needs a seed it can pin, or it becomes flaky.
+**SHELLS: EJECT CLIP + LOAD INSERTION — DONE (2026-09-04), F-eject.1 and
+F-eject.2** — [notes + before/after strip](docs/dev-notes/2026-09-04-shell-reload/notes.md).
+Owner: "the shells eject but seem to clip through the gun frame", "new shells
+magically appear to load", "the reloading thing is more urgent". Both were the
+same class of bug: cases handled in RIG space with no idea where the bore was.
+* **Eject clip.** The tumble started AT the chamber mouth (not where the
+  7 cm extract slide had left the case), snapped to rig −Z (not the bore,
+  66° off it on the open gun) and flew in rig +Y — so its rear half was back
+  in the tube and its rise cut the chamber wall and standing breech. Now:
+  `boreFrameInRig()` reads `out`/`side` off the live Muzzle/Breech locators;
+  the hand-off is the extracted case's centre (`mouth + out·SHELL_LEN/2`),
+  bore-aligned via quaternion, with velocity `0.55·out + 2.05·up + side`
+  and end-over-end spin about `side`. Cases leave the frame and are DROPPED
+  once past the apex and back near breech height (`EJECT_DROP_BELOW_M`) —
+  the old arc fell back through the frame past the camera as a huge shell.
+  Per-reload seed jitters the arc (`reloadSeed`, `pinReloadSeed(n)`; seed 0 =
+  reference); at the hand-off beat every seed is the origin, so the eject
+  gate is seed-invariant — it now reads 3.50 cm (the SHELL_LEN/2 offset), the
+  stale hardcoded breech still fails at 16.8.
+* **Load insertion.** Two stages, mirroring the eject: a rig-space CARRY
+  (0.74→0.96, `loadCarry`) with the cases riding rigidly in the hand to
+  `stagedShellCenter()` — tips 1.5 cm behind the mouths, ON the bore axis —
+  then a barrel-local INSERT (0.96→1.11, `insertStage`) sliding the seated
+  Shell_L/R nodes in along their own z, the extract in reverse. The support
+  hand's two breech keys are DERIVED each frame (`loadHold()` → `HandHold`
+  into `supportHandPose(t, hold)`); the authored table had the hand at the
+  bottom of the frame at 1110 ms while the cases seated by themselves.
+* **Two placements were wrong before they were right**, both in the notes:
+  the orb behind the heads along `out` sat between the eye and the breech
+  and hid the whole load (`out` points largely at the camera on the presented
+  gun); and "left of the pair" went screen-RIGHT because the GLB is yawed
+  180° so the model's right chamber is screen-left — `loadHold` now picks the
+  side by `side.x < 0` in rig space.
+* **Forearms** are now anchored to fixed ELBOW_L/R points behind the camera
+  and re-aimed per frame (`aimForearm`), 0.90 m long: the 0.15/0.26 capsules
+  ended in a rounded stump that came into view on a hard look down (the
+  detached arm the owner saw), and a hand at the breech with its resting arm
+  direction pointed the forearm straight at the eye. Checked at pitch ±1.45
+  with the reticle at both frame edges: no end in view.
+* Gate strip now samples 960 (staged) and 1040 (mid-insert);
+  `GAME_EXTRA_BEATS=530,560` adds frames without touching the owned list.
+* **Round 2, owner's pass:** the remaining clip was the MODEL — the receiver's
+  top strap ran forward over the chambers, so an open mouth sat level with the
+  receiver top and every case spent its first 35 mm inside it. The body loft
+  now steps down to action flats (z −0.004) forward of the breech face;
+  `shorty-double.glb` re-exported (13994 tris). Pose retuned LOW (dy 0.040,
+  roll −16; a true drop put the reload off the bottom edge because the breech
+  rests there). Hand is a fist centred on the pair, covering heads then mouths
+  as it pushes (owner: "you wouldn't really see the shells"). KeyT slow-mo
+  (1 → 0.25 → 0.1) for inspection. The flat bar across the open mouths was the
+  `extractor` box sitting ON the bore axis — now a plate under the tubes.
+  Owner's second look: "it looks better yes". **Round 3:** the hinge pin sits
+  inside the chamber's length, so the open chamber swung DOWN through the
+  tray and the tray showed inside the empty bore as a grey slab (owner found
+  it by hand). Flats now ramp −0.004 → −0.022 toward the knuckle and taper in
+  width; the bore plug starts at `HOLLOW_DEPTH` 27 mm (gate asserts that);
+  chamber inner wall is matte `Bore` via a second material slot. Owner:
+  "other than that I think I like this, think it can be merged". Merged to
+  main `6c783f2`. **Round 4 (post-merge):** the top rib's underside was inside
+  the hollow chambers (showed as a rectangle in the empty bores) — now a 10 mm
+  valley strip; the "asymmetric shelf" was the ramped tray's side face seen on
+  the near side only (loft is symmetric; both-side renders in the notes) —
+  tray now a constant 0.040 half-width under the tubes.
 
-**[ ] F-eject.2 — fresh shells still appear from nowhere.** Owner: "new shells
-magically appear to load. this is a gap in the spec." Correct, and the spec
-names it: the load beat carries the cases up with the support hand but never
-shows them being *inserted*. The Doom reload the tempo was taken from has the
-left hand jamming two shells into the barrels. Owner's read on difficulty, which
-matches mine: the hand is a blobby orb so the ANIMATION is not the hard part —
-the timing against the 1.30 s beat sheet and keeping the fresh cases from
-clipping the barrels on the way in are. Note the reference GLB
-(`docs/dev-notes/refs/sawnoffs_animated.glb`) does NOT solve this: its slugs
-simply reappear seated at t=1.933, which is why our support hand was kept over
-its approach in the first place. So this one has no reference to decode — it
-has to be authored.
+**[x] F-arm.1 — the FPV forearms should resemble the goblin SDF character.**
+Spec written 2026-09-04 (approach B, owner-approved in conversation):
+[docs/superpowers/specs/2026-09-04-fpv-goblin-arms-design.md](docs/superpowers/specs/2026-09-04-fpv-goblin-arms-design.md)
+— Blender-authored arm GLB (thicker skin with ball joints, leather bracer
+with brass hardware matching the gun, a SMARTWATCH on the left wrist with a
+drawable glowing screen), generated albedo + normal skin maps with no
+emissive, kit parity for the watch. **BUILT 2026-09-05** via the dispatch UI
+on kimi/k3 (8 tasks, branch `dispatch/2026-09-04-fpv-goblin-arms-task-8`):
+`goblin-arm.glb` (8942 tris) from `scripts/model_goblin_arm.py`, `game-arms.ts`
+dresses it (generated albedo + normals, NO emissive, gun env map), smartwatch
+on the left wrist with a drawable glowing screen (`__sdfGame.watchScreen`),
+kit parity in `goblin-kit.wam`, gate check 2b. Task 1's agent stopped on a
+plan defect of mine (the albedo's own tests were unsatisfiable as written);
+fixed by hand after the chain: wart darkening is a multiplicative shade, the
+mottle mix is linear (0..80%), the mean test budgets luminance at 8% and hue
+at 12% per channel. 3169 tests, tsc, gate all green. Evidence:
+[docs/dev-notes/2026-09-04-fpv-goblin-arms/](docs/dev-notes/2026-09-04-fpv-goblin-arms/notes.md).
+Owner's first look (2026-09-05) drove three more: a TWO-BONE arm (Upper_L/R
+nodes, `armIk` to shoulder anchors behind the camera — the one-piece stick
+showed its end at extreme pitch), skin re-toned to the character's face
+(saturated, wet, fine dark speckle via a fleck lattice; NOT the matte
+darkening tried first), chrome spike studs on the bracer, warts moved off the
+fist, knuckle nubs removed (they read as warts). 3177 tests, tsc, gate green. Second look: shoulders moved to CAMERA space (a rig-space shoulder swung in
+front of the eye under free-aim pitch), grain moved into the normal +
+roughness maps (pit field), finer tile, greener/darker tone. Then: with free aim pitched up the
+straight hand-to-shoulder line ran THROUGH the receiver — the IK now has a
+bend floor (34°) toward a camera-space outward hint, so the forearm always
+leaves the hand past the gun. Owner: "good job for now" — **merged.** Follow-up **F-arm.2 — the watch
+as an in-game device** (shells / health / timer drawn on the screen canvas).
+Owner, 2026-09-04: "the arm itself probably needs some work to more
+accurately resemble the goblin SDF model (I guess that will be the main
+player character)". Today each arm is one skin-coloured capsule from the hand
+orb to a fixed elbow; the goblin blob has a forearm bar r=0.028 with an elbow
+blob r=0.038 over a 0.235 bone (`goblin-skin.ts` already carries the
+numbers), mottle, and a real hand. Options: pose the SDF goblin's own arm
+prims in the view-model (the hands sheet / hand-volume path already marches a
+hand), or author a low-poly forearm+hand in Blender alongside the shorty.
+Not a blocker; the elbow-anchor from F-eject gives whichever replacement its
+attachment point.
 
 **SHORTY BREECH MECHANISM — DONE (2026-09-03), all 8 tasks** —
 [plan](docs/superpowers/plans/2026-09-03-shorty-breech-mechanism.md) ·
@@ -2008,6 +2193,33 @@ Key reference docs (open these before touching their area):
   wounds exposed hull spheres inside craters (fixed by wound exclusion in
   `buildHullInstances`). Residual: stacked-vs-solo still ~4.8x — hidden bodies
   march to the clamp through interpenetrating fields; fold into `X1.10`.
+- `X1.29` [x] **Near-wound step multiplier — MEASURED, DELIBERATELY LEFT AT
+  0.6.** Owner A/B'd 0.6 against the sound 0.4 on screen (`setWoundStep`) and
+  could not tell them apart, so the frame budget won. Everything below is why
+  it is a decision now rather than an oversight, so it can be re-taken without
+  re-deriving. The wounded field is not a distance bound and nobody had
+  measured how badly: max |grad| is 2.06 for ONE stock blast (sound
+  multiplier 0.48) and 3.92 for a blast + six-pellet spread (0.26), against a
+  0.6 inherited from the shell's fbm under-relaxation. What 0.6 looks like,
+  counted over every pixel of a real frame on a shotgunned torso: **4.32% of
+  that body's hit pixels at 1.5 m** (2.16% at 2.5 m, 0.97% at 4 m) shaded from
+  inside the meat — contiguous patches, not speckle, 686 of them at 2.5 m with
+  normals >45° wrong, tissue-ramp depth up to 13.7 mm too deep. STABLE across
+  camera motion (2892 of 2903 pixels persist over 0.23°), which is why it read
+  as gore rather than as a bug. A single wound is clean at any value — this is
+  a STACKING artifact. 0.4 removes every >45° error and 92% of the pixels for
+  **+23% / +18% / +16% march steps at 2 / 4 / 8 m** on a wounded body (0.3
+  removes the sub-threshold remainder for +45/+36/+32%); unwounded bodies and
+  hit counts unchanged. Re-take it live with `__sdfGame.setWoundStep(0.4)` /
+  `__sdfLab.setWoundStep(0.4)` (perfCfg.z; 0 = the compiled constant), one
+  constant to make it permanent. Characterised by
+  `webgpu/march-step-soundness.test.ts` — the measured gradient, and one
+  recorded ray pinned BOTH ways (shades 11 mm inside at 0.6, stops in front of
+  the wall at 0.4), so the file stays honest whichever value ships. Related,
+  NOT
+  fixed: `coneMarch` steps `(d - r) * marchCfg.y` with no wound term at all,
+  so an enabled cone pre-pass can certify a crater's interior as empty (cone
+  ships OFF).
 - `X1.12` [ ] **Research pass on iquilezles.org** — <https://iquilezles.org/articles/raymarchingdf/>
   and the surrounding articles/code. Deferred, not urgent.
 

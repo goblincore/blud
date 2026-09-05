@@ -1,0 +1,283 @@
+# Soldier — a heavy-set enlisted grunt, authored from a DESCRIPTION (the
+# treatment arm of the A/B against mesh-fitting; see commit "plan: author the
+# soldier from a DESCRIPTION"). The reference plate
+# (docs/dev-notes/refs/soldier-views-ref.png) was read once for the brief and
+# put down: nothing below is fit to it. The mesh in refs/soldier-mesh/ was
+# used ONLY to bake the face decal, which is what blob:face-bake is for.
+#
+# THE READ, crown to boots, in three beats: a FLAT GREEN TOP, then a HEAVY
+# SHOULDER YOKE, then a WIDE BELTED WAIST. Everything else is a supporting
+# mass. He is the ordinary human in a bestiary of monsters (goblin, clown,
+# zombie), so he is deliberately the PLAINest member of the cast — but plain
+# in the house idiom: few large smooth masses, bold colour blocking doing the
+# identifying work (grey-green plate, red chest and boots, olive trousers,
+# green hair), two or three exaggerated features (the flat-top, the
+# pauldrons, the belt) and no fine detail. Nothing here has a groove, a
+# pleat, or a painted seam, because none of the approved three do.
+#
+# Cast check: the goblin carries its whole character in ears+nose+lips over a
+# smooth pot-bellied body; the clown in hat+nose+shoes. The soldier's
+# equivalents are flat-top+pauldrons+belt. Same primitive count, same blend
+# weights, same "one colour per garment" rule.
+
+model soldier
+  height 1.70
+  # humanoid | digitigrade. Checked, not decorative — see blob-checks.ts.
+  stance humanoid
+
+skeleton
+  # Root at 0.87 so the leg chain (0.42 + 0.42 below the pelvis tail at 0.97)
+  # lands the ankle at 0.13 — legs are exactly half the standing height,
+  # which is what keeps him an ordinary human next to the goblin's stumps
+  # and the zombie's stoop.
+  root pelvis at 0.87 len=0.10
+
+  # Upright, no hunch — the zombie owns the stoop in this cast. The tiniest
+  # backward lean (-1 deg) keeps the chest plate from tipping the silhouette
+  # forward in profile.
+  bone spine1 parent=pelvis dir=up pitch=-1 len=0.16
+  bone chest  parent=spine1 dir=up pitch=-1 len=0.17
+  bone spine2 parent=chest  dir=up pitch=0  len=0.06
+  bone neck   parent=spine2 dir=up pitch=0  len=0.08
+  # Carries the face block: at=0.55 puts the cranium centre at 1.561, chin
+  # ~1.48, flesh crown ~1.647; the hair cap tops at 1.69. Head is 1/8 of
+  # 1.70 as briefed.
+  bone skull  parent=neck   dir=up pitch=2  len=0.22
+
+  mirror
+    # Shoulder socket at x 0.14, y 1.36 — the goblin lesson applies: shoulder
+    # reach is a function of chest width. The chest flesh here is half-width
+    # ~0.115, so a 0.04/0.10 clavicle lands the socket just proud of it.
+    bone clavicle parent=spine2  side=0.040 dir=side  len=0.100
+    # Arms hang DOWN and slightly OUT (tilt 8) so the bare arm clears the
+    # belt slab; the schoolgirl measured the same fog line (<=6 deg melts
+    # arm and waist fields together).
+    bone upperarm parent=clavicle dir=down tilt=8 pitch=2  len=0.26
+    bone forearm  parent=upperarm dir=down tilt=4 pitch=8  len=0.24
+    bone hand     parent=forearm  dir=down pitch=6         len=0.095
+    # Legs: dead straight with a whisper of outward slant, the "at ease"
+    # stand. No bow — the goblin owns the bow.
+    bone thigh    parent=pelvis dir=down tilt=2 side=0.068 len=0.42
+    bone shin     parent=thigh  dir=down tilt=2            len=0.42
+    # The foot bone only positions the boot prims (the house pattern).
+    bone foot     parent=shin   dir=fwd                    len=0.13
+  end
+
+body
+  # ============================================================
+  # TORSO — flesh under armour. Almost none of this is visible: the cuirass,
+  # belt and trousers cover it. It exists to fuse limbs to trunk.
+  # ============================================================
+  # Hips: trousered (olive). This is the TOP of the camo fatigues.
+  # BARE TORSO (owner, 2026-09-04: "remove his shirt — all clothing should be
+  # mesh more or less"). These three masses were painted olive/dark as a
+  # sleeveless top; unpainted they take the palette's skin, so the shirt, the
+  # belt, its pouches and its buckle all leave the .blob and become the kit's
+  # job. What is left here is body.
+  # THE HIPS WEAR THE TROUSERS (owner, 2026-09-05: "fix the hole in his pants
+  # so his crotch isn't showing flesh"). This mass lost its paint when the
+  # shirt came off, and unpainted means flesh -- so bare skin showed at the
+  # crotch between two olive thighs. Same hex as the thighs, so the trouser
+  # line runs unbroken from waist to knee. The chest and belly above stay bare.
+  blob torso on pelvis at=0.40 r=0.115 wide=1.00 tall=0.90 deep=0.78 blend=0.010 color=5c5d41
+  # Waist: trouser top rising to the belt line.
+  bar  torso on spine1 from=0.40 to=1.00 r=0.108 r2=0.105 deep=0.75 blend=0.008
+  # Chest: the sleeveless top under the plate — only a dark crescent shows
+  # at the armpits and midriff, which is the point: bare arms and dark vest
+  # against hard plate is most of the read.
+  bar  torso on chest  from=0.20 to=0.95 r=0.105 r2=0.115 deep=0.82 blend=0.008
+
+  # ============================================================
+  # THE CUIRASS — machined plate, proud of the torso. box + metal exist for
+  # exactly this. Grey-green, flat-fronted, hard-edged.
+  # ============================================================
+  # NO `metal` on the big plates: metal shades as a diffuse floor plus
+  # tinted specular, and under the lab's single key that reads BLACK from
+  # most yaws (first shoot, 2026-09-04). Painted + moderate gloss keeps the
+  # machined edge (box, tight round) and lets the grey-green show. metal
+  # stays only on small trim (buckle), where dark is fine.
+  # tall 0.70 / at 0.60: the cuirass ENDS above the belt with a band of dark
+  # vest between (the reference's midriff break), and its top stays below
+  # the pauldron bar so yoke and chest read as two masses, not one T.
+  # deep 0.72, not 0.55: at 0.55 the profile torso was paper-thin under a
+  # yoke that wide — a barrel chest carries the plate, a plank does not.
+  # The muted-red front plate inset, one size smaller and standing a clear
+  # centimetre prouder than the cuirass face (v1 sat 4 mm INSIDE it and
+  # vanished). The reference's single loudest colour decision, kept.
+
+  # ============================================================
+  # THE BELT — the third beat of the silhouette. A wide dark slab breaking
+  # the torso's line, plus bold pouches. Pouches are BOXES, not blobs:
+  # issued webbing is rectangular.
+  # ============================================================
+  # Pouch pair, front-left and front-right of the buckle.
+  # Centre buckle — one small metal box.
+
+  # ============================================================
+  # PAULDRONS — the second beat. One big flat plate per shoulder, sitting
+  # ON TOP of the deltoid (offset y +0.03) and spreading wider than the arm
+  # socket, so the yoke reads from the front as a single hard bar across
+  # the shoulders.
+  # ============================================================
+
+  # ============================================================
+  # ARMS — BARE, thick, skin. The deltoid must show below the pauldron's
+  # lower edge and the forearm must be visibly fatter than a shirted wrist.
+  # Unpainted = flesh, so the palette's skin carries them.
+  # ============================================================
+  # THICKER ARMS (owner, 2026-09-04: "more muscular"). Deltoid 0.060 -> 0.072,
+  # upper arm 0.048/0.042 -> 0.060/0.048, forearm cap 0.042 -> 0.050 and the
+  # shaft 0.044/0.038 -> 0.054/0.042. The taper is kept STEEPER on the upper
+  # arm than before (0.060 -> 0.048 rather than 0.048 -> 0.042) so the mass
+  # reads as a deltoid falling into a narrower elbow rather than a uniform
+  # tube -- a thicker cylinder alone reads as fat, not muscle.
+  blob arm on upperarm at=0.06 r=0.098 tall=1.05 blend=0.010 mirror
+  bar  arm on upperarm from=0.12 to=0.95 r=0.086 r2=0.058 blend=0.008 mirror
+  blob arm on forearm  at=0.00 r=0.064 blend=0.006 mirror
+  # The issued-grunt forearm: fatter than the upper arm's lower end.
+  bar  arm on forearm  from=0.05 to=0.95 r=0.072 r2=0.048 blend=0.008 mirror
+  # Fist — a blunt mitt, no fingers (house rule: the goblin's grabby hand is
+  # the only articulated one in the cast).
+  # ORB HANDS (owner, 2026-09-05). Deliberately a SPHERE -- wide/tall/deep all
+  # 1.00, where this was a flattened 0.90/1.00/1.20 paddle. A paddle at the end
+  # of a hanging arm reads as a smear at crotch height; an orb reads as a fist,
+  # which is also what the shotgun will need something to grip with. Slightly
+  # larger (0.044 -> 0.052) to carry against the bulked forearm, and blended
+  # tighter so the wrist stays a wrist.
+  blob arm on hand at=0.55 offset=(0,0,0.008) r=0.052 wide=1.00 tall=1.00 deep=1.00 blend=0.005 mirror
+
+  # ============================================================
+  # LEGS — camo fatigues. Camo is done the house way: TWO bold olive blocks
+  # (thigh / shin), not pattern noise. Knee plates and boots break the leg
+  # into plate / cloth / plate.
+  # ============================================================
+  # A BARE FLESH FOOT, because removing the boots removed his feet entirely and
+  # left the legs ending at the ankle. Feet are body; boots are the kit's, and
+  # they go OVER this. Rounded rather than boxed -- a bare foot has no machined
+  # edges, and the boot that wraps it will supply the hard silhouette.
+  # The foot has TWO constraints and they pull against each other: it must
+  # touch the shin (or strandedOf reports it floating, which is how the boots
+  # hid a 142 mm gap) and it must reach the ground. tall 1.30 rather than a
+  # lower offset alone -- dropping it far enough to stand detaches it, so the
+  # ankle grows down to meet the ground instead of the whole foot sliding.
+  blob leg on foot at=0.40 offset=(0.004,-0.072,0.020) r=0.042 wide=0.95 tall=1.30 deep=1.60 blend=0.008 mirror
+
+  # LEGS ARE BODY NOW. The knee plates, the boots and the boot-shaft paint on
+  # the shin all left for the kit (owner, 2026-09-04) -- webbing, plate and
+  # footwear are mesh. The trousers stay as PAINT for the moment: they are
+  # cloth on the leg rather than a separate object, so they cost nothing here.
+  blob leg on thigh at=0.00 r=0.075 deep=1.05 blend=0.008 mirror core color=5c5d41
+  bar  leg on thigh from=0.02 to=1.00 r=0.072 r2=0.058 deep=1.05 blend=0.007 mirror color=5c5d41
+  # Knee plate — hard box proud of the knee.
+  # to 0.68 -> 1.00. The shin used to stop at 68% of its bone because the BOOT
+  # covered the rest; with the boot gone to the kit, it left the flesh foot
+  # stranded 142 mm below the leg -- caught by strandedOf, which is the defect
+  # that check was written for, found in work an hour old. Tapered a little
+  # harder (r2 0.050 -> 0.044) so the ankle narrows rather than ending blunt.
+  bar  leg on shin from=0.08 to=1.00 r=0.056 r2=0.044 blend=0.006 mirror color=676549
+
+  # ============================================================
+  # BOOTS — heavy, muted red (the second red accent), with a darker sole.
+  # The boot SHAFT covers the lower shin, so the trouser block above ends
+  # at 0.68 and the red starts there.
+  # ============================================================
+  # Foot mass: heel behind the ankle, toe well forward (the schoolgirl
+  # shoe's authored-as-world-displacement pattern).
+  # (a box takes no tip= — the foot's length is all in deep= and offset z.)
+  # Sole — a flat dark slab under the foot.
+
+  # Neck: skin, thick — a grunt's neck, not the schoolgirl's 0.028.
+  bar head on neck from=0.05 to=0.95 r=0.036 deep=1.10 blend=0.004
+
+  # ============================================================
+  # THE FLAT-TOP — the single most identifying feature. A SMALL squared cap
+  # sitting ON the crown, box-shaped so it cannot read round. The 2026-09-04
+  # lesson stands: a big helmet box reads as "a green rectangle bush" and
+  # breaks headShape()'s face projection; paint follows the NEAREST prim, so
+  # this only needs to be nearest at the crown, not to enclose the skull.
+  # tall 0.32 keeps it a CAP; the cranium's own roundness below it is skull,
+  # not hair.
+  # ============================================================
+  # offset.y 0.104 -> 0.082 (2026-09-04). MEASURED: the flat-top's underside
+  # sat at y 1.6386 while the cranium's crown reaches 1.6251 -- it FLOATED
+  # 13.5 mm clear of the head it is supposed to sit on. The defect was in the
+  # character as authored; the pauldrons hid it, and removing them exposed it.
+  # 22 mm down puts the box 8 mm INTO the crown, so the two fuse.
+  blob head on skull at=0.55 offset=(0,0.074,-0.004) r=0.070 wide=1.02 tall=0.30 deep=0.96 box round=0.10 blend=0.004 color=2e6034
+  # A thin slab down the back of the head: the cut wraps the skull in the
+  # bake and in the brief's read, and from behind an all-skin head loses
+  # him. Flat, shallow, and proud only 6 mm.
+  blob head on skull at=0.62 offset=(0,0.028,-0.062) r=0.068 wide=0.92 tall=0.62 deep=0.30 box round=0.15 blend=0.004 color=2e6034
+
+# ============================================================
+# FACE BLOCK — a heavy squarish skull under the cap: wide jaw for the beard,
+# heavy low brow for the scowl. The face ITSELF is the baked decal below;
+# three dispatches proved painted-prim features read as a visor band, and no
+# eye/mouth prims are added here for that reason.
+# ============================================================
+face
+  headRadius 0.075
+  headWidth  0.980
+  headHeight 1.150
+  headDepth  1.050
+  jawWidth   1.000
+  jawHeight  0.900
+  jawDrop    0.060
+  jawJut     0.023
+  noseLength 0.034
+  noseWidth  0.531
+  noseDrop   0.014
+  browHeavy  0.001
+  browRise   0.050
+  headBlend  0.005
+
+# The mesh's own face, baked flat (npm run blob:face-bake -- soldier) and
+# pasted on: flat-top hairline, red eyes under a knitted brow, beard, open
+# shouting mouth. `decal 1` is load-bearing — the loader fetches the PNG
+# only if decal > 0.5.
+#
+# Projection solved against the bake's own feature coordinates (uv measured
+# off soldier-face.png: chin v 0.02, eyes v 0.32, ear edges u 0.27/0.71,
+# uv = hs * scale + centre with hs in skull semi-axes): scale 0.24/0.33,
+# centre 0.50/0.27. The bake's bottom third is shoulders, so centreY sits
+# far below the sheet default — that is the bake's framing, not a mistake.
+sheet
+  image       soldier-face.png
+  decal       0
+  projScaleX  0.180
+  projScaleY  0.200
+  projCentreX 0.50
+  projCentreY 0.490
+  # Owner-tuned in the lab, 2026-09-04. THE COLOUR BAKE IS THE FACE -- the
+  # greyscale-map experiment was tried and reverted: luma modulation threw
+  # away the brow, nose and beard definition the colour bake carries, and the
+  # result read flatter, not more like the zombie.
+  #
+  # eyeGlowCut 0.670 is what makes the eyes glow, and it is the whole trick.
+  # The bake's max luma is 0.855, so at the 0.880 default NOTHING clears the
+  # glow mask -- which is why the eyes were dead. Dropping the cut below 0.855
+  # lets the bake's own painted red eyes light up, with no mask, no punched
+  # texels and no second image. decal 0 (multiply) is what lets them read as
+  # light rather than paint.
+  # eyeGlow is the GENERATED sheet's painted-eye brightness and does nothing
+  # for a baked face; eyeGlowAmp is the shader-side multiplier that does.
+  eyeGlow     0.500
+  eyeGlowAmp  0.500
+  eyeGlowCut  0.670
+  texRelief   1.400
+  texStrength 1.000
+
+# Skin around #cb956a as briefed (sRGB -> linear). Drier than the zombie
+# (wetness 0.15 vs latex-wet), warmer mottle. Wounds stay red.
+palette
+  baseColor     0.606 0.306 0.145
+  deepColor     0.50 0.08 0.08
+  charColor     0.20 0.12 0.09
+  specIntensity 0.45
+  specRoughness 0.40
+  fresnelBoost  0.35
+  translucency  0.20
+  wetness       0.15
+  mottleAmp     0.15
+  mottleScale   1.4
+  mottleColor   0.45 0.25 0.12
