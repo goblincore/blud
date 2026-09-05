@@ -20,6 +20,12 @@ import { makeRng, WANDER_TUNING, headingDir, type WanderBounds } from './wander'
 import { len, sub, dot } from './vec';
 import type { LimbId, Vec3 } from './types';
 import type { Wound } from './damage';
+import { compileBlob } from './blob-compile';
+import { parseBlob } from './blob-parse';
+import soldierSrc from './characters/soldier.blob?raw';
+import { SOLDIER_PROFILE } from './motion-profile';
+import { CARRIES, GUN_GRIP, gunPoseFromArm, gunPoint } from './carry';
+import { RUN, rotateYaw } from './gait';
 
 const DT = 1 / 60;
 const BOUNDS: WanderBounds = { minX: -1.5, maxX: 1.5, minZ: -1.5, maxZ: 1.5 };
@@ -84,6 +90,14 @@ function cruising(seed: number): MotionState {
 
 function blastWound(): Wound {
   return { primIdx: 0, local: [0, 0, 0], radius: 0.13, type: 'blast', ageSec: 0 };
+}
+
+function soldierJoints(): MotionJoints {
+  const body = buildBody(compileBlob(parseBlob(soldierSrc)));
+  const bound = bindRig(body);
+  const j = makeMotionJoints(body, bound.rig.restPose);
+  if (!j) throw new Error('soldier has no motion joints');
+  return j;
 }
 
 describe('makeMotionJoints', () => {
@@ -510,6 +524,75 @@ describe('applyFloorContact', () => {
     expect(applyFloorContact([air], G)[0]).toEqual(air);
     const pin = { pos: [0, G - 5, 0], prev: [0, G - 5, 0], pinned: true } as RigPoint;
     expect(applyFloorContact([pin], G)[0]).toEqual(pin);
+  });
+});
+
+describe('soldier motion — profile, lean, carry', () => {
+  const CFG: MotionConfig = { enabled: true, wander: false, profile: SOLDIER_PROFILE, forceSpeed: 3.4 };
+
+  it('forceSpeed drives the blend and the run weight without wander', () => {
+    const j = soldierJoints();
+    const { frame, state } = run(j, makeMotionState(3, [0, 0, 0]), CFG, 120);
+    expect(frame.blend).toBeCloseTo(1, 3);
+    expect(state.runWeight).toBe(1);
+    expect(frame.gaitName).toBe('run');
+    const walk = run(j, makeMotionState(3, [0, 0, 0]), { ...CFG, forceSpeed: 1.0 }, 120);
+    expect(walk.state.runWeight).toBe(0);
+    expect(walk.frame.gaitName).toBe('march');
+  });
+
+  it('the run lean pitches the head forward of the hips by ~sin(12°)·height', () => {
+    const j = soldierJoints();
+    // headAlive false isolates the lean from the head aim: the soldier's
+    // rest skull points straight UP (unlike the zombie's hunch), so the
+    // horizon gaze drives the head to its 0.5 rad pitch clamp and would
+    // swamp the lean measurement (the composition is additive — no ordering
+    // or cone re-anchoring separates them). Cf. the idle-pose test above.
+    const { frame } = run(j, makeMotionState(3, [0, 0, 0]), CFG, 90,
+      () => ({ ...NO_SIGNALS(), headAlive: false }));
+    const hips = frame.restPose[j.index.hips]!, head = frame.restPose[j.index.head]!;
+    const dz = head[2] - hips[2];
+    const rise = head[1] - hips[1];
+    const expected = Math.sin(RUN.torsoLean * Math.PI / 180) * Math.hypot(rise, dz);
+    expect(dz).toBeGreaterThan(expected * 0.6);
+    expect(dz).toBeLessThan(expected * 1.6);
+  });
+
+  it('carry: the left hand lands on the gun fore-end; no arm segment stretches', () => {
+    const j = soldierJoints();
+    const cfg: MotionConfig = { enabled: true, wander: false, profile: SOLDIER_PROFILE, forceSpeed: 0, carryOverride: 'hip' };
+    const { frame } = run(j, makeMotionState(3, [0, 0, 0]), cfg, 30);
+    const P = frame.restPose;
+    const right = rotateYaw([1, 0, 0], frame.bodyYaw);
+    const gun = gunPoseFromArm(P[j.index.elbowR]!, P[j.index.handR]!, right, CARRIES.hip.gunPitch);
+    const fore = gunPoint(gun, GUN_GRIP.foreHand);
+    expect(len(sub(P[j.index.handL]!, fore))).toBeLessThan(0.02);
+    for (const [s, e, h, lens] of [
+      ['shoulderL', 'elbowL', 'handL', j.arm.L], ['shoulderR', 'elbowR', 'handR', j.arm.R],
+    ] as const) {
+      expect(len(sub(P[j.index[e]]!, P[j.index[s]]!))).toBeLessThan(lens[0] * 1.01);
+      expect(len(sub(P[j.index[h]]!, P[j.index[e]]!))).toBeLessThan(lens[1] * 1.01);
+    }
+    expect(frame.gun).not.toBeNull();
+    expect(len(sub(frame.gun!.root, gun.root))).toBeLessThan(1e-9);
+  });
+
+  it('hand tips and toes follow their parents', () => {
+    const j = soldierJoints();
+    const { frame } = run(j, makeMotionState(3, [0, 0, 0]), CFG, 45);
+    const P = frame.restPose;
+    const restTip = sub(j.base[j.index.handTipR]!, j.base[j.index.handR]!);
+    expect(len(sub(P[j.index.handTipR]!, P[j.index.handR]!))).toBeCloseTo(len(restTip), 6);
+    const restToe = sub(j.base[j.index.toeL]!, j.base[j.index.footL]!);
+    expect(len(sub(P[j.index.toeL]!, P[j.index.footL]!))).toBeCloseTo(len(restToe), 6);
+  });
+
+  it('the zombie with no profile is unchanged (pins cover the numbers; this covers the fields)', () => {
+    const j = realJoints();
+    const { frame, state } = run(j, makeMotionState(3, [0, 0, 0]), CFG_ON, 10);
+    expect(frame.gun).toBeNull();
+    expect(frame.gaitName).toBe('shamble');
+    expect(state.runWeight).toBe(0);
   });
 });
 

@@ -50,13 +50,17 @@ import type { Wound, WoundType } from './damage';
 import type { LimbId, Vec3 } from './types';
 import { add, len, normalize, qFromAxisAngle, qRotate, scale, sub } from './vec';
 import type { RigPoint } from './rig';
-import type { GaitJointName } from './gait';
-import { GAIT_TUNING, jointNamesForBody, rotateYaw, stepGait, type ArmStyle } from './gait';
+import type { GaitJointName, GaitProfile } from './gait';
+import { blendProfiles, GAIT_TUNING, jointNamesForBody, rotateYaw, stepGait, type ArmStyle } from './gait';
+import { runWeight, ZOMBIE_PROFILE, type MotionProfile } from './motion-profile';
+import {
+  armPivot, CARRIES, GUN_GRIP, gunPoseFromArm, gunPoint, type CarryName, type GunPose,
+} from './carry';
 import type { WanderBounds, WanderState } from './wander';
-import { headingDir, stepWander, WANDER_TUNING, wrapPi, type Rng } from './wander';
+import { headingDir, stepWander, wrapPi, type Rng } from './wander';
 import type { PlantState, AimState } from './ik';
 import {
-  IK_TUNING, makeAim, makePlant, solvePlantedLeg,
+  IK_TUNING, makeAim, makePlant, poleReflect, solveChain, solvePlantedLeg,
   stepAim, stepPlant,
 } from './ik';
 import type { StaggerKind, StaggerState } from './stagger';
@@ -272,6 +276,12 @@ export interface MotionState {
   bodyYaw: number;
   /** Gait amplitude 0..1 — follows wander speed / the wander toggle. */
   blend: number;
+  /** walk→run blend weight last frame (diagnostic + hysteresis-free). */
+  runWeight: number;
+  /** Fire hold: seconds left holding the fire carry; 0 = none. */
+  fireHold: number;
+  /** Seconds since the last shot (Infinity before the first). */
+  sinceFire: number;
   /** Last frame's root shift (kept so a fall can freeze it). */
   lastShift: Vec3;
   /** Root shift captured when the fall started; null while standing. */
@@ -291,6 +301,9 @@ export function makeMotionState(seed: number, start: Vec3): MotionState {
     recoil: { joint: null, dirWorld: [0, 0, 0], amp: 0, age: 0 },
     bodyYaw: 0,
     blend: 0,
+    runWeight: 0,
+    fireHold: 0,
+    sinceFire: Infinity,
     lastShift: [0, 0, 0],
     fallShift: null,
   };
@@ -309,6 +322,14 @@ export interface MotionConfig {
   /** Gaze-follow gain override 0..1 — defaults to MOTION_TUNING.gazeFollow.
    *  0 pins the gaze to the wander target (the creepy variant). */
   gazeFollow?: number;
+  /** Per-character profile. Absent = the zombie's (shamble/reach, stock cruise). */
+  profile?: MotionProfile;
+  /** Treadmill: use this speed (m/s) for the gait blend and run weight
+   *  instead of the wander speed, with the body standing still. For the
+   *  lab's pose captures. */
+  forceSpeed?: number;
+  /** Hold this carry regardless of gait/fire state (lab captures). */
+  carryOverride?: CarryName;
 }
 
 /** What happened since the last frame — collected by the wiring between
@@ -362,6 +383,12 @@ export interface MotionFrame {
   /** Diagnostics for the handle/panel. */
   speed: number;
   blend: number;
+  /** The active gait profile's name ('shamble' | 'march' | 'run'). */
+  gaitName: string;
+  /** The held gun's pose this frame, world; null when the profile has no carries. */
+  gun: GunPose | null;
+  /** World-space point shoves for the wiring to apply with impulseAt this frame. */
+  kicks: { joint: GaitJointName; delta: Vec3 }[];
 }
 
 const SOLVE = {
@@ -399,6 +426,14 @@ function clamp(n: number, lo: number, hi: number): number {
   return n < lo ? lo : n > hi ? hi : n;
 }
 
+/** Arm style for this frame: an explicit config wins; else the blended gait
+ *  profile's style; else (no profile at all) the historical default. */
+function pickArmStyle(cfg: MotionConfig, gaitProfile: GaitProfile): ArmStyle {
+  if (cfg.armStyle) return cfg.armStyle;
+  if (cfg.profile) return gaitProfile.armStyle;
+  return GAIT_TUNING.armStyle;
+}
+
 // ---------------------------------------------------------------------------
 // The frame.
 // ---------------------------------------------------------------------------
@@ -420,6 +455,7 @@ export function stepMotion(
   const dt = Math.max(sig.dt, 0);
   const idx = joints.index;
   const havePoints = points.length === joints.names.length;
+  const profile = cfg.profile ?? ZOMBIE_PROFILE;
 
   // --- collapse owns the mode: meter accumulation + trigger matrix ---------
   const collapse = stepCollapse(state.collapse, {
@@ -445,7 +481,7 @@ export function stepMotion(
 
   // --- locomotion (standing only) -----------------------------------------
   let wander = state.wander;
-  if (!collapsed && cfg.wander) wander = stepWander(wander, rng, dt, bounds);
+  if (!collapsed && cfg.wander) wander = stepWander(wander, rng, dt, bounds, profile.cruise);
 
   // --- body yaw: the damped rigid turn -------------------------------------
   // The whole body (rest pose, gait/stagger offsets, aim cone, plants via
@@ -467,13 +503,20 @@ export function stepMotion(
 
   // Gait amplitude follows actual speed — idle beats and the wander toggle
   // fade the stride out instead of stepping in place like a treadmill.
-  const wantBlend = !collapsed && cfg.wander
-    ? clamp(wander.speed / (WANDER_TUNING.speed * MOTION_TUNING.fullStrideAt), 0, 1)
+  // forceSpeed is the lab treadmill: the body stands still but blends as if
+  // moving at that speed. For the zombie profile.cruise === WANDER_TUNING
+  // .speed and forceSpeed is undefined, so this arithmetic is unchanged.
+  const speedForBlend = cfg.forceSpeed !== undefined ? cfg.forceSpeed : (cfg.wander ? wander.speed : 0);
+  const wantBlend = !collapsed && (cfg.wander || cfg.forceSpeed !== undefined)
+    ? clamp(speedForBlend / (profile.cruise * MOTION_TUNING.fullStrideAt), 0, 1)
     : 0;
   const blend = clamp(
     state.blend + clamp(wantBlend - state.blend, -MOTION_TUNING.blendRate * dt, MOTION_TUNING.blendRate * dt),
     0, 1,
   );
+  const rw = collapsed ? 0 : runWeight(profile, speedForBlend);
+  const gaitProfile = profile.gait.walk === profile.gait.run
+    ? profile.gait.walk : blendProfiles(profile.gait.walk, profile.gait.run, rw);
 
   // --- the gait clock; a blast's knock is baked in (periodic ⇒ invisible) --
   const skew = {
@@ -481,10 +524,10 @@ export function stepMotion(
     missing: sig.missing,
     wounded: sig.wounded,
   };
-  const armStyle = cfg.armStyle ?? GAIT_TUNING.armStyle;
+  const armStyle = pickArmStyle(cfg, gaitProfile);
   const gait = stepGait(
     { time: state.gait.time + stagger.phaseKnock, seed: state.gait.seed },
-    skew, dt, armStyle,
+    skew, dt, armStyle, gaitProfile,
   );
 
   // --- assemble the standing rest targets ----------------------------------
@@ -498,11 +541,17 @@ export function stepMotion(
     wander.pos[0] - joints.pelvis[0], 0, wander.pos[2] - joints.pelvis[2],
   ];
   const pivot = joints.pelvis;
-  // Reach-style arms keep a presence floor so a standing zombie's mummy arms
-  // stay up; every other offset fades with locomotion as before.
+  // Reach- and carry-style arms keep a presence floor so a standing body's
+  // arms stay up (mummy arms / held gun); every other offset fades with
+  // locomotion as before. The carry floor is FULL presence: the carry table
+  // (carry.ts) is tuned so the left shoulder can just reach the gun's
+  // fore-end at presence 1 — a partial carry swings the fore-end out of the
+  // left arm's reach, so a held gun never droops.
   const armPresence = armStyle === 'reach'
     ? Math.max(blend, MOTION_TUNING.reachMinPresence)
-    : blend;
+    : armStyle === 'carry'
+      ? 1
+      : blend;
   const targets: Vec3[] = joints.base.map((base, i) => {
     const name = joints.names[i]!;
     const gaitOff = name === 'pelvis' ? gait.pose.rootOffset : gait.pose.offsets[name];
@@ -519,6 +568,34 @@ export function stepMotion(
       pivot[2] + shift[2] + spun[2] + off[2],
     ];
   });
+
+  // --- torso lean (profiles) ------------------------------------------------
+  // The whole upper body pitches forward about the hips joint: a ROTATION of
+  // targets, so no segment length changes. Zero for the shamble — the branch
+  // is skipped entirely so the zombie's arithmetic is untouched.
+  if (gait.pose.lean !== 0 && !collapsed && idx.hips !== undefined) {
+    const pivotP = targets[idx.hips]!;
+    const right = rotateYaw([1, 0, 0], bodyYaw);
+    // Forward lean = POSITIVE rotation about +right for the up-pointing
+    // spine (right-hand rule takes +y toward +z) — the reach pivot's negated
+    // convention applies to the DOWN-pointing hang, not to this chain.
+    const qLean = qFromAxisAngle(right, gait.pose.lean * blend);
+    const hipsY = joints.base[idx.hips]![1];
+    joints.names.forEach((name, i) => {
+      if (name === 'pelvis' || name === 'hips') return;
+      if (joints.base[i]![1] <= hipsY) return; // legs stay under the body
+      targets[i] = add(pivotP, qRotate(qLean, sub(targets[i]!, pivotP)));
+    });
+  }
+
+  // Pre-override hand/foot targets — the tip/toe follow pass below moves each
+  // secondary point by whatever delta the arm/plant overrides gave its parent.
+  const before = {
+    handL: idx.handL !== undefined ? targets[idx.handL]! : null,
+    handR: idx.handR !== undefined ? targets[idx.handR]! : null,
+    footL: idx.footL !== undefined ? targets[idx.footL]! : null,
+    footR: idx.footR !== undefined ? targets[idx.footR]! : null,
+  };
 
   // --- reach-style arm pivot (motion-polish) --------------------------------
   // The reach pose is a ROTATION about the shoulder anchor, not an additive
@@ -569,6 +646,39 @@ export function stepMotion(
     applyArm('R');
   }
 
+  // --- carry-style arms: the right arm authored, the left hand IK'd --------
+  let gun: GunPose | null = null;
+  const carries = profile.carries;
+  if (armStyle === 'carry' && carries && !collapsed) {
+    const carryName: CarryName = cfg.carryOverride
+      ?? (state.fireHold > 0 ? carries.fire : (rw >= 0.5 ? carries.run : carries.walk));
+    const carry = CARRIES[carryName];
+    const right = rotateYaw([1, 0, 0], bodyYaw);
+    const pelvisX = joints.base[idx.pelvis!]![0];
+    const restSeg = (a: GaitJointName, b: GaitJointName) =>
+      rotateYaw(sub(joints.base[idx[b]!]!, joints.base[idx[a]!]!), bodyYaw);
+    // Right arm: rotations about the shoulder target (sway/stagger/lean ride it).
+    if (!sig.missing.armR) {
+      const iS = idx.shoulderR!, iE = idx.elbowR!, iH = idx.handR!;
+      const inward = joints.base[iS]![0] < pelvisX ? 1 : -1;
+      const r = armPivot(targets[iS]!, restSeg('shoulderR', 'elbowR'), restSeg('elbowR', 'handR'),
+        carry.right, right, inward, armPresence);
+      targets[iE] = add(r.elbow, rotateYaw(stagger.offsets.elbowR ?? Z, bodyYaw));
+      targets[iH] = add(r.hand, rotateYaw(stagger.offsets.handR ?? Z, bodyYaw));
+      gun = gunPoseFromArm(targets[iE]!, targets[iH]!, right, carry.gunPitch);
+    }
+    // Left arm: FABRIK onto the fore-end, elbow poled outward.
+    if (gun && !sig.missing.armL) {
+      const iS = idx.shoulderL!, iE = idx.elbowL!, iH = idx.handL!;
+      const target = gunPoint(gun, GUN_GRIP.foreHand);
+      const chain = solveChain([targets[iS]!, targets[iE]!, targets[iH]!], joints.arm.L, target, SOLVE);
+      const pole = rotateYaw(carry.leftPole, bodyYaw);
+      const elbow = poleReflect(chain[0]!, chain[1]!, chain[2]!, pole);
+      targets[iE] = add(elbow, rotateYaw(stagger.offsets.elbowL ?? Z, bodyYaw));
+      targets[iH] = add(chain[2]!, rotateYaw(stagger.offsets.handL ?? Z, bodyYaw));
+    }
+  }
+
   // --- IK override 1: foot plants ------------------------------------------
   // A blast's recoveryStep releases both locks for one frame (a forced
   // stance edge): the feet catch up to the shoved root, then re-plant.
@@ -610,6 +720,19 @@ export function stepMotion(
       plantLeg(plantR, 'hipR', 'kneeR', 'footR', joints.leg.R);
     }
   }
+
+  // --- secondary points follow their parents --------------------------------
+  // Hand tips and toes are rigid with the hand/foot: whatever the arm and
+  // plant overrides did to the parent, the child moves by the same delta.
+  const follow = (child: GaitJointName, parent: GaitJointName, was: Vec3 | null) => {
+    const ic = idx[child], ip = idx[parent];
+    if (ic === undefined || ip === undefined || !was) return;
+    targets[ic] = add(targets[ic]!, sub(targets[ip]!, was));
+  };
+  follow('handTipL', 'handL', before.handL);
+  follow('handTipR', 'handR', before.handR);
+  follow('toeL', 'footL', before.footL);
+  follow('toeR', 'footR', before.footR);
 
   // --- IK override 2: head aim (tracks the wander target / heading) --------
   // stepAim lays its chain out STRAIGHT along the solved direction, which
@@ -689,6 +812,9 @@ export function stepMotion(
   const nextState: MotionState = {
     wander, gait: gait.state, stagger: stagger.state, collapse: collapse.state,
     plantL, plantR, aim, recoil, bodyYaw, blend,
+    runWeight: rw,
+    fireHold: state.fireHold,
+    sinceFire: state.sinceFire,
     lastShift: shift,
     fallShift: collapsed ? (state.fallShift ?? shift) : null,
   };
@@ -713,6 +839,9 @@ export function stepMotion(
       staggerKind: collapsed ? null : stagger.state.kind,
       speed: collapsed ? 0 : wander.speed,
       blend: collapsed ? 0 : blend,
+      gaitName: gaitProfile.name,
+      gun,
+      kicks: [],
     },
   };
 }
