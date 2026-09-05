@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="430" viewBox="0 0 1120 430">
+  <rect width="1120" height="430" fill="#11131a"/>
+  <style>
+    text { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; fill: #e6edf7; font-size: 14px }
+    .head { font: 600 19px system-ui, sans-serif }
+    .muted { fill: #9aa5b7; font-size: 12px }
+    .ok { fill: #4bd08f }
+    .fallback { fill: #f4bd61 }
+  </style>
+  <text x="24" y="30" class="head">WebGPU RGBA32F zombie gradient readback</text>
+  <text x="24" y="51" class="muted">distance, gx, gy, gz — green is analytic; amber is explicit fallback</text>
+  <text x="24" y="78" class="muted">case</text><text x="312" y="78" class="muted">distance</text>
+  <text x="462" y="78" class="muted">gx</text><text x="612" y="78" class="muted">gy</text>
+  <text x="762" y="78" class="muted">gz</text><text x="912" y="78" class="muted">reason</text>
+  <g transform="translate(0 8)">
+    <text x="24" y="96">sphere-known</text><text x="312" y="96">1.000000</text><text x="462" y="96">1.000000</text><text x="612" y="96">0.000000</text><text x="762" y="96">0.000000</text><text x="912" y="96" class="ok">ok 0</text>
+    <text x="24" y="124">capsule-interior</text><text x="312" y="124">0.160555</text><text x="462" y="124">0.832050</text><text x="612" y="124">0.000000</text><text x="762" y="124">0.554700</text><text x="912" y="124" class="ok">ok 0</text>
+    <text x="24" y="152">capsule-endcap</text><text x="312" y="152">0.206809</text><text x="462" y="152">0.240532</text><text x="612" y="152">0.673489</text><text x="762" y="152">-0.350775</text><text x="912" y="152" class="ok">ok 0</text>
+    <text x="24" y="180">nonuniform-scale</text><text x="312" y="180">0.084637</text><text x="462" y="180">0.212105</text><text x="612" y="180">-0.048507</text><text x="762" y="180">0.420090</text><text x="912" y="180" class="ok">ok 0</text>
+    <text x="24" y="208">rotated-nonuniform</text><text x="312" y="208">0.131887</text><text x="462" y="208">0.313816</text><text x="612" y="208">-0.247284</text><text x="762" y="208">0.430982</text><text x="912" y="208" class="ok">ok 0</text>
+    <text x="24" y="236">smooth-min</text><text x="312" y="236">-0.047500</text><text x="462" y="236">0.200000</text><text x="612" y="236">-0.550000</text><text x="762" y="236">0.225000</text><text x="912" y="236" class="ok">ok 0</text>
+    <text x="24" y="264">smooth-max</text><text x="312" y="264">0.027500</text><text x="462" y="264">-0.100000</text><text x="612" y="264">-0.050000</text><text x="762" y="264">0.475000</text><text x="912" y="264" class="ok">ok 0</text>
+    <text x="24" y="292">anisotropic-blend</text><text x="312" y="292">0.373567</text><text x="462" y="292">0.594422</text><text x="612" y="292">0.486407</text><text x="762" y="292">0.000000</text><text x="912" y="292" class="ok">ok 0</text>
+    <text x="24" y="320">degenerate-axis</text><text x="312" y="320">-0.200000</text><text x="462" y="320">0.000000</text><text x="612" y="320">0.000000</text><text x="762" y="320">0.000000</text><text x="912" y="320" class="fallback">degenerate 2</text>
+    <text x="24" y="348">hard-min-boundary</text><text x="312" y="348">0.000000</text><text x="462" y="348">0.000000</text><text x="612" y="348">0.000000</text><text x="762" y="348">0.000000</text><text x="912" y="348" class="fallback">hard-boundary 3</text>
+    <text x="24" y="376">excluded-invalid-fallback</text><text x="312" y="376">-10.000000</text><text x="462" y="376">0.000000</text><text x="612" y="376">1.000000</text><text x="762" y="376">0.000000</text><text x="912" y="376" class="fallback">unsupported 1</text>
+  </g>
+  <text x="24" y="414" class="muted">Maximum smooth component error vs CPU 1.342e-7 · shader console clean · negative control rejected 16 comparisons</text>
+</svg>

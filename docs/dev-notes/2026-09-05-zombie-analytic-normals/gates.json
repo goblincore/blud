@@ -1,7 +1,7 @@
 {
   "version": 1,
   "reference": "pass",
-  "gpuKernel": "pending",
+  "gpuKernel": "pass",
   "intact": "pending",
   "wounds": "pending",
   "visualEvidence": "pending",
@@ -19,6 +19,12 @@
       "command": "vitest reference (19/19); node gate tests (2/2); tsc --noEmit",
       "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/notes.md",
       "reason": "named endpoint-join and near-axis adversarial cases also passed"
+    },
+    {
+      "commit": "worktree based on dcca600",
+      "command": "vitest reference+kernel; tsc --noEmit; WebGPU kernel phase on owned ports 5251/9251; corrupted-gradient negative control",
+      "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/kernel.json",
+      "reason": "11 real RGBA32F GPU readbacks matched CPU and scalar oracles; explicit fallback reasons passed; negative control produced 16 required failures"
     }
   ]
 }

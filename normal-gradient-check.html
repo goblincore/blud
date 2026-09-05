@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zombie normal-gradient WebGPU check</title>
+  <style>
+    :root { color-scheme: dark; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    body { margin: 0; padding: 20px; background: #11131a; color: #e6edf7; }
+    h1 { margin: 0 0 8px; font: 600 18px system-ui, sans-serif; }
+    #gpu { width: 16px; height: 16px; overflow: hidden; opacity: .15; }
+    #results { display: grid; gap: 4px; margin-top: 12px; }
+    .result { padding: 7px 9px; border-left: 5px solid #7c8496; background: #1a1e29; }
+    .result.ok { border-color: #4bd08f; }
+    .result.bad { border-color: #ff6173; }
+    #status { color: #ff9eaa; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>Zombie analytic-normal kernel samples</h1>
+  <div id="gpu"></div>
+  <div id="status"></div>
+  <div id="results"></div>
+  <script type="module" src="/src/lab/sdf-zombie/webgpu/normal-gradient-probe.ts"></script>
+</body>
+</html>

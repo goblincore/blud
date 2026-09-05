@@ -49,3 +49,13 @@ npx vitest run src/lab/sdf-zombie/webgpu/normal-gradient-reference.test.ts --max
 node --test scripts/lib/normal-gradient-gates.test.mjs
 npx tsc --noEmit
 ```
+
+## Task 2 — isolated WebGPU derivative kernels
+
+The `gpuKernel` gate is `pass`. The isolated Three WebGPU page registered the helpers through a previous-helper-only `wgslFn` chain and rendered one RGBA32F value/gradient sample plus a separate reason-code pass for each fixture. Numeric outputs use `outputNode`, `NoToneMapping`, `NoColorSpace`, `NoBlending`, no fog and an aligned RGBA32F readback.
+
+Eleven named cases ran on the real WebGPU backend: unit sphere, capsule interior, capsule endcap, nonuniform scale, rotated nonuniform scale, smooth min, smooth max, an anisotropic blend, the capsule-axis singularity, a hard-min tie and an invalid branch excluded by the blend. The eight smooth cases matched both Task 1 CPU answers and independent scalar finite differences. Maximum scalar error was `3.085e-8`; maximum gradient-component error was `1.342e-7`. The invalid cases returned reason codes `2` degenerate, `3` hard-boundary and `1` unsupported. The excluded invalid branch conservatively retained `unsupported`, which is compatible with later strict per-branch reason propagation.
+
+The negative control set a diagnostic uniform that negated GPU `gx` after kernel evaluation. The same driver failed 16 CPU/oracle component comparisons; its first failure was the unit sphere's `gx` error `2 > 0.012`. The mutation is confined to the diagnostic entry and is off by default.
+
+Tracked results are in `kernel.json` and `kernel-visualization.svg`. Raw reports and the runtime screenshot are `/tmp/zombie-ng-kernel/` and `/tmp/zombie-ng-kernel-negative/`.

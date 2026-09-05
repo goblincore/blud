@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "phase": "kernel",
+  "referenceGate": "pass",
+  "backend": "webgpu",
+  "passed": true,
+  "command": "node scripts/zombie-normal-gradient-check.mjs --phase kernel --out /tmp/zombie-ng-kernel --vite 5251 --cdp 9251",
+  "tolerances": {
+    "scalar": "abs(error) <= 5e-5 + 1e-4 * abs(reference)",
+    "gradientComponent": "abs(error) <= 2e-3 + 1e-2 * abs(reference)"
+  },
+  "maxErrors": {
+    "cpuScalar": 3.084831801114518e-8,
+    "cpuGradientComponent": 1.3416424143875005e-7,
+    "oracleScalar": 3.084831801114518e-8,
+    "oracleGradientComponent": 1.341499538121127e-7
+  },
+  "cases": [
+    { "name": "sphere-known", "actual": [1, 1, 0, 0], "reasonCode": 0, "expectedReason": "ok" },
+    { "name": "capsule-interior", "actual": [0.1605551391839981, 0.8320503234863281, 0, 0.5547001957893372], "reasonCode": 0, "expectedReason": "ok" },
+    { "name": "capsule-endcap", "actual": [0.20680926740169525, 0.24053168296813965, 0.6734887957572937, -0.3507753312587738], "reasonCode": 0, "expectedReason": "ok" },
+    { "name": "nonuniform-scale", "actual": [0.08463654667139053, 0.21210455894470215, -0.04850732907652855, 0.42009037733078003], "reasonCode": 0, "expectedReason": "ok" },
+    { "name": "rotated-nonuniform", "actual": [0.13188734650611877, 0.3138156533241272, -0.24728445708751678, 0.43098172545433044], "reasonCode": 0, "expectedReason": "ok" },
+    { "name": "smooth-min", "actual": [-0.04749999940395355, 0.19999998807907104, -0.550000011920929, 0.22500000894069672], "reasonCode": 0, "expectedReason": "ok" },
+    { "name": "smooth-max", "actual": [0.027499999850988388, -0.10000000149011612, -0.04999999701976776, 0.4750000238418579], "reasonCode": 0, "expectedReason": "ok" },
+    { "name": "anisotropic-blend", "actual": [0.3735673725605011, 0.5944215059280396, 0.48640692234039307, 0], "reasonCode": 0, "expectedReason": "ok" },
+    { "name": "degenerate-axis", "actual": [-0.20000000298023224, 0, 0, 0], "reasonCode": 2, "expectedReason": "degenerate" },
+    { "name": "hard-min-boundary", "actual": [0, 0, 0, 0], "reasonCode": 3, "expectedReason": "hard-boundary" },
+    { "name": "excluded-invalid-fallback", "actual": [-10, 0, 1, 0], "reasonCode": 1, "expectedReason": "unsupported" }
+  ],
+  "negativeControl": {
+    "command": "node scripts/zombie-normal-gradient-check.mjs --phase kernel --negative-control --out /tmp/zombie-ng-kernel-negative --vite 5251 --cdp 9251",
+    "driverPassed": false,
+    "failureCount": 16,
+    "firstFailure": "sphere-known cpu gx error 2 > 0.012"
+  },
+  "console": ["[vite] connecting...", "[vite] connected."],
+  "artifacts": {
+    "rawPositive": "/tmp/zombie-ng-kernel/kernel.json",
+    "rawNegative": "/tmp/zombie-ng-kernel-negative/kernel.json",
+    "runtimeVisualization": "/tmp/zombie-ng-kernel/numeric-visualization.png",
+    "trackedVisualization": "docs/dev-notes/2026-09-05-zombie-analytic-normals/kernel-visualization.svg"
+  }
+}
