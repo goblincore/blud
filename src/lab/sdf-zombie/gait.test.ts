@@ -3,12 +3,17 @@ import { describe, it, expect } from 'vitest';
 import {
   GAIT_JOINTS,
   GAIT_TUNING,
+  MARCH,
+  RUN,
+  SHAMBLE,
+  blendProfiles,
   jointForBoneEnd,
   jointNamesForBody,
   makeGaitState,
   rotateYaw,
   stepGait,
   type GaitPose,
+  type GaitProfile,
   type GaitSkew,
 } from './gait';
 import { bindRig } from './rig-bind';
@@ -282,7 +287,7 @@ describe('GAIT_TUNING', () => {
     expect(GAIT_TUNING.stanceDuty).toBeGreaterThan(0.4);
     expect(GAIT_TUNING.stanceDuty).toBeLessThan(0.8);
     for (const v of Object.values(GAIT_TUNING))
-      if (typeof v === 'number') expect(v).toBeGreaterThan(0);
+      if (typeof v === 'number') expect(v).toBeGreaterThanOrEqual(0);
   });
 });
 
@@ -392,5 +397,38 @@ describe('joint naming — every rig point of every character gets a name', () =
     expect(p.offsets.toeR).toEqual(p.offsets.footR);
     expect(p.offsets.clavicleL).toEqual(p.offsets.chest);
     expect(p.offsets.spineA[1]).not.toBe(0);
+  });
+});
+
+describe('gait profiles', () => {
+  it('SHAMBLE is GAIT_TUNING by identity and the default', () => {
+    expect(SHAMBLE).toBe(GAIT_TUNING);
+    const a = stepGait(makeGaitState(1), NONE, 0.1, 'swing').pose;
+    const b = stepGait(makeGaitState(1), NONE, 0.1, 'swing', SHAMBLE).pose;
+    expect(b).toEqual(a);
+  });
+  it('run lifts the foot higher and strides longer than march', () => {
+    const lift = (p: GaitProfile) => {
+      let st = makeGaitState(5); let best = 0; let reach = 0;
+      for (let i = 0; i < 240; i++) {
+        const s = stepGait(st, NONE, 1 / 240, 'swing', p); st = s.state;
+        best = Math.max(best, s.pose.offsets.footL[1]); reach = Math.max(reach, s.pose.offsets.footL[2]);
+      }
+      return { best, reach };
+    };
+    expect(lift(RUN).best).toBeGreaterThan(lift(MARCH).best);
+    expect(lift(RUN).reach).toBeGreaterThan(lift(MARCH).reach);
+  });
+  it('blendProfiles lerps scalars and snaps armStyle at 0.5', () => {
+    const half = blendProfiles(MARCH, RUN, 0.5);
+    expect(half.strideLen).toBeCloseTo((MARCH.strideLen + RUN.strideLen) / 2, 9);
+    expect(blendProfiles(MARCH, RUN, 0.49).armStyle).toBe(MARCH.armStyle);
+    expect(blendProfiles(MARCH, RUN, 0.5).armStyle).toBe(RUN.armStyle);
+    expect(blendProfiles(MARCH, RUN, 0).torsoLean).toBe(0);
+    expect(blendProfiles(MARCH, RUN, 1).torsoLean).toBe(RUN.torsoLean);
+  });
+  it('the pose reports the profile lean; shamble reports 0', () => {
+    expect(stepGait(makeGaitState(1), NONE, 0.1, 'swing').pose.lean).toBe(0);
+    expect(stepGait(makeGaitState(1), NONE, 0.1, 'swing', RUN).pose.lean).toBeCloseTo(RUN.torsoLean * Math.PI / 180, 9);
   });
 });

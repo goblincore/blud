@@ -24,8 +24,8 @@ import type { BuildResult } from './build-body';
 const TAU = Math.PI * 2;
 const Z: Vec3 = [0, 0, 0];
 
-/** The two authored arm styles — see GAIT_TUNING.armStyle. */
-export type ArmStyle = 'swing' | 'reach';
+/** The three authored arm styles — see GAIT_TUNING.armStyle. */
+export type ArmStyle = 'swing' | 'reach' | 'carry';
 
 // ---------------------------------------------------------------------------
 // Joint schema — one name per rig point.
@@ -53,10 +53,15 @@ export const GAIT_JOINTS: readonly GaitJointName[] = [
   'spineA', 'spineB', 'clavicleL', 'clavicleR', 'handTipL', 'handTipR', 'toeL', 'toeR',
 ];
 
+/** A GAIT PROFILE — every knob of one way of walking. The zombie's numbers
+ *  are `SHAMBLE` (=== GAIT_TUNING, the historical name, kept for every
+ *  caller and test that reads it). Other characters get their own. */
 /** All gait frequencies and amplitudes in one place — the "motion DNA".
  *  Frequencies are per-stride ratios of the master stride clock so sway/bob
  *  never beat against the steps. */
 export const GAIT_TUNING = {
+  /** Profile name, for readouts. */
+  name: 'shamble',
   /** Stride cycles per second — the master clock. Low on purpose (shamble). */
   strideFreq: 1.05,
   /** Hip-sway cycles per stride (0.5 = one sway per stride cycle). */
@@ -100,6 +105,10 @@ export const GAIT_TUNING = {
    *  (both arms raised toward the heading, slight bob/sway). Default reach:
    *  it is a zombie. */
   armStyle: 'reach' as ArmStyle,
+  /** Forward pitch of the whole upper body about the hips (degrees). The
+   *  motion layer rotates every joint above the hips by this — a rotation
+   *  of targets, never a displacement (the reach-pose lesson). */
+  torsoLean: 0,
   /** Reach style: shoulder pivot pitch (rad) — 0 is the authored hang,
    *  π/2 is straight at the horizon. The reach pose is a ROTATION about the
    *  shoulder anchor, never an additive displacement (see GaitPose.reach):
@@ -156,6 +165,66 @@ export const GAIT_TUNING = {
   /** Damage: lurch wobble frequency (Hz). */
   damageLurchFreq: 0.7,
 } as const;
+
+export type GaitProfile = {
+  -readonly [K in keyof typeof GAIT_TUNING]: (typeof GAIT_TUNING)[K] extends number ? number
+    : (typeof GAIT_TUNING)[K] extends string ? string : (typeof GAIT_TUNING)[K];
+} & { armStyle: ArmStyle };
+
+export const SHAMBLE: GaitProfile = GAIT_TUNING as unknown as GaitProfile;
+
+/** An upright patrol walk: gun carried low, short quiet steps. */
+export const MARCH: GaitProfile = {
+  ...SHAMBLE,
+  name: 'march',
+  strideFreq: 1.6,
+  strideLen: 0.45,
+  footLift: 0.10,
+  footPush: 0.06,
+  stanceDuty: 0.58,
+  bobAmp: 0.02,
+  rockAmp: 0.01,
+  swayAmp: 0.03,
+  shoulderSway: 0.35,
+  armSwing: 0.06,
+  asymJitter: 0.08,
+  armStyle: 'carry',
+  torsoLean: 0,
+};
+
+/** A run: long stride, real foot lift, a flight phase in the bob, a lean. */
+export const RUN: GaitProfile = {
+  ...SHAMBLE,
+  name: 'run',
+  strideFreq: 2.4,
+  strideLen: 0.75,
+  footLift: 0.22,
+  footPush: 0.10,
+  stanceDuty: 0.45,
+  kneeBend: 0.12,
+  bobAmp: 0.04,
+  rockAmp: 0.02,
+  swayAmp: 0.03,
+  shoulderSway: 0.5,
+  armSwing: 0.10,
+  asymJitter: 0.06,
+  armStyle: 'carry',
+  torsoLean: 12,
+};
+
+/** Lerp every numeric knob; strings (name, armStyle) snap at w = 0.5 so the
+ *  hands never hover between two grips. */
+export function blendProfiles(a: GaitProfile, b: GaitProfile, w: number): GaitProfile {
+  const t = w < 0 ? 0 : w > 1 ? 1 : w;
+  if (t === 0) return a;
+  if (t === 1) return b;
+  const out = { ...(t < 0.5 ? a : b) } as Record<string, unknown>;
+  for (const k of Object.keys(a) as (keyof GaitProfile)[]) {
+    const av = a[k], bv = b[k];
+    if (typeof av === 'number' && typeof bv === 'number') out[k] = av + (bv - av) * t;
+  }
+  return out as GaitProfile;
+}
 
 // ---------------------------------------------------------------------------
 // Public types.
@@ -221,6 +290,8 @@ export interface GaitPose {
   offsets: Record<Exclude<GaitJointName, 'pelvis'>, Vec3>;
   /** The reach-style arm pivot spec — present only when armStyle === 'reach'. */
   reach?: ReachPose;
+  /** Upper-body forward lean (rad), from the profile's torsoLean. */
+  lean: number;
   /** Normalised stride phase in [0, 1) — 0 = left-foot stance start. */
   phase: number;
   /** Which feet are currently planted. */
@@ -295,10 +366,11 @@ function stanceProgress(phi: number, duty: number): { stance: boolean; u: number
 export function stepGait(
   state: GaitState, skew: GaitSkew, dt: number,
   armStyle: ArmStyle = GAIT_TUNING.armStyle,
+  profile: GaitProfile = SHAMBLE,
 ): GaitStep {
   const time = state.time + Math.max(dt, 0);
   const s = state.seed;
-  const T = GAIT_TUNING;
+  const T = profile;
 
   const missingL = !!skew.missing.legL;
   const missingR = !!skew.missing.legR;
@@ -390,7 +462,7 @@ export function stepGait(
     if (missing) return { elbow: Z, hand: Z };
     const wounded = side === 'L' ? woundedArmL : woundedArmR;
     const aSide = side === 'L' ? aL : aR;
-    if (armStyle === 'reach') return { elbow: Z, hand: Z };
+    if (armStyle !== 'swing') return { elbow: Z, hand: Z };
     const boost = (side === 'L' ? missingArmR : missingArmL) ? T.missingArmSwingBoost : 1;
     const sideScale = aSide * boost * (wounded ? T.woundedArmSwingScale : 1);
     const swing = Math.sin(Math.PI * stanceProgress(legPhi, duty(side)).u);
@@ -473,6 +545,7 @@ export function stepGait(
       rootOffset,
       offsets,
       reach,
+      lean: T.torsoLean * Math.PI / 180,
       phase: p,
       stance: { legL: legA.stance, legR: legB.stance },
       hop,
