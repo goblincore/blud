@@ -354,6 +354,8 @@ export interface SdfLayer {
   readonly marchTarget: THREE.RenderTarget;
   /** The occluder pre-pass target, for MEASUREMENT readback only. */
   readonly occluderTarget: THREE.RenderTarget;
+  /** The quarter-res depth-prepass target, for MEASUREMENT readback only. */
+  readonly depthPreTarget: THREE.RenderTarget;
   /** Outer-hull entry/exit targets, for MEASUREMENT readback only. */
   readonly shellEntryTarget: THREE.RenderTarget;
   readonly shellExitTarget: THREE.RenderTarget;
@@ -876,6 +878,9 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     /** The occluder pre-pass target, for diagnostics that need occT per pixel
      *  (same access the shell targets already have). */
     get occluderTarget() { return occluder; },
+    /** The quarter-res depth-prepass target, for MEASUREMENT readback only
+     *  (the occupancy probe pattern — never render through it). */
+    get depthPreTarget() { return depthPre; },
     get shellEntryTarget() { return shellEntry; },
     get shellExitTarget() { return shellExit; },
     get targetSize() { return { width: target.width, height: target.height }; },

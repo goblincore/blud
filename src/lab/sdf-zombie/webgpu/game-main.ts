@@ -3886,6 +3886,39 @@ async function main() {
     get marchSteps() { return actors[0]?.view.uniforms.marchCfg.value.x ?? 0; },
 
     /**
+     * DEPTH-PREPASS STATS (close-up task 3) — is the coarse pass actually
+     * writing starts? Same readback contract as occupancy() (one paused
+     * step, row-padded float read) on the quarter-res target. A pass that
+     * writes nothing (meshes not staged, clear-colour trap, fetch wrong)
+     * is invisible in the frame and shows up here as nonZero 0.
+     */
+    async depthPreStats() {
+      handle.setLoopRunning(false);
+      handle.step(1 / 60);
+      await handle.resolveGpu();
+      const t = sdfLayer.depthPreTarget;
+      const w = t.width;
+      const h = t.height;
+      const buf = new Float32Array(
+        await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h),
+      );
+      const floatsPerRow = Math.ceil((w * 16) / 256) * 256 / 4;
+      let nonZero = 0;
+      let min = Infinity;
+      let max = 0;
+      let sum = 0;
+      for (let row = 0; row < h; row++) {
+        const base = row * floatsPerRow;
+        for (let col = 0; col < w; col++) {
+          const v = buf[base + col * 4]!;
+          if (v > 0) { nonZero++; sum += v; if (v < min) min = v; if (v > max) max = v; }
+        }
+      }
+      handle.setLoopRunning(true);
+      return { w, h, texels: w * h, nonZero, min: nonZero ? +min.toFixed(3) : 0, max: +max.toFixed(3), mean: nonZero ? +(sum / nonZero).toFixed(3) : 0 };
+    },
+
+    /**
      * PROXY-BOX OCCUPANCY — the shell-march decision measurement.
      *
      * How much of the screen area the march actually rasterises is flesh?

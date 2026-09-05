@@ -1359,7 +1359,8 @@ export function createZombieGpuView(
   const material = createMarchMaterial(
     dataTex, volumeTex, u,
     marchBody,
-    opts.cone, opts.occluder, tileNodes, opts.shell, opts.prev, opts.levelShadow);
+    opts.cone, opts.occluder, tileNodes, opts.shell, opts.prev, opts.levelShadow,
+    undefined, opts.depthPre);
 
   // The coarse twin: same field, same proxy box, no shading, its own mesh on
   // its own layer. Writes the conservative start distance into .x, and the
