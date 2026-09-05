@@ -87,12 +87,12 @@ model soldier-kit
   style chunky
 
 palette
-  # THE OWNER'S ONE COLOUR INSTRUCTION: a dull metallic greenish-teal. Not
-  # chrome, not bright — issued kit that has been worn. kit-overlay.ts's LOOK
-  # table carries the "dull" half (mid metalness, high roughness, weak env);
-  # this hex carries the hue. Started one notch bright for the lab's single
-  # harsh key (the clown lesson) — verify against the render, not the hex.
-  plate   #43635a
+  # SHINY METAL GREY, matching the goblin's iron (owner, 2026-09-05, replacing
+  # the dull greenish-teal this kit shipped with). #6e7378 is goblin-kit.wam's
+  # `iron` verbatim rather than a fresh grey: the point is that the two
+  # characters' plate reads as the SAME material, and a hue picked
+  # independently would drift from it under the same key.
+  plate   #6e7378
   # Issued webbing: dark olive-brown, near-black in shadow. Belt and pouches.
   webbing #3c3327
 

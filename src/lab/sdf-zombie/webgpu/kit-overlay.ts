@@ -120,21 +120,18 @@ const LOOK: Record<string, {
   gold:    { metalness: 0.70, roughness: 0.22, envIntensity: 1.3 },
 
   // ---- soldier ----
-  // Issued plate, and the owner's one colour instruction: a DULL metallic
-  // greenish-teal — not chrome, not bright. The hue is the .wam's job; the
-  // dullness lives here. Metalness stays mid (the house rule: full metal has
-  // no diffuse and goes black off-key), but where iron gets a tight 0.16
-  // roughness and a strong env to read as polished steel, worn plate gets a
-  // broad 0.42 and a weak one — a soft sheen, no mirror.
-  // broad 0.55 and a weak one — a soft sheen, no mirror. The env has to be
-  // THIS weak because of the turntable's back views: in the key's shadow the
-  // diffuse term dies and any stronger env turns the plate into pale-blue
-  // fresnel sheen, which reads as plastic, not worn metal.
-  plate:   { metalness: 0.45, roughness: 0.60, envIntensity: 0.25 },
-  // Belt and pouches: olive webbing, matte and thirsty. Roughness 0.7, not
-  // the leathers' 0.5: the belt's front face sits exactly at the key's
-  // mirror height, and at 0.55 the broad white dielectric sheen turned the
-  // whole slab pale grey — the opposite of "dull".
+  // SHINY METAL GREY, the goblin's iron exactly (owner, 2026-09-05). This
+  // shipped as a dull worn plate (0.45 / 0.60 / 0.25) and the owner asked for
+  // the goblin's look instead, so it reuses `iron`'s numbers verbatim rather
+  // than a fresh approximation -- the two characters' plate should read as the
+  // same material under the same key, and independently-picked values drift.
+  //
+  // NOTE what this overrides: the dull version's weak env was chosen because
+  // "in the key's shadow the diffuse term dies and any stronger env turns the
+  // plate into pale-blue fresnel sheen". That risk was real for a TEAL albedo;
+  // a neutral grey has no hue to go blue. Judge the back views anyway -- that
+  // is where it showed.
+  plate:   { metalness: 0.72, roughness: 0.16, envIntensity: 1.15 },
   webbing: { metalness: 0.05, roughness: 0.70, envIntensity: 0.25 },
 
   // --- mouse kit (mouse-kit.wam): cotton and vinyl, not metal. These
