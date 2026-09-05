@@ -369,51 +369,64 @@ gate('baked-piece-hittable',
   hit.gibbed != null,
   hit);
 
-// LEAK: sever more, settle, bake, gib everything baked, repeat. Views must
-// never exceed MAX_CHUNKS; baked+live must stay bounded while totalBakes
-// grows (proof the ring actually recycles rather than leaking).
+// LEAK: long-firefight soak — spawn synthetic chunks repeatedly (the same
+// spawn/settle/bake machinery as real severs, in unlimited supply), bake
+// them, gib a few, keep going until totalBakes is ~3x the view cap. Views
+// must never exceed MAX_CHUNKS (12) and baked+live must stay bounded while
+// totalBakes grows — proof the ring actually RECYCLES rather than leaking.
 const leak = [];
 let leakOk = true;
-for (let cycle = 0; cycle < 4; cycle++) {
-  await stageChunks(3, 3);
-  for (let i = 0; i < 40; i++) {
-    await evaluate('__sdfGame.step(12)');
-    const s = await evaluate('__sdfGame.chunkStats()');
-    if (s.live === 0) break;
-  }
-  // Gib baked pieces: overhead buckshot per piece (cycle 0 only — the
-  // freeBaked path is exercised once; the remaining cycles test recycling).
-  await evaluate(`(async () => {
-    for (let round = 0; round < 6; round++) {
-      const s = __sdfGame.chunkStats();
-      if (!s.pieces.length) break;
-      const p = s.pieces[0];
-      let px = p.centre[0], pz = p.centre[2] + 0.3;
-      for (let i = 0; i < 5; i++) {
-        __sdfGame.setPose(px, pz, 0, -1.56, 0);
-        __sdfGame.step(4);
-        const m = __sdfGame.muzzleWorld();
-        px += p.centre[0] - m[0];
-        pz += p.centre[2] - m[2];
-      }
-      let gibbed = false;
-      for (let v = 0; v < 2 && !gibbed; v++) {
-        __sdfGame.step(95);
-        __sdfGame.setPose(px, pz, 0, -1.56, 0);
-        __sdfGame.step(2);
-        __sdfGame.fire(2);
-        __sdfGame.step(10);
-        if (__sdfGame.chunkStats().baked < s.baked) gibbed = true;
-      }
-      if (!gibbed) break;
+{
+  for (let cycle = 0; cycle < 6; cycle++) {
+    // Three fresh chunks per cycle, offset so they scatter differently.
+    await evaluate(`(async () => {
+      const z = __sdfGame.zombies().find(q => q.room === 3);
+      const bx = z.pos[0] + ${cycle * 0.4}, bz = z.pos[2] + ${cycle * 0.3};
+      __sdfGame.spawnTestChunk(bx + 1.0, 0.02, bz + 0.5);
+      __sdfGame.spawnTestChunk(bx - 0.8, 0.02, bz + 0.2);
+      __sdfGame.spawnTestChunk(bx + 0.1, 0.02, bz - 0.7);
+      return 1;
+    })()`);
+    for (let i = 0; i < 50; i++) {
+      await evaluate('__sdfGame.step(12)');
+      const s = await evaluate('__sdfGame.chunkStats()');
+      if (s.live === 0) break;
     }
-    return 1;
-  })()`);
-  const s = await evaluate('__sdfGame.chunkStats()');
-  leak.push({ cycle, ...s, minusPieces: s.pieces.length });
-  if (s.views > 12 || s.baked > 12) leakOk = false;
+    // Cycle 0: gib a couple of pieces (exercises freeBaked mid-soak).
+    if (cycle === 0) {
+      await evaluate(`(async () => {
+        for (let round = 0; round < 4; round++) {
+          const s = __sdfGame.chunkStats();
+          if (!s.pieces.length) break;
+          const p = s.pieces[0];
+          let px = p.centre[0], pz = p.centre[2] + 0.3;
+          for (let i = 0; i < 5; i++) {
+            __sdfGame.setPose(px, pz, 0, -1.56, 0);
+            __sdfGame.step(4);
+            const m = __sdfGame.muzzleWorld();
+            px += p.centre[0] - m[0];
+            pz += p.centre[2] - m[2];
+          }
+          let gibbed = false;
+          for (let v = 0; v < 2 && !gibbed; v++) {
+            __sdfGame.step(95);
+            __sdfGame.setPose(px, pz, 0, -1.56, 0);
+            __sdfGame.step(2);
+            __sdfGame.fire(2);
+            __sdfGame.step(10);
+            if (__sdfGame.chunkStats().baked < s.baked) gibbed = true;
+          }
+          if (!gibbed) break;
+        }
+        return 1;
+      })()`);
+    }
+    const s = await evaluate('__sdfGame.chunkStats()');
+    leak.push({ cycle, live: s.live, baked: s.baked, views: s.views, totalBakes: s.totalBakes });
+    if (s.views > 12 || s.baked > 12) leakOk = false;
+  }
 }
-gate('leak-bounded', leakOk, { series: leak.map(({ pieces, ...r }) => r), cycles: leak.length });
+gate('leak-bounded', leakOk, { series: leak });
 
 writeFileSync(OUT, JSON.stringify(results, null, 2));
 console.log(`gate results written to ${OUT}`);

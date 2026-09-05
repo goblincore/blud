@@ -1170,14 +1170,6 @@ async function main() {
   let bakedChunkMat: BakedChunkMaterial | null = null;
   let bakedChunkSeed: ((m: BakedChunkMaterial) => void) | null = null;
   let totalBakes = 0;
-  /** TEMPORARY gate instrumentation (chunk-bake hittability): counts pellet
-   *  loop passes with baked pieces present, and the last segment tested. */
-  let bakeCheckCount = 0;
-  let lastBakeCheck: unknown = null;
-  let lastDeath: unknown = null;
-  let bakeCheckMin = 1e9;
-  let bakeCheckHits = 0;
-  const bakeCheckLog: unknown[] = [];
   let lastBakeMs = 0;
   let lastBakeInfo: Record<string, number> | null = null;
   // Bone tubes (task 5): the instancer owns its own light set — seed it once
@@ -3070,20 +3062,13 @@ async function main() {
         const p = pellets[i]!;
         const from = prevs[i]!;
         let dead = expired(p);
-        let deathWhy = expired(p) ? 'expired' : null;
         if (!dead && bakedChunks.length > 0) {
-          // ORDER, second time's the charm: this MUST precede the floor kill
-          // below — a settled piece rests AT the y = 0.02 plane, so the slug
-          // that reaches it is always past y 0.02 by segment end, and a
-          // floor-first pre-check eats every such shot before the test runs
-          // (measured: the bake-check log held first-segment entries only).
-          bakeCheckCount++;
-          lastBakeCheck = {
-            from: [...from] as [number, number, number],
-            to: [...p.pos] as [number, number, number],
-            pelletR: p.radius,
-            pieces: bakedChunks.map(b => ({ c: [...b.centre] as [number, number, number], r: b.radius, id: b.id })),
-          };
+          // ORDER: this MUST precede the floor kill below — a settled piece
+          // rests AT the y = 0.02 plane, so the slug that reaches it is
+          // always past y 0.02 by segment end, and a floor-first pre-check
+          // eats every such shot before the test can run (measured 2026-09-
+          // 05: the check log held first-segment entries only, and every
+          // overhead drop at a settled piece read as eaten by the floor).
           // A BAKED piece is still hittable (close-up task 5 gate): the
           // pre-bake page tested NOTHING against chunks, so the bake would
           // have shipped floor pieces that silently ate slugs. A segment
@@ -3108,29 +3093,20 @@ async function main() {
             // point-probe would let a 5.5 cm slug overlap a piece without
             // hitting it — wrong at these scales.
             const hitR = b.radius + p.radius;
-            const dd = Math.sqrt(qx * qx + qy * qy + qz * qz);
-            if (bakeCheckLog.length > 64) bakeCheckLog.shift();
-            bakeCheckLog.push({ dd: +dd.toFixed(4), hitR: +hitR.toFixed(4), piece: b.id,
-              seg: [[...from] as [number, number, number], [...p.pos] as [number, number, number]] });
-            if (dd < bakeCheckMin) {
-              bakeCheckMin = dd;
-            }
-            if (dd > hitR) continue;
-            bakeCheckHits++;
+            if (qx * qx + qy * qy + qz * qz > hitR * hitR) continue;
             gibBakedPiece(b, p.pos);
-            dead = true; deathWhy = 'bake';
+            dead = true;
             break;
           }
         }
         if (!dead && p.pos[1] <= 0.02) dead = true;
-        if (!dead && p.pos[1] <= 0.02) { dead = true; deathWhy = 'floor'; }
         if (!dead) {
           // Level geometry: a point-in-AABB test is enough — pellets are
           // small and the substepped trace already bounds their travel.
           for (const b of colliders) {
             if (p.pos[0] > b.min[0] && p.pos[0] < b.max[0]
               && p.pos[1] > b.min[1] && p.pos[1] < b.max[1]
-              && p.pos[2] > b.min[2] && p.pos[2] < b.max[2]) { dead = true; deathWhy = 'collider'; break; }
+              && p.pos[2] > b.min[2] && p.pos[2] < b.max[2]) { dead = true; break; }
           }
         }
         if (!dead) {
@@ -3168,13 +3144,10 @@ async function main() {
               ? hitActor.hitSlug(hitPoint, dirN)
               : hitActor.hit(hitPoint, dirN);
             if (stamped) registerBleed(hitActor, stamped, p.kind);
-            dead = true; deathWhy = 'actor';
+            dead = true;
           }
         }
-        if (dead) {
-          lastDeath = { why: deathWhy, at: [...p.pos] as [number, number, number], kind: p.kind };
-          pellets.splice(i, 1);
-        }
+        if (dead) pellets.splice(i, 1);
       }
       for (const a of hitThisFrame) a.endHits();
       // Sync the mesh pool to the sim list — growing it on demand (the
@@ -3686,7 +3659,6 @@ async function main() {
     muzzleWorld: () => muzzleWorld(),
     /** Live projectile debug (chunk-bake gate): kind, position, age. */
     pelletsDebug: () => pellets.map(p => ({ kind: p.kind, pos: [...p.pos] as [number, number, number], age: p.ageSec })),
-    bakeCheckDebug: () => ({ count: bakeCheckCount, min: bakeCheckMin, hits: bakeCheckHits, log: bakeCheckLog, lastDeath }),
     /** The EXACT ray a slug fired right now would take (chunk-bake gate):
      *  origin = muzzleWorld(), dir = convergedDir(muzzleWorld()) — the same
      *  two calls fire() makes. A driver can measure a ray-to-target miss
