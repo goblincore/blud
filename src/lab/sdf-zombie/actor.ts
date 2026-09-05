@@ -21,7 +21,7 @@
 //   - crowd callers pass a fixed dt, not rAF's jittery real dt.
 
 import type { BuildResult } from './build-body';
-import { bindRig, impulseAt, type BoundRig } from './rig-bind';
+import { bindRig, impulseAt, pinTips, type BoundRig } from './rig-bind';
 import {
   applyFloorContact, makeMotionJoints, makeMotionState, MOTION_TUNING,
   planSubSteps, STANDING_RIG, stepMotion,
@@ -198,6 +198,8 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
       },
     ).points;
     if (f.ropes.length) points = relaxRopeConstraints(points, f.ropes);
+    // Hand tips and toes ride their anchor rigidly (rig-bind.ts RigidTip).
+    points = pinTips(points, m.bound.tips, f.bodyYaw);
     if (f.collapsed) {
       points = applyFloorContact(points, m.motionJoints.groundY - MOTION_TUNING.floorPad);
     }

@@ -92,6 +92,25 @@ export interface BoundRig {
   boneFrames: Map<number, BoneFrame>;
   /** Null when the body has no `skull` bone or no skull-owned spheres. */
   head: HeadRigid | null;
+  /** Extremity tips (hand and foot bone tails) held RIGID to their anchor
+   *  joint — see pinTips. Empty for bodies without hand/foot bones. */
+  tips: RigidTip[];
+}
+
+/**
+ * A hand tip or toe: a leaf rig point that nothing in the gait drives. Left
+ * free, it is a verlet point on a length constraint — it sags under gravity
+ * and swings in the stride, so a boot posed from ankle→toe (rig-frames.ts)
+ * pitched toe-down while the flesh foot, bound to the ankle, stayed level,
+ * and the heel slid out under the boot (owner, 2026-09-05). Pinned, it is the
+ * anchor plus its yawed rest offset every step: boot and flesh agree, the
+ * gun's grip frame stops jiggling.
+ */
+export interface RigidTip {
+  point: number;
+  anchor: number;
+  /** Bind-time tip − anchor, body-local (yaw 0). */
+  rest: Vec3;
 }
 
 /** Head-rigidity knobs — the loose-neck creature is a TUNING, not a code path. */
@@ -295,7 +314,31 @@ export function bindRig(body: BuildResult): BoundRig {
       return frames;
     })(),
     head,
+    tips: (() => {
+      const tips: RigidTip[] = [];
+      const heads = new Set<number>();
+      for (const b of body.bones.values()) heads.add(indexOf(b.head));
+      for (const [name, b] of body.bones) {
+        if (!/^(hand|foot)\.[lr]$/.test(name)) continue;
+        const tip = indexOf(b.tail), anchor = indexOf(b.head);
+        if (tip === anchor || heads.has(tip)) continue; // not a leaf
+        tips.push({ point: tip, anchor, rest: sub(positions[tip]!, positions[anchor]!) });
+      }
+      return tips;
+    })(),
   };
+}
+
+/** Snap every rigid tip to anchor + yawed rest offset (pos AND prev, so the
+ *  verlet carries no velocity into the next step). Pure; returns new points. */
+export function pinTips(points: readonly RigPoint[], tips: readonly RigidTip[], bodyYaw = 0): RigPoint[] {
+  if (tips.length === 0) return points as RigPoint[];
+  const out = points.slice();
+  for (const t of tips) {
+    const pos = add(out[t.anchor]!.pos, bodyYaw === 0 ? t.rest : rotateYaw(t.rest, bodyYaw));
+    out[t.point] = { ...out[t.point]!, pos, prev: pos };
+  }
+  return out;
 }
 
 /**
