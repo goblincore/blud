@@ -1,0 +1,7 @@
+{
+  "label": "autoround-q4km-PROPER",
+  "tasks": {
+    "task1": {"name": "SeededRng", "elapsed_s": 478, "files": 6, "stdout_bytes": 782},
+    "task5": {"name": "LRU cache", "elapsed_s": 568, "files": 4, "stdout_bytes": 1081}
+  }
+}

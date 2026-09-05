@@ -1,0 +1,8 @@
+{
+  "name": "seeded-rng",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "vitest": "^4.1.5"
+  }
+}

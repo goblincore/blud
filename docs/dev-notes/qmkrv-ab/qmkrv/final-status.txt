@@ -1,0 +1,2 @@
+?? src/game/enemy/hand-ai.test.ts
+?? src/game/enemy/hand-ai.ts

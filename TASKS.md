@@ -504,6 +504,33 @@ it rather than re-deriving a scene. Chain is now fully serial (one bench at a
 time — concurrent benches are what spoiled the tile table and the r2 sweep):
 **1b → 4 (goo) → 2 → 3 → 5**, all `pending` except 1b and 4.
 
+**CLOSE-UP TASK 3 (depth prepass) — BUILT, CENSUS-CLEAN, DOES NOT SHIP
+(2026-09-05).** The quarter-res coarse march of the field exists and works:
+one texel per 4x4 SDF-pixel block, cone radius = the block's half-diagonal
+(the proof the start is a lower bound), per-body twins resolving to the
+NEAREST touch via frag_depth, consumed as a third max() term at the ray
+start. Census CLEAN at six views (0.5/3/9 m + head/thin + rooms 3/4): hits
+kept 99.99-100.02%, state-clean, pixel diffs at/below noise; meanStepsHit
+-5% to -45%. But Question A's walk share did not survive its own baseline:
+re-measured at today's 13.9 ms wounded fill-screen frame the walk is
+**15.9%** (normal 13.86 vs flat 11.65), so halving the walk buys ~1 ms while
+the pass costs ~0.5-2 ms (growing with bodies - the coarse rays march long
+distances at standoff). Bench: fill-screen +0.5 ms, room3 +0.95, room4 +1.94.
+**Verdict: ships OFF** (`GAME_DEPTH_PREPASS = 0`,
+`__sdfGame.setDepthPrepass`); the seam, the census
+(`scripts/sdf-depth-prepass-census.mjs`) and `depthPreStats()` stay. Three
+new shader-wiring traps found and pinned, all rendering as "every body
+unlit-black with every uniform dead": a PAREN in a WGSL-signature comment
+truncates three's parameter parse exactly like the known colon hazard;
+calling a helper by its CONST name instead of its source name is an
+unresolved call target; and `vec4(a, b, 0, 0)` composed from two SCALAR
+uniforms in a wgslFn literal breaks WGSL generation outright — pass ONE vec4
+uniform whole. Also: `createZombieGpuView`'s positional createMarchMaterial
+call silently dropped the new argument (the march sampled the 1x1 zero
+fallback while the twin wrote real starts) — positional call sites must be
+re-counted when a parameter is added.
+[notes](docs/dev-notes/2026-09-04-closeup-3-depth-prepass/notes.md).
+
 **CLOSE-UP TASK 4 (goo) — DONE, NEGATIVE RESULT (2026-09-05).** The premise
 ("the goo layer is the blood cost") does NOT reproduce. Measured with the
 item seams landed on `dispatch/2026-09-04-closeup-task-4-attempt1` (parity-
