@@ -69,13 +69,18 @@ body
   # belt and trousers cover it. It exists to fuse limbs to trunk.
   # ============================================================
   # Hips: trousered (olive). This is the TOP of the camo fatigues.
-  blob torso on pelvis at=0.40 r=0.115 wide=1.00 tall=0.90 deep=0.78 blend=0.010 color=5c5d41
+  # BARE TORSO (owner, 2026-09-04: "remove his shirt — all clothing should be
+  # mesh more or less"). These three masses were painted olive/dark as a
+  # sleeveless top; unpainted they take the palette's skin, so the shirt, the
+  # belt, its pouches and its buckle all leave the .blob and become the kit's
+  # job. What is left here is body.
+  blob torso on pelvis at=0.40 r=0.115 wide=1.00 tall=0.90 deep=0.78 blend=0.010
   # Waist: trouser top rising to the belt line.
-  bar  torso on spine1 from=0.40 to=1.00 r=0.108 r2=0.105 deep=0.75 blend=0.008 color=5c5d41
+  bar  torso on spine1 from=0.40 to=1.00 r=0.108 r2=0.105 deep=0.75 blend=0.008
   # Chest: the sleeveless top under the plate — only a dark crescent shows
   # at the armpits and midriff, which is the point: bare arms and dark vest
   # against hard plate is most of the read.
-  bar  torso on chest  from=0.20 to=0.95 r=0.105 r2=0.115 deep=0.82 blend=0.008 color=3a3d33
+  bar  torso on chest  from=0.20 to=0.95 r=0.105 r2=0.115 deep=0.82 blend=0.008
 
   # ============================================================
   # THE CUIRASS — machined plate, proud of the torso. box + metal exist for
@@ -100,11 +105,8 @@ body
   # the torso's line, plus bold pouches. Pouches are BOXES, not blobs:
   # issued webbing is rectangular.
   # ============================================================
-  blob torso on spine1 at=0.55 offset=(0,-0.012,0.008) r=0.125 wide=1.10 tall=0.34 deep=0.98 box round=0.18 blend=0.008 color=3d372e
   # Pouch pair, front-left and front-right of the buckle.
-  blob torso on spine1 at=0.55 offset=(0.075,-0.016,0.100) r=0.032 wide=1.25 tall=0.85 deep=0.70 box round=0.20 blend=0.004 both color=7a7048
   # Centre buckle — one small metal box.
-  blob torso on spine1 at=0.55 offset=(0,-0.014,0.105) r=0.020 wide=1.10 tall=0.70 deep=0.50 box round=0.25 blend=0.004 color=8a8d84 metal gloss=0.95
 
   # ============================================================
   # PAULDRONS — the second beat. One big flat plate per shoulder, sitting
@@ -174,7 +176,7 @@ body
   # 13.5 mm clear of the head it is supposed to sit on. The defect was in the
   # character as authored; the pauldrons hid it, and removing them exposed it.
   # 22 mm down puts the box 8 mm INTO the crown, so the two fuse.
-  blob head on skull at=0.55 offset=(0,0.082,-0.004) r=0.082 wide=1.02 tall=0.32 deep=0.98 box round=0.10 blend=0.004 color=2e6034
+  blob head on skull at=0.55 offset=(0,0.074,-0.004) r=0.070 wide=1.02 tall=0.30 deep=0.96 box round=0.10 blend=0.004 color=2e6034
   # A thin slab down the back of the head: the cut wraps the skull in the
   # bake and in the brief's read, and from behind an all-skin head loses
   # him. Flat, shallow, and proud only 6 mm.
