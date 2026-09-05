@@ -33,7 +33,8 @@ export interface PackedBody {
   /** x = radius at endpoint B, NEGATIVE when untapered; y = fold profile
    *  BITFIELD: bit 0 (1) chamfer, bit 1 (2) bent, bit 2 (4) shell,
    *  bit 3 (8) box, bit 4 (16) metal (SHADING-ONLY — every fold read of
-   *  prof is a bit mask, so the bit never changes geometry); zw spare
+   *  prof is a bit mask, so the bit never changes geometry), bit 5 (32)
+   *  STRAND (hairlock — the strand bundle; strand.ts); zw spare
    *  (groove depth/width). Negative is the sentinel rather than "equal to radius"
    *  because 0 is a LEGITIMATE taper target — a true point is the whole
    *  reason the taper exists. */
@@ -55,6 +56,10 @@ export interface PackedBody {
    *  see the primClip.set call below). Kept in step with ROW_PRIM_CLIP's
    *  docstring in march.wgsl.ts, which is the row table this mirrors. */
   primClip: Float32Array;
+  /** x = strand count, y = wave, z = cycles, w = fat (hairlock 2026-09-05).
+   *  All zeros = no strand bundle — the exact no-op every pre-strand
+   *  character packs. Read only by prims with profile bit 5 (value 32). */
+  primStrand: Float32Array;
   restA: Float32Array;         // xyz = REST endpoint A, w = radius (0 = unwritten)
   restB: Float32Array;         // xyz = REST endpoint B, w = blendK
   clusterBounds: Float32Array; // xyz = centre, w = radius
@@ -154,6 +159,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
   const primColor = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const primShell = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const primClip = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
+  const primStrand = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const restA = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const restB = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
 
@@ -202,7 +208,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
     // (& 7) == 1) that leaves bit 4 clear. The shader folds any prof >= 4
     // as a shell ONLY through the (& 4) mask; the low bits still mean
     // chamfer/bend for the non-shell range and are ignored on a shell.
-    const prof = (p.blendProfile === 'chamfer' ? 1 : 0) + bent + (p.shell ? 4 : 0) + (p.box ? 8 : 0) + (p.metal ? 16 : 0);
+    const prof = (p.blendProfile === 'chamfer' ? 1 : 0) + bent + (p.shell ? 4 : 0) + (p.box ? 8 : 0) + (p.metal ? 16 : 0) + (p.strand ? 32 : 0);
     // primBend.w carries a BOX's corner-rounding fraction. Safe to share the
     // row: the shader reads ROW_PRIM_BEND only when prof & 2, and `bend=` on a
     // box is rejected at compile time, so a box never sets that bit and the
@@ -230,6 +236,12 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
     primClip.set(sh
       ? [sh.clipNormal[0], sh.clipNormal[1], sh.clipNormal[2], p.glow ?? 0]
       : [0, 0, 0, p.glow ?? 0], o);
+    // The strand bundle's four parameters ride their own row (hairlock).
+    // Zeros for everything else, so a body with no strand= packs rows
+    // bit-identical to before the row existed.
+    primStrand.set(p.strand === undefined
+      ? [0, 0, 0, 0]
+      : [p.strand.count, p.strand.wave, p.strand.cycles, p.strand.fat], o);
     primShape.set([
       p.radiusB === undefined ? -1 : p.radiusB,
       prof,
@@ -302,7 +314,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
     const shaped = own.some(p =>
       p.radiusB !== undefined || p.blendProfile === 'chamfer' || p.op === 'groove'
       || p.bend !== undefined || p.shell !== undefined || p.box !== undefined
-      || p.metal !== undefined);
+      || p.metal !== undefined || p.strand !== undefined);
     clusterRange.set(
       [c.start, c.count, c.alive ? 1 : 0, (oriented ? 1 : 0) + (shaped ? 2 : 0)], o);
   });
@@ -337,7 +349,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
       const shaped = gOwn.some(p =>
         p.radiusB !== undefined || p.blendProfile === 'chamfer' || p.op === 'groove'
         || p.bend !== undefined || p.shell !== undefined || p.box !== undefined
-        || p.metal !== undefined);
+        || p.metal !== undefined || p.strand !== undefined);
       groupRange.set([g.start, g.count, g.distort, (oriented ? 1 : 0) + (shaped ? 2 : 0)], o);
       groupCount++;
     }
@@ -345,7 +357,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
   });
 
   return {
-    primA, primB, primScale, primQuat, primShape, primBend, primColor, primShell, primClip, restA, restB, clusterBounds, clusterRange,
+    primA, primB, primScale, primQuat, primShape, primBend, primColor, primShell, primClip, primStrand, restA, restB, clusterBounds, clusterRange,
     groupBounds, groupRange, clusterGroups, groupCount,
     primCount: body.prims.length,
     clusterCount: body.clusters.length,
