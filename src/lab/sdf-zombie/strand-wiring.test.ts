@@ -180,6 +180,82 @@ describe('strand — the field is safe for an over-relaxed tracer', () => {
   });
 });
 
+describe('strand — hair ripples in the wind, for free', () => {
+  const STRAND: StrandParams = { count: 6, wave: 0.18, cycles: 4, fat: 0.72 };
+  const a: Vec3 = [0, 0, 0];
+  const b: Vec3 = [0.01, -0.15, 0.02];
+  const f = (q: Vec3, windPhase: number) =>
+    sdStrand(q, a, b, undefined, 0.026, 0.010, STRAND, windPhase)
+    / strandLipschitz(a, b, undefined, 0.026, 0.010, STRAND);
+
+  it('moves the strands when the wind phase advances', () => {
+    let moved = 0;
+    for (let i = 0; i < 3000; i++) {
+      const s2 = (n: number) => ((Math.sin(n * 12.9898 + i * 78.233) * 43758.5453) % 1 + 1) % 1;
+      const q: Vec3 = [s2(1) * 0.1 - 0.05, s2(2) * 0.18 - 0.16, s2(3) * 0.1 - 0.05];
+      moved = Math.max(moved, Math.abs(f(q, 0) - f(q, 0.25)));
+    }
+    // SCALE CHECK, not a round number. The wobble amplitude is
+    // wave * cell = wave * 2r/count, so at the fat end of this bundle it is
+    // 0.18 * 2*0.026/6 = 1.56 mm, and the field is then divided by the
+    // Lipschitz bound. A quarter turn therefore cannot move the field more
+    // than about that, and measures 1.60 mm. An earlier threshold of 2 mm
+    // was above the wobble's own amplitude and so unreachable by
+    // construction — the test was impossible, not the feature broken.
+    const wobble = STRAND.wave * 2 * 0.026 / STRAND.count;
+    expect(moved).toBeGreaterThan(wobble * 0.5);
+  });
+
+  it('is exactly periodic in the phase, so a breeze never runs out of runway', () => {
+    // The phase is a CYCLE COUNT, so a whole turn returns the same field —
+    // the drift can accumulate for hours without drifting out of range.
+    for (let i = 0; i < 400; i++) {
+      const s2 = (n: number) => ((Math.sin(n * 3.71 + i * 51.3) * 21031.7) % 1 + 1) % 1;
+      const q: Vec3 = [s2(1) * 0.1 - 0.05, s2(2) * 0.18 - 0.16, s2(3) * 0.1 - 0.05];
+      expect(f(q, 1)).toBeCloseTo(f(q, 0), 9);
+      expect(f(q, 7)).toBeCloseTo(f(q, 0), 9);
+    }
+  });
+
+  it('costs the bound NOTHING — the seams stay the same size at any phase', () => {
+    // The claim that makes this free: a constant added to a phase changes
+    // neither the wobble amplitude nor its slope along t, so strandReach and
+    // strandLipschitz are untouched and no bound site moves. If the ripple
+    // were ever wired somewhere that scales the field rather than sliding it,
+    // the seams would widen and this would catch it.
+    const STEP = 2e-6;
+    for (const phase of [0, 0.37, 2.6]) {
+      let worstJump = 0;
+      for (let line = 0; line < 1200; line++) {
+        const s2 = (n: number) => ((Math.sin(n * 7.13 + line * 51.7) * 38211.4) % 1 + 1) % 1;
+        const o: Vec3 = [s2(1) * 0.16 - 0.08, s2(2) * 0.22 - 0.19, s2(3) * 0.16 - 0.08];
+        const d: Vec3 = [s2(4) - 0.5, s2(5) - 0.5, s2(6) - 0.5];
+        const n = Math.hypot(d[0], d[1], d[2]) || 1;
+        let prev = f(o, phase);
+        for (let k = 1; k <= 250; k++) {
+          const q: Vec3 = [o[0] + (d[0] / n) * STEP * k, o[1] + (d[1] / n) * STEP * k, o[2] + (d[2] / n) * STEP * k];
+          const cur = f(q, phase);
+          const jump = Math.abs(cur - prev);
+          if (jump / STEP > 1.05) worstJump = Math.max(worstJump, jump);
+          prev = cur;
+        }
+      }
+      // The same sub-millimetre seam budget the no-wind field holds to.
+      expect(worstJump).toBeLessThan(0.001);
+    }
+  });
+
+  it('is a bit-exact no-op at phase 0', () => {
+    for (let i = 0; i < 400; i++) {
+      const s2 = (n: number) => ((Math.sin(n * 9.17 + i * 12.7) * 9311.3) % 1 + 1) % 1;
+      const q: Vec3 = [s2(1) * 0.1 - 0.05, s2(2) * 0.18 - 0.16, s2(3) * 0.1 - 0.05];
+      const withArg = sdStrand(q, a, b, undefined, 0.026, 0.010, STRAND, 0);
+      const without = sdStrand(q, a, b, undefined, 0.026, 0.010, STRAND);
+      expect(Object.is(withArg, without)).toBe(true);
+    }
+  });
+});
+
 describe('strand — nothing that lacks it moves', () => {
   it('packs the strand row as zeros for every shipped character', () => {
     for (const name of ['zombie-blob', 'goblin', 'soldier', 'female', 'schoolgirl', 'schoolgirl-alt', 'clown', 'mouse']) {

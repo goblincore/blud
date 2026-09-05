@@ -425,7 +425,7 @@ export const STRAND_LIPSCHITZ = /* wgsl */ `fn strandLip(a: vec3<f32>, b: vec3<f
 // header carries the measurements. The gate is strand-wiring.test.ts, not
 // the render check: losing the bundle draws the parent capsule, which is
 // MORE material, and render-check only reports holes.
-export const CONE_STRAND = /* wgsl */ `fn coneStrand(q: vec3<f32>, a: vec3<f32>, b: vec3<f32>, c: vec3<f32>, r1: f32, r2: f32, minScale: f32, bent: f32, st: vec4<f32>) -> f32 {
+export const CONE_STRAND = /* wgsl */ `fn coneStrand(q: vec3<f32>, a: vec3<f32>, b: vec3<f32>, c: vec3<f32>, r1: f32, r2: f32, minScale: f32, bent: f32, st: vec4<f32>, windPhase: f32) -> f32 {
   let n = st.x;
   let wave = st.y;
   let cycles = st.z;
@@ -481,8 +481,12 @@ export const CONE_STRAND = /* wgsl */ `fn coneStrand(q: vec3<f32>, a: vec3<f32>,
     for (var dj = -1; dj <= 1; dj = dj + 1) {
       let idc = clamp(id0 + vec2<f32>(f32(di), f32(dj)), vec2<f32>(-m), vec2<f32>(m));
       let h = strandHash4(idc.x, idc.y);
-      let phx = 6.2831853 * (cycles * tStar + h.x);
-      let phy = 6.2831853 * (cycles * tStar + h.y + 0.25);
+      // windPhase rides INSIDE the cycle count: a whole-turn offset that
+      // slides the sample along the wave without changing the wave. Mirrors
+      // sdStrand in strand.ts; d(phase)/dt is still TAU*cycles, which is
+      // what strandLip is built from, so the bound is untouched.
+      let phx = 6.2831853 * (cycles * tStar + h.x + windPhase);
+      let phy = 6.2831853 * (cycles * tStar + h.y + 0.25 + windPhase);
       let wob = wave * cell;
       let ctr = idc * cell + wob * vec2<f32>(sin(phx), sin(phy)) + 0.4 * wob * (2.0 * h.zw - vec2<f32>(1.0));
       // The strand's local direction: the curve's plus the wobble's slope,
@@ -532,7 +536,12 @@ export const SD_PRIM = /* wgsl */ `fn sdPrim(p: vec3<f32>, i: i32, data: texture
   if ((i32(prof) & 32) != 0) {
     let ST = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_STRAND} + band), 0);
     let bent = select(0.0, 1.0, (i32(prof) & 2) != 0);
-    return coneStrand(p * inv, A.xyz * inv, B.xyz * inv, cpos * inv, A.w, r2, minScale, bent, ST);
+    // HAIR RIPPLES IN THE SAME WIND THE CLOTH SWAYS IN: cycles of wobble
+    // phase per metre of accumulated drift (STRAND_WIND_RIPPLE in
+    // strand.ts). Length, not a projection — a bundle has no single
+    // facing, and hair ripples whichever way the air is moving.
+    let windPhase = length(gWindDrift) * 6.0;
+    return coneStrand(p * inv, A.xyz * inv, B.xyz * inv, cpos * inv, A.w, r2, minScale, bent, ST, windPhase);
   }
   // BOX before BENT: bend= is rejected on a box at compile time, so the two
   // never coexist; testing box first means the bend row is never fetched for
@@ -626,7 +635,12 @@ export const SD_PRIM_ORIENTED = /* wgsl */ `fn sdPrimO(p: vec3<f32>, i: i32, dat
   if ((i32(prof) & 32) != 0) {
     let ST = textureLoad(data, vec2<i32>(i, ${ROW_PRIM_STRAND} + band), 0);
     let bent = select(0.0, 1.0, (i32(prof) & 2) != 0);
-    return coneStrand(qq, a, b, c * inv, A.w, r2, minScale, bent, ST);
+    // HAIR RIPPLES IN THE SAME WIND THE CLOTH SWAYS IN: cycles of wobble
+    // phase per metre of accumulated drift (STRAND_WIND_RIPPLE in
+    // strand.ts). Length, not a projection — a bundle has no single
+    // facing, and hair ripples whichever way the air is moving.
+    let windPhase = length(gWindDrift) * 6.0;
+    return coneStrand(qq, a, b, c * inv, A.w, r2, minScale, bent, ST, windPhase);
   }
   // BOX before BENT — same reasoning as sdPrim: bend= and box never coexist,
   // so testing box first means the bend row is fetched only here, on demand.

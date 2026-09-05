@@ -103,6 +103,20 @@ export const STRAND_CYCLES_MAX = 12;
 export const STRAND_FAT_MIN = 0.05;
 export const STRAND_FAT_MAX = 1;
 
+/**
+ * WIND RIPPLE: cycles of wobble phase per METRE of accumulated wind drift.
+ *
+ * The bundle's wobble already has a phase; advancing it with the wind sends
+ * the waves travelling down each strand, which is hair rippling in a breeze.
+ * At the lab's default 0.35 m/s that is a little over two cycles a second.
+ *
+ * IT IS FREE. A constant added to a phase changes neither the wobble's
+ * amplitude nor its slope along t, so strandReach and strandLipschitz are
+ * untouched and no bound site moves — the same property that made the shell
+ * warp's drift free. Only the sample's position in the wave changes.
+ */
+export const STRAND_WIND_RIPPLE = 6;
+
 export const STRAND_DEFAULT_WAVE = 0.15;
 export const STRAND_DEFAULT_CYCLES = 3;
 export const STRAND_DEFAULT_FAT = 0.7;
@@ -227,6 +241,7 @@ function strandHash(ix: number, iy: number, k: number): number {
  */
 export function sdStrand(
   q: Vec3, a: Vec3, b: Vec3, ctrl: Vec3 | undefined, r1: number, r2: number, s: StrandParams,
+  windPhase = 0,
 ): number {
   const rb = r2 < 0 ? r1 : r2;
   const straight = ctrl === undefined;
@@ -309,8 +324,12 @@ export function sdStrand(
       const h2 = strandHash(ix, iy, 1);
       const h3 = strandHash(ix, iy, 2);
       const h4 = strandHash(ix, iy, 3);
-      const phx = TAU * (s.cycles * tStar + h1);
-      const phy = TAU * (s.cycles * tStar + h2 + 0.25);
+      // `windPhase` rides INSIDE the cycle count, so it is a whole-turn
+      // offset: it slides the sample along the wave without changing the
+      // wave. d(phase)/dt is still TAU*cycles, which is what the Lipschitz
+      // bound is built from — see STRAND_WIND_RIPPLE.
+      const phx = TAU * (s.cycles * tStar + h1 + windPhase);
+      const phy = TAU * (s.cycles * tStar + h2 + 0.25 + windPhase);
       const wob = s.wave * cell;
       const ctrX = ix * cell + wob * Math.sin(phx) + STRAND_JITTER * wob * (2 * h3 - 1);
       const ctrY = iy * cell + wob * Math.sin(phy) + STRAND_JITTER * wob * (2 * h4 - 1);
