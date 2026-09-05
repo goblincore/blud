@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "source": "src/lab/sdf-zombie/characters/zombie.blob",
+  "fixture": "parseBlob -> compileBlob -> buildBody -> bindRig/applyRig(yaw=0.61) -> packBody(posed, rest)",
+  "buildErrors": [],
+  "compile": {
+    "bodyDefinitions": 16,
+    "authoredBodyDefinitions": 12,
+    "generatedFaceDefinitions": 4,
+    "generatedFaceTags": ["head", "jaw", "brow", "nose"],
+    "generatedFaceBuiltRows": [
+      { "row": 1, "tag": "head", "bone": "skull", "radius": 0.118, "scale": [0.76, 1.161, 0.894] },
+      { "row": 2, "tag": "jaw", "bone": "skull", "radius": 0.09204, "scale": [0.748, 0.861, 0.85824] },
+      { "row": 3, "tag": "brow", "bone": "skull", "radius": 0.0354, "scale": [1.55, 0.42, 0.8] },
+      { "row": 4, "tag": "nose", "bone": "skull", "radius": 0.02242, "scale": [0.379, 0.85, 1.45] }
+    ],
+    "authoredInternalDefinitions": 34
+  },
+  "builtRows": {
+    "fleshAndCarve": 23,
+    "flesh": 23,
+    "carve": 0,
+    "subtractiveCarves": 0,
+    "grooves": 0,
+    "internal": 68,
+    "bone": 60,
+    "organ": 8,
+    "total": 91
+  },
+  "profiles": {
+    "flesh": {
+      "shapes": { "capsule": 9, "sphere": 14 },
+      "blendProfiles": { "round": 23 },
+      "scales": { "anisotropic": 10, "isotropic": 13 },
+      "bent": 0,
+      "tapered": 0,
+      "shells": 0,
+      "boxes": 0,
+      "strands": 0
+    },
+    "carve": {
+      "shapes": {},
+      "blendProfiles": {},
+      "scales": {},
+      "bent": 0,
+      "tapered": 0,
+      "shells": 0,
+      "boxes": 0,
+      "strands": 0
+    },
+    "internal": {
+      "shapes": { "bent": 37, "capsule": 19, "sphere": 12 },
+      "blendProfiles": { "round": 68 },
+      "scales": { "anisotropic": 35, "isotropic": 33 },
+      "bent": 37,
+      "tapered": 13,
+      "shells": 0,
+      "boxes": 0,
+      "strands": 0
+    }
+  },
+  "clusters": [
+    { "limb": "head", "start": 0, "count": 5 },
+    { "limb": "torso", "start": 5, "count": 4 },
+    { "limb": "armL", "start": 9, "count": 4 },
+    { "limb": "armR", "start": 13, "count": 4 },
+    { "limb": "legL", "start": 17, "count": 3 },
+    { "limb": "legR", "start": 20, "count": 3 }
+  ],
+  "packing": { "primCount": 23, "carveCount": 0, "boneCount": 68 },
+  "pose": {
+    "bodyYawRadians": 0.61,
+    "orientedRows": 58,
+    "quaternionGroups": [
+      {
+        "quaternion": [1.5612511283791264e-17, 0.2912814752422905, 0.05243066700411226, 0.9551995222665152],
+        "count": 6,
+        "arrays": { "flesh": 4, "internal": 2 },
+        "limbs": { "head": 6 },
+        "representative": { "array": "flesh", "localRow": 1, "bone": "skull", "sourceLine": null, "shape": "sphere", "scale": [0.76, 1.161, 0.894] }
+      },
+      {
+        "quaternion": [1.734723475976807e-18, 0.2962199952697584, 0.03554639726834226, 0.9544580493890895],
+        "count": 34,
+        "arrays": { "internal": 34 },
+        "limbs": { "torso": 34 },
+        "representative": { "array": "internal", "localRow": 2, "bone": "spine", "sourceLine": 141, "shape": "bent", "scale": [1, 1, 0.85] }
+      },
+      {
+        "quaternion": [0, 0.3002931752092615, 0, 0.9538469525677271],
+        "count": 17,
+        "arrays": { "internal": 17 },
+        "limbs": { "torso": 17 },
+        "representative": { "array": "internal", "localRow": 4, "bone": "pelvis", "sourceLine": 145, "shape": "bent", "scale": [1, 1, 0.85] }
+      },
+      {
+        "quaternion": [-6.938893903907228e-18, 0.2688479015148047, 0.09409676437569527, 0.9585752994862276],
+        "count": 1,
+        "arrays": { "internal": 1 },
+        "limbs": { "head": 1 },
+        "representative": { "array": "internal", "localRow": 53, "bone": "neck", "sourceLine": 27, "shape": "capsule", "scale": [1, 1, 1] }
+      }
+    ]
+  }
+}

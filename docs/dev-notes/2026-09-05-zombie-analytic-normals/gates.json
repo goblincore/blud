@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "reference": "pass",
+  "gpuKernel": "pending",
+  "intact": "pending",
+  "wounds": "pending",
+  "visualEvidence": "pending",
+  "timing": "pending",
+  "ownerLook": "pending",
+  "evidence": [
+    {
+      "commit": "worktree based on 3a9eb96",
+      "command": "vitest reference (16/16); node gate tests (2/2); tsc --noEmit",
+      "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/notes.md",
+      "reason": "production-scalar parity, convergence, singular fallback, and atomic gate tests passed"
+    },
+    {
+      "commit": "worktree based on 3a9eb96",
+      "command": "vitest reference (19/19); node gate tests (2/2); tsc --noEmit",
+      "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/notes.md",
+      "reason": "named endpoint-join and near-axis adversarial cases also passed"
+    }
+  ]
+}
