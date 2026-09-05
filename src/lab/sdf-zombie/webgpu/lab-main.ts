@@ -874,6 +874,9 @@ async function main() {
     }
     if (params === null) return false;
     u.faceProj.value.set(params.projScaleX, params.projScaleY, params.projCentreX, params.projCentreY);
+    // The character's own glow threshold, so a baked face keeps its eyes
+    // without the panel being set by hand every reload.
+    u.faceCfg2.value.z = params.eyeGlowCut;
 
     // A BAKED IMAGE (npm run blob:face-bake) IS LOADED WHATEVER `decal` SAYS.
     //
@@ -985,10 +988,26 @@ async function main() {
   // a headless character's stub skull would otherwise project the face rows
   // as stripes across its body. Goes through faceEnabled so the panel toggle
   // and applyLod agree with it.
+  // A BROKEN SHEET BLOCK IS LOUD NOW. This used to swallow the error on the
+  // grounds that "the body compile path reports it" -- it does not, because
+  // the body compiles fine with a bad SHEET. What actually happened (and cost
+  // an hour on 2026-09-04): one invalid key in the soldier's sheet block made
+  // compileSheet throw, the whole block was discarded, the lab silently fell
+  // back to the GENERATED procedural sheet, and the character rendered with
+  // the zombie's face and head. Nothing anywhere said why. The keys are
+  // validated against a fixed list, so a typo or a guessed-at parameter --
+  // `eyeGlowCut`, which is panel-only -- lands here, and silence is the worst
+  // possible response to it.
   try {
     const sheetParams = compileSheet(parseBlob(activeCharacterSrc()));
     if (sheetParams && sheetParams.enabled === 0) faceEnabled = false;
-  } catch { /* a broken sheet block is reported by the body compile path */ }
+  } catch (e) {
+    console.error(
+      `[lab] ${activeCharacterName()}: its \`sheet\` block FAILED TO COMPILE, so the `
+      + `baked face is being ignored and this character is wearing the generated `
+      + `sheet instead (which reads as the zombie's face). Fix the sheet block:\n  `
+      + String(e instanceof Error ? e.message : e));
+  }
   u.faceCfg.value.x = faceEnabled ? faceMode : 0;   // face on (unless the sheet says no)
   u.faceCfg.value.y = 1.0;    // strength
 

@@ -91,11 +91,9 @@ body
   # the pauldron bar so yoke and chest read as two masses, not one T.
   # deep 0.72, not 0.55: at 0.55 the profile torso was paper-thin under a
   # yoke that wide — a barrel chest carries the plate, a plank does not.
-  blob torso on chest at=0.60 offset=(0,0,0.022) r=0.135 wide=1.22 tall=0.70 deep=0.72 box round=0.12 blend=0.008 color=77806b gloss=0.55
   # The muted-red front plate inset, one size smaller and standing a clear
   # centimetre prouder than the cuirass face (v1 sat 4 mm INSIDE it and
   # vanished). The reference's single loudest colour decision, kept.
-  blob torso on chest at=0.62 offset=(0,0.012,0.100) r=0.092 wide=1.02 tall=0.72 deep=0.30 box round=0.10 blend=0.006 color=983c38 gloss=0.50
 
   # ============================================================
   # THE BELT — the third beat of the silhouette. A wide dark slab breaking
@@ -114,7 +112,6 @@ body
   # socket, so the yoke reads from the front as a single hard bar across
   # the shoulders.
   # ============================================================
-  blob arm on clavicle at=1.00 offset=(0.012,0.028,-0.012) r=0.078 wide=1.30 tall=0.50 deep=1.10 box round=0.15 blend=0.006 mirror color=77806b gloss=0.55
 
   # ============================================================
   # ARMS — BARE, thick, skin. The deltoid must show below the pauldron's
@@ -127,11 +124,11 @@ body
   # arm than before (0.060 -> 0.048 rather than 0.048 -> 0.042) so the mass
   # reads as a deltoid falling into a narrower elbow rather than a uniform
   # tube -- a thicker cylinder alone reads as fat, not muscle.
-  blob arm on upperarm at=0.06 r=0.072 tall=1.10 blend=0.008 mirror
-  bar  arm on upperarm from=0.12 to=0.95 r=0.060 r2=0.048 blend=0.006 mirror
-  blob arm on forearm  at=0.00 r=0.050 blend=0.005 mirror
+  blob arm on upperarm at=0.06 r=0.098 tall=1.05 blend=0.010 mirror
+  bar  arm on upperarm from=0.12 to=0.95 r=0.086 r2=0.058 blend=0.008 mirror
+  blob arm on forearm  at=0.00 r=0.064 blend=0.006 mirror
   # The issued-grunt forearm: fatter than the upper arm's lower end.
-  bar  arm on forearm  from=0.05 to=0.95 r=0.054 r2=0.042 blend=0.006 mirror
+  bar  arm on forearm  from=0.05 to=0.95 r=0.072 r2=0.048 blend=0.008 mirror
   # Fist — a blunt mitt, no fingers (house rule: the goblin's grabby hand is
   # the only articulated one in the cast).
   blob arm on hand at=0.50 offset=(0,0,0.010) r=0.044 wide=0.90 tall=1.00 deep=1.20 blend=0.006 mirror
@@ -193,11 +190,11 @@ face
   jawHeight  0.90
   jawDrop    0.060
   jawJut     0.038
-  noseLength 0.031
-  noseWidth  0.500
-  noseDrop   0.039
-  browHeavy  0.019
-  browRise   0.039
+  noseLength 0.004
+  noseWidth  0.34
+  noseDrop   0.020
+  browHeavy  0.010
+  browRise   0.020
   headBlend  0.005
 
 # The mesh's own face, baked flat (npm run blob:face-bake -- soldier) and
