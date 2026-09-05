@@ -1,0 +1,207 @@
+# Female — THE WIDOW, authored from a description, no measurement step (the
+# soldier's method: describe-and-judge, see commit "plan + refs: a female
+# character, authored from a description"). The reference plate
+# (docs/dev-notes/refs/female-example-views-ref.png) was read once for
+# proportions — hourglass, slim limbs, hair UP in a bun — and put down. The
+# mesh was used ONLY to bake the face decal (blob:face-bake), filtered to its
+# six head meshes; its clothes and its 722-joint Rigify rig are ignored.
+#
+# WHO SHE IS. The cast is a bestiary — a scheming goblin, a flesh-zombie, a
+# jester-clown, an ordinary grunt — and the one ordinary-human slot is taken.
+# What the Weird West has that this cast doesn't is its GOTHIC: the mourning
+# widow in black, pale and cinched, hair piled up, one red cameo at the
+# throat. She is the saloon's widow — dressed for a funeral she may have
+# arranged. That puts a woman beside the goblin and the soldier without
+# either figure-study realism or a second monster.
+#
+# THE THREE BEATS that carry her silhouette (same budget as the goblin's
+# ears+nose+lips, the soldier's flat-top+pauldrons+belt, the clown's
+# hat+nose+shoes):
+#   1. THE BUN — oversized dark updo, the reference's loudest feature. From
+#      behind and the side it is half the head's mass.
+#   2. THE WASP WAIST — the corseted cinch. Shoulders and hips both read
+#      wider than a waist pulled in hard; the hourglass is the reference's
+#      proportion note and the widow's menace at once.
+#   3. THE BLACK BLOCKS — dress, stockings, gloves, shoes as ONE near-black
+#      plum mass broken only by pale skin (face, upper arms) and the single
+#      red choker. Colour blocking does the clothing; no kit, no fine detail.
+#
+# Everything else is a supporting mass, in the house idiom: few large smooth
+# prims, heavy blends, clothing as paint on the sculpt (the mouse/schoolgirl
+# route — it costs no prims), the face a baked decal, never painted prims.
+
+model female
+  height 1.68
+  # humanoid | digitigrade. Checked, not decorative — see blob-checks.ts.
+  stance humanoid
+
+skeleton
+  # Legs are half the standing height, as on the soldier — she is the same
+  # ordinary-human scale, an inch shorter in heels-down terms. Root at 0.85
+  # so the leg chain (0.42 + 0.415 below the pelvis tail at 0.95) lands the
+  # ankle at 0.115, the schoolgirl's ankle — her shoe prims then port
+  # unchanged.
+  root pelvis at 0.85 len=0.10
+
+  # Upright with a whisper of backward lean — the widow stands straight; the
+  # zombie owns the stoop, the goblin the hunch.
+  bone spine1 parent=pelvis dir=up pitch=-1 len=0.15
+  bone chest  parent=spine1 dir=up pitch=-1 len=0.15
+  bone spine2 parent=chest  dir=up pitch=0  len=0.06
+  bone neck   parent=spine2 dir=up pitch=0  len=0.075
+  # Carries the face block: cranium centre ~1.48, chin ~1.41, flesh crown
+  # ~1.57; the bun tops at ~1.66. Head about 1/8 of 1.68, cast-normal.
+  bone skull  parent=neck   dir=up pitch=2  len=0.21
+
+  mirror
+    # Shoulder socket at x 0.128, y 1.31. The goblin lesson: shoulder reach
+    # is a function of chest width — the yoke here is half-width ~0.10, so a
+    # 0.028/0.10 clavicle lands the socket just proud of the dress.
+    bone clavicle parent=spine2  side=0.028 dir=side  len=0.100
+    # Arms hang DOWN and slightly OUT (tilt 8/6 clears the skirt by ~5 cm —
+    # the schoolgirl measured the <=6 deg fog line where arm and waist melt).
+    bone upperarm parent=clavicle dir=down tilt=8 pitch=2  len=0.23
+    bone forearm  parent=upperarm dir=down tilt=6 pitch=10 len=0.21
+    bone hand     parent=forearm  dir=down pitch=8         len=0.09
+    # Legs: dead straight with a whisper of outward slant, like the soldier.
+    bone thigh    parent=pelvis dir=down tilt=2 side=0.058 len=0.42
+    bone shin     parent=thigh  dir=down tilt=2            len=0.415
+    # The foot bone only positions the shoe prims (the house pattern).
+    bone foot     parent=shin   dir=fwd                    len=0.12
+  end
+
+body
+  # ============================================================
+  # TORSO — the black dress IS these masses, painted. Near-black plum
+  # (171219), not pure black: pure black reads as a hole under the lab's
+  # single key. The hourglass lives here: yoke ~0.10 half, waist pulled to
+  # 0.070, hips back out to 0.098.
+  # ============================================================
+  # Hips: the dress over the pelvis; the skirt shell flares below this.
+  blob torso on pelvis at=0.45 r=0.098 wide=0.95 tall=0.95 deep=0.82 blend=0.008 color=171219
+  # Waist: bar up spine1 (y 1.00 -> 1.10), cinched to 0.070 at the top — the
+  # wasp waist sits just under the bust, where the reference's does.
+  bar  torso on spine1 from=0.35 to=1.00 r=0.088 r2=0.070 deep=0.76 blend=0.006 color=171219
+  # Bust: swelling from the cinch (0.072 at y 1.13) out to 0.100 at the
+  # shoulder line (y 1.24), deep 0.88 for the side-profile read.
+  bar  torso on chest  from=0.20 to=0.92 r=0.072 r2=0.100 deep=0.88 blend=0.008 color=171219
+  # Bust mounds, front — the side-view bust of the reference, as geometry.
+  blob torso on chest  at=0.55 offset=(0.042,0,0.048) r=0.046 deep=1.00 blend=0.006 both color=171219
+  # High mourning collar up spine2 to the neck.
+  bar  torso on spine2 from=0.00 to=0.90 r=0.082 r2=0.048 deep=0.78 blend=0.006 color=171219
+
+  # ============================================================
+  # THE SKIRT — one flared shell cone, black, knee-length (cloth, not mass —
+  # the schoolgirl's skirt pattern). Waistband 0.072 half at y 1.00 flaring
+  # to 0.170 at the hem (y 0.50, just above the knee), deep 0.80. tall 0.30
+  # stays inside the renderer's anisotropy family (the schoolgirl's GPU-hole
+  # lesson: no thinner than ~3x on the caps).
+  # ============================================================
+  shell torso on spine1 at=0.333 r=0.072 r2=0.170 tip=(0,-0.500,0) wide=1.00 tall=0.30 deep=0.80 thick=0.006 clip=(0,-1,0) clipd=-0.500 rim=0.007 blend=0.006 color=171219
+
+  # Neck: pale skin above the collar.
+  bar head on neck from=0.05 to=0.95 r=0.027 deep=1.15 blend=0.004
+
+  # THE CAMEO CHOKER — the single red accent (8a1016). A flat band proud of
+  # the throat, wide and squashed so it reads as a choker, not a bead.
+  blob head on neck at=0.50 offset=(0,0,0.024) r=0.013 wide=1.40 tall=0.45 deep=0.90 blend=0.003 color=8a1016
+
+  # ============================================================
+  # HAIR — dark brown (261b12, the bake's hair) worn UP. Crown dome + fringe
+  # + nape as the swept-back mass, and THE BUN (beat 1) as one big blob on
+  # the crown's top-back — oversized, half the head's silhouette from
+  # behind.
+  # ============================================================
+  blob head on skull at=0.50 offset=(0,0.030,-0.020) r=0.072 wide=1.00 tall=0.95 deep=0.95 blend=0.006 color=261b12 gloss=0.25
+  blob head on skull at=0.55 offset=(0,0.100,-0.045) r=0.060 wide=1.00 tall=1.05 deep=1.00 blend=0.006 color=261b12 gloss=0.30
+  # Swept fringe at the brow depth — the decal paints the hairline itself.
+  blob head on skull at=0.50 offset=(0,0.045,0.040) r=0.045 wide=1.25 tall=1.10 deep=0.90 blend=0.004 color=261b12 gloss=0.25
+  # Nape closing to the neck at the back.
+  blob head on skull at=0.50 offset=(0,-0.055,-0.060) r=0.045 wide=0.85 tall=1.00 deep=1.00 blend=0.005 color=261b12 gloss=0.30
+  # Chin: a definite small point.
+  blob head on skull at=0.50 offset=(0,-0.105,0.060) r=0.018 wide=1.10 tall=0.60 deep=0.90 blend=0.004
+
+  # ============================================================
+  # ARMS — slim, pale upper arms BARE (the pale block that echoes the face),
+  # black opera gloves from above the elbow to the fingertips. Slimmer than
+  # the schoolgirl's: the reference's limbs are slender.
+  # ============================================================
+  blob arm on clavicle at=1.00 offset=(0,-0.016,0) r=0.029 tall=0.85 blend=0.005 mirror core
+  bar  arm on upperarm from=0.05 to=0.98 r=0.026 r2=0.022 blend=0.005 mirror
+  # The glove line: skin to just above the elbow, black below.
+  blob arm on forearm  at=0.00 r=0.023 blend=0.005 mirror
+  bar  arm on forearm  from=0.02 to=0.30 r=0.022 r2=0.021 blend=0.004 mirror
+  bar  arm on forearm  from=0.30 to=0.98 r=0.021 r2=0.018 blend=0.004 mirror color=171219
+  # Gloved hand — a slim smooth mitt, no fingers (house rule: only the
+  # goblin's hand articulates).
+  blob arm on hand at=0.50 offset=(0,0,0.020) r=0.023 wide=0.85 tall=1.10 deep=1.20 blend=0.004 mirror color=171219
+
+  # ============================================================
+  # LEGS — black stockings as paint below the skirt hem; slim (the
+  # reference's calves carry no bulge). Thigh cross-section deeper than
+  # wide, as measured on the schoolgirl.
+  # ============================================================
+  blob leg on thigh at=0.00 r=0.060 deep=1.08 blend=0.006 mirror core color=171219
+  bar  leg on thigh from=0.02 to=1.00 r=0.064 r2=0.040 deep=1.08 blend=0.005 mirror color=171219
+  blob leg on shin  at=0.00 r=0.040 deep=1.05 blend=0.005 mirror color=171219
+  bar  leg on shin  from=0.02 to=1.00 r=0.042 r2=0.031 blend=0.005 mirror color=171219
+
+  # ============================================================
+  # SHOES — black heeled pumps (the schoolgirl's mary-jane pattern, ankle at
+  # 0.115, same world-displacement authoring), glossier than the dress.
+  # ============================================================
+  blob leg on foot at=0.00 r=0.028 r2=0.024 wide=1.70 tall=1.05 deep=1.30 blend=0.006 offset=(0.002,-0.085,-0.050) tip=(0.010,-0.002,0.095) mirror color=171219 gloss=0.30
+  blob leg on foot at=0.00 r=0.036 wide=1.15 tall=0.95 deep=1.25 blend=0.006 offset=(-0.004,-0.030,0.000) mirror color=171219 gloss=0.30
+
+# ============================================================
+# FACE BLOCK — a small oval skull under the hair: narrower jaw, light brow,
+# a small nose. The face ITSELF is the baked decal below; three dispatches
+# proved painted-prim features read as a visor band, so none are added.
+# ============================================================
+face
+  headRadius 0.068
+  headWidth  0.92
+  headHeight 1.28
+  headDepth  1.10
+  jawWidth   0.78
+  jawHeight  0.72
+  jawDrop    0.058
+  jawJut     0.036
+  noseLength 0.003
+  noseWidth  0.30
+  noseDrop   0.022
+  browHeavy  0.002
+  browRise   0.022
+  headBlend  0.005
+
+# Her own face, baked flat off the reference mesh's head (npm run
+# blob:face-bake -- female --head-frac 1.0, head meshes only — the clothes
+# were filtered out first) and pasted on. `decal 1` is load-bearing: the
+# loader fetches the baked PNG only if decal > 0.5.
+#
+# The bake frames bun-to-chin: eyes at bake v ~0.53, mouth v ~0.70. First
+# projection is the schoolgirl's solve scaled to this skull, tuned by eye
+# from the turntable frames — the frames win over arithmetic.
+sheet
+  image       female-face.png
+  decal       1
+  projScaleX  0.30
+  projScaleY  0.26
+  projCentreX 0.50
+  projCentreY 0.50
+
+# PALE skin — the widow has not seen the sun. sRGB ~(232,205,190) -> linear.
+# Dry, matte, almost no mottle: she is porcelain, not latex. Wounds stay
+# red.
+palette
+  baseColor     0.80 0.62 0.52
+  deepColor     0.50 0.08 0.08
+  charColor     0.22 0.13 0.10
+  specIntensity 0.40
+  specRoughness 0.45
+  fresnelBoost  0.28
+  translucency  0.22
+  wetness       0.10
+  mottleAmp     0.03
+  mottleScale   1.2
+  mottleColor   0.55 0.38 0.28

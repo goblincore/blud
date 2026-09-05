@@ -55,6 +55,7 @@ import boxFixtureBlobSrc from '../characters/box-fixture.blob?raw';
 // and may come and go with the comparison).
 import minotaurBlobSrc from '../characters/minotaur.blob?raw';
 import soldierBlobSrc from '../characters/soldier.blob?raw';
+import femaleBlobSrc from '../characters/female.blob?raw';
 
 /**
  * Every authored .blob character, by the name you pass as `?character=`.
@@ -78,6 +79,7 @@ const CHARACTERS: Record<string, string> = {
   'box-fixture': boxFixtureBlobSrc,
   minotaur: minotaurBlobSrc,
   soldier: soldierBlobSrc,
+  female: femaleBlobSrc,
 };
 
 /**
