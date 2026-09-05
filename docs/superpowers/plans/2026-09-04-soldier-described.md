@@ -50,6 +50,36 @@ is what failed. Do not run `blob:rings`, `blob:measure`, or
 `scripts/head-profile.ts`. If a change reads better than the reference, make
 it and say why in a comment. That licence is the point of this experiment.
 
+## LOOK AT THE CAST FIRST — HE HAS TO BELONG BESIDE THEM
+
+Before you write a single line, **shoot and LOOK at the three characters the
+owner likes**:
+
+```
+npm run blob:shot -- goblin
+npm run blob:shot -- clown
+npm run blob:shot -- zombie
+```
+
+`Read` those frames. They are the house look, and the soldier has to sit next
+to them in the same game without looking like he wandered in from another one.
+Read their `.blob` files too — `characters/goblin.blob` especially, whose
+comments explain WHY its nose, ears and lips are shaped the way they are.
+
+What you are looking for is the shared visual language, not details to copy.
+Things worth noticing and matching: how heavy and blended the masses are, how
+few primitives carry a whole character, how much work bold colour blocking
+does versus fine detail, and how each one has two or three exaggerated
+features doing all the identifying while everything else stays simple.
+
+**Then build the soldier as a member of that cast.** He is the ordinary
+human in a bestiary of monsters, so he should read as deliberately plainer —
+but plainer in the same idiom, not in a different one. If you find yourself
+adding detail none of those three has, that is the signal to stop.
+
+Say in your report how you decided he fits with them. That judgement is
+half of what this experiment is testing.
+
 ## THE CHARACTER
 
 A heavy-set enlisted grunt. Not elite, not a hero — a guy issued equipment.
