@@ -364,7 +364,9 @@ async function runIntact() {
         const failure=normalCoverageFailure(result,{woundControl});
         if(failure) report.failures.push(failure);
       }
-      result.angularReview={triggered:result.angularDegrees.max>25,technicalBeautyReviewed:phase==='wounds'&&['torso-after-impact','body-after-arm-sever'].includes(name),authority:'controller review 2026-09-05; owner allows benign appearance differences; no ownerLook gate change'};
+      // Review belongs to a captured artifact, never to a reusable scene name.
+      // Historical exceptions remain in wounds.json; fresh images need review.
+      result.angularReview={triggered:result.angularDegrees.max>25,technicalBeautyReviewed:false,authority:'fresh capture: artifact-specific technical beauty review pending; no ownerLook gate change'};
       const angularFailure=normalAngularFailure(result,result.angularReview);if(angularFailure)report.failures.push(angularFailure);
     }
     writeFileSync(resolve(outDir,'progress.json'),JSON.stringify(report,null,2));
