@@ -20,13 +20,15 @@ The tracked machine-readable result is `summary.json`. Its timing and coverage m
 
 ## Unresolved validation
 
-Static review of the intact driver found three issues whose fixes are pending: head/torso coverage currently counts all camera-framed hit pixels instead of anatomical regions; staging helpers can call `process.exit` and bypass driver cleanup; and the motion camera uses the wrong yaw sign. These are driver defects, not gameplay GPU evidence, and they do not change the incomplete conclusion.
+The three intact-driver static-review findings are now implemented as fixes: head/torso counts use independent owner-to-anatomy masks for the intended staged actor; all staging calls use throwing failure callbacks that preserve cleanup; and motion yaw is computed from the vector to the target. Five new behavioral tests and the offline verdict regression pass. Static re-review is pending, and the full GPU/readback path remains unexecuted. These fixes do not change the incomplete conclusion.
+
+The anatomical pass preserves other actors' geometry/depth while tagging their RGB with a negative flat-albedo sentinel, then restores their exact look values in `finally`. Chunk-containing eligibility captures are explicitly rejected because this API cannot map a detached piece to an actor. Task 4 must extend that identity/mask contract before claiming impact/sever coverage.
 
 The separate zoned wound-cache branch has `zonedCfg.x`; that uniform is absent at this checkpoint. Any future combination must force complete legacy normals while cache mode is active until cached-field gradients pass separate validation. Cached gradients and reduced-rate AO/scatter remain future experiments.
 
 ## Resume sequence
 
-From `/Users/donny/Projects/blud/.worktrees/zombie-analytic-normals`, after the driver review fixes land and machine load1 is at most 12:
+From `/Users/donny/Projects/blud/.worktrees/zombie-analytic-normals`, after static re-review of the driver fixes and when machine load1 is at most 12:
 
 ```bash
 export LAB_VITE_PORT=5251 LAB_CDP_PORT=9251

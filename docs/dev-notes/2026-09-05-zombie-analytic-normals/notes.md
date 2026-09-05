@@ -75,3 +75,9 @@ Future combination with the independent zoned-wound experiment must force full l
 The prerequisite gate stopped the chain. `reference` and `gpuKernel` remain passed, `intact` remains deferred, `wounds` is skipped by gate, visual evidence and timing are skipped by gate, and owner look remains pending. `summary.json` contains no invented measurements: gameplay coverage and timings are unavailable, with no images or reel.
 
 The verdict driver now handles this state entirely offline, writes the structured incomplete summary, updates dependent gates and exits nonzero. A focused process-level test proves that it does not attempt CDP when prerequisites are missing. See `verdict.md` for the evidence assessment, static-review findings and exact resume sequence.
+
+## Task 3 static-review fix round 1
+
+Implemented the three driver findings on top of Task 5's offline incomplete-verdict commit `04a479a`. Head and torso now each use the staged actor's raw hit-owner index mapped to `posed().prims[].limb`, with independent hit/analytic/fallback denominators. Other actors retain depth/occlusion but use negative sentinel RGB during the eligibility pass; their exact color and flat-albedo setting restore in `finally`. Chunk-containing eligibility captures are rejected until Task 4 extends piece identity/masks for impact/sever coverage. All staging calls go through wrappers with throwing failure callbacks, and moving-camera yaw uses `atan2(dx,-dz)` toward the body.
+
+RED: all 5 new behavioral tests failed against unimplemented helper shells. GREEN: 8 focused Node tests passed (5 fixes, 2 gates, 1 process-level offline verdict regression); both modified driver/helper modules pass syntax checks and `git diff --check` is clean. Static re-review remains pending. No browser, GPU launch or retry occurred in this fix round; `intact` stays deferred and Task 4 stays skipped by prerequisite. Raw gameplay evidence, visual acceptance and timing remain unavailable.

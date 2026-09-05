@@ -2,7 +2,8 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { applyShipDefaults, stageCloseUp, stampFacingWounds } from './lib/sdf-closeup-stage.mjs';
+import { applyShipDefaults } from './lib/sdf-closeup-stage.mjs';
+import { normalAnatomyCoverage, normalOrbitPose, stageNormalCloseup, stampNormalWounds, withNormalBodyMask } from './lib/normal-gradient-intact.mjs';
 import { readNormalGates, writeNormalGates } from './lib/normal-gradient-gates.mjs';
 
 const argv = process.argv.slice(2);
@@ -215,10 +216,12 @@ async function runIntact() {
     writeFileSync(resolve(outDir, `${name}.png`), Buffer.from(png,'base64'));
     return { ...r, data, rgba32f:undefined };
   };
-  const compare = async (name, expectedReason=null) => {
+  const compare = async (name, bodyId, expectedReason=null) => {
     const legacy = await frame(0,1,`${name}-legacy-normal`);
     const hybrid = await frame(1,1,`${name}-hybrid-normal`);
-    const eligibility = await frame(1,2,`${name}-eligibility`);
+    const eligibility = await withNormalBodyMask(evaluate,bodyId,()=>frame(1,2,`${name}-eligibility`));
+    const ownerLimbs = await evaluate(`__sdfGame.zombie(${bodyId}).posed().prims.map(p=>p.limb)`);
+    const anatomy = normalAnatomyCoverage(eligibility.data,ownerLimbs);
     const reasons = Object.fromEntries(Object.keys(reasonCode).map(k=>[k,0]));
     let depthMax=0, depthChanged=0, fallbackMax=0, scalarMax=0, nonFinite=0;
     const angles=[];
@@ -239,7 +242,7 @@ async function runIntact() {
     }
     angles.sort((a,b)=>a-b);
     const total=Object.values(reasons).reduce((a,b)=>a+b,0);
-    const result={name,w:legacy.w,h:legacy.h,total,reasons,analyticFraction:reasons.ok/Math.max(total,1),depthMax,depthChanged,fallbackMax,scalarMax,nonFinite,
+    const result={name,bodyId,anatomy,anatomyMask:'staged-body owner limb; foreign bodies retain depth with negative RGB sentinel',w:legacy.w,h:legacy.h,total,reasons,analyticFraction:reasons.ok/Math.max(total,1),depthMax,depthChanged,fallbackMax,scalarMax,nonFinite,
       angularDegrees:{count:angles.length,p50:angles[Math.floor(angles.length*.5)]??0,p95:angles[Math.floor(angles.length*.95)]??0,p99:angles[Math.floor(angles.length*.99)]??0,max:angles.at(-1)??0}};
     report.results.push(result);
     if(total<100) report.failures.push(`${name}: insufficient hit pixels ${total}`);
@@ -247,8 +250,10 @@ async function runIntact() {
     if(expectedReason!==null) {
       if(reasons[expectedReason]!==total) report.failures.push(`${name}: expected complete ${expectedReason} fallback`);
     } else {
-      const coverageFloor = name === 'head' || name === 'torso' ? .5 : .1;
-      if(reasons.ok<100||result.analyticFraction<coverageFloor) report.failures.push(`${name}: analytic coverage below ${coverageFloor}`);
+      if(name==='head'||name==='torso') {
+        const region=anatomy[name];
+        if(region.hits<100||region.analyticFraction<.5) report.failures.push(`${name}: anatomical coverage below 50% or fewer than 100 region hits: ${JSON.stringify(region)}`);
+      } else if(reasons.ok<100||result.analyticFraction<.1) report.failures.push(`${name}: analytic coverage below 10% probe floor`);
       if(result.angularDegrees.p99>5||result.angularDegrees.max>25) report.failures.push(`${name}: base-normal angular error exceeds 5deg p99 /25deg max`);
     }
     console.log(JSON.stringify(result));
@@ -264,22 +269,22 @@ async function runIntact() {
     if(report.initialStatus.mode!==0) throw new Error('gradient does not default off');
     report.staging=[];
     for(const [name,aimY,ladder] of [['whole-body',.95,[2.4]],['torso',1.15,[1.1]],['head',1.65,[.8]]]) {
-      const stage=await stageCloseUp(evaluate,{aimY,ladder});report.staging.push({name,...stage});
-      await compare(name);
+      const stage=await stageNormalCloseup(evaluate,{aimY,ladder});report.staging.push({name,...stage});
+      await compare(name,stage.body);
     }
     const body=report.staging[0].body;
     report.material=await evaluate(`(() => { const u=__sdfGame.zombie(${body}).view.uniforms; return {march:u.marchCfg.value.toArray(),surface:u.surfCfg.value.toArray(),surface2:u.surfCfg2.value.toArray(),wound:u.woundCfg.value.toArray(),wound2:u.woundCfg2.value.toArray(),perf:u.perfCfg.value.toArray()}; })()`);
     await evaluate(`performance.now=window.__ngClockOriginal;__sdfGame.freeze(false);__sdfGame.step(20);__sdfGame.freeze(true);performance.now=()=>window.__ngClock`);
-    await stageCloseUp(evaluate,{aimY:1.25,ladder:[1.25]});
+    await stageNormalCloseup(evaluate,{aimY:1.25,ladder:[1.25]});
     report.animatedGeometry=await evaluate(`(() => { const p=__sdfGame.zombie(${body}).posed().prims;return {count:p.length,anisotropic:p.filter(x=>Math.max(...x.scale)-Math.min(...x.scale)>1e-5).length,rotated:p.filter(x=>x.orient&&Math.abs(x.orient[3]-1)>1e-6).length}; })()`);
-    await compare('animated-scaled-flesh');
+    await compare('animated-scaled-flesh',body);
     await evaluate(`__sdfGame.zombie(${body}).view.uniforms.counts2.value.y = 1`);
-    await compare('unsupported-bare-bones','unsupported');
+    await compare('unsupported-bare-bones',body,'unsupported');
     await evaluate(`__sdfGame.zombie(${body}).view.uniforms.counts2.value.y = 0`);
-    const stage=await stageCloseUp(evaluate,{aimY:1.1,ladder:[1.45]});
-    report.wounds=await stampFacingWounds(evaluate,{offsets:[[0,0,'slug']],minStamped:1});
+    const stage=await stageNormalCloseup(evaluate,{aimY:1.1,ladder:[1.45]});
+    report.wounds=await stampNormalWounds(evaluate,{offsets:[[0,0,'slug']],minStamped:1});
     await evaluate('__sdfGame.step(30)');
-    await compare('mixed-wounded');
+    await compare('mixed-wounded',stage.body);
     if(!(report.results.at(-1).reasons['wound-pending']>0)) report.failures.push('mixed-wounded: no wound fallback pixels');
     // Shipped-look paired moving-body/flashlight reel, same frozen pose per pair.
     // Clock increments are explicit and restored before this driver exits.
@@ -287,8 +292,8 @@ async function runIntact() {
       await evaluate(`performance.now=window.__ngClockOriginal;__sdfGame.freeze(false);__sdfGame.step(4);__sdfGame.freeze(true);window.__ngClock+=66.6667;performance.now=()=>window.__ngClock`);
       const z=await evaluate(`__sdfGame.zombies().find(z=>z.id===${body})`);
       const ang=.2*Math.sin(i*.4), distance=1.8;
-      const x=z.pos[0]+Math.sin(ang)*distance, zcam=z.pos[2]+Math.cos(ang)*distance;
-      await evaluate(`__sdfGame.setPose(${x},${zcam},${ang},${Math.atan2(1.1-1.62,distance)},0)`);
+      const cameraPose=normalOrbitPose(z.pos,ang,distance,1.1,1.62);
+      await evaluate(`__sdfGame.setPose(${cameraPose.x},${cameraPose.z},${cameraPose.yaw},${cameraPose.pitch},0)`);
       for(const mode of [0,1]) {
         await evaluate(`__sdfGame.setNormalGradient(${mode});__sdfGame.setNormalGradientDebug(0);__sdfGame.step(1,0)`);
         await sleep(65);

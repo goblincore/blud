@@ -72,3 +72,25 @@ On a quiet machine, run the exact command above, then investigate any compiler/n
 5. Owner visual acceptance remains pending. Mode stays off; no merge, push, auto-enable, or Task 4 implementation occurred.
 
 Commit: the narrow Task 3 implementation commit containing this report (parent `edeca69`); controller receives its SHA in the return message.
+
+## Fix round 1 — driver findings implemented, static re-review pending
+
+Follow-up base: Task 5 incomplete-verdict commit `04a479a`. No shader/renderer changes in this fix round, and the existing offline verdict branch is preserved.
+
+1. **Anatomy and staged-body identity:** `normalAnatomyCoverage` maps raw eligibility owner indices to the staged actor's actual `posed().prims[].limb`. Head and torso each report their own `hits`, `analytic`, `fallback`, and `analyticFraction`; the >=50% gates use the corresponding region, with at least 100 region hit pixels. Other limb pixels cannot inflate either denominator. During the eligibility pass only, all other actors keep geometry and clip depth but emit negative RGB through the existing flat-albedo seam. That excludes another actor's identical local owner indices. `withNormalBodyMask` restores exact original base color and flat-albedo setting on success, setup failure, or readback failure via `finally`. No new/reserved uniform slots were consumed. Captures with detached chunks are explicitly rejected; **Task 4 must extend body/piece identity and anatomical masks before claiming impact/sever coverage**.
+2. **Failure propagation:** every intact-driver stage and wound-stamp call now uses `stageNormalCloseup` / `stampNormalWounds`, wrappers passing an explicit throwing failure callback to the underlying staging functions. These cannot inherit the library's `process.exit` default. Errors propagate through the inner state/clock cleanup and outer JSON/tab cleanup.
+3. **Moving camera:** `normalOrbitPose` computes yaw from `atan2(targetX-cameraX, -(targetZ-cameraZ))`, with pitch from the same target distance. Tested for both orbit signs.
+
+TDD: `/tmp/zombie-ng-fix-red.txt` records 5 failures for the 5 helper shells before implementation. The tests exercise independent anatomical denominators with non-head/torso/foreign/background/unknown-owner rows, both yaw signs, thrown staging/wound failures reaching cleanup, and exact other-body look restoration on failed readback. Final focused verification:
+
+```text
+node --test --test-concurrency=1 scripts/lib/normal-gradient-intact.test.mjs scripts/lib/normal-gradient-gates.test.mjs scripts/zombie-normal-gradient-check.test.mjs
+# 8 passed, 0 failed (5 fixes +2 gates +1 offline verdict regression)
+node --check scripts/zombie-normal-gradient-check.mjs
+node --check scripts/lib/normal-gradient-intact.mjs
+# both exit 0
+git diff --check
+# clean
+```
+
+GREEN output: `/tmp/zombie-ng-fix-green.txt`. The offline process test proves prerequisites still produce an incomplete summary/nonzero exit without touching CDP. No full suite, browser/GPU launch, load retry, subagent, or external-memory operation ran. `verdict.md` and notes now distinguish implemented fixes from pending static re-review. `intact` remains deferred; gameplay GPU samples/captures remain zero; Task 4 remains skipped. Runtime sentinel preservation, owner mapping and the real readback path still need the required game GPU gate when authorized on a quiet machine. The prior exact resume command and numerical/coverage criteria remain applicable after static re-review.
