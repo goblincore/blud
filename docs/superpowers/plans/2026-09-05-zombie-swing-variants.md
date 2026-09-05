@@ -862,18 +862,35 @@ Expected: PASS, 26 tests.
 Run: `npx tsc --noEmit`
 Expected: no output.
 
-- [ ] **Step 9: Run the full suite**
+- [ ] **Step 9: Fix game-main's brains() seam**
 
-Run: `npx vitest run`
-Expected: PASS, no regressions. If `game-main.ts` fails to typecheck because it
-reads `a.debug().side`, that is fine — it still exists; only report a failure
-if one actually occurs.
+`Brain.side` no longer exists, and `game-main.ts:2984` reads it. In the
+`brains()` seam, replace:
 
-- [ ] **Step 10: Commit**
+```ts
+        swingT: b.swingT, side: b.side, hasToken: a.debug().hasToken,
+```
+
+with:
+
+```ts
+        swingT: b.swingT, side: b.swing.side, variant: b.swing.variant,
+        hasToken: a.debug().hasToken,
+```
+
+(The `variant` field is what Task 4's gate assertion reads.)
+
+- [ ] **Step 10: Run the full suite**
+
+Run: `npx tsc --noEmit && npx vitest run`
+Expected: typecheck clean, suite green, no regressions.
+
+- [ ] **Step 11: Commit**
 
 ```bash
 git add src/lab/sdf-zombie/brain.ts src/lab/sdf-zombie/brain.test.ts \
-  src/lab/sdf-zombie/webgpu/game-actor.ts src/lab/sdf-zombie/webgpu/game-actor.test.ts
+  src/lab/sdf-zombie/webgpu/game-actor.ts src/lab/sdf-zombie/webgpu/game-actor.test.ts \
+  src/lab/sdf-zombie/webgpu/game-main.ts
 git commit -m "brain: roll a swing variant at swing start
 
 Brain.side becomes Brain.swing {side, variant}. The variant is rolled on the
@@ -1076,8 +1093,7 @@ if (seenVariants.size < 2) {
 console.log(`ring: both swing variants fired (${[...seenVariants].sort().join(', ')})`);
 ```
 
-For this to work `brains()` must report the variant. In `game-main.ts`'s
-`brains()` seam, add `variant: a.debug().variant,` to the returned object.
+`brains()` already reports `variant` — Task 3 Step 9 added it.
 
 - [ ] **Step 5: Run the gate**
 
