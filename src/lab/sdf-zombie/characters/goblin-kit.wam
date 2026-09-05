@@ -69,6 +69,8 @@ palette
   # barely matters and the shine is the whole read. kit-overlay.ts gives it the
   # lowest roughness and the highest env intensity of anything in the kit.
   glass   #14161a
+  band    #1c1c20
+  screen  #22282e
 
 skeleton
   # `hips` HAS NO COUNTERPART IN goblin.blob, and leaving it out is a silent
@@ -176,6 +178,20 @@ parts
       ring 1.00 w=0.012 d=0.010 tip
       cap start=none end=point
   end
+
+  # SMARTWATCH — LEFT WRIST ONLY, matching the FPV arm asset (goblin-arm.glb,
+  # F-arm.1). Outside the mirror block and pinned to forearm.l so no .r copy
+  # is emitted. The band is a ring just above the wrist, proud of the flesh
+  # (forearm shaft r 0.028, wrist blob r 0.030 -> 0.060 across) by 2 mm; the
+  # body is a box snapped ONTO the band with on= so its landing needs no
+  # offset guesswork, the screen a thinner box snapped onto the body.
+  loft watchband bones=forearm.l..forearm.l material=band
+    ring 0.88 w=0.062 d=0.062
+    ring 0.92 w=0.064 d=0.064
+    ring 0.96 w=0.062 d=0.062
+    cap start=none end=none
+  attach watchbody bone=forearm.l kind=box at=0.92 offset=(0,0,0.040) size=0.026 w=0.030 d=0.008 on=watchband material=band
+  attach watchface bone=forearm.l kind=box at=0.92 offset=(0,0,0.048) size=0.020 w=0.024 d=0.002 on=watchbody material=screen
 
   # BREASTPLATE — a cuirass over the ribs AND the belly, down to the belt.
   #
