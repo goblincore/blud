@@ -331,6 +331,12 @@ export async function runInterleaved(legs, reps, opts, failParam = failHard) {
     await bootCloseupPage({ send: conn.send, evaluate: ev, url: opts.url, fail });
     await applyShipDefaults(ev);
     if (L.exitBound !== undefined) await ev(`__sdfGame.setHullExitBound(${L.exitBound})`);
+    // Generic per-leg seam application (close-up task 4): the BODY of an
+    // async function with the page's seams in scope. Same class of hook as
+    // exitBound above, for leg tables that need more than one seam each
+    // (the goo A/B flips several perf levers per leg). Runs BEFORE staging,
+    // so the staging search sees the leg's state.
+    if (L.legJs) await ev(`(async () => { ${L.legJs} })()`);
     // Default staging: the room-1 fill-screen closeup. A caller can replace
     // it wholesale with stageJs — the BODY of an async function (wrapped
     // here, so a bare `return {...}` is legal) returning the staging record.
@@ -350,24 +356,31 @@ export async function runInterleaved(legs, reps, opts, failParam = failHard) {
     await ev(`__sdfGame.setFlatAlbedo(${L.flat})`);
     await ev('__sdfGame.step(2)');
     const occ = await ev('__sdfGame.occupancy()');
-    await ev(`__sdfGame.bench({ kind: 'closeup', mode: 'throughput', warmup: 120, chunkFrames: 10, closeupFrames: 240, label: ${JSON.stringify(leg)}, ...${JSON.stringify(opts.benchArgs ?? {})} })`);
+    await ev(`__sdfGame.bench({ kind: 'closeup', mode: 'throughput', warmup: 120, chunkFrames: 10, closeupFrames: 240, label: ${JSON.stringify(leg)}, ...(L.benchArgs ?? ${JSON.stringify(opts.benchArgs ?? {})}) })`);
     const r = JSON.parse(await ev('JSON.stringify(window.__gameBench)'));
     if (!r.valid) fail(`${leg} rep${rep}: ${r.hiddenSteps} hidden frames — INVALID`);
-    const seg = r.segments.find((s) => s.name === 'closeup');
-    const census = seg?.census?.last ?? seg?.census?.first ?? null;
+    // Every segment, keyed by name (close-up task 4): the closeup scenario
+    // has one, the firefight has walk/fire/gib — a driver that benches a
+    // multi-segment scenario needs them all, not just the first.
+    const segs = {};
+    for (const s of r.segments) {
+      segs[s.name] = { p50: s.p50, p95: s.p95, mean: s.mean, max: s.max, census: s.census ?? null };
+    }
+    const seg = r.segments.find((s) => s.name === 'closeup') ?? r.segments[0];
     const row = {
       rep, leg,
-      p50: seg.p50, p95: seg.p95, mean: seg.mean, max: seg.max,
+      p50: seg?.p50, p95: seg?.p95, mean: seg?.mean, max: seg?.max,
+      segs,
       coverage: occ.hits / (occ.targetW * occ.targetH),
       dist: staging.d ?? null,
       wounds: woundInfo?.wounds ?? 0,
-      bodies: census?.bodies ?? occ.bodiesOnScreen,
+      bodies: segs[seg?.name]?.census?.last?.bodies ?? occ.bodiesOnScreen,
       meanStepsHit: occ.meanStepsHit, missStepShare: occ.missStepShare,
       uptime: await ev('__sdfGame.uptime()'),
       load1: loadavg()[0],
       load1Start: loadStart,
     };
-    if (opts.onRow) await opts.onRow(row, { staging, woundInfo });
+    if (opts.onRow) await opts.onRow(row, { staging, woundInfo, evaluate: ev });
     return row;
   };
 

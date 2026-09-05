@@ -3272,6 +3272,13 @@ async function main() {
           rim: gooLayer.rim,
           stretch: gooLayer.stretch,
           shadowRed: gooLayer.shadowRed,
+          perf: {
+            surfaceAtDensityRes: gooLayer.surfaceAtDensityRes,
+            minTexelRadius: gooLayer.minTexelRadius,
+            areaPriority: gooLayer.areaPriority,
+            splatFadeTail: gooLayer.splatFadeTail,
+            passGate: gooLayer.passGate,
+          },
         }
         : { enabled: false, unavailable: true };
     },
@@ -3412,6 +3419,36 @@ async function main() {
       if (o.rim !== undefined) gooLayer.setRim(o.rim);
       if (o.stretch !== undefined) gooLayer.setStretch(o.stretch);
       if (o.shadowRed !== undefined) gooLayer.setShadowRed(o.shadowRed);
+    },
+
+    /**
+     * Close-up task 4's PERF SEAMS (goo-layer.ts) — all default to the
+     * shipped state; the goo A/B driver flips them per leg. Deliberately NOT
+     * part of setGooTuning: these are bench levers, not look knobs, and the
+     * goo panel's copy button emits tuning keys (see the emit-key warning on
+     * the panel) — mixing the two would let a paste silently move a perf
+     * seam.
+     */
+    setGooPerf(o: {
+      surfaceAtDensityRes?: boolean;
+      minTexelRadius?: number;
+      areaPriority?: boolean;
+      splatFadeTail?: number;
+      passGate?: { density?: boolean; blur?: boolean; surface?: boolean };
+    }) {
+      if (!gooLayer) return { unavailable: true };
+      if (o.surfaceAtDensityRes !== undefined) gooLayer.setSurfaceAtDensityRes(o.surfaceAtDensityRes);
+      if (o.minTexelRadius !== undefined) gooLayer.setMinTexelRadius(o.minTexelRadius);
+      if (o.areaPriority !== undefined) gooLayer.setAreaPriority(o.areaPriority);
+      if (o.splatFadeTail !== undefined) gooLayer.setSplatFadeTail(o.splatFadeTail);
+      if (o.passGate !== undefined) gooLayer.setPassGate(o.passGate);
+      return {
+        surfaceAtDensityRes: gooLayer.surfaceAtDensityRes,
+        minTexelRadius: gooLayer.minTexelRadius,
+        areaPriority: gooLayer.areaPriority,
+        splatFadeTail: gooLayer.splatFadeTail,
+        passGate: gooLayer.passGate,
+      };
     },
 
     /** Sweep gout density/shape without a rebuild. Mutates the shared table,

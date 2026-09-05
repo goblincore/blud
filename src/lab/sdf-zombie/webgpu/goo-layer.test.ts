@@ -108,7 +108,7 @@ describe('goo blur wiring (source tripwires)', () => {
     // One hoisted gate, three consequences: the two blur renders and the
     // surface's choice of blurred-vs-raw texture. No degenerate copy pass.
     expect(src).toContain('const blurred = uBlurPx.value > 0');
-    expect(src).toContain('if (blurred) {');
+    expect(src).toContain('if (blurred && passGate.blur) {');
     expect(src).toContain("surfMats[mode][blurred ? 'blur' : 'raw']");
     expect(src).toContain('void renderer.render(blurH.scene, quadCam)');
     expect(src).toContain('void renderer.render(blurV.scene, quadCam)');
@@ -119,9 +119,11 @@ describe('goo blur wiring (source tripwires)', () => {
     expect(src).toContain('makeDepthMat(blurB.texture)');
     expect(src).toContain('makeBlurMat(blurA.texture, 0, 1)');
     // Same explicit-first-clear treatment as the density target (the
-    // lazy-init trap) and the same resize in setSize.
-    expect(src).toContain('for (const t of [target, blurA, blurB])');
+    // lazy-init trap) and the same resize in setSize — now including task
+    // 4's low-res surface target.
+    expect(src).toContain('for (const t of [target, blurA, blurB, surfaceLow])');
     expect(src).toContain('blurB.setSize(w, h)');
+    expect(src).toContain('surfaceLow.setSize(w, h)');
   });
 });
 
@@ -461,8 +463,227 @@ describe('gut mask wiring (source tripwires)', () => {
     // The mask now rides .b, which is genuinely free — .r and .b both held
     // `fall`, so dividing depth by .r instead of .b costs nothing.
     const src = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
-    expect(src).toMatch(/colorNode\s*=\s*vec4\(fall,\s*fall\.mul\(viewDepth\),\s*fall\.mul\(gutMask\),\s*1\)/);
+    expect(src).toMatch(
+      /colorNode\s*=\s*vec4\(weightedFall,\s*weightedFall\.mul\(viewDepth\),\s*weightedFall\.mul\(gutMask\),\s*1\)/,
+    );
+    // The weight multiplies ALL THREE accumulated channels — if it scaled
+    // density but not density*depth, faded splats would reconstruct a WRONG
+    // depth (g/r no longer the same depth), shifting surface normals.
+    expect(src).toMatch(/const weightedFall = fall\.mul\(fallMask\);/);
     expect(GOO_SURFACE_WGSL).toMatch(/gutFrac = clamp\(gutFrac, 0\.0, 1\.0\)/);
     expect(GOO_SURFACE_WGSL).toContain('let baseCol = mix(vec3<f32>(0.62, 0.11, 0.10), organColor, gutFrac)');
+  });
+});
+
+// -------------------------------------------------------------------------
+// CLOSE-UP TASK 4 — goo perf levers. Pure decision code is tested directly;
+// the render-path seams cannot run without a WebGPU device, so their OFF
+// defaults and the invariants that keep the shipped path intact are pinned
+// as source tripwires (the same discipline the blur-wiring guards use).
+// -------------------------------------------------------------------------
+
+import {
+  projectedTexelRadius, splatDensityWeight, orderIndicesByAreaDesc,
+  GOO_UPSAMPLE_WGSL,
+} from './goo-layer';
+
+describe('projectedTexelRadius (item 2a decision code)', () => {
+  it('a world half-extent of half the view-plane height projects to targetH/2 texels', () => {
+    // View-plane half-height at distance d is d*tan(fov/2); pick d and tan so
+    // the extent equals it: the projection must be exactly half the target.
+    const d = 10;
+    const tan = 0.5; // view-plane half-height 5
+    const px = projectedTexelRadius(5, d, tan, 400);
+    expect(px).toBeCloseTo(400 / 2, 6);
+  });
+
+  it('scales linearly with extent and target height, inversely with distance', () => {
+    const base = projectedTexelRadius(0.1, 5, 1, 400);
+    expect(projectedTexelRadius(0.2, 5, 1, 400)).toBeCloseTo(base * 2, 9);
+    expect(projectedTexelRadius(0.1, 5, 1, 800)).toBeCloseTo(base * 2, 9);
+    expect(projectedTexelRadius(0.1, 10, 1, 400)).toBeCloseTo(base / 2, 9);
+  });
+
+  it('degenerate inputs project to Infinity (never skip on bad state)', () => {
+    expect(projectedTexelRadius(0.1, 0, 1, 400)).toBe(Infinity);
+    expect(projectedTexelRadius(0.1, -1, 1, 400)).toBe(Infinity);
+    expect(projectedTexelRadius(0.1, 5, 1, 0)).toBe(Infinity);
+  });
+});
+
+describe('splatDensityWeight (item 3 decision code)', () => {
+  it('off (fadeTail 0) is weight 1 everywhere', () => {
+    expect(splatDensityWeight(0, 256, 0)).toBe(1);
+    expect(splatDensityWeight(255, 256, 0)).toBe(1);
+    expect(splatDensityWeight(3, 10, -1)).toBe(1);
+  });
+
+  it('the newest splat is always full weight; the oldest approaches 0 in a saturated ring', () => {
+    expect(splatDensityWeight(0, 256, 128)).toBe(1);
+    const oldest = splatDensityWeight(255, 256, 128);
+    expect(oldest).toBeGreaterThan(0);
+    expect(oldest).toBeLessThan(0.01);
+  });
+
+  it('is monotonically non-increasing from newest to oldest', () => {
+    let prev = 1.01;
+    for (let rank = 0; rank < 256; rank++) {
+      const w = splatDensityWeight(rank, 256, 128);
+      expect(w).toBeLessThanOrEqual(prev);
+      expect(w).toBeGreaterThan(0);
+      prev = w;
+    }
+  });
+
+  it('an unsaturated ring keeps nearly-full weight (no fade before accumulation)', () => {
+    // 10 splats with a 128 tail: everything is "recent" — the pool must not
+    // thin before the ring has actually accumulated.
+    expect(splatDensityWeight(0, 10, 128)).toBe(1);
+    expect(splatDensityWeight(9, 10, 128)).toBeGreaterThan(0.9);
+  });
+
+  it('crosses 0.5 mid-tail and is smooth there (no visible band in the pool)', () => {
+    const total = 256;
+    const tail = 128;
+    const mid = splatDensityWeight(total - tail / 2 - 1, total, tail);
+    expect(mid).toBeGreaterThan(0.45);
+    expect(mid).toBeLessThan(0.55);
+  });
+});
+
+describe('orderIndicesByAreaDesc (item 2b decision code)', () => {
+  it('orders by area descending and fills exactly count entries', () => {
+    const out = orderIndicesByAreaDesc([3, 1, 9, 4], 4, []);
+    expect(out).toEqual([2, 3, 0, 1]);
+  });
+
+  it('breaks ties by index ascending (deterministic frames)', () => {
+    const out = orderIndicesByAreaDesc([5, 5, 5], 3, []);
+    expect(out).toEqual([0, 1, 2]);
+  });
+
+  it('handles count 0 and sorts only the first count indices (caller fills the cap)', () => {
+    expect(orderIndicesByAreaDesc([1, 2], 0, [])).toEqual([]);
+    // The helper sorts the FIRST count indices, not a top-count selection —
+    // sync() always hands it every candidate and truncates at the cap after.
+    const out = orderIndicesByAreaDesc([7, 8, 9], 2, []);
+    expect(out).toEqual([1, 0]);
+  });
+});
+
+describe('goo perf seams (source tripwires)', () => {
+  const src = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
+
+  it('every lever defaults to the shipped state', () => {
+    expect(src).toContain('let surfaceAtDensityRes = false;');
+    expect(src).toContain('let minTexelRadius = 0;');
+    expect(src).toContain('let areaPriority = false;');
+    expect(src).toContain('let splatFadeTail = 0;');
+    expect(src).toContain('const passGate = { density: true, blur: true, surface: true };');
+  });
+
+  it('the low-res surface target carries no depth attachment and half-float', () => {
+    const block = src.slice(src.indexOf('const surfaceLow = new THREE.RenderTarget'), src.indexOf('function makeLowDepthMat'));
+    expect(block).toContain('depthBuffer: false');
+    expect(block).toContain('THREE.HalfFloatType');
+  });
+
+  it('the low DEPTH variant packs depth into the colour alpha, never depthNode', () => {
+    // The shading pass must not depth-test (its own buffer is empty); the
+    // hardware depth test happens in the upsample against the scene.
+    const block = src.slice(src.indexOf('function makeLowDepthMat'), src.indexOf('const lowMats'));
+    expect(block).toContain('vec4(shaded.xyz as never, shaded.w as never)');
+    expect(block).toContain('m.depthWrite = false;');
+    expect(block).not.toContain('depthNode');
+  });
+
+  it('the upsample DEPTH variant is the only new place depthNode is bound', () => {
+    const block = src.slice(src.indexOf('function makeUpsampleMat'), src.indexOf('const lowQuad'));
+    expect(block).toContain('m.depthNode = c.w as never;');
+    expect(block).toMatch(/if \(depth\) \{/);
+    expect(block).toContain('m.depthTest = true;');
+  });
+
+  it('the low pass clears black with ALPHA 0 — the upsample empty sentinel', () => {
+    // A cleared alpha of 1 would be a depth of 1 (or an opaque, gut-masked
+    // sludge) in every unshaded texel; the restored scene clear is the
+    // background with alpha 1, so the low pass owns its clear explicitly.
+    expect(src).toContain('renderer.setClearColor(0x000000, 0);');
+    expect(src).toContain('renderer.setClearColor(prevClear, prevClearAlpha);');
+  });
+
+  it('the density pass clear is untouched', () => {
+    // Ground rule: the density target's clear colour is black with alpha 0,
+    // explicitly and for two documented reasons. (The shipped code's
+    // setClearColor(0x000000) predates task 4 and is not ours to restate.)
+    expect(src).toContain('renderer.setClearColor(0x000000);');
+    expect(src).toContain('void renderer.render(gooScene, camera);');
+  });
+
+  it('passGate only skips work; it never changes what the kept passes read', () => {
+    // The surface must keep reading the BLURRED buffer when blurPx > 0 even
+    // when the blur passes are gate-skipped, so a gated surface leg times the
+    // same shader, not a cheaper raw-buffer one.
+    expect(src).toContain('const blurred = uBlurPx.value > 0;');
+    expect(src).toContain('if (blurred && passGate.blur) {');
+    expect(src).toContain('if (!passGate.surface) return;');
+    expect(src).toContain('if (passGate.density) void renderer.render(gooScene, camera);');
+  });
+
+  it('the item-1 branch returns after the upsample — the shipped pass B is the else arm', () => {
+    expect(src).toContain('if (surfaceAtDensityRes) {');
+    expect(src).toContain('const wantMat = surfMats[mode][blurred ? \'blur\' : \'raw\'];');
+  });
+
+  it('the minTexel skip is inert at 0 without touching the mist gates', () => {
+    expect(src).toContain('if (minTexelRadius <= 0) return false;');
+    // Both collection paths keep the mist/size gates ahead of any skip.
+    const drops = src.match(/if \(d\.kind === 'mist'\) continue;/g) ?? [];
+    expect(drops.length).toBe(2); // once per sync path
+  });
+
+  it('sync still updates the fallMask buffer and draws only live instances', () => {
+    expect(src).toContain('fallAttr.needsUpdate = true;');
+    expect(src).toContain('quads.count = n;');
+  });
+});
+
+describe('goo upsample WGSL (item 1)', () => {
+  it('starts with fn, since three anchors its parse to ^', () => {
+    expect(/^fn\s+gooUpsample\s*\(/.test(GOO_UPSAMPLE_WGSL)).toBe(true);
+  });
+
+  it('declares nothing reserved', () => {
+    const clashes = declaredNames(GOO_UPSAMPLE_WGSL).filter(d => RESERVED_WORDS.includes(d));
+    expect(clashes).toEqual([]);
+  });
+
+  it('carries NO flipY — target-to-target sampling is orientation-preserving', () => {
+    // The shading pass already paid the canvas-boundary flip when it read the
+    // density field; flipping here would render the goo upside-down.
+    expect(GOO_UPSAMPLE_WGSL).not.toContain('flipY');
+  });
+
+  it('discards on the cleared-alpha sentinel and passes the packed alpha through', () => {
+    expect(GOO_UPSAMPLE_WGSL).toContain('if (c.a < 9.99e-5) { discard; }');
+    expect(GOO_UPSAMPLE_WGSL).toContain('return vec4<f32>(c.rgb, c.a);');
+  });
+});
+
+describe('goo perf page seam (source tripwires)', () => {
+  const src = readFileSync('src/lab/sdf-zombie/webgpu/game-main.ts', 'utf8');
+
+  it('exposes setGooPerf and reports the lever state in the goo getter', () => {
+    expect(src).toContain('setGooPerf(o: {');
+    expect(src).toContain('surfaceAtDensityRes: gooLayer.surfaceAtDensityRes,');
+    expect(src).toContain('passGate: gooLayer.passGate,');
+  });
+
+  it('keeps the perf seams OUT of setGooTuning', () => {
+    // The goo panel's copy button emits setGooTuning keys; a perf lever in
+    // that schema would let a tuning paste silently move a bench seam.
+    const block = src.slice(src.indexOf('setGooTuning(o: {'), src.indexOf('setGooPerf(o: {'));
+    expect(block).not.toContain('surfaceAtDensityRes');
+    expect(block).not.toContain('minTexelRadius');
   });
 });
