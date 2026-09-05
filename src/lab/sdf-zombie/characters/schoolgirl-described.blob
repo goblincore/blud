@@ -185,26 +185,38 @@ body
   bar head on neck from=0.10 to=0.90 r=0.030 deep=1.15 blend=0.004 color=e9c9ae
 
   # ============================================================
-  # THE BOB (beat 1) — five prims, and yes, that is the same hair budget
-  # the measured schoolgirl spent: a bob IS a mass haircut and the masses
-  # are the honest way to build it. The dome is deliberately oversized —
-  # a helmet of hair, wider than the skull under it (the face block is
-  # 0.072 half-wide; the lobes reach 0.108).
-  #   dome  — crown + back, tops at ~1.69 against the 1.70 pin.
-  #   lobes — the bell flare below the crown, framing the cheeks open.
-  #   fringe — the brow rim; the DECAL paints the true hairline and the
-  #            widow's peak, so geometry stays at the temple line (the
-  #            measured one's double-hairline lesson).
-  #   nape  — closes the bob's underside at the neck.
-  #   locks — two pointed side locks in front of the ears, the plate's
-  #           face-framing strands. These are the ONE place strands would
-  #           beat masses; see the report re: hairlock.
+  # THE BOB (beat 1), rebuilt on STRANDS and RESIZED (2026-09-05). One tight
+  # cap for the crown, three strand bundles hanging off it.
+  #
+  # IT USED TO BE A BOUFFANT, and the cause is worth recording because it is
+  # a trap any character can fall into: the model's height pin says 1.70, but
+  # this skeleton puts the flesh crown at 1.603, so the only way to reach the
+  # pin was ~90 mm of hair on top. That is a bowling ball, not a haircut.
+  # Real hair adds 20-30 mm. The cap now sits at 0.079 against a 0.072 skull
+  # and tops out near 1.62, so she reads a few percent under the anchor —
+  # which the brief allows at +-10% and which is the right way to lose the
+  # argument with a number.
+  #
+  # The crown stays a MASS: a bob's silhouette is a bell and a bell is a
+  # volume, which a bundle of strands cannot make. What the masses could not
+  # do is the EDGE — an ellipsoid ends in an ellipsoid, so the old bob
+  # terminated in a moulded rim. Every hanging edge is strands now.
   # ============================================================
-  blob head on skull at=0.55 offset=(0,0.070,-0.022) r=0.100 wide=1.06 tall=0.94 deep=1.00 blend=0.006 color=2a1a10 gloss=0.25
-  blob head on skull at=0.55 offset=(0.072,-0.045,-0.025) r=0.036 wide=1.00 tall=1.50 deep=2.00 blend=0.006 both color=2a1a10 gloss=0.30
-  blob head on skull at=0.55 offset=(0,0.054,0.044) r=0.048 wide=1.35 tall=0.72 deep=0.90 blend=0.004 color=2a1a10 gloss=0.22
-  blob head on skull at=0.55 offset=(0,-0.058,-0.058) r=0.045 wide=1.05 tall=0.95 deep=1.00 blend=0.005 color=2a1a10 gloss=0.30
-  blob head on skull at=0.55 offset=(0.055,-0.005,0.050) tip=(0.004,-0.095,0.004) r=0.014 r2=0.004 blend=0.003 chamfer both color=2a1a10 gloss=0.22
+  # THE CROWN stays a MASS. A bob's silhouette is a bell and a bell is a
+  # volume; strands cannot make one, they can only hang off it. Slightly
+  # smaller than the mass version's dome (0.094 vs 0.100) because the strand
+  # curtains now carry the outer surface.
+  blob head on skull at=0.55 offset=(0,0.040,-0.008) r=0.079 wide=1.02 tall=0.84 deep=1.06 blend=0.006 color=2a1a10 gloss=0.25
+  # THE BLUNT FRINGE — short strands over the brow, stopping at the eyebrow
+  # line. The decal paints the true hairline, so the geometry stays back of
+  # it (the measured schoolgirl's double-hairline lesson).
+  blob head on skull at=0.55 offset=(0,0.050,0.056) tip=(0,-0.064,0.014) r=0.034 wide=1.25 deep=0.72 strand=12 wave=0.13 cycles=2 fat=0.80 blend=0.004 color=2a1a10 gloss=0.26
+  # THE SIDE CURTAINS — temple to jaw, and they ARE the bob. Strands rather
+  # than a lobe: an ellipsoid ends in an ellipsoid, so the old bob terminated
+  # in a moulded rim. These end in separate points and the silhouette breaks.
+  blob head on skull at=0.55 offset=(0.062,0.030,0.004) tip=(0.004,-0.116,0.008) r=0.030 r2=0.026 wide=0.86 deep=1.18 strand=8 wave=0.17 cycles=2.5 fat=0.80 blend=0.005 both color=2a1a10 gloss=0.28
+  # THE NAPE — short strands closing the underside at the neck.
+  blob head on skull at=0.55 offset=(0,0.014,-0.058) tip=(0,-0.086,-0.004) r=0.036 r2=0.030 wide=1.05 deep=0.80 strand=8 wave=0.14 cycles=2 fat=0.80 blend=0.005 color=2a1a10 gloss=0.28
   # Chin: a small definite point, blended soft so it reads as the jaw's
   # tip, not a bead.
   blob head on skull at=0.55 offset=(0,-0.105,0.062) r=0.020 wide=1.15 tall=0.60 deep=0.90 blend=0.004 color=e9c9ae
