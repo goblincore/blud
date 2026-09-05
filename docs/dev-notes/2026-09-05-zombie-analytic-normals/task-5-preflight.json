@@ -1,0 +1,17 @@
+{
+  "at": "2026-09-05T23:52:10.931Z",
+  "source": "Node os.loadavg fresh preflight before any GPU launch",
+  "load": [
+    15.3505859375,
+    12.6591796875,
+    9.20703125
+  ],
+  "threshold": 12,
+  "browserStarted": false,
+  "disposition": "deferred; subsequent root instruction holds all GPU launches while separate zoned-baked-wounds manual session is coordinated",
+  "previousSummary": {
+    "archive": "docs/dev-notes/2026-09-05-zombie-analytic-normals/summary-before-positive.json.gz",
+    "sha256": "9f6b11fabb40f26bfdb93854cf1817e06c002d5851874da2559839164e463c26",
+    "bytes": 49151
+  }
+}

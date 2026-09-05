@@ -50,8 +50,8 @@ repo via the dev-only `/__lab/save-*` endpoints
 [plan](docs/superpowers/plans/2026-09-05-soldier-animation.md) ·
 [strips](docs/dev-notes/2026-09-05-soldier-animation/notes.md)
 
-**[~] Zombie analytic normals — Tasks 1–3 passed; owner approved wound/gameplay appearance; Task 4 GPU validation passed and timing pending (2026-09-05).**
-[Verdict](docs/dev-notes/2026-09-05-zombie-analytic-normals/verdict.md); procedural wound gradients implemented with retained GPU evidence; settled-chunk baking integrated and combined lifecycle verified. No measured speedup.
+**[~] Zombie analytic normals — Tasks 1–3 passed; owner approved wound/gameplay appearance; Task 4 GPU validation passed; Task 5 static harness prepared, timing deferred (2026-09-05).**
+[Verdict](docs/dev-notes/2026-09-05-zombie-analytic-normals/verdict.md); procedural wound gradients implemented with retained GPU evidence; settled-chunk baking integrated and combined lifecycle verified. Static timing path needs GPU validation; dynamic/multi-actor timing fixtures remain unimplemented. No measured speedup.
 
 **[~] Zoned baked wounds — Task 3 resumed from saved work (2026-09-05); Tasks 1–2 done, 4–6 pending behind numerical/memory gates.**
 [Plan](docs/superpowers/plans/2026-09-04-zoned-baked-wounds.md); defer expensive GPU verification under load; current shipping baseline and actual close-up coverage still require matched comparison.

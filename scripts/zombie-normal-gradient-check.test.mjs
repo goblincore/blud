@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { rmSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -148,4 +148,20 @@ test('offline verdict reports partial wound evidence without claiming full accep
   assert.equal(summary.appearance.fullOwnerLook,'pending');
   assert.match(summary.appearance.woundMotionScope,/subsequent simulation frame/i);
   assert.doesNotMatch(JSON.stringify(summary),/speedup|performance pass|full acceptance/i);
+});
+
+test('positive verdict checkpoint preserves approved correctness/look and never opens a browser', () => {
+  const fixture=mkdtempSync(join(tmpdir(),'zombie-ng-positive-verdict-'));
+  const evidenceDir=join(fixture,'docs/dev-notes/2026-09-05-zombie-analytic-normals'),outDir=join(fixture,'out');
+  mkdirSync(evidenceDir,{recursive:true});
+  writeFileSync(join(evidenceDir,'gates.json'),JSON.stringify({version:1,reference:'pass',gpuKernel:'pass',intact:'pass',wounds:'pass',visualEvidence:'pass',timing:'pending',ownerLook:'pass',evidence:[]}));
+  try {
+    const result=spawnSync(process.execPath,[driver,'--phase','verdict','--defer-timing','--out',outDir,'--vite','1','--cdp','1'],{cwd:fixture,encoding:'utf8',timeout:5000});
+    assert.equal(result.status,1,result.stderr);
+    const summary=JSON.parse(readFileSync(join(outDir,'summary.json'),'utf8'));
+    assert.equal(summary.conclusion,'incomplete');assert.equal(summary.gates.ownerLook,'pass');assert.equal(summary.gates.wounds,'pass');
+    assert.equal(summary.gates.timing,'deferred');assert.equal(summary.timings.browserOpened,false);
+    assert.equal(summary.scenes.length,8);assert.ok(summary.scenes.every(s=>s.status==='unmeasured'));
+    assert.equal(summary.timings.protocol.shippingShaderOverhead,'unmeasured; no direct current-main control');
+  } finally {rmSync(fixture,{recursive:true,force:true});}
 });

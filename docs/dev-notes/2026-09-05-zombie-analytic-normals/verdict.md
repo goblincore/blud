@@ -1,8 +1,18 @@
-# Zombie analytic normals — correctness passed, performance pending
+# Zombie analytic normals — performance incomplete
 
-Updated2026-09-05 after current main b280709 integration and final Task4 GPU validation. Wounds and technical visual evidence now pass. The owner approved manual d1a7450 wound/gameplay appearance; this carries no measured speedup claim. The feature remains default off and the overall performance verdict is incomplete.
+Updated 2026-09-05. Tasks 1–4 correctness and technical visual evidence pass, and the owner approved d1a7450 wound/gameplay appearance. The feature remains default off. No timing samples were collected in this resume, and no speedup or regression is established.
 
-Final bounded settling, exact depth/fallback, detached-chunk point proof, both initial impact ticks, and default-on bake/re-gib/view-reuse checks pass. Root accepted the exact fresh body/chunk angle flags after independent gradient/owner/noise proof and image inspection. See [completion evidence](wound-resume/resume.json) for hashes, fresh images and preserved failed runs. Timing is pending under the full Task5 protocol.
+Task 5 now has an implemented but GPU-unvalidated static measurement path for intact/wounded torso, intact/wounded head, and the real bare-bones unsupported control. It uses fresh seeded pages, the full close-up distance ladder and an explicit 35% target, five alternating pairs, 240 measured frames per leg after 120 warmup frames, and raw ten-frame chunk means. A captured renderer GPU queue supplies an actual completion fence. The clock stays native realtime during timing; the separate untimed depth/fallback and coverage pass restores its pinned capture clock in `finally`. These mechanisms have focused offline tests, not a new GPU pass.
+
+The 23:52:10Z launch preflight measured load1 **15.3506**, above the required 12. No browser or server started. Subsequent controller instructions hold all GPU work while a separate zoned-baked-wounds manual session is coordinated. See [preflight](task-5-preflight.json), [empty timing checkpoint](paired-timings.json), and [current summary](summary.json). Timing is **deferred**; the overall verdict remains **incomplete**.
+
+The actual two-body close-up with surrounding actors, walking/flashlight timing, and impact/stagger/sever timing fixtures remain **unimplemented and unmeasured**. Existing Task 4 motion evidence does not fill these performance gaps. The static path retains fresh current-game defaults, including hull exit bounds and settled-chunk baking ON, without the historical staging helper's hull-off or spill suppression. Static frozen crater fixtures do not establish dynamic gameplay cost. Baked mesh and live SDF census remain separate.
+
+Runtime off/on uses the same enlarged candidate shader. Direct current-main control, compiler/register overhead, pure compile cost, normal-work counters, and unfenced frame intervals are unmeasured or unavailable. Even a runtime win would not establish a net shipping win. No automatic enable, merge, or push is authorized by this checkpoint.
+
+Task 4 completion remains recorded in [the exact artifact index](wound-resume/resume.json): bounded settling, exact depth/fallback, detached-chunk point proofs, initial impact ticks and default-on bake/re-gib/reuse checks. Existing failed captures and the previous incomplete summary are preserved; the latter is byte-identically archived in [summary-before-positive.json.gz](summary-before-positive.json.gz), with hash in the preflight record.
+
+The next step is scoped review of this unfinished harness checkpoint, then a controller-coordinated quiet primary run on one owned 5251/9251 lifecycle. Complete both primary torso scenes first and report raw paired results. A clear repeatable regression can justify no-go with the omitted scenes explicit; otherwise finish the remaining approved fixtures and shipping control. AO/scatter cost measurement and a cached-field gradient bridge remain separate future work.
 
 ## Historical checkpoint before this completion
 

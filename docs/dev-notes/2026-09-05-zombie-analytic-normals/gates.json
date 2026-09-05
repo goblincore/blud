@@ -5,7 +5,7 @@
   "intact": "pass",
   "wounds": "pass",
   "visualEvidence": "pass",
-  "timing": "pending",
+  "timing": "deferred",
   "ownerLook": "pass",
   "evidence": [
     {
@@ -97,6 +97,18 @@
       "command": "guarded owned WebGPU sliced arm/shoulder captures; default-on bake lifecycle;14 focused Node tests; tsc --noEmit",
       "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-resume/resume.json",
       "reason": "Root accepted artifact-specific numeric/beauty proof and combined previous Task4 evidence. Exact depth/fallback, final bounded settling, chunk point adapter, initial projectile ticks and 8/8 bake lifecycle checks pass. Owner explicitly approved manual d1a7450 wound/gameplay appearance. Timing unmeasured; default off."
+    },
+    {
+      "commit": "9d6445ca5eb036612820b91d6949513b03f67ecd",
+      "command": "node scripts/zombie-normal-gradient-check.mjs --phase verdict --defer-timing --out docs/dev-notes/2026-09-05-zombie-analytic-normals --vite 5251 --cdp 9251",
+      "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/paired-timings.json",
+      "reason": "explicit offline timing checkpoint; no GPU run attempted"
+    },
+    {
+      "commit": "9d6445ca5eb036612820b91d6949513b03f67ecd",
+      "command": "node scripts/zombie-normal-gradient-check.mjs --phase verdict --defer-timing --out docs/dev-notes/2026-09-05-zombie-analytic-normals --vite 5251 --cdp 9251",
+      "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/paired-timings.json",
+      "reason": "explicit offline timing checkpoint; no GPU run attempted"
     }
   ]
 }

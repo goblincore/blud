@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "status": "incomplete",
+  "browserOpened": false,
+  "preflight": {
+    "load1": 3.107421875,
+    "at": "2026-09-05T23:56:25.691Z"
+  },
+  "seed": 20260905,
+  "protocol": {
+    "pairs": 5,
+    "replacementCap": 3,
+    "frames": 240,
+    "warmup": 120,
+    "chunkFrames": 10,
+    "coverageTarget": 0.35,
+    "clock": "native realtime performance.now; capture clock is separate",
+    "fence": "actual renderer GPUQueue.onSubmittedWorkDone; distinct from historical timestamp-resolve bench",
+    "statistic": "p50/p95/p99 of ten-frame chunk means, not frame spikes",
+    "baseline": "runtime legacy/hybrid share candidate shader integrated with main b280709",
+    "compileCost": "unavailable",
+    "normalWorkCounts": "unavailable",
+    "shippingShaderOverhead": "unmeasured; no direct current-main control",
+    "defaults": "fresh current game defaults; no historical applyShipDefaults call; mesh baking and hull exit bound ON; no spill suppression"
+  },
+  "scenes": [
+    {
+      "name": "intact-torso",
+      "status": "unmeasured",
+      "fixture": "implemented-static; GPU validation pending"
+    },
+    {
+      "name": "wounded-torso",
+      "status": "unmeasured",
+      "fixture": "implemented-static; GPU validation pending"
+    },
+    {
+      "name": "intact-head",
+      "status": "unmeasured",
+      "fixture": "implemented-static; GPU validation pending"
+    },
+    {
+      "name": "wounded-head",
+      "status": "unmeasured",
+      "fixture": "implemented-static; GPU validation pending"
+    },
+    {
+      "name": "two-body-close-up-with-surrounding-actors",
+      "status": "unmeasured",
+      "fixture": "not implemented"
+    },
+    {
+      "name": "walking-and-flashlight-motion",
+      "status": "unmeasured",
+      "fixture": "not implemented"
+    },
+    {
+      "name": "impact-stagger-sever-sequence",
+      "status": "unmeasured",
+      "fixture": "not implemented"
+    },
+    {
+      "name": "unsupported-control",
+      "status": "unmeasured",
+      "fixture": "implemented-static; GPU validation pending"
+    }
+  ],
+  "errors": [],
+  "rawPath": "/Users/donny/Projects/blud/.worktrees/zombie-analytic-normals/docs/dev-notes/2026-09-05-zombie-analytic-normals/paired-timings.json",
+  "reason": "explicit offline timing checkpoint; no GPU run attempted"
+}

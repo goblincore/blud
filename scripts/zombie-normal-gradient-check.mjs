@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runNormalPerformance } from './lib/normal-gradient-performance.mjs';
 import { applyShipDefaults } from './lib/sdf-closeup-stage.mjs';
 import { normalAnatomyCoverage, normalOrbitPose, stageNormalCloseup, stampNormalWounds, withNormalBodyMask, normalBeautyFrames, normalCoverageFailure, normalAngularFailure, settleNormalLegacy, readNormalRaw } from './lib/normal-gradient-intact.mjs';
 import { readNormalGates, writeNormalGates } from './lib/normal-gradient-gates.mjs';
@@ -54,7 +55,7 @@ async function writeIncompleteVerdict() {
     ...(before.intact === 'pass' ? {} : { wounds: 'skipped-by-gate' }),
     visualEvidence: 'skipped-by-gate',
     timing: 'skipped-by-gate',
-    ownerLook: 'pending',
+    ownerLook: before.ownerLook ?? 'pending',
   };
   const summaryPath = resolve(outDir, 'summary.json');
   const gates = await writeNormalGates(gatesPath, gatePatch, {
@@ -164,6 +165,22 @@ async function writeIncompleteVerdict() {
 
 if (phase === 'verdict' && await writeIncompleteVerdict()) {
   // A missing prerequisite is a complete offline verdict result. Do not open a browser.
+} else if (phase === 'verdict') {
+  const timings = await runNormalPerformance({vite,cdp,outDir,defer:argv.includes('--defer-timing')});
+  const commit=execFileSync('git',['rev-parse','HEAD'],{cwd:repoRoot,encoding:'utf8'}).trim();
+  const gates=await writeNormalGates(gatesPath,{timing:timings.status==='no-go'?'fail':'deferred'},{
+    commit,command:`node scripts/zombie-normal-gradient-check.mjs ${process.argv.slice(2).join(' ')}`,
+    artifact:relative(repoRoot,timings.rawPath),reason:timings.reason,
+  });
+  const summary={commit,gates,scenes:timings.scenes,timings,coverage:timings.scenes.filter(s=>s.coverage).map(s=>({name:s.name,...s.coverage})),
+    artifacts:{raw:timings.rawPath,historicalSummary:'docs/dev-notes/2026-09-05-zombie-analytic-normals/summary-before-positive.json.gz',preflight:'docs/dev-notes/2026-09-05-zombie-analytic-normals/task-5-preflight.json',intact:'docs/dev-notes/2026-09-05-zombie-analytic-normals/intact.json',
+      wounds:'docs/dev-notes/2026-09-05-zombie-analytic-normals/wounds.json',
+      task4:'docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-resume/resume.json'},
+    appearance:{ownerLook:gates.ownerLook,scope:'Owner approved d1a7450 wound/gameplay appearance; integrated-main technical checks are separate. No subjective performance claim.'},
+    conclusion:timings.status==='no-go'?'no-go':'incomplete'};
+  writeFileSync(resolve(outDir,'summary.json'),JSON.stringify(summary,null,2)+'\n');
+  console.log(JSON.stringify({conclusion:summary.conclusion,reason:timings.reason,raw:timings.rawPath}));
+  process.exitCode=summary.conclusion==='no-go'?2:1;
 } else {
 
 const sleep = ms => new Promise(resolveSleep => setTimeout(resolveSleep, ms));
