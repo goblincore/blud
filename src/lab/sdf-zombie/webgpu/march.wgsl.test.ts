@@ -22,7 +22,7 @@ import {
   SAMPLE_VOLUME, APPLY_CARVES, APPLY_WOUNDS, CONE_CAP, SMIN_CHAMFER, SD_GROOVE, CONE_BEND, SD_BEZIER_T,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META, ROW_PRIM_SHAPE,
-  ROW_PRIM_BEND, ROW_PRIM_SHELL, ROW_PRIM_CLIP, WOUND_MASK, WOUND_SHADOW, SD_SHELL,
+  ROW_PRIM_BEND, ROW_PRIM_SHELL, ROW_PRIM_WARP, ROW_PRIM_CLIP, WOUND_MASK, WOUND_SHADOW, SD_SHELL,
   ROW_WOUND_CAP, APPLY_BONES, ROW_WOUND_FLAGS, TISSUE_RAMP, SD_ROUND_BOX, LEVEL_SHADOW,
   FACE_MELT_SAG, FACE_MELT_STRETCH, FACE_MELT_FADE_LO,
 } from './march.wgsl';
@@ -907,6 +907,7 @@ describe('data texture layout', () => {
       ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE, ROW_PRIM_BEND, ROW_PRIM_COLOR,
       ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
       ROW_PRIM_SHELL, ROW_PRIM_CLIP, ROW_WOUND_CAP, ROW_WOUND_FLAGS,
+      ROW_PRIM_WARP,
     ];
     expect(new Set(rows).size).toBe(rows.length);
     expect(Math.max(...rows)).toBe(DATA_ROWS - 1);
@@ -1086,7 +1087,7 @@ describe('arc capsule — bent primitives', () => {
 describe('shell fold — the thin clipped sheet (2026-08-25)', () => {
   it('sdShell is in HELPERS and implements abs(dBase)-thick with the rounded-rim clip', () => {
     expect(HELPERS).toContain(SD_SHELL);
-    expect(SD_SHELL).toContain('let d = abs(dBase) - thick;');
+    expect(SD_SHELL).toContain('let d = abs(base) - thick;');
     // The rim: distance to the sheet/plane intersection curve + rounding.
     expect(SD_SHELL).toContain('rim - length(vec2(d, dPlane))');
   });
@@ -1105,7 +1106,8 @@ describe('shell fold — the thin clipped sheet (2026-08-25)', () => {
     expect(fold).toContain(`textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SHELL} + band), 0)`);
     expect(fold).toContain(`textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_CLIP} + band), 0)`);
     expect(fold).toContain('if ((i32(prof) & 4) != 0) {');
-    expect(fold).toContain('sd = sdShell(sd, p, S2.x, S2.y, S2.z, S2.w, C2.xyz);');
+    expect(fold).toContain(`textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_WARP} + band), 0)`);
+    expect(fold).toContain('sd = sdShell(sd, p, S2.x, S2.y, S2.z, S2.w, C2.xyz, W2.x, W2.y);');
     const profGate = fold.indexOf('if ((i32(prof) & 4) != 0) {');
     const bendGate = fold.indexOf('if ((i32(prof) & 2) != 0) {');
     // The shell wrap must come AFTER the base field is computed (sdPrim) and
@@ -1280,8 +1282,9 @@ describe('per-prim orientation (motion-polish task 3)', () => {
     // ROW_CLUSTER_GROUPS, and the shell fold added ROW_PRIM_SHELL/ROW_PRIM_CLIP
     // — each without displacing any existing row. The wound depth slab added
     // ROW_WOUND_CAP (2026-08-27, pale-wound fix). The entrails cavity flag
-    // added ROW_WOUND_FLAGS (2026-09-02).
-    expect(DATA_ROWS).toBe(20);
+    // added ROW_WOUND_FLAGS (2026-09-02). The shell cloth spike added
+    // ROW_PRIM_WARP (2026-09-05).
+    expect(DATA_ROWS).toBe(21);
     expect(SD_PRIM_ORIENTED).toContain('abs(1.0 - O.w) > 1e-6');
   });
 

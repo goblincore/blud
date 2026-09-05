@@ -17,6 +17,22 @@ export interface ShellParams {
   clipNormal: Vec3;
   clipOffset: number;
   rim: number;
+  /**
+   * WRINKLES. Amplitude in metres of a low-frequency sine warp applied to the
+   * shell's base distance, so the sheet undulates like cloth instead of
+   * reading as a smooth balloon. 0 (the default) is a bit-exact no-op and
+   * keeps the code path a shell has always had.
+   *
+   * The field stops being an exact distance once this is non-zero: a warp of
+   * amplitude A and frequency F has gradient up to A*F per axis, so
+   * `sdShellWrap` divides by the resulting Lipschitz factor to keep the result
+   * a conservative UNDERestimate. Same bargain radiusRamp made, and for the
+   * same reason -- a sphere tracer that assumes unit gradient oversteps and
+   * punches holes.
+   */
+  warpAmp?: number;
+  /** Wrinkle frequency, radians per metre. Ignored when warpAmp is 0. */
+  warpFreq?: number;
 }
 
 /**

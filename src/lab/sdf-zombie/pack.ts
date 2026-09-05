@@ -2,7 +2,7 @@
 import type { BuiltBody, Primitive } from './types';
 import { bendCtrl } from './vec';
 import { MAX_CLUSTERS, MAX_PRIMS } from './validate';
-import { boxReach } from './extent';
+import { boxReach, shellReach } from './extent';
 
 export const PRIM_STRIDE = 4;    // vec4
 export const CLUSTER_STRIDE = 4; // vec4
@@ -55,6 +55,10 @@ export interface PackedBody {
    *  see the primClip.set call below). Kept in step with ROW_PRIM_CLIP's
    *  docstring in march.wgsl.ts, which is the row table this mirrors. */
   primClip: Float32Array;
+  /** x = wrinkle amplitude (m), y = wrinkle frequency (rad/m), zw spare.
+   *  All-zero for every prim that is not a warped shell, which is what makes
+   *  this row's arrival invisible to every existing character. */
+  primWarp: Float32Array;
   restA: Float32Array;         // xyz = REST endpoint A, w = radius (0 = unwritten)
   restB: Float32Array;         // xyz = REST endpoint B, w = blendK
   clusterBounds: Float32Array; // xyz = centre, w = radius
@@ -154,6 +158,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
   const primColor = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const primShell = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const primClip = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
+  const primWarp = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const restA = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
   const restB = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
 
@@ -230,6 +235,13 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
     primClip.set(sh
       ? [sh.clipNormal[0], sh.clipNormal[1], sh.clipNormal[2], p.glow ?? 0]
       : [0, 0, 0, p.glow ?? 0], o);
+    // WRINKLES. Its own row, for the reason ROW_PRIM_WARP's doc gives. Zeros
+    // unless the author wrote `warp=`, and the shader's warp branch is gated
+    // on both being non-zero, so an unwarped shell takes the exact same code
+    // path it took before this row existed.
+    primWarp.set(sh
+      ? [sh.warpAmp ?? 0, sh.warpFreq ?? 0, 0, 0]
+      : [0, 0, 0, 0], o);
     primShape.set([
       p.radiusB === undefined ? -1 : p.radiusB,
       prof,
@@ -345,7 +357,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
   });
 
   return {
-    primA, primB, primScale, primQuat, primShape, primBend, primColor, primShell, primClip, restA, restB, clusterBounds, clusterRange,
+    primA, primB, primScale, primQuat, primShape, primBend, primColor, primShell, primClip, primWarp, restA, restB, clusterBounds, clusterRange,
     groupBounds, groupRange, clusterGroups, groupCount,
     primCount: body.prims.length,
     clusterCount: body.clusters.length,
@@ -405,7 +417,7 @@ function fitSphere(prims: Primitive[]): { center: [number, number, number]; radi
   let radius = 0;
   for (const p of fitTo) {
     const reach = Math.max(p.radius, p.radiusB ?? p.radius) * boxReach(p.box) * Math.max(p.scale[0], p.scale[1], p.scale[2])
-      + (p.shell ? p.shell.thickness : 0);
+      + shellReach(p);
     if (p.orient && Math.abs(1 - p.orient[3]) > 1e-6) {
       // An oriented prim rotates about its MIDPOINT, so its endpoints move:
       // bound by the rotation-invariant ball around the midpoint instead of

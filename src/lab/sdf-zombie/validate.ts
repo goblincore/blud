@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/validate.ts
 import type { ClusterInfo, Primitive, Vec3 } from './types';
 import type { Quat } from './vec';
-import { boxReach } from './extent';
+import { boxReach, shellReach } from './extent';
 import { add, bendCtrl, cross, dot, len, lerp, normalize, qMul, qNormalize, qRotate, scale as vscale, sub } from './vec';
 
 /**
@@ -142,7 +142,7 @@ export function sdPrimitive(p: Vec3, prim: Primitive): number {
   // plane with a rounded rim — the exact construction sdShellWrap below. Only
   // when the prim carries `shell` params; every other prim keeps the bare
   // capsule field bit-identical, which is what the zombie pin demands.
-  if (prim.shell) return sdShellWrap(base, p, prim.shell.thickness, prim.shell.clipNormal, prim.shell.clipOffset, prim.shell.rim);
+  if (prim.shell) return sdShellWrap(base, p, prim.shell.thickness, prim.shell.clipNormal, prim.shell.clipOffset, prim.shell.rim, prim.shell.warpAmp, prim.shell.warpFreq);
   return base;
 }
 
@@ -174,10 +174,29 @@ export function sdPrimitive(p: Vec3, prim: Primitive): number {
 export function sdShellWrap(
   dBase: number, p: Vec3, thickness: number,
   clipNormal: Vec3, clipOffset: number, rim: number,
+  warpAmp = 0, warpFreq = 0,
 ): number {
-  const d = Math.abs(dBase) - thickness;
+  // WRINKLES. Three sines with offset phases so the pattern does not repeat
+  // visibly along any axis, added to the BASE distance before the sheet is
+  // taken -- warping the base makes the whole sheet undulate, where warping
+  // the sheet would only roughen its faces.
+  //
+  // Each partial derivative is at most warpAmp*warpFreq, so the gradient grows
+  // by up to sqrt(3)*A*F and the result is divided by that to stay a
+  // conservative bound. At warpAmp 0 the multiplier is exactly 1 and every
+  // term vanishes, so an unwarped shell is bit-identical.
+  let base = dBase;
+  let lip = 1;
+  if (warpAmp !== 0 && warpFreq !== 0) {
+    base += warpAmp
+      * Math.sin(warpFreq * p[0])
+      * Math.sin(warpFreq * p[1] + 1.3)
+      * Math.sin(warpFreq * p[2] + 2.6);
+    lip = 1 + Math.sqrt(3) * Math.abs(warpAmp) * Math.abs(warpFreq);
+  }
+  const d = Math.abs(base) - thickness;
   const dPlane = clipNormal[0] * p[0] + clipNormal[1] * p[1] + clipNormal[2] * p[2] - clipOffset;
-  return Math.max(Math.max(d, dPlane), rim - Math.hypot(d, dPlane));
+  return Math.max(Math.max(d, dPlane), rim - Math.hypot(d, dPlane)) / lip;
 }
 
 /**
@@ -635,7 +654,7 @@ export function validateBody(body: Body, opts: ValidateOpts): string[] {
         ? [prim.a, prim.b]
         : [prim.a, prim.b, bendCtrl(prim.a, prim.b, prim.bend)];
       const rMax = Math.max(prim.radius, prim.radiusB ?? prim.radius) * boxReach(prim.box);
-      const reach = rMax * maxScale + (prim.shell ? prim.shell.thickness : 0);
+      const reach = rMax * maxScale + shellReach(prim);
       for (const end of ends)
         if (len(sub(end, c.center)) + reach > c.radius + 1e-6)
           errs.push(`primitive in cluster "${c.limb}" escapes its bounding sphere`);

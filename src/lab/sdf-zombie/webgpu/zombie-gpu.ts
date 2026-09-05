@@ -33,7 +33,7 @@ import type { ComputeTileBinding } from './tile-bin-compute';
 import {
   HELPERS, MARCH_BODY, CONE_MARCH, DATA_ROWS,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE,
-  ROW_PRIM_BEND, ROW_PRIM_COLOR, ROW_PRIM_SHELL, ROW_PRIM_CLIP,
+  ROW_PRIM_BEND, ROW_PRIM_COLOR, ROW_PRIM_SHELL, ROW_PRIM_WARP, ROW_PRIM_CLIP,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
   ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS,
 } from './march.wgsl';
@@ -1224,6 +1224,7 @@ export function createZombieGpuView(
     writeRow(ROW_PRIM_BEND, p.primBend, MAX_PRIMS);
     writeRow(ROW_PRIM_COLOR, p.primColor, MAX_PRIMS);
     writeRow(ROW_PRIM_SHELL, p.primShell, MAX_PRIMS);
+    writeRow(ROW_PRIM_WARP, p.primWarp, MAX_PRIMS);
     writeRow(ROW_PRIM_CLIP, p.primClip, MAX_PRIMS);
     writeRow(ROW_CLUSTER_BOUNDS, p.clusterBounds, p.clusterCount);
     writeRow(ROW_CLUSTER_RANGE, p.clusterRange, p.clusterCount);
@@ -1717,6 +1718,7 @@ export function createChunkGpuView(
     writeRow(ROW_PRIM_BEND, packed.primBend, MAX_PRIMS);
     writeRow(ROW_PRIM_COLOR, packed.primColor, MAX_PRIMS);
     writeRow(ROW_PRIM_SHELL, packed.primShell, MAX_PRIMS);
+    writeRow(ROW_PRIM_WARP, packed.primWarp, MAX_PRIMS);
     writeRow(ROW_PRIM_CLIP, packed.primClip, MAX_PRIMS);
     writeRow(ROW_CLUSTER_RANGE, packed.clusterRange, 1);
     writeRow(ROW_GROUP_RANGE, packed.groupRange, MAX_PRIMS);

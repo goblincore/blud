@@ -433,6 +433,11 @@ function parseBodyLine(l: BlobLine, s: ParseState, into: BlobPart[]): void {
     // clipd= and rim=; the required-arg contract is judged here (and again in
     // blob-compile.ts) so a shell missing one fails loudly with the line.
     thickness: numArg(l, 'thick', 0),
+    // WRINKLES, off by default. Two scalars rather than a vector because
+    // BlobLine has no vector helper and they are unrelated quantities:
+    // `warp=` is amplitude in metres, `warpFreq=` is radians per metre.
+    warpAmp: numArg(l, 'warp', 0),
+    warpFreq: numArg(l, 'warpFreq', 0),
     clipNormal: parseVec3Arg(l, 'clip', strArg(l, 'clip')),
     clipOffset: numArg(l, 'clipd', 0),
     rim: numArg(l, 'rim', 0),

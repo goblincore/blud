@@ -222,6 +222,23 @@ export function buildHullInstances(
       // groove's `tall` is tiny, so min(scale) pushed its spheres under
       // MIN_HULL_RADIUS. A fatter cutter would have punched a hole.
       if (p.op === 'sub' || p.op === 'groove' || p.dead) continue;
+      // A SHELL is a hollow sheet, and this hull inscribes SOLID spheres in
+      // the base capsule the sheet was onioned from — which is empty. It has
+      // only ever been harmless because every shell shipped so far wraps
+      // flesh that fills it (the schoolgirl's skirt sits inside her hips), so
+      // the sphere landed in the body underneath rather than in the shell.
+      //
+      // A warp breaks that by construction: it moves the sheet INWARD by up
+      // to warpAmp as readily as outward, and an inscribed sphere sized off
+      // the base capsule then pokes through the cloth. Rays that reach it
+      // clamp tMax in empty space and discard — the see-through holes the
+      // mouse's snout cost a day to find.
+      //
+      // Skipping shells entirely is the conservative direction: FEWER
+      // occluder spheres can only cost fill rate, never correctness, and a
+      // sheet a few millimetres thick was never going to occlude anything
+      // the flesh under it did not already occlude.
+      if (p.shell) continue;
       if (!live.has(p.cluster)) continue;
       // Minus the amp, not plus: the dent side is the one that can reach
       // past the hull (see the buildHullInstances doc). A sphere that cannot

@@ -55,6 +55,8 @@ import { MAX_PRIMS } from '../validate';
 //                       w = hasClip (shell-fold prims only)
 //   row 17 primClip     xyz = clip plane normal (shell-fold prims only),
 //                       w = per-prim glow 0..1 (hard-surface task 3)
+//   row 20 primWarp     x = wrinkle amplitude (m), y = wrinkle frequency
+//                       (rad/m), zw spare (shell-fold prims only)
 //
 // DIVERGENCE NOTE (2026-08-17, motion-polish task 3): row 7 / per-prim
 // orientation exists ONLY here. The GLSL twin (march.glsl.ts) is FROZEN per
@@ -79,7 +81,7 @@ import { MAX_PRIMS } from '../validate';
 //     build for any of them, so this is a test failure rather than a
 //     pipeline-creation error nobody reads.
 
-export const DATA_ROWS = 20;
+export const DATA_ROWS = 21;
 export const ROW_PRIM_A = 0;
 export const ROW_PRIM_B = 1;
 export const ROW_PRIM_SCALE = 2;
@@ -128,6 +130,21 @@ export const ROW_PRIM_SHELL = 16;
  *  the glow COLOUR is the prim's own ROW_PRIM_COLOR albedo, so the lane is
  *  inert (w = 0) unless the author writes `glow=`. See ROW_PRIM_SHELL. */
 export const ROW_PRIM_CLIP = 17;
+/** WRINKLES (shell cloth spike): x = warp amplitude in metres, y = warp
+ *  frequency in radians per metre, zw spare. Read only by prims with a shell
+ *  fold, and only when x and y are both non-zero — a shell authored without
+ *  `warp=` packs zeros here and takes the untouched branch in sdShell, which
+ *  is why every existing character is bit-identical across this row's
+ *  arrival.
+ *
+ *  Its OWN row rather than a lane on ROW_PRIM_SHELL: that row is full
+ *  (x thickness, y rim, z clip offset, w hasClip) and w is genuinely read —
+ *  `hasClip < 0.5` is an early return in sdShell — even though pack.ts
+ *  happens to write 1 there for every shell today. Aliasing a lane that is
+ *  constant by accident rather than by contract is how the box/shell profile
+ *  bit went wrong. One row costs MAX_PRIMS * 16 bytes = 2 KiB per body, the
+ *  same bargain ROW_WOUND_FLAGS took. */
+export const ROW_PRIM_WARP = 20;
 
 
 // iq quadratic polynomial smooth-min: rigid, and conservative (never
@@ -438,11 +455,31 @@ export const SD_PRIM_ORIENTED = /* wgsl */ `fn sdPrimO(p: vec3<f32>, i: i32, dat
 // - rim` is the distance to the sheet/plane intersection CURVE, so
 // `max(max(sheet, plane), rim - length(...))` rounds that edge — a cloth hem
 // instead of a cut. `rim` 0 degenerates to the hard clip.
-export const SD_SHELL = /* wgsl */ `fn sdShell(dBase: f32, p: vec3<f32>, thick: f32, rim: f32, clipO: f32, hasClip: f32, clipN: vec3<f32>) -> f32 {
-  let d = abs(dBase) - thick;
-  if (hasClip < 0.5) { return d; }
+// WRINKLES (shell cloth spike). Three sines with offset phases displace the
+// BASE distance before the sheet is taken, so the whole sheet undulates like
+// hanging cloth rather than its two faces getting independently roughened.
+//
+// This costs the exactness of the field. Each partial derivative of the warp
+// term is at most warpA*warpF, so the gradient magnitude grows to at most
+// 1 + sqrt(3)*|A|*|F| and the result is divided by exactly that: the field
+// stays a conservative distance BOUND, which is all a sphere tracer needs,
+// and no plain-step flag is required. Mirrors sdShellWrap in validate.ts —
+// the two must agree or the CPU checks pass a body the GPU tears.
+//
+// With warpA or warpF zero the branch is skipped, `lip` is exactly 1.0, and
+// division by 1.0 is exact in IEEE — an unwarped shell is bit-identical to
+// before this existed, which shell-warp.test.ts pins.
+export const SD_SHELL = /* wgsl */ `fn sdShell(dBase: f32, p: vec3<f32>, thick: f32, rim: f32, clipO: f32, hasClip: f32, clipN: vec3<f32>, warpA: f32, warpF: f32) -> f32 {
+  var base = dBase;
+  var lip = 1.0;
+  if (warpA != 0.0 && warpF != 0.0) {
+    base = base + warpA * sin(warpF * p.x) * sin(warpF * p.y + 1.3) * sin(warpF * p.z + 2.6);
+    lip = 1.0 + 1.7320508 * abs(warpA) * abs(warpF);
+  }
+  let d = abs(base) - thick;
+  if (hasClip < 0.5) { return d / lip; }
   let dPlane = dot(p, clipN) - clipO;
-  return max(max(d, dPlane), rim - length(vec2(d, dPlane)));
+  return max(max(d, dPlane), rim - length(vec2(d, dPlane))) / lip;
 }`;
 
 export const HASH13 = /* wgsl */ `fn hash13(pIn: vec3<f32>) -> f32 {
@@ -963,7 +1000,8 @@ export const FOLD_GROUP = /* wgsl */ `fn foldGroup(dIn: f32, p: vec3<f32>, data:
     if ((i32(prof) & 4) != 0) {
       let S2 = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SHELL} + band), 0);
       let C2 = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_CLIP} + band), 0);
-      sd = sdShell(sd, p, S2.x, S2.y, S2.z, S2.w, C2.xyz);
+      let W2 = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_WARP} + band), 0);
+      sd = sdShell(sd, p, S2.x, S2.y, S2.z, S2.w, C2.xyz, W2.x, W2.y);
     }
     if (sd < gFoldBest) { gFoldBest = sd; gFoldBestIdx = f32(idx); gFoldBestDistort = grp.z; }
     // Chamfer is profile bit 0 (value 1); bend is bit 1 (value 2); shell is

@@ -344,6 +344,8 @@ function partToPrim(p: BlobPart): PrimDef {
               clipNormal: p.clipNormal as Vec3,
               clipOffset: p.clipOffset,
               rim: p.rim,
+              warpAmp: p.warpAmp ?? 0,
+              warpFreq: p.warpFreq ?? 0,
             },
           }
         : {}),

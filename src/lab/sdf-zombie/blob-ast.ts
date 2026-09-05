@@ -90,6 +90,9 @@ export interface BlobPart {
    * where the sheet meets the plane (0 = a razor edge). Null = not a shell.
    */
   thickness: number;
+  /** Wrinkle amplitude (metres) and frequency (rad/m); 0 = smooth. */
+  warpAmp?: number;
+  warpFreq?: number;
   clipNormal: readonly [number, number, number] | null;
   clipOffset: number;
   rim: number;

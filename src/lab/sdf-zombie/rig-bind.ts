@@ -2,7 +2,7 @@
 import type { BuildResult } from './build-body';
 import type { ClusterInfo, Primitive, Vec3 } from './types';
 import type { Quat } from './vec';
-import { boxReach } from './extent';
+import { boxReach, shellReach } from './extent';
 import { constrainRigBends, makeRig, type RigPoint, type RigState } from './rig';
 import { IK_TUNING, clampDir } from './ik';
 import { rotateYaw } from './gait';
@@ -381,7 +381,7 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
         ? [m.a, m.b] : [m.a, m.b, bendCtrl(m.a, m.b, m.bend)];
       const rMax = Math.max(m.radius, m.radiusB ?? m.radius) * boxReach(m.box);
       for (const end of ends)
-        radius = Math.max(radius, len(sub(end, center)) + rMax * maxScale);
+        radius = Math.max(radius, len(sub(end, center)) + rMax * maxScale + shellReach(m));
     }
     return { ...c, center, radius };
   });

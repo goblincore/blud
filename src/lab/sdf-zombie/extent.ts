@@ -1,5 +1,5 @@
 // src/lab/sdf-zombie/extent.ts
-import type { BoxParams, Primitive, Vec3 } from './types';
+import type { BoxParams, Primitive, ShellParams, Vec3 } from './types';
 import { bendCtrl, len, sub } from './vec';
 
 /**
@@ -50,6 +50,28 @@ export function boxReach(box: BoxParams | undefined): number {
  * would pull a second copy of three into the bundle, which is the trap that
  * makes every standard material render black — see lab-renderer.ts.
  */
+/**
+ * How far a SHELL pushes its surface PROUD of the base capsule it onions.
+ *
+ * A shell's surface sits where `abs(dBase) == thickness`, so the outer face is
+ * `thickness` beyond the base capsule — and a warp displaces that face by up
+ * to `warpAmp` further out again (the sine triple's product is bounded by 1).
+ * Both terms are additive on the outside, so the reach is their sum.
+ *
+ * Exists as a function rather than an inlined `p.shell ? p.shell.thickness : 0`
+ * because that expression was inlined at THREE of the bound sites and simply
+ * absent at the other five — thickness is a few millimetres, so the gap never
+ * bit, and a wrinkle amplitude is an order of magnitude larger and would have.
+ * Every outer-bound site now calls this; `grep -c shellReach` is the count.
+ *
+ * Returns 0 for a non-shell, so it is inert on every prim that is not one.
+ */
+export function shellReach(prim: { shell?: ShellParams }): number {
+  const sh = prim.shell;
+  if (sh === undefined) return 0;
+  return sh.thickness + Math.abs(sh.warpAmp ?? 0);
+}
+
 export function chunkExtent(prims: Primitive[], origin: Vec3): number {
   let r = 0;
   for (const p of prims) {
@@ -61,7 +83,7 @@ export function chunkExtent(prims: Primitive[], origin: Vec3): number {
     const ends = p.bend === undefined
       ? [p.a, p.b] : [p.a, p.b, bendCtrl(p.a, p.b, p.bend)];
     for (const e of ends)
-      r = Math.max(r, len(sub(e, origin)) + rMax * ms);
+      r = Math.max(r, len(sub(e, origin)) + rMax * ms + shellReach(p));
   }
   return r;
 }
