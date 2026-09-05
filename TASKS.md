@@ -40,12 +40,17 @@ necklace/watch meshes are out of scope per the owner.
    and it is not obvious which way it goes. `.blob` ALREADY does cloth --
    the schoolgirl's skirt and sailor collar are `shell` prims (`thick=` /
    `clip=` / `rim=`), a thin onioned surface clipped to a hem. So the choice
-   is: put drape in WAM, which cuts against goblin-kit.wam's own argument that
-   WAM exists for HARD things because smooth-min rounds the edges a buckle
-   needs; or extend the shell with Selfie Girl item 5 -- domain-warp it with
-   low-frequency sines for wrinkles, plus the rim trick where the shell meets
-   its clipping plane, `length(vec2(dShell, dPlane)) - r`. Decide before
-   authoring, not during.
+   was: put drape in WAM, or extend the SDF shell. **DECIDED (owner,
+   2026-09-05): extend the SDF SHELL.** Selfie Girl item 5 -- domain-warp it
+   with low-frequency sines for wrinkles, plus the rim trick where the shell
+   meets its clipping plane, `length(vec2(dShell, dPlane)) - r`.
+   The leverage is why: the shell prim already ships and the schoolgirl's
+   skirt and sailor collar already use it, so wrinkles land on EXISTING
+   garments for free rather than only on new ones -- and it keeps WAM for the
+   hard things goblin-kit.wam argues it exists for. Warp amplitude must
+   default to 0 so no current character moves.
+   **LICENCE, unchanged:** the Selfie Girl shader forbids reuse of the Work.
+   Re-derive; implement from iq's own articles. Do not read the shader.
 
 
 
