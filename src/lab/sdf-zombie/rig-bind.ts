@@ -6,8 +6,9 @@ import { boxReach } from './extent';
 import { constrainRigBends, makeRig, type RigPoint, type RigState } from './rig';
 import { IK_TUNING, clampDir } from './ik';
 import { rotateYaw } from './gait';
+import { segmentQuat } from './rig-frames';
 import {
-  add, bendCtrl, cross, dot, len, normalize, qFromAxisAngle, qFromTo, qIdentity, qMul, qRotate,
+  add, bendCtrl, cross, dot, len, normalize, qRotate,
   scale as vscale, sub,
 } from './vec';
 
@@ -329,14 +330,12 @@ export function bindRig(body: BuildResult): BoundRig {
 export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): BuildResult {
   const pos = bound.rig.points;
   const rigid = bound.head ? headTransform(bound.head, pos, bodyYaw) : null;
-  const qYaw = bodyYaw === 0 ? qIdentity() : qFromAxisAngle([0, 1, 0], bodyYaw);
   const poseEnds = (bind: PrimBind): { a: Vec3; b: Vec3 } => {
     let a = bind.a.offset, b = bind.b.offset;
     if (bind.armFrame) {
       const frame = bind.armFrame;
       const dir = normalize(sub(pos[frame.tail]!.pos, pos[frame.head]!.pos));
-      const rest = bodyYaw === 0 ? frame.restDir : rotateYaw(frame.restDir, bodyYaw);
-      const q = qMul(qFromTo(rest, dir), qYaw);
+      const q = segmentQuat(frame.restDir, dir, bodyYaw);
       a = qRotate(q, a); b = qRotate(q, b);
     }
     return { a: add(pos[bind.a.point]!.pos, a), b: add(pos[bind.b.point]!.pos, b) };
@@ -368,8 +367,7 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
       // and current direction would drop the azimuth), then the residual tilt.
       const h = pos[frame.head]!.pos;
       const dir = normalize(sub(pos[frame.tail]!.pos, h));
-      const rest = bodyYaw === 0 ? frame.restDir : rotateYaw(frame.restDir, bodyYaw);
-      const q = qMul(qFromTo(rest, dir), qYaw);
+      const q = segmentQuat(frame.restDir, dir, bodyYaw);
       return { ...p, a: add(h, qRotate(q, frame.restA)), b: add(h, qRotate(q, frame.restB)), orient: q };
     }
     return { ...p, ...poseEnds(bound.boneBinding[i]!) };
@@ -437,9 +435,8 @@ function headTransform(h: HeadRigid, pos: readonly RigPoint[], bodyYaw = 0): {
   // The cone anchor turns with the body: at yaw 0 this is exactly h.restDir.
   const rest = bodyYaw === 0 ? h.restDir : rotateYaw(h.restDir, bodyYaw);
   const clamped = clampDir(dir, rest, IK_TUNING.headMaxYaw, IK_TUNING.headMaxPitch);
-  const qYaw = bodyYaw === 0 ? qIdentity() : qFromAxisAngle([0, 1, 0], bodyYaw);
   // qMul(a, b) applies b first: the body turn, then the in-cone residual.
-  const q = qMul(qFromTo(rest, clamped), qYaw);
+  const q = segmentQuat(h.restDir, clamped, bodyYaw);
 
   // Translation: the neck pivot plus a bounded share of the drift the rigid
   // rotation does not explain (verlet lag, gait bob, whatever pulled the head
@@ -475,8 +472,7 @@ export function headQuatOf(bound: BoundRig, bodyYaw = 0): Quat | null {
   const rest = bodyYaw === 0 ? h.restDir : rotateYaw(h.restDir, bodyYaw);
   const clamped = clampDir(
     normalize(sub(tip, pivot)), rest, IK_TUNING.headMaxYaw, IK_TUNING.headMaxPitch);
-  const qYaw = bodyYaw === 0 ? qIdentity() : qFromAxisAngle([0, 1, 0], bodyYaw);
-  return qMul(qFromTo(rest, clamped), qYaw);
+  return segmentQuat(h.restDir, clamped, bodyYaw);
 }
 
 /** Shoves the rig point nearest a world position — used to make hits push flesh. */
