@@ -7,7 +7,7 @@ import { constrainRigBends, makeRig, type RigPoint, type RigState } from './rig'
 import { IK_TUNING, clampDir } from './ik';
 import { rotateYaw } from './gait';
 import {
-  add, bendCtrl, dot, len, normalize, qFromAxisAngle, qFromTo, qIdentity, qMul, qRotate,
+  add, bendCtrl, cross, dot, len, normalize, qFromAxisAngle, qFromTo, qIdentity, qMul, qRotate,
   scale as vscale, sub,
 } from './vec';
 
@@ -132,6 +132,13 @@ export function bindRig(body: BuildResult): BoundRig {
   // prims retain bone metadata for wound anchoring, so bone names alone
   // cannot tell us whether the joint is still attached.
   rig.bends = [];
+  // The mirrored shoulders establish the authored body's lateral axis.
+  // Flexion is toward body-forward, not toward the rest forearm: its inward
+  // carrying angle otherwise lets sideways motion mask backward extension.
+  const leftShoulder = body.bones.get('upperArm.l')?.head;
+  const rightShoulder = body.bones.get('upperArm.r')?.head;
+  const bodyForward = leftShoulder && rightShoulder
+    ? normalize(cross(sub(leftShoulder, rightShoulder), [0, 1, 0])) : [0, 0, 1] as Vec3;
   for (const side of ['l', 'r']) {
     const upperName = `upperArm.${side}`, foreName = `foreArm.${side}`;
     const live = (name: string) => body.prims.some(p => p.bone === name && !p.dead &&
@@ -140,11 +147,10 @@ export function bindRig(body: BuildResult): BoundRig {
     const upper = body.bones.get(upperName), fore = body.bones.get(foreName);
     if (!upper || !fore || !live(upperName) || !live(foreName)) continue;
     const restUpper = normalize(sub(upper.tail, upper.head));
-    const foreDir = sub(fore.tail, fore.head);
-    const restPole = normalize(sub(foreDir, vscale(restUpper, dot(foreDir, restUpper))));
-    if (len(restPole) < 1e-8) continue; // no authored bend direction to enforce
+    const restPole = normalize(sub(bodyForward, vscale(restUpper, dot(bodyForward, restUpper))));
+    if (len(restPole) < 1e-8) continue; // no forward flexion axis for this rest arm
     rig.bends.push({ root: indexOf(upper.head), mid: indexOf(upper.tail),
-      end: indexOf(fore.tail), restUpper, restPole });
+      end: indexOf(fore.tail), restUpper, restPole, maxFlex: 150 * Math.PI / 180 });
   }
 
   // Joints of the unmirrored (centreline) bones: pelvis, spine, neck, skull.
