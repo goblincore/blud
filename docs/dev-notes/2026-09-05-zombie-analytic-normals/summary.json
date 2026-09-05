@@ -1,0 +1,62 @@
+{
+  "commit": "8637914",
+  "gates": {
+    "reference": "pass",
+    "gpuKernel": "pass",
+    "intact": "deferred",
+    "wounds": "skipped-by-gate",
+    "visualEvidence": "skipped-by-gate",
+    "timing": "skipped-by-gate",
+    "ownerLook": "pending"
+  },
+  "scenes": [
+    {
+      "name": "intact-head-and-torso",
+      "status": "missing",
+      "reason": "No real gameplay WebGPU compile, numeric, coverage, image, or motion sample ran."
+    },
+    {
+      "name": "wounded-head-and-torso",
+      "status": "skipped-by-gate",
+      "reason": "Dependent gameplay evidence was skipped because intact validation is deferred and wounds did not run."
+    },
+    {
+      "name": "two-body-close-up-with-surrounding-actors",
+      "status": "skipped-by-gate",
+      "reason": "Dependent gameplay evidence was skipped because intact validation is deferred and wounds did not run."
+    },
+    {
+      "name": "walking-and-flashlight-motion",
+      "status": "skipped-by-gate",
+      "reason": "Dependent gameplay evidence was skipped because intact validation is deferred and wounds did not run."
+    },
+    {
+      "name": "impact-stagger-sever-sequence",
+      "status": "skipped-by-gate",
+      "reason": "Dependent gameplay evidence was skipped because intact validation is deferred and wounds did not run."
+    },
+    {
+      "name": "unsupported-control",
+      "status": "skipped-by-gate",
+      "reason": "Dependent gameplay evidence was skipped because intact validation is deferred and wounds did not run."
+    }
+  ],
+  "timings": {
+    "status": "skipped-by-gate",
+    "measurements": null,
+    "reason": "No eligible paired runs were attempted; no frame-time or compile-time claim is available."
+  },
+  "coverage": {
+    "status": "unavailable",
+    "measurements": null,
+    "reason": "No real gameplay eligibility readback ran, so analytic and fallback pixel shares are unknown."
+  },
+  "artifacts": {
+    "kernel": "docs/dev-notes/2026-09-05-zombie-analytic-normals/kernel.json",
+    "intact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/intact.json",
+    "summary": "docs/dev-notes/2026-09-05-zombie-analytic-normals/summary.json",
+    "images": [],
+    "reel": null
+  },
+  "conclusion": "incomplete"
+}

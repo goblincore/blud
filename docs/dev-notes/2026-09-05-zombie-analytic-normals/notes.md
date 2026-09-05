@@ -69,3 +69,9 @@ Focused verification: 233 Vitest tests, 2 Node gate tests, TypeScript and driver
 Criteria fixed before gameplay data: independently >=50% eligible intact head and torso hit pixels; report whole body separately; other scene 10% is a probe floor only. Use raw Float32 target reason/depth/normal data, before antialias/color conversion. Require exact depth equality, fallback component error <=1e-6, geometric scalar error <=1e-5, and legacy finite-stencil angle p99<=5 degrees /max<=25 degrees. Angle comparison is distinct from mathematical derivative correctness and owner look. No timing claim or owner acceptance follows.
 
 Future combination with the independent zoned-wound experiment must force full legacy normals while `zonedCfg.x` is active until separate cached-gradient work passes. This baseline has no such uniform and does not speculate one into its interfaces. Detailed handoff: `.superpowers/sdd/2026-09-05-zombie-analytic-normals/task-3-report.md`; machine-readable missing evidence: `intact.json`.
+
+## Task 5 — incomplete verdict
+
+The prerequisite gate stopped the chain. `reference` and `gpuKernel` remain passed, `intact` remains deferred, `wounds` is skipped by gate, visual evidence and timing are skipped by gate, and owner look remains pending. `summary.json` contains no invented measurements: gameplay coverage and timings are unavailable, with no images or reel.
+
+The verdict driver now handles this state entirely offline, writes the structured incomplete summary, updates dependent gates and exits nonzero. A focused process-level test proves that it does not attempt CDP when prerequisites are missing. See `verdict.md` for the evidence assessment, static-review findings and exact resume sequence.

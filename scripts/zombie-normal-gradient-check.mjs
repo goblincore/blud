@@ -1,8 +1,9 @@
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { applyShipDefaults, stageCloseUp, stampFacingWounds } from './lib/sdf-closeup-stage.mjs';
-import { readNormalGates } from './lib/normal-gradient-gates.mjs';
+import { readNormalGates, writeNormalGates } from './lib/normal-gradient-gates.mjs';
 
 const argv = process.argv.slice(2);
 const valueOf = (name, fallback) => {
@@ -17,6 +18,84 @@ const negativeControl = argv.includes('--negative-control');
 const allowed = new Set(['kernel', 'intact', 'wounds', 'verdict']);
 if (!allowed.has(phase)) throw new Error(`unknown phase ${phase}`);
 mkdirSync(outDir, { recursive: true });
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const gatesPath = resolve('docs/dev-notes/2026-09-05-zombie-analytic-normals/gates.json');
+
+async function writeIncompleteVerdict() {
+  const before = await readNormalGates(gatesPath);
+  const blockers = [];
+  if (before.reference !== 'pass') blockers.push(`reference gate is ${before.reference ?? 'missing'}`);
+  if (before.gpuKernel !== 'pass') blockers.push(`gpuKernel gate is ${before.gpuKernel ?? 'missing'}`);
+  if (before.intact !== 'pass') blockers.push(`intact gate is ${before.intact ?? 'missing'}`);
+  if (before.wounds !== 'pass') blockers.push(`wounds gate is ${before.wounds ?? 'missing'}`);
+  if (blockers.length === 0) return false;
+
+  const commit = execFileSync('git', ['rev-parse', '--short', 'HEAD'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  }).trim();
+  const reason = `${blockers.join('; ')}. Zero real gameplay GPU samples, coverage captures, motion frames, or paired timing records are available.`;
+  const gatePatch = {
+    ...(before.intact === 'pass' ? {} : { wounds: 'skipped-by-gate' }),
+    visualEvidence: 'skipped-by-gate',
+    timing: 'skipped-by-gate',
+    ownerLook: 'pending',
+  };
+  const summaryPath = resolve(outDir, 'summary.json');
+  const gates = await writeNormalGates(gatesPath, gatePatch, {
+    commit: `verdict based on ${commit}`,
+    command: `node scripts/zombie-normal-gradient-check.mjs ${process.argv.slice(2).join(' ')}`,
+    artifact: relative(repoRoot, summaryPath),
+    reason,
+  });
+  const skippedReason = 'Dependent gameplay evidence was skipped because intact validation is deferred and wounds did not run.';
+  const summary = {
+    commit,
+    gates: {
+      reference: gates.reference,
+      gpuKernel: gates.gpuKernel,
+      intact: gates.intact,
+      wounds: gates.wounds,
+      visualEvidence: gates.visualEvidence,
+      timing: gates.timing,
+      ownerLook: gates.ownerLook,
+    },
+    scenes: [
+      { name: 'intact-head-and-torso', status: 'missing', reason: 'No real gameplay WebGPU compile, numeric, coverage, image, or motion sample ran.' },
+      { name: 'wounded-head-and-torso', status: 'skipped-by-gate', reason: skippedReason },
+      { name: 'two-body-close-up-with-surrounding-actors', status: 'skipped-by-gate', reason: skippedReason },
+      { name: 'walking-and-flashlight-motion', status: 'skipped-by-gate', reason: skippedReason },
+      { name: 'impact-stagger-sever-sequence', status: 'skipped-by-gate', reason: skippedReason },
+      { name: 'unsupported-control', status: 'skipped-by-gate', reason: skippedReason },
+    ],
+    timings: {
+      status: 'skipped-by-gate',
+      measurements: null,
+      reason: 'No eligible paired runs were attempted; no frame-time or compile-time claim is available.',
+    },
+    coverage: {
+      status: 'unavailable',
+      measurements: null,
+      reason: 'No real gameplay eligibility readback ran, so analytic and fallback pixel shares are unknown.',
+    },
+    artifacts: {
+      kernel: 'docs/dev-notes/2026-09-05-zombie-analytic-normals/kernel.json',
+      intact: 'docs/dev-notes/2026-09-05-zombie-analytic-normals/intact.json',
+      summary: relative(repoRoot, summaryPath),
+      images: [],
+      reel: null,
+    },
+    conclusion: 'incomplete',
+  };
+  writeFileSync(summaryPath, `${JSON.stringify(summary, null, 2)}\n`);
+  console.error(`VERDICT INCOMPLETE: ${reason}`);
+  process.exitCode = 1;
+  return true;
+}
+
+if (phase === 'verdict' && await writeIncompleteVerdict()) {
+  // A missing prerequisite is a complete offline verdict result. Do not open a browser.
+} else {
 
 const sleep = ms => new Promise(resolveSleep => setTimeout(resolveSleep, ms));
 const withTimeout = (promise, ms, label) => Promise.race([
@@ -319,4 +398,5 @@ if (report.passed) {
 } else {
   console.error(`${phase.toUpperCase()} FAIL: ${report.failures.join(' | ')}`);
   process.exitCode = 1;
+}
 }

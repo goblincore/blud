@@ -1,6 +1,6 @@
 # Zombie analytic normals — approved design
 
-Date: 2026-09-05. Status: owner approved the design ("yes lgtm"), including **zombie first, with fallback**. Implementation has not started and no new dispatch has been requested. Planning inspection baseline: main `b268695`; execution must inspect current main and active wound-cache work again.
+Date: 2026-09-05. Status: owner approved the design ("yes lgtm"), including **zombie first, with fallback**. Tasks 1–2 passed; a default-off intact/detail implementation exists at checkpoint `8637914`, but required gameplay GPU validation is deferred, Task 4 wounds was skipped by gate, and the Task 5 verdict is incomplete. Planning inspection baseline: main `b268695`; resumed execution must inspect current main and active wound-cache work again.
 
 ## Objective
 
@@ -116,6 +116,6 @@ This is a separate scope and can be scheduled later. It does not delay gradient 
 - Targeted tests only under appropriate machine load; one owned browser/device at a time. Do not repeat the prior GPU-tab leak or spend hours waiting for performance conditions.
 - Save unresolved evidence as pending or negative; do not weaken visual coverage, singular-case handling or fallback reporting to mark a task complete.
 
-Self-review: proposal separates exact derivatives from look parity; supports the owner-selected zombie scope; explicitly preserves noise, incoming rim derivatives and nonunit gradient magnitudes; keeps wounded coverage and fallback cost visible; leaves AO/scatter and cache integration independent. No implementation has started.
+Self-review: proposal separates exact derivatives from look parity; supports the owner-selected zombie scope; explicitly preserves noise, incoming rim derivatives and nonunit gradient magnitudes; keeps wounded coverage and fallback cost visible; leaves AO/scatter and cache integration independent. The default-off intact implementation remains unvalidated on the gameplay GPU path; wounds, visual evidence, timing and owner acceptance are not complete.
 
 Background on derivative propagation versus numerical differences: Baydin et al., [Automatic differentiation in machine learning: a survey](https://arxiv.org/abs/1502.05767). The implementation proposed here is a small set of explicit derivative rules, not adoption of a general AD framework.

@@ -3,9 +3,9 @@
   "reference": "pass",
   "gpuKernel": "pass",
   "intact": "deferred",
-  "wounds": "pending",
-  "visualEvidence": "pending",
-  "timing": "pending",
+  "wounds": "skipped-by-gate",
+  "visualEvidence": "skipped-by-gate",
+  "timing": "skipped-by-gate",
   "ownerLook": "pending",
   "evidence": [
     {
@@ -31,6 +31,12 @@
       "command": "Focused Vitest 233/233, Node gates 2/2, tsc and driver syntax pass; guarded actual intact launch stopped before servers at load1 20.47,27.25,25.78 >12",
       "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/intact.json",
       "reason": "Real game GPU compilation, numeric readback, coverage and motion are unexecuted due to bounded environmental load gate; not a correctness pass."
+    },
+    {
+      "commit": "verdict based on 8637914",
+      "command": "node scripts/zombie-normal-gradient-check.mjs --phase verdict --out docs/dev-notes/2026-09-05-zombie-analytic-normals --vite 5251 --cdp 9251",
+      "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/summary.json",
+      "reason": "intact gate is deferred; wounds gate is pending. Zero real gameplay GPU samples, coverage captures, motion frames, or paired timing records are available."
     }
   ]
 }
