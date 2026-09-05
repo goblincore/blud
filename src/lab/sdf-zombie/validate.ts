@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/validate.ts
 import type { ClusterInfo, Primitive, Vec3 } from './types';
 import type { Quat } from './vec';
-import { boxReach } from './extent';
+import { boxReach, strandReach } from './extent';
 import { sdStrand, strandLipschitz } from './strand';
 import { add, bendCtrl, cross, dot, len, lerp, normalize, qMul, qNormalize, qRotate, scale as vscale, sub } from './vec';
 
@@ -649,7 +649,7 @@ export function validateBody(body: Body, opts: ValidateOpts): string[] {
       const ends = prim.bend === undefined
         ? [prim.a, prim.b]
         : [prim.a, prim.b, bendCtrl(prim.a, prim.b, prim.bend)];
-      const rMax = Math.max(prim.radius, prim.radiusB ?? prim.radius) * boxReach(prim.box);
+      const rMax = Math.max(prim.radius, prim.radiusB ?? prim.radius) * boxReach(prim.box) * strandReach(prim.strand);
       const reach = rMax * maxScale + (prim.shell ? prim.shell.thickness : 0);
       for (const end of ends)
         if (len(sub(end, c.center)) + reach > c.radius + 1e-6)

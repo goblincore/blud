@@ -1,6 +1,12 @@
 // src/lab/sdf-zombie/extent.ts
 import type { BoxParams, Primitive, Vec3 } from './types';
 import { bendCtrl, len, sub } from './vec';
+import { strandReach } from './strand';
+
+// strandReach lives in strand.ts with the field it bounds; re-exported here
+// so the eight outer-bound sites import both reach factors from the one
+// module this file's header enumerates.
+export { strandReach };
 
 /**
  * How far a primitive's surface reaches from its segment, in units of
@@ -34,6 +40,13 @@ import { bendCtrl, len, sub } from './vec';
  * Note this is the opposite risk from occluder-hull.ts, which builds an INNER
  * hull and needs no change: a rounded box strictly contains the capsule of
  * the same semi-axes, so spheres sized for the capsule stay inside the box.
+ *
+ * STRANDS (hairlock, 2026-09-05): a strand bundle reaches PAST its parent
+ * radius — the outermost strand centres sit at ceil(n/2)·2r/n from the axis
+ * plus wobble, jitter and the strand radius — so every site below multiplies
+ * strandReach in beside boxReach. `grep -rn "strandReach"` must find all
+ * eight outer-bound sites; occluder-hull.ts is the INNER hull and handles
+ * strands the opposite way (no sphere is safely inside a sparse bundle).
  */
 export function boxReach(box: BoxParams | undefined): number {
   if (box === undefined) return 1;
@@ -55,7 +68,7 @@ export function chunkExtent(prims: Primitive[], origin: Vec3): number {
   for (const p of prims) {
     if (p.op === 'sub') continue;
     const ms = Math.max(p.scale[0], p.scale[1], p.scale[2]);
-    const rMax = Math.max(p.radius, p.radiusB ?? p.radius) * boxReach(p.box);
+    const rMax = Math.max(p.radius, p.radiusB ?? p.radius) * boxReach(p.box) * strandReach(p.strand);
     // A bent prim swings out to its ctrl — include it or the proxy box clips
     // the very horn that prompted the bend.
     const ends = p.bend === undefined
