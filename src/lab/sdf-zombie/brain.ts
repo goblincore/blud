@@ -27,6 +27,7 @@
 // ROOM-BOUND, DELIBERATELY. stepWander clamps every body to its own room's
 // bounds, so a chaser stops at the doorway. Cross-room pursuit needs
 // navigation and is a separate spec.
+import type { SwingVariant } from './attack';
 import type { Vec3 } from './types';
 import { wrapPi } from './wander';
 
@@ -45,9 +46,9 @@ export interface Brain {
   cooldown: number;
   /** Seconds of blast hold remaining. */
   holdSecs: number;
-  /** Which arm the NEXT swing uses. Alternates, so a stalled pack swinging
-   *  the same arm every time does not read as a metronome. */
-  side: 'L' | 'R';
+  /** The swing the NEXT attack throws. The arm alternates every swing so a
+   *  stalled pack does not metronome; the variant is rolled at swing start. */
+  swing: { side: 'L' | 'R'; variant: SwingVariant };
 }
 
 export interface BrainSelf { x: number; z: number; yaw: number; room: number }
@@ -66,6 +67,11 @@ export interface BrainInput {
   drift: -1 | 0 | 1;
   /** A blast-profile hit landed this frame. Outranks every other transition. */
   blasted: boolean;
+  /** A fresh 0..1 value each frame from the actor's own RNG. Consumed ONLY on
+   *  the frame a swing starts, to roll its variant. It lives in the input
+   *  rather than as an injected generator so this module stays a pure
+   *  function of its arguments — the same reason wander.ts takes an Rng. */
+  roll: number;
 }
 
 export interface BrainOutput {
@@ -75,7 +81,7 @@ export interface BrainOutput {
   /** True = locomotion off this frame (the actor's cfg.wander gate). */
   halt: boolean;
   /** The swing to compose, or null. */
-  attack: { phase: number; side: 'L' | 'R' } | null;
+  attack: { phase: number; side: 'L' | 'R'; variant: SwingVariant } | null;
   /** True while this body is IN the melee ring at all — attacking, closing,
    *  recovering or waiting — and so should be separated at the wider engaged
    *  radius. Waiters count: see the encircle branch. */
@@ -124,7 +130,7 @@ export type BrainTuning = typeof BRAIN_TUNING;
 export function makeBrain(): Brain {
   return {
     state: 'idle', alert: false, lostFor: 0,
-    swingT: 0, cooldown: 0, holdSecs: 0, side: 'R',
+    swingT: 0, cooldown: 0, holdSecs: 0, swing: { side: 'R', variant: 'hook' },
   };
 }
 
@@ -141,7 +147,7 @@ export function stepBrain(
   const dt = Math.max(0, input.dt);
   const { self, player } = input;
 
-  let { state, alert, lostFor, swingT, cooldown, holdSecs, side } = brain;
+  let { state, alert, lostFor, swingT, cooldown, holdSecs, swing } = brain;
   cooldown = Math.max(0, cooldown - dt);
   holdSecs = Math.max(0, holdSecs - dt);
 
@@ -164,7 +170,7 @@ export function stepBrain(
   if (alert && lostFor > tuning.loseGrace) alert = false;
 
   const idle = (): BrainOutput => ({
-    brain: { state: 'idle', alert, lostFor, swingT: 0, cooldown, holdSecs, side },
+    brain: { state: 'idle', alert, lostFor, swingT: 0, cooldown, holdSecs, swing },
     target: null, halt: false, attack: null, engaged: false, committed: false,
   });
 
@@ -174,14 +180,14 @@ export function stepBrain(
   // cancelled outright — the lurch is the bigger read.
   if (input.blasted) {
     return {
-      brain: { state: 'stagger', alert, lostFor, swingT: 0, cooldown, holdSecs: tuning.blastHoldSec, side },
+      brain: { state: 'stagger', alert, lostFor, swingT: 0, cooldown, holdSecs: tuning.blastHoldSec, swing },
       target: null, halt: true, attack: null, engaged: false, committed: false,
     };
   }
   if (state === 'stagger') {
     if (holdSecs > 0) {
       return {
-        brain: { state, alert, lostFor, swingT: 0, cooldown, holdSecs, side },
+        brain: { state, alert, lostFor, swingT: 0, cooldown, holdSecs, swing },
         target: null, halt: true, attack: null, engaged: false, committed: false,
       };
     }
@@ -198,15 +204,17 @@ export function stepBrain(
     swingT = tuning.swingSec > 0 ? Math.min(1, swingT + dt / tuning.swingSec) : 1;
     if (swingT < 1) {
       return {
-        brain: { state, alert, lostFor, swingT, cooldown, holdSecs, side },
+        brain: { state, alert, lostFor, swingT, cooldown, holdSecs, swing },
         target: playerPoint, halt: true,
-        attack: { phase: swingT, side },
+        attack: { phase: swingT, side: swing.side, variant: swing.variant },
         engaged: true, committed: true,
       };
     }
     swingT = 0;
     cooldown = tuning.cooldownSec;
-    side = side === 'R' ? 'L' : 'R';           // alternate
+    // Alternate the arm for the next swing; its variant is rolled when that
+    // swing actually starts, not here.
+    swing = { side: swing.side === 'R' ? 'L' : 'R', variant: swing.variant };
     state = 'recover';
   }
 
@@ -218,7 +226,7 @@ export function stepBrain(
 
   if (state === 'pursue') {
     return {
-      brain: { state, alert, lostFor, swingT: 0, cooldown, holdSecs, side },
+      brain: { state, alert, lostFor, swingT: 0, cooldown, holdSecs, swing },
       // The PLAYER, not a standoff point: stepWander's 0.4 m arrive band on a
       // target at meleeRadius parks the body outside meleeRadius, so it could
       // never engage (the predecessor's defect, found by the crowd gate).
@@ -230,7 +238,7 @@ export function stepBrain(
   // Inside the ring. The token decides which side of it this body is on.
   if (!input.hasToken) {
     return {
-      brain: { state: 'encircle', alert, lostFor, swingT: 0, cooldown, holdSecs, side },
+      brain: { state: 'encircle', alert, lostFor, swingT: 0, cooldown, holdSecs, swing },
       target: ringPoint(player, bearing + input.drift * tuning.driftStep, tuning.outerRadius),
       // ENGAGED, for separation purposes. Measured 2026-09-05: the ring
       // spaces token HOLDERS from each other, but nothing spaced the waiters,
@@ -245,23 +253,30 @@ export function stepBrain(
 
   if (state === 'recover' && cooldown > 0) {
     return {
-      brain: { state: 'recover', alert, lostFor, swingT: 0, cooldown, holdSecs, side },
+      brain: { state: 'recover', alert, lostFor, swingT: 0, cooldown, holdSecs, swing },
       target: playerPoint, halt: true, attack: null,
       engaged: true, committed: false,
     };
   }
 
   if (dist <= tuning.meleeRadius && cooldown <= 0) {
+    // Roll the variant HERE, at the one frame the swing begins, and store it
+    // so the rest of the swing reads a fixed value — the caller's roll keeps
+    // changing every frame and must not re-decide mid-swing.
+    const started = {
+      side: swing.side,
+      variant: (input.roll < 0.5 ? 'hook' : 'overhead') as SwingVariant,
+    };
     return {
-      brain: { state: 'attack', alert, lostFor, swingT: 0, cooldown, holdSecs, side },
+      brain: { state: 'attack', alert, lostFor, swingT: 0, cooldown, holdSecs, swing: started },
       target: playerPoint, halt: true,
-      attack: { phase: 0, side },
+      attack: { phase: 0, side: started.side, variant: started.variant },
       engaged: true, committed: true,
     };
   }
 
   return {
-    brain: { state: 'engage', alert, lostFor, swingT: 0, cooldown, holdSecs, side },
+    brain: { state: 'engage', alert, lostFor, swingT: 0, cooldown, holdSecs, swing },
     target: playerPoint, halt: false, attack: null,
     engaged: true, committed: false,
   };

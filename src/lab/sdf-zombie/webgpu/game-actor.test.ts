@@ -730,4 +730,31 @@ describe('createZombieActor — the ring wiring', () => {
     expect(a.debug().swingT).toBeGreaterThan(0);
     expect(['L', 'R']).toContain(a.debug().side);
   });
+
+  it('reports the swing variant through debug()', () => {
+    const a = makeTestActor({ start: [0, 0, 0], room: 3 });
+    for (let i = 0; i < 8; i++) {
+      a.setBrainInput({ x: 0, z: 0.6, room: 3 }, true);
+      a.setRingInput(true, 0);
+      a.step(1 / 60);
+    }
+    expect(a.debug().state).toBe('attack');
+    expect(['hook', 'overhead']).toContain(a.debug().variant);
+  });
+
+  it('two actors with different seeds do not throw the same swing forever', () => {
+    const variants = new Set<string>();
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      const a = makeTestActor({ start: [0, 0, 0], room: 3, seed });
+      for (let i = 0; i < 400; i++) {
+        a.setBrainInput({ x: 0, z: 0.6, room: 3 }, true);
+        a.setRingInput(true, 0);
+        a.step(1 / 60);
+        if (a.debug().state === 'attack') variants.add(a.debug().variant);
+      }
+    }
+    // Over eight bodies and several swings each, BOTH must appear. A variant
+    // that never fires is a selection bug every unit test above would pass.
+    expect([...variants].sort()).toEqual(['hook', 'overhead']);
+  });
 });

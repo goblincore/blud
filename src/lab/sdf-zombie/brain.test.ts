@@ -16,6 +16,7 @@ function input(over: Partial<BrainInput> = {}): BrainInput {
     hasToken: false,
     drift: 0,
     blasted: false,
+    roll: 0,
     ...over,
   };
 }
@@ -163,7 +164,8 @@ describe('stepBrain — the swing', () => {
     expect(out.brain.state).toBe('attack');
     expect(out.halt).toBe(true);
     expect(out.committed).toBe(true);
-    expect(out.attack).toEqual({ phase: 0, side: out.brain.side });
+    expect(out.attack)
+      .toEqual({ phase: 0, side: out.brain.swing.side, variant: out.attack!.variant });
   });
 
   it('runs the swing over swingSec, then recovers and flips the arm', () => {
@@ -177,7 +179,7 @@ describe('stepBrain — the swing', () => {
     }
     expect(b.state).toBe('recover');
     expect(b.cooldown).toBeGreaterThan(0);
-    expect(b.side).not.toBe(firstSide);
+    expect(b.swing.side).not.toBe(firstSide);
   });
 
   it('a committed swing reports committed and finishes after the token is gone', () => {
@@ -263,5 +265,56 @@ describe('stepBrain — stagger', () => {
     expect(hit.brain.state).toBe('stagger');
     expect(hit.attack).toBeNull();
     expect(hit.brain.swingT).toBe(0);
+  });
+});
+
+describe('stepBrain — swing variants', () => {
+  const close = {
+    player: { x: 0, z: BRAIN_TUNING.meleeRadius - 0.05, room: 3 },
+    hasToken: true,
+  };
+  /** Alert, in the player's room. */
+  const seed = () => stepBrain(makeBrain(), input()).brain;
+
+  it('picks the hook on a low roll and the overhead on a high one', () => {
+    expect(stepBrain(seed(), input({ ...close, roll: 0.1 })).attack!.variant).toBe('hook');
+    expect(stepBrain(seed(), input({ ...close, roll: 0.9 })).attack!.variant).toBe('overhead');
+  });
+
+  it('holds the variant for the whole swing even as the roll changes', () => {
+    let out = stepBrain(seed(), input({ ...close, roll: 0.1 }));
+    expect(out.attack!.variant).toBe('hook');
+    let b = out.brain;
+    for (let i = 0; i < 10; i++) {
+      // A fresh roll every frame — the swing must ignore it.
+      out = stepBrain(b, input({ ...close, roll: 0.99 }));
+      b = out.brain;
+      if (out.attack) expect(out.attack.variant).toBe('hook');
+    }
+  });
+
+  it('rolls again on the NEXT swing', () => {
+    const DT = 1 / 60;
+    let out = stepBrain(seed(), input({ ...close, roll: 0.1 }));
+    let b = out.brain;
+    // Run the swing out and through the cooldown, feeding a high roll.
+    const frames = Math.ceil((BRAIN_TUNING.swingSec + BRAIN_TUNING.cooldownSec) / DT) + 4;
+    let sawOverhead = false;
+    for (let i = 0; i < frames; i++) {
+      out = stepBrain(b, input({ ...close, roll: 0.9 }));
+      b = out.brain;
+      if (out.attack && out.attack.variant === 'overhead') sawOverhead = true;
+    }
+    expect(sawOverhead).toBe(true);
+  });
+
+  it('still alternates the arm underneath the variant', () => {
+    const DT = 1 / 60;
+    let out = stepBrain(seed(), input({ ...close, roll: 0.1 }));
+    const first = out.attack!.side;
+    let b = out.brain;
+    const frames = Math.ceil(BRAIN_TUNING.swingSec / DT) + 2;
+    for (let i = 0; i < frames; i++) { out = stepBrain(b, input(close)); b = out.brain; }
+    expect(b.swing.side).not.toBe(first);
   });
 });

@@ -256,6 +256,7 @@ export interface ZombieActor {
     idle: number;
     state: string;
     side: 'L' | 'R';
+    variant: string;
     hasToken: boolean;
     alert: boolean;
     swingT: number;
@@ -317,6 +318,11 @@ export function createZombieActor(opts: {
   // Starting-phase variety: seed the initial heading so spawns don't parade.
   state = { ...state, wander: { ...state.wander, heading: (opts.seed % 8) * (Math.PI / 4) } };
   const rng: Rng = makeRng(opts.seed);
+  /** A SECOND, independent RNG for swing-variant rolls. It must not share the
+   *  wander/motion generator: drawing an extra value per frame from that one
+   *  would shift every subsequent wander decision and change trajectories
+   *  that existing tests and captures pin. */
+  const swingRng: Rng = makeRng((opts.seed ^ 0x5eed5eed) >>> 0);
   // `current` is the LIVE body — severLimb/severDistal hand back a new
   // BuildResult with alive flags moved (prims are never removed/reordered).
   let current = body;
@@ -546,6 +552,7 @@ export function createZombieActor(opts: {
         hasToken: ringToken,
         drift: ringDrift,
         blasted: pendingBlast,
+        roll: swingRng(),
       });
       brain = think.brain;
       brainAlerted = false;   // one-shot: the first sub-step consumes it
@@ -666,7 +673,7 @@ export function createZombieActor(opts: {
       target: state.wander.target ? [...state.wander.target] as Vec3 : null,
       idle: state.wander.idle,
       state: brain.state, alert: brain.alert, swingT: brain.swingT,
-      side: brain.side, hasToken: ringToken,
+      side: brain.swing.side, variant: brain.swing.variant, hasToken: ringToken,
     };
   }
 
@@ -787,7 +794,7 @@ export function createZombieActor(opts: {
       blend: 0, speed: 0,
       staggerKind: null, target: null, idle: 0,
       state: brain.state, alert: brain.alert, swingT: brain.swingT,
-      side: brain.side, hasToken: ringToken,
+      side: brain.swing.side, variant: brain.swing.variant, hasToken: ringToken,
     },
     hit,
     hitSlug,

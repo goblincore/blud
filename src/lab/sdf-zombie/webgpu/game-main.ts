@@ -2981,7 +2981,8 @@ async function main() {
       const p = a.pose().pos;
       return {
         id: a.id, room: a.room, state: b.state, alert: b.alert,
-        swingT: b.swingT, side: b.side, hasToken: a.debug().hasToken,
+        swingT: b.swingT, side: b.swing.side, variant: b.swing.variant,
+        hasToken: a.debug().hasToken,
         dist: Math.hypot(p[0] - player.pos[0], p[2] - player.pos[2]),
         bearing: Math.atan2(p[0] - player.pos[0], p[2] - player.pos[2]),
       };
