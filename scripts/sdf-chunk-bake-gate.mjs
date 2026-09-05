@@ -359,7 +359,7 @@ const hit = await evaluate(`(async () => {
       centre: target.centre.map(v => +v.toFixed(3)),
       stance: [px, pz].map(v => +v.toFixed(3)),
       volleyLog, trace0, firedOk, gibbed: didGib,
-      checks: __sdfGame.bakeCheckDebug().log ? __sdfGame.bakeCheckDebug() : __sdfGame.bakeCheckDebug() });
+    });
     if (didGib) gibbed = { piece: target.id, mode: 'overhead-buckshot' };
   }
   return { gibbed, attempts };

@@ -5108,6 +5108,9 @@ async function main() {
       lastBakeMs,
       lastBakeInfo,
       pieces: bakedChunks.map(b => ({ id: b.id, centre: [...b.centre] as [number, number, number], radius: b.radius })),
+      /** Live (still-marched) chunk positions — the look/bench drivers frame
+       *  the camera on these in bake-OFF captures. */
+      livePieces: liveChunks.map(c => ({ id: c.id, centre: [...c.state.pos] as [number, number, number], radius: c.state.radius })),
     }),
     /** SDF-pass scale relative to the capped buffer (1.0 = 1:1). */
     setSdfScale: (v: number) => applySdfScale(v),
