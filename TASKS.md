@@ -53,6 +53,14 @@ necklace/watch meshes are out of scope per the owner.
    Re-derive; implement from iq's own articles. Do not read the shader.
 
 
+**[x] A-female — THE WIDOW SHIPPED (2026-09-05), describe-and-judge again.**
+`characters/female.blob` (33 prims, clothed, no kit): the cast's gothic
+mourning widow — black dress/gloves/stockings as paint, wasp waist, oversized
+dark bun, pale skin, one red cameo choker. Baked face decal from the
+reference's head meshes only (its 722-joint Rigify rig and clothes ignored).
+One pipeline fix: `blob-face-bake.py` now REPEAT-wraps UVs (`% 1.0`) before
+atlas sampling — the female mesh's UVs run outside 0..1 and clipping smeared
+the atlas edge in streaks.
 
 **[x] A-soldier — SOLDIER SHIPPED (2026-09-05), and the method changed on the
 way.** `characters/soldier.blob` (15 prims, body only) + `soldier-kit.wam`

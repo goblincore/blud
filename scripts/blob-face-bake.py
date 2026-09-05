@@ -139,6 +139,10 @@ for t in range(len(tris)):
     uu = l0 * u[0, 0] + l1 * u[1, 0] + l2 * u[2, 0]
     vv = l0 * u[0, 1] + l1 * u[1, 1] + l2 * u[2, 1]
     # glTF uv origin is TOP-left: no V flip.
+    # REPEAT-wrapped UVs (values outside 0..1) must be wrapped, not clipped --
+    # clipping smears the atlas edge across the face in streaks (the female
+    # head's v runs -0.994..-0.007, its hair/eyes sit at |uv| ~16).
+    uu = uu % 1.0; vv = vv % 1.0
     px = np.clip((uu * AW).astype(int), 0, AW - 1); py = np.clip((vv * AH).astype(int), 0, AH - 1)
     col = np.concatenate([atlas[py, px], np.full(px.shape + (1,), 255, np.uint8)], -1)
     sub[m] = zz[m]; img[y0:y1 + 1, x0:x1 + 1][m] = col[m]
