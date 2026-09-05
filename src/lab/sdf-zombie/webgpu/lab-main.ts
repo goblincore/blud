@@ -968,7 +968,21 @@ async function main() {
     let best: Vec3 | null = null;
     let bestAxes: Vec3 | null = null;
     let bestR = -Infinity;
-    for (const p of b.prims.slice(head.start, head.start + head.count)) {
+    // PAINTED HEAD PRIMS ARE SKIPPED, and this is load-bearing: the face
+    // projects onto whichever prim wins here, and hair/hats/helmets can
+    // always out-size the skull they COVER. The soldier's flat-top did
+    // exactly that (hair 0.1758 vs cranium 0.1634 on radius*maxScale) and his
+    // face vanished — projected onto the hair's frame, centred in the hair.
+    // There is no tuning escape, because any covering prim is by definition
+    // at least as large as the thing it covers. Flesh is unpainted, so
+    // `color === undefined` selects the cranium.
+    //
+    // FALLBACK: a character whose cranium is itself painted has no unpainted
+    // head prim, so the second pass restores the old all-prims behaviour
+    // rather than returning null and dropping the face entirely.
+    const headPrims = b.prims.slice(head.start, head.start + head.count);
+    const flesh = headPrims.filter(p => p.op !== 'sub' && p.color === undefined);
+    for (const p of (flesh.length > 0 ? flesh : headPrims)) {
       if (p.op === 'sub') continue;
       const r = p.radius * Math.max(p.scale[0], p.scale[1], p.scale[2]);
       if (r > bestR) {
