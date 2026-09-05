@@ -169,7 +169,12 @@ body
   # tall 0.32 keeps it a CAP; the cranium's own roundness below it is skull,
   # not hair.
   # ============================================================
-  blob head on skull at=0.55 offset=(0,0.104,-0.004) r=0.082 wide=1.02 tall=0.32 deep=0.98 box round=0.10 blend=0.004 color=2e6034
+  # offset.y 0.104 -> 0.082 (2026-09-04). MEASURED: the flat-top's underside
+  # sat at y 1.6386 while the cranium's crown reaches 1.6251 -- it FLOATED
+  # 13.5 mm clear of the head it is supposed to sit on. The defect was in the
+  # character as authored; the pauldrons hid it, and removing them exposed it.
+  # 22 mm down puts the box 8 mm INTO the crown, so the two fuse.
+  blob head on skull at=0.55 offset=(0,0.082,-0.004) r=0.082 wide=1.02 tall=0.32 deep=0.98 box round=0.10 blend=0.004 color=2e6034
   # A thin slab down the back of the head: the cut wraps the skull in the
   # bake and in the brief's read, and from behind an all-skin head loses
   # him. Flat, shallow, and proud only 6 mm.

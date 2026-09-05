@@ -869,8 +869,18 @@ async function main() {
     let params;
     try {
       params = compileSheet(parseBlob(activeCharacterSrc()));
-    } catch {
-      return false; // a broken sheet block is reported by the body compile path
+    } catch (e) {
+      // SECOND SILENT CATCH, same lie as the one at the faceEnabled block: the
+      // body compile path does NOT report this, because the body compiles fine
+      // with a broken SHEET. Returning false here sends the caller to
+      // loadFaceTexture('zombie-flat') -- so one bad key in a sheet block put
+      // the ZOMBIE'S FACE on the character with nothing said anywhere. That is
+      // exactly how the soldier lost his face on 2026-09-04.
+      console.error(
+        `[lab] ${activeCharacterName()}: \`sheet\` block failed to compile, so this `
+        + `character is falling back to the ZOMBIE face texture. Fix the sheet block:\n  `
+        + String(e instanceof Error ? e.message : e));
+      return false;
     }
     if (params === null) return false;
     u.faceProj.value.set(params.projScaleX, params.projScaleY, params.projCentreX, params.projCentreY);
