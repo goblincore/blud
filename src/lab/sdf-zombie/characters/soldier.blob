@@ -155,7 +155,14 @@ body
   # left the legs ending at the ankle. Feet are body; boots are the kit's, and
   # they go OVER this. Rounded rather than boxed -- a bare foot has no machined
   # edges, and the boot that wraps it will supply the hard silhouette.
-  blob leg on foot at=0.40 offset=(0.004,-0.094,0.020) r=0.042 wide=0.95 tall=0.72 deep=1.60 blend=0.008 mirror
+  # NO FLESH FOOT (owner, 2026-09-05: "they still leak out the sides... is
+  # there a way to just not render them when wearing shoes"). The boot IS the
+  # foot: the kit's foot shell stands on y=0 and swallows the shaft, and the
+  # flesh blob under it only ever showed as leaks at the heel and the sides
+  # through every stride. The foot BONE stays -- the boot is skinned to it and
+  # the rig's toe point is pinned to the ankle off it (rig-bind.ts pinTips).
+  # If he ever goes barefoot, this is the line to restore:
+  #   blob leg on foot at=0.40 offset=(0.004,-0.094,0.020) r=0.042 wide=0.95 tall=0.72 deep=1.60 blend=0.008 mirror
 
   # LEGS ARE BODY NOW. The knee plates, the boots and the boot-shaft paint on
   # the shin all left for the kit (owner, 2026-09-04) -- webbing, plate and
