@@ -179,14 +179,35 @@ same class of bug: cases handled in RIG space with no idea where the bore was.
   the near side only (loft is symmetric; both-side renders in the notes) —
   tray now a constant 0.040 half-width under the tubes.
 
-**[ ] F-arm.1 — the FPV forearms should resemble the goblin SDF character.**
+**[x] F-arm.1 — the FPV forearms should resemble the goblin SDF character.**
 Spec written 2026-09-04 (approach B, owner-approved in conversation):
 [docs/superpowers/specs/2026-09-04-fpv-goblin-arms-design.md](docs/superpowers/specs/2026-09-04-fpv-goblin-arms-design.md)
 — Blender-authored arm GLB (thicker skin with ball joints, leather bracer
 with brass hardware matching the gun, a SMARTWATCH on the left wrist with a
 drawable glowing screen), generated albedo + normal skin maps with no
-emissive, kit parity for the watch. Follow-up once built: use the watch
-screen as an in-game device (shells / health / timer).
+emissive, kit parity for the watch. **BUILT 2026-09-05** via the dispatch UI
+on kimi/k3 (8 tasks, branch `dispatch/2026-09-04-fpv-goblin-arms-task-8`):
+`goblin-arm.glb` (8942 tris) from `scripts/model_goblin_arm.py`, `game-arms.ts`
+dresses it (generated albedo + normals, NO emissive, gun env map), smartwatch
+on the left wrist with a drawable glowing screen (`__sdfGame.watchScreen`),
+kit parity in `goblin-kit.wam`, gate check 2b. Task 1's agent stopped on a
+plan defect of mine (the albedo's own tests were unsatisfiable as written);
+fixed by hand after the chain: wart darkening is a multiplicative shade, the
+mottle mix is linear (0..80%), the mean test budgets luminance at 8% and hue
+at 12% per channel. 3169 tests, tsc, gate all green. Evidence:
+[docs/dev-notes/2026-09-04-fpv-goblin-arms/](docs/dev-notes/2026-09-04-fpv-goblin-arms/notes.md).
+Owner's first look (2026-09-05) drove three more: a TWO-BONE arm (Upper_L/R
+nodes, `armIk` to shoulder anchors behind the camera — the one-piece stick
+showed its end at extreme pitch), skin re-toned to the character's face
+(saturated, wet, fine dark speckle via a fleck lattice; NOT the matte
+darkening tried first), chrome spike studs on the bracer, warts moved off the
+fist, knuckle nubs removed (they read as warts). 3177 tests, tsc, gate green. Second look: shoulders moved to CAMERA space (a rig-space shoulder swung in
+front of the eye under free-aim pitch), grain moved into the normal +
+roughness maps (pit field), finer tile, greener/darker tone. Then: with free aim pitched up the
+straight hand-to-shoulder line ran THROUGH the receiver — the IK now has a
+bend floor (34°) toward a camera-space outward hint, so the forearm always
+leaves the hand past the gun. Owner: "good job for now" — **merged.** Follow-up **F-arm.2 — the watch
+as an in-game device** (shells / health / timer drawn on the screen canvas).
 Owner, 2026-09-04: "the arm itself probably needs some work to more
 accurately resemble the goblin SDF model (I guess that will be the main
 player character)". Today each arm is one skin-coloured capsule from the hand
@@ -430,6 +451,35 @@ it rather than re-deriving a scene. Chain is now fully serial (one bench at a
 time — concurrent benches are what spoiled the tile table and the r2 sweep):
 **1b → 4 (goo) → 2 → 3 → 5**, all `pending` except 1b, which is the manual
 trigger.
+
+**CLOSE-UP TASK 1B — DONE (2026-09-04).** Harness extracted to
+`scripts/lib/sdf-closeup-stage.mjs` (staging record byte-identical pre/post
+extraction — proven by diff across four runs, not by reading). **Question A
+ANSWERED at decision grade** (two genuinely-quiet windows out of ~10
+attempts, ranges quoted): of the wounded fill-screen frame — clean walk
+~29%, **wound-adjacent walk ~41% (the stablest number: wound shadow + wound
+fold near craters)**, post-hit shading chain ~30%, shading on the clean body
+alone ~5%; wound total ~66%. Tasks 2/3 are NOT aimed at the wrong half, but
+the biggest single column is the wound WALK, which lever 3's early-out
+(≈0) doesn't bite and lever 2's probes don't touch — task 2's scope should
+absorb the wound-shadow walk, and everything must be measured on the WOUNDED
+fill-screen staging. Stability machinery now load-gated (reject >+8 rise /
+>24 abs loadavg, counted makeup reps, 16 rejections in the final run), crash
+retry re-connects (fixed: ws death used to pend forever — one run lost).
+Instrument findings: `hashMarchTarget` is NOT a live-frame parity hash
+(stale target outside debug-mode renders; poisons the next occupancy read);
+the bare `teleport` seam drops the player inside the frozen spawn cluster
+where the mode-4 depth-winner bias reads hits=0 for a room the canvas
+renders — stand off 4 m (bench framing) before censing a crowd.
+[notes](docs/dev-notes/2026-09-04-closeup-1b/notes.md)
+**STEP 3 DONE — `GAME_HULL_EXIT_BOUND` SHIPS 1 (`6a514a0`).** Re-taken
+census clean at five views (room 1 at 0.5/3/9 m + rooms 3/4 standoff):
+hits/rasterised/meanStepsHit bit-identical on/off, pixel diffs at noise,
+state-clean — the historical body-deletion was the fog and it is gone.
+Step win by counter: missStepShare 0.58 → 0.46, meanStepsHit unchanged.
+Timing A/B unresolvable on that night's machine (spreads 11–40%, load
+quoted per row) — the flip rests on exactness + counters + r2's −0.28 ms.
+Gates: tsc 0, vitest src/lab 2457/2457.
 
 **CLOSE-UP FRAME RATE + GORE COST — SPEC WRITTEN, 5 TASKS QUEUED INERT
 (2026-09-04).** Successor program to perf r2, aimed at the owner's restated

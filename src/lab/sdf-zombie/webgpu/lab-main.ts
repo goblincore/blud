@@ -1657,8 +1657,8 @@ async function main() {
       p => sdBody(p, lastPosed));
     wounds = pushWound(wounds, wound, MAX_WOUNDS);
     pendingWounds.push(wound);
-    // The shot feeds stagger (profile + direction) and, for torso blasts,
-    // the wound clutch — both consumed by the next motion step.
+    // The shot feeds stagger (profile + direction) and localized hit recoil,
+    // both consumed by the next motion step.
     pendingShot = {
       type,
       dirWorld: [d.x, d.y, d.z],
@@ -2773,8 +2773,7 @@ async function main() {
         if (motionReadEl) {
           motionReadEl.textContent =
             `meter ${f.meter.toFixed(2)} · ${f.phase}${f.hop ? ' · hop' : ''}` +
-            (f.staggerKind ? ` · ${f.staggerKind}` : '') +
-            (f.clutchArm ? ` · clutch ${f.clutchArm}` : '');
+            (f.staggerKind ? ` · ${f.staggerKind}` : '');
         }
         // Keep the shambler framed: the orbit target drifts after the body
         // (fast enough to follow a walk, slow enough to leave the orbit feel).
@@ -4227,7 +4226,6 @@ async function main() {
         hop: ms.collapse.phase === 'standing'
           && (missingLimbs().legL !== missingLimbs().legR),
         stagger: ms.stagger.kind,
-        clutch: ms.clutch.arm,
         heading: ms.wander.heading,
         bodyYaw: ms.bodyYaw,
         armStyle,
