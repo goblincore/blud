@@ -289,6 +289,21 @@ export const NG_WOUNDS = /* wgsl */ `fn ngWounds(base: vec4<f32>, p: vec3<f32>, 
     let wMeta = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_META}), 0);
     let capRow = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_CAP}), 0);
     let cap = vec4<f32>(capRow.xyz, select(1e5, capRow.w, capRow.w > 0.0));
+    if (wMeta.x < -0.5) {
+      let sphere = w.w - r;
+      let slab = cap.w - dot(v, cap.xyz);
+      let cutter = min(sphere, slab);
+      let cutterLip = max(1.0, length(cap.xyz));
+      if (r <= R) { gNgReason = 2; }
+      if (abs(r - 2.0 * w.w) <= R) { gNgReason = 3; }
+      if (abs(sphere - slab) <= (1.0 + length(cap.xyz)) * R && cutter + (gNgLip + cutterLip) * R >= d.x) { gNgReason = 3; }
+      if (abs(d.x - cutter) <= (gNgLip + cutterLip) * R) { gNgReason = 3; }
+      let gradient = select(-cap.xyz, -v / max(r, 1e-8), sphere <= slab);
+      if (cutter > d.x) { d = vec4<f32>(cutter, gradient); }
+      gNgLip = max(gNgLip, cutterLip);
+      if (r < 2.0 * w.w) { gNgNear = 1.0; }
+      continue;
+    }
     let burn = wMeta.x > 1.5;
     let depth = select(w.w, w.w * 0.35 * clamp(wMeta.y, 0.0, 1.0), burn);
     let rim = vec3<f32>(depth * cfg.w * wMeta.w, max(depth * cfg2.x, 1e-4), depth * cfg.z * wMeta.z * select(1.0, 0.25, burn));

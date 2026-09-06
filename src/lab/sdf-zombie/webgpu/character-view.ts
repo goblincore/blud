@@ -39,6 +39,7 @@ import type { MotionFrame } from '../motion';
 import { DEFAULT_FACE, type FaceParams } from '../face';
 import type { FleshMaterial } from '../material';
 import type { BodyDef, Vec3 } from '../types';
+import type { VisualWound } from '../shared-wounds/torso';
 import type { FaceSheetParams } from '../blob-face-sheet';
 import { loadKit, type KitOverlay } from './kit-overlay';
 import { loadHeldProp, type HeldProp } from './held-prop';
@@ -304,7 +305,7 @@ export interface WoundRing {
    * report). Head wounds ride the orient quat and were fine; limb capsules
    * carry it in their axis.
    */
-  refresh(gpu: ZombieGpuView, posed: BuildResult, bodyYaw: number): void;
+  refresh(gpu: ZombieGpuView, posed: BuildResult, bodyYaw: number, visual?: readonly VisualWound[]): void;
   /** Replace the ring wholesale — the sever path rebuilds it. */
   set(wounds: Wound[]): void;
 }
@@ -324,18 +325,21 @@ export function createWoundRing(): WoundRing {
     },
     stampWorldOf: (w) => stampWorld.get(w) ?? null,
     set(next) { wounds = next; },
-    refresh(gpu, posed, bodyYaw) {
-      if (wounds.length === 0 || typeof gpu.setWounds !== 'function') return;
+    refresh(gpu, posed, bodyYaw, visual) {
+      const rows = visual ?? wounds;
+      if ((!visual && wounds.length === 0) || typeof gpu.setWounds !== 'function') return;
       gpu.setWounds(
-        wounds.map(w => woundWorldPos(posed.prims, w, bodyYaw)),
-        wounds.map(w => w.radius),
-        wounds.map(w => TYPE_ID[w.type]),
-        wounds.map(w => w.ageSec),
-        wounds.map(w => WOUND_PROFILES[w.type].rimSplayScale * (w.rimScale ?? 1)),
-        wounds.map(w => WOUND_PROFILES[w.type].rimOffsetScale),
-        wounds.map(w => {
+        rows.map(w => woundWorldPos(posed.prims, w, bodyYaw)),
+        rows.map(w => w.radius),
+        rows.map(w => 'presetCut' in w && w.presetCut ? -1 : TYPE_ID[w.type]),
+        rows.map(w => w.ageSec),
+        rows.map(w => WOUND_PROFILES[w.type].rimSplayScale * (w.rimScale ?? 1)),
+        rows.map(w => WOUND_PROFILES[w.type].rimOffsetScale),
+        rows.map(w => {
           const n = woundCarveNormal(posed.prims, w, bodyYaw);
-          return n ? { n, depth: w.carveDepth ?? 0 } : null;
+          // The preview repacks slots as its second cutter appears. Clear
+          // an uncapped slot explicitly so it cannot inherit an old cap.
+          return n ? { n, depth: w.carveDepth ?? 0 } : visual ? { n: [0, 0, 0] as Vec3, depth: 0 } : null;
         }),
       );
     },

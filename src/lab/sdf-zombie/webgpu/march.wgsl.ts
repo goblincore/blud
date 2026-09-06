@@ -977,6 +977,13 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
     // reference stable.
     let wCap = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_CAP}), 0);
     let capEff = select(1.0e5, wCap.w, wCap.w > 0.0);
+    // Bounded torso preview: a fixed sphere recipe, with its owner's depth
+    // cap. Negative type is upload-only; stock gameplay types remain 0..2.
+    if (wMeta.x < -0.5) {
+      d = max(d, min(w.w - r, capEff - dot(p - w.xyz, wCap.xyz)));
+      if (r < w.w * 2.0) { near = 1.0; }
+      continue;
+    }
     let isBurn = wMeta.x > 1.5;
     let depth = select(w.w, w.w * 0.35 * clamp(wMeta.y, 0.0, 1.0), isBurn);
     d = smax(d, min(-(r - depth), capEff - dot(p - w.xyz, wCap.xyz)), woundCfg.y);
@@ -3464,4 +3471,3 @@ export const HELPERS = [
   // a textureLoad — so it rides last, ahead of MARCH_BODY which calls it.
   DEPTH_PRE_FETCH,
 ];
-

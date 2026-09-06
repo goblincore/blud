@@ -46,6 +46,7 @@ import type { SwingVariant } from '../attack';
 import type { MissingLimbs } from '../collapse';
 import type { ZombieGpuView } from './zombie-gpu';
 import { createWoundRing, type CharacterView } from './character-view';
+import { createTorsoWounds } from '../shared-wounds/torso';
 import type { Aabb } from './game-level';
 import { GUN_GRIP, gunPoint } from '../carry';
 import { qRotate } from '../vec';
@@ -284,6 +285,10 @@ export interface ZombieActor {
   step(dt: number): void;
   /** Live wound ring (for HUD/debug). */
   wounds: () => readonly Wound[];
+  /** Rendered carve spheres, also used to exclude occluder hulls. */
+  visualWounds: () => readonly Wound[];
+  /** Preview transitions advance even while the motion/rig is frozen. */
+  advanceWoundPreview(dt: number): boolean;
   /** Where `wound` was placed at stamp time, before the recoil shove — see
    *  the note on `stampWorld`. Null for a wound this actor never stamped
    *  (a blast bundle from stampBlast, or one evicted from the ring).
@@ -373,6 +378,8 @@ export function createZombieActor(opts: {
    *  taking the two halves, and callers that HAVE a CharacterView hand it over
    *  as well, for the damage delegation in task 4b. */
   character?: CharacterView;
+  /** Experimental fixed torso presets, off for the normal game. */
+  boundedWounds?: boolean;
   start: Vec3;
   seed: number;
   bounds: WanderBounds;
@@ -425,6 +432,8 @@ export function createZombieActor(opts: {
    *  One implementation, whoever owns it: the drift this refactor exists to
    *  kill came from two hand-written copies of the same sequence. */
   const woundRing = opts.character?.wounds ?? createWoundRing();
+  const torsoWounds = opts.boundedWounds ? createTorsoWounds() : null;
+  if (torsoWounds) for (const w of woundRing.all()) torsoWounds.record(w, body);
   const pendingWounds: Wound[] = [];
   const pendingSevered: LimbId[] = [];
   let pendingShot: MotionSignals['shot'] = null;
@@ -512,7 +521,13 @@ export function createZombieActor(opts: {
     // game push identical carve rows — including the depth-slab normals the
     // lab had ZERO references to before this. The pose is ours to supply: the
     // ring owns the wound DATA, the caller owns the rig it is stamped against.
-    woundRing.refresh(view, posed, bodyYaw);
+    woundRing.refresh(view, posed, bodyYaw, torsoWounds?.visual(posed));
+  }
+
+  function advanceWoundPreview(dt: number): boolean {
+    if (!torsoWounds?.advance(dt)) return false;
+    refreshWounds();
+    return true;
   }
 
   /** Re-binds after a body edit, carrying live rig points across (bones are
@@ -550,6 +565,7 @@ export function createZombieActor(opts: {
     current = r.body;
     if (r.stumpWound) {
       woundRing.stamp(r.stumpWound, posed, bodyYaw);
+      torsoWounds?.record(r.stumpWound, posed, false);
       pendingWounds.push(r.stumpWound);
     }
     pendingSevered.push(limb);
@@ -861,6 +877,7 @@ export function createZombieActor(opts: {
     // arrive already resolved against a posed body, with no single impact
     // point to anchor to.
     woundRing.stampBundle(blastWounds);
+    if (torsoWounds) for (const w of blastWounds) torsoWounds.record(w, posed);
     for (const w of blastWounds) pendingWounds.push(w);
     if (blastWounds.length === 0) return;
     posed = applyRig(current, bound, bodyYaw);
@@ -896,6 +913,7 @@ export function createZombieActor(opts: {
     // below and before flushHitTail re-solves the pose, so it is the
     // placement, uncontaminated by the reaction to it.
     woundRing.stamp(wound, field, bodyYaw);
+    torsoWounds?.record(wound, field);
     pendingWounds.push(wound);
     pendingShot = {
       type: wound.type,
@@ -967,6 +985,8 @@ export function createZombieActor(opts: {
     committed: () => lastCommitted,
     step,
     wounds: () => woundRing.all(),
+    visualWounds: () => torsoWounds?.visual(posed) ?? woundRing.all(),
+    advanceWoundPreview,
     stampWorldOf: (w: Wound) => woundRing.stampWorldOf(w),
     debug: () => lastDebug ?? {
       holdSecs: mind.debug().holdSecs, knockV, phase: 'standing', meter: 0,
