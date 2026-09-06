@@ -131,6 +131,46 @@ is not evidence.** Re-run 3x before believing it. Fix: more control samples, or
 gate on `maxChannelDelta` instead of raw pixel count. Recorded in the
 [refactor baselines README](docs/dev-notes/2026-09-06-refactor-baselines/README.md).
 
+**[~] SOLDIER SHOOT-BACK AI — IN THE GAME, WORKING, JANKY (2026-09-06).**
+He spawns in room 1 with his kit, his gun and his own baked face; notices,
+marches to ~3 m, bursts 1–3 shots with the weapon visibly raised, holds a
+settle beat, repositions. Measured: aim 1.48s, FIRE 2.18/3.23/4.28, settle
+4.63, move 5.08. **Owner verdict: "working but needs a ton of work"** — after a
+shot he drifts toward the player or runs into a wall.
+**NEXT SESSION: rewrite the behaviour against a real FPS reference.** The
+NotBlood source (in this repo, the basis of the original billboard version) has
+gun cultists to port from; `src/game/enemy/cultist-ai.ts` is the legacy
+billboard FSM. Owner's shape: in attack mode fire three times, reposition only
+*slightly*, fire again; move further when fired at; more drastic moves when hit
+and not killed.
+[spec](docs/superpowers/specs/2026-09-06-soldier-shootback-ai-design.md)
+
+**[!] TASK 3/4c REVERTED — the lab must NOT adopt `character-view` yet.**
+Task 3's extraction rigidly offsets the goblin's KIT from his FLESH (~0.155 m
+XZ, zero Y) — armour bunched one side, a goggle piece protruding from his face.
+Confirmed with a deterministic freeze (`pauseLoop` + `holdStill`) on both
+commits. The kit loads at `[0,0,0]` in both, so the suspect is
+`buildCharacterBody`'s closing `translateBody(result, start)` — the original
+hero path never translated (only crowd bodies did). The module and the GAME's
+use of it are fine and were kept. **Do not restore without a goblin view in the
+pixel gate.**
+
+**[ ] THE PIXEL GATE ONLY EVER RENDERS THE ZOMBIE.** All five clean views,
+three wounded views and four game gates use the zombie; the registry tests
+assert 16 characters parse and build but nothing renders them. That is why a
+visible goblin regression passed everything green. Add a **goblin** view — he
+is the only character with both a polygon kit and a generated face sheet.
+Capture comparisons must use the deterministic freeze; `setMotionEnabled(false)`
+alone leaves the pose wherever the walk stopped and produces false diffs.
+
+**[ ] RESTORE the "kit ⇒ bespoke motion profile" invariant** (I deleted it in
+task 2 and was wrong). goblin, clown and clown-alt carry kits but walk on
+`ZOMBIE_PROFILE`'s shamble, which mangles the goblin's SDF face prims in
+motion — he looks correct with movement off. Either restore the test or author
+real profiles for the three.
+
+**[ ] F-bleed-gate is a coin flip** — see below; re-run 3x before believing a FAIL.
+
 **[x] Zombie analytic normals — owner passed integrated combat playtest; hybrid mode enabled by default (2026-09-06).**
 [Integration evidence](docs/dev-notes/2026-09-06-analytic-normal-integration/README.md); procedural flesh/wound gradients with automatic legacy fallback and retained comparison toggle. Owner reports smoother play but attribution is uncertain. Broader Task 5 performance study remains open: moving/multi-actor and direct original-shader controls are unmeasured. Stable 30 fps combat is the product target.
 
