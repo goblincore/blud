@@ -131,6 +131,18 @@ await evaluate(`window.__sdfLab.setCrowdCount(${CROWD})`);
 await sleep(Number(process.env.CROWD_SETTLE_MS ?? 400));
 await evaluate(`window.__sdfLab.setCam(${YAW}, ${PITCH}, ${DIST})`);
 await sleep(SETTLE_MS);
+
+// STAMP BEFORE pauseLoop(), NOT AFTER. This block first sat below the pause,
+// which is the one window where a state change cannot reach the framebuffer:
+// pauseLoop's whole contract is "the last presented frame stays on the canvas,
+// nothing advances between the freeze and the shot". The wounds went into the
+// ring, the uniform count read 6, and the screenshot was still the pre-stamp
+// frame — every wounded view came out byte-identical to its unwounded twin,
+// which looks exactly like "the change was a no-op" and is not.
+if (WOUNDS > 0) {
+  await evaluate(`window.__sdfLab.stampWounds(${WOUNDS})`);
+  await sleep(600);   // let the live loop present the craters
+}
 // Suspend the loop: the statue-mode rig integrates real dt forever (a
 // micro-jitter no settling removes), so only a paused loop gives bit-stable
 // captures. The last presented frame stays on the canvas.
@@ -139,13 +151,6 @@ if (MOTION !== 'on') {
   // Canonical reset + fixed-dt walk-in: makes the frozen frame a pure
   // function of (code, seed), so two page loads hash identically.
   await evaluate('window.__sdfLab.holdStill(120)');
-}
-
-if (WOUNDS > 0) {
-  // Stamped BEFORE the capture and after the freeze, so the craters are part
-  // of the frozen scene the three screenshots must agree on.
-  await evaluate(`window.__sdfLab.stampWounds(${WOUNDS})`);
-  await sleep(600);
 }
 
 if (BENCH) {
