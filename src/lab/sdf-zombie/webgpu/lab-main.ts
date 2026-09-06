@@ -140,7 +140,6 @@ import {
 } from '../panel';
 import { createEnclosure, type WallKey } from './enclosure';
 
-const TYPE_ID: Record<WoundType, number> = { pellet: 0, blast: 1, burn: 2 };
 
 /** Chunk mesh/render-object slots are recycled oldest-first at this cap.
  *  A per-prim gib is ~15 pieces, so 40 lets two full gibs coexist. */
@@ -1221,7 +1220,7 @@ async function main() {
   function woundedLimbs() {
     const alive = (l: LimbId) => current.clusters.find(c => c.limb === l)?.alive ?? false;
     const w = { armL: false, armR: false, legL: false, legR: false };
-    for (const wound of wounds) {
+    for (const wound of woundRing.all()) {
       const prim = current.prims[wound.primIdx];
       if (!prim || !alive(prim.limb)) continue;
       if (prim.limb === 'armL' || prim.limb === 'armR'
@@ -1230,7 +1229,13 @@ async function main() {
     return w;
   }
 
-  let wounds: Wound[] = [];
+  /** THE SHARED WOUND RING (character-view.ts) — the hero's, and the same
+   *  implementation the game runs. Replaces a bare Wound[] plus a hand-written
+   *  uploadWounds that had drifted from the game's: it pushed SIX rows where
+   *  the game pushes SEVEN, the missing one being woundCarveNormal's depth
+   *  slab. That is why the lab could tune a crater that renders differently
+   *  in the game — the whole reason this module exists. */
+  const woundRing = heroView.wounds;
   /**
    * Freezes everything that animates on its own, so two captures of the same
    * pose are pixel-comparable.
@@ -1275,19 +1280,12 @@ async function main() {
   }
 
   function uploadWounds(prims: BuildResult['prims'], yaw = heroMotion.lastBodyYaw) {
-    view.setWounds(
-      // The CARVE centres, not the surface anchors: the shader subtracts its
-      // spheres from these, and the centres are thickness-capped at stamp
-      // time (damage.ts) so a blast on a thin torso never opens the far side.
-      wounds.map(w => woundWorldPos(prims, w, yaw)),
-      wounds.map(w => w.radius),
-      wounds.map(w => TYPE_ID[w.type]),
-      wounds.map(w => w.ageSec),
-      // Per-wound lip: the profile's splay scaled by the flesh behind the hit
-      // (Wound.rimScale), so a blast on a claw does not grow a floating ring.
-      wounds.map(w => WOUND_PROFILES[w.type].rimSplayScale * (w.rimScale ?? 1)),
-      wounds.map(w => WOUND_PROFILES[w.type].rimOffsetScale),
-    );
+    // Delegates to the shared ring, which pushes the SEVENTH row this function
+    // never did: woundCarveNormal's inward depth-slab cap. That cap clips the
+    // carve sphere so a crater on thin flesh floors instead of perforating —
+    // the lab has been tuning wounds WITHOUT it while the game shipped WITH
+    // it, which is the divergence 4c exists to close.
+    woundRing.refresh(view, { prims } as BuildResult, yaw);
   }
   // Rest prims pair with the yaw-0 frame (they ARE the yaw-0 body); the
   // next frame's uploadWounds(posed) overwrites this transient anyway.
@@ -1301,7 +1299,7 @@ async function main() {
   function woundSpheres(prims: BuildResult['prims']) {
     // Same carve centres the shader subtracts — the exclusion zone must
     // cover exactly what is removed, or hull spheres reappear in craters.
-    return wounds.map(w => ({ centre: woundWorldPos(prims, w, heroMotion.lastBodyYaw), radius: w.radius }));
+    return woundRing.all().map(w => ({ centre: woundWorldPos(prims, w, heroMotion.lastBodyYaw), radius: w.radius }));
   }
 
   // -------------------------------------------------------------------------
@@ -1514,7 +1512,7 @@ async function main() {
     // heading rotation puts the prims through, so the crater rides the turn.
     const wound = worldHitToWound(lastPosed.prims, hit, WOUND_PROFILES[type].radius, type, heroMotion.lastBodyYaw,
       p => sdBody(p, lastPosed));
-    wounds = pushWound(wounds, wound, MAX_WOUNDS);
+    woundRing.stamp(wound, lastPosed, heroMotion.lastBodyYaw);
     pendingWounds.push(wound);
     // The shot feeds stagger (profile + direction) and localized hit recoil,
     // both consumed by the next motion step.
@@ -1534,13 +1532,13 @@ async function main() {
 
     // Wound-driven detachment: a carve that disconnects a limb severs it for
     // real — same path as the keyboard sever.
-    const fullCuts = cutLimbs(current, wounds, torsoCentre());
+    const fullCuts = cutLimbs(current, [...woundRing.all()], torsoCentre());
     for (const limb of fullCuts) {
       const { body: next, chunk, stumpWound } = severLimb(current, limb);
       if (chunk.prims.length === 0) continue;
       current = next;
       if (stumpWound) {
-        wounds = pushWound(wounds, stumpWound, MAX_WOUNDS);
+        woundRing.stamp(stumpWound, lastPosed, heroMotion.lastBodyYaw);
         pendingWounds.push(stumpWound);
       }
       pendingSevered.push(limb);
@@ -1554,13 +1552,13 @@ async function main() {
     // Mid-limb cuts: a carve that severs a CHAIN joint (knee, elbow…) drops
     // everything distal to it as its own chunk — before this the distal piece
     // stayed in the field and floated. Full-limb cuts above take precedence.
-    for (const cut of cutChains(current, wounds)) {
+    for (const cut of cutChains(current, [...woundRing.all()])) {
       if (fullCuts.includes(cut.limb)) continue;
       const { body: next, chunk, stumpWound } = severDistal(current, cut);
       if (chunk.prims.length === 0) continue;
       current = next;
       if (stumpWound) {
-        wounds = pushWound(wounds, stumpWound, MAX_WOUNDS);
+        woundRing.stamp(stumpWound, lastPosed, heroMotion.lastBodyYaw);
         pendingWounds.push(stumpWound);
       }
       pendingSevered.push(cut.limb);
@@ -1740,7 +1738,7 @@ async function main() {
       spawnChunk(g.limb, g.origin, g.prims, vel, g.tornAt, 'gob');
     }
     current = next;
-    wounds = [];
+    woundRing.set([]);
     view.update(current);
     refreshWounds();
     // The gibbed body leaves its armour and drops its gun (task 13): the
@@ -2015,7 +2013,7 @@ async function main() {
   /** One detonation → the existing gore stack, in the click-shoot order. */
   const gorePort: FpvGorePort = {
     stampWounds(ws) {
-      for (const w of ws) wounds = pushWound(wounds, w, MAX_WOUNDS);
+      woundRing.stampBundle(ws);
       refreshWounds();
     },
     // DIRECT meter credit (fpv-mode's contract): freshWounds would weight by
@@ -2043,7 +2041,7 @@ async function main() {
         if (chunk.prims.length === 0) continue;
         current = next;
         if (stumpWound) {
-          wounds = pushWound(wounds, stumpWound, MAX_WOUNDS);
+          woundRing.stamp(stumpWound, lastPosed, heroMotion.lastBodyYaw);
           pendingWounds.push(stumpWound); // stump meter fuel, as click-shoot
         }
         pendingSevered.push(limb);
@@ -2060,7 +2058,7 @@ async function main() {
         if (chunk.prims.length === 0) continue;
         current = next;
         if (stumpWound) {
-          wounds = pushWound(wounds, stumpWound, MAX_WOUNDS);
+          woundRing.stamp(stumpWound, lastPosed, heroMotion.lastBodyYaw);
           pendingWounds.push(stumpWound);
         }
         pendingSevered.push(cut.limb);
@@ -2304,7 +2302,7 @@ async function main() {
     if (chunk.prims.length === 0) return;
     current = next;
     if (stumpWound) {
-      wounds = pushWound(wounds, stumpWound, MAX_WOUNDS);
+      woundRing.stamp(stumpWound, lastPosed, heroMotion.lastBodyYaw);
       pendingWounds.push(stumpWound);
     }
     pendingSevered.push(limb);
@@ -3770,7 +3768,7 @@ async function main() {
 
   const actionBox = addSection(panelEl, 'actions');
   addButton(actionBox, 'respawn', () => {
-    wounds = [];
+    woundRing.set([]);
     override = loadOverride(activeCharacterName());
     rebuildBody();
   });
@@ -3866,7 +3864,7 @@ async function main() {
     scene,
     camera,
     body: view.object,
-    get wounds() { return wounds; },
+    get wounds() { return woundRing.all(); },
     get current() { return current; },
     get chunkCount() { return chunks.length; },
     /** One shared NodeMaterial, asynchronously prepared before interaction. */
@@ -4134,7 +4132,7 @@ async function main() {
         const w = worldHitToWound(
           lastPosed.prims, hit, WOUND_PROFILES.blast.radius, 'blast', heroMotion.lastBodyYaw,
           p => sdBody(p, lastPosed));
-        wounds = pushWound(wounds, w, MAX_WOUNDS);
+        woundRing.stamp(w, lastPosed, heroMotion.lastBodyYaw);
         pendingWounds.push(w); // stamped blasts feed the damage meter too
       }
       refreshWounds();
@@ -4154,7 +4152,7 @@ async function main() {
       const w = worldHitToWound(
         lastPosed.prims, hit, WOUND_PROFILES.blast.radius, 'blast', heroMotion.lastBodyYaw,
         p => sdBody(p, lastPosed));
-      wounds = pushWound(wounds, w, MAX_WOUNDS);
+      woundRing.stamp(w, lastPosed, heroMotion.lastBodyYaw);
       refreshWounds();
       return hit;
     },
@@ -4164,7 +4162,7 @@ async function main() {
      *  resetMotion alone re-binds the rig of whatever body is current, which
      *  for a gibbed corpse is a body-shaped nothing. */
     respawn() {
-      wounds = [];
+      woundRing.set([]);
       override = loadOverride(activeCharacterName());
       rebuildBody();
     },
