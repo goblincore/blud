@@ -163,5 +163,14 @@ test('positive verdict checkpoint preserves approved correctness/look and never 
     assert.equal(summary.gates.timing,'deferred');assert.equal(summary.timings.browserOpened,false);
     assert.equal(summary.scenes.length,8);assert.ok(summary.scenes.every(s=>s.status==='unmeasured'));
     assert.equal(summary.timings.protocol.shippingShaderOverhead,'unmeasured; no direct current-main control');
+    assert.match(summary.provenance.baseCommit,/^[a-f0-9]{40}$/);
+    assert.ok(['clean','dirty'].includes(summary.provenance.workingTree));
+    assert.match(summary.provenance.sourceSha256['scripts/lib/normal-gradient-performance.mjs'],/^[a-f0-9]{64}$/);
+    assert.equal(summary.commit,summary.provenance.workingTree==='dirty'?`dirty working tree based on ${summary.provenance.baseCommit}`:summary.provenance.baseCommit);
+    const repeated=spawnSync(process.execPath,[driver,'--phase','verdict','--defer-timing','--out',outDir,'--vite','1','--cdp','1'],{cwd:fixture,encoding:'utf8',timeout:5000});
+    assert.equal(repeated.status,1,repeated.stderr);
+    const repeatedSummary=JSON.parse(readFileSync(join(outDir,'summary.json'),'utf8'));
+    assert.equal(repeatedSummary.gates.evidence.length,summary.gates.evidence.length);
+
   } finally {rmSync(fixture,{recursive:true,force:true});}
 });

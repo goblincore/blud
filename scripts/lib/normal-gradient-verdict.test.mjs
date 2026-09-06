@@ -9,9 +9,10 @@ test('both endpoints and absolute drift reject a complete pair', () => {
 });
 test('pair rejection discards the good sibling, alternates order, caps three replacements', async () => {
   const calls=[];
-  const result=await collectNormalPairs(async(mode,attempt)=>{calls.push([attempt,mode]);return leg(mode,attempt<2&&mode===1?{loadEnd:13}:{});});
+  const result=await collectNormalPairs(async(mode,attempt)=>{calls.push([attempt,mode]);return leg(mode,(attempt===1||attempt===3)&&mode===1?{loadEnd:13}:{});});
   assert.equal(result.accepted.length,5); assert.equal(result.rejected.length,2);
-  assert.deepEqual(calls.slice(0,4),[[0,0],[0,1],[1,1],[1,0]]);
+  assert.deepEqual(result.accepted.map(p=>p.order),[[0,1],[1,0],[0,1],[1,0],[0,1]]);
+  assert.deepEqual(calls.slice(2,6),[[1,1],[1,0],[2,1],[2,0]]);
   const blocked=await collectNormalPairs(async(mode)=>leg(mode,{loadEnd:13}));
   assert.equal(blocked.accepted.length,0);assert.equal(blocked.rejected.length,8);assert.equal(blocked.status,'deferred');
 });

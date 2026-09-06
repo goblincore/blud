@@ -12,7 +12,9 @@ Runtime off/on uses the same enlarged candidate shader. Direct current-main cont
 
 Task 4 completion remains recorded in [the exact artifact index](wound-resume/resume.json): bounded settling, exact depth/fallback, detached-chunk point proofs, initial impact ticks and default-on bake/re-gib/reuse checks. Existing failed captures and the previous incomplete summary are preserved; the latter is byte-identically archived in [summary-before-positive.json.gz](summary-before-positive.json.gz), with hash in the preflight record.
 
-The next step is scoped review of this unfinished harness checkpoint, then a controller-coordinated quiet primary run on one owned 5251/9251 lifecycle. Complete both primary torso scenes first and report raw paired results. A clear repeatable regression can justify no-go with the omitted scenes explicit; otherwise finish the remaining approved fixtures and shipping control. AO/scatter cost measurement and a cached-field gradient bridge remain separate future work.
+Round 1 scoped fixes preserve accepted-pair alternation, checkpoint both primary timings before coverage, retain failed eligibility artifacts and record honest dirty-on-base source provenance. Thirteen focused offline tests pass; these fixes add no GPU evidence.
+
+The next step is scoped re-review of this unfinished harness checkpoint, then a controller-coordinated quiet primary run on one owned 5251/9251 lifecycle. Complete both primary torso scenes first and report raw paired results. A clear repeatable regression can justify no-go with the omitted scenes explicit; otherwise finish the remaining approved fixtures and shipping control. AO/scatter cost measurement and a cached-field gradient bridge remain separate future work.
 
 ## Historical checkpoint before this completion
 

@@ -37,7 +37,7 @@ function pairFailure(legs) {
 export async function collectNormalPairs(runLeg,onPair=()=>{}) {
   const result={status:'deferred',accepted:[],rejected:[]};
   for(let attempt=0;attempt<8&&result.accepted.length<5;attempt++) {
-    const pair={attempt,order:attempt%2?[1,0]:[0,1],legs:[]};
+    const pair={attempt,order:result.accepted.length%2?[1,0]:[0,1],legs:[]};
     for(const mode of pair.order)pair.legs.push(await runLeg(mode,attempt));
     pair.reason=pairFailure(pair.legs);
     (pair.reason?result.rejected:result.accepted).push(pair);

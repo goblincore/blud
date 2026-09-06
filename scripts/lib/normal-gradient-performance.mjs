@@ -156,22 +156,57 @@ async function captureCoverage(conn,body,scene,outDir) {
     if(Number.isInteger(data[i])&&data[i]>1&&data[i]<=8)for(let c=0;c<3;c++)parity.fallbackMax=Math.max(parity.fallbackMax,Math.abs(a[i+c]-b[i+c]));
   }
   for(const [mode,frame] of [['legacy',settled.frame],['hybrid',hybrid]])writeFileSync(resolve(outDir,`${scene}-${mode}-normal.rgba32f`),Buffer.from(frame.rgba32f,'base64'));
+  // Write raw eligibility and its measured coverage before any acceptance
+  // assertion, so an empty/weak target remains inspectable after failure.
+  const record=persistNormalEligibility(raw,{scene,body,outDir,ownerLimbs,parity});
   if(parity.depthChanged||parity.fallbackMax||parity.nonFinite)fail('fresh capture depth/fallback parity failed: '+JSON.stringify(parity));
-  const reasons=Array(8).fill(0);
-  for(let i=0;i<data.length;i+=4){const r=data[i]-1;if(Number.isInteger(r)&&r>=0&&r<8)reasons[r]++;}
   const wound=scene.startsWith('wounded')?await evaluate(`__sdfGameDebug.normalWoundCoverage(${body},window.__ngRawTransfer.rgba32f,${raw.w},${raw.h})`):null;
-  const pixels=reasons.reduce((a,b)=>a+b,0);
-  if(!pixels)fail('no target actor eligibility pixels');
-  if(scene!=='unsupported-control'&&pixels/(raw.w*raw.h)<.35)fail('staged actor eligibility coverage below 35% target');
-  const file=resolve(outDir,`${scene}-eligibility.rgba32f`);writeFileSync(file,bytes);
+  record.woundRegions=wound?.regions??null;
+  writeFileSync(record.metrics,JSON.stringify(record,null,2)+'\n');
   await evaluate('__sdfGame.setNormalGradientDebug(0);__sdfGame.step(20,0);await __ngQueue.onSubmittedWorkDone()');
   const shot=await send('Page.captureScreenshot',{format:'png'});
-  const image=resolve(outDir,`${scene}-beauty.png`);writeFileSync(image,Buffer.from(shot.result.data,'base64'));
-  return {parity,target:{width:raw.w,height:raw.h},targetBody:body,pixels,targetCoverage:pixels/(raw.w*raw.h),
-    wholeBody:{analytic:reasons[0],fallback:pixels-reasons[0],analyticFraction:reasons[0]/pixels},reasons,
+  record.image=resolve(outDir,`${scene}-beauty.png`);writeFileSync(record.image,Buffer.from(shot.result.data,'base64'));
+  writeFileSync(record.metrics,JSON.stringify(record,null,2)+'\n');
+  return record;
+}
+
+export function persistNormalEligibility(raw,{scene,body,outDir,ownerLimbs,parity}) {
+  const bytes=Buffer.from(raw.rgba32f,'base64'),data=new Float32Array(bytes.buffer,bytes.byteOffset,bytes.length/4);
+  const reasons=Array(8).fill(0);
+  for(let i=0;i<data.length;i+=4){const r=data[i]-1;if(Number.isInteger(r)&&r>=0&&r<8)reasons[r]++;}
+  const pixels=reasons.reduce((a,b)=>a+b,0),targetCoverage=pixels/(raw.w*raw.h);
+  const reason=!pixels?'no target actor eligibility pixels':scene!=='unsupported-control'&&targetCoverage<.35?'staged actor eligibility coverage below 35% target':null;
+  const record={parity,target:{width:raw.w,height:raw.h},targetBody:body,pixels,targetCoverage,
+    wholeBody:{analytic:reasons[0],fallback:pixels-reasons[0],analyticFraction:pixels?reasons[0]/pixels:null},reasons,
     reasonOrder:['ok','unsupported','degenerate','hard-boundary','owner-unstable','wound-pending','sampled-cache','inactive'],
-    anatomy:normalAnatomyCoverage(data,ownerLimbs),woundRegions:wound?.regions??null,raw:file,sha256:createHash('sha256').update(bytes).digest('hex'),image,
+    anatomy:normalAnatomyCoverage(data,ownerLimbs),woundRegions:null,
+    raw:resolve(outDir,`${scene}-eligibility.rgba32f`),sha256:createHash('sha256').update(bytes).digest('hex'),
+    metrics:resolve(outDir,`${scene}-eligibility.json`),validation:reason?'fail':'pass',reason,
     scope:'untimed live SDF target body; baked meshes excluded'};
+  writeFileSync(record.raw,bytes);
+  writeFileSync(record.metrics,JSON.stringify(record,null,2)+'\n');
+  if(reason)fail(`${reason}; retained metrics: ${record.metrics}`);
+  return record;
+}
+
+// Keep the primary timing window free of expensive untimed coverage work.
+// Exported for an offline sequencing test using the same production loop.
+export async function runStaticNormalScenes(scenes,{measure,capture,save}) {
+  for(const scene of scenes) {
+    if(!STATIC_SCENES.includes(scene.name))continue;
+    scene.status='running';save();
+    const pairs=await measure(scene);
+    scene.pairs=pairs;scene.status=pairs.status;save();
+    if(pairs.status!=='measured')return {status:'incomplete',reason:'three replacement attempts exhausted'};
+    // The preceding save checkpoints BOTH primary timing sets before the
+    // first primary capture, including if capture fails or load rises.
+    const captureScenes=scene.name==='intact-torso'?[]:scene.name==='wounded-torso'?scenes.slice(0,2):[scene];
+    for(const target of captureScenes){target.coverage=await capture(target);save();}
+    if(scene.name==='wounded-torso'&&scenes.slice(0,2).some(s=>s.pairs?.summary?.clearRegression)) {
+      return {status:'no-go',reason:'clear repeatable primary runtime regression; remaining scenes explicitly unmeasured'};
+    }
+  }
+  return {status:'incomplete',reason:'remaining dynamic and multi-actor fixtures and direct main control are not measured; no net shipping claim'};
 }
 
 export async function runNormalPerformance({vite,cdp,outDir,defer=false,onUpdate=()=>{}}) {
@@ -192,27 +227,20 @@ export async function runNormalPerformance({vite,cdp,outDir,defer=false,onUpdate
     result.browserOpened=true;save();
     conn=await connectGame({vite,cdp,width:800,height:720,onFail:fail});
     await conn.send('Page.addScriptToEvaluateOnNewDocument',{source:install});
-    for(const scene of result.scenes) {
-      if(!STATIC_SCENES.includes(scene.name))continue;
-      scene.status='running';save();
-      const pairs=await collectNormalPairs(async(mode,attempt)=>{
+    Object.assign(result,await runStaticNormalScenes(result.scenes,{
+      save,
+      measure:scene=>collectNormalPairs(async(mode,attempt)=>{
         if(loadavg()[0]>12)throw new Error(`timing deferred before fixture: load1 ${loadavg()[0]} >12`);
         const info=await boot(conn,vite,mode,scene.name);
         const leg=await measure(conn,info,mode,scene.name);
         scene.partialLeg={attempt,leg};save();return leg;
-      },(pair,partial)=>{scene.pairs=partial;delete scene.partialLeg;save();console.log(JSON.stringify({scene:scene.name,attempt:pair.attempt,reason:pair.reason,legs:pair.legs.map(l=>({mode:l.mode,loadStart:l.loadStart,loadEnd:l.loadEnd,mean:l.overall.mean,p50:l.overall.p50,p95:l.overall.p95,p99:l.overall.p99}))}));});
-      scene.pairs=pairs;scene.status=pairs.status;save();
-      if(pairs.status!=='measured'){result.reason='three replacement attempts exhausted';break;}
-      // Fresh, untimed same fixture, distinct from beauty timing.
-      if(loadavg()[0]>12)throw new Error(`eligibility deferred: load1 ${loadavg()[0]} >12`);
-      const info=await boot(conn,vite,1,scene.name);
-      scene.coverage=await coverage(conn,info.staging.body,scene.name,outDir);save();
-      // Complete both primary torso scenes before applying the no-go stop.
-      if(scene.name==='wounded-torso'&&result.scenes.slice(0,2).some(s=>s.pairs?.summary?.clearRegression)) {
-        result.status='no-go';result.reason='clear repeatable primary runtime regression; remaining scenes explicitly unmeasured';break;
-      }
-    }
-    if(result.status!=='no-go')result.reason='remaining dynamic and multi-actor fixtures and direct main control are not measured; no net shipping claim';
+      },(pair,partial)=>{scene.pairs=partial;delete scene.partialLeg;save();console.log(JSON.stringify({scene:scene.name,attempt:pair.attempt,reason:pair.reason,legs:pair.legs.map(l=>({mode:l.mode,loadStart:l.loadStart,loadEnd:l.loadEnd,mean:l.overall.mean,p50:l.overall.p50,p95:l.overall.p95,p99:l.overall.p99}))}));}),
+      capture:async scene=>{
+        if(loadavg()[0]>12)throw new Error(`eligibility deferred: load1 ${loadavg()[0]} >12`);
+        const info=await boot(conn,vite,1,scene.name);
+        return coverage(conn,info.staging.body,scene.name,outDir);
+      },
+    }));
   } catch(error) {result.errors.push(error.message);result.reason=error.message;}
   finally {
     for(const scene of result.scenes)if(scene.status==='running')scene.status='deferred';

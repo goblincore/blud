@@ -99,13 +99,29 @@
       "reason": "Root accepted artifact-specific numeric/beauty proof and combined previous Task4 evidence. Exact depth/fallback, final bounded settling, chunk point adapter, initial projectile ticks and 8/8 bake lifecycle checks pass. Owner explicitly approved manual d1a7450 wound/gameplay appearance. Timing unmeasured; default off."
     },
     {
-      "commit": "9d6445ca5eb036612820b91d6949513b03f67ecd",
+      "commit": "dirty working tree based on 9d6445ca5eb036612820b91d6949513b03f67ecd",
       "command": "node scripts/zombie-normal-gradient-check.mjs --phase verdict --defer-timing --out docs/dev-notes/2026-09-05-zombie-analytic-normals --vite 5251 --cdp 9251",
       "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/paired-timings.json",
-      "reason": "explicit offline timing checkpoint; no GPU run attempted"
+      "reason": "explicit offline timing checkpoint; no GPU run attempted",
+      "provenance": {
+        "baseCommit": "9d6445ca5eb036612820b91d6949513b03f67ecd",
+        "workingTree": "dirty",
+        "sourceSha256": null,
+        "note": "Corrected retrospectively: the static harness was uncommitted at this offline execution; original execution source hashes were not recorded. The unfinished harness was subsequently committed in 059d6df."
+      }
     },
     {
-      "commit": "9d6445ca5eb036612820b91d6949513b03f67ecd",
+      "commit": "dirty working tree based on 059d6df07fabc52c07d385756c3a54e107f68b4f",
+      "provenance": {
+        "baseCommit": "059d6df07fabc52c07d385756c3a54e107f68b4f",
+        "workingTree": "dirty",
+        "sourceStatus": "M scripts/lib/normal-gradient-performance.mjs\n M scripts/lib/normal-gradient-verdict.mjs\n M scripts/zombie-normal-gradient-check.mjs",
+        "sourceSha256": {
+          "scripts/zombie-normal-gradient-check.mjs": "14e3fa41756dd88f09d797a26bcf40dd1ca9e8b94c70ba2799c4b0112d23b50d",
+          "scripts/lib/normal-gradient-performance.mjs": "17c48f8c1986cb1e55d21bc5c5ace32f1092af8cccb9677e868d73b634080195",
+          "scripts/lib/normal-gradient-verdict.mjs": "7cfc9a5682bb69f5a43207bb84a27ed16cb83e11ea83f948e65b7adcb22c5aa1"
+        }
+      },
       "command": "node scripts/zombie-normal-gradient-check.mjs --phase verdict --defer-timing --out docs/dev-notes/2026-09-05-zombie-analytic-normals --vite 5251 --cdp 9251",
       "artifact": "docs/dev-notes/2026-09-05-zombie-analytic-normals/paired-timings.json",
       "reason": "explicit offline timing checkpoint; no GPU run attempted"

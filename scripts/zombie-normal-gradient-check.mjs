@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -166,13 +167,23 @@ async function writeIncompleteVerdict() {
 if (phase === 'verdict' && await writeIncompleteVerdict()) {
   // A missing prerequisite is a complete offline verdict result. Do not open a browser.
 } else if (phase === 'verdict') {
+  // Record the executed source state BEFORE producing artifacts. HEAD alone
+  // is not provenance when the harness has uncommitted changes.
+  const sourceFiles=['scripts/zombie-normal-gradient-check.mjs','scripts/lib/normal-gradient-performance.mjs','scripts/lib/normal-gradient-verdict.mjs'];
+  const baseCommit=execFileSync('git',['rev-parse','HEAD'],{cwd:repoRoot,encoding:'utf8'}).trim();
+  const sourceStatus=execFileSync('git',['status','--porcelain','--untracked-files=all','--',...sourceFiles],{cwd:repoRoot,encoding:'utf8'}).trim();
+  const provenance={baseCommit,workingTree:sourceStatus?'dirty':'clean',sourceStatus,
+    sourceSha256:Object.fromEntries(sourceFiles.map(file=>[file,createHash('sha256').update(readFileSync(resolve(repoRoot,file))).digest('hex')]))};
+  const commit=sourceStatus?`dirty working tree based on ${baseCommit}`:baseCommit;
   const timings = await runNormalPerformance({vite,cdp,outDir,defer:argv.includes('--defer-timing')});
-  const commit=execFileSync('git',['rev-parse','HEAD'],{cwd:repoRoot,encoding:'utf8'}).trim();
-  const gates=await writeNormalGates(gatesPath,{timing:timings.status==='no-go'?'fail':'deferred'},{
-    commit,command:`node scripts/zombie-normal-gradient-check.mjs ${process.argv.slice(2).join(' ')}`,
-    artifact:relative(repoRoot,timings.rawPath),reason:timings.reason,
-  });
-  const summary={commit,gates,scenes:timings.scenes,timings,coverage:timings.scenes.filter(s=>s.coverage).map(s=>({name:s.name,...s.coverage})),
+  const timing=timings.status==='no-go'?'fail':'deferred';
+  const evidence={commit,provenance,command:`node scripts/zombie-normal-gradient-check.mjs ${process.argv.slice(2).join(' ')}`,
+    artifact:relative(repoRoot,timings.rawPath),reason:timings.reason};
+  const previous=await readNormalGates(gatesPath);
+  // Re-running the same offline checkpoint is not another experiment.
+  const repeatedCheckpoint=argv.includes('--defer-timing')&&previous.timing===timing&&JSON.stringify(previous.evidence.at(-1))===JSON.stringify(evidence);
+  const gates=repeatedCheckpoint?previous:await writeNormalGates(gatesPath,{timing},evidence);
+  const summary={commit,provenance,gates,scenes:timings.scenes,timings,coverage:timings.scenes.filter(s=>s.coverage).map(s=>({name:s.name,...s.coverage})),
     artifacts:{raw:timings.rawPath,historicalSummary:'docs/dev-notes/2026-09-05-zombie-analytic-normals/summary-before-positive.json.gz',preflight:'docs/dev-notes/2026-09-05-zombie-analytic-normals/task-5-preflight.json',intact:'docs/dev-notes/2026-09-05-zombie-analytic-normals/intact.json',
       wounds:'docs/dev-notes/2026-09-05-zombie-analytic-normals/wounds.json',
       task4:'docs/dev-notes/2026-09-05-zombie-analytic-normals/wound-resume/resume.json'},
