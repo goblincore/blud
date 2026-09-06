@@ -3618,6 +3618,12 @@ async function main() {
       const yaw = a.pose().yaw;
       return a.wounds().map(w => ({
         surface: woundWorldPos(prims, w, yaw),
+        // Where it was PLACED, before the hit's recoil shove moved the body.
+        // `surface` is the live position and is what the renderer uses; this
+        // is the one to compare against a pre-shot prediction. Conflating the
+        // two is what made the slug placement gate read 18 cm of "error" that
+        // was really IMPULSE.blast — see game-actor's stampWorld note.
+        stampSurface: a.stampWorldOf(w),
         carveNormal: woundCarveNormal(prims, w, yaw),
         carveDepth: w.carveDepth,
         radius: w.radius,

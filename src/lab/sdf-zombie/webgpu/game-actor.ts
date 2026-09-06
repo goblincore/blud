@@ -261,6 +261,12 @@ export interface ZombieActor {
   step(dt: number): void;
   /** Live wound ring (for HUD/debug). */
   wounds: () => readonly Wound[];
+  /** Where `wound` was placed at stamp time, before the recoil shove — see
+   *  the note on `stampWorld`. Null for a wound this actor never stamped
+   *  (a blast bundle from stampBlast, or one evicted from the ring).
+   *  DIAGNOSTIC ONLY: rendering must keep using woundWorldPos, so a crater
+   *  rides the flesh it is carved into. */
+  stampWorldOf: (wound: Wound) => Vec3 | null;
   /** CAPTURE SEAM: pin the next step()'s swing pose. Overwritten by the brain
    *  on the following step; null clears it. Never used by the game itself. */
   forceSwing(phase: number, side: 'L' | 'R', variant: SwingVariant): void;
@@ -832,9 +838,35 @@ export function createZombieActor(opts: {
     if (hitPending) { hitPending = false; flushHitTail(); }
   }
 
+  /**
+   * Where each wound was placed AT STAMP TIME — before the recoil shove below
+   * moved the body out from under it.
+   *
+   * WHY IT EXISTS. `woundWorldPos` reconstructs a wound's position from the
+   * CURRENT pose, which is right for rendering (a crater rides the flesh it is
+   * carved into) and wrong for asking "did this land where the shot hit?".
+   * applyProjectileHit stamps, then `impulseAt` TRANSLATES the nearest rig
+   * point by IMPULSE[type] METRES — 0.18 for a slug's blast profile. So a
+   * caller comparing the live position against the pre-shot prediction
+   * measures the recoil, not the placement, and reads ~18 cm of "error" that
+   * is really the body being knocked back.
+   *
+   * That is exactly what sdf-game-slug-gate.mjs was doing: it failed at
+   * 18.3 cm against a 3 cm tolerance for as long as the slug shove has been
+   * blast-scaled, and nobody saw it because the gate needs a vite server and
+   * headless Chrome and never runs under `npm test`. The crater was always
+   * placed correctly.
+   *
+   * WeakMap so an entry dies with the wound the ring buffer evicts.
+   */
+  const stampWorld = new WeakMap<Wound, Vec3>();
+
   function applyProjectileHit(wound: Wound, hitWorld: Vec3, dirWorld: Vec3): Wound {
     const field = posed;
     wounds = pushWound(wounds, wound, MAX_WOUNDS);
+    // BEFORE the impulse below, and before flushHitTail re-solves the pose:
+    // this is the placement, uncontaminated by the reaction to it.
+    stampWorld.set(wound, woundWorldPos(field.prims, wound, bodyYaw));
     pendingWounds.push(wound);
     pendingShot = {
       type: wound.type,
@@ -913,6 +945,7 @@ export function createZombieActor(opts: {
     committed: () => lastCommitted,
     step,
     wounds: () => wounds,
+    stampWorldOf: (w: Wound) => stampWorld.get(w) ?? null,
     debug: () => lastDebug ?? {
       holdSecs: mind.debug().holdSecs, knockV, phase: 'standing', meter: 0,
       blend: 0, speed: 0,

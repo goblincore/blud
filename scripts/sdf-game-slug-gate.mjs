@@ -142,12 +142,42 @@ for (let i = 0; i < 40; i++) {
 }
 if (!woundsNow || woundsNow.length <= w0.length) fail('no new wound after fireSlug');
 const newest = woundsNow[woundsNow.length - 1];
-const dSurf = dist3(newest.surface, pred.hit);
+// JUDGE THE STAMP-TIME POSITION, NOT THE LIVE ONE.
+//
+// `surface` is where the crater is NOW: woundWorldPos reconstructs it from the
+// current pose, which is right for rendering because a crater must ride the
+// flesh it is carved into. But applyProjectileHit stamps the wound and THEN
+// calls impulseAt, which TRANSLATES the nearest rig point by IMPULSE[type]
+// METRES -- 0.18 for a slug's blast profile. Comparing the live position
+// against a pre-shot prediction therefore measures the RECOIL, not the
+// placement.
+//
+// This gate did exactly that and failed at ~18.3 cm against its 3 cm
+// tolerance -- for as long as the slug shove has been blast-scaled (it was
+// raised from a uniform 0.05 deliberately; see game-actor's IMPULSE comment).
+// Nobody noticed, because the gate needs a vite server and headless Chrome and
+// never runs under `npm test`, and no misplaced crater was ever visible in
+// play. The crater was always placed correctly.
+//
+// `stampSurface` is the position recorded BEFORE the impulse, so this now
+// measures what the gate's name claims.
+// NO FALLBACK TO `surface` ON PURPOSE. Falling back would silently re-measure
+// recoil as placement error — the exact bug this gate was fixed for — and it
+// would pass or fail for reasons no reader could see. A missing stampSurface
+// means the build is stale or the wound came from stampBlast (which records
+// none), and both are worth stopping for.
+if (!newest.stampSurface) {
+  fail('wound has no stampSurface: stale build, or a stampBlast wound. '
+     + 'Not falling back to the live surface — see the note above.');
+}
+const dSurf = dist3(newest.stampSurface, pred.hit);
+const dLive = dist3(newest.surface, pred.hit);
 // The carve sphere now sits ON the surface anchor; its depth cap rides
 // carveDepth (2026-08-27 slab redesign). Placement is judged on the surface.
-console.log(`PLACEMENT GATE: |surface − impact| = ${(dSurf * 100).toFixed(2)} cm (radius ${(newest.radius * 100).toFixed(1)} cm, carveDepth ${(newest.carveDepth ?? 0).toFixed(3)} m, type ${newest.type})`);
+console.log(`PLACEMENT GATE: |stamp − impact| = ${(dSurf * 100).toFixed(2)} cm (radius ${(newest.radius * 100).toFixed(1)} cm, carveDepth ${(newest.carveDepth ?? 0).toFixed(3)} m, type ${newest.type})`);
+console.log(`  live surface is ${(dLive * 100).toFixed(2)} cm from impact — the difference is the hit's recoil shove, not placement error`);
 const GATE = dSurf <= TOL_M;
-if (!GATE) fail(`placement gate FAILED: crater surface anchor ${dSurf * 100} cm off the impact point (> ${TOL_M * 100} cm)`);
+if (!GATE) fail(`placement gate FAILED: crater STAMP anchor ${dSurf * 100} cm off the impact point (> ${TOL_M * 100} cm)`);
 
 // Reference captures of THE SAME crater under different ambient mixing
 // (defect-1 evidence) and with both markers shown.
