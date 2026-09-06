@@ -22,7 +22,7 @@ try {
   if(!await evaluate('window.__sdfGame?.backend==="webgpu"'))throw Error('WebGPU boot failed');
   await evaluate('__sdfGame.freeze(true);__sdfGame.setLoopRunning(false);__sdfGame.installDebugProbe()');
   await applyShipDefaults(evaluate);
-  check('default-on bake and default-off normals',{pass:await evaluate('__sdfGame.chunkBake===true&&__sdfGame.normalGradientStatus().mode===0')});
+  check('default-on bake and hybrid normals',{pass:await evaluate('__sdfGame.chunkBake===true&&__sdfGame.normalGradientStatus().mode===1')});
   report.initial=await evaluate('__sdfGame.chunkStats()');
   const census=()=>evaluate(`({stats:__sdfGame.chunkStats(),mode:__sdfGame.normalGradientStatus(),live:__sdfGame.normalGradientPieces().filter(p=>p.kind==='chunk').map(p=>({key:p.key,cfg:__sdfGame.normalGradientPiece(p.key).uniforms.normalGradientCfg.value.toArray()}))})`);
   await evaluate(`(()=>{const z=__sdfGame.zombies().find(z=>z.room===3);if(!z)throw Error('no room3 actor');window.__ngBakeOrigin=z.pos;window.__ngViews=[];__sdfGame.setNormalGradient(1);__sdfGame.spawnTestChunk(z.pos[0]+1,.02,z.pos[2]+.6);__sdfGame.spawnTestChunk(z.pos[0]-.9,.02,z.pos[2]-.5);for(const p of __sdfGame.normalGradientPieces().filter(p=>p.kind==='chunk'))window.__ngViews.push(__sdfGame.normalGradientPiece(p.key));})()`);

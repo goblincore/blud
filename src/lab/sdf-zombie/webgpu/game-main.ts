@@ -942,7 +942,8 @@ async function main() {
   let onSeverDispatch: ((a: ZombieActor, piece: { limb: string; origin: Vec3; prims: Primitive[]; tornAt: Vec3[]; bones: Primitive[] }, stumpWound: Wound | null) => void) | null = null;
 
   const actors: ZombieActor[] = [];
-  let normalGradientMode: 0 | 1 = 0;
+  // Owner-approved hybrid normals; unsupported surfaces retain calcNormal.
+  let normalGradientMode: 0 | 1 = 1;
   let normalGradientDebug: 0 | 1 | 2 = 0;
   const errors: string[] = [];
   let nextId = 1;

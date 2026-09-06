@@ -1,0 +1,2226 @@
+{
+  "scope": "synthetic chunks through production spawn/bake/re-gib/view recycle; no wound derivative coverage",
+  "passed": true,
+  "checks": [
+    {
+      "name": "default-on bake and hybrid normals",
+      "pass": true
+    },
+    {
+      "name": "spawn inherits hybrid",
+      "pass": true
+    },
+    {
+      "name": "default-on live to baked transition",
+      "pass": true
+    },
+    {
+      "name": "baked mesh retained and pooled mode 0",
+      "pass": true,
+      "state": {
+        "stats": {
+          "live": 0,
+          "baked": 2,
+          "views": 2,
+          "totalBakes": 2,
+          "lastBakeMs": 81.5,
+          "lastBakeSwapMs": 0.09999990463256836,
+          "lastBakeRequestMs": 0.10000014305114746,
+          "bakeThread": "worker",
+          "pendingBake": null,
+          "bakeError": null,
+          "lastBakeInfo": {
+            "id": 1,
+            "verts": 4260,
+            "tris": 8516,
+            "bakeMs": 81.5,
+            "overflow": 0,
+            "droppedQuads": 0,
+            "extent": 0.24032548698540945,
+            "flesh": 6,
+            "bones": 0,
+            "torn": 0,
+            "gore": 1,
+            "radius": 0.16519917736370185
+          },
+          "pieces": [
+            {
+              "id": 2,
+              "centre": [
+                3.5498743057250977,
+                0.13063155114650726,
+                5.376594543457031
+              ],
+              "radius": 0.16393486135901975
+            },
+            {
+              "id": 1,
+              "centre": [
+                6.9667603969573975,
+                0.13883943707332946,
+                4.37894082069397
+              ],
+              "radius": 0.16519917736370185
+            }
+          ],
+          "livePieces": []
+        },
+        "mode": {
+          "mode": 0,
+          "diagnostic": 0,
+          "supportedBodies": 10,
+          "legacyBodies": 0
+        },
+        "live": []
+      },
+      "pooled": [
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "name": "baked mesh retained and pooled mode 1",
+      "pass": true,
+      "state": {
+        "stats": {
+          "live": 0,
+          "baked": 2,
+          "views": 2,
+          "totalBakes": 2,
+          "lastBakeMs": 81.5,
+          "lastBakeSwapMs": 0.09999990463256836,
+          "lastBakeRequestMs": 0.10000014305114746,
+          "bakeThread": "worker",
+          "pendingBake": null,
+          "bakeError": null,
+          "lastBakeInfo": {
+            "id": 1,
+            "verts": 4260,
+            "tris": 8516,
+            "bakeMs": 81.5,
+            "overflow": 0,
+            "droppedQuads": 0,
+            "extent": 0.24032548698540945,
+            "flesh": 6,
+            "bones": 0,
+            "torn": 0,
+            "gore": 1,
+            "radius": 0.16519917736370185
+          },
+          "pieces": [
+            {
+              "id": 2,
+              "centre": [
+                3.5498743057250977,
+                0.13063155114650726,
+                5.376594543457031
+              ],
+              "radius": 0.16393486135901975
+            },
+            {
+              "id": 1,
+              "centre": [
+                6.9667603969573975,
+                0.13883943707332946,
+                4.37894082069397
+              ],
+              "radius": 0.16519917736370185
+            }
+          ],
+          "livePieces": []
+        },
+        "mode": {
+          "mode": 1,
+          "diagnostic": 0,
+          "supportedBodies": 10,
+          "legacyBodies": 0
+        },
+        "live": []
+      },
+      "pooled": [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          1,
+          0,
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "name": "real weapon re-gib creates hybrid live pieces",
+      "attempts": [
+        {
+          "target": 2,
+          "volley": 0,
+          "before": {
+            "live": 0,
+            "baked": 2,
+            "views": 2,
+            "totalBakes": 2,
+            "lastBakeMs": 81.5,
+            "lastBakeSwapMs": 0.09999990463256836,
+            "lastBakeRequestMs": 0.10000014305114746,
+            "bakeThread": "worker",
+            "pendingBake": null,
+            "bakeError": null,
+            "lastBakeInfo": {
+              "id": 1,
+              "verts": 4260,
+              "tris": 8516,
+              "bakeMs": 81.5,
+              "overflow": 0,
+              "droppedQuads": 0,
+              "extent": 0.24032548698540945,
+              "flesh": 6,
+              "bones": 0,
+              "torn": 0,
+              "gore": 1,
+              "radius": 0.16519917736370185
+            },
+            "pieces": [
+              {
+                "id": 2,
+                "centre": [
+                  3.5498743057250977,
+                  0.13063155114650726,
+                  5.376594543457031
+                ],
+                "radius": 0.16393486135901975
+              },
+              {
+                "id": 1,
+                "centre": [
+                  6.9667603969573975,
+                  0.13883943707332946,
+                  4.37894082069397
+                ],
+                "radius": 0.16519917736370185
+              }
+            ],
+            "livePieces": []
+          },
+          "after": {
+            "live": 3,
+            "baked": 1,
+            "views": 4,
+            "totalBakes": 2,
+            "lastBakeMs": 81.5,
+            "lastBakeSwapMs": 0.09999990463256836,
+            "lastBakeRequestMs": 0.10000014305114746,
+            "bakeThread": "worker",
+            "pendingBake": null,
+            "bakeError": null,
+            "lastBakeInfo": {
+              "id": 1,
+              "verts": 4260,
+              "tris": 8516,
+              "bakeMs": 81.5,
+              "overflow": 0,
+              "droppedQuads": 0,
+              "extent": 0.24032548698540945,
+              "flesh": 6,
+              "bones": 0,
+              "torn": 0,
+              "gore": 1,
+              "radius": 0.16519917736370185
+            },
+            "pieces": [
+              {
+                "id": 1,
+                "centre": [
+                  6.9667603969573975,
+                  0.13883943707332946,
+                  4.37894082069397
+                ],
+                "radius": 0.16519917736370185
+              }
+            ],
+            "livePieces": [
+              {
+                "id": 3,
+                "centre": [
+                  3.533078250085364,
+                  0.18986268019771566,
+                  5.099295495186029
+                ],
+                "radius": 0.04646876839123266
+              },
+              {
+                "id": 4,
+                "centre": [
+                  3.5242271357097867,
+                  0.33100769202528846,
+                  5.27934972338159
+                ],
+                "radius": 0.055844722152827375
+              },
+              {
+                "id": 5,
+                "centre": [
+                  3.608759512992715,
+                  0.21607824786966218,
+                  5.118477695867958
+                ],
+                "radius": 0.0547349692388442
+              }
+            ]
+          },
+          "fired": true,
+          "correction": [
+            -0.006342532458479866,
+            -0.07922059236000571
+          ],
+          "state": {
+            "stats": {
+              "live": 3,
+              "baked": 1,
+              "views": 4,
+              "totalBakes": 2,
+              "lastBakeMs": 81.5,
+              "lastBakeSwapMs": 0.09999990463256836,
+              "lastBakeRequestMs": 0.10000014305114746,
+              "bakeThread": "worker",
+              "pendingBake": null,
+              "bakeError": null,
+              "lastBakeInfo": {
+                "id": 1,
+                "verts": 4260,
+                "tris": 8516,
+                "bakeMs": 81.5,
+                "overflow": 0,
+                "droppedQuads": 0,
+                "extent": 0.24032548698540945,
+                "flesh": 6,
+                "bones": 0,
+                "torn": 0,
+                "gore": 1,
+                "radius": 0.16519917736370185
+              },
+              "pieces": [
+                {
+                  "id": 1,
+                  "centre": [
+                    6.9667603969573975,
+                    0.13883943707332946,
+                    4.37894082069397
+                  ],
+                  "radius": 0.16519917736370185
+                }
+              ],
+              "livePieces": [
+                {
+                  "id": 3,
+                  "centre": [
+                    3.533078250085364,
+                    0.18986268019771566,
+                    5.099295495186029
+                  ],
+                  "radius": 0.04646876839123266
+                },
+                {
+                  "id": 4,
+                  "centre": [
+                    3.5242271357097867,
+                    0.33100769202528846,
+                    5.27934972338159
+                  ],
+                  "radius": 0.055844722152827375
+                },
+                {
+                  "id": 5,
+                  "centre": [
+                    3.608759512992715,
+                    0.21607824786966218,
+                    5.118477695867958
+                  ],
+                  "radius": 0.0547349692388442
+                }
+              ]
+            },
+            "mode": {
+              "mode": 1,
+              "diagnostic": 0,
+              "supportedBodies": 10,
+              "legacyBodies": 0
+            },
+            "live": [
+              {
+                "key": "chunk:3",
+                "cfg": [
+                  1,
+                  0,
+                  0,
+                  0
+                ]
+              },
+              {
+                "key": "chunk:4",
+                "cfg": [
+                  1,
+                  0,
+                  0,
+                  0
+                ]
+              },
+              {
+                "key": "chunk:5",
+                "cfg": [
+                  1,
+                  0,
+                  0,
+                  0
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "pass": true
+    },
+    {
+      "name": "ring reuse resets inherited legacy mode",
+      "pass": true,
+      "stats": {
+        "live": 12,
+        "baked": 0,
+        "views": 12,
+        "totalBakes": 2,
+        "lastBakeMs": 81.5,
+        "lastBakeSwapMs": 0.09999990463256836,
+        "lastBakeRequestMs": 0.10000014305114746,
+        "bakeThread": "worker",
+        "pendingBake": null,
+        "bakeError": null,
+        "lastBakeInfo": {
+          "id": 1,
+          "verts": 4260,
+          "tris": 8516,
+          "bakeMs": 81.5,
+          "overflow": 0,
+          "droppedQuads": 0,
+          "extent": 0.24032548698540945,
+          "flesh": 6,
+          "bones": 0,
+          "torn": 0,
+          "gore": 1,
+          "radius": 0.16519917736370185
+        },
+        "pieces": [],
+        "livePieces": [
+          {
+            "id": 9,
+            "centre": [
+              4.8,
+              2.12,
+              5.1
+            ],
+            "radius": 0.24520842224996464
+          },
+          {
+            "id": 10,
+            "centre": [
+              5.1,
+              2.12,
+              5.1
+            ],
+            "radius": 0.2470298430196564
+          },
+          {
+            "id": 11,
+            "centre": [
+              5.3999999999999995,
+              2.12,
+              5.1
+            ],
+            "radius": 0.24581206463870311
+          },
+          {
+            "id": 12,
+            "centre": [
+              4.8,
+              2.12,
+              5.3999999999999995
+            ],
+            "radius": 0.23629939687002188
+          },
+          {
+            "id": 13,
+            "centre": [
+              5.1,
+              2.12,
+              5.3999999999999995
+            ],
+            "radius": 0.23181795340334416
+          },
+          {
+            "id": 14,
+            "centre": [
+              5.3999999999999995,
+              2.12,
+              5.3999999999999995
+            ],
+            "radius": 0.24278195190236534
+          },
+          {
+            "id": 15,
+            "centre": [
+              4.8,
+              2.12,
+              5.699999999999999
+            ],
+            "radius": 0.247199924792543
+          },
+          {
+            "id": 16,
+            "centre": [
+              5.1,
+              2.12,
+              5.699999999999999
+            ],
+            "radius": 0.22910465163515012
+          },
+          {
+            "id": 17,
+            "centre": [
+              5.3999999999999995,
+              2.12,
+              5.699999999999999
+            ],
+            "radius": 0.240507656492984
+          },
+          {
+            "id": 18,
+            "centre": [
+              4.8,
+              2.12,
+              6
+            ],
+            "radius": 0.24749160851433466
+          },
+          {
+            "id": 19,
+            "centre": [
+              5.1,
+              2.12,
+              6
+            ],
+            "radius": 0.23935306317220584
+          },
+          {
+            "id": 20,
+            "centre": [
+              5.3999999999999995,
+              2.12,
+              6
+            ],
+            "radius": 0.246845888854323
+          }
+        ]
+      },
+      "reused": 2,
+      "configs": [
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "name": "toggle reaches all recycled live pieces",
+      "pass": true
+    }
+  ],
+  "failures": [],
+  "console": [
+    {
+      "method": "Log.entryAdded",
+      "params": {
+        "entry": {
+          "source": "network",
+          "level": "error",
+          "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+          "timestamp": 1788680912392.061,
+          "url": "http://localhost:5251/favicon.ico",
+          "networkRequestId": "68424.111"
+        }
+      }
+    },
+    {
+      "method": "Log.entryAdded",
+      "params": {
+        "entry": {
+          "source": "rendering",
+          "level": "warning",
+          "text": "Calling [RenderPassEncoder (unlabeled)].Draw with an index count of 0 is unusual.",
+          "timestamp": 1788680912820.081,
+          "url": "http://localhost:5251/sdf-game.html?frozen=1&fixture=normal-bake-integration"
+        }
+      }
+    }
+  ],
+  "initial": {
+    "live": 0,
+    "baked": 0,
+    "views": 0,
+    "totalBakes": 0,
+    "lastBakeMs": 0,
+    "lastBakeSwapMs": 0,
+    "lastBakeRequestMs": 0,
+    "bakeThread": "worker",
+    "pendingBake": null,
+    "bakeError": null,
+    "lastBakeInfo": null,
+    "pieces": [],
+    "livePieces": []
+  },
+  "spawned": {
+    "stats": {
+      "live": 2,
+      "baked": 0,
+      "views": 2,
+      "totalBakes": 0,
+      "lastBakeMs": 0,
+      "lastBakeSwapMs": 0,
+      "lastBakeRequestMs": 0,
+      "bakeThread": "worker",
+      "pendingBake": null,
+      "bakeError": null,
+      "lastBakeInfo": null,
+      "pieces": [],
+      "livePieces": [
+        {
+          "id": 1,
+          "centre": [
+            5.8,
+            0.13999999999999999,
+            5.3999999999999995
+          ],
+          "radius": 0.24032548698540945
+        },
+        {
+          "id": 2,
+          "centre": [
+            3.9,
+            0.13999999999999999,
+            4.3
+          ],
+          "radius": 0.24314967740743126
+        }
+      ]
+    },
+    "mode": {
+      "mode": 1,
+      "diagnostic": 0,
+      "supportedBodies": 10,
+      "legacyBodies": 0
+    },
+    "live": [
+      {
+        "key": "chunk:1",
+        "cfg": [
+          1,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "key": "chunk:2",
+        "cfg": [
+          1,
+          0,
+          0,
+          0
+        ]
+      }
+    ]
+  },
+  "transition": [
+    {
+      "stats": {
+        "live": 2,
+        "baked": 0,
+        "views": 2,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "lastBakeRequestMs": 0,
+        "bakeThread": "worker",
+        "pendingBake": null,
+        "bakeError": null,
+        "lastBakeInfo": null,
+        "pieces": [],
+        "livePieces": [
+          {
+            "id": 1,
+            "centre": [
+              6.031402744571463,
+              0.7956429246580018,
+              5.206298561125719
+            ],
+            "radius": 0.24032548698540945
+          },
+          {
+            "id": 2,
+            "centre": [
+              3.7995985434688317,
+              0.5258491657792654,
+              4.604361231247392
+            ],
+            "radius": 0.24314967740743126
+          }
+        ]
+      },
+      "mode": {
+        "mode": 1,
+        "diagnostic": 0,
+        "supportedBodies": 10,
+        "legacyBodies": 0
+      },
+      "live": [
+        {
+          "key": "chunk:1",
+          "cfg": [
+            1,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "key": "chunk:2",
+          "cfg": [
+            1,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "stats": {
+        "live": 2,
+        "baked": 0,
+        "views": 2,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "lastBakeRequestMs": 0,
+        "bakeThread": "worker",
+        "pendingBake": null,
+        "bakeError": null,
+        "lastBakeInfo": null,
+        "pieces": [],
+        "livePieces": [
+          {
+            "id": 1,
+            "centre": [
+              6.239707174220388,
+              0.9992595643064174,
+              5.031932142863889
+            ],
+            "radius": 0.24032548698540945
+          },
+          {
+            "id": 2,
+            "centre": [
+              3.7092190271092598,
+              0.4519411958159448,
+              4.878341528238437
+            ],
+            "radius": 0.24314967740743126
+          }
+        ]
+      },
+      "mode": {
+        "mode": 1,
+        "diagnostic": 0,
+        "supportedBodies": 10,
+        "legacyBodies": 0
+      },
+      "live": [
+        {
+          "key": "chunk:1",
+          "cfg": [
+            1,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "key": "chunk:2",
+          "cfg": [
+            1,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "stats": {
+        "live": 2,
+        "baked": 0,
+        "views": 2,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "lastBakeRequestMs": 0,
+        "bakeThread": "worker",
+        "pendingBake": null,
+        "bakeError": null,
+        "lastBakeInfo": null,
+        "pieces": [],
+        "livePieces": [
+          {
+            "id": 1,
+            "centre": [
+              6.4334988499904675,
+              0.8116467075389795,
+              4.869713987206144
+            ],
+            "radius": 0.24032548698540945
+          },
+          {
+            "id": 2,
+            "centre": [
+              3.6347397925698712,
+              0.3068219055951877,
+              5.104121036922499
+            ],
+            "radius": 0.24314967740743126
+          }
+        ]
+      },
+      "mode": {
+        "mode": 1,
+        "diagnostic": 0,
+        "supportedBodies": 10,
+        "legacyBodies": 0
+      },
+      "live": [
+        {
+          "key": "chunk:1",
+          "cfg": [
+            1,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "key": "chunk:2",
+          "cfg": [
+            1,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "stats": {
+        "live": 2,
+        "baked": 0,
+        "views": 2,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "lastBakeRequestMs": 0,
+        "bakeThread": "worker",
+        "pendingBake": null,
+        "bakeError": null,
+        "lastBakeInfo": null,
+        "pieces": [],
+        "livePieces": [
+          {
+            "id": 1,
+            "centre": [
+              6.613788888282362,
+              0.2600616594509117,
+              4.7187977139505595
+            ],
+            "radius": 0.24032548698540945
+          },
+          {
+            "id": 2,
+            "centre": [
+              3.580967992468934,
+              0.2564022509493097,
+              5.267127151082103
+            ],
+            "radius": 0.24314967740743126
+          }
+        ]
+      },
+      "mode": {
+        "mode": 1,
+        "diagnostic": 0,
+        "supportedBodies": 10,
+        "legacyBodies": 0
+      },
+      "live": [
+        {
+          "key": "chunk:1",
+          "cfg": [
+            1,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "key": "chunk:2",
+          "cfg": [
+            1,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "stats": {
+        "live": 2,
+        "baked": 0,
+        "views": 2,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "lastBakeRequestMs": 0,
+        "bakeThread": "worker",
+        "pendingBake": null,
+        "bakeError": null,
+        "lastBakeInfo": null,
+        "pieces": [],
+        "livePieces": [
+          {
+            "id": 1,
+            "centre": [
+              6.738598333613414,
+              0.42471197876070355,
+              4.61432285480186
+            ],
+            "radius": 0.24032548698540945
+          },
+          {
+            "id": 2,
+            "centre": [
+              3.557701068625023,
+              0.24314967740743126,
+              5.33765949028451
+            ],
+            "radius": 0.24314967740743126
+          }
+        ]
+      },
+      "mode": {
+        "mode": 1,
+        "diagnostic": 0,
+        "supportedBodies": 10,
+        "legacyBodies": 0
+      },
+      "live": [
+        {
+          "key": "chunk:1",
+          "cfg": [
+            1,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "key": "chunk:2",
+          "cfg": [
+            1,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "stats": {
+        "live": 2,
+        "baked": 0,
+        "views": 2,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "lastBakeRequestMs": 0.39999985694885254,
+        "bakeThread": "worker",
+        "pendingBake": 2,
+        "bakeError": null,
+        "lastBakeInfo": null,
+        "pieces": [],
+        "livePieces": [
+          {
+            "id": 1,
+            "centre": [
+              6.850949465717012,
+              0.25072154515110906,
+              4.5202765374691785
+            ],
+            "radius": 0.24032548698540945
+          },
+          {
+            "id": 2,
+            "centre": [
+              3.557482774848627,
+              0.24314967740743126,
+              5.338321235291537
+            ],
+            "radius": 0.24314967740743126
+          }
+        ]
+      },
+      "mode": {
+        "mode": 1,
+        "diagnostic": 0,
+        "supportedBodies": 10,
+        "legacyBodies": 0
+      },
+      "live": [
+        {
+          "key": "chunk:1",
+          "cfg": [
+            1,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "key": "chunk:2",
+          "cfg": [
+            1,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "stats": {
+        "live": 2,
+        "baked": 0,
+        "views": 2,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "lastBakeRequestMs": 0.39999985694885254,
+        "bakeThread": "worker",
+        "pendingBake": 2,
+        "bakeError": null,
+        "lastBakeInfo": null,
+        "pieces": [],
+        "livePieces": [
+          {
+            "id": 1,
+            "centre": [
+              6.9287268216542435,
+              0.24814289936479986,
+              4.45517106179827
+            ],
+            "radius": 0.24032548698540945
+          },
+          {
+            "id": 2,
+            "centre": [
+              3.557482774848627,
+              0.24314967740743126,
+              5.338321235291537
+            ],
+            "radius": 0.24314967740743126
+          }
+        ]
+      },
+      "mode": {
+        "mode": 1,
+        "diagnostic": 0,
+        "supportedBodies": 10,
+        "legacyBodies": 0
+      },
+      "live": [
+        {
+          "key": "chunk:1",
+          "cfg": [
+            1,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "key": "chunk:2",
+          "cfg": [
+            1,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "stats": {
+        "live": 2,
+        "baked": 0,
+        "views": 2,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "lastBakeRequestMs": 0.39999985694885254,
+        "bakeThread": "worker",
+        "pendingBake": 2,
+        "bakeError": null,
+        "lastBakeInfo": null,
+        "pieces": [],
+        "livePieces": [
+          {
+            "id": 1,
+            "centre": [
+              6.968823476463901,
+              0.24032548698540945,
+              4.42160715681927
+            ],
+            "radius": 0.24032548698540945
+          },
+          {
+            "id": 2,
+            "centre": [
+              3.557482774848627,
+              0.24314967740743126,
+              5.338321235291537
+            ],
+            "radius": 0.24314967740743126
+          }
+        ]
+      },
+      "mode": {
+        "mode": 1,
+        "diagnostic": 0,
+        "supportedBodies": 10,
+        "legacyBodies": 0
+      },
+      "live": [
+        {
+          "key": "chunk:1",
+          "cfg": [
+            1,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "key": "chunk:2",
+          "cfg": [
+            1,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "stats": {
+        "live": 2,
+        "baked": 0,
+        "views": 2,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "lastBakeRequestMs": 0.39999985694885254,
+        "bakeThread": "worker",
+        "pendingBake": 2,
+        "bakeError": null,
+        "lastBakeInfo": null,
+        "pieces": [],
+        "livePieces": [
+          {
+            "id": 1,
+            "centre": [
+              6.970766716306551,
+              0.24032548698540945,
+              4.41998051944167
+            ],
+            "radius": 0.24032548698540945
+          },
+          {
+            "id": 2,
+            "centre": [
+              3.557482774848627,
+              0.24314967740743126,
+              5.338321235291537
+            ],
+            "radius": 0.24314967740743126
+          }
+        ]
+      },
+      "mode": {
+        "mode": 1,
+        "diagnostic": 0,
+        "supportedBodies": 10,
+        "legacyBodies": 0
+      },
+      "live": [
+        {
+          "key": "chunk:1",
+          "cfg": [
+            1,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "key": "chunk:2",
+          "cfg": [
+            1,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "stats": {
+        "live": 2,
+        "baked": 0,
+        "views": 2,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "lastBakeRequestMs": 0.39999985694885254,
+        "bakeThread": "worker",
+        "pendingBake": 2,
+        "bakeError": null,
+        "lastBakeInfo": null,
+        "pieces": [],
+        "livePieces": [
+          {
+            "id": 1,
+            "centre": [
+              6.970801803851038,
+              0.24032548698540945,
+              4.419951148537422
+            ],
+            "radius": 0.24032548698540945
+          },
+          {
+            "id": 2,
+            "centre": [
+              3.557482774848627,
+              0.24314967740743126,
+              5.338321235291537
+            ],
+            "radius": 0.24314967740743126
+          }
+        ]
+      },
+      "mode": {
+        "mode": 1,
+        "diagnostic": 0,
+        "supportedBodies": 10,
+        "legacyBodies": 0
+      },
+      "live": [
+        {
+          "key": "chunk:1",
+          "cfg": [
+            1,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "key": "chunk:2",
+          "cfg": [
+            1,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "stats": {
+        "live": 1,
+        "baked": 1,
+        "views": 2,
+        "totalBakes": 1,
+        "lastBakeMs": 165.10000014305115,
+        "lastBakeSwapMs": 0.5,
+        "lastBakeRequestMs": 0.10000014305114746,
+        "bakeThread": "worker",
+        "pendingBake": 1,
+        "bakeError": null,
+        "lastBakeInfo": {
+          "id": 2,
+          "verts": 4373,
+          "tris": 8728,
+          "bakeMs": 165.10000014305115,
+          "overflow": 0,
+          "droppedQuads": 16,
+          "extent": 0.24314967740743126,
+          "flesh": 6,
+          "bones": 0,
+          "torn": 0,
+          "gore": 1,
+          "radius": 0.16393486135901975
+        },
+        "pieces": [
+          {
+            "id": 2,
+            "centre": [
+              3.5498743057250977,
+              0.13063155114650726,
+              5.376594543457031
+            ],
+            "radius": 0.16393486135901975
+          }
+        ],
+        "livePieces": [
+          {
+            "id": 1,
+            "centre": [
+              6.970801987293694,
+              0.24032548698540945,
+              4.419950994982171
+            ],
+            "radius": 0.24032548698540945
+          }
+        ]
+      },
+      "mode": {
+        "mode": 1,
+        "diagnostic": 0,
+        "supportedBodies": 10,
+        "legacyBodies": 0
+      },
+      "live": [
+        {
+          "key": "chunk:1",
+          "cfg": [
+            1,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "stats": {
+        "live": 0,
+        "baked": 2,
+        "views": 2,
+        "totalBakes": 2,
+        "lastBakeMs": 81.5,
+        "lastBakeSwapMs": 0.09999990463256836,
+        "lastBakeRequestMs": 0.10000014305114746,
+        "bakeThread": "worker",
+        "pendingBake": null,
+        "bakeError": null,
+        "lastBakeInfo": {
+          "id": 1,
+          "verts": 4260,
+          "tris": 8516,
+          "bakeMs": 81.5,
+          "overflow": 0,
+          "droppedQuads": 0,
+          "extent": 0.24032548698540945,
+          "flesh": 6,
+          "bones": 0,
+          "torn": 0,
+          "gore": 1,
+          "radius": 0.16519917736370185
+        },
+        "pieces": [
+          {
+            "id": 2,
+            "centre": [
+              3.5498743057250977,
+              0.13063155114650726,
+              5.376594543457031
+            ],
+            "radius": 0.16393486135901975
+          },
+          {
+            "id": 1,
+            "centre": [
+              6.9667603969573975,
+              0.13883943707332946,
+              4.37894082069397
+            ],
+            "radius": 0.16519917736370185
+          }
+        ],
+        "livePieces": []
+      },
+      "mode": {
+        "mode": 1,
+        "diagnostic": 0,
+        "supportedBodies": 10,
+        "legacyBodies": 0
+      },
+      "live": []
+    }
+  ],
+  "baked": {
+    "stats": {
+      "live": 0,
+      "baked": 2,
+      "views": 2,
+      "totalBakes": 2,
+      "lastBakeMs": 81.5,
+      "lastBakeSwapMs": 0.09999990463256836,
+      "lastBakeRequestMs": 0.10000014305114746,
+      "bakeThread": "worker",
+      "pendingBake": null,
+      "bakeError": null,
+      "lastBakeInfo": {
+        "id": 1,
+        "verts": 4260,
+        "tris": 8516,
+        "bakeMs": 81.5,
+        "overflow": 0,
+        "droppedQuads": 0,
+        "extent": 0.24032548698540945,
+        "flesh": 6,
+        "bones": 0,
+        "torn": 0,
+        "gore": 1,
+        "radius": 0.16519917736370185
+      },
+      "pieces": [
+        {
+          "id": 2,
+          "centre": [
+            3.5498743057250977,
+            0.13063155114650726,
+            5.376594543457031
+          ],
+          "radius": 0.16393486135901975
+        },
+        {
+          "id": 1,
+          "centre": [
+            6.9667603969573975,
+            0.13883943707332946,
+            4.37894082069397
+          ],
+          "radius": 0.16519917736370185
+        }
+      ],
+      "livePieces": []
+    },
+    "mode": {
+      "mode": 1,
+      "diagnostic": 0,
+      "supportedBodies": 10,
+      "legacyBodies": 0
+    },
+    "live": []
+  },
+  "bakeViewIds": [
+    null,
+    null
+  ],
+  "regib": {
+    "attempts": [
+      {
+        "target": 2,
+        "volley": 0,
+        "before": {
+          "live": 0,
+          "baked": 2,
+          "views": 2,
+          "totalBakes": 2,
+          "lastBakeMs": 81.5,
+          "lastBakeSwapMs": 0.09999990463256836,
+          "lastBakeRequestMs": 0.10000014305114746,
+          "bakeThread": "worker",
+          "pendingBake": null,
+          "bakeError": null,
+          "lastBakeInfo": {
+            "id": 1,
+            "verts": 4260,
+            "tris": 8516,
+            "bakeMs": 81.5,
+            "overflow": 0,
+            "droppedQuads": 0,
+            "extent": 0.24032548698540945,
+            "flesh": 6,
+            "bones": 0,
+            "torn": 0,
+            "gore": 1,
+            "radius": 0.16519917736370185
+          },
+          "pieces": [
+            {
+              "id": 2,
+              "centre": [
+                3.5498743057250977,
+                0.13063155114650726,
+                5.376594543457031
+              ],
+              "radius": 0.16393486135901975
+            },
+            {
+              "id": 1,
+              "centre": [
+                6.9667603969573975,
+                0.13883943707332946,
+                4.37894082069397
+              ],
+              "radius": 0.16519917736370185
+            }
+          ],
+          "livePieces": []
+        },
+        "after": {
+          "live": 3,
+          "baked": 1,
+          "views": 4,
+          "totalBakes": 2,
+          "lastBakeMs": 81.5,
+          "lastBakeSwapMs": 0.09999990463256836,
+          "lastBakeRequestMs": 0.10000014305114746,
+          "bakeThread": "worker",
+          "pendingBake": null,
+          "bakeError": null,
+          "lastBakeInfo": {
+            "id": 1,
+            "verts": 4260,
+            "tris": 8516,
+            "bakeMs": 81.5,
+            "overflow": 0,
+            "droppedQuads": 0,
+            "extent": 0.24032548698540945,
+            "flesh": 6,
+            "bones": 0,
+            "torn": 0,
+            "gore": 1,
+            "radius": 0.16519917736370185
+          },
+          "pieces": [
+            {
+              "id": 1,
+              "centre": [
+                6.9667603969573975,
+                0.13883943707332946,
+                4.37894082069397
+              ],
+              "radius": 0.16519917736370185
+            }
+          ],
+          "livePieces": [
+            {
+              "id": 3,
+              "centre": [
+                3.533078250085364,
+                0.18986268019771566,
+                5.099295495186029
+              ],
+              "radius": 0.04646876839123266
+            },
+            {
+              "id": 4,
+              "centre": [
+                3.5242271357097867,
+                0.33100769202528846,
+                5.27934972338159
+              ],
+              "radius": 0.055844722152827375
+            },
+            {
+              "id": 5,
+              "centre": [
+                3.608759512992715,
+                0.21607824786966218,
+                5.118477695867958
+              ],
+              "radius": 0.0547349692388442
+            }
+          ]
+        },
+        "fired": true,
+        "correction": [
+          -0.006342532458479866,
+          -0.07922059236000571
+        ],
+        "state": {
+          "stats": {
+            "live": 3,
+            "baked": 1,
+            "views": 4,
+            "totalBakes": 2,
+            "lastBakeMs": 81.5,
+            "lastBakeSwapMs": 0.09999990463256836,
+            "lastBakeRequestMs": 0.10000014305114746,
+            "bakeThread": "worker",
+            "pendingBake": null,
+            "bakeError": null,
+            "lastBakeInfo": {
+              "id": 1,
+              "verts": 4260,
+              "tris": 8516,
+              "bakeMs": 81.5,
+              "overflow": 0,
+              "droppedQuads": 0,
+              "extent": 0.24032548698540945,
+              "flesh": 6,
+              "bones": 0,
+              "torn": 0,
+              "gore": 1,
+              "radius": 0.16519917736370185
+            },
+            "pieces": [
+              {
+                "id": 1,
+                "centre": [
+                  6.9667603969573975,
+                  0.13883943707332946,
+                  4.37894082069397
+                ],
+                "radius": 0.16519917736370185
+              }
+            ],
+            "livePieces": [
+              {
+                "id": 3,
+                "centre": [
+                  3.533078250085364,
+                  0.18986268019771566,
+                  5.099295495186029
+                ],
+                "radius": 0.04646876839123266
+              },
+              {
+                "id": 4,
+                "centre": [
+                  3.5242271357097867,
+                  0.33100769202528846,
+                  5.27934972338159
+                ],
+                "radius": 0.055844722152827375
+              },
+              {
+                "id": 5,
+                "centre": [
+                  3.608759512992715,
+                  0.21607824786966218,
+                  5.118477695867958
+                ],
+                "radius": 0.0547349692388442
+              }
+            ]
+          },
+          "mode": {
+            "mode": 1,
+            "diagnostic": 0,
+            "supportedBodies": 10,
+            "legacyBodies": 0
+          },
+          "live": [
+            {
+              "key": "chunk:3",
+              "cfg": [
+                1,
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "key": "chunk:4",
+              "cfg": [
+                1,
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "key": "chunk:5",
+              "cfg": [
+                1,
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "pass": true
+  },
+  "recycle": {
+    "stats": {
+      "live": 12,
+      "baked": 0,
+      "views": 12,
+      "totalBakes": 2,
+      "lastBakeMs": 81.5,
+      "lastBakeSwapMs": 0.09999990463256836,
+      "lastBakeRequestMs": 0.10000014305114746,
+      "bakeThread": "worker",
+      "pendingBake": null,
+      "bakeError": null,
+      "lastBakeInfo": {
+        "id": 1,
+        "verts": 4260,
+        "tris": 8516,
+        "bakeMs": 81.5,
+        "overflow": 0,
+        "droppedQuads": 0,
+        "extent": 0.24032548698540945,
+        "flesh": 6,
+        "bones": 0,
+        "torn": 0,
+        "gore": 1,
+        "radius": 0.16519917736370185
+      },
+      "pieces": [],
+      "livePieces": [
+        {
+          "id": 9,
+          "centre": [
+            4.8,
+            2.12,
+            5.1
+          ],
+          "radius": 0.24520842224996464
+        },
+        {
+          "id": 10,
+          "centre": [
+            5.1,
+            2.12,
+            5.1
+          ],
+          "radius": 0.2470298430196564
+        },
+        {
+          "id": 11,
+          "centre": [
+            5.3999999999999995,
+            2.12,
+            5.1
+          ],
+          "radius": 0.24581206463870311
+        },
+        {
+          "id": 12,
+          "centre": [
+            4.8,
+            2.12,
+            5.3999999999999995
+          ],
+          "radius": 0.23629939687002188
+        },
+        {
+          "id": 13,
+          "centre": [
+            5.1,
+            2.12,
+            5.3999999999999995
+          ],
+          "radius": 0.23181795340334416
+        },
+        {
+          "id": 14,
+          "centre": [
+            5.3999999999999995,
+            2.12,
+            5.3999999999999995
+          ],
+          "radius": 0.24278195190236534
+        },
+        {
+          "id": 15,
+          "centre": [
+            4.8,
+            2.12,
+            5.699999999999999
+          ],
+          "radius": 0.247199924792543
+        },
+        {
+          "id": 16,
+          "centre": [
+            5.1,
+            2.12,
+            5.699999999999999
+          ],
+          "radius": 0.22910465163515012
+        },
+        {
+          "id": 17,
+          "centre": [
+            5.3999999999999995,
+            2.12,
+            5.699999999999999
+          ],
+          "radius": 0.240507656492984
+        },
+        {
+          "id": 18,
+          "centre": [
+            4.8,
+            2.12,
+            6
+          ],
+          "radius": 0.24749160851433466
+        },
+        {
+          "id": 19,
+          "centre": [
+            5.1,
+            2.12,
+            6
+          ],
+          "radius": 0.23935306317220584
+        },
+        {
+          "id": 20,
+          "centre": [
+            5.3999999999999995,
+            2.12,
+            6
+          ],
+          "radius": 0.246845888854323
+        }
+      ]
+    },
+    "reused": 2,
+    "configs": [
+      [
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0
+      ]
+    ]
+  },
+  "final": {
+    "stats": {
+      "live": 12,
+      "baked": 0,
+      "views": 12,
+      "totalBakes": 2,
+      "lastBakeMs": 81.5,
+      "lastBakeSwapMs": 0.09999990463256836,
+      "lastBakeRequestMs": 0.10000014305114746,
+      "bakeThread": "worker",
+      "pendingBake": null,
+      "bakeError": null,
+      "lastBakeInfo": {
+        "id": 1,
+        "verts": 4260,
+        "tris": 8516,
+        "bakeMs": 81.5,
+        "overflow": 0,
+        "droppedQuads": 0,
+        "extent": 0.24032548698540945,
+        "flesh": 6,
+        "bones": 0,
+        "torn": 0,
+        "gore": 1,
+        "radius": 0.16519917736370185
+      },
+      "pieces": [],
+      "livePieces": [
+        {
+          "id": 9,
+          "centre": [
+            4.8,
+            2.12,
+            5.1
+          ],
+          "radius": 0.24520842224996464
+        },
+        {
+          "id": 10,
+          "centre": [
+            5.1,
+            2.12,
+            5.1
+          ],
+          "radius": 0.2470298430196564
+        },
+        {
+          "id": 11,
+          "centre": [
+            5.3999999999999995,
+            2.12,
+            5.1
+          ],
+          "radius": 0.24581206463870311
+        },
+        {
+          "id": 12,
+          "centre": [
+            4.8,
+            2.12,
+            5.3999999999999995
+          ],
+          "radius": 0.23629939687002188
+        },
+        {
+          "id": 13,
+          "centre": [
+            5.1,
+            2.12,
+            5.3999999999999995
+          ],
+          "radius": 0.23181795340334416
+        },
+        {
+          "id": 14,
+          "centre": [
+            5.3999999999999995,
+            2.12,
+            5.3999999999999995
+          ],
+          "radius": 0.24278195190236534
+        },
+        {
+          "id": 15,
+          "centre": [
+            4.8,
+            2.12,
+            5.699999999999999
+          ],
+          "radius": 0.247199924792543
+        },
+        {
+          "id": 16,
+          "centre": [
+            5.1,
+            2.12,
+            5.699999999999999
+          ],
+          "radius": 0.22910465163515012
+        },
+        {
+          "id": 17,
+          "centre": [
+            5.3999999999999995,
+            2.12,
+            5.699999999999999
+          ],
+          "radius": 0.240507656492984
+        },
+        {
+          "id": 18,
+          "centre": [
+            4.8,
+            2.12,
+            6
+          ],
+          "radius": 0.24749160851433466
+        },
+        {
+          "id": 19,
+          "centre": [
+            5.1,
+            2.12,
+            6
+          ],
+          "radius": 0.23935306317220584
+        },
+        {
+          "id": 20,
+          "centre": [
+            5.3999999999999995,
+            2.12,
+            6
+          ],
+          "radius": 0.246845888854323
+        }
+      ]
+    },
+    "mode": {
+      "mode": 1,
+      "diagnostic": 0,
+      "supportedBodies": 10,
+      "legacyBodies": 0
+    },
+    "live": [
+      {
+        "key": "chunk:9",
+        "cfg": [
+          1,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "key": "chunk:10",
+        "cfg": [
+          1,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "key": "chunk:11",
+        "cfg": [
+          1,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "key": "chunk:12",
+        "cfg": [
+          1,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "key": "chunk:13",
+        "cfg": [
+          1,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "key": "chunk:14",
+        "cfg": [
+          1,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "key": "chunk:15",
+        "cfg": [
+          1,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "key": "chunk:16",
+        "cfg": [
+          1,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "key": "chunk:17",
+        "cfg": [
+          1,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "key": "chunk:18",
+        "cfg": [
+          1,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "key": "chunk:19",
+        "cfg": [
+          1,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "key": "chunk:20",
+        "cfg": [
+          1,
+          0,
+          0,
+          0
+        ]
+      }
+    ]
+  }
+}

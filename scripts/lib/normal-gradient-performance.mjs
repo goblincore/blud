@@ -84,7 +84,7 @@ async function boot(conn,vite,mode,scene) {
     if(!window.__ngQueue?.onSubmittedWorkDone)throw new Error('actual renderer GPU queue was not captured');
     await __ngQueue.onSubmittedWorkDone();
     if(!__sdfGame.chunkBake||!__sdfGame.hullExitBound)throw new Error('current-main bake/hull defaults missing');
-    if(__sdfGame.normalGradientStatus().mode!==0)throw new Error('candidate is not default off');
+    if(__sdfGame.normalGradientStatus().mode!==1)throw new Error('candidate does not default to hybrid normals');
     __sdfGame.setNormalGradient(${mode});__sdfGame.setNormalGradientDebug(0);
     return {queueCompletion:true,clockNative:performance.now.toString().includes('[native code]'),bake:__sdfGame.chunkBake};
   })()`);

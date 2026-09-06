@@ -1,4 +1,13 @@
-# Zombie analytic normals — performance incomplete
+# Zombie analytic normals — enabled after owner playtest; full performance study incomplete
+
+## Current decision — 2026-09-06
+
+Owner passed the integrated `5b6579a` combat playtest and reports smoother play, without attributing it specifically to analytic normals. Enable hybrid normals by default in the game; unsupported surfaces retain legacy normals and the comparison toggle remains. This decision supersedes the earlier default-off hold. Correctness, wound appearance and current-main worker-bake integration have passed; full Task 5 performance acceptance is not claimed. See [fresh integration evidence](../2026-09-06-analytic-normal-integration/README.md) for the small warmed comparison and its limitations. The product goal is stable 30 fps during combat, not maximizing isolated benchmark gains.
+
+## Historical checkpoint — 2026-09-05
+
+The following records the earlier incomplete checkpoint; subsequent Task 4 closure and owner approvals are documented in the integration report and progress ledger.
+
 
 Updated 2026-09-05. Tasks 1–4 correctness and technical visual evidence pass, and the owner approved d1a7450 wound/gameplay appearance. The feature remains default off. No timing samples were collected in this resume, and no speedup or regression is established.
 

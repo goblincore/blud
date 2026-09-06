@@ -415,7 +415,7 @@ async function runIntact() {
   };
   try {
     report.initialStatus=await evaluate('__sdfGame.normalGradientStatus()');
-    if(report.initialStatus.mode!==0) throw new Error('gradient does not default off');
+    if(report.initialStatus.mode!==1) throw new Error('gradient does not default to hybrid normals');
     report.staging=[];
     if(phase==='wounds') {
       report.events=[];report.motion=[];

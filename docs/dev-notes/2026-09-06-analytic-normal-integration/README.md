@@ -18,3 +18,10 @@ Actual renderer GPU queue captured before boot. Native performance.now around on
 Intact median of run medians: 23.7 versus 22.2 ms, about 6% lower. Wounded sequence drifts substantially; no reliable wound speedup conclusion. This same-shader toggle cannot quantify expanded-shader compiler/register overhead relative to main's original shader. No direct-main control, multi-body, moving gameplay or impact-spike test here. Full original Task 5 remains incomplete; this is a bounded smoke comparison supporting a fresh owner playtest, not a net shipping performance claim.
 
 The user requested eventual merge, with a fresh feel check first. Main/default flip/push remain pending that check. The cached-wound prototype is separate and not included.
+
+
+## Owner approval and default — 2026-09-06
+
+Owner passed the integrated playtest on `5b6579a`: it feels smoother, but the contribution of analytic normals versus the accumulated changes is uncertain. The final game default is now hybrid (1), with automatic fallback. The generic renderer/lab default stays legacy; the game applies its chosen mode to all actors and pooled chunks. All three normal browser harnesses now expect hybrid at game boot and still explicitly select their comparison modes. Earlier default-off statements and raw reports above describe their captured revisions, not the final default. Broader Task 5 remains incomplete; merge acceptance rests on correctness, integrated lifecycle checks and owner visual/feel approval, not a proven net performance gain.
+
+Final default-on verification: 214 Vitest files / 3,514 tests passed, 27 Node harness tests passed, TypeScript and production build passed. Fresh default-on GPU bake lifecycle passes all eight checks (default-on-bake-integration.json). Final scoped review found no actionable issues in initialization, inheritance or the three updated harnesses. Main publication follows this verified tree; source behavior is unchanged by the documentation commit.
