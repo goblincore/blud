@@ -67,6 +67,13 @@ export interface MindDebug {
   side: 'L' | 'R';
   variant: string;
   swingT: number;
+  /** Seconds of blast hold remaining (the stagger walk-freeze). Both brains
+   *  carry the field; the actor surfaces it through debug().holdSecs — the
+   *  heavy-hit tuning seam the slug tests read. Lives here rather than
+   *  staying actor-owned because the hold timer itself moved INSIDE the
+   *  mind: an actor-side copy would be the private timer brain.ts's header
+   *  documents as the original defect. */
+  holdSecs: number;
   hasToken: boolean;
   /** Ranged vocabulary. Zombies report the neutral defaults. */
   aimT: number;
@@ -113,6 +120,7 @@ export function makeZombieMind(): EnemyMind {
       side: brain.swing.side,
       variant: brain.swing.variant,
       swingT: brain.swingT,
+      holdSecs: brain.holdSecs,
       hasToken: lastToken,
       aimT: 0,
       cooldown: brain.cooldown,
@@ -154,6 +162,7 @@ export function makeSoldierMind(): EnemyMind {
       side: 'R',
       variant: 'none',
       swingT: 0,
+      holdSecs: brain.holdSecs,
       hasToken: false,
       aimT,
       cooldown: brain.cooldown,
