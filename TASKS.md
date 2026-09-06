@@ -82,6 +82,15 @@ baselines captured first, no test file may be edited.
 [plan](docs/superpowers/plans/2026-09-06-shared-character-view.md) (12 tasks:
 Phase A 1–6, Phase B 7–12). Phase A task 5 replaces held soldier tasks 6–7 and
 inherits deleting the `brain()` migration shim task 5 left in game-actor.
+Task 3 (`character-view.ts`, adopted by the lab) done on
+`dispatch/2026-09-06-shared-character-view-task-3` — build/GPU view/sheet data
+(catch + 2026-09-04 story now live there)/kit/prop/pose moved out of lab-main;
+captures byte-identical, suite 3558/3558 green (task 2's follow-up `da9216b`
+replaced the false invariant, so no expected red any more). Plan defects fixed
+in the new test only: the prescribed broken-sheet fixture could never parse (a
+lone sheet block dies on `no "root" bone declared` before compileSheet runs —
+fixture now carries a minimal skeleton), and the prescribed file holds 5 tests,
+not 6.
 Task 2 (`character-registry.ts`) done on
 `dispatch/2026-09-06-shared-character-view-task-2` with a FINDING the owner must
 call: the plan's invariant **kit ⇒ bespoke motion profile does not hold** —
