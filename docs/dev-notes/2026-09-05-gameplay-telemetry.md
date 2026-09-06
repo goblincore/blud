@@ -18,10 +18,14 @@ Console seams: __sdfGame.telemetry.start(), .stop(), .active, .lastCapture(). Ca
 - Shot, impact, sever and chunk bake events use milliseconds since recording began. Expensive spans (>=2ms) and discrete events emit blud: User Timing labels for optional Chrome DevTools traces; their browser entry buffers are cleared immediately. No forced GPU fence or readback is added.
 - States include scene counts, camera pose, render dimensions, frame cap, refresh estimate, visibility and whether the pointer is locked. Counts are CPU-side scene/proxy state, not exact shaded-pixel coverage.
 - First-frame and visibility-gap intervals remain in raw data but are excluded from summary percentiles. 4,000event limit reports droppedEvents; frame limit stops rather than overwriting the first shot.
-- Build commit and dirty state describe Vite startup; restart the server after source changes for fresh provenance. Dirty builds are labelled, not presented as clean main.
+- Build commit and dirty state are fetched at recording start; server-start provenance is recorded separately. Dirty builds are labelled, not presented as clean main.
 
 ## Verification
 
 Six focused Vitest tests cover timing/event alignment, bounded retention, visibility filtering, duration/invalid samples, failed-save recovery and unique local file persistence. TypeScript passes. The failure recovery regression was observed failing before the fix.
 
 Real WebGPU smoke test on isolated Chrome9260/Vite5260 used F8 to record and stop, fired a slug through the real game seam, and persisted35natural frames plus shot/impact/sever events. A sampled impact frame carried distinct wound-hit, wound-flush and projectile CPU spans, with one live chunk and255blood droplets. Screenshot inspected; controls readable. This was functional validation, not an overhead measurement or a reproduction of the owner’s40–50ms issue.
+
+## Update 2026-09-06
+
+See [game tile playtest and extended capture](2026-09-06-game-tiles-telemetry/notes.md) for F6 tile toggling, F9 visual markers, world/local wound data, bounded geometry snapshots and asynchronous chunk-worker events. No performance comparison is claimed.

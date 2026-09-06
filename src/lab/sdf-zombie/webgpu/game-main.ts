@@ -81,6 +81,8 @@ import {
 import { runBench, type BenchDeps } from './game-bench';
 import { GameTelemetry, type FrameTiming } from './game-telemetry';
 import { createTelemetryControls } from './game-telemetry-controls';
+import { createGameTilePlaytest } from './game-tile-playtest';
+import { createComputeTileBinding } from './tile-bin-compute';
 import { sdBody, smax } from '../validate';
 import { FISHEYE_DEFAULTS, clampFovDeg, reticleNdc, visibleFovDeg } from './fisheye';
 import {
@@ -591,6 +593,7 @@ async function main() {
   // temporal dead zone — the chunk list therefore goes through this
   // indirection, assigned once liveChunks exists. Empty until then.
   let chunkObjects: () => THREE.Object3D[] = () => [];
+  let refreshActorTiles = () => {};
   handle.setDrawFn(() => postAa.render(() => {
     flashlight.update(camera);
     // Hand the march the same beam the meshes get. The SDF bodies shade
@@ -703,6 +706,7 @@ async function main() {
         ...liveChunks.map(c => ({ prims: c.view.posedBones() })),
       ]);
     }
+    refreshActorTiles();
     if (gooEnabled && gooLayer) {
       gooLayer.render(camera, () => sdfLayer.render(scene, camera));
     } else {
@@ -945,6 +949,50 @@ async function main() {
   let onSeverDispatch: ((a: ZombieActor, piece: { limb: string; origin: Vec3; prims: Primitive[]; tornAt: Vec3[]; bones: Primitive[] }, stumpWound: Wound | null) => void) | null = null;
 
   const actors: ZombieActor[] = [];
+  const tilesPlaytest = import.meta.env.DEV && new URLSearchParams(location.search).has('tiles-playtest');
+  const gameTiles = createGameTilePlaytest({
+    allowed: tilesPlaytest,
+    capacity: () => ({ widthPx: Math.max(960, postAa.contentSize.width), heightPx: Math.max(600, postAa.contentSize.height) }),
+    createBinding: (w, h) => createComputeTileBinding(handle.renderer, w, h),
+  });
+  const tilesButton = tilesPlaytest ? document.createElement('button') : null;
+  const updateTilesButton = () => {
+    if (!tilesButton) return;
+    const d = gameTiles.diagnostics();
+    const fallback = Object.values(d.fallbacks).reduce((n, v) => n + v, 0);
+    const label = `Tile culling: ${d.enabled ? 'ON' : 'OFF'} [F6]${fallback ? ` · ${fallback} fallback` : ''}`;
+    if (tilesButton.textContent !== label) tilesButton.textContent = label;
+  };
+  const setGameTiles = (on: boolean) => {
+    gameTiles.setEnabled(on);
+    telemetry.event('tile-culling', gameTiles.diagnostics() as unknown as Record<string, unknown>);
+    updateTilesButton();
+  };
+  if (tilesButton) {
+    tilesButton.style.cssText = 'position:fixed;right:12px;top:52px;z-index:10001;padding:8px;background:#171b20;color:#eee;border:1px solid #687079';
+    tilesButton.onclick = () => setGameTiles(!gameTiles.diagnostics().enabled);
+    document.body.appendChild(tilesButton);
+    updateTilesButton();
+  }
+  const tilesKey = (e: KeyboardEvent) => {
+    if (tilesPlaytest && e.code === 'F6' && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault(); setGameTiles(!gameTiles.diagnostics().enabled);
+    }
+  };
+  window.addEventListener('keydown', tilesKey);
+  refreshActorTiles = () => {
+    if (!tilesPlaytest) return;
+    const timing = telemetry.begin();
+    camera.updateMatrixWorld(); camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
+    const size = sdfLayer.targetSize;
+    gameTiles.refresh(camera, { widthPx: size.width, heightPx: size.height }, actors.map(a => a.view));
+    telemetry.end('tile-binning-submit', timing);
+    updateTilesButton();
+  };
+  import.meta.hot?.dispose(() => {
+    refreshActorTiles = () => {}; gameTiles.dispose(); tilesButton?.remove();
+    window.removeEventListener('keydown', tilesKey);
+  });
   // Owner-approved hybrid normals; unsupported surfaces retain calcNormal.
   let normalGradientMode: 0 | 1 = 1;
   let normalGradientDebug: 0 | 1 | 2 = 0;
@@ -1064,9 +1112,11 @@ async function main() {
     // TRANSLATE THE FIELD, NOT THE MESH (translate.ts) — the shader
     // marches world space.
     const placed = translateBody(built, start);
+    const tileBinding = gameTiles.createBinding();
     const view: ZombieGpuView = createZombieGpuView(placed,
       {
         cone: sdfLayer.cone,
+        tiles: tileBinding,
         occluder: sdfLayer.occluder,
         // The outer hull's bounds. Passing them unconditionally is safe:
         // the fetch identities (0 / 1e9) make the march bit-identical while
@@ -1087,6 +1137,7 @@ async function main() {
         depthPre: sdfLayer.depthPre,
         levelShadow: { light: flashlight.levelShadow },
       });
+    gameTiles.track(view, tileBinding);
     // Bone tubes: with the mesh ON the field stops packing bone rows (task 5).
     view.setPackBones(!boneMesh);
     view.applyMaterial(flesh, LIGHT_PRESETS['practical-hard-key']);
@@ -2029,7 +2080,10 @@ async function main() {
   let chunkBakeInput: ChunkBakeData | null = null;
   let lastBakeSwapMs = 0;
   let lastBakeRequestMs = 0;
-  const cancelChunkBake = () => { chunkBakeJobs.cancel(); chunkBakeInput = null; };
+  const cancelChunkBake = () => {
+    if (chunkBakeJobs.pendingId !== null) telemetry.event('chunk-bake-cancel', { chunk: chunkBakeJobs.pendingId });
+    chunkBakeJobs.cancel(); chunkBakeInput = null;
+  };
   window.addEventListener('pagehide', cancelChunkBake);
   import.meta.hot?.dispose(() => {
     cancelChunkBake();
@@ -2042,6 +2096,7 @@ async function main() {
   function finishChunkBake(): void {
     const done = chunkBakeJobs.takeCompleted();
     if (!done) return;
+    telemetry.event('chunk-bake-complete', { chunk: done.id });
     const data = chunkBakeInput;
     chunkBakeInput = null;
     const index = liveChunks.findIndex(c => c.id === done.id);
@@ -2049,6 +2104,7 @@ async function main() {
     const entry = liveChunks[index]!;
     if (!chunkSettled(entry.state)) return;
     const t0 = performance.now();
+    const swapTiming = telemetry.begin();
     const baked = unpackChunkBake(done.result);
     if (!bakedChunkMat) {
       bakedChunkMat = createBakedChunkMaterial();
@@ -2075,6 +2131,8 @@ async function main() {
       radius: baked.radius,
     };
     lastBakeSwapMs = performance.now() - t0;
+    telemetry.end('chunk-bake-swap', swapTiming);
+    telemetry.event('chunk-bake-swap', { chunk: entry.id, workerMs: baked.bakeMs, swapCpuMs: lastBakeSwapMs, vertices: baked.verts, triangles: baked.tris });
     if (baked.overflow || baked.droppedQuads > 0) {
       console.warn(`[chunk-bake] chunk ${entry.id}: overflow=${baked.overflow} droppedQuads=${baked.droppedQuads} — geometry holes`);
     }
@@ -3215,7 +3273,12 @@ async function main() {
               ? hitActor.hitSlug(hitPoint, dirN)
               : hitActor.hit(hitPoint, dirN);
             telemetry.end('wound-hit', hitTiming);
-            telemetry.event('impact', { actor: hitActor.id, kind: p.kind, stamped: !!stamped });
+            if (telemetry.active) telemetry.event('impact', {
+              actor: hitActor.id, model: 'zombie', room: hitActor.room, kind: p.kind, stamped: !!stamped,
+              world: hitPoint, direction: dirN, actorPose: hitActor.pose(),
+              wound: stamped ? describeRecordedWound(hitActor, stamped) : null,
+              woundCount: hitActor.wounds().length,
+            });
             if (stamped) registerBleed(hitActor, stamped, p.kind);
             dead = true;
           }
@@ -3224,6 +3287,10 @@ async function main() {
       }
       const flushTiming = telemetry.begin();
       for (const a of hitThisFrame) a.endHits();
+      if (telemetry.active) for (const a of hitThisFrame) telemetry.event('actor-wounds', {
+        actor: a.id, model: 'zombie', pose: a.pose(), wounds: a.wounds().map(w => describeRecordedWound(a, w)),
+        aliveRegions: a.posed().clusters.filter(c => c.alive).map(c => c.limb),
+      });
       telemetry.end('wound-flush', flushTiming);
       telemetry.end('projectiles-and-hits', projectileTiming);
       // Sync the mesh pool to the sim list — growing it on demand (the
@@ -3274,7 +3341,10 @@ async function main() {
           const t0 = performance.now();
           const data = c.view.bakeData();
           // Bone-only pieces retain their original SDF path.
-          if (data.flesh.length > 0 && chunkBakeJobs.submit(c.id, data)) chunkBakeInput = data;
+          if (data.flesh.length > 0 && chunkBakeJobs.submit(c.id, data)) {
+            chunkBakeInput = data;
+            telemetry.event('chunk-bake-request', { chunk: c.id, flesh: data.flesh.length, bones: data.bones.length });
+          }
           lastBakeRequestMs = performance.now() - t0;
         }
       }
@@ -3463,6 +3533,42 @@ async function main() {
     return false;
   }
 
+  function describeRecordedWound(a: ZombieActor, w: Wound) {
+    const prims = a.posed().prims;
+    const prim = prims[w.primIdx];
+    return { ...w, world: prim ? woundWorldPos(prims, w, a.pose().yaw) : null,
+      bone: prim?.bone ?? null, sourceLine: prim?.src ?? null,
+      region: prim ? a.posed().clusters[prim.cluster]?.limb ?? null : null };
+  }
+  function captureTelemetryScene(name: string) {
+    if (!telemetry.active) return;
+    const started = performance.now();
+    telemetry.snapshot(name, {
+      camera: { position: camera.position.toArray(), quaternion: camera.quaternion.toArray(), projection: camera.projectionMatrix.toArray(), fov: camera.fov },
+      player: { position: player.pos, yaw: player.yaw, pitch: player.pitch },
+      settings: { tiles: gameTiles.diagnostics(), sdfScale, adaptive: adaptiveEnabled, frameCap: handle.frameCap,
+        width: sdfLayer.targetSize.width, height: sdfLayer.targetSize.height, woundTuning, normalGradientMode },
+      actors: actors.map(a => {
+        const body = a.posed();
+        // Already-posed CPU data: no ray queries, GPU fence or texture readback.
+        return { id: a.id, model: 'zombie', room: a.room, pose: a.pose(),
+          prims: body.prims, clusters: body.clusters, bonePrims: body.bonePrims,
+          wounds: a.wounds().map(w => describeRecordedWound(a, w)),
+          uniforms: Object.fromEntries(Object.entries(a.view.uniforms).flatMap<[string, number | boolean | number[]]>(([key, u]) => {
+            const v = (u as { value: unknown }).value;
+            if (typeof v === 'number' || typeof v === 'boolean') return [[key, v]];
+            if (v instanceof THREE.Vector2 || v instanceof THREE.Vector3 || v instanceof THREE.Vector4 || v instanceof THREE.Matrix4) return [[key, (v as { toArray(): number[] }).toArray()]];
+            return [];
+          })),
+        };
+      }),
+      chunks: liveChunks.map(c => ({ id: c.id, state: c.state, pendingBake: chunkBakeJobs.pendingId === c.id })),
+      bakedChunks: bakedChunks.map(c => ({ id: c.id, centre: c.centre, radius: c.radius })),
+      purpose: 'Frozen actor geometry for diagnosis; not deterministic whole-game replay. No pixel/ray eligibility counters.',
+    });
+    telemetry.event('snapshot-cost', { name, cpuMs: performance.now() - started });
+  }
+
   // Read scalar counters only; no field queries/readbacks during live play.
   let firstTelemetryFrame = true;
   let telemetryVisibilityGap = false;
@@ -3478,13 +3584,19 @@ async function main() {
       frameCap: handle.frameCap, refreshMs: handle.refreshMs,
       renderWidth: sdfLayer.marchTarget.width, renderHeight: sdfLayer.marchTarget.height,
       frozen: wanderFrozen, chunkBake: chunkBakeEnabled, bleed: bleedEnabled,
+      totalWounds: actors.reduce((n, a) => n + a.wounds().length, 0),
+      pendingBake: chunkBakeJobs.pendingId, bakeError: chunkBakeJobs.error,
+      tiles: gameTiles.diagnostics(), sdfScale, adaptive: adaptiveEnabled,
+      woundStep: actors[0]?.view.uniforms.perfCfg.value.z, analyticNormals: normalGradientMode,
     });
     firstTelemetryFrame = false; telemetryVisibilityGap = false;
     telemetryControls?.afterFrame();
   };
-  const telemetryControls = import.meta.env.DEV ? createTelemetryControls(telemetry, () => ({
-    build: import.meta.env.VITE_TELEMETRY_BUILD ?? { commit: 'unknown', dirty: true },
-    page: location.pathname, userAgent: navigator.userAgent, backend: handle.backend,
+  const telemetryControls = import.meta.env.DEV ? createTelemetryControls(telemetry, async () => ({
+    build: await fetch('/__lab/telemetry-build', { cache: 'no-store', signal: AbortSignal.timeout(5000) }).then(r => { if (!r.ok) throw new Error('Build identity unavailable'); return r.json(); }),
+    buildAtServerStart: import.meta.env.VITE_TELEMETRY_BUILD ?? { commit: 'unknown', dirty: true },
+    captureVersion: 2, targetFrameMs: 1000 / 30, lateToleranceMs: 2, tiles: gameTiles.diagnostics(),
+    page: location.pathname, query: location.search, userAgent: navigator.userAgent, backend: handle.backend,
     visibility: document.visibilityState, frameCap: handle.frameCap,
     fisheye: fisheyeReport(), renderWidth: sdfLayer.marchTarget.width, renderHeight: sdfLayer.marchTarget.height,
     woundStep: actors[0]?.view.uniforms.perfCfg.value.z,
@@ -3494,17 +3606,22 @@ async function main() {
     cpuMeaning: 'tickCpuMs and drawCpuMs are synchronous CPU time, including submission, not GPU execution',
     phaseMeaning: 'inclusive spans accumulated since previous draw; nested hit/flush/bake spans must not be added to parents',
     spikeAttribution: 'a frame interval describes the gap BEFORE that row; inspect previous-row CPU spans and events in that gap',
-    limits: { maxFrames: 18000, maxEvents: 4000, durationMs: 180000 },
+    limits: { maxFrames: 18000, maxEvents: 4000, durationMs: 180000, maxSnapshots: 16, maxBytes: 12 * 1024 * 1024 },
+    snapshots: 'At recording start and F9 only; snapshot-cost events identify instrumentation work.',
   }), undefined, active => {
     firstTelemetryFrame = true; telemetryVisibilityGap = false;
     handle.setFrameObserver(active ? telemetryFrame : null);
-  }) : null;
+    if (active) captureTelemetryScene('recording-start');
+  }, () => captureTelemetryScene('visual-issue')) : null;
+  import.meta.hot?.dispose(() => telemetryControls?.dispose());
 
   (window as unknown as { __sdfGame: unknown }).__sdfGame = {
     telemetry: telemetryControls ? {
-      start: () => telemetryControls.start(), stop: () => telemetryControls.stop(),
+      start: () => telemetryControls.start(), stop: () => telemetryControls.stop(), mark: () => telemetryControls.mark(),
       get active() { return telemetry.active; }, lastCapture: () => telemetryControls.lastCapture(),
     } : null,
+    setTiles: setGameTiles,
+    tiles: () => gameTiles.diagnostics(),
     backend: handle.backend,
     /** Set the player pose. y defaults to 0 (feet on the floor). */
     setPose(x: number, z: number, yaw: number, pitch = 0, y = 0) {

@@ -20,8 +20,8 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
-**[~] Manual gameplay telemetry — isolated Record/F8 capture with local JSON save; ready for owner playthrough.**
-[Usage and timing interpretation](docs/dev-notes/2026-09-05-gameplay-telemetry.md); records natural frame/CPU timing and damage events, no GPU duration claim.
+**[~] Game tile visual playtest + telemetry — integrated on main; owner visual run next, before performance comparisons.**
+[Usage](docs/dev-notes/2026-09-06-game-tiles-telemetry/notes.md): `?tiles-playtest`, F6 tiles, F8 record/save, F9 geometry/wound marker; ordinary tile default off, no GPU timing claim.
 
 **SOLDIER ANIMATION — BUILT, AWAITING OWNER LOOK (2026-09-05).** The soldier
 marches, runs, carries the shorty and hip-fires it in the lab; the skinned

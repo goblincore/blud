@@ -66,3 +66,44 @@ describe('manual gameplay capture', () => {
     expect(data.frames).toHaveLength(1);
   });
 });
+
+it('owns recorded event values even when live wound coordinates change later', () => {
+  const log = new GameTelemetry();
+  const detail = { local: [1, 2, 3], wound: { radius: 0.1 } };
+  log.start({});
+  log.event('impact', detail);
+  detail.local[0] = 9;
+  detail.wound.radius = 2;
+  expect(log.stop().events[0]?.detail).toEqual({ local: [1, 2, 3], wound: { radius: 0.1 } });
+});
+
+it('bounds detailed snapshots independently and keeps the earliest marked scene', () => {
+  const log = new GameTelemetry(() => 0, { maxSnapshots: 1 });
+  log.start({});
+  log.snapshot('visual-issue', { actors: [{ id: 7 }] });
+  log.snapshot('later', { actors: [{ id: 8 }] });
+  const capture = log.stop();
+  expect(capture.snapshots).toEqual([{ t: 0, name: 'visual-issue', detail: { actors: [{ id: 7 }] } }]);
+  expect(capture.droppedSnapshots).toBe(1);
+});
+
+it('stops at the byte budget without dropping the first shot or retaining the oversized frame', () => {
+  const log = new GameTelemetry(() => 0, { maxBytes: 1024 });
+  log.start({});
+  log.event('shot', { kind: 'slug' });
+  log.frame({ startMs: 1, endMs: 2, intervalMs: 33, tickCpuMs: 1, drawCpuMs: 0 }, { huge: 'x'.repeat(2048) });
+  const capture = log.stop();
+  expect(capture.stopReason).toBe('byte-limit');
+  expect(capture.events[0]?.name).toBe('shot');
+  expect(capture.frames).toHaveLength(0);
+});
+
+it('reports consecutive late visible frames without counting cap jitter or visibility gaps', () => {
+  const log = new GameTelemetry(() => 0);
+  log.start({ targetFrameMs: 1000 / 30, lateToleranceMs: 2 });
+  for (const [i, intervalMs] of [33.5, 40, 50, 33.4, 45].entries()) {
+    log.frame({ startMs: i * 50, endMs: i * 50 + 2, intervalMs, tickCpuMs: 1, drawCpuMs: 1 }, {});
+  }
+  log.frame({ startMs: 500, endMs: 502, intervalMs: 200, tickCpuMs: 1, drawCpuMs: 1 }, { hidden: true });
+  expect(log.stop().summary).toMatchObject({ lateFrames: 3, maxConsecutiveLateFrames: 2 });
+});

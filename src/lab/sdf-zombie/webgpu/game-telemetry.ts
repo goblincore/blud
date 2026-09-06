@@ -10,9 +10,10 @@ export interface CaptureFrame {
 export interface GameplayCapture {
   schema: 'blud-gameplay-v1'; startedAt: string; timeOrigin: number;
   metadata: Detail; durationMs: number; stopReason: string;
-  droppedEvents: number; invalidFrames: number;
+  droppedEvents: number; invalidFrames: number; droppedSnapshots: number;
   frames: CaptureFrame[]; events: { t: number; name: string; detail?: Detail }[];
-  summary: { frames: number; visibleFrames: number; p50Ms: number | null; p95Ms: number | null; p99Ms: number | null; maxMs: number | null; spikes40ms: number };
+  snapshots: { t: number; name: string; detail: Detail }[];
+  summary: { frames: number; visibleFrames: number; p50Ms: number | null; p95Ms: number | null; p99Ms: number | null; maxMs: number | null; spikes40ms: number; lateFrames: number; maxConsecutiveLateFrames: number; lateThresholdMs: number };
 }
 
 export class GameTelemetry {
@@ -28,10 +29,13 @@ export class GameTelemetry {
   private droppedEvents = 0;
   private invalidFrames = 0;
   private generation = 0;
-  private readonly limits: { maxFrames: number; maxEvents: number; maxDurationMs: number };
+  private snapshots: GameplayCapture['snapshots'] = [];
+  private droppedSnapshots = 0;
+  private bytes = 0;
+  private readonly limits: { maxFrames: number; maxEvents: number; maxDurationMs: number; maxSnapshots: number; maxBytes: number };
 
   constructor(private now = () => performance.now(), limits: Partial<GameTelemetry['limits']> = {}) {
-    this.limits = { maxFrames: 18000, maxEvents: 4000, maxDurationMs: 180000, ...limits };
+    this.limits = { maxFrames: 18000, maxEvents: 4000, maxDurationMs: 180000, maxSnapshots: 16, maxBytes: 12 * 1024 * 1024, ...limits };
   }
   start(metadata: Detail) {
     if (this.active) return;
@@ -39,6 +43,8 @@ export class GameTelemetry {
     this.started = this.now(); this.ended = this.started;
     this.startedAt = new Date().toISOString();
     this.frames = []; this.events = []; this.phases = {};
+    this.snapshots = []; this.droppedSnapshots = 0;
+    this.bytes = new TextEncoder().encode(JSON.stringify(this.metadata)).byteLength;
     this.droppedEvents = 0; this.invalidFrames = 0; this.reason = 'manual';
     this.generation++; this.active = true;
   }
@@ -61,17 +67,36 @@ export class GameTelemetry {
   event(name: string, detail?: Detail) {
     if (!this.active) return;
     if (this.events.length >= this.limits.maxEvents) { this.droppedEvents++; return; }
-    this.events.push({ t: this.now() - this.started, name, ...(detail ? { detail } : {}) });
+    const entry = { t: this.now() - this.started, name, ...(detail ? { detail: structuredClone(detail) } : {}) };
+    if (!this.reserve(entry)) { this.droppedEvents++; return; }
+    this.events.push(entry);
     const label = `blud:${name}`;
     try { performance.mark(label, { detail }); performance.clearMarks(label); } catch { /* optional */ }
+  }
+  /** Detailed geometry is sampled only at start/manual markers, never every frame. */
+  snapshot(name: string, detail: Detail) {
+    if (!this.active) return;
+    if (this.snapshots.length >= this.limits.maxSnapshots) { this.droppedSnapshots++; return; }
+    const entry = { t: this.now() - this.started, name, detail: structuredClone(detail) };
+    if (!this.reserve(entry)) { this.droppedSnapshots++; return; }
+    this.snapshots.push(entry);
+  }
+  private reserve(value: unknown): boolean {
+    // Count UTF-8 payloads plus separators; leave 4 MiB for the enclosing document.
+    const bytes = new TextEncoder().encode(JSON.stringify(value)).byteLength + 1;
+    if (this.bytes + bytes > this.limits.maxBytes) { this.finish('byte-limit'); return false; }
+    this.bytes += bytes;
+    return true;
   }
   frame(timing: FrameTiming, state: Detail) {
     if (!this.active) return;
     if (!Object.values(timing).every(Number.isFinite) || timing.intervalMs < 0) {
       this.invalidFrames++; this.phases = {}; return;
     }
-    this.frames.push({ t: timing.startMs - this.started, intervalMs: timing.intervalMs,
-      tickCpuMs: timing.tickCpuMs, drawCpuMs: timing.drawCpuMs, phases: this.phases, state });
+    const entry = { t: timing.startMs - this.started, intervalMs: timing.intervalMs,
+      tickCpuMs: timing.tickCpuMs, drawCpuMs: timing.drawCpuMs, phases: this.phases, state };
+    if (!this.reserve(entry)) return;
+    this.frames.push(entry);
     this.phases = {};
     if (this.frames.length >= this.limits.maxFrames) this.finish('frame-limit');
     else if (this.now() - this.started >= this.limits.maxDurationMs) this.finish('duration-limit');
@@ -82,12 +107,20 @@ export class GameTelemetry {
     const visible = this.frames.filter(f => !f.state.hidden && !f.state.visibilityGap && !f.state.firstFrame);
     const sorted = visible.map(f => f.intervalMs).sort((a, b) => a - b);
     const pct = (q: number) => sorted.length ? sorted[Math.min(sorted.length - 1, Math.ceil(q * sorted.length) - 1)]! : null;
+    const target = Number(this.metadata.targetFrameMs) || 1000 / 30;
+    const tolerance = Number(this.metadata.lateToleranceMs) || 2;
+    const lateThresholdMs = target + tolerance;
+    let lateFrames = 0, streak = 0, maxConsecutiveLateFrames = 0;
+    for (const f of this.frames) {
+      if (f.state.hidden || f.state.visibilityGap || f.state.firstFrame || f.intervalMs <= lateThresholdMs) { streak = 0; continue; }
+      lateFrames++; streak++; maxConsecutiveLateFrames = Math.max(maxConsecutiveLateFrames, streak);
+    }
     return { schema: 'blud-gameplay-v1', startedAt: this.startedAt, timeOrigin: performance.timeOrigin,
       metadata: this.metadata, durationMs: this.ended - this.started, stopReason: this.reason,
-      droppedEvents: this.droppedEvents, invalidFrames: this.invalidFrames,
-      frames: this.frames, events: this.events,
+      droppedEvents: this.droppedEvents, invalidFrames: this.invalidFrames, droppedSnapshots: this.droppedSnapshots,
+      frames: this.frames, events: this.events, snapshots: this.snapshots,
       summary: { frames: this.frames.length, visibleFrames: visible.length,
         p50Ms: pct(.5), p95Ms: pct(.95), p99Ms: pct(.99), maxMs: pct(1),
-        spikes40ms: sorted.filter(x => x >= 40).length } };
+        spikes40ms: sorted.filter(x => x >= 40).length, lateFrames, maxConsecutiveLateFrames, lateThresholdMs } };
   }
 }
