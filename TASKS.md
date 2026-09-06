@@ -82,6 +82,18 @@ baselines captured first, no test file may be edited.
 [plan](docs/superpowers/plans/2026-09-06-shared-character-view.md) (12 tasks:
 Phase A 1–6, Phase B 7–12). Phase A task 5 replaces held soldier tasks 6–7 and
 inherits deleting the `brain()` migration shim task 5 left in game-actor.
+Task 2 (`character-registry.ts`) done on
+`dispatch/2026-09-06-shared-character-view-task-2` with a FINDING the owner must
+call: the plan's invariant **kit ⇒ bespoke motion profile does not hold** —
+goblin, clown and clown-alt carry polygon kits but have no motion profile and
+walk with the zombie's shamble (`motionProfileFor` default; motion-profile.test.ts
+even pins `motionProfileFor('clown')` to `ZOMBIE_PROFILE`). The invariant test
+ships RED (1 failure in the suite, 3551/3552) per the plan's own protocol —
+report, don't weaken. Fix is either author real profiles for the three, or bless
+shamble-as-their-walk and relax the invariant. Smaller find: `minotaur.blob`'s
+sheet block declares `image minotaur-face.png` but no such PNG exists under
+`public/assets/lab/faces/` — the lab has been 404ing it silently; the registry
+records it as declared.
 
 **[x] Zombie analytic normals — owner passed integrated combat playtest; hybrid mode enabled by default (2026-09-06).**
 [Integration evidence](docs/dev-notes/2026-09-06-analytic-normal-integration/README.md); procedural flesh/wound gradients with automatic legacy fallback and retained comparison toggle. Owner reports smoother play but attribution is uncertain. Broader Task 5 performance study remains open: moving/multi-actor and direct original-shader controls are unmeasured. Stable 30 fps combat is the product target.
