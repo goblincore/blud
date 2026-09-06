@@ -54,3 +54,49 @@ Limitations / handoff notes for tasks 2-3:
 - The layer assumes the app's `clearDepth` is the default 1 (it never touches clearDepth; the clear-quad pass relies on autoClear).
 - Lighting is unshadowed by design (M1). Depth readback returns Float32 for r32f and half floats for rgba16f attachments (decode as in the smoke report).
 - The temporary fixture files (root html, `tmp-m1-smoke.ts`, `scripts/tmp-m1-deferred-smoke.mjs`) were deleted post-run; the report JSON above records every assertion they made.
+
+## Task 2 (2026-09-06) — SDF surface producer
+
+Worktree `2026-09-06-hybrid-deferred-m1-task-2`, branch `codex/dispatch/2026-09-06-hybrid-deferred-m1-task-2`, base = task 1's `7c9974e8` (confirmed dispatch worktree, not the primary checkout).
+
+### What was built
+
+- `march.wgsl.ts`: `MARCH_BODY` is now assembled from named sections — `MARCH_BODY_PARAMS` (the shared 81-input signature), `MARCH_BODY_TRACE` (ray setup, march loop, hit, full albedo/normal material chain), `MARCH_BODY_SURFACE_PREP` (light-independent wet/specPow/glow terms, hoisted above the flashlight), `MARCH_BODY_LIGHT` (flashlight through display conversion). The hoist is arithmetic-neutral: verified by extracting the old template from `git show HEAD` and diffing against the section concatenation — the ONLY differences are the wet/glow blocks moving above the flashlight and the shine exponent taking the name `specPow`. No `.replace()` chains; the sections are one source of truth.
+- `deferred-sdf.ts` (new): owns the surface-capture declarations (`SDF_SURFACE_STATE` globals, the NG_STATE parse pattern), `MARCH_SURFACE = fn marchSurface + PARAMS + reset prologue + TRACE + PREP + tail`, the three readback fns (each takes the traced hit as a `dep` input so TSL data flow orders reads after the march), one shared dependency-ordered node chain, and `sdfSurfaceMrtNodes()` (the four named attachments). No imports from zombie-gpu — acyclic: march.wgsl <- deferred-sdf <- zombie-gpu.
+- `zombie-gpu.ts`: `GpuViewOpts.output?: 'lit' | 'surface'` (default `'lit'`, no implicit opt-in), trailing `output` param on `createMarchMaterial` (positional-last rule preserved; all existing variants unchanged). Surface mode: entry = `sdfSurfaceMarch` (same signature, one binding block), trace cached with `.toVar('sdfTrace')`, MRT via material `mrtNode`, `depthNode` keeps the real traced clip depth in hardware depth, no colorNode/outputNode. Surface mode deliberately skips the flashlight/scatter/AO/wound-shadow/level-shadow/ambient/shoulder/display-conversion tail.
+
+### Output meanings (from the production hit evaluation)
+
+- `albedoRoughness = vec4(unlit tissue/paint albedo, roughness)`; roughness inverts the light pass's `shin = exp2((1-rough)*8)+2` against the legacy exponent `specPow = mix(mix(128,4,surfCfg.y),220,gloss)`, then folds the legacy wet INTENSITY multiplier into roughness (char widens to matte, wet tightens) — a documented M1 approximation, since the G-buffer has no per-pixel specular-intensity channel.
+- `normalMetalness = vec4(normalize(worldHitNormal), metal)` — the detail/bump-perturbed shading normal, world space.
+- `emissionClass = vec4(face-sheet glow + per-prim glow, 2)` — actual emission only, class 2 = flesh.
+- `surfaceDepth = clip.z/clip.w` of the traced hit via the SAME formula/nodes as the legacy depth-alpha.
+
+### Legacy lighting terms intentionally absent from M1 surface data
+
+Analytic flashlight beam, key specular/fresnel compose, backlit scatter field probe, AO field probe, traced wound soft shadow, level shadow map, enclosure ambient bounce, highlight shoulder, faceFlat relight mix, legacy display compensation (lodCfg.y). Also: legacy REPLACES flesh under a glow; the deferred light pass ADDS emission over the lit surface. Not hidden in prelit data; full look parity is a later gate.
+
+### Verification (all run on this branch)
+
+- `NODE_OPTIONS=--no-experimental-webstorage npx vitest run src/lab/sdf-zombie/webgpu/deferred-sdf.test.ts src/lab/sdf-zombie/webgpu/march.wgsl.test.ts src/lab/sdf-zombie/webgpu/zombie-gpu.test.ts src/lab/sdf-zombie/webgpu/normal-gradient.wgsl.test.ts` — 252/252 pass.
+- Whole `src/lab/sdf-zombie/webgpu/` directory (every consumer/variant: fpv hands, hull-refine, humanoid, chunks, sdf-layer, tile/normal-gradient suites): **63 files, 1239/1239 pass**.
+- `npx tsc --noEmit` — clean.
+- Real-GPU smoke (headless Chrome `--enable-unsafe-webgpu`, Apple GPU, own vite+chrome on private ports 5262/9262, temporary page/driver deleted post-run like task 1's): a real `buildBody(ZOMBIE)` surface-mode view rendered through `createDeferredLayer` at fixed 800x600, sdfScale 1. Evidence: `task2-smoke-report.json`, `task2-smoke-lit.png` / `-material.png` / `-normal.png` (all three inspected: wounded zombie lit by the shared light pass with a visible glistening chest crater; class-2 flesh silhouette in the material view; plausible world normals; the black band at the frame bottom is page background below the 800x600 canvas, not render output), `task2-surface-shader-0.wgsl` (the generated fragment shader).
+  - GENERATED SHADER (not template text): exactly ONE march loop (`i < 512` once) in the surface material; `sdfTrace = marchSurface(...)` executes first, then the clip-depth computation, then `sdfSurfaceReadAlbedo/Normal/Emission(sdfTrace)` — reads follow the write, one trace feeds all four attachments plus `frag_depth`. The legacy lit material's shader contains NO `gSdf*` globals (zero contamination of the shipping path).
+  - Pixels: 43975 flesh pixels; centre sample (400,300): depth 0.9774, class 2, unit normal (len 0.9997), albedo (0.552, 0.144, 0.168), roughness 0.150, emission 0. Corner (2,2): depth exactly 1, class 0. Zero class/depth coherence mismatches across all 480k pixels; every hit pixel class 2.
+  - LIGHT INVARIANCE: changed the view's legacy light uniforms (lightDir/keyColor/lightCfg/spotCfg) AND the layer's light set (1 point -> 1 point + 1 spot, moved) — all four SDF surface buffers BIT-IDENTICAL (`surfaceInvariant: true`).
+  - WOUNDS: `setWounds` at the chest changed 36228 depth texels and 92004 albedo texels.
+  - DEPTH PARITY: legacy lit path's depth-alpha vs surface-mode surfaceDepth at all 43975 flesh pixels, same body/camera — max diff **exactly 0** (bitwise-identical traced hit depth).
+  - Console: zero errors.
+
+### Traps hit (recorded for task 3)
+
+- three's `copyTextureToBuffer` pads rows to 256-byte multiples and returns the PADDED mapped range as a TypedArray (not an ArrayBuffer). At 800 px the rgba16f attachments are exactly aligned (6400 B/row) but r32f (3200 B/row) pads to 3328 B — indexing the raw buffer as tight rows silently misreads every row after the first. Task 3's gate must unpack rows (the smoke's `unpackRows`) when reading `surfaceDepth` at 800 wide, or use widths whose row size is a 256 multiple.
+- Generated WGSL formats declarations as `fn name (` with a space — grep generated code accordingly.
+- Depth-parity comparisons must use the UNWOUNDED surface buffers (base == relit, proven bit-identical) — comparing post-wound buffers against an unwounded legacy render diffs the crater, not the pipeline.
+
+### Handoff to task 3
+
+- The producer mesh/material/uniforms reach task 3 through the existing view object (`view.object`); nothing new was added to `ZombieGpuView` beyond the `output` opt-in. The deferred layer's SDF scene just adds `view.object`.
+- Surface mode REQUIRES debugCfg = 0 (the default everywhere): the debug early-returns predate the G-buffer and would emit reset/empty attributes at a computed depth. The deferred fixture must not enable the march's debug modes.
+- Real image/lighting invariance validation IS DONE for the SDF producer at scale 1 (above); what remains for task 3 is the full comparison scene (stone room + occluder + moving orbs), sdfScale 0.5, resize behavior, debug-view captures, and the legacy/deferred frame-time comparison.
