@@ -50,6 +50,18 @@ repo via the dev-only `/__lab/save-*` endpoints
 [plan](docs/superpowers/plans/2026-09-05-soldier-animation.md) ·
 [strips](docs/dev-notes/2026-09-05-soldier-animation/notes.md)
 
+**[~] SOLDIER SHOOT-BACK AI (phase 2) — DESIGN APPROVED 2026-09-06, awaiting plan.**
+The first enemy that shoots back, and the milestone where the game learns
+enemies come in KINDS. New pure `soldier-brain.ts` (standoff band → aim →
+fire → recover → reposition, backpedal when rushed); `brain.ts` is untouched
+behind an `EnemyMind` seam that defaults to `zombieMind`. Behavior only —
+**no player damage** (there is still no player health in sdf-game). One
+soldier, one room, no ranged crowd arbiter. Most of the work is plumbing:
+game-main only imports `zombie.blob`, the face sheet is a module constant,
+and `game-actor` never sets `MotionConfig.profile`. Watch the sheet block —
+that trap cost an hour on 2026-09-04.
+[spec](docs/superpowers/specs/2026-09-06-soldier-shootback-ai-design.md)
+
 **[x] Zombie analytic normals — owner passed integrated combat playtest; hybrid mode enabled by default (2026-09-06).**
 [Integration evidence](docs/dev-notes/2026-09-06-analytic-normal-integration/README.md); procedural flesh/wound gradients with automatic legacy fallback and retained comparison toggle. Owner reports smoother play but attribution is uncertain. Broader Task 5 performance study remains open: moving/multi-actor and direct original-shader controls are unmeasured. Stable 30 fps combat is the product target.
 
