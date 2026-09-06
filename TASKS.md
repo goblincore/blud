@@ -85,6 +85,11 @@ baselines captured first, no test file may be edited.
 [plan](docs/superpowers/plans/2026-09-06-shared-character-view.md) (12 tasks:
 Phase A 1–6, Phase B 7–12). Phase A task 5 replaces held soldier tasks 6–7 and
 inherits deleting the `brain()` migration shim task 5 left in game-actor.
+Task 3 + 4c REVERTED 2026-09-06 for a "goblin regression", then RE-LANDED the
+same day (`cae594c2`) once a goblin actually reached the gate: neither symptom
+was task 3's. The eyes were the rigid-head bug below; the displaced kit is an
+asset load race that reproduces on the reverted lab. Six hash-gated views
+byte-identical, four game gates PASS, 3583/3583.
 Task 3 (`character-view.ts`, adopted by the lab) done on
 `dispatch/2026-09-06-shared-character-view-task-3` — build/GPU view/sheet data
 (catch + 2026-09-04 story now live there)/kit/prop/pose moved out of lab-main;
@@ -106,6 +111,41 @@ shamble-as-their-walk and relax the invariant. Smaller find: `minotaur.blob`'s
 sheet block declares `image minotaur-face.png` but no such PNG exists under
 `public/assets/lab/faces/` — the lab has been 404ing it silently; the registry
 records it as declared.
+
+**[x] F-face-rides-skull — FIXED 2026-09-06 (`295c848d`). Eleven characters, one line.**
+Rigid-head membership was `limb==head && a===b at rest` — SPHERES only, "exactly
+the face prims face.ts emits". True of face.ts, false of any `.blob`-authored
+face: the goblin's ears, nose and lip blobs carry `tip=` so they bound
+per-endpoint and slid off the skull whenever it turned (at rest both binds
+agree — hence "looks fine with movement off"). 11 of 16 characters affected;
+the ZOMBIE authors none, which is why no gate saw it. Rule is now "both ends
+bind to a skull rig point", spheres still unconditional, so the change is
+ADDITIVE and a test pins the zombie's rigid set to exactly his head spheres.
+`boneFrames` held a second copy of the shape check and now shares the predicate.
+
+**[x] P-pixel-gate-blindness — FIXED 2026-09-06 (`806cbbac`).** Every view and
+all four game gates rendered the ZOMBIE, so a visible goblin regression passed
+green and got a correct refactor reverted. `CHARACTER=` adds a goblin canary
+(the only character with both a kit and a generated sheet); `MOTION=walk` adds
+a mid-gait view, since every pre-existing view holds the REST pose where the
+goblin always looked right. Determinism measured before either was trusted:
+zombie-walk 3/3 identical, goblin 3 different hashes in BOTH modes.
+
+**[x] P-crowd-capture-hang — FIXED 2026-09-06 (`342be37f`). 48 min → 1 min 47.**
+It never exited (live CDP WebSocket held node's loop), so callers wrapped it in
+`timeout` and `refactor-baseline.sh` treated **rc=124 as its SUCCESS path**.
+Every capture burned its whole budget doing nothing: measured unwrapped, a
+capture takes **7 s** against the 240 s budget. Contract inverts — 0 is
+success, 124 is a real hang. Any comment still saying otherwise is stale.
+
+**[ ] F-kit-load-race — the goblin's armour lands late, then teleports on.**
+Owner, watching live: "initially the mesh elements aren't on the goblin as it's
+moving and then they teleport onto it" — deferred by owner, "not something we
+need to address atm". Measured: geometry is IDENTICAL across 8 boots (kit bone
+world matrices to 4 dp, flesh centroid, root shift) while all 8 screenshots
+hash differently, so it is not the rig or the body that moves. `loadKit` is
+fire-and-forget. This is why the goblin views sit in `MANIFEST-EYEBALL`; they
+move back into `MANIFEST` when it is fixed.
 
 **[x] F-slug-gate — FIXED 2026-09-06. The gate was wrong, not the renderer.**
 It compared a wound's LIVE position against a pre-shot prediction, but
