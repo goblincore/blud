@@ -30,8 +30,7 @@ import type { Vec3 } from './types';
 import { wrapPi } from './wander';
 
 export type SoldierState =
-  | 'idle' | 'advance' | 'retreat' | 'standoff'
-  | 'aim' | 'fire' | 'recover' | 'stagger';
+  | 'idle' | 'engage' | 'aim' | 'fire' | 'recover' | 'stagger';
 
 export interface SoldierBrain {
   state: SoldierState;
@@ -100,28 +99,30 @@ export const SOLDIER_TUNING = {
   noticeCone: (70 * Math.PI) / 180,
   /** Alert survives this long after the player leaves the room (s). */
   loseGrace: 4,
-  /** Closer than this, back off (m).
+  /** He will shoot from anywhere inside this (m).
    *
-   *  SIZED TO THE ROOM, not picked freehand. Room 1 spans -8.8..-0.8 on both
-   *  axes (ROOM_HALF 4, BAND_HALF 0.8) = 8 m interior, and wanderBounds insets
-   *  0.7, leaving the body 6.6 x 6.6 m of walkable floor. The first values
-   *  here were 3.5 / 6.0, which put standoffFar at nearly the whole box: the
-   *  soldier sat against a wall whenever the player was not adjacent, so the
-   *  CORNERED case was his normal case and the retreat state had nowhere to go.
+   *  DECOUPLED FROM MOVEMENT, deliberately, and this is the whole point of the
+   *  2026-09-06 rewrite. The first design gated firing on being in a
+   *  `standoff` STATE, reached only after the advance/retreat branches fell
+   *  through — and the decision tick that rolls for a shot lived inside that
+   *  same branch, so the tick only advanced while he was already settled. To
+   *  fire he had to hold standoff for up to repositionSec AND win the roll,
+   *  which against a player who moves at all essentially never happened. He
+   *  chased his own band and never attacked. Owner: "he still doesn't seem to
+   *  settle and attack."
    *
-   *  2.0 sits just outside the zombie's engageRange (2.6) and well clear of
-   *  its meleeRadius (1.25) — he backs out of melee reach without fleeing. */
-  standoffNear: 2.0,
-  /** Farther than this, close in (m). Roughly half the usable floor, so there
-   *  is real room behind him to retreat into, and a sawed-off still makes
-   *  sense at the range he holds. */
-  standoffFar: 3.5,
-  /** Band hysteresis (m). THE EXIT THRESHOLD SITS INSIDE THE BAND: he starts
-   *  advancing at dist > standoffFar but does not stop until
-   *  dist <= standoffFar - this. An exit threshold OUTSIDE the band would
-   *  make advance and retreat overlap and oscillate, which is the opposite
-   *  of the intent. At these values he settles in roughly 2.4–3.1 m. */
-  bandHysteresis: 0.4,
+   *  Now range and movement are independent: if you are inside this, he can
+   *  shoot, wherever his feet happen to be. */
+  fireRange: 6.0,
+  /** Where he would RATHER stand (m). A preference his movement drifts
+   *  toward, not a gate on anything. */
+  preferredRange: 3.0,
+  /** Inside this he backs off while shooting (m). Just outside the zombie's
+   *  meleeRadius (1.25) — he gives ground rather than being shoved. */
+  tooClose: 2.0,
+  /** Slack around preferredRange before he bothers closing (m). Stops a
+   *  half-metre drift from starting a walk. */
+  rangeSlack: 1.0,
   /** The telegraph (s). Doom's shotgun guy has a distinct pre-fire frame and
    *  it is the only reason a sergeant is dodgeable; this is that frame. If
    *  the playtest says the soldier is unreadable, this is the first knob. */
@@ -236,7 +237,7 @@ export function stepSoldierBrain(
   // brain.ts's staggerNow for what a one-step deferral actually cost.
   if (state === 'stagger') {
     if (holdSecs > 0) return pack({ halt: true });
-    state = alert && player ? 'advance' : 'idle';
+    state = alert && player ? 'engage' : 'idle';
     phaseT = 0;
   }
 
@@ -282,56 +283,45 @@ export function stepSoldierBrain(
     if (phaseT < tuning.recoverSec) {
       return pack({ halt: true, faceHeading: faceBearing });
     }
-    state = 'standoff'; phaseT = 0;
+    state = 'engage'; phaseT = 0;
   }
 
-  // --- the band, hysteresis running INWARD --------------------------------
-  // See bandHysteresis's comment for why the exit threshold is inside.
-  if (state === 'advance') {
-    if (dist <= tuning.standoffFar - tuning.bandHysteresis) state = 'standoff';
-  } else if (state === 'retreat') {
-    if (dist >= tuning.standoffNear + tuning.bandHysteresis) state = 'standoff';
-  } else if (dist > tuning.standoffFar) {
-    state = 'advance';
-  } else if (dist < tuning.standoffNear) {
-    state = 'retreat';
-  } else if (state === 'idle') {
-    state = 'standoff';
-  }
-
-  if (state === 'advance') {
-    // The PLAYER, not a standoff point: stepWander's arrive band on a target
-    // at the band edge would park him outside it. brain.ts's pursue makes the
-    // same choice for the same reason (its predecessor's defect, found by the
-    // crowd gate).
-    return pack({ target: playerPoint });
-  }
-
-  if (state === 'retreat') {
-    return pack({ target: ringPoint(player, standBearing, tuning.standoffFar) });
-  }
-
-  // --- standoff: the decision tick ----------------------------------------
-  // ROLLING EVERY FRAME WOULD DEFEAT THE POINT. At 60 Hz a refireRoll of 0.5
-  // fires on the first eligible frame every single time, which is a fixed
-  // cooldown wearing a costume. Doom rolls when a monster FINISHES A MOVE,
-  // not every tic, and that cadence is the whole source of the irregular
-  // rhythm. So both rolls are consumed here and nowhere else.
+  // --- the decision tick -------------------------------------------------
+  // IT ALWAYS ADVANCES. In the first design this lived inside the standoff
+  // branch, below the advance/retreat early returns, so it only ticked while
+  // he was already settled — and a settled soldier is exactly the state a
+  // moving player denies him. Firing became unreachable. Now the tick is
+  // unconditional and the shot is gated on RANGE, not on a movement state.
+  //
+  // Rolling every frame would still be wrong: at 60 Hz a refireRoll of 0.5
+  // fires on the first eligible frame every time, which is a fixed cooldown
+  // wearing a costume. Doom rolls when a monster FINISHES A MOVE, and that
+  // cadence is the whole source of the irregular rhythm.
   driftT -= dt;
   if (driftT <= 0) {
     driftT = tuning.repositionSec;
     drift = input.rollDrift < 0.5 ? -1 : 1;
-    if (cooldown <= 0 && input.roll < tuning.refireRoll) {
+    if (dist <= tuning.fireRange && cooldown <= 0 && input.roll < tuning.refireRoll) {
       state = 'aim'; phaseT = 0;
       return pack({ halt: true, faceHeading: faceBearing, aimT: 0 });
     }
   }
 
+  // --- one moving state ---------------------------------------------------
+  // Movement is a TARGET CHOICE, not a state machine. Close if he is well
+  // outside his preferred range, give ground if you crowd him, otherwise
+  // strafe. Nothing here gates the shot, so none of it can starve him of one.
+  state = 'engage';
+  if (dist > tuning.preferredRange + tuning.rangeSlack) {
+    // The PLAYER, not a standoff point: stepWander's arrive band on a target
+    // at the preferred range would park him short of it every time.
+    return pack({ target: playerPoint });
+  }
+  if (dist < tuning.tooClose) {
+    return pack({ target: ringPoint(player, standBearing, tuning.preferredRange) });
+  }
   return pack({
-    target: ringPoint(
-      player,
-      standBearing + drift * tuning.strafeStep,
-      clamp(dist, tuning.standoffNear, tuning.standoffFar),
-    ),
+    target: ringPoint(player, standBearing + drift * tuning.strafeStep, dist),
   });
+
 }

@@ -15,12 +15,13 @@ const DT = 1 / 60;
 // them fixture arithmetic rather than behaviour. A test that encodes a tuning
 // value in a magic number is a test that breaks when the value is tuned, which
 // is the one thing tuning values are for.
-/** Comfortably inside the band. */
-const MID = (SOLDIER_TUNING.standoffNear + SOLDIER_TUNING.standoffFar) / 2;
-/** Comfortably outside it — he should close. */
-const FAR = SOLDIER_TUNING.standoffFar * 2;
-/** Comfortably inside standoffNear — he should back off. */
-const NEAR = SOLDIER_TUNING.standoffNear * 0.5;
+/** At his preferred range — in weapon range, not crowding, not far. */
+const MID = SOLDIER_TUNING.preferredRange;
+/** Well beyond the range he likes — he should close. Still inside
+ *  noticeRange so he can see the player at all. */
+const FAR = SOLDIER_TUNING.preferredRange + SOLDIER_TUNING.rangeSlack + 2;
+/** Crowding him — he should give ground. */
+const NEAR = SOLDIER_TUNING.tooClose * 0.5;
 
 function input(over: Partial<SoldierInput> = {}): SoldierInput {
   return {
@@ -89,65 +90,66 @@ describe('stepSoldierBrain — perception', () => {
   });
 });
 
-describe('stepSoldierBrain — the band', () => {
-  it('advances when farther than standoffFar', () => {
+describe('stepSoldierBrain — movement is a preference, never a gate', () => {
+  it('closes when well outside the range he likes', () => {
     const out = stepSoldierBrain(alerted(), input({
       player: { x: 0, z: FAR, room: 3 },
     }));
-    expect(out.brain.state).toBe('advance');
+    expect(out.brain.state).toBe('engage');
     expect(out.target).toEqual([0, 0, FAR]);   // the player himself
     expect(out.halt).toBe(false);
   });
 
-  it('retreats when closer than standoffNear', () => {
+  it('gives ground when crowded', () => {
     const out = stepSoldierBrain(alerted(), input({
       player: { x: 0, z: NEAR, room: 3 },
     }));
-    expect(out.brain.state).toBe('retreat');
+    expect(out.brain.state).toBe('engage');
     expect(out.halt).toBe(false);
-    // Away from the player: he is at z=2, self at 0, so the retreat point is
-    // standoffFar BEHIND self on the player->self bearing (z negative).
+    // Away from the player: he is at z=NEAR, self at 0, so the fallback point
+    // sits BEHIND self on the player->self bearing (z negative).
     expect(out.target![2]).toBeLessThan(0);
   });
 
-  it('holds standoff inside the band', () => {
-    const out = stepSoldierBrain(alerted(), input({
-      player: { x: 0, z: MID, room: 3 },
-    }));
-    expect(out.brain.state).toBe('standoff');
-    expect(out.halt).toBe(false);
+  it('strafes when comfortable', () => {
+    const out = stepSoldierBrain(alerted(), input({ roll: 1 }));
+    expect(out.brain.state).toBe('engage');
+    const t2 = out.target!;
+    expect(Math.abs(t2[0])).toBeGreaterThan(0);   // actually moved off-axis
+    // and stayed at the range he was already at
+    expect(Math.hypot(t2[0], t2[2] - MID)).toBeCloseTo(MID, 5);
   });
 
-  it('hysteresis runs INWARD: advancing continues past standoffFar', () => {
-    // Start him advancing from 8 m...
-    let b = stepSoldierBrain(alerted(), input({ player: { x: 0, z: FAR, room: 3 } })).brain;
-    expect(b.state).toBe('advance');
-    // ...then place him just inside standoffFar. He must NOT stop yet.
-    const inside = SOLDIER_TUNING.standoffFar - SOLDIER_TUNING.bandHysteresis / 2;
-    const out = stepSoldierBrain(b, input({ player: { x: 0, z: inside, room: 3 } }));
-    expect(out.brain.state).toBe('advance');
-    // Only well inside does he settle.
-    const settled = SOLDIER_TUNING.standoffFar - SOLDIER_TUNING.bandHysteresis - 0.1;
-    b = stepSoldierBrain(out.brain, input({ player: { x: 0, z: settled, room: 3 } })).brain;
-    expect(b.state).toBe('standoff');
+  it('THE REGRESSION: movement never starves him of a shot', () => {
+    // The first design gated firing on a `standoff` state reached only after
+    // the advance/retreat branches fell through, with the decision tick INSIDE
+    // that branch — so a player who kept him moving kept the tick from ever
+    // advancing and he could not attack at all. Firing must now work from any
+    // in-range distance, including ones that also make him walk.
+    for (const z of [NEAR, MID, FAR]) {
+      let b = makeSoldierBrain();
+      let fired = false;
+      for (let i = 0; i < 600 && !fired; i++) {
+        const o = stepSoldierBrain(b, input({ player: { x: 0, z, room: 3 }, roll: 0 }));
+        b = o.brain;
+        if (o.fire) fired = true;
+      }
+      const inRange = z <= SOLDIER_TUNING.fireRange;
+      expect(fired, `z=${z} (inRange=${inRange})`).toBe(inRange);
+    }
   });
 
-  it('hysteresis runs INWARD on the near edge too', () => {
-    let b = stepSoldierBrain(alerted(), input({ player: { x: 0, z: NEAR, room: 3 } })).brain;
-    expect(b.state).toBe('retreat');
-    const inside = SOLDIER_TUNING.standoffNear + SOLDIER_TUNING.bandHysteresis / 2;
-    const out = stepSoldierBrain(b, input({ player: { x: 0, z: inside, room: 3 } }));
-    expect(out.brain.state).toBe('retreat');
-    const settled = SOLDIER_TUNING.standoffNear + SOLDIER_TUNING.bandHysteresis + 0.1;
-    b = stepSoldierBrain(out.brain, input({ player: { x: 0, z: settled, room: 3 } })).brain;
-    expect(b.state).toBe('standoff');
-  });
-
-  it('never emits fire or a face lock while only holding the band', () => {
-    const out = run(alerted(), {}, 3);
-    expect(out.fire).toBe(false);
-    expect(out.faceHeading).toBeNull();
-    expect(out.aimT).toBe(0);
+  it('will not shoot from beyond fireRange', () => {
+    let b = makeSoldierBrain();
+    let fired = false;
+    for (let i = 0; i < 600; i++) {
+      const o = stepSoldierBrain(b, input({
+        player: { x: 0, z: SOLDIER_TUNING.fireRange + 2, room: 3 }, roll: 0,
+      }));
+      b = o.brain;
+      if (o.fire) fired = true;
+    }
+    expect(fired).toBe(false);
   });
 });
 
@@ -175,7 +177,7 @@ describe('stepSoldierBrain — the firing cycle', () => {
   it('does NOT fire on frame one even when the roll always says fire', () => {
     // The decision-tick regression: rolling every frame would fire instantly.
     const out = stepSoldierBrain(alerted(), input({ roll: 0 }));
-    expect(out.brain.state).toBe('standoff');
+    expect(out.brain.state).toBe('engage');
     expect(out.fire).toBe(false);
   });
 
@@ -189,7 +191,7 @@ describe('stepSoldierBrain — the firing cycle', () => {
   it('never enters aim when the roll always refuses', () => {
     const r = until(alerted(), { roll: 1 }, 6);
     expect(r.fires).toBe(0);
-    expect(r.out.brain.state).toBe('standoff');
+    expect(r.out.brain.state).toBe('engage');
   });
 
   it('emits exactly ONE fire pulse per cycle', () => {
@@ -247,15 +249,6 @@ describe('stepSoldierBrain — the firing cycle', () => {
     expect(right.out.brain.drift).toBe(1);
   });
 
-  it('strafes tangentially, staying inside the band', () => {
-    const out = stepSoldierBrain(alerted(), input({ roll: 1 }));
-    expect(out.brain.state).toBe('standoff');
-    const t = out.target!;
-    const d = Math.hypot(t[0] - 0, t[2] - MID);
-    expect(d).toBeGreaterThanOrEqual(SOLDIER_TUNING.standoffNear - 1e-6);
-    expect(d).toBeLessThanOrEqual(SOLDIER_TUNING.standoffFar + 1e-6);
-    expect(Math.abs(t[0])).toBeGreaterThan(0);     // actually moved off-axis
-  });
 });
 
 describe('staggerSoldierNow', () => {

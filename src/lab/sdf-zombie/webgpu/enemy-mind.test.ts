@@ -3,9 +3,9 @@ import { describe, it, expect } from 'vitest';
 import { makeZombieMind, makeSoldierMind, type MindInput } from './enemy-mind';
 import { SOLDIER_TUNING } from '../soldier-brain';
 
-/** Inside the soldier's band, derived so a retune cannot rot the fixture —
+/** The soldier's preferred range, derived so a retune cannot rot the fixture —
  *  see soldier-brain.test.ts's note. Also inside the zombie's engageRange. */
-const MID = (SOLDIER_TUNING.standoffNear + SOLDIER_TUNING.standoffFar) / 2;
+const MID = SOLDIER_TUNING.preferredRange;
 
 const DT = 1 / 60;
 
@@ -59,10 +59,10 @@ describe('makeSoldierMind', () => {
     expect(out.committed).toBe(false);
   });
 
-  it('holds the band and reports the soldier vocabulary in debug', () => {
+  it('engages and reports the soldier vocabulary in debug', () => {
     const m = makeSoldierMind();
     m.step(mindInput());
-    expect(m.debug().state).toBe('standoff');
+    expect(m.debug().state).toBe('engage');
     expect(m.debug().aimT).toBe(0);
   });
 

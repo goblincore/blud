@@ -40,10 +40,31 @@ export const SOLDIER_PROFILE: MotionProfile = {
   // speeds (Task 1's sampling, for a 0.84 m leg):
   //   soldier-walk: freq 0.937 Hz, duty 0.63, travel 0.746 m → implied speed 1.12 m/s
   //   soldier-run:  freq 1.500 Hz, duty 0.31, travel 0.670 m → implied speed 3.22 m/s
-  // The band brackets between the two clips (±0.2 inside the implied
-  // speeds); cruise is the run clip's implied speed rounded to 0.1.
+  // The band brackets between the two clips (±0.2 inside the implied speeds).
   runBand: { from: 1.32, to: 3.02 },
-  cruise: 3.2,
+  // CRUISE IS THE WALK CLIP'S SPEED, NOT THE RUN CLIP'S (fixed 2026-09-06).
+  //
+  // It was 3.2 — the RUN clip's implied speed, taken because both numbers came
+  // out of the same clip sampling. But those are two different quantities:
+  // runBand calibrates the walk->run BLEND, while cruise is what stepWander
+  // actually MOVES the body at. Setting the wander speed from the run clip
+  // made the soldier sprint everywhere at 2.8x the zombie's 1.15 m/s.
+  //
+  // Nothing in the lab could show it: the lab's hero is a treadmill driven by
+  // forceSpeed and never wanders. In the GAME it was immediately obvious —
+  // stepWander's arriveRadius is 0.4 m, which he crossed in 0.125 s, so he
+  // overshot every target: past the standoff point into retreat range,
+  // reverse, past it into advance range, reverse. The owner's description was
+  // "running around the room like a chicken with his head cut off until he
+  // gets stuck in a wall".
+  //
+  // 1.25, not the walk clip's own 1.12: motion-profile.test.ts pins
+  // cruise > WANDER_TUNING.speed (1.15) — "a soldier moves faster than a
+  // shambling zombie" — which is real design intent that the absurd 3.2
+  // happened to satisfy. 1.25 keeps it, stays below runBand.from (1.32) so he
+  // MARCHES rather than blending toward the run, and crosses the 1.5 m
+  // standoff band in 1.2 s instead of half a second.
+  cruise: 1.25,
   armStyle: 'carry',
   carries: { walk: 'low', run: 'chest', fire: 'hip' },
   prop: { url: '/assets/lab/shorty-double.glb' },
