@@ -82,102 +82,78 @@ soldier work resume, without Phase B.
 
 ---
 
-## Task 1: Capture the baselines — TWICE
+## Task 1: Capture the baseline — DONE (2026-09-06)
 
-Nothing moves until there is something to compare against. A baseline taken
-after the first extraction bakes in whatever that extraction already broke.
+Kept for the record, because what it established governs every later task.
 
-**Files:**
-- Create: `docs/dev-notes/2026-09-06-refactor-baselines/README.md`
-- Create: `scripts/refactor-baseline.sh`
+**The plan originally had this task write a `refactor-baseline.sh` from
+scratch, with an invented `--out` flag. That was wrong on both counts.**
+`crowd-capture.mjs` already exists and is a pixel-identity gate built for a
+refactor: it applies the deterministic freeze recipe, fires three shots,
+checks they agree, and reports a SHA-256. Its own header says "the reported
+hash is what the pre/post-refactor comparison uses." The real script wraps it.
 
-- [ ] **Step 1: Write the capture script**
+### What was measured
 
-Create `scripts/refactor-baseline.sh`:
+**Determinism: CONFIRMED.** Three captures across three fresh page loads, plus
+a fourth from an entirely separate vite+Chrome lifecycle, all produced
+`77d1659dac5c48c321f655dc8b0e7321182ea9b11ddd1abc3a97644432f489ce`.
 
-```bash
-#!/usr/bin/env bash
-# Capture the full before/after image set for the character-view refactor.
-#
-# WHY IT RUNS TWICE ON THE SAME CODE (see the spec's verification section):
-# the whole gate assumes GPU output is reproducible run-to-run on this machine.
-# The 89-PNG precedent says it is, but that was one task's experience, not a
-# property anyone asserted. Two captures of IDENTICAL code, diffed against each
-# other, is the cheapest possible test of that assumption — and if it fails we
-# need to know before, not after, we have moved ten thousand lines.
-#
-#   scripts/refactor-baseline.sh <outdir>
-set -euo pipefail
-OUT="${1:?usage: refactor-baseline.sh <outdir>}"
-mkdir -p "$OUT"
+**So the byte-identical gate is real, not an assumption.** Every later task may
+hold to it. If a future run yields two hashes for the same code, that property
+has broken: STOP and report rather than loosening the comparison.
 
-# Every character in the lab's registry gets a turntable.
-for c in zombie goblin clown clown-alt mouse cyclops schoolgirl schoolgirl-alt \
-         schoolgirl-described bonewalker dragon minotaur soldier female; do
-  node scripts/blob-turntable.mjs "$c" --out "$OUT/turntable-$c" || exit 1
-done
+### The trap that cost two attempts
 
-node scripts/lab-look-once.mjs   --out "$OUT/lab-look"   || exit 1
-node scripts/crowd-capture.mjs   --out "$OUT/crowd"      || exit 1
-node scripts/goo-capture.mjs     --out "$OUT/goo"        || exit 1
-node scripts/melt-capture.mjs    --out "$OUT/melt"       || exit 1
-node scripts/wound-redness-capture.mjs --out "$OUT/wound" || exit 1
-node scripts/sdf-game-entrails-capture.mjs --out "$OUT/entrails" || exit 1
+**`crowd-capture.mjs` writes its PNG, prints its JSON, and then never exits** —
+a live CDP WebSocket keeps node's event loop alive. Any loop over it hangs
+forever on the first iteration, looking exactly like a slow capture.
 
-echo "[baseline] wrote $(find "$OUT" -name '*.png' | wc -l | tr -d ' ') PNGs to $OUT"
-```
+The result is complete well before the hang, so a per-run `timeout` is the
+correct harness and **`rc=124` is the success path**. A capture that exits 0 is
+the surprise, not the norm.
 
-`chmod +x scripts/refactor-baseline.sh`.
-
-**Before running it, verify each script's actual flags** — the `--out` flag is
-assumed here. Run `node scripts/blob-turntable.mjs --help` (or read its header)
-and correct the script to match. A capture written to the wrong place is worse
-than no capture, because it looks like it worked.
-
-- [ ] **Step 2: Capture run A**
-
-Run: `scripts/refactor-baseline.sh /tmp/baseline-A`
-
-Expected: a PNG count printed, exit 0.
-
-- [ ] **Step 3: Capture run B, on the same untouched code**
-
-Run: `scripts/refactor-baseline.sh /tmp/baseline-B`
-
-- [ ] **Step 4: Diff A against B — this is the determinism test**
-
-Run:
+### The gate, for every later task
 
 ```bash
-diff -rq /tmp/baseline-A /tmp/baseline-B && echo "DETERMINISTIC" || echo "NON-DETERMINISTIC"
+scripts/refactor-baseline.sh /tmp/after-task-N
+diff /tmp/baseline/MANIFEST /tmp/after-task-N/MANIFEST
 ```
 
-**If DETERMINISTIC:** the byte-identical gate is valid. Continue.
+The MANIFEST is `<label> <sha256>` per capture, sorted. An empty diff is the
+pass. A non-empty diff names the exact view that moved.
 
-**If NON-DETERMINISTIC:** STOP and report. Record exactly which captures differ
-and by how much (`compare -metric AE` from ImageMagick if available). This
-changes the gate for this plan *and* for every future rendering change in this
-repo, so it is a finding to surface, not a problem to work around. Do not
-proceed by loosening the gate on your own judgement.
+Five views — `solo-front`, `solo-side`, `solo-close`, `crowd6`, `crowd6-wide`
+— so a regression confined to one camera cannot hide.
 
-- [ ] **Step 5: Commit the baseline**
+The script also fails a capture whose `stableWithinRun` is false: that means
+the freeze recipe did not take, and the hash is meaningless as a baseline.
 
-```bash
-mkdir -p docs/dev-notes/2026-09-06-refactor-baselines
-cp -r /tmp/baseline-A/* docs/dev-notes/2026-09-06-refactor-baselines/
-git add scripts/refactor-baseline.sh docs/dev-notes/2026-09-06-refactor-baselines
-git commit -m "refactor baselines: capture the before-state, twice
-
-Two captures of identical code, diffed against each other, to test the
-assumption the whole gate rests on -- that GPU output here is reproducible
-run to run. Everything after this compares against run A.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
-```
+- [x] Determinism verified across boots
+- [x] `scripts/refactor-baseline.sh` written against the real interfaces
+- [x] Baseline captured and committed
 
 ---
 
-## Task 2: `character-registry.ts`
+## Task 2: `character-registry.ts` — DONE (2026-09-06)
+
+Landed as `8318b25` + `da9216b`. Two findings, both recorded:
+
+1. **The "kit implies a bespoke profile" invariant below was MINE and it was
+   WRONG.** The dispatched agent correctly left it RED rather than weakening
+   it, which is the protocol working. Replaced with the face-sheet check.
+2. **`minotaur.blob:433` declares `image minotaur-face.png` and no such file
+   ships** — the lab has been 404ing it silently for as long as it has existed.
+   Owner's call: RECORD, do not fix. Baking the face or deleting the sheet
+   block both change how the minotaur renders, which is not a thing to do
+   inside a pure refactor. It sits in `KNOWN_MISSING` with a second test that
+   fails if the gap is ever closed without updating the list.
+
+Also: `node:fs` does not typecheck here — the tsconfig carries only
+`["vite/client"]`, so use `import.meta.glob`, as `blob-checks.test.ts` does
+for the same reason. Tests passing is not enough; `npm run build` is the check
+that catches this.
+
 
 **Files:**
 - Create: `src/lab/sdf-zombie/character-registry.ts`
@@ -203,15 +179,23 @@ describe('character-registry', () => {
     }
   });
 
-  it('every character with a kit has a motion profile that is not the zombie default', () => {
-    // A kit rides the RIG, and a body with the zombie's profile has no rig
-    // points the kit's bones can name. This pairing is a real constraint, not
-    // a tidiness rule.
-    for (const name of characterNames()) {
-      const e = characterEntry(name);
-      if (!e.kit) continue;
-      expect(e.profile.name, `${name} has a kit but the default profile`).toBe(name);
-    }
+  it('every face sheet a character declares actually ships', () => {
+    // NOTE: the plan originally asserted "a character with a kit has a bespoke
+    // motion profile" here. THAT INVARIANT IS FALSE and was removed on
+    // 2026-09-06. It conflated the MOTION PROFILE (which gait drives the body)
+    // with the RIG (which bones exist) -- the kit rides boneFrames() off the
+    // rig regardless of gait. goblin, clown and clown-alt carry kits on the
+    // zombie shamble deliberately, and motion-profile.test.ts:10 already
+    // pinned motionProfileFor('clown') to ZOMBIE_PROFILE.
+    //
+    // This is the invariant that pays rent instead, and it caught a real
+    // pre-existing bug on its first run.
+    const KNOWN_MISSING = new Set(['minotaur']);   // see below
+    const missing = characterNames()
+      .map(n => ({ name: n, url: characterEntry(n).face.url }))
+      .filter(d => !SHIPPED_FACES.has(d.url))
+      .filter(d => !KNOWN_MISSING.has(d.name));
+    expect(missing.map(m => `${m.name} -> ${m.url}`)).toEqual([]);
   });
 
   it('every profile that declares carries also declares a prop', () => {
