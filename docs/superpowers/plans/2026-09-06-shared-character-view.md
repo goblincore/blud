@@ -598,6 +598,39 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
+## ORDERING CORRECTION (2026-09-06) — read before Task 4
+
+**Task 4 as originally written could not be executed.** It said "move the
+damage orchestration OUT of game-actor INTO character-view", but at the time
+task 3 landed:
+
+- `game-actor` takes a `ZombieGpuView`, not a `CharacterView`, and does not
+  import `character-view` at all
+- `character-view` is consumed only by `lab-main`
+- the game does not get a `CharacterView` until **Task 5**
+
+So the game cannot delegate damage to an object it does not hold. The
+dependency was backwards, and moving damage out first would break the game
+until task 5 landed.
+
+It also bundled a PURE MOVE with the one sanctioned BEHAVIOUR CHANGE. Had the
+game's gates moved, there would have been no way to tell whether the move
+broke something or the lab convergence leaked into the game.
+
+**Task 4 is therefore split three ways, on the behaviour boundary:**
+
+| Task | What | Gate |
+| --- | --- | --- |
+| **4a** | The game adopts `CharacterView` — zombies only, no soldier | Pure: pixel gate empty, 4 game gates unmoved, no test edited |
+| **4b** | Move damage `game-actor` → `character-view` | Pure: same gates. Now a TRUE move, because the game holds a CharacterView |
+| **4c** | `lab-main`'s 11 `pushWound` sites converge onto the shared path | **BEHAVIOUR CHANGES.** New baseline, owner's eyes. Game gates must still be unmoved |
+| **5** | Soldier spawns; delete the `brain()` shim | Game gates unmoved for the zombie |
+
+Everything below describes 4b and 4c; 4a is the first three steps of the old
+Task 5, done first.
+
+---
+
 ## Task 4: the damage half — the ONE task that changes behaviour
 
 **Read this whole task before starting.** It is the sanctioned exception to the
