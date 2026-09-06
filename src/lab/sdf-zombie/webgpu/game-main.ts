@@ -56,7 +56,9 @@ import { createOccluderHull, buildHullInstances, HULL_SHRINK, type HullInstance 
 import { translateBody } from '../translate';
 import { buildBody, DEFAULT_BUILD_OPTS, type BuildResult } from '../build-body';
 import { parseBlob } from '../blob-parse';
-import { createCharacterView } from './character-view';
+import { createCharacterView, compileCharacterSheet } from './character-view';
+import { characterEntry } from '../character-registry';
+import { makeSoldierMind } from './enemy-mind';
 import { compileBlob, compileFace, compilePalette } from '../blob-compile';
 import { checkStance } from '../blob-checks';
 import { FLESH_PRESETS, LIGHT_PRESETS } from '../material';
@@ -936,6 +938,39 @@ async function main() {
   const [fx, fy, fw, fh, fsw, fsh] = ZOMBIE_FLAT.rect;
   const faceAtlas = new THREE.Vector4(fw / fsw, fh / fsh, fx / fsw, fy / fsh);
 
+  /** Face textures BY CHARACTER, loaded once and shared by every body of that
+   *  kind. The zombie's stays the module-level pair above (every zombie wears
+   *  one sheet); anything else gets its own from the registry.
+   *
+   *  THIS IS THE TRAP THE SPEC NAMED. game-main hardcoded ZOMBIE_FLAT for
+   *  every body, so spawning the soldier through that path would have dressed
+   *  him in the zombie's face — and one bad key in his sheet block already
+   *  cost an hour on 2026-09-04 producing exactly that symptom. */
+  const faceCache = new Map<string, { tex: THREE.Texture; atlas: THREE.Vector4; mean: number }>();
+  function faceFor(name: string) {
+    const hit = faceCache.get(name);
+    if (hit) return hit;
+    const sheet = compileCharacterSheet(characterEntry(name));
+    if (sheet.error) {
+      console.error(`[sdf-game] ${name}: sheet block failed to compile, falling `
+        + `back to the zombie face. Fix it:\n  ${sheet.error}`);
+    }
+    const f = sheet.face;
+    const tex = new THREE.TextureLoader().load(f.url);
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
+    tex.generateMipmaps = false;
+    tex.flipY = true;
+    const [x, y, w, h, sw, sh] = f.rect;
+    const entry = {
+      tex,
+      atlas: new THREE.Vector4(w / sw, h / sh, x / sw, y / sh),
+      mean: f.mean,
+    };
+    faceCache.set(name, entry);
+    return entry;
+  }
+
   let probeWeight = DEFAULT_PROBE_WEIGHT;
 
   /** Sever dispatch indirection — actors are built before the weapon block;
@@ -1046,7 +1081,7 @@ async function main() {
   /** ONE spawn — the boot-loop body, kept as THE actor path so the wound
    *  panel's bone-ratio rebuild cannot drift from boot. Pushes build errors
    *  into errs; the caller decides how to surface them. */
-  function spawnZombie(room: RoomDef, start: Vec3, errs: string[]): ZombieActor {
+  function spawnEnemy(name: string, room: RoomDef, start: Vec3, errs: string[]): ZombieActor {
     const enc = enclosureOf(room.name)!;
     const roomFurniture = FURNITURE
       .filter(f => f.room === room.id)
@@ -1058,7 +1093,7 @@ async function main() {
     // point — the uniform stamping is the game's lighting and perf tuning,
     // not shared with a dev lab that lights its subject differently.
     const character = createCharacterView({
-      name: 'zombie',
+      name,
       start,
       renderer: handle.renderer,
       scene,
@@ -1111,10 +1146,23 @@ async function main() {
     view.uniforms.aaCfg.value.y = GAME_AA;
     view.uniforms.aaCfg.value.x = sdfLayer.pixelConeK;
     view.uniforms.levelShadowCfg.value.x = GAME_LEVEL_SHADOW;
-    view.setFaceTexture(faceTex, faceAtlas, ZOMBIE_FLAT.mean);
+    const face = name === 'zombie'
+      ? { tex: faceTex, atlas: faceAtlas, mean: ZOMBIE_FLAT.mean }
+      : faceFor(name);
+    view.setFaceTexture(face.tex, face.atlas, face.mean);
     view.uniforms.faceCfg.value.x = 1;
     view.uniforms.faceCfg.value.y = 1.0;
-    view.uniforms.faceProj.value.set(0.45, 0.58, 0.5, 0.56);
+    // The character's OWN projection when its .blob declares a sheet block;
+    // the zombie's hand-tuned default otherwise. Passing the zombie's numbers
+    // to a body with its own bake is what strips a character's face.
+    const sheet = name === 'zombie' ? null : compileCharacterSheet(characterEntry(name)).sheet;
+    if (sheet) {
+      view.uniforms.faceProj.value.set(
+        sheet.projScaleX, sheet.projScaleY, sheet.projCentreX, sheet.projCentreY,
+      );
+    } else {
+      view.uniforms.faceProj.value.set(0.45, 0.58, 0.5, 0.56);
+    }
     const skull = headShape(placed);
     if (skull) view.setHeadShape(skull.centre, skull.axes);
     // The room's enclosure: bounds + albedos, with the page's probeWeight.
@@ -1138,6 +1186,8 @@ async function main() {
     const zombieId = nextId++;
     const actor = createZombieActor({
       id: zombieId, room: room.id, body: placed, view, character, start,
+      ...(name === 'soldier' ? { mind: makeSoldierMind() } : {}),
+      profile: characterEntry(name).profile,
       seed: 1337 + nextId * 101,
       bounds: wanderBounds(room),
       furniture: roomFurniture,
@@ -1146,10 +1196,19 @@ async function main() {
     return actor;
   }
 
+  /** Which room the lone soldier holds.
+   *
+   *  ROOM 1, and it is the PLAYER'S START ROOM with exactly one spawn point —
+   *  so he stands alone in front of you the moment you boot, with no zombie
+   *  noise to read the state machine through. There is no ranged arbiter yet,
+   *  so a second soldier would shoot through the first. */
+  const SOLDIER_ROOM = 1;
+
   function spawnAll(errs: string[]): void {
     for (const room of ROOMS) {
       for (const start of spawnPoints(room)) {
-        actors.push(spawnZombie(room, start, errs));
+        const name = room.id === SOLDIER_ROOM ? 'soldier' : 'zombie';
+        actors.push(spawnEnemy(name, room, start, errs));
       }
     }
   }
@@ -2730,7 +2789,13 @@ async function main() {
       // this frame's verdict rather than last frame's.
       if (pInfo) {
         const claimants: RingClaimant[] = actors
-          .filter(a => a.brain().alert && a.brain().state !== 'idle')
+          // meleeCapable FIRST: the ring is the zombie's mechanism, and a
+          // soldier in 'advance'/'standoff' satisfies the alert+non-idle test
+          // while having no swing to throw. Submitting him would make him
+          // compete for a token AND be spaced at melee radius against the
+          // zombies, distorting their positioning.
+          .filter(a => a.mind().meleeCapable
+            && a.mind().debug().alert && a.mind().debug().state !== 'idle')
           .map(a => {
             const p = a.pose().pos;
             return {
@@ -2763,6 +2828,19 @@ async function main() {
       actors.forEach((a, i) => a.nudge(push[i]![0], push[i]![1]));
 
       for (const a of actors) a.step(dt);
+      // POLYGON HALVES RIDE THE RIG. Armour from per-bone frames, the gun from
+      // the motion frame's gun pose; collapse and gib release the gun while the
+      // kit keeps following the fallen rig. One call, because character-view
+      // owns all three — this is the block held soldier task 7 was going to
+      // hand-port out of lab-main for a fourth time.
+      //
+      // A no-op for the zombie: it has neither kit nor prop, and pose() returns
+      // immediately when both are absent.
+      for (const a of actors) {
+        if (!a.character) continue;
+        const p = a.pose();
+        a.character.pose(a.posed(), a.boundRig(), p.yaw, a.sinceFire(), a.motionFrame(), dt, a.id);
+      }
       const now = performance.now() / 1000;
       for (const a of actors) {
         a.view.setTime(now);
@@ -3491,11 +3569,11 @@ async function main() {
     zombies: () => actors.map(a => ({ id: a.id, room: a.room, ...a.pose() })),
     /** Per-actor brain readout — the crowd/AI capture driver's oracle. */
     brains: () => actors.map(a => {
-      const b = a.brain();
+      const b = a.mind().debug();
       const p = a.pose().pos;
       return {
         id: a.id, room: a.room, state: b.state, alert: b.alert,
-        swingT: b.swingT, side: b.swing.side, variant: b.swing.variant,
+        swingT: b.swingT, side: b.side, variant: b.variant,
         hasToken: a.debug().hasToken,
         dist: Math.hypot(p[0] - player.pos[0], p[2] - player.pos[2]),
         bearing: Math.atan2(p[0] - player.pos[0], p[2] - player.pos[2]),

@@ -724,7 +724,7 @@ describe('createZombieActor — the brain and the crowd', () => {
         // way game-main's arbitration will from task 6 on.
         a.setRingInput(true, 0);
         a.step(1 / 60);
-        sawSwing = a.brain().state === 'attack' && a.brain().swingT > 0;
+        sawSwing = a.mind().debug().state === 'attack' && a.mind().debug().swingT > 0;
       }
       expect(sawSwing).toBe(true);
     });
@@ -748,8 +748,8 @@ describe('createZombieActor — the ring wiring', () => {
     a.setBrainInput(near, false);
     a.setRingInput(true, 0);
     a.step(1 / 60);
-    expect(a.brain().alert).toBe(true);
-    expect(['engage', 'attack']).toContain(a.brain().state);
+    expect(a.mind().debug().alert).toBe(true);
+    expect(['engage', 'attack']).toContain(a.mind().debug().state);
     expect(a.engagedForCrowd()).toBe(true);
   });
 
@@ -758,7 +758,7 @@ describe('createZombieActor — the ring wiring', () => {
     a.setBrainInput(near, false);
     a.setRingInput(false, 1);
     a.step(1 / 60);
-    expect(a.brain().state).toBe('encircle');
+    expect(a.mind().debug().state).toBe('encircle');
     // A waiter takes the wide separation circle too. Measured 2026-09-05: the
     // pair actually interpenetrating in room 4 was an ATTACKER and a WAITER
     // (-0.051 m), so leaving waiters on the 0.35 m walking circle left the
@@ -775,7 +775,7 @@ describe('createZombieActor — the ring wiring', () => {
     a.setBrainInput(near, false);
     a.setRingInput(true, 0);
     a.step(1 / 60);
-    expect(a.brain().state).toBe('stagger');
+    expect(a.mind().debug().state).toBe('stagger');
     expect(a.committed()).toBe(false);
   });
 

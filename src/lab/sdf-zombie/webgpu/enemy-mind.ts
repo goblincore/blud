@@ -81,6 +81,22 @@ export interface MindDebug {
 }
 
 export interface EnemyMind {
+  /**
+   * Does this mind ever want a MELEE-RING token?
+   *
+   * WHY IT IS A FLAG AND NOT INFERRED FROM `state`. game-main picked melee
+   * claimants with `a.brain().alert && a.brain().state !== 'idle'` — a
+   * predicate that silently assumes every actor is a melee actor. A soldier in
+   * `advance` or `standoff` satisfies it, so he would be submitted to
+   * melee-ring.ts as a claimant: competing for a token to throw a swing he has
+   * no animation for, and being spaced against zombies at melee radius, which
+   * distorts THEIR positioning too.
+   *
+   * The ring is the zombie's mechanism. A mind should say whether it plays
+   * that game rather than have it guessed from a state name that happens to
+   * exist in both vocabularies.
+   */
+  readonly meleeCapable: boolean;
   step(input: MindInput): MindOutput;
   /** Force the stagger state NOW, on the frame the hit lands. */
   stagger(): void;
@@ -91,6 +107,7 @@ export function makeZombieMind(): EnemyMind {
   let brain: Brain = makeBrain();
   let lastToken = false;
   return {
+    meleeCapable: true,
     step(input) {
       lastToken = input.hasToken;
       const out = stepBrain(brain, {
@@ -132,6 +149,8 @@ export function makeSoldierMind(): EnemyMind {
   let brain: SoldierBrain = makeSoldierBrain();
   let aimT = 0;
   return {
+    // A rifleman never claims a melee token. See the interface note.
+    meleeCapable: false,
     step(input) {
       const out = stepSoldierBrain(brain, {
         dt: input.dt,

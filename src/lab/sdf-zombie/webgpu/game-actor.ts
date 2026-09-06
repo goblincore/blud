@@ -41,6 +41,7 @@ import { makeRng, type Rng, type WanderBounds } from '../wander';
 import type { BrainPlayer } from '../brain';
 import { makeZombieMind, type EnemyMind } from './enemy-mind';
 import type { MotionProfile } from '../motion-profile';
+import type { MotionFrame } from '../motion';
 import type { SwingVariant } from '../attack';
 import type { MissingLimbs } from '../collapse';
 import type { ZombieGpuView } from './zombie-gpu';
@@ -237,19 +238,14 @@ export interface ZombieActor {
   /** The decision layer — callers that must distinguish kinds, and the
    *  source of truth for every decision field this interface reports. */
   mind(): EnemyMind;
-  /** Live brain STATE, Brain-shaped — the debug seam and the capture
-   *  driver's oracle (__sdfGame.brains() reads state/alert/swingT and
-   *  swing.side/variant off it). A VIEW over the live mind's debug, not a
-   *  Brain: the state itself moved inside the mind, and keeping a second
-   *  copy would be exactly the drift the EnemyMind seam exists to kill.
-   *  Migration shim: game-main's kind task owns brains() and its callers
-   *  and deletes this. Do not grow callers. */
-  brain(): {
-    state: string;
-    alert: boolean;
-    swingT: number;
-    swing: { side: 'L' | 'R'; variant: string };
-  };
+  /** The LAST motion frame, or null before the first step. character-view's
+   *  pose() reads `gun` (the held prop's transform) and `collapsed` (release
+   *  the prop) off it — the whole frame rather than those two fields, so the
+   *  actor does not have to grow an accessor every time the prop needs one
+   *  more thing from motion. */
+  motionFrame: () => MotionFrame | null;
+  /** Seconds since this body last fired. Feeds the held prop's muzzle rise. */
+  sinceFire: () => number;
   /** This frame's melee-ring verdict for this body (melee-ring.ts). Set
    *  BEFORE step(), like setBrainInput. */
   setRingInput(hasToken: boolean, drift: -1 | 0 | 1): void;
@@ -892,6 +888,8 @@ export function createZombieActor(opts: {
     beginHits,
     endHits,
     posed: () => posed,
+    motionFrame: () => lastFrame,
+    sinceFire: () => state.sinceFire,
     boundRig: () => bound,
     pose: () => ({ pos: [...state.wander.pos] as Vec3, yaw: bodyYaw }),
     nudge,
@@ -901,15 +899,6 @@ export function createZombieActor(opts: {
       if (alerted) brainAlerted = true;
     },
     mind: () => mind,
-    brain: () => {
-      // The Brain-shaped VIEW the interface documents, built from the live
-      // mind's debug so there is no second state to drift.
-      const md = mind.debug();
-      return {
-        state: md.state, alert: md.alert, swingT: md.swingT,
-        swing: { side: md.side, variant: md.variant },
-      };
-    },
     setRingInput: (hasToken: boolean, drift: -1 | 0 | 1) => {
       ringToken = hasToken;
       ringDrift = drift;

@@ -7,11 +7,26 @@ import {
 
 const DT = 1 / 60;
 
+// DISTANCES DERIVE FROM THE TUNING, never literals.
+//
+// They were literals (5 = "in the band", 8 = "outside", 2 = "too close") and
+// every one of them rotted the moment the band was retuned from 3.5-6.0 to
+// 2.0-3.5 to fit room 1's 6.6 m of walkable floor: 15 tests failed, all of
+// them fixture arithmetic rather than behaviour. A test that encodes a tuning
+// value in a magic number is a test that breaks when the value is tuned, which
+// is the one thing tuning values are for.
+/** Comfortably inside the band. */
+const MID = (SOLDIER_TUNING.standoffNear + SOLDIER_TUNING.standoffFar) / 2;
+/** Comfortably outside it — he should close. */
+const FAR = SOLDIER_TUNING.standoffFar * 2;
+/** Comfortably inside standoffNear — he should back off. */
+const NEAR = SOLDIER_TUNING.standoffNear * 0.5;
+
 function input(over: Partial<SoldierInput> = {}): SoldierInput {
   return {
     dt: DT,
     self: { x: 0, z: 0, yaw: 0, room: 3 },   // facing +z
-    player: { x: 0, z: 5, room: 3 },          // straight ahead, in the band
+    player: { x: 0, z: MID, room: 3 },        // straight ahead, in the band
     alerted: false,
     roll: 1,        // 1 = never fire (refireRoll is 0.5)
     rollDrift: 0,
@@ -44,7 +59,7 @@ describe('stepSoldierBrain — perception', () => {
 
   it('does not notice a player behind it', () => {
     const out = stepSoldierBrain(makeSoldierBrain(), input({
-      player: { x: 0, z: -5, room: 3 },
+      player: { x: 0, z: -MID, room: 3 },
     }));
     expect(out.brain.alert).toBe(false);
     expect(out.brain.state).toBe('idle');
@@ -53,21 +68,21 @@ describe('stepSoldierBrain — perception', () => {
 
   it('does not notice a player in another room', () => {
     const out = stepSoldierBrain(makeSoldierBrain(), input({
-      player: { x: 0, z: 5, room: 9 },
+      player: { x: 0, z: MID, room: 9 },
     }));
     expect(out.brain.alert).toBe(false);
   });
 
   it('a gunshot in the room bypasses the notice cone', () => {
     const out = stepSoldierBrain(makeSoldierBrain(), input({
-      player: { x: 0, z: -5, room: 3 },
+      player: { x: 0, z: -MID, room: 3 },
       alerted: true,
     }));
     expect(out.brain.alert).toBe(true);
   });
 
   it('forgets the player after loseGrace out of the room', () => {
-    const out = run(alerted(), { player: { x: 0, z: 5, room: 9 } },
+    const out = run(alerted(), { player: { x: 0, z: MID, room: 9 } },
       SOLDIER_TUNING.loseGrace + 0.5);
     expect(out.brain.alert).toBe(false);
     expect(out.brain.state).toBe('idle');
@@ -77,16 +92,16 @@ describe('stepSoldierBrain — perception', () => {
 describe('stepSoldierBrain — the band', () => {
   it('advances when farther than standoffFar', () => {
     const out = stepSoldierBrain(alerted(), input({
-      player: { x: 0, z: 8, room: 3 },
+      player: { x: 0, z: FAR, room: 3 },
     }));
     expect(out.brain.state).toBe('advance');
-    expect(out.target).toEqual([0, 0, 8]);   // the player himself
+    expect(out.target).toEqual([0, 0, FAR]);   // the player himself
     expect(out.halt).toBe(false);
   });
 
   it('retreats when closer than standoffNear', () => {
     const out = stepSoldierBrain(alerted(), input({
-      player: { x: 0, z: 2, room: 3 },
+      player: { x: 0, z: NEAR, room: 3 },
     }));
     expect(out.brain.state).toBe('retreat');
     expect(out.halt).toBe(false);
@@ -97,7 +112,7 @@ describe('stepSoldierBrain — the band', () => {
 
   it('holds standoff inside the band', () => {
     const out = stepSoldierBrain(alerted(), input({
-      player: { x: 0, z: 5, room: 3 },
+      player: { x: 0, z: MID, room: 3 },
     }));
     expect(out.brain.state).toBe('standoff');
     expect(out.halt).toBe(false);
@@ -105,7 +120,7 @@ describe('stepSoldierBrain — the band', () => {
 
   it('hysteresis runs INWARD: advancing continues past standoffFar', () => {
     // Start him advancing from 8 m...
-    let b = stepSoldierBrain(alerted(), input({ player: { x: 0, z: 8, room: 3 } })).brain;
+    let b = stepSoldierBrain(alerted(), input({ player: { x: 0, z: FAR, room: 3 } })).brain;
     expect(b.state).toBe('advance');
     // ...then place him just inside standoffFar. He must NOT stop yet.
     const inside = SOLDIER_TUNING.standoffFar - SOLDIER_TUNING.bandHysteresis / 2;
@@ -118,7 +133,7 @@ describe('stepSoldierBrain — the band', () => {
   });
 
   it('hysteresis runs INWARD on the near edge too', () => {
-    let b = stepSoldierBrain(alerted(), input({ player: { x: 0, z: 2, room: 3 } })).brain;
+    let b = stepSoldierBrain(alerted(), input({ player: { x: 0, z: NEAR, room: 3 } })).brain;
     expect(b.state).toBe('retreat');
     const inside = SOLDIER_TUNING.standoffNear + SOLDIER_TUNING.bandHysteresis / 2;
     const out = stepSoldierBrain(b, input({ player: { x: 0, z: inside, room: 3 } }));
@@ -236,7 +251,7 @@ describe('stepSoldierBrain — the firing cycle', () => {
     const out = stepSoldierBrain(alerted(), input({ roll: 1 }));
     expect(out.brain.state).toBe('standoff');
     const t = out.target!;
-    const d = Math.hypot(t[0] - 0, t[2] - 5);
+    const d = Math.hypot(t[0] - 0, t[2] - MID);
     expect(d).toBeGreaterThanOrEqual(SOLDIER_TUNING.standoffNear - 1e-6);
     expect(d).toBeLessThanOrEqual(SOLDIER_TUNING.standoffFar + 1e-6);
     expect(Math.abs(t[0])).toBeGreaterThan(0);     // actually moved off-axis

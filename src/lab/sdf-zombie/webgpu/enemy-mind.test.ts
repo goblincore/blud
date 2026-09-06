@@ -1,6 +1,11 @@
 // src/lab/sdf-zombie/webgpu/enemy-mind.test.ts
 import { describe, it, expect } from 'vitest';
 import { makeZombieMind, makeSoldierMind, type MindInput } from './enemy-mind';
+import { SOLDIER_TUNING } from '../soldier-brain';
+
+/** Inside the soldier's band, derived so a retune cannot rot the fixture —
+ *  see soldier-brain.test.ts's note. Also inside the zombie's engageRange. */
+const MID = (SOLDIER_TUNING.standoffNear + SOLDIER_TUNING.standoffFar) / 2;
 
 const DT = 1 / 60;
 
@@ -8,7 +13,7 @@ function mindInput(over: Partial<MindInput> = {}): MindInput {
   return {
     dt: DT,
     self: { x: 0, z: 0, yaw: 0, room: 3 },
-    player: { x: 0, z: 5, room: 3 },
+    player: { x: 0, z: MID, room: 3 },
     alerted: false,
     hasToken: false,
     drift: 0,

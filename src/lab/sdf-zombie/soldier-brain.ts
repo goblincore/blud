@@ -100,16 +100,28 @@ export const SOLDIER_TUNING = {
   noticeCone: (70 * Math.PI) / 180,
   /** Alert survives this long after the player leaves the room (s). */
   loseGrace: 4,
-  /** Closer than this, back off (m). */
-  standoffNear: 3.5,
-  /** Farther than this, close in (m). */
-  standoffFar: 6.0,
+  /** Closer than this, back off (m).
+   *
+   *  SIZED TO THE ROOM, not picked freehand. Room 1 spans -8.8..-0.8 on both
+   *  axes (ROOM_HALF 4, BAND_HALF 0.8) = 8 m interior, and wanderBounds insets
+   *  0.7, leaving the body 6.6 x 6.6 m of walkable floor. The first values
+   *  here were 3.5 / 6.0, which put standoffFar at nearly the whole box: the
+   *  soldier sat against a wall whenever the player was not adjacent, so the
+   *  CORNERED case was his normal case and the retreat state had nowhere to go.
+   *
+   *  2.0 sits just outside the zombie's engageRange (2.6) and well clear of
+   *  its meleeRadius (1.25) — he backs out of melee reach without fleeing. */
+  standoffNear: 2.0,
+  /** Farther than this, close in (m). Roughly half the usable floor, so there
+   *  is real room behind him to retreat into, and a sawed-off still makes
+   *  sense at the range he holds. */
+  standoffFar: 3.5,
   /** Band hysteresis (m). THE EXIT THRESHOLD SITS INSIDE THE BAND: he starts
    *  advancing at dist > standoffFar but does not stop until
    *  dist <= standoffFar - this. An exit threshold OUTSIDE the band would
    *  make advance and retreat overlap and oscillate, which is the opposite
-   *  of the intent. At these values he settles in roughly 4.1–5.4 m. */
-  bandHysteresis: 0.6,
+   *  of the intent. At these values he settles in roughly 2.4–3.1 m. */
+  bandHysteresis: 0.4,
   /** The telegraph (s). Doom's shotgun guy has a distinct pre-fire frame and
    *  it is the only reason a sergeant is dodgeable; this is that frame. If
    *  the playtest says the soldier is unreadable, this is the first knob. */
