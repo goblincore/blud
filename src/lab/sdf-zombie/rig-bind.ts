@@ -232,28 +232,53 @@ export function bindRig(body: BuildResult): BoundRig {
   };
 
   // The rigid head frame: skull-owned prims ride ONE transform derived from
-  // the skull rig points, not per-endpoint nearest-joint binds. Membership is
-  // head-limb SPHERES (a === b at rest) — exactly the face prims face.ts
-  // emits. The neck-flesh capsule (a !== b, spanning chest→neck) deliberately
-  // stays per-endpoint: rigidly rotating it would tear its chest end loose.
-  // Spheres cannot shear, so per-endpoint binding is only ever WRONG for them
-  // in the sense of leaving them behind — the rigid pass exists so they
-  // rotate WITH the cranium instead.
+  // the skull rig points, not per-endpoint nearest-joint binds. The neck-flesh
+  // capsule (spanning chest→neck) deliberately stays per-endpoint: rigidly
+  // rotating it would tear its chest end loose.
+  //
+  // MEMBERSHIP IS SHAPE-BLIND, and was not (fixed 2026-09-06). The rule used
+  // to be head-limb SPHERES (a === b at rest), justified as "exactly the face
+  // prims face.ts emits" — true of face.ts, and false of every face authored
+  // in a .blob. The goblin's ears, hooked nose and lip blobs carry a `tip=`,
+  // so a !== b, so all four fell through to per-endpoint nearest-joint binds;
+  // when the skull rotated on the neck the cranium turned and the FACE DID
+  // NOT. The owner found it by eye ("the prims on the head/face don't move
+  // with the rest of the head", and "he looks fine if you turn movement off"),
+  // and ELEVEN of the sixteen shipped characters are affected — the ZOMBIE is
+  // one of the few that is not, which is why no gate saw it: he is what every
+  // capture in this repo renders.
+  //
+  // What actually distinguishes a face prim from the neck capsule is not its
+  // SHAPE but WHERE ITS ENDS LIVE: both of a face prim's ends sit on the skull
+  // segment, while the neck capsule has one end down at the chest. So a prim
+  // joins when both endpoints bind to a skull rig point. Spheres stay in
+  // unconditionally, exactly as before — that keeps the change ADDITIVE, so a
+  // body whose head prims are all spheres (the zombie, and every pixel
+  // baseline taken of him) is provably unmoved. See rig-bind.test.ts, which
+  // pins the zombie's rigid set to precisely his head spheres.
   const skull = body.bones.get('skull');
+  const skullPts = skull ? new Set([indexOf(skull.head), indexOf(skull.tail)]) : null;
+  /** Does this prim ride the ONE rigid head transform? Shared by the rigid
+   *  set built below and by boneFrames further down, which must agree with it
+   *  exactly — a bone prim posed BOTH rigidly and axially is posed twice. */
+  const ridesHead = (p: { limb: string; a: Vec3; b: Vec3 }): boolean =>
+    skullPts !== null
+    && p.limb === 'head'
+    && (len(sub(p.a, p.b)) < KEY_EPS
+      || (skullPts.has(bindEnd(p.a).point) && skullPts.has(bindEnd(p.b).point)));
   let head: HeadRigid | null = null;
   if (skull) {
     const pivot = indexOf(skull.head);
     const tip = indexOf(skull.tail);
     const prims = new Map<number, { a: Vec3; b: Vec3 }>();
     body.prims.forEach((p, i) => {
-      if (p.limb === 'head' && len(sub(p.a, p.b)) < KEY_EPS)
+      if (ridesHead(p))
         prims.set(i, { a: sub(p.a, positions[pivot]!), b: sub(p.b, positions[pivot]!) });
     });
-    // Bones follow the SAME membership rule as the face prims above — head-limb
-    // spheres ride the rigid frame, everything else stays per-endpoint.
+    // Bones follow the SAME membership rule as the face prims above.
     const bones = new Map<number, { a: Vec3; b: Vec3 }>();
     body.bonePrims.forEach((p, i) => {
-      if (p.limb === 'head' && len(sub(p.a, p.b)) < KEY_EPS)
+      if (ridesHead(p))
         bones.set(i, { a: sub(p.a, positions[pivot]!), b: sub(p.b, positions[pivot]!) });
     });
     if (prims.size > 0 || bones.size > 0) {
@@ -299,8 +324,11 @@ export function bindRig(body: BuildResult): BoundRig {
       const frames = new Map<number, BoneFrame>();
       body.bonePrims.forEach((p, i) => {
         if (p.limb !== 'torso' && p.limb !== 'head') return;
-        // Skull-owned spheres ride the rigid head instead.
-        if (p.limb === 'head' && len(sub(p.a, p.b)) < KEY_EPS && skull) return;
+        // Skull-owned prims ride the rigid head instead — SAME membership
+        // test as the rigid set above, not a second copy of it. This was a
+        // duplicated `a === b` shape check, and leaving it behind when the
+        // rigid rule widened would have posed the goblin's nose bone twice.
+        if (ridesHead(p)) return;
         const mid: Vec3 = [(p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2];
         const seg = nearestSeg(mid);
         if (!seg) return;

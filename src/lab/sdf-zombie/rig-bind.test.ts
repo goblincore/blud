@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { bindRig, applyRig, headQuatOf, pinTips, HEAD_RIGID_TUNING } from './rig-bind';
 import { IK_TUNING } from './ik';
 import { headingDir } from './wander';
+import goblinSrc from './characters/goblin.blob?raw';
 import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { ZOMBIE } from './body';
 import { stepRig } from './rig';
@@ -434,5 +435,88 @@ describe('rigid tips (hand tips and toes)', () => {
     const z = bindRig(buildBody(compileBlob(parseBlob(zombieSrc))));
     expect(z.tips).toEqual([]);
     expect(pinTips(z.rig.points, z.tips, 1)).toBe(z.rig.points);
+  });
+});
+
+/** bindRig's own nearest-joint rule, for asserting membership from outside:
+ *  the rig point closest to a world position. */
+function nearestRigPoint(bound: ReturnType<typeof bindRig>, p: Vec3): number {
+  let best = 0, bestD = Infinity;
+  bound.rig.points.forEach((q, i) => {
+    const d = len(sub(p, q.pos));
+    if (d < bestD) { bestD = d; best = i; }
+  });
+  return best;
+}
+
+describe('applyRig — rigid head membership is SHAPE-BLIND (2026-09-06)', () => {
+  // THE BUG THE OWNER FOUND BY EYE: "the prims on the head/face don't move
+  // with the rest of the head."
+  //
+  // Membership in the rigid head frame was `limb === 'head' && a === b` —
+  // head-limb SPHERES only — justified as "exactly the face prims face.ts
+  // emits". That is true of face.ts. It is NOT true of a face authored in a
+  // .blob: the goblin's ears, hooked nose and lip blobs carry a `tip=`, so
+  // a !== b, so every one of them fell through to per-endpoint nearest-joint
+  // binding. When the skull then rotated on the neck, the cranium turned and
+  // the face did not — it slid off, which is exactly what the goblin looks
+  // like in motion and exactly why he "looks fine if you turn movement off".
+  //
+  // ELEVEN of the sixteen shipped characters have head prims with a tip
+  // (goblin, both clowns, all three schoolgirls, mouse, dragon, minotaur,
+  // bonewalker, strand-fixture). The ZOMBIE has none — his only non-sphere
+  // head prim is the neck bar, which must keep binding per-endpoint — which
+  // is why nothing caught this: he is what every gate and every capture
+  // renders.
+  const goblin = () => buildBody(compileBlob(parseBlob(goblinSrc)));
+
+  it('a non-sphere face prim sitting ON THE SKULL rides the rigid head', () => {
+    const body = goblin();
+    const bound = bindRig(body);
+    expect(bound.head).not.toBeNull();
+
+    // Every head-limb prim whose endpoints both sit on the skull segment,
+    // whatever its shape. The nose and the ears are capsules; before the fix
+    // the rigid set held only the spheres and these were absent.
+    const shaped = body.prims
+      .map((p, i) => ({ p, i }))
+      .filter(({ p }) => p.limb === 'head' && len(sub(p.a, p.b)) >= 1e-9);
+    expect(shaped.length, 'goblin.blob authors non-sphere head prims').toBeGreaterThan(0);
+
+    const skullPts = new Set([bound.head!.pivot, bound.head!.tip]);
+    const onSkull = shaped.filter(({ p }) =>
+      skullPts.has(nearestRigPoint(bound, p.a)) && skullPts.has(nearestRigPoint(bound, p.b)));
+    expect(onSkull.length, 'the nose/ears/lips are skull-owned').toBeGreaterThan(0);
+
+    for (const { i } of onSkull)
+      expect(bound.head!.prims.has(i), `prim ${i} left behind by the rigid head`).toBe(true);
+  });
+
+  it('the neck capsule STILL binds per-endpoint — it spans off the skull', () => {
+    // The one non-sphere head-limb prim that must NOT join: rigidly rotating
+    // a capsule that runs chest→neck tears its chest end loose.
+    const body = goblin();
+    const bound = bindRig(body);
+    const skullPts = new Set([bound.head!.pivot, bound.head!.tip]);
+    const spanning = body.prims
+      .map((p, i) => ({ p, i }))
+      .filter(({ p }) => p.limb === 'head' && len(sub(p.a, p.b)) >= 1e-9)
+      .filter(({ p }) =>
+        !skullPts.has(nearestRigPoint(bound, p.a)) || !skullPts.has(nearestRigPoint(bound, p.b)));
+    for (const { i } of spanning)
+      expect(bound.head!.prims.has(i), `spanning prim ${i} must stay per-endpoint`).toBe(false);
+  });
+
+  it('THE ZOMBIE IS UNTOUCHED — his rigid set is exactly his head spheres', () => {
+    // The change is additive by construction, and this pins it: if the
+    // zombie's rigid membership ever moves, every pixel baseline in the repo
+    // is invalidated at once and the reason must be deliberate.
+    const body = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
+    const bound = bindRig(body);
+    const spheres = body.prims
+      .map((p, i) => ({ p, i }))
+      .filter(({ p }) => p.limb === 'head' && len(sub(p.a, p.b)) < 1e-9)
+      .map(({ i }) => i);
+    expect([...bound.head!.prims.keys()].sort((a, b) => a - b)).toEqual(spheres);
   });
 });
