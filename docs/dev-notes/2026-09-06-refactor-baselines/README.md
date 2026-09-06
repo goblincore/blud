@@ -46,3 +46,31 @@ live CDP WebSocket keeps node's event loop alive. Any loop over it hangs on the
 first iteration, looking exactly like a slow capture. The result is complete
 before the hang, so a per-run `timeout` is the correct harness and **`rc=124`
 is the success path**.
+
+## Game gates (added 2026-09-06, after the slug fix)
+
+`GAME-GATES` records the four `sdf-game-*-gate.mjs` verdicts. Re-run with:
+
+```bash
+scripts/game-gate-baseline.sh /tmp/after-task-N
+diff docs/dev-notes/2026-09-06-refactor-baselines/GAME-GATES /tmp/after-task-N/VERDICTS
+```
+
+**These are THRESHOLD gates, not hash gates.** Unlike the lab captures, the
+game is not reproducible byte-for-byte across runs — bodies wander, so a
+target's position differs run to run (measured: `-4.67,-4.85` vs
+`-4.79,-4.81` on two runs of identical code). **Compare the verdicts, never
+the numbers.**
+
+Why this exists: every task in the plan says "the four game gates unmoved",
+but "unmoved from what" was never recorded — so the first failure (slug) was
+unattributable and cost a checkout of the previous commit plus a full re-run
+to learn it had been red all along.
+
+**The bleed gate rewrites tracked files.** It re-captures its evidence PNGs
+into `docs/dev-notes/2026-08-31-bleeding-wounds/` on every run, leaving ten
+modified files. `game-gate-baseline.sh` restores them; if you run that gate by
+hand, `git checkout --` that directory or you will commit them by accident.
+
+Argument shapes differ per gate and are NOT interchangeable — `bleed` takes a
+MODE first (`parity|reel|bench`); passing it a port yields "unknown mode".
