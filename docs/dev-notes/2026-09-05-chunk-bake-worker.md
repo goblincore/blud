@@ -26,8 +26,8 @@ failure leaves SDF rendering active and exposes `chunkStats().bakeError`.
   real severed-piece baking, baked-piece hits and six recycling cycles pass;
   25 total bakes, at most twelve views. No comparison to a separate baseline
   server was requested by this invocation.
-- Scoped follow-up review found no remaining issues. Owner visual/playthrough
-  verification was followed by owner authorization to publish on main.
+- Scoped follow-up review found no remaining issues. The owner authorized
+  publication on main; a separate detailed playthrough verdict was not recorded.
 
 ## Manual check
 
@@ -38,3 +38,27 @@ disappearing pieces or visible jumps during the mesh swap.
 This addresses detached-piece CPU bake stalls. It does not establish the cause
 of the one-off 4.373-second freeze or fix the separate cached-wound raymarch
 failure on the zoned-wounds experimental branch.
+
+## Wrap-up — 2026-09-06
+
+Implementation committed on local main as `4049547`. Before committing,
+TypeScript passed and the complete Vitest suite passed: 211 files, 3,466 tests.
+The first sandboxed suite run could not open tsx IPC sockets; rerunning with
+local IPC access resolved all eleven CLI test failures.
+
+**Remote publication remains pending.** Automatic approval review rejected
+`git push origin main` because the payload also includes the two pre-existing
+local commits `386e028` (hair wind motion) and `b78bca2` (task notes), and it
+requires explicit approval for the complete payload and destination
+`https://github.com/goblincore/blud.git`. No push occurred. The owner then asked
+to wrap up and update notes; do not interpret that as the requested explicit
+push approval. Recheck branch/remote state before any later publication.
+
+The isolated headless test browser was stopped. The development server on
+port 5173 was left running for manual checks. Unrelated reference-asset changes
+were left untouched.
+
+Separate follow-up: the cached wound visual corrections remain on
+`codex/zoned-wounds-visual-fix`; cached ray convergence still needs investigation
+before another visual/performance verdict. The analytic-normal GPU timing work
+also remains outstanding. Neither is part of this worker commit.
