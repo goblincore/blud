@@ -180,6 +180,7 @@ interface DeferredLabControls {
   ready: boolean;
   setMode(mode: 'legacy'|'deferred'): void;
   setSdfScale(scale: number): void;
+  setResolution(width: number, height: number): void;
   setDebugView(view: 'lit'|'albedo'|'normal'|'depth'|'material'): void;
   setLightCount(count: number): void;
   setLightTime(seconds: number): void; // deterministic positions, no camera/body change
@@ -192,7 +193,7 @@ interface DeferredLabControls {
 }
 ```
 
-- [ ] **Step 1: Build the fixture from production components.** Use `createLabRenderer`, `buildBody` with the existing authored zombie (see `lab-main.ts`), `FLESH_PRESETS`, and `stoneTextures` for a room/floor/pillar. Do not substitute analytic sphere SDFs or flat mesh colors. A stable torso wound should visibly expose depth/tissue. Create separate legacy/surface views from identical body data and parameters; only render the selected one. Use `createSdfLayer` in legacy mode so it honors the same SDF scale. Legacy mesh lights mirror the shared light list; label SDF legacy's limited light support in measurements. Avoid game actors/AI/physics and unrelated asset dependencies in this fixture.
+- [ ] **Step 1: Build the fixture from production components.** Use `createLabRenderer(mount, { mode: 'fixed', width: 800, height: 600 })`, `buildBody` with the existing authored zombie (see `lab-main.ts`), `FLESH_PRESETS`, and `stoneTextures` for a room/floor/pillar. Derive producer sizes from this internal buffer, never CSS/device pixel ratio. Test window resize as presentation-only, and explicit `setResolution(640,480)` then `setResolution(800,600)` as target reallocation. Do not substitute analytic sphere SDFs or flat mesh colors. A stable torso wound should visibly expose depth/tissue. Create separate legacy/surface views from identical body data and parameters; only render the selected one. Use `createSdfLayer` in legacy mode so it honors the same SDF scale. Legacy mesh lights mirror the shared light list; label SDF legacy's limited light support in measurements. Avoid game actors/AI/physics and unrelated asset dependencies in this fixture.
 
 - [ ] **Step 2: Add page/build entry and controls.** Add `sdfDeferred: resolve(__dirname, 'sdf-deferred.html')` to Vite build inputs. Handle `mode=legacy|deferred`, visible mode/scale/debug/light controls, and the API above. Use fixed camera/body poses and deterministic light placement. `step` must render actual frames and resolve GPU work before readbacks; readiness is true only after both modes compile successfully. Add unload disposal, explicit resize handling, and clear errors in the page.
 

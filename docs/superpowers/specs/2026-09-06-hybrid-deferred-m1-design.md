@@ -49,6 +49,8 @@ New page: `sdf-deferred.html`. Query `mode=legacy|deferred` selects a mode; lega
 
 Expose `window.__deferredLab` with mode/scale/light/debug controls, readiness, deterministic stepping, diagnostics, and bounded timing sampling. Debug views: lit, albedo, normal, depth, material. Visible controls should use those names; keep technical diagnostics in the debug API/report.
 
+Use an explicit fixed 800x600 internal `RenderCap`, matching the current game's default, for both comparison modes. Window resize changes CSS presentation only; buffer reallocation is tested separately through `setResolution(width,height)` (800x600 -> 640x480 -> 800x600). Derive SDF target sizes from the internal buffer and SDF scale, not CSS pixels or device pixel ratio.
+
 All owned targets/materials/geometry are disposed. Resize reallocates both producer targets and resolve/output targets, invalidates stale contents, and clears them before sampling. Restore renderer target/MRT/clear settings and camera layers even on errors. Do not sample a texture while writing it. Explicitly validate target/canvas orientation and clip-space conventions with asymmetric geometry.
 
 ## Lighting and shadows
