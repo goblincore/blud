@@ -1,5 +1,9 @@
 # Analytic normals: current-main integration and manual playtest
 
+**Published:** main and origin/main received `a68a217` on 2026-09-06 after the owner passed the integrated playtest. Hybrid analytic normals are now the game default. See [session handoff](../2026-09-06-sdf-session-handoff.md) for current state and next work. The preparation notes below retain their historical state.
+
+## Preparation checkpoint
+
 2026-09-06. Candidate branch `codex/zombie-analytic-normals`, integration commit `eb6e61d`, includes main `2c3a3da`. Main has not received this feature. The new dev-only `?normal-playtest` panel starts hybrid analytic normals with automatic fallback; N or the button toggles original normals. Ordinary game default remains original.
 
 Manual URL: http://127.0.0.1:5251/sdf-game.html?slug&normal-playtest
