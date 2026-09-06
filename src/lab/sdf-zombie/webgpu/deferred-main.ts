@@ -921,18 +921,21 @@ async function main() {
   }
 
   // ---- readiness: BOTH modes must compile before ready flips -----------------
+  // setMode mutates `mode`; the warmup below would otherwise leave the page
+  // stuck in legacy regardless of the requested/default mode.
+  const requestedMode = mode;
   try {
     api.setMode('deferred');
     await api.step(2);
     api.setMode('legacy');
     await api.step(2);
-    api.setMode(mode);
+    api.setMode(requestedMode);
     await api.step(1);
     await new Promise((r) => setTimeout(r, 250)); // let async shader errors land
     if (errors.length > 0) throw new Error(`compile errors: ${errors.join('; ')}`);
     ready = true;
     if (statusEl) {
-      statusEl.textContent = `ready — ${handle.backend} ${FIXED_W}x${FIXED_H} — mode ${mode}`;
+      statusEl.textContent = `ready — ${handle.backend} ${FIXED_W}x${FIXED_H} — mode ${requestedMode}`;
     }
   } catch (e) {
     recordError(`init: ${e instanceof Error ? e.message : String(e)}`);
