@@ -43,6 +43,10 @@ import type { FaceSheetParams } from '../blob-face-sheet';
 import { loadKit, type KitOverlay } from './kit-overlay';
 import { loadHeldProp, type HeldProp } from './held-prop';
 import { createZombieGpuView, type ZombieGpuView } from './zombie-gpu';
+import {
+  MAX_WOUNDS, pushWound, WOUND_PROFILES, woundCarveNormal, woundWorldPos,
+  type Wound, type WoundType,
+} from '../damage';
 
 // ---------------------------------------------------------------------------
 // The build step
@@ -232,8 +236,116 @@ export function compileCharacterSheet(entry: CharacterEntry): CharacterSheet {
 // The factory
 // ---------------------------------------------------------------------------
 
+
+// ---------------------------------------------------------------------------
+// The wound ring (task 4b)
+//
+// WHAT MOVED, AND WHAT DID NOT. The owner's call was the SMALLEST boundary:
+// character-view owns the wound DATA and the carve UPLOAD; the reaction to a
+// hit stays with each caller. That is not a compromise, it is what the code
+// allows — `impulseAt` mutates the rig, `mind.stagger()` is behaviour, and
+// `flushHitTail` (runSeverChecks -> applyRig -> view.update -> setHeadRotation)
+// is rig work from end to end. All of that is state the CALLER owns, so
+// dragging it in here would mean dragging the rig in with it.
+//
+// CONSEQUENCE, STATED SO NOBODY IS SURPRISED: the lab converges onto the
+// game's carve-normal upload (it had ZERO references to woundCarveNormal), but
+// NOT onto the hit batching, because batching defers the rig re-solve rather
+// than the wound upload. Closing that gap means moving the rig here too.
+//
+// A FACTORY, not fields on CharacterView, because game-actor's `character` is
+// OPTIONAL — eight test call sites and hull-spike-main build actors from a
+// bare body and view. Those get their own ring from this same factory, so
+// there is ONE implementation of the ring regardless of who owns it. That is
+// the whole point: the drift this module exists to kill came from two
+// hand-written copies of the same sequence.
+// ---------------------------------------------------------------------------
+
+/** Wound-type ids the shader expects — the mapping lab-main and game-actor
+ *  each declared as their own TYPE_ID const. */
+const TYPE_ID: Record<WoundType, number> = { pellet: 0, blast: 1, burn: 2 };
+
+export interface WoundRing {
+  /** The live ring, oldest evicted at MAX_WOUNDS. */
+  all(): readonly Wound[];
+  /**
+   * Push a freshly stamped wound and record where it was placed.
+   * `posed` and `bodyYaw` are the pose it was stamped against — the caller
+   * owns those, so it passes them in.
+   */
+  stamp(wound: Wound, posed: BuildResult, bodyYaw: number): Wound;
+  /** Push a bundle with no stamp-time record (resolveExplosion's blast
+   *  wounds arrive already resolved against a posed body). */
+  stampBundle(wounds: readonly Wound[]): void;
+  /**
+   * Where `wound` was placed AT STAMP TIME, before any recoil moved the body.
+   *
+   * `woundWorldPos` reconstructs from the CURRENT pose, which is right for
+   * rendering — a crater must ride the flesh it is carved into — and wrong for
+   * asking "did this land where the shot hit?", because a hit shoves the rig
+   * by IMPULSE[type] METRES (0.18 for a slug). sdf-game-slug-gate.mjs made
+   * exactly that mistake and read 18.3 cm of "placement error" that was
+   * entirely recoil. DIAGNOSTIC ONLY — never render from this.
+   */
+  stampWorldOf(wound: Wound): Vec3 | null;
+  /**
+   * Upload the carve rows: the surface anchor (the shader's sphere centre)
+   * plus the per-wound depth-slab cap, which clips the sphere so a crater on
+   * thin flesh floors before it perforates.
+   *
+   * THE WOUND FRAME IS THE BODY FRAME (2026-09-02, the billboarding fix).
+   * Wounds are stamped on applyRig output WITH the live bodyYaw and uploaded
+   * from the posed prims WITH the live bodyYaw. damage.ts uses the yaw to pick
+   * a canonical BODY-FRAME basis (de-yaw the prim axis, build, re-yaw), so
+   * `local` comes out in the body frame and the frame turns with the flesh.
+   * Without it every SPHERE prim — all four torso blobs, the shoulder balls —
+   * has no axis to carry the turn and its crater stays viewer-fixed while the
+   * body rotates under it (the owner's back-wound-rotates-to-the-front
+   * report). Head wounds ride the orient quat and were fine; limb capsules
+   * carry it in their axis.
+   */
+  refresh(gpu: ZombieGpuView, posed: BuildResult, bodyYaw: number): void;
+  /** Replace the ring wholesale — the sever path rebuilds it. */
+  set(wounds: Wound[]): void;
+}
+
+export function createWoundRing(): WoundRing {
+  let wounds: Wound[] = [];
+  const stampWorld = new WeakMap<Wound, Vec3>();
+  return {
+    all: () => wounds,
+    stamp(wound, posed, bodyYaw) {
+      wounds = pushWound(wounds, wound, MAX_WOUNDS);
+      stampWorld.set(wound, woundWorldPos(posed.prims, wound, bodyYaw));
+      return wound;
+    },
+    stampBundle(ws) {
+      for (const w of ws) wounds = pushWound(wounds, w, MAX_WOUNDS);
+    },
+    stampWorldOf: (w) => stampWorld.get(w) ?? null,
+    set(next) { wounds = next; },
+    refresh(gpu, posed, bodyYaw) {
+      if (wounds.length === 0 || typeof gpu.setWounds !== 'function') return;
+      gpu.setWounds(
+        wounds.map(w => woundWorldPos(posed.prims, w, bodyYaw)),
+        wounds.map(w => w.radius),
+        wounds.map(w => TYPE_ID[w.type]),
+        wounds.map(w => w.ageSec),
+        wounds.map(w => WOUND_PROFILES[w.type].rimSplayScale * (w.rimScale ?? 1)),
+        wounds.map(w => WOUND_PROFILES[w.type].rimOffsetScale),
+        wounds.map(w => {
+          const n = woundCarveNormal(posed.prims, w, bodyYaw);
+          return n ? { n, depth: w.carveDepth ?? 0 } : null;
+        }),
+      );
+    },
+  };
+}
+
 export interface CharacterView {
   readonly entry: CharacterEntry;
+  /** This body's wounds and their carve upload. */
+  readonly wounds: WoundRing;
   /** The built, translated body. Severing replaces it (task 4); the lab's
    *  rebuild swaps the body under a live view, so per-frame calls take the
    *  caller's current body rather than trusting this field. */
@@ -349,6 +461,7 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
     entry,
     body,
     gpu,
+    wounds: createWoundRing(),
     get palette() { return out.palette; },
     get kit() { return kit; },
     get prop() { return heldProp; },

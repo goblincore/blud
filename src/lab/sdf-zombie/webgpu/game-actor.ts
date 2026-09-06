@@ -44,7 +44,7 @@ import type { MotionProfile } from '../motion-profile';
 import type { SwingVariant } from '../attack';
 import type { MissingLimbs } from '../collapse';
 import type { ZombieGpuView } from './zombie-gpu';
-import type { CharacterView } from './character-view';
+import { createWoundRing, type CharacterView } from './character-view';
 import type { Aabb } from './game-level';
 
 /** Signals for an undamaged wanderer — every frame, verbatim. */
@@ -395,7 +395,13 @@ export function createZombieActor(opts: {
   let bodyYaw = 0;
 
   // ---- damage state -------------------------------------------------------
-  let wounds: Wound[] = [];
+  /** THE shared wound ring (character-view.ts). The character's own when the
+   *  caller supplied one, otherwise a private one from the same factory — so
+   *  the eight test call sites and hull-spike-main, which build actors from a
+   *  bare body and view, run the SAME ring implementation the game does.
+   *  One implementation, whoever owns it: the drift this refactor exists to
+   *  kill came from two hand-written copies of the same sequence. */
+  const woundRing = opts.character?.wounds ?? createWoundRing();
   const pendingWounds: Wound[] = [];
   const pendingSevered: LimbId[] = [];
   let pendingShot: MotionSignals['shot'] = null;
@@ -437,7 +443,7 @@ export function createZombieActor(opts: {
 
   function woundedLimbs() {
     const w = { armL: false, armR: false, legL: false, legR: false };
-    for (const wound of wounds) {
+    for (const wound of woundRing.all()) {
       const prim = current.prims[wound.primIdx];
       if (!prim) continue;
       if ((prim.limb === 'armL' || prim.limb === 'armR'
@@ -479,19 +485,11 @@ export function createZombieActor(opts: {
    *  stamp at 0. Stamp(posed, θ) / upload(posed, θ) / resolve(rest, 0): one
    *  frame, three views of it. Same wiring as webgpu/lab-main's hero. */
   function refreshWounds() {
-    if (wounds.length === 0 || typeof view.setWounds !== 'function') return;
-    view.setWounds(
-      wounds.map(w => woundWorldPos(posed.prims, w, bodyYaw)),
-      wounds.map(w => w.radius),
-      wounds.map(w => TYPE_ID[w.type]),
-      wounds.map(w => w.ageSec),
-      wounds.map(w => WOUND_PROFILES[w.type].rimSplayScale * (w.rimScale ?? 1)),
-      wounds.map(w => WOUND_PROFILES[w.type].rimOffsetScale),
-      wounds.map(w => {
-        const n = woundCarveNormal(posed.prims, w, bodyYaw);
-        return n ? { n, depth: w.carveDepth ?? 0 } : null;
-      }),
-    );
+    // The upload lives on the ring now (character-view.ts), so the lab and the
+    // game push identical carve rows — including the depth-slab normals the
+    // lab had ZERO references to before this. The pose is ours to supply: the
+    // ring owns the wound DATA, the caller owns the rig it is stamped against.
+    woundRing.refresh(view, posed, bodyYaw);
   }
 
   /** Re-binds after a body edit, carrying live rig points across (bones are
@@ -528,7 +526,7 @@ export function createZombieActor(opts: {
     const t = fitRestToPose(restPts, posedPts);
     current = r.body;
     if (r.stumpWound) {
-      wounds = pushWound(wounds, r.stumpWound, MAX_WOUNDS);
+      woundRing.stamp(r.stumpWound, posed, bodyYaw);
       pendingWounds.push(r.stumpWound);
     }
     pendingSevered.push(limb);
@@ -547,11 +545,11 @@ export function createZombieActor(opts: {
 
   function runSeverChecks() {
     const torsoC = current.clusters.find(c => c.limb === 'torso')?.center ?? [0, 1.1, 0] as Vec3;
-    const fullCuts = cutLimbs(current, wounds, torsoC);
+    const fullCuts = cutLimbs(current, [...woundRing.all()], torsoC);
     for (const limb of fullCuts) {
       detach(limb, severLimb(current, limb));
     }
-    for (const cut of cutChains(current, wounds)) {
+    for (const cut of cutChains(current, [...woundRing.all()])) {
       if (fullCuts.includes(cut.limb)) continue;
       detach(cut.limb, severDistal(current, cut));
     }
@@ -744,8 +742,8 @@ export function createZombieActor(opts: {
     pendingSevered.length = 0;
     // Wound wobble decays — the spike chain's known gap (never advanced
     // ageSec), closed here so craters settle instead of bulging forever.
-    if (wounds.length) {
-      wounds = wounds.map(w => ({ ...w, ageSec: w.ageSec + dt }));
+    if (woundRing.all().length) {
+      woundRing.set(woundRing.all().map(w => ({ ...w, ageSec: w.ageSec + dt })));
     }
     posed = applyRig(current, bound, bodyYaw);
     view.update(posed, current);
@@ -804,13 +802,13 @@ export function createZombieActor(opts: {
   }
 
   function stampBlast(blastWounds: readonly Wound[]): void {
-    for (const w of blastWounds) {
-      // The caller must have resolved these with this actor's pose().yaw
-      // (ExplosionBody.bodyYaw) so they sit in the body frame like every
-      // other wound in the ring — see refreshWounds.
-      wounds = pushWound(wounds, w, MAX_WOUNDS);
-      pendingWounds.push(w);
-    }
+    // The caller must have resolved these with this actor's pose().yaw
+    // (ExplosionBody.bodyYaw) so they sit in the body frame like every other
+    // wound in the ring — see refreshWounds. No stamp-time record: these
+    // arrive already resolved against a posed body, with no single impact
+    // point to anchor to.
+    woundRing.stampBundle(blastWounds);
+    for (const w of blastWounds) pendingWounds.push(w);
     if (blastWounds.length === 0) return;
     posed = applyRig(current, bound, bodyYaw);
     view.update(posed, current);
@@ -838,35 +836,13 @@ export function createZombieActor(opts: {
     if (hitPending) { hitPending = false; flushHitTail(); }
   }
 
-  /**
-   * Where each wound was placed AT STAMP TIME — before the recoil shove below
-   * moved the body out from under it.
-   *
-   * WHY IT EXISTS. `woundWorldPos` reconstructs a wound's position from the
-   * CURRENT pose, which is right for rendering (a crater rides the flesh it is
-   * carved into) and wrong for asking "did this land where the shot hit?".
-   * applyProjectileHit stamps, then `impulseAt` TRANSLATES the nearest rig
-   * point by IMPULSE[type] METRES — 0.18 for a slug's blast profile. So a
-   * caller comparing the live position against the pre-shot prediction
-   * measures the recoil, not the placement, and reads ~18 cm of "error" that
-   * is really the body being knocked back.
-   *
-   * That is exactly what sdf-game-slug-gate.mjs was doing: it failed at
-   * 18.3 cm against a 3 cm tolerance for as long as the slug shove has been
-   * blast-scaled, and nobody saw it because the gate needs a vite server and
-   * headless Chrome and never runs under `npm test`. The crater was always
-   * placed correctly.
-   *
-   * WeakMap so an entry dies with the wound the ring buffer evicts.
-   */
-  const stampWorld = new WeakMap<Wound, Vec3>();
 
   function applyProjectileHit(wound: Wound, hitWorld: Vec3, dirWorld: Vec3): Wound {
     const field = posed;
-    wounds = pushWound(wounds, wound, MAX_WOUNDS);
-    // BEFORE the impulse below, and before flushHitTail re-solves the pose:
-    // this is the placement, uncontaminated by the reaction to it.
-    stampWorld.set(wound, woundWorldPos(field.prims, wound, bodyYaw));
+    // stamp() records the pre-impulse position for us — BEFORE the shove
+    // below and before flushHitTail re-solves the pose, so it is the
+    // placement, uncontaminated by the reaction to it.
+    woundRing.stamp(wound, field, bodyYaw);
     pendingWounds.push(wound);
     pendingShot = {
       type: wound.type,
@@ -944,8 +920,8 @@ export function createZombieActor(opts: {
     engagedForCrowd: () => lastEngaged,
     committed: () => lastCommitted,
     step,
-    wounds: () => wounds,
-    stampWorldOf: (w: Wound) => stampWorld.get(w) ?? null,
+    wounds: () => woundRing.all(),
+    stampWorldOf: (w: Wound) => woundRing.stampWorldOf(w),
     debug: () => lastDebug ?? {
       holdSecs: mind.debug().holdSecs, knockV, phase: 'standing', meter: 0,
       blend: 0, speed: 0,
