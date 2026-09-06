@@ -47,21 +47,33 @@ CAP_TIMEOUT="${CAP_TIMEOUT:-240}"
 # (label, CROWD, YAW, PITCH, DIST) — several camera angles and crowd sizes so
 # a regression confined to one view cannot hide. Single body first: it is the
 # most sensitive to a body/material change and the fastest to read.
+# label CROWD YAW PITCH DIST WOUNDS
+#
+# THE WOUNDED VIEWS ARE NOT OPTIONAL (added 2026-09-06). Without them this gate
+# is blind to the ENTIRE wound path — crowd-capture never fires a weapon, so
+# the five original views contain no craters at all. A refactor touching wound
+# code could pass byte-identically while changing every crater on screen, which
+# is precisely what happened when the lab converged onto the shared carve
+# upload: five identical hashes, and a real behaviour change invisible to all
+# of them.
 CAPTURES=(
-  "solo-front 0 0.6 0.12 2.4"
-  "solo-side  0 1.9 0.10 2.4"
-  "solo-close 0 0.6 0.30 1.4"
-  "crowd6     6 0.6 0.12 2.4"
-  "crowd6-wide 6 0.6 0.05 4.0"
+  "solo-front  0 0.6 0.12 2.4 0"
+  "solo-side   0 1.9 0.10 2.4 0"
+  "solo-close  0 0.6 0.30 1.4 0"
+  "crowd6      6 0.6 0.12 2.4 0"
+  "crowd6-wide 6 0.6 0.05 4.0 0"
+  "wound-front 0 0.6 0.12 2.4 6"
+  "wound-close 0 0.6 0.30 1.4 6"
+  "wound-side  0 1.9 0.10 2.4 6"
 )
 
 fails=0
 for row in "${CAPTURES[@]}"; do
-  read -r label crowd yaw pitch dist <<< "$row"
+  read -r label crowd yaw pitch dist wounds <<< "$row"
   png="$OUT/$label.png"
-  echo "[baseline] $label (crowd=$crowd yaw=$yaw pitch=$pitch dist=$dist)"
+  echo "[baseline] $label (crowd=$crowd yaw=$yaw pitch=$pitch dist=$dist wounds=$wounds)"
   timeout "$CAP_TIMEOUT" env \
-    CROWD="$crowd" YAW="$yaw" PITCH="$pitch" DIST="$dist" MOTION=off \
+    CROWD="$crowd" YAW="$yaw" PITCH="$pitch" DIST="$dist" MOTION=off WOUNDS="$wounds" \
     node scripts/crowd-capture.mjs "$LAB_VITE_PORT" "$LAB_CDP_PORT" "$png" \
     </dev/null > "$OUT/$label.json" 2>&1
   rc=$?

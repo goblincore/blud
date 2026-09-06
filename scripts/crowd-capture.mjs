@@ -31,6 +31,18 @@ const DIST = Number(process.env.DIST ?? 2.4);
 const MOTION = process.env.MOTION ?? 'off';
 const SETTLE_MS = Number(process.env.SETTLE_MS ?? 2500);
 const BENCH = process.env.BENCH === '1';
+// WOUNDS: stamp N blast craters on the torso before capturing. Default 0 =
+// today's behaviour, byte-for-byte.
+//
+// WHY IT WAS ADDED (2026-09-06). This script's header says it "shoots", and
+// the loop below is commented "three shots" — but those are three
+// Page.captureScreenshot calls. NOTHING here ever fired a weapon or stamped a
+// wound, so every pixel-identity verdict this script has ever given was blind
+// to the entire wound path: carve spheres, rim splay, depth-slab caps, ageing.
+// A refactor moving wound code could pass this gate byte-identically while
+// changing every crater on screen, which is exactly what nearly happened when
+// the lab converged onto the shared carve upload.
+const WOUNDS = Number(process.env.WOUNDS ?? 0);
 
 import { writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -129,6 +141,13 @@ if (MOTION !== 'on') {
   await evaluate('window.__sdfLab.holdStill(120)');
 }
 
+if (WOUNDS > 0) {
+  // Stamped BEFORE the capture and after the freeze, so the craters are part
+  // of the frozen scene the three screenshots must agree on.
+  await evaluate(`window.__sdfLab.stampWounds(${WOUNDS})`);
+  await sleep(600);
+}
+
 if (BENCH) {
   const r = await evaluate(`window.__sdfLab.benchGpu({ chunks: 8, chunkFrames: 20 })`, true);
   console.log('BENCH ' + JSON.stringify(r));
@@ -147,7 +166,7 @@ if (BENCH) {
   const unique = [...new Set(hashes)];
   writeFileSync(OUT, Buffer.from(lastB64, 'base64'));
   console.log(JSON.stringify({
-    out: OUT, crowd: CROWD, motion: MOTION,
+    out: OUT, crowd: CROWD, motion: MOTION, wounds: WOUNDS,
     hashes: unique,
     stableWithinRun: unique.length === 1,
     consoleErrors: consoleErrors.slice(0, 6),
