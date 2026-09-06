@@ -49,6 +49,8 @@ New page: `sdf-deferred.html`. Query `mode=legacy|deferred` selects a mode; lega
 
 Expose `window.__deferredLab` with mode/scale/light/debug controls, readiness, deterministic stepping, diagnostics, and bounded timing sampling. Debug views: lit, albedo, normal, depth, material. Visible controls should use those names; keep technical diagnostics in the debug API/report.
 
+Use an explicit fixed 800x600 internal `RenderCap`, matching the current game's default, for both comparison modes. Window resize changes CSS presentation only; buffer reallocation is tested separately through `setResolution(width,height)` (800x600 -> 640x480 -> 800x600). Derive SDF target sizes from the internal buffer and SDF scale, not CSS pixels or device pixel ratio.
+
 All owned targets/materials/geometry are disposed. Resize reallocates both producer targets and resolve/output targets, invalidates stale contents, and clears them before sampling. Restore renderer target/MRT/clear settings and camera layers even on errors. Do not sample a texture while writing it. Explicitly validate target/canvas orientation and clip-space conventions with asymmetric geometry.
 
 ## Lighting and shadows
@@ -56,6 +58,12 @@ All owned targets/materials/geometry are disposed. Resize reallocates both produ
 Support up to 16 dynamic point/spot lights with a runtime active count. Use inverse-square-style bounded attenuation and smooth spotlight falloff consistently for SDF and mesh. Start with a small fixed loop; do not add tiled/clustered culling in this milestone. No additional field evaluations per light.
 
 Keep M1's new shared lights unshadowed and label that accurately. Capture a pillar crossing in camera depth for visibility validation, not as proof of light-space shadows. Keep the legacy renderer's shadows untouched. The report must make clear that shared shadow receivers, character hull self-exclusion, shadow budgets, and transparent integration remain future work.
+
+## Flying-orb showcase (owner addition)
+
+The scene opens with three small emissive flying orbs (amber, cyan, magenta) driving actual shared point lights. Animate them along deterministic, phase-offset looping paths within the room, passing near stone and across the wounded character so diffuse color and wet highlights visibly move. Use bright opaque emissive sphere meshes for the sources; the light position/color and visible orb position/color come from the same state each frame. Keep lighting intensities readable rather than washing out tissue detail. Orbs depth-test against room/character geometry and respect the existing surface contract; no new transparency/bloom subsystem is required.
+
+Provide Play/Pause lights and the existing 1/8/16 light-count comparison, with default count 3. Count changes update both visible sources and their lights. `setLightTime(t)` freezes animation at deterministic time t; `setLightsAnimated(true)` resumes from that time without a jump. `setOrbsVisible(false)` hides source meshes only, retaining all light contributions, for surface-buffer invariance tests. Moving marker geometry would otherwise correctly change G-buffer pixels and invalidate the test's fixed-geometry premise. Test invariance with markers hidden; test visible marker/light alignment, camera-depth occlusion, and animation separately. Include a short captured animation or several timestamped frames showing the lights sweep both surfaces.
 
 ## Validation and acceptance
 

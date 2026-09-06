@@ -180,9 +180,12 @@ interface DeferredLabControls {
   ready: boolean;
   setMode(mode: 'legacy'|'deferred'): void;
   setSdfScale(scale: number): void;
+  setResolution(width: number, height: number): void;
   setDebugView(view: 'lit'|'albedo'|'normal'|'depth'|'material'): void;
   setLightCount(count: number): void;
-  setLightTime(seconds: number): void; // deterministic positions, no camera/body change
+  setLightTime(seconds: number): void; // deterministic positions; pauses light animation
+  setLightsAnimated(enabled: boolean): void;
+  setOrbsVisible(visible: boolean): void; // source meshes only; light contributions remain
   setWounded(enabled: boolean): void;
   setCameraPose(pose: 'overview'|'mesh-front'|'sdf-front'|'wound'): void;
   step(frames: number): Promise<void>;
@@ -192,15 +195,25 @@ interface DeferredLabControls {
 }
 ```
 
-- [ ] **Step 1: Build the fixture from production components.** Use `createLabRenderer`, `buildBody` with the existing authored zombie (see `lab-main.ts`), `FLESH_PRESETS`, and `stoneTextures` for a room/floor/pillar. Do not substitute analytic sphere SDFs or flat mesh colors. A stable torso wound should visibly expose depth/tissue. Create separate legacy/surface views from identical body data and parameters; only render the selected one. Use `createSdfLayer` in legacy mode so it honors the same SDF scale. Legacy mesh lights mirror the shared light list; label SDF legacy's limited light support in measurements. Avoid game actors/AI/physics and unrelated asset dependencies in this fixture.
+- [ ] **Step 1: Build the fixture from production components.** Use `createLabRenderer(mount, { mode: 'fixed', width: 800, height: 600 })`, `buildBody` with the existing authored zombie (see `lab-main.ts`), `FLESH_PRESETS`, and `stoneTextures` for a room/floor/pillar. Derive producer sizes from this internal buffer, never CSS/device pixel ratio. Test window resize as presentation-only, and explicit `setResolution(640,480)` then `setResolution(800,600)` as target reallocation. Do not substitute analytic sphere SDFs or flat mesh colors. A stable torso wound should visibly expose depth/tissue. Create separate legacy/surface views from identical body data and parameters; only render the selected one. Use `createSdfLayer` in legacy mode so it honors the same SDF scale. Legacy mesh lights mirror the shared light list; label SDF legacy's limited light support in measurements. Avoid game actors/AI/physics and unrelated asset dependencies in this fixture.
 
 - [ ] **Step 2: Add page/build entry and controls.** Add `sdfDeferred: resolve(__dirname, 'sdf-deferred.html')` to Vite build inputs. Handle `mode=legacy|deferred`, visible mode/scale/debug/light controls, and the API above. Use fixed camera/body poses and deterministic light placement. `step` must render actual frames and resolve GPU work before readbacks; readiness is true only after both modes compile successfully. Add unload disposal, explicit resize handling, and clear errors in the page.
+
+- [ ] **Step 2b: Add the owner-requested flying-orb showcase.** Default to three small bright opaque emissive spheres in amber/cyan/magenta, each driving a point light in the shared light buffer from the exact same position/color state. Use deterministic phase-offset looping paths contained inside the room, with vertical motion and close passes across the stone and wounded torso. Keep intensities/ranges readable and preserve wound highlights. Orbs must depth-test correctly; reuse the surface mesh producer with emission (no new transparent glow/bloom pass). Play/Pause lights toggles animation, and 1/8/16 count changes update source meshes and lights together. `setLightTime(t)` pauses at exact t; resume continues without jumping. Add `setOrbsVisible` for independent marker visibility. Record a short animation or timestamped frame sequence and inspect the visible colored light movement on BOTH material classes.
+
+```ts
+// One source of state for marker and lighting, updated before rendering:
+const position = orbPosition(index, lightTime); // deterministic closed path inside room bounds
+orb.position.fromArray(position);
+light.position = position;
+// setOrbsVisible(false) affects orb.visible only; NEVER the light buffer/count.
+```
 
 - [ ] **Step 3: Implement an assertion-driven CDP gate using existing lifecycle helpers.** Base browser control on `scripts/game-tiles-telemetry-check.mjs`, server ownership on `scripts/lab-servers.sh`. Allocate ports 5306/9306 by default. The shell wrapper starts/stops only its own Vite/Chrome. Capture console errors, runtime errors, and GPU validation errors. Fail on shader errors, empty body/mesh coverage, stale/mismatched depth, missing material classes, or light-dependent surface data.
 
 ```js
 // Core invariant: use deterministic poses, freeze body/camera, then compare readbacks.
-await evaluate('__deferredLab.setMode("deferred"); __deferredLab.setLightTime(0); __deferredLab.step(2)');
+await evaluate('__deferredLab.setMode("deferred"); __deferredLab.setOrbsVisible(false); __deferredLab.setLightTime(0); __deferredLab.step(2)');
 const before = await evaluate('__deferredLab.readSurfaces()');
 await evaluate('__deferredLab.setLightTime(1.25); __deferredLab.step(2)');
 const after = await evaluate('__deferredLab.readSurfaces()');
@@ -208,7 +221,7 @@ const after = await evaluate('__deferredLab.readSurfaces()');
 // Assert coverage includes real mesh and flesh pixels, not just all-background equality.
 ```
 
-The gate must also toggle wounds and verify a changed SDF hit/tissue region, compare legacy/SDF hit depths, check both occlusion poses at scales 1 and 0.5, resize down/up, and toggle modes repeatedly. Read all four attachments with appropriate typed formats (half-floats require decoding). Record threshold rationales and coordinates/masks; do not write tautological tests of a hardcoded fixture response.
+Keep orb meshes hidden for the material/depth invariance comparison because moving geometry legitimately changes those buffers. Re-enable them for the showcase and separately verify marker/light alignment, occlusion, pause/resume, and count updates. The gate must also toggle wounds and verify a changed SDF hit/tissue region, compare legacy/SDF hit depths, check both occlusion poses at scales 1 and 0.5, resize down/up, and toggle modes repeatedly. Read all four attachments with appropriate typed formats (half-floats require decoding). Record threshold rationales and coordinates/masks; do not write tautological tests of a hardcoded fixture response.
 
 - [ ] **Step 4: Run and inspect the real images; fix integration bugs before claiming success.**
 

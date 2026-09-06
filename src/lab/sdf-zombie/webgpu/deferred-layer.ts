@@ -18,8 +18,15 @@
 // empty state (surfaceDepth must clear to 1 = far, emissionClass.a to 0 =
 // class empty, everything else don't-care), so each producer target is cleared
 // by a full-screen MRT quad writing those constants. The renderer's own
-// autoClear during that pass resets the hardware depth attachment; the layer
-// assumes the app's clearDepth is the default 1.
+// autoClear during that pass resets the hardware depth attachment — with
+// autoClearDepth/clearDepth explicitly forced to true/1 for those passes and
+// restored afterwards, because a caller's autoClearDepth=false or clearDepth=0
+// would otherwise reject every geometry fragment (coordinator review fix 5).
+// Producer scenes' backgrounds are suppressed for the same passes: a Color
+// background force-clears the target even with autoClear=false and would
+// overwrite the sentinels (coordinator review fix 3), and a caller-level
+// renderer MRT would merge into the producers' material mrtNode outputs
+// (coordinator review fix 4). All of it is restored in finally.
 //
 // ORIENTATION. Every internal pass samples by integer fragment coordinate
 // (screenCoordinate -> textureLoad). That is framebuffer-identity for both
@@ -122,7 +129,7 @@ export interface DeferredLayer {
  * clamped, reduced specular — its bounded class-specific response. Emission
  * is additive linear radiance.
  */
-const DEFERRED_LIGHT_WGSL = /* wgsl */ `fn deferredLight(
+export const DEFERRED_LIGHT_WGSL = /* wgsl */ `fn deferredLight(
   px: vec2<f32>,
   albedoRoughness: texture_2d<f32>,
   normalMetalness: texture_2d<f32>,
@@ -131,7 +138,8 @@ const DEFERRED_LIGHT_WGSL = /* wgsl */ `fn deferredLight(
   lights: texture_2d<f32>,
   lightCount: f32,
   invViewProj: mat4x4<f32>,
-  camPos: vec3<f32>
+  camPos: vec3<f32>,
+  ambient: vec3<f32>
 ) -> vec4<f32> {
   let dims = vec2<f32>(textureDimensions(surfaceDepth, 0));
   let c = clamp(vec2<i32>(floor(px)), vec2<i32>(0, 0), vec2<i32>(dims) - vec2<i32>(1, 1));
@@ -143,9 +151,12 @@ const DEFERRED_LIGHT_WGSL = /* wgsl */ `fn deferredLight(
   let gA = textureLoad(albedoRoughness, c, 0);
   let gN = textureLoad(normalMetalness, c, 0);
   // World position from clip depth, pixel coordinate, inverse view-projection.
-  // px is the fragment coordinate (origin top-left); ndc y flips relative to
-  // it. WebGPU clip z is already [0,1] — no remap.
-  let ndc = vec2<f32>((px.x + 0.5) / dims.x * 2.0 - 1.0, 1.0 - (px.y + 0.5) / dims.y * 2.0);
+  // px IS the WebGPU fragment coordinate (@builtin(position).xy): it already
+  // carries the pixel-center +0.5, origin top-left, so px/dims lands the texel
+  // centre EXACTLY — adding another half pixel here shifts every reconstructed
+  // world position (coordinator review fix 1). WebGPU clip z is already
+  // [0,1] — no remap. ndc y flips relative to the fragment coordinate.
+  let ndc = vec2<f32>(px.x / dims.x * 2.0 - 1.0, 1.0 - px.y / dims.y * 2.0);
   let wp4 = invViewProj * vec4<f32>(ndc, depth, 1.0);
   let world = wp4.xyz / wp4.w;
   let n = normalize(gN.xyz);
@@ -157,6 +168,11 @@ const DEFERRED_LIGHT_WGSL = /* wgsl */ `fn deferredLight(
   let specCol = mix(vec3<f32>(0.04), albedo, metal);
   let isFlesh = cls > 1.5 && cls < 2.5;
   var acc = emission;
+  // Constant ambient floor (M1 fixture choice): the shared light pass has no
+  // probe/enclosure bounce — the legacy path's fill/scatter terms are the
+  // inventoried omissions. Without a floor, surfaces outside every light's
+  // range render pure black and read as MISSING data in captures.
+  acc = acc + ambient * baseDiff;
   let count = i32(lightCount);
   for (var i = 0; i < ${MAX_DEFERRED_LIGHTS}; i = i + 1) {
     if (i >= count) { break; }
@@ -285,6 +301,10 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
   const uLightCount = uniform(0);
   const uInvViewProj = uniform(new THREE.Matrix4());
   const uCamPos = uniform(new THREE.Vector3());
+  /** Constant ambient floor — see the deferredLight WGSL note. Fixed for M1;
+   *  not a per-light term, so it cannot leak light-dependence into surface
+   *  data (it lives in the lit target only). */
+  const uAmbient = uniform(new THREE.Color(0.05, 0.05, 0.055));
   /** dest-to-sdf texel ratio for the nearest low-res fetch. */
   const uSdfRatio = uniform(new THREE.Vector2(sdfW / width, sdfH / height));
   /** Present-pass debug selector (DEBUG_VIEW_INDEX). */
@@ -360,6 +380,7 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
     lightCount: uLightCount,
     invViewProj: uInvViewProj,
     camPos: uCamPos,
+    ambient: uAmbient,
   }) as never;
   const lightScene = quadPass(lightMat);
 
@@ -409,14 +430,60 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
       assertAlive();
       const previousTarget = renderer.getRenderTarget();
       const previousAutoClear = renderer.autoClear;
+      // Coordinator review fix 5: autoClear=true does NOT imply a hardware
+      // depth clear — a caller with autoClearDepth=false or clearDepth 0
+      // (sdf-layer's shell-exit pass sets exactly that) would leave stale/zero
+      // hardware depth in the producer targets, and the sentinel clear quad
+      // (depthWrite off) cannot dig out of it. Force a depth-1 clear for the
+      // producer clear passes and restore the caller's state afterwards.
+      const previousAutoClearDepth = renderer.autoClearDepth;
+      const previousClearDepth = renderer.getClearDepth();
+      // Coordinator review fix 4: a caller-level MRT (renderer.setMRT) MERGES
+      // INTO/replaces the producers' material-level mrtNode outputs. The owned
+      // passes must run with no renderer MRT; restore the caller's after.
+      const previousMrt = renderer.getMRT();
       const previousMask = camera.layers.mask;
+      // Coordinator review fix 3: a Color scene.background force-clears the
+      // target THROUGH the renderer (Background.js sets forceClear even with
+      // autoClear=false), overwriting the sentinel clear — empty pixels would
+      // read depth<1/class!=0 and occlude the SDF. A backgroundNode draws a
+      // depthless skybox mesh into the G-buffer, same corruption. Suppress
+      // both for the producer passes; restore in finally, including exceptions.
+      const producerScenes = [meshScene, sdfScene] as const;
+      const previousBackgrounds = producerScenes.map((s) => ({
+        scene: s,
+        background: s.background,
+        backgroundNode: (s as THREE.Scene & { backgroundNode?: unknown }).backgroundNode ?? null,
+      }));
       try {
+        // Coordinator review fix 2: a FRESH PerspectiveCamera defaults to
+        // WebGL clip conventions; WebGPURenderer only rewrites its
+        // coordinateSystem/projection during the first geometry render —
+        // AFTER we would have cached the inverse view-projection below.
+        // Sync the camera to the renderer's coordinate system FIRST, exactly
+        // as Renderer.render itself does (Renderer.js:3474), so the very
+        // first frame reconstructs world positions from the actual WebGPU
+        // projection.
+        const coordinateSystem = (renderer as unknown as { coordinateSystem?: number }).coordinateSystem;
+        if (coordinateSystem !== undefined &&
+            (camera as unknown as { coordinateSystem?: number }).coordinateSystem !== coordinateSystem) {
+          (camera as unknown as { coordinateSystem: number }).coordinateSystem = coordinateSystem;
+          camera.updateProjectionMatrix();
+        }
         // Camera state for the light pass's world reconstruction.
         camera.updateMatrixWorld();
         _view.copy(camera.matrixWorld).invert();
         _vp.multiplyMatrices(camera.projectionMatrix, _view);
         uInvViewProj.value.copy(_vp).invert();
         uCamPos.value.setFromMatrixPosition(camera.matrixWorld);
+
+        for (const prev of previousBackgrounds) {
+          prev.scene.background = null;
+          (prev.scene as THREE.Scene & { backgroundNode?: unknown }).backgroundNode = null;
+        }
+        renderer.setMRT(null);
+        renderer.autoClearDepth = true;
+        renderer.setClearDepth(1);
 
         renderer.setRenderTarget(meshTarget);
         renderer.autoClear = true;
@@ -442,6 +509,13 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
       } finally {
         renderer.setRenderTarget(previousTarget);
         renderer.autoClear = previousAutoClear;
+        renderer.autoClearDepth = previousAutoClearDepth;
+        renderer.setClearDepth(previousClearDepth);
+        renderer.setMRT(previousMrt);
+        for (const prev of previousBackgrounds) {
+          prev.scene.background = prev.background;
+          (prev.scene as THREE.Scene & { backgroundNode?: unknown }).backgroundNode = prev.backgroundNode;
+        }
         camera.layers.mask = previousMask;
       }
     },
