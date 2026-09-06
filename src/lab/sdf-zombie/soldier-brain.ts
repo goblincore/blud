@@ -143,6 +143,31 @@ export function makeSoldierBrain(): SoldierBrain {
   };
 }
 
+/**
+ * Force the stagger state NOW — called by the wiring the instant a
+ * blast-profile hit lands, before any step.
+ *
+ * IT IS SYNCHRONOUS ON PURPOSE, for the reason brain.ts's staggerNow records:
+ * a flag consumed by the NEXT step delays the lurch by one frame, and while
+ * sixteen milliseconds is imperceptible on its own, it shifts the whole
+ * recovery downstream far enough to change what a displacement measurement a
+ * second later reports. A body lurches on the frame it is shot.
+ *
+ * Cancels any in-flight aim: a staggering soldier must not complete a
+ * telegraph he was knocked out of, and must leave no stranded fire pulse
+ * behind (the cycle emits its pulse on the aim->fire transition, so clearing
+ * phaseT and the state together is what guarantees it).
+ *
+ * A SEPARATE FUNCTION from brain.ts's staggerNow because that one is typed to
+ * Brain. This is part of the duplication the file header accounts for.
+ */
+export function staggerSoldierNow(
+  brain: SoldierBrain,
+  tuning: SoldierTuning = SOLDIER_TUNING,
+): SoldierBrain {
+  return { ...brain, state: 'stagger', phaseT: 0, holdSecs: tuning.blastHoldSec };
+}
+
 /** A point `radius` from the player, on `bearing`. */
 function ringPoint(player: SoldierPlayer, bearing: number, radius: number): Vec3 {
   return [player.x + Math.sin(bearing) * radius, 0, player.z + Math.cos(bearing) * radius];

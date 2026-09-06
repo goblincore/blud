@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/soldier-brain.test.ts
 import { describe, it, expect } from 'vitest';
 import {
-  SOLDIER_TUNING, makeSoldierBrain, stepSoldierBrain,
+  SOLDIER_TUNING, makeSoldierBrain, staggerSoldierNow, stepSoldierBrain,
   type SoldierBrain, type SoldierInput,
 } from './soldier-brain';
 
@@ -240,5 +240,46 @@ describe('stepSoldierBrain — the firing cycle', () => {
     expect(d).toBeGreaterThanOrEqual(SOLDIER_TUNING.standoffNear - 1e-6);
     expect(d).toBeLessThanOrEqual(SOLDIER_TUNING.standoffFar + 1e-6);
     expect(Math.abs(t[0])).toBeGreaterThan(0);     // actually moved off-axis
+  });
+});
+
+describe('staggerSoldierNow', () => {
+  it('forces stagger and halts, synchronously', () => {
+    const b = staggerSoldierNow(alerted());
+    expect(b.state).toBe('stagger');
+    expect(b.holdSecs).toBeCloseTo(SOLDIER_TUNING.blastHoldSec, 6);
+    const out = stepSoldierBrain(b, input());
+    expect(out.halt).toBe(true);
+    expect(out.target).toBeNull();
+  });
+
+  it('cancels an in-flight aim and leaves NO stuck fire pulse', () => {
+    let b = alerted();
+    // Advance to aim.
+    for (let t = 0; t < SOLDIER_TUNING.repositionSec + 0.1; t += DT) {
+      const o = stepSoldierBrain(b, input({ roll: 0 }));
+      b = o.brain;
+      if (b.state === 'aim') break;
+    }
+    expect(b.state).toBe('aim');
+    b = staggerSoldierNow(b);
+    expect(b.state).toBe('stagger');
+    expect(b.phaseT).toBe(0);
+    // Run out the hold: not one fire pulse anywhere.
+    let fires = 0;
+    for (let t = 0; t < SOLDIER_TUNING.blastHoldSec + 0.2; t += DT) {
+      const o = stepSoldierBrain(b, input({ roll: 1 }));
+      b = o.brain;
+      if (o.fire) fires++;
+    }
+    expect(fires).toBe(0);
+  });
+
+  it('resumes at advance once the hold expires, if still alert', () => {
+    let b = staggerSoldierNow(alerted());
+    for (let t = 0; t < SOLDIER_TUNING.blastHoldSec + 0.1; t += DT) {
+      b = stepSoldierBrain(b, input({ roll: 1 })).brain;
+    }
+    expect(b.state).not.toBe('stagger');
   });
 });
