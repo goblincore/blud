@@ -38,9 +38,9 @@ import {
   type MotionJoints, type MotionState, type MotionSignals,
 } from '../motion';
 import { makeRng, type Rng, type WanderBounds } from '../wander';
-import {
-  makeBrain, staggerNow, stepBrain, type Brain, type BrainPlayer,
-} from '../brain';
+import type { BrainPlayer } from '../brain';
+import { makeZombieMind, type EnemyMind } from './enemy-mind';
+import type { MotionProfile } from '../motion-profile';
 import type { SwingVariant } from '../attack';
 import type { MissingLimbs } from '../collapse';
 import type { ZombieGpuView } from './zombie-gpu';
@@ -230,8 +230,22 @@ export interface ZombieActor {
    *  he is in a tunnel or the void) and whether a shot just went off in this
    *  actor's room. Set BEFORE step(). */
   setBrainInput(player: BrainPlayer | null, alerted: boolean): void;
-  /** Live brain state — the debug seam and the capture driver's oracle. */
-  brain(): Brain;
+  /** The decision layer — callers that must distinguish kinds, and the
+   *  source of truth for every decision field this interface reports. */
+  mind(): EnemyMind;
+  /** Live brain STATE, Brain-shaped — the debug seam and the capture
+   *  driver's oracle (__sdfGame.brains() reads state/alert/swingT and
+   *  swing.side/variant off it). A VIEW over the live mind's debug, not a
+   *  Brain: the state itself moved inside the mind, and keeping a second
+   *  copy would be exactly the drift the EnemyMind seam exists to kill.
+   *  Migration shim: game-main's kind task owns brains() and its callers
+   *  and deletes this. Do not grow callers. */
+  brain(): {
+    state: string;
+    alert: boolean;
+    swingT: number;
+    swing: { side: 'L' | 'R'; variant: string };
+  };
   /** This frame's melee-ring verdict for this body (melee-ring.ts). Set
    *  BEFORE step(), like setBrainInput. */
   setRingInput(hasToken: boolean, drift: -1 | 0 | 1): void;
@@ -265,6 +279,8 @@ export interface ZombieActor {
     hasToken: boolean;
     alert: boolean;
     swingT: number;
+    /** Ranged vocabulary — the soldier's aim progress 0..1; zombies 0. */
+    aimT: number;
   };
   /**
    * One pellet lands at `hitWorld`, travelling along `dirWorld`.
@@ -316,6 +332,15 @@ export function createZombieActor(opts: {
   seed: number;
   bounds: WanderBounds;
   furniture: readonly Aabb[];
+  /** The decision layer. Absent = the zombie's, so every existing call site
+   *  and every pin is untouched by construction. */
+  mind?: EnemyMind;
+  /** Per-character motion profile. Absent = the zombie's, matching
+   *  stepMotion's own `cfg.profile ?? ZOMBIE_PROFILE` fallback. */
+  profile?: MotionProfile;
+  /** The body fired its weapon this frame. Called from step(); the wiring
+   *  spawns the flash and the pellets. */
+  onFire?: () => void;
   /** Receives every detached piece, already placed in world space, plus the
    *  stump wound the sever stamped on the REMAINING body (null when no live
    *  anchor existed) — the bleed emitters register from it directly. */
@@ -362,18 +387,20 @@ export function createZombieActor(opts: {
   // travel ≈ v0/k). Actor-owned on purpose: a wander.pos delta already
   // expresses it, so the shared motion modules and the lab's wiring — which
   // must stay bit-identical — are untouched. The walk STOP is not here: a
-  // blast calls staggerNow() and the brain's stagger state gates cfg.wander
-  // for blastHoldSec — locomotion is gated in exactly one place.
+  // blast calls the mind's stagger() and the stagger state's hold gates
+  // cfg.wander for blastHoldSec — locomotion is gated in exactly one place.
   let knockV = 0;
   let knockDir: Vec3 = [0, 0, 0];
 
-  // ---- brain state --------------------------------------------------------
-  // The decision layer (brain.ts) runs INSIDE the sub-step loop so a chase
-  // target is refreshed at the same cadence the locomotion integrates at.
-  // Its target overrides wander.target; its halt IS the single cfg.wander
-  // gate (the blast hold is a brain state now); its swing phase becomes
-  // cfg.attack. The melee ring's verdict and the blast flag arrive as inputs.
-  let brain: Brain = makeBrain();
+  // ---- mind state ---------------------------------------------------------
+  // The decision layer (the EnemyMind — brain.ts's machine or the soldier's,
+  // wrapped) runs INSIDE the sub-step loop so a chase target is refreshed at
+  // the same cadence the locomotion integrates at. Its target overrides
+  // wander.target; its halt IS the single cfg.wander gate (the blast hold is
+  // a brain state now); its swing phase becomes cfg.attack. The melee ring's
+  // verdict and the blast flag arrive as inputs. Absent opts.mind = the
+  // zombie's, which is what keeps every existing pin green by construction.
+  const mind: EnemyMind = opts.mind ?? makeZombieMind();
   let brainPlayer: BrainPlayer | null = null;
   let brainAlerted = false;
   let ringToken = false;
@@ -565,7 +592,7 @@ export function createZombieActor(opts: {
       firstSub = false;
       // Decide before locomotion integrates, so the target this sub-step walks
       // toward is this sub-step's target.
-      const think = stepBrain(brain, {
+      const think = mind.step({
         dt: sdt,
         self: {
           x: state.wander.pos[0], z: state.wander.pos[2],
@@ -576,11 +603,21 @@ export function createZombieActor(opts: {
         hasToken: ringToken,
         drift: ringDrift,
         roll: swingRng(),
+        rollDrift: swingRng(),
       });
-      brain = think.brain;
       brainAlerted = false;   // one-shot: the first sub-step consumes it
       lastEngaged = think.engaged;
       lastCommitted = think.committed;
+      // FACE LOCK. A halted body cannot otherwise turn: stepWander owns
+      // wander.heading and is skipped when cfg.wander is false, so an aiming
+      // soldier would track nothing and shoot wherever he last faced.
+      // Writing the bearing straight into heading lets the EXISTING damped,
+      // rate-limited bodyYaw follow do the turn — no new constant, and no
+      // second turn implementation. (brain.ts: one walker, one turn rate.)
+      if (think.faceHeading !== null) {
+        state = { ...state, wander: { ...state.wander, heading: think.faceHeading } };
+      }
+      if (think.fire) opts.onFire?.();
       if (think.target) {
         // CHASE ROUTING. The furniture rejection's escape hatch (drop the
         // target, stepWander picks another) cannot work for a chaser: the
@@ -621,6 +658,10 @@ export function createZombieActor(opts: {
         {
           enabled: true,
           wander: !think.halt,
+          // Profile, spread rather than `profile: opts.profile`: the same
+          // bit-identity contract as the attack line below — motion.ts's
+          // zombie path is pinned on the key being ABSENT, not undefined.
+          ...(opts.profile !== undefined ? { profile: opts.profile } : {}),
           // Spread, not `attack: think.attack ?? undefined`: motion.ts's
           // bit-identity contract is about the key being ABSENT.
           // swingPin is forceSwing()'s one-frame capture pin (see step());
@@ -689,19 +730,29 @@ export function createZombieActor(opts: {
     view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
     refreshWounds();
     const d = lastFrame;
-    if (d) lastDebug = {
-      holdSecs: brain.holdSecs,
-      knockV,
-      phase: d.phase,
-      meter: d.meter,
-      blend: d.blend,
-      speed: d.speed,
-      staggerKind: d.staggerKind,
-      target: state.wander.target ? [...state.wander.target] as Vec3 : null,
-      idle: state.wander.idle,
-      state: brain.state, alert: brain.alert, swingT: brain.swingT,
-      side: brain.swing.side, variant: brain.swing.variant, hasToken: ringToken,
-    };
+    if (d) {
+      // The decision fields are the MIND's now. holdSecs rides MindDebug so
+      // the hold timer's truth lives in exactly one place (see
+      // enemy-mind.ts) — an actor-side copy would be the private timer
+      // brain.ts's header documents as the original defect.
+      const md = mind.debug();
+      lastDebug = {
+        holdSecs: md.holdSecs,
+        knockV,
+        phase: d.phase,
+        meter: d.meter,
+        blend: d.blend,
+        speed: d.speed,
+        staggerKind: d.staggerKind,
+        target: state.wander.target ? [...state.wander.target] as Vec3 : null,
+        idle: state.wander.idle,
+        state: md.state, alert: md.alert,
+        swingT: md.swingT,
+        side: md.side, variant: md.variant,
+        hasToken: md.hasToken,
+        aimT: md.aimT,
+      };
+    }
   }
 
   /** Ground-plane displacement from crowd separation, clamped exactly like a
@@ -780,12 +831,12 @@ export function createZombieActor(opts: {
       ...(wound.type === 'blast' ? { gain: SLUG_GAIN } : {}),
     };
     if (wound.type === 'blast') {
-      // Heavy-hit choreography: the flag is one-shot into the brain, whose
-      // stagger state stops the walk for blastHoldSec. The ROOT knock stays
-      // here — moving the root is a different thing from gating locomotion.
-      // Lurch on the frame the slug lands, not the next one — see
-      // brain.ts's staggerNow for what the one-step deferral cost.
-      brain = staggerNow(brain);
+      // Heavy-hit choreography: the mind's stagger stops the walk for
+      // blastHoldSec. The ROOT knock stays here — moving the root is a
+      // different thing from gating locomotion. Lurch on the frame the slug
+      // lands, not the next one — see brain.ts's staggerNow for what the
+      // one-step deferral cost.
+      mind.stagger();
       const l = Math.hypot(dirWorld[0], dirWorld[2]);
       if (l > 1e-6) {
         knockV = BLAST_KNOCK_MPS;
@@ -824,7 +875,16 @@ export function createZombieActor(opts: {
       // Sticky until a step consumes it: the shot may land between frames.
       if (alerted) brainAlerted = true;
     },
-    brain: () => brain,
+    mind: () => mind,
+    brain: () => {
+      // The Brain-shaped VIEW the interface documents, built from the live
+      // mind's debug so there is no second state to drift.
+      const md = mind.debug();
+      return {
+        state: md.state, alert: md.alert, swingT: md.swingT,
+        swing: { side: md.side, variant: md.variant },
+      };
+    },
     setRingInput: (hasToken: boolean, drift: -1 | 0 | 1) => {
       ringToken = hasToken;
       ringDrift = drift;
@@ -837,11 +897,14 @@ export function createZombieActor(opts: {
     step,
     wounds: () => wounds,
     debug: () => lastDebug ?? {
-      holdSecs: brain.holdSecs, knockV, phase: 'standing', meter: 0,
+      holdSecs: mind.debug().holdSecs, knockV, phase: 'standing', meter: 0,
       blend: 0, speed: 0,
       staggerKind: null, target: null, idle: 0,
-      state: brain.state, alert: brain.alert, swingT: brain.swingT,
-      side: brain.swing.side, variant: brain.swing.variant, hasToken: ringToken,
+      state: mind.debug().state, alert: mind.debug().alert,
+      swingT: mind.debug().swingT,
+      side: mind.debug().side, variant: mind.debug().variant,
+      hasToken: mind.debug().hasToken,
+      aimT: mind.debug().aimT,
     },
     hit,
     hitSlug,
