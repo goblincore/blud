@@ -118,6 +118,19 @@ rendering keeps using `woundWorldPos` so a crater rides the flesh it is carved
 into. **Result: 0.86 cm** (live surface still 18.37 cm, which the gate now
 prints as recoil rather than error). `b04854f`.
 
+**[ ] F-bleed-gate — THE BLEED PARITY GATE IS FLAKY, near a coin flip (measured 2026-09-06).**
+`sdf-game-bleed-gate.mjs parity` sets its pass threshold per run from two
+same-state captures and fails when the toggle cycle exceeds it. On
+**byte-identical code**, four runs gave floors 137k/141k/191k/153k and toggles
+204k/37k/164k/119k — the toggle swings **5.5x**, the floor 40%, and the verdict
+flipped FAIL then PASS PASS PASS. In the failing run the gate's own two control
+cycles (same state, **no toggle**) differed 4x and it takes the max, so the
+threshold is whatever the noisiest control was. It also passed on
+`maxChannelDelta` while failing on pixel count. **A single FAIL from this gate
+is not evidence.** Re-run 3x before believing it. Fix: more control samples, or
+gate on `maxChannelDelta` instead of raw pixel count. Recorded in the
+[refactor baselines README](docs/dev-notes/2026-09-06-refactor-baselines/README.md).
+
 **[x] Zombie analytic normals — owner passed integrated combat playtest; hybrid mode enabled by default (2026-09-06).**
 [Integration evidence](docs/dev-notes/2026-09-06-analytic-normal-integration/README.md); procedural flesh/wound gradients with automatic legacy fallback and retained comparison toggle. Owner reports smoother play but attribution is uncertain. Broader Task 5 performance study remains open: moving/multi-actor and direct original-shader controls are unmeasured. Stable 30 fps combat is the product target.
 

@@ -74,3 +74,29 @@ hand, `git checkout --` that directory or you will commit them by accident.
 
 Argument shapes differ per gate and are NOT interchangeable — `bleed` takes a
 MODE first (`parity|reel|bench`); passing it a port yields "unknown mode".
+
+## The bleed gate is FLAKY — do not trust a single run (measured 2026-09-06)
+
+`sdf-game-bleed-gate.mjs parity` derives its pass threshold per-run from two
+same-state captures ("the floor") and fails when the toggle cycle exceeds it.
+Both numbers are wildly unstable. Four runs on **byte-identical code**:
+
+| run | floor | toggle | verdict |
+| --- | --- | --- | --- |
+| a | 137,230 | 203,845 | FAIL |
+| b | 141,188 | 37,056 | PASS |
+| c | 191,299 | 164,484 | PASS |
+| d | 152,940 | 118,812 | PASS |
+
+The toggle measurement swings **5.5x** and the floor **40%**. Worse, in run (a)
+the gate's own two control cycles — both measuring the same state with **no
+toggle** — differed 4x (137,230 vs 32,559), and it takes the max, so the
+threshold is set by whichever control happened to be noisiest.
+
+**A single FAIL from this gate is not evidence of a regression.** Re-run it at
+least three times before believing it. It also passes on `maxChannelDelta`
+while failing on raw pixel count, which is a further sign the pixel-count axis
+is the unreliable one.
+
+Worth fixing properly (more control samples, or gate on `maxChannelDelta`), but
+that is its own change — not something to do inside a refactor.
