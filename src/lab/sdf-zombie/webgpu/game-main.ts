@@ -79,6 +79,8 @@ import {
   length as tslLength, sub as tslSub, positionWorld, cameraPosition, uniform as tslUniform,
 } from 'three/tsl';
 import { runBench, type BenchDeps } from './game-bench';
+import { GameTelemetry, type FrameTiming } from './game-telemetry';
+import { createTelemetryControls } from './game-telemetry-controls';
 import { sdBody, smax } from '../validate';
 import { FISHEYE_DEFAULTS, clampFovDeg, reticleNdc, visibleFovDeg } from './fisheye';
 import {
@@ -182,6 +184,7 @@ async function main() {
   const resKey = resRungFromUrl();
   const handle = await createLabRenderer(mount, RES_RUNGS[resKey]);
   const { scene, camera } = handle;
+  const telemetry = new GameTelemetry();
 
   // FRAME PACING. Present on a 30 fps cadence instead of taking whatever slot
   // rAF hands us. Unpaced, a ~33 ms frame on a 60 Hz display alternates between
@@ -1946,6 +1949,7 @@ async function main() {
     // Gunfire in a room turns every head in it, cone or no cone. Placed after
     // the guards on purpose: a dry click or a shot during a reload must not
     // alert anything, or the flag fires on inputs that made no noise.
+    telemetry.event('shot', { kind: slugMode ? 'slug' : 'pellet', barrels });
     shotAlert = true;
     cooldown = GRAPESHOT.fireCooldownSec;
     recoilPitch += GRAPESHOT.kickRadPerBarrel * barrels;
@@ -2081,6 +2085,7 @@ async function main() {
    *  path — the design question settled for option 2 (simpler: no dual
    *  representation to keep in sync, and closer to the feel). */
   function gibBakedPiece(b: BakedChunk, at: Vec3): void {
+    telemetry.event('baked-piece-hit', { chunk: b.id, world: [...at] });
     spareChunkViews.push(freeBaked(b));
     gibChunkMeat(b.template, at);
   }
@@ -2550,6 +2555,7 @@ async function main() {
   // each sever's stump wound into the bleed ledger (the gushing emitter —
   // the wound is the actor's own reference, so the anchor rides the body).
   onSeverDispatch = (a, piece, stumpWound) => {
+    telemetry.event('sever', { actor: a.id, limb: piece.limb });
     spawnChunkPiece(piece, { uniforms: a.view.uniforms, volumeTexture: a.view.volumeTexture });
     if (stumpWound) registerBleed(a, stumpWound, 'stump');
   };
@@ -2754,7 +2760,9 @@ async function main() {
       const push = separate(agents);
       actors.forEach((a, i) => a.nudge(push[i]![0], push[i]![1]));
 
+      const bodyTiming = telemetry.begin();
       for (const a of actors) a.step(dt);
+      telemetry.end('body-step', bodyTiming);
       const now = performance.now() / 1000;
       for (const a of actors) {
         a.view.setTime(now);
@@ -3087,6 +3095,7 @@ async function main() {
       }
     }
     {
+      const projectileTiming = telemetry.begin();
       const prevs = pellets.map(p => [...p.pos] as Vec3);
       stepProjectiles(pellets, dt);
       // Hit batching: every actor hit this frame flushes its rig/repack/
@@ -3201,16 +3210,22 @@ async function main() {
             // so the bleed emitter binds the exact wound instead of sniffing
             // the ring tail (a hit that also severs puts a stump there).
             if (!hitThisFrame.has(hitActor)) { hitActor.beginHits(); hitThisFrame.add(hitActor); }
+            const hitTiming = telemetry.begin();
             const stamped = p.kind === 'slug'
               ? hitActor.hitSlug(hitPoint, dirN)
               : hitActor.hit(hitPoint, dirN);
+            telemetry.end('wound-hit', hitTiming);
+            telemetry.event('impact', { actor: hitActor.id, kind: p.kind, stamped: !!stamped });
             if (stamped) registerBleed(hitActor, stamped, p.kind);
             dead = true;
           }
         }
         if (dead) pellets.splice(i, 1);
       }
+      const flushTiming = telemetry.begin();
       for (const a of hitThisFrame) a.endHits();
+      telemetry.end('wound-flush', flushTiming);
+      telemetry.end('projectiles-and-hits', projectileTiming);
       // Sync the mesh pool to the sim list — growing it on demand (the
       // pool is ONLY grown here; fire() must not touch meshes because it
       // runs from an evaluate() with no frame in between).
@@ -3239,6 +3254,7 @@ async function main() {
       // for the clause-by-clause "has already stopped" argument) and its
       // march proxy is replaced by a static mesh. Reverse iteration: bake
       // SPLICES entries out of liveChunks.
+      const chunkTiming = telemetry.begin();
       const cdt = Math.min(dt, 1 / 30);
       // GUT ROPES first, so stepBlood's skip of 'gut' droplets this frame
       // sees this frame's chain positions (see stepGutRopes).
@@ -3262,6 +3278,8 @@ async function main() {
           lastBakeRequestMs = performance.now() - t0;
         }
       }
+      telemetry.end('chunks-and-guts', chunkTiming);
+      const bloodTiming = telemetry.begin();
       // BLEED — emitters spray (anchors recomputed from the CURRENT posed
       // prims, so droplets ride the walking body), flying chunks trail, and
       // the sim settles into splats. Runs even with the wander frozen: it is
@@ -3287,6 +3305,7 @@ async function main() {
         // even frozen — same contract as the lab's always-sync).
         bloodView.sync(bloodSim, camera);
       }
+      telemetry.end('blood-simulation-and-sync', bloodTiming);
     }
 
     const eye = eyeOf(player);
@@ -3316,7 +3335,9 @@ async function main() {
     // Unconditional, NOT under bleedEnabled like bloodView.sync above: floor
     // splats persist in the sim after bleed is switched off, and the goo
     // draws them. Gating this would freeze the pools mid-frame instead.
+    const gooTiming = telemetry.begin();
     gooLayer?.sync(bloodSim, camera);
+    telemetry.end('goo-sync', gooTiming);
   }
 
   handle.setRenderCallback((dt) => {
@@ -3442,7 +3463,48 @@ async function main() {
     return false;
   }
 
+  // Read scalar counters only; no field queries/readbacks during live play.
+  let firstTelemetryFrame = true;
+  let telemetryVisibilityGap = false;
+  document.addEventListener('visibilitychange', () => { telemetryVisibilityGap = true; });
+  const telemetryFrame = (frame: FrameTiming) => {
+    telemetry.frame(frame, {
+      hidden: document.hidden, visibilityGap: telemetryVisibilityGap, firstFrame: firstTelemetryFrame,
+      pointerLocked: document.pointerLockElement === canvas,
+      actors: actors.length, bodiesOnScreen: bodiesOnScreen(),
+      liveChunks: liveChunks.length, bakedChunks: bakedChunks.length,
+      projectiles: pellets.length, droplets: bloodSim.droplets.length, splats: bloodSim.splats.length,
+      player: [...player.pos], yaw: player.yaw, pitch: player.pitch,
+      frameCap: handle.frameCap, refreshMs: handle.refreshMs,
+      renderWidth: sdfLayer.marchTarget.width, renderHeight: sdfLayer.marchTarget.height,
+      frozen: wanderFrozen, chunkBake: chunkBakeEnabled, bleed: bleedEnabled,
+    });
+    firstTelemetryFrame = false; telemetryVisibilityGap = false;
+    telemetryControls?.afterFrame();
+  };
+  const telemetryControls = import.meta.env.DEV ? createTelemetryControls(telemetry, () => ({
+    build: import.meta.env.VITE_TELEMETRY_BUILD ?? { commit: 'unknown', dirty: true },
+    page: location.pathname, userAgent: navigator.userAgent, backend: handle.backend,
+    visibility: document.visibilityState, frameCap: handle.frameCap,
+    fisheye: fisheyeReport(), renderWidth: sdfLayer.marchTarget.width, renderHeight: sdfLayer.marchTarget.height,
+    woundStep: actors[0]?.view.uniforms.perfCfg.value.z,
+    hullExitBound: actors[0]?.view.uniforms.perfCfg.value.x,
+    gpuTiming: 'unavailable: existing multipass timestamps are not attributable to individual frames',
+    intervalMeaning: 'natural drawn-frame start intervals, including frame cap/vsync and scheduling; not pure GPU time',
+    cpuMeaning: 'tickCpuMs and drawCpuMs are synchronous CPU time, including submission, not GPU execution',
+    phaseMeaning: 'inclusive spans accumulated since previous draw; nested hit/flush/bake spans must not be added to parents',
+    spikeAttribution: 'a frame interval describes the gap BEFORE that row; inspect previous-row CPU spans and events in that gap',
+    limits: { maxFrames: 18000, maxEvents: 4000, durationMs: 180000 },
+  }), undefined, active => {
+    firstTelemetryFrame = true; telemetryVisibilityGap = false;
+    handle.setFrameObserver(active ? telemetryFrame : null);
+  }) : null;
+
   (window as unknown as { __sdfGame: unknown }).__sdfGame = {
+    telemetry: telemetryControls ? {
+      start: () => telemetryControls.start(), stop: () => telemetryControls.stop(),
+      get active() { return telemetry.active; }, lastCapture: () => telemetryControls.lastCapture(),
+    } : null,
     backend: handle.backend,
     /** Set the player pose. y defaults to 0 (feet on the floor). */
     setPose(x: number, z: number, yaw: number, pitch = 0, y = 0) {
