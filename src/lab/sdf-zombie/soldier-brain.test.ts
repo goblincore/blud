@@ -135,3 +135,110 @@ describe('stepSoldierBrain — the band', () => {
     expect(out.aimT).toBe(0);
   });
 });
+
+describe('stepSoldierBrain — the firing cycle', () => {
+  /** Steps until `pred` holds or `seconds` elapse. Returns {out, fires}. */
+  function until(
+    brain: SoldierBrain,
+    over: Partial<SoldierInput>,
+    seconds: number,
+    pred: (o: ReturnType<typeof stepSoldierBrain>) => boolean = () => false,
+  ) {
+    let b = brain;
+    let fires = 0;
+    let out = stepSoldierBrain(b, input(over));
+    b = out.brain;
+    if (out.fire) fires++;
+    for (let t = DT; t < seconds && !pred(out); t += DT) {
+      out = stepSoldierBrain(b, input(over));
+      b = out.brain;
+      if (out.fire) fires++;
+    }
+    return { out, fires, brain: b };
+  }
+
+  it('does NOT fire on frame one even when the roll always says fire', () => {
+    // The decision-tick regression: rolling every frame would fire instantly.
+    const out = stepSoldierBrain(alerted(), input({ roll: 0 }));
+    expect(out.brain.state).toBe('standoff');
+    expect(out.fire).toBe(false);
+  });
+
+  it('enters aim on the first decision tick when the roll says fire', () => {
+    const r = until(alerted(), { roll: 0 }, SOLDIER_TUNING.repositionSec + 0.1,
+      o => o.brain.state === 'aim');
+    expect(r.out.brain.state).toBe('aim');
+    expect(r.out.halt).toBe(true);
+  });
+
+  it('never enters aim when the roll always refuses', () => {
+    const r = until(alerted(), { roll: 1 }, 6);
+    expect(r.fires).toBe(0);
+    expect(r.out.brain.state).toBe('standoff');
+  });
+
+  it('emits exactly ONE fire pulse per cycle', () => {
+    // Long enough for one aim+fire+recover, short enough that the next
+    // decision tick cannot start a second cycle (cooldown is 1.0 s).
+    const span = SOLDIER_TUNING.repositionSec + SOLDIER_TUNING.aimSec
+      + SOLDIER_TUNING.recoverSec + 0.2;
+    const r = until(alerted(), { roll: 0 }, span);
+    expect(r.fires).toBe(1);
+  });
+
+  it('holds the face lock and halts through aim, fire and recover', () => {
+    const r = until(alerted(), { roll: 0 }, SOLDIER_TUNING.repositionSec + 0.1,
+      o => o.brain.state === 'aim');
+    // Player is straight ahead at +z, so the face bearing is 0.
+    expect(r.out.faceHeading).toBeCloseTo(0, 6);
+    expect(r.out.halt).toBe(true);
+    expect(r.out.target).toBeNull();
+  });
+
+  it('aimT ramps 0..1 across the telegraph', () => {
+    const enter = until(alerted(), { roll: 0 }, SOLDIER_TUNING.repositionSec + 0.1,
+      o => o.brain.state === 'aim');
+    expect(enter.out.aimT).toBe(0);
+    const mid = until(enter.brain, { roll: 0 }, SOLDIER_TUNING.aimSec / 2);
+    expect(mid.out.aimT).toBeGreaterThan(0.3);
+    expect(mid.out.aimT).toBeLessThan(0.7);
+  });
+
+  it('COMMITMENT: a started cycle completes even if the player leaves the band', () => {
+    const enter = until(alerted(), { roll: 0 }, SOLDIER_TUNING.repositionSec + 0.1,
+      o => o.brain.state === 'aim');
+    expect(enter.out.brain.state).toBe('aim');
+    // Player teleports far outside the band, mid-telegraph.
+    const far = { player: { x: 0, z: 30, room: 3 }, roll: 1 };
+    const r = until(enter.brain, far, SOLDIER_TUNING.aimSec + 0.1);
+    expect(r.fires).toBe(1);            // he still takes the shot
+  });
+
+  it('respects minCooldownSec between shots', () => {
+    // Two full decision ticks with roll=0: the cooldown must suppress the
+    // second opportunity if it lands too soon.
+    const span = SOLDIER_TUNING.repositionSec * 2 + SOLDIER_TUNING.aimSec
+      + SOLDIER_TUNING.recoverSec + 0.1;
+    const r = until(alerted(), { roll: 0 }, span);
+    expect(r.fires).toBeLessThanOrEqual(1);
+  });
+
+  it('re-rolls the strafe sign on the decision tick', () => {
+    const left = until(alerted(), { roll: 1, rollDrift: 0 },
+      SOLDIER_TUNING.repositionSec + 0.1, o => o.brain.driftT >= SOLDIER_TUNING.repositionSec);
+    expect(left.out.brain.drift).toBe(-1);
+    const right = until(alerted(), { roll: 1, rollDrift: 1 },
+      SOLDIER_TUNING.repositionSec + 0.1, o => o.brain.driftT >= SOLDIER_TUNING.repositionSec);
+    expect(right.out.brain.drift).toBe(1);
+  });
+
+  it('strafes tangentially, staying inside the band', () => {
+    const out = stepSoldierBrain(alerted(), input({ roll: 1 }));
+    expect(out.brain.state).toBe('standoff');
+    const t = out.target!;
+    const d = Math.hypot(t[0] - 0, t[2] - 5);
+    expect(d).toBeGreaterThanOrEqual(SOLDIER_TUNING.standoffNear - 1e-6);
+    expect(d).toBeLessThanOrEqual(SOLDIER_TUNING.standoffFar + 1e-6);
+    expect(Math.abs(t[0])).toBeGreaterThan(0);     // actually moved off-axis
+  });
+});
