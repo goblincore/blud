@@ -18,7 +18,7 @@ import { stepRig, type RigPoint } from './rig';
 import { relaxRopeConstraints, COLLAPSE_TUNING } from './collapse';
 import { makeRng, WANDER_TUNING, headingDir, type WanderBounds } from './wander';
 import { attackPose, ATTACK_TUNING } from './attack';
-import { len, normalize, sub, dot } from './vec';
+import { len, normalize, sub, dot, qRotate } from './vec';
 import type { LimbId, Vec3 } from './types';
 import type { Wound } from './damage';
 import { compileBlob } from './blob-compile';
@@ -679,7 +679,7 @@ describe('fire signal', () => {
   const CFG: MotionConfig = { enabled: true, wander: false, profile: SOLDIER_PROFILE, forceSpeed: 3.4 };
   const fireAt = (n: number) => (i: number): MotionSignals => ({ ...NO_SIGNALS(), fire: i === n });
 
-  it('switches to the hip carry for fireHoldSec, then releases to the run carry', () => {
+  it('switches to the aimed carry for fireHoldSec, then releases to the run carry', () => {
     const j = soldierJoints();
     let state = makeMotionState(3, [0, 0, 0]);
     let points = stubPoints(j);
@@ -690,8 +690,8 @@ describe('fire signal', () => {
       carries.push(s.frame.carry ?? '-');
     }
     expect(carries[9]).toBe('chest');
-    expect(carries[10]).toBe('hip');
-    expect(carries[10 + Math.round(FIRE.holdSec * 60) - 2]).toBe('hip');
+    expect(carries[10]).toBe('aim');
+    expect(carries[10 + Math.round(FIRE.holdSec * 60) - 2]).toBe('aim');
     expect(carries[10 + Math.round(FIRE.holdSec * 60) + 2]).toBe('chest');
   });
 
@@ -862,5 +862,133 @@ describe('stepMotion — the attack seam', () => {
     // while the hook is only cocked (0.35).
     expect(yAt('overhead', ATTACK_TUNING.windupEnd))
       .toBeGreaterThan(yAt('hook', ATTACK_TUNING.windupEnd));
+  });
+});
+
+
+describe('soldier aimed movement', () => {
+  const cfg: MotionConfig = { enabled: true, wander: false, profile: SOLDIER_PROFILE, forceSpeed: 0 };
+
+  it('aims the barrel level along body facing, with both hands attached at natural arm lengths', () => {
+    const j = soldierJoints();
+    const state = makeMotionState(3, [0, 0, 0]);
+    state.bodyYaw = 1.1; state.wander.heading = 1.1;
+    const { frame } = run(j, state, { ...cfg, carryOverride: SOLDIER_PROFILE.carries!.fire }, 90);
+    const P = frame.restPose;
+    const forward = qRotate(frame.gun!.quat, [0, 0, 1]);
+    expect(dot(forward, headingDir(frame.bodyYaw))).toBeGreaterThan(0.995);
+    expect(Math.abs(forward[1])).toBeLessThan(0.03);
+    expect(P[j.index.handR]![1]).toBeGreaterThan(P[j.index.shoulderR]![1] - 0.2);
+    expect(len(sub(P[j.index.handL]!, gunPoint(frame.gun!, GUN_GRIP.foreHand)))).toBeLessThan(0.005);
+    for (const [s, e, h, lens] of [
+      ['shoulderL', 'elbowL', 'handL', j.arm.L], ['shoulderR', 'elbowR', 'handR', j.arm.R],
+    ] as const) {
+      expect(len(sub(P[j.index[e]]!, P[j.index[s]]!))).toBeCloseTo(lens[0], 5);
+      expect(len(sub(P[j.index[h]]!, P[j.index[e]]!))).toBeCloseTo(lens[1], 5);
+    }
+  });
+
+  it('raises the weapon continuously when entering aim instead of teleporting the hand', () => {
+    const j = soldierJoints();
+    const ready = run(j, makeMotionState(3, [0, 0, 0]), cfg, 60);
+    const raised = run(j, ready.state, { ...cfg, carryOverride: SOLDIER_PROFILE.carries!.fire }, 1);
+    expect(len(sub(raised.frame.restPose[j.index.handR]!, ready.frame.restPose[j.index.handR]!))).toBeLessThan(0.045);
+    const settled = run(j, raised.state, { ...cfg, carryOverride: SOLDIER_PROFILE.carries!.fire }, 90);
+    expect(len(sub(settled.frame.restPose[j.index.handR]!, ready.frame.restPose[j.index.handR]!))).toBeGreaterThan(0.1);
+  });
+
+  it('stops the soldier stride clock while stationary', () => {
+    const j = soldierJoints();
+    const moving = run(j, makeMotionState(3, [0, 0, 0]), { ...cfg, forceSpeed: 1.25 }, 60);
+    const resting = run(j, moving.state, cfg, 60);
+    expect(resting.state.gait.time).toBe(moving.state.gait.time);
+  });
+
+  it('turns toward an explicit aim heading while standing', () => {
+    const j = soldierJoints();
+    const { frame } = run(j, makeMotionState(3, [0, 0, 0]), { ...cfg, faceHeading: Math.PI / 2 } as MotionConfig, 30);
+    expect(frame.bodyYaw).toBeCloseTo(Math.PI / 2, 6);
+  });
+});
+
+
+describe('soldier two-hand transitions', () => {
+  it('keeps the support grip reachable throughout ready, run, and aim transitions', () => {
+    const j = soldierJoints();
+    let state = makeMotionState(5, [0, 0, 0]);
+    let points = stubPoints(j);
+    for (const carry of ['low', 'aim', 'chest', 'aim', 'low'] as const) {
+      for (let i = 0; i < 60; i++) {
+        const result = stepMotion(state, j, {
+          enabled: true, wander: false, profile: SOLDIER_PROFILE, forceSpeed: 0, carryOverride: carry,
+        }, NO_SIGNALS(), points, BOUNDS, makeRng(5));
+        state = result.state;
+        const P = result.frame.restPose;
+        const fore = gunPoint(result.frame.gun!, GUN_GRIP.foreHand);
+        expect(len(sub(P[j.index.handL]!, fore)), `${carry} frame ${i}`).toBeLessThan(0.01);
+        expect(len(sub(P[j.index.elbowL]!, P[j.index.shoulderL]!))).toBeCloseTo(j.arm.L[0], 5);
+        expect(len(sub(P[j.index.handL]!, P[j.index.elbowL]!))).toBeCloseTo(j.arm.L[1], 5);
+        points = P.map(p => ({ pos: [...p] as Vec3, prev: [...p] as Vec3, pinned: false }));
+      }
+    }
+  });
+});
+
+
+describe('soldier backpedal anatomy', () => {
+  it('steps away from the target while keeping knees bending toward body forward', () => {
+    const j = soldierJoints();
+    let state = makeMotionState(7, [0, 0, 0]);
+    state.wander = { pos: [0, 0, 0], target: [0, 0, -1.4], heading: 0, speed: 1.25, idle: 0 };
+    state.blend = 1;
+    let points = stubPoints(j);
+    for (let i = 0; i < 45; i++) {
+      const next = stepMotion(state, j, {
+        enabled: true, wander: true, profile: SOLDIER_PROFILE, faceHeading: 0,
+      }, NO_SIGNALS(), points, BOUNDS, makeRng(7));
+      const P = next.frame.restPose;
+      for (const [hipName, kneeName, footName] of [
+        ['hipL', 'kneeL', 'footL'], ['hipR', 'kneeR', 'footR'],
+      ] as const) {
+        const h = P[j.index[hipName]]!, k = P[j.index[kneeName]]!, f = P[j.index[footName]]!;
+        const axis = normalize(sub(f, h)), thigh = sub(k, h);
+        const along = dot(axis, thigh);
+        const bow = sub(thigh, [axis[0] * along, axis[1] * along, axis[2] * along]);
+        expect(dot(bow, headingDir(next.frame.bodyYaw)), `${kneeName} frame ${i}`).toBeGreaterThan(-0.001);
+      }
+      points = P.map(p => ({ pos: [...p] as Vec3, prev: [...p] as Vec3, pinned: false }));
+      state = next.state;
+    }
+    expect(state.wander.pos[2]).toBeLessThan(-0.4);
+    expect(state.bodyYaw).toBe(0);
+  });
+});
+
+
+describe('soldier running ready carry', () => {
+  it('keeps the running barrel near horizontal and below the face with both hands attached', () => {
+    const j = soldierJoints();
+    let state = makeMotionState(11, [0, 0, 0]);
+    let points = stubPoints(j);
+    for (let i = 0; i < 120; i++) {
+      const next = stepMotion(state, j, {
+        enabled: true, wander: false, profile: SOLDIER_PROFILE, forceSpeed: 3.4,
+      }, NO_SIGNALS(), points, BOUNDS, makeRng(11));
+      const P = next.frame.restPose;
+      const gun = next.frame.gun!;
+      const forward = qRotate(gun.quat, [0, 0, 1]);
+      expect(Math.abs(forward[1]), `barrel pitch frame ${i}`).toBeLessThan(0.5); // within 30 degrees
+      expect(gunPoint(gun, GUN_GRIP.muzzle)[1]).toBeLessThan(P[j.index.neck]![1] - 0.05);
+      expect(P[j.index.handR]![1]).toBeLessThan(P[j.index.shoulderR]![1] - 0.1);
+      expect(len(sub(P[j.index.handL]!, gunPoint(gun, GUN_GRIP.foreHand)))).toBeLessThan(0.01);
+      for (const [s, e, h, lens] of [
+        ['shoulderL', 'elbowL', 'handL', j.arm.L], ['shoulderR', 'elbowR', 'handR', j.arm.R],
+      ] as const) {
+        expect(len(sub(P[j.index[e]]!, P[j.index[s]]!))).toBeCloseTo(lens[0], 5);
+        expect(len(sub(P[j.index[h]]!, P[j.index[e]]!))).toBeCloseTo(lens[1], 5);
+      }
+      points = P.map(p => ({ pos: [...p] as Vec3, prev: [...p] as Vec3, pinned: false }));
+      state = next.state;
+    }
   });
 });

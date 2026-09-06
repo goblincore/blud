@@ -485,3 +485,35 @@ describe('curve-mode gait', () => {
     expect(blendProfiles(walk, runP, 0).curves).toBe(SOLDIER_WALK);
   });
 });
+
+
+describe('soldier cadence continuity', () => {
+  it('changing speed late in a session advances phase by one frame, without retiming the past', () => {
+    const slow = blendProfiles(MARCH, RUN, 0.35);
+    const fast = blendProfiles(MARCH, RUN, 0.4);
+    const before = stepGait(makeGaitState(9), NONE, 600, 'carry', slow);
+    const after = stepGait(before.state, NONE, DT, 'carry', fast);
+    const advanced = (after.pose.phase - before.pose.phase + 1) % 1;
+    expect(advanced).toBeCloseTo(DT * fast.strideFreq, 8);
+  });
+
+  it('the run knee moves smoothly through every sampled frame on soldier-length legs', () => {
+    const limbs: GaitLimbs = {
+      L: { thigh: [0.0147, -0.4197, 0], shin: [0.0147, -0.4197, 0] },
+      R: { thigh: [-0.0147, -0.4197, 0], shin: [-0.0147, -0.4197, 0] },
+    };
+    let state = makeGaitState(9);
+    let previous = stepGait(state, NONE, 0, 'carry', RUN, limbs).pose;
+    let fastest = 0;
+    for (let i = 0; i < 200; i++) {
+      const next = stepGait(state, NONE, 1 / 240, 'carry', RUN, limbs);
+      for (const key of ['kneeL', 'kneeR'] as const) {
+        fastest = Math.max(fastest, len(sub(next.pose.offsets[key], previous.offsets[key])) * 240);
+      }
+      state = next.state;
+      previous = next.pose;
+    }
+    // A bad sampled thigh angle used to kick the knee ~16 m/s for one frame.
+    expect(fastest).toBeLessThan(7);
+  });
+});

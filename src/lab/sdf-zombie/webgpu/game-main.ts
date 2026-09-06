@@ -69,7 +69,7 @@ import {
   type RoomDef,
 } from './game-level';
 import { stepPlayer, eyeOf, PLAYER, type PlayerState, type MoveInput } from './game-player';
-import { createZombieActor, type ZombieActor } from './game-actor';
+import { createZombieActor, segmentHitsBox, type ZombieActor } from './game-actor';
 import { separate, minPairDistance, type CrowdAgent } from '../crowd';
 import { arbitrate, RING_TUNING, type RingClaimant } from '../melee-ring';
 import { ATTACK_TUNING, type SwingVariant } from '../attack';
@@ -1247,14 +1247,8 @@ async function main() {
       id: zombieId, room: room.id, body: placed, view, character, start,
       ...(name === 'soldier' ? {
         mind: makeSoldierMind(),
-        onFire: () => {
-          const muz = character.muzzle();
-          if (!muz) return;   // prop still loading: no muzzle, no shot
-          // Along his ACTUAL facing, which the brain's face lock has already
-          // turned toward the player. Do NOT re-aim at the player here, or the
-          // shot ignores the turn rate and snaps to a target the telegraph
-          // never tracked — the aim would stop meaning anything.
-          const dir = rotateYaw([0, 0, 1], actor.pose().yaw);
+        onFire: ({ origin: muz, direction: dir }) => {
+          if (!character.prop || character.prop.released) return;
           nextSeed = (nextSeed * 1664525 + 1013904223) >>> 0;
           // ONE barrel: the double-barrel volley is the player's signature,
           // and the soldier throwing the same wall of lead reads as a second
@@ -2061,7 +2055,7 @@ async function main() {
    *  not one to make by accident.
    *
    *  There is no player health in the SDF game, so these hit nothing at all.
-   *  They fly, and they expire. That is the whole contract for this phase. */
+   *  They stop at solid level geometry and expire; actor damage remains a later phase. */
   const soldierPellets: Projectile[] = [];
   const soldierPelletViews: THREE.Mesh[] = [];
   /** World-space muzzle flashes. Separate from flashGroup, which is the FPV
@@ -3444,9 +3438,11 @@ async function main() {
       // SOLDIER PELLETS: stepped, culled and drawn — never traced. Uses the
       // same integrator as the player's (semi-implicit Euler, gravity before
       // move); hand-rolling a second one would let the two drift apart.
+      const soldierFrom = soldierPellets.map(p => [...p.pos] as Vec3);
       stepProjectiles(soldierPellets, dt);
       for (let i = soldierPellets.length - 1; i >= 0; i--) {
-        if (expired(soldierPellets[i]!)) soldierPellets.splice(i, 1);
+        if (expired(soldierPellets[i]!) || colliders.some(box =>
+          segmentHitsBox(soldierFrom[i]!, soldierPellets[i]!.pos, box))) soldierPellets.splice(i, 1);
       }
       while (soldierPelletViews.length < soldierPellets.length) {
         const mesh = new THREE.Mesh(pelletGeo, pelletMat);
@@ -3851,6 +3847,8 @@ async function main() {
         id: a.id, room: a.room, state: b.state, alert: b.alert,
         swingT: b.swingT, side: b.side, variant: b.variant,
         hasToken: a.debug().hasToken,
+        aimT: b.aimT, cooldown: b.cooldown, sinceFire: a.sinceFire(),
+        speed: a.debug().speed, target: a.debug().target,
         dist: Math.hypot(p[0] - player.pos[0], p[2] - player.pos[2]),
         bearing: Math.atan2(p[0] - player.pos[0], p[2] - player.pos[2]),
       };

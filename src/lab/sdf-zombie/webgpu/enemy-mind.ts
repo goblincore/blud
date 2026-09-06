@@ -20,6 +20,7 @@ import {
 } from '../soldier-brain';
 import type { SwingVariant } from '../attack';
 import type { Vec3 } from '../types';
+import type { WanderBounds } from '../wander';
 
 export interface MindInput {
   dt: number;
@@ -38,6 +39,9 @@ export interface MindInput {
   /** A SECOND independent 0..1, for the soldier's strafe sign. The zombie
    *  mind ignores it. */
   rollDrift: number;
+  lineOfSight?: boolean;
+  bounds?: WanderBounds;
+  canMoveTo?: (point: Vec3) => boolean;
 }
 
 export interface MindOutput {
@@ -164,6 +168,9 @@ export function makeSoldierMind(): EnemyMind {
         alerted: input.alerted,
         roll: input.roll,
         rollDrift: input.rollDrift,
+        lineOfSight: input.lineOfSight,
+        bounds: input.bounds,
+        canMoveTo: input.canMoveTo,
       });
       brain = out.brain;
       aimT = out.aimT;

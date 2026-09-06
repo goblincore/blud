@@ -264,8 +264,10 @@ export function blendProfiles(a: GaitProfile, b: GaitProfile, w: number): GaitPr
 /** The gait clock. time advances by dt each step; seed is immutable per body
  *  and drives the deterministic per-side asymmetry. */
 export interface GaitState {
-  /** Accumulated sim time (s). */
+  /** Accumulated gait time (s); the motion layer scales dt with travel. */
   time: number;
+  /** Integrated stride cycles for variable-speed profiles; absent on legacy shamble. */
+  cycles?: number;
   /** Per-body asymmetry seed — any integer; never changes. */
   seed: number;
 }
@@ -420,7 +422,10 @@ export function stepGait(
   // Master clock. Legs alternate π apart; sway/bob/rock derive from the same
   // phase so they never beat against the steps.
   const freq = T.strideFreq * (hop ? T.hopFreqScale : 1);
-  const phiL = time * freq * TAU;
+  // Recomputing time × frequency retimes the entire past when speed changes.
+  // Keep the shamble's original arithmetic for its exact-pose contract.
+  const cycles = profile === SHAMBLE ? undefined : (state.cycles ?? state.time * freq) + Math.max(dt, 0) * freq;
+  const phiL = cycles === undefined ? time * freq * TAU : cycles * TAU;
   const phiR = phiL + Math.PI;
 
   // Per-side seeded asymmetry — no two bodies or sides swing identically.
@@ -602,7 +607,7 @@ export function stepGait(
   let p = (phiL % TAU) / TAU;
   if (p < 0) p += 1;
   return {
-    state: { time, seed: s },
+    state: cycles === undefined ? { time, seed: s } : { time, seed: s, cycles },
     pose: {
       rootOffset,
       offsets,

@@ -17,6 +17,8 @@ export interface MotionProfile {
   runBand: { from: number; to: number };
   /** Wander cruise speed (m/s). */
   cruise: number;
+  /** Body turn rate (rad/s); absent preserves the heavy zombie turn. */
+  turnRate?: number;
   /** Arm style when the gait profile does not say 'carry'. */
   armStyle: ArmStyle;
   /** Which carry each locomotion state uses; absent = no held weapon. */
@@ -39,8 +41,8 @@ export const SOLDIER_PROFILE: MotionProfile = {
   // Cruise and the walk→run band come from the reference clips' implied
   // speeds (Task 1's sampling, for a 0.84 m leg):
   //   soldier-walk: freq 0.937 Hz, duty 0.63, travel 0.746 m → implied speed 1.12 m/s
-  //   soldier-run:  freq 1.500 Hz, duty 0.31, travel 0.670 m → implied speed 3.22 m/s
-  // The band brackets between the two clips (±0.2 inside the implied speeds).
+  //   soldier-run (helmeted reference): freq 1.500 Hz, duty 0.28, travel 0.557 m → implied speed 2.97 m/s
+  // The blend reaches the run near its measured speed.
   runBand: { from: 1.32, to: 3.02 },
   // CRUISE IS THE WALK CLIP'S SPEED, NOT THE RUN CLIP'S (fixed 2026-09-06).
   //
@@ -66,7 +68,8 @@ export const SOLDIER_PROFILE: MotionProfile = {
   // standoff band in 1.2 s instead of half a second.
   cruise: 1.25,
   armStyle: 'carry',
-  carries: { walk: 'low', run: 'chest', fire: 'hip' },
+  carries: { walk: 'low', run: 'chest', fire: 'aim' },
+  turnRate: 5.5,
   prop: { url: '/assets/lab/shorty-double.glb' },
 };
 
@@ -86,4 +89,11 @@ export function runWeight(p: MotionProfile, speed: number): number {
   if (!(speed > from)) return 0;
   if (speed >= to) return 1;
   return (speed - from) / (to - from);
+}
+
+/** Lab speed controls are animation bands, independent of patrol cruise. */
+export function speedForBand(profile: MotionProfile, band: 'walk' | 'run'): number {
+  return band === 'run' && Number.isFinite(profile.runBand.to)
+    ? Math.max(profile.cruise, profile.runBand.to + 0.2)
+    : Math.min(profile.cruise, profile.runBand.from * 0.75);
 }

@@ -94,7 +94,7 @@ import {
   type ActorMotion, type ActorSignals,
 } from '../actor';
 import type { ArmStyle } from '../gait';
-import { motionProfileFor, type MotionProfile } from '../motion-profile';
+import { speedForBand, motionProfileFor, type MotionProfile } from '../motion-profile';
 import type { CarryName } from '../carry';
 import { makeRng, type Rng, type WanderBounds } from '../wander';
 import { add, sub } from '../vec';
@@ -949,7 +949,7 @@ async function main() {
   /** Seconds since the hero last fired; feeds the prop's muzzle rise. */
   let sinceFire = Infinity;
   const cruiseFor = (band: 'walk' | 'run') =>
-    band === 'run' ? motionProfile.cruise : Math.min(motionProfile.cruise, motionProfile.runBand.from * 0.75);
+    speedForBand(motionProfile, band);
 
   // The character's polygon kit and held prop load inside createCharacterView
   // (the load step) — heroView.kit / heroView.prop, on the DEFAULT layer with
@@ -4365,11 +4365,11 @@ async function main() {
      * body standing still, then motion is frozen so the rig holds it.
      * 'walk' | 'run' | 'hip' are the turntable's presets.
      */
-    holdPose(preset: 'walk' | 'run' | 'hip' | 'rest', frames = 90) {
+    holdPose(preset: 'walk' | 'run' | 'hip' | 'aim' | 'rest', frames = 90) {
       setWander(false);
       setMotionEnabled(true); // resetMotion: fresh state at the origin, poseHeld off
       forceSpeed = preset === 'walk' ? cruiseFor('walk') : preset === 'run' ? cruiseFor('run') : 0;
-      carryOverride = preset === 'hip' ? 'hip' : undefined;
+      carryOverride = preset === 'hip' ? 'hip' : preset === 'aim' ? motionProfile.carries?.fire : undefined;
       if (preset === 'hip') pendingFire = true;
       const sig = heroSignals;
       for (let i = 0; i < frames; i++) {

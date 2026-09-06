@@ -47,6 +47,8 @@ import type { MissingLimbs } from '../collapse';
 import type { ZombieGpuView } from './zombie-gpu';
 import { createWoundRing, type CharacterView } from './character-view';
 import type { Aabb } from './game-level';
+import { GUN_GRIP, gunPoint } from '../carry';
+import { qRotate } from '../vec';
 
 /** Signals for an undamaged wanderer — every frame, verbatim. */
 const CALM: Omit<MotionSignals, 'dt'> = {
@@ -131,6 +133,31 @@ export function segmentCrossesBox(
     t0 = Math.max(t0, ta);
     t1 = Math.min(t1, tb);
     if (t0 > t1) return false;
+  }
+  return true;
+}
+
+/** Swept-body clearance for a short directed combat move. */
+export function clearCombatMove(from: Vec3, target: Vec3, furniture: readonly Aabb[]): boolean {
+  // The push-out solver can leave the centre exactly on the padded face.
+  // A tenth-mm tolerance permits tangential/away motion from that contact.
+  return firstBlockingBox(from, target, furniture, FURNITURE_MARGIN - 1e-4) === null;
+}
+
+/** Segment versus solid level geometry, including vertical clearance. */
+export function segmentHitsBox(from: Vec3, to: Vec3, box: Aabb): boolean {
+  let enter = 0, leave = 1;
+  for (let axis = 0; axis < 3; axis++) {
+    const d = to[axis]! - from[axis]!;
+    if (Math.abs(d) < 1e-9) {
+      if (from[axis]! < box.min[axis]! || from[axis]! > box.max[axis]!) return false;
+    } else {
+      const a = (box.min[axis]! - from[axis]!) / d;
+      const b = (box.max[axis]! - from[axis]!) / d;
+      enter = Math.max(enter, Math.min(a, b));
+      leave = Math.min(leave, Math.max(a, b));
+      if (enter > leave) return false;
+    }
   }
   return true;
 }
@@ -358,7 +385,7 @@ export function createZombieActor(opts: {
   profile?: MotionProfile;
   /** The body fired its weapon this frame. Called from step(); the wiring
    *  spawns the flash and the pellets. */
-  onFire?: () => void;
+  onFire?: (shot: { origin: Vec3; direction: Vec3 }) => void;
   /** Receives every detached piece, already placed in world space, plus the
    *  stump wound the sever stamped on the REMAINING body (null when no live
    *  anchor existed) — the bleed emitters register from it directly. */
@@ -620,20 +647,33 @@ export function createZombieActor(opts: {
         drift: ringDrift,
         roll: swingRng(),
         rollDrift: swingRng(),
+        ...(!mind.meleeCapable ? {
+          bounds: opts.bounds,
+          lineOfSight: brainPlayer !== null && !opts.furniture.some(box => segmentHitsBox(
+            [state.wander.pos[0], 1.4, state.wander.pos[2]],
+            [brainPlayer!.x, 1.4, brainPlayer!.z], box)),
+          canMoveTo: (target: Vec3) => clearCombatMove(state.wander.pos, target, opts.furniture),
+        } : {}),
       });
       brainAlerted = false;   // one-shot: the first sub-step consumes it
       lastEngaged = think.engaged;
       lastCommitted = think.committed;
-      // FACE LOCK. A halted body cannot otherwise turn: stepWander owns
-      // wander.heading and is skipped when cfg.wander is false, so an aiming
-      // soldier would track nothing and shoot wherever he last faced.
-      // Writing the bearing straight into heading lets the EXISTING damped,
-      // rate-limited bodyYaw follow do the turn — no new constant, and no
-      // second turn implementation. (brain.ts: one walker, one turn rate.)
+      // Facing and travel are independent for a ranged actor. The motion
+      // profile owns the turn rate; the mind gates release on actual yaw.
       if (think.faceHeading !== null) {
         state = { ...state, wander: { ...state.wander, heading: think.faceHeading } };
       }
-      if (think.fire) opts.onFire?.();
+      // Fire is the SAME event for the animation clock and the projectile.
+      // Previously the callback fired but CALM.fire stayed false forever.
+      signals.fire = think.fire && !missingLimbs().armR
+        && (current.clusters.find(c => c.limb === 'head')?.alive ?? false);
+      if (!mind.meleeCapable) {
+        signals.missing = missingLimbs();
+        signals.wounded = woundedLimbs();
+      }
+      if (think.halt && !mind.meleeCapable) {
+        state = { ...state, wander: { ...state.wander, target: null, speed: 0, idle: 0 } };
+      }
       if (think.target) {
         // CHASE ROUTING. The furniture rejection's escape hatch (drop the
         // target, stepWander picks another) cannot work for a chaser: the
@@ -651,7 +691,7 @@ export function createZombieActor(opts: {
         // router must NOT substitute the player, or an encircling body would
         // be routed straight into the melee it is waiting outside of.
         const goal: Vec3 = think.target;
-        if (firstBlockingBox(state.wander.pos, goal, opts.furniture)) {
+        if (mind.meleeCapable && firstBlockingBox(state.wander.pos, goal, opts.furniture)) {
           if (detourSide === 0) {
             detourSide = pickAvoidSide(state.wander.pos, goal, opts.furniture);
           }
@@ -674,6 +714,7 @@ export function createZombieActor(opts: {
         {
           enabled: true,
           wander: !think.halt,
+          ...(think.faceHeading !== null ? { faceHeading: think.faceHeading } : {}),
           // Profile, spread rather than `profile: opts.profile`: the same
           // bit-identity contract as the attack line below — motion.ts's
           // zombie path is pinned on the key being ABSENT, not undefined.
@@ -739,6 +780,13 @@ export function createZombieActor(opts: {
         rig: constrainRigBends({ ...bound.rig, points, restPose: f.restPose, bodyYaw: f.bodyYaw },
           f.collapsed ? joints.groundY - MOTION_TUNING.floorPad : undefined),
       };
+      for (const kick of f.kicks) {
+        const i = joints.index[kick.joint];
+        if (i !== undefined) bound = impulseAt(bound, bound.rig.points[i]!.pos, kick.delta);
+      }
+      if (signals.fire && f.gun && !f.collapsed) {
+        opts.onFire?.({ origin: gunPoint(f.gun, GUN_GRIP.muzzle), direction: qRotate(f.gun.quat, [0, 0, 1]) });
+      }
     }
     // Drain the frame's one-shot signals (values are read back by the motion
     // step; arrays are drained in place after the first sub-step above).

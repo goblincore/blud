@@ -147,3 +147,20 @@ describe('stepWander cruise override', () => {
     expect(go(3.4)).toBeGreaterThan(go() * 2);
   });
 });
+
+describe('directed combat movement', () => {
+  it('sidesteps toward a destination while keeping the weapon facing the threat', () => {
+    const state = { pos: [0, 0, 0] as [number, number, number], heading: 0, speed: 1, target: [1, 0, 0] as [number, number, number], idle: 0 };
+    const next = stepWander(state, makeRng(1), 1 / 60, { minX: -3, maxX: 3, minZ: -3, maxZ: 3 }, 1.25, { faceHeading: 0 });
+    expect(next.pos[0]).toBeGreaterThan(0.01);
+    expect(next.pos[2]).toBeCloseTo(0, 10);
+    expect(next.heading).toBe(0);
+  });
+
+  it('reports no locomotion when a room wall prevents displacement', () => {
+    const state = { pos: [3, 0, 0] as [number, number, number], heading: Math.PI / 2, speed: 1, target: [5, 0, 0] as [number, number, number], idle: 0 };
+    const next = stepWander(state, makeRng(1), 1 / 60, { minX: -3, maxX: 3, minZ: -3, maxZ: 3 }, 1.25, { faceHeading: 0 });
+    expect(next.speed).toBe(0);
+    expect(next.pos).toEqual([3, 0, 0]);
+  });
+});

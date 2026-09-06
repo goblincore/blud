@@ -15,7 +15,7 @@
 // onto the gun's Fore_Hand locator (ik.ts solveChain, lengths preserved
 // exactly), with an outward pole so the elbow never folds through the body.
 // That is what makes "both hands on the gun" true by construction in every
-// carry, and it is what a fourth, shouldered carry will reuse.
+// carry, including the forward aimed hold.
 //
 // Pure. Body-local axes: +x right, +y up, +z forward.
 import type { Vec3 } from './types';
@@ -23,7 +23,7 @@ import {
   add, cross, dot, normalize, qFromAxisAngle, qMul, qRotate, sub, type Quat,
 } from './vec';
 
-export type CarryName = 'low' | 'chest' | 'hip';
+export type CarryName = 'low' | 'chest' | 'hip' | 'aim';
 
 /** Right-arm rotations, radians. pitch: forward raise about the body's
  *  right axis (0 = the authored hang). yaw: about +y, positive swings the
@@ -39,19 +39,21 @@ export interface CarrySpec {
   leftPole: Vec3;
 }
 
-/** Starting numbers for the owner's look, not contracts. (Tuned in Task 6:
- *  the left-shoulder reach gate forces every two-handed carry into a
- *  cross-body diagonal — right hand near the midline, fore-end up at the
- *  left hand — so `yaw` does the reaching and the original near-zero yaws
- *  put the fore-end 0.6–0.8 m from the left shoulder.) */
+/** Low/chest/hip are cross-body holds. Aim tucks the elbow behind the
+ *  shoulder so the barrel can face forward while the fore-end remains
+ *  reachable. All four preserve the authored arm segment lengths. */
 export const CARRIES: Record<CarryName, CarrySpec> = {
   // Low ready: grip at the waist near the midline, muzzle forward-down
   // across the body, the left hand resting on the fore-end.
   low:   { right: { pitch: 0.00, yaw: 0.75, fold: 1.85 }, gunPitch: -0.95, leftPole: [0.5, -0.3, 0.2] },
-  // Diagonal across the chest, muzzle up, both hands on it — the run.
-  chest: { right: { pitch: 0.60, yaw: 0.40, fold: 1.55 }, gunPitch: 0.55,  leftPole: [0.6, 0.1, 0.1] },
-  // Level at the waist, swung a little across the body, elbow tucked — the shot.
+  // Running ready: elbow close to the ribs, gun across the lower chest.
+  // Counter-pitch the raised forearm so the muzzle clears the face.
+  chest: { right: { pitch: -0.30, yaw: 0.50, fold: 2.10 }, gunPitch: -0.25, leftPole: [0.5, -0.3, 0.2] },
+  // Legacy waist-level hold, swung a little across the body, elbow tucked.
   hip:   { right: { pitch: 0.00, yaw: 0.55, fold: 1.75 }, gunPitch: -0.35, leftPole: [0.5, -0.3, 0.3] },
+  // Elbow tucked back, grip below the shoulder, forearm and barrel forward.
+  // The short gun's fore-end stays within the real soldier's 0.50 m left arm.
+  aim:   { right: { pitch: -0.95, yaw: 0.07, fold: 2.382 }, gunPitch: 0, leftPole: [0.5, -0.3, 0.2] },
 };
 
 /** shorty-double.glb locators, gun-local metres, +z = muzzle. Measured from
@@ -126,7 +128,7 @@ export function armPivot(
 
 /** Muzzle-rise after a shot: an extra gun pitch (rad) decaying from the
  *  fire instant. Pure in `age` so the prop can pose without state. */
-export const MUZZLE_RISE = { peak: 0.35, decay: 0.12 } as const;
+export const MUZZLE_RISE = { peak: 0.12, decay: 0.12 } as const;
 export function muzzleRise(age: number): number {
   if (age < 0) return 0;
   return MUZZLE_RISE.peak * Math.exp(-age / MUZZLE_RISE.decay);

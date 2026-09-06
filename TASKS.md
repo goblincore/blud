@@ -20,6 +20,8 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**[~] Soldier combat/animation polish — ready for owner playtest on `codex/soldier-polish`.** Fixed endless strafe targets, slow/misaligned aim, absent recoil, discontinuous gait, run carry, and lab run controls. [Findings and preview](docs/dev-notes/2026-09-06-soldier-polish/notes.md); not merged pending feel check.
+
 **[~] Game tile visual playtest + telemetry — integrated on main; owner visual run next, before performance comparisons.**
 [Usage](docs/dev-notes/2026-09-06-game-tiles-telemetry/notes.md): `?tiles-playtest`, F6 tiles, F8 record/save, F9 geometry/wound marker; ordinary tile default off, no GPU timing claim.
 

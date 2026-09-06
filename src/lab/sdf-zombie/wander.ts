@@ -116,6 +116,8 @@ export function stepWander(
   bounds: WanderBounds,
   /** Cruise speed (m/s). Defaults to WANDER_TUNING.speed — the zombie. */
   cruiseSpeed: number = WANDER_TUNING.speed,
+  /** Combat locomotion: move toward the endpoint while looking at the threat. */
+  combat?: { faceHeading: number },
 ): WanderState {
   const dtc = Math.min(Math.max(dt, 0), 0.25);
   const T = WANDER_TUNING;
@@ -129,6 +131,23 @@ export function stepWander(
 
   let { pos, heading, speed, target, idle } = state;
   const accel = T.accel * dtc;
+
+  if (combat) {
+    heading = wrapPi(combat.faceHeading);
+    if (!target || dtc === 0) return { pos, heading, speed: 0, target, idle: 0 };
+    const dx = target[0] - pos[0], dz = target[2] - pos[2];
+    const dist = Math.hypot(dx, dz);
+    if (dist < 0.15) return { pos, heading, speed: 0, target, idle: 0 };
+    const wanted = cruiseSpeed * Math.min(1, dist / 0.65);
+    speed = approach(speed, wanted, accel);
+    const travel = Math.min(dist, speed * dtc);
+    const next: Vec3 = [
+      clamp(pos[0] + dx / dist * travel, b.minX, b.maxX), 0,
+      clamp(pos[2] + dz / dist * travel, b.minZ, b.maxZ),
+    ];
+    speed = Math.hypot(next[0] - pos[0], next[2] - pos[2]) / dtc;
+    return { pos: next, heading, speed, target, idle: 0 };
+  }
 
   if (idle > 0) {
     idle = Math.max(0, idle - dtc);
