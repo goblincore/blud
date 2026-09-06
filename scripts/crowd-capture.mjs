@@ -16,10 +16,27 @@
 // Env:
 //   CROWD       crowd size (default 0 = body zero only)
 //   YAW/PITCH/DIST  camera (defaults 0.6 / 0.12 / 2.4)
-//   MOTION      "off" (freeze recipe, default) or "on" (leave motion running
-//               — used only for smoke-checking animation, never for diffs)
+//   MOTION      "off"  full freeze recipe (default): motion and wander off,
+//                      so the body holds its authored rest pose;
+//               "walk" motion AND wander LEFT ON, then the same pauseLoop +
+//                      holdStill(120) canonical reset and fixed-dt walk-in.
+//                      Deterministic for the same reason "off" is — holdStill
+//                      reseeds from MOTION_SEED and steps a FIXED dt, so the
+//                      real-rAF timing history that made settled captures
+//                      unrepeatable never enters. This is the ONLY mode that
+//                      renders a body mid-gait, and therefore the only one
+//                      that can see a motion-vs-rig defect (see CHARACTER);
+//               "on"   leave the live loop running — smoke-check only, NEVER
+//                      diff two of these.
+//   CHARACTER   lab ?character= value (default: the lab's own default, zombie).
+//               THE GATE WAS BLIND TO EVERY CHARACTER BUT THE ZOMBIE until
+//               this existed (2026-09-06): a goblin regression visible on
+//               screen passed all eight views and all four game gates,
+//               because every one of them rendered the zombie.
 //   SETTLE_MS   default 2500
 //   BENCH       if 1, run benchGpu() instead of shooting
+
+const fail = (msg) => { console.error(`FAIL: ${msg}`); process.exit(1); };
 
 const VITE = Number(process.argv[2] ?? 5291);
 const CDP = Number(process.argv[3] ?? 9271);
@@ -29,6 +46,13 @@ const YAW = Number(process.env.YAW ?? 0.6);
 const PITCH = Number(process.env.PITCH ?? 0.12);
 const DIST = Number(process.env.DIST ?? 2.4);
 const MOTION = process.env.MOTION ?? 'off';
+if (!['off', 'walk', 'on'].includes(MOTION)) fail(`MOTION must be off|walk|on, got "${MOTION}"`);
+// Freeze the rig only in "off". "walk" wants the gait to actually run during
+// holdStill's fixed-dt walk-in; "on" wants everything live.
+const FREEZE_MOTION = MOTION === 'off';
+// Pause + canonical reset for anything that is going to be diffed.
+const CANONICALISE = MOTION !== 'on';
+const CHARACTER = process.env.CHARACTER ?? '';
 const SETTLE_MS = Number(process.env.SETTLE_MS ?? 2500);
 const BENCH = process.env.BENCH === '1';
 // WOUNDS: stamp N blast craters on the torso before capturing. Default 0 =
@@ -49,7 +73,6 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const fail = (msg) => { console.error(`FAIL: ${msg}`); process.exit(1); };
 
 // ---------- CDP plumbing (same no-deps pattern as relax-sweep.mjs) ----------
 const tab = await (
@@ -96,7 +119,8 @@ await send('Emulation.setDeviceMetricsOverride', { width: 960, height: 960, devi
 // of base64 through Runtime.evaluate (whose promise GCs at that size).
 const hashPng = (b64) => createHash('sha256').update(Buffer.from(b64, 'base64')).digest('hex');
 
-const url = `http://localhost:${VITE}/sdf-lab-webgpu.html`;
+const url = `http://localhost:${VITE}/sdf-lab-webgpu.html`
+  + (CHARACTER ? `?character=${encodeURIComponent(CHARACTER)}` : '');
 console.log(`capture ${url}  crowd ${CROWD}, motion ${MOTION}, bench ${BENCH}`);
 await send('Page.navigate', { url });
 
@@ -116,7 +140,7 @@ if (backend !== 'webgpu') fail(`backend is ${backend}, not webgpu`);
 await evaluate(`(() => {
   const L = window.__sdfLab;
   window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyH' })); // hide debug panel
-  if (${MOTION !== 'on'}) { L.setMotionEnabled(false); L.setWander(false); }
+  if (${FREEZE_MOTION}) { L.setMotionEnabled(false); L.setWander(false); }
   L.setAdaptive(false);
   L.setSdfScale(1.0);
   L.post.setSmear(0);
@@ -146,7 +170,7 @@ if (WOUNDS > 0) {
 // Suspend the loop: the statue-mode rig integrates real dt forever (a
 // micro-jitter no settling removes), so only a paused loop gives bit-stable
 // captures. The last presented frame stays on the canvas.
-if (MOTION !== 'on') {
+if (CANONICALISE) {
   await evaluate('window.__sdfLab.pauseLoop()');
   // Canonical reset + fixed-dt walk-in: makes the frozen frame a pure
   // function of (code, seed), so two page loads hash identically.
@@ -171,7 +195,8 @@ if (BENCH) {
   const unique = [...new Set(hashes)];
   writeFileSync(OUT, Buffer.from(lastB64, 'base64'));
   console.log(JSON.stringify({
-    out: OUT, crowd: CROWD, motion: MOTION, wounds: WOUNDS,
+    out: OUT, character: CHARACTER || 'zombie', crowd: CROWD,
+    motion: MOTION, wounds: WOUNDS,
     hashes: unique,
     stableWithinRun: unique.length === 1,
     consoleErrors: consoleErrors.slice(0, 6),

@@ -45,10 +45,10 @@ lab_servers_up
 # Per-capture budget. One capture is ~60-90 s of real work plus the hang.
 CAP_TIMEOUT="${CAP_TIMEOUT:-240}"
 
-# (label, CROWD, YAW, PITCH, DIST) — several camera angles and crowd sizes so
-# a regression confined to one view cannot hide. Single body first: it is the
-# most sensitive to a body/material change and the fastest to read.
-# label CROWD YAW PITCH DIST WOUNDS
+# (label CHARACTER CROWD YAW PITCH DIST WOUNDS MOTION) — several camera angles,
+# crowd sizes and two characters so a regression confined to one view cannot
+# hide. Single body first: it is the most sensitive to a body/material change
+# and the fastest to read.
 #
 # THE WOUNDED VIEWS ARE NOT OPTIONAL (added 2026-09-06). Without them this gate
 # is blind to the ENTIRE wound path — crowd-capture never fires a weapon, so
@@ -57,24 +57,47 @@ CAP_TIMEOUT="${CAP_TIMEOUT:-240}"
 # is precisely what happened when the lab converged onto the shared carve
 # upload: five identical hashes, and a real behaviour change invisible to all
 # of them.
+#
+# THE GOBLIN VIEWS ARE NOT OPTIONAL EITHER (added 2026-09-06). Every view above
+# them renders the ZOMBIE, and so did all four sdf-game gates — so when task 3
+# visibly broke the goblin on screen, all eight views and all four gates went
+# green. The goblin is the right canary because he is the only registered
+# character carrying BOTH a polygon kit (which rides the rig) and a generated
+# face sheet (which does not), plus SDF face primitives no other character has.
+#
+# AND goblin-walk IS THE POINT OF THE PAIR. Every other view here holds the
+# authored REST pose, where the goblin has always looked correct — the owner
+# found this himself ("the goblin looks fine if i turn off movement"). The
+# defect only exists mid-gait, so a gate made only of rest poses can never see
+# it no matter how many characters it renders. MOTION=walk leaves the gait and
+# wander running and relies on holdStill's reseed + fixed-dt walk-in for
+# repeatability, exactly as MOTION=off does.
 CAPTURES=(
-  "solo-front  0 0.6 0.12 2.4 0"
-  "solo-side   0 1.9 0.10 2.4 0"
-  "solo-close  0 0.6 0.30 1.4 0"
-  "crowd6      6 0.6 0.12 2.4 0"
-  "crowd6-wide 6 0.6 0.05 4.0 0"
-  "wound-front 0 0.6 0.12 2.4 6"
-  "wound-close 0 0.6 0.30 1.4 6"
-  "wound-side  0 1.9 0.10 2.4 6"
+  "solo-front   .      0 0.6 0.12 2.4 0 off"
+  "solo-side    .      0 1.9 0.10 2.4 0 off"
+  "solo-close   .      0 0.6 0.30 1.4 0 off"
+  "crowd6       .      6 0.6 0.12 2.4 0 off"
+  "crowd6-wide  .      6 0.6 0.05 4.0 0 off"
+  "goblin-rest  goblin 0 0.6 0.12 2.4 0 off"
+  "goblin-close goblin 0 0.6 0.30 1.4 0 off"
+  "goblin-walk  goblin 0 0.6 0.12 2.4 0 walk"
+  "zombie-walk  .      0 0.6 0.12 2.4 0 walk"
+  "wound-front  .      0 0.6 0.12 2.4 6 off"
+  "wound-close  .      0 0.6 0.30 1.4 6 off"
+  "wound-side   .      0 1.9 0.10 2.4 6 off"
 )
 
 fails=0
 for row in "${CAPTURES[@]}"; do
-  read -r label crowd yaw pitch dist wounds <<< "$row"
+  read -r label character crowd yaw pitch dist wounds motion <<< "$row"
+  # "." is the placeholder for "the lab's own default character" so the table
+  # stays a fixed-width read; an empty column would shift every field after it.
+  [ "$character" = "." ] && character=""
   png="$OUT/$label.png"
-  echo "[baseline] $label (crowd=$crowd yaw=$yaw pitch=$pitch dist=$dist wounds=$wounds)"
+  echo "[baseline] $label (char=${character:-zombie} crowd=$crowd yaw=$yaw pitch=$pitch dist=$dist wounds=$wounds motion=$motion)"
   timeout "$CAP_TIMEOUT" env \
-    CROWD="$crowd" YAW="$yaw" PITCH="$pitch" DIST="$dist" MOTION=off WOUNDS="$wounds" \
+    CROWD="$crowd" YAW="$yaw" PITCH="$pitch" DIST="$dist" \
+    MOTION="$motion" WOUNDS="$wounds" CHARACTER="$character" \
     node scripts/crowd-capture.mjs "$LAB_VITE_PORT" "$LAB_CDP_PORT" "$png" \
     </dev/null > "$OUT/$label.json" 2>&1
   rc=$?
@@ -96,6 +119,20 @@ for row in "${CAPTURES[@]}"; do
     fails=$((fails + 1))
     continue
   fi
+  # THE GOBLIN VIEWS ARE NOT HASH-GATED EITHER, AND THAT IS THE BUG THEY WERE
+  # ADDED TO EXPOSE (measured 2026-09-06). Three boots of goblin-rest on
+  # UNCHANGED code gave 2646cd27 / 97c1c11f / 631ecac1, and three of
+  # goblin-walk gave three more — while zombie-walk, same recipe, same
+  # holdStill, gave 90d3fcc6 three times out of three. The variation is not
+  # sub-pixel: on some boots the goblin's armour hangs off the body entirely
+  # and a kit piece floats beside his head; on others it fits.
+  #
+  # So the goblin's own render is nondeterministic per page load, and it is
+  # NOT the walk mode (the zombie walks bit-stably) and NOT task 3 (this
+  # reproduces on the reverted lab, which is what the revert was supposed to
+  # fix). Until that is fixed these two are EYEBALL evidence. When it IS
+  # fixed they must move back into MANIFEST — a stable goblin that is not
+  # hash-gated is the blindness this whole exercise was about.
   # WOUNDED VIEWS ARE NOT HASH-GATED — they go to MANIFEST-EYEBALL instead.
   #
   # They are NOT reproducible run to run (measured 2026-09-06: the same code
@@ -110,7 +147,7 @@ for row in "${CAPTURES[@]}"; do
   # would report three CHANGED views and train the reader to ignore the gate.
   # They stay as EYEBALL evidence — which is what they were wanted for, since
   # the carve-cap difference is sub-perceptual anyway.
-  if [ "$wounds" -gt 0 ]; then
+  if [ "$wounds" -gt 0 ] || [ "$character" = "goblin" ]; then
     shasum -a 256 "$png" | awk -v l="$label" '{print l" "$1}' >> "$OUT/MANIFEST-EYEBALL"
   else
     shasum -a 256 "$png" | awk -v l="$label" '{print l" "$1}' >> "$MANIFEST"
