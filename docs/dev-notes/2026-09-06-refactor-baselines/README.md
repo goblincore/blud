@@ -39,13 +39,22 @@ all distinct, which is what makes the baseline discriminating.
 | crowd6 | 6 | 0.6 | 0.12 | 2.4 |
 | crowd6-wide | 6 | 0.6 | 0.05 | 4.0 |
 
-## Trap
+## Trap (FIXED 2026-09-06 — kept for the record)
 
-`crowd-capture.mjs` writes its PNG, prints its JSON, then **never exits** — a
-live CDP WebSocket keeps node's event loop alive. Any loop over it hangs on the
-first iteration, looking exactly like a slow capture. The result is complete
-before the hang, so a per-run `timeout` is the correct harness and **`rc=124`
-is the success path**.
+`crowd-capture.mjs` used to write its PNG, print its JSON, and then **never
+exit**: a live CDP WebSocket kept node's event loop alive. Any loop over it
+hung on the first iteration, looking exactly like a slow capture. The result
+was complete before the hang, so a per-run `timeout` was the harness and
+`rc=124` was the *success* path.
+
+It now closes the socket and exits. **`rc=0` is success; `rc=124` means it
+really hung** and the capture must not be trusted.
+
+The cost was much worse than the comments claimed. They guessed "60–90 s of
+real work plus the hang"; measured after the fix, an unwrapped capture returns
+in **7 seconds**, so a 240 s budget spent ~97% of every run waiting on a
+finished process. The full twelve-view baseline went from ~48 minutes to
+**1 min 47 s**.
 
 ## Game gates (added 2026-09-06, after the slug fix)
 

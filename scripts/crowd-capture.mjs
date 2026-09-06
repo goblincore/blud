@@ -35,6 +35,11 @@
 //               because every one of them rendered the zombie.
 //   SETTLE_MS   default 2500
 //   BENCH       if 1, run benchGpu() instead of shooting
+//
+// EXITS ON ITS OWN. It did not until 2026-09-06 -- see the note above the
+// ws.close() at the bottom -- so callers wrapping this in `timeout` and
+// treating rc=124 as the success path are reading a fixed bug; a clean run
+// now exits 0 and a 124 means it really did hang.
 
 const fail = (msg) => { console.error(`FAIL: ${msg}`); process.exit(1); };
 
@@ -202,3 +207,25 @@ if (BENCH) {
     consoleErrors: consoleErrors.slice(0, 6),
   }, null, 2));
 }
+
+// CLOSE THE SOCKET, OR THIS PROCESS NEVER EXITS (fixed 2026-09-06).
+//
+// An open CDP WebSocket is a live libuv handle, so node kept the event loop
+// alive forever with all the work done and the PNG already on disk. Every
+// caller had to wrap the run in `timeout`, and every capture then burned its
+// ENTIRE budget waiting on a finished process. The cost was badly
+// underestimated in the comments this replaces, which guessed "60-90 s of
+// real work plus the hang": MEASURED after the fix, an unwrapped capture
+// returns in SEVEN SECONDS, so a 240 s budget was spending 97% of a
+// twelve-shot gate waiting on nothing. It also cost two debugging attempts
+// the first time someone hit it, because a plain loop over this script simply
+// hangs on iteration one.
+//
+// The unref'd timer is belt and braces, not the mechanism: closing the socket
+// normally drains the loop and node exits on its own, flushing stdout the
+// ordinary way (which `process.exit()` here would risk truncating, since a
+// piped stdout write can still be in flight). If some other handle is left
+// holding the loop the timer fires and takes the exit anyway -- and because
+// it is unref'd it never delays an otherwise-clean exit.
+ws.close();
+setTimeout(() => process.exit(0), 2000).unref();

@@ -21,12 +21,17 @@
 # the SAME code, that assumption has broken and the gate is invalid: stop and
 # say so rather than loosening the comparison.
 #
-# THE PER-RUN `timeout` IS LOAD-BEARING, NOT A FLAKE GUARD. crowd-capture.mjs
-# writes its PNG and prints its JSON and then NEVER EXITS — a live CDP
-# WebSocket keeps node's event loop alive. A plain loop over it hangs forever
-# on the first iteration (this cost two attempts on 2026-09-06 before the
-# cause was found). The result is complete well before the hang, so `rc=124`
-# from `timeout` is the SUCCESS path here. A run that exits 0 is the surprise.
+# THE PER-RUN `timeout` IS AN ORDINARY HANG GUARD AGAIN (2026-09-06).
+#
+# It used to be load-bearing: crowd-capture.mjs wrote its PNG, printed its
+# JSON and then NEVER EXITED, because its live CDP WebSocket kept node's event
+# loop alive. `rc=124` from `timeout` was this script's SUCCESS path, and a
+# run that exited 0 was the surprise. The cost was not subtle — every capture
+# waited out its ENTIRE budget with the work long finished, four minutes a
+# shot against seven seconds of measured work, twelve shots per baseline.
+#
+# crowd-capture now closes the socket and exits. So 0 is success, and a 124
+# means it genuinely hung and the capture must not be trusted.
 set -uo pipefail
 
 OUT="${1:?usage: refactor-baseline.sh <outdir>}"
@@ -42,7 +47,11 @@ export LAB_CDP_PORT="${LAB_CDP_PORT:-9273}"
 trap 'lab_servers_down' EXIT
 lab_servers_up
 
-# Per-capture budget. One capture is ~60-90 s of real work plus the hang.
+# Per-capture budget — now a hang guard with a lot of headroom, not a stopwatch
+# anyone waits out. MEASURED 2026-09-06, once crowd-capture stopped hanging: a
+# full unwrapped capture returns in about SEVEN SECONDS. The old comment here
+# guessed "60-90 s of real work plus the hang" and was wrong about the work
+# too — nearly all of that was the hang.
 CAP_TIMEOUT="${CAP_TIMEOUT:-240}"
 
 # (label CHARACTER CROWD YAW PITCH DIST WOUNDS MOTION) — several camera angles,
@@ -101,8 +110,10 @@ for row in "${CAPTURES[@]}"; do
     node scripts/crowd-capture.mjs "$LAB_VITE_PORT" "$LAB_CDP_PORT" "$png" \
     </dev/null > "$OUT/$label.json" 2>&1
   rc=$?
-  # 124 = timeout killed the hung-but-finished process: the expected path.
-  if [ "$rc" -ne 124 ] && [ "$rc" -ne 0 ]; then
+  if [ "$rc" -ne 0 ]; then
+    # 124 now means a REAL hang (it used to be the success path — see the note
+    # at the top), so it fails like any other bad exit rather than passing.
+    [ "$rc" -eq 124 ] && echo "[baseline] $label HUNG — ${CAP_TIMEOUT}s budget exhausted"
     echo "[baseline] FAIL $label rc=$rc — see $OUT/$label.json"
     fails=$((fails + 1))
     continue
