@@ -5433,6 +5433,12 @@ async function main() {
     /** Accent lights per room — capture/measurement seam (pair-shot framing). */
     accents: ROOMS.flatMap(r => r.accents.map(a => ({ room: r.id, ...a }))),
   };
+  if (import.meta.env.DEV && new URLSearchParams(location.search).has('normal-playtest')) {
+    const { installNormalPlaytest } = await import('./normal-gradient-playtest');
+    const api = (window as unknown as { __sdfGame: Parameters<typeof installNormalPlaytest>[0] }).__sdfGame;
+    const disposePlaytest = installNormalPlaytest(api);
+    import.meta.hot?.dispose(disposePlaytest);
+  }
 }
 
 main().catch((err) => {
