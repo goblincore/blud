@@ -104,8 +104,12 @@ import {
   type WoundPanel, type WoundTuningValues,
 } from './wound-panel';
 import { chunkSettled, makeChunk, stepChunk } from '../gib-chunks';
+import { chunkBakeField } from '../chunk-bake-field';
+import { createChunkBakeJobs } from './chunk-bake-jobs';
+import { unpackChunkBake } from './chunk-bake-buffers';
+import type { ChunkBakeData } from './chunk-bake-geometry';
 import {
-  bakeChunkGeometry, createBakedChunkMaterial, type BakedChunkMaterial,
+  createBakedChunkMaterial, type BakedChunkMaterial,
 } from './baked-chunks';
 import { chunkExtent } from '../extent';
 import { createChunkGpuView, createSharedChunkGpuMaterial, type ChunkGpuView } from './zombie-gpu';
@@ -2000,6 +2004,7 @@ async function main() {
   const MAX_CHUNKS = 12;
   const chunkMaterial = createSharedChunkGpuMaterial(sdfLayer.prev);
   const chunkViews: ChunkGpuView[] = [];
+  const spareChunkViews: ChunkGpuView[] = [];
   const liveChunks: { id: number; state: ReturnType<typeof makeChunk>; view: ChunkGpuView; template: ChunkTemplate }[] = [];
   // The bake STATE (seam, bakedChunks, material) is declared near the boot's
   // light-seed block; here live only the bake/gib/free functions.
@@ -2013,24 +2018,38 @@ async function main() {
     b.mesh.geometry.dispose(); // material is shared; geometry is per-bake
     return b.view;
   }
-  /** Extract + swap one settled chunk. Runs inside the frame loop, so the
-   *  CPU cost is a real frame hitch — measured, reported in chunkStats,
-   *  and paid once per chunk. A bone-only chunk (the melt's released
-   *  skeleton groups) has an EMPTY CPU flesh field (validate.ts never
-   *  folds bones outside the near-wound gate) — keep those marched. */
-  function bakeSettled(entry: { id: number; state: ReturnType<typeof makeChunk>; view: ChunkGpuView; template: ChunkTemplate }): void {
-    const data = entry.view.bakeData();
-    if (data.flesh.length === 0) {
-      entry.view.update(entry.state);
-      liveChunks.push(entry);
-      return;
-    }
+  const chunkBakeJobs = createChunkBakeJobs(() => new Worker(
+    new URL('./chunk-bake.worker.ts', import.meta.url), { type: 'module' },
+  ));
+  let chunkBakeInput: ChunkBakeData | null = null;
+  let lastBakeSwapMs = 0;
+  let lastBakeRequestMs = 0;
+  const cancelChunkBake = () => { chunkBakeJobs.cancel(); chunkBakeInput = null; };
+  window.addEventListener('pagehide', cancelChunkBake);
+  import.meta.hot?.dispose(() => {
+    cancelChunkBake();
+    window.removeEventListener('pagehide', cancelChunkBake);
+  });
+
+  /** Consume at most one completed mesh in a frame. All extraction, welding,
+   * colour and normal work ran in the worker; only wrap buffers and swap here.
+   * Recycled IDs are never reused, so an old reply cannot hide a new piece. */
+  function finishChunkBake(): void {
+    const done = chunkBakeJobs.takeCompleted();
+    if (!done) return;
+    const data = chunkBakeInput;
+    chunkBakeInput = null;
+    const index = liveChunks.findIndex(c => c.id === done.id);
+    if (!chunkBakeEnabled || index < 0 || !data) return;
+    const entry = liveChunks[index]!;
+    if (!chunkSettled(entry.state)) return;
+    const t0 = performance.now();
+    const baked = unpackChunkBake(done.result);
     if (!bakedChunkMat) {
       bakedChunkMat = createBakedChunkMaterial();
-      // The boot seed block ran before any bake existed — apply it now.
       bakedChunkSeed?.(bakedChunkMat);
     }
-    const baked = bakeChunkGeometry(data);
+    liveChunks.splice(index, 1);
     const mesh = new THREE.Mesh(baked.geometry, bakedChunkMat.material);
     mesh.frustumCulled = true; // it is a static bounded mesh — let three cull it
     scene.add(mesh);
@@ -2050,6 +2069,7 @@ async function main() {
       torn: data.torn.length, gore: data.gore,
       radius: baked.radius,
     };
+    lastBakeSwapMs = performance.now() - t0;
     if (baked.overflow || baked.droppedQuads > 0) {
       console.warn(`[chunk-bake] chunk ${entry.id}: overflow=${baked.overflow} droppedQuads=${baked.droppedQuads} — geometry holes`);
     }
@@ -2060,8 +2080,10 @@ async function main() {
    *  path — the design question settled for option 2 (simpler: no dual
    *  representation to keep in sync, and closer to the feel). */
   function gibBakedPiece(b: BakedChunk, at: Vec3): void {
-    const template = b.template;
-    freeBaked(b);
+    spareChunkViews.push(freeBaked(b));
+    gibChunkMeat(b.template, at);
+  }
+  function gibChunkMeat(template: ChunkTemplate, at: Vec3): void {
     const rng = mulberry32(nextSeed++);
     const gobs = 2 + (rng() < 0.5 ? 1 : 0);
     for (let i = 0; i < gobs; i++) {
@@ -2117,14 +2139,17 @@ async function main() {
     // oldest, least-relevant gore, so its view recycles FIRST; only when
     // every view is live-and-flying does the old oldest-live rule apply.
     // Either way views stay bounded at MAX_CHUNKS — the leak gate.
-    let recycled: ChunkGpuView | undefined;
-    if (chunkViews.length >= MAX_CHUNKS) {
+    let recycled: ChunkGpuView | undefined = spareChunkViews.pop();
+    if (!recycled && chunkViews.length >= MAX_CHUNKS) {
       const oldestBaked = bakedChunks.shift();
       if (oldestBaked) {
         recycled = freeBaked(oldestBaked);
       } else {
         const oldest = liveChunks.shift();
-        if (oldest) recycled = oldest.view;
+        if (oldest) {
+          if (chunkBakeJobs.pendingId === oldest.id) cancelChunkBake();
+          recycled = oldest.view;
+        }
       }
     }
     if (recycled) {
@@ -3107,6 +3132,33 @@ async function main() {
             break;
           }
         }
+        if (!dead && chunkBakeEnabled) {
+          // Settled pieces must remain hittable while queued/in flight. A
+          // sphere rejects distant shots, then the existing CPU field tests
+          // the actual piece without extracting any mesh on this thread.
+          const dx = p.pos[0] - from[0], dy = p.pos[1] - from[1], dz = p.pos[2] - from[2];
+          const l2 = dx * dx + dy * dy + dz * dz || 1;
+          for (let ci = liveChunks.length - 1; ci >= 0; ci--) {
+            const c = liveChunks[ci]!;
+            if (!chunkSettled(c.state)) continue;
+            const centre = c.state.pos;
+            const t = Math.max(0, Math.min(1, ((centre[0] - from[0]) * dx + (centre[1] - from[1]) * dy + (centre[2] - from[2]) * dz) / l2));
+            const qx = from[0] + dx * t - centre[0], qy = from[1] + dy * t - centre[1], qz = from[2] + dz * t - centre[2];
+            if (qx * qx + qy * qy + qz * qz > (c.state.radius + p.radius) ** 2) continue;
+            const data = c.view.bakeData();
+            if (data.flesh.length === 0) continue;
+            const field = chunkBakeField(data).field;
+            const hp = traceProjectile(from, p.pos, q => field(q) - p.radius);
+            if (!hp) continue;
+            if (chunkBakeJobs.pendingId === c.id) cancelChunkBake();
+            liveChunks.splice(ci, 1);
+            c.view.object.visible = false;
+            spareChunkViews.push(c.view);
+            gibChunkMeat(c.template, hp);
+            dead = true;
+            break;
+          }
+        }
         if (!dead && p.pos[1] <= 0.02) dead = true;
         if (!dead) {
           // Level geometry: a point-in-AABB test is enough — pellets are
@@ -3190,21 +3242,24 @@ async function main() {
       // GUT ROPES first, so stepBlood's skip of 'gut' droplets this frame
       // sees this frame's chain positions (see stepGutRopes).
       stepGutRopes(cdt);
-      // ONE bake per frame: a bake is ~5 ms of CPU (gate: lastBakeMs 5.3 on
-      // a 128-vert piece) and a double-barrel gib lands several chunks that
-      // settle within a few frames of each other. A settled chunk stays
-      // settled, so the others simply bake on the following frames.
-      let bakedThisFrame = false;
+      finishChunkBake();
       for (let ci = liveChunks.length - 1; ci >= 0; ci--) {
         const c = liveChunks[ci]!;
-        c.state = stepChunk(c.state, cdt);
-        if (chunkBakeEnabled && !bakedThisFrame && chunkSettled(c.state)) {
-          liveChunks.splice(ci, 1);
-          bakeSettled(c);
-          bakedThisFrame = true;
+        // Keep the exact settled snapshot visible while its worker runs.
+        // No disappearance, and no pose drift between sampling and swap.
+        if (chunkBakeJobs.pendingId === c.id) {
+          c.view.update(c.state); // repair view resets (e.g. bone-mode changes) without moving the snapshot
           continue;
         }
+        c.state = stepChunk(c.state, cdt);
         c.view.update(c.state);
+        if (chunkBakeEnabled && chunkBakeJobs.pendingId === null && !chunkBakeJobs.error && chunkSettled(c.state)) {
+          const t0 = performance.now();
+          const data = c.view.bakeData();
+          // Bone-only pieces retain their original SDF path.
+          if (data.flesh.length > 0 && chunkBakeJobs.submit(c.id, data)) chunkBakeInput = data;
+          lastBakeRequestMs = performance.now() - t0;
+        }
       }
       // BLEED — emitters spray (anchors recomputed from the CURRENT posed
       // prims, so droplets ride the walking body), flying chunks trail, and
@@ -5260,6 +5315,7 @@ async function main() {
      *  settles — baked pieces stay baked until shot or recycled. */
     setChunkBake(on: boolean) {
       chunkBakeEnabled = on;
+      if (!on) cancelChunkBake();
       if (on && bakedChunkMat) bakedChunkSeed?.(bakedChunkMat);
     },
     get chunkBake() { return chunkBakeEnabled; },
@@ -5270,7 +5326,12 @@ async function main() {
       baked: bakedChunks.length,
       views: chunkViews.length,
       totalBakes,
-      lastBakeMs,
+      lastBakeMs, // worker CPU time, NOT a main-thread span
+      lastBakeSwapMs,
+      lastBakeRequestMs,
+      bakeThread: 'worker',
+      pendingBake: chunkBakeJobs.pendingId,
+      bakeError: chunkBakeJobs.error,
       lastBakeInfo,
       pieces: bakedChunks.map(b => ({ id: b.id, centre: [...b.centre] as [number, number, number], radius: b.radius })),
       /** Live (still-marched) chunk positions — the look/bench drivers frame

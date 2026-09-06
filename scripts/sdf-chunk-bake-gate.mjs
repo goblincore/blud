@@ -243,11 +243,12 @@ const staged1 = await stageChunks(3, 2);
 if (staged1.error) fail(staged1.error);
 
 // Settle: step until the bake has consumed every settled chunk (a bake runs
-// in the frame the predicate fires; 8 s of 60 Hz steps is far past the
+// asynchronously after the predicate fires; simulation steps and a worker yield cover the
 // ~2 s settle bound the unit test pins).
 const settleToBake = async (minBaked) => {
   for (let i = 0; i < 40; i++) {
     await evaluate('__sdfGame.step(12)');
+    await sleep(10); // let worker messages arrive between hand-stepped batches
     const s = await evaluate('__sdfGame.chunkStats()');
     if (s.baked >= minBaked && s.live === 0) return s;
     if (s.baked >= minBaked) {
@@ -260,7 +261,8 @@ const settleToBake = async (minBaked) => {
 const stats1 = await settleToBake(staged1.chunks);
 gate('bake-happens', stats1.baked >= staged1.chunks,
   { staged: staged1.chunks, ...stats1 });
-gate('bake-not-slow', stats1.lastBakeMs < 60, { lastBakeMs: stats1.lastBakeMs });
+const mainBakeMs = stats1.bakeThread === 'worker' ? stats1.lastBakeRequestMs + stats1.lastBakeSwapMs : stats1.lastBakeMs;
+gate('bake-not-slow', mainBakeMs < 60, { mainBakeMs, workerBakeMs: stats1.bakeThread === 'worker' ? stats1.lastBakeMs : null });
 const hOn = await evaluate('window.__sdfGameDebug.hashMarchTarget()');
 gate('on-differs-from-off', hOn.hash !== hOff.hash, { hOn: hOn.hash, hOff: hOff.hash });
 
@@ -306,6 +308,7 @@ const hit = await evaluate(`(async () => {
     __sdfGame.step(12);
     const s = __sdfGame.chunkStats();
     if (s.baked >= t0.baked + 2) break;
+    await new Promise(resolve => setTimeout(resolve, 10)); // worker reply needs an event-loop turn
   }
   const s0 = __sdfGame.chunkStats();
   if (s0.baked < t0.baked + 2) return { error: 'test chunks did not bake', s0, t0 };
