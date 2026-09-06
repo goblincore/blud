@@ -1235,8 +1235,9 @@ export const FOLD_GROUP = /* wgsl */ `fn foldGroup(dIn: f32, p: vec3<f32>, data:
         cpos = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_BEND} + band), 0).xyz;
       }
     }
-    var sd = sdPrim(p, idx, data, r2, prof, cpos, band);
+    var sd: f32;
     if (ori) { sd = sdPrimO(p, idx, data, r2, prof, cpos, band); }
+    else { sd = sdPrim(p, idx, data, r2, prof, cpos, band); }
     // A SHELL (profile bit 2, value 4) thins the closed base field to a
     // sheet and clips it: abs(dBase) - thick, then a rounded-rim clip against
     // the shell plane. Only shell prims read the two extra rows, and only in

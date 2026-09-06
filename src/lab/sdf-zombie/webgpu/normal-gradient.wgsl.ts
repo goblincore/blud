@@ -200,7 +200,7 @@ const NG_EXCLUDED = /* wgsl */ `fn ngExcluded(p: vec3<f32>, bounds: vec4<f32>, g
       let S = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SCALE} + band), 0);
       if (S.w > 0.5) { continue; }
       let T = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SHAPE} + band), 0);
-      if (T.x >= 0.0 || (i32(T.y) & 47) != 0) { gNgReason = 1; }
+      if (T.x >= 0.0 || (i32(T.y) & 47) != 0) { gNgReason = 1; return lower; }
     }
   }
   return lower;
@@ -386,6 +386,7 @@ export const NG_BODY = /* wgsl */ `fn ngBody(p: vec3<f32>, data: texture_2d<f32>
       // separate rest-frame/owner contract; do not silently mis-anchor them.
       if (gTileBand[e] != 0.0) { gNgReason = 1; return d; }
       d = ngGroup(d, p, data, counts, 0, gTileBounds[e], gTileGrp[e]);
+      if (gNgReason == 1) { return d; }
     }
   }
   for (var c = 0; c < 8; c = c + 1) {
@@ -412,6 +413,9 @@ export const NG_BODY = /* wgsl */ `fn ngBody(p: vec3<f32>, data: texture_2d<f32>
       } else if (clusterSkipped) {
         let excluded = ngExcluded(p, bounds, grp, data, 0);
       } else { d = ngGroup(d, p, data, counts, 0, bounds, grp); }
+      // Unsupported is final throughout the group walk. Numerical reasons
+      // may still be superseded by unsupported, so retain their diagnostic order.
+      if (gNgReason == 1) { return d; }
     }
   }
   if (gNgReason != 0) { return d; }
