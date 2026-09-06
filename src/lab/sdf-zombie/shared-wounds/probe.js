@@ -38,7 +38,7 @@ async function boot() {
         pass.draw(3);
         pass.end();
         device.queue.submit([encoder.finish()]);
-        status.textContent = `State ${blend.from} → ${blend.to} · blend ${blend.blend.toFixed(2)}\nShared GPU fields: ${(library.byteLength / 1024).toFixed(0)} KiB total · 32³ × 2 R32F fields · no per-actor volume\nPer actor: 4 numbers (IDs + time); at most 2 endpoints · cached interior derivative bound ${library.lipschitz.toFixed(3)}\nNot a gameplay FPS benchmark. Both paths calculate gradients during each field evaluation in this first comparison.`;
+        status.textContent = `State ${blend.from} → ${blend.to} · blend ${blend.blend.toFixed(2)}\nShared GPU fields: ${(library.byteLength / 1024).toFixed(0)} KiB total · 32³ × 2 R32F fields · no per-actor volume\nPer actor: 4 numbers (IDs + time); at most 2 endpoints · cached field derivative bound ${library.lipschitz.toFixed(3)}\nNot a gameplay FPS benchmark. Both paths calculate gradients during each field evaluation in this first comparison.`;
         return target;
     }
     function animate() { render(); if (state.current !== state.target)
