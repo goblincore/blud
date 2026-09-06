@@ -42,6 +42,7 @@ import type { BodyDef, Vec3 } from '../types';
 import type { FaceSheetParams } from '../blob-face-sheet';
 import { loadKit, type KitOverlay } from './kit-overlay';
 import { loadHeldProp, type HeldProp } from './held-prop';
+import { createMuzzleFlash } from './character-effects';
 import { createZombieGpuView, type ZombieGpuView } from './zombie-gpu';
 import {
   MAX_WOUNDS, pushWound, WOUND_PROFILES, woundCarveNormal, woundWorldPos,
@@ -391,6 +392,8 @@ export interface CharacterViewOpts {
   start: Vec3;
   renderer: THREE.WebGPURenderer;
   scene: THREE.Scene;
+  /** Transparent character effects, rendered after the SDF composite. */
+  effectsScene?: THREE.Scene;
   /** Passed through to createZombieGpuView unchanged — the caller still owns
    *  the sdf layer, the flashlight and the lighting preset. Use the exact
    *  parameter type createZombieGpuView already declares; do not invent a
@@ -445,15 +448,24 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
   // simply undressed/unarmed, which is exactly how it rendered before.
   let kit: KitOverlay | null = null;
   let heldProp: HeldProp | null = null;
+  let disposed = false;
+  const muzzleFlash = entry.profile.prop && opts.effectsScene ? createMuzzleFlash() : null;
+  if (muzzleFlash) opts.effectsScene!.add(muzzleFlash.object);
   const kitUrl = entry.kit;
   if (kitUrl) {
     loadKit(kitUrl, opts.renderer, [0, 0, 0])
-      .then(k => { kit = k; opts.scene.add(k.object); })
+      .then(k => {
+        if (disposed) { k.dispose(); return; }
+        kit = k; opts.scene.add(k.object);
+      })
       .catch(e => console.error(`[kit] ${kitUrl} failed to load; rendering the body undressed`, e));
   }
   if (entry.profile.prop) {
-    loadHeldProp(entry.profile.prop.url)
-      .then(p => { heldProp = p; opts.scene.add(p.object); })
+    loadHeldProp(entry.profile.prop.url, opts.renderer)
+      .then(p => {
+        if (disposed) { p.dispose(); return; }
+        heldProp = p; opts.scene.add(p.object);
+      })
       .catch(e => console.error(`[prop] ${entry.profile.prop!.url} failed to load; rendering unarmed`, e));
   }
 
@@ -478,6 +490,9 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
         }
         if (frame?.collapsed && !heldProp.released) heldProp.release([0, 0, 0], releaseSeed);
         heldProp.step(Math.min(dt, 1 / 30), 0);
+        // Gas begins just outside the bore, so the barrel doesn't punch a
+        // black hole through the hot core when viewed from the side.
+        muzzleFlash?.pose(!heldProp.released && frame?.gun ? heldProp.muzzle(0.018) : null, sinceFire);
       }
     },
     muzzle() {
@@ -485,11 +500,16 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
     },
     releaseProp(vel, seed) {
       heldProp?.release(vel, seed);
+      muzzleFlash?.pose(null, Infinity);
     },
     dispose() {
+      if (disposed) return;
+      disposed = true;
+      kit?.object.removeFromParent();
       gpu.dispose();
       kit?.dispose();
       heldProp?.dispose();
+      muzzleFlash?.dispose();
     },
   };
 }

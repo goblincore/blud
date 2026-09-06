@@ -1,0 +1,161 @@
+{
+  "samples": [
+    {
+      "id": 1,
+      "room": 1,
+      "state": "idle",
+      "alert": false,
+      "swingT": 0,
+      "side": "R",
+      "variant": "none",
+      "hasToken": false,
+      "aimT": 0,
+      "cooldown": 0,
+      "sinceFire": null,
+      "speed": 0,
+      "target": [
+        -3.7273316323757175,
+        0,
+        -3.2716620078310372
+      ],
+      "dist": 3.8696462052269016,
+      "bearing": 0.2657997427177711
+    },
+    {
+      "id": 1,
+      "room": 1,
+      "state": "idle",
+      "alert": false,
+      "swingT": 0,
+      "side": "R",
+      "variant": "none",
+      "hasToken": false,
+      "aimT": 0,
+      "cooldown": 0,
+      "sinceFire": null,
+      "speed": 0,
+      "target": [
+        -3.7273316323757175,
+        0,
+        -3.2716620078310372
+      ],
+      "dist": 3.8696462052269016,
+      "bearing": 0.2657997427177711
+    },
+    {
+      "id": 1,
+      "room": 1,
+      "state": "idle",
+      "alert": false,
+      "swingT": 0,
+      "side": "R",
+      "variant": "none",
+      "hasToken": false,
+      "aimT": 0,
+      "cooldown": 0,
+      "sinceFire": null,
+      "speed": 1.2099999999999993,
+      "target": [
+        -4.654967978224159,
+        0,
+        -6.455803106538952
+      ],
+      "dist": 4.118835230250541,
+      "bearing": 0.2099518787946899
+    },
+    {
+      "id": 1,
+      "room": 1,
+      "state": "engage",
+      "alert": true,
+      "swingT": 0,
+      "side": "R",
+      "variant": "none",
+      "hasToken": false,
+      "aimT": 0,
+      "cooldown": 0,
+      "sinceFire": null,
+      "speed": 1.2499999999999933,
+      "target": [
+        -4.723524307001365,
+        0,
+        -4.3099875778047485
+      ],
+      "dist": 3.7534586378566446,
+      "bearing": 0.024744264349365202
+    },
+    {
+      "id": 1,
+      "room": 1,
+      "state": "engage",
+      "alert": true,
+      "swingT": 0,
+      "side": "R",
+      "variant": "none",
+      "hasToken": false,
+      "aimT": 0,
+      "cooldown": 0,
+      "sinceFire": null,
+      "speed": 0,
+      "target": null,
+      "dist": 3.3843936727841695,
+      "bearing": 0.024744264349364328
+    },
+    {
+      "id": 1,
+      "room": 1,
+      "state": "engage",
+      "alert": true,
+      "swingT": 0,
+      "side": "R",
+      "variant": "none",
+      "hasToken": false,
+      "aimT": 0,
+      "cooldown": 0,
+      "sinceFire": null,
+      "speed": 0.8493715461999352,
+      "target": [
+        -5.81592747778919,
+        0,
+        -3.9894264569937197
+      ],
+      "dist": 3.450558491329483,
+      "bearing": -0.1714021108088109
+    },
+    {
+      "id": 1,
+      "room": 1,
+      "state": "aim",
+      "alert": true,
+      "swingT": 0,
+      "side": "R",
+      "variant": "none",
+      "hasToken": false,
+      "aimT": 0.2142857142857143,
+      "cooldown": 0,
+      "sinceFire": null,
+      "speed": 0,
+      "target": null,
+      "dist": 3.4779445922460743,
+      "bearing": -0.20771990256245543
+    },
+    {
+      "id": 1,
+      "room": 1,
+      "state": "fire",
+      "alert": true,
+      "swingT": 0,
+      "side": "R",
+      "variant": "none",
+      "hasToken": false,
+      "aimT": 1,
+      "cooldown": 0,
+      "sinceFire": 0,
+      "speed": 0,
+      "target": null,
+      "dist": 3.4779445922460743,
+      "bearing": -0.20771990256245543
+    }
+  ],
+  "errors": []
+}

@@ -878,7 +878,10 @@ describe('soldier aimed movement', () => {
     const forward = qRotate(frame.gun!.quat, [0, 0, 1]);
     expect(dot(forward, headingDir(frame.bodyYaw))).toBeGreaterThan(0.995);
     expect(Math.abs(forward[1])).toBeLessThan(0.03);
-    expect(P[j.index.handR]![1]).toBeGreaterThan(P[j.index.shoulderR]![1] - 0.2);
+    expect(P[j.index.handR]![1]).toBeGreaterThan(P[j.index.shoulderR]![1] - 0.08);
+    // A stocked shotgun must seat at the shoulder, not float behind the ribs.
+    const stock = gunPoint(frame.gun!, [0, 0, -0.26]);
+    expect(len(sub(stock, P[j.index.shoulderR]!))).toBeLessThan(0.08);
     expect(len(sub(P[j.index.handL]!, gunPoint(frame.gun!, GUN_GRIP.foreHand)))).toBeLessThan(0.005);
     for (const [s, e, h, lens] of [
       ['shoulderL', 'elbowL', 'handL', j.arm.L], ['shoulderR', 'elbowR', 'handR', j.arm.R],

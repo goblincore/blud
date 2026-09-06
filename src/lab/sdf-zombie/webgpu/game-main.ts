@@ -56,6 +56,7 @@ import { createOccluderHull, buildHullInstances, HULL_SHRINK, type HullInstance 
 import { type BuildResult } from '../build-body';
 import { parseBlob } from '../blob-parse';
 import { createCharacterView, compileCharacterSheet } from './character-view';
+import { createCharacterEffects } from './character-effects';
 import { characterEntry } from '../character-registry';
 import { rotateYaw } from '../gait';
 import { makeSoldierMind } from './enemy-mind';
@@ -423,6 +424,7 @@ async function main() {
   // The draw chain, exactly as the bench stands it up.
   // -----------------------------------------------------------------------
   const postAa = createPostAa(handle.renderer);
+  const characterEffects = createCharacterEffects(handle.renderer);
   // THE FISHEYE. The camera renders WIDER than the player sees and the blit
   // squeezes it back, which is what buys the bulge without losing the frame
   // to a warp that reaches off the buffer. `centerFovDeg` is the look knob;
@@ -714,6 +716,7 @@ async function main() {
     } else {
       sdfLayer.render(scene, camera);
     }
+    characterEffects.render(camera);
   }));
 
   const occluderHull = createOccluderHull();
@@ -1154,6 +1157,7 @@ async function main() {
       start,
       renderer: handle.renderer,
       scene,
+      effectsScene: characterEffects.scene,
       errors: errs,
       // The panel's ratio, once the owner has touched it, overrides whatever
       // the doc would have done (nothing today; an authored ratio from the
@@ -1254,7 +1258,6 @@ async function main() {
           // and the soldier throwing the same wall of lead reads as a second
           // player rather than an enemy.
           soldierPellets.push(...spawnPellets(muz, dir, 1, nextSeed));
-          spawnMuzzleFlash(muz);
         },
       } : {}),
       profile: characterEntry(name).profile,
@@ -1379,7 +1382,8 @@ async function main() {
     for (const a of actors) {
       scene.remove(a.view.object);
       scene.remove(a.view.coneObject);
-      a.view.dispose();
+      if (a.character) a.character.dispose();
+      else a.view.dispose();
     }
     actors.length = 0;
     const errs: string[] = [];
@@ -2058,24 +2062,6 @@ async function main() {
    *  They stop at solid level geometry and expire; actor damage remains a later phase. */
   const soldierPellets: Projectile[] = [];
   const soldierPelletViews: THREE.Mesh[] = [];
-  /** World-space muzzle flashes. Separate from flashGroup, which is the FPV
-   *  weapon's single viewmodel-parented flash and cannot be at two places. */
-  const soldierFlashes: { sprite: THREE.Sprite; life: number }[] = [];
-  const SOLDIER_FLASH_SEC = 0.06;
-
-  function spawnMuzzleFlash(at: Vec3): void {
-    const tex = flashTextures[Math.floor(Math.random() * flashTextures.length)];
-    if (!tex) return;   // pool not built yet
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: tex, color: 0xffe6bf, transparent: true,
-      blending: THREE.AdditiveBlending, depthWrite: false,
-    }));
-    s.position.set(at[0], at[1], at[2]);
-    s.material.rotation = Math.random() * Math.PI * 2;
-    s.scale.setScalar(0.45);
-    scene.add(s);
-    soldierFlashes.push({ sprite: s, life: SOLDIER_FLASH_SEC });
-  }
   const pelletGeo = new THREE.SphereGeometry(GRAPESHOT.radius, 10, 8);
   const pelletMat = new THREE.MeshBasicMaterial({ color: 0xffcf7a });
   const pelletViews: THREE.Mesh[] = [];
@@ -3459,17 +3445,6 @@ async function main() {
           v.scale.setScalar(p.radius / GRAPESHOT.radius);
         } else {
           v.visible = false;
-        }
-      }
-      for (let i = soldierFlashes.length - 1; i >= 0; i--) {
-        const f = soldierFlashes[i]!;
-        f.life -= dt;
-        if (f.life <= 0) {
-          scene.remove(f.sprite);
-          f.sprite.material.dispose();
-          soldierFlashes.splice(i, 1);
-        } else {
-          f.sprite.material.opacity = f.life / SOLDIER_FLASH_SEC;
         }
       }
       // Sync the mesh pool to the sim list — growing it on demand (the

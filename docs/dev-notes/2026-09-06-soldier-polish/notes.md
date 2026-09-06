@@ -32,3 +32,7 @@ Preview: [game](http://localhost:5184/sdf-game.html), [soldier lab](http://local
 
 
 Final checks: Node 22 full suite: 3,606 passed / 1 failed (223 files), where the failing new running-carry regression ran during its red/green adjustment. Final rerun of all affected motion, carry, soldier actor, and profile files: 69/69 passed. Earlier independent review verification: 71/71 passed; zombie actor/damage/gait pins: 63/63 passed. Production build (TypeScript + Vite) passed; only the existing bundle-size warning remains. Diff whitespace check passed.
+
+## Owner approval — September 6
+
+Owner approved the feel and authorized merging. Fast-forwarded 909b6a87 into local main after a fresh full Node 22 suite passed all 3,607 tests. Shotgun/flash follow-on: [notes](../2026-09-06-soldier-shotgun/notes.md).

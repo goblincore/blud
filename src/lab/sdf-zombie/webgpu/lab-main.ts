@@ -32,6 +32,7 @@ import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER } from './sdf-lay
 import {
   buildCharacterBody, compileCharacterSheet, createCharacterView,
 } from './character-view';
+import { createCharacterEffects } from './character-effects';
 import { createPostAa, POST_AA_SMEAR_MAX } from './post-aa';
 import {
   createZombieGpuView, createChunkGpuView, createSharedChunkGpuMaterial,
@@ -248,11 +249,13 @@ async function main() {
   // AND the crowd). Resolves without real awaits — see createCharacterView —
   // so no frame can fire mid-bootstrap here.
   const heroErrors: string[] = [];
+  const characterEffects = createCharacterEffects(handle.renderer);
   const heroView = await createCharacterView({
     name: activeCharacterName(),
     start: [0, 0, 0],
     renderer: handle.renderer,
     scene,
+    effectsScene: characterEffects.scene,
     gpu: { cone: sdfLayer.cone, occluder: sdfLayer.occluder, tiles: heroTileBinding },
     errors: heroErrors,
     face,
@@ -337,7 +340,10 @@ async function main() {
   // safe in a closure because everything between here and the end of main()
   // is synchronous, so no frame can fire before it initialises.
   handle.setDrawFn(() => postAa.render(
-    () => gooLayer.render(camera, () => sdfLayer.render(scene, camera)),
+    () => {
+      gooLayer.render(camera, () => sdfLayer.render(scene, camera));
+      characterEffects.render(camera);
+    },
   ));
 
   // The occluder hull. Its own layer, rendered before the march, so every ray

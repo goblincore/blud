@@ -39,8 +39,8 @@ export interface CarrySpec {
   leftPole: Vec3;
 }
 
-/** Low/chest/hip are cross-body holds. Aim tucks the elbow behind the
- *  shoulder so the barrel can face forward while the fore-end remains
+/** Low/chest/hip are cross-body holds. Aim raises the forearm from a low
+ *  elbow so the barrel can face forward while the fore-end remains
  *  reachable. All four preserve the authored arm segment lengths. */
 export const CARRIES: Record<CarryName, CarrySpec> = {
   // Low ready: grip at the waist near the midline, muzzle forward-down
@@ -51,18 +51,20 @@ export const CARRIES: Record<CarryName, CarrySpec> = {
   chest: { right: { pitch: -0.30, yaw: 0.50, fold: 2.10 }, gunPitch: -0.25, leftPole: [0.5, -0.3, 0.2] },
   // Legacy waist-level hold, swung a little across the body, elbow tucked.
   hip:   { right: { pitch: 0.00, yaw: 0.55, fold: 1.75 }, gunPitch: -0.35, leftPole: [0.5, -0.3, 0.3] },
-  // Elbow tucked back, grip below the shoulder, forearm and barrel forward.
-  // The short gun's fore-end stays within the real soldier's 0.50 m left arm.
-  aim:   { right: { pitch: -0.95, yaw: 0.07, fold: 2.382 }, gunPitch: 0, leftPole: [0.5, -0.3, 0.2] },
+  // Shoulder aim: elbow down beside the ribs, forearm up to the grip. The
+  // counter-pitch levels the barrel and seats the stock at the shoulder pad.
+  // Support-hand reach is 0.485 m on the soldier's 0.50 m left arm.
+  aim:   { right: { pitch: -0.06, yaw: 0.11, fold: 2.46 }, gunPitch: -0.968, leftPole: [0.5, -0.3, 0.2] },
 };
 
-/** shorty-double.glb locators, gun-local metres, +z = muzzle. Measured from
+/** Shared held-gun locators, gun-local metres, +z = muzzle. Measured from
  *  the glb's node tree (Grip_Hand/Fore_Hand under Frame, Muzzle_L/R under
- *  Barrels, all rotation-free, GunRoot at the origin). */
+ *  Barrels, all rotation-free, GunRoot at the origin). The enemy-specific
+ *  soldier-shotgun.glb is authored to the same attachment contract. */
 export const GUN_GRIP = {
   gripHand: [0, -0.074, -0.074] as Vec3,
   foreHand: [0, -0.045, 0.155] as Vec3,
-  /** Midpoint of Muzzle_L / Muzzle_R. */
+  /** Single shotgun muzzle; midpoint of the legacy shorty's two bores. */
   muzzle: [0, 0, 0.318] as Vec3,
 } as const;
 
