@@ -564,12 +564,22 @@ Run:
 
 ```bash
 scripts/refactor-baseline.sh /tmp/after-task-3
-diff -rq docs/dev-notes/2026-09-06-refactor-baselines /tmp/after-task-3
+diff docs/dev-notes/2026-09-06-refactor-baselines/MANIFEST /tmp/after-task-3/MANIFEST
 ```
 
-Expected: **no differences.** A moved pixel means the extraction stopped being
-an extraction — find what you rewrote instead of moved. Do not proceed with a
-non-empty diff.
+Expected: **empty diff, and the script printing `[baseline] OK`.**
+
+Diff the MANIFEST specifically, **not the directories** — the baseline dir also
+holds a README and the per-capture JSON logs, so `diff -rq` on the dirs always
+reports differences that mean nothing.
+
+Check both: an empty diff with a FAILED script means captures did not run, and
+comparing two incomplete manifests passes vacuously.
+
+A moved hash means the extraction stopped being an extraction — find what you
+rewrote instead of moved. Do not proceed with a non-empty diff.
+
+Note `rc=124` per capture is the SUCCESS path (see Task 1's trap).
 
 - [ ] **Step 7: Commit**
 
