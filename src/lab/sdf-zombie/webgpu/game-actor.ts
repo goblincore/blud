@@ -682,6 +682,15 @@ export function createZombieActor(opts: {
           // bit-identity contract is about the key being ABSENT.
           // swingPin is forceSwing()'s one-frame capture pin (see step());
           // null on every frame the game itself runs.
+          // WEAPON UP: hold the fire carry for the whole telegraph, not just
+          // the shot frame. motion.ts only swaps to `carries.fire` while
+          // FIRE.holdSec is running, i.e. AFTER the bang -- so a soldier
+          // winding up showed no wind-up at all and the owner saw "muzzle
+          // flash out of a walking body". carryOverride is the existing seam
+          // for exactly this (it is what the lab's pose captures use).
+          ...(think.weaponUp && opts.profile?.carries
+            ? { carryOverride: opts.profile.carries.fire }
+            : {}),
           ...(swingPin !== null
             ? { attack: swingPin }
             : think.attack !== null ? { attack: think.attack } : {}),

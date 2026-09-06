@@ -29,31 +29,97 @@
 import * as THREE from 'three/webgpu';
 import { createLabRenderer } from './lab-renderer';
 import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER } from './sdf-layer';
-import {
-  buildCharacterBody, compileCharacterSheet, createCharacterView,
-} from './character-view';
+import { loadKit, type KitOverlay } from './kit-overlay';
+import { loadHeldProp, type HeldProp } from './held-prop';
 import { createPostAa, POST_AA_SMEAR_MAX } from './post-aa';
 import {
   createZombieGpuView, createChunkGpuView, createSharedChunkGpuMaterial,
   type ChunkGpuView,
 } from './zombie-gpu';
 import { createOccluderHull } from './occluder-hull';
-import {
-  characterEntry, hasCharacter, FACE_TEXTURES, type FaceTexName,
-} from '../character-registry';
-import type { BodyOverride, BuildResult } from '../build-body';
+import { translateBody } from '../translate';
+import { buildBody, DEFAULT_BUILD_OPTS, type BodyOverride, type BuildResult } from '../build-body';
+import { makeZombie } from '../body';
+import zombieBlobSrc from '../characters/zombie.blob?raw';
+import goblinBlobSrc from '../characters/goblin.blob?raw';
+import clownBlobSrc from '../characters/clown.blob?raw';
+import clownAltBlobSrc from '../characters/clown-alt.blob?raw';
+import mouseBlobSrc from '../characters/mouse.blob?raw';
+import cyclopsBlobSrc from '../characters/cyclops.blob?raw';
+import schoolgirlBlobSrc from '../characters/schoolgirl.blob?raw';
+import schoolgirlAltBlobSrc from '../characters/schoolgirl-alt.blob?raw';
+import schoolgirlDescribedBlobSrc from '../characters/schoolgirl-described.blob?raw';
+import strandFixtureBlobSrc from '../characters/strand-fixture.blob?raw';
+import bonewalkerBlobSrc from '../characters/bonewalker.blob?raw';
+import dragonBlobSrc from '../characters/dragon.blob?raw';
+import boxFixtureBlobSrc from '../characters/box-fixture.blob?raw';
+// The blob:draft first pass and the round-1 hand-authored scaffold it is
+// judged against (dispatch/blobforge-task-10 A/B; minotaur-r1 is untracked
+// and may come and go with the comparison).
+import minotaurBlobSrc from '../characters/minotaur.blob?raw';
+import soldierBlobSrc from '../characters/soldier.blob?raw';
+import femaleBlobSrc from '../characters/female.blob?raw';
 
-// CHARACTERS, KITS and the face-texture table live in ../character-registry.ts
-// now (one list, keyed by the same strings — see its header for the four
-// copies this replaces). Everything below reads it through characterEntry().
+/**
+ * Every authored .blob character, by the name you pass as `?character=`.
+ *
+ * The lab hardcoded zombie.blob until the first port (goblin) had nowhere to be
+ * looked at — and a character you cannot see is one you cannot judge, which is
+ * the whole reason the turntable exists. Unknown or absent falls back to the
+ * zombie rather than erroring, so a bad URL never blanks the lab.
+ */
+const CHARACTERS: Record<string, string> = {
+  zombie: zombieBlobSrc,
+  goblin: goblinBlobSrc,
+  clown: clownBlobSrc,
+  'clown-alt': clownAltBlobSrc,
+  mouse: mouseBlobSrc,
+  cyclops: cyclopsBlobSrc,
+  schoolgirl: schoolgirlBlobSrc,
+  'schoolgirl-alt': schoolgirlAltBlobSrc,
+  'schoolgirl-described': schoolgirlDescribedBlobSrc,
+  // Not a character — the strand primitive's acceptance case. See its header.
+  'strand-fixture': strandFixtureBlobSrc,
+  bonewalker: bonewalkerBlobSrc,
+  dragon: dragonBlobSrc,
+  'box-fixture': boxFixtureBlobSrc,
+  minotaur: minotaurBlobSrc,
+  soldier: soldierBlobSrc,
+  female: femaleBlobSrc,
+};
+
+/**
+ * The POLYGON kit for a character, if it has one — armour, clothing and hard
+ * props authored in a sibling `.wam` and compiled to a self-contained glTF.
+ * Absent means flesh only, which is every character but the goblin today.
+ *
+ * The kit RIDES THE RIG: every frame the hero loop re-poses it from
+ * rig-frames.ts's per-bone transforms (see the `kit?.pose(frames)` call).
+ */
+const KITS: Record<string, string> = {
+  goblin: '/assets/lab/goblin-kit.gltf',
+  clown: '/assets/lab/clown-kit.gltf',
+  'clown-alt': '/assets/lab/clown-alt-kit.gltf',
+  soldier: '/assets/lab/soldier-kit.gltf',
+  // No mouse: its whole outfit is painted SDF geometry (color= on prims).
+};
 
 function activeCharacterName(): string {
   const want = new URLSearchParams(location.search).get('character');
-  return want && hasCharacter(want) ? want : 'zombie';
+  return want && want in CHARACTERS ? want : 'zombie';
+}
+
+function activeCharacterSrc(): string {
+  const want = new URLSearchParams(location.search).get('character');
+  if (want && !(want in CHARACTERS))
+    console.warn(`[blob] unknown character "${want}", using zombie. Known: ${Object.keys(CHARACTERS).join(', ')}`);
+  return (want && CHARACTERS[want]) || zombieBlobSrc;
 }
 import { parseBlob } from '../blob-parse';
 import { generateFaceSheet } from '../blob-face-sheet';
-import { compileBlob, compileFace, compileSheetImage } from '../blob-compile';
+import { checkStance } from '../blob-checks';
+import { compileBlob, compileFace, compilePalette, compileSheet, compileSheetImage } from '../blob-compile';
+import { BlobError } from '../blob-ast';
 import {
   DEFAULT_FACE, FACE_PRESETS, pickFace, type FaceParams,
 } from '../face';
@@ -93,7 +159,8 @@ import {
   makeActorMotion, stepActorMotion,
   type ActorMotion, type ActorSignals,
 } from '../actor';
-import type { ArmStyle } from '../gait';
+import { rotateYaw, type ArmStyle } from '../gait';
+import { boneFrames } from '../rig-frames';
 import { motionProfileFor, type MotionProfile } from '../motion-profile';
 import type { CarryName } from '../carry';
 import { makeRng, type Rng, type WanderBounds } from '../wander';
@@ -140,19 +207,137 @@ import {
 } from '../panel';
 import { createEnclosure, type WallKey } from './enclosure';
 
+// ---------------------------------------------------------------------------
+// Face texture sheets. Same three sources as the WebGL lab, same crop rects.
+//
+// - `zombie-flat` is ORIGINAL art and the shipping candidate: a luminance MASK
+//   on neutral mid-grey rather than a picture, so mid-grey divided by the mean
+//   comes out at 1.0 and only the features act.
+// - `smiley` is a DIAGNOSTIC — flat yellow, a red border on the projected
+//   rect, a blue mark top-left. No baked lighting, no alpha, no crop ambiguity,
+//   so a misregistration shows you exactly HOW it is wrong.
+// - `blood-zombie` is extracted Blood art. DEV PLACEHOLDER, never ships.
+//
+// `rect` is in TOP-LEFT pixel coordinates: [x, y, w, h, sheetW, sheetH].
+// `mean` is MEASURED off the file — it sets the level the multiplier divides
+// out, so a stale value shifts the whole head's brightness.
+// ---------------------------------------------------------------------------
+type FaceTexName = 'zombie-flat' | 'smiley' | 'blood-zombie';
+
+const FACE_TEXTURES: Record<
+  FaceTexName,
+  { url: string; rect: [number, number, number, number, number, number]; mean: number }
+> = {
+  'zombie-flat': { url: '/assets/lab/zombie-face.png', rect: [0, 0, 64, 64, 64, 64], mean: 0.406 },
+  smiley: { url: '/assets/lab/smiley.png', rect: [0, 0, 64, 64, 64, 64], mean: 0.66 },
+  'blood-zombie': {
+    url: '/assets/blood-tiles/1200.png',
+    rect: [32, 0, 18, 16, 77, 116],
+    mean: 0.33,
+  },
+};
+
+const TYPE_ID: Record<WoundType, number> = { pellet: 0, blast: 1, burn: 2 };
 
 /** Chunk mesh/render-object slots are recycled oldest-first at this cap.
  *  A per-prim gib is ~15 pieces, so 40 lets two full gibs coexist. */
 const MAX_CHUNKS = 40;
 
 // ---------------------------------------------------------------------------
-// The build step lives in character-view.ts now (buildCharacterBody): the
-// initial body, the crowd spawner and rebuildBody()'s panel-driven rebuild
-// all go through it, so all three render the same document and none of them
-// can silently drift back to the TS body. makeZombie() in body.ts stays only
-// as the frozen reference the anchor test (zombie-blob.test.ts) pins the
-// language against.
-// ---------------------------------------------------------------------------
+// zombie.blob wiring
+//
+// The zombie is authored in zombie.blob now; makeZombie() in body.ts stays
+// only as the frozen reference the anchor test (zombie-blob.test.ts) pins
+// the language against. Every place in this file that used to call
+// makeZombie() directly — the initial body, the crowd spawner, and
+// rebuildBody()'s panel-driven rebuild — goes through buildZombieBody()
+// below instead, so all three render the same document and none of them can
+// silently drift back to the TS body.
+//
+// Logged once per failure kind so a spammy [ crowd-spawn doesn't flood the
+// console with the same BlobError fifteen times.
+let blobCompileWarned = false;
+
+/**
+ * Parses and compiles zombie.blob for the given face, or null if the
+ * document is broken. Never throws: a bad .blob must not blank the lab.
+ * Sets `lastBlobCompileError` as a side effect so callers can surface the
+ * failure on-screen instead of only in the console — a silent fallback
+ * would hide exactly the typed BlobError this format exists to catch.
+ *
+ * `compileFace(doc)` is called explicitly rather than left to compileBlob's
+ * default parameter. compileBlob's signature is
+ * `(doc, face = compileFace(doc))` — a default that only fires when the
+ * CALLER omits the argument. This function always supplies an explicit
+ * `face` (DEFAULT_FACE merged with the panel's live overrides, computed by
+ * the caller), so relying on that default here would mean compileFace(doc)
+ * — and with it every bit of validation against zombie.blob's OWN `face`
+ * block, including the unknown-key check this format exists to give — never
+ * runs at all. The panel override still wins for the values actually
+ * rendered (unchanged from before this format existed); this call exists
+ * purely so a typo in zombie.blob's face section is caught instead of
+ * silently compiling with the panel's values and no diagnostic.
+ */
+let lastBlobCompileError: string | null = null;
+let lastBlobStance: 'humanoid' | 'digitigrade' | null = null;
+/**
+ * The character's own flesh material, if it declared a `palette` block, so the
+ * lab can dress the body in it instead of the panel's default preset. Recorded
+ * here rather than re-parsed at the call site for the same reason
+ * `lastBlobStance` is: `compileZombie` already has the parsed document, and a
+ * second parse is a second place for the two to disagree about which character
+ * is loaded. Null means "no palette declared" — wear the panel's preset, which
+ * is what every character did before palettes existed.
+ */
+let lastBlobPalette: FleshMaterial | null = null;
+function compileZombie(face: FaceParams): BodyDef | null {
+  try {
+    const doc = parseBlob(activeCharacterSrc());
+    lastBlobStance = doc.stance;
+    compileFace(doc); // validates zombie.blob's face block; return value unused, see above
+    lastBlobPalette = compilePalette(doc);
+    const compiled = compileBlob(doc, face);
+    lastBlobCompileError = null;
+    return compiled;
+  } catch (e) {
+    const msg = e instanceof BlobError ? e.message : e instanceof Error ? e.message : String(e);
+    lastBlobCompileError = msg;
+    // Clear the palette too: the fallback body is the TS zombie, and dressing
+    // it in a half-parsed character's colours would make a compile error look
+    // like a rendering bug instead of the missing character it is.
+    lastBlobPalette = null;
+    if (!blobCompileWarned) {
+      blobCompileWarned = true;
+      console.error('[blob] zombie.blob failed to compile, falling back to the TS zombie', e);
+    }
+    return null;
+  }
+}
+
+/**
+ * Builds a zombie body from zombie.blob, falling back to makeZombie(face)
+ * (the pinned TS reference) if the document fails to compile. The single
+ * seam used by the initial body, the crowd spawner, and rebuildBody() — see
+ * the comment above compileZombie().
+ */
+function buildZombieBody(face: FaceParams, opts: BodyOverride): BuildResult {
+  const compiled = compileZombie(face);
+  const result = buildBody(compiled ?? makeZombie(face), DEFAULT_BUILD_OPTS, opts);
+  // Declared-vs-actual knee fold. Surfaced next to validateBody's own errors
+  // because it is the same kind of finding — something the author almost
+  // certainly did not mean — and because a backward knee is otherwise
+  // invisible to every geometric check: it is perfectly closed, connected and
+  // non-interpenetrating.
+  if (compiled && lastBlobStance)
+    result.errors = [...checkStance(result.bones, lastBlobStance), ...result.errors];
+  if (lastBlobCompileError) {
+    result.errors = [
+      `zombie.blob failed to compile, rendering the fallback TS zombie: ${lastBlobCompileError}`,
+      ...result.errors,
+    ];
+  }
+  return result;
+}
 
 // Everything lives inside an async bootstrap rather than using top-level await.
 // WebGPURenderer needs `await renderer.init()`, and the project's build target
@@ -196,7 +381,6 @@ async function main() {
   const enclosure = createEnclosure();
   scene.add(enclosure.group);
 
-  const entry = characterEntry(activeCharacterName());
   let override = loadOverride(activeCharacterName());
   // Seed the face from the character's OWN `face` block (compileFace parses the
   // .blob), so a .blob-authored head renders at the size its author declared.
@@ -209,56 +393,13 @@ async function main() {
   try {
     face = {
       ...DEFAULT_FACE,
-      ...compileFace(parseBlob(entry.src)),
+      ...compileFace(parseBlob(activeCharacterSrc())),
       ...(override.faceParams ?? {}),
     };
   } catch {
     face = { ...DEFAULT_FACE, ...(override.faceParams ?? {}) };
   }
-
-  // The render targets the character view is constructed with — declared here
-  // rather than in the draw-chain block below because createCharacterView
-  // needs them at build time. Everything else about the draw chain keeps its
-  // original order.
-  // The raymarched bodies render into their own target at their own scale and
-  // composite back over the polygonal scene. Cost is close to linear in
-  // pixels, so this is the biggest lever available without compute.
-  const sdfLayer = createSdfLayer(handle.renderer);
-  // Post chain (X1.25): FXAA + temporal smear + sharp-bilinear upscale. It
-  // owns the frame's tail — with every effect off it is an exact
-  // pass-through, so the pre-X1.25 draw path is untouched by default-off.
-  // Created before sizeSdfLayer because the SDF layer sizes from its
-  // contentSize (the capped render size), which must NOT follow the canvas
-  // when the sharp-upscale toggle grows the canvas backing to the window.
-  const postAa = createPostAa(handle.renderer);
-  postAa.addSink(sdfLayer);
-  // PERF TASK 5 step 3, compute port: the hero body opts into the per-tile
-  // fold lists. The GPU binding is allocated ONCE at the WORST-CASE grid
-  // (content size at scale 1.0 — NOT today's scaled size); adaptive
-  // resolution then moves rungs by changing uniforms alone. Gated by
-  // tileCfg.x = 0 so the shipping path marches the cluster walk exactly as
-  // before; the panel button / __sdfLab.setTiles flips it.
-  const heroTileBinding = createComputeTileBinding(
-    handle.renderer,
-    Math.ceil(postAa.contentSize.width), Math.ceil(postAa.contentSize.height),
-  );
-
-  // THE HERO. One createCharacterView: build, GPU view, kit and prop are the
-  // factory's; the face stays below (one sheet is fanned out across the hero
-  // AND the crowd). Resolves without real awaits — see createCharacterView —
-  // so no frame can fire mid-bootstrap here.
-  const heroErrors: string[] = [];
-  const heroView = await createCharacterView({
-    name: activeCharacterName(),
-    start: [0, 0, 0],
-    renderer: handle.renderer,
-    scene,
-    gpu: { cone: sdfLayer.cone, occluder: sdfLayer.occluder, tiles: heroTileBinding },
-    errors: heroErrors,
-    face,
-    override,
-  });
-  const body = heroView.body;
+  const body = buildZombieBody(face, override);
 
   const errorsEl = document.getElementById('errors');
   function showErrors(b: BuildResult) {
@@ -316,6 +457,18 @@ async function main() {
   // FPV readout line — same declaration-before-callback pattern.
   let fpvReadEl: HTMLDivElement | null = null;
 
+  // The raymarched bodies render into their own target at their own scale and
+  // composite back over the polygonal scene. Cost is close to linear in
+  // pixels, so this is the biggest lever available without compute.
+  const sdfLayer = createSdfLayer(handle.renderer);
+  // Post chain (X1.25): FXAA + temporal smear + sharp-bilinear upscale. It
+  // owns the frame's tail — with every effect off it is an exact
+  // pass-through, so the pre-X1.25 draw path is untouched by default-off.
+  // Created before sizeSdfLayer because the SDF layer sizes from its
+  // contentSize (the capped render size), which must NOT follow the canvas
+  // when the sharp-upscale toggle grows the canvas backing to the window.
+  const postAa = createPostAa(handle.renderer);
+  postAa.addSink(sdfLayer);
   function sizeSdfLayer() {
     const s = postAa.contentSize;
     sdfLayer.setSize(s.width, s.height);
@@ -367,15 +520,28 @@ async function main() {
   sdfLayer.setOccluderEnabled(false);
 
   // The character's own palette if it declared one, else the lab default.
-  // `createCharacterView` above already compiled it, so heroView.palette is
-  // populated by the time this reads it — the ordering is load-bearing, which
-  // is why this sits below the build rather than at the top of the setup block.
-  let flesh: FleshMaterial = heroView.palette
-    ? { ...heroView.palette }
+  // `body` above already ran compileZombie, so lastBlobPalette is populated by
+  // the time this reads it — the ordering is load-bearing, which is why this
+  // sits below the build rather than at the top of the setup block.
+  let flesh: FleshMaterial = lastBlobPalette
+    ? { ...lastBlobPalette }
     : { ...FLESH_PRESETS['henenlotter-latex'] };
   let light: LightPresetName = 'practical-hard-key';
 
-  const view = heroView.gpu;
+  // PERF TASK 5 step 3, compute port: the hero body opts into the per-tile
+  // fold lists. The GPU binding is allocated ONCE at the WORST-CASE grid
+  // (content size at scale 1.0 — NOT today's scaled size); adaptive
+  // resolution then moves rungs by changing uniforms alone. Gated by
+  // tileCfg.x = 0 so the shipping path marches the cluster walk exactly as
+  // before; the panel button / __sdfLab.setTiles flips it.
+  const heroTileBinding = createComputeTileBinding(
+    handle.renderer,
+    Math.ceil(postAa.contentSize.width), Math.ceil(postAa.contentSize.height),
+  );
+  const view = createZombieGpuView(body, {
+    cone: sdfLayer.cone, occluder: sdfLayer.occluder,
+    tiles: heroTileBinding,
+  });
   view.applyMaterial(flesh, LIGHT_PRESETS[light]);
   // Everything raymarched lives on SDF_LAYER, so the two render passes are a
   // camera layer mask apart rather than an object list to keep in sync.
@@ -748,10 +914,22 @@ async function main() {
   }
 
   function loadGeneratedFace(): boolean {
-    // The sheet compile and its catch — with the 2026-09-04 story about the
-    // soldier's face — live in compileCharacterSheet now. One home, loud there;
-    // this side only decides what to do when there is no usable sheet.
-    const { sheet: params } = compileCharacterSheet(entry);
+    let params;
+    try {
+      params = compileSheet(parseBlob(activeCharacterSrc()));
+    } catch (e) {
+      // SECOND SILENT CATCH, same lie as the one at the faceEnabled block: the
+      // body compile path does NOT report this, because the body compiles fine
+      // with a broken SHEET. Returning false here sends the caller to
+      // loadFaceTexture('zombie-flat') -- so one bad key in a sheet block put
+      // the ZOMBIE'S FACE on the character with nothing said anywhere. That is
+      // exactly how the soldier lost his face on 2026-09-04.
+      console.error(
+        `[lab] ${activeCharacterName()}: \`sheet\` block failed to compile, so this `
+        + `character is falling back to the ZOMBIE face texture. Fix the sheet block:\n  `
+        + String(e instanceof Error ? e.message : e));
+      return false;
+    }
     if (params === null) return false;
     u.faceProj.value.set(params.projScaleX, params.projScaleY, params.projCentreX, params.projCentreY);
     // The character's own glow threshold, so a baked face keeps its eyes
@@ -779,7 +957,7 @@ async function main() {
     // average texel multiply by ~1, i.e. neutral, and the face then takes the
     // body's lighting instead of replacing it. Transparent texels are skipped
     // so the surrounding alpha does not drag the average down.
-    const image = compileSheetImage(parseBlob(entry.src));
+    const image = compileSheetImage(parseBlob(activeCharacterSrc()));
     if (image !== null) {
       const tex = new THREE.TextureLoader().load(`/assets/lab/faces/${image}`, applyMeanOf);
       // Mean 1 until the image decodes, then applyMeanOf re-uploads with the
@@ -842,21 +1020,35 @@ async function main() {
   // A character's `sheet` block can switch the projection off (`enabled 0`):
   // a headless character's stub skull would otherwise project the face rows
   // as stripes across its body. Goes through faceEnabled so the panel toggle
-  // and applyLod agree with it. (A broken sheet block is reported — loudly,
-  // with the 2026-09-04 story — by compileCharacterSheet itself; the catch
-  // lives there now.)
-  {
-    const { sheet: sheetParams } = compileCharacterSheet(entry);
+  // and applyLod agree with it.
+  // A BROKEN SHEET BLOCK IS LOUD NOW. This used to swallow the error on the
+  // grounds that "the body compile path reports it" -- it does not, because
+  // the body compiles fine with a bad SHEET. What actually happened (and cost
+  // an hour on 2026-09-04): one invalid key in the soldier's sheet block made
+  // compileSheet throw, the whole block was discarded, the lab silently fell
+  // back to the GENERATED procedural sheet, and the character rendered with
+  // the zombie's face and head. Nothing anywhere said why. The keys are
+  // validated against a fixed list, so a typo or a guessed-at parameter --
+  // `eyeGlowCut`, which is panel-only -- lands here, and silence is the worst
+  // possible response to it.
+  try {
+    const sheetParams = compileSheet(parseBlob(activeCharacterSrc()));
     if (sheetParams && sheetParams.enabled === 0) faceEnabled = false;
+  } catch (e) {
+    console.error(
+      `[lab] ${activeCharacterName()}: its \`sheet\` block FAILED TO COMPILE, so the `
+      + `baked face is being ignored and this character is wearing the generated `
+      + `sheet instead (which reads as the zombie's face). Fix the sheet block:\n  `
+      + String(e instanceof Error ? e.message : e));
   }
   u.faceCfg.value.x = faceEnabled ? faceMode : 0;   // face on (unless the sheet says no)
   // strength: the character's own value if its sheet block names one. This
   // was a hardcoded 1.0, which silently overrode anything the panel or a
   // .blob had to say about it.
-  {
-    const { sheet: sp } = compileCharacterSheet(entry);
+  try {
+    const sp = compileSheet(parseBlob(activeCharacterSrc()));
     u.faceCfg.value.y = sp ? sp.texStrength : 1.0;
-  }
+  } catch { u.faceCfg.value.y = 1.0; }
 
   /**
    * The skull's centre and its three SEMI-AXES: the fattest additive primitive
@@ -951,9 +1143,28 @@ async function main() {
   const cruiseFor = (band: 'walk' | 'run') =>
     band === 'run' ? motionProfile.cruise : Math.min(motionProfile.cruise, motionProfile.runBand.from * 0.75);
 
-  // The character's polygon kit and held prop load inside createCharacterView
-  // (the load step) — heroView.kit / heroView.prop, on the DEFAULT layer with
-  // the floor and the reference cube, fire-and-forget exactly as before.
+  // The character's polygon kit and held prop, on the DEFAULT layer with the
+  // floor and the reference cube — NOT SDF_LAYER. That is what puts them in
+  // the polygonal pass whose depth the march already composites against
+  // (sdf-layer.ts's header), so armour and gun occlude and are occluded by
+  // flesh with nothing added here.
+  //
+  // Fire-and-forget: a kit or prop that fails to load must not take the lab
+  // down with it, and there is nothing to fall back to — the character is
+  // simply undressed/unarmed, which is exactly how it rendered before.
+  let kit: KitOverlay | null = null;
+  let heldProp: HeldProp | null = null;
+  const kitUrl = KITS[activeCharacterName()];
+  if (kitUrl) {
+    loadKit(kitUrl, handle.renderer, [0, 0, 0])
+      .then(k => { kit = k; scene.add(k.object); })
+      .catch(e => console.error(`[kit] ${kitUrl} failed to load; rendering the body undressed`, e));
+  }
+  if (motionProfile.prop) {
+    loadHeldProp(motionProfile.prop.url)
+      .then(p => { heldProp = p; scene.add(p.object); })
+      .catch(e => console.error(`[prop] ${motionProfile.prop!.url} failed to load; rendering unarmed`, e));
+  }
 
   // ——— MELT (2026-09-03) ————————————————————————————————————————————————
   // The zombie liquefies where it stands: flesh sags into a puddle and the
@@ -1200,7 +1411,7 @@ async function main() {
     forcedCollapse = false;
     // A fresh body gets its armour back; the released gun stays on the
     // floor — that is the expected debris.
-    if (heroView.kit) heroView.kit.object.visible = true;
+    if (kit) kit.object.visible = true;
     // Clear any melt on reset. stopMelt() owns the full teardown (progress,
     // held flag, released bone chunks and the shader uniform) — the melt
     // spike this replaced cleared three of its own variables by hand here,
@@ -1220,7 +1431,7 @@ async function main() {
   function woundedLimbs() {
     const alive = (l: LimbId) => current.clusters.find(c => c.limb === l)?.alive ?? false;
     const w = { armL: false, armR: false, legL: false, legR: false };
-    for (const wound of woundRing.all()) {
+    for (const wound of wounds) {
       const prim = current.prims[wound.primIdx];
       if (!prim || !alive(prim.limb)) continue;
       if (prim.limb === 'armL' || prim.limb === 'armR'
@@ -1229,13 +1440,7 @@ async function main() {
     return w;
   }
 
-  /** THE SHARED WOUND RING (character-view.ts) — the hero's, and the same
-   *  implementation the game runs. Replaces a bare Wound[] plus a hand-written
-   *  uploadWounds that had drifted from the game's: it pushed SIX rows where
-   *  the game pushes SEVEN, the missing one being woundCarveNormal's depth
-   *  slab. That is why the lab could tune a crater that renders differently
-   *  in the game — the whole reason this module exists. */
-  const woundRing = heroView.wounds;
+  let wounds: Wound[] = [];
   /**
    * Freezes everything that animates on its own, so two captures of the same
    * pose are pixel-comparable.
@@ -1280,12 +1485,19 @@ async function main() {
   }
 
   function uploadWounds(prims: BuildResult['prims'], yaw = heroMotion.lastBodyYaw) {
-    // Delegates to the shared ring, which pushes the SEVENTH row this function
-    // never did: woundCarveNormal's inward depth-slab cap. That cap clips the
-    // carve sphere so a crater on thin flesh floors instead of perforating —
-    // the lab has been tuning wounds WITHOUT it while the game shipped WITH
-    // it, which is the divergence 4c exists to close.
-    woundRing.refresh(view, { prims } as BuildResult, yaw);
+    view.setWounds(
+      // The CARVE centres, not the surface anchors: the shader subtracts its
+      // spheres from these, and the centres are thickness-capped at stamp
+      // time (damage.ts) so a blast on a thin torso never opens the far side.
+      wounds.map(w => woundWorldPos(prims, w, yaw)),
+      wounds.map(w => w.radius),
+      wounds.map(w => TYPE_ID[w.type]),
+      wounds.map(w => w.ageSec),
+      // Per-wound lip: the profile's splay scaled by the flesh behind the hit
+      // (Wound.rimScale), so a blast on a claw does not grow a floating ring.
+      wounds.map(w => WOUND_PROFILES[w.type].rimSplayScale * (w.rimScale ?? 1)),
+      wounds.map(w => WOUND_PROFILES[w.type].rimOffsetScale),
+    );
   }
   // Rest prims pair with the yaw-0 frame (they ARE the yaw-0 body); the
   // next frame's uploadWounds(posed) overwrites this transient anyway.
@@ -1299,7 +1511,7 @@ async function main() {
   function woundSpheres(prims: BuildResult['prims']) {
     // Same carve centres the shader subtracts — the exclusion zone must
     // cover exactly what is removed, or hull spheres reappear in craters.
-    return woundRing.all().map(w => ({ centre: woundWorldPos(prims, w, heroMotion.lastBodyYaw), radius: w.radius }));
+    return wounds.map(w => ({ centre: woundWorldPos(prims, w, heroMotion.lastBodyYaw), radius: w.radius }));
   }
 
   // -------------------------------------------------------------------------
@@ -1387,9 +1599,9 @@ async function main() {
       // capture A/B across loads — including the pixel-identity gate this
       // dispatch runs. Same index ⇒ same face, on every load, forever.
       const crowdFace = pickFace(makeRng(CROWD_FACE_SEED + i * 7919)());
-      const placed = buildCharacterBody(entry,
-        [(col - 2) * 0.62 * crowdSpread, 0, -row * 0.85 * crowdSpread], [],
-        crowdFace, override);
+      const crowdBody = buildZombieBody(crowdFace, override);
+      const placed = translateBody(crowdBody,
+        [(col - 2) * 0.62 * crowdSpread, 0, -row * 0.85 * crowdSpread]);
       const v = createZombieGpuView(placed,
         { cone: sdfLayer.cone, occluder: sdfLayer.occluder });
       trackBody(v, placed);
@@ -1512,7 +1724,7 @@ async function main() {
     // heading rotation puts the prims through, so the crater rides the turn.
     const wound = worldHitToWound(lastPosed.prims, hit, WOUND_PROFILES[type].radius, type, heroMotion.lastBodyYaw,
       p => sdBody(p, lastPosed));
-    woundRing.stamp(wound, lastPosed, heroMotion.lastBodyYaw);
+    wounds = pushWound(wounds, wound, MAX_WOUNDS);
     pendingWounds.push(wound);
     // The shot feeds stagger (profile + direction) and localized hit recoil,
     // both consumed by the next motion step.
@@ -1532,13 +1744,13 @@ async function main() {
 
     // Wound-driven detachment: a carve that disconnects a limb severs it for
     // real — same path as the keyboard sever.
-    const fullCuts = cutLimbs(current, [...woundRing.all()], torsoCentre());
+    const fullCuts = cutLimbs(current, wounds, torsoCentre());
     for (const limb of fullCuts) {
       const { body: next, chunk, stumpWound } = severLimb(current, limb);
       if (chunk.prims.length === 0) continue;
       current = next;
       if (stumpWound) {
-        woundRing.stamp(stumpWound, lastPosed, heroMotion.lastBodyYaw);
+        wounds = pushWound(wounds, stumpWound, MAX_WOUNDS);
         pendingWounds.push(stumpWound);
       }
       pendingSevered.push(limb);
@@ -1552,13 +1764,13 @@ async function main() {
     // Mid-limb cuts: a carve that severs a CHAIN joint (knee, elbow…) drops
     // everything distal to it as its own chunk — before this the distal piece
     // stayed in the field and floated. Full-limb cuts above take precedence.
-    for (const cut of cutChains(current, [...woundRing.all()])) {
+    for (const cut of cutChains(current, wounds)) {
       if (fullCuts.includes(cut.limb)) continue;
       const { body: next, chunk, stumpWound } = severDistal(current, cut);
       if (chunk.prims.length === 0) continue;
       current = next;
       if (stumpWound) {
-        woundRing.stamp(stumpWound, lastPosed, heroMotion.lastBodyYaw);
+        wounds = pushWound(wounds, stumpWound, MAX_WOUNDS);
         pendingWounds.push(stumpWound);
       }
       pendingSevered.push(cut.limb);
@@ -1738,13 +1950,13 @@ async function main() {
       spawnChunk(g.limb, g.origin, g.prims, vel, g.tornAt, 'gob');
     }
     current = next;
-    woundRing.set([]);
+    wounds = [];
     view.update(current);
     refreshWounds();
     // The gibbed body leaves its armour and drops its gun (task 13): the
     // kit hides with the body it clothed; the prop tumbles as debris.
-    if (heroView.kit) heroView.kit.object.visible = false;
-    heroView.releaseProp([0, 2.5, 0], MOTION_SEED);
+    if (kit) kit.object.visible = false;
+    heldProp?.release([0, 2.5, 0], MOTION_SEED);
     resetMotion(); // a gibbed body is done shambling — fresh state for whatever spawns next
   }
 
@@ -2013,7 +2225,7 @@ async function main() {
   /** One detonation → the existing gore stack, in the click-shoot order. */
   const gorePort: FpvGorePort = {
     stampWounds(ws) {
-      woundRing.stampBundle(ws);
+      for (const w of ws) wounds = pushWound(wounds, w, MAX_WOUNDS);
       refreshWounds();
     },
     // DIRECT meter credit (fpv-mode's contract): freshWounds would weight by
@@ -2041,7 +2253,7 @@ async function main() {
         if (chunk.prims.length === 0) continue;
         current = next;
         if (stumpWound) {
-          woundRing.stamp(stumpWound, lastPosed, heroMotion.lastBodyYaw);
+          wounds = pushWound(wounds, stumpWound, MAX_WOUNDS);
           pendingWounds.push(stumpWound); // stump meter fuel, as click-shoot
         }
         pendingSevered.push(limb);
@@ -2058,7 +2270,7 @@ async function main() {
         if (chunk.prims.length === 0) continue;
         current = next;
         if (stumpWound) {
-          woundRing.stamp(stumpWound, lastPosed, heroMotion.lastBodyYaw);
+          wounds = pushWound(wounds, stumpWound, MAX_WOUNDS);
           pendingWounds.push(stumpWound);
         }
         pendingSevered.push(cut.limb);
@@ -2302,7 +2514,7 @@ async function main() {
     if (chunk.prims.length === 0) return;
     current = next;
     if (stumpWound) {
-      woundRing.stamp(stumpWound, lastPosed, heroMotion.lastBodyYaw);
+      wounds = pushWound(wounds, stumpWound, MAX_WOUNDS);
       pendingWounds.push(stumpWound);
     }
     pendingSevered.push(limb);
@@ -2712,11 +2924,21 @@ async function main() {
     view.setMelt(meltState ? meltState.t : 0);
     const posed = applyRig(current, heroMotion.bound, heroMotion.lastBodyYaw);
     lastPosed = posed;
-    // Polygon halves ride the rig — one pose() call drives kit and prop from
-    // the same rig solve (the block itself lives in character-view.ts, moved
-    // verbatim).
-    heroView.pose(current, heroMotion.bound, heroMotion.lastBodyYaw, sinceFire,
-      heroMotion.motionState ? lastMotionFrame : null, dt, MOTION_SEED);
+    // Polygon halves ride the rig: the kit from per-bone frames, the gun from
+    // the motion frame's gun pose (right forearm). Collapse and gib release
+    // the gun; the kit simply keeps following the (fallen) rig.
+    if (kit || heldProp) {
+      const frames = boneFrames(current, heroMotion.bound, heroMotion.lastBodyYaw);
+      kit?.pose(frames);
+      if (heldProp) {
+        const lastFrame = heroMotion.motionState ? lastMotionFrame : null;
+        if (lastFrame?.gun && !heldProp.released) {
+          heldProp.pose(lastFrame.gun, sinceFire, rotateYaw([1, 0, 0], heroMotion.lastBodyYaw));
+        }
+        if (lastFrame?.collapsed && !heldProp.released) heldProp.release([0, 0, 0], MOTION_SEED);
+        heldProp.step(Math.min(dt, 1 / 30), 0);
+      }
+    }
     // Rest-space noise anchor (motion-polish task 6): `current` is the
     // authored, un-rigged body — the rest pose the noise texture is baked
     // into. Prim indices correspond 1:1 with the posed body (applyRig maps
@@ -2918,7 +3140,7 @@ async function main() {
   function rebuildBody() {
     override = { ...override, faceParams: face };
     saveOverride(activeCharacterName(), override);
-    current = buildCharacterBody(entry, [0, 0, 0], [], face, override);
+    current = buildZombieBody(face, override);
     showErrors(current);
     view.update(current);
     refreshWounds();
@@ -3165,7 +3387,7 @@ async function main() {
   const CHARACTER_OPT = '(character)';
   addSelect(faceBox, 'head shape', [CHARACTER_OPT, ...Object.keys(FACE_PRESETS)], CHARACTER_OPT, (v) => {
     if (v === CHARACTER_OPT) {
-      try { Object.assign(face, DEFAULT_FACE, compileFace(parseBlob(entry.src))); }
+      try { Object.assign(face, DEFAULT_FACE, compileFace(parseBlob(activeCharacterSrc()))); }
       catch { Object.assign(face, DEFAULT_FACE); }
     } else {
       Object.assign(face, FACE_PRESETS[v]!);
@@ -3197,10 +3419,10 @@ async function main() {
     // Blend mode as the character's sheet block says: replace (decal 1),
     // else luma multiply (blendLuma 1, main's default), else plain multiply.
     let mode: 1 | 2 | 3 = 2;
-    {
-      const { sheet: sp } = compileCharacterSheet(entry);
+    try {
+      const sp = compileSheet(parseBlob(activeCharacterSrc()));
       if (sp) mode = sp.decal > 0.5 ? 2 : (sp.blendLuma > 0.5 ? 3 : 1);
-    }
+    } catch { /* keep replace */ }
     const tex = new THREE.TextureLoader().load(url, t => { applyMeanOf(t); URL.revokeObjectURL(url); });
     wearFaceImage(tex, mode);
     uploadedFace = f.type === 'image/png' ? buf : null; // save only PNGs (the endpoint checks magic bytes)
@@ -3768,7 +3990,7 @@ async function main() {
 
   const actionBox = addSection(panelEl, 'actions');
   addButton(actionBox, 'respawn', () => {
-    woundRing.set([]);
+    wounds = [];
     override = loadOverride(activeCharacterName());
     rebuildBody();
   });
@@ -3816,7 +4038,7 @@ async function main() {
     // `face` back into the override, so resetting storage alone re-persisted
     // whatever the sliders had done to the skull (owner, 2026-08-23: the
     // schoolgirl's cranium stayed a skin dome above her hair after reset).
-    try { Object.assign(face, DEFAULT_FACE, compileFace(parseBlob(entry.src))); }
+    try { Object.assign(face, DEFAULT_FACE, compileFace(parseBlob(activeCharacterSrc()))); }
     catch { Object.assign(face, DEFAULT_FACE); }
     rebuildBody();
     rebuildFaceSliders();
@@ -3864,7 +4086,7 @@ async function main() {
     scene,
     camera,
     body: view.object,
-    get wounds() { return woundRing.all(); },
+    get wounds() { return wounds; },
     get current() { return current; },
     get chunkCount() { return chunks.length; },
     /** One shared NodeMaterial, asynchronously prepared before interaction. */
@@ -4132,7 +4354,7 @@ async function main() {
         const w = worldHitToWound(
           lastPosed.prims, hit, WOUND_PROFILES.blast.radius, 'blast', heroMotion.lastBodyYaw,
           p => sdBody(p, lastPosed));
-        woundRing.stamp(w, lastPosed, heroMotion.lastBodyYaw);
+        wounds = pushWound(wounds, w, MAX_WOUNDS);
         pendingWounds.push(w); // stamped blasts feed the damage meter too
       }
       refreshWounds();
@@ -4152,7 +4374,7 @@ async function main() {
       const w = worldHitToWound(
         lastPosed.prims, hit, WOUND_PROFILES.blast.radius, 'blast', heroMotion.lastBodyYaw,
         p => sdBody(p, lastPosed));
-      woundRing.stamp(w, lastPosed, heroMotion.lastBodyYaw);
+      wounds = pushWound(wounds, w, MAX_WOUNDS);
       refreshWounds();
       return hit;
     },
@@ -4162,7 +4384,7 @@ async function main() {
      *  resetMotion alone re-binds the rig of whatever body is current, which
      *  for a gibbed corpse is a body-shaped nothing. */
     respawn() {
-      woundRing.set([]);
+      wounds = [];
       override = loadOverride(activeCharacterName());
       rebuildBody();
     },

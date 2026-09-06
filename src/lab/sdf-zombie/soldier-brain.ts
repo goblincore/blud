@@ -30,7 +30,7 @@ import type { Vec3 } from './types';
 import { wrapPi } from './wander';
 
 export type SoldierState =
-  | 'idle' | 'engage' | 'aim' | 'fire' | 'recover' | 'stagger';
+  | 'idle' | 'engage' | 'aim' | 'fire' | 'recover' | 'settle' | 'stagger';
 
 export interface SoldierBrain {
   state: SoldierState;
@@ -48,6 +48,19 @@ export interface SoldierBrain {
   drift: -1 | 1;
   /** Seconds until the next decision tick. */
   driftT: number;
+  /** Shots fired SO FAR in the current burst — a running count, not a
+   *  remaining-count. It has to count UP: a decrementing "follow-ups owed"
+   *  counter is re-armed by the next shot before the cap is ever tested, so
+   *  the burst runs forever (caught by the settle test, which never saw the
+   *  state). Reset to 0 when the burst ends. */
+  burstShots: number;
+  /** True when the shot that just landed earned a follow-up. */
+  burstLeft: number;
+  /** Seconds of held, facing, weapon-up beat after the last shot of a burst,
+   *  before he is allowed to move again. Without it `recover` ends and he is
+   *  already strafing on the next frame, which is what made the shot read as
+   *  "muzzle flash, then straight back to wandering". */
+  settleT: number;
 }
 
 export interface SoldierSelf { x: number; z: number; yaw: number; room: number }
@@ -84,6 +97,15 @@ export interface SoldierOutput {
    *  stepWander owns wander.heading and is skipped when cfg.wander is false,
    *  so without this he would aim at wherever he last happened to face. */
   faceHeading: number | null;
+  /** Weapon UP — raise the gun into the fire carry. True through the whole
+   *  aim -> fire -> recover -> settle beat, not just on the shot frame.
+   *
+   *  WITHOUT IT THERE IS NO TELEGRAPH AT ALL. The carry only swapped to the
+   *  fire pose on the frame MotionSignals.fire went high, so the owner saw a
+   *  muzzle flash out of a walking body and nothing before it: "he doesn't
+   *  really aim at me or raise the weapon, i just see the muzzle flash". A
+   *  wind-up you cannot see is not a wind-up. */
+  weaponUp: boolean;
   /** 0..1 telegraph progress while aiming, else 0. Drives no geometry in this
    *  phase — it is the debug HUD's read and the seam a visible tell hangs off
    *  in phase 3. In the output rather than reconstructed by a consumer from a
@@ -123,13 +145,28 @@ export const SOLDIER_TUNING = {
   /** Slack around preferredRange before he bothers closing (m). Stops a
    *  half-metre drift from starting a walk. */
   rangeSlack: 1.0,
+  /** Chance of a follow-up shot when one lands (rolled per shot, so a burst
+   *  is usually 1-2 and occasionally 3). Doom's sergeant is not a metronome
+   *  of single taps. */
+  burstChance: 0.45,
+  /** Hard cap on follow-ups, so a burst is at most burstMax+1 shots.
+   *
+   *  WITHOUT IT THE BURST NEVER ENDS. The follow-up is rolled per shot, so a
+   *  caller whose roll keeps winning re-arms it forever and he never reaches
+   *  the settle beat -- he just fires until the player leaves range. Caught by
+   *  the settle test, which never saw the state at all. */
+  burstMax: 2,
+  /** Held, facing, weapon-up beat after the LAST shot of a burst, before he
+   *  may move again (s). The pause is the read: without it he flashes and is
+   *  instantly strafing, which looks like a twitch rather than an attack. */
+  settleSec: 0.45,
   /** The telegraph (s). Doom's shotgun guy has a distinct pre-fire frame and
    *  it is the only reason a sergeant is dodgeable; this is that frame. If
    *  the playtest says the soldier is unreadable, this is the first knob. */
-  aimSec: 0.5,
+  aimSec: 0.7,
   /** Recoil hold after the shot (s). Sits under FIRE.holdSec (0.85) so the
    *  carry is still in the fire pose when he resumes. */
-  recoverSec: 0.4,
+  recoverSec: 0.35,
   /** Floor between shots (s). */
   minCooldownSec: 1.0,
   /** Chance to take an ELIGIBLE firing opportunity, rolled on a decision
@@ -153,6 +190,7 @@ export function makeSoldierBrain(): SoldierBrain {
     state: 'idle', alert: false, lostFor: 0,
     phaseT: 0, cooldown: 0, holdSecs: 0,
     drift: 1, driftT: SOLDIER_TUNING.repositionSec,
+    burstShots: 0, burstLeft: 0, settleT: 0,
   };
 }
 
@@ -198,7 +236,8 @@ export function stepSoldierBrain(
   const dt = Math.max(0, input.dt);
   const { self, player } = input;
 
-  let { state, alert, lostFor, phaseT, cooldown, holdSecs, drift, driftT } = brain;
+  let { state, alert, lostFor, phaseT, cooldown, holdSecs, drift, driftT,
+    burstShots, burstLeft, settleT } = brain;
   cooldown = Math.max(0, cooldown - dt);
   holdSecs = Math.max(0, holdSecs - dt);
 
@@ -221,8 +260,10 @@ export function stepSoldierBrain(
   if (alert && lostFor > tuning.loseGrace) alert = false;
 
   const pack = (over: Partial<SoldierOutput> = {}): SoldierOutput => ({
-    brain: { state, alert, lostFor, phaseT, cooldown, holdSecs, drift, driftT },
-    target: null, halt: false, fire: false, faceHeading: null, aimT: 0,
+    brain: { state, alert, lostFor, phaseT, cooldown, holdSecs, drift, driftT,
+      burstShots, burstLeft, settleT },
+    target: null, halt: false, fire: false, faceHeading: null,
+    weaponUp: false, aimT: 0,
     ...over,
   });
 
@@ -261,13 +302,19 @@ export function stepSoldierBrain(
     phaseT += dt;
     if (phaseT < tuning.aimSec) {
       return pack({
-        halt: true, faceHeading: faceBearing,
+        halt: true, faceHeading: faceBearing, weaponUp: true,
         aimT: tuning.aimSec > 0 ? phaseT / tuning.aimSec : 1,
       });
     }
     // The telegraph is done: THIS frame is the shot.
     state = 'fire'; phaseT = 0;
-    return pack({ halt: true, faceHeading: faceBearing, fire: true, aimT: 1 });
+    // Roll the follow-up HERE, as the shot lands, so a burst is decided by the
+    // same event that fired it rather than by the next decision tick.
+    burstShots += 1;
+    burstLeft = (burstShots <= tuning.burstMax && input.roll < tuning.burstChance) ? 1 : 0;
+    return pack({
+      halt: true, faceHeading: faceBearing, weaponUp: true, fire: true, aimT: 1,
+    });
   }
 
   if (state === 'fire') {
@@ -281,9 +328,33 @@ export function stepSoldierBrain(
   if (state === 'recover') {
     phaseT += dt;
     if (phaseT < tuning.recoverSec) {
-      return pack({ halt: true, faceHeading: faceBearing });
+      return pack({ halt: true, faceHeading: faceBearing, weaponUp: true });
     }
-    state = 'engage'; phaseT = 0;
+    phaseT = 0;
+    // A follow-up shot skips the decision tick entirely: the burst is one
+    // action, not two independent opportunities.
+    if (burstLeft > 0 && dist <= tuning.fireRange) {
+      burstLeft = 0;
+      state = 'aim';
+      return pack({ halt: true, faceHeading: faceBearing, weaponUp: true, aimT: 0 });
+    }
+    // Burst over: hold the beat before moving. Still halted, still facing,
+    // still weapon-up.
+    burstLeft = 0;
+    burstShots = 0;
+    settleT = tuning.settleSec;
+    state = 'settle';
+  }
+
+  // The beat after the last shot. Its OWN state, not a reused `recover`:
+  // reusing recover would re-enter that block on the next frame and loop the
+  // recoil forever.
+  if (state === 'settle') {
+    settleT = Math.max(0, settleT - dt);
+    if (settleT > 0) {
+      return pack({ halt: true, faceHeading: faceBearing, weaponUp: true });
+    }
+    state = 'engage';
   }
 
   // --- the decision tick -------------------------------------------------

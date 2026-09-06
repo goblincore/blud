@@ -231,13 +231,51 @@ describe('stepSoldierBrain — the firing cycle', () => {
     expect(r.fires).toBe(1);            // he still takes the shot
   });
 
-  it('respects minCooldownSec between shots', () => {
-    // Two full decision ticks with roll=0: the cooldown must suppress the
-    // second opportunity if it lands too soon.
-    const span = SOLDIER_TUNING.repositionSec * 2 + SOLDIER_TUNING.aimSec
-      + SOLDIER_TUNING.recoverSec + 0.1;
-    const r = until(alerted(), { roll: 0 }, span);
-    expect(r.fires).toBeLessThanOrEqual(1);
+  it('a BURST bypasses the tick, but a refused burst does not', () => {
+    // roll 0 always wins the burst roll, so a shot is followed up immediately
+    // without waiting for the next decision tick -- a burst is ONE action.
+    const span = SOLDIER_TUNING.repositionSec + SOLDIER_TUNING.aimSec * 2
+      + SOLDIER_TUNING.recoverSec * 2 + 0.1;
+    const burst = until(alerted(), { roll: 0 }, span);
+    expect(burst.fires).toBeGreaterThan(1);
+
+    // roll 1 refuses both the fire roll AND the burst roll: no shots at all.
+    const none = until(alerted(), { roll: 1 }, span);
+    expect(none.fires).toBe(0);
+  });
+
+  it('holds a settle beat after the burst before moving again', () => {
+    // The shot used to end and he was strafing on the very next frame, which
+    // read as a twitch rather than an attack.
+    let b = alerted();
+    let sawSettle = false;
+    let movedDuringSettle = false;
+    for (let i = 0; i < 60 * 12; i++) {
+      const o = stepSoldierBrain(b, input({ roll: 0 }));
+      b = o.brain;
+      if (b.state === 'settle') {
+        sawSettle = true;
+        if (!o.halt || o.target !== null) movedDuringSettle = true;
+        if (!o.weaponUp) movedDuringSettle = true;   // gun must stay up
+      }
+    }
+    expect(sawSettle).toBe(true);
+    expect(movedDuringSettle).toBe(false);
+  });
+
+  it('the weapon is UP for the whole beat, not just the shot frame', () => {
+    let b = alerted();
+    const upStates = new Set<string>();
+    for (let i = 0; i < 60 * 12; i++) {
+      const o = stepSoldierBrain(b, input({ roll: 0 }));
+      b = o.brain;
+      if (o.weaponUp) upStates.add(b.state);
+    }
+    // aim through settle, never while merely engaging
+    expect(upStates.has('aim')).toBe(true);
+    expect(upStates.has('recover')).toBe(true);
+    expect(upStates.has('settle')).toBe(true);
+    expect(upStates.has('engage')).toBe(false);
   });
 
   it('re-rolls the strafe sign on the decision tick', () => {

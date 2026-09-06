@@ -49,6 +49,10 @@ export interface MindOutput {
   attack: { phase: number; side: 'L' | 'R'; variant: SwingVariant } | null;
   /** The weapon went off this frame. Always false for a zombie. */
   fire: boolean;
+  /** Raise the weapon into the fire carry — the visible telegraph, held
+   *  through the whole aim/fire/recover/settle beat. Always false for a
+   *  zombie, which carries nothing. */
+  weaponUp: boolean;
   /** Bearing to write into wander.heading while halted; null = leave it.
    *  Always null for a zombie, which turns only while walking. */
   faceHeading: number | null;
@@ -125,6 +129,7 @@ export function makeZombieMind(): EnemyMind {
         halt: out.halt,
         attack: out.attack,
         fire: false,
+        weaponUp: false,
         faceHeading: null,
         engaged: out.engaged,
         committed: out.committed,
@@ -167,6 +172,7 @@ export function makeSoldierMind(): EnemyMind {
         halt: out.halt,
         attack: null,
         fire: out.fire,
+        weaponUp: out.weaponUp,
         faceHeading: out.faceHeading,
         // Not in any ring: there is no ranged arbiter, and submitting a lone
         // soldier at the wider engaged radius would only push him around.
