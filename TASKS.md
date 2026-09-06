@@ -60,7 +60,8 @@ soldier, one room, no ranged crowd arbiter. Most of the work is plumbing:
 game-main only imports `zombie.blob`, the face sheet is a module constant,
 and `game-actor` never sets `MotionConfig.profile`. Watch the sheet block —
 that trap cost an hour on 2026-09-04.
-[spec](docs/superpowers/specs/2026-09-06-soldier-shootback-ai-design.md)
+[spec](docs/superpowers/specs/2026-09-06-soldier-shootback-ai-design.md) ·
+[plan](docs/superpowers/plans/2026-09-06-soldier-shootback-ai.md) (9 tasks)
 
 **[x] Zombie analytic normals — owner passed integrated combat playtest; hybrid mode enabled by default (2026-09-06).**
 [Integration evidence](docs/dev-notes/2026-09-06-analytic-normal-integration/README.md); procedural flesh/wound gradients with automatic legacy fallback and retained comparison toggle. Owner reports smoother play but attribution is uncertain. Broader Task 5 performance study remains open: moving/multi-actor and direct original-shader controls are unmeasured. Stable 30 fps combat is the product target.

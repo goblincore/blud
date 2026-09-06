@@ -122,9 +122,15 @@ architecture note.
 
 The whole geometry of this brain. `standoffNear` / `standoffFar` bracket a
 preferred range; outside it he closes or backs off, inside it he runs the
-firing cycle. Both edges are hysteretic, the way `engageRange` /
-`releaseRange` already are, so a player hovering on an edge does not induce
-state chatter.
+firing cycle.
+
+**The hysteresis runs inward, not outward.** He starts advancing at
+`dist > standoffFar` but does not stop until `dist <= standoffFar - hys`; he
+starts retreating at `dist < standoffNear` but does not stop until
+`dist >= standoffNear + hys`. Putting the exit threshold *inside* the band is
+what kills the chatter — an exit threshold outside it would make the two
+states overlap and oscillate, which is the opposite of the intent. At the
+starting values he settles somewhere in 4.1–5.4 m.
 
 Retreat targets a point away from the player along the bearing from player to
 self, at `standoffFar`.
@@ -144,17 +150,30 @@ at the band edge makes him flicker in and out of aiming and never commit.
 
 `fire` is true on **exactly one frame** per cycle.
 
-Entry to `aim` is gated by a minimum cooldown **and** a roll against
-`refireRoll`, consumed only on the frame the gate is evaluated — the same
-discipline `brain.ts` uses for swing variants, where the roll arrives as an
-input rather than an injected generator so the module stays a pure function of
-its arguments.
+### The decision tick
+
+**Rolling for the shot every frame would defeat the point.** At 60 Hz a
+`refireRoll` of 0.5 fires on the first eligible frame every single time, which
+is a fixed cooldown wearing a costume. Doom rolls when a monster *finishes a
+move*, not every tic, and that cadence is the whole source of the irregular
+rhythm.
+
+So the brain has one **decision tick**, every `repositionSec`. On that tick,
+and only on that tick, it (a) re-rolls the strafe sign and (b) if it is in
+`standoff` with `cooldown` expired, rolls `refireRoll` to enter `aim`.
+
+This needs **two independent 0..1 inputs**, `roll` and `rollDrift`. One value
+cannot serve both without correlating them — with a single `roll`, "fires" and
+"strafes left" would become the same event. Both arrive as inputs rather than
+from an injected generator, so the module stays a pure function of its
+arguments, exactly as `brain.ts` does for swing variants. Both are consumed
+only on a decision tick.
 
 ### Reposition
 
-In `standoff` he strafes tangentially. With no ring to hand him a `drift` he
-picks his own sign and flips it every `repositionSec`, consuming `roll` only
-on the frame the sign flips.
+In `standoff` he strafes tangentially: the target is his own current bearing
+from the player, offset by `drift * strafeStep`, at his current radius clamped
+into the band. The sign comes from the decision tick above.
 
 ### Output
 
@@ -196,12 +215,13 @@ plan should not have to invent them:
 | `loseGrace` | 4 s | The zombie's value. |
 | `standoffNear` | 3.5 m | Closer than this, retreat. |
 | `standoffFar` | 6.0 m | Farther than this, advance. Holds ~5 m. |
-| `bandHysteresis` | 0.6 m | Applied outward on both edges on exit. |
+| `bandHysteresis` | 0.6 m | See below — the exit threshold sits *inside* the band. |
 | `aimSec` | 0.5 s | The telegraph. Must stay readable. |
 | `recoverSec` | 0.4 s | Recoil hold. Sits under `FIRE.holdSec` (0.85 s). |
 | `minCooldownSec` | 1.0 s | Floor between shots. |
 | `refireRoll` | 0.5 | Chance to take an eligible firing opportunity. |
-| `repositionSec` | 1.5 s | Strafe-sign flip interval. |
+| `repositionSec` | 1.5 s | The decision tick — see below. |
+| `strafeStep` | 0.5 rad | Tangential offset applied to the strafe target. |
 | `blastHoldSec` | 0.55 s | The zombie's value, for stagger parity. |
 
 ### Stagger
@@ -313,11 +333,18 @@ Soldier pellets are visual: they fly and expire on time or distance.
 - the cycle emits exactly one `fire` pulse
 - **the committed-cycle property**: enter `aim`, move the player out of the
   band, assert the cycle still completes
-- the refire roll gates entry to `aim`
+- the refire roll gates entry to `aim`, **and is consumed only on a decision
+  tick** — the regression test is that a soldier standing in the band with
+  `roll = 0` (always fire) does not fire on frame one, and fires at most once
+  per `repositionSec`
 - `staggerSoldierNow` cancels an in-flight aim and leaves no stuck `fire`
 - `faceHeading` tracks a moving player
-- retreat is bounded: a soldier against a wall stops backing up and keeps
-  firing, rather than pressing the clamp forever
+
+**Not unit-testable, and deliberately so:** cornering. The brain always emits a
+retreat point at `standoffFar`; the stop comes from `stepWander`'s bounds
+clamp, which lives outside this module. It is checked in the playtest, not the
+suite — asserting it here would mean giving the brain a bounds query it should
+not have.
 
 ### Hard gate — the zombie does not move
 
