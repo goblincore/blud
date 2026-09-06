@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/motion-profile.test.ts
 import { describe, it, expect } from 'vitest';
-import { motionProfileFor, ZOMBIE_PROFILE, SOLDIER_PROFILE, runWeight } from './motion-profile';
+import { motionProfileFor, ZOMBIE_PROFILE, SOLDIER_PROFILE, runWeight, speedForBand } from './motion-profile';
 import { SHAMBLE, MARCH, RUN } from './gait';
 import { WANDER_TUNING } from './wander';
 
@@ -18,7 +18,7 @@ describe('motion profiles', () => {
     expect(p).toBe(SOLDIER_PROFILE);
     expect(p.gait.walk).toBe(MARCH);
     expect(p.gait.run).toBe(RUN);
-    expect(p.carries).toEqual({ walk: 'low', run: 'chest', fire: 'hip' });
+    expect(p.carries).toEqual({ walk: 'low', run: 'chest', fire: 'aim' });
     expect(p.prop?.url).toBe('/assets/lab/shorty-double.glb');
     expect(p.cruise).toBeGreaterThan(WANDER_TUNING.speed);
   });
@@ -29,4 +29,11 @@ describe('motion profiles', () => {
     expect(runWeight(SOLDIER_PROFILE, (b.from + b.to) / 2)).toBeCloseTo(0.5, 9);
     expect(runWeight(ZOMBIE_PROFILE, 99)).toBe(0);
   });
+});
+
+
+it('lab run control reaches the run gait even when patrol cruise is a walk', () => {
+  expect(runWeight(SOLDIER_PROFILE, speedForBand(SOLDIER_PROFILE, 'run'))).toBe(1);
+  expect(runWeight(SOLDIER_PROFILE, speedForBand(SOLDIER_PROFILE, 'walk'))).toBe(0);
+  expect(speedForBand(ZOMBIE_PROFILE, 'run')).toBe(ZOMBIE_PROFILE.cruise);
 });

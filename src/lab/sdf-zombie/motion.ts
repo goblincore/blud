@@ -54,7 +54,7 @@ import type { GaitJointName, GaitLimbs, GaitProfile } from './gait';
 import { blendProfiles, GAIT_TUNING, jointNamesForBody, rotateYaw, stepGait, type ArmStyle } from './gait';
 import { runWeight, ZOMBIE_PROFILE, type MotionProfile } from './motion-profile';
 import {
-  armPivot, CARRIES, GUN_GRIP, gunPoseFromArm, gunPoint, type CarryName, type GunPose,
+  armPivot, CARRIES, GUN_GRIP, gunPoseFromArm, gunPoint, type CarryName, type CarrySpec, type GunPose,
 } from './carry';
 import type { WanderBounds, WanderState } from './wander';
 import { headingDir, stepWander, wrapPi, type Rng } from './wander';
@@ -300,6 +300,8 @@ export interface MotionState {
   fireHold: number;
   /** Seconds since the last shot (Infinity before the first). */
   sinceFire: number;
+  /** Smoothed arm rotations for the current weapon hold. */
+  carryPose?: CarrySpec;
   /** Last frame's root shift (kept so a fall can freeze it). */
   lastShift: Vec3;
   /** Root shift captured when the fall started; null while standing. */
@@ -348,6 +350,8 @@ export interface MotionConfig {
   forceSpeed?: number;
   /** Hold this carry regardless of gait/fire state (lab captures). */
   carryOverride?: CarryName;
+  /** Aim facing independent of travel, used by directed soldier movement. */
+  faceHeading?: number;
   /** Melee swing: phase 0..1 plus which arm swings, throwing which variant
    *  (brain.ts drives all three through game-actor). UNDEFINED IS NOT
    *  "phase 0": undefined skips the composition branches entirely, so the
@@ -510,7 +514,8 @@ export function stepMotion(
 
   // --- locomotion (standing only) -----------------------------------------
   let wander = state.wander;
-  if (!collapsed && cfg.wander) wander = stepWander(wander, rng, dt, bounds, profile.cruise);
+  if (!collapsed && cfg.wander) wander = stepWander(wander, rng, dt, bounds, profile.cruise,
+    cfg.faceHeading === undefined ? undefined : { faceHeading: cfg.faceHeading });
 
   // --- body yaw: the damped rigid turn -------------------------------------
   // The whole body (rest pose, gait/stagger offsets, aim cone, plants via
@@ -522,8 +527,8 @@ export function stepMotion(
   let lean = 0;
   if (!collapsed) {
     const gain = cfg.headingFollow ?? MOTION_TUNING.headingFollow;
-    const maxTurn = MOTION_TUNING.headingFollowRate * Math.max(gain, 0) * dt;
-    const dYaw = wrapPi(wander.heading - bodyYaw);
+    const maxTurn = (profile.turnRate ?? MOTION_TUNING.headingFollowRate) * Math.max(gain, 0) * dt;
+    const dYaw = wrapPi((cfg.faceHeading ?? wander.heading) - bodyYaw);
     const applied = Math.abs(dYaw) <= maxTurn ? dYaw : Math.sign(dYaw) * maxTurn;
     bodyYaw = wrapPi(bodyYaw + applied);
     const yawRate = dt > 1e-9 ? applied / dt : 0;
@@ -571,10 +576,19 @@ export function stepMotion(
       R: { thigh: sub(joints.base[idx.kneeR]!, joints.base[idx.hipR]!), shin: sub(joints.base[idx.footR]!, joints.base[idx.kneeR]!) },
     }
     : undefined;
+  // Slow steps as movement slows and freeze cadence at a stop. The old
+  // shamble keeps its historical clock. The blend still settles the pose.
+  const cadence = profile.carries
+    ? (speedForBlend > 0 ? clamp(Math.sqrt(speedForBlend / profile.cruise), 0.65, 1) : 0)
+    : 1;
   const gait = stepGait(
-    { time: state.gait.time + stagger.phaseKnock, seed: state.gait.seed },
-    skew, dt, armStyle, gaitProfile, limbs,
+    { ...state.gait, time: state.gait.time + stagger.phaseKnock,
+      ...(state.gait.cycles === undefined ? {} : { cycles: state.gait.cycles + stagger.phaseKnock * gaitProfile.strideFreq }) },
+    skew, dt * cadence, armStyle, gaitProfile, limbs,
   );
+  const travel = sub(wander.pos, state.wander.pos);
+  const travelYaw = cfg.faceHeading !== undefined && Math.hypot(travel[0], travel[2]) > 1e-6
+    ? Math.atan2(travel[0], travel[2]) : bodyYaw;
 
   // The melee swing, if the brain is driving one. Composed exactly where a
   // stagger composes — see attack.ts's header. A collapsed body never swings.
@@ -607,7 +621,9 @@ export function stepMotion(
       : blend;
   const targets: Vec3[] = joints.base.map((base, i) => {
     const name = joints.names[i]!;
-    const gaitOff = name === 'pelvis' ? gait.pose.rootOffset : gait.pose.offsets[name];
+    const gaitLocal = name === 'pelvis' ? gait.pose.rootOffset : gait.pose.offsets[name];
+    const movingLeg = name === 'kneeL' || name === 'kneeR' || name === 'footL' || name === 'footR' || name === 'toeL' || name === 'toeR';
+    const gaitOff = movingLeg && travelYaw !== bodyYaw ? rotateYaw(gaitLocal, travelYaw - bodyYaw) : gaitLocal;
     const stagOff = name === 'pelvis' ? stagger.rootOffset : stagger.offsets[name] ?? Z;
     const s = ARM_JOINTS.has(name) ? armPresence : blend * strideScale;
     // BRANCHED, not `add(..., ZERO)`: adding zero would turn a -0 component
@@ -720,11 +736,21 @@ export function stepMotion(
   let gun: GunPose | null = null;
   let carryUsed: CarryName | null = null;
   const carries = profile.carries;
+  let carryPose = state.carryPose;
   if (armStyle === 'carry' && carries && !collapsed) {
     const carryName: CarryName = cfg.carryOverride
       ?? (fireHold > 0 ? carries.fire : (rw >= 0.5 ? carries.run : carries.walk));
     carryUsed = carryName;
-    const carry = CARRIES[carryName];
+    const wanted = CARRIES[carryName];
+    const previous = carryPose ?? wanted;
+    const amount = 1 - Math.exp(-9 * dt);
+    const mix = (a: number, b: number) => a + (b - a) * amount;
+    const carry: CarrySpec = {
+      right: { pitch: mix(previous.right.pitch, wanted.right.pitch), yaw: mix(previous.right.yaw, wanted.right.yaw), fold: mix(previous.right.fold, wanted.right.fold) },
+      gunPitch: mix(previous.gunPitch, wanted.gunPitch),
+      leftPole: [mix(previous.leftPole[0], wanted.leftPole[0]), mix(previous.leftPole[1], wanted.leftPole[1]), mix(previous.leftPole[2], wanted.leftPole[2])],
+    };
+    carryPose = carry;
     const right = rotateYaw([1, 0, 0], bodyYaw);
     const pelvisX = joints.base[idx.pelvis!]![0];
     const restSeg = (a: GaitJointName, b: GaitJointName) =>
@@ -779,6 +805,19 @@ export function stepMotion(
   // yaw (not wander.heading — the knee must agree with the turned body
   // mid-turn, same contract as every other body-local thing this frame).
   const legPole = headingDir(bodyYaw);
+  if (cfg.faceHeading !== undefined && !collapsed) {
+    // Travel can reverse under an aimed torso. Swing feet follow travel, but
+    // the knee hinge still faces the chest instead of turning inside out.
+    for (const [side, hip, knee, foot] of [
+      ['L', 'hipL', 'kneeL', 'footL'], ['R', 'hipR', 'kneeR', 'footR'],
+    ] as const) {
+      if (sig.missing[side === 'L' ? 'legL' : 'legR']) continue;
+      const ih = idx[hip]!, ik = idx[knee]!, iff = idx[foot]!;
+      const chain = solveChain([targets[ih]!, targets[ik]!, targets[iff]!], joints.leg[side], targets[iff]!, SOLVE);
+      targets[ik] = poleReflect(chain[0]!, chain[1]!, chain[2]!, legPole);
+      targets[iff] = chain[2]!;
+    }
+  }
   const plantLeg = (st: PlantState, hip: GaitJointName, knee: GaitJointName, foot: GaitJointName, lens: readonly [number, number]) => {
     if (st.phase !== 'stance') return;
     const solved = solvePlantedLeg(
@@ -842,7 +881,7 @@ export function stepMotion(
     // fixed wander target by the gazeFollow gain — 0 keeps the old
     // pinned-gaze behaviour as a pure tuning.
     const gazeFollow = cfg.gazeFollow ?? MOTION_TUNING.gazeFollow;
-    const ahead = add(wander.pos, scale(headingDir(wander.heading), MOTION_TUNING.gazeAhead));
+    const ahead = add(wander.pos, scale(headingDir(cfg.faceHeading ?? wander.heading), MOTION_TUNING.gazeAhead));
     const pinned = wander.target ?? ahead;
     const t = add(scale(pinned, 1 - gazeFollow), scale(ahead, gazeFollow));
     const look: Vec3 = [t[0], joints.base[idx.head!]![1] + shift[1], t[2]];
@@ -898,6 +937,7 @@ export function stepMotion(
     runWeight: rw,
     fireHold,
     sinceFire,
+    ...(carryPose === undefined ? {} : { carryPose }),
     lastShift: shift,
     fallShift: collapsed ? (state.fallShift ?? shift) : null,
   };

@@ -22,12 +22,10 @@
 // HEADING CONVENTION (wander.ts): yaw 0 faces +z, positive is clockwise seen
 // from above. The bearing to a point is atan2(dx, dz).
 //
-// ROOM-BOUND, DELIBERATELY, exactly as brain.ts is. stepWander clamps every
-// body to its own room's bounds — which is also why CORNERING IS EMERGENT:
-// a soldier backed into a wall simply stops retreating and keeps firing from
-// where he stands. No bounds query in here, and no cornered state.
+// Room-bound tactical moves use injected bounds and swept clearance. If no
+// candidate is reachable, hold position and keep looking for a firing chance.
 import type { Vec3 } from './types';
-import { wrapPi } from './wander';
+import { wrapPi, type WanderBounds } from './wander';
 
 export type SoldierState =
   | 'idle' | 'engage' | 'aim' | 'fire' | 'recover' | 'settle' | 'stagger';
@@ -61,6 +59,9 @@ export interface SoldierBrain {
    *  already strafing on the next frame, which is what made the shot read as
    *  "muzzle flash, then straight back to wandering". */
   settleT: number;
+  /** Fixed endpoint and timeout for one short tactical move. */
+  moveGoal: Vec3 | null;
+  moveT: number;
 }
 
 export interface SoldierSelf { x: number; z: number; yaw: number; room: number }
@@ -82,6 +83,10 @@ export interface SoldierInput {
    *  the same number as `roll`: one value serving both decisions correlates
    *  them, so "fires" and "strafes left" would become the same event. */
   rollDrift: number;
+  lineOfSight?: boolean;
+  bounds?: WanderBounds;
+  /** Actor-owned swept-body clearance query; deterministic for this scene. */
+  canMoveTo?: (point: Vec3) => boolean;
 }
 
 export interface SoldierOutput {
@@ -117,6 +122,10 @@ export const SOLDIER_TUNING = {
   /** Beyond this the player goes unnoticed (m). The zombie's value; the band
    *  sits well inside it, so he notices before he has to decide anything. */
   noticeRange: 9,
+  aimTolerance: 0.12,
+  moveSec: 1.4,
+  moveDistance: 1.1,
+  arriveRadius: 0.3,
   /** Half-angle of the notice cone (rad). The zombie's value. */
   noticeCone: (70 * Math.PI) / 180,
   /** Alert survives this long after the player leaves the room (s). */
@@ -176,8 +185,6 @@ export const SOLDIER_TUNING = {
   refireRoll: 0.5,
   /** The decision tick (s) — see the comment on the tick itself. */
   repositionSec: 1.5,
-  /** Tangential offset applied to the strafe target (rad). */
-  strafeStep: 0.5,
   /** Blast hold, matching the zombie's, so a shot soldier lurches for as long
    *  as a shot zombie does (s). */
   blastHoldSec: 0.55,
@@ -190,7 +197,7 @@ export function makeSoldierBrain(): SoldierBrain {
     state: 'idle', alert: false, lostFor: 0,
     phaseT: 0, cooldown: 0, holdSecs: 0,
     drift: 1, driftT: SOLDIER_TUNING.repositionSec,
-    burstShots: 0, burstLeft: 0, settleT: 0,
+    burstShots: 0, burstLeft: 0, settleT: 0, moveGoal: null, moveT: 0,
   };
 }
 
@@ -216,12 +223,7 @@ export function staggerSoldierNow(
   brain: SoldierBrain,
   tuning: SoldierTuning = SOLDIER_TUNING,
 ): SoldierBrain {
-  return { ...brain, state: 'stagger', phaseT: 0, holdSecs: tuning.blastHoldSec };
-}
-
-/** A point `radius` from the player, on `bearing`. */
-function ringPoint(player: SoldierPlayer, bearing: number, radius: number): Vec3 {
-  return [player.x + Math.sin(bearing) * radius, 0, player.z + Math.cos(bearing) * radius];
+  return { ...brain, state: 'stagger', phaseT: 0, holdSecs: tuning.blastHoldSec, moveGoal: null, moveT: 0, burstLeft: 0, burstShots: 0 };
 }
 
 function clamp(v: number, lo: number, hi: number): number {
@@ -237,7 +239,7 @@ export function stepSoldierBrain(
   const { self, player } = input;
 
   let { state, alert, lostFor, phaseT, cooldown, holdSecs, drift, driftT,
-    burstShots, burstLeft, settleT } = brain;
+    burstShots, burstLeft, settleT, moveGoal, moveT } = brain;
   cooldown = Math.max(0, cooldown - dt);
   holdSecs = Math.max(0, holdSecs - dt);
 
@@ -249,10 +251,11 @@ export function stepSoldierBrain(
   const dist = player ? Math.hypot(dx, dz) : Infinity;
 
   // --- notice, then lock (brain.ts's rule verbatim) ------------------------
+  const visible = sameRoom && input.lineOfSight !== false;
   if (!alert && sameRoom) {
     if (input.alerted) {
       alert = true;                              // a gunshot bypasses the cone
-    } else if (dist <= tuning.noticeRange) {
+    } else if (visible && dist <= tuning.noticeRange) {
       const bearing = Math.atan2(dx, dz);
       if (Math.abs(wrapPi(bearing - self.yaw)) <= tuning.noticeCone) alert = true;
     }
@@ -261,15 +264,16 @@ export function stepSoldierBrain(
 
   const pack = (over: Partial<SoldierOutput> = {}): SoldierOutput => ({
     brain: { state, alert, lostFor, phaseT, cooldown, holdSecs, drift, driftT,
-      burstShots, burstLeft, settleT },
+      burstShots, burstLeft, settleT, moveGoal, moveT },
     target: null, halt: false, fire: false, faceHeading: null,
     weaponUp: false, aimT: 0,
     ...over,
   });
 
   const idle = (): SoldierOutput => {
-    state = 'idle'; phaseT = 0;
-    return pack();
+    state = 'idle'; phaseT = 0; moveGoal = null; moveT = 0;
+    burstLeft = 0; burstShots = 0;
+    return pack({ halt: alert });
   };
 
   // --- stagger outranks everything ----------------------------------------
@@ -282,25 +286,20 @@ export function stepSoldierBrain(
     phaseT = 0;
   }
 
-  if (!alert || !player) return idle();
+  if (!alert || !player || !sameRoom) return idle();
 
   /** Where he must LOOK: from himself toward the player. */
   const faceBearing = Math.atan2(dx, dz);
-  /** Where he STANDS relative to the player: from the player toward himself.
-   *  The retreat and strafe points are placed on this bearing, so he backs
-   *  straight away from the player and strafes around him. */
-  const standBearing = Math.atan2(self.x - player.x, self.z - player.z);
-  const playerPoint: Vec3 = [player.x, 0, player.z];
-
-  // --- the committed firing cycle -----------------------------------------
-  // Once aim starts the cycle runs to the end even if the player leaves the
-  // band. This is the direct analogue of brain.ts's "a committed swing runs
-  // to the end", and it is what makes the telegraph readable: without it,
-  // strafing at the band edge makes him flicker in and out of aiming and
-  // never commit. All three states halt and hold the face lock.
+  // Hold the telegraph through small range changes, but cancel when sight
+  // breaks or the player leaves effective weapon range. Facing must settle
+  // before release; a completed timer alone cannot authorize the shot.
+  if (state === 'aim' && (!visible || dist > tuning.fireRange + tuning.rangeSlack)) {
+    state = 'engage'; phaseT = 0; burstLeft = 0; burstShots = 0;
+    driftT = Math.min(driftT, 0.35);
+  }
   if (state === 'aim') {
-    phaseT += dt;
-    if (phaseT < tuning.aimSec) {
+    phaseT = Math.min(tuning.aimSec, phaseT + dt);
+    if (phaseT < tuning.aimSec || Math.abs(wrapPi(faceBearing - self.yaw)) > tuning.aimTolerance) {
       return pack({
         halt: true, faceHeading: faceBearing, weaponUp: true,
         aimT: tuning.aimSec > 0 ? phaseT / tuning.aimSec : 1,
@@ -333,7 +332,7 @@ export function stepSoldierBrain(
     phaseT = 0;
     // A follow-up shot skips the decision tick entirely: the burst is one
     // action, not two independent opportunities.
-    if (burstLeft > 0 && dist <= tuning.fireRange) {
+    if (burstLeft > 0 && visible && dist <= tuning.fireRange) {
       burstLeft = 0;
       state = 'aim';
       return pack({ halt: true, faceHeading: faceBearing, weaponUp: true, aimT: 0 });
@@ -354,7 +353,8 @@ export function stepSoldierBrain(
     if (settleT > 0) {
       return pack({ halt: true, faceHeading: faceBearing, weaponUp: true });
     }
-    state = 'engage';
+    state = 'engage'; moveGoal = null; moveT = 0;
+    driftT = Math.max(driftT, 0.65);
   }
 
   // --- the decision tick -------------------------------------------------
@@ -369,30 +369,57 @@ export function stepSoldierBrain(
   // wearing a costume. Doom rolls when a monster FINISHES A MOVE, and that
   // cadence is the whole source of the irregular rhythm.
   driftT -= dt;
-  if (driftT <= 0) {
+  const decision = driftT <= 0;
+  if (decision) {
     driftT = tuning.repositionSec;
     drift = input.rollDrift < 0.5 ? -1 : 1;
-    if (dist <= tuning.fireRange && cooldown <= 0 && input.roll < tuning.refireRoll) {
-      state = 'aim'; phaseT = 0;
-      return pack({ halt: true, faceHeading: faceBearing, aimT: 0 });
+    if (visible && dist <= tuning.fireRange && cooldown <= 0 && input.roll < tuning.refireRoll) {
+      state = 'aim'; phaseT = 0; moveGoal = null; moveT = 0;
+      return pack({ halt: true, faceHeading: faceBearing, weaponUp: true, aimT: 0 });
     }
   }
 
-  // --- one moving state ---------------------------------------------------
-  // Movement is a TARGET CHOICE, not a state machine. Close if he is well
-  // outside his preferred range, give ground if you crowd him, otherwise
-  // strafe. Nothing here gates the shot, so none of it can starve him of one.
   state = 'engage';
-  if (dist > tuning.preferredRange + tuning.rangeSlack) {
-    // The PLAYER, not a standoff point: stepWander's arrive band on a target
-    // at the preferred range would park him short of it every time.
-    return pack({ target: playerPoint });
+  // Arrival, collision, and a time limit all end a move. The endpoint never
+  // follows the actor around an orbit, and a blocked move cannot run forever.
+  if (moveGoal) {
+    moveT -= dt;
+    if (moveT <= 0 || Math.hypot(moveGoal[0] - self.x, moveGoal[2] - self.z) < tuning.arriveRadius
+      || (input.canMoveTo && !input.canMoveTo(moveGoal))) {
+      moveGoal = null; moveT = 0;
+      driftT = Math.max(driftT, 0.65);
+      return pack({ halt: true, faceHeading: faceBearing });
+    }
+    return pack({ target: moveGoal, faceHeading: faceBearing });
   }
-  if (dist < tuning.tooClose) {
-    return pack({ target: ringPoint(player, standBearing, tuning.preferredRange) });
-  }
-  return pack({
-    target: ringPoint(player, standBearing + drift * tuning.strafeStep, dist),
-  });
 
+  const crowded = dist < tuning.tooClose;
+  const far = dist > tuning.preferredRange + tuning.rangeSlack;
+  // Comfortable soldiers can hold a good firing position. A move is a
+  // decision, not the default every frame between shots.
+  if (!decision && !crowded && !far) return pack({ halt: true, faceHeading: faceBearing });
+
+  const candidate = (side: number): Vec3 => {
+    const radial = crowded ? -1 : far ? 1 : 0;
+    const ux = dx / (dist || 1), uz = dz / (dist || 1);
+    const distance = radial ? Math.min(tuning.moveDistance, Math.abs(dist - tuning.preferredRange)) : tuning.moveDistance;
+    let x = self.x + (radial * ux + side * uz) * distance;
+    let z = self.z + (radial * uz - side * ux) * distance;
+    if (input.bounds) {
+      x = clamp(x, input.bounds.minX + 0.1, input.bounds.maxX - 0.1);
+      z = clamp(z, input.bounds.minZ + 0.1, input.bounds.maxZ - 0.1);
+    }
+    return [x, 0, z];
+  };
+  // Try the preferred radial move, then either sidestep around the blocker.
+  // Swept clearance rejects walls/crates before any walking starts.
+  const sides = crowded || far ? [0, drift, -drift] : [drift, -drift];
+  for (const side of sides) {
+    const point = candidate(side);
+    if (Math.hypot(point[0] - self.x, point[2] - self.z) < tuning.arriveRadius + 0.05) continue;
+    if (input.canMoveTo && !input.canMoveTo(point)) continue;
+    moveGoal = point; moveT = tuning.moveSec;
+    return pack({ target: moveGoal, faceHeading: faceBearing });
+  }
+  return pack({ halt: true, faceHeading: faceBearing });
 }

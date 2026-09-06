@@ -96,7 +96,8 @@ describe('stepSoldierBrain — movement is a preference, never a gate', () => {
       player: { x: 0, z: FAR, room: 3 },
     }));
     expect(out.brain.state).toBe('engage');
-    expect(out.target).toEqual([0, 0, FAR]);   // the player himself
+    expect(out.target![2]).toBeGreaterThan(0);
+    expect(out.target![2]).toBeLessThan(FAR); // a bounded approach, not a charge
     expect(out.halt).toBe(false);
   });
 
@@ -111,13 +112,11 @@ describe('stepSoldierBrain — movement is a preference, never a gate', () => {
     expect(out.target![2]).toBeLessThan(0);
   });
 
-  it('strafes when comfortable', () => {
+  it('holds a comfortable firing position between decisions', () => {
     const out = stepSoldierBrain(alerted(), input({ roll: 1 }));
     expect(out.brain.state).toBe('engage');
-    const t2 = out.target!;
-    expect(Math.abs(t2[0])).toBeGreaterThan(0);   // actually moved off-axis
-    // and stayed at the range he was already at
-    expect(Math.hypot(t2[0], t2[2] - MID)).toBeCloseTo(MID, 5);
+    expect(out.halt).toBe(true);
+    expect(out.target).toBeNull();
   });
 
   it('THE REGRESSION: movement never starves him of a shot', () => {
@@ -221,14 +220,14 @@ describe('stepSoldierBrain — the firing cycle', () => {
     expect(mid.out.aimT).toBeLessThan(0.7);
   });
 
-  it('COMMITMENT: a started cycle completes even if the player leaves the band', () => {
+  it('abandons a shot if the player leaves effective weapon range', () => {
     const enter = until(alerted(), { roll: 0 }, SOLDIER_TUNING.repositionSec + 0.1,
       o => o.brain.state === 'aim');
     expect(enter.out.brain.state).toBe('aim');
     // Player teleports far outside the band, mid-telegraph.
     const far = { player: { x: 0, z: 30, room: 3 }, roll: 1 };
     const r = until(enter.brain, far, SOLDIER_TUNING.aimSec + 0.1);
-    expect(r.fires).toBe(1);            // he still takes the shot
+    expect(r.fires).toBe(0);            // reacquire before another telegraph
   });
 
   it('a BURST bypasses the tick, but a refused burst does not', () => {
@@ -327,5 +326,58 @@ describe('staggerSoldierNow', () => {
       b = stepSoldierBrain(b, input({ roll: 1 })).brain;
     }
     expect(b.state).not.toBe('stagger');
+  });
+});
+
+describe('soldier combat regressions', () => {
+  it('waits for actual facing before releasing a completed telegraph', () => {
+    const b = { ...alerted(), state: 'aim' as const, phaseT: SOLDIER_TUNING.aimSec };
+    const out = stepSoldierBrain(b, input({ self: { x: 0, z: 0, yaw: Math.PI, room: 3 } }));
+    expect(out.fire).toBe(false);
+    expect(out.weaponUp).toBe(true);
+    expect(out.faceHeading).toBeCloseTo(0);
+  });
+
+  it('cancels fire when the player disappears behind an obstacle', () => {
+    const b = { ...alerted(), state: 'aim' as const, phaseT: SOLDIER_TUNING.aimSec };
+    const out = stepSoldierBrain(b, input({ lineOfSight: false }));
+    expect(out.fire).toBe(false);
+    expect(out.brain.state).not.toBe('aim');
+  });
+
+  it('does not finish a shot into a different room during alert grace', () => {
+    const b = { ...alerted(), state: 'aim' as const, phaseT: SOLDIER_TUNING.aimSec };
+    expect(stepSoldierBrain(b, input({ player: { x: 0, z: MID, room: 9 } })).fire).toBe(false);
+  });
+
+  it('raises the gun on the first frame of aim', () => {
+    const b = { ...alerted(), driftT: 0 };
+    expect(stepSoldierBrain(b, input({ roll: 0 })).weaponUp).toBe(true);
+  });
+
+  it('commits to one reachable destination instead of chasing an orbit', () => {
+    const b = { ...alerted(), driftT: 0 };
+    const start = stepSoldierBrain(b, input({ roll: 1 }));
+    expect(start.target).not.toBeNull();
+    const next = stepSoldierBrain(start.brain, input({ self: { x: 0.2, z: 0.1, yaw: 0, room: 3 } }));
+    expect(next.target).toEqual(start.target);
+    const arrived = stepSoldierBrain(next.brain, input({
+      self: { x: start.target![0], z: start.target![2], yaw: 0, room: 3 },
+    }));
+    expect(arrived.halt).toBe(true);
+    expect(arrived.target).toBeNull();
+  });
+
+  it('holds position if both sidesteps are blocked', () => {
+    const b = { ...alerted(), driftT: 0 };
+    const out = stepSoldierBrain(b, input({ canMoveTo: () => false }));
+    expect(out.halt).toBe(true);
+    expect(out.target).toBeNull();
+  });
+
+  it('abandons a blocked move promptly rather than walking into a wall forever', () => {
+    const start = stepSoldierBrain({ ...alerted(), driftT: 0 }, input());
+    const out = run(start.brain, {}, 1.8);
+    expect(out.halt).toBe(true);
   });
 });
