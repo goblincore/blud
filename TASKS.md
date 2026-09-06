@@ -61,7 +61,24 @@ game-main only imports `zombie.blob`, the face sheet is a module constant,
 and `game-actor` never sets `MotionConfig.profile`. Watch the sheet block —
 that trap cost an hour on 2026-09-04.
 [spec](docs/superpowers/specs/2026-09-06-soldier-shootback-ai-design.md) ·
-[plan](docs/superpowers/plans/2026-09-06-soldier-shootback-ai.md) (9 tasks)
+[plan](docs/superpowers/plans/2026-09-06-soldier-shootback-ai.md) (9 tasks).
+Tasks 1–5 dispatched (`zai/glm-5.3-flash:high`); **tasks 6–8 HELD** in
+`~/.claude/dispatch/plans-hold/` — they hand-port lab-main's kit/prop/face
+wiring into game-main, which the shared-character-view work below replaces.
+Task 9 is the owner playtest, never dispatched.
+
+**[~] SHARED CHARACTER VIEW + game-main split — DESIGN APPROVED 2026-09-06.**
+game-main.ts is 5450 lines and lab-main.ts 4779, both one `async main()`;
+game-main's holds **191 bindings**. The size is a symptom — the disease is that
+the lab and the game duplicate the wiring that puts a character on screen, and
+it has caused four copies of the same registry (lab silent-zombie fallback,
+bench-main's face table, soldier tasks 6+7). Phase A: `character-registry.ts`
+(pure data) + `character-view.ts` (body/view/face/kit/prop + per-frame pose),
+adopted by the lab then the game — where it REPLACES held tasks 6–7. Phase B:
+five factory modules out of game-main, `tick()` (~700 lines) extracted last
+because its call ordering is load-bearing and undocumented. Pure refactor:
+baselines captured first, no test file may be edited.
+[spec](docs/superpowers/specs/2026-09-06-shared-character-view-design.md)
 
 **[x] Zombie analytic normals — owner passed integrated combat playtest; hybrid mode enabled by default (2026-09-06).**
 [Integration evidence](docs/dev-notes/2026-09-06-analytic-normal-integration/README.md); procedural flesh/wound gradients with automatic legacy fallback and retained comparison toggle. Owner reports smoother play but attribution is uncertain. Broader Task 5 performance study remains open: moving/multi-actor and direct original-shader controls are unmeasured. Stable 30 fps combat is the product target.
