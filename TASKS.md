@@ -104,6 +104,25 @@ sheet block declares `image minotaur-face.png` but no such PNG exists under
 `public/assets/lab/faces/` — the lab has been 404ing it silently; the registry
 records it as declared.
 
+**[ ] F-slug-gate — SLUG PLACEMENT GATE IS A FALSE ALARM, fix the gate not the renderer (found 2026-09-06).**
+`scripts/sdf-game-slug-gate.mjs` fails at **18.3 cm** against a 3 cm tolerance,
+and has been failing unnoticed because it needs a vite server + headless
+Chrome and never runs under `npm test`. **It is measuring the deliberate hit
+recoil.** The gate calls `predictSlugHit()` for the impact point on the body
+as it stands, then fires; `applyProjectileHit` stamps the wound and then
+`impulseAt` TRANSLATES the nearest rig point by `IMPULSE[type]` metres —
+`blast` (which is what a slug stamps) is **0.18 m**. The gate then reads the
+wound's position on the *shoved* body and compares it to the *pre-shove*
+prediction. 18.0 cm commanded, 18.33–18.39 cm measured, remainder is rig
+settling. The crater is correctly placed; the body moved because it was shot,
+and the owner has never seen a misplaced crater in play. The 3 cm tolerance
+predates the deliberate raise of the slug shove from a uniform 0.05 to
+blast-scale 0.18 and was never revisited. **Fix the GATE** — capture the wound
+world position at stamp time before the impulse, or subtract the known shove,
+or widen the tolerance to `IMPULSE[type]` + settle margin. Confirmed
+pre-existing (identical 18.33 cm on the pre-refactor tree), so it does not
+block the character-view work.
+
 **[x] Zombie analytic normals — owner passed integrated combat playtest; hybrid mode enabled by default (2026-09-06).**
 [Integration evidence](docs/dev-notes/2026-09-06-analytic-normal-integration/README.md); procedural flesh/wound gradients with automatic legacy fallback and retained comparison toggle. Owner reports smoother play but attribution is uncertain. Broader Task 5 performance study remains open: moving/multi-actor and direct original-shader controls are unmeasured. Stable 30 fps combat is the product target.
 
