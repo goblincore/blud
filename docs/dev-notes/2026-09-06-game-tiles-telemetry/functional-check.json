@@ -1,0 +1,109 @@
+{
+  "checks": [
+    {
+      "name": "tiles-enabled-all-actors",
+      "detail": {
+        "allowed": true,
+        "enabled": true,
+        "bound": 10,
+        "active": 10,
+        "fallbacks": {
+          "gridOverflow": 0,
+          "groupOverflow": 0,
+          "missingBinding": 0
+        }
+      }
+    },
+    {
+      "name": "live-tile-toggle",
+      "detail": {
+        "allowed": true,
+        "enabled": true,
+        "bound": 10,
+        "active": 10,
+        "fallbacks": {
+          "gridOverflow": 0,
+          "groupOverflow": 0,
+          "missingBinding": 0
+        }
+      }
+    },
+    {
+      "name": "natural-slug-fired",
+      "detail": {
+        "actor": 1
+      }
+    },
+    {
+      "name": "resolution-change",
+      "detail": {
+        "allowed": true,
+        "enabled": true,
+        "bound": 10,
+        "active": 10,
+        "fallbacks": {
+          "gridOverflow": 0,
+          "groupOverflow": 0,
+          "missingBinding": 0
+        }
+      }
+    },
+    {
+      "name": "cast-rebuild-retains-tiles",
+      "detail": {
+        "allowed": true,
+        "enabled": true,
+        "bound": 10,
+        "active": 10,
+        "fallbacks": {
+          "gridOverflow": 0,
+          "groupOverflow": 0,
+          "missingBinding": 0
+        }
+      }
+    },
+    {
+      "name": "wound-location-recorded",
+      "detail": {
+        "region": "torso",
+        "world": [
+          -3.7670889742748677,
+          1.0480425968236293,
+          -3.5200170065606238
+        ],
+        "local": [
+          0.1390679055522571,
+          0.006802003001759534,
+          -0.058717930550604924
+        ]
+      }
+    },
+    {
+      "name": "natural-recording-saved",
+      "detail": {
+        "frames": 136,
+        "snapshots": 3,
+        "events": 8
+      }
+    },
+    {
+      "name": "ordinary-launch-has-no-tile-bindings",
+      "detail": {
+        "allowed": false,
+        "enabled": false,
+        "bound": 0,
+        "active": 0,
+        "fallbacks": {
+          "gridOverflow": 0,
+          "groupOverflow": 0,
+          "missingBinding": 0
+        }
+      }
+    },
+    {
+      "name": "no-page-or-WebGPU-errors",
+      "detail": {}
+    }
+  ],
+  "errors": []
+}

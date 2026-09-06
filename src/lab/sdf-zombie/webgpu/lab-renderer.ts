@@ -23,6 +23,7 @@
 // which renders every standard material black. Do not split these imports.
 import * as THREE from 'three/webgpu';
 import { WebGPURenderer } from 'three/webgpu';
+import type { FrameTiming } from './game-telemetry';
 
 export interface LabRendererHandle {
   renderer: WebGPURenderer;
@@ -31,6 +32,8 @@ export interface LabRendererHandle {
   canvas: HTMLCanvasElement;
   setRenderCallback(cb: (dtSec: number) => void): void;
   setDrawFn(fn: () => void): void;
+  /** Observe natural frames only; CPU submission timing is NOT GPU duration. */
+  setFrameObserver(observer: ((frame: FrameTiming) => void) | null): void;
   /** 'webgpu' or 'webgl' — WebGPURenderer silently falls back, so ASK. */
   readonly backend: string;
 
@@ -299,6 +302,7 @@ export async function createLabRenderer(mount: HTMLElement, cap?: RenderCap): Pr
   let refreshMs = 1000 / 60;
   let cb: (dtSec: number) => void = () => {};
   let drawFn: () => void = () => { void renderer.render(scene, camera); };
+  let frameObserver: ((frame: FrameTiming) => void) | null = null;
 
   // The query pool has a fixed capacity and warns loudly once it fills, so the
   // resolve has to keep up with the frames. One in-flight resolve at a time is
@@ -323,8 +327,18 @@ export async function createLabRenderer(mount: HTMLElement, cap?: RenderCap): Pr
 
     const dt = (now - lastTime) / 1000;
     lastTime = now;
-    cb(dt);
-    drawFn();
+    if (frameObserver) {
+      const start = performance.now();
+      cb(dt);
+      const afterTick = performance.now();
+      drawFn();
+      const end = performance.now();
+      frameObserver({ startMs: now, endMs: end, intervalMs: dt * 1000,
+        tickCpuMs: afterTick - start, drawCpuMs: end - afterTick });
+    } else {
+      cb(dt);
+      drawFn();
+    }
 
     // Drain the timestamp query pool. It has a fixed capacity and warns loudly
     // once it fills, so the resolve has to keep up with the frames even though
@@ -362,6 +376,7 @@ export async function createLabRenderer(mount: HTMLElement, cap?: RenderCap): Pr
     get refreshMs() { return refreshMs; },
     setRenderCallback(fn) { cb = fn; },
     setDrawFn(fn) { drawFn = fn; },
+    setFrameObserver(observer) { frameObserver = observer; },
     backend: backendName,
     step(dtSec) { cb(dtSec); drawFn(); },
     async resolveGpu() {

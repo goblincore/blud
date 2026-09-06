@@ -51,17 +51,15 @@ import { dungeonMaterialSet } from '../../../game/level/theme-material-set';
 import { createOuterHull } from './shell-hull-outer';
 import { createBoneInstancer } from './bone-instancer';
 import { createPostAa } from './post-aa';
-import { createZombieGpuView, type ZombieGpuView } from './zombie-gpu';
+import { type ZombieGpuView } from './zombie-gpu';
 import { createOccluderHull, buildHullInstances, HULL_SHRINK, type HullInstance } from './occluder-hull';
-import { translateBody } from '../translate';
-import { buildBody, DEFAULT_BUILD_OPTS, type BuildResult } from '../build-body';
+import { type BuildResult } from '../build-body';
 import { parseBlob } from '../blob-parse';
 import { createCharacterView, compileCharacterSheet } from './character-view';
 import { characterEntry } from '../character-registry';
 import { rotateYaw } from '../gait';
 import { makeSoldierMind } from './enemy-mind';
-import { compileBlob, compileFace, compilePalette } from '../blob-compile';
-import { checkStance } from '../blob-checks';
+import { compileFace, compilePalette } from '../blob-compile';
 import { FLESH_PRESETS, LIGHT_PRESETS } from '../material';
 import type { Vec3 } from '../types';
 import zombieBlobSrc from '../characters/zombie.blob?raw';
@@ -83,6 +81,10 @@ import {
   length as tslLength, sub as tslSub, positionWorld, cameraPosition, uniform as tslUniform,
 } from 'three/tsl';
 import { runBench, type BenchDeps } from './game-bench';
+import { GameTelemetry, type FrameTiming } from './game-telemetry';
+import { createTelemetryControls } from './game-telemetry-controls';
+import { createGameTilePlaytest } from './game-tile-playtest';
+import { createComputeTileBinding } from './tile-bin-compute';
 import { sdBody, smax } from '../validate';
 import { FISHEYE_DEFAULTS, clampFovDeg, reticleNdc, visibleFovDeg } from './fisheye';
 import {
@@ -186,6 +188,7 @@ async function main() {
   const resKey = resRungFromUrl();
   const handle = await createLabRenderer(mount, RES_RUNGS[resKey]);
   const { scene, camera } = handle;
+  const telemetry = new GameTelemetry();
 
   // FRAME PACING. Present on a 30 fps cadence instead of taking whatever slot
   // rAF hands us. Unpaced, a ~33 ms frame on a 60 Hz display alternates between
@@ -592,6 +595,7 @@ async function main() {
   // temporal dead zone — the chunk list therefore goes through this
   // indirection, assigned once liveChunks exists. Empty until then.
   let chunkObjects: () => THREE.Object3D[] = () => [];
+  let refreshActorTiles = () => {};
   handle.setDrawFn(() => postAa.render(() => {
     flashlight.update(camera);
     // Hand the march the same beam the meshes get. The SDF bodies shade
@@ -704,6 +708,7 @@ async function main() {
         ...liveChunks.map(c => ({ prims: c.view.posedBones() })),
       ]);
     }
+    refreshActorTiles();
     if (gooEnabled && gooLayer) {
       gooLayer.render(camera, () => sdfLayer.render(scene, camera));
     } else {
@@ -979,6 +984,50 @@ async function main() {
   let onSeverDispatch: ((a: ZombieActor, piece: { limb: string; origin: Vec3; prims: Primitive[]; tornAt: Vec3[]; bones: Primitive[] }, stumpWound: Wound | null) => void) | null = null;
 
   const actors: ZombieActor[] = [];
+  const tilesPlaytest = import.meta.env.DEV && new URLSearchParams(location.search).has('tiles-playtest');
+  const gameTiles = createGameTilePlaytest({
+    allowed: tilesPlaytest,
+    capacity: () => ({ widthPx: Math.max(960, postAa.contentSize.width), heightPx: Math.max(600, postAa.contentSize.height) }),
+    createBinding: (w, h) => createComputeTileBinding(handle.renderer, w, h),
+  });
+  const tilesButton = tilesPlaytest ? document.createElement('button') : null;
+  const updateTilesButton = () => {
+    if (!tilesButton) return;
+    const d = gameTiles.diagnostics();
+    const fallback = Object.values(d.fallbacks).reduce((n, v) => n + v, 0);
+    const label = `Tile culling: ${d.enabled ? 'ON' : 'OFF'} [F6]${fallback ? ` · ${fallback} fallback` : ''}`;
+    if (tilesButton.textContent !== label) tilesButton.textContent = label;
+  };
+  const setGameTiles = (on: boolean) => {
+    gameTiles.setEnabled(on);
+    telemetry.event('tile-culling', gameTiles.diagnostics() as unknown as Record<string, unknown>);
+    updateTilesButton();
+  };
+  if (tilesButton) {
+    tilesButton.style.cssText = 'position:fixed;right:12px;top:52px;z-index:10001;padding:8px;background:#171b20;color:#eee;border:1px solid #687079';
+    tilesButton.onclick = () => setGameTiles(!gameTiles.diagnostics().enabled);
+    document.body.appendChild(tilesButton);
+    updateTilesButton();
+  }
+  const tilesKey = (e: KeyboardEvent) => {
+    if (tilesPlaytest && e.code === 'F6' && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault(); setGameTiles(!gameTiles.diagnostics().enabled);
+    }
+  };
+  window.addEventListener('keydown', tilesKey);
+  refreshActorTiles = () => {
+    if (!tilesPlaytest) return;
+    const timing = telemetry.begin();
+    camera.updateMatrixWorld(); camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
+    const size = sdfLayer.targetSize;
+    gameTiles.refresh(camera, { widthPx: size.width, heightPx: size.height }, actors.map(a => a.view));
+    telemetry.end('tile-binning-submit', timing);
+    updateTilesButton();
+  };
+  import.meta.hot?.dispose(() => {
+    refreshActorTiles = () => {}; gameTiles.dispose(); tilesButton?.remove();
+    window.removeEventListener('keydown', tilesKey);
+  });
   // Owner-approved hybrid normals; unsupported surfaces retain calcNormal.
   let normalGradientMode: 0 | 1 = 1;
   let normalGradientDebug: 0 | 1 | 2 = 0;
@@ -1093,6 +1142,13 @@ async function main() {
     // the game's half of proving it. The game keeps everything BELOW this
     // point — the uniform stamping is the game's lighting and perf tuning,
     // not shared with a dev lab that lights its subject differently.
+    //
+    // The per-view tile binding is the GAME's (gameTiles), created here and
+    // handed to the factory rather than made inside it: the game tracks every
+    // binding it hands out so it can re-bin them, and the lab has no such
+    // registry. It rides in through `gpu`, which is createZombieGpuView's own
+    // parameter type, so nothing about the seam had to widen to carry it.
+    const tileBinding = gameTiles.createBinding();
     const character = createCharacterView({
       name,
       start,
@@ -1105,6 +1161,7 @@ async function main() {
       ...(boneRatioOverride !== null ? { boneRatio: boneRatioOverride } : {}),
       gpu: {
         cone: sdfLayer.cone,
+        tiles: tileBinding,
         occluder: sdfLayer.occluder,
         // The outer hull's bounds. Passing them unconditionally is safe:
         // the fetch identities (0 / 1e9) make the march bit-identical while
@@ -1128,6 +1185,7 @@ async function main() {
     });
     const placed = character.body;
     const view = character.gpu;
+    gameTiles.track(view, tileBinding);
     // Bone tubes: with the mesh ON the field stops packing bone rows (task 5).
     view.setPackBones(!boneMesh);
     view.applyMaterial(flesh, LIGHT_PRESETS['practical-hard-key']);
@@ -2062,6 +2120,7 @@ async function main() {
     // Gunfire in a room turns every head in it, cone or no cone. Placed after
     // the guards on purpose: a dry click or a shot during a reload must not
     // alert anything, or the flag fires on inputs that made no noise.
+    telemetry.event('shot', { kind: slugMode ? 'slug' : 'pellet', barrels });
     shotAlert = true;
     cooldown = GRAPESHOT.fireCooldownSec;
     recoilPitch += GRAPESHOT.kickRadPerBarrel * barrels;
@@ -2141,7 +2200,10 @@ async function main() {
   let chunkBakeInput: ChunkBakeData | null = null;
   let lastBakeSwapMs = 0;
   let lastBakeRequestMs = 0;
-  const cancelChunkBake = () => { chunkBakeJobs.cancel(); chunkBakeInput = null; };
+  const cancelChunkBake = () => {
+    if (chunkBakeJobs.pendingId !== null) telemetry.event('chunk-bake-cancel', { chunk: chunkBakeJobs.pendingId });
+    chunkBakeJobs.cancel(); chunkBakeInput = null;
+  };
   window.addEventListener('pagehide', cancelChunkBake);
   import.meta.hot?.dispose(() => {
     cancelChunkBake();
@@ -2154,6 +2216,7 @@ async function main() {
   function finishChunkBake(): void {
     const done = chunkBakeJobs.takeCompleted();
     if (!done) return;
+    telemetry.event('chunk-bake-complete', { chunk: done.id });
     const data = chunkBakeInput;
     chunkBakeInput = null;
     const index = liveChunks.findIndex(c => c.id === done.id);
@@ -2161,6 +2224,7 @@ async function main() {
     const entry = liveChunks[index]!;
     if (!chunkSettled(entry.state)) return;
     const t0 = performance.now();
+    const swapTiming = telemetry.begin();
     const baked = unpackChunkBake(done.result);
     if (!bakedChunkMat) {
       bakedChunkMat = createBakedChunkMaterial();
@@ -2187,6 +2251,8 @@ async function main() {
       radius: baked.radius,
     };
     lastBakeSwapMs = performance.now() - t0;
+    telemetry.end('chunk-bake-swap', swapTiming);
+    telemetry.event('chunk-bake-swap', { chunk: entry.id, workerMs: baked.bakeMs, swapCpuMs: lastBakeSwapMs, vertices: baked.verts, triangles: baked.tris });
     if (baked.overflow || baked.droppedQuads > 0) {
       console.warn(`[chunk-bake] chunk ${entry.id}: overflow=${baked.overflow} droppedQuads=${baked.droppedQuads} — geometry holes`);
     }
@@ -2197,6 +2263,7 @@ async function main() {
    *  path — the design question settled for option 2 (simpler: no dual
    *  representation to keep in sync, and closer to the feel). */
   function gibBakedPiece(b: BakedChunk, at: Vec3): void {
+    telemetry.event('baked-piece-hit', { chunk: b.id, world: [...at] });
     spareChunkViews.push(freeBaked(b));
     gibChunkMeat(b.template, at);
   }
@@ -2666,6 +2733,7 @@ async function main() {
   // each sever's stump wound into the bleed ledger (the gushing emitter —
   // the wound is the actor's own reference, so the anchor rides the body).
   onSeverDispatch = (a, piece, stumpWound) => {
+    telemetry.event('sever', { actor: a.id, limb: piece.limb });
     spawnChunkPiece(piece, { uniforms: a.view.uniforms, volumeTexture: a.view.volumeTexture });
     if (stumpWound) registerBleed(a, stumpWound, 'stump');
   };
@@ -2876,7 +2944,14 @@ async function main() {
       const push = separate(agents);
       actors.forEach((a, i) => a.nudge(push[i]![0], push[i]![1]));
 
+      const bodyTiming = telemetry.begin();
       for (const a of actors) a.step(dt);
+      // 'body-step' CLOSES HERE, before the kit pose below, because that is
+      // the boundary main's telemetry numbers were taken with. Widening a
+      // counter to cover more work without saying so makes every recorded
+      // figure incomparable to every new one, which is worse than the counter
+      // being slightly narrow than it ought to be.
+      telemetry.end('body-step', bodyTiming);
       // POLYGON HALVES RIDE THE RIG. Armour from per-bone frames, the gun from
       // the motion frame's gun pose; collapse and gib release the gun while the
       // kit keeps following the fallen rig. One call, because character-view
@@ -3222,6 +3297,7 @@ async function main() {
       }
     }
     {
+      const projectileTiming = telemetry.begin();
       const prevs = pellets.map(p => [...p.pos] as Vec3);
       stepProjectiles(pellets, dt);
       // Hit batching: every actor hit this frame flushes its rig/repack/
@@ -3336,17 +3412,35 @@ async function main() {
             // so the bleed emitter binds the exact wound instead of sniffing
             // the ring tail (a hit that also severs puts a stump there).
             if (!hitThisFrame.has(hitActor)) { hitActor.beginHits(); hitThisFrame.add(hitActor); }
+            const hitTiming = telemetry.begin();
             const stamped = p.kind === 'slug'
               ? hitActor.hitSlug(hitPoint, dirN)
               : hitActor.hit(hitPoint, dirN);
+            telemetry.end('wound-hit', hitTiming);
+            if (telemetry.active) telemetry.event('impact', {
+              actor: hitActor.id, model: 'zombie', room: hitActor.room, kind: p.kind, stamped: !!stamped,
+              world: hitPoint, direction: dirN, actorPose: hitActor.pose(),
+              wound: stamped ? describeRecordedWound(hitActor, stamped) : null,
+              woundCount: hitActor.wounds().length,
+            });
             if (stamped) registerBleed(hitActor, stamped, p.kind);
             dead = true;
           }
         }
         if (dead) pellets.splice(i, 1);
       }
+      const flushTiming = telemetry.begin();
       for (const a of hitThisFrame) a.endHits();
-
+      if (telemetry.active) for (const a of hitThisFrame) telemetry.event('actor-wounds', {
+        actor: a.id, model: 'zombie', pose: a.pose(), wounds: a.wounds().map(w => describeRecordedWound(a, w)),
+        aliveRegions: a.posed().clusters.filter(c => c.alive).map(c => c.limb),
+      });
+      telemetry.end('wound-flush', flushTiming);
+      telemetry.end('projectiles-and-hits', projectileTiming);
+      // SOLDIER PELLETS SIT OUTSIDE 'projectiles-and-hits' ON PURPOSE — see
+      // the same argument at 'body-step'. This is work that did not exist when
+      // that counter was calibrated on main, and quietly folding it in would
+      // make new readings incomparable to recorded ones.
       // SOLDIER PELLETS: stepped, culled and drawn — never traced. Uses the
       // same integrator as the player's (semi-implicit Euler, gravity before
       // move); hand-rolling a second one would let the two drift apart.
@@ -3410,6 +3504,7 @@ async function main() {
       // for the clause-by-clause "has already stopped" argument) and its
       // march proxy is replaced by a static mesh. Reverse iteration: bake
       // SPLICES entries out of liveChunks.
+      const chunkTiming = telemetry.begin();
       const cdt = Math.min(dt, 1 / 30);
       // GUT ROPES first, so stepBlood's skip of 'gut' droplets this frame
       // sees this frame's chain positions (see stepGutRopes).
@@ -3429,10 +3524,15 @@ async function main() {
           const t0 = performance.now();
           const data = c.view.bakeData();
           // Bone-only pieces retain their original SDF path.
-          if (data.flesh.length > 0 && chunkBakeJobs.submit(c.id, data)) chunkBakeInput = data;
+          if (data.flesh.length > 0 && chunkBakeJobs.submit(c.id, data)) {
+            chunkBakeInput = data;
+            telemetry.event('chunk-bake-request', { chunk: c.id, flesh: data.flesh.length, bones: data.bones.length });
+          }
           lastBakeRequestMs = performance.now() - t0;
         }
       }
+      telemetry.end('chunks-and-guts', chunkTiming);
+      const bloodTiming = telemetry.begin();
       // BLEED — emitters spray (anchors recomputed from the CURRENT posed
       // prims, so droplets ride the walking body), flying chunks trail, and
       // the sim settles into splats. Runs even with the wander frozen: it is
@@ -3458,6 +3558,7 @@ async function main() {
         // even frozen — same contract as the lab's always-sync).
         bloodView.sync(bloodSim, camera);
       }
+      telemetry.end('blood-simulation-and-sync', bloodTiming);
     }
 
     const eye = eyeOf(player);
@@ -3487,7 +3588,9 @@ async function main() {
     // Unconditional, NOT under bleedEnabled like bloodView.sync above: floor
     // splats persist in the sim after bleed is switched off, and the goo
     // draws them. Gating this would freeze the pools mid-frame instead.
+    const gooTiming = telemetry.begin();
     gooLayer?.sync(bloodSim, camera);
+    telemetry.end('goo-sync', gooTiming);
   }
 
   handle.setRenderCallback((dt) => {
@@ -3613,7 +3716,95 @@ async function main() {
     return false;
   }
 
+  function describeRecordedWound(a: ZombieActor, w: Wound) {
+    const prims = a.posed().prims;
+    const prim = prims[w.primIdx];
+    return { ...w, world: prim ? woundWorldPos(prims, w, a.pose().yaw) : null,
+      bone: prim?.bone ?? null, sourceLine: prim?.src ?? null,
+      region: prim ? a.posed().clusters[prim.cluster]?.limb ?? null : null };
+  }
+  function captureTelemetryScene(name: string) {
+    if (!telemetry.active) return;
+    const started = performance.now();
+    telemetry.snapshot(name, {
+      camera: { position: camera.position.toArray(), quaternion: camera.quaternion.toArray(), projection: camera.projectionMatrix.toArray(), fov: camera.fov },
+      player: { position: player.pos, yaw: player.yaw, pitch: player.pitch },
+      settings: { tiles: gameTiles.diagnostics(), sdfScale, adaptive: adaptiveEnabled, frameCap: handle.frameCap,
+        width: sdfLayer.targetSize.width, height: sdfLayer.targetSize.height, woundTuning, normalGradientMode },
+      actors: actors.map(a => {
+        const body = a.posed();
+        // Already-posed CPU data: no ray queries, GPU fence or texture readback.
+        return { id: a.id, model: 'zombie', room: a.room, pose: a.pose(),
+          prims: body.prims, clusters: body.clusters, bonePrims: body.bonePrims,
+          wounds: a.wounds().map(w => describeRecordedWound(a, w)),
+          uniforms: Object.fromEntries(Object.entries(a.view.uniforms).flatMap<[string, number | boolean | number[]]>(([key, u]) => {
+            const v = (u as { value: unknown }).value;
+            if (typeof v === 'number' || typeof v === 'boolean') return [[key, v]];
+            if (v instanceof THREE.Vector2 || v instanceof THREE.Vector3 || v instanceof THREE.Vector4 || v instanceof THREE.Matrix4) return [[key, (v as { toArray(): number[] }).toArray()]];
+            return [];
+          })),
+        };
+      }),
+      chunks: liveChunks.map(c => ({ id: c.id, state: c.state, pendingBake: chunkBakeJobs.pendingId === c.id })),
+      bakedChunks: bakedChunks.map(c => ({ id: c.id, centre: c.centre, radius: c.radius })),
+      purpose: 'Frozen actor geometry for diagnosis; not deterministic whole-game replay. No pixel/ray eligibility counters.',
+    });
+    telemetry.event('snapshot-cost', { name, cpuMs: performance.now() - started });
+  }
+
+  // Read scalar counters only; no field queries/readbacks during live play.
+  let firstTelemetryFrame = true;
+  let telemetryVisibilityGap = false;
+  document.addEventListener('visibilitychange', () => { telemetryVisibilityGap = true; });
+  const telemetryFrame = (frame: FrameTiming) => {
+    telemetry.frame(frame, {
+      hidden: document.hidden, visibilityGap: telemetryVisibilityGap, firstFrame: firstTelemetryFrame,
+      pointerLocked: document.pointerLockElement === canvas,
+      actors: actors.length, bodiesOnScreen: bodiesOnScreen(),
+      liveChunks: liveChunks.length, bakedChunks: bakedChunks.length,
+      projectiles: pellets.length, droplets: bloodSim.droplets.length, splats: bloodSim.splats.length,
+      player: [...player.pos], yaw: player.yaw, pitch: player.pitch,
+      frameCap: handle.frameCap, refreshMs: handle.refreshMs,
+      renderWidth: sdfLayer.marchTarget.width, renderHeight: sdfLayer.marchTarget.height,
+      frozen: wanderFrozen, chunkBake: chunkBakeEnabled, bleed: bleedEnabled,
+      totalWounds: actors.reduce((n, a) => n + a.wounds().length, 0),
+      pendingBake: chunkBakeJobs.pendingId, bakeError: chunkBakeJobs.error,
+      tiles: gameTiles.diagnostics(), sdfScale, adaptive: adaptiveEnabled,
+      woundStep: actors[0]?.view.uniforms.perfCfg.value.z, analyticNormals: normalGradientMode,
+    });
+    firstTelemetryFrame = false; telemetryVisibilityGap = false;
+    telemetryControls?.afterFrame();
+  };
+  const telemetryControls = import.meta.env.DEV ? createTelemetryControls(telemetry, async () => ({
+    build: await fetch('/__lab/telemetry-build', { cache: 'no-store', signal: AbortSignal.timeout(5000) }).then(r => { if (!r.ok) throw new Error('Build identity unavailable'); return r.json(); }),
+    buildAtServerStart: import.meta.env.VITE_TELEMETRY_BUILD ?? { commit: 'unknown', dirty: true },
+    captureVersion: 2, targetFrameMs: 1000 / 30, lateToleranceMs: 2, tiles: gameTiles.diagnostics(),
+    page: location.pathname, query: location.search, userAgent: navigator.userAgent, backend: handle.backend,
+    visibility: document.visibilityState, frameCap: handle.frameCap,
+    fisheye: fisheyeReport(), renderWidth: sdfLayer.marchTarget.width, renderHeight: sdfLayer.marchTarget.height,
+    woundStep: actors[0]?.view.uniforms.perfCfg.value.z,
+    hullExitBound: actors[0]?.view.uniforms.perfCfg.value.x,
+    gpuTiming: 'unavailable: existing multipass timestamps are not attributable to individual frames',
+    intervalMeaning: 'natural drawn-frame start intervals, including frame cap/vsync and scheduling; not pure GPU time',
+    cpuMeaning: 'tickCpuMs and drawCpuMs are synchronous CPU time, including submission, not GPU execution',
+    phaseMeaning: 'inclusive spans accumulated since previous draw; nested hit/flush/bake spans must not be added to parents',
+    spikeAttribution: 'a frame interval describes the gap BEFORE that row; inspect previous-row CPU spans and events in that gap',
+    limits: { maxFrames: 18000, maxEvents: 4000, durationMs: 180000, maxSnapshots: 16, maxBytes: 12 * 1024 * 1024 },
+    snapshots: 'At recording start and F9 only; snapshot-cost events identify instrumentation work.',
+  }), undefined, active => {
+    firstTelemetryFrame = true; telemetryVisibilityGap = false;
+    handle.setFrameObserver(active ? telemetryFrame : null);
+    if (active) captureTelemetryScene('recording-start');
+  }, () => captureTelemetryScene('visual-issue')) : null;
+  import.meta.hot?.dispose(() => telemetryControls?.dispose());
+
   (window as unknown as { __sdfGame: unknown }).__sdfGame = {
+    telemetry: telemetryControls ? {
+      start: () => telemetryControls.start(), stop: () => telemetryControls.stop(), mark: () => telemetryControls.mark(),
+      get active() { return telemetry.active; }, lastCapture: () => telemetryControls.lastCapture(),
+    } : null,
+    setTiles: setGameTiles,
+    tiles: () => gameTiles.diagnostics(),
     backend: handle.backend,
     /** Set the player pose. y defaults to 0 (feet on the floor). */
     setPose(x: number, z: number, yaw: number, pitch = 0, y = 0) {

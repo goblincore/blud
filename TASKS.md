@@ -20,6 +20,9 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**[~] Game tile visual playtest + telemetry — integrated on main; owner visual run next, before performance comparisons.**
+[Usage](docs/dev-notes/2026-09-06-game-tiles-telemetry/notes.md): `?tiles-playtest`, F6 tiles, F8 record/save, F9 geometry/wound marker; ordinary tile default off, no GPU timing claim.
+
 **SOLDIER ANIMATION — BUILT, AWAITING OWNER LOOK (2026-09-05).** The soldier
 marches, runs, carries the shorty and hip-fires it in the lab; the skinned
 kit and the gun ride the rig (`rig-frames.ts` → `KitOverlay.pose`,

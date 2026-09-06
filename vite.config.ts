@@ -2,6 +2,18 @@ import { defineConfig } from 'vite';
 import type { Plugin } from 'vite';
 import { resolve } from 'path';
 import { saveFace, savePalette } from './src/lab/dev-save';
+import { saveGameplayCapture } from './scripts/lib/game-telemetry-save';
+import { execFileSync } from 'node:child_process';
+
+function readTelemetryBuild(cwd = process.cwd()) {
+  try {
+    return {
+      commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8' }).trim(),
+      dirty: execFileSync('git', ['status', '--porcelain'], { cwd, encoding: 'utf8' }).trim().length > 0,
+    };
+  } catch { return { commit: 'unknown', dirty: true }; }
+}
+const telemetryBuild = readTelemetryBuild();
 
 /** DEV-ONLY: the lab's save endpoints. Never part of a build. */
 function labDevSave(): Plugin {
@@ -11,6 +23,34 @@ function labDevSave(): Plugin {
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
         const url = new URL(req.url ?? '/', 'http://localhost');
+        if (url.pathname === '/__lab/telemetry-build') {
+          if (req.method !== 'GET') { res.statusCode = 405; res.end(); return; }
+          res.setHeader('content-type', 'application/json');
+          res.setHeader('cache-control', 'no-store');
+          res.end(JSON.stringify({ ...readTelemetryBuild(server.config.root), capturedAt: new Date().toISOString(), scope: 'working-tree-at-recording-start' }));
+          return;
+        }
+        if (url.pathname === '/__lab/save-telemetry') {
+          if (req.method !== 'POST') { res.statusCode = 405; res.end(); return; }
+          if (req.headers.origin && req.headers.origin !== `http://${req.headers.host}`
+            && req.headers.origin !== `https://${req.headers.host}`) { res.statusCode = 403; res.end(); return; }
+          const chunks: Buffer[] = [];
+          let bytes = 0, rejected = false;
+          req.on('data', (chunk: Buffer) => {
+            if (rejected) return;
+            bytes += chunk.length;
+            if (bytes > 16 * 1024 * 1024) {
+              rejected = true; chunks.length = 0; res.statusCode = 413; res.end('Capture too large');
+            } else chunks.push(chunk);
+          });
+          req.on('end', () => {
+            if (rejected) return;
+            res.setHeader('content-type', 'application/json');
+            try { res.end(JSON.stringify(saveGameplayCapture(server.config.root, JSON.parse(Buffer.concat(chunks).toString('utf8'))))); }
+            catch (error) { res.statusCode = 400; res.end(JSON.stringify({ ok: false, error: String(error) })); }
+          });
+          return;
+        }
         if (!url.pathname.startsWith('/__lab/save-')) return next();
         if (req.method !== 'POST') { res.statusCode = 405; res.end(); return; }
         const name = url.searchParams.get('character') ?? '';
@@ -34,6 +74,7 @@ function labDevSave(): Plugin {
 }
 
 export default defineConfig({
+  define: { 'import.meta.env.VITE_TELEMETRY_BUILD': JSON.stringify(telemetryBuild) },
   plugins: [labDevSave()],
   test: {
     environment: 'happy-dom',
