@@ -78,7 +78,10 @@ adopted by the lab then the game — where it REPLACES held tasks 6–7. Phase B
 five factory modules out of game-main, `tick()` (~700 lines) extracted last
 because its call ordering is load-bearing and undocumented. Pure refactor:
 baselines captured first, no test file may be edited.
-[spec](docs/superpowers/specs/2026-09-06-shared-character-view-design.md)
+[spec](docs/superpowers/specs/2026-09-06-shared-character-view-design.md) ·
+[plan](docs/superpowers/plans/2026-09-06-shared-character-view.md) (12 tasks:
+Phase A 1–6, Phase B 7–12). Phase A task 5 replaces held soldier tasks 6–7 and
+inherits deleting the `brain()` migration shim task 5 left in game-actor.
 
 **[x] Zombie analytic normals — owner passed integrated combat playtest; hybrid mode enabled by default (2026-09-06).**
 [Integration evidence](docs/dev-notes/2026-09-06-analytic-normal-integration/README.md); procedural flesh/wound gradients with automatic legacy fallback and retained comparison toggle. Owner reports smoother play but attribution is uncertain. Broader Task 5 performance study remains open: moving/multi-actor and direct original-shader controls are unmeasured. Stable 30 fps combat is the product target.
