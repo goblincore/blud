@@ -58,6 +58,7 @@ import { buildBody, DEFAULT_BUILD_OPTS, type BuildResult } from '../build-body';
 import { parseBlob } from '../blob-parse';
 import { createCharacterView, compileCharacterSheet } from './character-view';
 import { characterEntry } from '../character-registry';
+import { rotateYaw } from '../gait';
 import { makeSoldierMind } from './enemy-mind';
 import { compileBlob, compileFace, compilePalette } from '../blob-compile';
 import { checkStance } from '../blob-checks';
@@ -1186,7 +1187,24 @@ async function main() {
     const zombieId = nextId++;
     const actor = createZombieActor({
       id: zombieId, room: room.id, body: placed, view, character, start,
-      ...(name === 'soldier' ? { mind: makeSoldierMind() } : {}),
+      ...(name === 'soldier' ? {
+        mind: makeSoldierMind(),
+        onFire: () => {
+          const muz = character.muzzle();
+          if (!muz) return;   // prop still loading: no muzzle, no shot
+          // Along his ACTUAL facing, which the brain's face lock has already
+          // turned toward the player. Do NOT re-aim at the player here, or the
+          // shot ignores the turn rate and snaps to a target the telegraph
+          // never tracked — the aim would stop meaning anything.
+          const dir = rotateYaw([0, 0, 1], actor.pose().yaw);
+          nextSeed = (nextSeed * 1664525 + 1013904223) >>> 0;
+          // ONE barrel: the double-barrel volley is the player's signature,
+          // and the soldier throwing the same wall of lead reads as a second
+          // player rather than an enemy.
+          soldierPellets.push(...spawnPellets(muz, dir, 1, nextSeed));
+          spawnMuzzleFlash(muz);
+        },
+      } : {}),
       profile: characterEntry(name).profile,
       seed: 1337 + nextId * 101,
       bounds: wanderBounds(room),
@@ -1975,6 +1993,37 @@ async function main() {
   // Pellets: simulated pure (game-weapon.ts), drawn from a mesh pool that
   // grows on demand inside the tick's sync step.
   const pellets: Projectile[] = [];
+
+  /** SOLDIER PELLETS — A SEPARATE LIST, AND NEVER TRACED AGAINST ACTORS.
+   *
+   *  Two deliberate reasons. The player's pellet path is tuned, pinned, and
+   *  carries the hit-batching work from 2026-09-05; a soldier feature must not
+   *  perturb it. And an un-traced list CANNOT accidentally friendly-fire the
+   *  zombies — whether soldiers hurt them is a real encounter-design decision,
+   *  not one to make by accident.
+   *
+   *  There is no player health in the SDF game, so these hit nothing at all.
+   *  They fly, and they expire. That is the whole contract for this phase. */
+  const soldierPellets: Projectile[] = [];
+  const soldierPelletViews: THREE.Mesh[] = [];
+  /** World-space muzzle flashes. Separate from flashGroup, which is the FPV
+   *  weapon's single viewmodel-parented flash and cannot be at two places. */
+  const soldierFlashes: { sprite: THREE.Sprite; life: number }[] = [];
+  const SOLDIER_FLASH_SEC = 0.06;
+
+  function spawnMuzzleFlash(at: Vec3): void {
+    const tex = flashTextures[Math.floor(Math.random() * flashTextures.length)];
+    if (!tex) return;   // pool not built yet
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: tex, color: 0xffe6bf, transparent: true,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+    s.position.set(at[0], at[1], at[2]);
+    s.material.rotation = Math.random() * Math.PI * 2;
+    s.scale.setScalar(0.45);
+    scene.add(s);
+    soldierFlashes.push({ sprite: s, life: SOLDIER_FLASH_SEC });
+  }
   const pelletGeo = new THREE.SphereGeometry(GRAPESHOT.radius, 10, 8);
   const pelletMat = new THREE.MeshBasicMaterial({ color: 0xffcf7a });
   const pelletViews: THREE.Mesh[] = [];
@@ -3297,6 +3346,42 @@ async function main() {
         if (dead) pellets.splice(i, 1);
       }
       for (const a of hitThisFrame) a.endHits();
+
+      // SOLDIER PELLETS: stepped, culled and drawn — never traced. Uses the
+      // same integrator as the player's (semi-implicit Euler, gravity before
+      // move); hand-rolling a second one would let the two drift apart.
+      stepProjectiles(soldierPellets, dt);
+      for (let i = soldierPellets.length - 1; i >= 0; i--) {
+        if (expired(soldierPellets[i]!)) soldierPellets.splice(i, 1);
+      }
+      while (soldierPelletViews.length < soldierPellets.length) {
+        const mesh = new THREE.Mesh(pelletGeo, pelletMat);
+        mesh.frustumCulled = false;
+        scene.add(mesh);
+        soldierPelletViews.push(mesh);
+      }
+      for (let k = 0; k < soldierPelletViews.length; k++) {
+        const v = soldierPelletViews[k]!;
+        const p = soldierPellets[k];
+        if (p) {
+          v.visible = true;
+          v.position.set(p.pos[0], p.pos[1], p.pos[2]);
+          v.scale.setScalar(p.radius / GRAPESHOT.radius);
+        } else {
+          v.visible = false;
+        }
+      }
+      for (let i = soldierFlashes.length - 1; i >= 0; i--) {
+        const f = soldierFlashes[i]!;
+        f.life -= dt;
+        if (f.life <= 0) {
+          scene.remove(f.sprite);
+          f.sprite.material.dispose();
+          soldierFlashes.splice(i, 1);
+        } else {
+          f.sprite.material.opacity = f.life / SOLDIER_FLASH_SEC;
+        }
+      }
       // Sync the mesh pool to the sim list — growing it on demand (the
       // pool is ONLY grown here; fire() must not touch meshes because it
       // runs from an evaluate() with no frame in between).
