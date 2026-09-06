@@ -127,6 +127,17 @@ export function buildCharacterBody(
   face?: FaceParams,
   opts?: BodyOverride,
   out?: { palette: FleshMaterial | null },
+  /** Bone-thickness ratio override, applied to the COMPILED body before
+   *  buildBody — bone ratio changes which bone prims exist, so like faceParams
+   *  it must act before the build, not after.
+   *
+   *  A GAME-ONLY KNOB TODAY, and the reason it is a separate parameter rather
+   *  than a BodyOverride field: BodyOverride is buildBody's contract and this
+   *  never reaches buildBody. game-main's wound panel drives it and rebuilds
+   *  the whole cast through the same spawn path as boot, which is the
+   *  invariant that keeps a tuned ratio from drifting between the two. The lab
+   *  has no equivalent control; undefined leaves the .blob's own value. */
+  boneRatio?: number,
 ): BuildResult {
   const paletteOut = out ?? { palette: null };
   let f = face;
@@ -144,6 +155,11 @@ export function buildCharacterBody(
     }
   }
   const { compiled, stance, error } = compileCharacter(entry, f, paletteOut);
+  // The panel's ratio, once the owner has touched it, overrides whatever the
+  // doc would have done (nothing today; an authored ratio from the bones
+  // block, later). Applied to the COMPILED body only — the TS fallback zombie
+  // has no bones block to override.
+  if (compiled && boneRatio !== undefined) compiled.boneRatio = boneRatio;
   const result = buildBody(compiled ?? makeZombie(f), DEFAULT_BUILD_OPTS, opts ?? {});
   // Declared-vs-actual knee fold. Surfaced next to validateBody's own errors
   // because it is the same kind of finding — something the author almost
@@ -276,19 +292,34 @@ export interface CharacterViewOpts {
    *  gets the .blob's own face with no overrides. */
   face?: FaceParams;
   override?: BodyOverride;
+  /** Bone-thickness ratio override — see buildCharacterBody. Game-only today
+   *  (the wound panel drives it); undefined leaves the .blob's own value. */
+  boneRatio?: number;
 }
 
 /**
- * Builds the character named `opts.name` and returns everything needed to
- * put it on screen and keep it posed. Resolves without awaiting any real
- * I/O — the kit and prop load fire-and-forget below — so a caller inside a
- * synchronous bootstrap gains only a microtask and cannot admit a frame
- * between steps that assume none (lab-main's setDrawFn/gooLayer ordering).
+ * Builds the character named `opts.name` and returns everything needed to put
+ * it on screen and keep it posed.
+ *
+ * SYNCHRONOUS, DELIBERATELY. There is no `await` anywhere in this function —
+ * the kit and prop load fire-and-forget below — so the `async` this shipped
+ * with bought nothing and cost something real: the GAME's spawn path is
+ * synchronous (`spawnAll` at boot, and `rebuildCast` from a panel callback
+ * that does hull work immediately after it), and an async factory would have
+ * forced both of those async to satisfy a promise that never suspends.
+ * Rippling `await` into a panel callback is exactly the kind of "small"
+ * change that admits a frame between steps that assume none.
+ *
+ * lab-main's `await createCharacterView(...)` is unaffected: awaiting a
+ * non-promise is legal, yields the value, and still costs one microtask — so
+ * its setDrawFn/gooLayer ordering is bit-identical either way.
  */
-export async function createCharacterView(opts: CharacterViewOpts): Promise<CharacterView> {
+export function createCharacterView(opts: CharacterViewOpts): CharacterView {
   const entry = characterEntry(opts.name);
   const out = { palette: null as FleshMaterial | null };
-  const body = buildCharacterBody(entry, opts.start, opts.errors, opts.face, opts.override, out);
+  const body = buildCharacterBody(
+    entry, opts.start, opts.errors, opts.face, opts.override, out, opts.boneRatio,
+  );
   const gpu = createZombieGpuView(body, opts.gpu);
 
   // The character's polygon kit and held prop, on the DEFAULT layer with the

@@ -44,6 +44,7 @@ import type { MotionProfile } from '../motion-profile';
 import type { SwingVariant } from '../attack';
 import type { MissingLimbs } from '../collapse';
 import type { ZombieGpuView } from './zombie-gpu';
+import type { CharacterView } from './character-view';
 import type { Aabb } from './game-level';
 
 /** Signals for an undamaged wanderer — every frame, verbatim. */
@@ -217,6 +218,9 @@ export interface ZombieActor {
   readonly room: number;
   /** The LIVE body — severing replaces it (alive flags move). */
   readonly body: BuildResult;
+  /** THE BODY it belongs to, when the caller supplied one. Null for the
+   *  test and spike call sites that build from a bare body + view. */
+  readonly character: CharacterView | null;
   readonly view: ZombieGpuView;
   /** Latest POSED body (world space) — what projectiles will raycast. */
   readonly posed: () => BuildResult;
@@ -328,6 +332,18 @@ export function createZombieActor(opts: {
   room: number;
   body: BuildResult;
   view: ZombieGpuView;
+  /** THE BODY it belongs to, when the caller has one — build, GPU view, face,
+   *  kit, prop, and (from task 4b) damage.
+   *
+   *  OPTIONAL, AND `body`/`view` STAY REQUIRED, deliberately. Making this the
+   *  only way in broke eight existing test call sites and hull-spike-main:
+   *  they construct actors from a lightweight fake body and view, and a
+   *  CharacterView cannot be faked cheaply because building one creates a real
+   *  GPU view. An API change that forces eight test files to change is a
+   *  design that made the actor untestable without a GPU — so the actor keeps
+   *  taking the two halves, and callers that HAVE a CharacterView hand it over
+   *  as well, for the damage delegation in task 4b. */
+  character?: CharacterView;
   start: Vec3;
   seed: number;
   bounds: WanderBounds;
@@ -457,8 +473,8 @@ export function createZombieActor(opts: {
    *  stamp at 0. Stamp(posed, θ) / upload(posed, θ) / resolve(rest, 0): one
    *  frame, three views of it. Same wiring as webgpu/lab-main's hero. */
   function refreshWounds() {
-    if (wounds.length === 0 || typeof opts.view.setWounds !== 'function') return;
-    opts.view.setWounds(
+    if (wounds.length === 0 || typeof view.setWounds !== 'function') return;
+    view.setWounds(
       wounds.map(w => woundWorldPos(posed.prims, w, bodyYaw)),
       wounds.map(w => w.radius),
       wounds.map(w => TYPE_ID[w.type]),
@@ -863,6 +879,7 @@ export function createZombieActor(opts: {
     id: opts.id,
     room: opts.room,
     get body() { return current; },
+    character: opts.character ?? null,
     view,
     beginHits,
     endHits,

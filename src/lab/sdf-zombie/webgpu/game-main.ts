@@ -56,6 +56,7 @@ import { createOccluderHull, buildHullInstances, HULL_SHRINK, type HullInstance 
 import { translateBody } from '../translate';
 import { buildBody, DEFAULT_BUILD_OPTS, type BuildResult } from '../build-body';
 import { parseBlob } from '../blob-parse';
+import { createCharacterView } from './character-view';
 import { compileBlob, compileFace, compilePalette } from '../blob-compile';
 import { checkStance } from '../blob-checks';
 import { FLESH_PRESETS, LIGHT_PRESETS } from '../material';
@@ -1050,19 +1051,23 @@ async function main() {
     const roomFurniture = FURNITURE
       .filter(f => f.room === room.id)
       .map(f => ({ min: [f.minX, 0, f.minZ] as Vec3, max: [f.maxX, f.height, f.maxZ] as Vec3 }));
-    const compiled = compileBlob(doc, face);
-    // The panel's ratio, once the owner has touched it, overrides whatever
-    // the doc would have done (nothing today; an authored ratio from the
-    // bones block, later).
-    if (boneRatioOverride !== null) compiled.boneRatio = boneRatioOverride;
-    const built = buildBody(compiled, DEFAULT_BUILD_OPTS, {});
-    errs.push(...built.errors);
-    if (doc.stance) errs.push(...checkStance(built.bones, doc.stance));
-    // TRANSLATE THE FIELD, NOT THE MESH (translate.ts) — the shader
-    // marches world space.
-    const placed = translateBody(built, start);
-    const view: ZombieGpuView = createZombieGpuView(placed,
-      {
+    // THE SHARED PATH (character-view.ts). Compile, bone-ratio override,
+    // build, stance check, translate and the GPU view were all inline here and
+    // all duplicated in lab-main; they are one module now, and this call is
+    // the game's half of proving it. The game keeps everything BELOW this
+    // point — the uniform stamping is the game's lighting and perf tuning,
+    // not shared with a dev lab that lights its subject differently.
+    const character = createCharacterView({
+      name: 'zombie',
+      start,
+      renderer: handle.renderer,
+      scene,
+      errors: errs,
+      // The panel's ratio, once the owner has touched it, overrides whatever
+      // the doc would have done (nothing today; an authored ratio from the
+      // bones block, later).
+      ...(boneRatioOverride !== null ? { boneRatio: boneRatioOverride } : {}),
+      gpu: {
         cone: sdfLayer.cone,
         occluder: sdfLayer.occluder,
         // The outer hull's bounds. Passing them unconditionally is safe:
@@ -1083,7 +1088,10 @@ async function main() {
         // few dozen boxes.
         depthPre: sdfLayer.depthPre,
         levelShadow: { light: flashlight.levelShadow },
-      });
+      },
+    });
+    const placed = character.body;
+    const view = character.gpu;
     // Bone tubes: with the mesh ON the field stops packing bone rows (task 5).
     view.setPackBones(!boneMesh);
     view.applyMaterial(flesh, LIGHT_PRESETS['practical-hard-key']);
@@ -1129,7 +1137,7 @@ async function main() {
     scene.add(view.coneObject);
     const zombieId = nextId++;
     const actor = createZombieActor({
-      id: zombieId, room: room.id, body: placed, view, start,
+      id: zombieId, room: room.id, body: placed, view, character, start,
       seed: 1337 + nextId * 101,
       bounds: wanderBounds(room),
       furniture: roomFurniture,
