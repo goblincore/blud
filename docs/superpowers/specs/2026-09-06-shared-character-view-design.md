@@ -25,6 +25,33 @@ produced bugs three times:
 
 Every one of those is a registry-lookup miss, not a rendering fault.
 
+### The damage path has already diverged
+
+Worse than duplication, and the reason the shared layer reaches further than
+"a character on screen". The wound PRIMITIVES are properly shared already —
+`damage.ts`, `sever.ts`, `bleed-registry.ts`, 815 lines of clean pure modules.
+What is written twice is the **orchestration**: *hit lands → stamp wound →
+shove → check sever → push stump → repack → upload*. Once in `game-actor`'s
+`hit()` / `hitSlug()` / `stampBlast()`, and once scattered across eleven
+`pushWound` sites in `lab-main`.
+
+The two copies are no longer the same:
+
+| | `game-actor` | `lab-main` |
+| --- | --- | --- |
+| `beginHits` / `endHits` batching | 9 refs | **0** |
+| `woundCarveNormal` | 2 | **0** |
+| `shouldSpill` (entrails) | 5, in `game-main` | **0** |
+
+The batching is the 2026-09-05 fix for the owner's "50 ms spike when I shoot up
+close" — sixteen pellets in one frame doing sixteen full repacks. The lab never
+received it.
+
+**So the lab currently tunes wounds against an older, slower, differently
+behaving damage path than the one that ships.** That is not a tidiness problem.
+It means lab verdicts may not transfer to the game, which is the one job the
+lab exists to do.
+
 ### The owner's framing
 
 > "the lab has some specifics that are specific to it but it is meant to be
@@ -40,7 +67,8 @@ shared layer existed, he would have appeared roughly for free.
 | Question | Answer |
 | --- | --- |
 | Scope | Shared layer **and** split `game-main`. `lab-main` is converted to the shared layer but otherwise left alone this pass. |
-| Shared layer reach | **A dressed character on screen.** Body, GPU view, face sheet, kit overlay, held prop, and the per-frame pose of all of them. Stops short of behaviour, damage, wounds and crowd. |
+| Shared layer reach | **The body: how it looks, how it animates, and what happens to it when hit.** Build, GPU view, face sheet, kit, prop, per-frame pose, **and the damage orchestration** — hit/hitSlug/stampBlast, sever, the wound ring, repack+upload, hit batching. Stops short of behaviour, motion and crowd. |
+| Bleed / entrails | **Optional attachment, default off.** The game enables it; the lab keeps today's behaviour until the owner deliberately turns it on. |
 | Sequencing | Shared module first, adopted by the lab, then by the game — where it *replaces* held tasks 6 and 7 rather than following them. |
 | `march.wgsl.ts` | Out of scope. 3,466 lines of generated shader source is a different animal. |
 
@@ -92,6 +120,10 @@ owning:
   cannot take the page down
 - `pose(rigResult, bodyYaw, sinceFire)` — one call driving body, kit and prop
   together
+- **the damage orchestration**: `hit()`, `hitSlug()`, `stampBlast()`, the
+  sever checks, the wound ring, the repack + carve upload, and
+  `beginHits()` / `endHits()` batching. Moved wholesale out of `game-actor`,
+  which is where the current, correct version lives.
 - `release()` / `dispose()`
 
 The interface follows the factory-closure pattern the codebase already uses in
@@ -99,24 +131,61 @@ The interface follows the factory-closure pattern the codebase already uses in
 it introduces no new idiom. `main()` is the one place in the codebase that
 never adopted that pattern.
 
+### Bleed and entrails: an optional attachment, default OFF
+
+`registerBleed`, `spillVerdict` and `stepGutRopes` live in `game-main`, and the
+lab has **none** of them. Folding them into `character-view` unconditionally
+would give the lab entrails it does not currently have — a behaviour change,
+not a refactor, and it would blow the byte-identical capture gate on the first
+commit.
+
+So bleed is an attachment the caller opts into. The game enables it; the lab
+defaults to off and its captures stay exact. Turning it on in the lab later is
+then a deliberate one-line change, made when the owner actually wants to tune
+bleeding there — which, given the divergence above, is likely.
+
 ### The boundary, stated explicitly
 
-`character-view` owns **"a character appears on screen and animates."** It does
-NOT own behaviour, damage, wounds, severing, crowd separation or the melee
-ring — those are `game-actor`'s and stay there.
+`character-view` owns **the body**: how it looks, how it animates, and what
+happens to it when it is hit.
 
-The line is *appears* versus *fights*. The lab needs the first and not the
-second, which is precisely what makes the first shareable.
+`game-actor` owns **the fighter**: what it decides and how it moves — the mind,
+motion and wander, crowd nudge, furniture routing, the melee-ring token.
+
+The line is *body* versus *fighter*. The lab needs a body it can shoot and
+tune; it has never needed a fighter. `game-actor` shrinks considerably under
+this split, since the hit/sever/repack plumbing is the bulk of its 850 lines.
+
+**This is a revision.** The boundary was first drawn at *appears* versus
+*fights*, leaving damage in `game-actor`. The owner's objection — tuning wounds
+in the lab and then implementing them separately in the game is silly — was
+correct, and the divergence table above is the evidence for it.
 
 ## 2. Adoption order
 
-1. **Extract; adopt in `lab-main`.** The lab is the only place this wiring
-   exists, so this is a move, not a design. Gate: captures byte-identical.
-2. **Adopt in `game-main` — this IS held tasks 6 and 7.** The soldier reaches
+1. **Extract the presentation half; adopt in `lab-main`.** Build, view, face,
+   kit, prop, pose. The lab is the only place this wiring exists, so it is a
+   move, not a design. Gate: **captures byte-identical**.
+2. **Extract the damage half from `game-actor`; adopt in `lab-main`.** The
+   game's version is the correct one, so the lab converges onto it.
+   **Gate: NOT byte-identical — see below.**
+3. **Adopt in `game-main` — this IS held tasks 6 and 7.** The soldier reaches
    the game by calling the shared module instead of hand-porting the lab's
    block.
-3. **Split `game-main`'s remaining subsystems** (§3).
-4. **Held task 8 (the shot)** lands on clean ground.
+4. **Split `game-main`'s remaining subsystems** (§3).
+5. **Held task 8 (the shot)** lands on clean ground.
+
+### Step 2 is the one that legitimately changes behaviour
+
+Everywhere else in this spec, a moved pixel means a broken extraction. Step 2
+is the exception, and it must be called out or it will read as a failure:
+**the lab's wound behaviour will change**, because it is picking up hit
+batching and carve normals it never had. That is the entire point of the step.
+
+So step 2 gets its own commit, and **the owner's eyes are the gate, not a
+checksum**. The captures are recorded as a new baseline afterwards, not
+compared against the old one. Every other step in this plan keeps the strict
+byte-identical rule.
 
 Step 2 is load-bearing: it converts *"a dev tool and the shipping game can
 share this"* from an assertion into a demonstration, on real work, while the
@@ -167,8 +236,10 @@ skipped. It is task one of the plan, not an appendix.
 | Game gates | `sdf-game-{crowd,bleed,slug,shorty}-gate.mjs` | Simulation regressions unit tests miss |
 | Lab captures | `blob-render-check.sh` per character, `blob-turntable.mjs`, `lab-look-once.mjs`, `crowd-capture.mjs` | Rendering — byte-identical against commit one |
 
-**No test file may be edited.** A test that needs changing means behaviour
-changed, and that is a finding, not an obstacle.
+**No test file may be edited** — with exactly one exception, §2 step 2, where
+the lab converges onto the game's damage path and its behaviour legitimately
+changes. Everywhere else, a test that needs changing means behaviour changed,
+and that is a finding, not an obstacle.
 
 `blob-render-check.sh` exit codes are meaningful and must be propagated: 0 the
 renderer agrees with the field, 1 it shows a hole, 2 the check could not run.
@@ -205,8 +276,10 @@ commit with its own justification.
 Strictly, this spec covers two projects that the chosen sequencing couples:
 
 - **Phase A — the shared character view.** Baselines, `character-registry`,
-  `character-view`, adopted by the lab and then the game. Ends with the soldier
-  in the game and held tasks 6–7 obsolete. Delivers working software on its own.
+  `character-view` (presentation, then damage), adopted by the lab and then the
+  game. Ends with the soldier in the game, the lab tuning wounds on the same
+  path the game ships, and held tasks 6–7 obsolete. Delivers working software
+  on its own.
 - **Phase B — `game-main`'s factory split.** The five modules, then `tick` last.
   Also delivers working software on its own, and is independently reversible.
 
