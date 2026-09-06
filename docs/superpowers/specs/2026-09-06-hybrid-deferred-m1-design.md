@@ -59,6 +59,12 @@ Support up to 16 dynamic point/spot lights with a runtime active count. Use inve
 
 Keep M1's new shared lights unshadowed and label that accurately. Capture a pillar crossing in camera depth for visibility validation, not as proof of light-space shadows. Keep the legacy renderer's shadows untouched. The report must make clear that shared shadow receivers, character hull self-exclusion, shadow budgets, and transparent integration remain future work.
 
+## Flying-orb showcase (owner addition)
+
+The scene opens with three small emissive flying orbs (amber, cyan, magenta) driving actual shared point lights. Animate them along deterministic, phase-offset looping paths within the room, passing near stone and across the wounded character so diffuse color and wet highlights visibly move. Use bright opaque emissive sphere meshes for the sources; the light position/color and visible orb position/color come from the same state each frame. Keep lighting intensities readable rather than washing out tissue detail. Orbs depth-test against room/character geometry and respect the existing surface contract; no new transparency/bloom subsystem is required.
+
+Provide Play/Pause lights and the existing 1/8/16 light-count comparison, with default count 3. Count changes update both visible sources and their lights. `setLightTime(t)` freezes animation at deterministic time t; `setLightsAnimated(true)` resumes from that time without a jump. `setOrbsVisible(false)` hides source meshes only, retaining all light contributions, for surface-buffer invariance tests. Moving marker geometry would otherwise correctly change G-buffer pixels and invalidate the test's fixed-geometry premise. Test invariance with markers hidden; test visible marker/light alignment, camera-depth occlusion, and animation separately. Include a short captured animation or several timestamped frames showing the lights sweep both surfaces.
+
 ## Validation and acceptance
 
 - Real WebGPU shader compilation/rendering is mandatory; TypeScript and string tests alone do not establish success.
