@@ -33,6 +33,7 @@ OUT="${1:?usage: refactor-baseline.sh <outdir>}"
 mkdir -p "$OUT"
 MANIFEST="$OUT/MANIFEST"
 : > "$MANIFEST"
+: > "$OUT/MANIFEST-EYEBALL"
 
 cd "$(dirname "$0")/.."
 export LAB_VITE_PORT="${LAB_VITE_PORT:-5293}"
@@ -95,10 +96,29 @@ for row in "${CAPTURES[@]}"; do
     fails=$((fails + 1))
     continue
   fi
-  shasum -a 256 "$png" | awk -v l="$label" '{print l" "$1}' >> "$MANIFEST"
+  # WOUNDED VIEWS ARE NOT HASH-GATED — they go to MANIFEST-EYEBALL instead.
+  #
+  # They are NOT reproducible run to run (measured 2026-09-06: the same code
+  # gave wound-close 5fc7f17c then b16b928d). The stamp has to happen while the
+  # render loop is LIVE, because pauseLoop's contract is that nothing reaches
+  # the framebuffer after it — so the body pose at stamp time varies with
+  # timing, stampWounds' raycast lands slightly differently, and the craters
+  # move. holdStill()'s resetMotion() canonicalises the pose AFTERWARDS, which
+  # is too late for wounds already stamped against the old one.
+  #
+  # Leaving them in MANIFEST would be worse than useless: every future run
+  # would report three CHANGED views and train the reader to ignore the gate.
+  # They stay as EYEBALL evidence — which is what they were wanted for, since
+  # the carve-cap difference is sub-perceptual anyway.
+  if [ "$wounds" -gt 0 ]; then
+    shasum -a 256 "$png" | awk -v l="$label" '{print l" "$1}' >> "$OUT/MANIFEST-EYEBALL"
+  else
+    shasum -a 256 "$png" | awk -v l="$label" '{print l" "$1}' >> "$MANIFEST"
+  fi
 done
 
 sort -o "$MANIFEST" "$MANIFEST"
+sort -o "$OUT/MANIFEST-EYEBALL" "$OUT/MANIFEST-EYEBALL"
 echo "[baseline] $(wc -l < "$MANIFEST" | tr -d ' ') captures -> $MANIFEST"
 if [ "$fails" -ne 0 ]; then
   echo "[baseline] $fails capture(s) FAILED — this baseline is incomplete, do not gate on it"

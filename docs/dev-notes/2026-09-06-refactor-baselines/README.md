@@ -100,3 +100,28 @@ is the unreliable one.
 
 Worth fixing properly (more control samples, or gate on `maxChannelDelta`), but
 that is its own change — not something to do inside a refactor.
+
+## Wounded views are EYEBALL evidence, not a hash gate (2026-09-06)
+
+`refactor-baseline.sh` also captures `wound-front`, `wound-close` and
+`wound-side` (`WOUNDS=6`). Their hashes go to `MANIFEST-EYEBALL`, **not** to
+`MANIFEST`, because they are **not reproducible run to run**: identical code
+gave `wound-close` `5fc7f17c…` on one run and `b16b928d…` on the next.
+
+Why: the stamp must happen while the render loop is LIVE, since `pauseLoop`'s
+contract is that nothing reaches the framebuffer after it. So the body pose at
+stamp time varies with timing, `stampWounds`' raycast lands slightly
+differently, and the craters move. `holdStill()`'s `resetMotion()`
+canonicalises the pose *afterwards*, which is too late for wounds already
+stamped against the old one.
+
+Leaving them in `MANIFEST` would be worse than useless — every run would
+report three CHANGED views and train the reader to ignore the gate.
+
+**They are still worth capturing.** Task 4c's carve-cap change was invisible to
+all five clean views (no craters in frame), and these are the only views that
+exercise the wound path at all. Compare them BY EYE.
+
+To make them hash-gateable, the stamp would need to happen after
+`holdStill()`'s canonical pose reset, with a way to pump one frame while the
+loop is paused. Worth doing; not done.
