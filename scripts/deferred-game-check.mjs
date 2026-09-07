@@ -285,6 +285,25 @@ const faceTarget = async (px, pz, tx, tz, pitch = -0.12) => {
   return await assertInFrame('faceTarget', tx, 1.2, tz);
 };
 
+/** Aim the locked player at a WORLD POINT OF ANY HEIGHT. faceTarget's fixed
+ *  1.2 m in-frame guard passes while the actual subject — a settled chunk
+ *  lying on the floor, say — sits below the frame, so every chunk/baked
+ *  observation aims and verifies at the point itself: two camera read-backs
+ *  converge the pitch, then the point's own projection is the in-frame
+ *  assertion. */
+const facePoint = async (x, y, z, dist = 1.2) => {
+  await enterSimPhase('facePoint');
+  const cam0 = await evaluate('__sdfGame.cameraWorld()');
+  const yaw = aimYawAt(x + dist, z, x, z);
+  let pitch = Math.atan2(y - cam0[1], Math.hypot(x + dist - cam0[0], z - cam0[2]));
+  await evaluate(`__sdfGame.setPose(${x + dist}, ${z}, ${yaw}, ${pitch}); __sdfGame.step(2);`);
+  const cam1 = await evaluate('__sdfGame.cameraWorld()');
+  pitch = Math.atan2(y - cam1[1], Math.hypot(x + dist - cam1[0], z - cam1[2]));
+  await evaluate(`__sdfGame.setPose(${x + dist}, ${z}, ${yaw}, ${pitch}); __sdfGame.step(4);`);
+  await settleAndLock();
+  return await assertInFrame('facePoint', x, y, z, 0.97);
+};
+
 /** Deterministic inspection state, the capture twin of the crowd gate's
  *  freeze recipe: loop off + wanderers frozen + hand-stepped fixed dt.
  *  setMotionEnabled-style gait pausing is NOT used — game-main's freeze()
@@ -614,6 +633,8 @@ try {
   assert.ok(fleshTexel.depth > 0 && fleshTexel.depth < 0.99, `flesh depth must be real: ${fleshTexel.depth}`);
   check('P2-route-flesh-sdf', { cls: fleshTexel.cls, depth: +fleshTexel.depth.toFixed(5) });
 
+null
+
   /** NORMAL DIRECTION (task-2 review carry-forward): transformed producers
    *  must carry GEOMETRIC world normals, not just unit-length ones. An
    *  OUTWARD camera-facing surface normal points FROM the surface TOWARD
@@ -621,18 +642,42 @@ try {
    *  n·(camera-surface) > 0. (The previous version built surface−camera —
    *  the camera→surface ray — and demanded a positive dot, asserting the
    *  normal points AWAY from the eye while claiming camera-facing.)
-   *  |n| must be ~1. Used for flesh here; baked producers call it in
-   *  their own stages. Each probe uses ITS OWN chosen world coordinate. */
+   *  |n| must be ~1.
+   *
+   *  AUDIT FIX (owner task order): the reconstruction MUST use the
+   *  SELECTED texel's own coordinate, not the caller's centre NDC. Texels
+   *  are picked from an OFFSET lattice (and single reads land in whichever
+   *  containing texel floor() chooses), so reconstructing the probe world
+   *  point at the centre while grading the normal at the selected texel
+   *  compared two different surface points — on a curved/posed producer
+   *  that is exactly the error the check exists to catch. The texel's
+   *  containing pixel (floor) maps back to its centre NDC exactly like
+   *  bracketAt does, and the probe world point is solved ON THAT PIXEL's
+   *  ray at the texel's resolved depth. */
   const normalTowardCam = async (sp, texel, minDot, label) => {
+    assert.ok(texel && texel.pixel && texel.size, `${label}: texel lacks pixel/size — cannot reconstruct at the selected coordinate`);
+    const ndc = [2 * (texel.pixel[0] + 0.5) / texel.size.width - 1,
+      1 - 2 * (texel.pixel[1] + 0.5) / texel.size.height];
     const cam = await evaluate('__sdfGame.cameraWorld()');
-    const v = await depthToWorld(sp.x, sp.y, texel.depth);
+    // Reconstruct on the SELECTED texel's own ray at ITS resolved depth.
+    const v = await depthToWorld(ndc[0], ndc[1], texel.depth);
+    // The reconstruction must land on the same surface pixel we graded:
+    // screenPosOf(v) must round-trip to the selected texel's pixel.
+    const spBack = await evaluate(`__sdfGame.screenPosOf(${v[0]}, ${v[1]}, ${v[2]})`);
+    const pxBack = [Math.floor((spBack.x + 1) / 2 * texel.size.width),
+      Math.floor((1 - spBack.y) / 2 * texel.size.height)];
+    assert.ok(pxBack[0] === texel.pixel[0] && pxBack[1] === texel.pixel[1],
+      `${label}: reconstruction must land on the SELECTED texel's pixel
+        (selected ${JSON.stringify(texel.pixel)}, reconstructed ${JSON.stringify(pxBack)})`);
     const toCam = [cam[0] - v[0], cam[1] - v[1], cam[2] - v[2]];
     const len = Math.hypot(...toCam) || 1;
     const dot = (texel.normal[0] * toCam[0] + texel.normal[1] * toCam[1] + texel.normal[2] * toCam[2]) / len;
     const nlen = Math.hypot(...texel.normal);
     assert.ok(Math.abs(nlen - 1) < 0.05, `${label}: normal not unit length (${nlen.toFixed(4)})`);
     assert.ok(dot > minDot, `${label}: normal points AWAY from the camera (n·v ${dot.toFixed(3)} <= ${minDot})`);
-    return { dot: +dot.toFixed(3), nlen: +nlen.toFixed(4) };
+    return { dot: +dot.toFixed(3), nlen: +nlen.toFixed(4),
+      selectedPixel: texel.pixel, selectedNdc: ndc.map((q) => +q.toFixed(5)),
+      centreNdc: [sp?.x, sp?.y].map((q) => +q?.toFixed?.(5)) };
   };
 
   // FPV gun: the breech landmark is the level-only mesh route (cls 17).
@@ -678,14 +723,10 @@ try {
     `occluded probe pixel must stay flesh-hued (got ${JSON.stringify(behindPix.points.f)})`);
   check('P2-route-forward-probe-behind-occluded', { behind: behindPix.points.f });
 
-  // NORMAL DIRECTION (task-2 review carry-forward): transformed producers
-  // must carry GEOMETRIC world normals, not just unit-length ones. A
-  // camera-facing surface satisfies n·(surface→eye) > 0 — the camera-surface
-  // oracle, per normalTowardCam. Check
-  // the flesh march producer here; tube/baked producers get their own
-  // checks where they are enabled/baked.
   // NORMAL DIRECTION on the flesh march producer (world-space normals on a
-  // curved, posed surface; a torso texel this central must face the eye).
+  // curved, posed surface; the reconstruction runs at the SELECTED texel's
+  // own pixel per normalTowardCam's audit note). Baked producers get their
+  // own check in the lifecycle phase.
   const fleshNormal = await normalTowardCam(fleshSp, fleshTexel, 0.3, 'flesh torso');
   check('P2-normal-direction-flesh', fleshNormal);
   noNewErrors('P2 routes');
@@ -894,10 +935,24 @@ try {
   // proven at the texel level (a cls-18 flesh texel in a 3x3 NDC lattice
   // around the projected torso), and captured. The zombie-only blind spot
   // that let a goblin regression pass everything green ends here.
-  const REGISTRY = ['zombie', 'goblin', 'clown', 'clown-alt', 'mouse', 'cyclops',
+  // The REGISTRY IS THE SOURCE OF TRUTH: the roster is read from the page
+  // (the same character-registry.ts the game spawns from, via the
+  // __sdfGame.characterNames seam) and the pinned list below is CHECKED
+  // against it in both directions. A character added to (or removed from)
+  // the registry fails here with the exact diff instead of being silently
+  // omitted — the zombie-only blind spot this gate exists to kill was
+  // exactly such a silent drift between a hand list and the real roster.
+  const REGISTRY_PINNED = ['zombie', 'goblin', 'clown', 'clown-alt', 'mouse', 'cyclops',
     'schoolgirl', 'schoolgirl-alt', 'schoolgirl-described', 'strand-fixture',
     'bonewalker', 'dragon', 'box-fixture', 'minotaur', 'soldier', 'female'];
-  assert.equal(REGISTRY.length, 16, 'registry roster pinned at 16 — update with character-registry.ts');
+  const REGISTRY = await evaluate('__sdfGame.characterNames()');
+  assert.ok(Array.isArray(REGISTRY) && REGISTRY.length > 0,
+    `__sdfGame.characterNames() must return the registry roster (got ${JSON.stringify(REGISTRY)})`);
+  const missingFromPin = REGISTRY.filter((n) => !REGISTRY_PINNED.includes(n));
+  const staleInPin = REGISTRY_PINNED.filter((n) => !REGISTRY.includes(n));
+  assert.deepEqual({ missingFromPin, staleInPin }, { missingFromPin: [], staleInPin: [] },
+    `pinned roster DRIFTED from character-registry.ts:\n    registry-only: ${JSON.stringify(missingFromPin)}\n    pin-only: ${JSON.stringify(staleInPin)}\n    update REGISTRY_PINNED (and any per-character handling) with the registry`);
+  assert.equal(REGISTRY.length, 16, 'roster size sanity — see character-registry.ts');
   const rendered = {};
   const baseMeshCount = (await evaluate('__sdfGame.deferredDiagnostics()')).router.counts.mesh;
   for (const name of REGISTRY) {
@@ -926,29 +981,66 @@ try {
     }
     let minotaurRepro = null;
     if (name === 'minotaur') {
-      // REPRODUCE the declared asset gap with evidence — the allowlist only
-      // ever excuses THIS file's loader failure, and only while this leg runs.
-      minotaurRepro = await evaluate(`fetch('/assets/lab/faces/minotaur-face.png').then((r) => ({ status: r.status, ok: r.ok }))`);
-      assert.ok(minotaurRepro && minotaurRepro.status === 404,
-        `minotaur face 404 must reproduce (registry declares it missing): got ${JSON.stringify(minotaurRepro)}`);
+      // REPRODUCE the declared asset gap with evidence. The request goes to
+      // the PRECISE declared path. A dev server may answer a missing static
+      // file with a REAL 404 or with its SPA fallback (status 200, text/html
+      // index document) depending on the request's Accept header — and an
+      // <img>-style load fails EITHER way because the body is not an image.
+      // The gate records exactly what came back (status + content-type + a
+      // bounded body/type signature) and requires the MISSING-FILE fact:
+      // either a non-OK status, or a 200 whose type/body is NOT an image.
+      // It never blanket-excuses errors by character name (the console-error
+      // allowlist stays pinned to this exact filename + load-failure
+      // signature).
+      minotaurRepro = await evaluate(`(async () => {
+        const r = await fetch('/assets/lab/faces/${MINOTAUR_FACE}');
+        const ctype = r.headers.get('content-type') ?? '';
+        const body = await r.arrayBuffer();
+        const head = new TextDecoder().decode(body.slice(0, 64));
+        const isImage = ctype.startsWith('image/');
+        return { path: '/assets/lab/faces/${MINOTAUR_FACE}', status: r.status,
+          ok: r.ok, contentType: ctype, bytes: body.byteLength,
+          bodyHead: JSON.stringify(head.slice(0, 48)),
+          missing: !isImage || !r.ok };
+      })()`);
+      assert.ok(minotaurRepro && minotaurRepro.missing === true,
+        `minotaur face must be MISSING at its declared path (registry documents the gap):
+         got ${JSON.stringify(minotaurRepro)}`);
+      console.log(`  minotaur face repro: ${JSON.stringify(minotaurRepro)}`);
     }
     const zc = (await evaluate('__sdfGame.zombies()')).find((q) => q.id === spawned.id);
     assert.ok(zc, `${name}: spawned actor ${spawned.id} missing from the roster`);
     await faceTarget(zc.pos[0] + 1.5, zc.pos[2] + 0.1, zc.pos[0], zc.pos[2]);
-    const torsoSp = await assertInFrame(`${name} in frame`, zc.pos[0], 1.1, zc.pos[2]);
-    // Texel evidence: cls-18 flesh within a 3x3 lattice around the torso.
-    let fleshHit = null;
-    outer2: for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        const s = await evaluate(`__sdfGame.readSurfaceAt(${(torsoSp.x + dx * 0.06).toFixed(4)}, ${(torsoSp.y + dy * 0.06).toFixed(4)})`);
-        if (s.cls > 17.5 && s.cls < 18.5 && s.depth < 0.99) { fleshHit = s; break outer2; }
+    // Bodies range from the mouse (knee-high) to the minotaur: anchor the
+    // torso texel scan at the first height that is IN FRAME and lands on a
+    // flesh texel, recording which anchor worked. A fixed 1.1 m anchor is
+    // exactly the kind of silent assumption this phase exists to replace.
+    let torsoSp = null, fleshHit = null, torsoAnchor = null;
+    for (const hy of [1.1, 0.7, 1.5]) {
+      const sp = await evaluate(`__sdfGame.screenPosOf(${zc.pos[0]}, ${hy}, ${zc.pos[2]})`);
+      if (!sp || Math.abs(sp.x) > 0.9 || Math.abs(sp.y) > 0.9 || sp.z >= 1) continue;
+      torsoSp = sp; torsoAnchor = hy;
+      outer2: for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const s = await evaluate(`__sdfGame.readSurfaceAt(${(sp.x + dx * 0.06).toFixed(4)}, ${(sp.y + dy * 0.06).toFixed(4)})`);
+          if (s.cls > 17.5 && s.cls < 18.5 && s.depth < 0.99) { fleshHit = s; break outer2; }
+        }
       }
+      if (fleshHit) break;
     }
-    assert.ok(fleshHit, `${name}: no flesh (cls 18) texel found around the projected torso`);
-    // Kit evidence: named descendants, routed, with material names.
-    let kitTree = null;
+    if (!torsoSp) {
+      torsoSp = await assertInFrame(`${name} in frame`, zc.pos[0], 1.1, zc.pos[2]);
+    }
+    assert.ok(fleshHit, `${name}: no flesh (cls 18) texel found around the projected torso ` +
+      `(anchors tried 1.1/0.7/1.5, ndc ${JSON.stringify(torsoSp)})`);
+    // Kit evidence: named descendants, routed, with material names, plus
+    // VISIBLE KIT PIXELS. Kit mesh node ORIGINS ride bones and can sit
+    // inside the flesh, so the scan walks up to four kit mesh nodes and a
+    // 5x5 NDC lattice around each projection — first cls-17 hit wins. A
+    // kit that routes but paints NO pixels fails here.
+    let kitTree = null, kitTexel = null, kitNode = null;
     if (kitChar) {
-      kitTree = await evaluate(`__sdfGame.debugRegisteredTree('rig-${name}', 48)`);
+      kitTree = await evaluate(`__sdfGame.debugRegisteredTree('rig-${name}', 64)`);
       assert.ok(kitTree.found, `${name}: deferred rig group not found`);
       const meshNodes = kitTree.nodes.filter((n) => n.isMesh);
       assert.ok(meshNodes.length >= 2,
@@ -957,27 +1049,41 @@ try {
         `${name}: kit meshes must route 'mesh': ${JSON.stringify(meshNodes.map((n) => [n.name, n.route]))}`);
       assert.ok(meshNodes.some((n) => (n.materials ?? []).length > 0),
         `${name}: kit meshes must carry named materials`);
-      // Visible kit pixels: a cls-17 texel at the first kit mesh's projection.
-      const km = meshNodes.find((n) => Math.abs(n.pos[0]) + Math.abs(n.pos[2]) > 0.001) ?? meshNodes[0];
-      const ksp = await evaluate(`__sdfGame.screenPosOf(${km.pos[0]}, ${km.pos[1]}, ${km.pos[2]})`);
-      let kitTexel = null;
-      if (ksp && Math.abs(ksp.x) <= 0.95 && Math.abs(ksp.y) <= 0.95 && ksp.z < 1) {
-        for (let dy = -1; dy <= 1 && !kitTexel; dy++) {
-          for (let dx = -1; dx <= 1 && !kitTexel; dx++) {
-            const s = await evaluate(`__sdfGame.readSurfaceAt(${(ksp.x + dx * 0.04).toFixed(4)}, ${(ksp.y + dy * 0.04).toFixed(4)})`);
-            if (s.cls > 16.5 && s.cls < 17.5 && s.depth < 0.995) kitTexel = s;
+      const heldPropNames = ['shorty', 'gunroot', 'foreend', 'barrels', 'frame'];
+      let propNodes = null;
+      if (name === 'soldier') {
+        // HELD PROP evidence (task order: actual kit/prop routing): the
+        // shorty-double.glb descendants must be IN the rig tree and routed.
+        propNodes = meshNodes.filter((n) => heldPropNames.some((h) => n.name.toLowerCase().includes(h)));
+        assert.ok(propNodes.length >= 2,
+          `soldier: held-prop (shorty) descendants missing from the rig tree ` +
+          `(mesh nodes: ${JSON.stringify(meshNodes.map((n) => n.name))})`);
+        assert.ok(propNodes.every((n) => n.route === 'mesh'),
+          `soldier: held-prop nodes must route 'mesh': ${JSON.stringify(propNodes.map((n) => [n.name, n.route]))}`);
+      }
+      for (const km of (propNodes?.length ? propNodes : meshNodes).slice(0, 4)) {
+        const ksp = await evaluate(`__sdfGame.screenPosOf(${km.pos[0]}, ${km.pos[1]}, ${km.pos[2]})`);
+        if (!ksp || Math.abs(ksp.x) > 0.95 || Math.abs(ksp.y) > 0.95 || ksp.z >= 1) continue;
+        for (let dy = -2; dy <= 2 && !kitTexel; dy++) {
+          for (let dx = -2; dx <= 2 && !kitTexel; dx++) {
+            const s = await evaluate(`__sdfGame.readSurfaceAt(${(ksp.x + dx * 0.035).toFixed(4)}, ${(ksp.y + dy * 0.035).toFixed(4)})`);
+            if (s.cls > 16.5 && s.cls < 17.5 && s.depth < 0.995) { kitTexel = s; kitNode = km.name; }
           }
         }
+        if (kitTexel) break;
       }
       rendered[name] = {
-        id: spawned.id, fleshDepth: +fleshHit.depth.toFixed(5),
-        kitMeshes: meshNodes.length, kitTexel: kitTexel ? +kitTexel.depth.toFixed(5) : null,
+        id: spawned.id, torsoAnchor, fleshDepth: +fleshHit.depth.toFixed(5),
+        kitMeshes: meshNodes.length, kitNodePainted: kitNode,
+        kitTexel: kitTexel ? +kitTexel.depth.toFixed(5) : null,
         kitMaterials: meshNodes.flatMap((n) => n.materials).slice(0, 8),
+        heldPropNodes: propNodes ? propNodes.map((n) => n.name) : undefined,
         minotaur404: minotaurRepro,
       };
-      assert.ok(kitTexel, `${name}: kit pixels missing from the G-buffer at the projected kit node`);
+      assert.ok(kitTexel, `${name}: kit pixels missing from the G-buffer at every projected kit node ` +
+        `(tried ${JSON.stringify((propNodes?.length ? propNodes : meshNodes).slice(0, 4).map((n) => n.name))})`);
     } else {
-      rendered[name] = { id: spawned.id, fleshDepth: +fleshHit.depth.toFixed(5), minotaur404: minotaurRepro };
+      rendered[name] = { id: spawned.id, torsoAnchor, fleshDepth: +fleshHit.depth.toFixed(5), minotaur404: minotaurRepro };
     }
     await shot(`task6-char-${name}.png`, {}, {}, { minFrameNonDark: 8 });
     console.log(`  rendered ${name} (id ${spawned.id})`);
@@ -1054,7 +1160,7 @@ try {
   assert.ok(census.live >= 2, `two live chunks expected: ${JSON.stringify({ live: census.live, baked: census.baked })}`);
   const chunkTexels = [];
   for (const piece of census.livePieces.slice(0, 2)) {
-    await faceTarget(piece.centre[0] + 1.2, piece.centre[2] + 0.1, piece.centre[0], piece.centre[2], 0);
+    await facePoint(piece.centre[0], piece.centre[1], piece.centre[2], 1.2);
     const csp = await evaluate(`__sdfGame.screenPosOf(${piece.centre[0]}, ${piece.centre[1]}, ${piece.centre[2]})`);
     let texel = null;
     if (csp && Math.abs(csp.x) <= 0.95 && Math.abs(csp.y) <= 0.95 && csp.z < 1) {
@@ -1093,7 +1199,7 @@ try {
   assert.ok(meshAfterBake >= afterMeshCount + 1, `bake must add the mesh to the mesh route: ${meshAfterBake}`);
   // Baked pixels: cls 17 at the baked piece centre.
   const bakedPiece = bakeCensus1.pieces[bakeCensus1.pieces.length - 1];
-  await faceTarget(bakedPiece.centre[0] + 1.1, bakedPiece.centre[2] + 0.1, bakedPiece.centre[0], bakedPiece.centre[2], 0);
+  await facePoint(bakedPiece.centre[0], bakedPiece.centre[1], bakedPiece.centre[2], 1.1);
   const bsp = await evaluate(`__sdfGame.screenPosOf(${bakedPiece.centre[0]}, ${bakedPiece.centre[1]}, ${bakedPiece.centre[2]})`);
   let bakedTexel = null;
   if (bsp && Math.abs(bsp.x) <= 0.95 && Math.abs(bsp.y) <= 0.95 && bsp.z < 1) {
@@ -1237,7 +1343,9 @@ try {
   const legacyDiag = await evaluate('__sdfGame.deferredDiagnostics()');
   assert.deepEqual(legacyDiag, { mode: 'legacy' }, 'legacy boot reports the legacy mode only');
   assert.equal(await evaluate('typeof __sdfGame.hashSurface === "function"'), true);
-  assert.equal(await evaluate('await __sdfGame.hashSurface()'), null, 'hashSurface is null-safe on legacy');
+  // evaluate() already sets awaitPromise — a top-level `await` inside the
+  // expression is a SyntaxError under Runtime.evaluate's script semantics.
+  assert.equal(await evaluate('__sdfGame.hashSurface()'), null, 'hashSurface is null-safe on legacy');
   const zl = await evaluate('__sdfGame.zombies().find(z2 => z2.room === 2)');
   await faceTarget(zl.pos[0] + 1.8, zl.pos[2], zl.pos[0], zl.pos[2]);
   const legacyFrame = await shot('task6-legacy-default.png', {}, {}, { minFrameNonDark: 8 });

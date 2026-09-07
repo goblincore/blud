@@ -56,7 +56,7 @@ import { createOccluderHull, buildHullInstances, HULL_SHRINK, type HullInstance 
 import { type BuildResult } from '../build-body';
 import { parseBlob } from '../blob-parse';
 import { createCharacterView, compileCharacterSheet } from './character-view';
-import { characterEntry } from '../character-registry';
+import { characterEntry, characterNames } from '../character-registry';
 import { rotateYaw } from '../gait';
 import { makeSoldierMind } from './enemy-mind';
 import { compileFace, compilePalette } from '../blob-compile';
@@ -6294,6 +6294,12 @@ async function main() {
      *  characters rendered once" gate drives this; ordinary play never
      *  calls it. Face/kit/prop evidence needs a live goblin/clown, which the
      *  room roster (zombies + the one soldier) does not carry. */
+    /** THE REGISTRY, live (task-6 gate): the roster the gate must cover is
+     *  character-registry.ts's own keys, read through the page so a driver
+     *  cannot silently drift from the registry the game actually spawns
+     *  (the zombie-only blind spot this gate exists to kill was exactly
+     *  such a drift). Read-only, JSON-serialisable, order = registry order. */
+    characterNames: (): string[] => [...characterNames()],
     spawnDebugCharacter: (name: string) => {
       const room = ROOMS.find(r => r.id === playerRoomId()) ?? ROOMS[0]!;
       const starts = spawnPoints(room);
