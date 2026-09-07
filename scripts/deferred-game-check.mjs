@@ -38,7 +38,7 @@
 //       redirect path and the null (canvas-depth) path, with numeric
 //       tolerances. The FAR SENTINEL requirement is satisfied honestly: the
 //       gate CREATES a deterministic true-empty region (hides the level
-//       shell, aims at the now-open ceiling, verifies each probe ray is
+//       shell, keeps the camera fixed, verifies each upper probe ray is
 //       empty-class + sentinel depth BEFORE spawning), probes 0.99/0.9995/
 //       0.99995 on those verified rays (all must draw), and requires the
 //       digest to restore bit-exactly. A deepest-ray bracket on the REAL
@@ -58,7 +58,8 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 const vite = Number(process.argv[2] ?? 5326), cdp = Number(process.argv[3] ?? 9326);
 const out = 'docs/dev-notes/2026-09-06-hybrid-deferred-m2';
 mkdirSync(out, { recursive: true });
-const W = 1280, H = 800;
+// Exact buffer-sized viewport avoids CSS resampling in depth-pixel tests.
+const W = 800, H = 600;
 
 /** TASK6_SCOPE=core|full (default full). CORE runs the render-control and
  *  route/depth/scale evidence only — P0, P1, P2, P6, P7a — and writes
@@ -114,7 +115,7 @@ const evaluate = async (expression) => {
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const check = (name, detail) => {
-  checks.push({ name, detail }); console.log('PASS', name, JSON.stringify(detail)?.slice(0, 400));
+  checks.push({ name, detail }); saveEvidence(); console.log('PASS', name, JSON.stringify(detail)?.slice(0, 400));
   const mu = process.memoryUsage();
   console.log(`  [mem] rss=${Math.round(mu.rss / 1e6)}MB heap=${Math.round(mu.heapUsed / 1e6)}MB checks=${checks.length}`);
 };
@@ -173,7 +174,7 @@ const regionPx = (r) => {
 /** Decode ONE fresh screenshot in page; return 7x7 means at NDC points and
  *  NDC-region stats, plus the raw base64 so `shot` can save THE SAME frame
  *  it measured (two captures can straddle a flicker beat). */
-const probeFrame = async (points, regions = {}) => {
+const probeFrame = async (points, regions = {}, sampleRadius = 3) => {
   const s = await send('Page.captureScreenshot', { format: 'png' });
   const b64 = s?.result?.data;
   assert.ok(b64, 'captureScreenshot returned no data');
@@ -185,7 +186,8 @@ const probeFrame = async (points, regions = {}) => {
     ctx.drawImage(bmp, 0, 0);
     const rect = ${JSON.stringify(RECT)};
     const mean7 = (px, py) => {
-      const d = ctx.getImageData(px - 3, py - 3, 7, 7).data;
+      const radius = ${sampleRadius};
+      const d = ctx.getImageData(px - radius, py - radius, 2 * radius + 1, 2 * radius + 1).data;
       let r = 0, g = 0, b = 0; const n = d.length / 4;
       for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; }
       return [Math.round(r / n), Math.round(g / n), Math.round(b / n)];
@@ -338,7 +340,9 @@ const depthToWorld = async (ndcX, ndcY, targetDepth) => {
   const at = async (t) => {
     const w = await evaluate(`__sdfGame.screenRayToWorld(${ndcX}, ${ndcY}, ${t})`);
     const sp = await evaluate(`__sdfGame.screenPosOf(${w[0]}, ${w[1]}, ${w[2]})`);
-    return { w, d: (sp.z + 1) / 2 };
+    // The live WebGPU camera already projects z into [0,1]. Applying
+    // OpenGL's (z+1)/2 here moved behind-surface probes in front.
+    return { w, d: sp.z };
   };
   const a = await at(3.0), b = await at(6.0);
   const Bp = (b.d - a.d) / (1 / 3.0 - 1 / 6.0);
@@ -360,39 +364,34 @@ const depthToWorld = async (ndcX, ndcY, targetDepth) => {
 const PROBE_COLORS = [[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 0], [255, 0, 255], [0, 255, 255], [255, 128, 0], [128, 64, 255]];
 const colorDist = (c, e) => Math.hypot(c[0] - e[0], c[1] - e[1], c[2] - e[2]);
 
-/**
- * BRACKETED DEPTH AGREEMENT at one NDC pixel. Places |deltas| probes side
- * by side (spread NDC apart, each at its OWN pixel's resolved depth plus
- * its delta), screenshots once, and classifies each probe drawn/occluded
- * by its palette colour. Destination depth at that pixel is then known to
- * sit inside [D+max(nearer deltas), D+min(farther deltas)] — the reported
- * numeric tolerance. Returns the bracket record.
- */
-const bracketAt = async (label, ndc, deltas, spread = 0.05, scale = 0.1) => {
-  // Per-probe NDC + resolved depth at ITS OWN pixel (curved surfaces need
-  // the per-pixel depth; a flat wall agrees across the spread).
+/** Bracket one verified surface pixel, sequentially. Moving probes
+ * sideways sampled the wall beside the body instead of flesh, and tiny
+ * world-size sprites disappeared at far depths. A fixed screen footprint
+ * and centre-pixel measurement isolate destination depth at this ray. */
+const bracketAt = async (label, ndc, deltas, _spread = 0.05, _scale = 0.1) => {
+  const s = await evaluate(`__sdfGame.readSurfaceAt(${ndc[0]}, ${ndc[1]})`);
+  assert.ok(s && s.cls > 0.5, `${label}: bracket requires an occupied surface`);
+  // Reconstruct through the centre of the texel we actually read.
+  ndc = [2 * (s.pixel[0] + 0.5) / s.size.width - 1,
+    1 - 2 * (s.pixel[1] + 0.5) / s.size.height];
+  if (label.startsWith('flesh')) assert.equal(s.cls, 18, `${label}: must sample flesh`);
+  if (label.startsWith('gun')) assert.equal(s.cls, 17, `${label}: must sample the gun`);
+  if (label.startsWith('wall')) assert.equal(s.cls, 1, `${label}: must sample the wall`);
   const probes = [];
-  const clampN = (v) => Math.max(-0.92, Math.min(0.92, v));
-  for (let i = 0; i < deltas.length; i++) {
-    const nx = clampN(ndc[0] + (i - (deltas.length - 1) / 2) * spread);
-    const ny = clampN(ndc[1]);
-    const s = await evaluate(`__sdfGame.readSurfaceAt(${nx.toFixed(4)}, ${ny.toFixed(4)})`);
-    assert.ok(s, `${label}: readSurfaceAt failed`);
-    const w = await depthToWorld(nx, ny, Math.min(0.9995, s.depth + deltas[i]));
+  for (const delta of deltas) {
+    const target = Math.min(0.99995, s.depth + delta);
+    assert.ok(Math.sign(target - s.depth) === Math.sign(delta), `${label}: clamped probe crossed the surface`);
+    const w = await depthToWorld(ndc[0], ndc[1], target);
     const sp = await evaluate(`__sdfGame.screenPosOf(${w[0]}, ${w[1]}, ${w[2]})`);
-    probes.push({ i, ndc: [nx, ny], dRes: s.depth, cls: s.cls, target: s.depth + deltas[i], w, sp, delta: deltas[i] });
-  }
-  await evaluate(`__sdfGame.spawnDepthProbes(${JSON.stringify(probes.map((p) => p.w))}, ${scale}); __sdfGame.step(2);`);
-  await sleep(220);
-  const points = {};
-  for (const p of probes) points[`p${p.i}`] = { x: p.sp.x, y: p.sp.y };
-  const { points: colors } = await probeFrame(points);
-  await evaluate('__sdfGame.clearDepthProbes(); __sdfGame.step(1);');
-  for (const p of probes) {
-    const c = colors[`p${p.i}`];
-    p.sampled = c;
-    p.drawn = colorDist(c, PROBE_COLORS[p.i]) < 90;
-    p.sceneDepth = p.dRes;
+    assert.ok(Math.abs(sp.z - target) < 1e-6, `${label}: probe depth must round-trip`);
+    await evaluate(`__sdfGame.spawnDepthProbes([${JSON.stringify(w)}], {pixels:12}); __sdfGame.step(2);`);
+    const frame = await probeFrame({ p: sp }, {}, 0);
+    const linear = await evaluate(`__sdfGame.readCompositeAt(${ndc[0]}, ${ndc[1]})`);
+    await evaluate('__sdfGame.clearDepthProbes(); __sdfGame.step(1);');
+    const sampled = linear ? linear.map(c => c * 255) : frame.points.p;
+    probes.push({ i: 0, ndc, dRes: s.depth, cls: s.cls, target, delta: target - s.depth,
+      sampled, displayed: frame.points.p, measurement: linear ? 'linear-composite' : 'canvas',
+      drawn: colorDist(sampled, PROBE_COLORS[0]) < 90 });
   }
   const nearer = probes.filter((p) => p.delta < 0);
   const farther = probes.filter((p) => p.delta > 0);
@@ -416,7 +415,7 @@ const bracketAt = async (label, ndc, deltas, spread = 0.05, scale = 0.1) => {
     Math.min(...farther.map((p) => p.delta)),
   ];
   const centre = Math.abs(bracket[1] - bracket[0]) < 1e-6 ? 0 : (bracket[0] + bracket[1]) / 2;
-  const record = { ndc, resolvedAtCentre: probes[Math.floor(probes.length / 2)].dRes, centreCls: probes[Math.floor(probes.length / 2)].cls, bracket, centre, tolerance: bracket[1] - bracket[0], probes: probes.map((p) => ({ delta: p.delta, dRes: +p.dRes.toFixed(6), cls: p.cls, drawn: p.drawn })) };
+  const record = { ndc, resolvedAtCentre: probes[Math.floor(probes.length / 2)].dRes, centreCls: probes[Math.floor(probes.length / 2)].cls, bracket, centre, tolerance: bracket[1] - bracket[0], probes: probes.map((p) => ({ delta: p.delta, dRes: +p.dRes.toFixed(6), cls: p.cls, drawn: p.drawn, sampled: p.sampled, displayed: p.displayed, measurement: p.measurement })) };
   check(`depth-bracket:${label}`, record);
   return record;
 };
@@ -695,25 +694,21 @@ try {
 
   /** TRUE-EMPTY SENTINEL PROOF. This enclosed dungeon has no empty-far
    *  region under the authored shell, so the gate CREATES one: hide the
-   *  static level meshes (the router's sync() skips visible=false subtrees
-   *  — exact for the G-buffer AND the forward pass) and aim the PLAYER at
-   *  the now-open ceiling, while the WANDERERS STAY FROZEN (the player-only
-   *  recipe: camera follow runs in the always-on draw path, so no actor
-   *  state changes and the digest can restore bit-exactly). Each probe ray
+   *  static level meshes while preserving the locked camera and actors.
+   *  The upper rays miss the bodies and now see empty space. Each ray
+   *  is checked directly rather than inferred from a centroid. Each probe ray
    *  is verified empty-class + sentinel depth BEFORE any probe spawns —
    *  no centroid trust — then probes at 0.99 / 0.9995 / 0.99995 on those
    *  verified rays must ALL draw, bracketing destination depth into
    *  (0.99995, 1]. The digest must restore bit-exactly afterwards. */
   const emptyStage = async (label) => {
     const hBefore = await evaluate('__sdfGame.hashSurface()');
-    const savedPose = await evaluate('__sdfGame.pose()');
-    await evaluate('__sdfGame.setRenderLock(false);'); // actors stay frozen
-    await evaluate(`__sdfGame.setPose(${savedPose.pos[0]}, ${savedPose.pos[2]}, 0, 1.35); __sdfGame.step(${SETTLE_STEPS});`);
+    // Keep camera/simulation locked: the upper rays already miss bodies.
+    // Moving away and settling back perturbed camera floats and depth bits.
     await evaluate('__sdfGame.setLevelMeshVisible(false);');
-    await settleAndLock();
     const hEmpty = await evaluate('__sdfGame.hashSurface()');
     const depths = [0.99, 0.9995, 0.99995];
-    const rays = [[0, 0.6], [-0.5, 0.45], [0.5, 0.45]];
+    const rays = [[-0.75, 0.6], [0, 0.8], [0.75, 0.6]];
     const spots = [];
     for (let i = 0; i < depths.length; i++) {
       const s = await evaluate(`__sdfGame.readSurfaceAt(${rays[i][0]}, ${rays[i][1]})`);
@@ -721,14 +716,14 @@ try {
         `far-empty:${label}: probe ray ${JSON.stringify(rays[i])} is not empty+sentinel pre-probe: ${JSON.stringify(s)}`);
       spots.push({ i, ray: rays[i], w: await depthToWorld(rays[i][0], rays[i][1], depths[i]) });
     }
-    await evaluate(`__sdfGame.spawnDepthProbes(${JSON.stringify(spots.map((q) => q.w))}, 0.12); __sdfGame.step(2);`);
+    await evaluate(`__sdfGame.spawnDepthProbes(${JSON.stringify(spots.map((q) => q.w))}, {pixels:12}); __sdfGame.step(2);`);
     await sleep(220);
     const points = {};
     for (const q of spots) {
       const sp = await evaluate(`__sdfGame.screenPosOf(${q.w[0]}, ${q.w[1]}, ${q.w[2]})`);
       q.sp = sp; points[`p${q.i}`] = { x: sp.x, y: sp.y };
     }
-    const { points: colors } = await probeFrame(points);
+    const { points: colors } = await probeFrame(points, {}, 0);
     await evaluate('__sdfGame.clearDepthProbes();');
     for (const q of spots) {
       q.drawn = colorDist(colors[`p${q.i}`], PROBE_COLORS[q.i]) < 90;
@@ -736,12 +731,8 @@ try {
       assert.ok(q.drawn, `far-empty:${label}: probe at depth ${depths[q.i]} on a VERIFIED empty ray must DRAW `
         + `(nothing is there — destination depth is the sentinel) — got ${JSON.stringify(q.sampled)}`);
     }
-    // Restore: level visible, pose back, players-only settle, re-lock; the
-    // digest must return bit-exactly to the locked entry state.
-    await evaluate('__sdfGame.setRenderLock(false);');
+    // Restore only level visibility; the locked entry digest must return exactly.
     await evaluate('__sdfGame.setLevelMeshVisible(true);');
-    await evaluate(`__sdfGame.setPose(${savedPose.pos[0]}, ${savedPose.pos[2]}, ${savedPose.yaw}, ${savedPose.pitch}); __sdfGame.step(${SETTLE_STEPS});`);
-    await settleAndLock();
     const hBack = await evaluate('__sdfGame.hashSurface()');
     assert.deepEqual(hBack.hashes, hBefore.hashes,
       `far-empty:${label}: level+pose restore must reproduce the entry digest exactly`
@@ -855,7 +846,7 @@ try {
   assert.deepEqual(hScaleBack, h0a, 'restoring scale 1 must reproduce the digest EXACTLY');
   check('P7a-scale', { half: diagHalf.sizes.sdfTargetSize, restored: 'hash==h0' });
 
-  // Resize down/up under the fixed cap: the 800x600 buffer must NOT follow
+  // Resize larger/back under the fixed cap: the 800x600 buffer must NOT follow
   // the window (the CSS cap), and the composite must survive both moves.
   await send('Emulation.setDeviceMetricsOverride', { width: 1000, height: 700, deviceScaleFactor: 1, mobile: false });
   await sleep(500);

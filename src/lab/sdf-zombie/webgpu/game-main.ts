@@ -4553,6 +4553,12 @@ async function main() {
       if (drawStill) handle.drawOnce();
       return deferredApi.readSurfaceAt(ndcX, ndcY);
     },
+    /** Depth-gate color before FXAA/lens; null when presenting to canvas. */
+    readCompositeAt: (ndcX: number, ndcY: number) => {
+      if (!deferredApi) return Promise.resolve(null);
+      handle.drawOnce();
+      return deferredApi.readCompositeAt(ndcX, ndcY);
+    },
     /** BOUNDED MULTI-POINT surface sample (task-6 lattice scans): one
      *  readback set for up to 512 NDC points. Draws a still first so the
      *  samples reflect the current state. Null-safe on legacy. */
@@ -4637,7 +4643,7 @@ async function main() {
      *  inferring depth from broad image deltas. Unregistered renderables are
      *  left alone by the forward route and hidden from the G-buffer passes
      *  by the router, so the probes only ever composite. */
-    spawnDepthProbes: (spots: Vec3[], scale = 0.14) => {
+    spawnDepthProbes: (spots: Vec3[], scale: number | { pixels: number } = 0.14) => {
       clearDepthProbes();
       // Task-6 gate: up to EIGHT distinct probes per spawn (a depth-bracket
       // ladder along one ray needs side-by-side colours in one frame; three
@@ -4647,6 +4653,10 @@ async function main() {
       for (let i = 0; i < spots.length && i < colors.length; i++) {
         const s = new THREE.Sprite(new THREE.SpriteMaterial({
           color: colors[i]!,
+          // Diagnostic palette must survive distance/exposure unchanged;
+          // these sprites measure depth, not the authored fog response.
+          fog: false,
+          toneMapped: false,
           transparent: true,
           blending: THREE.NormalBlending,
           depthWrite: false,
@@ -4654,7 +4664,13 @@ async function main() {
         }));
         s.name = `depth-probe-${i}`;
         s.position.set(spots[i]![0], spots[i]![1], spots[i]![2]);
-        s.scale.setScalar(scale);
+        // Diagnostic option: a fixed screen footprint remains measurable
+        // at far-plane depths; world-size probes shrink below one pixel.
+        const viewZ = new THREE.Vector3(...spots[i]!).applyMatrix4(camera.matrixWorldInverse).z;
+        const worldSize = typeof scale === 'number' ? scale
+          : 2 * Math.abs(viewZ) * Math.tan(camera.fov * Math.PI / 360)
+            * scale.pixels / postAa.contentSize.height;
+        s.scale.setScalar(worldSize);
         scene.add(s);
         depthProbes.push(s);
       }

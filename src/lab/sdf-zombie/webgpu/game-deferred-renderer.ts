@@ -303,6 +303,8 @@ export interface GameDeferredRenderer {
    *  attachment read per attachment, only when a gate asks. Null on a
    *  legacy boot (game-main guards). */
   readSurfaceAt(ndcX: number, ndcY: number): Promise<GameSurfaceSample>;
+  /** Linear composed color before postprocessing; null on the canvas path. */
+  readCompositeAt(ndcX: number, ndcY: number): Promise<number[] | null>;
   /** BOUNDED MULTI-POINT surface sample (task-6 lattice scans): the same
    *  four full-attachment reads as ONE readSurfaceAt, decoded at up to 512
    *  NDC points — a whole-frame lattice scan costs a single readback set,
@@ -445,11 +447,21 @@ export function createGameDeferredRenderer(deps: GameDeferredRendererDeps): Game
       lastDebugView = view;
     },
 
+    async readCompositeAt(ndcX, ndcY) {
+      if (!outputTarget) return null;
+      const { width: w, height: h } = outputTarget;
+      const px = Math.min(w - 1, Math.max(0, Math.floor((ndcX + 1) * w / 2)));
+      const py = Math.min(h - 1, Math.max(0, Math.floor((1 - ndcY) * h / 2)));
+      const raw = await renderer.readRenderTargetPixelsAsync(outputTarget, 0, 0, w, h);
+      const bits = new Uint16Array(raw.buffer, raw.byteOffset, raw.byteLength / 2);
+      return Array.from(readRgba16FTexel(bits, w, px, py, new Float32Array(4))).slice(0, 3);
+    },
+
     async readSurfaceAt(ndcX, ndcY) {
       const target = layer.targets.resolved;
       const w = target.width, h = target.height;
-      const px = Math.min(w - 1, Math.max(0, Math.round(((ndcX + 1) / 2) * w)));
-      const py = Math.min(h - 1, Math.max(0, Math.round(((1 - ndcY) / 2) * h)));
+      const px = Math.min(w - 1, Math.max(0, Math.floor(((ndcX + 1) / 2) * w)));
+      const py = Math.min(h - 1, Math.max(0, Math.floor(((1 - ndcY) / 2) * h)));
       // One full-attachment read per attachment (the fixture-proven pattern —
       // partial-rect readbacks hit the 256-byte row-padding hazard for free).
       // Decoding goes through the SHARED surface-readback decoder: the r32f
@@ -607,8 +619,8 @@ export function createGameDeferredRenderer(deps: GameDeferredRendererDeps): Game
       const depF32 = new Float32Array(dep.bytes.buffer, dep.bytes.byteOffset, dep.bytes.byteLength / 4);
       const out: GameSurfaceSample[] = [];
       for (const p of points.slice(0, 512)) {
-        const px = Math.min(w - 1, Math.max(0, Math.round(((p.x + 1) / 2) * w)));
-        const py = Math.min(h - 1, Math.max(0, Math.round(((1 - p.y) / 2) * h)));
+        const px = Math.min(w - 1, Math.max(0, Math.floor(((p.x + 1) / 2) * w)));
+        const py = Math.min(h - 1, Math.max(0, Math.floor(((1 - p.y) / 2) * h)));
         const aO = py * albedoRow + px * 4;
         const nmO = py * nmRow + px * 4;
         out.push({
