@@ -125,7 +125,7 @@ import {
   resolveGameBootMode,
   type GameDeferredRendererDiagnostics,
 } from './game-deferred-renderer';
-import type { GameLightCandidate } from './game-deferred-lights';
+import { legacyFlashKnee, type GameLightCandidate } from './game-deferred-lights';
 import type { DeferredDebugView } from './deferred-layer';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -523,9 +523,13 @@ async function main() {
       // M2 task 5: the flashlight slot's march-key response for deferred
       // flesh, read LIVE from beamTuning — the same gain/shoulder the legacy
       // march replays per frame, so setBeamTuning moves BOTH paths together
-      // and the constants cannot drift apart. knee = 1 - shoulder (the
-      // softShoulder parameterisation the march shader uses).
-      flashKey: () => ({ gain: beamTuning.gain, knee: 1 - beamTuning.shoulder }),
+      // and the constants cannot drift apart. knee = legacyFlashKnee(
+      // shoulder): the march shader's own two-step conversion — shoulder 0
+      // is compression OFF (knee 0), otherwise clamp(1 - shoulder, .05, .99)
+      // — so every legal panel position packs (the raw `1 - shoulder` map
+      // threw on shoulder 0 and .05 every frame). gain 0 is a PRESENT zero
+      // (the beam leaves flesh) once packed, never an absent override.
+      flashKey: () => ({ gain: beamTuning.gain, knee: legacyFlashKnee(beamTuning.shoulder) }),
       flashlight: flashlight.spot,
       width: postAa.contentSize.width,
       height: postAa.contentSize.height,

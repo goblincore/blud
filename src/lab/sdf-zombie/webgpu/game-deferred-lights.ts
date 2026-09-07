@@ -44,10 +44,28 @@ export interface GameLightCandidate {
  *  (see DeferredLight.fleshKeyIntensity / .fleshShoulderKnee). `gain` is the
  *  legacy march's beam gain (game-main beamTuning.gain — passed through a
  *  live getter so setBeamTuning cannot desync the deferred path); `knee` is
- *  its highlight shoulder (1 - beamTuning.shoulder). */
+ *  its highlight shoulder, converted from beamTuning.shoulder by
+ *  legacyFlashKnee() — the march's own two-step endpoint semantics. */
 export interface GameDeferredFlashKey {
   gain: number;
   knee: number;
+}
+
+/**
+ * LEGACY SHOULDER → PACKED KNEE (composition review fix, 2026-09-07). The
+ * march's own conversion (march.wgsl.ts:3329-3333) is two-step and the first
+ * wiring skipped the first step: the shoulder block runs only when
+ * `spotCfg2.y > 0` — shoulder 0 means compression OFF, not knee 1 — and
+ * otherwise takes `clamp(1 - shoulder, 0.05, 0.99)`. The game panel permits
+ * shoulder 0 and 0.05; the raw `1 - shoulder` map produced knee 1 and 0.95,
+ * and the packed knee bound rejected anything >= 1 (and used to reject 0.95),
+ * so legal panel positions threw on every deferred frame. Exported so the
+ * game wiring and its regression tests share ONE definition of the endpoint
+ * semantics with the shader they mirror.
+ */
+export function legacyFlashKnee(shoulder: number): number {
+  if (!(shoulder > 0)) return 0; // off (NaN included — off is the safe read)
+  return Math.min(Math.max(1 - shoulder, 0.05), 0.99);
 }
 
 export interface GameDeferredLightSet {

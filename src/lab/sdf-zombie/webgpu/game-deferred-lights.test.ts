@@ -8,8 +8,10 @@ import { describe, it, expect } from 'vitest';
 import * as THREE from 'three/webgpu';
 import {
   buildGameDeferredLights, DEFERRED_LIGHT_DEFAULT_RANGE, DEFERRED_INTENSITY_SCALE,
+  legacyFlashKnee,
   type GameLightCandidate,
 } from './game-deferred-lights';
+import { packDeferredLights, FLESH_KEY_PRESENT_ZERO } from './deferred-lighting';
 
 const ORIGIN = new THREE.Vector3(0, 0, 0);
 
@@ -255,6 +257,7 @@ describe('data-only conversion', () => {
   describe('flashKey stamp', () => {
     const flash = () => new THREE.SpotLight(0xffffff, 90, 16, Math.PI * 0.12, 0.45, 1.6);
     const key = { gain: 4, knee: 0.65 };
+    const beamPanelGain = 4; // the game's beamTuning.gain default (panel range 0..8)
 
     it('absent flashKey keeps the record unstamped (task-3 shape)', () => {
       const l = buildGameDeferredLights([{ id: 'flashlight', role: 'flashlight', light: flash() }], ORIGIN).lights[0]!;
@@ -288,6 +291,45 @@ describe('data-only conversion', () => {
       expect(l.fleshKeyIntensity).toBeCloseTo(2, 6);
       expect(l.fleshShoulderKnee).toBe(0.65); // a curve shape, not an intensity
       expect(l.intensity).toBeCloseTo(90 * 0.5, 6); // the physical level intensity scales too
+    });
+
+    it('legacyFlashKnee mirrors the march endpoints: 0 off, otherwise clamp(1-s, .05, .99)', () => {
+      // march.wgsl.ts:3329-3333 — the block gates on spotCfg2.y > 0, then
+      // clamps. These are exactly the panel-legal positions; the first wiring
+      // (raw 1 - shoulder) threw on the first two every deferred frame.
+      expect(legacyFlashKnee(0)).toBe(0); // compression OFF — not knee 1
+      expect(legacyFlashKnee(0.05)).toBe(0.95); // packs under the [0,1) bound
+      expect(legacyFlashKnee(0.35)).toBeCloseTo(0.65, 12); // the shipped default
+      expect(legacyFlashKnee(0.9)).toBeCloseTo(0.1, 12);
+      expect(legacyFlashKnee(0.99)).toBe(0.05); // clamped UP into the march range
+      expect(legacyFlashKnee(1.2)).toBe(0.05); // over-range shoulder clamps, never knee <= 0
+    });
+
+    it('the game-mapped endpoints survive the FULL adapter→pack path (present-zero included)', () => {
+      // End-to-end: what game-main's live getter produces must PACK for every
+      // legal beam panel value — the sentinel distinguishes an explicit gain
+      // 0 from an absent override, and the converted knees all pass the [0,1)
+      // bound. data[14]/[15] are the packed v3.z/v3.w floats.
+      for (const shoulder of [0, 0.05, 0.35, 0.9]) {
+        const l = buildGameDeferredLights(
+          [{ id: 'flashlight', role: 'flashlight', light: flash() }],
+          ORIGIN,
+          { flashKey: { gain: beamPanelGain, knee: legacyFlashKnee(shoulder) } },
+        ).lights[0]!;
+        const packed = packDeferredLights([l]);
+        expect(packed.data[14]).toBeCloseTo(beamPanelGain, 6);
+        // Float32 storage: exact for 0/0.65-ish values, off by ~1e-8 at 0.95.
+        expect(packed.data[15]).toBeCloseTo(legacyFlashKnee(shoulder), 6);
+      }
+      // Gain 0 — the panel's "beam off for flesh": packs as the PRESENT-ZERO
+      // sentinel, never as absent 0 (which would fall back to physical 90).
+      const off = buildGameDeferredLights(
+        [{ id: 'flashlight', role: 'flashlight', light: flash() }],
+        ORIGIN,
+        { flashKey: { gain: 0, knee: legacyFlashKnee(0.35) } },
+      ).lights[0]!;
+      expect(off.fleshKeyIntensity).toBe(0);
+      expect(packDeferredLights([off]).data[14]).toBe(FLESH_KEY_PRESENT_ZERO);
     });
   });
 });
