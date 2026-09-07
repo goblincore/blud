@@ -22,13 +22,110 @@
           "exclude": 0
         },
         "unsupported": [
-          "unsupported-mesh ← MeshBasicNodeMaterial (unsupported material for the opaque MRT pass)",
-          "room ← room (non-mesh renderable routed mesh)",
-          "kit-group ← kit-group (non-mesh renderable routed mesh)"
+          "unsupported-mesh ← MeshBasicNodeMaterial (unsupported material for the opaque MRT pass)"
         ]
+      }
+    },
+    {
+      "name": "producer-coverage-classes",
+      "detail": {
+        "0": 295419,
+        "1": 182850,
+        "18": 1731
+      }
+    },
+    {
+      "name": "alpha-cutout-survives-adapter",
+      "detail": {
+        "solid": {
+          "pixel": [
+            481,
+            278
+          ],
+          "depth": 0.9857448935508728,
+          "cls": 1
+        },
+        "hole": {
+          "pixel": [
+            515,
+            278
+          ],
+          "depth": 1,
+          "cls": 0
+        },
+        "clipDepth": 0.9857415996681654
+      }
+    },
+    {
+      "name": "scoped-exclusion-forward-unsupported-unregistered",
+      "detail": {
+        "forwardSphere": 1,
+        "unsupportedMesh": 1,
+        "helperSphere": 1
+      }
+    },
+    {
+      "name": "light-list-selection",
+      "detail": {
+        "ids": [
+          "flashlight",
+          "fire-11",
+          "fire-07",
+          "fire-15",
+          "fire-10",
+          "fire-14",
+          "fire-06",
+          "fire-03",
+          "fire-09",
+          "fire-13",
+          "fire-19",
+          "fire-18",
+          "fire-05",
+          "fire-02",
+          "fire-12",
+          "fire-17"
+        ],
+        "dropped": [
+          "muzzle",
+          "fire-08",
+          "fire-16",
+          "fire-04",
+          "fire-01",
+          "fire-00"
+        ],
+        "flashlightIndex": 0,
+        "count": 16
+      }
+    },
+    {
+      "name": "light-list-muzzle-priority-invariance",
+      "detail": {
+        "activeIds": [
+          "flashlight",
+          "muzzle",
+          "fire-11"
+        ],
+        "muzzleInvariance": true
+      }
+    },
+    {
+      "name": "late-kit-child-discovery-receiver",
+      "detail": {
+        "pixel": [
+          345,
+          295
+        ],
+        "cls": 17,
+        "depth": 0.987356960773468
+      }
+    },
+    {
+      "name": "capture-written",
+      "detail": {
+        "file": "docs/dev-notes/2026-09-06-hybrid-deferred-m2/task3-scene.png"
       }
     }
   ],
   "errors": [],
-  "pass": false
+  "pass": true
 }

@@ -59,10 +59,12 @@ const CAMERA_POSE = { pos: [0.1, 2.6, 7.2] as Vec3, look: [0.1, 1.0, 0] as Vec3 
  *  - An exclusion anchor (want class 0) is only meaningful against EMPTY
  *    background. At ±2.8, y=0.8 the anchor ray continued past the excluded
  *    object into the side wall at x=±3.6, so the wall's class-1 coverage
- *    sat behind the probe and the sentinel could never be observed. The
- *    exclusion meshes now sit at y=2.0 near mid-room, where the ray exits
- *    past the walls' z extent (|z|>3.6) and the floor's far edge into
- *    genuine background.
+ *    sat behind the probe and the sentinel could never be observed. At
+ *    ±2.0, y=2.0 the ray then clipped the cutout plane's opaque half
+ *    (x∈[1.2,2.4], y up to 2.1 at z=0.5). The final home is ±1.6, y=2.2,
+ *    z=−1.0: the anchor ray crosses the cutout plane 0.17 world units
+ *    ABOVE its top edge, exits past the walls' z extent (|z|>3.6) and the
+ *    floor's far edge into genuine background.
  */
 const LAYOUT = {
   body: [0, 0, 0] as Vec3,
@@ -72,8 +74,8 @@ const LAYOUT = {
   cutoutSolid: [1.5, 1.5, 0.5] as Vec3,
   cutoutHole: [2.1, 1.5, 0.5] as Vec3,
   forwardSphere: [-1.8, 1.4, 0.5] as Vec3,
-  unsupportedMesh: [2.0, 2.0, -0.5] as Vec3,
-  helperSphere: [-2.0, 2.0, -0.5] as Vec3,
+  unsupportedMesh: [1.6, 2.2, -1.0] as Vec3,
+  helperSphere: [-1.6, 2.2, -1.0] as Vec3,
   kitChild: [-1.0, 1.0, -0.5] as Vec3,
 };
 
