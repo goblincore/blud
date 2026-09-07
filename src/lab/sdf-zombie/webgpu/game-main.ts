@@ -1983,6 +1983,18 @@ async function main() {
     gunGroup.rotation.x = THREE.MathUtils.degToRad(GUN_REST.pitchDeg);
     gunGroup.position.copy(GUN_REST.pos);
     (aimRig ?? viewModelAnchor).add(gunGroup);
+    // DEFERRED G-BUFFER ROUTE (composition review fix): the shorty is an
+    // OPAQUE first-person surface — it belongs in the mesh pass (level-only
+    // receiver, like the kits) so the shared light stage shades it, not a
+    // parallel three lighting pass the deferred frame then overdraws. Its
+    // materials are exactly the Standard family the adapter takes (the
+    // loader filters to isMeshStandardMaterial), the version-tracking
+    // adapter cache is what carries setGunTuning's live mutations into the
+    // G-buffer, and castShadow stays FALSE — the shadow factory only casts
+    // `castShadow === true` meshes, so routing never puts the viewmodel in
+    // the flashlight maps. The flash sprite, smoke and blood stay FORWARD
+    // (blended, unregistered).
+    if (deferredApi) deferredApi.router.register(gunGroup, 'mesh', 'level-only');
 
     // Anchor points come off the GLB itself, so they cannot drift from the
     // weapon when its pose changes -- which is what left the support hand
@@ -2023,6 +2035,13 @@ async function main() {
     foreHandGroup.position.copy(FORE_HAND_REST);
     (aimRig ?? viewModelAnchor).add(gripHandGroup, foreHandGroup);
     aimArms();
+    // DEFERRED G-BUFFER ROUTE: the goblin arms are opaque Standard-material
+    // surfaces (skin, bracer, watch screen — game-arms.ts) — same route as
+    // the gun, same receiver, same castShadow reasoning.
+    if (deferredApi) {
+      deferredApi.router.register(gripHandGroup, 'mesh', 'level-only');
+      deferredApi.router.register(foreHandGroup, 'mesh', 'level-only');
+    }
 
     // SHOTGUN CASES. Red hull, brass head -- the read the owner asked for.
     // Four meshes, all built now: two thrown out of the breech on the eject
@@ -2046,6 +2065,15 @@ async function main() {
     for (let i = 0; i < 2; i++) {
       const e = makeShell(); ejectedShells.push(e); (aimRig ?? viewModelAnchor).add(e);
       const l = makeShell(); loadShells.push(l); (aimRig ?? viewModelAnchor).add(l);
+      // DEFERRED G-BUFFER ROUTE: the shells are OPAQUE Standard meshes (red
+      // hull, brass head) — level-only like the rest of the viewmodel. They
+      // fly and tumble through the forward-composited frame, so this route
+      // is also what makes them depth-test against the presented scene
+      // (walls occlude a shell that landed behind it).
+      if (deferredApi) {
+        deferredApi.router.register(e, 'mesh', 'level-only');
+        deferredApi.router.register(l, 'mesh', 'level-only');
+      }
     }
 
     // MUZZLE FLASH -- geometry half. Textured, not flat quads: the first pass

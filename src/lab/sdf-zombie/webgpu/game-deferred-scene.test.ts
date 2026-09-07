@@ -285,6 +285,53 @@ describe('scoped draws on the ORIGINAL objects', () => {
     s.dispose();
   });
 
+  it('FPV composition (review fix): camera-anchored opaque gear routes mesh/level-only; the blended sprite stays forward; castShadow untouched', () => {
+    // The exact shape of the game's viewmodel wiring: gear parented to the
+    // CAMERA (which sits in the scene), registered individually so the rig
+    // itself stays an unregistered container, and a transparent flash sprite
+    // under the same rig that must NEVER enter a G-buffer pass.
+    const scene = new THREE.Scene();
+    const cam = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
+    scene.add(cam);
+    const rig = new THREE.Group(); rig.name = 'aim-rig';
+    cam.add(rig);
+    const gunMesh = stdMesh('gun');
+    const handMesh = stdMesh('hand', new THREE.MeshStandardMaterial({ color: 0x6fae5a }));
+    const shellHull = stdMesh('shell-hull', new THREE.MeshStandardMaterial({ color: 0xa8231d, roughness: 0.55 }));
+    const flashQuad = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.2, 0.2),
+      new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false }),
+    );
+    flashQuad.name = 'muzzle-flash';
+    rig.add(gunMesh, handMesh, shellHull, flashQuad);
+    gunMesh.castShadow = false; // the game never sets it on FPV gear
+    const { renderer, submitted } = mockRenderer();
+    const s = createGameDeferredScene(scene);
+    s.register(gunMesh, 'mesh', 'level-only');
+    s.register(handMesh, 'mesh', 'level-only');
+    s.register(shellHull, 'mesh', 'level-only');
+    s.sync();
+    expect(s.routeOf(gunMesh)).toBe('mesh');
+    expect(s.receiverOf(gunMesh)).toBe('level-only');
+    expect(s.routeOf(flashQuad)).toBeNull(); // unregistered → forward-only
+    // Mesh G-buffer: the gear IN (as adapted members), the flash OUT.
+    s.draw('mesh', renderer, camera());
+    const meshPass = submitted[0]!;
+    expect(meshPass.swaps.map((w) => w.object)).toEqual(expect.arrayContaining([gunMesh, handMesh, shellHull]));
+    expect(new Set(meshPass.hidden).has(flashQuad)).toBe(true);
+    // The adapted material carries the level-only receiver, and the source
+    // castShadow flag was never touched by routing.
+    const gunMat = meshPass.swaps.find((w) => w.object === gunMesh)!.material as THREE.Material;
+    expect(gunMat).not.toBe(gunMesh.material); // an adapter, not the source
+    expect(gunMesh.castShadow).toBe(false);
+    // Forward: gear hidden (they were G-buffer members), flash draws.
+    s.draw('forward', renderer, camera());
+    const fwdPass = submitted[1]!;
+    expect(new Set(fwdPass.hidden).has(gunMesh)).toBe(true);
+    expect(new Set(fwdPass.hidden).has(flashQuad)).toBe(false);
+    s.dispose();
+  });
+
   it('a game-hidden subtree stays hidden and untouched in every draw (no force-showing)', () => {
     const scene = new THREE.Scene();
     const dead = new THREE.Group(); dead.name = 'dead-actor';
