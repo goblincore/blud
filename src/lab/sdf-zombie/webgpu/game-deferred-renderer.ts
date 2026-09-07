@@ -234,7 +234,9 @@ export interface GameDeferredRendererDiagnostics {
 }
 
 /** One raw RESOLVED G-buffer texel (see readSurfaceAt). Vectors are plain
- *  number tuples so the value crosses the CDP boundary untouched. */
+ *  number tuples so the value crosses the CDP boundary untouched.
+ *  normal is WORLD-space (deferred-mesh stores normalWorld; the march the
+ *  same world frame — lights are world-space). */
 export interface GameSurfaceSample {
   /** Layer pixel the NDC point mapped to. */
   pixel: [number, number];
@@ -294,6 +296,11 @@ export interface GameDeferredRenderer {
    *  attachment read per attachment, only when a gate asks. Null on a
    *  legacy boot (game-main guards). */
   readSurfaceAt(ndcX: number, ndcY: number): Promise<GameSurfaceSample>;
+  /** BOUNDED MULTI-POINT surface sample (task-6 lattice scans): the same
+   *  four full-attachment reads as ONE readSurfaceAt, decoded at up to 512
+   *  NDC points — a whole-frame lattice scan costs a single readback set,
+   *  not one per pixel. Same contract as readSurfaceAt otherwise. */
+  sampleSurfacePoints(points: ReadonlyArray<{ x: number; y: number }>): Promise<GameSurfaceSample[]>;
   /** WHOLE-G-buffer digest (task-6 evidence seam): per-attachment FNV-1a
    *  over the logical texels plus the class histogram and depth extent.
    *  Four full-attachment readbacks per call, only when a gate asks; the
@@ -576,6 +583,60 @@ export function createGameDeferredRenderer(deps: GameDeferredRendererDeps): Game
         deepOccupied,
         sentinelCentroid: sentinelPixels > 0 ? [Math.round(sx / sentinelPixels), Math.round(sy / sentinelPixels)] : null,
       };
+    },
+
+    async sampleSurfacePoints(points) {
+      // Self-contained on purpose (mirrors readSurfaceAt/hashSurface decode
+      // logic): ONE parallel readback set for the WHOLE lattice — 512 points
+      // cost the same as one point. Bounded output by construction.
+      const target = layer.targets.resolved;
+      const w = target.width, h = target.height;
+      const readRaw = async (name: SurfaceAttachmentName): Promise<{ bytes: Uint8Array; half: boolean; channels: number }> => {
+        const textureIndex = target.textures.findIndex((t) => t.name === name);
+        if (textureIndex < 0) throw new Error(`resolved target is missing attachment '${name}'`);
+        const tex = target.textures[textureIndex]!;
+        const channels = tex.format === THREE.RedFormat ? 1 : 4;
+        const half = tex.type === THREE.HalfFloatType;
+        const raw = await renderer.readRenderTargetPixelsAsync(target, 0, 0, w, h, textureIndex);
+        return { bytes: new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength), half, channels };
+      };
+      const [albedo, nm, ec, dep] = await Promise.all([
+        readRaw('albedoRoughness'), readRaw('normalMetalness'), readRaw('emissionClass'), readRaw('surfaceDepth'),
+      ]);
+      const strides = (r: { half: boolean; channels: number }) => {
+        const rowBytes = w * r.channels * (r.half ? 2 : 4);
+        const padded = Math.ceil(rowBytes / 256) * 256;
+        return r.half ? padded / 2 : padded / 4;
+      };
+      const albedoRow = strides(albedo), nmRow = strides(nm), ecRow = strides(ec), depRow = strides(dep);
+      const h2f = (bits: number): number => {
+        const s = (bits & 0x8000) >> 15, exp = (bits & 0x7c00) >> 10, frac = bits & 0x3ff;
+        return exp === 0 ? (s ? -0 : 0) * (frac ? Number.NaN : 1)
+          : exp === 31 ? (s ? -1 : 1) * (frac ? Number.NaN : Infinity)
+          : (s ? -1 : 1) * (1 + frac / 1024) * 2 ** (exp - 15);
+      };
+      const albedoF32 = new Float32Array(albedo.bytes.buffer, albedo.bytes.byteOffset, albedo.bytes.byteLength / 4);
+      const nmU16 = new Uint16Array(nm.bytes.buffer, nm.bytes.byteOffset, nm.bytes.byteLength / 2);
+      const ecU16 = new Uint16Array(ec.bytes.buffer, ec.bytes.byteOffset, ec.bytes.byteLength / 2);
+      const depF32 = new Float32Array(dep.bytes.buffer, dep.bytes.byteOffset, dep.bytes.byteLength / 4);
+      const out: GameSurfaceSample[] = [];
+      for (const p of points.slice(0, 512)) {
+        const px = Math.min(w - 1, Math.max(0, Math.round(((p.x + 1) / 2) * w)));
+        const py = Math.min(h - 1, Math.max(0, Math.round(((1 - p.y) / 2) * h)));
+        const o = (py * w + px) * 4;
+        const nmO = py * nmRow + px * 4;
+        const dec = (arr: Uint16Array, base: number, c: number) => h2f(arr[base + c]!);
+        out.push({
+          pixel: [px, py], size: { width: w, height: h },
+          albedo: [albedoF32[o]!, albedoF32[o + 1]!, albedoF32[o + 2]!],
+          roughness: albedoF32[o + 3]!,
+          normal: [dec(nmU16, nmO, 0), dec(nmU16, nmO, 1), dec(nmU16, nmO, 2)],
+          metalness: dec(nmU16, nmO, 3),
+          cls: dec(ecU16, py * ecRow + px * 4, 3),
+          depth: depF32[py * depRow + px]!,
+        });
+      }
+      return out;
     },
 
     render(camera) {

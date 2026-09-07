@@ -4519,12 +4519,21 @@ async function main() {
     /** RAW G-buffer sample at an NDC point (composition review fix evidence
      *  seam): lets a gate assert the gun/hand SURFACE CHANNELS — not just
      *  metadata — follow setGunTuning on the live frame. Draws a still frame
-     *  FIRST so the sample always reflects the CURRENT state, never a stale
-     *  earlier frame. Null-safe on legacy. */
-    readSurfaceAt: (ndcX: number, ndcY: number) => {
+     *  FIRST by default so the sample always reflects the CURRENT state;
+     *  pass drawStill=false for BULK scans of an already-rendered locked
+     *  frame (each still is a full render). Null-safe on legacy. */
+    readSurfaceAt: (ndcX: number, ndcY: number, drawStill = true) => {
+      if (!deferredApi) return Promise.resolve(null);
+      if (drawStill) handle.drawOnce();
+      return deferredApi.readSurfaceAt(ndcX, ndcY);
+    },
+    /** BOUNDED MULTI-POINT surface sample (task-6 lattice scans): one
+     *  readback set for up to 512 NDC points. Draws a still first so the
+     *  samples reflect the current state. Null-safe on legacy. */
+    sampleSurfacePoints: (points: Array<{ x: number; y: number }>) => {
       if (!deferredApi) return Promise.resolve(null);
       handle.drawOnce();
-      return deferredApi.readSurfaceAt(ndcX, ndcY);
+      return deferredApi.sampleSurfacePoints(points);
     },
     /** WHOLE-G-buffer digest (task-6 regression-gate seam): four per-
      *  attachment FNV-1a digests over the logical texels plus the class

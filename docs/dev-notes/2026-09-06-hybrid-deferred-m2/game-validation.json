@@ -1,4 +1,5 @@
 {
+  "phase": "faceTarget",
   "checks": [
     {
       "name": "P0-boot-deferred",
@@ -34,21 +35,81 @@
       }
     },
     {
-      "name": "P1-hash-baseline",
+      "name": "P1-render-control",
       "detail": {
-        "nonEmpty": 479999,
-        "classCounts": {
-          "1": 431617,
-          "17": 36332,
-          "18": 12050
+        "hashes": {
+          "albedoRoughness": 3480081861,
+          "normalMetalness": 4262513036,
+          "emissionClass": 981701222,
+          "surfaceDepth": 643334694
         },
-        "maxDepth": 1
+        "nonEmpty": 480000,
+        "classCounts": {
+          "1": 426322,
+          "17": 36400,
+          "18": 17278
+        },
+        "sentinelPixels": 0,
+        "deepOccupied": 0,
+        "maxDepth": 0.994732,
+        "pose": {
+          "pos": [
+            8.48,
+            0,
+            -4.136598517214702
+          ],
+          "yaw": -1.5707963267948966,
+          "pitch": -0.12
+        },
+        "actorPos": [
+          6.931788945020168,
+          0,
+          -4.136231680613403
+        ]
+      }
+    },
+    {
+      "name": "P1-sampling-invariance",
+      "detail": {
+        "litDelta": -1,
+        "lit0": 59,
+        "litSampling": 60
+      }
+    },
+    {
+      "name": "P1-gain-invariance",
+      "detail": {
+        "litDelta": 20
+      }
+    },
+    {
+      "name": "P1-beam-invariance",
+      "detail": {
+        "litDelta": 17
+      }
+    },
+    {
+      "name": "P1-generation-invariance",
+      "detail": {
+        "litDelta": -1,
+        "renderedMaps": 0
+      }
+    },
+    {
+      "name": "P1-marker-hidden-from-gbuffer",
+      "detail": {
+        "marker": [
+          251,
+          0,
+          251
+        ]
       }
     }
   ],
   "pageErrors": [],
   "pass": false,
-  "generatedAt": "2026-09-07T13:29:26.741Z",
+  "pageErrorsDropped": 0,
+  "generatedAt": "2026-09-07T16:03:32.948Z",
   "ports": {
     "vite": 5326,
     "cdp": 9326
@@ -62,7 +123,7 @@
     "stages": {
       "bootDiag": {
         "mode": "deferred",
-        "frames": 41,
+        "frames": 189,
         "canvasDepthWrites": false,
         "router": {
           "counts": {
@@ -166,28 +227,26 @@
         "width": 800,
         "height": 600,
         "hashes": {
-          "albedoRoughness": 647766986,
-          "normalMetalness": 1444991748,
-          "emissionClass": 3491576748,
-          "surfaceDepth": 2044576743
+          "albedoRoughness": 3480081861,
+          "normalMetalness": 4262513036,
+          "emissionClass": 981701222,
+          "surfaceDepth": 643334694
         },
-        "nonEmpty": 479999,
+        "nonEmpty": 480000,
         "classCounts": {
-          "1": 431617,
-          "17": 36332,
-          "18": 12050
+          "1": 426322,
+          "17": 36400,
+          "18": 17278
         },
-        "minDepth": 0.5197560787200928,
-        "maxDepth": 1,
+        "minDepth": 0.5195043087005615,
+        "maxDepth": 0.9947323203086853,
         "deepestPixel": [
-          50,
-          129
+          422,
+          291
         ],
-        "sentinelPixels": 1,
-        "sentinelCentroid": [
-          50,
-          129
-        ]
+        "sentinelPixels": 0,
+        "deepOccupied": 0,
+        "sentinelCentroid": null
       }
     }
   }
