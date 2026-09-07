@@ -11,6 +11,18 @@ const twoPoint = (): RigState => makeRig(
 );
 
 describe('stepRig', () => {
+  it('holds animated contacts exactly and releases them without spring velocity', () => {
+    let s = twoPoint();
+    s = { ...s, posePins: [1], restPose: [[0, 1, 0], [0, .55, .1]] };
+    s = stepRig(s, 1 / 60, { ...OPTS, gravity: [0, -9.8, 0], restStiffness: .18 });
+    expect(s.points[1]!.pos).toEqual([0, .55, .1]);
+    expect(s.points[1]!.prev).toEqual(s.points[1]!.pos);
+    expect(s.points[1]!.pinned).toBe(false);
+    s = stepRig({ ...s, posePins: undefined, constraints: [] }, 1 / 60, { ...OPTS, gravity: [0, -9.8, 0] });
+    expect(s.points[1]!.pos[1]).toBeLessThan(.55);
+    expect(s.points[1]!.pos[2]).toBe(.1);
+  });
+
   it('holds a constraint already at rest length', () => {
     let s = twoPoint();
     for (let i = 0; i < 30; i++) s = stepRig(s, 1 / 60, OPTS);

@@ -20,49 +20,47 @@
 # equivalents are flat-top+pauldrons+belt. Same primitive count, same blend
 # weights, same "one colour per garment" rule.
 
-# 2026-09-06 silhouette pass: broad barrel torso and neck; all joint centers
-# and bone lengths are unchanged so weapon IK keeps its existing reach.
+# 2026-09-07: body and kit enlarged 1.2x, with thighs shortened from
+# 0.42 to 0.38 before scaling. Upper-body proportions and arm reach scale
+# uniformly; the shorter thighs keep the heavier grunt from looking lanky.
 model soldier
-  height 1.70
+  height 1.992
   # humanoid | digitigrade. Checked, not decorative — see blob-checks.ts.
   stance humanoid
 
 skeleton
-  # Root at 0.87 so the leg chain (0.42 + 0.42 below the pelvis tail at 0.97)
-  # lands the ankle at 0.13 — legs are exactly half the standing height,
-  # which is what keeps him an ordinary human next to the goblin's stumps
-  # and the zombie's stoop.
-  root pelvis at 0.87 len=0.10
+  # Lower the root by the removed thigh height so the ankle/sole stays put.
+  root pelvis at 0.996029 len=0.12
 
   # Upright, no hunch — the zombie owns the stoop in this cast. The tiniest
   # backward lean (-1 deg) keeps the chest plate from tipping the silhouette
   # forward in profile.
-  bone spine1 parent=pelvis dir=up pitch=-1 len=0.16
-  bone chest  parent=spine1 dir=up pitch=-1 len=0.17
-  bone spine2 parent=chest  dir=up pitch=0  len=0.06
-  bone neck   parent=spine2 dir=up pitch=0  len=0.08
+  bone spine1 parent=pelvis dir=up pitch=-1 len=0.192
+  bone chest  parent=spine1 dir=up pitch=-1 len=0.204
+  bone spine2 parent=chest  dir=up pitch=0  len=0.072
+  bone neck   parent=spine2 dir=up pitch=0  len=0.096
   # Carries the face block: at=0.55 puts the cranium centre at 1.561, chin
   # ~1.48, flesh crown ~1.647; the hair cap tops at 1.69. Head is 1/8 of
   # 1.70 as briefed.
-  bone skull  parent=neck   dir=up pitch=2  len=0.22
+  bone skull  parent=neck   dir=up pitch=2  len=0.264
 
   mirror
     # Shoulder socket at x 0.14, y 1.36 — the goblin lesson applies: shoulder
     # reach is a function of chest width. The chest flesh here is half-width
     # ~0.115, so a 0.04/0.10 clavicle lands the socket just proud of it.
-    bone clavicle parent=spine2  side=0.040 dir=side  len=0.100
+    bone clavicle parent=spine2  side=0.048 dir=side  len=0.12
     # Arms hang DOWN and slightly OUT (tilt 8) so the bare arm clears the
     # belt slab; the schoolgirl measured the same fog line (<=6 deg melts
     # arm and waist fields together).
-    bone upperarm parent=clavicle dir=down tilt=8 pitch=2  len=0.26
-    bone forearm  parent=upperarm dir=down tilt=4 pitch=8  len=0.24
-    bone hand     parent=forearm  dir=down pitch=6         len=0.095
+    bone upperarm parent=clavicle dir=down tilt=8 pitch=2  len=0.312
+    bone forearm  parent=upperarm dir=down tilt=4 pitch=8  len=0.288
+    bone hand     parent=forearm  dir=down pitch=6         len=0.114
     # Legs: dead straight with a whisper of outward slant, the "at ease"
     # stand. No bow — the goblin owns the bow.
-    bone thigh    parent=pelvis dir=down tilt=2 side=0.068 len=0.42
-    bone shin     parent=thigh  dir=down tilt=2            len=0.42
+    bone thigh    parent=pelvis dir=down tilt=2 side=0.0816 len=0.456
+    bone shin     parent=thigh  dir=down tilt=2            len=0.504
     # The foot bone only positions the boot prims (the house pattern).
-    bone foot     parent=shin   dir=fwd                    len=0.13
+    bone foot     parent=shin   dir=fwd                    len=0.156
   end
 
 body
@@ -81,13 +79,13 @@ body
   # shirt came off, and unpainted means flesh -- so bare skin showed at the
   # crotch between two olive thighs. Same hex as the thighs, so the trouser
   # line runs unbroken from waist to knee. The chest and belly above stay bare.
-  blob torso on pelvis at=0.40 r=0.142 wide=1.05 tall=0.90 deep=0.84 blend=0.010 color=5c5d41
+  blob torso on pelvis at=0.40 r=0.1704 wide=1.05 tall=0.90 deep=0.84 blend=0.012 color=5c5d41
   # Waist: trouser top rising to the belt line.
-  bar  torso on spine1 from=0.40 to=1.00 r=0.129 r2=0.135 deep=0.85 blend=0.008
+  bar  torso on spine1 from=0.40 to=1.00 r=0.1548 r2=0.162 deep=0.85 blend=0.0096
   # Chest: the sleeveless top under the plate — only a dark crescent shows
   # at the armpits and midriff, which is the point: bare arms and dark vest
   # against hard plate is most of the read.
-  bar  torso on chest  from=0.20 to=0.95 r=0.133 r2=0.145 deep=0.84 blend=0.008
+  bar  torso on chest  from=0.20 to=0.95 r=0.1596 r2=0.174 deep=0.84 blend=0.0096
 
   # ============================================================
   # THE CUIRASS — machined plate, proud of the torso. box + metal exist for
@@ -133,11 +131,11 @@ body
   # arm than before (0.060 -> 0.048 rather than 0.048 -> 0.042) so the mass
   # reads as a deltoid falling into a narrower elbow rather than a uniform
   # tube -- a thicker cylinder alone reads as fat, not muscle.
-  blob arm on upperarm at=0.06 r=0.098 tall=1.05 blend=0.010 mirror
-  bar  arm on upperarm from=0.12 to=0.95 r=0.086 r2=0.058 blend=0.008 mirror
-  blob arm on forearm  at=0.00 r=0.064 blend=0.006 mirror
+  blob arm on upperarm at=0.06 r=0.1176 tall=1.05 blend=0.012 mirror
+  bar  arm on upperarm from=0.12 to=0.95 r=0.1032 r2=0.0696 blend=0.0096 mirror
+  blob arm on forearm  at=0.00 r=0.0768 blend=0.0072 mirror
   # The issued-grunt forearm: fatter than the upper arm's lower end.
-  bar  arm on forearm  from=0.05 to=0.95 r=0.072 r2=0.048 blend=0.008 mirror
+  bar  arm on forearm  from=0.05 to=0.95 r=0.0864 r2=0.0576 blend=0.0096 mirror
   # Fist — a blunt mitt, no fingers (house rule: the goblin's grabby hand is
   # the only articulated one in the cast).
   # ORB HANDS (owner, 2026-09-05). Deliberately a SPHERE -- wide/tall/deep all
@@ -146,7 +144,7 @@ body
   # which is also what the shotgun will need something to grip with. Slightly
   # larger (0.044 -> 0.052) to carry against the bulked forearm, and blended
   # tighter so the wrist stays a wrist.
-  blob arm on hand at=0.55 offset=(0,0,0.008) r=0.052 wide=1.00 tall=1.00 deep=1.00 blend=0.005 mirror
+  blob arm on hand at=0.55 offset=(0,0,0.0096) r=0.0624 wide=1.00 tall=1.00 deep=1.00 blend=0.006 mirror
 
   # ============================================================
   # LEGS — camo fatigues. Camo is done the house way: TWO bold olive blocks
@@ -170,15 +168,15 @@ body
   # the shin all left for the kit (owner, 2026-09-04) -- webbing, plate and
   # footwear are mesh. The trousers stay as PAINT for the moment: they are
   # cloth on the leg rather than a separate object, so they cost nothing here.
-  blob leg on thigh at=0.00 r=0.084 deep=1.05 blend=0.008 mirror core color=5c5d41
-  bar  leg on thigh from=0.02 to=1.00 r=0.079 r2=0.061 deep=1.05 blend=0.007 mirror color=5c5d41
+  blob leg on thigh at=0.00 r=0.1008 deep=1.05 blend=0.0096 mirror core color=5c5d41
+  bar  leg on thigh from=0.02 to=1.00 r=0.0948 r2=0.0732 deep=1.05 blend=0.0084 mirror color=5c5d41
   # Knee plate — hard box proud of the knee.
   # to 0.68 -> 1.00 (main, 2026-09-05): the shin used to stop at 68% of its
   # bone because the BOOT covered the rest. With no flesh foot at all now, the
   # shin runs to the ankle so the leg has an end inside the boot shaft rather
   # than a blunt stump above it. Tapered harder (r2 0.050 -> 0.044) so the
   # ankle narrows.
-  bar  leg on shin from=0.08 to=1.00 r=0.060 r2=0.044 blend=0.006 mirror color=676549
+  bar  leg on shin from=0.08 to=1.00 r=0.072 r2=0.0528 blend=0.0072 mirror color=676549
 
   # ============================================================
   # BOOTS — heavy, muted red (the second red accent), with a darker sole.
@@ -191,13 +189,13 @@ body
   # Sole — a flat dark slab under the foot.
 
   # Neck: skin, thick — a grunt's neck, not the schoolgirl's 0.028.
-  bar head on neck from=0.05 to=0.95 r=0.044 deep=1.10 blend=0.004
+  bar head on neck from=0.05 to=0.95 r=0.0528 deep=1.10 blend=0.0048
 
   # Narrow flat strip along the crown, with parallel sides at the front.
-  blob head on skull at=0.55 offset=(0,0.071,0.010) r=0.070 wide=0.48 tall=0.24 deep=0.52 box round=0.18 blend=0.004 color=2e6034
+  blob head on skull at=0.55 offset=(0,0.0852,0.012) r=0.084 wide=0.48 tall=0.24 deep=0.52 box round=0.18 blend=0.0048 color=2e6034
   # Only the rear tip tapers: a short join tucked into the crown, rather
   # than a broad cap with a long tail running down the back of the head.
-  blob head on skull at=0.55 offset=(0,0.068,-0.020) tip=(0,-0.025,-0.043) r=0.028 r2=0.012 wide=1.10 tall=0.42 deep=0.70 blend=0.008 color=2e6034
+  blob head on skull at=0.55 offset=(0,0.0816,-0.024) tip=(0,-0.03,-0.0516) r=0.0336 r2=0.0144 wide=1.10 tall=0.42 deep=0.70 blend=0.0096 color=2e6034
 
 # ============================================================
 # FACE BLOCK — owner-tuned in the lab, 2026-09-06.
@@ -206,20 +204,20 @@ body
 # eye/mouth prims are added here for that reason.
 # ============================================================
 face
-  headRadius 0.075
+  headRadius 0.09
   headWidth  0.980
   headHeight 1.150
   headDepth  1.050
   jawWidth   0.816
   jawHeight  0.900
-  jawDrop    0.060
-  jawJut     0.037
-  noseLength 0.031
+  jawDrop    0.072
+  jawJut     0.0444
+  noseLength 0.0372
   noseWidth  1.085
-  noseDrop   0.014
-  browHeavy  0.014
-  browRise   0.035
-  headBlend  0.005
+  noseDrop   0.0168
+  browHeavy  0.0168
+  browRise   0.042
+  headBlend  0.006
   headRise   0
   headLead   0
 

@@ -66,6 +66,7 @@ export async function loadHeldProp(url: string, renderer?: THREE.WebGPURenderer)
   const write = (root: Vec3, quat: Quat) => {
     pos.set(root[0], root[1], root[2]);
     q.set(quat[0], quat[1], quat[2], quat[3]);
+    one.setScalar(last.scale ?? 1);
     object.matrix.compose(pos, q, one);
     object.matrixWorld.copy(object.matrix);
   };
@@ -83,8 +84,8 @@ export async function loadHeldProp(url: string, renderer?: THREE.WebGPURenderer)
       const quat: Quat = rise === 0 ? gun.quat : qMul(qFromAxisAngle(bodyRight, -rise), gun.quat);
       // Rise pivots about the grip, not the root: keep Grip_Hand where it is.
       const grip = gunPoint(gun, GUN_GRIP.gripHand);
-      const root = sub(grip, qRotate(quat, GUN_GRIP.gripHand));
-      last = { root, quat };
+      const root = sub(grip, qRotate(quat, scale(GUN_GRIP.gripHand, gun.scale ?? 1)));
+      last = { root, quat, scale: gun.scale };
       write(root, quat);
     },
     release(handVel, seed) {
@@ -94,7 +95,7 @@ export async function loadHeldProp(url: string, renderer?: THREE.WebGPURenderer)
     step(dt, floorY) {
       if (!drop || drop.resting) return;
       drop = stepDrop(drop, dt, floorY);
-      last = { root: drop.pos, quat: drop.quat };
+      last = { ...last, root: drop.pos, quat: drop.quat };
       write(drop.pos, drop.quat);
     },
     muzzle(forward = 0) {

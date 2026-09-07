@@ -11,6 +11,7 @@
 // reads the COMPILED mesh — vertices have nowhere to hide, unlike ring lines
 // (the goblin's pauldron bug lived in a `cap dome` no ring line measured).
 import { describe, it, expect } from 'vitest';
+import { Ray, Vector3 } from 'three';
 import blobSrc from './soldier.blob?raw';
 import kitJson from '../../../../public/assets/lab/soldier-kit.gltf?raw';
 import { parseBlob } from '../blob-parse';
@@ -22,6 +23,7 @@ import { bindRig } from '../rig-bind';
 import type { Vec3 } from '../types';
 
 interface Gltf {
+  skins: { joints: number[] }[];
   buffers: { uri: string; byteLength: number }[];
   bufferViews: { buffer: number; byteOffset?: number; byteLength: number }[];
   accessors: { bufferView: number; byteOffset?: number; count: number; type: string; componentType: number }[];
@@ -137,12 +139,14 @@ describe('soldier-kit.gltf fits soldier.blob', () => {
     // Above the old cuirass rim and between the shoulder crowns: the rear
     // collar must cover this otherwise bare gap, while remaining behind the
     // neck. Check the emitted lip, including its cap centre, against the SDF.
+    // Original measured collar region, enlarged with the torso and lowered
+    // by the 4.8 cm removed from the thighs.
     const lip = groups.get('plate')!.filter(v =>
-      Math.abs(v[0]) < 0.080 && v[1] > 1.415 && v[2] < -0.065);
+      Math.abs(v[0]) < 0.080 * 1.2 && v[1] > 1.415 * 1.2 - .048 && v[2] < -0.065 * 1.2);
     expect(lip.length).toBeGreaterThanOrEqual(8);
     for (const v of lip) {
-      expect(sdBody(v, body), `collar clearance at ${v.join(', ')}`).toBeGreaterThan(0.008);
-      expect(v[1]).toBeLessThan(1.450); // below the head, clear of its turns
+      expect(sdBody(v, body), `collar clearance at ${v.join(', ')}`).toBeGreaterThan(0.008 * 1.2);
+      expect(v[1]).toBeLessThan(1.450 * 1.2 - .048); // below the head, clear of its turns
     }
   });
 
@@ -162,6 +166,46 @@ describe('soldier-kit.gltf fits soldier.blob', () => {
     const lowest = all.reduce((a, b) => (b[1] < a[1] ? b : a));
     expect(Math.abs(lowest[0]), `lowest vertex at (${lowest.map(n => n.toFixed(3)).join(', ')})`)
       .toBeGreaterThan(0.04); // out at a foot (ankle x=0.097), not the body axis
+  });
+
+  it('encases each shin from below the knee to the ankle with clearance on every side', () => {
+    // Sample the actual triangle faces, not just loft-ring vertices: an
+    // eight-sided boot can clear the flesh at its corners and cut it at a facet.
+    for (const side of ['l', 'r']) {
+      const name = `shin.${side}`, bone = body.bones.get(name)!;
+      const joint = gltf.skins[0]!.joints.findIndex(i => gltf.nodes[i]!.name === name);
+      expect(joint).toBeGreaterThanOrEqual(0);
+      const triangles: Vector3[][] = [];
+      for (const prim of gltf.meshes[0]!.primitives) {
+        const positions = readVec3(prim.attributes['POSITION']!);
+        const jointsOffset = offsetOf(prim.attributes['JOINTS_0']!);
+        const indices = readIndices(prim.indices);
+        for (let i = 0; i < indices.length; i += 3) {
+          const ids = indices.slice(i, i + 3);
+          if (ids.every(v => view.getUint16(jointsOffset + v * 8, true) === joint))
+            triangles.push(ids.map(v => new Vector3(...positions[v]!)));
+        }
+      }
+      expect(triangles.length).toBeGreaterThan(0);
+      // The knee shield covers the first ~15%; sample below its hem so
+      // the hit is the boot shaft, not the closer overlapping knee plate.
+      for (const t of [.20, .30, .40, .55, .70, .85, .95]) {
+        const origin = new Vector3(...bone.head).lerp(new Vector3(...bone.tail), t);
+        for (let azimuth = 0; azimuth < 32; azimuth++) {
+          const angle = azimuth * Math.PI / 16;
+          const ray = new Ray(origin, new Vector3(Math.cos(angle), 0, Math.sin(angle)));
+          let nearest = Infinity;
+          for (const [a, b, c] of triangles) {
+            const hit = ray.intersectTriangle(a!, b!, c!, false, new Vector3());
+            if (hit) nearest = Math.min(nearest, hit.distanceTo(origin));
+          }
+          const label = `${name} shin ${t}, angle ${azimuth}`;
+          expect(nearest, `open boot at ${label}`).toBeLessThan(.18);
+          const surface = ray.at(nearest, new Vector3()).toArray() as Vec3;
+          expect(sdBody(surface, body), `boot cuts flesh at ${label}`).toBeGreaterThan(.008);
+        }
+      }
+    }
   });
 });
 

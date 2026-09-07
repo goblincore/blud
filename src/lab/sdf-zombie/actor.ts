@@ -193,7 +193,7 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
     m.lastBodyYaw = f.bodyYaw;
 
     let points = stepRig(
-      { ...m.bound.rig, restPose: f.restPose, bodyYaw: f.bodyYaw }, sdt,
+      { ...m.bound.rig, restPose: f.restPose, bodyYaw: f.bodyYaw, posePins: f.posePins }, sdt,
       {
         gravity: f.gravity,
         damping: 0.06,

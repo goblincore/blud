@@ -46,6 +46,7 @@
 // motion pipeline — it reads the posed prims.
 //
 import { soldierFallPose } from './soldier-fall';
+import { stepSoldierFootwork, type SoldierFootwork } from './soldier-footwork';
 import type { BuildResult } from './build-body';
 import type { Wound, WoundType } from './damage';
 import type { LimbId, Vec3 } from './types';
@@ -61,7 +62,7 @@ import type { WanderBounds, WanderState } from './wander';
 import { headingDir, stepWander, wrapPi, type Rng } from './wander';
 import type { PlantState, AimState } from './ik';
 import {
-  IK_TUNING, makeAim, makePlant, poleReflect, solveChain, solvePlantedLeg,
+  IK_TUNING, makeAim, makePlant, poleReflect, solveChain, solveHingeLeg, solvePlantedLeg,
   stepAim, stepPlant,
 } from './ik';
 import type { StaggerKind, StaggerState } from './stagger';
@@ -151,6 +152,14 @@ export const FIRE = {
 export const STANDING_RIG = {
   gravityY: -2.2,
   restStiffness: 0.18,
+} as const;
+
+/** Combat steps keep enough flexion for a weight-bearing knee bend. */
+const SOLDIER_STANCE = {
+  blendRate: 6,
+  hipDrop: .115,
+  stanceWidth: .22,
+  supportReserve: .04,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -289,6 +298,9 @@ export interface MotionState {
   fallStrength?: number;
   plantL: PlantState;
   plantR: PlantState;
+  stanceBlend?: number;
+  footwork?: SoldierFootwork;
+  walkPosture?: number;
   aim: AimState;
   recoil: RecoilState;
   /** The body's APPLIED yaw (rad) — follows wander.heading at the damped
@@ -407,6 +419,8 @@ export interface MotionFrame {
   bodyYaw: number;
   /** Rest targets per rig point, world space. rig.restPose ← this. */
   restPose: Vec3[];
+  /** Firm combat leg joints; absent returns the whole body to Verlet. */
+  posePins?: readonly number[];
   /** Multiply stepRig's restStiffness by this (the collapse ramp). */
   restPull: number;
   /** Gravity for stepRig this frame (soft standing vs full falling weight). */
@@ -525,6 +539,10 @@ export function stepMotion(
 
   // --- locomotion (standing only) -----------------------------------------
   let wander = state.wander;
+  // Waiting for a support is not an AI deceleration command. Keep the
+  // requested speed separate so every footfall does not restart acceleration.
+  if (state.footwork && !collapsed)
+    wander = { ...wander, speed: state.footwork.driveSpeed };
   const travelCruise = profile.name === 'soldier' && (sig.wounded.legL || sig.wounded.legR)
     ? profile.cruise * 0.55 : profile.cruise;
   if (!collapsed && cfg.wander) wander = stepWander(wander, rng, dt, bounds, travelCruise,
@@ -547,6 +565,33 @@ export function stepMotion(
     const yawRate = dt > 1e-9 ? applied / dt : 0;
     lean = clamp(yawRate * MOTION_TUNING.turnLean, -MOTION_TUNING.turnLeanMax, MOTION_TUNING.turnLeanMax);
   }
+
+  const aimedSoldier = profile.name === 'soldier' && cfg.faceHeading !== undefined;
+  // Real locomotion shares fixed supports in patrol and combat. Forced-speed
+  // authoring previews keep their existing treadmill clip.
+  const groundedSoldier = profile.name === 'soldier' && (aimedSoldier || cfg.forceSpeed === undefined)
+    && !collapsed && !sig.missing.legL && !sig.missing.legR;
+  const stanceBlend = clamp((state.stanceBlend ?? 0) + (groundedSoldier ? 1 : -1) * SOLDIER_STANCE.blendRate * dt, 0, 1);
+  const stanceDrop = SOLDIER_STANCE.hipDrop * stanceBlend;
+  const walkPosture = clamp((state.walkPosture ?? 0) + (groundedSoldier && !aimedSoldier ? 1 : -1) * 3 * dt, 0, 1);
+  const footwork = groundedSoldier ? stepSoldierFootwork(state.footwork, {
+    fromRoot: state.wander.pos, desiredRoot: wander.pos, yaw: bodyYaw, dt,
+    feet: [havePoints ? points[idx.footL]!.pos : joints.base[idx.footL]!, havePoints ? points[idx.footR]!.pos : joints.base[idx.footR]!],
+    hips: (['L', 'R'] as const).map(side => {
+      const p = joints.base[idx[`hip${side}`]]!;
+      return [p[0] - joints.pelvis[0], p[1] - stanceDrop, p[2] - joints.pelvis[2]] as Vec3;
+    }) as [Vec3, Vec3],
+    homes: (['L', 'R'] as const).map(side => {
+      const p = joints.base[idx[`foot${side}`]]!;
+      return [Math.sign(p[0] - joints.pelvis[0]) * SOLDIER_STANCE.stanceWidth, joints.groundY, p[2] - joints.pelvis[2]] as Vec3;
+    }) as [Vec3, Vec3],
+    reach: [joints.leg.L[0] + joints.leg.L[1] - SOLDIER_STANCE.supportReserve * stanceBlend,
+      joints.leg.R[0] + joints.leg.R[1] - SOLDIER_STANCE.supportReserve * stanceBlend],
+    lift: [sig.wounded.legL ? .04 : .07, sig.wounded.legR ? .04 : .07],
+    groundY: joints.groundY,
+  }) : undefined;
+  if (footwork) wander = { ...wander, pos: footwork.root,
+    speed: dt > 0 ? Math.hypot(footwork.root[0] - state.wander.pos[0], footwork.root[2] - state.wander.pos[2]) / dt : 0 };
 
   // Gait amplitude follows actual speed — idle beats and the wander toggle
   // fade the stride out instead of stepping in place like a treadmill.
@@ -579,6 +624,9 @@ export function stepMotion(
     wounded: sig.wounded,
   };
   const armStyle = pickArmStyle(cfg, gaitProfile);
+  const travel = sub(wander.pos, state.wander.pos);
+  const travelYaw = cfg.faceHeading !== undefined && Math.hypot(travel[0], travel[2]) > 1e-6
+    ? Math.atan2(travel[0], travel[2]) : bodyYaw;
   // The body's REST leg segment vectors (body-local) — curve-mode gaits
   // rebuild their knee/foot offsets from the clip angles with THESE lengths.
   // The zombie gets limbs too, but SHAMBLE.curves is undefined so nothing
@@ -600,9 +648,6 @@ export function stepMotion(
       ...(state.gait.cycles === undefined ? {} : { cycles: state.gait.cycles + stagger.phaseKnock * gaitProfile.strideFreq }) },
     skew, dt * cadence, armStyle, gaitProfile, limbs,
   );
-  const travel = sub(wander.pos, state.wander.pos);
-  const travelYaw = cfg.faceHeading !== undefined && Math.hypot(travel[0], travel[2]) > 1e-6
-    ? Math.atan2(travel[0], travel[2]) : bodyYaw;
 
   // The melee swing, if the brain is driving one. Composed exactly where a
   // stagger composes — see attack.ts's header. A collapsed body never swings.
@@ -635,7 +680,12 @@ export function stepMotion(
       : blend;
   const targets: Vec3[] = joints.base.map((base, i) => {
     const name = joints.names[i]!;
-    const gaitLocal = name === 'pelvis' ? gait.pose.rootOffset : gait.pose.offsets[name];
+    // Footwork already places the weight-bearing frame over its supports.
+    // Adding the clip's unrelated hip sway moves it off those contacts.
+    const rawGaitLocal = footwork && (name === 'pelvis' || name === 'hips' || name === 'hipL' || name === 'hipR')
+      ? Z : name === 'pelvis' ? gait.pose.rootOffset : gait.pose.offsets[name];
+    // Quiet the old clip's upper-body oscillation in the heavy patrol walk.
+    const gaitLocal = walkPosture === 0 ? rawGaitLocal : scale(rawGaitLocal, 1 - .75 * walkPosture);
     const movingLeg = name === 'kneeL' || name === 'kneeR' || name === 'footL' || name === 'footR' || name === 'toeL' || name === 'toeR';
     let gaitOff = movingLeg && travelYaw !== bodyYaw ? rotateYaw(gaitLocal, travelYaw - bodyYaw) : gaitLocal;
     if (profile.name === 'soldier' && movingLeg) {
@@ -661,7 +711,7 @@ export function stepMotion(
     const off = rotateYaw(leaned, bodyYaw);
     return [
       pivot[0] + shift[0] + spun[0] + off[0],
-      spun[1] + off[1],
+      spun[1] + off[1] - (name.startsWith('foot') || name.startsWith('toe') ? 0 : stanceDrop),
       pivot[2] + shift[2] + spun[2] + off[2],
     ];
   });
@@ -670,13 +720,14 @@ export function stepMotion(
   // The whole upper body pitches forward about the hips joint: a ROTATION of
   // targets, so no segment length changes. Zero for the shamble — the branch
   // is skipped entirely so the zombie's arithmetic is untouched.
-  if (gait.pose.lean !== 0 && !collapsed && idx.hips !== undefined) {
+  const torsoLean = gait.pose.lean * blend * (1 - walkPosture) + .24 * walkPosture;
+  if (torsoLean !== 0 && !collapsed && idx.hips !== undefined) {
     const pivotP = targets[idx.hips]!;
     const right = rotateYaw([1, 0, 0], bodyYaw);
     // Forward lean = POSITIVE rotation about +right for the up-pointing
     // spine (right-hand rule takes +y toward +z) — the reach pivot's negated
     // convention applies to the DOWN-pointing hang, not to this chain.
-    const qLean = qFromAxisAngle(right, gait.pose.lean * blend);
+    const qLean = qFromAxisAngle(right, torsoLean);
     const hipsY = joints.base[idx.hips]![1];
     joints.names.forEach((name, i) => {
       if (name === 'pelvis' || name === 'hips') return;
@@ -786,7 +837,7 @@ export function stepMotion(
         carry.right, right, inward, armPresence);
       targets[iE] = add(r.elbow, rotateYaw(stagger.offsets.elbowR ?? Z, bodyYaw));
       targets[iH] = add(r.hand, rotateYaw(stagger.offsets.handR ?? Z, bodyYaw));
-      gun = gunPoseFromArm(targets[iE]!, targets[iH]!, right, carry.gunPitch);
+      gun = gunPoseFromArm(targets[iE]!, targets[iH]!, right, carry.gunPitch, profile.prop?.scale);
       // Keep the authored wrist/gun orientation, then swivel the elbow out
       // of the vest. The shoulder and grip do not move, nor do arm lengths.
       targets[iE] = alignElbow(targets[iS]!, targets[iE]!, targets[iH]!, rotateYaw([-inward, -1, 0.3], bodyYaw));
@@ -831,7 +882,7 @@ export function stepMotion(
   // yaw (not wander.heading — the knee must agree with the turned body
   // mid-turn, same contract as every other body-local thing this frame).
   const legPole = headingDir(bodyYaw);
-  if (cfg.faceHeading !== undefined && !collapsed) {
+  if (cfg.faceHeading !== undefined && !collapsed && !footwork) {
     // Travel can reverse under an aimed torso. Swing feet follow travel, but
     // the knee hinge still faces the chest instead of turning inside out.
     for (const [side, hip, knee, foot] of [
@@ -863,7 +914,18 @@ export function stepMotion(
   const missingLegR = sig.missing.legR;
   let plantL = state.plantL;
   let plantR = state.plantR;
-  if (!collapsed) {
+  if (footwork) {
+    for (const [side, n] of [['L', 0], ['R', 1]] as const) {
+      const hip = idx[`hip${side}`], knee = idx[`knee${side}`], foot = idx[`foot${side}`];
+      const solved = solveHingeLeg(targets[hip]!, footwork.feet[n], joints.leg[side], legPole);
+      targets[knee] = solved.knee;
+      targets[foot] = solved.foot;
+      const previous = side === 'L' ? state.plantL : state.plantR;
+      const phase = footwork.swing?.side === n ? 'swing' : 'stance';
+      const plant: PlantState = { phase, plantPoint: footwork.feet[n], age: previous.phase === phase ? previous.age + dt : 0 };
+      if (side === 'L') plantL = plant; else plantR = plant;
+    }
+  } else if (!collapsed) {
     if (!missingLegL) {
       plantL = plantStep(plantL, gait.pose.stance.legL, idx.footL!);
       plantLeg(plantL, 'hipL', 'kneeL', 'footL', joints.leg.L);
@@ -979,7 +1041,7 @@ export function stepMotion(
   const nextState: MotionState = {
     ...(fallPose ? { fallPose, fallFatal, fallImpact, fallStrength } : {}),
     wander, gait: gait.state, stagger: stagger.state, collapse: collapse.state,
-    plantL, plantR, aim, recoil, bodyYaw, blend,
+    plantL, plantR, aim, recoil, bodyYaw, blend, stanceBlend, footwork, walkPosture,
     runWeight: rw,
     fireHold,
     sinceFire,
@@ -996,6 +1058,10 @@ export function stepMotion(
       heading: wander.heading,
       bodyYaw,
       restPose: targets,
+      // Hit reactions offset joints independently. Let Verlet absorb those
+      // impulses rather than hard-pinning incompatible torso/leg targets.
+      ...(footwork && !stagger.staggered && recoil.joint === null ? { posePins: (['pelvis', 'hips', 'hipL', 'hipR', 'kneeL', 'kneeR', 'footL', 'footR', 'toeL', 'toeR'] as const)
+        .map(name => idx[name]).filter(i => i !== undefined) } : {}),
       restPull: structural ? 1 : collapse.restPull,
       gravity: structural ? [0, -1.5, 0] : collapsed
         ? [0, MOTION_TUNING.collapseGravity, 0]

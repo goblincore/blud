@@ -2,9 +2,10 @@
 import { describe, it, expect } from 'vitest';
 import { makeZombieMind, makeSoldierMind, type MindInput } from './enemy-mind';
 import { SOLDIER_TUNING } from '../soldier-brain';
+import { BRAIN_TUNING } from '../brain';
 
 /** The soldier's preferred range, derived so a retune cannot rot the fixture —
- *  see soldier-brain.test.ts's note. Also inside the zombie's engageRange. */
+ *  see soldier-brain.test.ts's note. Zombie pursuit uses its own range below. */
 const MID = SOLDIER_TUNING.preferredRange;
 
 const DT = 1 / 60;
@@ -26,7 +27,9 @@ function mindInput(over: Partial<MindInput> = {}): MindInput {
 describe('makeZombieMind', () => {
   it('wraps stepBrain and reports the zombie vocabulary in debug', () => {
     const m = makeZombieMind();
-    const out = m.step(mindInput());
+    const out = m.step(mindInput({
+      player: { x: 0, z: BRAIN_TUNING.engageRange + 0.4, room: 3 },
+    }));
     expect(out.attack).toBeNull();
     expect(out.fire).toBe(false);
     expect(out.faceHeading).toBeNull();

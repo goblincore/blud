@@ -193,13 +193,12 @@ describe('stepSoldierBrain — the firing cycle', () => {
     expect(r.out.brain.state).toBe('engage');
   });
 
-  it('emits exactly ONE fire pulse per cycle', () => {
-    // Long enough for one aim+fire+recover, short enough that the next
-    // decision tick cannot start a second cycle (cooldown is 1.0 s).
-    const span = SOLDIER_TUNING.repositionSec + SOLDIER_TUNING.aimSec
-      + SOLDIER_TUNING.recoverSec + 0.2;
-    const r = until(alerted(), { roll: 0 }, span);
+  it('emits a single-frame fire pulse, then recovers before the follow-up', () => {
+    const r = until(alerted(), { roll: 0 }, 5, out => out.fire);
     expect(r.fires).toBe(1);
+    const next = stepSoldierBrain(r.brain, input({ roll: 0 }));
+    expect(next.fire).toBe(false);
+    expect(next.brain.state).toBe('recover');
   });
 
   it('holds the face lock and halts through aim, fire and recover', () => {
@@ -379,5 +378,25 @@ describe('soldier combat regressions', () => {
     const start = stepSoldierBrain({ ...alerted(), driftT: 0 }, input());
     const out = run(start.brain, {}, 1.8);
     expect(out.halt).toBe(true);
+  });
+});
+
+
+describe('soldier pressure bursts', () => {
+  it.each([{ roll: .8, count: 2 }, { roll: .1, count: 3 }])('commits to $count quick shots without moving between them', ({ roll, count }) => {
+    let brain = makeSoldierBrain();
+    const shots: number[] = [];
+    for (let frame = 0; frame < 600; frame++) {
+      const out = stepSoldierBrain(brain, input({ alerted: true, roll }));
+      brain = out.brain;
+      if (out.fire) shots.push(frame * DT);
+      if (shots.length && brain.state !== 'settle') expect(out.halt).toBe(true);
+      if (brain.state === 'settle') break;
+    }
+    expect(shots).toHaveLength(count);
+    for (let i = 1; i < shots.length; i++) {
+      expect(shots[i]! - shots[i - 1]!).toBeGreaterThan(.2);
+      expect(shots[i]! - shots[i - 1]!).toBeLessThan(.5);
+    }
   });
 });

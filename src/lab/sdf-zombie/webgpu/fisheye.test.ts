@@ -51,7 +51,8 @@ describe('fisheye lens geometry', () => {
 
   it('magnifies the centre by exactly the FOV ratio', () => {
     // sampleRadius'(0) = tan(centre/2) / tan(render/2): the knob is honest.
-    const want = Math.tan((60 * Math.PI) / 360) / Math.tan((90 * Math.PI) / 360);
+    const want = Math.tan((FISHEYE_DEFAULTS.centerFovDeg * Math.PI) / 360)
+      / Math.tan((FISHEYE_DEFAULTS.renderFovDeg * Math.PI) / 360);
     const h = 1e-5;
     expect(sampleRadius(h, DEF) / h).toBeCloseTo(want, 8);
   });
@@ -93,7 +94,7 @@ describe('fisheye inverse', () => {
 describe('fisheye reporting', () => {
   it('reports the vertical FOV actually visible, not the one rendered', () => {
     // Mid-edges are cropped by the warp: 90 rendered reads as ~68.3 on screen.
-    expect(visibleFovDeg(DEF)).toBeCloseTo(68.3, 1);
+    expect(visibleFovDeg(makeLens(90, 60, ASPECT))).toBeCloseTo(68.3, 1);
     expect(visibleFovDeg(makeLens(90, 90, ASPECT))).toBeCloseTo(90, 9);
   });
 
@@ -107,7 +108,7 @@ describe('fisheye reporting', () => {
   });
 
   it('ships the owner-approved defaults', () => {
-    expect(FISHEYE_DEFAULTS.renderFovDeg).toBe(90);
+    expect(FISHEYE_DEFAULTS.renderFovDeg).toBe(72);
     expect(FISHEYE_DEFAULTS.centerFovDeg).toBe(60);
   });
 

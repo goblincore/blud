@@ -21,6 +21,8 @@ export interface RigState {
   constraints: RigConstraint[];
   /** Authored pose. Points are pulled back toward this every step. */
   restPose: Vec3[];
+  /** Animated weight-bearing joints that must not spring away from contact. */
+  posePins?: readonly number[];
   bends?: RigBendConstraint[];
   /** Heading of the authored body frame; independent of flinch/rest targets. */
   bodyYaw?: number;
@@ -138,6 +140,7 @@ export function stepRig(state: RigState, dt: number, opts: StepOpts): RigState {
   const st = 1 - Math.pow(1 - opts.restStiffness, Math.max(dt, 1e-4) * 60);
 
   let points = state.points.map((p, i) => {
+    if (state.posePins?.includes(i)) return { pos: state.restPose[i]!, prev: state.restPose[i]!, pinned: true };
     if (p.pinned) return { ...p, prev: p.pos };
     const vel = scale(sub(p.pos, p.prev), 1 - opts.damping);
     let next = add(add(p.pos, vel), scale(opts.gravity, dt * dt));
@@ -158,7 +161,10 @@ export function stepRig(state: RigState, dt: number, opts: StepOpts): RigState {
     points = constrainRigBends({ ...state, points }).points;
   }
 
-  return constrainRigBends({ ...state, points });
+  const result = constrainRigBends({ ...state, points });
+  if (!state.posePins?.length) return result;
+  return { ...result, points: result.points.map((p, i) => state.posePins!.includes(i)
+    ? { ...p, pinned: state.points[i]!.pinned } : p) };
 }
 
 /** Guards against NaN/Infinity poisoning the whole rig after an extreme impulse. */

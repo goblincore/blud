@@ -125,7 +125,7 @@ export const SOLDIER_TUNING = {
   noticeRange: 9,
   aimTolerance: 0.12,
   moveSec: 1.4,
-  moveDistance: 1.1,
+  moveDistance: 1.35,
   arriveRadius: 0.3,
   /** Half-angle of the notice cone (rad). The zombie's value. */
   noticeCone: (70 * Math.PI) / 180,
@@ -148,17 +148,15 @@ export const SOLDIER_TUNING = {
   fireRange: 6.0,
   /** Where he would RATHER stand (m). A preference his movement drifts
    *  toward, not a gate on anything. */
-  preferredRange: 3.0,
+  preferredRange: 2.6,
   /** Inside this he backs off while shooting (m). Just outside the zombie's
    *  meleeRadius (1.25) — he gives ground rather than being shoved. */
-  tooClose: 2.0,
+  tooClose: 1.6,
   /** Slack around preferredRange before he bothers closing (m). Stops a
    *  half-metre drift from starting a walk. */
-  rangeSlack: 1.0,
-  /** Chance of a follow-up shot when one lands (rolled per shot, so a burst
-   *  is usually 1-2 and occasionally 3). Doom's sergeant is not a metronome
-   *  of single taps. */
-  burstChance: 0.45,
+  rangeSlack: 0.6,
+  /** Every uninterrupted burst has two shots; chance of adding a third. */
+  burstChance: 0.65,
   /** Hard cap on follow-ups, so a burst is at most burstMax+1 shots.
    *
    *  WITHOUT IT THE BURST NEVER ENDS. The follow-up is rolled per shot, so a
@@ -169,23 +167,25 @@ export const SOLDIER_TUNING = {
   /** Held, facing, weapon-up beat after the LAST shot of a burst, before he
    *  may move again (s). The pause is the read: without it he flashes and is
    *  instantly strafing, which looks like a twitch rather than an attack. */
-  settleSec: 0.45,
+  settleSec: 0.22,
   /** The telegraph (s). Doom's shotgun guy has a distinct pre-fire frame and
    *  it is the only reason a sergeant is dodgeable; this is that frame. If
    *  the playtest says the soldier is unreadable, this is the first knob. */
-  aimSec: 0.7,
+  aimSec: 0.5,
+  /** Reacquire between shots with the weapon already shouldered. */
+  followAimSec: 0.12,
   /** Recoil hold after the shot (s). Sits under FIRE.holdSec (0.85) so the
    *  carry is still in the fire pose when he resumes. */
-  recoverSec: 0.35,
-  /** Floor between shots (s). */
-  minCooldownSec: 1.0,
+  recoverSec: 0.22,
+  /** Cooldown after a shot before a NEW burst; follow-ups bypass it (s). */
+  minCooldownSec: 0.55,
   /** Chance to take an ELIGIBLE firing opportunity, rolled on a decision
    *  tick. Doom monsters roll for the attack rather than running a timer; a
    *  fixed cooldown metronomes, and metronoming is the fastest way to make an
    *  enemy read as a machine. */
-  refireRoll: 0.5,
+  refireRoll: 0.85,
   /** The decision tick (s) — see the comment on the tick itself. */
-  repositionSec: 1.5,
+  repositionSec: 0.65,
   /** Blast hold, matching the zombie's, so a shot soldier lurches for as long
    *  as a shot zombie does (s). */
   blastHoldSec: 0.55,
@@ -299,11 +299,12 @@ export function stepSoldierBrain(
     driftT = Math.min(driftT, 0.35);
   }
   if (state === 'aim') {
-    phaseT = Math.min(tuning.aimSec, phaseT + dt);
-    if (phaseT < tuning.aimSec || Math.abs(wrapPi(faceBearing - self.yaw)) > tuning.aimTolerance) {
+    const aimDuration = burstShots > 0 ? tuning.followAimSec : tuning.aimSec;
+    phaseT = Math.min(aimDuration, phaseT + dt);
+    if (phaseT < aimDuration || Math.abs(wrapPi(faceBearing - self.yaw)) > tuning.aimTolerance) {
       return pack({
         halt: true, faceHeading: faceBearing, weaponUp: true,
-        aimT: tuning.aimSec > 0 ? phaseT / tuning.aimSec : 1,
+        aimT: aimDuration > 0 ? phaseT / aimDuration : 1,
       });
     }
     // The telegraph is done: THIS frame is the shot.
@@ -311,7 +312,7 @@ export function stepSoldierBrain(
     // Roll the follow-up HERE, as the shot lands, so a burst is decided by the
     // same event that fired it rather than by the next decision tick.
     burstShots += 1;
-    burstLeft = (burstShots <= tuning.burstMax && input.roll < tuning.burstChance) ? 1 : 0;
+    burstLeft = (burstShots < 2 || (burstShots <= tuning.burstMax && input.roll < tuning.burstChance)) ? 1 : 0;
     return pack({
       halt: true, faceHeading: faceBearing, weaponUp: true, fire: true, aimT: 1,
     });
@@ -355,7 +356,7 @@ export function stepSoldierBrain(
       return pack({ halt: true, faceHeading: faceBearing, weaponUp: true });
     }
     state = 'engage'; moveGoal = null; moveT = 0;
-    driftT = Math.max(driftT, 0.65);
+    driftT = Math.max(driftT, 0.25);
   }
 
   // --- the decision tick -------------------------------------------------
@@ -388,7 +389,7 @@ export function stepSoldierBrain(
     if (moveT <= 0 || Math.hypot(moveGoal[0] - self.x, moveGoal[2] - self.z) < tuning.arriveRadius
       || (input.canMoveTo && !input.canMoveTo(moveGoal))) {
       moveGoal = null; moveT = 0;
-      driftT = Math.max(driftT, 0.65);
+      driftT = Math.max(driftT, 0.25);
       return pack({ halt: true, faceHeading: faceBearing });
     }
     return pack({ target: moveGoal, faceHeading: faceBearing });

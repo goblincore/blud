@@ -66,7 +66,7 @@ export function createEncounterDirector(nav: EncounterNavigation, boxes: readonl
         path: Vec3[];
         age: number;
     }>();
-    let clock = 0, owner: number | null = null, lease = 0, pause = 0;
+    let clock = 0, owner: number | null = null, lease = 0;
     const observed = new Map<number, boolean>();
     const nextPoint = (a: EncounterAgent, goal: Vec3, dt: number) => {
         let route = routes.get(a.id);
@@ -79,16 +79,15 @@ export function createEncounterDirector(nav: EncounterNavigation, boxes: readonl
     };
     return {
         shot(id: number) { lastShot.set(id, clock); if (owner === id) {
-            owner = null;
-            lease = 0;
-            pause = .45;
+            // Keep the lane through the ~0.35 s recovery/re-aim gap.
+            // Each follow-up refreshes it; the final shot expires naturally.
+            lease = .8;
         } },
-        clear() { memory.clear(); routes.clear(); lastShot.clear(); owner = null; lease = 0; pause = 0; },
+        clear() { memory.clear(); routes.clear(); lastShot.clear(); owner = null; lease = 0; },
         debug: () => ({ owner, memories: [...memory].map(([id, m]) => ({ id, at: m.at, age: m.age })) }),
         update(agents: readonly EncounterAgent[], player: BrainPlayer | null, gunshot: boolean, dt: number): Map<number, EncounterOrder> {
             clock += dt;
             lease -= dt;
-            pause = Math.max(0, pause - dt);
             observed.clear();
             const ids = new Set(agents.map(a => a.id));
             for (const id of memory.keys())
@@ -130,7 +129,7 @@ export function createEncounterDirector(nav: EncounterNavigation, boxes: readonl
                 owner = null;
                 lease = 0;
             }
-            if (owner === null && pause <= 0 && candidates.length) {
+            if (owner === null && candidates.length) {
                 candidates.sort((a, b) => (lastShot.get(a.id) ?? -100) - (lastShot.get(b.id) ?? -100) || a.id - b.id);
                 owner = candidates[0]!.id;
                 lease = 3.5;

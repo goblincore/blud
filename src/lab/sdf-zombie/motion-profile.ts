@@ -24,7 +24,7 @@ export interface MotionProfile {
   /** Which carry each locomotion state uses; absent = no held weapon. */
   carries?: { walk: CarryName; run: CarryName; fire: CarryName };
   /** The held prop, if any. */
-  prop?: { url: string };
+  prop?: { url: string; scale?: number };
 }
 
 export const ZOMBIE_PROFILE: MotionProfile = {
@@ -70,7 +70,7 @@ export const SOLDIER_PROFILE: MotionProfile = {
   armStyle: 'carry',
   carries: { walk: 'low', run: 'chest', fire: 'aim' },
   turnRate: 5.5,
-  prop: { url: '/assets/lab/soldier-shotgun.glb' },
+  prop: { url: '/assets/lab/soldier-shotgun.glb', scale: 1.2 },
 };
 
 const BY_NAME: Record<string, MotionProfile> = {

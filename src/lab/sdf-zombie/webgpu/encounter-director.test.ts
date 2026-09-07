@@ -2,15 +2,42 @@ import { describe, it, expect } from 'vitest';
 import { createEncounterDirector, clearFireLane, type EncounterAgent } from './encounter-director';
 import { createEncounterNavigation } from './encounter-navigation';
 import { ROOMS, TUNNELS, levelColliders } from './game-level';
+import { makeSoldierBrain, stepSoldierBrain } from '../soldier-brain';
 const nav = createEncounterNavigation(ROOMS, TUNNELS, levelColliders());
 const a = (id: number, x: number, z: number): EncounterAgent => ({ id, pos: [x, 0, z], home: [x, 0, z], yaw: Math.PI, room: 1, soldier: true, disabled: false });
 describe('mixed encounter coordination', () => {
-    it('grants one firing lane at a time and rotates after shots', () => {
+    it('lets real soldier brains finish three-shot bursts before another soldier takes the lane', () => {
+        const d = createEncounterDirector(nav, []), agents = [a(1, -2, 2), a(2, 2, 2)];
+        const player = { x: 0, z: 0, room: 1 }, dt = 1 / 60;
+        const brains = agents.map(() => makeSoldierBrain());
+        const shots: { id: number; time: number }[] = [];
+        for (let frame = 0; frame < 480; frame++) {
+            const orders = d.update(agents, player, false, dt);
+            agents.forEach((agent, i) => {
+                const order = orders.get(agent.id)!;
+                const out = stepSoldierBrain(brains[i]!, {
+                    dt, self: { x: agent.pos[0], z: agent.pos[2], yaw: Math.atan2(-agent.pos[0], -agent.pos[2]), room: 1 },
+                    player, alerted: true, lineOfSight: order.visible, mayFire: order.fireAllowed, roll: .1, rollDrift: .5,
+                });
+                brains[i] = out.brain;
+                if (out.fire) { shots.push({ id: agent.id, time: frame * dt }); d.shot(agent.id); }
+            });
+        }
+        expect(shots.length).toBeGreaterThanOrEqual(6);
+        expect(shots.slice(0, 6).map(s => s.id)).toEqual([1, 1, 1, 2, 2, 2]);
+        for (const i of [1, 2, 4, 5]) expect(shots[i]!.time - shots[i - 1]!.time).toBeLessThan(.5);
+    });
+    it('holds one firing lane through quick follow-ups, then rotates after the burst', () => {
         const d = createEncounterDirector(nav, []), agents = [a(1, -2, 2), a(2, 0, 2), a(3, 2, 2)], player = { x: 0, z: 0, room: 1 };
         let orders = d.update(agents, player, false, .1);
         expect([...orders.values()].filter(o => o.fireAllowed)).toHaveLength(1);
         expect(orders.get(1)!.fireAllowed).toBe(true);
         d.shot(1);
+        orders = d.update(agents, player, false, .4);
+        expect(orders.get(1)!.fireAllowed).toBe(true);
+        d.shot(1);
+        orders = d.update(agents, player, false, .4);
+        expect(orders.get(1)!.fireAllowed).toBe(true);
         orders = d.update(agents, player, false, .5);
         expect(orders.get(2)!.fireAllowed).toBe(true);
         expect(orders.get(1)!.fireAllowed).toBe(false);

@@ -820,7 +820,7 @@ export function createZombieActor(opts: {
       bodyYaw = f.bodyYaw;
       view.setRootShift(f.rootShift[0], f.rootShift[2], f.bodyYaw);
       let points = stepRig(
-        { ...bound.rig, restPose: f.restPose, bodyYaw: f.bodyYaw }, sdt,
+        { ...bound.rig, restPose: f.restPose, bodyYaw: f.bodyYaw, posePins: f.posePins }, sdt,
         {
           gravity: f.gravity,
           damping: 0.06,

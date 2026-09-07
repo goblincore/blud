@@ -10,6 +10,15 @@ import type { Vec3 } from './types';
 const near = (a: Vec3, b: Vec3, eps = 1e-6) => len(sub(a, b)) < eps;
 
 describe('carry maths', () => {
+  it('scales the whole gun while keeping the grip seated and the other locators aligned', () => {
+    const hand: Vec3 = [-.2, 1.6, .3];
+    const pose = gunPoseFromArm([-.2, 1.4, 0], hand, [1, 0, 0], .4, 1.2);
+    expect(near(gunPoint(pose, GUN_GRIP.gripHand), hand, 1e-9)).toBe(true);
+    for (const point of [GUN_GRIP.foreHand, GUN_GRIP.muzzle]) {
+      expect(len(sub(gunPoint(pose, point), hand)))
+        .toBeCloseTo(len(sub(point, GUN_GRIP.gripHand)) * 1.2, 9);
+    }
+  });
   it('lookQuat maps +z onto fwd and keeps +x near the requested right', () => {
     const fwd = normalize([0, 0.3, 1]);
     const q = lookQuat(fwd, [0, 1, 0]);

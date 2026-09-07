@@ -1,4 +1,7 @@
 # Soldier kit — the POLYGON half of the soldier, authored in WAM.
+# 2026-09-07: enlarged 1.2x with the body. Historical measurements below
+# use the original 1.70 m authoring units; height 2.04 now scales those units.
+# Shorter thigh/root and flared boot changes are authored below.
 #
 # WHY TWO LANGUAGES FOR ONE CHARACTER: see goblin-kit.wam's header — flesh in
 # .blob because blended SDFs are round by construction, plate in .wam because
@@ -81,7 +84,8 @@
 # lowest-geometry lint is satisfied by the boots standing on y=0. A warning
 # about anything else is real.
 model soldier-kit
-  height 1.70
+  # 1.2x original units; thigh/root edits below remove 4.8 cm of height.
+  height 2.04
   # chunky = 8-sided lofts, matching the other two kits: faceted plate against
   # smooth raymarched flesh is the contrast this experiment is for.
   style chunky
@@ -101,7 +105,7 @@ skeleton
   # WAM's root is a bare POINT, so `hips` restores the missing segment and
   # every .blob `parent=pelvis` becomes `parent=hips`. See goblin-kit.wam —
   # leaving it out is a silent 10 cm error.
-  root pelvis at 0.5118
+  root pelvis at 0.488249
   bone hips   parent=pelvis dir=up len=0.0588
   bone spine1 parent=hips   dir=up pitch=-1 len=0.0941
   bone chest  parent=spine1 dir=up pitch=-1 len=0.1000
@@ -118,7 +122,7 @@ skeleton
     bone upperarm parent=clavicle dir=down tilt=8 pitch=-2 len=0.1529
     bone forearm  parent=upperarm dir=down tilt=4 pitch=-8 len=0.1412
     bone hand     parent=forearm  dir=down pitch=-6        len=0.0559
-    bone thigh    parent=hips     side=0.0400 dir=down tilt=2 len=0.2471
+    bone thigh    parent=hips     side=0.0400 dir=down tilt=2 len=0.223529
     bone shin     parent=thigh    dir=down tilt=2 len=0.2471
     bone foot     parent=shin     dir=fwd len=0.0765
   end
@@ -174,26 +178,25 @@ parts
     # bend-reach fight.
     # A wider beveled shield, with its lower skirt separated from the boot.
     loft knee bones=thigh..shin material=plate shape=squarish
-      ring 0.41 w=0.076 dtop=0.091 dbot=0.071
-      ring 0.44 w=0.094 dtop=0.108 dbot=0.080
-      ring 0.53 w=0.096 dtop=0.112 dbot=0.080
-      ring 0.58 w=0.078 dtop=0.094 dbot=0.073
+      ring 0.385 w=0.076 dtop=0.091 dbot=0.071
+      ring 0.415 w=0.094 dtop=0.108 dbot=0.080
+      ring 0.505 w=0.096 dtop=0.112 dbot=0.080
+      ring 0.555 w=0.078 dtop=0.094 dbot=0.073
       cap start=none end=none
 
-    # BOOT SHAFT — continues the shin's line past the ankle to y=0.06, over
-    # the 15 cm of bare bone the flesh does not cover (see the header). A
-    # free ray rather than bones=shin..shin because it must run BELOW the
-    # shin bone's tail. cap end=flat closes the bottom: there is no limb for
-    # the disc to pierce, and it reads as the heel seat. The bottom ring is
-    # deliberately NARROWER than the foot's heel ring so the rim tucks inside
-    # it instead of hanging in the air.
-    loft shaft bone=shin at=0.55 dir=down tilt=2 len=0.153 material=plate
-      ring 0.00 w=0.0671 d=0.0671
-      ring 0.25 w=0.0647 d=0.0647
-      ring 0.50 w=0.0635 d=0.0635
-      ring 0.75 w=0.0760 d=0.0760
-      # Flares into the (now bigger) boot instead of narrowing into it.
-      ring 1.00 w=0.0900 d=0.0900
+    # KNEE-HIGH BOOT — a rigid greave following the shin, with its open
+    # cuff tucked beneath the knee shield. The calf has clearance on the
+    # inner side too: the outward offset must not push the flesh through
+    # an eight-sided facet. Keep the old lower endpoint inside the foot.
+    # The foot stays level on its own bone; overlapping shells allow ankle
+    # flexion without exposing the trouser leg or moving the sole.
+    loft shaft bone=shin at=0.045 dir=down tilt=2 len=0.277785 offset=(0.009,0,0) material=plate
+      ring 0.00 w=0.115 d=0.110
+      ring 0.12 w=0.120 d=0.115
+      ring 0.36 w=0.115 d=0.110
+      ring 0.60 w=0.105 d=0.100
+      ring 0.80 w=0.102 d=0.096
+      ring 1.00 w=0.1125 d=0.1035
       cap start=none end=flat
 
     # BOOT FOOT — over the bare flesh foot that IS in the .blob; no foot is
@@ -229,14 +232,14 @@ parts
     # ABOVE the ankle and swallows the shaft's bottom 90 mm — the shaft
     # (0.09 wide at its foot) tucks inside the 0.10-wide heel, one boot, no
     # seam. The toe half steps down so the sole still rocks.
-    loft foot bone=foot at=0.0 dir=fwd len=0.165 frame=up offset=(0,-0.0324,-0.0294) material=plate
-      ring 0.00 w=0.1000 d=0.0880
-      ring 0.20 w=0.1000 d=0.0880
-      ring 0.40 w=0.0980 d=0.0880
-      ring 0.55 w=0.0960 d=0.0760
-      ring 0.75 w=0.0900 d=0.0620
-      ring 0.90 w=0.0700 d=0.0520
-      ring 1.00 w=0.0560 d=0.0440
+    loft foot bone=foot at=0.0 dir=fwd len=0.185 frame=up offset=(0.009,-0.0324,-0.0334) material=plate
+      ring 0.00 w=0.125 d=0.0880
+      ring 0.20 w=0.125 d=0.0880
+      ring 0.40 w=0.1225 d=0.0880
+      ring 0.55 w=0.12 d=0.0760
+      ring 0.75 w=0.1125 d=0.0620
+      ring 0.90 w=0.0875 d=0.0520
+      ring 1.00 w=0.07 d=0.0440
       cap start=flat end=flat
 
   end

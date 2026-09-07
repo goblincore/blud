@@ -68,7 +68,8 @@ export const GUN_GRIP = {
   muzzle: [0, 0, 0.410] as Vec3,
 } as const;
 
-export interface GunPose { root: Vec3; quat: Quat }
+/** Scale applies to the mesh and every gun-local attachment; absent = 1. */
+export interface GunPose { root: Vec3; quat: Quat; scale?: number }
 
 /**
  * Rotation taking gun-local +z onto `fwd` with gun-local +x kept as close
@@ -93,17 +94,17 @@ export function lookQuat(fwd: Vec3, up: Vec3): Quat {
 
 /** The gun's world pose from the right forearm: Grip_Hand on `hand`, muzzle
  *  along elbow→hand pitched by `gunPitch` about `bodyRight`. */
-export function gunPoseFromArm(elbow: Vec3, hand: Vec3, bodyRight: Vec3, gunPitch: number): GunPose {
+export function gunPoseFromArm(elbow: Vec3, hand: Vec3, bodyRight: Vec3, gunPitch: number, size = 1): GunPose {
   const fwd0 = normalize(sub(hand, elbow));
   const fwd = gunPitch === 0 ? fwd0 : qRotate(qFromAxisAngle(bodyRight, -gunPitch), fwd0);
   const quat = lookQuat(fwd, [0, 1, 0]);
-  const root = sub(hand, qRotate(quat, GUN_GRIP.gripHand));
-  return { root, quat };
+  const root = sub(hand, qRotate(quat, scale(GUN_GRIP.gripHand, size)));
+  return { root, quat, scale: size };
 }
 
 /** A gun-local point in world. */
 export function gunPoint(pose: GunPose, local: Vec3): Vec3 {
-  return add(pose.root, qRotate(pose.quat, local));
+  return add(pose.root, qRotate(pose.quat, scale(local, pose.scale ?? 1)));
 }
 
 /**
