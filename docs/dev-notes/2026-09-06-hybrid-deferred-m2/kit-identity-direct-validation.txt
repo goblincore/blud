@@ -1,0 +1,5 @@
+lab-servers: starting vite on 5346
+lab-servers: starting chrome (headless) on debug port 9346
+PASS kit-actor-identity {"spawned":11,"selected":11,"bootActor":1,"meshCount":36}
+  [mem] rss=57MB heap=8MB checks=1
+TASK6 GAME CHECK: PASS (1 checks, phase complete)

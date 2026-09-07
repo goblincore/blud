@@ -26,8 +26,8 @@
 //       FPV gun mesh (cls 17), SDF bones enabled, forward probes both
 //       ways (nearer probe draws over flesh; behind-flesh probe occluded),
 //       world-normal DIRECTION checks on flesh; baked normals in lifecycle
-//   P3  ALL registered characters rendered once (16/16, the zombie-only blind
-//       spot), with kit-descendant tree + material-routing + texel evidence
+//   P3  Every in-scope registered character rendered once, with explicit owner
+//       exclusions and kit-descendant tree + material-routing + texel evidence
 //       for the kit characters and wound/kit/prop detail for
 //       zombie/goblin/soldier
 //   P4  lifecycle: slug sever detach, TWO shared-material live chunks, the
@@ -129,19 +129,12 @@ const check = (name, detail) => {
  *  reproduces the 404 with an in-page fetch and records the status. */
 const MINOTAUR_FACE = 'minotaur-face.png';
 let allowMinotaurFace404 = false;
-/** Set once a character's spawn has been REPRODUCED as the documented
- *  motion-joint wiring gap ('no motion joints'). Only that exact signature
- *  is ever excused, only after its reproduction, and the P3 summary asserts
- *  the blocked set explicitly — never a character-name substring match. */
-let motionJointGapReproduced = false;
 const isLoadFailure = (s) => typeof s === 'string' && (
   s.includes('404') || s.includes('Failed to load') || s.includes('Not Found')
   || s.includes('load failed') || s.includes('ERR_'));
 const isAllowedError = (s) =>
   (allowMinotaurFace404 && typeof s === 'string'
-    && s.includes(MINOTAUR_FACE) && isLoadFailure(s))
-  || (motionJointGapReproduced && typeof s === 'string'
-    && s.includes('no motion joints'));
+    && s.includes(MINOTAUR_FACE) && isLoadFailure(s));
 
 let errMark = 0;
 const noNewErrors = (stage) => {
@@ -302,10 +295,10 @@ const facePoint = async (x, y, z, dist = 1.2) => {
   await enterSimPhase('facePoint');
   const cam0 = await evaluate('__sdfGame.cameraWorld()');
   const yaw = aimYawAt(x + dist, z, x, z);
-  let pitch = Math.atan2(y - cam0[1], Math.hypot(x + dist - cam0[0], z - cam0[2]));
+  let pitch = Math.atan2(y - cam0[1], dist);
   await evaluate(`__sdfGame.setPose(${x + dist}, ${z}, ${yaw}, ${pitch}); __sdfGame.step(2);`);
   const cam1 = await evaluate('__sdfGame.cameraWorld()');
-  pitch = Math.atan2(y - cam1[1], Math.hypot(x + dist - cam1[0], z - cam1[2]));
+  pitch = Math.atan2(y - cam1[1], Math.hypot(x - cam1[0], z - cam1[2]));
   await evaluate(`__sdfGame.setPose(${x + dist}, ${z}, ${yaw}, ${pitch}); __sdfGame.step(4);`);
   await settleAndLock();
   return await assertInFrame('facePoint', x, y, z, 0.97);
@@ -971,14 +964,17 @@ null
   const REGISTRY_PINNED = ['zombie', 'goblin', 'clown', 'clown-alt', 'mouse', 'cyclops',
     'schoolgirl', 'schoolgirl-alt', 'schoolgirl-described', 'strand-fixture',
     'bonewalker', 'dragon', 'box-fixture', 'minotaur', 'soldier', 'female'];
-  const REGISTRY = await evaluate('__sdfGame.characterNames()');
+  const ALL_REGISTERED = await evaluate('__sdfGame.characterNames()');
+  const GAMEPLAY_EXCLUDED = { mouse: 'Unused character, excluded by owner', 'strand-fixture': 'SDF hair-rendering fixture, excluded by owner' };
+  const REGISTRY = ALL_REGISTERED.filter(n => !(n in GAMEPLAY_EXCLUDED));
+  results.excludedFeatures.characters = GAMEPLAY_EXCLUDED;
   assert.ok(Array.isArray(REGISTRY) && REGISTRY.length > 0,
     `__sdfGame.characterNames() must return the registry roster (got ${JSON.stringify(REGISTRY)})`);
-  const missingFromPin = REGISTRY.filter((n) => !REGISTRY_PINNED.includes(n));
-  const staleInPin = REGISTRY_PINNED.filter((n) => !REGISTRY.includes(n));
+  const missingFromPin = ALL_REGISTERED.filter((n) => !REGISTRY_PINNED.includes(n));
+  const staleInPin = REGISTRY_PINNED.filter((n) => !ALL_REGISTERED.includes(n));
   assert.deepEqual({ missingFromPin, staleInPin }, { missingFromPin: [], staleInPin: [] },
     `pinned roster DRIFTED from character-registry.ts:\n    registry-only: ${JSON.stringify(missingFromPin)}\n    pin-only: ${JSON.stringify(staleInPin)}\n    update REGISTRY_PINNED (and any per-character handling) with the registry`);
-  assert.equal(REGISTRY.length, 16, 'roster size sanity — see character-registry.ts');
+  assert.equal(ALL_REGISTERED.length, 16, 'roster size sanity — see character-registry.ts');
   const rendered = {};
   records.stages.characters = rendered; // live reference: saveEvidence() captures each character as it lands
   const baseMeshCount = (await evaluate('__sdfGame.deferredDiagnostics()')).router.counts.mesh;
@@ -991,42 +987,10 @@ null
     await evaluate(`__sdfGame.teleport(${roomIdx + 1}); __sdfGame.step(2);`);
     const before = (await evaluate('__sdfGame.deferredDiagnostics()')).router.counts.mesh;
     allowMinotaurFace404 = name === 'minotaur';
-    // Some registry bodies were never wired into the game's gait schema:
-    // makeMotionJoints nulls when the rig's points cannot all be named
-    // (the exact trap TASKS.md documents for goblin/soldier — fixed for
-    // those, not for every registered body), and createZombieActor throws.
-    // Normal play never hits this (spawnAll spawns zombies + one soldier),
-    // but the roster gate drives the same spawn path, so a block is
-    // REPRODUCED here: the exact error signature is required and recorded,
-    // the character is excluded by EVIDENCE (not by name-based waiver),
-    // and the P3 summary asserts the blocked set explicitly. Any OTHER
-    // spawn failure still fails the gate.
-    let spawned = null, spawnError = null;
-    try {
-      spawned = await evaluate(`__sdfGame.spawnDebugCharacter(${JSON.stringify(name)})`);
-    } catch (e) {
-      spawnError = String(e?.message ?? e);
-    }
+    // Explicit owner exclusions are filtered above. Every in-scope spawn
+    // must succeed; a generic motion-joint exception is not a waiver.
+    const spawned = await evaluate(`__sdfGame.spawnDebugCharacter(${JSON.stringify(name)})`);
     allowMinotaurFace404 = false;
-    if (!spawned) {
-      // BOTH observed shapes of the same wiring gap: the explicit throw
-      // ('no motion joints') and the crash inside makeMotionJoints itself
-      // (a gait joint name missing from the body's index — the strand
-      // fixture's shape). Both carry the makeMotionJoints provenance in the
-      // error text, which is what the narrow acceptance checks.
-      assert.ok(spawnError.includes('makeMotionJoints') || spawnError.includes('no motion joints'),
-        `${name}: spawn failed for an UNDOCUMENTED reason (only the motion-joint wiring gap has reproduced evidence): ${spawnError.slice(0, 400)}`);
-      motionJointGapReproduced = true;
-      rendered[name] = {
-        spawnBlocked: 'motion-joint wiring gap — makeMotionJoints cannot name this body's rig '
-          + '(preexisting; TASKS.md documents the same trap for goblin/soldier, fixed there only). '
-          + 'Normal play never spawns this character (spawnAll = zombies + one soldier).',
-        error: spawnError.slice(0, 300),
-      };
-      saveEvidence();
-      console.log(`  spawn-blocked ${name}: motion-joint gap (reproduced, recorded)`);
-      continue;
-    }
     assert.ok(spawned && spawned.id > 0, `${name}: spawn failed ${JSON.stringify(spawned)}`);
     await evaluate('__sdfGame.step(8)'); // hull build + pose for the new body
     const kitChar = ['goblin', 'clown', 'clown-alt', 'soldier'].includes(name);
@@ -1104,8 +1068,9 @@ null
     // VISIBLE KIT PIXELS (anchor selection + attribution below).
     let kitTree = null, kitTexel = null, kitNode = null;
     if (kitChar) {
-      kitTree = await evaluate(`__sdfGame.debugRegisteredTree('rig-${name}', 64)`);
+      kitTree = await evaluate(`__sdfGame.debugRegisteredTree('rig-${name}', 64, ${spawned.id})`);
       assert.ok(kitTree.found, `${name}: deferred rig group not found`);
+      assert.equal(kitTree.actorId, spawned.id, `${name}: kit evidence must belong to this spawned actor`);
       const meshNodes = kitTree.nodes.filter((n) => n.isMesh);
       assert.ok(meshNodes.length >= 2,
         `${name}: kit must contribute >=2 mesh descendants (got ${meshNodes.length}: ${JSON.stringify(kitTree.nodes.map((n) => n.name))})`);
@@ -1113,90 +1078,82 @@ null
         `${name}: kit meshes must route 'mesh': ${JSON.stringify(meshNodes.map((n) => [n.name, n.route]))}`);
       assert.ok(meshNodes.some((n) => (n.materials ?? []).length > 0),
         `${name}: kit meshes must carry named materials`);
-      // VISIBLE KIT PIXELS with honest attribution. Kit pieces are
-      // SKINNED meshes: the node origin is identity and the vertices ride
-      // the skeleton, so the anchors are the POSED BONE positions the seam
-      // reports (non-skinned kit/prop nodes use their own posed origin).
-      // Each candidate hit must (a) be cls 17 AND (b) sit at the anchor's
-      // own depth (|texel - anchor| <= 0.06) — the FPV viewmodel is also
-      // cls 17 but lives ~0.5 m from the eye, an order nearer than a body
-      // anchor at 1.5 m, so the depth test attributes the pixel to the kit
-      // and not to a gun pixel that happens to overlap the lattice.
-      const heldPropNames = ['shorty', 'gunroot', 'foreend', 'barrels', 'frame'];
+      // Exact equipment attribution uses paired visible/hidden G-buffer
+      // samples below. Soldier hides only held-prop meshes, so armor and
+      // the FPV weapon cannot satisfy the prop check.
       let propNodes = null;
       if (name === 'soldier') {
         // HELD PROP evidence (task order: actual kit/prop routing): the
         // shorty-double.glb descendants must be IN the rig tree and routed.
-        propNodes = meshNodes.filter((n) => heldPropNames.some((h) => n.name.toLowerCase().includes(h)));
+        propNodes = meshNodes.filter(n => n.heldProp);
         assert.ok(propNodes.length >= 2,
           `soldier: held-prop (shorty) descendants missing from the rig tree ` +
           `(mesh nodes: ${JSON.stringify(meshNodes.map((n) => n.name))})`);
         assert.ok(propNodes.every((n) => n.route === 'mesh'),
           `soldier: held-prop nodes must route 'mesh': ${JSON.stringify(propNodes.map((n) => [n.name, n.route]))}`);
       }
-      const anchors = [];
-      // All kit primitives SHARE one skeleton, so per-node first-4 bones
-      // would repeat the same four torso positions ten times and scan one
-      // spot. Collect DISTINCT posed bone positions across the skeleton
-      // (deduped at ~1 cm) — kit pieces paint away from the torso centre
-      // (horns at the skull, a coat at the sides), so the scan must walk
-      // the whole posed skeleton, not its first four joints.
-      const seenPos = new Set();
-      for (const km of (propNodes?.length ? propNodes : meshNodes).slice(0, 4)) {
-        const pts = (km.bones?.length ? km.bones.map((b) => ({ w: b, label: `${km.name}:bone` }))
-          : [{ w: km.pos, label: km.name }]);
-        for (const pt of pts) {
-          const key = pt.w.map((q) => Math.round(q * 100)).join(',');
-          if (seenPos.has(key)) continue;
-          seenPos.add(key);
-          anchors.push({ node: km.name, label: pt.label, w: pt.w });
-        }
-      }
-      // ONE batched lattice census per anchor (sampleSurfacePoints draws a
-      // still once per call); a hit is cls 17 at the anchor's own depth so
-      // the FPV viewmodel (also cls 17, ~0.5 m from the eye) cannot
-      // masquerade as kit.
+      // Refresh posed anchors after each camera orbit. Hide only this actor's
+      // kit (soldier: held-prop meshes only) to attribute actual pixels.
+      let anchorCount = 0;
       const scanKit = async () => {
-        for (const a of anchors.slice(0, 14)) {
-          const ksp = await evaluate(`__sdfGame.screenPosOf(${a.w[0]}, ${a.w[1]}, ${a.w[2]})`);
-          if (!ksp || Math.abs(ksp.x) > 0.95 || Math.abs(ksp.y) > 0.95 || ksp.z >= 1) continue;
-          const pts = [];
-          for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) pts.push({ x: +(ksp.x + dx * 0.03).toFixed(4), y: +(ksp.y + dy * 0.03).toFixed(4) });
-          const samples = await evaluate(`__sdfGame.sampleSurfacePoints(${JSON.stringify(pts)})`);
-          if (!samples) continue;
-          const hitIdx = samples.findIndex((s) => s.cls > 16.5 && s.cls < 17.5 && s.depth < 0.995 && Math.abs(s.depth - ksp.z) <= 0.06);
-          if (hitIdx >= 0) {
-            const s = samples[hitIdx];
-            return { texel: s, node: a.label, ndc: pts[hitIdx], depth: +s.depth.toFixed(5) };
+        const fresh = await evaluate(`__sdfGame.debugRegisteredTree('rig-${name}',64,${spawned.id})`);
+        assert.equal(fresh.actorId, spawned.id);
+        const selected = fresh.nodes.filter(n => n.isMesh && n.visible &&
+          (name !== 'soldier' || n.heldProp));
+        assert.ok(selected.length > 0, `${name}: selected equipment must be present`);
+        const ids = selected.map(n => n.uuid);
+        const anchors = [], seenPos = new Set();
+        for (const km of selected) {
+          for (const w of (km.bones?.length ? km.bones : [km.pos])) {
+            const key = w.map(q => Math.round(q * 100)).join(',');
+            if (seenPos.has(key)) continue;
+            seenPos.add(key); anchors.push({label:km.name,w});
           }
+        }
+        anchorCount = anchors.length;
+        for (const a of anchors.slice(0, 20)) {
+          const ksp = await evaluate(`__sdfGame.screenPosOf(${a.w.join(',')})`);
+          if (!ksp || Math.abs(ksp.x)>0.95 || Math.abs(ksp.y)>0.95 || ksp.z>=1) continue;
+          const pts = [];
+          for (let dy=-3;dy<=3;dy++) for (let dx=-3;dx<=3;dx++)
+            pts.push({x:ksp.x+dx*0.03,y:ksp.y+dy*0.03});
+          const on = await evaluate(`__sdfGame.sampleSurfacePoints(${JSON.stringify(pts)})`);
+          if (!on.some(s=>s.cls===17)) continue;
+          let off;
+          try {
+            assert.equal(await evaluate(`__sdfGame.setRegisteredObjectsVisible(${JSON.stringify(ids)},false)`),ids.length);
+            off = await evaluate(`__sdfGame.sampleSurfacePoints(${JSON.stringify(pts)})`);
+          } finally {
+            await evaluate(`__sdfGame.setRegisteredObjectsVisible(${JSON.stringify(ids)},true); __sdfGame.step(1)`);
+          }
+          const index=on.findIndex((t,i)=>t.cls===17 && t.depth<off[i].depth-1e-6);
+          if(index>=0) return {texel:on[index],node:a.label,ndc:pts[index],
+            offDepth:off[index].depth,selectedNodes:selected.map(n=>n.name)};
         }
         return null;
       };
-      // Kit visibility depends on the spawn pose and view angle: one facing
-      // can hide every kit piece behind the body. Orbit the character —
-      // east/north/west/south — and take the first side that paints kit
-      // pixels, recording which side. The body pose stays LOCKED; only the
-      // camera walks around it.
-      let kitTexel = null, kitNode = null, kitSide = 0;
-      const SIDE_OFFSETS = [[1.5, 0], [0, 1.5], [-1.5, 0], [0, -1.5]];
-      for (let side = 0; side < SIDE_OFFSETS.length && !kitTexel; side++) {
-        const [ox, oz] = SIDE_OFFSETS[side];
-        if (side > 0) {
-          await faceTarget(zc.pos[0] + ox, zc.pos[2] + oz, zc.pos[0], zc.pos[2], -0.05);
+      let kitHit = null, kitSide = 0;
+      const SIDE_OFFSETS = [[1.5,0],[0,1.5],[-1.5,0],[0,-1.5]];
+      for(let side=0;side<SIDE_OFFSETS.length && !kitHit;side++) {
+        if(side>0) {
+          const subject=(await evaluate('__sdfGame.zombies()')).find(q=>q.id===spawned.id);
+          const [ox,oz]=SIDE_OFFSETS[side];
+          await faceTarget(subject.pos[0]+ox,subject.pos[2]+oz,subject.pos[0],subject.pos[2],-0.05);
         }
-        const hit = await scanKit();
-        if (hit) { kitTexel = hit.texel; kitNode = hit.node; kitSide = side; }
+        kitHit=await scanKit(); kitSide=side;
       }
+      kitTexel=kitHit?.texel; kitNode=kitHit?.node;
       rendered[name] = {
         id: spawned.id, torsoAnchor, fleshDepth: +fleshHit.depth.toFixed(5),
-        kitMeshes: meshNodes.length, kitNodePainted: kitNode, kitSide,
+        kitMeshes: meshNodes.length, kitAnchor: kitNode, kitSide,
+        kitAttribution: kitHit ? {ndc:kitHit.ndc,offDepth:kitHit.offDepth,selectedNodes:kitHit.selectedNodes} : null,
         kitTexel: kitTexel ? +kitTexel.depth.toFixed(5) : null,
         kitMaterials: meshNodes.flatMap((n) => n.materials).slice(0, 8),
         heldPropNodes: propNodes ? propNodes.map((n) => n.name) : undefined,
         minotaur404: minotaurRepro,
       };
       assert.ok(kitTexel, `${name}: kit pixels missing from the G-buffer at every posed kit anchor ` +
-        `(tried ${anchors.slice(0, 14).length} distinct anchors)`);
+        `(tried ${anchorCount} distinct anchors)`);
     } else {
       rendered[name] = { id: spawned.id, torsoAnchor, fleshDepth: +fleshHit.depth.toFixed(5), minotaur404: minotaurRepro };
     }
@@ -1205,62 +1162,43 @@ null
     console.log(`  rendered ${name} (id ${spawned.id})`);
   }
   const afterMeshCount = (await evaluate('__sdfGame.deferredDiagnostics()')).router.counts.mesh;
-  const blocked = Object.entries(rendered).filter(([, v]) => v && v.spawnBlocked).map(([n]) => n);
-  // Every blocked entry must carry the reproduced makeMotionJoints-family
-  // evidence (a crash inside makeMotionJoints or the explicit null throw),
-  // and the blocked set must stay small — more than three unspawnable
-  // bodies means the roster gate is not covering the registry and must
-  // fail loudly rather than report around them.
-  for (const n of blocked) {
-    assert.ok(/makeMotionJoints|no motion joints/.test(rendered[n].error ?? ''),
-      `${n}: spawn-blocked entry lacks motion-joint evidence: ${JSON.stringify(rendered[n].error)}`);
-  }
-  assert.ok(blocked.length <= 3,
-    `too many spawn-blocked characters (${JSON.stringify(blocked)}) — roster coverage is failing, not excusable`);
-  const renderedCount = REGISTRY.length - blocked.length;
-  check('P3-all-characters-rendered', {
-    count: REGISTRY.length, renderedCount, blockedWithEvidence: blocked, rendered,
-    meshGrowth: afterMeshCount - baseMeshCount,
+  assert.equal(Object.keys(rendered).length, REGISTRY.length, 'every in-scope character must render');
+  check('P3-gameplay-characters-rendered', {
+    registeredCount: ALL_REGISTERED.length, renderedCount: REGISTRY.length,
+    excluded: GAMEPLAY_EXCLUDED, rendered, meshGrowth: afterMeshCount - baseMeshCount,
   });
-  results.excludedFeatures.characterMotionJointGaps = blocked;
   saveEvidence();
 
-  // Zombie wound detail: blast the FIRST zombie we can face, then prove the
-  // crater reaches the G-buffer (albedo at the wound anchor drops vs the
-  // neighbouring skin) — wound data, not just wound counters. The blast runs
-  // in a simulation phase so the hull exclusions rebuild before the readback.
+  // One controlled front-visible wound through the same stamp path as
+  // gameplay; compare identical pixels before/after, not two unrelated
+  // crater/skin guesses. The stamp does not damage, shove or sever.
   {
     results.phase = 'P4-wounds';
-    const zw = (await evaluate('__sdfGame.zombies()')).find((q) => q.id === rendered.zombie.id) ?? z0;
-    await faceTarget(zw.pos[0] + 1.6, zw.pos[2], zw.pos[0], zw.pos[2]);
-    await enterSimPhase('P4-explode');
-    const blast = await evaluate(`__sdfGame.explode(${zw.pos[0]}, 1.2, ${zw.pos[2]})`);
-    assert.ok(blast.totalWounds > 0, `blast must wound: ${JSON.stringify(blast)}`);
-    await evaluate('__sdfGame.step(6)');
-    await settleAndLock();
+    const zw = (await evaluate('__sdfGame.zombies()')).find(q=>q.id===rendered.zombie.id);
+    assert.ok(zw, 'wound subject must still exist');
+    await faceTarget(zw.pos[0]+1.6, zw.pos[2], zw.pos[0], zw.pos[2]);
+    const current = (await evaluate('__sdfGame.zombies()')).find(q=>q.id===zw.id);
+    const sp = await evaluate(`__sdfGame.screenPosOf(${current.pos[0]},1.1,${current.pos[2]})`);
+    const points=[];
+    for(let y=-3;y<=3;y++) for(let x=-3;x<=3;x++) points.push({x:sp.x+x*0.015,y:sp.y+y*0.015});
+    const before = await evaluate(`__sdfGame.sampleSurfacePoints(${JSON.stringify(points)})`);
+    const cam = await evaluate('__sdfGame.cameraWorld()');
+    const ray = await evaluate(`__sdfGame.screenRayToWorld(${sp.x},${sp.y},2)`);
+    const dir = ray.map((v,i)=>v-cam[i]); const len=Math.hypot(...dir);
+    const hit = await evaluate(`__sdfGame.stampWoundAt(${[...cam,...dir.map(v=>v/len)].join(',')},'slug',${zw.id})`);
+    assert.ok(hit, 'controlled ray must hit the wound subject');
+    await evaluate('__sdfGame.setRenderLock(false); __sdfGame.freeze(true); __sdfGame.step(4); __sdfGame.setRenderLock(true)');
+    const after = await evaluate(`__sdfGame.sampleSurfacePoints(${JSON.stringify(points)})`);
+    const changed = after.map((s,i)=>({s,prev:before[i],ndc:points[i]})).filter(({s,prev})=>
+      s.cls===18 && prev.cls===18 && s.albedo.reduce((a,b)=>a+b,0)<prev.albedo.reduce((a,b)=>a+b,0)*0.92);
+    assert.ok(changed.length>0, 'visible wound must darken matched flesh albedo pixels');
     const wounds = await evaluate(`__sdfGame.debugWounds(${zw.id})`);
-    assert.ok(wounds.length > 0, 'debugWounds must list the blast craters');
-    let woundAlbedo = null, skinAlbedo = null;
-    for (const w of wounds.slice(0, 4)) {
-      const sp = await evaluate(`__sdfGame.screenPosOf(${w.surface[0]}, ${w.surface[1]}, ${w.surface[2]})`);
-      if (!sp || Math.abs(sp.x) > 0.9 || Math.abs(sp.y) > 0.9 || sp.z >= 1) continue;
-      const s = await evaluate(`__sdfGame.readSurfaceAt(${sp.x.toFixed(4)}, ${sp.y.toFixed(4)})`);
-      if (s.cls > 17.5 && s.cls < 18.5) {
-        const n = await evaluate(`__sdfGame.readSurfaceAt(${(sp.x + 0.05).toFixed(4)}, ${(sp.y + 0.05).toFixed(4)})`);
-        if (n.cls > 17.5 && n.cls < 18.5) {
-          woundAlbedo = s.albedo; skinAlbedo = n.albedo;
-          break;
-        }
-      }
-    }
-    assert.ok(woundAlbedo, 'no wound anchor projected to a flesh texel in frame');
-    const wL = woundAlbedo[0] + woundAlbedo[1] + woundAlbedo[2];
-    const sL = skinAlbedo[0] + skinAlbedo[1] + skinAlbedo[2];
-    assert.ok(wL < sL * 0.92,
-      `wound albedo must be darker than neighbouring skin (wound ${wL.toFixed(3)} vs skin ${sL.toFixed(3)})`);
-    await shot('task6-zombie-wounded.png', {}, {}, { minFrameNonDark: 8 });
-    check('P4-zombie-wounds', { woundAlbedo, skinAlbedo, woundCount: wounds.length });
-    records.stages.zombieWounds = { woundAlbedo, skinAlbedo, woundCount: wounds.length };
+    assert.ok(wounds.length>0, 'wound must be recorded on the selected actor');
+    await shot('task6-zombie-wounded.png', {}, {}, {minFrameNonDark:8});
+    const evidence={actor:zw.id,hit,woundCount:wounds.length,changedPixels:changed.length,
+      ndc:changed[0].ndc,beforeAlbedo:changed[0].prev.albedo,afterAlbedo:changed[0].s.albedo};
+    check('P4-zombie-wounds',evidence);
+    records.stages.zombieWounds=evidence;
   }
   noNewErrors('P3/P4 characters');
   saveEvidence();
@@ -1269,6 +1207,8 @@ null
   // P5 — LIFECYCLE: sever detach, two shared chunks, bake, actor rebuild
   // ===================================================================
   results.phase = 'P5-sever';
+  const bakeWasEnabled = await evaluate('__sdfGame.chunkBake');
+  await evaluate('__sdfGame.setChunkBake(false)');
   // (a) Slug severs: two pieces detached into live chunks. Both chunks use
   //     the ONE shared chunk material (createSharedChunkGpuMaterial) — code
   //     fact; the gate proves BOTH RENDER as SDF producers. Pellet flight
@@ -1276,36 +1216,62 @@ null
   await enterSimPhase('P5-sever');
   const target = (await evaluate('__sdfGame.zombies()')).find((q) => q.id === (rendered.zombie?.id ?? z0.id)) ?? z0;
   await faceTarget(target.pos[0] + 0.9, target.pos[2], target.pos[0], target.pos[2], -0.18);
-  const sdfBefore = (await evaluate('__sdfGame.deferredDiagnostics()')).router.counts.sdf;
+  await enterSimPhase('P5-sever'); // faceTarget ends locked; pellets need live ticks
+  await evaluate('__sdfGame.freeze(true)'); // hold the target while stepping projectile/physics state
+  const chunkIdsBefore = (await evaluate('__sdfGame.chunkStats()')).livePieces.map(p=>p.id);
   let severed = 0;
-  for (let i = 0; i < 40 && severed < 2; i++) {
+  const severShots = [];
+  const limbs = ['armL', 'armR', 'legL', 'legR', 'head', 'torso'];
+  for (let i = 0; i < 30 && severed < 2; i++) {
+    const limb = limbs[Math.floor(i / 3) % limbs.length];
+    await evaluate(`__sdfGame.aimSurface(${JSON.stringify(limb)}); __sdfGame.step(2)`);
+    const predicted = await evaluate('__sdfGame.predictSlugHit()');
     const ok = await evaluate('__sdfGame.fireSlug()');
-    if (!ok) { await evaluate('__sdfGame.step(40)'); continue; } // cooldown/reload
+    if (!ok) { await evaluate('__sdfGame.step(40)'); continue; }
     await evaluate('__sdfGame.step(24)');
-
-    const sdfNow = (await evaluate('__sdfGame.deferredDiagnostics()')).router.counts.sdf;
-    if (sdfNow > sdfBefore + severed) severed = sdfNow - sdfBefore;
+    const now = await evaluate('__sdfGame.chunkStats()');
+    severed = now.livePieces.filter(p=>!chunkIdsBefore.includes(p.id)).length;
+    severShots.push({limb, actor:predicted.actorId, live:now.live, severed});
+    console.log('  sever shot', JSON.stringify(severShots.at(-1)));
   }
-  assert.ok(severed >= 2, `slugs at point-blank must detach two pieces (got ${severed})`);
+  assert.ok(severed >= 2, `aimed slugs must detach two pieces: ${JSON.stringify(severShots)}`);
   await settleAndLock();
   // BOTH live chunks render as SDF producers (shared chunk material).
   const census = await evaluate('__sdfGame.chunkStats()');
   assert.ok(census.live >= 2, `two live chunks expected: ${JSON.stringify({ live: census.live, baked: census.baked })}`);
-  const chunkTexels = [];
-  for (const piece of census.livePieces.slice(0, 2)) {
-    await facePoint(piece.centre[0], piece.centre[1], piece.centre[2], 1.2);
-    const csp = await evaluate(`__sdfGame.screenPosOf(${piece.centre[0]}, ${piece.centre[1]}, ${piece.centre[2]})`);
-    let texel = null;
-    if (csp && Math.abs(csp.x) <= 0.95 && Math.abs(csp.y) <= 0.95 && csp.z < 1) {
-      for (let dy = -1; dy <= 1 && !texel; dy++) {
-        for (let dx = -1; dx <= 1 && !texel; dx++) {
-          const s = await evaluate(`__sdfGame.readSurfaceAt(${(csp.x + dx * 0.07).toFixed(4)}, ${(csp.y + dy * 0.07).toFixed(4)})`);
-          if (s.cls > 17.5 && s.cls < 18.5 && s.depth < 0.995) texel = s;
-        }
-      }
+  assert.equal(census.sharedLiveMaterial, true, 'live chunks must share the production material');
+  const sampleChunk = async (piece, cls) => {
+    const sp = await evaluate(`__sdfGame.screenPosOf(${piece.centre.join(',')})`);
+    assert.ok(sp && Math.abs(sp.x) < 0.95 && Math.abs(sp.y) < 0.95, `chunk ${piece.id}: centre must be in frame`);
+    const points = [];
+    for (let dy=-4; dy<=4; dy++) for (let dx=-4; dx<=4; dx++)
+      points.push({x:sp.x+dx*0.012, y:sp.y+dy*0.012});
+    const on = await evaluate(`__sdfGame.sampleSurfacePoints(${JSON.stringify(points)})`);
+    assert.equal(await evaluate(`__sdfGame.setChunkVisible(${piece.id}, false)`), true);
+    let off;
+    try { off = await evaluate(`__sdfGame.sampleSurfacePoints(${JSON.stringify(points)})`); }
+    finally { await evaluate(`__sdfGame.setChunkVisible(${piece.id}, true); __sdfGame.step(1)`); }
+    for (let i=0; i<on.length; i++) {
+      const t=on[i];
+      if (t.cls !== cls || !(t.depth < off[i].depth - 1e-6)) continue;
+      const ndc = {x:2*(t.pixel[0]+0.5)/t.size.width-1, y:1-2*(t.pixel[1]+0.5)/t.size.height};
+      const world = await depthToWorld(ndc.x, ndc.y, t.depth);
+      const distance = Math.hypot(...world.map((v,j)=>v-piece.centre[j]));
+      if (distance > piece.radius * 1.25 + 0.03) continue;
+      return {texel:t, ndc, distance, offDepth:off[i].depth};
     }
-    chunkTexels.push({ id: piece.id, centre: piece.centre, texelDepth: texel ? +texel.depth.toFixed(5) : null, cls: texel?.cls ?? null });
-    assert.ok(texel, `live chunk ${piece.id} must render as flesh SDF (cls 18) at its projected centre`);
+    throw new Error(`chunk ${piece.id}: no class-${cls} pixel attributable to this producer`);
+  };
+  const chunkTexels = [];
+  const newlySeveredPieces = census.livePieces.filter(p => !chunkIdsBefore.includes(p.id));
+  assert.ok(newlySeveredPieces.length >= 2, 'two newly severed pieces must remain live for inspection');
+  for (const initial of newlySeveredPieces.slice(0, 2)) {
+    await facePoint(initial.centre[0], initial.centre[1], initial.centre[2], 1.2);
+    const piece = (await evaluate('__sdfGame.chunkStats()')).livePieces.find(p=>p.id===initial.id);
+    assert.ok(piece, `live chunk ${initial.id} disappeared during inspection`);
+    const hit = await sampleChunk(piece, 18);
+    chunkTexels.push({id:piece.id, centre:piece.centre, texelDepth:hit.texel.depth,
+      cls:hit.texel.cls, offDepth:hit.offDepth, distanceToCentre:hit.distance});
   }
   await shot('task6-two-chunks.png', {}, {}, { minFrameNonDark: 8 });
   check('P5-two-shared-chunks', { severed, chunks: chunkTexels, sharedMaterial: 'createSharedChunkGpuMaterial (single instance)' });
@@ -1320,40 +1286,33 @@ null
   results.phase = 'P5-bake';
   await enterSimPhase('P5-bake');
   const bakeCensus0 = await evaluate('__sdfGame.chunkStats()');
-  const bakeSpot = await evaluate(`__sdfGame.screenRayToWorld(0.3, -0.2, 1.6)`);
-  await evaluate(`__sdfGame.spawnTestChunk(${bakeSpot[0]}, 0.25, ${bakeSpot[2]}, 0.12); __sdfGame.step(10);`);
-  await waitFor('__sdfGame.chunkStats().totalBakes > ' + bakeCensus0.totalBakes,
-    'chunk bake never completed', 60, 400);
+  const bakeSpot = await evaluate('__sdfGame.screenRayToWorld(0.3, -0.2, 1.6)');
+  await evaluate(`__sdfGame.spawnTestChunk(${bakeSpot[0]}, 0.25, ${bakeSpot[2]}, 0.18)`);
+  const spawnedCensus = await evaluate('__sdfGame.chunkStats()');
+  const newPieces = spawnedCensus.livePieces.filter(p=>!bakeCensus0.livePieces.some(old=>old.id===p.id));
+  assert.equal(newPieces.length, 1, 'test spawn must produce exactly one new live chunk');
+  const bakeId = newPieces[0].id;
+  await evaluate('__sdfGame.setChunkBake(true); __sdfGame.step(10)');
+  await waitFor(`__sdfGame.chunkStats().pieces.some(p=>p.id===${bakeId})`,
+    `chunk ${bakeId} bake never completed`, 120, 300);
   await settleAndLock();
   const bakeCensus1 = await evaluate('__sdfGame.chunkStats()');
-  assert.ok(bakeCensus1.baked >= 1, `baked pieces must exist: ${JSON.stringify({ baked: bakeCensus1.baked })}`);
-  assert.ok(bakeCensus1.live <= bakeCensus0.live, `the baked piece must retire from the live march: ${bakeCensus1.live} vs ${bakeCensus0.live}`);
-  const meshAfterBake = (await evaluate('__sdfGame.deferredDiagnostics()')).router.counts.mesh;
-  assert.ok(meshAfterBake >= afterMeshCount + 1, `bake must add the mesh to the mesh route: ${meshAfterBake}`);
-  // Baked pixels: cls 17 at the baked piece centre.
-  const bakedPiece = bakeCensus1.pieces[bakeCensus1.pieces.length - 1];
+  assert.ok(!bakeCensus1.livePieces.some(p=>p.id===bakeId), 'the exact baked piece must retire from the live march');
+  const bakedPiece = bakeCensus1.pieces.find(p=>p.id===bakeId);
+  assert.ok(bakedPiece, 'the exact spawned chunk must become a baked mesh');
   await facePoint(bakedPiece.centre[0], bakedPiece.centre[1], bakedPiece.centre[2], 1.1);
-  const bsp = await evaluate(`__sdfGame.screenPosOf(${bakedPiece.centre[0]}, ${bakedPiece.centre[1]}, ${bakedPiece.centre[2]})`);
-  let bakedTexel = null;
-  if (bsp && Math.abs(bsp.x) <= 0.95 && Math.abs(bsp.y) <= 0.95 && bsp.z < 1) {
-    for (let dy = -1; dy <= 1 && !bakedTexel; dy++) {
-      for (let dx = -1; dx <= 1 && !bakedTexel; dx++) {
-        const s = await evaluate(`__sdfGame.readSurfaceAt(${(bsp.x + dx * 0.04).toFixed(4)}, ${(bsp.y + dy * 0.04).toFixed(4)})`);
-        if (s.cls > 16.5 && s.cls < 17.5 && s.depth < 0.995) bakedTexel = s;
-      }
-    }
-  }
-  assert.ok(bakedTexel, 'the baked chunk must render on the MESH route (cls 17) at its centre');
-  // Transformed-mesh NORMAL DIRECTION on the baked producer: its visible
-  // surface must face the eye (a geometric, not merely unit, normal).
-  const bakedNormal = await normalTowardCam({ x: bsp.x, y: bsp.y }, bakedTexel, 0.0, 'baked chunk');
+  const bakedHit = await sampleChunk(bakedPiece, 17);
+  const bakedTexel = bakedHit.texel;
+  const bakedNormal = await normalTowardCam(bakedHit.ndc, bakedTexel, 0.0, 'baked chunk');
   await shot('task6-baked-chunk.png', {}, {}, { minFrameNonDark: 8 });
   check('P5-bake-transition', {
+    id: bakeId, offDepth: bakedHit.offDepth, distanceToCentre: bakedHit.distance,
     baked: bakeCensus1.baked, totalBakes: bakeCensus1.totalBakes,
     lastBakeInfo: bakeCensus1.lastBakeInfo && { verts: bakeCensus1.lastBakeInfo.verts, tris: bakeCensus1.lastBakeInfo.tris },
     bakedTexelDepth: +bakedTexel.depth.toFixed(5),
     bakedNormal,
   });
+  await evaluate(`__sdfGame.setChunkBake(${bakeWasEnabled})`);
   noNewErrors('P5 bake');
   saveEvidence();
 

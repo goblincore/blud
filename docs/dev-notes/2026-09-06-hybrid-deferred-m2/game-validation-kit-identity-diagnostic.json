@@ -1,0 +1,35 @@
+{
+  "phase": "complete",
+  "checks": [
+    {
+      "name": "kit-actor-identity",
+      "detail": {
+        "spawned": 11,
+        "selected": 11,
+        "bootActor": 1,
+        "meshCount": 36
+      }
+    }
+  ],
+  "pageErrors": [],
+  "pass": true,
+  "scope": "kit-identity-debug",
+  "fullAcceptance": false,
+  "excludedFeatures": {
+    "boneTubes": "Owner retired this experimental path for visual reasons on 2026-09-07; validate SDF bones and baked geometry instead."
+  },
+  "pageErrorsDropped": 0,
+  "generatedAt": "2026-09-07T20:20:06.866Z",
+  "ports": {
+    "vite": 5346,
+    "cdp": 9346
+  },
+  "viewport": {
+    "width": 800,
+    "height": 600
+  },
+  "records": {
+    "captures": {},
+    "stages": {}
+  }
+}

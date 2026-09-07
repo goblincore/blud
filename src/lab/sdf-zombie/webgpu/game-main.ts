@@ -1429,6 +1429,7 @@ async function main() {
       deferredApi.router.register(rigGroup, 'mesh', 'level-only');
     }
     const zombieId = nextId++;
+    rigGroup.userData.gameActorId = zombieId;
     const actor = createZombieActor({
       id: zombieId, room: room.id, body: placed, view, character, start,
       ...(name === 'soldier' ? {
@@ -4597,14 +4598,26 @@ async function main() {
      *  world position, material names and ROUTER route/receiver. This is the
      *  "actual named kit descendants / material routing" evidence the task-5
      *  review demands — a mesh-count increment is not kit proof. */
-    debugRegisteredTree: (namePart: string, maxNodes = 48) => {
+    setRegisteredObjectsVisible: (uuids: string[], visible: boolean) => {
+      let count = 0;
+      const selected = new Set(uuids);
+      scene.traverse(o => {
+        if (selected.has(o.uuid)) { o.visible = visible; count++; }
+      });
+      return count;
+    },
+    debugRegisteredTree: (namePart: string, maxNodes = 48, actorId?: number) => {
       let root: THREE.Object3D | null = null;
       scene.traverse((o) => {
         if (root) return;
-        if (o.name && o.name.includes(namePart)) root = o;
+        if (o.name && o.name.includes(namePart) &&
+            (actorId === undefined || o.userData.gameActorId === actorId)) root = o;
       });
       if (!root) return { found: false, namePart };
       const r = root as THREE.Object3D;
+      const propNodes = new Set<string>();
+      actors.find(a => a.id === r.userData.gameActorId)?.character?.prop?.object
+        .traverse(o => propNodes.add(o.uuid));
       const nodes: Record<string, unknown>[] = [];
       const queue: THREE.Object3D[] = [r];
       let seen = 0;
@@ -4641,7 +4654,7 @@ async function main() {
         if (Array.isArray(m)) for (const mm of m) mats.push(String(mm.name || mm.type));
         else if (m) mats.push(String(m.name || m.type));
         nodes.push({
-          name: o.name || `<${o.type}>`, depth: nodeDepth(r, o),
+          name: o.name || `<${o.type}>`, uuid: o.uuid, heldProp: propNodes.has(o.uuid), depth: nodeDepth(r, o),
           isMesh: (o as THREE.Mesh).isMesh === true, visible: o.visible,
           isSkinnedMesh: (o as THREE.SkinnedMesh).isSkinnedMesh === true,
           bones,
@@ -4652,7 +4665,7 @@ async function main() {
         for (const c of o.children) queue.push(c);
       }
       return {
-        found: true, name: r.name,
+        found: true, name: r.name, actorId: r.userData.gameActorId ?? null,
         route: deferredApi?.router.routeOf(r) ?? null,
         receiver: deferredApi?.router.receiverOf(r) ?? null,
         totalDescendants: countDescendants(r),
@@ -6211,10 +6224,21 @@ async function main() {
       if (on && bakedChunkMat) bakedChunkSeed?.(bakedChunkMat);
     },
     get chunkBake() { return chunkBakeEnabled; },
+    /** Paired-pixel diagnostic: hide exactly one live or baked producer
+     * while the gate holds simulation locked; returns false for stale IDs. */
+    setChunkVisible(id: number, visible: boolean) {
+      const live = liveChunks.find(c => c.id === id);
+      const baked = bakedChunks.find(c => c.id === id);
+      const object = live?.view.object ?? baked?.mesh;
+      if (!object) return false;
+      object.visible = visible;
+      return true;
+    },
     /** Leak/observability census: live (stepped/marched) chunks, baked
      *  meshes, ring views, bake cost. The long-firefight gate reads this. */
     chunkStats: () => ({
       live: liveChunks.length,
+      sharedLiveMaterial: liveChunks.every(c => (c.view.object as THREE.Mesh).material === chunkMaterial.material),
       baked: bakedChunks.length,
       views: chunkViews.length,
       totalBakes,

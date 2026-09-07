@@ -1,0 +1,55 @@
+lab-servers: starting vite on 5346
+lab-servers: starting chrome (headless) on debug port 9346
+PASS P0-boot-deferred {"counts":{"mesh":343,"sdf":10,"forward":0,"exclude":14},"shadow":{"generationRequested":true,"sampling":true,"renderedMaps":2,"fullCasters":99,"levelCasters":98,"size":1024,"unsupported":[]},"sizes":{"width":800,"height":600,"sdfScale":1,"sdfTargetSize":{"width":800,"height":600},"outputTarget":{"width":800,"height":600}}}
+  [mem] rss=57MB heap=8MB checks=1
+PASS P1-render-control {"hashes":{"albedoRoughness":2120040956,"normalMetalness":855916645,"emissionClass":1922909433,"surfaceDepth":3204361401},"nonEmpty":480000,"classCounts":{"1":432205,"17":36400,"18":11395},"sentinelPixels":0,"deepOccupied":0,"maxDepth":0.994226,"pose":{"pos":[7.066554571220361,0,-4.417264078161423],"yaw":-1.5707963267948966,"pitch":-0.12},"actorPos":[5.323400552447586,0,-4.408719178081224]}
+  [mem] rss=57MB heap=9MB checks=2
+PASS P1-sampling-invariance {"litDelta":-1,"lit0":48,"litSampling":49}
+  [mem] rss=69MB heap=9MB checks=3
+PASS P1-gain-invariance {"litDelta":17}
+  [mem] rss=69MB heap=10MB checks=4
+PASS P1-beam-invariance {"litDelta":12}
+  [mem] rss=70MB heap=10MB checks=5
+PASS P1-generation-invariance {"litDelta":-1,"renderedMaps":0}
+  [mem] rss=71MB heap=12MB checks=6
+PASS P1-marker-hidden-from-gbuffer {"marker":[251,0,251]}
+  [mem] rss=72MB heap=12MB checks=7
+PASS P2-route-level-mesh {"cls":1,"depth":0.96235,"ndc":[-0.85,-0.5]}
+  [mem] rss=72MB heap=12MB checks=8
+PASS P2-route-flesh-sdf {"cls":18,"depth":0.9369}
+  [mem] rss=72MB heap=12MB checks=9
+PASS P2-route-fpv-gun {"cls":17,"depth":0.65411}
+  [mem] rss=72MB heap=12MB checks=10
+PASS P2-sdf-bones-and-readback-parity {"boneMesh":false,"pixel":[400,348]}
+  [mem] rss=72MB heap=12MB checks=11
+PASS P2-route-forward-probe-nearer {"pixel":[254,13,13]}
+  [mem] rss=73MB heap=13MB checks=12
+PASS P2-route-forward-probe-behind-occluded {"behind":[244,207,207]}
+  [mem] rss=74MB heap=14MB checks=13
+PASS P2-normal-direction-flesh {"dot":0.903,"nlen":0.9996,"selectedPixel":[400,348],"selectedNdc":[0.00125,-0.16167],"centreNdc":[0,-0.16264]}
+  [mem] rss=74MB heap=14MB checks=14
+PASS depth-bracket:wall-tight {"ndc":[-0.84875,-0.5016666666666667],"resolvedAtCentre":0.962347149848938,"centreCls":1,"bracket":[-0.00024999999999997247,0.00024999999999997247],"centre":0,"tolerance":0.0004999999999999449,"probes":[{"delta":-0.0004999999999999449,"dRes":0.962347,"cls":1,"drawn":true,"sampled":[255,0,0],"displayed":[240,1,0],"measurement":"linear-composite"},{"delta":-0.00024999999999997247,"dRes":0.962347,"cl
+  [mem] rss=75MB heap=12MB checks=15
+PASS depth-bracket:flesh {"ndc":[0.0012499999999999734,-0.16166666666666663],"resolvedAtCentre":0.9369040131568909,"centreCls":18,"bracket":[-0.0020000000000000018,0.0020000000000000018],"centre":0,"tolerance":0.0040000000000000036,"probes":[{"delta":-0.0040000000000000036,"dRes":0.936904,"cls":18,"drawn":true,"sampled":[255,0,0],"displayed":[254,14,14],"measurement":"linear-composite"},{"delta":-0.0020000000000000018,"dR
+  [mem] rss=78MB heap=13MB checks=16
+PASS depth-bracket:gun {"ndc":[0.13874999999999993,-0.4883333333333333],"resolvedAtCentre":0.6541129350662231,"centreCls":17,"bracket":[-0.0020000000000000018,0.0020000000000000018],"centre":0,"tolerance":0.0040000000000000036,"probes":[{"delta":-0.0040000000000000036,"dRes":0.654113,"cls":17,"drawn":true,"sampled":[255,0,0],"displayed":[239,0,0],"measurement":"linear-composite"},{"delta":-0.0020000000000000018,"dRes":0
+  [mem] rss=79MB heap=14MB checks=17
+PASS depth-bracket:far-deepest-real-scene {"ndc":[-0.03874999999999995,0.018333333333333313],"resolvedAtCentre":0.9942260384559631,"centreCls":1,"bracket":[-0.0030000000000000027,0.005723961544036871],"centre":0.001361980772018434,"tolerance":0.008723961544036873,"probes":[{"delta":-0.0030000000000000027,"dRes":0.994226,"cls":1,"drawn":true,"sampled":[255,0,0],"displayed":[236,1,2],"measurement":"linear-composite"},{"delta":0.005723961544
+  [mem] rss=82MB heap=16MB checks=18
+PASS far-true-empty:redirect {"case":"true-empty-created","depths":[0.99,0.9995,0.99995],"rays":[[-0.75,0.6],[0,0.8],[0.75,0.6]],"probes":[{"depth":0.99,"drawn":true,"sampled":[239,0,0]},{"depth":0.9995,"drawn":true,"sampled":[0,239,0]},{"depth":0.99995,"drawn":true,"sampled":[0,0,239]}],"emptyCensus":{"nonEmpty":50169,"sentinelPixels":429831,"deepOccupied":0},"restoredBitExact":true}
+  [mem] rss=82MB heap=17MB checks=19
+PASS depth-bracket:wall-null-path {"ndc":[-0.84875,-0.5016666666666667],"resolvedAtCentre":0.962347149848938,"centreCls":1,"bracket":[-0.00024999999999997247,0.00024999999999997247],"centre":0,"tolerance":0.0004999999999999449,"probes":[{"delta":-0.0004999999999999449,"dRes":0.962347,"cls":1,"drawn":true,"sampled":[255,0,0],"displayed":[255,0,0],"measurement":"canvas"},{"delta":-0.00024999999999997247,"dRes":0.962347,"cls":1,"draw
+  [mem] rss=83MB heap=17MB checks=20
+PASS depth-bracket:flesh-null-path {"ndc":[0.0012499999999999734,-0.16166666666666663],"resolvedAtCentre":0.9369040131568909,"centreCls":18,"bracket":[-0.0020000000000000018,0.0020000000000000018],"centre":0,"tolerance":0.0040000000000000036,"probes":[{"delta":-0.0040000000000000036,"dRes":0.936904,"cls":18,"drawn":true,"sampled":[255,0,0],"displayed":[255,0,0],"measurement":"canvas"},{"delta":-0.0020000000000000018,"dRes":0.936904
+  [mem] rss=83MB heap=17MB checks=21
+PASS far-true-empty:null-path {"case":"true-empty-created","depths":[0.99,0.9995,0.99995],"rays":[[-0.75,0.6],[0,0.8],[0.75,0.6]],"probes":[{"depth":0.99,"drawn":true,"sampled":[255,0,0]},{"depth":0.9995,"drawn":true,"sampled":[0,255,0]},{"depth":0.99995,"drawn":true,"sampled":[0,0,255]}],"emptyCensus":{"nonEmpty":50169,"sentinelPixels":429831,"deepOccupied":0},"restoredBitExact":true}
+  [mem] rss=83MB heap=18MB checks=22
+PASS P6-depth-summary {"redirect":{"wall":0.0004999999999999449,"flesh":0.0040000000000000036,"gun":0.0040000000000000036},"far":{"redirect":{"case":"true-empty-created","depths":[0.99,0.9995,0.99995],"restored":true},"null":{"case":"true-empty-created","depths":[0.99,0.9995,0.99995],"restored":true},"redirect2":{"case":"redirect-restored-digest-stable"},"deepestRealScene":[-0.0030000000000000027,0.005723961544036871]}
+  [mem] rss=83MB heap=18MB checks=23
+PASS P7a-scale {"half":{"width":400,"height":300},"restored":"hash==h0"}
+  [mem] rss=83MB heap=17MB checks=24
+PASS P7a-resize {"down":{"nonDarkPct":77,"w":1000,"h":700},"up":{"nonDarkPct":76.1,"w":800,"h":600}}
+  [mem] rss=82MB heap=15MB checks=25
+PASS P4-zombie-wounds {"actor":2,"hit":[5.59845907218175,1.167762268947396,-4.405386238932079],"woundCount":1,"changedPixels":27,"ndc":{"x":-0.016825198949579644,"y":-0.2570210951849534},"beforeAlbedo":[0.81982421875,0.43994140625,0.4599609375],"afterAlbedo":[0.6533203125,0.267333984375,0.288818359375]}
+  [mem] rss=75MB heap=12MB checks=26
+TASK6 GAME CHECK: PASS (26 checks, phase complete)

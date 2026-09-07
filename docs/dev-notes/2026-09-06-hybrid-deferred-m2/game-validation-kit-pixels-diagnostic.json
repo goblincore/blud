@@ -1,0 +1,521 @@
+{
+  "phase": "complete",
+  "checks": [
+    {
+      "name": "P3-gameplay-characters-rendered",
+      "detail": {
+        "registeredCount": 16,
+        "renderedCount": 5,
+        "excluded": {
+          "mouse": "Unused character, excluded by owner",
+          "strand-fixture": "SDF hair-rendering fixture, excluded by owner"
+        },
+        "rendered": {
+          "zombie": {
+            "id": 11,
+            "torsoAnchor": 1.1,
+            "fleshDepth": 0.93213,
+            "minotaur404": null
+          },
+          "goblin": {
+            "id": 12,
+            "torsoAnchor": 1.1,
+            "fleshDepth": 0.94521,
+            "kitMeshes": 6,
+            "kitAnchor": "mesh_0",
+            "kitSide": 0,
+            "kitAttribution": {
+              "ndc": {
+                "x": -0.05620282092349291,
+                "y": -0.3983177945729377
+              },
+              "offDepth": 0.9346171617507935,
+              "selectedNodes": [
+                "mesh_0",
+                "mesh_0_1",
+                "mesh_0_2",
+                "mesh_0_3",
+                "mesh_0_4",
+                "mesh_0_5"
+              ]
+            },
+            "kitTexel": 0.93367,
+            "kitMaterials": [
+              "iron",
+              "leather",
+              "band",
+              "screen",
+              "glass",
+              "brass"
+            ],
+            "minotaur404": null
+          },
+          "clown": {
+            "id": 13,
+            "torsoAnchor": 1.1,
+            "fleshDepth": 0.94058,
+            "kitMeshes": 9,
+            "kitAnchor": "mesh_0",
+            "kitSide": 0,
+            "kitAttribution": {
+              "ndc": {
+                "x": -0.07185183968063272,
+                "y": -0.7364635147795577
+              },
+              "offDepth": 0.9480403661727905,
+              "selectedNodes": [
+                "mesh_0",
+                "mesh_0_1",
+                "mesh_0_2",
+                "mesh_0_3",
+                "mesh_0_4",
+                "mesh_0_5",
+                "mesh_0_6",
+                "mesh_0_7",
+                "mesh_0_8"
+              ]
+            },
+            "kitTexel": 0.93624,
+            "kitMaterials": [
+              "hoodblue",
+              "hoodpink",
+              "yellow",
+              "grey",
+              "red",
+              "pink",
+              "blue",
+              "nose"
+            ],
+            "minotaur404": null
+          },
+          "clown-alt": {
+            "id": 14,
+            "torsoAnchor": 0.7,
+            "fleshDepth": 0.93309,
+            "kitMeshes": 9,
+            "kitAnchor": "mesh_0",
+            "kitSide": 1,
+            "kitAttribution": {
+              "ndc": {
+                "x": -0.025789120203667387,
+                "y": -0.8931572516677626
+              },
+              "offDepth": 0.9424135684967041,
+              "selectedNodes": [
+                "mesh_0",
+                "mesh_0_1",
+                "mesh_0_2",
+                "mesh_0_3",
+                "mesh_0_4",
+                "mesh_0_5",
+                "mesh_0_6",
+                "mesh_0_7",
+                "mesh_0_8"
+              ]
+            },
+            "kitTexel": 0.927,
+            "kitMaterials": [
+              "royal",
+              "yellow",
+              "grey",
+              "red",
+              "pink",
+              "blue",
+              "purple",
+              "nose"
+            ],
+            "minotaur404": null
+          },
+          "soldier": {
+            "id": 15,
+            "torsoAnchor": 1.1,
+            "fleshDepth": 0.93282,
+            "kitMeshes": 36,
+            "kitAnchor": "barrel0",
+            "kitSide": 0,
+            "kitAttribution": {
+              "ndc": {
+                "x": 0.14681171772640464,
+                "y": -0.3349467844037984
+              },
+              "offDepth": 0.9725660085678101,
+              "selectedNodes": [
+                "barrel0",
+                "barrel1",
+                "bead",
+                "bore0",
+                "bore1",
+                "cone0",
+                "cone1",
+                "crown0",
+                "crown1",
+                "fe_cap",
+                "foreend",
+                "mouth0",
+                "mouth1",
+                "rib_top",
+                "body",
+                "grip_panel1",
+                "grip_panel-1",
+                "guard",
+                "guard_tang_f",
+                "guard_tang_r",
+                "hinge",
+                "hinge001",
+                "trig0",
+                "trig1",
+                "t004",
+                "t004_1",
+                "t006",
+                "t006_1",
+                "extractor",
+                "shell_head_L",
+                "shell_hull_L",
+                "shell_head_R",
+                "shell_hull_R",
+                "toplever"
+              ]
+            },
+            "kitTexel": 0.90813,
+            "kitMaterials": [
+              "plate",
+              "webbing",
+              "Blue",
+              "Blue",
+              "Brass",
+              "Bore",
+              "Bore",
+              "Bore"
+            ],
+            "heldPropNodes": [
+              "barrel0",
+              "barrel1",
+              "bead",
+              "bore0",
+              "bore1",
+              "cone0",
+              "cone1",
+              "crown0",
+              "crown1",
+              "fe_cap",
+              "foreend",
+              "mouth0",
+              "mouth1",
+              "rib_top",
+              "body",
+              "grip_panel1",
+              "grip_panel-1",
+              "guard",
+              "guard_tang_f",
+              "guard_tang_r",
+              "hinge",
+              "hinge001",
+              "trig0",
+              "trig1",
+              "t004",
+              "t004_1",
+              "t006",
+              "t006_1",
+              "extractor",
+              "shell_head_L",
+              "shell_hull_L",
+              "shell_head_R",
+              "shell_hull_R",
+              "toplever"
+            ],
+            "minotaur404": null
+          }
+        },
+        "meshGrowth": 208
+      }
+    }
+  ],
+  "pageErrors": [],
+  "pass": true,
+  "scope": "kit-pixels-debug",
+  "fullAcceptance": false,
+  "excludedFeatures": {
+    "boneTubes": "Owner retired this experimental path for visual reasons on 2026-09-07; validate SDF bones and baked geometry instead.",
+    "characters": {
+      "mouse": "Unused character, excluded by owner",
+      "strand-fixture": "SDF hair-rendering fixture, excluded by owner"
+    }
+  },
+  "pageErrorsDropped": 0,
+  "generatedAt": "2026-09-07T20:24:52.131Z",
+  "ports": {
+    "vite": 5346,
+    "cdp": 9346
+  },
+  "viewport": {
+    "width": 800,
+    "height": 600
+  },
+  "records": {
+    "captures": {
+      "task6-char-zombie.png": {
+        "points": {},
+        "regions": {},
+        "frame": {
+          "nonDarkPct": 76,
+          "w": 800,
+          "h": 600
+        }
+      },
+      "task6-char-goblin.png": {
+        "points": {},
+        "regions": {},
+        "frame": {
+          "nonDarkPct": 79.6,
+          "w": 800,
+          "h": 600
+        }
+      },
+      "task6-char-clown.png": {
+        "points": {},
+        "regions": {},
+        "frame": {
+          "nonDarkPct": 86.7,
+          "w": 800,
+          "h": 600
+        }
+      },
+      "task6-char-clown-alt.png": {
+        "points": {},
+        "regions": {},
+        "frame": {
+          "nonDarkPct": 80.7,
+          "w": 800,
+          "h": 600
+        }
+      },
+      "task6-char-soldier.png": {
+        "points": {},
+        "regions": {},
+        "frame": {
+          "nonDarkPct": 76.4,
+          "w": 800,
+          "h": 600
+        }
+      }
+    },
+    "stages": {
+      "characters": {
+        "zombie": {
+          "id": 11,
+          "torsoAnchor": 1.1,
+          "fleshDepth": 0.93213,
+          "minotaur404": null
+        },
+        "goblin": {
+          "id": 12,
+          "torsoAnchor": 1.1,
+          "fleshDepth": 0.94521,
+          "kitMeshes": 6,
+          "kitAnchor": "mesh_0",
+          "kitSide": 0,
+          "kitAttribution": {
+            "ndc": {
+              "x": -0.05620282092349291,
+              "y": -0.3983177945729377
+            },
+            "offDepth": 0.9346171617507935,
+            "selectedNodes": [
+              "mesh_0",
+              "mesh_0_1",
+              "mesh_0_2",
+              "mesh_0_3",
+              "mesh_0_4",
+              "mesh_0_5"
+            ]
+          },
+          "kitTexel": 0.93367,
+          "kitMaterials": [
+            "iron",
+            "leather",
+            "band",
+            "screen",
+            "glass",
+            "brass"
+          ],
+          "minotaur404": null
+        },
+        "clown": {
+          "id": 13,
+          "torsoAnchor": 1.1,
+          "fleshDepth": 0.94058,
+          "kitMeshes": 9,
+          "kitAnchor": "mesh_0",
+          "kitSide": 0,
+          "kitAttribution": {
+            "ndc": {
+              "x": -0.07185183968063272,
+              "y": -0.7364635147795577
+            },
+            "offDepth": 0.9480403661727905,
+            "selectedNodes": [
+              "mesh_0",
+              "mesh_0_1",
+              "mesh_0_2",
+              "mesh_0_3",
+              "mesh_0_4",
+              "mesh_0_5",
+              "mesh_0_6",
+              "mesh_0_7",
+              "mesh_0_8"
+            ]
+          },
+          "kitTexel": 0.93624,
+          "kitMaterials": [
+            "hoodblue",
+            "hoodpink",
+            "yellow",
+            "grey",
+            "red",
+            "pink",
+            "blue",
+            "nose"
+          ],
+          "minotaur404": null
+        },
+        "clown-alt": {
+          "id": 14,
+          "torsoAnchor": 0.7,
+          "fleshDepth": 0.93309,
+          "kitMeshes": 9,
+          "kitAnchor": "mesh_0",
+          "kitSide": 1,
+          "kitAttribution": {
+            "ndc": {
+              "x": -0.025789120203667387,
+              "y": -0.8931572516677626
+            },
+            "offDepth": 0.9424135684967041,
+            "selectedNodes": [
+              "mesh_0",
+              "mesh_0_1",
+              "mesh_0_2",
+              "mesh_0_3",
+              "mesh_0_4",
+              "mesh_0_5",
+              "mesh_0_6",
+              "mesh_0_7",
+              "mesh_0_8"
+            ]
+          },
+          "kitTexel": 0.927,
+          "kitMaterials": [
+            "royal",
+            "yellow",
+            "grey",
+            "red",
+            "pink",
+            "blue",
+            "purple",
+            "nose"
+          ],
+          "minotaur404": null
+        },
+        "soldier": {
+          "id": 15,
+          "torsoAnchor": 1.1,
+          "fleshDepth": 0.93282,
+          "kitMeshes": 36,
+          "kitAnchor": "barrel0",
+          "kitSide": 0,
+          "kitAttribution": {
+            "ndc": {
+              "x": 0.14681171772640464,
+              "y": -0.3349467844037984
+            },
+            "offDepth": 0.9725660085678101,
+            "selectedNodes": [
+              "barrel0",
+              "barrel1",
+              "bead",
+              "bore0",
+              "bore1",
+              "cone0",
+              "cone1",
+              "crown0",
+              "crown1",
+              "fe_cap",
+              "foreend",
+              "mouth0",
+              "mouth1",
+              "rib_top",
+              "body",
+              "grip_panel1",
+              "grip_panel-1",
+              "guard",
+              "guard_tang_f",
+              "guard_tang_r",
+              "hinge",
+              "hinge001",
+              "trig0",
+              "trig1",
+              "t004",
+              "t004_1",
+              "t006",
+              "t006_1",
+              "extractor",
+              "shell_head_L",
+              "shell_hull_L",
+              "shell_head_R",
+              "shell_hull_R",
+              "toplever"
+            ]
+          },
+          "kitTexel": 0.90813,
+          "kitMaterials": [
+            "plate",
+            "webbing",
+            "Blue",
+            "Blue",
+            "Brass",
+            "Bore",
+            "Bore",
+            "Bore"
+          ],
+          "heldPropNodes": [
+            "barrel0",
+            "barrel1",
+            "bead",
+            "bore0",
+            "bore1",
+            "cone0",
+            "cone1",
+            "crown0",
+            "crown1",
+            "fe_cap",
+            "foreend",
+            "mouth0",
+            "mouth1",
+            "rib_top",
+            "body",
+            "grip_panel1",
+            "grip_panel-1",
+            "guard",
+            "guard_tang_f",
+            "guard_tang_r",
+            "hinge",
+            "hinge001",
+            "trig0",
+            "trig1",
+            "t004",
+            "t004_1",
+            "t006",
+            "t006_1",
+            "extractor",
+            "shell_head_L",
+            "shell_hull_L",
+            "shell_head_R",
+            "shell_hull_R",
+            "toplever"
+          ],
+          "minotaur404": null
+        }
+      }
+    }
+  }
+}

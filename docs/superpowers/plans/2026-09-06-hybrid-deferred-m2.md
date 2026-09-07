@@ -1,5 +1,7 @@
 # Hybrid Deferred M2 Implementation Plan
 
+Owner scope clarification (2026-09-07): mouse is unused and strand-fixture belongs to SDF hair rendering, unrelated to current gameplay. Exclude these two explicitly from the gameplay gate. Other in-scope spawn failures remain failures, not automatic exclusions. Baked geometry/lifecycle acceptance remains required.
+
 ## Owner scope update — 2026-09-07
 
 Instanced polygonal bone tubes are retired from the intended gameplay path because their appearance is unsuitable. They are excluded from mandatory M2 acceptance and must not block the game GPU gate. Existing SDF field bones remain supported. Bone sphere culling is not integrated here; a separate agent owns that work. Detached/shared chunks and baked geometry remain in scope, including material, depth, normal and lifecycle evidence. Earlier tube-specific steps below describe historical work and do not override this scope update.

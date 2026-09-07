@@ -1,0 +1,10 @@
+lab-servers: starting vite on 5346
+lab-servers: starting chrome (headless) on debug port 9346
+  rendered zombie (id 11)
+  rendered goblin (id 12)
+  rendered clown (id 13)
+  rendered clown-alt (id 14)
+  rendered soldier (id 15)
+PASS P3-gameplay-characters-rendered {"registeredCount":16,"renderedCount":5,"excluded":{"mouse":"Unused character, excluded by owner","strand-fixture":"SDF hair-rendering fixture, excluded by owner"},"rendered":{"zombie":{"id":11,"torsoAnchor":1.1,"fleshDepth":0.93213,"minotaur404":null},"goblin":{"id":12,"torsoAnchor":1.1,"fleshDepth":0.94521,"kitMeshes":6,"kitAnchor":"mesh_0","kitSide":0,"kitAttribution":{"ndc":{"x":-0.05620282092
+  [mem] rss=69MB heap=9MB checks=1
+TASK6 GAME CHECK: PASS (1 checks, phase complete)
