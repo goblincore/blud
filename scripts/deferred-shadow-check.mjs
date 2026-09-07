@@ -62,7 +62,12 @@ const assertNoPageErrors = async (stage) => {
 
 const screenshot = async (name) => {
   const shot = await send('Page.captureScreenshot', { format: 'png' });
-  writeFileSync(`${out}/${name}`, Buffer.from(shot.data, 'base64'));
+  // send() resolves the FULL CDP message — the payload lives at .result.data
+  // (the previous version read shot.data, so Buffer.from(undefined) killed
+  // the run right after the passing checks and no PNG evidence was saved).
+  const b64 = shot?.result?.data;
+  assert.ok(b64, `${name}: captureScreenshot returned no data: ${JSON.stringify(shot)?.slice(0, 200)}`);
+  writeFileSync(`${out}/${name}`, Buffer.from(b64, 'base64'));
 };
 
 const results = { checks, errors, pass: false };
