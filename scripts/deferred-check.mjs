@@ -437,6 +437,7 @@ try {
   // quad in a truly-empty region must be visible (empty pixels wrote far
   // depth). Canvas presentation is restored at the end.
   const compRep = await evaluate('__deferredLab.presentComposition()');
+  writeFileSync(`${m2}/task1-composition.json`, JSON.stringify(compRep, null, 2));
   assert.ok(compRep.outputRestored, 'canvas presentation must be restored after the owned-target render');
   assert.equal(compRep.chest.cls, 2, `chest probe pixel must resolve as flesh (${JSON.stringify(compRep.chest)})`);
   assert.ok(compRep.front.beforeLum > 0, `chest pixel must show lit content (${JSON.stringify(compRep.front)})`);
@@ -452,7 +453,6 @@ try {
   assert.ok(compRep.empty.afterLum - compRep.empty.beforeLum > 1.0,
     `forward quad in an empty region must be VISIBLE — empty depth must be far (${JSON.stringify(compRep.empty)})`);
   check('owned-target-forward-composition', compRep);
-  writeFileSync(`${m2}/task1-composition.json`, JSON.stringify(compRep, null, 2));
   await shot('task1-canvas-restored', m2);
 
   // Environment: defaults are the M1 constants with fog OFF; setting the same

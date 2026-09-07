@@ -1055,6 +1055,11 @@ async function main() {
       handle.renderer.autoClear = prevAutoClear;
       await completeGpu();
       const afterA = await readTarget();
+      const changedPixels = (a: { data: Float32Array }, b: { data: Float32Array }) => {
+        let n = 0;
+        for (let i = 0; i < a.data.length; i++) if (Math.abs(a.data[i]! - b.data[i]!) > 0.01) n++;
+        return n;
+      };
 
       // Frame B: EMPTY mesh scene — the body silhouette leaves empty pixels.
       deferredLayer.render(emptyMeshScene, sdfScene, camera);
@@ -1100,6 +1105,8 @@ async function main() {
 
       return {
         size: [w, h],
+        changedPixelsA: changedPixels(beforeA, afterA),
+        changedPixelsB: changedPixels(beforeB, afterB),
         chest: { px: [cx, cy], ...chestSurface },
         front: {
           px: [cx, cy], before: sample(beforeA, cx, cy), after: sample(afterA, cx, cy),

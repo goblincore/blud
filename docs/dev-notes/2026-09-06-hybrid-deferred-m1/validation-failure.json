@@ -217,5 +217,5 @@
     }
   ],
   "errors": [],
-  "failure": "Error: {\"id\":225,\"result\":{\"result\":{\"type\":\"object\",\"value\":{}},\"exceptionDetails\":{\"exceptionId\":1,\"text\":\"Uncaught (in promise) Error: no flesh pixel beside the front quad for the behind quad\",\"lineNumber\":852,\"columnNumber\":30,\"scriptId\":\"3\",\"stackTrace\":{\"callFrames\":[{\"functionName\":\"presentComposition\",\"scriptId\":\"3\",\"url\":\"http://localhost:5321/src/lab/sdf-zombie/webgpu/deferred-main.ts\",\"lineNumber\":851,\"columnNumber\":29}]},\"exception\":{\"type\":\"object\",\"subtype\":\"error\",\"className\":\"Error\",\"description\":\"Error: no flesh pixel beside the front quad for the behind quad\\n    at Object.presentComposition (http://localhost:5321/src/lab/sdf-zombie/webgpu/deferred-main.ts:852:30)\",\"objectId\":\"-6827094415261818414.4.1\"}}}}"
+  "failure": "AssertionError [ERR_ASSERTION]: front quad must WIN against the presented depth ({\"px\":[390,306],\"before\":[0.81640625,0.10821533203125,0.06756591796875],\"after\":[0.81640625,0.10821533203125,0.06756591796875],\"beforeLum\":0.256,\"afterLum\":0.256})"
 }
