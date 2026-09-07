@@ -3,7 +3,7 @@
     800,
     600
   ],
-  "changedPixelsA": 7872,
+  "changedPixelsA": 7284,
   "changedPixelsB": 3810,
   "chest": {
     "px": [
@@ -44,12 +44,12 @@
       0.1522216796875
     ],
     "after": [
-      4,
-      4,
-      4
+      1.111328125,
+      0.19482421875,
+      0.1522216796875
     ],
     "beforeLum": 0.387,
-    "afterLum": 4
+    "afterLum": 0.387
   },
   "empty": {
     "px": [

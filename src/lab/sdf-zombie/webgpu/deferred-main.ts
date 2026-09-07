@@ -954,35 +954,16 @@ async function main() {
      *   leaves truly empty pixels (depth 1): a forward quad there must be
      *   visible, proving empty pixels wrote far depth.
      *
-     * Returns per-pixel color before/after plus resolved class/depth, and
-     * restores canvas presentation before returning.
+     * Returns per-pixel color before/after plus resolved class/depth. Canvas
+     * presentation, quad visibility and renderer state are restored on every
+     * exit path (finally), including probe-positioning throws.
      */
-    /** TEMPORARY task-1 diagnostic: draws the forward quads to the CANVAS
-     *  (autoClear off) so a screenshot can prove whether the draw itself
-     *  paints. Removed once the composition smoke is green. */
-    async debugForwardDraw() {
-      const prevTarget = handle.renderer.getRenderTarget();
-      const prevAutoClear = handle.renderer.autoClear;
-      forwardFront.visible = true;
-      forwardFront.position.set(0, 1.2, 0.4);
-      forwardFront.lookAt(camera.position);
-      forwardFront.updateMatrixWorld();
-      handle.renderer.autoClear = false;
-      handle.renderer.setRenderTarget(null);
-      handle.renderer.render(forwardScene, camera);
-      handle.renderer.setRenderTarget(prevTarget);
-      handle.renderer.autoClear = prevAutoClear;
-      forwardFront.visible = false;
-      await completeGpu();
-      return { placed: forwardFront.position.toArray() };
-    },
-
-    async presentComposition(opts: { forwardDepthTest?: boolean } = {}) {
+    async presentComposition() {
       if (mode !== 'deferred') throw new Error('presentComposition requires deferred mode');
-      // forwardDepthTest=false is a DIAGNOSTIC mode (always-pass quads):
-      // it separates "the forward draw paints" from "the destination depth
-      // gates it". The gate runs the default (true).
-      forwardMat.depthTest = opts.forwardDepthTest !== false;
+      // Forward quads compose WITH depth tests against the presented depth —
+      // the constructed material default, re-pinned here so a future edit
+      // cannot silently weaken the semantics under test.
+      forwardMat.depthTest = true;
       const w = deferredLayer.targets.resolved.width;
       const h = deferredLayer.targets.resolved.height;
       // Keep the owned target matched to the layer even after setResolution.
@@ -1012,6 +993,30 @@ async function main() {
         mesh.updateMatrixWorld();
       };
 
+      // Everything below mutates renderer/layer/scene state. The finally at
+      // the end restores canvas presentation, quad visibility and renderer
+      // target/autoClear even when a probe-positioning throw aborts the
+      // composition mid-frame.
+      const prevTarget = handle.renderer.getRenderTarget();
+      const prevAutoClear = handle.renderer.autoClear;
+      // Idempotent restoration. The happy path calls it BEFORE the report is
+      // built — `return` evaluates its expression before finally runs, so
+      // restoring only in finally would report the still-active target.
+      // finally re-invokes it (a no-op then) purely for the throw path.
+      let restored = false;
+      const restore = async () => {
+        if (restored) return;
+        restored = true;
+        deferredLayer.setOutputTarget(null);
+        forwardFront.visible = false;
+        forwardBehind.visible = false;
+        forwardFar.visible = false;
+        handle.renderer.setRenderTarget(prevTarget);
+        handle.renderer.autoClear = prevAutoClear;
+        draw();
+        await completeGpu();
+      };
+      try {
       // Frame A: full scenes into the owned target.
       deferredLayer.setOutputTarget(compTarget);
       deferredLayer.render(meshScene, sdfScene, camera);
@@ -1070,8 +1075,6 @@ async function main() {
       forwardBehind.visible = true;
       forwardFar.visible = false;
       const beforeA = await readTarget();
-      const prevTarget = handle.renderer.getRenderTarget();
-      const prevAutoClear = handle.renderer.autoClear;
       handle.renderer.setRenderTarget(compTarget);
       handle.renderer.autoClear = false; // compose INTO the presented frame
       handle.renderer.render(forwardScene, camera);
@@ -1119,14 +1122,7 @@ async function main() {
       await completeGpu();
       const afterB = await readTarget();
 
-      // Restore canvas presentation and the normal scenes.
-      deferredLayer.setOutputTarget(null);
-      forwardFront.visible = false;
-      forwardBehind.visible = false;
-      forwardFar.visible = false;
-      draw();
-      await completeGpu();
-
+      await restore();
       return {
         size: [w, h],
         changedPixelsA: changedPixels(beforeA, afterA),
@@ -1153,6 +1149,9 @@ async function main() {
         },
         outputRestored: deferredLayer.diagnostics().outputTargetActive === false,
       };
+      } finally {
+        await restore();
+      }
     },
     /** Luminance-weighted centroid of the lit target inside a square window
      *  around (cx, cy), above the window's own baseline. The GPU-side world
