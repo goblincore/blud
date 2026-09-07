@@ -6,6 +6,7 @@ import {
   packDeferredLights,
   createDeferredLightTexture,
   uploadDeferredLights,
+  FLESH_KEY_PRESENT_ZERO,
   type DeferredLight,
 } from './deferred-lighting';
 
@@ -138,9 +139,32 @@ describe('march-key flesh fields (M2 task 5 game conversion)', () => {
     expect(() => packDeferredLights([{ ...point, fleshKeyIntensity: -1 }])).toThrow(/fleshKeyIntensity/);
   });
 
-  it('rejects a nonfinite or over-range shoulder knee', () => {
+  it('packs a PRESENT ZERO key as the sentinel, never as absent 0 (composition review fix)', () => {
+    // The game's beam-gain panel is legal at 0 ("remove the beam"); that
+    // state must survive the packing as FLESH_KEY_PRESENT_ZERO so the WGSL
+    // takes the march path (contribution exactly 0) instead of falling back
+    // to the packed physical intensity.
+    const packed = packDeferredLights([{ ...point, fleshKeyIntensity: 0 }]);
+    expect(packed.data[14]).toBe(FLESH_KEY_PRESENT_ZERO);
+    // Absent stays 0 — the M1 fixture shape.
+    const absent = packDeferredLights([point]);
+    expect(absent.data[14]).toBe(0);
+    // Presence is the API field being defined; knee comes along unchanged.
+    const keyed = packDeferredLights([{ ...point, fleshKeyIntensity: 0, fleshShoulderKnee: 0.65 }]);
+    expect(keyed.data[14]).toBe(FLESH_KEY_PRESENT_ZERO);
+    expect(keyed.data[15]).toBeCloseTo(0.65, 6);
+  });
+
+  it('rejects a nonfinite or over-range shoulder knee; every legal panel value packs', () => {
     expect(() => packDeferredLights([{ ...point, fleshShoulderKnee: Number.NaN }])).toThrow(/fleshShoulderKnee/);
-    expect(() => packDeferredLights([{ ...point, fleshShoulderKnee: 0.95 }])).toThrow(/fleshShoulderKnee/);
-    expect(() => packDeferredLights([{ ...point, fleshShoulderKnee: 0.9 }])).not.toThrow();
+    expect(() => packDeferredLights([{ ...point, fleshShoulderKnee: 1 }])).toThrow(/fleshShoulderKnee/);
+    expect(() => packDeferredLights([{ ...point, fleshShoulderKnee: 1.01 }])).toThrow(/fleshShoulderKnee/);
+    // The march clamp range is [0.05, 0.99]: shoulder 0 -> knee 0 (off),
+    // shoulder 0.05 -> knee 0.95, shoulder 0.01 -> knee 0.99. All legal —
+    // the old `< 0.95` bound threw on legal panel values every frame.
+    expect(() => packDeferredLights([{ ...point, fleshShoulderKnee: 0 }])).not.toThrow();
+    expect(() => packDeferredLights([{ ...point, fleshShoulderKnee: 0.95 }])).not.toThrow();
+    const packed = packDeferredLights([{ ...point, fleshShoulderKnee: 0.99 }]);
+    expect(packed.data[15]).toBeCloseTo(0.99, 6);
   });
 });

@@ -38,6 +38,13 @@ export const DEFERRED_LIGHT_STRIDE_FLOATS = 16;
 export const LIGHT_KIND_POINT = 0;
 export const LIGHT_KIND_SPOT = 1;
 
+/** The packed v3.z sentinel for a march flesh key PRESENT WITH GAIN 0 (see
+ *  the packed-layout note). The API field is nonnegative; presence is
+ *  `fleshKeyIntensity !== undefined`. The WGSL branches on `v3.z != 0` and
+ *  evaluates `max(v3.z, 0)`, so the sentinel selects the march model with an
+ *  exactly-zero contribution. */
+export const FLESH_KEY_PRESENT_ZERO = -1;
+
 export interface DeferredLight {
   kind: 'point' | 'spot';
   position: readonly [number, number, number];
@@ -48,14 +55,22 @@ export interface DeferredLight {
   cosInner: number;
   cosOuter: number;
   /** Flesh-class key intensity under the MARCH falloff model
-   *  (`key * (1 - d/range)^2` — see the packed-layout note on v3.z). Absent
-   *  or 0: flesh evaluates the packed physical `intensity` like every other
-   *  class. Only the game's flashlight slot sets it. */
+   *  (`key * (1 - d/range)^2` — see the packed-layout note on v3.z).
+   *  ABSENT (undefined): flesh evaluates the packed physical `intensity`
+   *  like every other class — every M1 fixture. PRESENT (including 0): the
+   *  march model replaces the physical one for flesh, so an explicit 0
+   *  removes the beam from flesh receivers while the level keeps the
+   *  physical slot (the game's beam-gain-0 panel position). Only the game's
+   *  flashlight slot sets it. */
   fleshKeyIntensity?: number;
   /** softShoulder knee applied to the flesh-class lit sum (packed v3.w).
    *  0/absent = off. Mirrors the march's beam shoulder (spotCfg2.y 0.35 →
    *  knee 0.65): compresses [knee, inf) into [knee, 1) monotonically so two
-   *  differently-bright flesh texels stay different inside the beam. */
+   *  differently-bright flesh texels stay different. Accepted range is the
+   *  march's own [0, 1): the legacy shader clamps 1-shoulder into
+   *  [0.05, 0.99], so every legal panel value must pack (composition review
+   *  fix — the old `< 0.95` bound threw on the LEGAL panel value 0.05,
+   *  killing every deferred frame at that tuning). */
   fleshShoulderKnee?: number;
 }
 
@@ -84,11 +99,13 @@ export function packDeferredLights(lights: readonly DeferredLight[]): { data: Fl
       if (!Number.isFinite(v)) throw new RangeError(`lights[${i}].${label} must be finite, got ${v}`);
     }
     if (light.range <= 0) throw new RangeError(`lights[${i}].range must be positive, got ${light.range}`);
-    const key = light.fleshKeyIntensity ?? 0;
-    if (!Number.isFinite(key) || key < 0) throw new RangeError(`lights[${i}].fleshKeyIntensity must be finite >= 0, got ${key}`);
+    const key = light.fleshKeyIntensity;
+    if (key !== undefined && (!Number.isFinite(key) || key < 0)) {
+      throw new RangeError(`lights[${i}].fleshKeyIntensity must be finite >= 0, got ${key}`);
+    }
     const knee = light.fleshShoulderKnee ?? 0;
-    if (!Number.isFinite(knee) || knee < 0 || knee >= 0.95) {
-      throw new RangeError(`lights[${i}].fleshShoulderKnee must be finite in [0, 0.95), got ${knee}`);
+    if (!Number.isFinite(knee) || knee < 0 || knee >= 1) {
+      throw new RangeError(`lights[${i}].fleshShoulderKnee must be finite in [0, 1), got ${knee}`);
     }
     for (let c = 0; c < 3; c++) {
       if (light.color[c]! < 0) throw new RangeError(`lights[${i}].color[${c}] must be >= 0, got ${light.color[c]}`);
@@ -108,7 +125,9 @@ export function packDeferredLights(lights: readonly DeferredLight[]): { data: Fl
     data[o + 11] = light.intensity;
     data[o + 12] = light.cosInner;
     data[o + 13] = light.cosOuter;
-    data[o + 14] = light.fleshKeyIntensity ?? 0;
+    // Present-zero encodes as the sentinel (see the v3.z note): 0 alone
+    // means ABSENT, the M1 fixture shape.
+    data[o + 14] = key === undefined ? 0 : (key === 0 ? FLESH_KEY_PRESENT_ZERO : key);
     data[o + 15] = light.fleshShoulderKnee ?? 0;
   });
   return { data, count: lights.length };

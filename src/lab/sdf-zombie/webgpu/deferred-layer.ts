@@ -266,11 +266,17 @@ export interface DeferredLayer {
  * shades bodies with its analytic beam (`beamGain * (1 - d/range)^2`, a
  * linear-to-range window with NO inverse square, plus a highlight shoulder
  * so a beam-lit body keeps its wound detail), while three's physical
- * I/d^2 lights the level. A slot that carries `fleshKeyIntensity` (v3.z > 0)
- * is therefore evaluated under the march's model FOR FLESH ONLY; every other
- * class (and every slot without the field) keeps the packed physical
- * intensity. `fleshShoulderKnee` (v3.w > 0, accumulated across slots as the
- * max) compresses the flesh lit sum EXCLUDING emission with the march's
+ * I/d^2 lights the level. A slot that carries `fleshKeyIntensity` (packed
+ * v3.z nonzero) is therefore evaluated under the march's model FOR FLESH
+ * ONLY; every other class (and every slot without the field) keeps the
+ * packed physical intensity. v3.z is a THREE-state field (see
+ * deferred-lighting.ts's packed-layout note): 0 = absent (physical),
+ * > 0 = the march key gain, FLESH_KEY_PRESENT_ZERO (-1) = present with
+ * gain 0 — the march path with an exactly-zero contribution, so the game's
+ * legal beam-gain-0 panel position removes the beam from flesh instead of
+ * silently falling back to the physical intensity.
+ * `fleshShoulderKnee` (v3.w > 0, accumulated across slots as the max)
+ * compresses the flesh lit sum EXCLUDING emission with the march's
  * softShoulder curve. Both fields default to 0: bit-identical to the
  * pre-task-5 evaluation, which is what every M1 fixture pins.
  *
@@ -353,8 +359,26 @@ export const DEFERRED_LIGHT_WGSL = /* wgsl */ `fn deferredLight(
     let range = max(v1.w, 1e-4);
     let ratio = clamp(d / range, 0.0, 1.0);
     let window = 1.0 - ratio * ratio * ratio * ratio;
+    // M2 task 5 review fix — shoulder activation is CONE- AND RANGE-
+    // INDEPENDENT, exactly like the legacy march (its softShoulder block is
+    // gated on the spot existing, never on beam/cone membership). The
+    // accumulation therefore happens BEFORE the window/cone gates below: a
+    // flesh receiver lit by the practicals must keep its tone response as
+    // the beam's cone/range boundary sweeps across it, or the compression
+    // switches on/off discontinuously at the edge while the beam's own
+    // contribution there approaches zero. Slots outside the loop count
+    // carry v3.w 0 (inactive rows are zeroed on every upload).
+    fleshKnee = max(fleshKnee, v3.w);
     if (window <= 0.0) { continue; }
-    var att = select(v2.w * window * window / d2, v3.z * window * window, isFlesh && v3.z > 0.0);
+    // The march key's RADIAL window is the legacy LINEAR one,
+    // (1 - d/range)^2 — no inverse square, no quartic. Reusing the physical
+    // window here (the first wiring) evaluated the march key on the wrong
+    // falloff FAMILY: at half range it read 0.879 where the march reads
+    // 0.25, so the deferred bodies fell off far too slowly with distance
+    // and no scalar gain could match the legacy captures at more than one
+    // distance.
+    let marchWindow = (1.0 - ratio) * (1.0 - ratio);
+    var att = select(v2.w * window * window / d2, max(v3.z, 0.0) * marchWindow, isFlesh && v3.z != 0.0);
     if (v0.w > 0.5) {
       // Spot: smoothstep falloff between cosOuter and cosInner.
       let cd = dot(-toL / d, normalize(v1.xyz));
@@ -424,7 +448,6 @@ export const DEFERRED_LIGHT_WGSL = /* wgsl */ `fn deferredLight(
       }
     }
     acc = acc + contribution;
-    fleshKnee = max(fleshKnee, v3.w);
   }
   // M2 task 5 — flesh highlight shoulder (accumulated v3.w, 0 = off). The
   // march compresses a beam-lit body with softShoulder(knee) because a hard-
