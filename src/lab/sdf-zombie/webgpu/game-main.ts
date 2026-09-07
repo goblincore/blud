@@ -4088,6 +4088,9 @@ async function main() {
       const v = new THREE.Vector3(x, y, z).project(camera);
       return { x: v.x, y: v.y, z: v.z };
     },
+    /** The live camera's world position (task-6 normal-direction evidence:
+     *  a camera-facing surface must satisfy n·(surface−eye) > 0). */
+    cameraWorld: () => [camera.position.x, camera.position.y, camera.position.z] as Vec3,
     /** The exact inverse of screenPosOf: the world point `dist` metres along
      *  the live camera ray through an NDC point (depth-probe evidence seam —
      *  lets a gate place a forward sprite on a pixel it has already verified
