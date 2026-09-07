@@ -424,6 +424,10 @@ async function main() {
   // The draw chain, exactly as the bench stands it up.
   // -----------------------------------------------------------------------
   const postAa = createPostAa(handle.renderer);
+  if (boundedWoundPreview) {
+    postAa.setFxaa(false);
+    postAa.setSmear(0);
+  }
   // THE FISHEYE. The camera renders WIDER than the player sees and the blit
   // squeezes it back, which is what buys the bulge without losing the frame
   // to a warp that reaches off the buffer. `centerFovDeg` is the look knob;
@@ -459,7 +463,7 @@ async function main() {
   postAa.addSink(sdfLayer);
   /** SDF pass scale relative to the capped buffer. 1.0 = 1:1 (default).
    *  Runtime-adjustable for the cost table + adaptive ladder. */
-  let sdfScale = boundedWoundPreview ? 0.9 : 1.0;
+  let sdfScale = 1.0;
   // Texture round-trip probe rig (texRoundTrip below) — built lazily on the
   // first call, page-lifetime, never rendered by the frame loop. A diagnostic
   // of the 2026-09-04 close-up task; nothing outside texRoundTrip touches it.
