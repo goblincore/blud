@@ -22,14 +22,14 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 **[x] Soldier combat/animation polish — owner approved; merged to main (909b6a87).** Fixed movement, aim, recoil, gait and lab controls. [First pass](docs/dev-notes/2026-09-06-soldier-polish/notes.md).
 
-**[x] Soldier shotgun/readability — owner approved for main.** Exaggerated low-poly semiauto, bent support-arm aim, shared lab/game muzzle flash. [Design and captures](docs/dev-notes/2026-09-06-soldier-shotgun/notes.md).
+**[x] Soldier shotgun/readability — merged to local main (64aa78ee).** Exaggerated low-poly semiauto, bent support-arm aim, shared lab/game muzzle flash. [Design and captures](docs/dev-notes/2026-09-06-soldier-shotgun/notes.md).
 
-**[x] Soldier appearance and damage pass — owner approved for main.** Bulk/olive armor, tuned face and red eyes, localized armor loss/severs/collapse, scoped wounds, skin save and Vite cache fixes. [Result and gotchas](docs/dev-notes/2026-09-06-soldier-bulk/notes.md).
+**[x] Soldier appearance and damage pass — merged to local main (64aa78ee).** Bulk/olive armor, tuned face and red eyes, localized armor loss/severs/collapse, scoped wounds, skin save and Vite cache fixes. [Result and gotchas](docs/dev-notes/2026-09-06-soldier-bulk/notes.md).
 
 **[~] Game tile visual playtest + telemetry — integrated on main; owner visual run next, before performance comparisons.**
 [Usage](docs/dev-notes/2026-09-06-game-tiles-telemetry/notes.md): `?tiles-playtest`, F6 tiles, F8 record/save, F9 geometry/wound marker; ordinary tile default off, no GPU timing claim.
 
-**SOLDIER ANIMATION — BUILT, AWAITING OWNER LOOK (2026-09-05).** The soldier
+**SOLDIER ANIMATION — historical implementation notes (2026-09-05); completed and superseded by the approved passes above.** The soldier
 marches, runs, carries the shorty and hip-fires it in the lab; the skinned
 kit and the gun ride the rig (`rig-frames.ts` → `KitOverlay.pose`,
 `held-prop.ts`). Gait is now a PROFILE (`SHAMBLE` = the zombie verbatim,
@@ -59,7 +59,8 @@ repo via the dev-only `/__lab/save-*` endpoints
 [plan](docs/superpowers/plans/2026-09-05-soldier-animation.md) ·
 [strips](docs/dev-notes/2026-09-05-soldier-animation/notes.md)
 
-**[~] SOLDIER SHOOT-BACK AI (phase 2) — DESIGN APPROVED 2026-09-06, awaiting plan.**
+**[x] SOLDIER SHOOT-BACK AI (phase 2) — implemented and polished on main.**
+The following is the original implementation/dispatch context; current state is summarized above.
 The first enemy that shoots back, and the milestone where the game learns
 enemies come in KINDS. New pure `soldier-brain.ts` (standoff band → aim →
 fire → recover → reposition, backpedal when rushed); `brain.ts` is untouched

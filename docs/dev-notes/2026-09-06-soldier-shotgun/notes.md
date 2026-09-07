@@ -30,7 +30,7 @@ Armor should break off under fire and expose the flesh underneath. Headshots sho
 
 [Model](model.png) · [Shoulder aim](lab-aim.png) · [Lab firing](lab-fire.png) · [Game firing](game-fire.png) · [Wall occlusion](game-wall-occlusion.png)
 
-Preview: [game](http://localhost:5184/sdf-game.html), [soldier lab](http://localhost:5184/sdf-lab-webgpu.html?character=soldier). New weapon/readability pass is on `codex/soldier-shotgun`; the previously approved AI polish is already in main.
+Preview: [game](http://localhost:5184/sdf-game.html), [soldier lab](http://localhost:5184/sdf-lab-webgpu.html?character=soldier). Weapon/readability and the later bulk/injury fixes are merged to local main at `64aa78ee`. The preview worktree remains in use on port 5184.
 
 ## September 6 follow-up
 

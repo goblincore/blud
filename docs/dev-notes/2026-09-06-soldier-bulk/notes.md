@@ -44,3 +44,7 @@ node scripts/verify-soldier-wound.mjs'
 [Final wounded aim](final-wounded-aim.png). Other images in this directory document intermediate art/pose checks and do not supersede the final approved `.blob` settings.
 
 Merge review identified and fixed the severed-cluster ownership edge case. The pre-merge full suite passed **228 files / 3,638 tests**; an additional real-sever regression reproduced the bug before the fix.
+
+## Merge result
+
+Merged to local main at **64aa78ee**. The merged main tree passed **228 test files / 3,639 tests**, including the severed-owner regression, and the production TypeScript/Vite build. Independent review confirmed its ownership finding was resolved. Unrelated main asset edits were preserved. The preview worktree and server on port 5184 remain available. No remote push was performed.
