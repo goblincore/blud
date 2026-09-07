@@ -2,6 +2,13 @@
 // regression gate (private ports, own servers):
 //   LAB_VITE_PORT=5326 LAB_CDP_PORT=9326 scripts/deferred-game-check.sh
 //
+// SCOPE (TASK6_SCOPE env): 'full' (default) runs every phase P0..P8 and is
+// the only mode that may claim Task 6 acceptance (canonical
+// game-validation.json). 'core' runs the render-control and
+// route/depth/scale evidence only (P0, P1, P2, P6, P7a), writes
+// game-validation-core.json + task-6-core.md, and NEVER claims full
+// acceptance. Unknown values exit 2.
+//
 // The task-5 boot check proved boot+capture; the composition check proved the
 // output-depth seam. THIS gate is the game-level regression gate. Every
 // assertion runs against the REAL game (sdf-game.html), frozen through the
@@ -45,12 +52,28 @@
 // page error; SUCCESS closes resources and exits 0. Raw pixels never leave
 // the page: screenshots are decoded in-page and reduced to bounded stats.
 import assert from 'node:assert/strict';
+import { execSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { buildNdcLattice } from './lib/task6-grid.mjs';
 
 const vite = Number(process.argv[2] ?? 5326), cdp = Number(process.argv[3] ?? 9326);
 const out = 'docs/dev-notes/2026-09-06-hybrid-deferred-m2';
 mkdirSync(out, { recursive: true });
 const W = 1280, H = 800;
+
+/** TASK6_SCOPE=core|full (default full). CORE runs the render-control and
+ *  route/depth/scale evidence only — P0, P1, P2, P6, P7a — and writes
+ *  game-validation-core.json + task-6-core.md with fullAcceptance:false. It
+ *  NEVER writes the canonical game-validation.json and NEVER claims full
+ *  Task 6 acceptance: the character/lifecycle/muzzle/cap/legacy phases
+ *  (P3..P5b, P7b, P8) are the next continuation's stage. Unknown values
+ *  are rejected with exit 2. */
+const SCOPE = process.env.TASK6_SCOPE ?? 'full';
+if (SCOPE !== 'core' && SCOPE !== 'full') {
+  console.error(`TASK6 GAME CHECK: rejecting unknown TASK6_SCOPE '${SCOPE}' (expected 'core' | 'full')`);
+  process.exit(2);
+}
+const CORE = SCOPE === 'core';
 
 const tab = await (await fetch(`http://127.0.0.1:${cdp}/json/new?about:blank`, { method: 'PUT' })).json();
 const ws = new WebSocket(tab.webSocketDebuggerUrl);
@@ -231,7 +254,10 @@ const aimYawAt = (px, pz, tx, tz) => Math.atan2(tx - px, -(tz - pz));
  *  mutation the gate makes happens inside one of these. */
 const enterSimPhase = async (label) => {
   results.phase = label;
-  await evaluate('__sdfGame.setRenderLock(false); __sdfGame.freeze(false);');
+  // The diagnostic light clock unfreezes with the lock: simulation phases
+  // (muzzle, pellets) want the live flicker, and their assertions are
+  // delta-thresholded so flicker noise cannot mask the tested effect.
+  await evaluate('__sdfGame.setRenderLock(false); __sdfGame.freeze(false); __sdfGame.setLightClockFrozen(false);');
 };
 /** SETTLE + LOCK: freeze, hand-step long enough that every exponential
  *  transient (head-bob excitation from a teleport, recoil, weapon catch-up,
@@ -241,7 +267,13 @@ const enterSimPhase = async (label) => {
 const SETTLE_STEPS = 90;
 const settleAndLock = async () => {
   await evaluate(`__sdfGame.freeze(true); __sdfGame.step(${SETTLE_STEPS});`);
-  await evaluate('__sdfGame.setRenderLock(true); __sdfGame.step(2);');
+  // RENDER LOCK + LIGHT CLOCK: the lock freezes geometry but NOT the
+  // wall-clock practical flicker (performance.now). G-buffer invariance
+  // never needed the flicker, but every MATCHED LIT screenshot across two
+  // renders does — freeze the narrow diagnostic lighting clock while
+  // locked so two renders of the same scene are bit-comparable. Ordinary
+  // gameplay never freezes it (gate-only seam; default OFF).
+  await evaluate('__sdfGame.setRenderLock(true); __sdfGame.setLightClockFrozen(true); __sdfGame.step(2);');
   await sleep(300);
 };
 const faceTarget = async (px, pz, tx, tz, pitch = -0.12) => {
@@ -390,10 +422,11 @@ const bracketAt = async (label, ndc, deltas, spread = 0.05, scale = 0.1) => {
   return record;
 };
 
-const results = { phase: 'setup', checks, pageErrors, pass: false };
+const results = { phase: 'setup', checks, pageErrors, pass: false, scope: SCOPE, fullAcceptance: !CORE };
 Object.defineProperty(results, 'pageErrorsDropped', { get: () => pageErrorsDropped, enumerable: true });
 const records = { captures, stages: {} };
-const EV_PATH = `${out}/game-validation.json`;
+// Core scope writes its OWN evidence file — never the canonical full one.
+const EV_PATH = `${out}/${CORE ? 'game-validation-core.json' : 'game-validation.json'}`;
 /** Persist CURRENT progress (checks so far + phase + captures). Called after
  *  every completed phase AND in the failure path AND in finally — a hard
  *  timeout must leave the latest phase evidence on disk, not a stub. */
@@ -404,6 +437,35 @@ const saveEvidence = () => writeFileSync(EV_PATH, JSON.stringify({
   viewport: { width: W, height: H },
   records,
 }, null, 2));
+
+/** CORE-SCOPE REPORT (task-6-core.md): machine-generated, honest summary —
+ *  scope, source commit, every executed check, and the explicit disclaimer
+ *  that full Task 6 acceptance is NOT claimed. Never written in full mode
+ *  (the full task-6.md report is authored against the full evidence). */
+const writeCoreReport = () => {
+  if (!CORE) return;
+  let commit = 'unknown';
+  try { commit = execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim(); } catch { /* no git */ }
+  const lines = [
+    '# Task 6 — CORE scope GPU gate report (machine-generated)',
+    '',
+    `- scope: \`core\` (TASK6_SCOPE=${SCOPE})`,
+    `- fullAcceptance: **false** — a core pass is NOT full Task 6 acceptance`,
+    `- source commit: \`${commit}\``,
+    `- generatedAt: ${new Date().toISOString()}`,
+    `- ports: vite ${vite} / cdp ${cdp}, viewport ${W}x${H}`,
+    `- core coverage: P0 boot · P1 render-control + surface-hash invariance · P2 opaque routes · P6 exact depth/sentinel/present · P7a scale/resize`,
+    `- remaining for full Task 6: P3 characters · P4 wounds · P5 sever/bake/rebuild · P5b muzzle · P7b CSS cap · P8 legacy boots (next continuation)`,
+    '',
+    `## Checks (${checks.length})`,
+    '',
+    ...checks.map((c) => `- PASS ${c.name}`),
+    '',
+    'Evidence JSON: `game-validation-core.json` (same directory).',
+    '',
+  ];
+  writeFileSync(`${out}/task-6-core.md`, lines.join('\n'));
+};
 try {
   await send('Page.enable'); await send('Runtime.enable');
   await send('Emulation.setDeviceMetricsOverride', { width: W, height: H, deviceScaleFactor: 1, mobile: false });
@@ -552,16 +614,20 @@ try {
   check('P2-route-flesh-sdf', { cls: fleshTexel.cls, depth: +fleshTexel.depth.toFixed(5) });
 
   /** NORMAL DIRECTION (task-2 review carry-forward): transformed producers
-   *  must carry GEOMETRIC world normals, not just unit-length ones. A
-   *  camera-facing surface satisfies n·v > 0 with v = eye -> surface.
+   *  must carry GEOMETRIC world normals, not just unit-length ones. An
+   *  OUTWARD camera-facing surface normal points FROM the surface TOWARD
+   *  the eye, so the oracle vector is (eye − surface) = camera-surface and
+   *  n·(camera-surface) > 0. (The previous version built surface−camera —
+   *  the camera→surface ray — and demanded a positive dot, asserting the
+   *  normal points AWAY from the eye while claiming camera-facing.)
    *  |n| must be ~1. Used for flesh here; tube/baked producers call it in
-   *  their own stages. */
+   *  their own stages. Each probe uses ITS OWN chosen world coordinate. */
   const normalTowardCam = async (sp, texel, minDot, label) => {
     const cam = await evaluate('__sdfGame.cameraWorld()');
     const v = await depthToWorld(sp.x, sp.y, texel.depth);
-    const toSurf = [v[0] - cam[0], v[1] - cam[1], v[2] - cam[2]];
-    const len = Math.hypot(...toSurf) || 1;
-    const dot = (texel.normal[0] * toSurf[0] + texel.normal[1] * toSurf[1] + texel.normal[2] * toSurf[2]) / len;
+    const toCam = [cam[0] - v[0], cam[1] - v[1], cam[2] - v[2]];
+    const len = Math.hypot(...toCam) || 1;
+    const dot = (texel.normal[0] * toCam[0] + texel.normal[1] * toCam[1] + texel.normal[2] * toCam[2]) / len;
     const nlen = Math.hypot(...texel.normal);
     assert.ok(Math.abs(nlen - 1) < 0.05, `${label}: normal not unit length (${nlen.toFixed(4)})`);
     assert.ok(dot > minDot, `${label}: normal points AWAY from the camera (n·v ${dot.toFixed(3)} <= ${minDot})`);
@@ -592,61 +658,84 @@ try {
   const tubePixelDelta = hTubes.classCounts['17'] - h0a.classCounts['17'];
   assert.ok(tubePixelDelta > 0,
     `tubes must ADD cls-17 pixels (gun-only ${h0a.classCounts['17']} -> ${hTubes.classCounts['17']})`);
-  let tubeTexel = null, tubeNdc = null, tubeNormal = null;
+  let tubeTexel = null, tubeNdc = null, tubeNormal = null, tubeOffTexel = null;
   {
     // ONE-CALL lattice scan via sampleSurfacePoints (a single readback set,
     // not one render per sample — the per-sample variant hit CDP timeouts).
+    // The grid itself comes from scripts/lib/task6-grid.mjs — the inline
+    // version shipped `for (let dx = -6; dx <= 6; dx--)`, which never
+    // terminates and hung a whole gate run; the extracted builder has its
+    // own CPU regression (termination, the 20*13=260 unfiltered count,
+    // bounds, exclusion, hard maximum).
     // Candidates: cls-17 texels within a TIGHT depth window of the body
     // (the gun viewmodel is far nearer; the breech landmark itself resolved
     // at background depth, so a spatial skip alone is unreliable) and clear
     // of the measured gun texel. From the candidates, the normal-direction
     // check uses the MOST camera-facing one — a cylinder always has
     // front-facing pixels; only a genuinely flipped/defective normal fails.
-    const lattice = [];
-    for (let dy = 5; dy >= -14; dy--) {
-      for (let dx = -6; dx <= 6; dx--) {
-        const nx = +(fleshSp.x + dx * 0.05).toFixed(4);
-        const ny = +(fleshSp.y + dy * 0.05).toFixed(4);
-        if (Math.abs(nx) > 0.95 || Math.abs(ny) > 0.95) continue;
-        if (Math.hypot(nx - gunSp.x, ny - gunSp.y) < 0.2) continue;
-        lattice.push({ x: nx, y: ny });
-      }
-    }
-    const samples = await evaluate(`__sdfGame.sampleSurfacePoints(${JSON.stringify(lattice)})`);
+    const lattice = buildNdcLattice({
+      cx: fleshSp.x, cy: fleshSp.y,
+      dxRange: [-6, 6], dyRange: [-14, 5], step: 0.05,
+      exclude: { x: gunSp.x, y: gunSp.y, radius: 0.2 },
+    });
+    const samples = await evaluate(`__sdfGame.sampleSurfacePoints(${JSON.stringify(lattice.points)})`);
     const cam = await evaluate('__sdfGame.cameraWorld()');
     const candidates = [];
     for (let i = 0; i < samples.length; i++) {
       const s = samples[i];
       if (!(s.cls > 16.5 && s.cls < 17.5 && s.depth < 0.995)) continue;
       if (Math.abs(s.depth - fleshTexel.depth) > 0.012) continue; // body depth window
-      candidates.push({ i, s, ndc: lattice[i] });
+      candidates.push({ i, s, ndc: lattice.points[i] });
     }
     let best = null;
     for (const c of candidates.slice(0, 24)) {
       const w = await depthToWorld(c.ndc.x, c.ndc.y, c.s.depth);
-      const toSurf = [w[0] - cam[0], w[1] - cam[1], w[2] - cam[2]];
-      const len = Math.hypot(...toSurf) || 1;
-      const dot = (c.s.normal[0] * toSurf[0] + c.s.normal[1] * toSurf[1] + c.s.normal[2] * toSurf[2]) / len;
+      // camera-surface oracle (see normalTowardCam above): the outward
+      // normal of a front-facing surface points toward the EYE. Each
+      // candidate uses its OWN chosen world coordinate.
+      const toCam = [cam[0] - w[0], cam[1] - w[1], cam[2] - w[2]];
+      const len = Math.hypot(...toCam) || 1;
+      const dot = (c.s.normal[0] * toCam[0] + c.s.normal[1] * toCam[1] + c.s.normal[2] * toCam[2]) / len;
       const nlen = Math.hypot(...c.s.normal);
       if (!best || dot > best.dot) best = { dot, nlen, c };
     }
-    if (best) {
-      tubeTexel = best.c.s; tubeNdc = [best.c.ndc.x, best.c.ndc.y];
-      assert.ok(Math.abs(best.nlen - 1) < 0.05,
-        `bone tube: normal not unit length (${best.nlen.toFixed(4)})`);
-      assert.ok(best.dot > 0,
-        `bone tube: no camera-facing normal among ${candidates.length} tube texels `
-        + `(best n·v ${best.dot.toFixed(3)}) — transformed-instance normals are defective`);
-      tubeNormal = { dot: +best.dot.toFixed(3), nlen: +best.nlen.toFixed(4), candidates: candidates.length };
-    }
+    // REQUIRED (recovery review): the pixel-count delta alone does NOT
+    // establish tube coverage — it cannot distinguish tube pixels from gun
+    // pixels or coincidence. A real tube TEXEL is mandatory, and its tube
+    // identity is proven by the MATCHED VISIBILITY readback below.
+    assert.ok(best, `bone tubes: no cls-17 texel in the body depth window across a `
+      + `${lattice.points.length}-point lattice (${lattice.unfiltered} unfiltered, `
+      + `${candidates.length} raw cls-17 hits) — pixel delta alone does not prove tube coverage`);
+    tubeTexel = best.c.s; tubeNdc = [best.c.ndc.x, best.c.ndc.y];
+    assert.ok(Math.abs(best.nlen - 1) < 0.05,
+      `bone tube: normal not unit length (${best.nlen.toFixed(4)})`);
+    assert.ok(best.dot > 0,
+      `bone tube: no camera-facing normal among ${candidates.length} tube texels `
+      + `(best n·(cam-surf) ${best.dot.toFixed(3)}) — transformed-instance normals are defective`);
+    tubeNormal = { dot: +best.dot.toFixed(3), nlen: +best.nlen.toFixed(4), candidates: candidates.length, lattice: lattice.unfiltered };
   }
   await evaluate('__sdfGame.setBoneMesh(false); __sdfGame.step(3);');
   const hTubesOff = await evaluate('__sdfGame.hashSurface()');
   assert.deepEqual(hTubesOff, h0a, 'tubes off must restore the surface digest exactly');
+  // MATCHED VISIBILITY OFF/ON: read the SAME coordinate, tubes OFF. It must
+  // NOT still show a cls-17 surface at the tube depth — otherwise the
+  // "tube texel" could have been gun geometry that merely passed the
+  // filters. The paired reads (same NDC, same depth window) are what make
+  // the on-state texel attributable to the tubes.
+  {
+    const off = await evaluate(`__sdfGame.readSurfaceAt(${tubeNdc[0].toFixed(4)}, ${tubeNdc[1].toFixed(4)})`);
+    const offShowsTube = off.cls > 16.5 && off.cls < 17.5
+      && Math.abs(off.depth - tubeTexel.depth) <= 0.012;
+    assert.ok(!offShowsTube,
+      `bone tube: tubes-off readback at the SAME NDC (${JSON.stringify(tubeNdc)}) still shows a `
+      + `cls-17 surface at tube depth (cls ${off.cls}, depth ${off.depth}) — the texel is not attributable to the tubes`);
+    tubeOffTexel = { cls: off.cls, depth: +off.depth.toFixed(5) };
+  }
   check('P2-route-bone-tubes', {
     instances: tubes.count, tubePixelDelta,
     tubeTexel: tubeTexel && { depth: +tubeTexel.depth.toFixed(5), ndc: tubeNdc },
-    tubeNormal: tubeNormal ?? 'no tube texel in the scanned lattice (coverage still proven by the pixel delta)',
+    tubeNormal,
+    tubeOffReadback: tubeOffTexel,
     hashesDiffer: hTubes.hashes.emissionClass !== h0a.hashes.emissionClass,
   });
 
@@ -676,7 +765,8 @@ try {
 
   // NORMAL DIRECTION (task-2 review carry-forward): transformed producers
   // must carry GEOMETRIC world normals, not just unit-length ones. A
-  // camera-facing surface satisfies n·v > 0 with v = cam -> surface. Check
+  // camera-facing surface satisfies n·(surface→eye) > 0 — the camera-surface
+  // oracle, per normalTowardCam. Check
   // the flesh march producer here; tube/baked producers get their own
   // checks where they are enabled/baked.
   // NORMAL DIRECTION on the flesh march producer (world-space normals on a
@@ -866,6 +956,26 @@ try {
   check('P7a-resize', { down: downFrame.frame, up: upFrame.frame });
   noNewErrors('P7a scale/resize');
   saveEvidence();
+
+  // ===================================================================
+  // CORE SCOPE CUTOFF (TASK6_SCOPE=core): P0/P1/P2/P6/P7a only. The
+  // character/lifecycle/muzzle/cap/legacy phases below (P3..P5b, P7b, P8)
+  // are the NEXT continuation's stage — a core run never executes them,
+  // never writes the canonical full evidence, and never claims full
+  // Task 6 acceptance. The full-only phases run inside an async IIFE the
+  // core scope returns from immediately (no logic change, no reindent).
+  // ===================================================================
+  if (CORE) {
+    results.pass = true;
+    results.phase = 'complete';
+    results.coreCoverage = ['P0-boot', 'P1-render-control+invariance', 'P2-routes', 'P6-depth', 'P7a-scale-resize'];
+    results.remainingForFullAcceptance = ['P3-characters', 'P4-wounds', 'P5-sever', 'P5b-muzzle', 'P7b-css-cap', 'P8-legacy'];
+    saveEvidence();
+    writeCoreReport();
+    console.log(`TASK6 GAME CHECK: CORE scope PASS (${checks.length} checks) — full Task 6 acceptance NOT claimed; P3+ remains for the next continuation`);
+  }
+  await (async () => { // full-only phases; core returns immediately
+    if (CORE) return;
 
   // ===================================================================
   // P3/P4 — EVERY REGISTERED CHARACTER RENDERED ONCE + DETAIL EVIDENCE
@@ -1234,6 +1344,7 @@ try {
 
   results.pass = true;
   results.phase = 'complete';
+  })(); // end full-only phases
 } catch (e) {
   results.pass = false;
   results.failure = {

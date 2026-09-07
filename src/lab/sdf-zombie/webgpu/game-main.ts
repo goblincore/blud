@@ -698,8 +698,14 @@ async function main() {
     // two-rate wobble reads as flame; white noise reads as a broken light.
     // Runs in BOTH modes: the deferred practicals are the same PointLights,
     // read live by the coordinator's light list.
+    // The clock is wall-clock performance.now() ON PURPOSE — but that means
+    // the task-6 render lock does NOT freeze it (the lock pins simulation,
+    // not this). When the gate freezes the DIAGNOSTIC light clock
+    // (setLightClockFrozen), ft pins to the freeze instant so two renders of
+    // a locked scene have identical practical intensity; gameplay never
+    // freezes it.
     {
-      const ft = performance.now() * 0.001;
+      const ft = lightClockFrozen ? flickerClockFrozenAt : performance.now() * 0.001;
       for (const f of flickerLights) {
         const w = Math.sin(ft * 7.3 + f.phase) * 0.5 + Math.sin(ft * 17.1 + f.phase * 2.3) * 0.25;
         f.light.intensity = f.base * (1 + w * 0.14);
@@ -3046,6 +3052,11 @@ async function main() {
    *  the teleported player's head-bob decayed. Default OFF; only the gate
    *  sets it, so legacy gameplay is untouched. */
   let simLocked = false;
+  /** TASK-6 DIAGNOSTIC LIGHT CLOCK state — see setLightClockFrozen in the
+   *  __sdfGame seam. Freezes the practical flicker phase at the freeze
+   *  instant; default OFF, gate-only. */
+  let lightClockFrozen = false;
+  let flickerClockFrozenAt = 0;
   /** Whether the hulls have been built for the CURRENT frozen stretch — see
    *  the frozen-from-boot hull build in tick. */
   let frozenHullBuilt = false;
@@ -4089,7 +4100,8 @@ async function main() {
       return { x: v.x, y: v.y, z: v.z };
     },
     /** The live camera's world position (task-6 normal-direction evidence:
-     *  a camera-facing surface must satisfy n·(surface−eye) > 0). */
+     *  an OUTWARD camera-facing surface normal points toward the eye, so it
+     *  satisfies n·(eye−surface) > 0 — the camera-surface oracle). */
     cameraWorld: () => [camera.position.x, camera.position.y, camera.position.z] as Vec3,
     /** The exact inverse of screenPosOf: the world point `dist` metres along
      *  the live camera ray through an NDC point (depth-probe evidence seam —
@@ -4130,6 +4142,18 @@ async function main() {
      *  change; settle transients with step(~90); turn back on to observe. */
     setRenderLock: (on: boolean) => { simLocked = on; },
     get renderLock() { return simLocked; },
+    /** TASK-6 DIAGNOSTIC LIGHT CLOCK: the practical-fire flicker runs on
+     *  wall-clock performance.now() INSIDE the draw path, which the render
+     *  lock does not freeze — two renders of a locked scene still differ in
+     *  practical intensity. G-buffer invariance never cared; MATCHED LIT
+     *  screenshots do. Freezing this one clock pins the flicker phase so
+     *  locked renders are bit-comparable in lit output too. Gate-only:
+     *  default OFF, ordinary gameplay never freezes it. */
+    setLightClockFrozen: (on: boolean) => {
+      if (on) flickerClockFrozenAt = performance.now() * 0.001;
+      lightClockFrozen = on;
+    },
+    get lightClockFrozen() { return lightClockFrozen; },
     setProbeWeight: pushProbeWeight,
     get probeWeight() { return probeWeight; },
     /** Every zombie: id, room, live ground pose. */

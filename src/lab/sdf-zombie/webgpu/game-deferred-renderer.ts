@@ -54,6 +54,13 @@ import {
   type DeferredFlashlightShadowFactory,
 } from './deferred-shadows';
 import {
+  halfToFloat,
+  r32fRowStride,
+  readR32FTexel,
+  readRgba16FTexel,
+  rgba16fRowStride,
+} from './surface-readback';
+import {
   buildGameDeferredLights,
   type GameDeferredFlashKey,
   type GameDeferredLightSet,
@@ -445,33 +452,27 @@ export function createGameDeferredRenderer(deps: GameDeferredRendererDeps): Game
       const py = Math.min(h - 1, Math.max(0, Math.round(((1 - ndcY) / 2) * h)));
       // One full-attachment read per attachment (the fixture-proven pattern —
       // partial-rect readbacks hit the 256-byte row-padding hazard for free).
-      // Half floats decode manually (WebGPU rows are 256-byte aligned, so a
-      // row's uint16 stride is paddedRowBytes/2); the r32f depth reads as f32.
+      // Decoding goes through the SHARED surface-readback decoder: the r32f
+      // depth stride is paddedRowBytes(w,4)/4 floats per row (832 at width
+      // 800, NOT 800 — three's WebGPU backend returns the padded buffer), and
+      // the rgba16float attachments decode as uint16 bit patterns including
+      // subnormals. Both bugs previously lived inline here.
       const read = async (name: SurfaceAttachmentName): Promise<Float32Array> => {
         const textureIndex = target.textures.findIndex((t) => t.name === name);
         if (textureIndex < 0) throw new Error(`resolved target is missing attachment '${name}'`);
         const tex = target.textures[textureIndex]!;
-        const channels = tex.format === THREE.RedFormat ? 1 : 4;
-        const half = tex.type === THREE.HalfFloatType;
         const raw = await renderer.readRenderTargetPixelsAsync(target, 0, 0, w, h, textureIndex);
-        const src = new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength);
-        const out = new Float32Array(channels);
-        if (!half) {
-          const f32 = new Float32Array(src.buffer, src.byteOffset, src.byteLength / 4);
-          for (let c = 0; c < channels; c++) out[c] = f32[(py * w + px) * channels + c]!;
-          return out;
-        }
-        const rowBytes = w * channels * 2;
-        const paddedRowBytes = Math.ceil(rowBytes / 256) * 256;
-        const u16 = new Uint16Array(src.buffer, src.byteOffset, src.byteLength / 2);
-        const rowU16 = py * (paddedRowBytes / 2); // stride in uint16 units
-        const o = px * channels;
-        for (let c = 0; c < channels; c++) {
-          const bits = u16[rowU16 + o + c]!;
-          const s = (bits & 0x8000) >> 15, exp = (bits & 0x7c00) >> 10, frac = bits & 0x3ff;
-          out[c] = exp === 0 ? (s ? -0 : 0) * (frac ? Number.NaN : 1)
-            : exp === 31 ? (s ? -1 : 1) * (frac ? Number.NaN : Infinity)
-            : (s ? -1 : 1) * (1 + frac / 1024) * 2 ** (exp - 15);
+        const out = new Float32Array(4);
+        if (tex.format === THREE.RedFormat) {
+          const f32 = raw instanceof Float32Array
+            ? raw
+            : new Float32Array(raw.buffer, raw.byteOffset, raw.byteLength / 4);
+          out[0] = readR32FTexel(f32, w, px, py);
+        } else {
+          const u16 = raw instanceof Uint16Array
+            ? raw
+            : new Uint16Array(raw.buffer, raw.byteOffset, raw.byteLength / 2);
+          readRgba16FTexel(u16, w, px, py, out);
         }
         return out;
       };
@@ -509,20 +510,14 @@ export function createGameDeferredRenderer(deps: GameDeferredRendererDeps): Game
         }
         return h32 >>> 0;
       };
-      const h2f = (bits: number): number => {
-        const s = (bits & 0x8000) >> 15, exp = (bits & 0x7c00) >> 10, frac = bits & 0x3ff;
-        return exp === 0 ? (s ? -0 : 0) * (frac ? Number.NaN : 1)
-          : exp === 31 ? (s ? -1 : 1) * (frac ? Number.NaN : Infinity)
-          : (s ? -1 : 1) * (1 + frac / 1024) * 2 ** (exp - 15);
-      };
-      const readRaw = async (name: SurfaceAttachmentName): Promise<{ bytes: Uint8Array; half: boolean; channels: number }> => {
+      // Half decoding via the shared exact decoder (subnormals included —
+      // classes at the bottom of the representable range decode as numbers,
+      // never NaN).
+      const readRaw = async (name: SurfaceAttachmentName): Promise<{ bytes: Uint8Array }> => {
         const textureIndex = target.textures.findIndex((t) => t.name === name);
         if (textureIndex < 0) throw new Error(`resolved target is missing attachment '${name}'`);
-        const tex = target.textures[textureIndex]!;
-        const channels = tex.format === THREE.RedFormat ? 1 : 4;
-        const half = tex.type === THREE.HalfFloatType;
         const raw = await renderer.readRenderTargetPixelsAsync(target, 0, 0, w, h, textureIndex);
-        return { bytes: new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength), half, channels };
+        return { bytes: new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength) };
       };
       const [albedo, nm, ec, dep] = await Promise.all([
         readRaw('albedoRoughness'), readRaw('normalMetalness'), readRaw('emissionClass'), readRaw('surfaceDepth'),
@@ -547,7 +542,7 @@ export function createGameDeferredRenderer(deps: GameDeferredRendererDeps): Game
       const ecStride = ecPadded / 2, depStride = depPadded / 4;
       for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
-          const cls = h2f(ecU16[y * ecStride + x * 4 + 3]!);
+          const cls = halfToFloat(ecU16[y * ecStride + x * 4 + 3]!);
           const d = depF32[y * depStride + x]!;
           if (cls > 0.5) {
             nonEmpty++;
@@ -586,36 +581,27 @@ export function createGameDeferredRenderer(deps: GameDeferredRendererDeps): Game
     },
 
     async sampleSurfacePoints(points) {
-      // Self-contained on purpose (mirrors readSurfaceAt/hashSurface decode
-      // logic): ONE parallel readback set for the WHOLE lattice — 512 points
-      // cost the same as one point. Bounded output by construction.
+      // ONE parallel readback set for the WHOLE lattice — 512 points cost
+      // the same as one point. Decoding goes through the shared surface-
+      // readback decoder, format-aware per attachment: the albedo/normal/
+      // class attachments are rgba16float (uint16 bit patterns, padded
+      // rows), depth is r32float (padded rows). The previous version read
+      // the HALF albedo as float32 with a dense stride — two defects at
+      // once, every value garbage.
       const target = layer.targets.resolved;
       const w = target.width, h = target.height;
-      const readRaw = async (name: SurfaceAttachmentName): Promise<{ bytes: Uint8Array; half: boolean; channels: number }> => {
+      const readRaw = async (name: SurfaceAttachmentName): Promise<{ bytes: Uint8Array }> => {
         const textureIndex = target.textures.findIndex((t) => t.name === name);
         if (textureIndex < 0) throw new Error(`resolved target is missing attachment '${name}'`);
-        const tex = target.textures[textureIndex]!;
-        const channels = tex.format === THREE.RedFormat ? 1 : 4;
-        const half = tex.type === THREE.HalfFloatType;
         const raw = await renderer.readRenderTargetPixelsAsync(target, 0, 0, w, h, textureIndex);
-        return { bytes: new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength), half, channels };
+        return { bytes: new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength) };
       };
       const [albedo, nm, ec, dep] = await Promise.all([
         readRaw('albedoRoughness'), readRaw('normalMetalness'), readRaw('emissionClass'), readRaw('surfaceDepth'),
       ]);
-      const strides = (r: { half: boolean; channels: number }) => {
-        const rowBytes = w * r.channels * (r.half ? 2 : 4);
-        const padded = Math.ceil(rowBytes / 256) * 256;
-        return r.half ? padded / 2 : padded / 4;
-      };
-      const albedoRow = strides(albedo), nmRow = strides(nm), ecRow = strides(ec), depRow = strides(dep);
-      const h2f = (bits: number): number => {
-        const s = (bits & 0x8000) >> 15, exp = (bits & 0x7c00) >> 10, frac = bits & 0x3ff;
-        return exp === 0 ? (s ? -0 : 0) * (frac ? Number.NaN : 1)
-          : exp === 31 ? (s ? -1 : 1) * (frac ? Number.NaN : Infinity)
-          : (s ? -1 : 1) * (1 + frac / 1024) * 2 ** (exp - 15);
-      };
-      const albedoF32 = new Float32Array(albedo.bytes.buffer, albedo.bytes.byteOffset, albedo.bytes.byteLength / 4);
+      const albedoRow = rgba16fRowStride(w), nmRow = rgba16fRowStride(w), ecRow = rgba16fRowStride(w);
+      const depRow = r32fRowStride(w);
+      const albedoU16 = new Uint16Array(albedo.bytes.buffer, albedo.bytes.byteOffset, albedo.bytes.byteLength / 2);
       const nmU16 = new Uint16Array(nm.bytes.buffer, nm.bytes.byteOffset, nm.bytes.byteLength / 2);
       const ecU16 = new Uint16Array(ec.bytes.buffer, ec.bytes.byteOffset, ec.bytes.byteLength / 2);
       const depF32 = new Float32Array(dep.bytes.buffer, dep.bytes.byteOffset, dep.bytes.byteLength / 4);
@@ -623,16 +609,15 @@ export function createGameDeferredRenderer(deps: GameDeferredRendererDeps): Game
       for (const p of points.slice(0, 512)) {
         const px = Math.min(w - 1, Math.max(0, Math.round(((p.x + 1) / 2) * w)));
         const py = Math.min(h - 1, Math.max(0, Math.round(((1 - p.y) / 2) * h)));
-        const o = (py * w + px) * 4;
+        const aO = py * albedoRow + px * 4;
         const nmO = py * nmRow + px * 4;
-        const dec = (arr: Uint16Array, base: number, c: number) => h2f(arr[base + c]!);
         out.push({
           pixel: [px, py], size: { width: w, height: h },
-          albedo: [albedoF32[o]!, albedoF32[o + 1]!, albedoF32[o + 2]!],
-          roughness: albedoF32[o + 3]!,
-          normal: [dec(nmU16, nmO, 0), dec(nmU16, nmO, 1), dec(nmU16, nmO, 2)],
-          metalness: dec(nmU16, nmO, 3),
-          cls: dec(ecU16, py * ecRow + px * 4, 3),
+          albedo: [halfToFloat(albedoU16[aO]!), halfToFloat(albedoU16[aO + 1]!), halfToFloat(albedoU16[aO + 2]!)],
+          roughness: halfToFloat(albedoU16[aO + 3]!),
+          normal: [halfToFloat(nmU16[nmO]!), halfToFloat(nmU16[nmO + 1]!), halfToFloat(nmU16[nmO + 2]!)],
+          metalness: halfToFloat(nmU16[nmO + 3]!),
+          cls: halfToFloat(ecU16[py * ecRow + px * 4 + 3]!),
           depth: depF32[py * depRow + px]!,
         });
       }
