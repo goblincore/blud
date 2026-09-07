@@ -973,6 +973,7 @@ null
     `pinned roster DRIFTED from character-registry.ts:\n    registry-only: ${JSON.stringify(missingFromPin)}\n    pin-only: ${JSON.stringify(staleInPin)}\n    update REGISTRY_PINNED (and any per-character handling) with the registry`);
   assert.equal(REGISTRY.length, 16, 'roster size sanity — see character-registry.ts');
   const rendered = {};
+  records.stages.characters = rendered; // live reference: saveEvidence() captures each character as it lands
   const baseMeshCount = (await evaluate('__sdfGame.deferredDiagnostics()')).router.counts.mesh;
   for (const name of REGISTRY) {
     // Spread spawns across rooms (4 per room) so bodies do not stack.
@@ -1093,13 +1094,25 @@ null
           `soldier: held-prop nodes must route 'mesh': ${JSON.stringify(propNodes.map((n) => [n.name, n.route]))}`);
       }
       const anchors = [];
+      // All kit primitives SHARE one skeleton, so per-node first-4 bones
+      // would repeat the same four torso positions ten times and scan one
+      // spot. Collect DISTINCT posed bone positions across the skeleton
+      // (deduped at ~1 cm) — kit pieces paint away from the torso centre
+      // (horns at the skull, a coat at the sides), so the scan must walk
+      // the whole posed skeleton, not its first four joints.
+      const seenPos = new Set();
       for (const km of (propNodes?.length ? propNodes : meshNodes).slice(0, 4)) {
-        const pts = (km.bones?.length ? km.bones.slice(0, 4).map((b) => ({ w: b, label: `${km.name}:bone` }))
+        const pts = (km.bones?.length ? km.bones.map((b) => ({ w: b, label: `${km.name}:bone` }))
           : [{ w: km.pos, label: km.name }]);
-        for (const pt of pts) anchors.push({ node: km.name, label: pt.label, w: pt.w });
+        for (const pt of pts) {
+          const key = pt.w.map((q) => Math.round(q * 100)).join(',');
+          if (seenPos.has(key)) continue;
+          seenPos.add(key);
+          anchors.push({ node: km.name, label: pt.label, w: pt.w });
+        }
       }
       let kitTexel = null, kitNode = null;
-      for (const a of anchors.slice(0, 10)) {
+      for (const a of anchors.slice(0, 14)) {
         const ksp = await evaluate(`__sdfGame.screenPosOf(${a.w[0]}, ${a.w[1]}, ${a.w[2]})`);
         if (!ksp || Math.abs(ksp.x) > 0.95 || Math.abs(ksp.y) > 0.95 || ksp.z >= 1) continue;
         for (let dy = -2; dy <= 2 && !kitTexel; dy++) {
@@ -1120,16 +1133,16 @@ null
         minotaur404: minotaurRepro,
       };
       assert.ok(kitTexel, `${name}: kit pixels missing from the G-buffer at every posed kit anchor ` +
-        `(tried ${JSON.stringify(anchors.slice(0, 10).map((a) => a.label))})`);
+        `(tried ${anchors.slice(0, 14).length} distinct anchors)`);
     } else {
       rendered[name] = { id: spawned.id, torsoAnchor, fleshDepth: +fleshHit.depth.toFixed(5), minotaur404: minotaurRepro };
     }
     await shot(`task6-char-${name}.png`, {}, {}, { minFrameNonDark: 8 });
+    saveEvidence();
     console.log(`  rendered ${name} (id ${spawned.id})`);
   }
   const afterMeshCount = (await evaluate('__sdfGame.deferredDiagnostics()')).router.counts.mesh;
   check('P3-all-characters-rendered', { count: REGISTRY.length, rendered, meshGrowth: afterMeshCount - baseMeshCount });
-  records.stages.characters = rendered;
 
   // Zombie wound detail: blast the FIRST zombie we can face, then prove the
   // crater reaches the G-buffer (albedo at the wound anchor drops vs the

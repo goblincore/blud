@@ -4631,7 +4631,7 @@ async function main() {
         // exact positions the last render drew at.
         const sk = (o as THREE.SkinnedMesh).skeleton;
         const bones: Array<[number, number, number]> | undefined = sk
-          ? sk.bones.slice(0, 6).map((b) => {
+          ? sk.bones.slice(0, 14).map((b) => {
             const be = b.matrixWorld.elements;
             return [+be[12].toFixed(3), +be[13].toFixed(3), +be[14].toFixed(3)] as [number, number, number];
           })
