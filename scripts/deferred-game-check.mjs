@@ -662,29 +662,45 @@ try {
   {
     // ONE-CALL lattice scan via sampleSurfacePoints (a single readback set,
     // not one render per sample — the per-sample variant hit CDP timeouts).
-    // The grid itself comes from scripts/lib/task6-grid.mjs — the inline
+    // The grid pieces come from scripts/lib/task6-grid.mjs — the inline
     // version shipped `for (let dx = -6; dx <= 6; dx--)`, which never
     // terminates and hung a whole gate run; the extracted builder has its
-    // own CPU regression (termination, the 20*13=260 unfiltered count,
-    // bounds, exclusion, hard maximum).
-    // Candidates: cls-17 texels within a TIGHT depth window of the body
-    // (the gun viewmodel is far nearer; the breech landmark itself resolved
-    // at background depth, so a spatial skip alone is unreliable) and clear
-    // of the measured gun texel. From the candidates, the normal-direction
-    // check uses the MOST camera-facing one — a cylinder always has
-    // front-facing pixels; only a genuinely flipped/defective normal fails.
-    const lattice = buildNdcLattice({
-      cx: fleshSp.x, cy: fleshSp.y,
-      dxRange: [-6, 6], dyRange: [-14, 5], step: 0.05,
-      exclude: { x: gunSp.x, y: gunSp.y, radius: 0.2 },
-    });
-    const samples = await evaluate(`__sdfGame.sampleSurfacePoints(${JSON.stringify(lattice.points)})`);
+    // own CPU regression (termination, unfiltered count, bounds, hard
+    // maximum).
+    // FIXTURE (measured 2026-09-07, see task-6-core report): visible tube
+    // pixels are 1-2px silhouette slivers where a limb tube pokes past the
+    // flesh march — a fixed screen lattice straddles them whenever the
+    // frozen gait phase shifts (two boots differed: one found 2 hits, the
+    // other 0). The scan is therefore ANCHORED on real tube geometry: the
+    // boneTubes() seam exposes the world endpoints of the first 8 posed
+    // bone prims (the exact data update() packs this frame); each in-frame
+    // endpoint gets a 5x5 grid at 0.02 NDC (a 1px sliver at 800px ≈ 0.0025
+    // NDC is unmissable at that step). ≤16 anchors x 25 = ≤400 points in
+    // ONE batched call. Candidates require the BODY depth window (the gun
+    // viewmodel resolves ~0.65 vs body ~0.94 — depth is the separator; no
+    // spatial gun exclusion) and the best candidate must ALSO pass the
+    // matched tubes-off readback below.
+    const tips = tubes.tips ?? [];
+    assert.ok(Array.isArray(tips) && tips.length > 0,
+      `boneTubes() must expose anchored tube endpoints for the scan (got ${JSON.stringify(tips)?.slice(0, 80)})`);
+    const anchors = [];
+    for (const t of tips) {
+      const sp2 = await evaluate(`__sdfGame.screenPosOf(${t[0]}, ${t[1]}, ${t[2]})`);
+      if (sp2 && Math.abs(sp2.x) <= 0.9 && Math.abs(sp2.y) <= 0.9 && sp2.z < 1) anchors.push(sp2);
+    }
+    assert.ok(anchors.length > 0, `no tube endpoint is in frame (tips ${JSON.stringify(tips).slice(0, 200)})`);
+    const lattice = [];
+    for (const a2 of anchors.slice(0, 16)) {
+      const g = buildNdcLattice({ cx: a2.x, cy: a2.y, dxRange: [-2, 2], dyRange: [-2, 2], step: 0.02, max: 25 });
+      lattice.push(...g.points);
+    }
+    const samples = await evaluate(`__sdfGame.sampleSurfacePoints(${JSON.stringify(lattice)})`);
     const cam = await evaluate('__sdfGame.cameraWorld()');
     const candidates = [];
     for (let i = 0; i < samples.length; i++) {
       const s = samples[i];
       if (!(s.cls > 16.5 && s.cls < 17.5 && s.depth < 0.995)) continue;
-      if (Math.abs(s.depth - fleshTexel.depth) > 0.012) continue; // body depth window
+      if (Math.abs(s.depth - fleshTexel.depth) > 0.012) continue; // body depth window (gun ~0.65 far outside)
       candidates.push({ i, s, ndc: lattice.points[i] });
     }
     let best = null;
@@ -704,7 +720,7 @@ try {
     // pixels or coincidence. A real tube TEXEL is mandatory, and its tube
     // identity is proven by the MATCHED VISIBILITY readback below.
     assert.ok(best, `bone tubes: no cls-17 texel in the body depth window across a `
-      + `${lattice.points.length}-point lattice (${lattice.unfiltered} unfiltered, `
+      + `${lattice.length}-point anchored scan (${anchors.length} anchors, `
       + `${candidates.length} raw cls-17 hits) — pixel delta alone does not prove tube coverage`);
     tubeTexel = best.c.s; tubeNdc = [best.c.ndc.x, best.c.ndc.y];
     assert.ok(Math.abs(best.nlen - 1) < 0.05,

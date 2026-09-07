@@ -1,0 +1,285 @@
+{
+  "phase": "P2-routes",
+  "checks": [
+    {
+      "name": "P0-boot-deferred",
+      "detail": {
+        "counts": {
+          "mesh": 343,
+          "sdf": 10,
+          "forward": 0,
+          "exclude": 14
+        },
+        "shadow": {
+          "generationRequested": true,
+          "sampling": true,
+          "renderedMaps": 2,
+          "fullCasters": 99,
+          "levelCasters": 98,
+          "size": 1024,
+          "unsupported": []
+        },
+        "sizes": {
+          "width": 800,
+          "height": 600,
+          "sdfScale": 1,
+          "sdfTargetSize": {
+            "width": 800,
+            "height": 600
+          },
+          "outputTarget": {
+            "width": 800,
+            "height": 600
+          }
+        }
+      }
+    },
+    {
+      "name": "P1-render-control",
+      "detail": {
+        "hashes": {
+          "albedoRoughness": 195509317,
+          "normalMetalness": 1246967337,
+          "emissionClass": 2862665109,
+          "surfaceDepth": 402444098
+        },
+        "nonEmpty": 480000,
+        "classCounts": {
+          "1": 430781,
+          "17": 36400,
+          "18": 12819
+        },
+        "sentinelPixels": 0,
+        "deepOccupied": 0,
+        "maxDepth": 0.994182,
+        "pose": {
+          "pos": [
+            6.9824280559354515,
+            0,
+            -4.437469046534835
+          ],
+          "yaw": -1.5707963267948966,
+          "pitch": -0.12
+        },
+        "actorPos": [
+          5.237701994658574,
+          0,
+          -4.421680677489896
+        ]
+      }
+    },
+    {
+      "name": "P1-sampling-invariance",
+      "detail": {
+        "litDelta": -2,
+        "lit0": 48,
+        "litSampling": 50
+      }
+    },
+    {
+      "name": "P1-gain-invariance",
+      "detail": {
+        "litDelta": 17
+      }
+    },
+    {
+      "name": "P1-beam-invariance",
+      "detail": {
+        "litDelta": 12
+      }
+    },
+    {
+      "name": "P1-generation-invariance",
+      "detail": {
+        "litDelta": -2,
+        "renderedMaps": 0
+      }
+    },
+    {
+      "name": "P1-marker-hidden-from-gbuffer",
+      "detail": {
+        "marker": [
+          251,
+          0,
+          251
+        ]
+      }
+    },
+    {
+      "name": "P2-route-level-mesh",
+      "detail": {
+        "cls": 1,
+        "depth": 0.96235,
+        "ndc": [
+          -0.85,
+          -0.5
+        ]
+      }
+    },
+    {
+      "name": "P2-route-flesh-sdf",
+      "detail": {
+        "cls": 18,
+        "depth": 0.93787
+      }
+    },
+    {
+      "name": "P2-route-fpv-gun",
+      "detail": {
+        "cls": 17,
+        "depth": 0.65208
+      }
+    }
+  ],
+  "pageErrors": [],
+  "pass": false,
+  "scope": "core",
+  "fullAcceptance": false,
+  "pageErrorsDropped": 0,
+  "failure": {
+    "phase": "P2-routes",
+    "message": "bone tubes: no cls-17 texel in the body depth window across a 400-point anchored scan (16 anchors, 0 raw cls-17 hits) — pixel delta alone does not prove tube coverage",
+    "stack": "AssertionError [ERR_ASSERTION]: bone tubes: no cls-17 texel in the body depth window across a 400-point anchored scan (16 anchors, 0 raw cls-17 hits) — pixel delta alone does not prove tube coverage\n    at file:///Users/donny/.claude/dispatch/worktrees/2026-09-06-hybrid-deferred-m2-task-6-continue-3/scripts/deferred-game-check.mjs:722:12"
+  },
+  "generatedAt": "2026-09-07T17:15:04.299Z",
+  "ports": {
+    "vite": 5326,
+    "cdp": 9326
+  },
+  "viewport": {
+    "width": 1280,
+    "height": 800
+  },
+  "records": {
+    "captures": {},
+    "stages": {
+      "bootDiag": {
+        "mode": "deferred",
+        "frames": 123,
+        "canvasDepthWrites": false,
+        "router": {
+          "counts": {
+            "mesh": 343,
+            "sdf": 10,
+            "forward": 0,
+            "exclude": 14
+          },
+          "unsupported": [],
+          "roots": [
+            "ring-level",
+            "accent-lights",
+            "Mesh",
+            "Mesh",
+            "Mesh",
+            "Mesh",
+            "Mesh",
+            "Mesh",
+            "Mesh",
+            "deferred-rig-soldier--4.80--4.80",
+            "Mesh",
+            "Mesh",
+            "deferred-rig-zombie-4.80--4.80",
+            "Mesh",
+            "Mesh",
+            "deferred-rig-zombie-2.80--4.00",
+            "Mesh",
+            "Mesh",
+            "deferred-rig-zombie-4.80-4.80",
+            "Mesh",
+            "Mesh",
+            "deferred-rig-zombie-2.60-6.20",
+            "Mesh",
+            "Mesh",
+            "deferred-rig-zombie-3.00-3.00",
+            "Mesh",
+            "Mesh",
+            "deferred-rig-zombie--4.80-4.80",
+            "Mesh",
+            "Mesh",
+            "deferred-rig-zombie--6.80-6.00",
+            "Mesh",
+            "Mesh",
+            "deferred-rig-zombie--2.40-4.40",
+            "Mesh",
+            "Mesh",
+            "deferred-rig-zombie--6.00-3.20",
+            "grapeshot-k3",
+            "fpv-hand-grip",
+            "fpv-hand-fore",
+            "shell-eject-0",
+            "shell-load-0",
+            "shell-eject-1",
+            "shell-load-1"
+          ]
+        },
+        "lights": {
+          "ids": [
+            "flashlight",
+            "fire-00",
+            "fire-02",
+            "fire-01",
+            "fire-04",
+            "fire-03"
+          ],
+          "dropped": [
+            "muzzle"
+          ],
+          "flashlightIndex": 0,
+          "flashKey": {
+            "fleshKeyIntensity": 2,
+            "fleshShoulderKnee": 0.65
+          }
+        },
+        "shadow": {
+          "generationRequested": true,
+          "sampling": true,
+          "renderedMaps": 2,
+          "fullCasters": 99,
+          "levelCasters": 98,
+          "size": 1024,
+          "unsupported": []
+        },
+        "sizes": {
+          "width": 800,
+          "height": 600,
+          "sdfScale": 1,
+          "sdfTargetSize": {
+            "width": 800,
+            "height": 600
+          },
+          "outputTarget": {
+            "width": 800,
+            "height": 600
+          }
+        },
+        "lightGain": 0.5,
+        "errors": []
+      },
+      "hashBaseline": {
+        "width": 800,
+        "height": 600,
+        "hashes": {
+          "albedoRoughness": 195509317,
+          "normalMetalness": 1246967337,
+          "emissionClass": 2862665109,
+          "surfaceDepth": 402444098
+        },
+        "nonEmpty": 480000,
+        "classCounts": {
+          "1": 430781,
+          "17": 36400,
+          "18": 12819
+        },
+        "minDepth": 0.5195077657699585,
+        "maxDepth": 0.9941824674606323,
+        "deepestPixel": [
+          383,
+          290
+        ],
+        "sentinelPixels": 0,
+        "deepOccupied": 0,
+        "sentinelCentroid": null
+      }
+    }
+  }
+}

@@ -690,6 +690,13 @@ async function main() {
   // indirection, assigned once liveChunks exists. Empty until then.
   let chunkObjects: () => THREE.Object3D[] = () => [];
   let refreshActorTiles = () => {};
+  /** TASK-6 DIAGNOSTIC LIGHT CLOCK state — see setLightClockFrozen in the
+   *  __sdfGame seam. Freezes the practical flicker phase at the freeze
+   *  instant; default OFF, gate-only. DECLARED HERE (before setDrawFn)
+   *  because the flicker block reads it and the render loop arms before
+   *  main() finishes — the same TDZ rule chunkObjects obeys. */
+  let lightClockFrozen = false;
+  let flickerClockFrozenAt = 0;
   handle.setDrawFn(() => postAa.render(() => {
     flashlight.update(camera);
 
@@ -3052,11 +3059,6 @@ async function main() {
    *  the teleported player's head-bob decayed. Default OFF; only the gate
    *  sets it, so legacy gameplay is untouched. */
   let simLocked = false;
-  /** TASK-6 DIAGNOSTIC LIGHT CLOCK state — see setLightClockFrozen in the
-   *  __sdfGame seam. Freezes the practical flicker phase at the freeze
-   *  instant; default OFF, gate-only. */
-  let lightClockFrozen = false;
-  let flickerClockFrozenAt = 0;
   /** Whether the hulls have been built for the CURRENT frozen stretch — see
    *  the frozen-from-boot hull build in tick. */
   let frozenHullBuilt = false;
@@ -4884,7 +4886,28 @@ async function main() {
       return { stain: l.x, wet: l.y, spec: l.z, fres: l.w };
     },
     get boneMesh() { return boneMesh; },
-    boneTubes: () => ({ count: boneInstancer.count, overflowed: boneInstancer.overflowed }),
+    boneTubes: () => ({
+      count: boneInstancer.count,
+      overflowed: boneInstancer.overflowed,
+      /** TASK-6 DIAGNOSTIC (bounded): world endpoints (a, b) of up to 8
+       *  posed bone prims — the SAME prim data boneInstancer.update() packs
+       *  this frame — so the gate can anchor its tube-texel scan to real
+       *  tube geometry instead of a blind screen lattice (visible tube
+       *  pixels are 1-2px silhouette slivers that a fixed lattice misses
+       *  whenever the frozen gait phase shifts). Never mutates state. */
+      tips: (() => {
+        const out: number[][] = [];
+        for (const a of actors) {
+          const prims = a.posed().bonePrims ?? [];
+          for (const p of prims) {
+            if (p.op !== 'bone') continue;
+            out.push([p.a[0], p.a[1], p.a[2]], [p.b[0], p.b[1], p.b[2]]);
+            if (out.length >= 16) return out;
+          }
+        }
+        return out;
+      })(),
+    }),
     setGooTuning(o: {
       threshold?: number; edge?: number; blurPx?: number; sizeScale?: number;
       mode?: 'overlay' | 'depth';
