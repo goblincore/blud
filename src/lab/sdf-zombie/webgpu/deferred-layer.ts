@@ -538,15 +538,17 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
   }) as never;
   const lightScene = quadPass(lightMat);
 
-  // 7. Present / debug views, to the canvas by default (M1) or to a
-  // caller-owned output target (M2 task 1, setOutputTarget). The depthNode
-  // carries the resolved surfaceDepth of the presented texel; it is only
-  // WRITTEN on the target path (presentMat.depthWrite toggled per frame) —
-  // the canvas path stays the M1 depth-less presentation.
+  // 7. Present / debug views. TWO fixed-config materials, each compiled
+  // exactly once (M2 task 1): the canvas path keeps the M1 depth-less
+  // presentation; the owned-target path presents with DEPTH WRITES
+  // (depthNode = the resolved surfaceDepth of the presented texel). They are
+  // separate materials because three compiles a NodeMaterial's depth output
+  // only if depthWrite/depthTest is set AT COMPILE TIME and caches the graph —
+  // a per-frame depthWrite toggle on one shared material would silently keep
+  // the first-compiled, depth-less shader.
   const presentFn = wgslFn(DEFERRED_PRESENT_WGSL);
   const presentDepthFn = wgslFn(DEFERRED_PRESENT_DEPTH_WGSL);
-  const presentMat = new MeshBasicNodeMaterial();
-  presentMat.colorNode = presentFn({
+  const presentArgs = () => ({
     px: screenCoordinate,
     lit: texture(litTarget.texture),
     albedoRoughness: texture(resolvedTex.albedoRoughness),
@@ -555,13 +557,24 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
     surfaceDepth: texture(resolvedTex.surfaceDepth),
     view: uView,
     flipY: uFlipY,
-  }) as never;
-  presentMat.depthNode = presentDepthFn({
+  });
+  // Canvas (M1 default).
+  const presentMat = new MeshBasicNodeMaterial();
+  presentMat.colorNode = presentFn(presentArgs()) as never;
+  const presentScene = quadPass(presentMat);
+  // Caller-owned color+depth target: fullscreen opaque presentation — depth
+  // tests are pointless for a quad that covers every pixel, but depth WRITES
+  // are the point (the resolved depth lands in the caller's depth buffer).
+  const targetPresentMat = new MeshBasicNodeMaterial();
+  targetPresentMat.colorNode = presentFn(presentArgs()) as never;
+  targetPresentMat.depthNode = presentDepthFn({
     px: screenCoordinate,
     surfaceDepth: texture(resolvedTex.surfaceDepth),
     flipY: uFlipY,
   }) as never;
-  const presentScene = quadPass(presentMat);
+  targetPresentMat.depthTest = false;
+  targetPresentMat.depthWrite = true;
+  const targetPresentScene = quadPass(targetPresentMat);
 
   const _view = new THREE.Matrix4();
   const _vp = new THREE.Matrix4();
@@ -629,10 +642,10 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
         backgroundNode: (s as THREE.Scene & { backgroundNode?: unknown }).backgroundNode ?? null,
       }));
       try {
-        // Present-pass depth writes are a per-frame property: ON only for the
-        // owned-output-target path, restored in finally so a throw mid-present
-        // cannot leave it on.
-        presentMat.depthWrite = outputTarget !== null;
+        // Present-pass depth writes live on the FIXED target-present material
+        // (compiled with depthWrite=true from construction); the canvas
+        // material keeps the M1 depth-less presentation. Nothing toggles at
+        // runtime — see the two-material note above.
         // Coordinator review fix 2: a FRESH PerspectiveCamera defaults to
         // WebGL clip conventions; WebGPURenderer only rewrites its
         // coordinateSystem/projection during the first geometry render —
@@ -690,7 +703,7 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
           // contract's "clear destination depth before presenting".
           renderer.setRenderTarget(outputTarget);
           renderer.autoClear = true;
-          void renderer.render(presentScene, quadCam);
+          void renderer.render(targetPresentScene, quadCam);
         } else {
           renderer.setRenderTarget(null);
           renderer.autoClear = previousAutoClear;
@@ -702,7 +715,6 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
         renderer.autoClearDepth = previousAutoClearDepth;
         renderer.setClearDepth(previousClearDepth);
         renderer.setMRT(previousMrt);
-        presentMat.depthWrite = false;
         for (const prev of previousBackgrounds) {
           prev.scene.background = prev.background;
           (prev.scene as THREE.Scene & { backgroundNode?: unknown }).backgroundNode = prev.backgroundNode;
@@ -835,6 +847,7 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
       resolveMat.dispose();
       lightMat.dispose();
       presentMat.dispose();
+      targetPresentMat.dispose();
     },
   };
 }

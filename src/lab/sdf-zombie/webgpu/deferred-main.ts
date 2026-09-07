@@ -957,8 +957,32 @@ async function main() {
      * Returns per-pixel color before/after plus resolved class/depth, and
      * restores canvas presentation before returning.
      */
-    async presentComposition() {
+    /** TEMPORARY task-1 diagnostic: draws the forward quads to the CANVAS
+     *  (autoClear off) so a screenshot can prove whether the draw itself
+     *  paints. Removed once the composition smoke is green. */
+    async debugForwardDraw() {
+      const prevTarget = handle.renderer.getRenderTarget();
+      const prevAutoClear = handle.renderer.autoClear;
+      forwardFront.visible = true;
+      forwardFront.position.set(0, 1.2, 0.4);
+      forwardFront.lookAt(camera.position);
+      forwardFront.updateMatrixWorld();
+      handle.renderer.autoClear = false;
+      handle.renderer.setRenderTarget(null);
+      handle.renderer.render(forwardScene, camera);
+      handle.renderer.setRenderTarget(prevTarget);
+      handle.renderer.autoClear = prevAutoClear;
+      forwardFront.visible = false;
+      await completeGpu();
+      return { placed: forwardFront.position.toArray() };
+    },
+
+    async presentComposition(opts: { forwardDepthTest?: boolean } = {}) {
       if (mode !== 'deferred') throw new Error('presentComposition requires deferred mode');
+      // forwardDepthTest=false is a DIAGNOSTIC mode (always-pass quads):
+      // it separates "the forward draw paints" from "the destination depth
+      // gates it". The gate runs the default (true).
+      forwardMat.depthTest = opts.forwardDepthTest !== false;
       const w = deferredLayer.targets.resolved.width;
       const h = deferredLayer.targets.resolved.height;
       // Keep the owned target matched to the layer even after setResolution.

@@ -427,6 +427,7 @@ try {
   // ---- T1. M2 task 1: owned output target, forward composition, environment
   // Evidence lands in docs/dev-notes/2026-09-06-hybrid-deferred-m2/.
   const m2 = 'docs/dev-notes/2026-09-06-hybrid-deferred-m2';
+  mkdirSync(m2, { recursive: true });
   await evaluate('__deferredLab.setMode("deferred"); __deferredLab.setCameraPose("wound")');
   await evaluate('__deferredLab.setOrbsVisible(false); __deferredLab.setLightTime(0.7); __deferredLab.setDebugView("lit")');
   await step();
