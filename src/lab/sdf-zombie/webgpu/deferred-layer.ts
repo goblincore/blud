@@ -42,11 +42,22 @@
 // resolved; light reads resolved and writes lit; present reads both and
 // writes the canvas. All disjoint.
 //
-// LIGHTS. M1 lighting is explicitly UNSHADOWED. The light buffer is a fixed
-// 16-slot DataTexture (deferred-lighting.ts); setLights is a data upload,
-// never a rebuild. No per-light field sampling, no legacy gamma compensation.
-// The flashlight shadow BINDING API (setFlashlightShadow) exists from M2
-// task 1 but stores only — sampling lands with the shadow module in task 4.
+// LIGHTS. The shared light list is a fixed 16-slot DataTexture
+// (deferred-lighting.ts); setLights is a data upload, never a rebuild.
+//
+// M2 TASK 4 — FLASHLIGHT SHADOWS. When a shadow binding is stored AND its
+// enabled flag is set, the light loop multiplies ONLY the designated
+// flashlight contribution (i == shadowLightIndex) by a bounded 3x3 PCF
+// visibility sampled from one of the two R32F shadow maps. WHICH map is
+// decided per receiver by bit 4 of the packed emissionClass.a (level-only
+// receiver bit, deferred-surface.ts): flesh/bone/equipment surfaces read the
+// level-only map so a character's own inflated hull cannot swallow its
+// illumination; everything else reads the full map. Ambient (added before
+// the loop) and emission (returned for empty pixels) stay OUTSIDE the
+// multiplication. Positions outside the shadow frustum are unoccluded.
+// setFlashlightShadow(null) — the M1 default — leaves shadowEnabled 0 and
+// the light evaluation bit-identical to M1's: one extra uniform branch, no
+// sampling, no extra passes.
 //
 // M2 TASK 1 ADDITIONS. Three opt-in seams, all defaulting to exact M1
 // behaviour:
@@ -82,6 +93,7 @@ import {
   MAX_DEFERRED_LIGHTS, packDeferredLights, createDeferredLightTexture, uploadDeferredLights,
   type DeferredLight,
 } from './deferred-lighting';
+import { FLASHLIGHT_SHADOW_KERNEL_RADIUS } from './deferred-shadows';
 
 export type DeferredDebugView = 'lit' | 'albedo' | 'normal' | 'depth' | 'material';
 
@@ -166,10 +178,14 @@ export interface DeferredLayerDiagnostics {
   };
   /** True while the present pass writes into a caller-owned target. */
   outputTargetActive: boolean;
-  /** True while a flashlight shadow binding is STORED. Sampling starts in
-   *  task 4 — this flag makes the reservation observable without claiming
-   *  any visual effect. */
+  /** True while a flashlight shadow binding is STORED. */
   flashlightShadowBound: boolean;
+  /** True while a stored binding also has its SAMPLING enabled — i.e. the
+   *  lit stage actually modulates the flashlight by the shadow maps (M2
+   *  task 4). The map RENDERS are the shadow factory's own counter; this
+   *  flag is only the sampling side, so the two toggles stay distinguishable
+   *  in evidence (spec: sampling toggle vs map-render toggle). */
+  flashlightShadowEnabled: boolean;
   /** What was actually verified against the device, if a device was visible. */
   limits: { supported: boolean; ok: boolean; checks: DeferredLimitCheck[] };
 }
@@ -189,8 +205,13 @@ export interface DeferredLayer {
   /** Lit-stage environment (ambient + distance fog). Validates and COPIES:
    *  later mutation of the caller's colors cannot leak into the layer. */
   setEnvironment(environment: DeferredEnvironment): void;
-  /** RESERVED (M2 task 4): validates and stores the flashlight shadow
-   *  binding; nothing samples it yet. null = unshadowed (M1 default). */
+  /** Validates and stores the flashlight shadow binding (M2 task 4): the
+   *  lit stage samples the bound R32F maps with a bounded 3x3 PCF and
+   *  multiplies ONLY the designated flashlight contribution. The binding is
+   *  re-read every render — a live viewProjection (the shadow factory's
+   *  matrix) tracks the current frame. null = unshadowed, the M1 default,
+   *  bit-identical output. Both depth maps remain the CALLER's textures —
+   *  the layer never disposes them. */
   setFlashlightShadow(binding: DeferredFlashlightShadowBinding | null): void;
   dispose(): void;
   diagnostics(): DeferredLayerDiagnostics;
@@ -223,6 +244,11 @@ export interface DeferredLayer {
  * cosOuter and cosInner. Flesh (class 2) gets a wrapped diffuse and a
  * clamped, reduced specular — its bounded class-specific response. Emission
  * is additive linear radiance.
+ *
+ * M2 TASK 4 — the flashlight shadow lookup is INLINED into this one function
+ * (wgslFn takes ONE function per string — the bone-tubes lesson — so a
+ * visibility helper would silently draw nothing). When shadowEnabled is 0
+ * none of it executes and the output is the M1 unshadowed evaluation.
  */
 export const DEFERRED_LIGHT_WGSL = /* wgsl */ `fn deferredLight(
   px: vec2<f32>,
@@ -238,7 +264,14 @@ export const DEFERRED_LIGHT_WGSL = /* wgsl */ `fn deferredLight(
   fogColor: vec3<f32>,
   fogNear: f32,
   fogFar: f32,
-  fogEnabled: f32
+  fogEnabled: f32,
+  fullDepth: texture_2d<f32>,
+  levelDepth: texture_2d<f32>,
+  shadowViewProj: mat4x4<f32>,
+  shadowLightIndex: f32,
+  shadowBias: f32,
+  shadowMapSize: vec2<f32>,
+  shadowEnabled: f32
 ) -> vec4<f32> {
   let dims = vec2<f32>(textureDimensions(surfaceDepth, 0));
   let c = clamp(vec2<i32>(floor(px)), vec2<i32>(0, 0), vec2<i32>(dims) - vec2<i32>(1, 1));
@@ -310,7 +343,43 @@ export const DEFERRED_LIGHT_WGSL = /* wgsl */ `fn deferredLight(
     let shin = exp2((1.0 - rough) * 8.0) + 2.0;
     var spec = pow(max(dot(n, h), 0.0), shin) * (shin + 2.0) / 8.0;
     if (isFlesh) { spec = min(spec, 1.0) * 0.35; }
-    acc = acc + v2.xyz * att * (baseDiff * ndl + specCol * spec * ndl);
+    var contribution = v2.xyz * att * (baseDiff * ndl + specCol * spec * ndl);
+    // M2 task 4: shadow visibility modulates ONLY the designated flashlight
+    // contribution — never ambient, never emission, never another light.
+    if (shadowEnabled > 0.5 && f32(i) == shadowLightIndex) {
+      let cp = shadowViewProj * vec4<f32>(world, 1.0);
+      if (cp.w > 0.0) {
+        let sNdc = cp.xyz / cp.w;
+        // Outside the valid shadow frustum (or behind the light plane):
+        // unoccluded (spec — no false darkening past the map's coverage).
+        if (sNdc.x >= -1.0 && sNdc.x <= 1.0 && sNdc.y >= -1.0 && sNdc.y <= 1.0 && sNdc.z > 0.0 && sNdc.z < 1.0) {
+          // Receiver-aware map selection (deferred-surface.ts): bit 4 of the
+          // packed emissionClass.a — set = level-only receiver, which reads
+          // the map WITHOUT the inflated flesh proxies so a character's own
+          // hull cannot shadow its flesh; everything else reads the full map.
+          let shadowMap = select(fullDepth, levelDepth, cls >= 15.5);
+          // NDC -> texel. Row 0 is +Y in this framebuffer-identity chain
+          // (the same convention as the world reconstruction above), so the
+          // y flip is folded in here.
+          let uv01 = vec2<f32>(sNdc.x * 0.5 + 0.5, 0.5 - sNdc.y * 0.5);
+          let baseTexel = floor(uv01 * shadowMapSize);
+          // Bounded PCF: ${2 * FLASHLIGHT_SHADOW_KERNEL_RADIUS + 1}x${2 * FLASHLIGHT_SHADOW_KERNEL_RADIUS + 1} manual depth comparisons,
+          // edge-clamped. Each texel stores the light's projected clip depth
+          // (z/w, [0,1], far = 1); a sample is lit when the fragment's depth
+          // is not behind the stored one by more than the bias.
+          var lit = 0.0;
+          for (var dy = -${FLASHLIGHT_SHADOW_KERNEL_RADIUS}; dy <= ${FLASHLIGHT_SHADOW_KERNEL_RADIUS}; dy = dy + 1) {
+            for (var dx = -${FLASHLIGHT_SHADOW_KERNEL_RADIUS}; dx <= ${FLASHLIGHT_SHADOW_KERNEL_RADIUS}; dx = dx + 1) {
+              let t = clamp(vec2<i32>(baseTexel) + vec2<i32>(dx, dy), vec2<i32>(0, 0), vec2<i32>(shadowMapSize) - vec2<i32>(1, 1));
+              let stored = textureLoad(shadowMap, t, 0).x;
+              if (sNdc.z <= stored + shadowBias) { lit = lit + 1.0; }
+            }
+          }
+          contribution = contribution * (lit / ${ (2 * FLASHLIGHT_SHADOW_KERNEL_RADIUS + 1) ** 2 }.0);
+        }
+      }
+    }
+    acc = acc + contribution;
   }
   // M2 task 1: game distance fog, evaluated ONLY here in the lit stage (raw
   // surface and debug outputs never read it). Linear three.js-style falloff
@@ -439,6 +508,27 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
   const uLightCount = uniform(0);
   const uInvViewProj = uniform(new THREE.Matrix4());
   const uCamPos = uniform(new THREE.Vector3());
+  // ---- flashlight shadow uniforms (M2 task 4) ------------------------------
+  // 1x1 far-depth fallbacks so the WGSL signature is complete while no
+  // binding is stored; with shadowEnabled 0 the WGSL never loads from them.
+  // A stored binding REBINDS the TextureNodes' .value (the setFaceTexture
+  // mechanism) — a data-only change, never a pipeline rebuild.
+  const shadowFallbackTexture = (() => {
+    const tex = new THREE.DataTexture(new Float32Array([1]), 1, 1, THREE.RedFormat, THREE.FloatType);
+    tex.minFilter = THREE.NearestFilter;
+    tex.magFilter = THREE.NearestFilter;
+    tex.colorSpace = THREE.NoColorSpace;
+    tex.generateMipmaps = false;
+    tex.needsUpdate = true;
+    return tex;
+  })();
+  const uShadowFullDepth = texture(shadowFallbackTexture);
+  const uShadowLevelDepth = texture(shadowFallbackTexture);
+  const uShadowViewProj = uniform(new THREE.Matrix4());
+  const uShadowLightIndex = uniform(-1);
+  const uShadowBias = uniform(0);
+  const uShadowMapSize = uniform(new THREE.Vector2(1, 1));
+  const uShadowEnabled = uniform(0);
   /** Constant ambient floor — see the deferredLight WGSL note. Fixed for M1;
    *  not a per-light term, so it cannot leak light-dependence into surface
    *  data (it lives in the lit target only). M2 task 1: settable through
@@ -461,8 +551,8 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
   let debugView: DeferredDebugView = 'lit';
   /** Caller-owned present target (M2 task 1). null = canvas (M1 default). */
   let outputTarget: THREE.RenderTarget | null = null;
-  /** Stored flashlight shadow binding (M2 task 1). Reserved: nothing samples
-   *  it until task 4. */
+  /** Stored flashlight shadow binding (M2 task 4). Sampled in the light
+   *  stage when enabled; refreshed into uniforms at every render. */
   let flashlightShadow: DeferredFlashlightShadowBinding | null = null;
 
   // ---- fullscreen pass scaffolding ----------------------------------------
@@ -542,6 +632,13 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
     fogNear: uFogNear,
     fogFar: uFogFar,
     fogEnabled: uFogEnabled,
+    fullDepth: uShadowFullDepth,
+    levelDepth: uShadowLevelDepth,
+    shadowViewProj: uShadowViewProj,
+    shadowLightIndex: uShadowLightIndex,
+    shadowBias: uShadowBias,
+    shadowMapSize: uShadowMapSize,
+    shadowEnabled: uShadowEnabled,
   }) as never;
   const lightScene = quadPass(lightMat);
 
@@ -590,6 +687,25 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
     if (disposed) throw new Error('deferred layer is disposed');
   }
 
+  /** Push the STORED shadow binding into the light-pass uniforms. Runs every
+   *  render, so a binding captured once (its viewProjection is the shadow
+   *  factory's LIVE matrix) tracks the current frame's light pose — the
+   *  same-frame shadow motion the spec requires. */
+  function refreshShadowUniforms(): void {
+    if (flashlightShadow) {
+      const b = flashlightShadow;
+      uShadowFullDepth.value = b.fullDepth;
+      uShadowLevelDepth.value = b.levelDepth;
+      uShadowViewProj.value.copy(b.viewProjection);
+      uShadowLightIndex.value = b.lightIndex;
+      uShadowBias.value = b.bias;
+      uShadowMapSize.value.set(b.mapSize.x, b.mapSize.y);
+      uShadowEnabled.value = b.enabled ? 1 : 0;
+    } else {
+      uShadowEnabled.value = 0;
+    }
+  }
+
   return {
     resize(nextWidth, nextHeight, nextScale) {
       assertAlive();
@@ -612,6 +728,7 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
 
     render(meshScene, sdfScene, camera, hooks) {
       assertAlive();
+      refreshShadowUniforms();
       // M2 task 1: an owned output target must match the layer's size — a
       // mismatch would silently edge-smear the presentation (nearest clamped
       // loads), so it is a loud error instead. Checked here (not in resize)
@@ -816,7 +933,6 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
       }
       flashlightShadow = binding;
     },
-
     diagnostics() {
       return {
         width,
@@ -835,6 +951,7 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
         },
         outputTargetActive: outputTarget !== null,
         flashlightShadowBound: flashlightShadow !== null,
+        flashlightShadowEnabled: flashlightShadow !== null && flashlightShadow.enabled,
         limits,
       };
     },
@@ -849,6 +966,7 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
       resolvedTarget.dispose();
       litTarget.dispose();
       lightTexture.dispose();
+      shadowFallbackTexture.dispose();
       quadGeom.dispose();
       clearMat.dispose();
       resolveMat.dispose();

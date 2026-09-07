@@ -718,6 +718,108 @@ describe('game environment (hybrid deferred M2 task 1)', () => {
   });
 });
 
+describe('flashlight shadow sampling in the light stage (hybrid deferred M2 task 4)', () => {
+  it('selects the shadow map by the RAW packed receiver bit, not the decoded class', () => {
+    // Bit 4 set (>= 15.5) = level-only receiver -> the map WITHOUT the
+    // inflated flesh proxies. The selection must use the raw packed value
+    // (cls), never baseCls — a decoded class 2 would pick the wrong map.
+    expect(DEFERRED_LIGHT_WGSL).toContain('select(fullDepth, levelDepth, cls >= 15.5)');
+  });
+
+  it('applies visibility ONLY to the designated flashlight contribution inside the loop', () => {
+    // The multiplication is gated on BOTH the master enable and the light
+    // index — a practical light must never be darkened by the flashlight's
+    // map, and the whole block must be skippable when unshadowed.
+    expect(DEFERRED_LIGHT_WGSL).toContain('shadowEnabled > 0.5 && f32(i) == shadowLightIndex');
+    const loopStart = DEFERRED_LIGHT_WGSL.indexOf('for (var i = 0;');
+    const gate = DEFERRED_LIGHT_WGSL.indexOf('shadowEnabled > 0.5 && f32(i) == shadowLightIndex');
+    const ambient = DEFERRED_LIGHT_WGSL.indexOf('ambient * baseDiff');
+    const emptyReturn = DEFERRED_LIGHT_WGSL.indexOf("return vec4<f32>(emission, 1.0)");
+    // Ambient (added before the loop) and the empty-pixel emission return
+    // both sit OUTSIDE the shadow multiplication (spec frame contract step 5).
+    expect(ambient).toBeGreaterThan(-1);
+    expect(ambient).toBeLessThan(loopStart);
+    expect(emptyReturn).toBeGreaterThan(-1);
+    expect(emptyReturn).toBeLessThan(loopStart);
+    expect(gate).toBeGreaterThan(loopStart);
+  });
+
+  it('treats positions outside the valid shadow frustum as unoccluded', () => {
+    expect(DEFERRED_LIGHT_WGSL).toContain('cp.w > 0.0');
+    // The full [−1,1]x[−1,1] xy window and the open (0,1) depth range must
+    // all be part of ONE unoccluded path returning to `contribution`
+    // untouched — i.e. the frustum test guards the PCF, it never darkens.
+    expect(DEFERRED_LIGHT_WGSL).toMatch(/sNdc\.x >= -1\.0 && sNdc\.x <= 1\.0 && sNdc\.y >= -1\.0 && sNdc\.y <= 1\.0 && sNdc\.z > 0\.0 && sNdc\.z < 1\.0/);
+  });
+
+  it('uses a bounded PCF of the named kernel size with the bias in the comparison', () => {
+    expect(DEFERRED_LIGHT_WGSL).toContain('textureLoad(shadowMap, t, 0).x');
+    expect(DEFERRED_LIGHT_WGSL).toContain('stored + shadowBias');
+    // 3x3 manual comparisons (kernel radius 1), averaged over 9 samples.
+    expect(DEFERRED_LIGHT_WGSL).toContain('for (var dy = -1; dy <= 1; dy = dy + 1)');
+    expect(DEFERRED_LIGHT_WGSL).toContain('for (var dx = -1; dx <= 1; dx = dx + 1)');
+    expect(DEFERRED_LIGHT_WGSL).toContain('lit / 9.0');
+  });
+
+  it('the shadow maps arrive as WGSL texture params alongside the M1 ones', () => {
+    expect(DEFERRED_LIGHT_WGSL).toContain('fullDepth: texture_2d<f32>');
+    expect(DEFERRED_LIGHT_WGSL).toContain('levelDepth: texture_2d<f32>');
+    expect(DEFERRED_LIGHT_WGSL).toContain('shadowViewProj: mat4x4<f32>');
+    expect(DEFERRED_LIGHT_WGSL).toContain('shadowMapSize: vec2<f32>');
+  });
+
+  it('a stored binding adds NO render submissions (sampling lives in the existing light pass)', () => {
+    const m = mockRenderer();
+    const layer = createDeferredLayer(m.renderer, { width: 64, height: 64, sdfScale: 1 });
+    try {
+      const camera = new THREE.PerspectiveCamera();
+      camera.coordinateSystem = THREE.WebGPUCoordinateSystem;
+      layer.render(new THREE.Scene(), new THREE.Scene(), camera);
+      const unshadowed = m.render.mock.calls.length;
+      const binding = {
+        fullDepth: new THREE.Texture(),
+        levelDepth: new THREE.Texture(),
+        viewProjection: new THREE.Matrix4(),
+        lightIndex: 0,
+        bias: 0.0025,
+        mapSize: new THREE.Vector2(1024, 1024),
+        enabled: true,
+      } satisfies DeferredFlashlightShadowBinding;
+      layer.setFlashlightShadow(binding);
+      layer.render(new THREE.Scene(), new THREE.Scene(), camera);
+      expect(m.render.mock.calls.length).toBe(unshadowed * 2);
+      expect(layer.diagnostics().flashlightShadowBound).toBe(true);
+      expect(layer.diagnostics().flashlightShadowEnabled).toBe(true);
+    } finally {
+      layer.dispose();
+    }
+  });
+
+  it('diagnostics distinguish bound-but-sampling-disabled (the diagnostic toggle)', () => {
+    const m = mockRenderer();
+    const layer = createDeferredLayer(m.renderer, { width: 64, height: 64, sdfScale: 1 });
+    try {
+      const binding = {
+        fullDepth: new THREE.Texture(),
+        levelDepth: new THREE.Texture(),
+        viewProjection: new THREE.Matrix4(),
+        lightIndex: 0,
+        bias: 0.0025,
+        mapSize: new THREE.Vector2(1024, 1024),
+        enabled: false,
+      } satisfies DeferredFlashlightShadowBinding;
+      layer.setFlashlightShadow(binding);
+      const d = layer.diagnostics();
+      expect(d.flashlightShadowBound).toBe(true);
+      expect(d.flashlightShadowEnabled).toBe(false);
+      layer.setFlashlightShadow(null);
+      expect(layer.diagnostics().flashlightShadowEnabled).toBe(false);
+    } finally {
+      layer.dispose();
+    }
+  });
+});
+
 describe('setFlashlightShadow reservation (hybrid deferred M2 task 1)', () => {
   it('stores the binding, reports it, and resets on null', () => {
     const m = mockRenderer();
