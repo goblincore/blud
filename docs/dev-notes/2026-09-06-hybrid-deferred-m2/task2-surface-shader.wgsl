@@ -22,17 +22,17 @@ var<private> output : OutputType;
 @binding( 6 ) @group( 1 ) var nodeUniform69 : texture_depth_2d;
 @binding( 7 ) @group( 1 ) var nodeUniform75 : texture_2d<f32>;
 
-struct NodeBuffer_1241Struct {
+struct NodeBuffer_1240Struct {
 	value : array< vec2<u32> >
 };
 @binding( 4 ) @group( 1 )
-var<storage, read> NodeBuffer_1241 : NodeBuffer_1241Struct;
+var<storage, read> NodeBuffer_1240 : NodeBuffer_1240Struct;
 
-struct NodeBuffer_1242Struct {
+struct NodeBuffer_1241Struct {
 	value : array< vec4<f32> >
 };
 @binding( 5 ) @group( 1 )
-var<storage, read> NodeBuffer_1242 : NodeBuffer_1242Struct;
+var<storage, read> NodeBuffer_1241 : NodeBuffer_1241Struct;
 
 struct renderStruct {
 	cameraProjectionMatrix : mat4x4<f32>,
@@ -2923,7 +2923,7 @@ fn main( @location( 0 ) v_positionWorld : vec3<f32>,
 	// flow
 	// code
 
-	sdfTrace = marchSurface( v_positionWorld, render.cameraPosition, nodeUniform4, nodeUniform5, nodeUniform6, object.nodeUniform7, object.nodeUniform8, object.nodeUniform9, object.nodeUniform10, object.nodeUniform11, object.nodeUniform12, object.nodeUniform13, object.nodeUniform14, object.nodeUniform15, object.nodeUniform16, object.nodeUniform17, object.nodeUniform18, object.nodeUniform19, object.nodeUniform20, object.nodeUniform21, object.nodeUniform22, object.nodeUniform23, object.nodeUniform24, object.nodeUniform25, object.nodeUniform26, object.nodeUniform27, object.nodeUniform28, object.nodeUniform29, object.nodeUniform30, object.nodeUniform31, object.nodeUniform32, object.nodeUniform33, object.nodeUniform34, object.nodeUniform35, object.nodeUniform36, object.nodeUniform37, object.nodeUniform38, object.nodeUniform39, object.nodeUniform40, object.nodeUniform41, object.nodeUniform42, object.nodeUniform43, object.nodeUniform44, object.nodeUniform45, object.nodeUniform46, object.nodeUniform47, object.nodeUniform48, object.nodeUniform49, object.nodeUniform50, object.nodeUniform51, object.nodeUniform52, object.nodeUniform53, object.nodeUniform54, object.nodeUniform55, object.nodeUniform56, object.nodeUniform57, object.nodeUniform58, object.nodeUniform59, object.nodeUniform60, &NodeBuffer_1241.value, &NodeBuffer_1242.value, object.nodeUniform63, ( fragCoord.xy / object.nodeUniform64 ), 0.0, 1000000000.0, 0.0, 1000000000.0, object.nodeUniform65, 1000000000.0, ( object.nodeUniform66 * vec4<f32>( 0.0, 0.0, 0.0, 1.0 ) ).xyz, object.nodeUniform67, object.nodeUniform68, nodeUniform69, object.nodeUniform70, object.nodeUniform71, object.nodeUniform72, object.nodeUniform73, object.nodeUniform74, nodeUniform75, object.nodeUniform76, object.nodeUniform77 );
+	sdfTrace = marchSurface( v_positionWorld, render.cameraPosition, nodeUniform4, nodeUniform5, nodeUniform6, object.nodeUniform7, object.nodeUniform8, object.nodeUniform9, object.nodeUniform10, object.nodeUniform11, object.nodeUniform12, object.nodeUniform13, object.nodeUniform14, object.nodeUniform15, object.nodeUniform16, object.nodeUniform17, object.nodeUniform18, object.nodeUniform19, object.nodeUniform20, object.nodeUniform21, object.nodeUniform22, object.nodeUniform23, object.nodeUniform24, object.nodeUniform25, object.nodeUniform26, object.nodeUniform27, object.nodeUniform28, object.nodeUniform29, object.nodeUniform30, object.nodeUniform31, object.nodeUniform32, object.nodeUniform33, object.nodeUniform34, object.nodeUniform35, object.nodeUniform36, object.nodeUniform37, object.nodeUniform38, object.nodeUniform39, object.nodeUniform40, object.nodeUniform41, object.nodeUniform42, object.nodeUniform43, object.nodeUniform44, object.nodeUniform45, object.nodeUniform46, object.nodeUniform47, object.nodeUniform48, object.nodeUniform49, object.nodeUniform50, object.nodeUniform51, object.nodeUniform52, object.nodeUniform53, object.nodeUniform54, object.nodeUniform55, object.nodeUniform56, object.nodeUniform57, object.nodeUniform58, object.nodeUniform59, object.nodeUniform60, &NodeBuffer_1240.value, &NodeBuffer_1241.value, object.nodeUniform63, ( fragCoord.xy / object.nodeUniform64 ), 0.0, 1000000000.0, 0.0, 1000000000.0, object.nodeUniform65, 1000000000.0, ( object.nodeUniform66 * vec4<f32>( 0.0, 0.0, 0.0, 1.0 ) ).xyz, object.nodeUniform67, object.nodeUniform68, nodeUniform69, object.nodeUniform70, object.nodeUniform71, object.nodeUniform72, object.nodeUniform73, object.nodeUniform74, nodeUniform75, object.nodeUniform76, object.nodeUniform77 );
 	nodeVar0 = ( render.cameraProjectionMatrix * ( render.cameraViewMatrix * vec4<f32>( ( render.cameraPosition + ( normalize( ( v_positionWorld - render.cameraPosition ) ) * vec3<f32>( sdfTrace.w ) ) ), 1.0 ) ) );
 	nodeVar1 = ( nodeVar0.z / nodeVar0.w );
 	output.depth = nodeVar1;

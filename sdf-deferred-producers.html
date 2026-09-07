@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Blud — hybrid deferred producer smoke (M2 task 2)</title>
+<style>
+  body { margin: 0; background: #0d0a0c; color: #eee; font: 13px monospace; overflow: hidden; }
+  #app { width: 100vw; height: 100vh; }
+  #status {
+    position: fixed; top: 8px; left: 8px; z-index: 10;
+    background: rgba(0,0,0,0.68); padding: 6px 8px; border: 1px solid #444; font-size: 11px;
+  }
+  #errors { position: fixed; bottom: 8px; left: 8px; color: #ff6464; font-size: 11px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="status">booting…</div>
+  <div id="errors"></div>
+  <script type="module" src="/src/lab/sdf-zombie/webgpu/deferred-producers-main.ts"></script>
+</body>
+</html>

@@ -1,0 +1,108 @@
+{
+  "checks": [
+    {
+      "name": "boot-clean-and-surface-kinds",
+      "detail": {
+        "body": 18,
+        "bones": 17,
+        "chunks": 18,
+        "chunkA": true,
+        "baked": 1
+      }
+    },
+    {
+      "name": "producer-coverage-classes",
+      "detail": {
+        "0": 475968,
+        "1": 451,
+        "17": 1025,
+        "18": 2556
+      }
+    },
+    {
+      "name": "per-producer-depth-normal-class",
+      "detail": {
+        "body": {
+          "cls": 18,
+          "depth": 0.985243022441864,
+          "clip": 0.9852356138276396,
+          "normalLen": 0.9998613576979235,
+          "pixel": [
+            394,
+            278
+          ]
+        },
+        "bones": {
+          "cls": 17,
+          "depth": 0.9850475192070007,
+          "clip": 0.9848148867718693,
+          "normalLen": 0.999716360874582,
+          "pixel": [
+            302,
+            280
+          ]
+        },
+        "chunkA": {
+          "cls": 18,
+          "depth": 0.9857563972473145,
+          "clip": 0.9856234017604237,
+          "normalLen": 0.9994983905151446,
+          "pixel": [
+            483,
+            292
+          ]
+        },
+        "chunkB": {
+          "cls": 18,
+          "depth": 0.9850929975509644,
+          "clip": 0.9852285452700589,
+          "normalLen": 0.9998746137688616,
+          "pixel": [
+            535,
+            302
+          ]
+        },
+        "baked": {
+          "cls": 1,
+          "depth": 0.9856970310211182,
+          "clip": 0.9858570104904294,
+          "normalLen": 0.999535840315995,
+          "pixel": [
+            251,
+            320
+          ]
+        }
+      }
+    },
+    {
+      "name": "light-invariant-surface-buffers",
+      "detail": {
+        "states": [
+          "a",
+          "b"
+        ],
+        "hashes": {
+          "albedoRoughness": "293adeae",
+          "normalMetalness": "e99b6102",
+          "emissionClass": "a52e94d3",
+          "surfaceDepth": "47512274"
+        }
+      }
+    },
+    {
+      "name": "one-trace-per-fragment-shader",
+      "detail": {
+        "marchOcc": 2,
+        "callAt": 146870
+      }
+    },
+    {
+      "name": "capture-written",
+      "detail": {
+        "file": "docs/dev-notes/2026-09-06-hybrid-deferred-m2/task2-producers.png"
+      }
+    }
+  ],
+  "errors": [],
+  "pass": true
+}
