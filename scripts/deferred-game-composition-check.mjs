@@ -187,7 +187,11 @@ try {
   noNewErrors('FPV routing');
 
   // 2. NULL-OUTPUT DEPTH COMPOSITION (the review fix's core).
-  await evaluate('__sdfGame.setFxaa(false); __sdfGame.setSmear(0); __sdfGame.step(4);');
+  //    The fisheye LENS is also a post effect (centerFov 60 < renderFov 90
+  //    means k > 0 and post-aa stays redirected) — the all-off state needs
+  //    it off too: setFisheye(90) makes centre == render, the exact k = 0
+  //    switch (post-aa.ts's setLens contract).
+  await evaluate('__sdfGame.setFxaa(false); __sdfGame.setSmear(0); __sdfGame.setFisheye(90); __sdfGame.step(4);');
   const diagNull = await evaluate('__sdfGame.deferredDiagnostics()');
   assert.equal(diagNull.canvasDepthWrites, true, 'post-aa fully off must flip the canvas-depth present ON');
   assert.equal(diagNull.sizes.outputTarget, null, 'post-aa fully off hands the coordinator null');
@@ -243,12 +247,12 @@ try {
   const baseDiag = await evaluate('__sdfGame.deferredDiagnostics()');
   const present0 = await evaluate('__sdfGame.presentCount()');
   const stanceYaw = aimYawAt(z0.pos[0] + 1.8, z0.pos[2], z0.pos[0], z0.pos[2]);
-  await evaluate(`__sdfGame.setPose(${z0.pos[0] + 1.8}, ${z0.pos[2]}, ${stanceYaw}, -0.12); __sdfGame.setBeam({ beamGain: 0 }); __sdfGame.step(6);`);
+  await evaluate(`__sdfGame.setPose(${z0.pos[0] + 1.8}, ${z0.pos[2]}, ${stanceYaw}, -0.12); __dungeon.setBeam({ beamGain: 0 }); __sdfGame.step(6);`);
   const gain0Diag = await evaluate('__sdfGame.deferredDiagnostics()');
   assert.equal(gain0Diag.lights.flashKey.fleshKeyIntensity, 0, 'beamGain 0 must stamp a PRESENT zero');
   assert.equal(gain0Diag.errors.length, baseDiag.errors.length, 'beamGain 0 must not error the frame');
   const gain0Stats = await shot('comp-endpoint-gain0.png', { torso: [560, 330, 780, 550], ...FPV_REGIONS }, {});
-  await evaluate(`__sdfGame.setBeam({ beamGain: 4 }); __sdfGame.step(6);`);
+  await evaluate(`__dungeon.setBeam({ beamGain: 4 }); __sdfGame.step(6);`);
   const baseStats = await shot('comp-endpoint-default.png', { torso: [560, 330, 780, 550], ...FPV_REGIONS }, {});
   const torsoDrop = baseStats.torso.lum - gain0Stats.torso.lum;
   assert.ok(torsoDrop >= 12, `beamGain 0 must remove the beam from FLESH (torso drop ${torsoDrop})`);
@@ -257,11 +261,11 @@ try {
   check('endpoint-gain0', { torsoDrop, wallDelta, torso: gain0Stats.torso, flashKey: gain0Diag.lights.flashKey });
 
   const present1 = await evaluate('__sdfGame.presentCount()');
-  await evaluate('__sdfGame.setBeam({ beamShoulder: 0 }); __sdfGame.step(2);');
+  await evaluate('__dungeon.setBeam({ beamShoulder: 0 }); __sdfGame.step(2);');
   const shoulder0Diag = await evaluate('__sdfGame.deferredDiagnostics()');
   assert.equal(shoulder0Diag.lights.flashKey.fleshShoulderKnee, 0, 'beamShoulder 0 -> knee 0 (compression off)');
   const s0Stats = await shot('comp-endpoint-shoulder0.png', { torso: [560, 330, 780, 550] }, {});
-  await evaluate('__sdfGame.setBeam({ beamShoulder: 0.05 }); __sdfGame.step(2);');
+  await evaluate('__dungeon.setBeam({ beamShoulder: 0.05 }); __sdfGame.step(2);');
   const shoulder05Diag = await evaluate('__sdfGame.deferredDiagnostics()');
   assert.equal(shoulder05Diag.lights.flashKey.fleshShoulderKnee, 0.95, 'beamShoulder .05 -> knee .95');
   const s05Stats = await shot('comp-endpoint-shoulder05.png', { torso: [560, 330, 780, 550] }, {});
@@ -273,7 +277,7 @@ try {
     torsoShoulder0: s0Stats.torso, torsoShoulder05: s05Stats.torso,
     presents: [present0, present1, present2],
   });
-  await evaluate('__sdfGame.setBeam({ beamGain: 4, beamShoulder: 0.35 }); __sdfGame.step(2);');
+  await evaluate('__dungeon.setBeam({ beamGain: 4, beamShoulder: 0.35 }); __sdfGame.step(2);');
   const restoredDiag = await evaluate('__sdfGame.deferredDiagnostics()');
   assert.equal(restoredDiag.lights.flashKey.fleshShoulderKnee, 0.65, 'defaults restored');
   noNewErrors('flashlight endpoints');
@@ -313,7 +317,7 @@ try {
   noNewErrors('cone edge');
 
   // 6. NEAR/MID/FAR CALIBRATION TABLE (post-aa ON again, default beam).
-  await evaluate('__sdfGame.setFxaa(true); __sdfGame.setSmear(0.25); __sdfGame.step(3);');
+  await evaluate('__sdfGame.setFxaa(true); __sdfGame.setSmear(0.25); __sdfGame.setFisheye(60); __sdfGame.step(3);');
   const diagRedirect = await evaluate('__sdfGame.deferredDiagnostics()');
   assert.equal(diagRedirect.canvasDepthWrites, false, 'post-aa back on restores the redirect');
   assert.ok(diagRedirect.sizes.outputTarget, 'redirect target restored');

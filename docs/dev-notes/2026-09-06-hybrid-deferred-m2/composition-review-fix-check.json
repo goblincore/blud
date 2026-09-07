@@ -1,13 +1,473 @@
 {
-  "checks": [],
-  "pageErrors": [
-    [
-      "THREE.TSL: Length of parameters exceeds maximum length of function 'vec4()' type.",
-      "Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces."
-    ]
+  "checks": [
+    {
+      "name": "boot-redirect-state",
+      "detail": {
+        "canvasDepthWrites": false,
+        "output": {
+          "width": 800,
+          "height": 600
+        },
+        "flashKey": {
+          "fleshKeyIntensity": 2,
+          "fleshShoulderKnee": 0.65
+        },
+        "mesh": 343
+      }
+    },
+    {
+      "name": "fpv-routing",
+      "detail": {
+        "roots": [
+          "grapeshot-k3",
+          "fpv-hand-grip",
+          "fpv-hand-fore",
+          "shell-eject-0",
+          "shell-load-0",
+          "shell-eject-1",
+          "shell-load-1"
+        ],
+        "fpv": {
+          "mean": [
+            34,
+            26,
+            23
+          ],
+          "lum": 28,
+          "clipPct": 0.2,
+          "darkPct": 45.2
+        }
+      }
+    },
+    {
+      "name": "null-output-compose",
+      "detail": {
+        "canvasDepthWrites": true,
+        "frame": {
+          "nonDarkPct": 79.8,
+          "w": 1280,
+          "h": 800
+        },
+        "fpv": {
+          "mean": [
+            21,
+            15,
+            8
+          ],
+          "lum": 15,
+          "clipPct": 0,
+          "darkPct": 53.1
+        }
+      }
+    },
+    {
+      "name": "null-wall-push",
+      "detail": {
+        "travelled": 1.13,
+        "pos": [
+          5.93,
+          -4.42
+        ]
+      }
+    },
+    {
+      "name": "null-front-behind-depth",
+      "detail": {
+        "open": {
+          "mean": [
+            21,
+            15,
+            8
+          ],
+          "lum": 15,
+          "clipPct": 0,
+          "darkPct": 53.1
+        },
+        "corner": {
+          "mean": [
+            57,
+            38,
+            30
+          ],
+          "lum": 42,
+          "clipPct": 0,
+          "darkPct": 46.7
+        },
+        "delta": 27
+      }
+    },
+    {
+      "name": "null-resize",
+      "detail": {
+        "nonDarkPct": 86,
+        "w": 1100,
+        "h": 700
+      }
+    },
+    {
+      "name": "endpoint-gain0",
+      "detail": {
+        "torsoDrop": 34,
+        "wallDelta": 1,
+        "torso": {
+          "mean": [
+            62,
+            40,
+            32
+          ],
+          "lum": 45,
+          "clipPct": 0.2,
+          "darkPct": 14.8
+        },
+        "flashKey": {
+          "fleshKeyIntensity": 0,
+          "fleshShoulderKnee": 0.65
+        }
+      }
+    },
+    {
+      "name": "endpoint-shoulders",
+      "detail": {
+        "knee0": {
+          "fleshKeyIntensity": 2,
+          "fleshShoulderKnee": 0
+        },
+        "knee095": {
+          "fleshKeyIntensity": 2,
+          "fleshShoulderKnee": 0.95
+        },
+        "torsoShoulder0": {
+          "mean": [
+            91,
+            74,
+            75
+          ],
+          "lum": 80,
+          "clipPct": 1.1,
+          "darkPct": 14.9
+        },
+        "torsoShoulder05": {
+          "mean": [
+            91,
+            75,
+            75
+          ],
+          "lum": 80,
+          "clipPct": 1.1,
+          "darkPct": 14.8
+        },
+        "presents": [
+          95,
+          119,
+          127
+        ]
+      }
+    }
   ],
+  "pageErrors": [],
   "pass": false,
   "records": {
-    "captures": {}
+    "captures": {
+      "comp-deferred-fpv-post-on.png": {
+        "stats": {
+          "fpv": {
+            "mean": [
+              34,
+              26,
+              23
+            ],
+            "lum": 28,
+            "clipPct": 0.2,
+            "darkPct": 45.2
+          },
+          "litWall": {
+            "mean": [
+              16,
+              15,
+              17
+            ],
+            "lum": 16,
+            "clipPct": 0,
+            "darkPct": 0
+          },
+          "darkWall": {
+            "mean": [
+              17,
+              14,
+              16
+            ],
+            "lum": 16,
+            "clipPct": 0,
+            "darkPct": 0
+          },
+          "frame": {
+            "nonDarkPct": 81.3,
+            "w": 1280,
+            "h": 800
+          }
+        }
+      },
+      "comp-null-open-room.png": {
+        "stats": {
+          "fpv": {
+            "mean": [
+              21,
+              15,
+              8
+            ],
+            "lum": 15,
+            "clipPct": 0,
+            "darkPct": 53.1
+          },
+          "litWall": {
+            "mean": [
+              14,
+              14,
+              15
+            ],
+            "lum": 14,
+            "clipPct": 0,
+            "darkPct": 0
+          },
+          "darkWall": {
+            "mean": [
+              16,
+              12,
+              14
+            ],
+            "lum": 14,
+            "clipPct": 0,
+            "darkPct": 0
+          },
+          "frame": {
+            "nonDarkPct": 79.8,
+            "w": 1280,
+            "h": 800
+          }
+        }
+      },
+      "comp-null-wall-corner.png": {
+        "stats": {
+          "fpv": {
+            "mean": [
+              57,
+              38,
+              30
+            ],
+            "lum": 42,
+            "clipPct": 0,
+            "darkPct": 46.7
+          },
+          "litWall": {
+            "mean": [
+              14,
+              14,
+              15
+            ],
+            "lum": 14,
+            "clipPct": 0,
+            "darkPct": 0
+          },
+          "darkWall": {
+            "mean": [
+              16,
+              13,
+              15
+            ],
+            "lum": 15,
+            "clipPct": 0,
+            "darkPct": 0
+          },
+          "frame": {
+            "nonDarkPct": 86.3,
+            "w": 1280,
+            "h": 800
+          }
+        }
+      },
+      "comp-null-resized.png": {
+        "stats": {
+          "frame": {
+            "nonDarkPct": 86,
+            "w": 1100,
+            "h": 700
+          }
+        }
+      },
+      "comp-endpoint-gain0.png": {
+        "stats": {
+          "torso": {
+            "mean": [
+              62,
+              40,
+              32
+            ],
+            "lum": 45,
+            "clipPct": 0.2,
+            "darkPct": 14.8
+          },
+          "fpv": {
+            "mean": [
+              21,
+              14,
+              8
+            ],
+            "lum": 14,
+            "clipPct": 0,
+            "darkPct": 53
+          },
+          "litWall": {
+            "mean": [
+              14,
+              14,
+              15
+            ],
+            "lum": 15,
+            "clipPct": 0,
+            "darkPct": 0
+          },
+          "darkWall": {
+            "mean": [
+              16,
+              12,
+              14
+            ],
+            "lum": 14,
+            "clipPct": 0,
+            "darkPct": 0
+          },
+          "frame": {
+            "nonDarkPct": 79.4,
+            "w": 1280,
+            "h": 800
+          }
+        }
+      },
+      "comp-endpoint-default.png": {
+        "stats": {
+          "torso": {
+            "mean": [
+              90,
+              74,
+              75
+            ],
+            "lum": 79,
+            "clipPct": 0.5,
+            "darkPct": 14.9
+          },
+          "fpv": {
+            "mean": [
+              21,
+              14,
+              8
+            ],
+            "lum": 15,
+            "clipPct": 0,
+            "darkPct": 53.4
+          },
+          "litWall": {
+            "mean": [
+              14,
+              14,
+              15
+            ],
+            "lum": 14,
+            "clipPct": 0,
+            "darkPct": 0
+          },
+          "darkWall": {
+            "mean": [
+              16,
+              12,
+              14
+            ],
+            "lum": 14,
+            "clipPct": 0,
+            "darkPct": 0
+          },
+          "frame": {
+            "nonDarkPct": 79.8,
+            "w": 1280,
+            "h": 800
+          }
+        }
+      },
+      "comp-endpoint-shoulder0.png": {
+        "stats": {
+          "torso": {
+            "mean": [
+              91,
+              74,
+              75
+            ],
+            "lum": 80,
+            "clipPct": 1.1,
+            "darkPct": 14.9
+          },
+          "frame": {
+            "nonDarkPct": 79.5,
+            "w": 1280,
+            "h": 800
+          }
+        }
+      },
+      "comp-endpoint-shoulder05.png": {
+        "stats": {
+          "torso": {
+            "mean": [
+              91,
+              75,
+              75
+            ],
+            "lum": 80,
+            "clipPct": 1.1,
+            "darkPct": 14.8
+          },
+          "frame": {
+            "nonDarkPct": 79.9,
+            "w": 1280,
+            "h": 800
+          }
+        }
+      },
+      "comp-tuning-default.png": {
+        "stats": {
+          "fpv": {
+            "mean": [
+              22,
+              15,
+              8
+            ],
+            "lum": 15,
+            "clipPct": 0,
+            "darkPct": 52.7
+          },
+          "frame": {
+            "nonDarkPct": 79.5,
+            "w": 1280,
+            "h": 800
+          }
+        }
+      },
+      "comp-tuning-mirror.png": {
+        "stats": {
+          "fpv": {
+            "mean": [
+              21,
+              15,
+              8
+            ],
+            "lum": 15,
+            "clipPct": 0,
+            "darkPct": 53.4
+          },
+          "frame": {
+            "nonDarkPct": 79.4,
+            "w": 1280,
+            "h": 800
+          }
+        }
+      }
+    }
   }
 }
