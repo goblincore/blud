@@ -4,14 +4,14 @@
       "name": "boot-deferred",
       "detail": {
         "mode": "deferred",
-        "present": 32
+        "present": 34
       }
     },
     {
       "name": "deferred-diagnostics",
       "detail": {
         "counts": {
-          "mesh": 199,
+          "mesh": 343,
           "sdf": 10,
           "forward": 0,
           "exclude": 14
@@ -61,7 +61,7 @@
     {
       "name": "boot-frame-coverage",
       "detail": {
-        "nonDarkPct": 91.5,
+        "nonDarkPct": 87.8,
         "w": 1280,
         "h": 800
       }
@@ -71,31 +71,31 @@
       "detail": {
         "room1": 1,
         "screen": {
-          "x": 1.973541442526412e-16,
-          "y": -0.1300884402003047,
-          "z": 0.9412170051348197
+          "x": 0,
+          "y": -0.13008844020030486,
+          "z": 0.9412170051348195
         },
         "stats": {
           "center": {
             "mean": [
-              73,
-              70,
-              71
+              65,
+              61,
+              62
             ],
-            "clipPct": 1.9,
-            "darkPct": 3
+            "clipPct": 1.5,
+            "darkPct": 8.3
           },
           "darkWall": {
             "mean": [
-              23,
-              18,
-              13
+              21,
+              16,
+              12
             ],
             "clipPct": 0,
-            "darkPct": 17.3
+            "darkPct": 16.2
           },
           "frame": {
-            "nonDarkPct": 86.3,
+            "nonDarkPct": 83,
             "w": 1280,
             "h": 800
           }
@@ -114,21 +114,21 @@
         "stats": {
           "torso": {
             "mean": [
-              180,
-              154,
-              155
+              158,
+              128,
+              128
             ],
-            "clipPct": 1.2,
-            "darkPct": 0
+            "clipPct": 0.5,
+            "darkPct": 1.2
           },
           "center": {
             "mean": [
-              97,
-              84,
-              85
+              89,
+              74,
+              74
             ],
-            "clipPct": 0.8,
-            "darkPct": 2.9
+            "clipPct": 0.4,
+            "darkPct": 7.7
           },
           "darkWall": {
             "mean": [
@@ -140,7 +140,7 @@
             "darkPct": 0
           },
           "frame": {
-            "nonDarkPct": 84.9,
+            "nonDarkPct": 81.9,
             "w": 1280,
             "h": 800
           }
@@ -151,29 +151,29 @@
       "name": "goblin-kit-face",
       "detail": {
         "id": 11,
-        "meshCount": 199,
-        "afterMesh": 200,
+        "meshCount": 343,
+        "afterMesh": 344,
         "stats": {
           "center": {
             "mean": [
-              98,
-              74,
-              70
+              99,
+              72,
+              67
             ],
-            "clipPct": 0.2,
-            "darkPct": 0.8
+            "clipPct": 0.1,
+            "darkPct": 6
           },
           "darkWall": {
             "mean": [
-              75,
-              42,
-              30
+              53,
+              32,
+              24
             ],
             "clipPct": 0,
             "darkPct": 0
           },
           "frame": {
-            "nonDarkPct": 86.4,
+            "nonDarkPct": 84.8,
             "w": 1280,
             "h": 800
           }
@@ -187,16 +187,16 @@
         "stats": {
           "center": {
             "mean": [
-              104,
-              66,
+              106,
+              64,
               64
             ],
             "clipPct": 0.2,
-            "darkPct": 2.4
+            "darkPct": 6.5
           },
           "darkWall": {
             "mean": [
-              16,
+              18,
               14,
               15
             ],
@@ -204,7 +204,7 @@
             "darkPct": 0
           },
           "frame": {
-            "nonDarkPct": 84,
+            "nonDarkPct": 83.5,
             "w": 1280,
             "h": 800
           }
@@ -219,16 +219,16 @@
         "stats": {
           "center": {
             "mean": [
-              115,
-              78,
-              78
+              104,
+              68,
+              67
             ],
-            "clipPct": 0.3,
-            "darkPct": 1.4
+            "clipPct": 0.2,
+            "darkPct": 7.3
           },
           "darkWall": {
             "mean": [
-              16,
+              18,
               14,
               15
             ],
@@ -236,7 +236,7 @@
             "darkPct": 0
           },
           "frame": {
-            "nonDarkPct": 84.7,
+            "nonDarkPct": 83.2,
             "w": 1280,
             "h": 800
           }
@@ -259,25 +259,25 @@
       "name": "boot-legacy",
       "detail": {
         "mode": "legacy",
-        "present": 88,
+        "present": 87,
         "stats": {
           "torso": {
             "mean": [
               149,
               122,
-              125
+              126
             ],
             "clipPct": 0.6,
-            "darkPct": 0.1
+            "darkPct": 0
           },
           "center": {
             "mean": [
               96,
-              77,
-              79
+              78,
+              80
             ],
             "clipPct": 0.2,
-            "darkPct": 0.9
+            "darkPct": 0.8
           },
           "darkWall": {
             "mean": [
@@ -286,10 +286,10 @@
               7
             ],
             "clipPct": 0,
-            "darkPct": 6.9
+            "darkPct": 7.1
           },
           "frame": {
-            "nonDarkPct": 83.1,
+            "nonDarkPct": 82.8,
             "w": 1280,
             "h": 800
           }
@@ -311,7 +311,7 @@
       "task5-deferred-boot.png": {
         "stats": {
           "frame": {
-            "nonDarkPct": 91.5,
+            "nonDarkPct": 87.8,
             "w": 1280,
             "h": 800
           }
@@ -321,24 +321,24 @@
         "stats": {
           "center": {
             "mean": [
-              73,
-              70,
-              71
+              65,
+              61,
+              62
             ],
-            "clipPct": 1.9,
-            "darkPct": 3
+            "clipPct": 1.5,
+            "darkPct": 8.3
           },
           "darkWall": {
             "mean": [
-              23,
-              18,
-              13
+              21,
+              16,
+              12
             ],
             "clipPct": 0,
-            "darkPct": 17.3
+            "darkPct": 16.2
           },
           "frame": {
-            "nonDarkPct": 86.3,
+            "nonDarkPct": 83,
             "w": 1280,
             "h": 800
           }
@@ -348,21 +348,21 @@
         "stats": {
           "torso": {
             "mean": [
-              180,
-              154,
-              155
+              158,
+              128,
+              128
             ],
-            "clipPct": 1.2,
-            "darkPct": 0
+            "clipPct": 0.5,
+            "darkPct": 1.2
           },
           "center": {
             "mean": [
-              97,
-              84,
-              85
+              89,
+              74,
+              74
             ],
-            "clipPct": 0.8,
-            "darkPct": 2.9
+            "clipPct": 0.4,
+            "darkPct": 7.7
           },
           "darkWall": {
             "mean": [
@@ -374,7 +374,7 @@
             "darkPct": 0
           },
           "frame": {
-            "nonDarkPct": 84.9,
+            "nonDarkPct": 81.9,
             "w": 1280,
             "h": 800
           }
@@ -384,24 +384,24 @@
         "stats": {
           "center": {
             "mean": [
-              98,
-              74,
-              70
+              99,
+              72,
+              67
             ],
-            "clipPct": 0.2,
-            "darkPct": 0.8
+            "clipPct": 0.1,
+            "darkPct": 6
           },
           "darkWall": {
             "mean": [
-              75,
-              42,
-              30
+              53,
+              32,
+              24
             ],
             "clipPct": 0,
             "darkPct": 0
           },
           "frame": {
-            "nonDarkPct": 86.4,
+            "nonDarkPct": 84.8,
             "w": 1280,
             "h": 800
           }
@@ -411,16 +411,16 @@
         "stats": {
           "center": {
             "mean": [
-              104,
-              66,
+              106,
+              64,
               64
             ],
             "clipPct": 0.2,
-            "darkPct": 2.4
+            "darkPct": 6.5
           },
           "darkWall": {
             "mean": [
-              16,
+              18,
               14,
               15
             ],
@@ -428,7 +428,7 @@
             "darkPct": 0
           },
           "frame": {
-            "nonDarkPct": 84,
+            "nonDarkPct": 83.5,
             "w": 1280,
             "h": 800
           }
@@ -438,16 +438,16 @@
         "stats": {
           "center": {
             "mean": [
-              115,
-              78,
-              78
+              104,
+              68,
+              67
             ],
-            "clipPct": 0.3,
-            "darkPct": 1.4
+            "clipPct": 0.2,
+            "darkPct": 7.3
           },
           "darkWall": {
             "mean": [
-              16,
+              18,
               14,
               15
             ],
@@ -455,7 +455,7 @@
             "darkPct": 0
           },
           "frame": {
-            "nonDarkPct": 84.7,
+            "nonDarkPct": 83.2,
             "w": 1280,
             "h": 800
           }
@@ -465,12 +465,12 @@
         "stats": {
           "center": {
             "mean": [
-              113,
-              76,
-              77
+              106,
+              68,
+              67
             ],
-            "clipPct": 0.3,
-            "darkPct": 1.5
+            "clipPct": 0.2,
+            "darkPct": 7.4
           },
           "darkWall": {
             "mean": [
@@ -482,7 +482,7 @@
             "darkPct": 0
           },
           "frame": {
-            "nonDarkPct": 84.9,
+            "nonDarkPct": 84.6,
             "w": 1280,
             "h": 800
           }
@@ -494,19 +494,19 @@
             "mean": [
               149,
               122,
-              125
+              126
             ],
             "clipPct": 0.6,
-            "darkPct": 0.1
+            "darkPct": 0
           },
           "center": {
             "mean": [
               96,
-              77,
-              79
+              78,
+              80
             ],
             "clipPct": 0.2,
-            "darkPct": 0.9
+            "darkPct": 0.8
           },
           "darkWall": {
             "mean": [
@@ -515,10 +515,10 @@
               7
             ],
             "clipPct": 0,
-            "darkPct": 6.9
+            "darkPct": 7.1
           },
           "frame": {
-            "nonDarkPct": 83.1,
+            "nonDarkPct": 82.8,
             "w": 1280,
             "h": 800
           }
@@ -527,15 +527,62 @@
     },
     "deferredBootDiag": {
       "mode": "deferred",
-      "frames": 31,
+      "frames": 32,
+      "canvasDepthWrites": false,
       "router": {
         "counts": {
-          "mesh": 199,
+          "mesh": 343,
           "sdf": 10,
           "forward": 0,
           "exclude": 14
         },
-        "unsupported": []
+        "unsupported": [],
+        "roots": [
+          "ring-level",
+          "accent-lights",
+          "Mesh",
+          "Mesh",
+          "Mesh",
+          "Mesh",
+          "Mesh",
+          "Mesh",
+          "Mesh",
+          "deferred-rig-soldier--4.80--4.80",
+          "Mesh",
+          "Mesh",
+          "deferred-rig-zombie-4.80--4.80",
+          "Mesh",
+          "Mesh",
+          "deferred-rig-zombie-2.80--4.00",
+          "Mesh",
+          "Mesh",
+          "deferred-rig-zombie-4.80-4.80",
+          "Mesh",
+          "Mesh",
+          "deferred-rig-zombie-2.60-6.20",
+          "Mesh",
+          "Mesh",
+          "deferred-rig-zombie-3.00-3.00",
+          "Mesh",
+          "Mesh",
+          "deferred-rig-zombie--4.80-4.80",
+          "Mesh",
+          "Mesh",
+          "deferred-rig-zombie--6.80-6.00",
+          "Mesh",
+          "Mesh",
+          "deferred-rig-zombie--2.40-4.40",
+          "Mesh",
+          "Mesh",
+          "deferred-rig-zombie--6.00-3.20",
+          "grapeshot-k3",
+          "fpv-hand-grip",
+          "fpv-hand-fore",
+          "shell-eject-0",
+          "shell-load-0",
+          "shell-eject-1",
+          "shell-load-1"
+        ]
       },
       "lights": {
         "ids": [
