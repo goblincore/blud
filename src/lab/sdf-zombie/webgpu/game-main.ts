@@ -4806,6 +4806,12 @@ async function main() {
       for (const a of actors) a.view.uniforms.counts2.value.z = on ? 0 : 1;
     },
     get ownerRefold() { return (actors[0]?.view.uniforms.counts2.value.z ?? 0) < 0.5; },
+    /** Per-ray wound list (march.wgsl.ts, counts2.w): build the reachable
+     *  wound set once per pixel and fold only those. OFF is bit-identical. */
+    setWoundList(on: boolean) {
+      for (const a of actors) a.view.uniforms.counts2.value.w = on ? 1 : 0;
+    },
+    get woundList() { return (actors[0]?.view.uniforms.counts2.value.w ?? 0) > 0.5; },
     // Tracks the REQUESTED state, not the uniform: an unwounded body never
     // uploads wounds, so its bound radius stays at the 1e9 identity even
     // with the cull on, and reading the uniform back would lie.

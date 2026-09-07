@@ -943,8 +943,18 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
   // that a far sample pays nothing per-wound.
   if (length(p - woundBound.xyz) > woundBound.w) { return vec2<f32>(dIn, 0.0); }
   let n = i32(woundCfg.x);
-  for (var i = 0; i < 16; i = i + 1) {
-    if (i >= n) { break; }
+  // PER-RAY WOUND LIST (counts2.w gate, 2026-09-07): with the gate ON the
+  // loop iterates only the preloaded reachable set; with it OFF this is the
+  // same iteration sequence as before (k == i, same break on n), so OFF is
+  // bit-identical to the shipped shader.
+  for (var k = 0; k < 16; k = k + 1) {
+    var i = k;
+    if (gWoundListOn > 0.5) {
+      if (k >= gWoundN) { break; }
+      i = gWoundList[k];
+    } else {
+      if (k >= n) { break; }
+    }
     let w = textureLoad(data, vec2<i32>(i, ${ROW_WOUND}), 0);
     let r = length(p - w.xyz);
     // Reach of this wound's influence, beyond which the carve, the fillet
@@ -1344,7 +1354,18 @@ var<private> gTileActive: f32 = 0.0;
 var<private> gTileN: f32 = 0.0;
 var<private> gTileBounds: array<vec4<f32>, ${TILE_MAX_ENTRIES}>;
 var<private> gTileGrp: array<vec4<f32>, ${TILE_MAX_ENTRIES}>;
-var<private> gTileBand: array<f32, ${TILE_MAX_ENTRIES}>;`;
+var<private> gTileBand: array<f32, ${TILE_MAX_ENTRIES}>;
+// PER-RAY WOUND LIST (counts2.w gate, 2026-09-07). Built ONCE per pixel at
+// the march entry (see MARCH_BODY) and folded by APPLY_WOUNDS every step
+// through the gWoundListOn gate. Private vars are per-invocation and start
+// at their INITIALISERS (never at a previous fragment's value), so the
+// cone/depth pre-pass chains — separate invocations that never run the
+// preload — keep gWoundListOn 0 and fold the full 16-wound loop, which is
+// CONSERVATIVE by construction (the cone certifies emptiness against the
+// full field, and any correctly-binned list is a subset of it).
+var<private> gWoundListOn: f32 = 0.0;
+var<private> gWoundN: i32 = 0;
+var<private> gWoundList: array<i32, 16>;`;
 
 // Folds bone into the field, AFTER wounds have been carved.
 //
@@ -2091,11 +2112,11 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
   prevT: f32,
   bodyCentre: vec3<f32>,
   bodyHalf: vec3<f32>,
-  // Melt progress in x, yzw spare (zombie melt task 6). Zero everywhere but a
+  // Melt progress in x, yzw spare - zombie melt task 6. Zero everywhere but a
   // melting body and its released bone chunks; the flesh-only wet-red ramp
   // below is bit-identical to the pre-melt shader while it is 0.
   meltCfg: vec4<f32>,
-  // Level-only shadow (perf round 2 task 7) — bound positionally LAST to
+  // Level-only shadow - perf round 2 task 7 — bound positionally LAST to
   // match createMarchMaterial's binding order. The gate is cfg.x — zero
   // keeps the march bit-identical to the pre-task-7 shader.
   // NOTE FOR THE NEXT EDITOR — the wgslFn parser regexes the parameter list
@@ -2189,6 +2210,28 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
       w = w + 1;
     }
     gTileN = f32(w);
+  }
+  // PER-RAY WOUND LIST (counts2.w gate, 2026-09-07). Built ONCE per pixel:
+  // a wound whose REACH sphere the ray never enters cannot change this
+  // ray's field on any step, nor the post-hit probes within RAY_CULL_SLACK
+  // of the ray. Same reach formula as applyWounds (pinned by test, + slack
+  // for the off-ray probes). The cone/depth pre-pass chains never run this
+  // block, so their gWoundListOn stays 0 and they fold every wound —
+  // conservative by construction.
+  gWoundListOn = select(0.0, 1.0, counts2.w > 0.5);
+  if (gWoundListOn > 0.5) {
+    gWoundN = 0;
+    let nW = min(i32(woundCfg.x), 16);
+    for (var i = 0; i < 16; i = i + 1) {
+      if (i >= nW) { break; }
+      let w = textureLoad(data, vec2<i32>(i, ${ROW_WOUND}), 0);
+      let reach = w.w * max(2.0, 2.0 * woundCfg.w + 3.0 * woundCfg2.x) + 4.0 * woundCfg.y + 0.25 + ${RAY_CULL_SLACK};
+      let oc = w.xyz - camPos;
+      let tc = max(dot(oc, rd), 0.0);
+      if (dot(oc, oc) - tc * tc > reach * reach) { continue; }
+      gWoundList[gWoundN] = i;
+      gWoundN = gWoundN + 1;
+    }
   }
   // OCCLUDER PRE-PASS. occT is the distance to the nearest point of a
   // conservative INNER hull of the scene — geometry guaranteed to lie inside
