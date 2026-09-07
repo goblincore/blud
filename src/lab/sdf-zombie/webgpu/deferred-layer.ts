@@ -189,6 +189,8 @@ export interface DeferredLayerDiagnostics {
    *  flag is only the sampling side, so the two toggles stay distinguishable
    *  in evidence (spec: sampling toggle vs map-render toggle). */
   flashlightShadowEnabled: boolean;
+  /** M2 task 7: the current authored-flesh-response gate. */
+  fleshDisplay: boolean;
   /** Per-slot shadow texture identity (review fix, 2026-09-06): the CURRENT
    *  bound texture's uuid and whether it is the layer's own fallback, for
    *  each of the two shadow slots. The two slots must never report the same
@@ -235,6 +237,12 @@ export interface DeferredLayer {
   /** Lit-stage environment (ambient + distance fog). Validates and COPIES:
    *  later mutation of the caller's colors cannot leak into the layer. */
   setEnvironment(environment: DeferredEnvironment): void;
+  /** M2 task 7 material-parity gate: when true, flesh receivers with packed
+   *  surfaceParams shade with the march's AUTHORED specular/Fresnel/wet/AO
+   *  response and the legacy display decode (march's lodCfg.y). Default
+   *  FALSE — M1 fixtures and spike scenes keep the documented bounded
+   *  evaluation bit-for-bit. Pure uniform data: no pipeline rebuild. */
+  setFleshDisplay(on: boolean): void;
   /** Validates and stores the flashlight shadow binding (M2 task 4): the
    *  lit stage samples the bound R32F maps with a bounded 3x3 PCF and
    *  multiplies ONLY the designated flashlight contribution. The binding is
@@ -324,7 +332,9 @@ export const DEFERRED_LIGHT_WGSL = /* wgsl */ `fn deferredLight(
   shadowLightIndex: f32,
   shadowBias: f32,
   shadowMapSize: vec2<f32>,
-  shadowEnabled: f32
+  shadowEnabled: f32,
+  surfaceParams: texture_2d<f32>,
+  fleshDisplay: f32
 ) -> vec4<f32> {
   let dims = vec2<f32>(textureDimensions(surfaceDepth, 0));
   let c = clamp(vec2<i32>(floor(px)), vec2<i32>(0, 0), vec2<i32>(dims) - vec2<i32>(1, 1));
@@ -357,12 +367,45 @@ export const DEFERRED_LIGHT_WGSL = /* wgsl */ `fn deferredLight(
   let baseDiff = albedo * (1.0 - metal);
   let specCol = mix(vec3<f32>(0.04), albedo, metal);
   let isFlesh = baseCls > 1.5 && baseCls < 2.5;
+  // ---- M2 task 7 AUTHORED FLESH RESPONSE ----------------------------------
+  // surfaceParams carries the march's authored response scalars packed 3x8
+  // (deferred-surface.ts packSurfaceParams; the SDF surface tail writes
+  // them). fleshDisplay gates the branch so M1 fixtures/spike scenes keep
+  // the documented bounded evaluation bit-for-bit; the game enables it
+  // (the march's lodCfg.y default). packed 0 (mesh/clear) = absent.
+  //   paramsSpec = mix(surfCfg.x, 1.5, gloss) * wet  (legacy spec INTENSITY)
+  //   paramsFres = surfCfg.z*(1-wmRim)*mix(1,2.5,gloss)*wet (Fresnel boost)
+  //   paramsAo   = the unlit field AO probe the legacy diffuse family uses
+  // The light/view composition below mirrors march.wgsl.ts's legacy tail:
+  // HARD diffuse (no wrap) × AO × the legacy metal diffuse floor, and a
+  // specular+Fresnel sum with NO n·l factor, NO 0.04 dielectric and NO 0.35
+  // cap — the packed lanes ARE the authored intensities. The exponent keeps
+  // riding albedoRoughness.w (the M1 wet-folds-into-roughness mapping).
+  let packedRaw = textureLoad(surfaceParams, c, 0).x;
+  let legacyFlesh = isFlesh && (fleshDisplay > 0.5) && (packedRaw > 0.0);
+  var paramsSpec = 0.0;
+  var paramsFres = 0.0;
+  var paramsAo = 1.0;
+  if (legacyFlesh) {
+    // Same 3x8 arithmetic as unpackSurfaceParams — floor/multiply, exact in
+    // f32 (max lane product 2^24-1, strides 65536/256 keep every floor
+    // clean). No bitcasts anywhere.
+    let p8 = floor(packedRaw / 65536.0);
+    let remP = packedRaw - p8 * 65536.0;
+    let q8 = floor(remP / 256.0);
+    let a8 = remP - q8 * 256.0;
+    paramsSpec = p8 / 255.0 * 3.5;
+    paramsFres = q8 / 255.0 * 5.0;
+    paramsAo = a8 / 255.0;
+  }
   var acc = emission;
   // Constant ambient floor (M1 fixture choice): the shared light pass has no
   // probe/enclosure bounce — the legacy path's fill/scatter terms are the
   // inventoried omissions. Without a floor, surfaces outside every light's
   // range render pure black and read as MISSING data in captures.
-  acc = acc + ambient * baseDiff;
+  // Authored branch: the legacy ambient sits INSIDE the AO × metal-diffuse-
+  // floor family (march: albedo*(amb + diff*...)*ao*mix(1,0.45,metal)).
+  acc = acc + ambient * select(baseDiff, albedo * mix(1.0, 0.45, metal) * paramsAo, legacyFlesh);
   let count = i32(lightCount);
   var fleshKnee = 0.0;
   for (var i = 0; i < ${MAX_DEFERRED_LIGHTS}; i = i + 1) {
@@ -405,17 +448,31 @@ export const DEFERRED_LIGHT_WGSL = /* wgsl */ `fn deferredLight(
       if (att <= 0.0) { continue; }
     }
     var ndl = dot(n, toL / d);
-    if (isFlesh) {
-      // Bounded flesh-class response: wrapped diffuse, no field resampling.
-      ndl = clamp((ndl + 0.5) / 1.5, 0.0, 1.0);
-    } else {
-      ndl = max(ndl, 0.0);
-    }
     let h = normalize(toL / d + viewDir);
     let shin = exp2((1.0 - rough) * 8.0) + 2.0;
-    var spec = pow(max(dot(n, h), 0.0), shin) * (shin + 2.0) / 8.0;
-    if (isFlesh) { spec = min(spec, 1.0) * 0.35; }
-    var contribution = v2.xyz * att * (baseDiff * ndl + specCol * spec * ndl);
+    var contribution: vec3<f32>;
+    if (legacyFlesh) {
+      // Authored compose (march.wgsl.ts legacy tail): hard key diffuse with
+      // the field AO, plus shine/Fresnel WITHOUT an n·l factor — the legacy
+      // specular is not diffuse-attenuated. wShadow (crater self-shadow) has
+      // no deferred equivalent; the level-shadow factor below stands in for
+      // the legacy lvl term on both diffuse and shine, exactly like march's
+      // application sites.
+      let legacyDiff = max(ndl, 0.0);
+      let shine = pow(max(dot(n, h), 0.0), shin);
+      let fres = pow(1.0 - max(dot(n, viewDir), 0.0), 4.0);
+      contribution = v2.xyz * att * (albedo * mix(1.0, 0.45, metal) * legacyDiff * paramsAo + shine * paramsSpec + fres * paramsFres);
+    } else {
+      if (isFlesh) {
+        // Bounded flesh-class response: wrapped diffuse, no field resampling.
+        ndl = clamp((ndl + 0.5) / 1.5, 0.0, 1.0);
+      } else {
+        ndl = max(ndl, 0.0);
+      }
+      var spec = pow(max(dot(n, h), 0.0), shin) * (shin + 2.0) / 8.0;
+      if (isFlesh) { spec = min(spec, 1.0) * 0.35; }
+      contribution = v2.xyz * att * (baseDiff * ndl + specCol * spec * ndl);
+    }
     // M2 task 4: shadow visibility modulates ONLY the designated flashlight
     // contribution — never ambient, never emission, never another light.
     if (shadowEnabled > 0.5 && f32(i) == shadowLightIndex) {
@@ -483,6 +540,20 @@ export const DEFERRED_LIGHT_WGSL = /* wgsl */ `fn deferredLight(
     let compressed = vec3<f32>(fleshKnee) + head * (vec3<f32>(1.0) - exp(-over / head));
     acc = emission + select(body, compressed,
       vec3<bool>(body.x > fleshKnee, body.y > fleshKnee, body.z > fleshKnee));
+  }
+  // M2 task 7 — legacy display response (the march's lodCfg.y). Every flesh
+  // preset was hand-tuned against the WebGL lab's RAW linear display; the
+  // legacy march cancels three's output sRGB encode by applying the sRGB
+  // EOTF decode before returning. The deferred lit target is linear and the
+  // present pass encodes — so the authored branch decodes the flesh lit sum
+  // (INCLUDING emission, matching march's glow-after-shoulder order) before
+  // fog. Same curve, same gate as march.wgsl.ts's lodCfg.y block; mesh
+  // receivers keep three's native pipeline (they were authored THROUGH it).
+  if (isFlesh && fleshDisplay > 0.5) {
+    let dc = max(acc, vec3<f32>(0.0));
+    let dlo = dc / 12.92;
+    let dhi = pow((dc + vec3<f32>(0.055)) / 1.055, vec3<f32>(2.4));
+    acc = select(dhi, dlo, dc <= vec3<f32>(0.04045));
   }
   // M2 task 1: game distance fog, evaluated ONLY here in the lit stage (raw
   // surface and debug outputs never read it). Linear three.js-style falloff
@@ -645,6 +716,8 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
   const uShadowBias = uniform(0);
   const uShadowMapSize = uniform(new THREE.Vector2(1, 1));
   const uShadowEnabled = uniform(0);
+  /** M2 task 7 authored-flesh-response gate (see setFleshDisplay). */
+  const uFleshDisplay = uniform(0);
   /** Constant ambient floor — see the deferredLight WGSL note. Fixed for M1;
    *  not a per-light term, so it cannot leak light-dependence into surface
    *  data (it lives in the lit target only). M2 task 1: settable through
@@ -708,6 +781,7 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
     normalMetalness: vec4(0.0, 0.0, 1.0, 0.0),
     emissionClass: vec4(0.0, 0.0, 0.0, 0.0),
     surfaceDepth: vec4(1.0, 1.0, 1.0, 1.0),
+    surfaceParams: vec4(0.0, 0.0, 0.0, 1.0),
   });
   const clearScene = quadPass(clearMat);
 
@@ -730,6 +804,7 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
     normalMetalness: pickVec4(meshTex.normalMetalness, sdfTex.normalMetalness),
     emissionClass: pickVec4(meshTex.emissionClass, sdfTex.emissionClass),
     surfaceDepth: vec4(rDepth, 0.0, 0.0, 1.0),
+    surfaceParams: pickVec4(meshTex.surfaceParams, sdfTex.surfaceParams),
   });
   const resolveScene = quadPass(resolveMat);
 
@@ -758,6 +833,8 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
     shadowBias: uShadowBias,
     shadowMapSize: uShadowMapSize,
     shadowEnabled: uShadowEnabled,
+    surfaceParams: texture(resolvedTex.surfaceParams),
+    fleshDisplay: uFleshDisplay,
   }) as never;
   const lightScene = quadPass(lightMat);
 
@@ -1060,6 +1137,11 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
       uFogEnabled.value = fogEnabled ? 1 : 0;
     },
 
+    setFleshDisplay(on) {
+      assertAlive();
+      uFleshDisplay.value = on ? 1 : 0;
+    },
+
     setFlashlightShadow(binding) {
       assertAlive();
       // M2 task 4: validate and store. The lit stage samples the binding
@@ -1106,6 +1188,7 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
         },
         outputTargetActive: outputTarget !== null,
         canvasDepthWrites,
+        fleshDisplay: uFleshDisplay.value > 0.5,
         flashlightShadowBound: flashlightShadow !== null,
         flashlightShadowEnabled: flashlightShadow !== null && flashlightShadow.enabled,
         shadowSlots: {

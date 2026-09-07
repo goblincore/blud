@@ -106,8 +106,8 @@ describe('adapter limit validation', () => {
       expect(d.limits.supported).toBe(true);
       expect(d.limits.ok).toBe(true);
       expect(d.limits.checks).toEqual([
-        { name: 'maxColorAttachments', required: 4, actual: 8 },
-        { name: 'maxColorAttachmentBytesPerSample', required: 28, actual: 32 },
+        { name: 'maxColorAttachments', required: 5, actual: 8 },
+        { name: 'maxColorAttachmentBytesPerSample', required: 32, actual: 32 },
       ]);
     } finally {
       layer.dispose();
@@ -831,7 +831,7 @@ describe('flashlight shadow sampling in the light stage (hybrid deferred M2 task
     expect(DEFERRED_LIGHT_WGSL).toContain('shadowEnabled > 0.5 && f32(i) == shadowLightIndex');
     const loopStart = DEFERRED_LIGHT_WGSL.indexOf('for (var i = 0;');
     const gate = DEFERRED_LIGHT_WGSL.indexOf('shadowEnabled > 0.5 && f32(i) == shadowLightIndex');
-    const ambient = DEFERRED_LIGHT_WGSL.indexOf('ambient * baseDiff');
+    const ambient = DEFERRED_LIGHT_WGSL.indexOf('ambient * select(baseDiff');
     const emptyReturn = DEFERRED_LIGHT_WGSL.indexOf("return vec4<f32>(emission, 1.0)");
     // Ambient (added before the loop) and the empty-pixel emission return
     // both sit OUTSIDE the shadow multiplication (spec frame contract step 5).
@@ -1090,5 +1090,28 @@ describe('dispose', () => {
     for (const spy of spies) expect(spy).toHaveBeenCalledOnce();
     expect(() => layer.render(new THREE.Scene(), new THREE.Scene(), new THREE.PerspectiveCamera())).toThrow(/disposed/);
     expect(() => layer.resize(32, 32, 1)).toThrow(/disposed/);
+  });
+});
+
+describe('authored flesh response (M2 task 7 material-parity repair)', () => {
+  it('the light pass decodes with the exact CPU strides and headroom constants', () => {
+    expect(DEFERRED_LIGHT_WGSL).toContain('floor(packedRaw / 65536.0)');
+    expect(DEFERRED_LIGHT_WGSL).toContain('floor(remP / 256.0)');
+    expect(DEFERRED_LIGHT_WGSL).toContain('p8 / 255.0 * 3.5');
+    expect(DEFERRED_LIGHT_WGSL).toContain('q8 / 255.0 * 5.0');
+  });
+
+  it('the authored branch is gated on fleshDisplay AND packed params, meshes never take it', () => {
+    expect(DEFERRED_LIGHT_WGSL).toContain('let legacyFlesh = isFlesh && (fleshDisplay > 0.5) && (packedRaw > 0.0);');
+    // Hard diffuse (no wrap) and the no-ndl specular only inside the branch:
+    expect(DEFERRED_LIGHT_WGSL).toContain('contribution = v2.xyz * att * (albedo * mix(1.0, 0.45, metal) * legacyDiff * paramsAo + shine * paramsSpec + fres * paramsFres);');
+    // The bounded branch survives verbatim for params-absent pixels:
+    expect(DEFERRED_LIGHT_WGSL).toContain('spec = min(spec, 1.0) * 0.35;');
+  });
+
+  it('the legacy display decode mirrors march lodCfg.y (sRGB EOTF) and is flesh-only', () => {
+    expect(DEFERRED_LIGHT_WGSL).toContain('if (isFlesh && fleshDisplay > 0.5)');
+    expect(DEFERRED_LIGHT_WGSL).toContain('dlo = dc / 12.92');
+    expect(DEFERRED_LIGHT_WGSL).toContain('dhi = pow((dc + vec3<f32>(0.055)) / 1.055, vec3<f32>(2.4))');
   });
 });

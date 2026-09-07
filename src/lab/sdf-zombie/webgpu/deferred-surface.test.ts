@@ -13,6 +13,10 @@ import {
   SURFACE_CLASS_MESH,
   SURFACE_CLASS_FLESH,
   SURFACE_CLASS_FLAT,
+  packSurfaceParams,
+  unpackSurfaceParams,
+  SURFACE_PARAM_SPEC_MAX,
+  SURFACE_PARAM_FRESNEL_MAX,
 } from './deferred-surface';
 
 describe('selectSurface (CPU reference for the resolve rule)', () => {
@@ -64,10 +68,10 @@ describe('sdfTargetSize', () => {
 });
 
 describe('createSurfaceTarget', () => {
-  it('creates the four named attachments in spec order with spec formats', () => {
+  it('creates the five named attachments in spec order with spec formats', () => {
     const target = createSurfaceTarget(64, 32);
     try {
-      expect(target.textures).toHaveLength(4);
+      expect(target.textures).toHaveLength(5);
       expect(target.textures.map((t) => t.name)).toEqual([...SURFACE_ATTACHMENT_NAMES]);
 
       const tex = getSurfaceTextures(target);
@@ -77,6 +81,8 @@ describe('createSurfaceTarget', () => {
       }
       expect(tex.surfaceDepth.format).toBe(THREE.RedFormat);
       expect(tex.surfaceDepth.type).toBe(THREE.FloatType);
+      expect(tex.surfaceParams.format).toBe(THREE.RedFormat);
+      expect(tex.surfaceParams.type).toBe(THREE.FloatType);
 
       for (const t of target.textures) {
         expect(t.minFilter).toBe(THREE.NearestFilter);
@@ -86,10 +92,11 @@ describe('createSurfaceTarget', () => {
       }
 
       // Hardware depth for the geometry producers, and the whole budget must
-      // stay inside the 32-byte default maxColorAttachmentBytesPerSample.
+      // stay inside the 32-byte default maxColorAttachmentBytesPerSample —
+      // the M2 task 7 surfaceParams attachment consumes the last 4 bytes.
       expect(target.depthBuffer).toBe(true);
       expect(SURFACE_COLOR_BYTES_PER_SAMPLE).toBeLessThanOrEqual(32);
-      expect(SURFACE_COLOR_BYTES_PER_SAMPLE).toBe(3 * 8 + 4);
+      expect(SURFACE_COLOR_BYTES_PER_SAMPLE).toBe(3 * 8 + 4 + 4);
     } finally {
       target.dispose();
     }
@@ -101,7 +108,7 @@ describe('createSurfaceTarget', () => {
     // gate read by name. A reorder here must fail loudly, not silently
     // re-bind which attachment carries the class vs the depth.
     expect([...SURFACE_ATTACHMENT_NAMES]).toEqual([
-      'albedoRoughness', 'normalMetalness', 'emissionClass', 'surfaceDepth',
+      'albedoRoughness', 'normalMetalness', 'emissionClass', 'surfaceDepth', 'surfaceParams',
     ]);
   });
 
@@ -222,5 +229,54 @@ describe('getSurfaceTextures', () => {
     } finally {
       target.dispose();
     }
+  });
+});
+
+describe('surfaceParams packing (M2 task 7 material-parity repair)', () => {
+  it('round-trips the authored response lanes at 8-bit precision', () => {
+    // The zombie's authored cruise: spec 0.95, fresnel 0.85, mid AO.
+    const packed = packSurfaceParams(0.95, 0.85, 0.72);
+    const out = unpackSurfaceParams(packed);
+    expect(Math.abs(out.specIntensity - 0.95)).toBeLessThanOrEqual(SURFACE_PARAM_SPEC_MAX / 255);
+    expect(Math.abs(out.fresnelBoost - 0.85)).toBeLessThanOrEqual(SURFACE_PARAM_FRESNEL_MAX / 255);
+    expect(Math.abs(out.ao - 0.72)).toBeLessThanOrEqual(1 / 255);
+  });
+
+  it('stays inside the exact-float32 integer range for every lane', () => {
+    const worst = packSurfaceParams(SURFACE_PARAM_SPEC_MAX, SURFACE_PARAM_FRESNEL_MAX, 1);
+    expect(worst).toBeLessThanOrEqual(16777215);
+    expect(worst).toBe(255 * 65536 + 255 * 256 + 255);
+    const out = unpackSurfaceParams(worst);
+    expect(out.specIntensity).toBeCloseTo(SURFACE_PARAM_SPEC_MAX, 5);
+    expect(out.fresnelBoost).toBeCloseTo(SURFACE_PARAM_FRESNEL_MAX, 5);
+    expect(out.ao).toBeCloseTo(1, 5);
+  });
+
+  it('keeps upper-lane saturation decodable (no mixed-radix spill)', () => {
+    // p8 = 255 with maximal lower lanes: floor(v / 65536) must stay 255.
+    const v = packSurfaceParams(SURFACE_PARAM_SPEC_MAX, SURFACE_PARAM_FRESNEL_MAX, 1);
+    expect(Math.floor(v / 65536)).toBe(255);
+    const out = unpackSurfaceParams(v);
+    expect(out.ao).toBeCloseTo(1, 5);
+  });
+
+  it('clamps out-of-range lanes and maps zero to the absent sentinel', () => {
+    expect(packSurfaceParams(-1, 999, 0.5)).toBe(packSurfaceParams(0, SURFACE_PARAM_FRESNEL_MAX, 0.5));
+    expect(packSurfaceParams(0, 0, 0)).toBe(0);
+    expect(unpackSurfaceParams(0)).toEqual({ specIntensity: 0, fresnelBoost: 0, ao: 0 });
+  });
+
+  it('rejects values that cannot be a packed lane product', () => {
+    expect(() => unpackSurfaceParams(-1)).toThrow(RangeError);
+    expect(() => unpackSurfaceParams(16777216)).toThrow(RangeError);
+    expect(() => unpackSurfaceParams(Number.NaN)).toThrow(RangeError);
+  });
+
+  it('mirrors the WGSL decode constants in the surface tail and light pass', () => {
+    // The WGSL duplicates the 3x8 arithmetic because wgslFn takes one fn per
+    // string (the bone-tubes lesson). These pins keep the two in lockstep —
+    // a constant changed on one side must fail here.
+    expect(SURFACE_PARAM_SPEC_MAX).toBe(3.5);
+    expect(SURFACE_PARAM_FRESNEL_MAX).toBe(5.0);
   });
 });

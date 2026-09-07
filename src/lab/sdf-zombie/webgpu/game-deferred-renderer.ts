@@ -183,6 +183,14 @@ export interface GameDeferredRendererDeps {
    *  main's beamTuning through a getter keeps setBeamTuning and the deferred
    *  path on one source of truth. */
   flashKey?: () => GameDeferredFlashKey | undefined;
+  /** M2 task 7 material-parity gate: LIVE legacy-display flag for flesh
+   *  receivers. True = the deferred light pass shades packed flesh with the
+   *  march's authored specular/Fresnel/wet/AO response and applies the
+   *  legacy display decode (the march's lodCfg.y). The game's march
+   *  materials keep lodCfg.y at its 1 default (only lab-main flips it), so
+   *  game-main passes () => true; absent/undefined keeps the M1 bounded
+   *  evaluation bit-for-bit (fixtures, spike scenes). */
+  fleshDisplay?: () => boolean;
   /** The flashlight spot the shadow maps follow. */
   flashlight: THREE.SpotLight;
   /** Shadow-map edge length. Default 1024 — the spec's number, also the
@@ -232,6 +240,8 @@ export interface GameDeferredRendererDiagnostics {
     outputTarget: { width: number; height: number } | null;
   };
   lightGain: number;
+  /** M2 task 7: whether the authored flesh response is currently enabled. */
+  fleshDisplay: boolean;
   /** Bounded page-side error record (the coordinator survives a throwing
    *  frame so a gate can read WHY the frame died from diagnostics). */
   errors: string[];
@@ -663,6 +673,9 @@ export function createGameDeferredRenderer(deps: GameDeferredRendererDeps): Game
 
         // 3. Environment (ambient + fog) from the live rig.
         layer.setEnvironment(deps.environment());
+        // 3b. Authored flesh response gate (M2 task 7). Uniform-only: no
+        // pipeline rebuild, defaults off for every non-game caller.
+        layer.setFleshDisplay(deps.fleshDisplay?.() ?? false);
 
         // 4. The shadow binding. No generation (or no active flashlight)
         //    means NULL — the M1 unshadowed default, bit-identical output.
@@ -737,6 +750,7 @@ export function createGameDeferredRenderer(deps: GameDeferredRendererDeps): Game
           outputTarget: outputTarget ? { width: outputTarget.width, height: outputTarget.height } : null,
         },
         lightGain,
+        fleshDisplay: layerDiag.fleshDisplay,
         errors: [...errors],
       };
     },

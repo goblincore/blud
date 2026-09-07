@@ -110,10 +110,14 @@ describe('the surface entry IS the production march, not a copy', () => {
 
   it('traces exactly once and evaluates the field once per march step — no per-attachment retrace', () => {
     expect(MARCH_SURFACE.match(/for \(var i = 0; i < 512;/g)).toHaveLength(1);
-    // In the ENTRY text mapBody appears only at the march step. calcNormal's
-    // own calls live in CALC_NORMAL's source; the scatter/AO/shadow probes
-    // are all in the lighting tail this entry does not include.
-    expect(MARCH_SURFACE.match(/\bmapBody\(/g)).toHaveLength(1);
+    // In the ENTRY text mapBody appears at the march step PLUS the ONE
+    // authored-response AO probe (M2 task 7: the unlit field AO lane of
+    // surfaceParams — the same probe the legacy light tail pays, so the
+    // budget is unchanged relative to the legacy path). calcNormal's own
+    // calls live in CALC_NORMAL's source; the scatter/shadow probes are all
+    // in the lighting tail this entry does not include. A THIRD call would
+    // mean a per-attachment retrace crept back in.
+    expect(MARCH_SURFACE.match(/\bmapBody\(/g)).toHaveLength(2);
   });
 
   it('exits before every light-dependent term and the display conversion', () => {
@@ -250,5 +254,25 @@ describe('node chain', () => {
   it('builds a distinct surface entry node with the shared helper chain', () => {
     expect(sdfSurfaceMarch).toBeTruthy();
     expect(typeof sdfSurfaceMarch).toBe('function');
+  });
+});
+
+describe('surfaceParams packing mirrors (M2 task 7)', () => {
+  it('the surface tail packs with the exact CPU constants and strides', () => {
+    // wgslFn takes one fn per string, so the packing arithmetic is DUPLICATED
+    // in WGSL (tail) and TS (packSurfaceParams). These pins are the lockstep
+    // contract — changing a constant on one side must fail here.
+    expect(MARCH_SURFACE).toContain('paramsSpecA = mix(surfCfg.x, 1.5, gloss)');
+    expect(MARCH_SURFACE).toContain('paramsFresB = surfCfg.z * (1.0 - wmRim) * mix(1.0, 2.5, gloss)');
+    expect(MARCH_SURFACE).toContain('paramsSpecA * wet / 3.5');
+    expect(MARCH_SURFACE).toContain('paramsFresB * wet / 5.0');
+    expect(MARCH_SURFACE).toContain('paramsP8 * 65536.0 + paramsQ8 * 256.0');
+    expect(MARCH_SURFACE).toContain('mapBody(p + n * 0.06');
+    expect(MARCH_SURFACE).toContain('clamp(mapBody(p + n * 0.06');
+  });
+
+  it('the AO probe stays lodCfg.x-gated and hard-diffuse-only shape', () => {
+    expect(MARCH_SURFACE).toContain('paramsAo = clamp(');
+    expect(MARCH_SURFACE).toContain('0.35, 1.0)');
   });
 });

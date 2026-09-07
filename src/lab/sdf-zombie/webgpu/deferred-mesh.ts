@@ -132,6 +132,10 @@ export function createDeferredMeshMaterial(
     normalMetalness: vec4(normalWorld, materialMetalness),
     emissionClass: vec4(materialEmissive.rgb, surfaceKind),
     surfaceDepth: vec4(clipDepth, 0.0, 0.0, 1.0),
+    // No authored march response exists for a Standard material (M2 task 7):
+    // the packed-0 sentinel keeps mesh receivers on the M1 bounded flesh
+    // evaluation — mesh shading is unchanged by the material-parity repair.
+    surfaceParams: vec4(0.0, 0.0, 0.0, 1.0),
   });
   mat.surfaceKind = surfaceKind;
 

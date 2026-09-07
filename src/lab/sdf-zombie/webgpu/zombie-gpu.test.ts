@@ -426,13 +426,13 @@ describe('deferred surface output mode (hybrid deferred M1 task 2)', () => {
     view.dispose();
   });
 
-  it('output: surface emits the four named attachments and NO legacy colour/alpha output', () => {
+  it('output: surface emits the five named attachments and NO legacy colour/alpha output', () => {
     const view = createZombieGpuView(body, { output: 'surface' });
     const mat = marchMat(view);
     expect(mat.mrtNode).toBeTruthy();
     const names = Object.keys(mat.mrtNode!.outputNodes);
     expect(names.sort()).toEqual(
-      ['albedoRoughness', 'normalMetalness', 'emissionClass', 'surfaceDepth'].sort(),
+      ['albedoRoughness', 'normalMetalness', 'emissionClass', 'surfaceDepth', 'surfaceParams'].sort(),
     );
     // The mrtNode IS the output struct (the task-1 MRTNode mechanism), so the
     // legacy colorNode/outputNode must NOT be set — a stray lit/depth-alpha
@@ -521,7 +521,7 @@ describe('M2 task 2 — surface output options on the chunk factories', () => {
     // output, and both chunk views share the exact same material object.
     expect(shared.material.mrtNode).toBeTruthy();
     expect(Object.keys(shared.material.mrtNode!.outputNodes).sort())
-      .toEqual(['albedoRoughness', 'emissionClass', 'normalMetalness', 'surfaceDepth']);
+      .toEqual(['albedoRoughness', 'emissionClass', 'normalMetalness', 'surfaceDepth', 'surfaceParams']);
     expect(shared.material.colorNode).toBeNull();
     expect(shared.material.outputNode).toBeNull();
 

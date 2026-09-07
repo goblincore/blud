@@ -34,14 +34,24 @@
 // INTENTIONALLY ABSENT FROM M1 (legacy lighting-only terms — they are light
 // or view dependent and would violate the unlit G-buffer rule): the analytic
 // flashlight beam, key specular/fresnel compose, the backlit scatter field
-// probe, the AO field probe, the traced wound soft shadow, the level shadow
-// map, the enclosure ambient bounce, the highlight shoulder, the faceFlat
-// relight mix, and the legacy display compensation (lodCfg.y). The deferred
-// light pass replaces the first group with the shared 16-light evaluation;
-// the rest are inventoried here and in the dev notes, NOT hidden in prelit
-// material data. The glow->lit fade-out also differs: legacy REPLACES flesh
-// under a glow, the deferred light pass ADDS emission on top of the lit
-// surface.
+// probe, the traced wound soft shadow, the level shadow map, the enclosure
+// ambient bounce, the highlight shoulder, the faceFlat relight mix, and the
+// legacy display compensation (lodCfg.y). The deferred light pass replaces
+// the first group with the shared 16-light evaluation; the rest are
+// inventoried here and in the dev notes, NOT hidden in prelit material data.
+// The glow->lit fade-out also differs: legacy REPLACES flesh under a glow,
+// the deferred light pass ADDS emission on top of the lit surface.
+//
+// M2 TASK 7 MATERIAL-PARITY REPAIR. The AUTHORED response scalars the legacy
+// specular/Fresnel/wetness compose needs — mix(surfCfg.x, 1.5, gloss),
+// surfCfg.z * (1 - wmRim) * mix(1, 2.5, gloss), wet and the unlit field AO
+// probe — are NOT light- or view-dependent, so they now ride the G-buffer in
+// surfaceParams (deferred-surface.ts), wet-folded into two packed lanes plus
+// the AO lane. The light-dependent composition (H, V, light colour, shadow)
+// still happens ONLY in the light pass; packed=0 (mesh/clear) keeps the M1
+// bounded flesh evaluation. The wet folding mirrors the roughness folding
+// below: wet multiplies the legacy spec/fresnel INTENSITY, so packing P = A*wet
+// and Q = B*wet loses nothing — the exponent keeps riding albedoRoughness.w.
 
 import { wgslFn, mrt, vec4, float } from 'three/tsl';
 import {
@@ -60,11 +70,13 @@ export const SDF_SURFACE_STATE = /* wgsl */ `fn sdfSurfaceStateReset() -> f32 {
   gSdfAlbedoRough = vec4<f32>(0.0, 0.0, 0.0, 0.0);
   gSdfNormalMetal = vec4<f32>(0.0, 0.0, 1.0, 0.0);
   gSdfEmissionClass = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+  gSdfSurfaceParams = vec4<f32>(0.0, 0.0, 0.0, 0.0);
   return 0.0;
 }
 var<private> gSdfAlbedoRough: vec4<f32>;
 var<private> gSdfNormalMetal: vec4<f32>;
 var<private> gSdfEmissionClass: vec4<f32>;
+var<private> gSdfSurfaceParams: vec4<f32>;
 `;
 
 /**
@@ -106,6 +118,27 @@ export const MARCH_SURFACE_TAIL = /* wgsl */ `
   surfRough = clamp(mix(1.0, surfRough, min(wet, 1.0)) / max(wet, 1.0), 0.04, 1.0);
   gSdfAlbedoRough = vec4<f32>(albedo, surfRough);
   gSdfNormalMetal = vec4<f32>(normalize(n), metal);
+  // ---- AUTHORED RESPONSE PACKING (hybrid deferred M2 task 7) --------------
+  // The legacy specular/Fresnel compose's material-side scalars, packed wet-
+  // scaled into surfaceParams (see deferred-surface.ts packSurfaceParams —
+  // this is the SAME 3x8-bit arithmetic, mirrored in WGSL; the headroom
+  // constants 3.5/5.0 are SURFACE_PARAM_SPEC_MAX / SURFACE_PARAM_FRESNEL_MAX).
+  // The AO lane is the same unlit field probe the legacy light tail pays
+  // (lodCfg.x-gated, 0.06 m offset, [0.35,1] clamp) — one extra mapBody per
+  // surface pixel, the same budget the legacy path already pays.
+  let paramsSpecA = mix(surfCfg.x, 1.5, gloss);
+  let paramsFresB = surfCfg.z * (1.0 - wmRim) * mix(1.0, 2.5, gloss);
+  var paramsAo = 1.0;
+  if (lodCfg.x > 0.5) {
+    paramsAo = clamp(mapBody(p + n * 0.06, data, counts, counts2, noiseCfg, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg, woundBound).x / 0.06, 0.35, 1.0);
+  }
+  let paramsP8 = round(clamp(paramsSpecA * wet / 3.5, 0.0, 1.0) * 255.0);
+  let paramsQ8 = round(clamp(paramsFresB * wet / 5.0, 0.0, 1.0) * 255.0);
+  let paramsA8 = round(clamp(paramsAo, 0.0, 1.0) * 255.0);
+  // Max lane product 255*65536 + 255*256 + 255 = 2^24-1: exact in float32,
+  // and the 65536/256 strides keep every floor-decode clean (the lower
+  // lanes' max 65535 never spills upward). No bitcasts anywhere.
+  gSdfSurfaceParams = vec4<f32>((paramsP8 * 65536.0 + paramsQ8 * 256.0) + paramsA8, 0.0, 0.0, 1.0);
   // .w is the PLAIN flesh class; the emission readback (deferred-sdf.ts)
   // substitutes the packed encodeSurfaceClass value (M2 task 2 receiver
   // metadata) from an unlit uniform, so this line keeps the M1 encoding as
@@ -152,6 +185,9 @@ export const SDF_SURFACE_READ_NORMAL = /* wgsl */ `fn sdfSurfaceReadNormal(dep: 
 export const SDF_SURFACE_READ_EMISSION = /* wgsl */ `fn sdfSurfaceReadEmission(dep: vec4<f32>, classVal: f32) -> vec4<f32> {
   return vec4<f32>(gSdfEmissionClass.xyz, classVal);
 }`;
+export const SDF_SURFACE_READ_PARAMS = /* wgsl */ `fn sdfSurfaceReadParams(dep: vec4<f32>) -> vec4<f32> {
+  return gSdfSurfaceParams;
+}`;
 
 /**
  * One shared, dependency-ordered node chain for the surface entry AND its
@@ -175,6 +211,7 @@ function buildSdfSurfaceChain() {
     readAlbedo: wgslFn(SDF_SURFACE_READ_ALBEDO, tail),
     readNormal: wgslFn(SDF_SURFACE_READ_NORMAL, tail),
     readEmission: wgslFn(SDF_SURFACE_READ_EMISSION, tail),
+    readParams: wgslFn(SDF_SURFACE_READ_PARAMS, tail),
   };
 }
 
@@ -204,5 +241,6 @@ export function sdfSurfaceMrtNodes(traced: unknown, clipDepth: unknown, classVal
     normalMetalness: chain.readNormal({ dep: traced as never }),
     emissionClass: chain.readEmission({ dep: traced as never, classVal: kind as never }),
     surfaceDepth: vec4(clipDepth as never, 0.0, 0.0, 1.0),
+    surfaceParams: chain.readParams({ dep: traced as never }),
   });
 }

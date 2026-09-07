@@ -531,6 +531,14 @@ async function main() {
       // threw on shoulder 0 and .05 every frame). gain 0 is a PRESENT zero
       // (the beam leaves flesh) once packed, never an absent override.
       flashKey: () => ({ gain: beamTuning.gain, knee: legacyFlashKnee(beamTuning.shoulder) }),
+      // M2 task 7 material-parity repair: the game's march materials keep
+      // lodCfg.y at its 1 default (the legacy display decode is part of the
+      // authored look — only lab-main ever flips it), so the deferred flesh
+      // response gates ON here. With it the light pass shades packed flesh
+      // with the authored spec/Fresnel/wet/AO response and applies the same
+      // display decode; without it, deferred flesh keeps the flat M1
+      // bounded approximation the owner rejected.
+      fleshDisplay: () => true,
       flashlight: flashlight.spot,
       width: postAa.contentSize.width,
       height: postAa.contentSize.height,
