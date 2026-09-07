@@ -74,6 +74,7 @@ import {
 } from './game-level';
 import { stepPlayer, eyeOf, PLAYER, type PlayerState, type MoveInput } from './game-player';
 import { createZombieActor, segmentHitsBox, type ZombieActor } from './game-actor';
+import { createPlayerBodyDrive, type PlayerBodyDrive } from './game-player-body';
 import { separate, minPairDistance, type CrowdAgent } from '../crowd';
 import { arbitrate, RING_TUNING, type RingClaimant } from '../melee-ring';
 import { ATTACK_TUNING, type SwingVariant } from '../attack';
@@ -371,6 +372,92 @@ async function main() {
   scene.add(flashlight.levelShadow);
   scene.add(flashlight.levelShadow.target);
 
+  // -----------------------------------------------------------------------
+  // ISOMETRIC EXPERIMENT — camera mode, toggle: ?iso / KeyI / __sdfGame.setIso.
+  //
+  // A NARROW-FOV PERSPECTIVE camera orbiting the player, NOT a true
+  // orthographic: the march's accumulated-depth gate, the goo surface pass
+  // and the cone pre-pass all rebuild camera rays with the perspective
+  // pinhole (the depth gate unprojects clip depth with an explicit
+  // `near*far/(far - depth*(far-near))` — zombie-gpu.ts), so ortho would
+  // silently corrupt all three. A ~26° fov at ~12 m reads as isometric
+  // while every ray stays a perspective ray.
+  //
+  // THE LENS CO-INVARIANT (same block as the fisheye boot below): anything
+  // that moves camera.fov must re-call postAa.setLens in the same breath.
+  // applyIso is the one writer for this mode; with centerFovDeg above the
+  // render fov the lens k is 0 — an exact identity — which is what iso
+  // wants at any fov.
+  // -----------------------------------------------------------------------
+  const ISO_CAM = {
+    fovDeg: 26,
+    /** Fixed orbit yaw: the camera sits +z of the player looking -z, so W
+     *  is always up-screen. The WASD remap in tick() is phrased against
+     *  this constant; rotating the orbit mid-game would drag the movement
+     *  frame around under the player's thumbs. */
+    yawRad: 0,
+    pitchRad: Math.PI * 0.31,
+    dist: 9.5,
+    /** Exponential follow rate (1/s) for the look-at focal. */
+    follow: 8,
+  };
+  let isoOn = new URLSearchParams(location.search).has('iso');
+  /** Smoothed look-at focal (the player's chest). Null = snap next frame. */
+  let isoFocal: Vec3 | null = null;
+  /** The flashlight is a HELD light. In iso the orbit camera sits nine
+   *  metres up and behind — posing the beam from THERE would be a
+   *  searchlight, not a torch. dungeon-lighting's update() reads only the
+   *  world position, quaternion and forward direction off its argument, so
+   *  this bare proxy camera posed at the player's eye in tick() stands in
+   *  for the real one (drawFn: flashlight.update(isoOn ? isoLightRig :
+   *  camera)). */
+  const isoLightRig = new THREE.PerspectiveCamera();
+  /** A small KEY for the player body HIMSELF. The held beam is born at his
+   *  eye and points forward, so his own body sits outside the cone — at
+   *  dungeon ambient (0.035) the goblin marched as a silhouette while every
+   *  enemy caught the beam (found in the first iso screenshots: kit and gun
+   *  visible, flesh black). The march cannot see scene lights, so this one
+   *  reaches him the same way the beam does: drawFn stamps his spot
+   *  uniforms from this light instead of the flashlight. It also lights the
+   *  kit meshes consistently (same scene). Boot-allocated at intensity 0 —
+   *  adding a light at runtime would recompile the TSL graph (the muzzle
+   *  flash light's note, same hazard). */
+  const isoKeyLight = new THREE.SpotLight(0xfff2dc, 0, 9, Math.PI * 0.38, 0.65, 1.3);
+  isoKeyLight.castShadow = false;
+  scene.add(isoKeyLight);
+  scene.add(isoKeyLight.target);
+  function applyIso(on: boolean) {
+    isoOn = on;
+    camera.fov = on ? ISO_CAM.fovDeg : FISHEYE_DEFAULTS.renderFovDeg;
+    camera.updateProjectionMatrix();
+    postAa.setLens(camera.fov, centerFovDeg);
+    // The viewmodel IS the FPV hands; in iso the goblin's own body holds
+    // the gun instead. Its flash PointLight goes with it — the SDF flash
+    // envelope in drawFn still lights the world on every shot.
+    viewModelAnchor.visible = !on;
+    setPlayerBodyVisible(on);
+    if (on) {
+      // Iso shots run on the player yaw alone: mouse Y does nothing (the
+      // mousemove/free-aim handlers guard on isoOn), so a pitch left over
+      // from FPV would silently tilt every projectile into the ground.
+      player.pitch = 0;
+      isoFocal = null;
+    }
+    // Fog is VIEW distance, and the orbit camera sits ISO_CAM.dist away:
+    // the dungeon fog tuned for an eye at 1.62 m would wash the whole
+    // frame to black at 12 m. Scale it for the orbit; restored on toggle
+    // off (the dungeon A/B below re-runs applyRig, which resets fog, so
+    // toggling the rig while in iso reverts this — accepted, it is a
+    // dev-surface combination).
+    const fog = scene.fog as THREE.Fog | null;
+    if (fog && dungeonOn) {
+      fog.near = DUNGEON_RIG.fogNear * (on ? 4 : 1);
+      fog.far = DUNGEON_RIG.fogFar * (on ? 4 : 1);
+    }
+    if (reticleEl) reticleEl.style.display = 'none';
+    updateHud();
+  }
+
   handle.renderer.shadowMap.enabled = true;
   handle.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   levelGroup.traverse((o) => {
@@ -606,7 +693,9 @@ async function main() {
   let chunkObjects: () => THREE.Object3D[] = () => [];
   let refreshActorTiles = () => {};
   handle.setDrawFn(() => postAa.render(() => {
-    flashlight.update(camera);
+    // In iso the beam poses at the player's eye, not the orbit camera —
+    // see isoLightRig above.
+    flashlight.update(isoOn ? isoLightRig : camera);
     // Hand the march the same beam the meshes get. The SDF bodies shade
     // inside the march and cannot see the scene's SpotLight at all (the
     // owner's "characters aren't lit by the light direction" report), so
@@ -658,20 +747,57 @@ async function main() {
       const flashGate  = spotOn + 2.2 * fv;
       const flashInner = Math.max(-1, cosInner - 0.45 * fv);
       const flashOuter = Math.max(-1, cosOuter - 0.45 * fv);
-      for (const a of actors) {
-        a.view.uniforms.spotPos.value.copy(flashlight.spot.position);
-        a.view.uniforms.spotAxis.value.copy(sAxis);
-        a.view.uniforms.spotCfg.value.set(flashGate, flashInner, flashOuter, flashlight.spot.distance);
-        a.view.uniforms.spotColor.value.copy(flashlight.spot.color);
+      // One body's beam/flash/level-shadow stamp — shared by the enemies and
+      // (in iso) the player body, so a new uniform can never be stamped into
+      // one set of march bodies and forgotten on the other.
+      const stampBeam = (v: ZombieGpuView) => {
+        v.uniforms.spotPos.value.copy(flashlight.spot.position);
+        v.uniforms.spotAxis.value.copy(sAxis);
+        v.uniforms.spotCfg.value.set(flashGate, flashInner, flashOuter, flashlight.spot.distance);
+        v.uniforms.spotColor.value.copy(flashlight.spot.color);
         if (fv > 0) {
           // Push warm. The flash is burning powder, not the flashlight's white.
-          const c = a.view.uniforms.spotColor.value;
+          const c = v.uniforms.spotColor.value;
           c.setRGB(c.r + 0.35 * fv, c.g + 0.16 * fv, c.b);
         }
-        a.view.uniforms.spotCfg2.value.set(beamTuning.gain, beamTuning.shoulder, beamTuning.keyFloor, 0);
-        a.view.uniforms.levelShadowMatrix.value.copy(twin.shadow.matrix);
-        a.view.uniforms.levelShadowCfg.value.x = lvlOn;
-        if (map !== null) a.view.levelShadowTex.value = map;
+        v.uniforms.spotCfg2.value.set(beamTuning.gain, beamTuning.shoulder, beamTuning.keyFloor, 0);
+        v.uniforms.levelShadowMatrix.value.copy(twin.shadow.matrix);
+        v.uniforms.levelShadowCfg.value.x = lvlOn;
+        if (map !== null) v.levelShadowTex.value = map;
+      };
+      for (const a of actors) stampBeam(a.view);
+      if (isoOn && playerBody) {
+        // The player body's ONE spot slot is the self-key, not the held
+        // beam: the beam is born at his eye, so stamping it into his own
+        // uniforms lit nothing (his body is outside its cone — the
+        // silhouette the first iso captures caught). Key pose and cone go
+        // in directly; his own muzzle flash biases the gate the same way
+        // stampBeam biases the enemies', so a shot lights him up too.
+        const v = playerBody.view;
+        const kAxis = new THREE.Vector3();
+        isoKeyLight.target.getWorldPosition(kAxis).sub(isoKeyLight.position).normalize();
+        const kInner = Math.cos(isoKeyLight.angle * (1 - isoKeyLight.penumbra));
+        const kOuter = Math.cos(isoKeyLight.angle);
+        v.uniforms.spotPos.value.copy(isoKeyLight.position);
+        v.uniforms.spotAxis.value.copy(kAxis);
+        v.uniforms.spotCfg.value.set(
+          1 + 2.2 * fv,
+          Math.max(-1, kInner - 0.45 * fv), Math.max(-1, kOuter - 0.45 * fv),
+          isoKeyLight.distance,
+        );
+        v.uniforms.spotColor.value.copy(isoKeyLight.color);
+        if (fv > 0) {
+          const c = v.uniforms.spotColor.value;
+          c.setRGB(c.r + 0.35 * fv, c.g + 0.16 * fv, c.b);
+        }
+        // GAIN 2.6, NOT the beam's 4: that number was tuned for the much
+        // brighter held beam, and stamped onto this small key it blew the
+        // goblin out to a white silhouette (first capture iteration).
+        v.uniforms.spotCfg2.value.set(2.6, beamTuning.shoulder, beamTuning.keyFloor, 0);
+        // The level-shadow twin's map belongs to the held beam's pose,
+        // which this stamp replaces — gate the player body's level shadow
+        // off rather than sample an unrelated matrix.
+        v.uniforms.levelShadowCfg.value.x = 0;
       }
       // Bone tubes take the SAME beam (bone-instancer's boneShade is the
       // march's own cone formula on these exact values).
@@ -699,7 +825,12 @@ async function main() {
     }
     // Front-to-back per-body passes (perf round 2 task 5): register this
     // frame's bodies and chunks. With the gate off the lists are not walked.
-    sdfLayer.setBodies(actors.map(a => a.view.object), chunkObjects());
+    // The iso player body marches with the enemies (its wound path is
+    // empty by construction — nothing can wound it).
+    sdfLayer.setBodies([
+      ...actors.map(a => a.view.object),
+      ...(isoOn && playerBody ? [playerBody.view.object] : []),
+    ], chunkObjects());
     // Bone tubes: feed this frame's posed bones (actors stepped in tick
     // ahead of this draw; chunks repacked world-space there too — posed()
     // and posedBones() are always current).
@@ -714,6 +845,9 @@ async function main() {
       }
       boneInstancer.update([
         ...actors.map(a => { const p = a.posed(); return { prims: p.bonePrims ?? [], alive: p.clusters.map(c => c.alive) }; }),
+        ...(isoOn && playerBody
+          ? [{ prims: playerBody.posed().bonePrims ?? [], alive: playerBody.posed().clusters.map(c => c.alive) }]
+          : []),
         ...liveChunks.map(c => ({ prims: c.view.posedBones() })),
       ]);
     }
@@ -1030,7 +1164,8 @@ async function main() {
     const timing = telemetry.begin();
     camera.updateMatrixWorld(); camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
     const size = sdfLayer.targetSize;
-    gameTiles.refresh(camera, { widthPx: size.width, heightPx: size.height }, actors.map(a => a.view));
+    gameTiles.refresh(camera, { widthPx: size.width, heightPx: size.height },
+      [...actors.map(a => a.view), ...(isoOn && playerBody ? [playerBody.view] : [])]);
     telemetry.end('tile-binning-submit', timing);
     updateTilesButton();
   };
@@ -1141,11 +1276,16 @@ async function main() {
   /** ONE spawn — the boot-loop body, kept as THE actor path so the wound
    *  panel's bone-ratio rebuild cannot drift from boot. Pushes build errors
    *  into errs; the caller decides how to surface them. */
-  function spawnEnemy(name: string, room: RoomDef, start: Vec3, errs: string[]): ZombieActor {
-    const enc = enclosureOf(room.name)!;
-    const roomFurniture = FURNITURE
-      .filter(f => f.room === room.id)
-      .map(f => ({ min: [f.minX, 0, f.minZ] as Vec3, max: [f.maxX, f.height, f.maxZ] as Vec3 }));
+  /** ONE dressed character view — compile, build, GPU view, tile binding,
+   *  materials, face and enclosure uniforms, scene registration. This block
+   *  lived inline in spawnEnemy; it is extracted VERBATIM so the isometric
+   *  player body (spawnPlayerBody below) wears the IDENTICAL wiring instead
+   *  of a second copy that drifts. Two callers: spawnEnemy and
+   *  spawnPlayerBody. `enclosureKey` is a room NAME for enemies and the
+   *  enclosure key under the player's start for the body — enclosureOf
+   *  takes both (spawnEnemy always passed room.name here). */
+  function spawnCharacterView(name: string, enclosureKey: string, start: Vec3, errs: string[]) {
+    const enc = enclosureOf(enclosureKey)!;
     // THE SHARED PATH (character-view.ts). Compile, bone-ratio override,
     // build, stance check, translate and the GPU view were all inline here and
     // all duplicated in lab-main; they are one module now, and this call is
@@ -1199,7 +1339,12 @@ async function main() {
     gameTiles.track(view, tileBinding);
     // Bone tubes: with the mesh ON the field stops packing bone rows (task 5).
     view.setPackBones(!boneMesh);
-    view.applyMaterial(name === 'soldier' ? character.palette ?? flesh : flesh,
+    // Characters whose .blob declares a palette WEAR it (the soldier's olive;
+    // the goblin-gun's green — a goblin in the game's pink preset reads as
+    // just another spawn). Every other enemy keeps the game's flesh preset:
+    // the zombie's look is the preset, not zombie.blob's palette.
+    view.applyMaterial(name === 'soldier' || name === 'goblin-gun'
+      ? character.palette ?? flesh : flesh,
       LIGHT_PRESETS['practical-hard-key']);
     // The panel's ramp rides ON TOP of the material: applyMaterial just
     // wrote the preset defaults, so a tuned panel must re-stamp its values
@@ -1267,6 +1412,19 @@ async function main() {
     }
     scene.add(view.object);
     scene.add(view.coneObject);
+    return character;
+  }
+
+  /** ONE enemy — the dressed view from spawnCharacterView plus the fighter
+   *  that drives it. Unchanged by the extraction apart from where the view
+   *  comes from. */
+  function spawnEnemy(name: string, room: RoomDef, start: Vec3, errs: string[]): ZombieActor {
+    const roomFurniture = FURNITURE
+      .filter(f => f.room === room.id)
+      .map(f => ({ min: [f.minX, 0, f.minZ] as Vec3, max: [f.maxX, f.height, f.maxZ] as Vec3 }));
+    const character = spawnCharacterView(name, room.name, start, errs);
+    const placed = character.body;
+    const view = character.gpu;
     const zombieId = nextId++;
     const actor = createZombieActor({
       id: zombieId, room: room.id, body: placed, view, character, start,
@@ -1306,6 +1464,44 @@ async function main() {
   spawnAll(errors);
   if (errors.length > 0) {
     console.error('[sdf-game] body errors:', errors.join(' | '));
+  }
+
+  // --- THE ISO PLAYER BODY --------------------------------------------------
+  // The isometric experiment's on-screen player: a goblin-gun body driven by
+  // the capsule (game-player-body.ts). It goes through the SAME dressed spawn
+  // path as the enemies so its uniforms and tile binding cannot drift, and it
+  // is deliberately NOT in `actors`: nothing traces projectiles against it,
+  // it never enters the hulls, and a wound-panel rebuildCast (which respawns
+  // every ENEMY) leaves it alone. Cosmetic by design — the player still IS
+  // the capsule; this is what the capsule looks like from outside.
+  let playerBody: PlayerBodyDrive | null = null;
+  /** One-shot fire edge for the body: set by fire(), consumed by the next
+   *  tick (motion's sig.fire is a per-frame event, not a level). */
+  let playerBodyFireQueued = false;
+  /** Visibility of every object class the body registered with the scene —
+   *  the march proxy, its cone twin and the optional depth-prepass twin.
+   *  applyIso is the only caller: FPV keeps the body fully hidden (the
+   *  camera lives inside its head), iso shows it. */
+  function setPlayerBodyVisible(on: boolean) {
+    if (!playerBody) return;
+    playerBody.view.object.visible = on;
+    playerBody.view.coneObject.visible = on;
+    if (playerBody.view.depthPreObject) playerBody.view.depthPreObject.visible = on;
+  }
+  {
+    const pStart: Vec3 = [PLAYER_START.x, 0, PLAYER_START.z];
+    const dressed = spawnCharacterView('goblin-gun', enclosureKeyAt(PLAYER_START.x, PLAYER_START.z), pStart, errors);
+    playerBody = createPlayerBodyDrive({
+      body: dressed.body,
+      view: dressed.gpu,
+      character: dressed,
+      profile: characterEntry('goblin-gun').profile,
+      seed: 0x150,
+      start: pStart,
+    });
+    // Hidden until iso asks for it (applyIso at the end of boot applies the
+    // ?iso state; this keeps the FPV boot byte-identical on the render side).
+    setPlayerBodyVisible(false);
   }
   // --- SETTLED-CHUNK BAKE (close-up task 5). A chunk that has come to rest
   // is a rigid static field that will never change again; when the seam is
@@ -1493,8 +1689,13 @@ async function main() {
       aim = moveAim(aim, e.movementX, e.movementY);
     } else {
       player.yaw += e.movementX * 0.0022;
-      player.pitch = Math.min(PLAYER.pitchLimit,
-        Math.max(-PLAYER.pitchLimit, player.pitch - e.movementY * 0.0022));
+      // Iso: mouse Y is dead. The orbit camera has no pitch to steer and a
+      // drifted pitch would tilt shots nobody can see aiming (applyIso
+      // zeroes it on the way in; this keeps it there).
+      if (!isoOn) {
+        player.pitch = Math.min(PLAYER.pitchLimit,
+          Math.max(-PLAYER.pitchLimit, player.pitch - e.movementY * 0.0022));
+      }
     }
   });
   window.addEventListener('keydown', (e) => {
@@ -1506,6 +1707,8 @@ async function main() {
       else pushProbeWeight(parked);
     }
     if (e.code === 'KeyE') { slugMode = !slugMode; updateHud(); }
+    // I toggles the isometric experiment (camera + the goblin player body).
+    if (e.code === 'KeyI') applyIso(!isoOn);
     // H hides/shows BOTH tuning panels together. They cover most of the
     // viewport, and until now the only way to dismiss them was to know the
     // console API -- which is no use to someone doing a look pass.
@@ -2130,6 +2333,9 @@ async function main() {
     flashAge = 0;
     fireAge = 0;
     fireBarrels = barrels;
+    // The iso body's fire carry snaps to 'aim' and its muzzle rises — the
+    // same FIRE.holdSec clock the soldiers' brains arm via sig.fire.
+    playerBodyFireQueued = true;
     if (flashGroup && flashMaterial) {
       // Fresh roll AND a fresh star per shot, so repeat fire never strobes an
       // identical silhouette.
@@ -2800,6 +3006,7 @@ async function main() {
       ` · ${where} · probe ${probeWeight.toFixed(2)}` +
       ` · shells ${shells}/${MAGAZINE_CAPACITY}` +
       (slugMode ? ' · ● SLUG (E to switch back)' : ' · PELLETS (E = slug)') +
+      (isoOn ? ' · ISO (I)' : '') +
       (sdfLayer.halfRate
         ? ` · HALF30 ${sdfLayer.halfRateMode === 1 ? 'reproj' : 'hold'}`
         : '') +
@@ -2884,6 +3091,20 @@ async function main() {
         stuckT = 0;
       }
       lastWalkPos = [player.pos[0], player.pos[2]];
+    }
+    if (isoOn) {
+      // SCREEN-RELATIVE MOVEMENT. stepPlayer wants intent in the PLAYER's
+      // view frame; in iso the intent axes are the CAMERA's fixed ground
+      // axes (camFwd = [sin cy, -cos cy], camRight = [cos cy, sin cy]), so
+      // a pressed key has to survive two hops: keys -> world (camera
+      // frame), world -> player frame (stepPlayer). The 2x2 is its own
+      // inverse (a reflection), which is why this reads as the same matrix
+      // applied twice.
+      const cy = Math.cos(ISO_CAM.yawRad), sy = Math.sin(ISO_CAM.yawRad);
+      const wx = sy * input.z + cy * input.x;
+      const wz = -cy * input.z + sy * input.x;
+      input.x = cy * wx + sy * wz;
+      input.z = sy * wx - cy * wz;
     }
     // Zombies are soft obstacles: one fat AABB each, rebuilt per frame.
     const zombieBoxes = actors.filter(a=>!a.motionFrame()?.collapsed).map(a => {
@@ -2978,6 +3199,21 @@ async function main() {
         const p = a.pose();
         a.character.pose(a.body, a.boundRig(), p.yaw, a.sinceFire(), a.motionFrame(), dt, a.id);
       }
+      // THE ISO PLAYER BODY, same block as the actors on purpose: it steps
+      // on the same sub-step discipline (inside the drive), poses its kit
+      // and prop from the same rig solve, and freezes with the wanderers —
+      // a frozen capture must not have the player still strolling about.
+      // In FPV (isoOn false) the body does not exist visually and is not
+      // stepped: nothing else in the frame loop may read it.
+      if (isoOn && playerBody) {
+        playerBody.step(dt, {
+          pos: [player.pos[0], 0, player.pos[2]],
+          yaw: player.yaw,
+          speed: Math.hypot(player.vel[0], player.vel[2]),
+          fire: playerBodyFireQueued,
+        });
+        playerBodyFireQueued = false;
+      }
       const now = performance.now() / 1000;
       for (const a of actors) {
         a.view.setTime(now);
@@ -2985,6 +3221,7 @@ async function main() {
         const skull = headShape(a.posed());
         if (skull) a.view.setHeadShape(skull.centre, skull.axes);
       }
+      if (isoOn && playerBody) playerBody.view.setTime(now);
       // Wound exclusion, same contract as the lab's woundSpheres: hull
       // endpoint spheres must not sit inside carve zones, or they render as
       // pale discs inside craters. The carve sphere is centred ON the anchor
@@ -3053,8 +3290,10 @@ async function main() {
     if (freeAimOn) {
       const turn = turnFromAim(aim, dt);
       player.yaw += turn.yaw;
-      player.pitch = Math.min(PLAYER.pitchLimit,
-        Math.max(-PLAYER.pitchLimit, player.pitch + turn.pitch));
+      if (!isoOn) {
+        player.pitch = Math.min(PLAYER.pitchLimit,
+          Math.max(-PLAYER.pitchLimit, player.pitch + turn.pitch));
+      }
     }
     {
       const w = freeAimOn ? weaponAngles(aim, aimFrustum()) : { yawDeg: 0, pitchDeg: 0 };
@@ -3103,8 +3342,10 @@ async function main() {
       // The rig just moved; the shoulders did not. Re-aim the arms at them.
       aimArms();
     }
-    if (reticleEl) {
-      reticleEl.style.display = freeAimOn ? 'block' : 'none';
+      if (reticleEl) {
+        // Iso: the reticle marks a camera-space direction that means
+        // nothing from an orbit camera — the goblin's facing IS the aim.
+        reticleEl.style.display = isoOn ? 'none' : freeAimOn ? 'block' : 'none';
       if (freeAimOn) {
         // Position against the CANVAS, not the window. Percent-of-viewport put
         // the reticle outside the render area whenever the canvas did not fill
@@ -3566,14 +3807,59 @@ async function main() {
       telemetry.end('blood-simulation-and-sync', bloodTiming);
     }
 
-    const eye = eyeOf(player);
-    camera.position.set(eye[0], eye[1], eye[2]);
-    const cp = Math.cos(player.pitch + recoilPitch);
-    camera.lookAt(
-      eye[0] + Math.sin(player.yaw) * cp,
-      eye[1] + Math.sin(player.pitch + recoilPitch),
-      eye[2] - Math.cos(player.yaw) * cp,
-    );
+    if (isoOn) {
+      // ISOMETRIC CAMERA. Orbit pose from the smoothed player focal; the
+      // goblin body is the visible player and the capsule stays the
+      // subject. Nothing in iso derives from the camera: WASD was remapped
+      // to the fixed screen axes above and shots run off the player yaw,
+      // which is what lets the orbit stay rigid.
+      const want: Vec3 = [player.pos[0], player.pos[1] + 0.9, player.pos[2]];
+      if (!isoFocal) {
+        isoFocal = want;
+      } else {
+        const k = 1 - Math.exp(-ISO_CAM.follow * dt);
+        isoFocal = [
+          isoFocal[0] + (want[0] - isoFocal[0]) * k,
+          isoFocal[1] + (want[1] - isoFocal[1]) * k,
+          isoFocal[2] + (want[2] - isoFocal[2]) * k,
+        ];
+      }
+      const icp = Math.cos(ISO_CAM.pitchRad);
+      const isp = Math.sin(ISO_CAM.pitchRad);
+      camera.position.set(
+        isoFocal[0] - Math.sin(ISO_CAM.yawRad) * icp * ISO_CAM.dist,
+        isoFocal[1] + isp * ISO_CAM.dist,
+        isoFocal[2] + Math.cos(ISO_CAM.yawRad) * icp * ISO_CAM.dist,
+      );
+      camera.lookAt(isoFocal[0], isoFocal[1], isoFocal[2]);
+      // The held flashlight rides the EYE, aimed along the facing (iso has
+      // no pitch) — see isoLightRig's note; drawFn picks this up.
+      const eyeIso = eyeOf(player);
+      isoLightRig.position.set(eyeIso[0], eyeIso[1], eyeIso[2]);
+      isoLightRig.lookAt(
+        eyeIso[0] + Math.sin(player.yaw),
+        eyeIso[1],
+        eyeIso[2] - Math.cos(player.yaw),
+      );
+      // The self-key hangs above and on the CAMERA side of the goblin, so
+      // his front and top — what the orbit actually sees — are the lit
+      // faces. drawFn stamps his march uniforms from it.
+      isoKeyLight.intensity = 14;
+      isoKeyLight.position.set(isoFocal[0] + 0.5, isoFocal[1] + 2.6, isoFocal[2] + 1.3);
+      isoKeyLight.target.position.set(isoFocal[0], isoFocal[1], isoFocal[2]);
+      isoKeyLight.target.updateMatrixWorld();
+      isoKeyLight.updateMatrixWorld();
+    } else {
+      isoKeyLight.intensity = 0;
+      const eye = eyeOf(player);
+      camera.position.set(eye[0], eye[1], eye[2]);
+      const cp = Math.cos(player.pitch + recoilPitch);
+      camera.lookAt(
+        eye[0] + Math.sin(player.yaw) * cp,
+        eye[1] + Math.sin(player.pitch + recoilPitch),
+        eye[2] - Math.cos(player.yaw) * cp,
+      );
+    }
     camera.updateMatrixWorld();
 
     // GOO DENSITY QUADS — pose them from the same sim state, every frame,
@@ -3614,6 +3900,10 @@ async function main() {
     if (frameCount++ % 10 === 0) updateHud();
   });
   updateHud();
+  // Boot the isometric experiment to its requested state (?iso) — AFTER
+  // everything applyIso touches exists: the viewmodel anchor, the player
+  // body, the reticle element and the lens state. FPV boots untouched.
+  applyIso(isoOn);
 
   // -----------------------------------------------------------------------
   // __sdfGame — the deterministic driver surface. The grapeshot dispatch
@@ -3844,6 +4134,18 @@ async function main() {
     /** Freeze/unfreeze the wanderers (pose, rig and shader clock all pin). */
     freeze: (on: boolean) => { wanderFrozen = on; },
     get frozen() { return wanderFrozen; },
+    /** The isometric experiment: orbit camera + the goblin player body.
+     *  Off by default; ?iso boots into it. */
+    setIso: applyIso,
+    get iso() { return isoOn; },
+    /** The iso player body's live pose/carry — the drive's debug oracle. */
+    playerBody: () => playerBody ? { ...playerBody.debug(), frame: playerBody.motionFrame() } : null,
+    /** DEBUG: the iso player body's GPU view (march proxy object et al) —
+     *  for capture-driver probes of exactly what the march was handed. */
+    playerView: () => playerBody?.view ?? null,
+    /** DEBUG: an enemy's GPU view by actors[] index, for A/B uniform diffs
+     *  against playerView(). */
+    enemyView: (i: number) => actors[i]?.view ?? null,
     setProbeWeight: pushProbeWeight,
     get probeWeight() { return probeWeight; },
     /** Every zombie: id, room, live ground pose. */

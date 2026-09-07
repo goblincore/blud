@@ -73,9 +73,27 @@ export const SOLDIER_PROFILE: MotionProfile = {
   prop: { url: '/assets/lab/soldier-shotgun.glb', scale: 1.2 },
 };
 
+/** The isometric experiment's gun-carrying goblin (the iso player body).
+ *  Same shamble as the plain goblin — the point is a goblin that LOOKS like
+ *  the goblin, not a second soldier — but with the soldier's carry table:
+ *  arms hold the shorty at all times, snap to the aim carry while
+ *  FIRE.holdSec runs after a shot. cruise is PLAYER.walkSpeed (3.4), so the
+ *  gait blend reads full stride exactly when the player is at full run;
+ *  the walk→run band is the top of that range. */
+export const GOBLIN_GUN_PROFILE: MotionProfile = {
+  name: 'goblin-gun',
+  gait: { walk: SHAMBLE, run: SHAMBLE },
+  runBand: { from: 2.6, to: 3.4 },
+  cruise: 3.4,
+  armStyle: 'carry',
+  carries: { walk: 'low', run: 'chest', fire: 'aim' },
+  prop: { url: '/assets/lab/shorty-double.glb', scale: 1.2 },
+};
+
 const BY_NAME: Record<string, MotionProfile> = {
   zombie: ZOMBIE_PROFILE,
   soldier: SOLDIER_PROFILE,
+  'goblin-gun': GOBLIN_GUN_PROFILE,
 };
 
 /** The profile for a character name; anything unlisted moves like the zombie. */

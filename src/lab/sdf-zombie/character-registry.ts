@@ -33,8 +33,9 @@ import boxFixtureBlobSrc from './characters/box-fixture.blob?raw';
 import minotaurBlobSrc from './characters/minotaur.blob?raw';
 import soldierBlobSrc from './characters/soldier.blob?raw';
 import femaleBlobSrc from './characters/female.blob?raw';
+import gargoyleBlobSrc from './characters/gargoyle.blob?raw';
 import {
-  ZOMBIE_PROFILE, SOLDIER_PROFILE, motionProfileFor, type MotionProfile,
+  ZOMBIE_PROFILE, SOLDIER_PROFILE, GOBLIN_GUN_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
 
 /** A face sheet's texture and its crop. `mean` is the level the shader
@@ -128,6 +129,16 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     face: ZOMBIE_FLAT,
     profile: motionProfileFor('goblin'),
   },
+  // The isometric experiment's player body: the SAME goblin blob and kit,
+  // registered under its own name because a profile is per-ENTRY — giving
+  // the plain goblin a shotgun would re-arm the lab's goblin too. The kit
+  // and carries ride the rig identically to the soldier's (character-view).
+  'goblin-gun': {
+    name: 'goblin-gun', src: goblinBlobSrc,
+    kit: '/assets/lab/goblin-kit.gltf',
+    face: ZOMBIE_FLAT,
+    profile: GOBLIN_GUN_PROFILE,
+  },
   clown: {
     name: 'clown', src: clownBlobSrc,
     kit: '/assets/lab/clown-kit.gltf',
@@ -208,6 +219,15 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     name: 'female', src: femaleBlobSrc,
     face: bakedFace('female-face.png'),
     profile: motionProfileFor('female'),
+  },
+  gargoyle: {
+    name: 'gargoyle', src: gargoyleBlobSrc,
+    // The .blob's sheet block declares gargoyle-flat.png — a plain white
+    // 64x64 whose MULTIPLY is an identity, so the shared zombie-flat's dark
+    // feature marks do not contaminate the authored box head. mean is exact
+    // (uniform 255), not measured.
+    face: { url: '/assets/lab/faces/gargoyle-flat.png', rect: [0, 0, 64, 64, 64, 64], mean: 1 },
+    profile: motionProfileFor('gargoyle'),
   },
 };
 
