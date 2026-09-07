@@ -221,6 +221,10 @@ const ALL_LEGS = {
   // BoneFrame / limb bone / organs) culls the inside-flesh rows. The finer
   // granularity the cluster verdict asked for — a chest pixel should skip
   // the pelvis, the skull and the shins.
+  // Bone cull SHIPS 'segment' (2026-09-07); baseline includes it. These legs
+  // are the ablations: 'bone-cull-off' = the pre-cull flat fold, 'bone-seg-on'
+  // kept as an explicit no-op leg for scripts that name it.
+  'bone-cull-off': { setBoneCullMode: 'off' },
   'bone-seg-on': { setBoneCullMode: 'segment' },
 };
 // BENCH_LEGS lets a validation pass run one leg without the whole matrix.
@@ -263,8 +267,7 @@ async function applyLeg(name) {
     __sdfGame.setOwnerRefold(true);
     __sdfGame.setWoundList(false);
     __sdfGame.setBoneMesh(false);
-    __sdfGame.setBoneCull(false);
-    __sdfGame.setBoneCullMode('off');
+    __sdfGame.setBoneCullMode('segment');
     // Chunk pass: split ONLY in passes mode, so the timer can label chunks;
     // every other mode benches the shipped single pass.
     __sdfGame.setChunkPass(${JSON.stringify(PASSES ? 'split' : 'merged')});

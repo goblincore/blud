@@ -918,10 +918,21 @@ async function main() {
   // Bone-cluster sphere cull (packBoneClusters). OFF ships — the old flat
   // bone loop; the bench's bone-cull-on leg flips it. Takes effect on the
   // next upload; promotion to ON is the owner's call after the numbers.
-  let boneCull = false;
+  // BONE CULL SHIPS 'segment' (owner call, 2026-09-07). Per-rigid-segment
+  // bone spheres: exact (identical hit counts across off/cluster/segment,
+  // pixel gate at the noise floor), bone evaluations -48% on a wounded
+  // frozen scene. Measured wounded-march win is small (~5-7% in room 3,
+  // unresolved in room 4) — culling has reached the point where what is
+  // left near a torso wound is genuinely near; the remaining bone cost goes
+  // away only by taking bones out of the field (baked bone-segment meshes,
+  // after deferred). Applied to every actor at spawn (spawnEnemy) and to
+  // late toggles via setBoneCullMode. Chunks stay on the flat fold.
+  // Evidence: docs/dev-notes/2026-09-07-bone-segment-spheres/notes.md.
+  const GAME_BONE_CULL_MODE = 'segment' as 'off' | 'cluster' | 'segment';
+  let boneCull = GAME_BONE_CULL_MODE !== 'off';
   // Three-way cull state (bone-segment spheres): boneCull stays the boolean
   // view (off vs any cull) the old seam reports.
-  let boneCullMode: 'off' | 'cluster' | 'segment' = 'off';
+  let boneCullMode: 'off' | 'cluster' | 'segment' = GAME_BONE_CULL_MODE;
   function applyBoneCullMode(mode: 'off' | 'cluster' | 'segment'): void {
     boneCullMode = mode;
     boneCull = mode !== 'off';
@@ -1314,6 +1325,9 @@ async function main() {
       navigation: encounterNav,
       onSever: (piece, stumpWound) => onSeverDispatch?.(actor, piece, stumpWound),
     });
+    // Ship default + any live toggle: a late spawn must not fall back to the
+    // flat bone fold while the rest of the room culls.
+    actor.view.setBoneCullMode(boneCullMode);
     encounterHomes.set(actor.id,[...start] as Vec3);
     return actor;
   }

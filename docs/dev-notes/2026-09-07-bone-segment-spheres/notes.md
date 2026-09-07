@@ -110,8 +110,41 @@ expected.
 
 ## Bench (Step 7)
 
-TBD — running.
+Two runs. The agent's (`bench-agent-1531/`, 15:31, load ~4–5; room 3
+baseline spread 6%, room 4 47%) is the evidence. The owner session's rerun
+(`bench-owner-INVALID-load27/`) hit a 1-min load of 27 mid-run (a concurrent
+deferred-renderer dispatch task) — spreads 93–125%, NOT READABLE, archived
+only so nobody re-runs it thinking it is missing.
 
-## Verdict
+`sdf:march` exclusive ms, median of 3 (agent run):
 
-TBD.
+| | r3 fire | r3 gib | r4 fire | r4 gib |
+| --- | ---: | ---: | ---: | ---: |
+| baseline (off) | 14.0 | 14.6 | 16.3 | 22.4 |
+| bone-cull-on (cluster) | 14.2 | 14.5 | 15.1 | 31.8 |
+| **bone-seg-on** | **13.3 (−5%)** | **13.6 (−7%)** | 16.8 (unresolved) | 31.9 (unresolved) |
+| bone-mesh-on (tubes) | 12.2 (−13%) | 11.4 (−22%) | 13.3 | 23.7 |
+
+Room 4 is unreadable in that run (spreads 20–47%). Room 3 is the number.
+
+## Verdict: SHIP ON (owner call, 2026-09-07) — exact, free, small
+
+The segment cull is exact (identical hits across all three modes), halves the
+bone evaluations (−48%), and recovers about a third of the tube win in room 3.
+That is worth having at zero look risk, and it ships as the game default
+(`GAME_BONE_CULL_MODE = 'segment'` in game-main.ts; the bench's baseline now
+includes it and `bone-cull-off` is the ablation leg).
+
+It is NOT the fix for the wounded march, and the gap to the tubes says why:
+
+- The segment path spends per-step texel reads to decide what to skip — two
+  per segment, 19 segments on the zombie, so ~38 loads before a bone folds —
+  against ~3–4 loads per bone it saves. Culling has hit the read budget.
+- What survives near a torso wound is genuinely near: the thoracic segment
+  (one axial BoneFrame, r = 0.25 m, ~5 rib pairs) and the organs. No sphere
+  granularity removes work that is really there.
+
+The remaining bone cost goes away only by not marching bones: baked
+bone-segment meshes as ordinary G-buffer members once the deferred renderer
+lands (the tubes leg, 13–22%, is the ceiling for that). Until then the
+wounded march is bounded below by flesh fold + wound zone steps, not bones.
