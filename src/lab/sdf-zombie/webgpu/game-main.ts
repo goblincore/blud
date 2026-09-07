@@ -2031,6 +2031,8 @@ async function main() {
     handMaterial = arms.skin;
     gripHandGroup = arms.right;
     foreHandGroup = arms.left;
+    gripHandGroup.name = 'fpv-hand-grip';
+    foreHandGroup.name = 'fpv-hand-fore';
     gripHandGroup.position.copy(GRIP_HAND_REST);
     foreHandGroup.position.copy(FORE_HAND_REST);
     (aimRig ?? viewModelAnchor).add(gripHandGroup, foreHandGroup);
@@ -2050,8 +2052,9 @@ async function main() {
     const headGeo = new THREE.CylinderGeometry(0.0172, 0.0172, 0.021, 12);
     const hullMat = new THREE.MeshStandardMaterial({ color: 0xa8231d, roughness: 0.55 });
     const headMat = new THREE.MeshStandardMaterial({ color: 0xb08d3a, roughness: 0.35, metalness: 0.9 });
-    function makeShell(): THREE.Group {
+    function makeShell(name: string): THREE.Group {
       const g = new THREE.Group();
+      g.name = name;
       const hull = new THREE.Mesh(hullGeo, hullMat);
       hull.position.y = 0.0105;
       const head = new THREE.Mesh(headGeo, headMat);
@@ -2063,8 +2066,8 @@ async function main() {
       return g;
     }
     for (let i = 0; i < 2; i++) {
-      const e = makeShell(); ejectedShells.push(e); (aimRig ?? viewModelAnchor).add(e);
-      const l = makeShell(); loadShells.push(l); (aimRig ?? viewModelAnchor).add(l);
+      const e = makeShell(`shell-eject-${i}`); ejectedShells.push(e); (aimRig ?? viewModelAnchor).add(e);
+      const l = makeShell(`shell-load-${i}`); loadShells.push(l); (aimRig ?? viewModelAnchor).add(l);
       // DEFERRED G-BUFFER ROUTE: the shells are OPAQUE Standard meshes (red
       // hull, brass head) — level-only like the rest of the viewmodel. They
       // fly and tumble through the forward-composited frame, so this route

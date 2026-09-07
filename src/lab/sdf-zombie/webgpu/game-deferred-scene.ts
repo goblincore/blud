@@ -85,6 +85,10 @@ export interface GameDeferredSceneDiagnostics {
   /** Materials that cannot enter a G-buffer pass, as
    *  "object ← material [reason]" with the source names. */
   unsupported: string[];
+  /** Registered ROOT names (composition review fix evidence seam): lets a
+   *  gate verify the opaque FPV gear (gun/arms/shells) is actually
+   *  registered instead of inferring it from object counts. */
+  roots: string[];
 }
 
 export interface GameDeferredScene {
@@ -438,11 +442,12 @@ export function createGameDeferredScene(scene: THREE.Scene): GameDeferredScene {
 
     diagnostics() {
       if (disposed) {
-        return { counts: { mesh: 0, sdf: 0, forward: 0, exclude: 0 }, unsupported: [] };
+        return { counts: { mesh: 0, sdf: 0, forward: 0, exclude: 0 }, unsupported: [], roots: [] };
       }
       return {
         counts: recomputeCounts(),
         unsupported: [...unsupported, ...reportedLive].slice(0, MAX_UNSUPPORTED),
+        roots: [...roots.keys()].map((o) => o.name || o.type),
       };
     },
 
