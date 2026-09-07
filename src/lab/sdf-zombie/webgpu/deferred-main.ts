@@ -762,8 +762,20 @@ async function main() {
       const dbg = handle.renderer.debug as unknown as {
         getShaderAsync: (scene: THREE.Scene, cam: THREE.Camera, obj: THREE.Object3D) => Promise<{ fragmentShader?: string }>;
       };
-      const out = await dbg.getShaderAsync(sdfScene, camera, surfaceView.object);
-      return out.fragmentShader ?? '';
+      // getShaderAsync builds its render context from the renderer's CURRENT
+      // target. Against the canvas (null target) the material's mrtNode is
+      // compiled out and the readback fns never appear — the shader then
+      // looks like a single-output march, which is NOT what the producer
+      // pass runs. Point the renderer at the real 4-attachment SDF target so
+      // the returned WGSL is the actual MRT pipeline, then restore.
+      const prev = handle.renderer.getRenderTarget();
+      handle.renderer.setRenderTarget(deferredLayer.targets.sdf);
+      try {
+        const out = await dbg.getShaderAsync(sdfScene, camera, surfaceView.object);
+        return out.fragmentShader ?? '';
+      } finally {
+        handle.renderer.setRenderTarget(prev);
+      }
     },
     /** World positions and projected pixels of the orb markers, for the
      *  marker/light alignment and occlusion checks. */
@@ -835,12 +847,19 @@ async function main() {
       }
       const sorted = [...lum].sort((a, b) => a - b);
       const baseline = sorted[Math.floor(sorted.length * 0.5)]!;
-      let sum = 0, sx = 0, sy = 0, count = 0, max = 0;
+      let max = 0;
+      for (const l of lum) if (l > max) max = l;
+      // Isolate the pool CORE: a plain above-median weight lets half the
+      // window's ambient-lit floor texture contribute, and the centroid then
+      // measures the window, not the light pool (measured: a 1-degree cone
+      // reported 3336 contributing px in an 80x80 window). Keep only pixels
+      // at least a quarter of the way from baseline to peak.
+      const threshold = baseline + 0.25 * (max - baseline);
+      let sum = 0, sx = 0, sy = 0, count = 0;
       let i = 0;
       for (let y = y0; y <= y1; y++) {
         for (let x = x0; x <= x1; x++, i++) {
-          const wgt = Math.max(0, lum[i]! - baseline);
-          if (lum[i]! > max) max = lum[i]!;
+          const wgt = lum[i]! > threshold ? lum[i]! - threshold : 0;
           if (wgt > 0) { count++; }
           sum += wgt; sx += wgt * x; sy += wgt * y;
         }

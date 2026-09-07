@@ -1,0 +1,201 @@
+{
+  "checks": [
+    {
+      "name": "startup-default-deferred",
+      "detail": {
+        "backend": "webgpu",
+        "canvas": {
+          "width": 800,
+          "height": 600
+        },
+        "limits": [
+          {
+            "name": "maxColorAttachments",
+            "required": 4,
+            "actual": 8
+          },
+          {
+            "name": "maxColorAttachmentBytesPerSample",
+            "required": 28,
+            "actual": 32
+          }
+        ]
+      }
+    },
+    {
+      "name": "startup-query-legacy",
+      "detail": {}
+    },
+    {
+      "name": "startup-query-deferred",
+      "detail": {}
+    },
+    {
+      "name": "coverage-and-resolve",
+      "detail": {
+        "coverage": {
+          "empty": 0,
+          "mesh": 474680,
+          "flesh": 5320,
+          "flat": 0,
+          "other": 0
+        },
+        "litMean": {
+          "mesh": 0.09374363668060151,
+          "flesh": 1.9045892332797971
+        },
+        "overlap": {
+          "meshWins": 0,
+          "sdfWins": 5320
+        }
+      }
+    },
+    {
+      "name": "light-invariance",
+      "detail": {
+        "litHashChanged": true,
+        "relMesh": 0.12753317627326255,
+        "relFlesh": 0.5004152857382511
+      }
+    },
+    {
+      "name": "occlusion-both-directions-both-scales",
+      "detail": {
+        "scale1": {
+          "meshFrontWins": 9853,
+          "sdfFrontWins": 11015
+        },
+        "scale0.5": {
+          "meshFrontWins": 9864,
+          "sdfFrontWins": 11052
+        }
+      }
+    },
+    {
+      "name": "wound-depth-tissue-deterministic",
+      "detail": {
+        "fleshPx": 81496
+      }
+    },
+    {
+      "name": "legacy-sdf-depth-parity",
+      "detail": {
+        "legacyHits": 81496,
+        "compared": 367,
+        "maxDiff": 0
+      }
+    },
+    {
+      "name": "explicit-reallocation",
+      "detail": {
+        "small": [
+          640,
+          480
+        ],
+        "restoredIdentical": true
+      }
+    },
+    {
+      "name": "css-resize-invariance",
+      "detail": {
+        "canvas": {
+          "width": 800,
+          "height": 600
+        }
+      }
+    },
+    {
+      "name": "repeated-mode-switches",
+      "detail": {
+        "cycles": 3
+      }
+    },
+    {
+      "name": "orb-marker-correspondence",
+      "detail": {
+        "markersSeen": 1,
+        "onScreen": 3,
+        "markerDetail": [
+          {
+            "index": 0,
+            "seen": false,
+            "occludedBy": 0.9697224497795105,
+            "orbDepth": 0.9727744195245207
+          },
+          {
+            "index": 1,
+            "seen": false,
+            "occludedBy": 0.9748948216438293,
+            "orbDepth": 0.9860879655498539
+          },
+          {
+            "index": 2,
+            "seen": true,
+            "hueCos": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "orb-occluded-by-flesh",
+      "detail": {
+        "cls": 2,
+        "depth": 0.8705036640167236,
+        "orbClip": 0.9500707720168455
+      }
+    },
+    {
+      "name": "pause-resume-no-jump",
+      "detail": {
+        "resumedAt": 3.333333333333333
+      }
+    },
+    {
+      "name": "light-count-updates",
+      "detail": {
+        "litMeanMeshByCount": {
+          "1": 0.04818309012068247,
+          "3": 0.07845062293597004,
+          "8": 0.2520071154574117,
+          "16": 0.4516725957616244
+        }
+      }
+    },
+    {
+      "name": "light-color-correspondence",
+      "detail": {
+        "red": {
+          "rOverB": 35.67152767419225,
+          "fleshProbes": 89
+        },
+        "cyan": {
+          "rOverB": 0.09918489658426613,
+          "fleshProbes": 89
+        }
+      }
+    },
+    {
+      "name": "world-reconstruction-centroid",
+      "detail": {
+        "projected": [
+          409.99,
+          348.07
+        ],
+        "centroid": [
+          411.16,
+          347.61
+        ],
+        "distPx": 1.255,
+        "poolPx": 84
+      }
+    },
+    {
+      "name": "one-trace-per-fragment-shader",
+      "detail": {
+        "marchOcc": 2,
+        "callAt": 146556
+      }
+    }
+  ],
+  "errors": []
+}

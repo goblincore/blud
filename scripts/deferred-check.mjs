@@ -252,8 +252,140 @@ try {
   }
   check('repeated-mode-switches', { cycles: 3 });
 
+  // ---- H. orb markers: position/color correspondence + cross-producer depth test
+  await evaluate('__deferredLab.setCameraPose("overview"); __deferredLab.setOrbsVisible(true)');
+  await evaluate('__deferredLab.setLightCount(3); __deferredLab.setLightTime(0.7)');
+  await step();
+  const orbState = await evaluate('__deferredLab.orbState()');
+  const onScreen = orbState.orbs.filter((o) => o.onScreen);
+  assert.ok(onScreen.length > 0, 'no orb markers on screen at overview');
+  const orbProbes = await surfaces({ probes: onScreen.map((o) => [Math.round(o.pixel[0]), Math.round(o.pixel[1])]) });
+  let markersSeen = 0;
+  const markerDetail = [];
+  for (let i = 0; i < onScreen.length; i++) {
+    const o = onScreen[i], p = orbProbes.probes[i];
+    const em = p.emission;
+    const emLum = 0.2126 * em[0] + 0.7152 * em[1] + 0.0722 * em[2];
+    if (emLum > 0.5) {
+      const emLen = Math.hypot(em[0], em[1], em[2]);
+      const cLen = Math.hypot(...o.color);
+      const cos = (em[0] * o.color[0] + em[1] * o.color[1] + em[2] * o.color[2]) / (emLen * cLen);
+      assert.ok(cos > 0.95, `orb ${o.index} emission hue mismatch (cos ${cos})`);
+      markersSeen++;
+      markerDetail.push({ index: o.index, seen: true, hueCos: Math.round(cos * 1000) / 1000 });
+    } else {
+      // Not the marker at its own projected pixel: only valid if NEARER
+      // geometry won the depth test there.
+      assert.ok(p.depth < o.clipDepth - 1e-4,
+        `orb ${o.index} marker missing without occlusion (probe depth ${p.depth}, orb clip ${o.clipDepth})`);
+      markerDetail.push({ index: o.index, seen: false, occludedBy: p.depth, orbDepth: o.clipDepth });
+    }
+  }
+  assert.ok(markersSeen > 0, 'no emissive orb markers found');
+  check('orb-marker-correspondence', { markersSeen, onScreen: onScreen.length, markerDetail });
+
+  // Explicit marker occlusion across producers: at t=3.7 orb 0 sits at
+  // (-0.20, 1.68, -1.03), behind the zombie's shoulder from the wound camera
+  // — flesh (SDF producer) must depth-win over the orb (mesh producer).
+  // (t=pi/0.9 puts the orb at x=0 where the ray threads just past the head —
+  // verified by a t-scan: 3.2/3.7/3.9 occluded, 2.6-3.0/3.49/4.1+ visible.)
+  await evaluate('__deferredLab.setCameraPose("wound"); __deferredLab.setLightTime(3.7)');
+  await step();
+  const occState = await evaluate('__deferredLab.orbState()');
+  const orb0 = occState.orbs.find((o) => o.index === 0);
+  assert.ok(orb0.onScreen, `orb 0 off-screen at the occlusion time: ${JSON.stringify(orb0)}`);
+  const occProbe = await surfaces({ probes: [[Math.round(orb0.pixel[0]), Math.round(orb0.pixel[1])]] });
+  const op = occProbe.probes[0];
+  const opEmLum = 0.2126 * op.emission[0] + 0.7152 * op.emission[1] + 0.0722 * op.emission[2];
+  assert.ok(opEmLum < 0.5, `occluded orb still emissive (lum ${opEmLum})`);
+  assert.equal(op.cls, 2, `the occluding surface must be FLESH, got class ${op.cls}`);
+  assert.ok(op.depth < orb0.clipDepth - 1e-4, `flesh did not depth-win over the orb (${op.depth} vs ${orb0.clipDepth})`);
+  check('orb-occluded-by-flesh', { cls: op.cls, depth: op.depth, orbClip: orb0.clipDepth });
+
+  // ---- I. pause/resume without a jump, count changes update lights+markers --
+  await evaluate('__deferredLab.setCameraPose("overview"); __deferredLab.setLightTime(3.3)');
+  let d2 = await diag();
+  assert.equal(d2.lightsAnimated, false);
+  assert.equal(d2.lightTime, 3.3);
+  await step(3);
+  d2 = await diag();
+  assert.equal(d2.lightTime, 3.3, 'frozen light time must not advance while paused');
+  await evaluate('__deferredLab.setLightsAnimated(true)');
+  await step(2);
+  d2 = await diag();
+  assert.ok(d2.lightTime > 3.3 && d2.lightTime < 3.4, `resume must continue from frozen t, got ${d2.lightTime}`);
+  check('pause-resume-no-jump', { resumedAt: d2.lightTime });
+
+  await evaluate('__deferredLab.setOrbsVisible(false); __deferredLab.setLightTime(0.7)');
+  const litByCount = {};
+  for (const n of [1, 8, 16, 3]) {
+    await evaluate(`__deferredLab.setLightCount(${n})`);
+    await step(1);
+    const st = await evaluate('__deferredLab.orbState()');
+    assert.equal(st.orbs.length, n, `marker set must track light count ${n}`);
+    const dd = await diag();
+    assert.equal(dd.layer.lightCount, n, `shared light buffer must track count ${n}`);
+    const s = await surfaces();
+    litByCount[n] = s.litMean.mesh;
+  }
+  assert.ok(litByCount[16] > litByCount[1], `16 lights must add energy over 1 (${JSON.stringify(litByCount)})`);
+  check('light-count-updates', { litMeanMeshByCount: litByCount });
+
+  // ---- J. light COLOR reaches the lit surface (hue swing on flesh) ----------
+  await evaluate('__deferredLab.setCameraPose("wound")');
+  const grid = [];
+  for (let y = 20; y < 600; y += 30) for (let x = 20; x < 800; x += 30) grid.push([x, y]);
+  const hueRatio = async (color) => {
+    await evaluate(`__deferredLab.setCustomLights([{kind:'point', position:[0.2,1.5,0.9], direction:[0,-1,0], color:${JSON.stringify(color)}, intensity:20, range:6, cosInner:0.9, cosOuter:0.7}])`);
+    await step();
+    const s = await surfaces({ probes: grid });
+    let r = 0, g = 0, b = 0, n = 0;
+    for (const p of s.probes) if (p.cls === 2) { r += p.lit[0]; g += p.lit[1]; b += p.lit[2]; n++; }
+    assert.ok(n > 50, `too few flesh probes for hue check (${n})`);
+    return { rOverB: (r / n) / Math.max(b / n, 1e-6), fleshProbes: n };
+  };
+  const redHue = await hueRatio([1, 0.05, 0.05]);
+  const cyanHue = await hueRatio([0.05, 1, 1]);
+  assert.ok(redHue.rOverB > 1.5, `red light must push flesh red (r/b ${redHue.rOverB})`);
+  assert.ok(cyanHue.rOverB < 0.7, `cyan light must push flesh blue-green (r/b ${cyanHue.rOverB})`);
+  check('light-color-correspondence', { red: redHue, cyan: cyanHue });
+
+  // ---- K. world reconstruction: isolated tight spot centroid (review fix 1) -
+  await evaluate('__deferredLab.setCameraPose("overview"); __deferredLab.setOrbsVisible(false)');
+  // Tight cone: a wide pool has a legitimate perspective weighting bias
+  // (nearer floor texels cover more pixels, pulling the centroid toward the
+  // camera — measured 4.05px at a 8-11deg cone); shrinking the cone removes
+  // the bias while a reconstruction error (e.g. a doubled half-pixel) would
+  // persist. Convergence to the CPU projection IS the fix-1 evidence.
+  await evaluate(`__deferredLab.setCustomLights([{kind:'spot', position:[0.9,2.6,-0.9], direction:[0,-1,0], color:[1,1,1], intensity:120, range:8, cosInner:0.9995, cosOuter:0.998}])`);
+  await step();
+  const proj = await evaluate('__deferredLab.projectWorld([0.9, 0, -0.9])');
+  assert.ok(proj.onScreen, `spot target off-screen: ${JSON.stringify(proj)}`);
+  const cent = await evaluate(`__deferredLab.litCentroid(${proj.pixel[0]}, ${proj.pixel[1]}, 40)`);
+  assert.ok(cent.centroid, 'no lit pool found for the isolated spot');
+  assert.ok(cent.count > 20, `pool too small to centroid (${cent.count}px)`);
+  const distPx = Math.hypot(cent.centroid[0] - proj.pixel[0], cent.centroid[1] - proj.pixel[1]);
+  assert.ok(distPx <= 2, `world reconstruction off by ${distPx}px (a doubled half-pixel shifts the pool)`);
+  check('world-reconstruction-centroid', { projected: proj.pixel.map((v) => Math.round(v * 100) / 100), centroid: cent.centroid.map((v) => Math.round(v * 100) / 100), distPx: Math.round(distPx * 1000) / 1000, poolPx: cent.count });
+  await evaluate('__deferredLab.setCustomLights(null); __deferredLab.setLightTime(0)');
+
+  // ---- L. generated shader: ONE marchSurface call before the readbacks ------
+  const wgsl = await evaluate('__deferredLab.surfaceShader()');
+  writeFileSync(`${out}/task3-surface-shader.wgsl`, wgsl);
+  const marchOcc = (wgsl.match(/marchSurface\s*\(/g) || []).length;
+  assert.equal(marchOcc, 2, `expected the fn definition + exactly ONE marchSurface call, got ${marchOcc} occurrences`);
+  const callAt = wgsl.search(/=\s*marchSurface\s*\(/);
+  assert.ok(callAt > 0, 'marchSurface call must assign the cached trace');
+  for (const fn of ['sdfSurfaceReadAlbedo', 'sdfSurfaceReadNormal', 'sdfSurfaceReadEmission']) {
+    const occ = (wgsl.match(new RegExp(fn + '\\s*\\(', 'g')) || []).length;
+    assert.equal(occ, 2, `${fn}: expected fn def + ONE call, got ${occ}`);
+    const fnCallAt = wgsl.search(new RegExp('=\\s*' + fn + '\\s*\\('));
+    assert.ok(fnCallAt > callAt, `${fn} must be called AFTER the single march`);
+  }
+  check('one-trace-per-fragment-shader', { marchOcc, callAt });
+
   writeFileSync(`${out}/validation-partial.json`, JSON.stringify({ checks, errors }, null, 2));
-  console.log('PART 1 COMPLETE —', checks.length, 'checks');
+  console.log('PART 2 COMPLETE —', checks.length, 'checks');
 } catch (e) {
   console.error('FAIL', e);
   writeFileSync(`${out}/validation-partial.json`, JSON.stringify({ checks, errors, failure: String(e) }, null, 2));
