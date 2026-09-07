@@ -338,6 +338,15 @@ export function createWoundRing(): WoundRing {
           const n = woundCarveNormal(posed.prims, w, bodyYaw);
           return n ? { n, depth: w.carveDepth ?? 0 } : null;
         }),
+        wounds.map(w => {
+          // Severing retains wound history and primitive indices. A hidden
+          // cluster still owns its wounds; null would turn them into global
+          // cutters that can erase surviving head/torso flesh.
+          const cluster = posed.clusters.findIndex(c =>
+            w.primIdx >= c.start && w.primIdx < c.start + c.count);
+          const c = posed.clusters[cluster];
+          return c ? { cluster, start: c.start, count: c.count } : null;
+        }),
       );
     },
   };
@@ -384,6 +393,8 @@ export interface CharacterView {
   muzzle(): Vec3 | null;
   /** Let the held prop go (collapse, gib). */
   releaseProp(vel: Vec3, seed: number): void;
+  /** Restore equipment and clear detached armor when a fresh body replaces this one. */
+  resetEquipment(): void;
   dispose(): void;
 }
 
@@ -449,14 +460,15 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
   let kit: KitOverlay | null = null;
   let heldProp: HeldProp | null = null;
   let disposed = false;
+  const wounds = createWoundRing();
   const muzzleFlash = entry.profile.prop && opts.effectsScene ? createMuzzleFlash() : null;
   if (muzzleFlash) opts.effectsScene!.add(muzzleFlash.object);
   const kitUrl = entry.kit;
   if (kitUrl) {
-    loadKit(kitUrl, opts.renderer, [0, 0, 0])
+    loadKit(kitUrl, opts.renderer, [0, 0, 0], entry.name === 'soldier')
       .then(k => {
         if (disposed) { k.dispose(); return; }
-        kit = k; opts.scene.add(k.object);
+        kit = k; opts.scene.add(k.object, k.debris);
       })
       .catch(e => console.error(`[kit] ${kitUrl} failed to load; rendering the body undressed`, e));
   }
@@ -473,7 +485,7 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
     entry,
     body,
     gpu,
-    wounds: createWoundRing(),
+    wounds,
     get palette() { return out.palette; },
     get kit() { return kit; },
     get prop() { return heldProp; },
@@ -483,7 +495,7 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
       // the gun; the kit simply keeps following the (fallen) rig.
       if (!kit && !heldProp) return;
       const frames = boneFrames(body, bound, bodyYaw);
-      kit?.pose(frames);
+      kit?.pose(frames, { body, wounds: wounds.all(), dt });
       if (heldProp) {
         if (frame?.gun && !heldProp.released) {
           heldProp.pose(frame.gun, sinceFire, rotateYaw([1, 0, 0], bodyYaw));
@@ -500,6 +512,11 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
     },
     releaseProp(vel, seed) {
       heldProp?.release(vel, seed);
+      muzzleFlash?.pose(null, Infinity);
+    },
+    resetEquipment() {
+      kit?.resetDamage();
+      heldProp?.reset();
       muzzleFlash?.pose(null, Infinity);
     },
     dispose() {

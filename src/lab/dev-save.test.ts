@@ -6,6 +6,8 @@ import { join } from 'node:path';
 // @ts-expect-error — node:os available in vitest via happy-dom/node
 import { tmpdir } from 'node:os';
 import { isCharacterName, saveFace, savePalette } from './dev-save';
+import { parseBlob } from './sdf-zombie/blob-parse';
+import { compilePalette } from './sdf-zombie/blob-compile';
 
 const SOLDIER: string = readFileSync('src/lab/sdf-zombie/characters/soldier.blob', 'utf8');
 let root = '';
@@ -55,5 +57,20 @@ describe('dev-save', () => {
     expect(savePalette(root, 'soldier', { baseColor: [1, 2] } as never).ok).toBe(false);
     expect(savePalette(root, 'soldier', { baseColor: ['a', 'b', 'c'] } as never).ok).toBe(false);
     expect(savePalette(root, 'soldier', { deepColor: [0, 0, 0] } as never).ok).toBe(false);
+  });
+  it('saves material sliders with skin color, including previously unauthored fields', () => {
+    const payload = { baseColor: [0.52224, 0.42432, 0.33252], fresnelBoost: 1.5, wetness: 0.79, surfaceNoiseAmp: 0.12 };
+    expect(savePalette(root, 'soldier', payload).ok).toBe(true);
+    const file = join(root, 'src/lab/sdf-zombie/characters/soldier.blob');
+    const after = readFileSync(file, 'utf8');
+    const material = compilePalette(parseBlob(after))!;
+    expect(material).toMatchObject({ ...payload, baseColor: [0.522, 0.424, 0.333] });
+    expect(material.deepColor).toEqual(compilePalette(parseBlob(SOLDIER))!.deepColor);
+    expect(savePalette(root, 'soldier', payload).ok).toBe(true);
+    expect(readFileSync(file, 'utf8')).toBe(after);
+  });
+  it.each([null, { baseColor: [0, 0, 0], wetness: NaN }, { baseColor: [0, 0, 0], fresnelBoost: 3 }, { baseColor: [0, 0, 0], unknown: 1 }])('rejects invalid material payloads without modifying the file: %j', payload => {
+    expect(savePalette(root, 'soldier', payload as never).ok).toBe(false);
+    expect(readFileSync(join(root, 'src/lab/sdf-zombie/characters/soldier.blob'), 'utf8')).toBe(SOLDIER);
   });
 });

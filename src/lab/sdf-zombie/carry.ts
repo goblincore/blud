@@ -20,7 +20,7 @@
 // Pure. Body-local axes: +x right, +y up, +z forward.
 import type { Vec3 } from './types';
 import {
-  add, cross, dot, normalize, qFromAxisAngle, qMul, qRotate, sub, type Quat,
+  add, cross, dot, normalize, qFromAxisAngle, qMul, qRotate, scale, sub, type Quat,
 } from './vec';
 
 export type CarryName = 'low' | 'chest' | 'hip' | 'aim';
@@ -51,21 +51,21 @@ export const CARRIES: Record<CarryName, CarrySpec> = {
   chest: { right: { pitch: -0.30, yaw: 0.50, fold: 2.10 }, gunPitch: -0.25, leftPole: [0.5, -0.3, 0.2] },
   // Legacy waist-level hold, swung a little across the body, elbow tucked.
   hip:   { right: { pitch: 0.00, yaw: 0.55, fold: 1.75 }, gunPitch: -0.35, leftPole: [0.5, -0.3, 0.3] },
-  // Shoulder aim: elbow down beside the ribs, forearm up to the grip. The
-  // counter-pitch levels the barrel and seats the stock at the shoulder pad.
-  // Support-hand reach is 0.485 m on the soldier's 0.50 m left arm.
-  aim:   { right: { pitch: -0.06, yaw: 0.11, fold: 2.46 }, gunPitch: -0.968, leftPole: [0.5, -0.3, 0.2] },
+  // Shoulder aim: receiver above the vest, stock seated at the shoulder.
+  // Bring the gun slightly inward so the support arm bends naturally instead
+  // of locking straight across the face. Both elbows stay outside the vest;
+  // the support elbow points down. Reach is 0.454 m on the 0.50 m left arm.
+  aim:   { right: { pitch: 0.15, yaw: 0.38, fold: 2.51 }, gunPitch: -1.2275, leftPole: [0.8, -0.8, 0.45] },
 };
 
 /** Shared held-gun locators, gun-local metres, +z = muzzle. Measured from
- *  the glb's node tree (Grip_Hand/Fore_Hand under Frame, Muzzle_L/R under
- *  Barrels, all rotation-free, GunRoot at the origin). The enemy-specific
- *  soldier-shotgun.glb is authored to the same attachment contract. */
+ *  soldier-shotgun.glb node tree under GunRoot. Hand spacing remains the
+ *  legacy attachment contract; the larger enemy gun extends only its muzzle. */
 export const GUN_GRIP = {
   gripHand: [0, -0.074, -0.074] as Vec3,
   foreHand: [0, -0.045, 0.155] as Vec3,
-  /** Single shotgun muzzle; midpoint of the legacy shorty's two bores. */
-  muzzle: [0, 0, 0.318] as Vec3,
+  /** Extended enemy shotgun muzzle, matching soldier-shotgun.glb. */
+  muzzle: [0, 0, 0.410] as Vec3,
 } as const;
 
 export interface GunPose { root: Vec3; quat: Quat }
@@ -134,4 +134,19 @@ export const MUZZLE_RISE = { peak: 0.12, decay: 0.12 } as const;
 export function muzzleRise(age: number): number {
   if (age < 0) return 0;
   return MUZZLE_RISE.peak * Math.exp(-age / MUZZLE_RISE.decay);
+}
+
+
+/** Swivel a solved elbow around the shoulder-to-grip axis toward a pole.
+ * Both segment lengths and the grip stay fixed. Unlike a side-only reflection,
+ * this chooses a fold plane that can clear the chest and its armor. */
+export function alignElbow(shoulder: Vec3, elbow: Vec3, hand: Vec3, pole: Vec3): Vec3 {
+  const axis = sub(hand, shoulder);
+  const length2 = dot(axis, axis);
+  if (length2 < 1e-12) return elbow;
+  const centre = add(shoulder, scale(axis, dot(sub(elbow, shoulder), axis) / length2));
+  const radial = sub(pole, scale(axis, dot(pole, axis) / length2));
+  const radius = Math.sqrt(dot(sub(elbow, centre), sub(elbow, centre)));
+  if (dot(radial, radial) < 1e-12 || radius < 1e-9) return elbow;
+  return add(centre, scale(normalize(radial), radius));
 }

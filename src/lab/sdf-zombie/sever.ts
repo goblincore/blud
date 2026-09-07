@@ -8,6 +8,9 @@ import { basisFromAxis, dot, len, lerp, sub } from './vec';
 export interface ChunkGroup {
   limb: LimbId;
   prims: Primitive[];
+  /** Source slots before severing; copied distal prims cannot use identity. */
+  sourceIndices?: number[];
+  sourceBoneIndices?: number[];
   /** The severed limb's BONE prims (gore r3 refinement 6). Chunks shipped
    *  bone-free — the separate-array design's safe default — so a torn-off
    *  forearm was solid meat. Filtered by cluster exactly as `prims` is. */
@@ -65,6 +68,7 @@ export function severLimb(body: BuildResult, limb: LimbId): SeverResult {
 
   const anchor = primIdx < 0 ? null : body.prims[primIdx]!;
   const stumpWound: Wound | null = anchor === null ? null : {
+    injuryIgnored: true,
     primIdx,
     // Place it on the segment between the anchor and the removed cluster's centre.
     local: toLocalApprox(anchor, lerp(anchor.a, cluster.center, 0.6)),
@@ -73,7 +77,10 @@ export function severLimb(body: BuildResult, limb: LimbId): SeverResult {
     ageSec: 0,
   };
 
-  return { body: next, chunk: { limb, prims, bones, origin: cluster.center, tornAt: [] }, stumpWound };
+  return { body: next, chunk: { limb, prims, bones,
+    sourceIndices: prims.map(p => body.prims.indexOf(p)),
+    sourceBoneIndices: bones.map(p => body.bonePrims.indexOf(p)),
+    origin: cluster.center, tornAt: [] }, stumpWound };
 }
 
 /** Local-frame offset from a primitive's head, matching damage.ts's convention. */
@@ -234,11 +241,12 @@ export function severDistal(body: BuildResult, cut: ChainCut): SeverResult {
   const clusterIdx = body.clusters.indexOf(cluster);
   const bodyBones: Primitive[] = [];
   const chunkBones: Primitive[] = [];
-  for (const b of body.bonePrims ?? []) {
+  const sourceBoneIndices: number[] = [];
+  for (const [boneIndex, b] of (body.bonePrims ?? []).entries()) {
     if (b.cluster !== clusterIdx || b.dead) { bodyBones.push(b); continue; }
     const da = dot(sub(b.a, joint), nrm), db = dot(sub(b.b, joint), nrm);
     if (da <= 0 && db <= 0) { bodyBones.push(b); continue; }
-    if (da > 0 && db > 0) { bodyBones.push({ ...b, dead: true }); chunkBones.push({ ...b, dead: false }); continue; }
+    if (da > 0 && db > 0) { bodyBones.push({ ...b, dead: true }); chunkBones.push({ ...b, dead: false }); sourceBoneIndices.push(boneIndex); continue; }
     const t = da / (da - db);
     const cutP = lerp(b.a, b.b, t);
     const r1 = b.radius, r2 = b.radiusB ?? b.radius;
@@ -251,6 +259,7 @@ export function severDistal(body: BuildResult, cut: ChainCut): SeverResult {
       : { ...b, b: cutP, radiusB: rCut, bend: undefined, dead: false };
     bodyBones.push(proxHalf);
     chunkBones.push(distHalf);
+    sourceBoneIndices.push(boneIndex);
   }
 
   // Live copies for the chunk: on the body they are dead, but the chunk is
@@ -267,6 +276,7 @@ export function severDistal(body: BuildResult, cut: ChainCut): SeverResult {
   const origin: Vec3 = [ox / n, oy / n, oz / n];
 
   const stumpWound: Wound = {
+    injuryIgnored: true,
     primIdx: proxIdx,
     local: toLocalApprox(prox, joint),
     radius: endpointGirth(body.prims.slice(cluster.start, cluster.start + cluster.count), joint) * 1.2,
@@ -277,7 +287,8 @@ export function severDistal(body: BuildResult, cut: ChainCut): SeverResult {
   return {
     body: { ...body, prims, bonePrims: bodyBones },
     // Distal bone pieces ride the chunk (split above); the body keeps the proximal halves.
-    chunk: { limb: cut.limb, prims: chunkPrims, bones: chunkBones, origin, tornAt: [joint] },
+    chunk: { limb: cut.limb, prims: chunkPrims, bones: chunkBones, sourceIndices: distalIdxs,
+      sourceBoneIndices, origin, tornAt: [joint] },
     stumpWound,
   };
 }

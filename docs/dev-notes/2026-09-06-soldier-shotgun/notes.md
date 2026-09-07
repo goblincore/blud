@@ -31,3 +31,7 @@ Armor should break off under fire and expose the flesh underneath. Headshots sho
 [Model](model.png) · [Shoulder aim](lab-aim.png) · [Lab firing](lab-fire.png) · [Game firing](game-fire.png) · [Wall occlusion](game-wall-occlusion.png)
 
 Preview: [game](http://localhost:5184/sdf-game.html), [soldier lab](http://localhost:5184/sdf-lab-webgpu.html?character=soldier). New weapon/readability pass is on `codex/soldier-shotgun`; the previously approved AI polish is already in main.
+
+## September 6 follow-up
+
+The owner approved the larger weapon and subsequent appearance/injury work for main. The damage follow-up above is implemented as localized breakoff and injury/sever logic; the original dimensions and pose measurements here describe the earlier pass. See [final settings, captures and gotchas](../2026-09-06-soldier-bulk/notes.md).

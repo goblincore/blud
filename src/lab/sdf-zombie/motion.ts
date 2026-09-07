@@ -54,7 +54,7 @@ import type { GaitJointName, GaitLimbs, GaitProfile } from './gait';
 import { blendProfiles, GAIT_TUNING, jointNamesForBody, rotateYaw, stepGait, type ArmStyle } from './gait';
 import { runWeight, ZOMBIE_PROFILE, type MotionProfile } from './motion-profile';
 import {
-  armPivot, CARRIES, GUN_GRIP, gunPoseFromArm, gunPoint, type CarryName, type CarrySpec, type GunPose,
+  alignElbow, armPivot, CARRIES, GUN_GRIP, gunPoseFromArm, gunPoint, type CarryName, type CarrySpec, type GunPose,
 } from './carry';
 import type { WanderBounds, WanderState } from './wander';
 import { headingDir, stepWander, wrapPi, type Rng } from './wander';
@@ -495,7 +495,8 @@ export function stepMotion(
     wounds: sig.freshWounds,
     severed: sig.severed,
     missing: sig.missing,
-    forced: sig.forcedCollapse,
+    forced: sig.forcedCollapse || (profile.name === 'soldier'
+      && (!sig.headAlive || sig.missing.legL || sig.missing.legR)),
     ropes: joints.ropes,
   }, dt);
   const collapsed = collapse.phase !== 'standing';
@@ -514,7 +515,9 @@ export function stepMotion(
 
   // --- locomotion (standing only) -----------------------------------------
   let wander = state.wander;
-  if (!collapsed && cfg.wander) wander = stepWander(wander, rng, dt, bounds, profile.cruise,
+  const travelCruise = profile.name === 'soldier' && (sig.wounded.legL || sig.wounded.legR)
+    ? profile.cruise * 0.55 : profile.cruise;
+  if (!collapsed && cfg.wander) wander = stepWander(wander, rng, dt, bounds, travelCruise,
     cfg.faceHeading === undefined ? undefined : { faceHeading: cfg.faceHeading });
 
   // --- body yaw: the damped rigid turn -------------------------------------
@@ -764,6 +767,9 @@ export function stepMotion(
       targets[iE] = add(r.elbow, rotateYaw(stagger.offsets.elbowR ?? Z, bodyYaw));
       targets[iH] = add(r.hand, rotateYaw(stagger.offsets.handR ?? Z, bodyYaw));
       gun = gunPoseFromArm(targets[iE]!, targets[iH]!, right, carry.gunPitch);
+      // Keep the authored wrist/gun orientation, then swivel the elbow out
+      // of the vest. The shoulder and grip do not move, nor do arm lengths.
+      targets[iE] = alignElbow(targets[iS]!, targets[iE]!, targets[iH]!, rotateYaw([-inward, -1, 0.3], bodyYaw));
     }
     // Left arm: FABRIK onto the fore-end, elbow poled outward.
     if (gun && !sig.missing.armL) {
@@ -771,7 +777,7 @@ export function stepMotion(
       const target = gunPoint(gun, GUN_GRIP.foreHand);
       const chain = solveChain([targets[iS]!, targets[iE]!, targets[iH]!], joints.arm.L, target, SOLVE);
       const pole = rotateYaw(carry.leftPole, bodyYaw);
-      const elbow = poleReflect(chain[0]!, chain[1]!, chain[2]!, pole);
+      const elbow = alignElbow(chain[0]!, chain[1]!, chain[2]!, pole);
       targets[iE] = add(elbow, rotateYaw(stagger.offsets.elbowL ?? Z, bodyYaw));
       targets[iH] = add(chain[2]!, rotateYaw(stagger.offsets.handL ?? Z, bodyYaw));
     }

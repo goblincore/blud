@@ -20,6 +20,8 @@
 # equivalents are flat-top+pauldrons+belt. Same primitive count, same blend
 # weights, same "one colour per garment" rule.
 
+# 2026-09-06 silhouette pass: broad barrel torso and neck; all joint centers
+# and bone lengths are unchanged so weapon IK keeps its existing reach.
 model soldier
   height 1.70
   # humanoid | digitigrade. Checked, not decorative — see blob-checks.ts.
@@ -79,13 +81,13 @@ body
   # shirt came off, and unpainted means flesh -- so bare skin showed at the
   # crotch between two olive thighs. Same hex as the thighs, so the trouser
   # line runs unbroken from waist to knee. The chest and belly above stay bare.
-  blob torso on pelvis at=0.40 r=0.115 wide=1.00 tall=0.90 deep=0.78 blend=0.010 color=5c5d41
+  blob torso on pelvis at=0.40 r=0.142 wide=1.05 tall=0.90 deep=0.84 blend=0.010 color=5c5d41
   # Waist: trouser top rising to the belt line.
-  bar  torso on spine1 from=0.40 to=1.00 r=0.108 r2=0.105 deep=0.75 blend=0.008
+  bar  torso on spine1 from=0.40 to=1.00 r=0.129 r2=0.135 deep=0.85 blend=0.008
   # Chest: the sleeveless top under the plate — only a dark crescent shows
   # at the armpits and midriff, which is the point: bare arms and dark vest
   # against hard plate is most of the read.
-  bar  torso on chest  from=0.20 to=0.95 r=0.105 r2=0.115 deep=0.82 blend=0.008
+  bar  torso on chest  from=0.20 to=0.95 r=0.133 r2=0.145 deep=0.84 blend=0.008
 
   # ============================================================
   # THE CUIRASS — machined plate, proud of the torso. box + metal exist for
@@ -168,15 +170,15 @@ body
   # the shin all left for the kit (owner, 2026-09-04) -- webbing, plate and
   # footwear are mesh. The trousers stay as PAINT for the moment: they are
   # cloth on the leg rather than a separate object, so they cost nothing here.
-  blob leg on thigh at=0.00 r=0.075 deep=1.05 blend=0.008 mirror core color=5c5d41
-  bar  leg on thigh from=0.02 to=1.00 r=0.072 r2=0.058 deep=1.05 blend=0.007 mirror color=5c5d41
+  blob leg on thigh at=0.00 r=0.084 deep=1.05 blend=0.008 mirror core color=5c5d41
+  bar  leg on thigh from=0.02 to=1.00 r=0.079 r2=0.061 deep=1.05 blend=0.007 mirror color=5c5d41
   # Knee plate — hard box proud of the knee.
   # to 0.68 -> 1.00 (main, 2026-09-05): the shin used to stop at 68% of its
   # bone because the BOOT covered the rest. With no flesh foot at all now, the
   # shin runs to the ankle so the leg has an end inside the boot shaft rather
   # than a blunt stump above it. Tapered harder (r2 0.050 -> 0.044) so the
   # ankle narrows.
-  bar  leg on shin from=0.08 to=1.00 r=0.056 r2=0.044 blend=0.006 mirror color=676549
+  bar  leg on shin from=0.08 to=1.00 r=0.060 r2=0.044 blend=0.006 mirror color=676549
 
   # ============================================================
   # BOOTS — heavy, muted red (the second red accent), with a darker sole.
@@ -189,36 +191,17 @@ body
   # Sole — a flat dark slab under the foot.
 
   # Neck: skin, thick — a grunt's neck, not the schoolgirl's 0.028.
-  bar head on neck from=0.05 to=0.95 r=0.036 deep=1.10 blend=0.004
+  bar head on neck from=0.05 to=0.95 r=0.044 deep=1.10 blend=0.004
 
-  # ============================================================
-  # THE FLAT-TOP — the single most identifying feature. A SMALL squared cap
-  # sitting ON the crown, box-shaped so it cannot read round. The 2026-09-04
-  # lesson stands: a big helmet box reads as "a green rectangle bush" and
-  # breaks headShape()'s face projection; paint follows the NEAREST prim, so
-  # this only needs to be nearest at the crown, not to enclose the skull.
-  # tall 0.32 keeps it a CAP; the cranium's own roundness below it is skull,
-  # not hair.
-  # ============================================================
-  # offset.y 0.104 -> 0.082 (2026-09-04). MEASURED: the flat-top's underside
-  # sat at y 1.6386 while the cranium's crown reaches 1.6251 -- it FLOATED
-  # 13.5 mm clear of the head it is supposed to sit on. The defect was in the
-  # character as authored; the pauldrons hid it, and removing them exposed it.
-  # 22 mm down puts the box 8 mm INTO the crown, so the two fuse.
-  # NARROWER (owner, 2026-09-05: "his hair is too wide for his head, it looks
-  # like a box on his head"). wide 1.02 -> 0.78 and deep 0.96 -> 0.80 pull the
-  # cap inside the cranium's outline (0.143 m across -> 0.109; the skull is
-  # ~0.12), round 0.10 -> 0.22 softens the corners so it reads as a cut,
-  # not a crate. Still a box, still tall 0.30, still 8 mm into the crown.
-  blob head on skull at=0.55 offset=(0,0.074,-0.004) r=0.070 wide=0.78 tall=0.30 deep=0.80 box round=0.22 blend=0.004 color=2e6034
-  # A thin slab down the back of the head: the cut wraps the skull in the
-  # bake and in the brief's read, and from behind an all-skin head loses
-  # him. Flat, shallow, and proud only 6 mm.
-  blob head on skull at=0.62 offset=(0,0.028,-0.062) r=0.068 wide=0.92 tall=0.62 deep=0.30 box round=0.15 blend=0.004 color=2e6034
+  # Narrow flat strip along the crown, with parallel sides at the front.
+  blob head on skull at=0.55 offset=(0,0.071,0.010) r=0.070 wide=0.48 tall=0.24 deep=0.52 box round=0.18 blend=0.004 color=2e6034
+  # Only the rear tip tapers: a short join tucked into the crown, rather
+  # than a broad cap with a long tail running down the back of the head.
+  blob head on skull at=0.55 offset=(0,0.068,-0.020) tip=(0,-0.025,-0.043) r=0.028 r2=0.012 wide=1.10 tall=0.42 deep=0.70 blend=0.008 color=2e6034
 
 # ============================================================
-# FACE BLOCK — a heavy squarish skull under the cap: wide jaw for the beard,
-# heavy low brow for the scowl. The face ITSELF is the baked decal below;
+# FACE BLOCK — owner-tuned in the lab, 2026-09-06.
+# The face itself is the baked texture below;
 # three dispatches proved painted-prim features read as a visor band, and no
 # eye/mouth prims are added here for that reason.
 # ============================================================
@@ -227,64 +210,51 @@ face
   headWidth  0.980
   headHeight 1.150
   headDepth  1.050
-  jawWidth   1.000
+  jawWidth   0.816
   jawHeight  0.900
   jawDrop    0.060
-  jawJut     0.023
-  noseLength 0.034
-  noseWidth  0.531
+  jawJut     0.037
+  noseLength 0.031
+  noseWidth  1.085
   noseDrop   0.014
-  browHeavy  0.001
-  browRise   0.050
+  browHeavy  0.014
+  browRise   0.035
   headBlend  0.005
+  headRise   0
+  headLead   0
 
-# The mesh's own face, baked flat (npm run blob:face-bake -- soldier) and
-# pasted on: flat-top hairline, red eyes under a knitted brow, beard, open
-# shouting mouth. `decal 1` is load-bearing — the loader fetches the PNG
-# only if decal > 0.5.
-#
-# Projection solved against the bake's own feature coordinates (uv measured
-# off soldier-face.png: chin v 0.02, eyes v 0.32, ear edges u 0.27/0.71,
-# uv = hs * scale + centre with hs in skull semi-axes): scale 0.24/0.33,
-# centre 0.50/0.27. The bake's bottom third is shoulders, so centreY sits
-# far below the sheet default — that is the bake's framing, not a mistake.
+# Existing face bake with the owner's lab projection and Replace blend.
+# The body keeps its lighter skin palette; only painted red eyes emit.
 sheet
   image       soldier-face.png
-  decal       0
-  projScaleX  0.180
-  projScaleY  0.200
+  decal       1
+  blendLuma   0
+  projScaleX  0.210
+  projScaleY  0.210
   projCentreX 0.50
-  projCentreY 0.490
-  # Owner-tuned in the lab, 2026-09-04. THE COLOUR BAKE IS THE FACE -- the
-  # greyscale-map experiment was tried and reverted: luma modulation threw
-  # away the brow, nose and beard definition the colour bake carries, and the
-  # result read flatter, not more like the zombie.
-  #
-  # eyeGlowCut 0.670 is what makes the eyes glow, and it is the whole trick.
-  # The bake's max luma is 0.855, so at the 0.880 default NOTHING clears the
-  # glow mask -- which is why the eyes were dead. Dropping the cut below 0.855
-  # lets the bake's own painted red eyes light up, with no mask, no punched
-  # texels and no second image. decal 0 (multiply) is what lets them read as
-  # light rather than paint.
-  # eyeGlow is the GENERATED sheet's painted-eye brightness and does nothing
-  # for a baked face; eyeGlowAmp is the shader-side multiplier that does.
-  eyeGlow     0.500
-  eyeGlowAmp  0.500
-  eyeGlowCut  0.670
-  texRelief   1.400
-  texStrength 1.000
+  projCentreY 0.510
+  eyeGlowAmp  2.2
+  eyeGlowCut  0.55
+  eyeGlowRedOnly 1
+  texRelief   1.050
+  texStrength 1
+  projSpherical 0
+  faceForward 1
 
-# Skin around #cb956a as briefed (sRGB -> linear). Drier than the zombie
-# (wetness 0.15 vs latex-wet), warmer mottle. Wounds stay red.
+# Light, relatively dry skin separates the face and bare arms from olive
+# armor. The game must apply this character palette (not the zombie preset)
+# and the sheet's blend settings for the same result as the lab.
 palette
-  baseColor     0.606 0.306 0.145
+  surfaceNoiseAmp 0.06
+  silhouetteNoiseAmp 0.016
+  baseColor     0.522 0.424 0.333
   deepColor     0.50 0.08 0.08
   charColor     0.20 0.12 0.09
-  specIntensity 0.45
-  specRoughness 0.40
-  fresnelBoost  0.35
-  translucency  0.20
-  wetness       0.15
-  mottleAmp     0.15
+  specIntensity 0.35
+  specRoughness 0.5
+  fresnelBoost  1.5
+  translucency  0.2
+  wetness       0.79
+  mottleAmp     0.10
   mottleScale   1.4
-  mottleColor   0.45 0.25 0.12
+  mottleColor   0.54 0.39 0.28

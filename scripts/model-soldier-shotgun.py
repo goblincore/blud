@@ -2,7 +2,7 @@
 
 Run: /Applications/Blender.app/Contents/MacOS/Blender -b -t 2 -P scripts/model-soldier-shotgun.py
 All authored measurements below use the runtime frame: X right, Y up, Z forward.
-The origin is the receiver bore; the barrel ends at Muzzle, Z=.318 metres.
+The origin is the receiver bore; the barrel ends at Muzzle, Z=.410 metres.
 No textures, skeleton, animated parts, or FPV-only mechanisms are exported.
 """
 import json
@@ -16,9 +16,9 @@ from mathutils import Vector
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUTPUT = os.path.join(ROOT, "public/assets/lab/soldier-shotgun.glb")
-PREVIEW = os.path.join(ROOT, "docs/dev-notes/2026-09-06-soldier-shotgun/model.png")
+PREVIEW = os.path.join(ROOT, "docs/dev-notes/2026-09-06-soldier-bulk/model.png")
 LOCATORS = {"Grip_Hand": (0, -.074, -.074),
-            "Fore_Hand": (0, -.045, .155), "Muzzle": (0, 0, .318)}
+            "Fore_Hand": (0, -.045, .155), "Muzzle": (0, 0, .410)}
 bpy.ops.wm.read_factory_settings(use_empty=True)
 parts = []
 
@@ -106,37 +106,39 @@ def tube(name, z0, z1, y, radius, mat, inner=0, sides=12):
     return obj
 
 
+# Exaggerated furniture and bore thickness improve the game-distance read.
+# Hand attachments stay fixed; only the muzzle and short stock extend.
 # A single bore, visibly open at the muzzle; lower tube ends behind the barrel.
-tube("Single barrel", .045, .318, 0, .014, steel, inner=.0102)
-tube("Dark bore stop", .281, .282, 0, .0101, dark)
-tube("Muzzle collar", .305, .318, 0, .016, steel, inner=.014)
-tube("Magazine tube", .036, .272, -.032, .0105, steel)
-tube("Magazine end cap", .267, .281, -.032, .0125, dark)
-box("Barrel magazine clamp", (0, -.016, .254), (.022, .034, .01), dark)
-box("Front sight", (0, .019, .297), (.005, .011, .015), steel)
+tube("Single barrel", .045, .410, 0, .019, steel, inner=.0138)
+tube("Dark bore stop", .366, .367, 0, .0137, dark)
+tube("Muzzle collar", .389, .410, 0, .022, steel, inner=.019)
+tube("Magazine tube", .036, .346, -.043, .0145, steel)
+tube("Magazine end cap", .339, .358, -.043, .017, dark)
+box("Barrel magazine clamp", (0, -.022, .325), (.030, .046, .014), dark)
+box("Front sight", (0, .026, .379), (.008, .015, .021), steel)
 
-profile("Receiver", [(-.097,-.025), (-.102,.007), (-.09,.021), (.047,.021),
-                     (.066,.01), (.066,-.025), (.048,-.033), (-.077,-.033)],
-        .043, steel, .003)
+profile("Receiver", [(-.101,-.034), (-.108,.010), (-.092,.029), (.053,.029),
+                     (.074,.014), (.074,-.034), (.052,-.045), (-.081,-.045)],
+        .059, steel, .004)
 # An inset-looking dark ejection port and steel bolt plate on the right side.
-box("Ejection port", (.022, -.002, .013), (.0016, .022, .056), dark, .002)
-box("Bolt exposed through port", (.023, -.005, .008), (.0016, .012, .04), steel, .0005)
-box("Charging handle", (.031, -.001, -.002), (.021, .007, .009), dark, .001)
-box("Receiver top rib", (0, .024, -.012), (.014, .006, .101), dark)
-box("Rear sight", (0, .031, -.045), (.022, .009, .013), steel)
+box("Ejection port", (.030, -.003, .014), (.002, .030, .064), dark, .0025)
+box("Bolt exposed through port", (.031, -.007, .009), (.002, .016, .047), steel, .0007)
+box("Charging handle", (.042, -.002, -.002), (.028, .010, .013), dark, .0015)
+box("Receiver top rib", (0, .033, -.012), (.019, .008, .111), dark)
+box("Rear sight", (0, .043, -.045), (.030, .012, .018), steel)
 
 # Fixed support furniture: no pump joint or animation required.
-profile("Fixed olive fore-end", [(.082,-.029), (.205,-.029), (.219,-.04),
-                                 (.21,-.062), (.089,-.062), (.078,-.052)],
-        .046, olive, .003)
-for z in (.102, .122, .142, .162, .182, .202):
-    box("Fore-end traction band", (0, -.055, z), (.047, .012, .003), dark, 0)
+profile("Fixed olive fore-end", [(.076,-.022), (.225,-.022), (.241,-.039),
+                                 (.231,-.069), (.084,-.069), (.071,-.055)],
+        .063, olive, .004)
+for z in (.096, .121, .146, .171, .196, .221):
+    box("Fore-end traction band", (0, -.059, z), (.064, .015, .004), dark, 0)
 
 # Hand locator is inside the rounded slab grip; guard is forward of its strap.
 profile("Pistol grip", [(-.084,-.026), (-.047,-.031), (-.062,-.104),
-                        (-.096,-.107), (-.11,-.096)], .031, olive, .003)
+                        (-.096,-.107), (-.11,-.096)], .042, olive, .004)
 profile("Grip heel", [(-.065,-.101), (-.096,-.104), (-.108,-.096),
-                       (-.107,-.108), (-.095,-.113), (-.066,-.111)], .033, dark, .001)
+                       (-.107,-.108), (-.095,-.113), (-.066,-.111)], .045, dark, .0015)
 # Closed strap with genuinely empty guard interior, rather than a solid slab.
 guard = [(-.042,-.031), (.013,-.031), (.026,-.041), (.024,-.062),
          (.013,-.072), (-.032,-.072), (-.045,-.063)]
@@ -152,12 +154,12 @@ profile("Hanging curved trigger", [(-.012,-.031), (-.006,-.033), (-.009,-.048),
         .005, steel, .0005)
 
 # A short conventional shoulder stock seats at bore height at the upper butt.
-profile("Compact shoulder stock", [(-.094,.011), (-.144,.005), (-.25,.012),
-                                    (-.258,.005), (-.256,-.063), (-.238,-.067),
-                                    (-.153,-.042), (-.101,-.035)], .037, olive, .003)
-profile("Rubber shoulder pad", [(-.251,.013), (-.263,.009), (-.263,-.064),
-                               (-.253,-.068)], .041, dark, .001)
-box("Stock cheek strip", (0, .009, -.194), (.026, .005, .08), dark, .001)
+profile("Compact shoulder stock", [(-.096,.015), (-.151,.008), (-.266,.017),
+                                    (-.275,.007), (-.272,-.085), (-.251,-.090),
+                                    (-.159,-.057), (-.105,-.047)], .051, olive, .004)
+profile("Rubber shoulder pad", [(-.267,.018), (-.280,.012), (-.280,-.086),
+                               (-.269,-.092)], .056, dark, .0015)
+box("Stock cheek strip", (0, .014, -.205), (.036, .007, .095), dark, .0015)
 
 # Join disconnected solids into ONE draw mesh with only three material groups.
 bpy.ops.object.select_all(action="DESELECT")
@@ -235,7 +237,7 @@ bpy.context.collection.objects.link(camera)
 camera.location = center+Vector(coord((.9,.35,.4)))
 camera.rotation_euler = (center-camera.location).to_track_quat("-Z", "Y").to_euler()
 camera.data.type = "ORTHO"
-camera.data.ortho_scale = .66
+camera.data.ortho_scale = .80
 scene.camera = camera
 os.makedirs(os.path.dirname(PREVIEW), exist_ok=True)
 scene.render.filepath = PREVIEW

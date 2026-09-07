@@ -1192,7 +1192,8 @@ async function main() {
     gameTiles.track(view, tileBinding);
     // Bone tubes: with the mesh ON the field stops packing bone rows (task 5).
     view.setPackBones(!boneMesh);
-    view.applyMaterial(flesh, LIGHT_PRESETS['practical-hard-key']);
+    view.applyMaterial(name === 'soldier' ? character.palette ?? flesh : flesh,
+      LIGHT_PRESETS['practical-hard-key']);
     // The panel's ramp rides ON TOP of the material: applyMaterial just
     // wrote the preset defaults, so a tuned panel must re-stamp its values
     // or a rebuild would silently reset the ramp (the silent-reset class
@@ -1223,6 +1224,19 @@ async function main() {
       view.uniforms.faceProj.value.set(
         sheet.projScaleX, sheet.projScaleY, sheet.projCentreX, sheet.projCentreY,
       );
+      // Keep the soldier's authored face consistent with the lab. Projection
+      // alone still left the zombie's full-strength tint, relief and glow on
+      // his head, washing out the jaw and turning the entire face orange.
+      if (name === 'soldier') {
+        view.uniforms.faceCfg.value.set(
+          sheet.enabled ? (sheet.decal > 0.5 ? 2 : sheet.blendLuma > 0.5 ? 3 : 1) : 0,
+          sheet.texStrength, sheet.faceForward, sheet.texRelief,
+        );
+        view.uniforms.faceCfg2.value.x = sheet.projSpherical;
+        view.uniforms.faceCfg2.value.z = sheet.eyeGlowCut;
+        view.uniforms.faceCfg2.value.w = sheet.eyeGlowAmp;
+        view.uniforms.faceGlowRedOnly.value = sheet.eyeGlowRedOnly;
+      }
     } else {
       view.uniforms.faceProj.value.set(0.45, 0.58, 0.5, 0.56);
     }
@@ -2943,7 +2957,7 @@ async function main() {
       for (const a of actors) {
         if (!a.character) continue;
         const p = a.pose();
-        a.character.pose(a.posed(), a.boundRig(), p.yaw, a.sinceFire(), a.motionFrame(), dt, a.id);
+        a.character.pose(a.body, a.boundRig(), p.yaw, a.sinceFire(), a.motionFrame(), dt, a.id);
       }
       const now = performance.now() / 1000;
       for (const a of actors) {

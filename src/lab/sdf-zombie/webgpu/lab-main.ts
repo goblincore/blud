@@ -67,7 +67,9 @@ import {
   type Wound, type WoundType,
 } from '../damage';
 import { sdBody } from '../validate';
-import { severLimb, severDistal, gibAll, gibAllPieces } from '../sever';
+import { severLimb, severDistal, gibAll, gibAllPieces, type SeverResult } from '../sever';
+import { soldierInjury } from '../soldier-damage';
+import { posedDetachedChunk } from '../detached-pose';
 import { TileBinner } from './tile-cull';
 import { createComputeTileBinding } from './tile-bin-compute';
 import { makeGobs } from '../gobs';
@@ -764,6 +766,7 @@ async function main() {
     // without the panel being set by hand every reload.
     u.faceCfg2.value.z = params.eyeGlowCut;
     u.faceCfg2.value.w = params.eyeGlowAmp;
+    u.faceGlowRedOnly.value = params.eyeGlowRedOnly;
     u.faceCfg2.value.x = params.projSpherical;
     u.faceCfg.value.w  = params.texRelief;
     u.faceCfg.value.z  = params.faceForward;
@@ -1204,9 +1207,9 @@ async function main() {
     pendingWounds.length = 0;
     pendingSevered.length = 0;
     forcedCollapse = false;
-    // A fresh body gets its armour back; the released gun stays on the
-    // floor — that is the expected debris.
-    if (heroView.kit) heroView.kit.object.visible = true;
+    pendingFire = false;
+    sinceFire = Infinity;
+    lastMotionFrame = null;
     // Clear any melt on reset. stopMelt() owns the full teardown (progress,
     // held flag, released bone chunks and the shader uniform) — the melt
     // spike this replaced cleared three of its own variables by hand here,
@@ -1217,6 +1220,7 @@ async function main() {
   /** Full-limb severance map from cluster alive flags (mid-limb distal cuts
    *  leave the cluster alive and do NOT count — hop/collapse see full legs). */
   function missingLimbs(): MissingLimbs {
+    if (motionProfile.name === 'soldier') return soldierInjury(current, woundRing.all()).missing;
     const gone = (l: LimbId) => !(current.clusters.find(c => c.limb === l)?.alive ?? false);
     return { legL: gone('legL'), legR: gone('legR'), armL: gone('armL'), armR: gone('armR') };
   }
@@ -1224,6 +1228,7 @@ async function main() {
   /** Present-but-hurt limbs for the gait limp skew — a limb carrying at
    *  least one live wound on a still-alive cluster. */
   function woundedLimbs() {
+    if (motionProfile.name === 'soldier') return soldierInjury(current, woundRing.all()).wounded;
     const alive = (l: LimbId) => current.clusters.find(c => c.limb === l)?.alive ?? false;
     const w = { armL: false, armR: false, legL: false, legR: false };
     for (const wound of woundRing.all()) {
@@ -1285,17 +1290,18 @@ async function main() {
     return null;
   }
 
-  function uploadWounds(prims: BuildResult['prims'], yaw = heroMotion.lastBodyYaw) {
+  function uploadWounds(body: BuildResult, yaw = heroMotion.lastBodyYaw) {
     // Delegates to the shared ring, which pushes the SEVENTH row this function
     // never did: woundCarveNormal's inward depth-slab cap. That cap clips the
     // carve sphere so a crater on thin flesh floors instead of perforating —
     // the lab has been tuning wounds WITHOUT it while the game shipped WITH
     // it, which is the divergence 4c exists to close.
-    woundRing.refresh(view, { prims } as BuildResult, yaw);
+    // Pass the complete body: wound ownership also needs the live limb spans.
+    woundRing.refresh(view, body, yaw);
   }
   // Rest prims pair with the yaw-0 frame (they ARE the yaw-0 body); the
   // next frame's uploadWounds(posed) overwrites this transient anyway.
-  function refreshWounds() { uploadWounds(current.prims, 0); }
+  function refreshWounds() { uploadWounds(current, 0); }
 
   /**
    * The hero's wounds as world-space removal spheres, from the SAME posed
@@ -1404,6 +1410,7 @@ async function main() {
         v.setFaceTexture(faceSheet.tex, faceSheet.atlas, faceSheet.mean);
         v.uniforms.faceCfg.value.copy(u.faceCfg.value);
         v.uniforms.faceCfg2.value.copy(u.faceCfg2.value);
+        v.uniforms.faceGlowRedOnly.value = u.faceGlowRedOnly.value;
         v.uniforms.faceProj.value.copy(u.faceProj.value);
         // Spawn-time skull sphere from the placed field; while the crowd is
         // animated this is re-derived per frame from the POSED prims, same as
@@ -1483,6 +1490,44 @@ async function main() {
     { passive: true },
   );
 
+  function applyHeroSever(limb: LimbId, result: SeverResult) {
+    if (result.chunk.prims.length === 0) return;
+    const world = motionProfile.name === 'soldier';
+    const chunk = world ? posedDetachedChunk(current, lastPosed, result.chunk, heroMotion.lastBodyYaw) : result.chunk;
+    current = result.body;
+    if (motionProfile.name === 'soldier') {
+      const injury = soldierInjury(current, woundRing.all());
+      forcedCollapse ||= injury.fatal;
+      if (injury.missing.armR || injury.fatal) heroView.releaseProp([0, 0, 0], MOTION_SEED);
+    }
+    if (result.stumpWound) {
+      woundRing.stamp(result.stumpWound, lastPosed, heroMotion.lastBodyYaw);
+      pendingWounds.push(result.stumpWound);
+    }
+    pendingSevered.push(limb);
+    spawnChunk(limb, chunk.origin, chunk.prims, undefined,
+      chunk.tornAt.length ? chunk.tornAt : [attachPoint(chunk.prims, torsoCentre())],
+      'limb', world ? chunk.bones : undefined, Math.random, world);
+    view.update(current);
+    refreshWounds();
+    rebind();
+  }
+
+  function runHeroSeverChecks() {
+    const soldier = motionProfile.name === 'soldier';
+    const cuttingWounds = soldier ? woundRing.all().filter(w => !w.injuryIgnored) : [...woundRing.all()];
+    const fullCuts = cutLimbs(current, cuttingWounds, torsoCentre());
+    if (motionProfile.name === 'soldier') {
+      const injury = soldierInjury(current, woundRing.all());
+      forcedCollapse ||= injury.fatal;
+      for (const limb of injury.sever) if (!fullCuts.includes(limb)) fullCuts.push(limb);
+    }
+    for (const limb of fullCuts) applyHeroSever(limb, severLimb(current, limb));
+    for (const cut of cutChains(current, soldier ? cuttingWounds : [...woundRing.all()])) {
+      if (!fullCuts.includes(cut.limb)) applyHeroSever(cut.limb, severDistal(current, cut));
+    }
+  }
+
   // Shooting — left button only. Shift = blast, Alt = burn. Fires on pointerUP
   // because the same button also orbits: a press that travelled further than
   // DRAG_SLOP was a camera drag and must not also put a hole in the zombie.
@@ -1536,43 +1581,8 @@ async function main() {
     heroMotion.bound = impulseAt(heroMotion.bound, hit, [d.x * push, d.y * push, d.z * push]);
     refreshWounds();
 
-    // Wound-driven detachment: a carve that disconnects a limb severs it for
-    // real — same path as the keyboard sever.
-    const fullCuts = cutLimbs(current, [...woundRing.all()], torsoCentre());
-    for (const limb of fullCuts) {
-      const { body: next, chunk, stumpWound } = severLimb(current, limb);
-      if (chunk.prims.length === 0) continue;
-      current = next;
-      if (stumpWound) {
-        woundRing.stamp(stumpWound, lastPosed, heroMotion.lastBodyYaw);
-        pendingWounds.push(stumpWound);
-      }
-      pendingSevered.push(limb);
-      spawnChunk(limb, chunk.origin, chunk.prims, undefined,
-        [attachPoint(chunk.prims, torsoCentre())]);
-      view.update(current);
-      refreshWounds();
-      rebind();
-    }
-
-    // Mid-limb cuts: a carve that severs a CHAIN joint (knee, elbow…) drops
-    // everything distal to it as its own chunk — before this the distal piece
-    // stayed in the field and floated. Full-limb cuts above take precedence.
-    for (const cut of cutChains(current, [...woundRing.all()])) {
-      if (fullCuts.includes(cut.limb)) continue;
-      const { body: next, chunk, stumpWound } = severDistal(current, cut);
-      if (chunk.prims.length === 0) continue;
-      current = next;
-      if (stumpWound) {
-        woundRing.stamp(stumpWound, lastPosed, heroMotion.lastBodyYaw);
-        pendingWounds.push(stumpWound);
-      }
-      pendingSevered.push(cut.limb);
-      spawnChunk(cut.limb, chunk.origin, chunk.prims, undefined, chunk.tornAt);
-      view.update(current);
-      refreshWounds();
-      rebind();
-    }
+    if (motionProfile.name === 'soldier') pendingFire = false;
+    runHeroSeverChecks();
   });
 
   // -------------------------------------------------------------------------
@@ -1616,15 +1626,17 @@ async function main() {
   function spawnChunk(
     limb: LimbId, origin: Vec3, prims: typeof current.prims,
     vel?: Vec3, tornAt?: Vec3[], kind: ChunkKind = 'limb',
-    bones?: Primitive[], rng: () => number = Math.random,
+    bones?: Primitive[], rng: () => number = Math.random, worldSpace = false,
   ): number | null {
     if (prims.length === 0 && (!bones || bones.length === 0)) return null;
     // The sever results are authored rest-space; chunks live in world space.
     // With the hero wandering (or lying somewhere), spawn the piece where the
     // body actually is — chunk.pos is the recentring origin for the piece's
     // prims AND its physics seed, so both must shift together.
-    origin = add(origin, heroMotion.lastRootShift);
-    if (tornAt) tornAt = tornAt.map(t => add(t, heroMotion.lastRootShift));
+    if (!worldSpace) {
+      origin = add(origin, heroMotion.lastRootShift);
+      if (tornAt) tornAt = tornAt.map(t => add(t, heroMotion.lastRootShift));
+    }
     const v: Vec3 = vel ?? [
       (Math.random() - 0.5) * 4.5,
       2.5 + Math.random() * 2.5,
@@ -1744,6 +1756,10 @@ async function main() {
       spawnChunk(g.limb, g.origin, g.prims, vel, g.tornAt, 'gob');
     }
     current = next;
+    // Bake newly unsupported armor against the dying rig before resetMotion
+    // returns its bones to the origin. Detached geometry remains world-space.
+    heroView.pose(current, heroMotion.bound, heroMotion.lastBodyYaw, sinceFire,
+      lastMotionFrame, 0, MOTION_SEED);
     woundRing.set([]);
     view.update(current);
     refreshWounds();
@@ -2042,37 +2058,11 @@ async function main() {
       heroMotion.bound = impulseAt(heroMotion.bound, at, [vel[0] * k, vel[1] * k, vel[2] * k]);
     },
     severFullLimbs(limbs) {
-      for (const limb of limbs) {
-        const { body: next, chunk, stumpWound } = severLimb(current, limb);
-        if (chunk.prims.length === 0) continue;
-        current = next;
-        if (stumpWound) {
-          woundRing.stamp(stumpWound, lastPosed, heroMotion.lastBodyYaw);
-          pendingWounds.push(stumpWound); // stump meter fuel, as click-shoot
-        }
-        pendingSevered.push(limb);
-        spawnChunk(limb, chunk.origin, chunk.prims, undefined,
-          [attachPoint(chunk.prims, torsoCentre())]);
-        view.update(current);
-        refreshWounds();
-        rebind();
-      }
+      for (const limb of limbs) applyHeroSever(limb, severLimb(current, limb));
     },
     applyChainCuts(cuts) {
-      for (const cut of cuts) {
-        const { body: next, chunk, stumpWound } = severDistal(current, cut);
-        if (chunk.prims.length === 0) continue;
-        current = next;
-        if (stumpWound) {
-          woundRing.stamp(stumpWound, lastPosed, heroMotion.lastBodyYaw);
-          pendingWounds.push(stumpWound);
-        }
-        pendingSevered.push(cut.limb);
-        spawnChunk(cut.limb, chunk.origin, chunk.prims, undefined, chunk.tornAt);
-        view.update(current);
-        refreshWounds();
-        rebind();
-      }
+      for (const cut of cuts) applyHeroSever(cut.limb, severDistal(current, cut));
+      if (motionProfile.name === 'soldier') runHeroSeverChecks();
     },
     gibBody() { gibEverything(); },
     impulseChunks(list) {
@@ -2303,20 +2293,7 @@ async function main() {
     if (ev.key === 'm') { startMelt(); return; }
     if (ev.key === 'M') { stopMelt(); return; }
     const limb = SEVER_KEYS[ev.key];
-    if (!limb) return;
-    const { body: next, chunk, stumpWound } = severLimb(current, limb);
-    if (chunk.prims.length === 0) return;
-    current = next;
-    if (stumpWound) {
-      woundRing.stamp(stumpWound, lastPosed, heroMotion.lastBodyYaw);
-      pendingWounds.push(stumpWound);
-    }
-    pendingSevered.push(limb);
-    spawnChunk(limb, chunk.origin, chunk.prims, undefined,
-      [attachPoint(chunk.prims, torsoCentre())]);
-    view.update(current);
-    refreshWounds();
-    rebind();
+    if (limb) applyHeroSever(limb, severLimb(current, limb));
   });
 
   // -------------------------------------------------------------------------
@@ -2654,7 +2631,7 @@ async function main() {
       heroSignals.wounded = woundedLimbs();
       heroSignals.missing = missingLimbs();
       heroSignals.headAlive = current.clusters.find(c => c.limb === 'head')?.alive ?? false;
-      heroSignals.forcedCollapse = forcedCollapse;
+      heroSignals.forcedCollapse = forcedCollapse || (motionProfile.name === 'soldier' && soldierInjury(current, woundRing.all()).fatal);
       // severed/freshWounds ARE pendingSevered/pendingWounds (same array
       // references): drained in place after the first sub-step.
       heroSignals.severed = pendingSevered;
@@ -2796,7 +2773,7 @@ async function main() {
     const skull = headShape(frameBody);
     if (skull) view.setHeadShape(skull.centre, skull.axes);
     view.setHeadRotation(headQuatOf(heroMotion.bound, heroMotion.lastBodyYaw) ?? [0, 0, 0, 1]);
-    uploadWounds(frameBody.prims);
+    uploadWounds(frameBody);
 
     // — Crowd step: every body rigs and poses per frame, through the SAME
     //    stepActorMotion pipeline as body zero. Differences are policy, not
@@ -2925,11 +2902,26 @@ async function main() {
     override = { ...override, faceParams: face };
     saveOverride(activeCharacterName(), override);
     current = buildCharacterBody(entry, [0, 0, 0], [], face, override);
+    woundRing.set([]);
+    // Empty rings skip their usual upload; explicitly clear the old carve rows.
+    view.setWounds([], [], [], []);
     showErrors(current);
     view.update(current);
     refreshWounds();
     rebind();
     resetMotion(); // a rebuilt body is a new shambler, not a pose transfer
+    heroView.resetEquipment();
+    // Also restore a dropped gun while paused or in statue mode, where no
+    // subsequent locomotion frame may arrive to produce a fresh carry pose.
+    if (heroMotion.motionJoints && heroMotion.motionState) {
+      const initial = stepMotion(heroMotion.motionState, heroMotion.motionJoints,
+        { enabled: true, wander: false, profile: motionProfile },
+        { ...heroSignals, dt: 0, shot: null, fire: false, headAlive: true,
+          forcedCollapse: false, wounded: woundedLimbs(), missing: missingLimbs(),
+          freshWounds: [], severed: [] },
+        heroMotion.bound.rig.points, WANDER_BOUNDS, motionRng);
+      heroView.pose(current, heroMotion.bound, 0, Infinity, initial.frame, 0, MOTION_SEED);
+    }
   }
 
   const presetBox = addSection(panelEl, 'presets');
@@ -3116,13 +3108,21 @@ async function main() {
   matBox.appendChild(skinRow);
   addSlider(matBox, { label: 'skin lightness', min: -0.5, max: 0.5, step: 0.01, get: () => skinLight, set: v => { skinLight = v; applySkin(); } });
   const saveSkinBtn = addButton(matBox, 'save skin → repo', async () => {
-    const r = await fetch(`/__lab/save-palette?character=${encodeURIComponent(activeCharacterName())}`, {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ baseColor: flesh.baseColor.map(v => Math.round(v * 1000) / 1000) }),
-    });
-    const j = await r.json() as { ok: boolean; path?: string; error?: string };
-    saveSkinBtn.textContent = j.ok ? `saved ${j.path}` : `save failed: ${j.error}`;
+    try {
+      const r = await fetch(`/__lab/save-palette?character=${encodeURIComponent(activeCharacterName())}`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          baseColor: flesh.baseColor,
+          ...Object.fromEntries(MATERIAL_SLIDERS.map(s => [s.key, flesh[s.key]])),
+        }),
+      });
+      const j = await r.json() as { ok: boolean; path?: string; error?: string };
+      saveSkinBtn.textContent = j.ok ? `saved ${j.path}` : `save failed: ${j.error}`;
+    } catch (e) {
+      saveSkinBtn.textContent = `save failed: ${e instanceof Error ? e.message : String(e)}`;
+    }
   });
+  saveSkinBtn.title = 'Saves skin color and all material sliders. Skin lightness is baked into the saved color.';
 
   const bodyBox = addSection(panelEl, 'body');
   addSlider(bodyBox, {
@@ -3329,6 +3329,7 @@ async function main() {
   }
   addButton(faceBox, 'focus head', focusHead);
   addButton(faceBox, 'focus body', focusBody);
+
 
   // Crater shape. Kept out of FleshMaterial because these describe damage
   // GEOMETRY, not the surface — they change the field, not the shading.
@@ -3806,6 +3807,7 @@ async function main() {
       ['projScaleX', p.x], ['projScaleY', p.y],
       ['projCentreX', p.z], ['projCentreY', p.w],
       ['eyeGlowAmp', u.faceCfg2.value.w], ['eyeGlowCut', u.faceCfg2.value.z],
+      ['eyeGlowRedOnly', u.faceGlowRedOnly.value],
       ['texRelief', u.faceCfg.value.w], ['texStrength', u.faceCfg.value.y],
       ['projSpherical', u.faceCfg2.value.x], ['faceForward', u.faceCfg.value.z],
     ].map(([k, v]) => `  ${pad(String(k))} ${n(v as number, 3)}`);

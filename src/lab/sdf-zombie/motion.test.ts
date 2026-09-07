@@ -555,19 +555,16 @@ describe('soldier motion — profile, lean, carry', () => {
     expect(walk.frame.gaitName).toBe('march');
   });
 
-  it('the run lean pitches the head forward of the hips by ~sin(12°)·height', () => {
+  it('the run lean pitches the living chest forward of the hips by the authored angle', () => {
     const j = soldierJoints();
-    // headAlive false isolates the lean from the head aim: the soldier's
-    // rest skull points straight UP (unlike the zombie's hunch), so the
-    // horizon gaze drives the head to its 0.5 rad pitch clamp and would
-    // swamp the lean measurement (the composition is additive — no ordering
-    // or cone re-anchoring separates them). Cf. the idle-pose test above.
-    const { frame } = run(j, makeMotionState(3, [0, 0, 0]), CFG, 90,
-      () => ({ ...NO_SIGNALS(), headAlive: false }));
-    const hips = frame.restPose[j.index.hips]!, head = frame.restPose[j.index.head]!;
-    const dz = head[2] - hips[2];
-    const rise = head[1] - hips[1];
+    // Chest excludes the head-aim override. A missing soldier head is fatal,
+    // so headAlive:false would test collapse rather than standing run lean.
+    const { frame } = run(j, makeMotionState(3, [0, 0, 0]), CFG, 90);
+    const hips = frame.restPose[j.index.hips]!, chest = frame.restPose[j.index.chest]!;
+    const dz = chest[2] - hips[2];
+    const rise = chest[1] - hips[1];
     const expected = Math.sin(RUN.torsoLean * Math.PI / 180) * Math.hypot(rise, dz);
+    expect(frame.collapsed).toBe(false);
     expect(dz).toBeGreaterThan(expected * 0.6);
     expect(dz).toBeLessThan(expected * 1.6);
   });
@@ -577,8 +574,7 @@ describe('soldier motion — profile, lean, carry', () => {
     const cfg: MotionConfig = { enabled: true, wander: false, profile: SOLDIER_PROFILE, forceSpeed: 0, carryOverride: 'hip' };
     const { frame } = run(j, makeMotionState(3, [0, 0, 0]), cfg, 30);
     const P = frame.restPose;
-    const right = rotateYaw([1, 0, 0], frame.bodyYaw);
-    const gun = gunPoseFromArm(P[j.index.elbowR]!, P[j.index.handR]!, right, CARRIES.hip.gunPitch);
+    const gun = frame.gun!;
     const fore = gunPoint(gun, GUN_GRIP.foreHand);
     expect(len(sub(P[j.index.handL]!, fore))).toBeLessThan(0.02);
     for (const [s, e, h, lens] of [
@@ -914,6 +910,36 @@ describe('soldier aimed movement', () => {
   });
 });
 
+describe('soldier injury response', () => {
+  it('losing one leg or the head causes a terminal fall, while a zombie still hops on one leg', () => {
+    const leg = { ...NO_SIGNALS(), missing: { ...INTACT, legL: true } };
+    for (const signals of [leg, { ...NO_SIGNALS(), headAlive: false }]) {
+      const j = soldierJoints();
+      const result = stepMotion(makeMotionState(5, [0, 0, 0]), j,
+        { enabled: true, wander: true, profile: SOLDIER_PROFILE }, signals,
+        stubPoints(j), BOUNDS, makeRng(5));
+      expect(result.frame.collapsed).toBe(true);
+    }
+    const j = realJoints();
+    const zombie = stepMotion(makeMotionState(5, [0, 0, 0]), j,
+      { enabled: true, wander: true }, leg, stubPoints(j), BOUNDS, makeRng(5));
+    expect(zombie.frame.collapsed).toBe(false);
+    expect(zombie.frame.hop).toBe(true);
+  });
+
+  it('a wounded standing soldier visibly shortens the hurt leg stride and travels slower', () => {
+    const j = soldierJoints();
+    const start = makeMotionState(5, [0, 0, 0]);
+    start.wander = { ...start.wander, heading: 0, speed: SOLDIER_PROFILE.cruise, target: [0, 0, 3] };
+    const cfg: MotionConfig = { enabled: true, wander: true, profile: SOLDIER_PROFILE, faceHeading: 0 };
+    const healthy = run(j, start, cfg, 40);
+    const hurt = run(j, start, cfg, 40, () => ({ ...NO_SIGNALS(), wounded: { ...INTACT, legL: true } }));
+    expect(hurt.frame.collapsed).toBe(false);
+    expect(hurt.state.wander.pos[2]).toBeLessThan(healthy.state.wander.pos[2] * 0.85);
+    expect(hurt.frame.speed).toBeLessThan(healthy.frame.speed * 0.75);
+  });
+});
+
 
 describe('soldier two-hand transitions', () => {
   it('keeps the support grip reachable throughout ready, run, and aim transitions', () => {
@@ -993,5 +1019,24 @@ describe('soldier running ready carry', () => {
       points = P.map(p => ({ pos: [...p] as Vec3, prev: [...p] as Vec3, pinned: false }));
       state = next.state;
     }
+  });
+});
+
+
+describe('soldier aim armor clearance', () => {
+  it('clears the vest with a lowered, bent support elbow that leaves the face visible', () => {
+    const j = soldierJoints();
+    const { frame } = run(j, makeMotionState(3, [0, 0, 0]), {
+      enabled: true, wander: false, profile: SOLDIER_PROFILE, forceSpeed: 0, carryOverride: 'aim',
+    }, 90);
+    const P = frame.restPose, shoulder = P[j.index.shoulderR]!;
+    // Rear lower receiver corner is the part that previously buried in the vest.
+    const receiver = gunPoint(frame.gun!, [0.0295, -0.045, -0.081]);
+    expect(receiver[1]).toBeGreaterThan(shoulder[1]);
+    expect(P[j.index.elbowR]![0]).toBeLessThan(shoulder[0] - 0.1);
+    expect(P[j.index.elbowL]![1]).toBeLessThan(P[j.index.shoulderL]![1] - 0.06);
+    // The support elbow clears the plate in front, rather than rising over it.
+    expect(P[j.index.elbowL]![2]).toBeGreaterThan(P[j.index.shoulderL]![2] + 0.18);
+    expect(len(sub(P[j.index.handL]!, P[j.index.shoulderL]!))).toBeLessThan(0.46);
   });
 });

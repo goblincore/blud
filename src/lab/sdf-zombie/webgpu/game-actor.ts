@@ -25,12 +25,14 @@ import {
   MAX_WOUNDS, pushWound, WOUND_PROFILES, woundCarveNormal, woundWorldPos,
   type Wound, type WoundType,
 } from '../damage';
-import { severLimb, severDistal } from '../sever';
+import { severLimb, severDistal, type SeverResult } from '../sever';
+import { soldierInjury } from '../soldier-damage';
+import { posedDetachedChunk } from '../detached-pose';
 import { cutLimbs, cutChains } from '../connectivity';
 import { sdBody } from '../validate';
 import type { LimbId, Primitive, Vec3 } from '../types';
 import {
-  applyRigidYaw, fitRestToPose, woundFromPellet, woundFromSlug,
+  woundFromPellet, woundFromSlug,
 } from './game-weapon';
 import {
   makeMotionJoints, makeMotionState, stepMotion, planSubSteps,
@@ -416,6 +418,8 @@ export function createZombieActor(opts: {
   let current = body;
   let posed = body;
   let bodyYaw = 0;
+  const soldierDamage = opts.profile?.name === 'soldier';
+  let soldierFatal = false;
 
   // ---- damage state -------------------------------------------------------
   /** THE shared wound ring (character-view.ts). The character's own when the
@@ -465,6 +469,7 @@ export function createZombieActor(opts: {
   let detourSide: -1 | 0 | 1 = 0;
 
   function woundedLimbs() {
+    if (soldierDamage) return soldierInjury(current, woundRing.all()).wounded;
     const w = { armL: false, armR: false, legL: false, legR: false };
     for (const wound of woundRing.all()) {
       const prim = current.prims[wound.primIdx];
@@ -477,6 +482,7 @@ export function createZombieActor(opts: {
   }
 
   function missingLimbs(): MissingLimbs {
+    if (soldierDamage) return soldierInjury(current, woundRing.all()).missing;
     const gone = (l: LimbId) => !(current.clusters.find(c => c.limb === l)?.alive ?? false);
     return { legL: gone('legL'), legR: gone('legR'), armL: gone('armL'), armR: gone('armR') };
   }
@@ -529,24 +535,9 @@ export function createZombieActor(opts: {
     bound = next;
   }
 
-  function detach(limb: LimbId, r: { body: BuildResult; chunk: { prims: Primitive[]; bones: Primitive[]; origin: Vec3; tornAt: Vec3[] }; stumpWound: Wound | null }) {
+  function detach(limb: LimbId, r: SeverResult) {
     if (r.chunk.prims.length === 0) return;
-    // Place the piece where the RENDERED limb hangs: fit rest→posed over the
-    // chunk prims' own endpoint pairs (identity-matched against the pre-sever
-    // layout), then apply that centroid+yaw transform to the piece.
-    const idxOf = new Map<Primitive, number>();
-    posed.prims.forEach((p, i) => idxOf.set(body.prims[i]!, i));
-    const restPts: Vec3[] = [];
-    const posedPts: Vec3[] = [];
-    for (const cp of r.chunk.prims) {
-      const i = idxOf.get(cp);
-      if (i === undefined) continue;
-      const pp = posed.prims[i];
-      if (!pp) continue;
-      restPts.push(cp.a, cp.b);
-      posedPts.push(pp.a, pp.b);
-    }
-    const t = fitRestToPose(restPts, posedPts);
+    const piece = posedDetachedChunk(current, posed, r.chunk, bodyYaw, !soldierDamage);
     current = r.body;
     if (r.stumpWound) {
       woundRing.stamp(r.stumpWound, posed, bodyYaw);
@@ -556,25 +547,27 @@ export function createZombieActor(opts: {
     rebind();
     opts.onSever?.({
       limb,
-      origin: applyRigidYaw(t, r.chunk.origin),
-      prims: r.chunk.prims.map(p => ({ ...p, a: applyRigidYaw(t, p.a), b: applyRigidYaw(t, p.b) })),
-      // Bones take the IDENTICAL rest -> posed transform as the flesh. Giving
-      // them anything else (or nothing) leaves the stub at rest pose while the
-      // limb it belongs to is posed — the same defect translate.ts had.
-      bones: r.chunk.bones.map(p => ({ ...p, a: applyRigidYaw(t, p.a), b: applyRigidYaw(t, p.b) })),
-      tornAt: r.chunk.tornAt.map(v => applyRigidYaw(t, v)),
+      origin: piece.origin, prims: piece.prims, bones: piece.bones, tornAt: piece.tornAt,
     }, r.stumpWound);
   }
 
   function runSeverChecks() {
     const torsoC = current.clusters.find(c => c.limb === 'torso')?.center ?? [0, 1.1, 0] as Vec3;
-    const fullCuts = cutLimbs(current, [...woundRing.all()], torsoC);
+    const injury = soldierDamage ? soldierInjury(current, woundRing.all()) : null;
+    if (injury) soldierFatal ||= injury.fatal;
+    const cuttingWounds = soldierDamage ? woundRing.all().filter(w => !w.injuryIgnored) : [...woundRing.all()];
+    const fullCuts = [...new Set([...cutLimbs(current, cuttingWounds, torsoC), ...(injury?.sever ?? [])])];
     for (const limb of fullCuts) {
       detach(limb, severLimb(current, limb));
     }
-    for (const cut of cutChains(current, [...woundRing.all()])) {
+    for (const cut of cutChains(current, soldierDamage ? cuttingWounds : [...woundRing.all()])) {
       if (fullCuts.includes(cut.limb)) continue;
       detach(cut.limb, severDistal(current, cut));
+    }
+    if (soldierDamage) {
+      const after = soldierInjury(current, woundRing.all());
+      soldierFatal ||= after.fatal;
+      if (soldierFatal || after.missing.armR) opts.character?.releaseProp([0, 0, 0], opts.seed);
     }
   }
 
@@ -670,6 +663,12 @@ export function createZombieActor(opts: {
       if (!mind.meleeCapable) {
         signals.missing = missingLimbs();
         signals.wounded = woundedLimbs();
+      }
+      if (soldierDamage) {
+        soldierFatal ||= soldierInjury(current, woundRing.all()).fatal;
+        signals.forcedCollapse ||= soldierFatal;
+        signals.fire &&= !soldierFatal;
+        signals.headAlive = current.clusters.find(c => c.limb === 'head')?.alive ?? false;
       }
       if (think.halt && !mind.meleeCapable) {
         state = { ...state, wander: { ...state.wander, target: null, speed: 0, idle: 0 } };

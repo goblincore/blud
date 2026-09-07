@@ -72,7 +72,8 @@ export interface ZombieGpuView {
    *  = uncapped spheres (the lab — its look is pinned; old wounds). */
   setWounds(worldPositions: Vec3[], radii: number[], types: number[], ages: number[],
     splayScales?: number[], offsetScales?: number[],
-    caps?: readonly ({ n: Vec3; depth: number } | null)[]): void;
+    caps?: readonly ({ n: Vec3; depth: number } | null)[],
+    owners?: readonly ({ cluster: number; start: number; count: number } | null)[]): void;
   /** Wound union-reach cull gate (close-up wound-cull task, 2026-09-05).
    *  Ships ON — the cull is a value no-op (outside the bound every per-wound
    *  reach test would `continue`). false parks the bound's radius at 1e9 (the
@@ -338,6 +339,7 @@ export function defaultUniforms(faceTex: THREE.Texture) {
     // the flesh under it, a loose threshold paints a solid red patch across
     // the brow. Re-measure this if the art changes.
     faceCfg2: uniform(new THREE.Vector4(0, 0.5, 0.88, 1.6)),
+    faceGlowRedOnly: uniform(0),
     /** x glowFlicker, y timeSeconds, zw = noise root shift xz (setRootShift —
      *  the only spare vec2 in this uniform set; see march.wgsl.ts). Chunks
      *  overwrite zw per frame with their own position instead. */
@@ -916,6 +918,7 @@ export function createMarchMaterial(
     visceraDepth: u.visceraDepth,
     faceCfg: u.faceCfg,
     faceCfg2: u.faceCfg2,
+    faceGlowRedOnly: u.faceGlowRedOnly,
     faceCfg3: u.faceCfg3,
     faceProj: u.faceProj,
     faceAtlas: u.faceAtlas,
@@ -1221,6 +1224,8 @@ export function writeWounds(
    *  body cavity). Omitted or absent per wound = 0 — non-cavity, the state
    *  every pre-entrails wound had. Written for i < n only, like every row. */
   cavities?: readonly boolean[],
+  /** Owning cluster and its primitive span. Omitted = legacy world-space wound. */
+  owners?: readonly ({ cluster: number; start: number; count: number } | null)[],
 ): number {
   const stride = layout.stride ?? MAX_PRIMS;
   const woundRow = layout.woundRow ?? ROW_WOUND;
@@ -1248,6 +1253,10 @@ export function writeWounds(
       texels[capBase + i * 4 + 3] = cap.depth;
     }
     texels[flagBase + i * 4] = cavities?.[i] ? 1 : 0;
+    const owner = owners?.[i];
+    texels[flagBase + i * 4 + 1] = owner ? owner.cluster + 1 : 0;
+    texels[flagBase + i * 4 + 2] = owner?.start ?? 0;
+    texels[flagBase + i * 4 + 3] = owner ? owner.start + owner.count : 0;
   }
   return n;
 }
@@ -1636,8 +1645,8 @@ export function createZombieGpuView(
         depthPreMesh.scale.copy(mesh.scale);
       }
     },
-    setWounds(worldPositions, radii, types, ages, splayScales, offsetScales, caps) {
-      u.woundCfg.value.x = writeWounds(texels, worldPositions, radii, types, ages, splayScales, offsetScales, {}, caps);
+    setWounds(worldPositions, radii, types, ages, splayScales, offsetScales, caps, owners) {
+      u.woundCfg.value.x = writeWounds(texels, worldPositions, radii, types, ages, splayScales, offsetScales, {}, caps, undefined, owners);
       // Union-reach bound, from the LIVE woundCfg/woundCfg2 channels the
       // reach formula reads (blendK, rimOffset, rimWidth) — see
       // woundReachBound. Stale only under a live panel edit without a
@@ -1871,6 +1880,7 @@ export function createChunkGpuView(
     u.bodyHalf.value.copy(template.bodyHalf.value);
     u.faceCfg.value.copy(template.faceCfg.value);
     u.faceCfg2.value.copy(template.faceCfg2.value);
+    u.faceGlowRedOnly.value = template.faceGlowRedOnly.value;
     u.faceCfg3.value.copy(template.faceCfg3.value);
     u.lodCfg.value.copy(template.lodCfg.value);
     u.faceProj.value.copy(template.faceProj.value);

@@ -29,6 +29,8 @@ export interface HeldProp {
   muzzle(forward?: number): Vec3;
   /** True once released. */
   readonly released: boolean;
+  /** Reclaim the prop for a fresh body; the caller supplies its next held pose. */
+  reset(): void;
   dispose(): void;
 }
 
@@ -71,6 +73,10 @@ export async function loadHeldProp(url: string, renderer?: THREE.WebGPURenderer)
   return {
     object,
     get released() { return drop !== null; },
+    reset() {
+      drop = null;
+      object.visible = true;
+    },
     pose(gun, sinceFire, bodyRight) {
       if (drop) return;
       const rise = muzzleRise(sinceFire);

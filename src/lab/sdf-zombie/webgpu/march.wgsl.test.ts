@@ -722,8 +722,9 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     // for. Re-pin when a slot is added ON PURPOSE — a silent change here is
     // the phantom-input bug. +1 windDrift, +1 bodyAnchor (shell warp), +1 woundBound
     // (wound-cull), +2 depth prepass (depthPreTex, depthPreCfg) - all appended after
-    // the level-shadow tail, in that order.
-    expect(names.length).toBe(81);
+    // the level-shadow tail, in that order. +1 opt-in faceGlowRedOnly mask.
+    expect(names.length).toBe(82);
+    expect(names).toContain('faceGlowRedOnly');
     expect(names.slice(-6)).toEqual(['windDrift', 'bodyAnchor', 'woundBound', 'depthPreTex', 'depthPreCfg', 'normalGradientCfg']);
     // meltCfg sits between bodyHalf and the level-shadow tail, matching the
     // JS binding object in createMarchMaterial (positional — a swap silently
