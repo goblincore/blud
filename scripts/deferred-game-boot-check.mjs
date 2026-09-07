@@ -8,6 +8,19 @@
 // acceptance list (wounded zombie, goblin kit + generated face, soldier held
 // prop, blood, detached chunk), proves the shadow generation/sampling toggles
 // report distinct counters, and saves labelled screenshots for inspection.
+//
+// STRENGTHENED (task-5 continuation, 2026-09-07): diagnostics alone are not
+// visual evidence — this run's first version passed ten checks while the
+// composite was a black opaque canvas, and the original wounded capture faced
+// +Z with the actor 1.2 m to the WEST (out of frame). Every capture now
+// (a) aims its camera at the subject with the page's own yaw convention and
+// asserts the subject IN FRAME through __sdfGame.screenPosOf (live camera
+// projection), (b) is decoded in-page and checked for actual pixel coverage
+// — the frame must not be black (room coverage) and actor shots must carry a
+// lit centre. The light-calibration stage pins the flashKey march-key
+// conversion and the flesh ROI clip/mean band at the shipped default gain
+// (reproducible replacement for the one-off gain-sweep probes).
+//
 // Every CDP request is bounded; the owned tab/socket close in finally; the
 // driver exits nonzero on any assertion failure or page error.
 import assert from 'node:assert/strict';
@@ -48,12 +61,82 @@ const evaluate = async (expression) => {
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const check = (name, detail) => { checks.push({ name, detail }); console.log('PASS', name, JSON.stringify(detail)); };
-const shot = async (name) => {
+
+/** The page's own aim convention: forward is (+sin yaw, -cos yaw). */
+const aimYawAt = (px, pz, tx, tz) => Math.atan2(tx - px, -(tz - pz));
+
+/** Decode a screenshot IN PAGE and return region statistics (small numbers
+ *  only — raw pixels never leave the page). Regions are [x0, y0, x1, y1]. */
+const frameStats = async (b64, regions) => await evaluate(`(async () => {
+  const res = await fetch('data:image/png;base64,' + ${JSON.stringify(b64)});
+  const bmp = await createImageBitmap(await res.blob());
+  const c = new OffscreenCanvas(bmp.width, bmp.height);
+  const ctx = c.getContext('2d');
+  ctx.drawImage(bmp, 0, 0);
+  const stats = {};
+  for (const [k, [x0, y0, x1, y1]] of Object.entries(${JSON.stringify(regions)})) {
+    const d = ctx.getImageData(x0, y0, x1 - x0, y1 - y0).data;
+    let r = 0, g = 0, b = 0, clip = 0, dark = 0; const n = d.length / 4;
+    for (let i = 0; i < d.length; i += 4) {
+      r += d[i]; g += d[i + 1]; b += d[i + 2];
+      if (d[i] > 246 && d[i + 1] > 246 && d[i + 2] > 246) clip++;
+      if (d[i] < 8 && d[i + 1] < 8 && d[i + 2] < 8) dark++;
+    }
+    stats[k] = { mean: [Math.round(r / n), Math.round(g / n), Math.round(b / n)],
+      clipPct: Math.round(1000 * clip / n) / 10, darkPct: Math.round(1000 * dark / n) / 10 };
+  }
+  // Whole-frame room coverage on a coarse grid: a BLACK canvas (the failure
+  // this guards) reads ~100% dark; a real composite stays well under.
+  const fd = ctx.getImageData(0, 0, bmp.width, bmp.height).data;
+  let nonDark = 0, samples = 0;
+  for (let y = 0; y < bmp.height; y += 8) {
+    for (let x = 0; x < bmp.width; x += 8) {
+      const i = (y * bmp.width + x) * 4;
+      samples++;
+      if (fd[i] > 10 || fd[i + 1] > 10 || fd[i + 2] > 10) nonDark++;
+    }
+  }
+  stats.frame = { nonDarkPct: Math.round(1000 * nonDark / samples) / 10, w: bmp.width, h: bmp.height };
+  return stats;
+})()`);
+
+/** Capture a labelled screenshot + its pixel stats into the records. */
+const captures = {};
+const shot = async (name, regions, limits) => {
   const s = await send('Page.captureScreenshot', { format: 'png' });
   const b64 = s?.result?.data;
   assert.ok(b64, `${name}: captureScreenshot returned no data`);
   writeFileSync(`${out}/${name}`, Buffer.from(b64, 'base64'));
+  const stats = await frameStats(b64, regions ?? {});
+  captures[name] = { stats };
+  if (limits?.minFrameNonDark !== undefined) {
+    assert.ok(stats.frame.nonDarkPct >= limits.minFrameNonDark,
+      `${name}: frame is ${stats.frame.nonDarkPct}% non-dark — black/empty composite`);
+  }
+  if (limits?.region) {
+    for (const [region, [minMean, maxClipPct]] of Object.entries(limits.region)) {
+      const rs = stats[region];
+      assert.ok(rs, `${name}: no stats for region ${region}`);
+      const lum = (rs.mean[0] + rs.mean[1] + rs.mean[2]) / 3;
+      assert.ok(lum >= minMean, `${name}: ${region} mean ${rs.mean} too dark (min ${minMean})`);
+      if (maxClipPct !== undefined) {
+        assert.ok(rs.clipPct <= maxClipPct,
+          `${name}: ${region} clipped ${rs.clipPct}% (max ${maxClipPct}%) — wound-deleting blowout`);
+      }
+    }
+  }
+  return stats;
 };
+
+/** Assert a world point is in frame through the LIVE camera. */
+const assertInFrame = async (label, x, y, z, maxNdc = 0.9) => {
+  const sp = await evaluate(`__sdfGame.screenPosOf(${x}, ${y}, ${z})`);
+  assert.ok(sp, `${label}: screenPosOf returned nothing`);
+  assert.ok(Math.abs(sp.x) <= maxNdc && Math.abs(sp.y) <= maxNdc && sp.z < 1,
+    `${label}: subject NOT in frame (ndc ${JSON.stringify(sp)}), the camera does not face it`);
+  return sp;
+};
+
 /** Snapshot the error count so a fresh stage starts from a clean slate. */
 let errMark = 0;
 const noNewErrors = (stage) => {
@@ -92,8 +175,27 @@ const waitForMeshCount = async (want, label, tries = 60) => {
   throw new Error(`${label}: router mesh count never reached ${want} (got ${got})`);
 };
 
+/** Teleport to (px,pz) FACING a target at (tx,tz), torso-height aim. */
+const faceTarget = async (px, pz, tx, tz, dist = 1.8) => {
+  const yaw = aimYawAt(px, pz, tx, tz);
+  await evaluate(`__sdfGame.setPose(${px}, ${pz}, ${yaw}, -0.12); __sdfGame.step(4);`);
+  const sp = await assertInFrame('faceTarget', tx, 1.2, tz);
+  return { yaw, screen: sp, dist };
+};
+
+/** Standard capture regions: the centre band where a framed subject lands,
+ *  plus a strip of unlit wall (must stay dark — the dungeon requirement). */
+const ACTOR_REGIONS = {
+  center: [460, 240, 860, 620],
+  darkWall: [140, 380, 280, 520],
+};
+const ACTOR_LIMITS = {
+  minFrameNonDark: 8,
+  region: { center: [18], darkWall: [0, 60] },
+};
+
 const results = { checks, pageErrors, pass: false };
-const records = {};
+const records = { captures };
 try {
   await send('Page.enable'); await send('Runtime.enable');
   await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
@@ -125,24 +227,69 @@ try {
     counts: diag.router.counts, lights: diag.lights.ids,
     dropped: diag.lights.dropped, shadow: diag.shadow, sizes: diag.sizes,
   });
+
+  // M2 task-5 continuation: the march-key conversion must be live. The
+  // flashlight slot carries the game's beamTuning (gain 4, shoulder 0.35 ->
+  // knee 0.65) scaled by the calibrated default light gain (0.5).
+  assert.equal(diag.lightGain, 0.5, 'the calibrated default light gain must ship active');
+  assert.ok(diag.lights.flashKey, `flashlight must carry the march-key stamp: ${JSON.stringify(diag.lights.flashKey)}`);
+  assert.ok(Math.abs(diag.lights.flashKey.fleshKeyIntensity - 2) < 1e-3,
+    `flesh key intensity = beamGain * lightGain = 2.0, got ${JSON.stringify(diag.lights.flashKey)}`);
+  assert.ok(Math.abs(diag.lights.flashKey.fleshShoulderKnee - 0.65) < 1e-3,
+    `flesh shoulder knee = 1 - 0.35, got ${JSON.stringify(diag.lights.flashKey)}`);
+  check('flashkey-conversion', diag.lights.flashKey);
   noNewErrors('deferred diagnostics');
 
-  // Soldier (room 1): kit, held prop, generated face — frame him.
-  await evaluate('__sdfGame.setPose(0, 2.2, 0, 0); __sdfGame.step(3);');
-  await shot('task5-deferred-soldier.png');
-  check('soldier-captured', { room1: await evaluate('__sdfGame.zombies().find(z => z.room === 1)') });
+  // The boot frame itself must be a real composite (room visible), not the
+  // black opaque canvas this check's first version scored ten greens on.
+  const bootStats = await shot('task5-deferred-boot.png', { frame: [0, 0, 1280, 800] },
+    { minFrameNonDark: 8 });
+  check('boot-frame-coverage', bootStats.frame);
+  records.captures = captures;
 
-  // Wounded zombie + blood: teleport beside a room-2 body and detonate.
+  // Soldier (room 1): kit, held prop, generated face — FACING him.
+  const soldier = await evaluate('__sdfGame.zombies().find(z => z.room === 1)');
+  assert.ok(soldier, 'a room-1 soldier must exist');
+  const sCam = { px: soldier.pos[0] + 1.6, pz: soldier.pos[2] + 0.4 };
+  await faceTarget(sCam.px, sCam.pz, soldier.pos[0], soldier.pos[2]);
+  await evaluate('__sdfGame.step(2)');
+  const soldierStats = await shot('task5-deferred-soldier.png', ACTOR_REGIONS, ACTOR_LIMITS);
+  records.captures = captures;
+  check('soldier-captured', {
+    room1: soldier.room, screen: (await evaluate(`__sdfGame.screenPosOf(${soldier.pos[0]}, 1.2, ${soldier.pos[2]})`)),
+    stats: soldierStats,
+  });
+  noNewErrors('soldier capture');
+
+  // Wounded zombie + blood: teleport BESIDE a room-2 body FACING it, blast,
+  // capture the wound evidence (clip band = the calibration this run ships).
   const z = await evaluate('__sdfGame.zombies().find(z2 => z2.room === 2)');
   assert.ok(z, 'a room-2 zombie must exist');
-  await evaluate(`__sdfGame.setPose(${z.pos[0] + 1.2}, ${z.pos[2]}, ${Math.PI}); __sdfGame.step(3);`);
+  const wCam = { px: z.pos[0] + 1.8, pz: z.pos[2] };
+  await faceTarget(wCam.px, wCam.pz, z.pos[0], z.pos[2]);
   const blast = await evaluate(`__sdfGame.explode(${z.pos[0]}, 1.2, ${z.pos[2]})`);
   assert.ok(blast.totalWounds > 0, `the blast must wound: ${JSON.stringify(blast)}`);
   await evaluate('__sdfGame.step(30)');
   const wounds = await evaluate(`__sdfGame.debugWounds(${z.id})`);
   assert.ok(Array.isArray(wounds) && wounds.length > 0, 'the wounded ring must carry the blast');
-  await shot('task5-deferred-wounded.png');
-  check('wounded-zombie', { blast, woundCount: wounds.length });
+  await assertInFrame('wounded', z.pos[0], 1.2, z.pos[2]);
+  // TORSO ROI — the calibration band: clip near-legacy, mean in the lit band.
+  // Regions were measured on the task5-cal2 captures (torso of a body 1.8 m
+  // out, beam centre). The old blown frame clips 32% here; legacy clips 0.7%.
+  const woundedStats = await shot('task5-deferred-wounded.png', {
+    torso: [560, 330, 780, 550],
+    ...ACTOR_REGIONS,
+  }, {
+    minFrameNonDark: 8,
+    region: {
+      torso: [110, 3.5],   // min mean, max clip% — rejects black AND blowout
+      center: [18],
+      darkWall: [0, 60],
+    },
+  });
+  records.captures = captures;
+  check('wounded-zombie', { blast, woundCount: wounds.length, stats: woundedStats });
+  noNewErrors('wounded capture');
 
   // Goblin: kit + generated face, spawned through the SAME spawn path.
   const beforeMesh = (await evaluate('__sdfGame.deferredDiagnostics()')).router.counts.mesh;
@@ -150,17 +297,19 @@ try {
   assert.ok(goblin.id > 0, `goblin spawn failed: ${JSON.stringify(goblin)}`);
   const afterMesh = await waitForMeshCount(beforeMesh + 1, 'goblin kit discovery');
   const gz = await evaluate(`__sdfGame.zombies().find(z2 => z2.id === ${goblin.id})`);
-  await evaluate(`__sdfGame.setPose(${gz.pos[0] + 1.1}, ${gz.pos[2]}, ${Math.PI}); __sdfGame.step(6);`);
-  await shot('task5-deferred-goblin.png');
-  check('goblin-kit-face', { id: goblin.id, meshCount: beforeMesh, afterMesh });
+  const gCam = { px: gz.pos[0] + 1.5, pz: gz.pos[2] + 0.3 };
+  await faceTarget(gCam.px, gCam.pz, gz.pos[0], gz.pos[2]);
+  await evaluate('__sdfGame.step(4)');
+  await assertInFrame('goblin', gz.pos[0], 1.1, gz.pos[2]);
+  const goblinStats = await shot('task5-deferred-goblin.png', ACTOR_REGIONS, ACTOR_LIMITS);
+  records.captures = captures;
+  check('goblin-kit-face', { id: goblin.id, meshCount: beforeMesh, afterMesh, stats: goblinStats });
+  noNewErrors('goblin capture');
 
-  // Detached chunk: point-blank slugs into a body until something severs.
-  // Aim convention (aimAtNearestSurfa... the page's own): forward is
-  // (+sin yaw, -cos yaw), so facing the target is yaw = atan2(dx, -dz); the
-  // eye sits ~1.7 m, so pitch dips slightly at a torso 1 m away.
+  // Detached chunk: point-blank slugs into the wounded body until something
+  // severs; the final frame FACES the corpse + chunk.
   const sdfBefore = (await evaluate('__sdfGame.deferredDiagnostics()')).router.counts.sdf;
   const target = z;
-  const aimYawAt = (px, pz, tx, tz) => Math.atan2(tx - px, -(tz - pz));
   let severed = false;
   for (let i = 0; i < 20 && !severed; i++) {
     const px = target.pos[0] + 0.9, pz = target.pos[2];
@@ -172,25 +321,33 @@ try {
     if (sdfNow > sdfBefore) severed = true;
   }
   assert.ok(severed, 'slugs at point-blank must sever a piece into a chunk');
-  await evaluate(`__sdfGame.setPose(${target.pos[0] + 1.4}, ${target.pos[2]}, ${Math.PI}); __sdfGame.step(10);`);
-  await shot('task5-deferred-chunk.png');
-  check('detached-chunk', { sdfBefore, routed: 'chunk proxy registered sdf; baked swap registers mesh' });
+  const cCam = { px: target.pos[0] + 1.4, pz: target.pos[2] + 0.2 };
+  await faceTarget(cCam.px, cCam.pz, target.pos[0], target.pos[2]);
+  await evaluate('__sdfGame.step(10)');
+  await assertInFrame('chunk', target.pos[0], 1.0, target.pos[2], 0.95);
+  const chunkStats = await shot('task5-deferred-chunk.png', ACTOR_REGIONS, ACTOR_LIMITS);
+  records.captures = captures;
+  check('detached-chunk', { sdfBefore, stats: chunkStats });
+  noNewErrors('chunk capture');
 
   // Shadow sampling-only toggle: maps keep rendering, lit stage ignores them.
   await evaluate('__sdfGame.setSpotShadowSampling(false); __sdfGame.step(3);');
   const samplingOff = await evaluate('__sdfGame.deferredDiagnostics()');
   assert.equal(samplingOff.shadow.sampling, false);
   assert.equal(samplingOff.shadow.renderedMaps, 2, 'generation continues while sampling is off');
-  await shot('task5-deferred-sampling-off.png');
+  const samplingOffStats = await shot('task5-deferred-sampling-off.png', ACTOR_REGIONS, ACTOR_LIMITS);
   await evaluate('__sdfGame.setSpotShadowSampling(true); __sdfGame.step(2);');
-  check('sampling-toggle', { sampling: samplingOff.shadow.sampling, renderedMaps: samplingOff.shadow.renderedMaps });
+  check('sampling-toggle', {
+    sampling: samplingOff.shadow.sampling, renderedMaps: samplingOff.shadow.renderedMaps,
+    stats: samplingOffStats,
+  });
 
   // Generation off (?spotshadow=0 seam): zero map renders, distinct counters.
   await evaluate('__sdfGame.setSpotShadow(false); __sdfGame.step(3);');
   const genOff = await evaluate('__sdfGame.deferredDiagnostics()');
   assert.equal(genOff.shadow.renderedMaps, 0, 'generation off renders zero maps');
   assert.equal(genOff.shadow.sampling, true, 'sampling flag is independent of generation');
-  await shot('task5-deferred-gen-off.png');
+  await shot('task5-deferred-gen-off.png', ACTOR_REGIONS, ACTOR_LIMITS);
   await evaluate('__sdfGame.setSpotShadow(true); __sdfGame.step(2);');
   check('generation-toggle', genOff.shadow);
   noNewErrors('deferred toggles');
@@ -203,11 +360,14 @@ try {
   const legacyDiag = await evaluate('__sdfGame.deferredDiagnostics()');
   assert.deepEqual(legacyDiag, { mode: 'legacy' }, 'legacy boot reports the legacy mode only');
   const zl = await evaluate('__sdfGame.zombies().find(z2 => z2.room === 2)');
-  await evaluate(`__sdfGame.setPose(${zl.pos[0] + 1.2}, ${zl.pos[2]}, ${Math.PI}); __sdfGame.step(3);`);
+  await faceTarget(zl.pos[0] + 1.8, zl.pos[2], zl.pos[0], zl.pos[2]);
   await evaluate(`__sdfGame.explode(${zl.pos[0]}, 1.2, ${zl.pos[2]})`);
   await evaluate('__sdfGame.step(30)');
-  await shot('task5-legacy-wounded.png');
-  check('boot-legacy', { mode: legacyMode, present: await evaluate('__sdfGame.presentCount()') });
+  const legacyStats = await shot('task5-legacy-wounded.png', {
+    torso: [560, 330, 780, 550],
+    ...ACTOR_REGIONS,
+  }, { minFrameNonDark: 8, region: { center: [18] } });
+  check('boot-legacy', { mode: legacyMode, present: await evaluate('__sdfGame.presentCount()'), stats: legacyStats });
 
   // Unsupported explicit deferred must be a visible fatal, not a legacy boot:
   // emulate the WebGL fallback by asserting resolveGameBootMode's contract

@@ -4002,6 +4002,15 @@ async function main() {
       player.grounded = y === 0;
     },
     pose: () => ({ pos: [...player.pos] as Vec3, yaw: player.yaw, pitch: player.pitch }),
+    /** Project a world point through the LIVE game camera to NDC + a
+     *  behind-camera flag (M2 task 5 boot driver: proves a capture subject
+     *  is actually IN FRAME — the old wounded capture faced +Z with the
+     *  actor 1.2 m to the west and nothing caught it). |ndc| <= 1 is on
+     *  screen; z > 1 means behind/clipped. */
+    screenPosOf(x: number, y: number, z: number) {
+      const v = new THREE.Vector3(x, y, z).project(camera);
+      return { x: v.x, y: v.y, z: v.z };
+    },
     /** Teleport to a room's centre, facing +z. */
     teleport(roomId: number) {
       const r = ROOMS.find(r => r.id === roomId);

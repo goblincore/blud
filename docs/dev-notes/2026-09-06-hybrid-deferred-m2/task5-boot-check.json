@@ -52,17 +52,53 @@
       }
     },
     {
+      "name": "flashkey-conversion",
+      "detail": {
+        "fleshKeyIntensity": 2,
+        "fleshShoulderKnee": 0.65
+      }
+    },
+    {
+      "name": "boot-frame-coverage",
+      "detail": {
+        "nonDarkPct": 91.5,
+        "w": 1280,
+        "h": 800
+      }
+    },
+    {
       "name": "soldier-captured",
       "detail": {
-        "room1": {
-          "id": 1,
-          "room": 1,
-          "pos": [
-            -4.206126435844296,
-            0,
-            -4.752741787306656
-          ],
-          "yaw": 1.0437944901923433
+        "room1": 1,
+        "screen": {
+          "x": 1.973541442526412e-16,
+          "y": -0.1300884402003047,
+          "z": 0.9412170051348197
+        },
+        "stats": {
+          "center": {
+            "mean": [
+              73,
+              70,
+              71
+            ],
+            "clipPct": 1.9,
+            "darkPct": 3
+          },
+          "darkWall": {
+            "mean": [
+              23,
+              18,
+              13
+            ],
+            "clipPct": 0,
+            "darkPct": 17.3
+          },
+          "frame": {
+            "nonDarkPct": 86.3,
+            "w": 1280,
+            "h": 800
+          }
         }
       }
     },
@@ -74,7 +110,41 @@
           "bodiesHit": 2,
           "totalWounds": 32
         },
-        "woundCount": 16
+        "woundCount": 16,
+        "stats": {
+          "torso": {
+            "mean": [
+              180,
+              154,
+              155
+            ],
+            "clipPct": 1.2,
+            "darkPct": 0
+          },
+          "center": {
+            "mean": [
+              97,
+              84,
+              85
+            ],
+            "clipPct": 0.8,
+            "darkPct": 2.9
+          },
+          "darkWall": {
+            "mean": [
+              14,
+              13,
+              14
+            ],
+            "clipPct": 0,
+            "darkPct": 0
+          },
+          "frame": {
+            "nonDarkPct": 84.9,
+            "w": 1280,
+            "h": 800
+          }
+        }
       }
     },
     {
@@ -82,21 +152,95 @@
       "detail": {
         "id": 11,
         "meshCount": 199,
-        "afterMesh": 200
+        "afterMesh": 200,
+        "stats": {
+          "center": {
+            "mean": [
+              98,
+              74,
+              70
+            ],
+            "clipPct": 0.2,
+            "darkPct": 0.8
+          },
+          "darkWall": {
+            "mean": [
+              75,
+              42,
+              30
+            ],
+            "clipPct": 0,
+            "darkPct": 0
+          },
+          "frame": {
+            "nonDarkPct": 86.4,
+            "w": 1280,
+            "h": 800
+          }
+        }
       }
     },
     {
       "name": "detached-chunk",
       "detail": {
         "sdfBefore": 11,
-        "routed": "chunk proxy registered sdf; baked swap registers mesh"
+        "stats": {
+          "center": {
+            "mean": [
+              104,
+              66,
+              64
+            ],
+            "clipPct": 0.2,
+            "darkPct": 2.4
+          },
+          "darkWall": {
+            "mean": [
+              16,
+              14,
+              15
+            ],
+            "clipPct": 0,
+            "darkPct": 0
+          },
+          "frame": {
+            "nonDarkPct": 84,
+            "w": 1280,
+            "h": 800
+          }
+        }
       }
     },
     {
       "name": "sampling-toggle",
       "detail": {
         "sampling": false,
-        "renderedMaps": 2
+        "renderedMaps": 2,
+        "stats": {
+          "center": {
+            "mean": [
+              115,
+              78,
+              78
+            ],
+            "clipPct": 0.3,
+            "darkPct": 1.4
+          },
+          "darkWall": {
+            "mean": [
+              16,
+              14,
+              15
+            ],
+            "clipPct": 0,
+            "darkPct": 0
+          },
+          "frame": {
+            "nonDarkPct": 84.7,
+            "w": 1280,
+            "h": 800
+          }
+        }
       }
     },
     {
@@ -115,7 +259,41 @@
       "name": "boot-legacy",
       "detail": {
         "mode": "legacy",
-        "present": 92
+        "present": 88,
+        "stats": {
+          "torso": {
+            "mean": [
+              149,
+              122,
+              125
+            ],
+            "clipPct": 0.6,
+            "darkPct": 0.1
+          },
+          "center": {
+            "mean": [
+              96,
+              77,
+              79
+            ],
+            "clipPct": 0.2,
+            "darkPct": 0.9
+          },
+          "darkWall": {
+            "mean": [
+              13,
+              9,
+              7
+            ],
+            "clipPct": 0,
+            "darkPct": 6.9
+          },
+          "frame": {
+            "nonDarkPct": 83.1,
+            "w": 1280,
+            "h": 800
+          }
+        }
       }
     },
     {
@@ -129,6 +307,224 @@
   "pageErrors": [],
   "pass": true,
   "records": {
+    "captures": {
+      "task5-deferred-boot.png": {
+        "stats": {
+          "frame": {
+            "nonDarkPct": 91.5,
+            "w": 1280,
+            "h": 800
+          }
+        }
+      },
+      "task5-deferred-soldier.png": {
+        "stats": {
+          "center": {
+            "mean": [
+              73,
+              70,
+              71
+            ],
+            "clipPct": 1.9,
+            "darkPct": 3
+          },
+          "darkWall": {
+            "mean": [
+              23,
+              18,
+              13
+            ],
+            "clipPct": 0,
+            "darkPct": 17.3
+          },
+          "frame": {
+            "nonDarkPct": 86.3,
+            "w": 1280,
+            "h": 800
+          }
+        }
+      },
+      "task5-deferred-wounded.png": {
+        "stats": {
+          "torso": {
+            "mean": [
+              180,
+              154,
+              155
+            ],
+            "clipPct": 1.2,
+            "darkPct": 0
+          },
+          "center": {
+            "mean": [
+              97,
+              84,
+              85
+            ],
+            "clipPct": 0.8,
+            "darkPct": 2.9
+          },
+          "darkWall": {
+            "mean": [
+              14,
+              13,
+              14
+            ],
+            "clipPct": 0,
+            "darkPct": 0
+          },
+          "frame": {
+            "nonDarkPct": 84.9,
+            "w": 1280,
+            "h": 800
+          }
+        }
+      },
+      "task5-deferred-goblin.png": {
+        "stats": {
+          "center": {
+            "mean": [
+              98,
+              74,
+              70
+            ],
+            "clipPct": 0.2,
+            "darkPct": 0.8
+          },
+          "darkWall": {
+            "mean": [
+              75,
+              42,
+              30
+            ],
+            "clipPct": 0,
+            "darkPct": 0
+          },
+          "frame": {
+            "nonDarkPct": 86.4,
+            "w": 1280,
+            "h": 800
+          }
+        }
+      },
+      "task5-deferred-chunk.png": {
+        "stats": {
+          "center": {
+            "mean": [
+              104,
+              66,
+              64
+            ],
+            "clipPct": 0.2,
+            "darkPct": 2.4
+          },
+          "darkWall": {
+            "mean": [
+              16,
+              14,
+              15
+            ],
+            "clipPct": 0,
+            "darkPct": 0
+          },
+          "frame": {
+            "nonDarkPct": 84,
+            "w": 1280,
+            "h": 800
+          }
+        }
+      },
+      "task5-deferred-sampling-off.png": {
+        "stats": {
+          "center": {
+            "mean": [
+              115,
+              78,
+              78
+            ],
+            "clipPct": 0.3,
+            "darkPct": 1.4
+          },
+          "darkWall": {
+            "mean": [
+              16,
+              14,
+              15
+            ],
+            "clipPct": 0,
+            "darkPct": 0
+          },
+          "frame": {
+            "nonDarkPct": 84.7,
+            "w": 1280,
+            "h": 800
+          }
+        }
+      },
+      "task5-deferred-gen-off.png": {
+        "stats": {
+          "center": {
+            "mean": [
+              113,
+              76,
+              77
+            ],
+            "clipPct": 0.3,
+            "darkPct": 1.5
+          },
+          "darkWall": {
+            "mean": [
+              16,
+              14,
+              15
+            ],
+            "clipPct": 0,
+            "darkPct": 0
+          },
+          "frame": {
+            "nonDarkPct": 84.9,
+            "w": 1280,
+            "h": 800
+          }
+        }
+      },
+      "task5-legacy-wounded.png": {
+        "stats": {
+          "torso": {
+            "mean": [
+              149,
+              122,
+              125
+            ],
+            "clipPct": 0.6,
+            "darkPct": 0.1
+          },
+          "center": {
+            "mean": [
+              96,
+              77,
+              79
+            ],
+            "clipPct": 0.2,
+            "darkPct": 0.9
+          },
+          "darkWall": {
+            "mean": [
+              13,
+              9,
+              7
+            ],
+            "clipPct": 0,
+            "darkPct": 6.9
+          },
+          "frame": {
+            "nonDarkPct": 83.1,
+            "w": 1280,
+            "h": 800
+          }
+        }
+      }
+    },
     "deferredBootDiag": {
       "mode": "deferred",
       "frames": 31,
@@ -153,7 +549,11 @@
         "dropped": [
           "muzzle"
         ],
-        "flashlightIndex": 0
+        "flashlightIndex": 0,
+        "flashKey": {
+          "fleshKeyIntensity": 2,
+          "fleshShoulderKnee": 0.65
+        }
       },
       "shadow": {
         "generationRequested": true,
@@ -177,7 +577,7 @@
           "height": 600
         }
       },
-      "lightGain": 1,
+      "lightGain": 0.5,
       "errors": []
     }
   }

@@ -259,6 +259,17 @@ export interface GameDeferredRenderer {
 
 const MAX_RECORDED_ERRORS = 8;
 
+/** The game adapter's default exposure (M2 task 5 calibration, 2026-09-07).
+ *  The flashKey march-key conversion fixes the falloff FAMILY; this scalar
+ *  fixes the magnitude against matched captures (docs/dev-notes/
+ *  2026-09-06-hybrid-deferred-m2/task-5.md): at the faced wounded-zombie
+ *  pose, gain 0.5 puts the beam-lit torso at clip 1.1% (legacy 0.7%) and
+ *  mean 167 vs legacy 171, with the lit wall at 0.9x legacy and the dark
+ *  wall at parity. Gain 1.0 clips 32-40% of the torso/face (the wound-
+ *  deleting blowout this calibration exists to prevent). The knob stays
+ *  live: __sdfGame.setDeferredLightGain(v) for tasks 6-7 fine-tuning. */
+export const GAME_DEFERRED_LIGHT_GAIN = 0.5;
+
 export function createGameDeferredRenderer(deps: GameDeferredRendererDeps): GameDeferredRenderer {
   const { renderer, scene, flashlight } = deps;
 
@@ -272,13 +283,14 @@ export function createGameDeferredRenderer(deps: GameDeferredRendererDeps): Game
   });
   const router: GameDeferredScene = createGameDeferredScene(scene);
 
-  // Live coordinator state. Defaults are the spec's: shadows on, sampling on,
-  // identity exposure.
+  // Live coordinator state. Defaults are the spec's: shadows on, sampling
+  // on, and the CALIBRATED exposure (GAME_DEFERRED_LIGHT_GAIN — was identity
+  // before the task-5 matched-capture calibration).
   let outputTarget: THREE.RenderTarget | null = null;
   let width = deps.width ?? 800;
   let height = deps.height ?? 600;
   let sdfScale = deps.sdfScale ?? 1;
-  let lightGain = 1;
+  let lightGain = GAME_DEFERRED_LIGHT_GAIN;
   let shadowGeneration = true;
   let shadowSampling = true;
   let frames = 0;
