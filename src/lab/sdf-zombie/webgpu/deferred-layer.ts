@@ -357,7 +357,10 @@ export const DEFERRED_LIGHT_WGSL = /* wgsl */ `fn deferredLight(
           // packed emissionClass.a — set = level-only receiver, which reads
           // the map WITHOUT the inflated flesh proxies so a character's own
           // hull cannot shadow its flesh; everything else reads the full map.
-          let shadowMap = select(fullDepth, levelDepth, cls >= 15.5);
+          // WGSL select() rejects texture handles, so BOTH texels load and
+          // the SCALAR is selected (unconditional loads, no divergence; 18
+          // loads per shaded pixel inside the 3x3 kernel).
+          let levelOnly = cls >= 15.5;
           // NDC -> texel. Row 0 is +Y in this framebuffer-identity chain
           // (the same convention as the world reconstruction above), so the
           // y flip is folded in here.
@@ -371,7 +374,9 @@ export const DEFERRED_LIGHT_WGSL = /* wgsl */ `fn deferredLight(
           for (var dy = -${FLASHLIGHT_SHADOW_KERNEL_RADIUS}; dy <= ${FLASHLIGHT_SHADOW_KERNEL_RADIUS}; dy = dy + 1) {
             for (var dx = -${FLASHLIGHT_SHADOW_KERNEL_RADIUS}; dx <= ${FLASHLIGHT_SHADOW_KERNEL_RADIUS}; dx = dx + 1) {
               let t = clamp(vec2<i32>(baseTexel) + vec2<i32>(dx, dy), vec2<i32>(0, 0), vec2<i32>(shadowMapSize) - vec2<i32>(1, 1));
-              let stored = textureLoad(shadowMap, t, 0).x;
+              let storedFull = textureLoad(fullDepth, t, 0).x;
+              let storedLevel = textureLoad(levelDepth, t, 0).x;
+              let stored = select(storedFull, storedLevel, levelOnly);
               if (sNdc.z <= stored + shadowBias) { lit = lit + 1.0; }
             }
           }

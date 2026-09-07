@@ -119,6 +119,9 @@ export interface DeferredFlashlightShadowFactory {
    *  false keeps both maps rendering but tells the layer not to darken. */
   binding(lightIndex: number, samplingEnabled?: boolean): DeferredFlashlightShadowBinding;
   diagnostics(): DeferredFlashlightShadowDiagnostics;
+  /** The owned depth targets (gate/readback seam, like the deferred layer's
+   *  own `targets`). Read-only: never render through these outside update(). */
+  readonly targets: { readonly full: THREE.RenderTarget; readonly level: THREE.RenderTarget };
   dispose(): void;
 }
 
@@ -487,6 +490,8 @@ export function createDeferredFlashlightShadows(
         unsupported: [...unsupported],
       };
     },
+
+    targets: { full: fullTarget, level: levelTarget },
 
     dispose() {
       if (disposed) return;

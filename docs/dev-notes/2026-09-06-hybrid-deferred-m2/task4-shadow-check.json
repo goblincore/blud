@@ -1,0 +1,54 @@
+{
+  "checks": [
+    {
+      "name": "boot-clean",
+      "detail": {
+        "ok": true
+      }
+    },
+    {
+      "name": "caster-counters",
+      "detail": {
+        "renderedMaps": 2,
+        "fullCasters": 7,
+        "levelCasters": 6,
+        "size": 1024,
+        "enabled": true,
+        "unsupported": []
+      }
+    },
+    {
+      "name": "null-binding-m1-default",
+      "detail": {
+        "nullHash": "bfe790cd",
+        "boundOffHash": "bfe790cd"
+      }
+    },
+    {
+      "name": "map-content",
+      "detail": {
+        "full": {
+          "min": 0.9072095155715942,
+          "max": 1,
+          "far": 17831,
+          "total": 1048576
+        },
+        "level": {
+          "min": 0.9072095155715942,
+          "max": 1,
+          "far": 17831,
+          "total": 1048576
+        }
+      }
+    },
+    {
+      "name": "sampling-changes-output",
+      "detail": {
+        "onHash": "94a981fd",
+        "offHash": "bfe790cd"
+      }
+    }
+  ],
+  "errors": [],
+  "pass": false
+}

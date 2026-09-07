@@ -723,7 +723,11 @@ describe('flashlight shadow sampling in the light stage (hybrid deferred M2 task
     // Bit 4 set (>= 15.5) = level-only receiver -> the map WITHOUT the
     // inflated flesh proxies. The selection must use the raw packed value
     // (cls), never baseCls — a decoded class 2 would pick the wrong map.
-    expect(DEFERRED_LIGHT_WGSL).toContain('select(fullDepth, levelDepth, cls >= 15.5)');
+    // (WGSL select() rejects texture handles, so both texels load and the
+    // stored SCALAR is selected — pinned here so a rewrite to handle-select
+    // fails in unit tests before it fails on device.)
+    expect(DEFERRED_LIGHT_WGSL).toContain('let levelOnly = cls >= 15.5;');
+    expect(DEFERRED_LIGHT_WGSL).toContain('select(storedFull, storedLevel, levelOnly)');
   });
 
   it('applies visibility ONLY to the designated flashlight contribution inside the loop', () => {
@@ -753,7 +757,8 @@ describe('flashlight shadow sampling in the light stage (hybrid deferred M2 task
   });
 
   it('uses a bounded PCF of the named kernel size with the bias in the comparison', () => {
-    expect(DEFERRED_LIGHT_WGSL).toContain('textureLoad(shadowMap, t, 0).x');
+    expect(DEFERRED_LIGHT_WGSL).toContain('textureLoad(fullDepth, t, 0).x');
+    expect(DEFERRED_LIGHT_WGSL).toContain('textureLoad(levelDepth, t, 0).x');
     expect(DEFERRED_LIGHT_WGSL).toContain('stored + shadowBias');
     // 3x3 manual comparisons (kernel radius 1), averaged over 9 samples.
     expect(DEFERRED_LIGHT_WGSL).toContain('for (var dy = -1; dy <= 1; dy = dy + 1)');
