@@ -15,8 +15,8 @@
 //              pass (createDeferredLayer). Unshadowed (M1), constant ambient
 //              floor, no legacy gamma compensation.
 //
-// Determinism: the rAF loop starts STOPPED (a visible Run button starts it for
-// humans); every automated frame goes through __deferredLab.step(), which uses
+// Determinism: ?paused=1 stops the loop for automation; normal launches play
+// immediately. Automated frames go through __deferredLab.step(), which uses
 // a fixed dt and fences the GPU before returning. Light animation is a pure
 // function of lightTime, so setLightTime(t) is an exact freeze and resuming
 // continues from t without a jump.
@@ -154,18 +154,15 @@ function orbColor(index: number): Vec3 {
   return [c[0] * tint, c[1] * tint, c[2] * tint];
 }
 
-/** Orb index -> shared light entry. Orb 2 is a downward spot so the spot
- *  branch of the light pass is exercised on real content; the rest are
- *  points. */
+/** Orb index -> shared point light, matching the legacy mesh lights. */
 function orbLight(index: number, t: number): DeferredLight {
   const position = orbPosition(index, t);
-  const spot = index === 2;
   return {
-    kind: spot ? 'spot' : 'point',
+    kind: 'point',
     position,
-    direction: spot ? [0, -1, 0] : [0, -1, 0],
+    direction: [0, -1, 0],
     color: orbColor(index),
-    intensity: 9,
+    intensity: 2,
     range: 7,
     cosInner: 0.92,
     cosOuter: 0.75,
@@ -352,19 +349,26 @@ async function main() {
   let mode: 'legacy' | 'deferred' = params.get('mode') === 'legacy' ? 'legacy' : 'deferred';
 
   const handle = await createLabRenderer(mount, { mode: 'fixed', width: FIXED_W, height: FIXED_H });
-  // Deterministic stepping owns the clock; the Run button is for humans.
+  // Keep warmup deterministic; normal launches start animation once ready.
   handle.setLoopRunning(false);
 
   // Surface GPU validation errors that never touch the console as JS errors.
   // (Structural types: this tsconfig has no WebGPU DOM lib.)
   interface MinimalDevice {
     features?: { has(f: string): boolean };
+    queue?: { onSubmittedWorkDone(): Promise<void> };
     addEventListener?: (type: string, cb: (e: { error: { message: string } }) => void) => void;
   }
   const device = (handle.renderer.backend as unknown as { device?: MinimalDevice }).device;
   device?.addEventListener?.('uncapturederror', (e) => {
     recordError(`webgpu: ${e.error.message}`);
   });
+
+  const completeGpu = async () => {
+    if (!device?.queue) throw new Error('WebGPU queue completion unavailable');
+    await device.queue.onSubmittedWorkDone();
+    await handle.resolveGpu(); // drain optional timestamp queries as well
+  };
 
   // ---- body: the authored lab zombie, ONE BuildResult, TWO views ----------
   const doc = parseBlob(zombieBlobSrc);
@@ -448,13 +452,13 @@ async function main() {
     const color = orbColor(i);
     const std = new THREE.MeshStandardMaterial({
       color: 0x000000, roughness: 0.4, metalness: 0,
-      emissive: new THREE.Color(...color), emissiveIntensity: 7,
+      emissive: new THREE.Color(...color), emissiveIntensity: 1.5,
     });
     const legMesh = new THREE.Mesh(orbGeo, std);
     legacyScene.add(legMesh);
     const defMesh = new THREE.Mesh(orbGeo, createDeferredMeshMaterial(std));
     meshScene.add(defMesh);
-    const legLight = new THREE.PointLight(new THREE.Color(...color), 9, 7, 2);
+    const legLight = new THREE.PointLight(new THREE.Color(...color), 2, 7, 2);
     legacyScene.add(legLight);
     orbSlots.push({ defMesh, legMesh, legLight });
   }
@@ -682,25 +686,33 @@ async function main() {
 
   // ---- the debugging seam -----------------------------------------------------
   let ready = false;
+  let running = false;
+  let debugView: DeferredDebugView = 'lit';
+  let syncControls = () => {};
+  const refresh = () => { syncControls(); if (ready && !running) draw(); };
   const api = {
     get ready() { return ready; },
     setMode(next: 'legacy' | 'deferred') {
       if (next !== 'legacy' && next !== 'deferred') throw new RangeError(`unknown mode '${next}'`);
       mode = next;
+      refresh();
     },
     setSdfScale(scale: number) {
       if (!Number.isFinite(scale) || scale <= 0 || scale > 1) throw new RangeError(`bad sdf scale ${scale}`);
       sdfScale = scale;
       deferredLayer.resize(handle.canvas.width, handle.canvas.height, sdfScale);
       sdfLayer.setScale(sdfScale);
+      refresh();
     },
     setResolution(width: number, height: number) {
       setRenderCap({ mode: 'fixed', width, height });
       window.dispatchEvent(new Event('resize'));
       deferredLayer.resize(width, height, sdfScale);
       sdfLayer.setSize(width, height);
+      refresh();
     },
-    setDebugView(view: DeferredDebugView) { deferredLayer.setDebugView(view); },
+    setDebugView(view: DeferredDebugView) { debugView = view; deferredLayer.setDebugView(view); refresh(); },
+    setLoopRunning(enabled: boolean) { running = enabled; handle.setLoopRunning(enabled); refresh(); },
     setLightCount(count: number) {
       if (!Number.isInteger(count) || count < 1 || count > MAX_DEFERRED_LIGHTS) {
         throw new RangeError(`light count must be 1..${MAX_DEFERRED_LIGHTS}, got ${count}`);
@@ -708,6 +720,7 @@ async function main() {
       lightCount = count;
       customLights = null;
       updateLights();
+      refresh();
     },
     setLightTime(seconds: number) {
       if (!Number.isFinite(seconds)) throw new RangeError(`bad light time ${seconds}`);
@@ -715,29 +728,34 @@ async function main() {
       lightsAnimated = false; // an exact freeze: resume continues from here
       customLights = null;
       updateLights();
+      refresh();
     },
     setLightsAnimated(enabled: boolean) {
       lightsAnimated = enabled; // resumes from lightTime — no jump
+      refresh();
     },
     setOrbsVisible(visible: boolean) {
       orbsVisible = visible; // marker meshes only — the light buffer is untouched
       updateLights();
+      refresh();
     },
     setWounded(enabled: boolean) {
       wounded = enabled;
       applyWounds();
+      refresh();
     },
     setCameraPose(next: CameraPoseName) {
       if (!(next in CAMERA_POSES)) throw new RangeError(`unknown pose '${next}'`);
       applyPose(next);
+      refresh();
     },
     async step(frames: number) {
       for (let i = 0; i < frames; i++) handle.step(STEP_DT);
-      await handle.resolveGpu();
+      await completeGpu();
     },
     diagnostics() {
       return {
-        ready, mode, pose, sdfScale, lightCount, lightsAnimated, lightTime, orbsVisible, wounded,
+        ready, mode, pose, sdfScale, lightCount, lightsAnimated, lightTime, orbsVisible, wounded, running,
         backend: handle.backend,
         canvas: { width: handle.canvas.width, height: handle.canvas.height },
         layer: deferredLayer.diagnostics(),
@@ -826,6 +844,7 @@ async function main() {
       customLights = lights;
       if (lights) lightsAnimated = false;
       updateLights();
+      refresh();
     },
     /** Luminance-weighted centroid of the lit target inside a square window
      *  around (cx, cy), above the window's own baseline. The GPU-side world
@@ -870,11 +889,13 @@ async function main() {
       };
     },
     async sampleTiming(frames: number) {
+      if (running) throw new Error('Stop the animation loop before measuring');
+      if (!Number.isInteger(frames) || frames < 1) throw new RangeError('frames must be a positive integer');
       const times: number[] = [];
       for (let i = 0; i < frames; i++) {
         const t0 = performance.now();
         handle.step(STEP_DT);
-        await handle.resolveGpu();
+        await completeGpu();
         times.push(performance.now() - t0);
       }
       const sorted = [...times].sort((a, b) => a - b);
@@ -940,13 +961,19 @@ async function main() {
     mk('wounded', woundChk);
     const runBtn = document.createElement('button');
     runBtn.textContent = 'run';
-    let running = false;
-    runBtn.onclick = () => {
-      running = !running;
-      handle.setLoopRunning(running);
-      runBtn.textContent = running ? 'freeze' : 'run';
-    };
+    runBtn.onclick = () => api.setLoopRunning(!running);
     mk('loop', runBtn);
+    syncControls = () => {
+      const selects = panel.querySelectorAll('select');
+      [mode, String(sdfScale), debugView, pose, String(lightCount)].forEach((value, i) => {
+        selects[i]!.value = value;
+      });
+      playBtn.textContent = lightsAnimated ? 'pause lights' : 'play lights';
+      orbsChk.checked = orbsVisible;
+      woundChk.checked = wounded;
+      runBtn.textContent = running ? 'freeze' : 'run';
+      if (ready && statusEl) statusEl.textContent = `ready — ${handle.backend} ${handle.canvas.width}x${handle.canvas.height} — mode ${mode}`;
+    };
   }
 
   // ---- readiness: BOTH modes must compile before ready flips -----------------
@@ -963,6 +990,7 @@ async function main() {
     await new Promise((r) => setTimeout(r, 250)); // let async shader errors land
     if (errors.length > 0) throw new Error(`compile errors: ${errors.join('; ')}`);
     ready = true;
+    api.setLoopRunning(params.get('paused') !== '1');
     if (statusEl) {
       statusEl.textContent = `ready — ${handle.backend} ${FIXED_W}x${FIXED_H} — mode ${requestedMode}`;
     }

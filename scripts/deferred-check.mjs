@@ -21,15 +21,22 @@ const pending = new Map(); let seq = 0;
 const errors = [], checks = [];
 ws.onmessage = (e) => {
   const m = JSON.parse(e.data);
-  if (m.id) { pending.get(m.id)?.(m); pending.delete(m.id); }
+  if (m.id) { pending.get(m.id)?.resolve(m); }
   if (m.method === 'Runtime.exceptionThrown') errors.push(m.params.exceptionDetails);
   if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') {
     errors.push(m.params.args.map((a) => a.value ?? a.description));
   }
 };
-const send = (method, params = {}) => new Promise((r) => {
-  const id = ++seq; pending.set(id, r); ws.send(JSON.stringify({ id, method, params }));
+const send = (method, params = {}) => new Promise((resolve, reject) => {
+  const id = ++seq;
+  const finish = (fn, value) => { clearTimeout(timer); pending.delete(id); fn(value); };
+  const timer = setTimeout(() => finish(reject, new Error(`CDP timeout: ${method}`)), 190000);
+  pending.set(id, { resolve: (m) => finish(resolve, m), reject: (e) => finish(reject, e) });
+  ws.send(JSON.stringify({ id, method, params }));
 });
+ws.onclose = () => {
+  for (const request of pending.values()) request.reject(new Error('CDP connection closed'));
+};
 const evaluate = async (expression) => {
   const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true, timeout: 180000 });
   if (r.error || r.result?.exceptionDetails) throw new Error(JSON.stringify(r));
@@ -43,11 +50,10 @@ const shot = async (name) => {
   console.log('SHOT', name);
 };
 
-async function boot(query) {
-  errors.length = 0;
+async function boot(query, paused = true) {
   // vite binds `localhost` (IPv6 on this machine) — 127.0.0.1 gets connection
   // refused even though the CDP endpoint answers on it.
-  await send('Page.navigate', { url: `http://localhost:${vite}/sdf-deferred.html${query ? `?${query}` : ''}` });
+  await send('Page.navigate', { url: `http://localhost:${vite}/sdf-deferred.html?${paused ? 'paused=1&' : ''}${query}` });
   for (let i = 0; i < 240; i++) {
     await sleep(500);
     if (errors.length) throw new Error(`page errors during boot: ${JSON.stringify(errors)}`);
@@ -76,7 +82,12 @@ try {
   await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
 
   // ---- A. startup mode: default + both explicit query modes ----------------
-  await boot('');
+  await boot('', false);
+  const initialTime = (await diag()).lightTime;
+  await sleep(500);
+  assert.ok((await diag()).lightTime > initialTime, 'default page must animate without clicking Run');
+  await evaluate('__deferredLab.setLoopRunning(false)');
+  check('default-loop-animates', {});
   let d = await diag();
   assert.equal(d.mode, 'deferred', 'default launch must be deferred');
   assert.equal(d.backend, 'webgpu');
@@ -356,7 +367,8 @@ try {
   // (nearer floor texels cover more pixels, pulling the centroid toward the
   // camera — measured 4.05px at a 8-11deg cone); shrinking the cone removes
   // the bias while a reconstruction error (e.g. a doubled half-pixel) would
-  // persist. Convergence to the CPU projection IS the fix-1 evidence.
+  // persist. This coarse check detects large reconstruction errors; the
+  // layer regression test specifically covers the half-pixel convention.
   await evaluate(`__deferredLab.setCustomLights([{kind:'spot', position:[0.9,2.6,-0.9], direction:[0,-1,0], color:[1,1,1], intensity:120, range:8, cosInner:0.9995, cosOuter:0.998}])`);
   await step();
   const proj = await evaluate('__deferredLab.projectWorld([0.9, 0, -0.9])');
@@ -365,7 +377,7 @@ try {
   assert.ok(cent.centroid, 'no lit pool found for the isolated spot');
   assert.ok(cent.count > 20, `pool too small to centroid (${cent.count}px)`);
   const distPx = Math.hypot(cent.centroid[0] - proj.pixel[0], cent.centroid[1] - proj.pixel[1]);
-  assert.ok(distPx <= 2, `world reconstruction off by ${distPx}px (a doubled half-pixel shifts the pool)`);
+  assert.ok(distPx <= 2, `world reconstruction off by ${distPx}px`);
   check('world-reconstruction-centroid', { projected: proj.pixel.map((v) => Math.round(v * 100) / 100), centroid: cent.centroid.map((v) => Math.round(v * 100) / 100), distPx: Math.round(distPx * 1000) / 1000, poolPx: cent.count });
   await evaluate('__deferredLab.setCustomLights(null); __deferredLab.setLightTime(0)');
 
@@ -384,11 +396,64 @@ try {
   }
   check('one-trace-per-fragment-shader', { marchOcc, callAt });
 
-  writeFileSync(`${out}/validation-partial.json`, JSON.stringify({ checks, errors }, null, 2));
-  console.log('PART 2 COMPLETE —', checks.length, 'checks');
+  // ---- M. inspectable captures and deterministic moving-light sequence -----
+  await evaluate('__deferredLab.setOrbsVisible(true); __deferredLab.setLightCount(3); __deferredLab.setWounded(true)');
+  for (const scale of [1, 0.5]) {
+    await evaluate(`__deferredLab.setSdfScale(${scale}); __deferredLab.setCameraPose("overview"); __deferredLab.setLightTime(0.7)`);
+    for (const mode of ['legacy', 'deferred']) {
+      await evaluate(`__deferredLab.setMode("${mode}")`); await step();
+      await shot(`overview-${mode}-scale${scale}`);
+    }
+    for (const view of ['albedo', 'normal', 'depth', 'material']) {
+      await evaluate(`__deferredLab.setDebugView("${view}")`); await step();
+      await shot(`${view}-scale${scale}`);
+    }
+    await evaluate('__deferredLab.setDebugView("lit")');
+    for (const pose of ['wound', 'mesh-front', 'sdf-front']) {
+      await evaluate(`__deferredLab.setCameraPose("${pose}")`); await step();
+      await shot(`${pose}-scale${scale}`);
+    }
+  }
+  await evaluate('__deferredLab.setSdfScale(1); __deferredLab.setCameraPose("overview")');
+  for (const t of [0, 0.7, 1.4, 2.1]) {
+    await evaluate(`__deferredLab.setLightTime(${t})`); await step();
+    await shot(`orbs-t${t}`);
+  }
+  check('captures-written', { scales: [1, 0.5], orbTimes: [0, 0.7, 1.4, 2.1] });
+
+  // ---- N. repeated alternating completed-frame wall timing -----------------
+  // Geometry/camera/resolution match. Shading does NOT: legacy flesh sees only
+  // orb 0 plus its static key, while deferred flesh receives every light.
+  const timings = [];
+  if (!SKIP_TIMING) {
+    for (const scale of [1, 0.5]) for (const count of [1, 8, 16]) {
+      await evaluate(`__deferredLab.setSdfScale(${scale}); __deferredLab.setLightCount(${count}); __deferredLab.setLightTime(0.7)`);
+      for (let repeat = 0; repeat < 3; repeat++) {
+        for (const mode of (repeat % 2 ? ['deferred', 'legacy'] : ['legacy', 'deferred'])) {
+          await evaluate(`__deferredLab.setMode("${mode}")`);
+          await evaluate('__deferredLab.sampleTiming(8)');
+          const result = await evaluate('__deferredLab.sampleTiming(32)');
+          timings.push({ scale, count, repeat, mode, ...result });
+          console.log('TIMING', JSON.stringify({ scale, count, repeat, mode, p50: result.p50, p95: result.p95 }));
+        }
+      }
+    }
+  }
+  await sleep(300);
+  const finalDiagnostics = await diag();
+  assert.deepEqual(errors, [], 'console/JS errors during GPU checks');
+  assert.deepEqual(finalDiagnostics.errors, [], 'WebGPU validation errors');
+  check('no-gpu-or-page-errors', {});
+  writeFileSync(`${out}/validation.json`, JSON.stringify({
+    checks, errors, diagnostics: finalDiagnostics, timings,
+    timingCaveat: 'Completed-frame wall time, not GPU timestamps or game FPS. Legacy SDF receives one moving light plus static key; meshes use Three falloff. Fixed 800x600, same geometry/camera, paused lights, 8 warm + 32 measured frames, three alternating repeats.',
+  }, null, 2));
+  console.log('COMPLETE —', checks.length, 'checks;', timings.length, 'timing samples');
 } catch (e) {
   console.error('FAIL', e);
-  writeFileSync(`${out}/validation-partial.json`, JSON.stringify({ checks, errors, failure: String(e) }, null, 2));
-  await fetch(`http://127.0.0.1:${cdp}/json/close/${tab.id}`); ws.close();
-  process.exit(1);
+  writeFileSync(`${out}/validation-failure.json`, JSON.stringify({ checks, errors, failure: String(e) }, null, 2));
+  process.exitCode = 1;
+} finally {
+  await fetch(`http://127.0.0.1:${cdp}/json/close/${tab.id}`, { signal: AbortSignal.timeout(5000) }).catch(() => {});
+  ws.close();
 }
