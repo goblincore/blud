@@ -2,7 +2,8 @@
 //
 // The grey-box ring for sdf-game.html: four rooms in quadrants, connected
 // 1 -> 2 -> 3 -> 4 -> 1 by short tunnels through the dividing bands, with NO
-// diagonal shortcut (the centre block is solid). Pure data + pure functions —
+// diagonal shortcut (the centre block is solid), plus a mixed-combat annex
+// east of room 2. Pure data + pure functions —
 // no three.js, no DOM — so the layout is unit-testable and the headless gates
 // can ask the same questions the renderer answers.
 //
@@ -92,7 +93,7 @@ function wallCentre(box: Box, axis: 0 | 1 | 2, side: -1 | 1): Vec3 {
 }
 
 export interface RoomDef {
-  /** 1..4 around the ring: NW, NE, SE, SW. */
+  /** 1..4 around the ring: NW, NE, SE, SW; 5 is the eastern annex. */
   id: number;
   name: string;
   /** Interior ground rect. */
@@ -105,12 +106,15 @@ export interface RoomDef {
   /** Coloured accent lights (one or two per room). Mesh-side PointLights
    *  AND bounce-albedo inputs — see AccentLight/litWallAlbedo. */
   accents: AccentLight[];
+  /** Total enemy slots (legacy name retained for existing encounters). */
   zombies: number;
+  /** First N spawn slots use soldiers; remaining slots use zombies. */
+  soldiers?: number;
 }
 
 export interface TunnelDef {
   name: string;
-  /** Rooms it joins (ring neighbours only). */
+  /** Rooms it joins. */
   a: number; b: number;
   /** Corridor ground rect + lintel height. */
   minX: number; maxX: number; minZ: number; maxZ: number;
@@ -121,6 +125,9 @@ export interface TunnelDef {
 }
 
 const R = ROOM_HALF, B = BAND_HALF, O = OUTER, T = TUNNEL_OFF, W = TUNNEL_HALF_W;
+const ANNEX_MIN_X = O + 2 * B;
+const ANNEX_MAX_X = ANNEX_MIN_X + 2 * R;
+const ANNEX_TUNNEL_HALF_W = 1;
 
 // DUNGEON STONE. Cold gray, deliberately not the reference video's sepia:
 // warm light on warm stone gives soft golden highlights that fight the
@@ -136,7 +143,7 @@ export const ROOMS: RoomDef[] = [
     wallColor: GALLERY_WALL, floorColor: GALLERY_FLOOR, ceilColor: GALLERY_CEIL,
     // FIRE brazier low on the west side, over the low furniture.
     accents: [{ pos: [-7.5, 1.15, -2.8], color: [1.0, 0.46, 0.13], power: 9 }],
-    zombies: 1 },
+    zombies: 1, soldiers: 1 },
   { id: 2, name: 'room2', minX: B, maxX: O, minZ: -O, maxZ: -B, height: WALL_H,
     wallColor: GALLERY_WALL, floorColor: GALLERY_FLOOR, ceilColor: GALLERY_CEIL,
     // FIRE brazier on the east wall by the tall crate.
@@ -156,6 +163,13 @@ export const ROOMS: RoomDef[] = [
     // FIRE brazier along the north wall.
     accents: [{ pos: [-3.5, 1.15, 7.9], color: [1.0, 0.44, 0.12], power: 9 }],
     zombies: 4 },
+  { id: 5, name: 'room5', minX: ANNEX_MIN_X, maxX: ANNEX_MAX_X, minZ: -O, maxZ: -B, height: WALL_H,
+    wallColor: GALLERY_WALL, floorColor: GALLERY_FLOOR, ceilColor: GALLERY_CEIL,
+    accents: [
+      { pos: [17.5, 1.15, -7.8], color: [1.0, 0.46, 0.13], power: 9 },
+      { pos: [11.2, 1.15, -1.6], color: [0.95, 0.38, 0.10], power: 7 },
+    ],
+    zombies: 5, soldiers: 3 },
 ];
 
 // Darker than either room: the passage is a throat between chambers.
@@ -169,6 +183,9 @@ export const TUNNELS: TunnelDef[] = [
     height: TUNNEL_H, color: TUNNEL_COLOR, axis: 'x' },
   { name: 'tunnel-4-1', a: 4, b: 1, minX: -T - W, maxX: -T + W, minZ: -B, maxZ: B,
     height: TUNNEL_H, color: TUNNEL_COLOR, axis: 'z' },
+  { name: 'tunnel-2-5', a: 2, b: 5, minX: O, maxX: ANNEX_MIN_X,
+    minZ: -T - ANNEX_TUNNEL_HALF_W, maxZ: -T + ANNEX_TUNNEL_HALF_W,
+    height: TUNNEL_H, color: TUNNEL_COLOR, axis: 'x' },
 ];
 
 // Arch steps at each tunnel mouth: two stepped header boxes per end, sitting
@@ -187,7 +204,19 @@ export function levelColliders(): Aabb[] {
 
   // Outer boundary.
   box(-O - WALL_T, -O, -O - WALL_T, O + WALL_T);
-  box(O, O + WALL_T, -O - WALL_T, O + WALL_T);
+  // The former east boundary opens into the annex corridor.
+  const annexTunnel = TUNNELS.find(t => t.name === 'tunnel-2-5')!;
+  box(O, O + WALL_T, -O - WALL_T, annexTunnel.minZ);
+  box(O, O + WALL_T, annexTunnel.maxZ, O + WALL_T);
+  // Annex shell and west wall split around its mouth. Corridor side walls
+  // meet both shells, so the rendered tunnel has matching solid sides.
+  box(ANNEX_MAX_X, ANNEX_MAX_X + WALL_T, -O - WALL_T, -B + WALL_T);
+  box(ANNEX_MIN_X - WALL_T, ANNEX_MAX_X + WALL_T, -O - WALL_T, -O);
+  box(ANNEX_MIN_X - WALL_T, ANNEX_MAX_X + WALL_T, -B, -B + WALL_T);
+  box(ANNEX_MIN_X - WALL_T, ANNEX_MIN_X, -O, annexTunnel.minZ);
+  box(ANNEX_MIN_X - WALL_T, ANNEX_MIN_X, annexTunnel.maxZ, -B);
+  box(O, ANNEX_MIN_X, annexTunnel.minZ - WALL_T, annexTunnel.minZ);
+  box(O, ANNEX_MIN_X, annexTunnel.maxZ, annexTunnel.maxZ + WALL_T);
   box(-O - WALL_T, O + WALL_T, -O - WALL_T, -O);
   box(-O - WALL_T, O + WALL_T, O, O + WALL_T);
 
@@ -252,6 +281,10 @@ export const FURNITURE: FurnitureDef[] = [
   { room: 4, minX: -7.6, maxX: -6.4, minZ: 6.8, maxZ: 8.0, height: 1.0 },
   { room: 4, minX: -4.4, maxX: -3.2, minZ: 2.6, maxZ: 3.4, height: 0.5 },
   { room: 4, minX: -2.6, maxX: -1.4, minZ: 6.4, maxZ: 7.6, height: 0.85 },
+  // room 5: offset chest-high cover, with a broad centre lane and lateral
+  // paths along both outer walls; nothing pinches the west entry.
+  { room: 5, minX: 13.0, maxX: 14.4, minZ: -6.7, maxZ: -5.7, height: 1.15 },
+  { room: 5, minX: 14.0, maxX: 15.4, minZ: -3.8, maxZ: -2.8, height: 1.0 },
 ];
 
 /** The enclosure a point belongs to: its room, or a tunnel corridor. */
@@ -308,13 +341,15 @@ export function wanderBounds(room: RoomDef, inset = 0.7) {
   };
 }
 
-/** Deterministic zombie spawn points per room, hand-placed clear of
+/** Deterministic enemy spawn points per room, hand-placed clear of
  *  furniture and tunnel mouths (the spawn test pins the furniture margin). */
 const SPAWN_TABLE: Record<number, Vec3[]> = {
   1: [[-4.8, 0, -4.8]],
   2: [[4.8, 0, -4.8], [2.8, 0, -4.0]],
   3: [[4.8, 0, 4.8], [2.6, 0, 6.2], [3.0, 0, 3.0]],
   4: [[-4.8, 0, 4.8], [-6.8, 0, 6.0], [-2.4, 0, 4.4], [-6.0, 0, 3.2]],
+  // Soldier slots first: spread the squad across the far side of cover.
+  5: [[15.8, 0, -7.5], [17.0, 0, -4.8], [15.8, 0, -2.1], [11.8, 0, -6.8], [11.8, 0, -2.8]],
 };
 export function spawnPoints(room: RoomDef): Vec3[] {
   return (SPAWN_TABLE[room.id] ?? []).slice(0, room.zombies).map(p => [...p] as Vec3);

@@ -911,7 +911,7 @@ describe('soldier aimed movement', () => {
 });
 
 describe('soldier injury response', () => {
-  it('losing one leg or the head causes a terminal fall, while a zombie still hops on one leg', () => {
+  it('losing one leg or the head causes a structural fall, while a zombie still hops on one leg', () => {
     const leg = { ...NO_SIGNALS(), missing: { ...INTACT, legL: true } };
     for (const signals of [leg, { ...NO_SIGNALS(), headAlive: false }]) {
       const j = soldierJoints();
@@ -1038,5 +1038,41 @@ describe('soldier aim armor clearance', () => {
     // The support elbow clears the plate in front, rather than rising over it.
     expect(P[j.index.elbowL]![2]).toBeGreaterThan(P[j.index.shoulderL]![2] + 0.18);
     expect(len(sub(P[j.index.handL]!, P[j.index.shoulderL]!))).toBeLessThan(0.46);
+  });
+});
+
+describe('soldier shuffle lanes', () => {
+  it.each([-1, 1])('keeps feet on their own side while travelling laterally (%s)', direction => {
+    const j = soldierJoints();
+    let state = makeMotionState(8, [0,0,0]);
+    state.wander = { ...state.wander, target: [direction * 20,0,0], speed: SOLDIER_PROFILE.cruise };
+    let points = stubPoints(j);
+    for (let i = 0; i < 180; i++) {
+      const r = stepMotion(state, j, { enabled: true, wander: true, profile: SOLDIER_PROFILE, faceHeading: 0 }, NO_SIGNALS(), points,
+        { minX: -30, maxX: 30, minZ: -30, maxZ: 30 }, makeRng(8));
+      state = r.state;
+      const p = r.frame.restPose;
+      for (const name of ['footL','footR'] as const) {
+        const side = Math.sign(j.base[j.index[name]]![0] - j.pelvis[0]);
+        expect(side * (p[j.index[name]]![0] - p[j.index.pelvis]![0])).toBeGreaterThan(.06);
+      }
+      points = p.map(pos => ({ pos, prev: pos, pinned: false }));
+    }
+  });
+});
+
+
+describe('soldier impact-driven death', () => {
+  it.each([-1, 1])('a lethal side impact throws the body in the incoming direction (%s)', side => {
+    const j = soldierJoints();
+    const { frame, state } = run(j, makeMotionState(9, [0,0,0]),
+      { enabled:true, wander:false, profile:SOLDIER_PROFILE }, 30, i => ({ ...NO_SIGNALS(),
+        fatal: true, forcedCollapse: true,
+        shot: i === 0 ? { type:'blast', dirWorld:[side,0,0], woundWorld:[0,1.2,0], torso:true } : null,
+      }));
+    expect(frame.collapsed).toBe(true);
+    expect(frame.restPose[j.index.pelvis]![1] - j.groundY).toBeLessThan(.5);
+    expect(side * (frame.restPose[j.index.pelvis]![0] - j.pelvis[0])).toBeGreaterThan(.6);
+    expect(state.fallImpact).toEqual([side,0,0]);
   });
 });

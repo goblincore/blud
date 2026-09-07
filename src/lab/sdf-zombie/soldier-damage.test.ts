@@ -24,14 +24,15 @@ describe('soldier regional injury on authored anatomy', () => {
     expect(soldierInjury(b, [hit(b, 'skull', 0.5)]).sever).not.toContain('head');
     expect(soldierInjury(b, [hit(b, 'skull', 0.5, 'blast')]).sever).toContain('head');
   });
-  it('a grazed leg limps; four focused pellets remove it despite identical carve coverage', () => {
+  it('a grazed leg limps; eight focused pellets remove it despite identical carve coverage', () => {
     const b = body(), w = hit(b, 'thigh.l', 0.5);
     const grazed = soldierInjury(b, [w]);
     expect(grazed.wounded.legL).toBe(true);
     expect(grazed.legHurt).toBe(true);
     expect(grazed.fatal).toBe(false);
     expect(grazed.sever).toEqual([]);
-    expect(soldierInjury(b, Array.from({ length: 4 }, () => ({ ...w }))).sever).toContain('legL');
+    expect(soldierInjury(b, Array(4).fill(w))).toMatchObject({ downed: true, fatal: false, sever: [] });
+    expect(soldierInjury(b, Array.from({ length: 8 }, () => ({ ...w }))).sever).toContain('legL');
     expect(soldierInjury(b, [w, w, hit(b, 'thigh.r', 0.5), hit(b, 'forearm.l', 0.5)]).sever).toEqual([]);
   });
   it('a heavy elbow hit cuts the arm while a mid-thigh slug causes injury first', () => {
@@ -45,8 +46,14 @@ describe('soldier regional injury on authored anatomy', () => {
       const cut = severDistal(b, { limb, fromPrim: b.prims.findIndex(p => p.bone === bone) });
       expect(cut.body.clusters.find(c => c.limb === limb)!.alive).toBe(true);
       expect(soldierInjury(cut.body, []).missing[limb]).toBe(true);
-      expect(soldierInjury(cut.body, []).fatal).toBe(limb === 'legL');
+      expect(soldierInjury(cut.body, []).downed).toBe(true);
+      expect(soldierInjury(cut.body, []).fatal).toBe(false);
     }
+  });
+  it('survives a scattered body blast but repeated focused torso damage remains fatal', () => {
+    const b = body(), wound = hit(b, 'chest', .5);
+    expect(soldierInjury(b, Array(8).fill(wound)).fatal).toBe(false);
+    expect(soldierInjury(b, Array(16).fill(wound)).fatal).toBe(true);
   });
   it('stump wounds cannot become a second injury in the remaining body', () => {
     const b = body(), cut = severLimb(b, 'armL');

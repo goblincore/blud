@@ -44,6 +44,22 @@ describe('soldier actor combat wiring', () => {
     return slug ? actor.hitSlug(point, [0, 0, -1]) : actor.hit(point, [0, 0, -1]);
   };
 
+  it('freezes a settled corpse for baking and wakes on further damage', () => {
+    const {actor}=soldier();
+    for(let i=0;i<4;i++) hitLimb(actor,'thigh.l');
+    for(let i=0;i<240;i++) actor.step(1/60);
+    expect(actor.corpseBakeEligible()).toBe(true);
+    actor.pauseForBake(true);
+    const before=JSON.stringify(actor.posed());
+    for(let i=0;i<30;i++) actor.step(1/60);
+    expect(JSON.stringify(actor.posed())).toBe(before);
+    const revision=actor.damageRevision();hitLimb(actor,'chest');
+    expect(actor.damageRevision()).toBeGreaterThan(revision);
+    actor.step(1/60);expect(actor.motionFrame()!.collapsed).toBe(true);
+    for(let i=0;i<8;i++) hitLimb(actor,'upperarm.r');
+    expect(actor.boundRig().rig.headFollowsRig).toBe(true); // immediate post-sever restore, before another step
+  });
+
   it('one head pellet causes a terminal fall and prevents all subsequent shots', () => {
     const { actor, shots } = soldier();
     const w = hitLimb(actor, 'skull');
@@ -57,27 +73,29 @@ describe('soldier actor combat wiring', () => {
     expect(hitLimb(actor, 'chest')).not.toBeNull(); // the corpse remains shootable
   });
 
-  it('repeated focused thigh pellets detach the leg and cause a terminal fall', () => {
+  it('repeated focused thigh pellets detach the leg and cause a disabling fall', () => {
     const { actor } = soldier();
-    for (let i = 0; i < 4; i++) hitLimb(actor, 'thigh.l');
+    for (let i = 0; i < 8; i++) hitLimb(actor, 'thigh.l');
     expect(actor.body.clusters.find(c => c.limb === 'legL')!.alive).toBe(false);
     actor.step(1 / 60);
     expect(actor.motionFrame()!.collapsed).toBe(true);
   });
 
-  it('a severed gun arm cannot leave a firing gun pose behind', () => {
+  it.each([['upperarm.r', 'armR'], ['upperarm.l', 'armL']])('a severed %s cannot leave a firing gun pose behind', (bone, limb) => {
     const release = vi.fn();
     const { actor, shots } = soldier([], release);
-    for (let i = 0; i < 4; i++) {
-      const w = hitLimb(actor, 'upperarm.r');
-      expect(actor.body.prims[w!.primIdx]!.limb).toBe('armR');
+    for (let i = 0; i < 8; i++) {
+      const w = hitLimb(actor, bone!);
+      expect(actor.body.prims[w!.primIdx]!.limb).toBe(limb);
     }
-    expect(actor.body.clusters.find(c => c.limb === 'armR')!.alive).toBe(false);
+    expect(actor.body.clusters.find(c => c.limb === limb)!.alive).toBe(false);
     for (let i = 0; i < 180; i++) {
       actor.setBrainInput({ x: 0, z: 2.8, room: 1 }, true);
       actor.step(1 / 60);
     }
     expect(actor.motionFrame()!.gun).toBeNull();
+    expect(actor.motionFrame()!.collapsed).toBe(true);
+    expect(actor.motionFrame()!.speed).toBe(0);
     expect(shots).toHaveLength(0);
     expect(release).toHaveBeenCalled();
   });

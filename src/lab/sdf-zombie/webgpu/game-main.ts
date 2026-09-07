@@ -1,3 +1,6 @@
+import { createEncounterNavigation } from './encounter-navigation';
+import { createEncounterDirector, type EncounterAgent } from './encounter-director';
+import { createSoldierCorpseBakes } from './soldier-corpse-bake';
 import { buildNormalBodyPointFn } from './normal-gradient.wgsl';
 import { finiteGradient, woundGradient, type V3, type WoundInput } from './normal-gradient-reference';
 import { classifyNormalSupport, normalHitPoint } from './normal-gradient-support';
@@ -212,6 +215,9 @@ async function main() {
   // The world: grey-box meshes from the same layout that feeds collision.
   // -----------------------------------------------------------------------
   const colliders = levelColliders();
+  const encounterNav = createEncounterNavigation(ROOMS, TUNNELS, colliders);
+  const encounter = createEncounterDirector(encounterNav, colliders);
+  const encounterHomes = new Map<number, Vec3>();
   const surfaces = levelSurfaces();
   const levelGroup = new THREE.Group();
   levelGroup.name = 'ring-level';
@@ -1267,6 +1273,7 @@ async function main() {
         mind: makeSoldierMind(),
         onFire: ({ origin: muz, direction: dir }) => {
           if (!character.prop || character.prop.released) return;
+          encounter.shot(zombieId);
           nextSeed = (nextSeed * 1664525 + 1013904223) >>> 0;
           // ONE barrel: the double-barrel volley is the player's signature,
           // and the soldier throwing the same wall of lead reads as a second
@@ -1278,23 +1285,17 @@ async function main() {
       seed: 1337 + nextId * 101,
       bounds: wanderBounds(room),
       furniture: roomFurniture,
+      navigation: encounterNav,
       onSever: (piece, stumpWound) => onSeverDispatch?.(actor, piece, stumpWound),
     });
+    encounterHomes.set(actor.id,[...start] as Vec3);
     return actor;
   }
 
-  /** Which room the lone soldier holds.
-   *
-   *  ROOM 1, and it is the PLAYER'S START ROOM with exactly one spawn point —
-   *  so he stands alone in front of you the moment you boot, with no zombie
-   *  noise to read the state machine through. There is no ranged arbiter yet,
-   *  so a second soldier would shoot through the first. */
-  const SOLDIER_ROOM = 1;
-
   function spawnAll(errs: string[]): void {
     for (const room of ROOMS) {
-      for (const start of spawnPoints(room)) {
-        const name = room.id === SOLDIER_ROOM ? 'soldier' : 'zombie';
+      for (const [index,start] of spawnPoints(room).entries()) {
+        const name = index < (room.soldiers ?? 0) ? 'soldier' : 'zombie';
         actors.push(spawnEnemy(name, room, start, errs));
       }
     }
@@ -1331,6 +1332,7 @@ async function main() {
     template: ChunkTemplate;
   }
   const bakedChunks: BakedChunk[] = [];
+  let soldierCorpses: ReturnType<typeof createSoldierCorpseBakes> | null = null;
   // One material for every baked chunk — one pipeline, N meshes. Lighting
   // uniforms are LIVE (refreshed per frame beside the bone instancer's);
   // albedo is per-vertex so sharing costs nothing.
@@ -1393,6 +1395,8 @@ async function main() {
    *  !wanderFrozen, and a FROZEN bench leg calling setWoundTuning must not
    *  march through a stale hull. */
   function rebuildCast(): void {
+    soldierCorpses?.dispose();
+    encounter.clear(); encounterHomes.clear();
     for (const a of actors) {
       scene.remove(a.view.object);
       scene.remove(a.view.coneObject);
@@ -2191,6 +2195,13 @@ async function main() {
   const chunkBakeJobs = createChunkBakeJobs(() => new Worker(
     new URL('./chunk-bake.worker.ts', import.meta.url), { type: 'module' },
   ));
+  soldierCorpses = createSoldierCorpseBakes(scene, () => {
+    if (!bakedChunkMat) { bakedChunkMat = createBakedChunkMaterial(); bakedChunkSeed?.(bakedChunkMat); }
+    return bakedChunkMat.material;
+  });
+  const disposeCorpses = () => soldierCorpses?.dispose();
+  window.addEventListener('pagehide', disposeCorpses);
+  import.meta.hot?.dispose(() => { disposeCorpses(); window.removeEventListener('pagehide',disposeCorpses); });
   let chunkBakeInput: ChunkBakeData | null = null;
   let lastBakeSwapMs = 0;
   let lastBakeRequestMs = 0;
@@ -2873,7 +2884,7 @@ async function main() {
       lastWalkPos = [player.pos[0], player.pos[2]];
     }
     // Zombies are soft obstacles: one fat AABB each, rebuilt per frame.
-    const zombieBoxes = actors.map(a => {
+    const zombieBoxes = actors.filter(a=>!a.motionFrame()?.collapsed).map(a => {
       const p = a.pose().pos;
       return { min: [p[0] - 0.35, 0, p[2] - 0.35] as Vec3, max: [p[0] + 0.35, 1.8, p[2] + 0.35] as Vec3 };
     });
@@ -2885,13 +2896,15 @@ async function main() {
       // Order matters: separating first means this frame's step() and its
       // view.update() render the corrected positions, so a resolved overlap
       // is never a frame late on screen.
-      const pRoom = playerRoomId();
+      const pRoom = encounterNav.roomAt(player.pos);
       const pInfo = pRoom > 0
         ? { x: player.pos[0], z: player.pos[2], room: pRoom }
         : null;
-      const alertRoom = shotAlert ? pRoom : -1;
+      const snapshots: EncounterAgent[] = actors.map(a=>({id:a.id,pos:a.pose().pos,yaw:a.pose().yaw,room:a.room,
+        home:encounterHomes.get(a.id)??a.pose().pos,soldier:!a.mind().meleeCapable,disabled:!!a.motionFrame()?.collapsed}));
+      const orders=encounter.update(snapshots,pInfo,shotAlert,dt);
       shotAlert = false;
-      for (const a of actors) a.setBrainInput(pInfo, a.room === alertRoom);
+      for (const a of actors) a.setEncounterOrder(orders.get(a.id)!);
 
       // --- melee ring: who may swing this frame ---------------------------
       // Claimants are the alert bodies that are actually in the encounter; an
@@ -2905,7 +2918,7 @@ async function main() {
           // while having no swing to throw. Submitting him would make him
           // compete for a token AND be spaced at melee radius against the
           // zombies, distorting their positioning.
-          .filter(a => a.mind().meleeCapable
+          .filter(a => a.mind().meleeCapable && orders.get(a.id)?.visible && !a.motionFrame()?.collapsed
             && a.mind().debug().alert && a.mind().debug().state !== 'idle')
           .map(a => {
             const p = a.pose().pos;
@@ -2927,8 +2940,8 @@ async function main() {
         const p = a.pose().pos;
         return {
           x: p[0], z: p[2],
-          r: a.engagedForCrowd() ? ENGAGED_RADIUS : ZOMBIE_RADIUS,
-          mobile: true,
+          r: enclosureKeyAt(p[0],p[2]).startsWith('tunnel') ? .34 : a.engagedForCrowd() ? ENGAGED_RADIUS : .45,
+          mobile: !a.motionFrame()?.collapsed,
         };
       });
       // The player is an ANCHOR: zombies slide off him rather than shove him.
@@ -2939,6 +2952,7 @@ async function main() {
       actors.forEach((a, i) => a.nudge(push[i]![0], push[i]![1]));
 
       const bodyTiming = telemetry.begin();
+      soldierCorpses?.update(actors,dt);
       for (const a of actors) a.step(dt);
       // 'body-step' CLOSES HERE, before the kit pose below, because that is
       // the boundary main's telemetry numbers were taken with. Widening a
@@ -3429,6 +3443,7 @@ async function main() {
         actor: a.id, model: 'zombie', pose: a.pose(), wounds: a.wounds().map(w => describeRecordedWound(a, w)),
         aliveRegions: a.posed().clusters.filter(c => c.alive).map(c => c.limb),
       });
+      soldierCorpses?.update(actors,0); // restore damaged snapshots before this draw
       telemetry.end('wound-flush', flushTiming);
       telemetry.end('projectiles-and-hits', projectileTiming);
       // SOLDIER PELLETS SIT OUTSIDE 'projectiles-and-hits' ON PURPOSE — see
@@ -3810,7 +3825,7 @@ async function main() {
       player.pitch = 0;
       return true;
     },
-    /** Enclosure key under the player's feet ('room1'..'room4', tunnel, 'void'). */
+    /** Enclosure key under the player's feet ('room1'..'room5', tunnel, 'void'). */
     room: () => enclosureKeyAt(player.pos[0], player.pos[2]),
     /** Hand-step N frames at dt seconds each; stops the rAF loop first. */
     step(n: number, dt = 1 / 60) {
@@ -3829,11 +3844,12 @@ async function main() {
     /** Every zombie: id, room, live ground pose. */
     zombies: () => actors.map(a => ({ id: a.id, room: a.room, ...a.pose() })),
     /** Per-actor brain readout — the crowd/AI capture driver's oracle. */
+    encounter: () => encounter.debug(),
     brains: () => actors.map(a => {
       const b = a.mind().debug();
       const p = a.pose().pos;
       return {
-        id: a.id, room: a.room, state: b.state, alert: b.alert,
+        id: a.id, room: a.room, kind: a.mind().meleeCapable ? 'zombie' : 'soldier', phase:a.debug().phase, state: b.state, alert: b.alert,
         swingT: b.swingT, side: b.side, variant: b.variant,
         hasToken: a.debug().hasToken,
         aimT: b.aimT, cooldown: b.cooldown, sinceFire: a.sinceFire(),
@@ -3942,6 +3958,7 @@ async function main() {
       return a ? {
         get body() { return a.body; },
         view: a.view, posed: a.posed, boundRig: a.boundRig, pose: a.pose, room: a.room,
+        hit: a.hit, hitSlug: a.hitSlug,
         woundCount: () => a.wounds().length,
         woundList: () => [...a.wounds()],
       } : undefined;
@@ -5669,6 +5686,8 @@ async function main() {
     /** Settled-chunk bake (close-up task 5). ON at boot (GAME_CHUNK_BAKE);
      *  off is pixel-identical. Toggling mid-session only affects FUTURE
      *  settles — baked pieces stay baked until shot or recycled. */
+    soldierCorpseBake: () => soldierCorpses?.stats(),
+    setSoldierCorpseBake(on: boolean) { soldierCorpses?.setEnabled(on); },
     setChunkBake(on: boolean) {
       chunkBakeEnabled = on;
       if (!on) cancelChunkBake();

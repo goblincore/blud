@@ -12,13 +12,14 @@ import {
 import { buildBody } from './build-body';
 import { makeZombie } from './body';
 import { DEFAULT_FACE } from './face';
-import { applyRig } from './rig-bind';
+import { applyRig, headQuatOf } from './rig-bind';
 import { translateBody } from './translate';
 import { makeRng, type WanderBounds } from './wander';
 import { compileBlob } from './blob-compile';
 import { parseBlob } from './blob-parse';
 import soldierSrc from './characters/soldier.blob?raw';
 import { SOLDIER_PROFILE } from './motion-profile';
+import { dot, normalize, qRotate, sub } from './vec';
 
 const BOUNDS: WanderBounds = { minX: -1.5, maxX: 1.5, minZ: -1.5, maxZ: 1.5 };
 const BASE_SEED = 1337;
@@ -99,5 +100,58 @@ describe('actor: fire kicks reach the rig', () => {
     expect(f!.kicks.length).toBe(3);
     expect(sig.fire).toBe(false); // drained
     expect(m.bound.rig.points[iH]!.pos[2]).toBeLessThan(before);
+  });
+});
+
+describe('soldier structural fall', () => {
+  it.each([[-1, false], [1, false], [-1, true], [1, true]] as const)('grounds the torso after a side impact (%s), missing arms: %s', (direction, missing) => {
+    const body = buildBody(compileBlob(parseBlob(soldierSrc)));
+    const m = makeActorMotion(body, { seed: 5 });
+    const signals = emptyActorSignals();
+    signals.downed = true; signals.fatal = !missing;
+    signals.missing.armL = missing; signals.missing.armR = missing;
+    const rng = makeRng(5);
+    // Seed the impact direction independently of wound generation.
+    stepActorMotion(m, { current: body, dt: 1/60, wander: false, armStyle: 'carry',
+      headingFollow: 1, gazeFollow: 0, bounds: BOUNDS, rng, signals, profile: SOLDIER_PROFILE });
+    m.motionState!.fallImpact = [direction, 0, 0];
+    for (let i = 0; i < 180; i++) stepActorMotion(m, { current: body, dt: 1/60, wander: false,
+      armStyle: 'carry', headingFollow: 1, gazeFollow: 0, bounds: BOUNDS, rng, signals, profile: SOLDIER_PROFILE });
+    const points = m.bound.rig.points;
+    const at = (name: 'shoulderL' | 'shoulderR' | 'chest' | 'pelvis') => points[m.motionJoints!.index[name]]!.pos[1];
+    const contact = Math.min(at('shoulderL') - .115, at('shoulderR') - .115, at('chest') - .15, at('pelvis') - .11);
+    expect(contact).toBeLessThan(.035);
+    expect(contact).toBeGreaterThan(-.035);
+  });
+
+  it('settles as a recognizable sprawled skeleton and keeps moving when downed alive', () => {
+    const body = buildBody(compileBlob(parseBlob(soldierSrc)));
+    const m = makeActorMotion(body, { seed: 5 });
+    const rng = makeRng(5);
+    const step = (fatal: boolean) => {
+      const signals = emptyActorSignals();
+      signals.downed = true; signals.fatal = fatal; signals.forcedCollapse = fatal;
+      return stepActorMotion(m, { current: body, dt: 1/60, wander: false, armStyle: 'carry',
+        headingFollow: 1, gazeFollow: 0, bounds: BOUNDS, rng, signals, profile: SOLDIER_PROFILE });
+    };
+    for (let i = 0; i < 180; i++) step(false);
+    const positions = m.bound.rig.points.map(p => p.pos);
+    expect(Math.max(...positions.map(p => p[1]))).toBeLessThan(.65);
+    expect(Math.max(...positions.map(p => p[2])) - Math.min(...positions.map(p => p[2]))).toBeGreaterThan(1.1);
+    for (const c of m.bound.rig.constraints) {
+      const a = positions[c.a]!, b = positions[c.b]!;
+      const ratio = Math.hypot(a[0]-b[0], a[1]-b[1], a[2]-b[2]) / c.rest;
+      expect(ratio).toBeGreaterThan(.8);
+      expect(ratio).toBeLessThan(1.2);
+    }
+    const h = m.bound.head!;
+    const headDirection = normalize(sub(m.bound.rig.points[h.tip]!.pos, m.bound.rig.points[h.pivot]!.pos));
+    expect(dot(qRotate(headQuatOf(m.bound)!, h.restDir), headDirection)).toBeGreaterThan(.999);
+    const before = m.bound.rig.points[m.motionJoints!.index.handL]!.pos;
+    for (let i = 0; i < 25; i++) step(false);
+    const after = m.bound.rig.points[m.motionJoints!.index.handL]!.pos;
+    expect(Math.hypot(...after.map((v,i) => v-before[i]!))).toBeGreaterThan(.005);
+    expect(step(true)!.gun).toBeNull();
+    expect(m.motionState!.fallFatal).toBe(true);
   });
 });

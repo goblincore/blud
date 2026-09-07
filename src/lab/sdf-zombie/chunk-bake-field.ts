@@ -87,10 +87,12 @@ const smoothstep = (a: number, b: number, x: number) => {
 export interface ChunkBakeParts {
   /** WORLD-space flesh prims (post chunk-transform; squash is 1 at settle). */
   flesh: Primitive[];
+  /** Optional clustered corpse field; chunks retain their one-cluster fold. */
+  body?: Body;
   /** WORLD-space bone + organ prims (the view's bonePrims array). */
   bones: Primitive[];
   /** Torn ends: world anchor + the view's girth radius (tornEndRadius). */
-  torn: { at: Vec3; radius: number }[];
+  torn: { at: Vec3; radius: number; normal?: Vec3; depth?: number; owner?: Body }[];
   /** The smax fillet width — the view's woundCfg.y at bake time. */
   carveK: number;
 }
@@ -123,7 +125,7 @@ const bodyOf = (prims: Primitive[]): Body => ({
 /** Compose the settled chunk's field evaluators. Pure: no three, no GPU —
  *  everything a vitest can assert on. */
 export function chunkBakeField(parts: ChunkBakeParts): ChunkFieldEvals {
-  const body = bodyOf(parts.flesh);
+  const body = parts.body ?? bodyOf(parts.flesh);
   const boneMin = (p: Vec3): { d: number; organ: boolean } | null => {
     if (parts.bones.length === 0) return null;
     let best = Infinity;
@@ -158,7 +160,9 @@ export function chunkBakeField(parts: ChunkBakeParts): ChunkFieldEvals {
         const r = len([p[0] - w.at[0], p[1] - w.at[1], p[2] - w.at[2]]);
         // APPLY_WOUNDS uncapped: smax(d, -(r - depth), k). The depth-slab
         // term is 1e5 for chunk views and drops out of the min.
-        d = smax(d, w.radius - r, parts.carveK);
+        if (w.owner && sdBody(p, w.owner) > sdBody(p, body) + .005) continue;
+        const slab = w.normal ? (w.depth ?? 1e5) - dot([p[0]-w.at[0], p[1]-w.at[1], p[2]-w.at[2]], w.normal) : 1e5;
+        d = smax(d, Math.min(w.radius - r, slab), parts.carveK);
       }
       // applyBones: hard min, gated on nearWound (bones are contained in
       // flesh, so skipping the fold where no wound is near is EXACT — the

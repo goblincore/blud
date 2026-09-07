@@ -1210,6 +1210,13 @@ async function main() {
     pendingFire = false;
     sinceFire = Infinity;
     lastMotionFrame = null;
+    const injury = motionProfile.name === 'soldier' ? soldierInjury(current, woundRing.all()) : null;
+    heroSignals.downed = injury?.downed ?? false;
+    heroSignals.fatal = injury?.fatal ?? false;
+    heroSignals.forcedCollapse = false;
+    heroSignals.missing = missingLimbs();
+    heroSignals.wounded = woundedLimbs();
+    heroSignals.headAlive = current.clusters.find(c => c.limb === 'head')?.alive ?? false;
     // Clear any melt on reset. stopMelt() owns the full teardown (progress,
     // held flag, released bone chunks and the shader uniform) — the melt
     // spike this replaced cleared three of its own variables by hand here,
@@ -1498,7 +1505,7 @@ async function main() {
     if (motionProfile.name === 'soldier') {
       const injury = soldierInjury(current, woundRing.all());
       forcedCollapse ||= injury.fatal;
-      if (injury.missing.armR || injury.fatal) heroView.releaseProp([0, 0, 0], MOTION_SEED);
+      if (injury.missing.armR || injury.missing.armL || injury.downed || injury.fatal) heroView.releaseProp([0, 0, 0], MOTION_SEED);
     }
     if (result.stumpWound) {
       woundRing.stamp(result.stumpWound, lastPosed, heroMotion.lastBodyYaw);
@@ -1520,6 +1527,7 @@ async function main() {
     if (motionProfile.name === 'soldier') {
       const injury = soldierInjury(current, woundRing.all());
       forcedCollapse ||= injury.fatal;
+      if (injury.downed) heroView.releaseProp([0, 0, 0], MOTION_SEED);
       for (const limb of injury.sever) if (!fullCuts.includes(limb)) fullCuts.push(limb);
     }
     for (const limb of fullCuts) applyHeroSever(limb, severLimb(current, limb));
@@ -2635,7 +2643,10 @@ async function main() {
       // severed/freshWounds ARE pendingSevered/pendingWounds (same array
       // references): drained in place after the first sub-step.
       heroSignals.severed = pendingSevered;
-      heroSignals.fire = pendingFire;
+      const injury = motionProfile.name === 'soldier' ? soldierInjury(current, woundRing.all()) : null;
+      heroSignals.downed = injury?.downed ?? false;
+      heroSignals.fatal = injury?.fatal ?? false;
+      heroSignals.fire = pendingFire && !(injury && (injury.downed || injury.fatal || injury.missing.armL || injury.missing.armR));
       const f = stepActorMotion(heroMotion, {
         current, dt,
         wander: wanderOn, armStyle, headingFollow, gazeFollow,
@@ -4362,7 +4373,10 @@ async function main() {
       };
     },
     /** The K key's console twin: forces the collapse next frame. */
-    forceCollapse() { forcedCollapse = true; },
+    forceCollapse(impact?: Vec3) {
+      if (impact && heroMotion.motionState) heroMotion.motionState.fallImpact = [...impact];
+      forcedCollapse = true;
+    },
     /** Soldier-class controls (no-ops for characters without carries). */
     setSpeedBand(b: 'walk' | 'run') { speedBand = b; },
     fire() { if (motionProfile.carries) pendingFire = true; },

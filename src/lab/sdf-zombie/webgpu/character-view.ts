@@ -43,6 +43,7 @@ import type { FaceSheetParams } from '../blob-face-sheet';
 import { loadKit, type KitOverlay } from './kit-overlay';
 import { loadHeldProp, type HeldProp } from './held-prop';
 import { createMuzzleFlash } from './character-effects';
+import { createEjectionCycle, createShotgunCasings } from './shotgun-casings';
 import { createZombieGpuView, type ZombieGpuView } from './zombie-gpu';
 import {
   MAX_WOUNDS, pushWound, WOUND_PROFILES, woundCarveNormal, woundWorldPos,
@@ -463,6 +464,10 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
   const wounds = createWoundRing();
   const muzzleFlash = entry.profile.prop && opts.effectsScene ? createMuzzleFlash() : null;
   if (muzzleFlash) opts.effectsScene!.add(muzzleFlash.object);
+  const casings = entry.name === 'soldier' ? createShotgunCasings() : null;
+  const ejection = createEjectionCycle();
+  const ejectOrigin = new THREE.Vector3(), ejectRight = new THREE.Vector3();
+  if (casings) opts.scene.add(casings.object);
   const kitUrl = entry.kit;
   if (kitUrl) {
     loadKit(kitUrl, opts.renderer, [0, 0, 0], entry.name === 'soldier')
@@ -493,7 +498,11 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
       // Polygon halves ride the rig: the kit from per-bone frames, the gun from
       // the motion frame's gun pose (right forearm). Collapse and gib release
       // the gun; the kit simply keeps following the (fallen) rig.
-      if (!kit && !heldProp) return;
+      casings?.step(dt);
+      if (!kit && !heldProp) {
+        ejection.update(sinceFire, false);
+        return;
+      }
       const frames = boneFrames(body, bound, bodyYaw);
       kit?.pose(frames, { body, wounds: wounds.all(), dt });
       if (heldProp) {
@@ -502,6 +511,13 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
         }
         if (frame?.collapsed && !heldProp.released) heldProp.release([0, 0, 0], releaseSeed);
         heldProp.step(Math.min(dt, 1 / 30), 0);
+        if (ejection.update(sinceFire, !!frame?.gun && !heldProp.released) && casings) {
+          // Receiver's right-side port, using the rendered gun's recoil transform.
+          heldProp.object.updateWorldMatrix(true, false);
+          ejectOrigin.set(.038, .006, -.025).applyMatrix4(heldProp.object.matrixWorld);
+          ejectRight.set(1, 0, 0).transformDirection(heldProp.object.matrixWorld);
+          casings.eject(ejectOrigin.toArray() as Vec3, ejectRight.toArray() as Vec3);
+        }
         // Gas begins just outside the bore, so the barrel doesn't punch a
         // black hole through the hot core when viewed from the side.
         muzzleFlash?.pose(!heldProp.released && frame?.gun ? heldProp.muzzle(0.018) : null, sinceFire);
@@ -515,6 +531,7 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
       muzzleFlash?.pose(null, Infinity);
     },
     resetEquipment() {
+      ejection.reset();
       kit?.resetDamage();
       heldProp?.reset();
       muzzleFlash?.pose(null, Infinity);
@@ -527,6 +544,7 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
       kit?.dispose();
       heldProp?.dispose();
       muzzleFlash?.dispose();
+      casings?.dispose();
     },
   };
 }

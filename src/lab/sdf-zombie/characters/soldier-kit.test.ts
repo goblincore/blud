@@ -133,6 +133,19 @@ describe('soldier-kit.gltf fits soldier.blob', () => {
     expect(kitTop, `orb crown ${top.toFixed(4)}`).toBeGreaterThan(top);
   });
 
+  it('extends the rear plate up the neck with clearance for the flesh', () => {
+    // Above the old cuirass rim and between the shoulder crowns: the rear
+    // collar must cover this otherwise bare gap, while remaining behind the
+    // neck. Check the emitted lip, including its cap centre, against the SDF.
+    const lip = groups.get('plate')!.filter(v =>
+      Math.abs(v[0]) < 0.080 && v[1] > 1.415 && v[2] < -0.065);
+    expect(lip.length).toBeGreaterThanOrEqual(8);
+    for (const v of lip) {
+      expect(sdBody(v, body), `collar clearance at ${v.join(', ')}`).toBeGreaterThan(0.008);
+      expect(v[1]).toBeLessThan(1.450); // below the head, clear of its turns
+    }
+  });
+
   // HE STANDS ON HIS BOOTS. The ankle is 15 cm of bare bone (the shin flesh
   // ends at y=0.214, the foot flesh tops at y=0.066), so if the boot's sole
   // floats, NOTHING catches him — the .wam sized every foot ring to put its

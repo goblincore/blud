@@ -24,6 +24,8 @@ export interface RigState {
   bends?: RigBendConstraint[];
   /** Heading of the authored body frame; independent of flinch/rest targets. */
   bodyYaw?: number;
+  /** Fallen structural actors rotate the skull with the full rig, not an upright gaze cone. */
+  headFollowsRig?: boolean;
 }
 
 /**

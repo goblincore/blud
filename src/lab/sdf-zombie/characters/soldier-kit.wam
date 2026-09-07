@@ -274,6 +274,27 @@ parts
     ring 1.00 w=0.177 d=0.150
     cap start=none end=none
 
+  # Raised rear collar overlaps the upper cuirass and follows its chest frame.
+  # Taper toward the neck leaves the moving shoulder sockets open; the forward
+  # rake closes the exposed upper-back gap without putting plate in front of
+  # the throat or face. The thin upper lip stays behind the thick neck flesh.
+  loft rearcollar bone=chest at=0.88 dir=up pitch=12 len=0.093 frame=fwd offset=(0,0,-0.067) material=plate shape=squarish
+    ring 0.00 w=0.162 d=0.018
+    ring 0.10 w=0.170 d=0.024
+    ring 0.46 w=0.143 d=0.024
+    ring 0.84 w=0.108 d=0.020
+    ring 1.00 w=0.094 d=0.014
+    cap start=flat end=flat
+
+  # Raised rectangular spine plate bridges the flexible back beneath the
+  # rigid cuirass. Beveled ends overlap the collar and lower back shell.
+  loft backplate bone=chest at=-0.48 dir=up len=0.190 frame=fwd offset=(0,0,-0.096) material=plate shape=squarish
+    ring 0.00 w=0.104 d=0.024
+    ring 0.08 w=0.126 d=0.040
+    ring 0.90 w=0.126 d=0.040
+    ring 1.00 w=0.104 d=0.024
+    cap start=flat end=flat
+
   # FRONT PLATE — the distinct raised plate on the cuirass's face. A box,
   # hand-placed like the goblin's buckle (`on=` sank that one 1 mm inside the
   # body): narrow enough (0.12 m) that the cuirass's curvature only pulls its

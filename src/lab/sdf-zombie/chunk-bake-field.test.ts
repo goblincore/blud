@@ -24,6 +24,17 @@ const TORN = [{ at: [0.1, 0, 0] as Vec3, radius: 0.045 }];
 const PARTS = { flesh: FLESH, bones: BONE, torn: TORN, carveK: 0.015 };
 
 describe('chunkBakeField', () => {
+  it('honors corpse wound depth caps and excludes unrelated owner fields', () => {
+    const flesh=[cap([0,0,0],[0,0,0],.1)];
+    const w={at:[0,0,0] as Vec3,radius:.2,normal:[1,0,0] as Vec3,depth:.02};
+    const capped=chunkBakeField({flesh,bones:[],torn:[w],carveK:0});
+    expect(capped.field([.08,0,0])).toBeLessThan(0);
+    expect(capped.field([0,0,0])).toBeGreaterThan(0);
+    const owner:Body={prims:[cap([2,0,0],[2,0,0],.1)],clusters:[{id:0,limb:'armL',start:0,count:1,center:[2,0,0],radius:.1,alive:true}]};
+    const scoped=chunkBakeField({flesh,bones:[],torn:[{...w,owner}],carveK:0});
+    expect(scoped.field([0,0,0])).toBeLessThan(0);
+  });
+
   it('field is negative deep inside the flesh and positive far outside', () => {
     const ev = chunkBakeField(PARTS);
     expect(ev.field([0, 0, 0])).toBeLessThan(0);

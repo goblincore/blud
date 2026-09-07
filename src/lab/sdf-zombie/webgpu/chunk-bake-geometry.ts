@@ -1,15 +1,19 @@
 // CPU extraction shared by the worker and deterministic tests. No renderer/DOM imports.
 import * as THREE from 'three';
 import { extractHullSoup, fitHullGrid } from './surface-nets-cpu';
-import { bakeChunkAlbedo, chunkBakeField, type ChunkFieldEvals, type ChunkLook } from '../chunk-bake-field';
+import { bakeChunkAlbedo, chunkBakeField, type ChunkFieldEvals, type ChunkLook, type ChunkBakeParts } from '../chunk-bake-field';
 import { qRotate, type Quat } from '../vec';
+import { nearestPrim } from '../validate';
 import type { Primitive, Vec3 } from '../types';
 
 /** The settled view's field inputs, in WORLD space (see ChunkGpuView.bakeData). */
 export interface ChunkBakeData {
+  body?: ChunkBakeParts['body'];
+  halfExtent?: Vec3;
+  cellSize?: number;
   flesh: Primitive[];
   bones: Primitive[];
-  torn: { at: Vec3; radius: number }[];
+  torn: ChunkBakeParts['torn'];
   carveK: number;
   centre: Vec3;
   /** Cluster radius — sizes the extraction grid. */
@@ -48,9 +52,9 @@ export const BAKE_CELL = 0.01;
 export function bakeChunkGeometry(data: ChunkBakeData): BakedChunkResult {
   const t0 = performance.now();
   const ev: ChunkFieldEvals = chunkBakeField({
-    flesh: data.flesh, bones: data.bones, torn: data.torn, carveK: data.carveK,
+    body: data.body, flesh: data.flesh, bones: data.bones, torn: data.torn, carveK: data.carveK,
   });
-  const grid = fitHullGrid(data.centre, [data.extent, data.extent, data.extent], BAKE_CELL, 0);
+  const grid = fitHullGrid(data.centre, data.halfExtent ?? [data.extent, data.extent, data.extent], data.cellSize ?? BAKE_CELL, 0);
   const soup = extractHullSoup(p => ev.field(p), grid, 0, 1);
 
   // Weld the triangle soup by exact position (surface-nets repeats each
@@ -76,7 +80,9 @@ export function bakeChunkGeometry(data: ChunkBakeData): BakedChunkResult {
       id = positions.length / 3;
       weld.set(key, id);
       positions.push(p[0], p[1], p[2]);
-      const [r, g, b, wm] = bakeChunkAlbedo(p, localOf(p), ev, data.look);
+      const painted = data.body ? data.body.prims[nearestPrim(p, data.body)]?.color : undefined;
+      const [r, g, b, wm] = bakeChunkAlbedo(p, localOf(p), ev,
+        painted ? { ...data.look, baseColor: painted } : data.look);
       colors.push(r, g, b, wm);
     }
     index.push(id);

@@ -146,7 +146,7 @@ describe('wandering zombies stay where the actor thinks they are', () => {
         id++;
       }
     }
-    expect(id - 1).toBe(10);
+    expect(id - 1).toBe(ROOMS.reduce((n,r)=>n+r.zombies,0));
   });
 });
 

@@ -45,6 +45,7 @@
 // corpse keeps taking wounds/severs/gibs because none of that depends on the
 // motion pipeline — it reads the posed prims.
 //
+import { soldierFallPose } from './soldier-fall';
 import type { BuildResult } from './build-body';
 import type { Wound, WoundType } from './damage';
 import type { LimbId, Vec3 } from './types';
@@ -282,6 +283,10 @@ export interface MotionState {
   gait: ReturnType<typeof stepGait>['state'];
   stagger: StaggerState;
   collapse: CollapseState;
+  fallPose?: Vec3[];
+  fallFatal?: boolean;
+  fallImpact?: Vec3;
+  fallStrength?: number;
   plantL: PlantState;
   plantR: PlantState;
   aim: AimState;
@@ -383,12 +388,17 @@ export interface MotionSignals {
   headAlive: boolean;
   /** Forced collapse — the K key / panel button. */
   forcedCollapse: boolean;
+  /** Soldier-specific loss of mobility versus terminal injury. */
+  downed?: boolean;
+  fatal?: boolean;
   /** Every wound ADDED since the last frame (shots + stumps) — meter fuel. */
   freshWounds: readonly Wound[];
 }
 
 /** One frame of orchestrator output — everything the wiring applies. */
 export interface MotionFrame {
+  /** Joint collision plane; soldiers use the boot sole when downed. */
+  floorY: number;
   /** Whole-body ground-plane translation baked into every rest target. */
   rootShift: Vec3;
   heading: number;
@@ -492,11 +502,11 @@ export function stepMotion(
 
   // --- collapse owns the mode: meter accumulation + trigger matrix ---------
   const collapse = stepCollapse(state.collapse, {
-    wounds: sig.freshWounds,
-    severed: sig.severed,
+    wounds: profile.name === 'soldier' ? [] : sig.freshWounds,
+    severed: profile.name === 'soldier' ? [] : sig.severed,
     missing: sig.missing,
     forced: sig.forcedCollapse || (profile.name === 'soldier'
-      && (!sig.headAlive || sig.missing.legL || sig.missing.legR)),
+      && (!sig.headAlive || sig.downed || sig.missing.legL || sig.missing.legR || sig.missing.armL || sig.missing.armR)),
     ropes: joints.ropes,
   }, dt);
   const collapsed = collapse.phase !== 'standing';
@@ -556,7 +566,8 @@ export function stepMotion(
     ? profile.gait.walk : blendProfiles(profile.gait.walk, profile.gait.run, rw);
 
   // --- fire hold ------------------------------------------------------------
-  const firedNow = !!sig.fire && !collapsed && !!profile.carries;
+  const canHold = profile.name !== 'soldier' || (!sig.missing.armL && !sig.missing.armR);
+  const firedNow = !!sig.fire && !collapsed && !!profile.carries && canHold;
   const fireHold = firedNow ? FIRE.holdSec : Math.max(0, state.fireHold - dt);
   const sinceFire = firedNow ? 0 : state.sinceFire + dt;
   const strideScale = fireHold > 0 ? FIRE.strideScale : 1;
@@ -626,7 +637,16 @@ export function stepMotion(
     const name = joints.names[i]!;
     const gaitLocal = name === 'pelvis' ? gait.pose.rootOffset : gait.pose.offsets[name];
     const movingLeg = name === 'kneeL' || name === 'kneeR' || name === 'footL' || name === 'footR' || name === 'toeL' || name === 'toeR';
-    const gaitOff = movingLeg && travelYaw !== bodyYaw ? rotateYaw(gaitLocal, travelYaw - bodyYaw) : gaitLocal;
+    let gaitOff = movingLeg && travelYaw !== bodyYaw ? rotateYaw(gaitLocal, travelYaw - bodyYaw) : gaitLocal;
+    if (profile.name === 'soldier' && movingLeg) {
+      const side = name.endsWith('L') ? -1 : 1;
+      const authoredSide = Math.sign(base[0] - pivot[0]) || side;
+      // A shuffle keeps each foot in its own lane, even when the body aims
+      // across travel. Rotating a forward stride unbounded crossed the legs.
+      const lateral = base[0] + gaitOff[0] - pivot[0];
+      const minLane = name.startsWith('knee') ? .065 : .10;
+      gaitOff = [authoredSide * Math.max(minLane, authoredSide * lateral) - base[0] + pivot[0], gaitOff[1], gaitOff[2]];
+    }
     const stagOff = name === 'pelvis' ? stagger.rootOffset : stagger.offsets[name] ?? Z;
     const s = ARM_JOINTS.has(name) ? armPresence : blend * strideScale;
     // BRANCHED, not `add(..., ZERO)`: adding zero would turn a -0 component
@@ -740,7 +760,7 @@ export function stepMotion(
   let carryUsed: CarryName | null = null;
   const carries = profile.carries;
   let carryPose = state.carryPose;
-  if (armStyle === 'carry' && carries && !collapsed) {
+  if (armStyle === 'carry' && carries && !collapsed && canHold) {
     const carryName: CarryName = cfg.carryOverride
       ?? (fireHold > 0 ? carries.fire : (rw >= 0.5 ? carries.run : carries.walk));
     carryUsed = carryName;
@@ -826,6 +846,11 @@ export function stepMotion(
   }
   const plantLeg = (st: PlantState, hip: GaitJointName, knee: GaitJointName, foot: GaitJointName, lens: readonly [number, number]) => {
     if (st.phase !== 'stance') return;
+    if (profile.name === 'soldier') {
+      const local = rotateYaw(sub(st.plantPoint, targets[idx.pelvis!]!), -bodyYaw);
+      const side = Math.sign(joints.base[idx[foot]!]![0] - pivot[0]);
+      if (side * local[0] < .10) st = { ...st, plantPoint: add(targets[idx.pelvis!]!, rotateYaw([side * .10, local[1], local[2]], bodyYaw)) };
+    }
     const solved = solvePlantedLeg(
       targets[idx[hip]!]!, targets[idx[knee]!]!, targets[idx[foot]!]!,
       st, lens, SOLVE, legPole,
@@ -937,7 +962,22 @@ export function stepMotion(
     }
   }
 
+  const structural = profile.name === 'soldier' && collapsed;
+  // Soldier foot joints sit 13 cm above the authored boot sole. The normal
+  // ankle-height plant plane would suspend a side-lying torso in the air.
+  const floorY = joints.groundY - (structural ? .13 : MOTION_TUNING.floorPad);
+  const fallPose = structural ? (state.fallPose ?? points.map(p => [...p.pos] as Vec3)) : undefined;
+  const fallFatal = !!state.fallFatal || !!sig.fatal || !sig.headAlive || sig.forcedCollapse;
+  const fallImpact = state.fallImpact ?? sig.shot?.dirWorld ?? (state.recoil.joint !== null ? state.recoil.dirWorld : rotateYaw([0,0,-1], bodyYaw));
+  const fallStrength = state.fallStrength ?? (sig.shot?.type === 'blast' ? 1 : sig.shot ? .4 : .8);
+  if (structural) {
+    const fall = soldierFallPose(joints.base, joints.names, fallPose!, pivot, shift, bodyYaw, collapse.state.fallAge,
+      floorY, sig.missing.legL || sig.wounded.legL, !fallFatal, fallImpact, fallStrength, sig.missing.armL);
+    fall.forEach((p, i) => { targets[i] = p; });
+  }
+
   const nextState: MotionState = {
+    ...(fallPose ? { fallPose, fallFatal, fallImpact, fallStrength } : {}),
     wander, gait: gait.state, stagger: stagger.state, collapse: collapse.state,
     plantL, plantR, aim, recoil, bodyYaw, blend,
     runWeight: rw,
@@ -951,15 +991,16 @@ export function stepMotion(
   return {
     state: nextState,
     frame: {
+      floorY,
       rootShift: shift,
       heading: wander.heading,
       bodyYaw,
       restPose: targets,
-      restPull: collapse.restPull,
-      gravity: collapsed
+      restPull: structural ? 1 : collapse.restPull,
+      gravity: structural ? [0, -1.5, 0] : collapsed
         ? [0, MOTION_TUNING.collapseGravity, 0]
         : [0, STANDING_RIG.gravityY, 0],
-      ropes: collapse.ropes,
+      ropes: structural ? [] : collapse.ropes,
       phase: collapse.phase,
       collapsed,
       meter: collapse.state.meter,

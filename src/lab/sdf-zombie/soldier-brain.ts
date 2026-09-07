@@ -84,6 +84,7 @@ export interface SoldierInput {
    *  them, so "fires" and "strafes left" would become the same event. */
   rollDrift: number;
   lineOfSight?: boolean;
+  mayFire?: boolean;
   bounds?: WanderBounds;
   /** Actor-owned swept-body clearance query; deterministic for this scene. */
   canMoveTo?: (point: Vec3) => boolean;
@@ -243,7 +244,7 @@ export function stepSoldierBrain(
   cooldown = Math.max(0, cooldown - dt);
   holdSecs = Math.max(0, holdSecs - dt);
 
-  const sameRoom = player !== null && player.room === self.room;
+  const sameRoom = player !== null && (player.room === self.room || input.lineOfSight === true);
   lostFor = sameRoom ? 0 : lostFor + dt;
 
   const dx = player ? player.x - self.x : 0;
@@ -293,7 +294,7 @@ export function stepSoldierBrain(
   // Hold the telegraph through small range changes, but cancel when sight
   // breaks or the player leaves effective weapon range. Facing must settle
   // before release; a completed timer alone cannot authorize the shot.
-  if (state === 'aim' && (!visible || dist > tuning.fireRange + tuning.rangeSlack)) {
+  if (state === 'aim' && (input.mayFire === false || !visible || dist > tuning.fireRange + tuning.rangeSlack)) {
     state = 'engage'; phaseT = 0; burstLeft = 0; burstShots = 0;
     driftT = Math.min(driftT, 0.35);
   }
@@ -332,7 +333,7 @@ export function stepSoldierBrain(
     phaseT = 0;
     // A follow-up shot skips the decision tick entirely: the burst is one
     // action, not two independent opportunities.
-    if (burstLeft > 0 && visible && dist <= tuning.fireRange) {
+    if (burstLeft > 0 && input.mayFire !== false && visible && dist <= tuning.fireRange) {
       burstLeft = 0;
       state = 'aim';
       return pack({ halt: true, faceHeading: faceBearing, weaponUp: true, aimT: 0 });
@@ -373,7 +374,7 @@ export function stepSoldierBrain(
   if (decision) {
     driftT = tuning.repositionSec;
     drift = input.rollDrift < 0.5 ? -1 : 1;
-    if (visible && dist <= tuning.fireRange && cooldown <= 0 && input.roll < tuning.refireRoll) {
+    if (input.mayFire !== false && visible && dist <= tuning.fireRange && cooldown <= 0 && input.roll < tuning.refireRoll) {
       state = 'aim'; phaseT = 0; moveGoal = null; moveT = 0;
       return pack({ halt: true, faceHeading: faceBearing, weaponUp: true, aimT: 0 });
     }

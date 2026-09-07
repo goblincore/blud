@@ -55,6 +55,7 @@ export interface BrainSelf { x: number; z: number; yaw: number; room: number }
 export interface BrainPlayer { x: number; z: number; room: number }
 
 export interface BrainInput {
+  lineOfSight?: boolean;
   dt: number;
   self: BrainSelf;
   /** null when the player is somewhere with no room id (a tunnel, the void). */
@@ -168,7 +169,7 @@ export function stepBrain(
   cooldown = Math.max(0, cooldown - dt);
   holdSecs = Math.max(0, holdSecs - dt);
 
-  const sameRoom = player !== null && player.room === self.room;
+  const sameRoom = player !== null && (player.room === self.room || input.lineOfSight === true);
   lostFor = sameRoom ? 0 : lostFor + dt;
 
   const dx = player ? player.x - self.x : 0;
@@ -176,7 +177,7 @@ export function stepBrain(
   const dist = player ? Math.hypot(dx, dz) : Infinity;
 
   // --- notice, then lock ---------------------------------------------------
-  if (!alert && sameRoom) {
+  if (!alert && sameRoom && input.lineOfSight !== false) {
     if (input.alerted) {
       alert = true;                              // a gunshot bypasses the cone
     } else if (dist <= tuning.noticeRange) {
