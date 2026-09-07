@@ -178,6 +178,9 @@ export interface DeferredLayerDiagnostics {
   };
   /** True while the present pass writes into a caller-owned target. */
   outputTargetActive: boolean;
+  /** True while the null-target (canvas) present also writes depth — the
+   *  composition review fix's opt-in. Default false (the M1 default). */
+  canvasDepthWrites: boolean;
   /** True while a flashlight shadow binding is STORED. */
   flashlightShadowBound: boolean;
   /** True while a stored binding also has its SAMPLING enabled — i.e. the
@@ -214,6 +217,21 @@ export interface DeferredLayer {
    *  default. The target receives LINEAR color — the single display encode
    *  stays on the canvas path / the game's post chain. */
   setOutputTarget(target: THREE.RenderTarget | null): void;
+  /** CANVAS-DEPTH OPT-IN (composition review fix, 2026-09-07). When true AND
+   *  no output target is set, the canvas present additionally writes the
+   *  resolved surface depth into the canvas's hardware depth attachment —
+   *  what the target-present pass does for caller-owned targets, and the
+   *  same fragment-depth mechanism the legacy sdf composite has always used
+   *  against the canvas. A game coordinator composing forward content
+   *  DIRECTLY onto the canvas (all post effects off) then depth-tests that
+   *  content against the presented scene instead of garbage — without
+   *  forcing a post effect on or disabling depth tests.
+   *
+   *  Default FALSE: the M1 canvas present is intentionally depthless and
+   *  stays bit-identical for every fixture/lab caller that never opts in.
+   *  The flag only selects between two FIXED pre-compiled materials — no
+   *  compile-time state is toggled at runtime. */
+  setCanvasDepthWrites(on: boolean): void;
   /** Lit-stage environment (ambient + distance fog). Validates and COPIES:
    *  later mutation of the caller's colors cannot leak into the layer. */
   setEnvironment(environment: DeferredEnvironment): void;
@@ -649,6 +667,9 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
   let debugView: DeferredDebugView = 'lit';
   /** Caller-owned present target (M2 task 1). null = canvas (M1 default). */
   let outputTarget: THREE.RenderTarget | null = null;
+  /** Canvas-depth opt-in (composition review fix). False keeps the M1
+   *  depthless canvas present; true makes it write the resolved depth. */
+  let canvasDepthWrites = false;
   /** Stored flashlight shadow binding (M2 task 4). Sampled in the light
    *  stage when enabled; refreshed into uniforms at every render. */
   let flashlightShadow: DeferredFlashlightShadowBinding | null = null;
@@ -777,6 +798,21 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
     flipY: uFlipY,
   }) as never;
   const targetPresentScene = quadPass(targetPresentMat, { depthWrite: true });
+  // CANVAS-DEPTH OPT-IN (composition review fix, 2026-09-07): the third and
+  // last fixed present config — canvas-bound like the M1 path but WITH the
+  // resolved-depth fragment output, exactly the target-present pass's depth
+  // wiring aimed at the canvas's own hardware depth attachment (the same
+  // mechanism the legacy sdf composite uses — sdf-layer quadMat.depthNode).
+  // Fixed config compiled once; the setCanvasDepthWrites flag only chooses
+  // between THIS scene and the depthless M1 one at render time.
+  const canvasDepthPresentMat = new MeshBasicNodeMaterial();
+  canvasDepthPresentMat.colorNode = presentFn(presentArgs()) as never;
+  canvasDepthPresentMat.depthNode = presentDepthFn({
+    px: screenCoordinate,
+    surfaceDepth: texture(resolvedTex.surfaceDepth),
+    flipY: uFlipY,
+  }) as never;
+  const canvasDepthPresentScene = quadPass(canvasDepthPresentMat, { depthWrite: true });
 
   const _view = new THREE.Matrix4();
   const _vp = new THREE.Matrix4();
@@ -935,7 +971,14 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
         } else {
           renderer.setRenderTarget(null);
           renderer.autoClear = previousAutoClear;
-          void renderer.render(presentScene, quadCam);
+          // Depthless M1 canvas present by default; the opt-in third config
+          // additionally writes the resolved depth so a canvas-composing
+          // coordinator's forward pass (and goo) depth-tests real geometry.
+          // Same color output either way — the flag changes depth ONLY.
+          void renderer.render(
+            canvasDepthWrites ? canvasDepthPresentScene : presentScene,
+            quadCam,
+          );
         }
       } finally {
         renderer.setRenderTarget(previousTarget);
@@ -985,6 +1028,12 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
         }
       }
       outputTarget = target;
+    },
+
+    setCanvasDepthWrites(on) {
+      assertAlive();
+      if (typeof on !== 'boolean') throw new TypeError('setCanvasDepthWrites: on must be a boolean');
+      canvasDepthWrites = on;
     },
 
     setEnvironment(environment) {
@@ -1056,6 +1105,7 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
           fogEnabled: uFogEnabled.value > 0.5,
         },
         outputTargetActive: outputTarget !== null,
+        canvasDepthWrites,
         flashlightShadowBound: flashlightShadow !== null,
         flashlightShadowEnabled: flashlightShadow !== null && flashlightShadow.enabled,
         shadowSlots: {

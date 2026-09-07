@@ -557,6 +557,87 @@ describe('target-present material depth config (task1 continuation regression)',
   });
 });
 
+describe('canvas-depth present opt-in (composition review fix, 2026-09-07)', () => {
+  function makeLayer() {
+    const m = mockRenderer();
+    const layer = createDeferredLayer(m.renderer, { width: 64, height: 64, sdfScale: 1 });
+    return { ...m, layer };
+  }
+
+  /** The material of the quad in the scene submitted to the renderer at
+   *  `callIndex` — the ACTUAL object a real renderer would compile. */
+  function submittedMaterial(render: ReturnType<typeof vi.fn>, callIndex: number) {
+    const scene = render.mock.calls[callIndex]![0] as THREE.Scene;
+    const mats: Array<THREE.MeshBasicNodeMaterial> = [];
+    for (const child of scene.children) {
+      if ((child as THREE.Mesh).isMesh) mats.push((child as THREE.Mesh).material as THREE.MeshBasicNodeMaterial);
+    }
+    expect(mats).toHaveLength(1);
+    return mats[0]!;
+  }
+
+  it('defaults OFF, validates its input, and refuses after dispose', () => {
+    const { layer } = makeLayer();
+    try {
+      expect(layer.diagnostics().canvasDepthWrites).toBe(false);
+      expect(() => layer.setCanvasDepthWrites(1 as unknown as boolean)).toThrow(/boolean/);
+      layer.setCanvasDepthWrites(true);
+      expect(layer.diagnostics().canvasDepthWrites).toBe(true);
+      layer.setCanvasDepthWrites(false);
+      expect(layer.diagnostics().canvasDepthWrites).toBe(false);
+    } finally {
+      layer.dispose();
+    }
+    expect(() => layer.setCanvasDepthWrites(true)).toThrow(/disposed/);
+  });
+
+  it('flag ON + null target: the canvas present carries the resolved-depth graph', () => {
+    // The point of the opt-in: the CANVAS-bound present becomes the same
+    // fragment-depth pass the owned-target present always was. The color
+    // graph is shared; only the depth wiring differs.
+    const { render, layer } = makeLayer();
+    try {
+      layer.setCanvasDepthWrites(true);
+      layer.render(new THREE.Scene(), new THREE.Scene(), new THREE.PerspectiveCamera());
+      const mat = submittedMaterial(render, 6);
+      expect(mat.depthWrite).toBe(true);
+      expect(mat.depthTest).toBe(false);
+      expect(mat.depthNode).not.toBeNull();
+      expect(mat.depthNode).toBeDefined();
+    } finally {
+      layer.dispose();
+    }
+  });
+
+  it('flag ON is irrelevant while a target is set: the target-present material wins', () => {
+    const { render, layer } = makeLayer();
+    try {
+      const sceneTarget = new THREE.RenderTarget(64, 64);
+      layer.setCanvasDepthWrites(true);
+      layer.setOutputTarget(sceneTarget);
+      layer.render(new THREE.Scene(), new THREE.Scene(), new THREE.PerspectiveCamera());
+      const mat = submittedMaterial(render, 6);
+      expect(mat.depthWrite).toBe(true);
+      expect(mat.depthNode).not.toBeNull();
+      sceneTarget.dispose();
+    } finally {
+      layer.dispose();
+    }
+  });
+
+  it('flag OFF keeps the M1 depthless canvas present bit-for-bit (the default)', () => {
+    const { render, layer } = makeLayer();
+    try {
+      layer.render(new THREE.Scene(), new THREE.Scene(), new THREE.PerspectiveCamera());
+      const mat = submittedMaterial(render, 6);
+      expect(mat.depthWrite).toBe(false);
+      expect(mat.depthNode).toBeNull();
+    } finally {
+      layer.dispose();
+    }
+  });
+});
+
 describe('render draw hooks (hybrid deferred M2 task 1)', () => {
   function makeLayer() {
     const m = mockRenderer();

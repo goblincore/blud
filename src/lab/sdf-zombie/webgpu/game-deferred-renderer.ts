@@ -227,6 +227,9 @@ export interface GameDeferredRendererDiagnostics {
   /** Bounded page-side error record (the coordinator survives a throwing
    *  frame so a gate can read WHY the frame died from diagnostics). */
   errors: string[];
+  /** True while the canvas present writes the resolved scene depth (post-aa
+   *  fully off) — the composition review fix's game-owned depth seam. */
+  canvasDepthWrites: boolean;
 }
 
 export interface GameDeferredRenderer {
@@ -334,6 +337,15 @@ export function createGameDeferredRenderer(deps: GameDeferredRendererDeps): Game
       // (found by the task-5 GPU boot check, 2026-09-07).
       outputTarget = target;
       layer.setOutputTarget(target);
+      // Composition review fix: a null target means post-aa is FULLY off and
+      // the forward pass will draw straight onto the canvas — so the canvas
+      // present must carry the resolved scene depth (the layer's opt-in
+      // third present config) for that pass to depth-test against. A real
+      // target already receives depth from the target-present pass. This is
+      // the game-owned depth composition: opaque + resolved hardware depth +
+      // forward in ONE depth-coherent surface, presented once — no post
+      // effect forced on, no depth test disabled.
+      layer.setCanvasDepthWrites(target === null);
     },
     setSize(w, h) {
       width = w;
@@ -424,6 +436,9 @@ export function createGameDeferredRenderer(deps: GameDeferredRendererDeps): Game
       return {
         mode: 'deferred',
         frames,
+        /** The composition mode seam for the gates: true while the canvas
+         *  present writes depth (post-aa fully off). */
+        canvasDepthWrites: layerDiag.canvasDepthWrites,
         router: router.diagnostics(),
         lights: {
           ids: [...lastLights.ids],
