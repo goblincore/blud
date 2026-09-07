@@ -148,6 +148,11 @@ export function createBakedChunkMaterial(options?: SurfaceOutputOptions): BakedC
       surfaceDepth: vec4(clip.z.div(clip.w) as never, float(0), float(0), float(1)),
     }) as never;
     material.blending = THREE.NoBlending; // MRT producer — the M1 mesh rule
+    // Route-diagnostic marker ON THE MATERIAL — see the same stamp in
+    // bone-instancer.ts: the task-3 router reads material.surfaceKind, and
+    // without it a surface-mode baked chunk is unsupported/hidden (task-5
+    // boot check, 2026-09-07).
+    (material as unknown as { surfaceKind: number }).surfaceKind = kind;
     surfaceKind = kind;
   } else {
     const shade = wgslFn(CHUNK_SHADE_WGSL);

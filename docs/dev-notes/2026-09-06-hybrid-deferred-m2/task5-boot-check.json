@@ -1,0 +1,68 @@
+{
+  "checks": [
+    {
+      "name": "boot-deferred",
+      "detail": {
+        "mode": "deferred",
+        "present": 31
+      }
+    }
+  ],
+  "pageErrors": [],
+  "pass": false,
+  "records": {
+    "deferredBootDiag": {
+      "mode": "deferred",
+      "frames": 30,
+      "router": {
+        "counts": {
+          "mesh": 199,
+          "sdf": 10,
+          "forward": 0,
+          "exclude": 14
+        },
+        "unsupported": [
+          "Mesh ← MeshBasicNodeMaterial (unsupported material for the opaque MRT pass)"
+        ]
+      },
+      "lights": {
+        "ids": [
+          "flashlight",
+          "fire-00",
+          "fire-02",
+          "fire-01",
+          "fire-04",
+          "fire-03"
+        ],
+        "dropped": [
+          "muzzle"
+        ],
+        "flashlightIndex": 0
+      },
+      "shadow": {
+        "generationRequested": true,
+        "sampling": true,
+        "renderedMaps": 2,
+        "fullCasters": 99,
+        "levelCasters": 98,
+        "size": 1024,
+        "unsupported": []
+      },
+      "sizes": {
+        "width": 800,
+        "height": 600,
+        "sdfScale": 1,
+        "sdfTargetSize": {
+          "width": 800,
+          "height": 600
+        },
+        "outputTarget": {
+          "width": 800,
+          "height": 600
+        }
+      },
+      "lightGain": 1,
+      "errors": []
+    }
+  }
+}

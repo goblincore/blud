@@ -324,6 +324,14 @@ export function createBoneInstancer(max = 256, options?: SurfaceOutputOptions): 
       surfaceDepth: vec4(clip.z.div(clip.w) as never, float(0), float(0), float(1)),
     }) as never;
     material.blending = THREE.NoBlending; // MRT producer — the M1 mesh rule
+    // Route-diagnostic marker ON THE MATERIAL (the same stamp zombie-gpu's
+    // march material carries): the task-3 router's materialEligibility reads
+    // material.surfaceKind to admit surface producers into the G-buffer
+    // passes. The handle getter below predates the router and is not enough
+    // — without this stamp a surface-mode bone tube is diagnosed as an
+    // unsupported MeshBasicNodeMaterial and hidden from its pass (found by
+    // the task-5 game boot check, 2026-09-07).
+    (material as unknown as { surfaceKind: number }).surfaceKind = kind;
     surfaceKind = kind;
   } else {
     material.colorNode = vec4(shade({

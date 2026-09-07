@@ -5986,6 +5986,23 @@ async function main() {
       }
       return { radiusM: fx.radiusM, bodiesHit: fx.perBody.length, totalWounds };
     },
+    /** CAPTURE SEAM (M2 task 5): spawn one extra REGISTRY character in the
+     *  player's current room through THE SAME spawnEnemy path as boot (so
+     *  deferred gpu opts, router registrations and kit/prop wiring all flow
+     *  identically), and return its actor id. Task-6's "all registered
+     *  characters rendered once" gate drives this; ordinary play never
+     *  calls it. Face/kit/prop evidence needs a live goblin/clown, which the
+     *  room roster (zombies + the one soldier) does not carry. */
+    spawnDebugCharacter: (name: string) => {
+      const room = ROOMS.find(r => r.id === playerRoomId()) ?? ROOMS[0]!;
+      const starts = spawnPoints(room);
+      const start = starts[actors.filter(a => a.room === room.id).length % starts.length]!;
+      const errs: string[] = [];
+      const actor = spawnEnemy(name, room, start, errs);
+      actors.push(actor);
+      if (errs.length > 0) console.error(`[sdf-game] spawnDebugCharacter(${name}):`, errs.join(' | ')) ;
+      return { id: actor.id, room: room.id, errors: errs };
+    },
     uptime: () => (performance.now() - bootTime) / 1000,
     get frames() { return frameCount; },
     /** Where a view-model hangs (child of the camera). */
