@@ -23,9 +23,9 @@
 //       under beam/exposure/shadow changes while the LIT frame moves; the
 //       unregistered debug marker visible yet absent from the G-buffer.
 //   P2  actual opaque-route coverage: level mesh (cls 1), flesh SDF (cls 18),
-//       FPV gun mesh (cls 17), bone tubes (hash delta), forward probes both
+//       FPV gun mesh (cls 17), SDF bones enabled, forward probes both
 //       ways (nearer probe draws over flesh; behind-flesh probe occluded),
-//       world-normal DIRECTION checks on flesh + transformed tube producers
+//       world-normal DIRECTION checks on flesh; baked normals in lifecycle
 //   P3  ALL registered characters rendered once (16/16, the zombie-only blind
 //       spot), with kit-descendant tree + material-routing + texel evidence
 //       for the kit characters and wound/kit/prop detail for
@@ -54,7 +54,6 @@
 import assert from 'node:assert/strict';
 import { execSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { buildNdcLattice } from './lib/task6-grid.mjs';
 
 const vite = Number(process.argv[2] ?? 5326), cdp = Number(process.argv[3] ?? 9326);
 const out = 'docs/dev-notes/2026-09-06-hybrid-deferred-m2';
@@ -422,7 +421,7 @@ const bracketAt = async (label, ndc, deltas, spread = 0.05, scale = 0.1) => {
   return record;
 };
 
-const results = { phase: 'setup', checks, pageErrors, pass: false, scope: SCOPE, fullAcceptance: !CORE };
+const results = { phase: 'setup', checks, pageErrors, pass: false, scope: SCOPE, fullAcceptance: false, excludedFeatures: { boneTubes: 'Owner retired this experimental path for visual reasons on 2026-09-07; validate SDF bones and baked geometry instead.' } };
 Object.defineProperty(results, 'pageErrorsDropped', { get: () => pageErrorsDropped, enumerable: true });
 const records = { captures, stages: {} };
 // Core scope writes its OWN evidence file — never the canonical full one.
@@ -452,6 +451,9 @@ const writeCoreReport = () => {
     `- scope: \`core\` (TASK6_SCOPE=${SCOPE})`,
     `- fullAcceptance: **false** — a core pass is NOT full Task 6 acceptance`,
     `- source commit: \`${commit}\``,
+    `- result: ${results.pass ? 'PASS' : 'FAIL'} (${results.phase})`,
+    `- failure: ${results.failure?.message ?? 'none'}`,
+    '- excluded: experimental bone tubes, retired by owner; SDF bones and baked geometry remain in scope.',
     `- generatedAt: ${new Date().toISOString()}`,
     `- ports: vite ${vite} / cdp ${cdp}, viewport ${W}x${H}`,
     `- core coverage: P0 boot · P1 render-control + surface-hash invariance · P2 opaque routes · P6 exact depth/sentinel/present · P7a scale/resize`,
@@ -620,7 +622,7 @@ try {
    *  n·(camera-surface) > 0. (The previous version built surface−camera —
    *  the camera→surface ray — and demanded a positive dot, asserting the
    *  normal points AWAY from the eye while claiming camera-facing.)
-   *  |n| must be ~1. Used for flesh here; tube/baked producers call it in
+   *  |n| must be ~1. Used for flesh here; baked producers call it in
    *  their own stages. Each probe uses ITS OWN chosen world coordinate. */
   const normalTowardCam = async (sp, texel, minDot, label) => {
     const cam = await evaluate('__sdfGame.cameraWorld()');
@@ -643,117 +645,15 @@ try {
     `breech texel must be level-only mesh (cls 17), got ${gunTexel.cls}`);
   check('P2-route-fpv-gun', { cls: gunTexel.cls, depth: +gunTexel.depth.toFixed(5) });
 
-  // Bone tubes: turning the instancer ON must change the G-buffer (tubes
-  // REPLACE the limb capsules — setPackBones — so they are VISIBLE level-only
-  // mesh producers, not hidden inside the flesh), and turning it OFF must
-  // restore the digest EXACTLY (the march is pinned). While on, a bounded
-  // lattice scan around the faced body finds tube texels (cls 17, above the
-  // gun zone) and the transformed-producer NORMAL DIRECTION check runs on
-  // the best camera-facing candidate.
-  await evaluate('__sdfGame.setBoneMesh(true); __sdfGame.step(3);');
-  const hTubes = await evaluate('__sdfGame.hashSurface()');
-  const tubes = await evaluate('__sdfGame.boneTubes()');
-  assert.ok(tubes.count > 0, 'bone instancer must have instances');
-  assert.notDeepEqual(hTubes, h0a, 'bone tubes must enter the G-buffer when enabled');
-  const tubePixelDelta = hTubes.classCounts['17'] - h0a.classCounts['17'];
-  assert.ok(tubePixelDelta > 0,
-    `tubes must ADD cls-17 pixels (gun-only ${h0a.classCounts['17']} -> ${hTubes.classCounts['17']})`);
-  let tubeTexel = null, tubeNdc = null, tubeNormal = null, tubeOffTexel = null;
-  {
-    // ONE-CALL lattice scan via sampleSurfacePoints (a single readback set,
-    // not one render per sample — the per-sample variant hit CDP timeouts).
-    // The grid pieces come from scripts/lib/task6-grid.mjs — the inline
-    // version shipped `for (let dx = -6; dx <= 6; dx--)`, which never
-    // terminates and hung a whole gate run; the extracted builder has its
-    // own CPU regression (termination, unfiltered count, bounds, hard
-    // maximum).
-    // FIXTURE (measured 2026-09-07, see task-6-core report): visible tube
-    // pixels are 1-2px silhouette slivers where a limb tube pokes past the
-    // flesh march — a fixed screen lattice straddles them whenever the
-    // frozen gait phase shifts (two boots differed: one found 2 hits, the
-    // other 0). The scan is therefore ANCHORED on real tube geometry: the
-    // boneTubes() seam exposes the world endpoints of the first 8 posed
-    // bone prims (the exact data update() packs this frame); each in-frame
-    // endpoint gets a 5x5 grid at 0.02 NDC (a 1px sliver at 800px ≈ 0.0025
-    // NDC is unmissable at that step). ≤16 anchors x 25 = ≤400 points in
-    // ONE batched call. Candidates require the BODY depth window (the gun
-    // viewmodel resolves ~0.65 vs body ~0.94 — depth is the separator; no
-    // spatial gun exclusion) and the best candidate must ALSO pass the
-    // matched tubes-off readback below.
-    const tips = tubes.tips ?? [];
-    assert.ok(Array.isArray(tips) && tips.length > 0,
-      `boneTubes() must expose anchored tube endpoints for the scan (got ${JSON.stringify(tips)?.slice(0, 80)})`);
-    const anchors = [];
-    for (const t of tips) {
-      const sp2 = await evaluate(`__sdfGame.screenPosOf(${t[0]}, ${t[1]}, ${t[2]})`);
-      if (sp2 && Math.abs(sp2.x) <= 0.9 && Math.abs(sp2.y) <= 0.9 && sp2.z < 1) anchors.push(sp2);
-    }
-    assert.ok(anchors.length > 0, `no tube endpoint is in frame (tips ${JSON.stringify(tips).slice(0, 200)})`);
-    const lattice = [];
-    for (const a2 of anchors.slice(0, 16)) {
-      const g = buildNdcLattice({ cx: a2.x, cy: a2.y, dxRange: [-2, 2], dyRange: [-2, 2], step: 0.02, max: 25 });
-      lattice.push(...g.points);
-    }
-    const samples = await evaluate(`__sdfGame.sampleSurfacePoints(${JSON.stringify(lattice)})`);
-    const cam = await evaluate('__sdfGame.cameraWorld()');
-    const candidates = [];
-    for (let i = 0; i < samples.length; i++) {
-      const s = samples[i];
-      if (!(s.cls > 16.5 && s.cls < 17.5 && s.depth < 0.995)) continue;
-      if (Math.abs(s.depth - fleshTexel.depth) > 0.012) continue; // body depth window (gun ~0.65 far outside)
-      candidates.push({ i, s, ndc: lattice.points[i] });
-    }
-    let best = null;
-    for (const c of candidates.slice(0, 24)) {
-      const w = await depthToWorld(c.ndc.x, c.ndc.y, c.s.depth);
-      // camera-surface oracle (see normalTowardCam above): the outward
-      // normal of a front-facing surface points toward the EYE. Each
-      // candidate uses its OWN chosen world coordinate.
-      const toCam = [cam[0] - w[0], cam[1] - w[1], cam[2] - w[2]];
-      const len = Math.hypot(...toCam) || 1;
-      const dot = (c.s.normal[0] * toCam[0] + c.s.normal[1] * toCam[1] + c.s.normal[2] * toCam[2]) / len;
-      const nlen = Math.hypot(...c.s.normal);
-      if (!best || dot > best.dot) best = { dot, nlen, c };
-    }
-    // REQUIRED (recovery review): the pixel-count delta alone does NOT
-    // establish tube coverage — it cannot distinguish tube pixels from gun
-    // pixels or coincidence. A real tube TEXEL is mandatory, and its tube
-    // identity is proven by the MATCHED VISIBILITY readback below.
-    assert.ok(best, `bone tubes: no cls-17 texel in the body depth window across a `
-      + `${lattice.length}-point anchored scan (${anchors.length} anchors, `
-      + `${candidates.length} raw cls-17 hits) — pixel delta alone does not prove tube coverage`);
-    tubeTexel = best.c.s; tubeNdc = [best.c.ndc.x, best.c.ndc.y];
-    assert.ok(Math.abs(best.nlen - 1) < 0.05,
-      `bone tube: normal not unit length (${best.nlen.toFixed(4)})`);
-    assert.ok(best.dot > 0,
-      `bone tube: no camera-facing normal among ${candidates.length} tube texels `
-      + `(best n·(cam-surf) ${best.dot.toFixed(3)}) — transformed-instance normals are defective`);
-    tubeNormal = { dot: +best.dot.toFixed(3), nlen: +best.nlen.toFixed(4), candidates: candidates.length, lattice: lattice.unfiltered };
-  }
-  await evaluate('__sdfGame.setBoneMesh(false); __sdfGame.step(3);');
-  const hTubesOff = await evaluate('__sdfGame.hashSurface()');
-  assert.deepEqual(hTubesOff, h0a, 'tubes off must restore the surface digest exactly');
-  // MATCHED VISIBILITY OFF/ON: read the SAME coordinate, tubes OFF. It must
-  // NOT still show a cls-17 surface at the tube depth — otherwise the
-  // "tube texel" could have been gun geometry that merely passed the
-  // filters. The paired reads (same NDC, same depth window) are what make
-  // the on-state texel attributable to the tubes.
-  {
-    const off = await evaluate(`__sdfGame.readSurfaceAt(${tubeNdc[0].toFixed(4)}, ${tubeNdc[1].toFixed(4)})`);
-    const offShowsTube = off.cls > 16.5 && off.cls < 17.5
-      && Math.abs(off.depth - tubeTexel.depth) <= 0.012;
-    assert.ok(!offShowsTube,
-      `bone tube: tubes-off readback at the SAME NDC (${JSON.stringify(tubeNdc)}) still shows a `
-      + `cls-17 surface at tube depth (cls ${off.cls}, depth ${off.depth}) — the texel is not attributable to the tubes`);
-    tubeOffTexel = { cls: off.cls, depth: +off.depth.toFixed(5) };
-  }
-  check('P2-route-bone-tubes', {
-    instances: tubes.count, tubePixelDelta,
-    tubeTexel: tubeTexel && { depth: +tubeTexel.depth.toFixed(5), ndc: tubeNdc },
-    tubeNormal,
-    tubeOffReadback: tubeOffTexel,
-    hashesDiffer: hTubes.hashes.emissionClass !== h0a.hashes.emissionClass,
-  });
+  // Owner scope correction (2026-09-07): instanced bone tubes are being
+  // retired for visual reasons. The supported bone path remains the SDF
+  // field (with sphere culling evaluated separately), plus baked geometry.
+  // Keep the field path enabled throughout this gate. Baked producer
+  // normal/depth coverage remains mandatory in the full lifecycle phase.
+  assert.equal(await evaluate('__sdfGame.boneMesh'), false, 'supported SDF bone path must remain active');
+  const fleshBatch = await evaluate(`__sdfGame.sampleSurfacePoints([{x:${fleshSp.x.toFixed(4)},y:${fleshSp.y.toFixed(4)}}])`);
+  assert.deepEqual(fleshBatch[0], fleshTexel, 'single/batch surface decoding must agree on the supported flesh path');
+  check('P2-sdf-bones-and-readback-parity', { boneMesh: false, pixel: fleshTexel.pixel });
 
   // Forward route, BOTH DIRECTIONS (depth-tested composite proof):
   //   - a probe NEARER than the flesh composites OVER the body pixel;
@@ -1359,6 +1259,7 @@ try {
   noNewErrors('P8 explicit legacy boot');
 
   results.pass = true;
+  results.fullAcceptance = true;
   results.phase = 'complete';
   })(); // end full-only phases
 } catch (e) {
@@ -1373,6 +1274,7 @@ try {
   process.exitCode = 1;
 } finally {
   saveEvidence();
+  writeCoreReport();
   try { await send('Page.close'); } catch { /* tab may already be gone */ }
   ws.close();
   await new Promise((r) => { ws.onclose = r; setTimeout(r, 500); });

@@ -1,5 +1,10 @@
 # Hybrid deferred M2 — game integration and flashlight shadows
 
+## Owner scope update — 2026-09-07
+
+Instanced polygonal bone tubes are retired from the intended gameplay path because their appearance is unsuitable. They are excluded from mandatory M2 acceptance and must not block the game GPU gate. Existing SDF field bones remain supported. Bone sphere culling is not integrated here; a separate agent owns that work. Detached/shared chunks and baked geometry remain in scope, including material, depth, normal and lifecycle evidence. Earlier tube-specific steps below describe historical work and do not override this scope update.
+
+
 Date: 2026-09-06. The owner requested game integration and shadows after reviewing M1, then explicitly selected **flashlight shadows first; other dynamic lights unshadowed**. Continue the established Dispatch UI execution and coordinator-review workflow. The owner subsequently approved this direction and selected GLM 5.3 Flash with high reasoning (`zai/glm-5.3-flash:high`, pi).
 
 ## Outcome

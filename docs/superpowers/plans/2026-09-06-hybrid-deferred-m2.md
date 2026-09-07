@@ -1,5 +1,10 @@
 # Hybrid Deferred M2 Implementation Plan
 
+## Owner scope update — 2026-09-07
+
+Instanced polygonal bone tubes are retired from the intended gameplay path because their appearance is unsuitable. They are excluded from mandatory M2 acceptance and must not block the game GPU gate. Existing SDF field bones remain supported. Bone sphere culling is not integrated here; a separate agent owns that work. Detached/shared chunks and baked geometry remain in scope, including material, depth, normal and lifecycle evidence. Earlier tube-specific steps below describe historical work and do not override this scope update.
+
+
 > **For agentic workers:** Use superpowers:executing-plans for your assigned task only. Execution and the selected flashlight-first scope are owner-authorized. Work through Dispatch UI in isolated branches; the coordinator owns review and final integration decisions.
 
 **Goal:** An opt-in playable deferred game with shared opaque dynamic lighting and flashlight shadows.
