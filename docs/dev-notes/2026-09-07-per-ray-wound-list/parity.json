@@ -1,0 +1,18 @@
+{
+  "url": "http://localhost:5277/sdf-game.html",
+  "backend": "webgpu",
+  "maxWounds": 16,
+  "woundCounts": [
+    0,
+    16,
+    16
+  ],
+  "clockPinned": true,
+  "frozen": true,
+  "captures": {
+    "offA": "/Users/donny/.claude/dispatch/worktrees/2026-09-07-per-ray-wound-list-task-1/docs/dev-notes/2026-09-07-per-ray-wound-list//off-a.png",
+    "offB": "/Users/donny/.claude/dispatch/worktrees/2026-09-07-per-ray-wound-list-task-1/docs/dev-notes/2026-09-07-per-ray-wound-list//off-b.png",
+    "on": "/Users/donny/.claude/dispatch/worktrees/2026-09-07-per-ray-wound-list-task-1/docs/dev-notes/2026-09-07-per-ray-wound-list//on.png",
+    "offC": "/Users/donny/.claude/dispatch/worktrees/2026-09-07-per-ray-wound-list-task-1/docs/dev-notes/2026-09-07-per-ray-wound-list//off-c.png"
+  }
+}

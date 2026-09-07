@@ -1458,9 +1458,10 @@ export function createZombieGpuView(
     writeRow(ROW_CLUSTER_GROUPS, p.clusterGroups, p.clusterCount);
     dataTex.needsUpdate = true;
     u.counts.value.set(p.primCount, p.clusterCount, p.carveCount, p.maxBlendK);
-    // z is the owner re-fold attribution gate (march.wgsl.ts) — a settings
-    // channel that must survive every upload, like perfCfg.
-    u.counts2.value.set(p.boneCount, bareBones ? 1 : 0, u.counts2.value.z, 0);
+    // z is the owner re-fold attribution gate (march.wgsl.ts) and w is the
+    // per-ray wound list gate (counts2.w, 2026-09-07) — settings channels
+    // that must survive every upload, like perfCfg.
+    u.counts2.value.set(p.boneCount, bareBones ? 1 : 0, u.counts2.value.z, u.counts2.value.w);
     return p;
   }
 
@@ -2061,7 +2062,9 @@ export function createChunkGpuView(
     // counts2.y is the BARE-BONES bypass: a bone-only chunk (the melt's
     // released skeleton groups) has no wound to be near, and the nearWound
     // gate would march an empty field — the chunk would be invisible.
-    u.counts2.value.set(packed.boneCount, nextPrims.length === 0 ? 1 : 0, u.counts2.value.z, 0);
+    // w is the per-ray wound list gate (march.wgsl.ts counts2.w), preserved
+    // across uploads like z above.
+    u.counts2.value.set(packed.boneCount, nextPrims.length === 0 ? 1 : 0, u.counts2.value.z, u.counts2.value.w);
     u.marchCfg.value.x = 48; // chunks are small; fewer steps
     // Torn-meat gore mask — for FLESH chunks. A bone-only chunk (the melt's
     // released skeleton groups) is not torn meat; the mask would paint bare

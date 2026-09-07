@@ -237,7 +237,7 @@ describe('ported features reach the entry point', () => {
     // w = 1e9 is the no-cull identity (chunk torn ends, hands view).
     expect(APPLY_WOUNDS).toContain('woundBound: vec4<f32>');
     const iBound = APPLY_WOUNDS.indexOf('if (length(p - woundBound.xyz) > woundBound.w) { return vec2<f32>(dIn, 0.0); }');
-    const iLoop = APPLY_WOUNDS.indexOf('for (var i = 0; i < 16; i = i + 1)');
+    const iLoop = APPLY_WOUNDS.indexOf('for (var k = 0; k < 16; k = k + 1)');
     const iFirstLoad = APPLY_WOUNDS.indexOf(`vec2<i32>(i, ${ROW_WOUND})`);
     expect(iBound).toBeGreaterThan(-1);
     expect(iLoop).toBeGreaterThan(iBound);
@@ -1013,7 +1013,10 @@ describe('data texture layout', () => {
       // with "wound" in the name but no wound-count loop (woundShadow's
       // 14-step penumbra march) are pinned by their own tests instead.
       if (!src.includes('i32(woundCfg.x)')) continue;
-      expect(src).toContain(`i < ${MAX_WOUNDS}`);
+      // The loop variable name can change (the per-ray wound list folds by k);
+      // pin only the BOUND, which is the MAX_WOUNDS literal that can drift
+      // from damage.ts. Match `var x = 0; x < 16` for any identifier x.
+      expect(src).toMatch(new RegExp(`var\\s+[a-z]\\w*\\s*=\\s*0\\s*;\\s*[a-z]\\w*\\s*<\\s*${MAX_WOUNDS}\\b`));
     }
   });
 });

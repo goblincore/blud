@@ -203,6 +203,10 @@ const ALL_LEGS = {
   // The per-limb owner re-fold (march.wgsl.ts ~L1505): the one wound-path
   // mechanism never priced. OFF is a wrong frame on purpose.
   'owner-refold-off': { setOwnerRefold: false },
+  // PER-RAY WOUND LIST (march.wgsl.ts, counts2.w): build the reachable wound
+  // set once per pixel and fold only those. OFF is bit-identical, so this
+  // leg prices the preload against the per-step full-wound fold.
+  'wound-list-on': { setWoundList: true },
   // Bone tubes ON: skeleton drawn as instanced tubes in the polygon pass
   // instead of folded into the field inside wounds (bone-tubes, default OFF
   // pending the look verdict). Prices the inside-flesh rows the nearWound
@@ -247,6 +251,7 @@ async function applyLeg(name) {
     __sdfGame.setWoundEarlyOut(true);
     __sdfGame.setWoundCull(true);
     __sdfGame.setOwnerRefold(true);
+    __sdfGame.setWoundList(false);
     __sdfGame.setBoneMesh(false);
     // Chunk pass: split ONLY in passes mode, so the timer can label chunks;
     // every other mode benches the shipped single pass.
