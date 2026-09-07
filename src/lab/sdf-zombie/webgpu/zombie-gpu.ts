@@ -39,6 +39,10 @@ import {
   ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS,
 } from './march.wgsl';
 import { sdfSurfaceMarch, sdfSurfaceMrtNodes } from './deferred-sdf';
+import {
+  encodeSurfaceClass, SURFACE_CLASS_FLESH,
+  type ShadowReceiver, type SurfaceOutputOptions,
+} from './deferred-surface';
 
 export interface ZombieGpuView {
   object: THREE.Object3D;
@@ -601,6 +605,14 @@ type Swizzled = { xyz: unknown; w: unknown };
 interface MaterialWithLevelShadowTex {
   levelShadowTex: { value: THREE.Texture };
 }
+/** Surface-mode march materials carry the packed emission-class uniform
+ *  (M2 task 2): base class + shadow receiver bit, flippable at runtime via
+ *  `.value` without rebuilding the pipeline. `surfaceKind` is the same
+ *  value, frozen at construction, for route diagnostics. */
+export interface MaterialWithSurfaceClass {
+  surfaceClass: { value: number };
+  surfaceKind: number;
+}
 /** The same handle, as the view exposes it. */
 export interface LevelShadowTexHandle {
   value: THREE.Texture;
@@ -858,6 +870,11 @@ export function createMarchMaterial(
   // mode: the whole point is that no caller-supplied variant of the marcher
   // may diverge from the production trace/material sections.
   output: 'lit' | 'surface' = 'lit',
+  // Hybrid deferred M2 (task 2), POSITIONALLY LAST after `output`. Which
+  // flashlight shadow map the surface samples — packed into emissionClass.a
+  // via encodeSurfaceClass. Ignored in lit mode. Default 'full' keeps the M1
+  // encoding (class 2, no bit) exact.
+  shadowReceiver?: ShadowReceiver,
 ) {
   const dataNode = dataTex instanceof THREE.Texture
     ? texture(dataTex)
@@ -1079,9 +1096,18 @@ export function createMarchMaterial(
     // outputNode: with a material mrtNode the output struct IS the MRT (the
     // task-1 note on MRTNode.js), and the deferred SDF target has no legacy
     // depth-alpha channel to feed.
-    material.mrtNode = sdfSurfaceMrtNodes(tracedHit, depth) as never;
+    //
+    // M2 task 2: the class channel is an UNLIT UNIFORM seeded from the
+    // shadowReceiver option (default keeps the M1 encoding exactly), exposed
+    // on the material so a caller can flip a body's receiver without
+    // rebuilding the pipeline. The tail still writes the plain flesh class
+    // into the private global; the emission readback substitutes this value.
+    const surfaceClass = uniform(encodeSurfaceClass(SURFACE_CLASS_FLESH, shadowReceiver ?? 'full'));
+    material.mrtNode = sdfSurfaceMrtNodes(tracedHit, depth, surfaceClass) as never;
     material.depthNode = depth;
     material.depthWrite = true;
+    (material as unknown as MaterialWithSurfaceClass).surfaceClass = surfaceClass;
+    (material as unknown as { surfaceKind: number }).surfaceKind = surfaceClass.value;
     return material;
   }
 
@@ -1145,13 +1171,30 @@ function bindObjectValue<T>(node: T, value: (state: ChunkMaterialState) => unkno
 /** A single externally-owned march material for every simultaneously-live
  * gib chunk. Creating a fresh NodeMaterial per chunk makes Three rebuild the
  * complete WGSL node graph for each render object even when program keys
- * match; this object-update binding keeps that graph singular. */
+ * match; this object-update binding keeps that graph singular.
+ *
+ * M2 task 2: `options` selects the output mode. Surface mode (used by the
+ * deferred game) emits the four named G-buffer attachments from the SAME
+ * graph — the per-draw data rebinding below is what keeps two differently
+ * bound chunks correct under one shared surface material. The per-draw
+ * bound nodes are exposed (`dataNode`, `volumeNode`, `uniformNodes`) so a
+ * test can perform exactly the rebinding a render performs:
+ * `node.update({ object })` is the same callback the renderer invokes. */
 export interface SharedChunkGpuMaterial {
   material: MeshBasicNodeMaterial;
+  /** The per-draw bound data-texture node. */
+  dataNode: { value: THREE.Texture; update: (frame: { object: THREE.Object3D }) => void };
+  /** The per-draw bound volume-texture node. */
+  volumeNode: { value: THREE.Texture; update: (frame: { object: THREE.Object3D }) => void };
+  /** The seed uniform NODES — every one rebinds its .value per draw. */
+  uniformNodes: MarchUniforms;
   dispose(): void;
 }
 
-export function createSharedChunkGpuMaterial(prev?: PrevSource): SharedChunkGpuMaterial {
+export function createSharedChunkGpuMaterial(
+  prev?: PrevSource,
+  options?: SurfaceOutputOptions,
+): SharedChunkGpuMaterial {
   // These seeds establish the binding types before any chunk exists. They are
   // never sampled by a chunk draw: every node below swaps to the current
   // mesh's state through onObjectUpdate first.
@@ -1165,11 +1208,18 @@ export function createSharedChunkGpuMaterial(prev?: PrevSource): SharedChunkGpuM
   }
   const dataNode = bindObjectValue(texture(seedData), state => state.dataTexture);
   const volumeNode = bindObjectValue(texture3D(seedVolume), state => state.volumeTexture);
-  const material = createMarchMaterial(dataNode, volumeNode, seedUniforms, undefined, undefined, undefined, undefined, undefined, prev);
+  const material = createMarchMaterial(
+    dataNode, volumeNode, seedUniforms,
+    undefined, undefined, undefined, undefined, undefined, prev,
+    undefined, undefined, undefined, options?.output ?? 'lit', options?.shadowReceiver,
+  );
 
   let disposed = false;
   return {
     material,
+    dataNode: dataNode as unknown as SharedChunkGpuMaterial['dataNode'],
+    volumeNode: volumeNode as unknown as SharedChunkGpuMaterial['volumeNode'],
+    uniformNodes: seedUniforms,
     dispose() {
       if (disposed) return;
       disposed = true;
@@ -1387,6 +1437,15 @@ export interface GpuViewOpts {
    * task 3 reaches the producer mesh/material through view.object.
    */
   output?: 'lit' | 'surface';
+  /**
+   * Hybrid deferred M2 (task 2): which flashlight shadow map this view's
+   * surface samples when `output: 'surface'` — packed into emissionClass.a
+   * by encodeSurfaceClass. Default 'full' keeps the M1 encoding EXACTLY
+   * (class 2, no receiver bit); the game passes 'level-only' for flesh so a
+   * character's own inflated hull cannot swallow its illumination.
+   * Ignored in lit mode.
+   */
+  shadowReceiver?: ShadowReceiver;
 }
 
 /** Wires an externally-owned GPU binding into a view: the material gets the
@@ -1501,7 +1560,8 @@ export function createZombieGpuView(
     dataTex, volumeTex, u,
     marchBody,
     opts.cone, opts.occluder, tileNodes, opts.shell, opts.prev, opts.levelShadow,
-    undefined, opts.depthPre, opts.output);
+    undefined, opts.depthPre, opts.output, opts.shadowReceiver,
+  );
 
   // The coarse twin: same field, same proxy box, no shading, its own mesh on
   // its own layer. Writes the conservative start distance into .x, and the
@@ -1834,6 +1894,11 @@ export function createChunkGpuView(
    *  is bone-free — which is what shipped, and why a torn-off forearm was
    *  solid meat. */
   bones?: Primitive[],
+  /** Hybrid deferred M2 (task 2), trailing: output mode + shadow receiver.
+   *  With a `sharedMaterial` given, the material's mode wins (one graph per
+   *  output mode — the shared material must be built with the SAME options);
+   *  this option then only governs the privately-owned-material path. */
+  options?: SurfaceOutputOptions,
 ): ChunkGpuView {
   const { tex: dataTex, texels, writeRow } = createDataTexture();
   const u = defaultUniforms(template.faceTex.value);
@@ -1841,7 +1906,11 @@ export function createChunkGpuView(
   const volTex = volumeTex ?? createFallbackHandVolumeTexture();
 
   const ownsMaterial = !sharedMaterial;
-  const material = sharedMaterial?.material ?? createMarchMaterial(dataTex, volTex, u);
+  const material = sharedMaterial?.material ?? createMarchMaterial(
+    dataTex, volTex, u,
+    undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, options?.output ?? 'lit', options?.shadowReceiver,
+  );
   // A unit proxy lets reset() resize this exact mesh with scale instead of
   // replacing its geometry. Object identity is what bounds Three's
   // RenderObject cache when the lab recycles its oldest 40 chunk slots.

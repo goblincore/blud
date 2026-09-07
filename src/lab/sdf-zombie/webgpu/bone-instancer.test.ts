@@ -1,7 +1,8 @@
 // src/lab/sdf-zombie/webgpu/bone-instancer.test.ts
 import { describe, expect, it } from 'vitest';
 import type { Primitive } from '../types';
-import { packBoneInstances, INSTANCE_FLOATS, BONE_QROT_WGSL, BONE_VERTEX_WGSL, BONE_SHADE_WGSL, BONE_HASH_WGSL, BONE_NOISE_WGSL, boneInstanceArrays } from './bone-instancer';
+import { packBoneInstances, INSTANCE_FLOATS, BONE_QROT_WGSL, BONE_VERTEX_WGSL, BONE_SURFACE_WGSL, BONE_SHADE_WGSL, BONE_HASH_WGSL, BONE_NOISE_WGSL, boneInstanceArrays, createBoneInstancer } from './bone-instancer';
+import { encodeSurfaceClass } from './deferred-surface';
 
 const bone = (over: Partial<Primitive>): Primitive => ({
   a: [0, 0, 0], b: [0, 0.2, 0], radius: 0.02, scale: [1, 1, 1], blendK: 0,
@@ -48,7 +49,7 @@ describe('packBoneInstances', () => {
 });
 
 describe('WGSL parse contract', () => {
-  for (const [name, src] of Object.entries({ BONE_QROT_WGSL, BONE_VERTEX_WGSL, BONE_SHADE_WGSL, BONE_HASH_WGSL, BONE_NOISE_WGSL })) {
+  for (const [name, src] of Object.entries({ BONE_QROT_WGSL, BONE_VERTEX_WGSL, BONE_SURFACE_WGSL, BONE_SHADE_WGSL, BONE_HASH_WGSL, BONE_NOISE_WGSL })) {
     it(`${name} starts with fn and has no colon-in-comment in its signature`, () => {
       expect(src.startsWith('fn ')).toBe(true);
       // ONE fn per string: wgslFn reads a second fn's parameters as the
@@ -62,4 +63,69 @@ describe('WGSL parse contract', () => {
       }
     });
   }
+});
+
+describe('material/light split (M2 task 2)', () => {
+  it('boneSurface carries the material terms with NO light input', () => {
+    // The G-buffer albedo must be light-invariant: the surface fn's
+    // signature takes p/boneColor/deepColor/look/woundTex/woundCount and
+    // nothing else — no lightDir, key, spot, ambient or camera.
+    const sig = BONE_SURFACE_WGSL.slice(BONE_SURFACE_WGSL.indexOf('('), BONE_SURFACE_WGSL.indexOf(') ->'));
+    for (const absent of ['lightDir', 'keyColor', 'lightCfg', 'spotPos', 'spotAxis', 'spotCfg', 'spotColor', 'ambient', 'camPos']) {
+      expect(sig).not.toContain(absent);
+    }
+    // The mottle/stain/exposure terms LIVE in the surface fn…
+    for (const present of ['expo', 'boneNoise', 'mottle', 'stain', 'albedo']) {
+      expect(BONE_SURFACE_WGSL).toContain(present);
+    }
+    // …and boneShade consumes them via surfaceIn instead of re-deriving.
+    expect(BONE_SHADE_WGSL).toContain('surfaceIn');
+    expect(BONE_SHADE_WGSL).not.toContain('boneNoise');
+    expect(BONE_SHADE_WGSL).not.toContain('textureLoad');
+    expect(BONE_SHADE_WGSL).toContain('let albedo = surfaceIn.xyz;');
+    expect(BONE_SHADE_WGSL).toContain('let expo = surfaceIn.w;');
+    // The light compose itself is intact.
+    for (const present of ['spotCfg.x > 0.0', 'let diffuse = albedo * (ambient + keyI * keyC', 'let specular = keyC * wetTint']) {
+      expect(BONE_SHADE_WGSL).toContain(present);
+    }
+  });
+
+  it('surfaceKind: default undefined (lit); surface mode packs mesh class + receiver', () => {
+    const lit = createBoneInstancer(8);
+    expect(lit.surfaceKind).toBeUndefined();
+    const litMat = lit.object.material as unknown as { mrtNode: unknown; colorNode: unknown; positionNode: unknown; normalNode: unknown };
+    // Existing default: lit output, and the instanced position/normal nodes.
+    expect(litMat.mrtNode).toBeNull();
+    expect(litMat.colorNode).toBeTruthy();
+    expect(litMat.positionNode).toBeTruthy();
+    expect(litMat.normalNode).toBeTruthy();
+    lit.dispose();
+
+    const surf = createBoneInstancer(8, { output: 'surface' });
+    expect(surf.surfaceKind).toBe(encodeSurfaceClass(1, 'full'));
+    expect(surf.surfaceKind).toBe(1);
+    const surfMat = surf.object.material as unknown as { mrtNode: { outputNodes: Record<string, unknown> } | null; colorNode: unknown; positionNode: unknown; normalNode: unknown };
+    expect(Object.keys(surfMat.mrtNode!.outputNodes).sort())
+      .toEqual(['albedoRoughness', 'emissionClass', 'normalMetalness', 'surfaceDepth']);
+    expect(surfMat.colorNode).toBeNull();
+    // The bone positionNode and normalNode are retained in BOTH modes.
+    expect(surfMat.positionNode).toBeTruthy();
+    expect(surfMat.normalNode).toBeTruthy();
+    surf.dispose();
+
+    const lvl = createBoneInstancer(8, { output: 'surface', shadowReceiver: 'level-only' });
+    expect(lvl.surfaceKind).toBe(encodeSurfaceClass(1, 'level-only'));
+    expect(lvl.surfaceKind).toBe(17);
+    lvl.dispose();
+  });
+
+  it('update/setWounds run identically in surface mode', () => {
+    const surf = createBoneInstancer(8, { output: 'surface', shadowReceiver: 'level-only' });
+    const n = surf.update([{ prims: [bone({})] }]);
+    void n;
+    expect(surf.count).toBe(1);
+    surf.setWounds([{ pos: [0, 0, 0], radius: 0.2 }]);
+    expect(surf.uniforms.woundCount.value).toBe(1);
+    surf.dispose();
+  });
 });

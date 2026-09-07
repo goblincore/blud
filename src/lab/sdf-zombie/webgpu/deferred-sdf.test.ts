@@ -77,11 +77,13 @@ describe('surface-entry wgslFn parse contract', () => {
     expect(surface).toEqual(legacy);
   });
 
-  it('parses the readbacks with the traced hit as their one input', () => {
-    for (const src of [SDF_SURFACE_READ_ALBEDO, SDF_SURFACE_READ_NORMAL, SDF_SURFACE_READ_EMISSION]) {
-      const parsed = new WGSLNodeFunction(src);
-      expect(parsed.inputs.map((i: { name: string }) => i.name)).toEqual(['dep']);
-    }
+  it('parses the readbacks with the traced hit as their data-dependency input', () => {
+    expect(new WGSLNodeFunction(SDF_SURFACE_READ_ALBEDO).inputs.map((i: { name: string }) => i.name)).toEqual(['dep']);
+    expect(new WGSLNodeFunction(SDF_SURFACE_READ_NORMAL).inputs.map((i: { name: string }) => i.name)).toEqual(['dep']);
+    // M2 task 2: the emission readback also takes the packed material class
+    // (base class + shadow receiver bit) as an unlit uniform-fed input.
+    expect(new WGSLNodeFunction(SDF_SURFACE_READ_EMISSION).inputs.map((i: { name: string }) => i.name))
+      .toEqual(['dep', 'classVal']);
   });
 });
 
@@ -188,6 +190,21 @@ describe('surface output assembly', () => {
     const outputNames = Object.keys((node as unknown as { outputNodes?: Record<string, unknown> }).outputNodes ?? {});
     for (const name of SURFACE_ATTACHMENT_NAMES) expect(outputNames).toContain(name);
     expect(outputNames.sort()).toEqual([...SURFACE_ATTACHMENT_NAMES].sort());
+  });
+
+  it('accepts the M2 class-value override and stays name-stable with it', () => {
+    // The receiver uniform rides the emission readback only — the other
+    // three attachments and the names are untouched.
+    const node = sdfSurfaceMrtNodes({ dep: true }, { z: true }, { value: 18 });
+    const outputNames = Object.keys((node as unknown as { outputNodes?: Record<string, unknown> }).outputNodes ?? {});
+    expect(outputNames.sort()).toEqual([...SURFACE_ATTACHMENT_NAMES].sort());
+  });
+
+  it('substitutes only the CLASS channel at the readback; emission RGB is the traced glow', () => {
+    // Text pin of the M2 substitution: xyz from the traced global, w from
+    // the uniform-fed input. The default (no override) is the plain flesh
+    // class constant — the pre-M2 encoding — pinned by the tail test above.
+    expect(SDF_SURFACE_READ_EMISSION).toContain('return vec4<f32>(gSdfEmissionClass.xyz, classVal);');
   });
 });
 

@@ -16,10 +16,19 @@ import { ZOMBIE } from '../body';
 import { makeChunk } from '../gib-chunks';
 import { ROW_PRIM_BEND } from './march.wgsl';
 import { MAX_PRIMS } from '../validate';
+import { encodeSurfaceClass } from './deferred-surface';
 import type { Primitive } from '../types';
 import * as THREE from 'three/webgpu';
 
 const body = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
+
+/** The march material as NodeMaterial-shaped — mrtNode/outputNode/colorNode/
+ *  depthNode are NodeMaterial slots, null unless the builder set them. */
+type MarchMat = {
+  mrtNode: { outputNodes: Record<string, unknown> } | null;
+  outputNode: unknown; colorNode: unknown; depthNode: unknown;
+  side: THREE.Side; depthWrite: boolean;
+};
 
 describe('noise root shift — packed channel (faceCfg3.zw)', () => {
   it('defaults to zero: a statue body keeps world-anchored noise, as before', () => {
@@ -400,13 +409,6 @@ describe('wound union-reach bound (close-up wound-cull task, 2026-09-05)', () =>
 // no existing caller opts in implicitly, that the legacy depth-alpha output
 // survives, and that a surface view keeps the whole view contract.
 describe('deferred surface output mode (hybrid deferred M1 task 2)', () => {
-  // The material as NodeMaterial-shaped — mrtNode/outputNode/colorNode/
-  // depthNode are NodeMaterial slots, null unless the builder set them.
-  type MarchMat = {
-    mrtNode: { outputNodes: Record<string, unknown> } | null;
-    outputNode: unknown; colorNode: unknown; depthNode: unknown;
-    side: THREE.Side; depthWrite: boolean;
-  };
   const marchMat = (view: ReturnType<typeof createZombieGpuView>): MarchMat =>
     (view.object as THREE.Mesh).material as unknown as MarchMat;
 
@@ -475,5 +477,122 @@ describe('deferred surface output mode (hybrid deferred M1 task 2)', () => {
     expect(coneMat.mrtNode).toBeNull();
     expect(coneMat.outputNode).toBeTruthy();
     view.dispose();
+  });
+
+  it('surfaceClass metadata: default stays M1 class 2; shadowReceiver level-only packs bit 4', () => {
+    // M2 task 2: the emission-class channel is an unlit uniform seeded by
+    // GpuViewOpts.shadowReceiver. The M1 fixture passes no receiver — its
+    // bodies must encode EXACTLY class 2 ('full' sets no bit).
+    const def = createZombieGpuView(body, { output: 'surface' });
+    const defMat = marchMat(def) as unknown as { surfaceClass?: { value: number } };
+    expect(defMat.surfaceClass?.value).toBe(encodeSurfaceClass(2, 'full'));
+    expect(defMat.surfaceClass?.value).toBe(2);
+    def.dispose();
+
+    // The game requests level-only receivers for flesh explicitly.
+    const lvl = createZombieGpuView(body, { output: 'surface', shadowReceiver: 'level-only' });
+    const lvlMat = marchMat(lvl) as unknown as { surfaceClass?: { value: number } };
+    expect(lvlMat.surfaceClass?.value).toBe(encodeSurfaceClass(2, 'level-only'));
+    expect(lvlMat.surfaceClass?.value).toBe(18);
+    lvl.dispose();
+  });
+});
+
+describe('M2 task 2 — surface output options on the chunk factories', () => {
+  /** The per-draw bound nodes exposed by createSharedChunkGpuMaterial.
+   *  node.update({ object }) performs EXACTLY the rebinding a render of
+   *  `object` performs (three's onObjectUpdate sets node.update; the
+   *  renderer calls it per object with the same frame shape). */
+  type BoundNode<T> = { value: T; update: (frame: { object: THREE.Object3D }) => void };
+  interface SharedHandle {
+    material: { mrtNode: { outputNodes: Record<string, unknown> } | null; colorNode: unknown; outputNode: unknown };
+    dataNode: BoundNode<THREE.Texture>;
+    volumeNode: BoundNode<THREE.Texture>;
+    uniformNodes: { counts: BoundNode<THREE.Vector4> };
+    dispose(): void;
+  }
+
+  it('two chunks with distinct data under ONE surface material rebind texture/uniform per draw', () => {
+    const shared = createSharedChunkGpuMaterial(undefined, {
+      output: 'surface', shadowReceiver: 'level-only',
+    }) as unknown as SharedHandle;
+
+    // ONE graph per output mode: surface mode emits the MRT, never the lit
+    // output, and both chunk views share the exact same material object.
+    expect(shared.material.mrtNode).toBeTruthy();
+    expect(Object.keys(shared.material.mrtNode!.outputNodes).sort())
+      .toEqual(['albedoRoughness', 'emissionClass', 'normalMetalness', 'surfaceDepth']);
+    expect(shared.material.colorNode).toBeNull();
+    expect(shared.material.outputNode).toBeNull();
+
+    const prims = body.prims.filter(p => p.limb === 'armL').slice(0, 2);
+    const chunkA = makeChunk('armL', [0.4, 1, -0.2], [1, 2, 0], 0.1, [0, 0, 1]);
+    const chunkB = makeChunk('armL', [-0.6, 0.7, 0.9], [-1, 1, 0], 0.1, [0, 0, 1]);
+    const template = createZombieGpuView(body, {});
+    const viewA = createChunkGpuView(chunkA, prims, template.uniforms,
+      undefined, undefined, shared as never, undefined, { output: 'surface' });
+    const viewB = createChunkGpuView(chunkB, prims, template.uniforms,
+      undefined, undefined, shared as never, undefined, { output: 'surface' });
+
+    expect(viewA.object).not.toBe(viewB.object);
+    expect((viewA.object as THREE.Mesh).material).toBe(shared.material as never);
+    expect((viewB.object as THREE.Mesh).material).toBe(shared.material as never);
+    expect(viewA.dataTexture).not.toBe(viewB.dataTexture);
+    expect(viewA.uniforms).not.toBe(viewB.uniforms);
+
+    // THE per-draw observation: simulate each draw's object update and read
+    // the bound values the pipeline would upload for that draw.
+    shared.dataNode.update({ object: viewA.object });
+    expect(shared.dataNode.value).toBe(viewA.dataTexture);
+    shared.uniformNodes.counts.update({ object: viewA.object });
+    expect(shared.uniformNodes.counts.value).toBe(viewA.uniforms.counts.value);
+
+    shared.dataNode.update({ object: viewB.object });
+    expect(shared.dataNode.value).toBe(viewB.dataTexture);
+    shared.uniformNodes.counts.update({ object: viewB.object });
+    expect(shared.uniformNodes.counts.value).toBe(viewB.uniforms.counts.value);
+
+    // The volume slot rebinds too, and both chunks share the SAME shared
+    // volume texture here (template owns it) — distinct-data still holds via
+    // the data texture and uniforms above.
+    shared.volumeNode.update({ object: viewA.object });
+    expect(shared.volumeNode.value).toBe(viewA.volumeTexture);
+
+    viewA.dispose();
+    viewB.dispose();
+    shared.dispose();
+    template.dispose();
+  });
+
+  it('existing calls stay lit: default chunk material and chunk views have no MRT', () => {
+    const shared = createSharedChunkGpuMaterial() as unknown as SharedHandle;
+    expect(shared.material.mrtNode).toBeNull();
+    expect(shared.material.colorNode).toBeTruthy();
+
+    const template = createZombieGpuView(body, {});
+    const prims = body.prims.filter(p => p.limb === 'armL').slice(0, 2);
+    const chunk = makeChunk('armL', [0.4, 1, -0.2], [1, 2, 0], 0.1, [0, 0, 1]);
+    const view = createChunkGpuView(chunk, prims, template.uniforms);
+    const mat = (view.object as THREE.Mesh).material as unknown as MarchMat;
+    expect(mat.mrtNode).toBeNull();
+    expect(mat.outputNode).toBeTruthy();
+    view.dispose();
+    shared.dispose();
+    template.dispose();
+  });
+
+  it('a non-shared chunk view in surface mode emits the MRT with the requested receiver', () => {
+    const template = createZombieGpuView(body, {});
+    const prims = body.prims.filter(p => p.limb === 'armL').slice(0, 2);
+    const chunk = makeChunk('armL', [0.4, 1, -0.2], [1, 2, 0], 0.1, [0, 0, 1]);
+    const view = createChunkGpuView(chunk, prims, template.uniforms,
+      undefined, undefined, undefined, undefined, { output: 'surface', shadowReceiver: 'level-only' });
+    const mat = (view.object as THREE.Mesh).material as unknown as MarchMat & { surfaceClass?: { value: number } };
+    expect(mat.mrtNode).toBeTruthy();
+    expect(mat.colorNode).toBeNull();
+    expect(mat.outputNode).toBeNull();
+    expect(mat.surfaceClass?.value).toBe(18);
+    view.dispose();
+    template.dispose();
   });
 });

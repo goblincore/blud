@@ -43,7 +43,7 @@
 // under a glow, the deferred light pass ADDS emission on top of the lit
 // surface.
 
-import { wgslFn, mrt, vec4 } from 'three/tsl';
+import { wgslFn, mrt, vec4, float } from 'three/tsl';
 import {
   HELPERS, MARCH_BODY_PARAMS, MARCH_BODY_TRACE, MARCH_BODY_SURFACE_PREP,
 } from './march.wgsl';
@@ -106,6 +106,10 @@ export const MARCH_SURFACE_TAIL = /* wgsl */ `
   surfRough = clamp(mix(1.0, surfRough, min(wet, 1.0)) / max(wet, 1.0), 0.04, 1.0);
   gSdfAlbedoRough = vec4<f32>(albedo, surfRough);
   gSdfNormalMetal = vec4<f32>(normalize(n), metal);
+  // .w is the PLAIN flesh class; the emission readback (deferred-sdf.ts)
+  // substitutes the packed encodeSurfaceClass value (M2 task 2 receiver
+  // metadata) from an unlit uniform, so this line keeps the M1 encoding as
+  // the documented default.
   gSdfEmissionClass = vec4<f32>(glow, ${SURFACE_CLASS_FLESH}.0);
   // vec4(albedo, t) exactly like the legacy entry: createMarchMaterial turns
   // t into the surfaceDepth attachment and the hardware depthNode with the
@@ -136,8 +140,17 @@ export const SDF_SURFACE_READ_ALBEDO = /* wgsl */ `fn sdfSurfaceReadAlbedo(dep: 
 export const SDF_SURFACE_READ_NORMAL = /* wgsl */ `fn sdfSurfaceReadNormal(dep: vec4<f32>) -> vec4<f32> {
   return gSdfNormalMetal;
 }`;
-export const SDF_SURFACE_READ_EMISSION = /* wgsl */ `fn sdfSurfaceReadEmission(dep: vec4<f32>) -> vec4<f32> {
-  return gSdfEmissionClass;
+/**
+ * The emission readback. M2 task 2: the CLASS channel is substituted at the
+ * readback — `classVal` is the packed encodeSurfaceClass value (base class in
+ * the low four bits, bit 4 = level-only shadow receiver), fed as an unlit
+ * uniform node by createMarchMaterial so a body's receiver can flip without
+ * rebuilding the pipeline. The trace's own global still carries the plain
+ * flesh class in .w (pinned unchanged); only this readback replaces it. The
+ * emission RGB is the traced glow, untouched.
+ */
+export const SDF_SURFACE_READ_EMISSION = /* wgsl */ `fn sdfSurfaceReadEmission(dep: vec4<f32>, classVal: f32) -> vec4<f32> {
+  return vec4<f32>(gSdfEmissionClass.xyz, classVal);
 }`;
 
 /**
@@ -178,14 +191,18 @@ export const sdfSurfaceMarch = chain.march;
  * every readback takes it as `dep`, so the generated fragment evaluates the
  * trace ONCE and every attachment read follows the write. `clipDepth` is the
  * WebGPU clip depth (clip.z / clip.w, already [0,1]) of the same traced hit.
+ * `classValue` (M2 task 2) is the packed material class + shadow receiver —
+ * an unlit uniform node from createMarchMaterial; omitted, the default is
+ * the plain flesh class constant, which is exactly the pre-M2 encoding.
  * Names match SURFACE_ATTACHMENT_NAMES — three's MRTNode matches outputs to
  * the render target's textures BY NAME.
  */
-export function sdfSurfaceMrtNodes(traced: unknown, clipDepth: unknown) {
+export function sdfSurfaceMrtNodes(traced: unknown, clipDepth: unknown, classValue?: unknown) {
+  const kind = classValue ?? float(SURFACE_CLASS_FLESH);
   return mrt({
     albedoRoughness: chain.readAlbedo({ dep: traced as never }),
     normalMetalness: chain.readNormal({ dep: traced as never }),
-    emissionClass: chain.readEmission({ dep: traced as never }),
+    emissionClass: chain.readEmission({ dep: traced as never, classVal: kind as never }),
     surfaceDepth: vec4(clipDepth as never, 0.0, 0.0, 1.0),
   });
 }

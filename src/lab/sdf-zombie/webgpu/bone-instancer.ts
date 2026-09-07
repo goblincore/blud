@@ -15,9 +15,11 @@ import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
   wgslFn, uniform, attribute, positionWorld, cameraPosition, vec4, float, texture,
+  mrt, mix, clamp, cameraProjectionMatrix, cameraViewMatrix,
 } from 'three/tsl';
 import type { Primitive } from '../types';
 import { boneInstanceOf, buildTubeGeometry } from './bone-tube-geom';
+import { encodeSurfaceClass, SURFACE_CLASS_MESH, type SurfaceOutputOptions } from './deferred-surface';
 
 export const INSTANCE_FLOATS = 18;
 
@@ -105,8 +107,46 @@ export const BONE_VERTEX_WGSL = /* wgsl */ `fn boneVertex(t: f32, theta: f32, la
   return q * iScale;
 }`;
 
+/** MATERIAL TERMS of the bone look (M2 task 2): wound exposure, mottle,
+ *  blood stain and the resulting albedo — everything that is a property of
+ *  the surface, not of the lights. Split out of boneShade verbatim so the
+ *  deferred G-buffer can publish the same albedo the lit shader composes
+ *  from, without re-deriving it or duplicating the shading. Returns
+ *  vec4(albedo, expo): lit mode feeds the whole vec4 into boneShade
+ *  (surfaceIn); surface mode reads xyz as the G-buffer albedo and maps w
+ *  (the wound exposure, 0 dry..1 blood-slick) to roughness in TSL. */
+export const BONE_SURFACE_WGSL = /* wgsl */ `fn boneSurface(p: vec3<f32>, boneColor: vec3<f32>, deepColor: vec3<f32>, look: vec4<f32>, woundTex: texture_2d<f32>, woundCount: f32) -> vec4<f32> {
+  // EXPOSURE from the wounds (the field's tissue-depth stain + cavity AO, faked):
+  // bone under a crater's centre is exposed — pale, dry, lit; bone toward the
+  // rim sits under blood and flesh — stained, dark, glossy. Nearest crater wins.
+  var expo = 0.0;
+  for (var i = 0; i < 64; i = i + 1) {
+    if (f32(i) >= woundCount) { break; }
+    let w = textureLoad(woundTex, vec2<i32>(i, 0), 0);
+    let dist = length(p - w.xyz);
+    expo = max(expo, clamp(1.0 - dist / max(w.w * 1.15, 1e-3), 0.0, 1.0));
+  }
+  expo = smoothstep(0.0, 1.0, expo);
+  // look.x = stain toward deepColor
+  // MOTTLE (owner, 2026-09-03: "uniform colour... should have random red
+  // bits like the non-mesh bones"). The field's bone inherited the flesh
+  // shader's noise; the tubes had none. Two octaves of value noise on world
+  // position: a broad tissue-stain wash plus tight blood flecks where the
+  // noise peaks. Stronger under blood (rim of a crater), fainter where a
+  // crater's centre has scoured the bone.
+  let nz = boneNoise(p * 55.0) * 0.65 + boneNoise(p * 140.0 + vec3<f32>(7.1, 3.3, 9.7)) * 0.35;
+  let flecks = smoothstep(0.62, 0.80, boneNoise(p * 210.0 + vec3<f32>(2.0, 5.0, 1.0)));
+  let mottle = clamp(nz * 0.6 + flecks * 0.9, 0.0, 1.0) * (1.0 - 0.5 * expo);
+  let stain = clamp(mix(look.x, look.x * 0.2, expo) + mottle * 0.55, 0.0, 1.0);
+  let albedo = mix(boneColor, deepColor * 0.8, stain) * (1.0 - 0.25 * flecks);
+  return vec4<f32>(albedo, expo);
+}`;
+
 /** Lambert key + flashlight cone, the march's own formula (march.wgsl.ts
- *  ~2253-2290) on the same uniform values, minus wetness/scatter. */
+ *  ~2253-2290) on the same uniform values, minus wetness/scatter. The
+ *  MATERIAL terms (exposure/mottle/stain/albedo) live in boneSurface above
+ *  and arrive as `surfaceIn` — the light compose consumes them; it does not
+ *  re-derive them. */
 /** Value-noise helpers for the mottle in boneShade. Separate strings: wgslFn
  *  takes ONE fn per source and reads a second fn's params as inputs (a
  *  boneHash inside BONE_SHADE_WGSL made TSL ask for an input 'q', and the
@@ -126,7 +166,7 @@ export const BONE_NOISE_WGSL = /* wgsl */ `fn boneNoise(q: vec3<f32>) -> f32 {
   let d = mix(boneHash(i + vec3<f32>(0.0, 1.0, 1.0)), boneHash(i + vec3<f32>(1.0, 1.0, 1.0)), u.x);
   return mix(mix(a, b, u.y), mix(c, d, u.y), u.z);
 }`;
-export const BONE_SHADE_WGSL = /* wgsl */ `fn boneShade(p: vec3<f32>, n: vec3<f32>, camPos: vec3<f32>, boneColor: vec3<f32>, deepColor: vec3<f32>, ambient: vec3<f32>, look: vec4<f32>, woundTex: texture_2d<f32>, woundCount: f32, lightDir: vec3<f32>, keyColor: vec3<f32>, lightCfg: vec2<f32>, spotPos: vec3<f32>, spotAxis: vec3<f32>, spotCfg: vec4<f32>, spotCfg2: vec4<f32>, spotColor: vec3<f32>) -> vec3<f32> {
+export const BONE_SHADE_WGSL = /* wgsl */ `fn boneShade(p: vec3<f32>, n: vec3<f32>, camPos: vec3<f32>, deepColor: vec3<f32>, ambient: vec3<f32>, look: vec4<f32>, lightDir: vec3<f32>, keyColor: vec3<f32>, lightCfg: vec2<f32>, spotPos: vec3<f32>, spotAxis: vec3<f32>, spotCfg: vec4<f32>, spotCfg2: vec4<f32>, spotColor: vec3<f32>, surfaceIn: vec4<f32>) -> vec3<f32> {
   var L = normalize(lightDir);
   var keyC = keyColor;
   var keyI = lightCfg.x;
@@ -146,34 +186,16 @@ export const BONE_SHADE_WGSL = /* wgsl */ `fn boneShade(p: vec3<f32>, n: vec3<f3
   // ambient fill from the enclosure, wrapped diffuse, WET specular + fresnel
   // (bone in a fresh cavity is blood-slick), and a blood stain toward the
   // deep tissue colour so it does not read as chalk against the meat.
+  // albedo + exposure come from boneSurface (surfaceIn = vec4(albedo, expo))
+  // — the exact terms the deferred G-buffer publishes.
   let V = normalize(camPos - p);
   let ndl = max(dot(n, L), 0.0);
   let H = normalize(L + V);
-  // EXPOSURE from the wounds (the field's tissue-depth stain + cavity AO, faked):
-  // bone under a crater's centre is exposed — pale, dry, lit; bone toward the
-  // rim sits under blood and flesh — stained, dark, glossy. Nearest crater wins.
-  var expo = 0.0;
-  for (var i = 0; i < 64; i = i + 1) {
-    if (f32(i) >= woundCount) { break; }
-    let w = textureLoad(woundTex, vec2<i32>(i, 0), 0);
-    let dist = length(p - w.xyz);
-    expo = max(expo, clamp(1.0 - dist / max(w.w * 1.15, 1e-3), 0.0, 1.0));
-  }
-  expo = smoothstep(0.0, 1.0, expo);
-  // look = (stain toward deepColor, blood tint on the highlight, spec gain, fresnel gain)
+  let albedo = surfaceIn.xyz;
+  let expo = surfaceIn.w;
+  // look = (stain [consumed in boneSurface], blood tint on the highlight, spec gain, fresnel gain)
   let shine = pow(max(dot(n, H), 0.0), 48.0);
   let fres = pow(1.0 - max(dot(n, V), 0.0), 4.0) * look.w;
-  // MOTTLE (owner, 2026-09-03: "uniform colour... should have random red
-  // bits like the non-mesh bones"). The field's bone inherited the flesh
-  // shader's noise; the tubes had none. Two octaves of value noise on world
-  // position: a broad tissue-stain wash plus tight blood flecks where the
-  // noise peaks. Stronger under blood (rim of a crater), fainter where a
-  // crater's centre has scoured the bone.
-  let nz = boneNoise(p * 55.0) * 0.65 + boneNoise(p * 140.0 + vec3<f32>(7.1, 3.3, 9.7)) * 0.35;
-  let flecks = smoothstep(0.62, 0.80, boneNoise(p * 210.0 + vec3<f32>(2.0, 5.0, 1.0)));
-  let mottle = clamp(nz * 0.6 + flecks * 0.9, 0.0, 1.0) * (1.0 - 0.5 * expo);
-  let stain = clamp(mix(look.x, look.x * 0.2, expo) + mottle * 0.55, 0.0, 1.0);
-  let albedo = mix(boneColor, deepColor * 0.8, stain) * (1.0 - 0.25 * flecks);
   let wetTint = mix(vec3<f32>(1.0), deepColor, look.y * (1.0 - 0.6 * expo));
   let ao = mix(0.45, 1.0, expo);
   let diffuse = albedo * (ambient + keyI * keyC * (0.15 + 0.85 * ndl)) * ao;
@@ -184,6 +206,9 @@ export const BONE_SHADE_WGSL = /* wgsl */ `fn boneShade(p: vec3<f32>, n: vec3<f3
 export interface BoneInstancer {
   object: THREE.Mesh;
   uniforms: BoneInstancerUniforms;
+  /** Packed emissionClass value when built with output:'surface' (M2 task
+   *  2); undefined in the default lit mode. Route diagnostics read this. */
+  readonly surfaceKind: number | undefined;
   /** Replace this frame's bone set. Each entry is a posed prim list + its
    *  cluster-alive table (undefined for chunks). */
   update(sources: ReadonlyArray<{ prims: readonly Primitive[]; alive?: readonly boolean[] }>): void;
@@ -216,7 +241,14 @@ const boneInstancerUniforms = () => ({
 });
 export type BoneInstancerUniforms = ReturnType<typeof boneInstancerUniforms>;
 
-export function createBoneInstancer(max = 256): BoneInstancer {
+/** Dry-bone roughness for the G-buffer (surface mode): matte. */
+const BONE_ROUGH_DRY = 0.85;
+/** Blood-exposed bone tightens to the lit model's fixed 48-exponent gloss
+ *  mapped through the shared light pass's shin = exp2((1-rough)*8) + 2:
+ *  48 -> rough 0.31 (the same inversion deferred-sdf.ts documents). */
+const BONE_ROUGH_EXPOSED = 0.31;
+
+export function createBoneInstancer(max = 256, options?: SurfaceOutputOptions): BoneInstancer {
   const base = buildTubeGeometry();
   const geo = new THREE.InstancedBufferGeometry();
   geo.setIndex(base.getIndex());
@@ -246,8 +278,11 @@ export function createBoneInstancer(max = 256): BoneInstancer {
     (acc, src) => [...acc, wgslFn(src, acc.slice(-1))], [],
   );
   void qrot;
-  // Same idiom for the fragment side: boneHash -> boneNoise -> boneShade.
-  const [, , shade] = [BONE_HASH_WGSL, BONE_NOISE_WGSL, BONE_SHADE_WGSL].reduce<ReturnType<typeof wgslFn>[]>(
+  // Same idiom for the fragment side: boneHash -> boneNoise -> boneSurface
+  // (material terms) -> boneShade (light compose, consumes surfaceIn).
+  const [, , surfaceFn, shade] = [
+    BONE_HASH_WGSL, BONE_NOISE_WGSL, BONE_SURFACE_WGSL, BONE_SHADE_WGSL,
+  ].reduce<ReturnType<typeof wgslFn>[]>(
     (acc, src) => [...acc, wgslFn(src, acc.slice(-1))], [],
   );
   const args = {
@@ -256,13 +291,49 @@ export function createBoneInstancer(max = 256): BoneInstancer {
     iR: attribute('iR', 'vec2'), iScale: attribute('iScale', 'vec3'), iQ: attribute('iQ', 'vec4'),
   };
   const material = new MeshBasicNodeMaterial();
+  // The instanced bone vertex positions and normals are retained in BOTH
+  // modes (M2 task 2): positionNode skins the tube; normalNode is the
+  // world-space bone surface normal — the lit shade consumes it as `n`, the
+  // surface mode publishes it straight into normalMetalness.
   material.positionNode = vert({ ...args, wantNormal: float(0) }) as never;
   material.normalNode = vert({ ...args, wantNormal: float(1) }) as never;
-  material.colorNode = vec4(shade({
-    p: positionWorld, n: material.normalNode, camPos: cameraPosition,
-    boneColor: u.boneColor, deepColor: u.deepColor, ambient: u.ambient, look: u.look, woundTex: texture(woundTex), woundCount: u.woundCount, lightDir: u.lightDir, keyColor: u.keyColor, lightCfg: u.lightCfg,
-    spotPos: u.spotPos, spotAxis: u.spotAxis, spotCfg: u.spotCfg, spotCfg2: u.spotCfg2, spotColor: u.spotColor,
-  }) as never, 1.0);
+
+  /** Material terms: vec4(albedo, wound exposure) — the same node the lit
+   *  compose consumes, evaluated with NO light input. */
+  const surf = surfaceFn({
+    p: positionWorld,
+    boneColor: u.boneColor, deepColor: u.deepColor, look: u.look,
+    woundTex: texture(woundTex), woundCount: u.woundCount,
+  }) as unknown as { xyz: unknown; w: unknown };
+
+  let surfaceKind: number | undefined;
+  if (options?.output === 'surface') {
+    // MRT from the material terms only — no light compose anywhere in this
+    // graph (light-invariance is structural: shade/light uniforms are not
+    // even referenced). Bones are mesh-class receivers ('full' by default;
+    // the game may pass 'level-only' for tissue). No metal, no emission.
+    const kind = encodeSurfaceClass(SURFACE_CLASS_MESH, options.shadowReceiver ?? 'full');
+    const clip = cameraProjectionMatrix.mul(cameraViewMatrix).mul(vec4(positionWorld, 1.0));
+    material.mrtNode = mrt({
+      albedoRoughness: vec4(
+        surf.xyz as never,
+        clamp(mix(float(BONE_ROUGH_DRY), float(BONE_ROUGH_EXPOSED), surf.w as never), 0.04, 1.0) as never,
+      ),
+      normalMetalness: vec4(material.normalNode as never, float(0)),
+      emissionClass: vec4(float(0), float(0), float(0), float(kind)),
+      surfaceDepth: vec4(clip.z.div(clip.w) as never, float(0), float(0), float(1)),
+    }) as never;
+    material.blending = THREE.NoBlending; // MRT producer — the M1 mesh rule
+    surfaceKind = kind;
+  } else {
+    material.colorNode = vec4(shade({
+      p: positionWorld, n: material.normalNode, camPos: cameraPosition,
+      deepColor: u.deepColor, ambient: u.ambient, look: u.look,
+      lightDir: u.lightDir, keyColor: u.keyColor, lightCfg: u.lightCfg,
+      spotPos: u.spotPos, spotAxis: u.spotAxis, spotCfg: u.spotCfg, spotCfg2: u.spotCfg2, spotColor: u.spotColor,
+      surfaceIn: surf as never,
+    }) as never, 1.0);
+  }
   material.depthWrite = true;
   material.depthTest = true;
   material.side = THREE.FrontSide;
@@ -274,6 +345,7 @@ export function createBoneInstancer(max = 256): BoneInstancer {
   return {
     object: mesh,
     uniforms: u,
+    get surfaceKind() { return surfaceKind; },
     update(sources) {
       let n = 0;
       arrays.overflowed = false;

@@ -28,9 +28,11 @@
 import * as THREE from 'three/webgpu';
 import {
   attribute, cameraPosition, float, normalWorld, positionWorld, uniform, vec4, wgslFn,
+  mrt, cameraProjectionMatrix, cameraViewMatrix,
 } from 'three/tsl';
 import { len } from '../vec';
 import type { Vec3 } from '../types';
+import { encodeSurfaceClass, SURFACE_CLASS_MESH, type SurfaceOutputOptions } from './deferred-surface';
 
 /**
  * Live lighting for every baked chunk. Same uniform names and semantics as
@@ -94,33 +96,77 @@ export const CHUNK_SHADE_WGSL = /* wgsl */ `fn chunkShade(p: vec3<f32>, n: vec3<
   return diffuse + specular;
 }`;
 
+/**
+ * MATERIAL TERMS of the baked chunk (M2 task 2): the baked vertex albedo
+ * with its wound-mask wetness, mapped to G-buffer form — rgb albedo,
+ * roughness from the mask. Dry torn meat is matte; the wet (blood-slick)
+ * mask tightens to the lit model's fixed 48-exponent gloss through the
+ * shared light pass's shin = exp2((1-rough)*8) + 2 (48 -> 0.31, the same
+ * inversion deferred-sdf.ts documents). NO light input — light-invariance
+ * is structural, and the lit albedo color is never encoded (the albedo IS
+ * the baked attribute the shade composes from).
+ */
+export const CHUNK_SURFACE_WGSL = /* wgsl */ `fn chunkSurface(albedo: vec4<f32>) -> vec4<f32> {
+  let wm = clamp(albedo.a, 0.0, 1.0);
+  let rough = clamp(mix(0.9, 0.31, wm), 0.04, 1.0);
+  return vec4<f32>(albedo.rgb, rough);
+}`;
+
 export interface BakedChunkMaterial {
   material: THREE.Material;
   uniforms: BakedChunkUniforms;
+  /** Packed emissionClass value when built with output:'surface' (M2 task
+   *  2); undefined in the default lit mode. */
+  readonly surfaceKind: number | undefined;
   dispose(): void;
 }
 
 /** ONE material for every baked chunk (the shared-chunk-material rule: one
  *  pipeline, N meshes). Lighting uniforms are LIVE and shared; albedo is
- *  per-vertex so sharing costs nothing. */
-export function createBakedChunkMaterial(): BakedChunkMaterial {
+ *  per-vertex so sharing costs nothing.
+ *
+ *  M2 task 2: trailing `options` selects the output mode. Surface mode
+ *  builds the four named G-buffer attachments from the baked vertex terms
+ *  (albedo/roughness via chunkSurface, world normal, mesh class + shadow
+ *  receiver, projected clip depth) and never touches the light compose —
+ *  the SAME material split as the bone instancer, and the lit path below
+ *  is untouched. */
+export function createBakedChunkMaterial(options?: SurfaceOutputOptions): BakedChunkMaterial {
   const u = bakedChunkUniforms();
-  const shade = wgslFn(CHUNK_SHADE_WGSL);
   const material = new THREE.MeshBasicNodeMaterial();
-  material.colorNode = vec4(shade({
-    p: positionWorld, n: normalWorld, camPos: cameraPosition,
-    albedo: attribute('bakeColor', 'vec4'),
-    deepColor: u.deepColor, ambient: u.ambient, look: u.look,
-    lightDir: u.lightDir, keyColor: u.keyColor, lightCfg: u.lightCfg,
-    spotPos: u.spotPos, spotAxis: u.spotAxis, spotCfg: u.spotCfg,
-    spotCfg2: u.spotCfg2, spotColor: u.spotColor,
-  }) as never, float(1.0));
+  let surfaceKind: number | undefined;
+  if (options?.output === 'surface') {
+    const surf = wgslFn(CHUNK_SURFACE_WGSL)({
+      albedo: attribute('bakeColor', 'vec4'),
+    }) as unknown as { xyz: unknown; w: unknown };
+    const kind = encodeSurfaceClass(SURFACE_CLASS_MESH, options.shadowReceiver ?? 'full');
+    const clip = cameraProjectionMatrix.mul(cameraViewMatrix).mul(vec4(positionWorld, 1.0));
+    material.mrtNode = mrt({
+      albedoRoughness: vec4(surf.xyz as never, surf.w as never),
+      normalMetalness: vec4(normalWorld, float(0)),
+      emissionClass: vec4(float(0), float(0), float(0), float(kind)),
+      surfaceDepth: vec4(clip.z.div(clip.w) as never, float(0), float(0), float(1)),
+    }) as never;
+    material.blending = THREE.NoBlending; // MRT producer — the M1 mesh rule
+    surfaceKind = kind;
+  } else {
+    const shade = wgslFn(CHUNK_SHADE_WGSL);
+    material.colorNode = vec4(shade({
+      p: positionWorld, n: normalWorld, camPos: cameraPosition,
+      albedo: attribute('bakeColor', 'vec4'),
+      deepColor: u.deepColor, ambient: u.ambient, look: u.look,
+      lightDir: u.lightDir, keyColor: u.keyColor, lightCfg: u.lightCfg,
+      spotPos: u.spotPos, spotAxis: u.spotAxis, spotCfg: u.spotCfg,
+      spotCfg2: u.spotCfg2, spotColor: u.spotColor,
+    }) as never, float(1.0));
+  }
   material.depthWrite = true;
   material.depthTest = true;
   material.side = THREE.FrontSide;
   return {
     material,
     uniforms: u,
+    get surfaceKind() { return surfaceKind; },
     dispose() { material.dispose(); },
   };
 }
