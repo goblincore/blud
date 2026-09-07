@@ -247,6 +247,37 @@ export interface GameSurfaceSample {
   depth: number;
 }
 
+/** Whole-G-buffer digest for the task-6 regression gate (surface-hash
+ *  invariance + class-coverage evidence). Computed IN PAGE: the raw
+ *  attachments never cross CDP — only these bounded numbers do. */
+export interface GameSurfaceHash {
+  width: number;
+  height: number;
+  /** FNV-1a (32-bit) over each attachment's LOGICAL bytes — row padding
+   *  excluded, so the digest is a pure function of the texels. */
+  hashes: {
+    albedoRoughness: number;
+    normalMetalness: number;
+    emissionClass: number;
+    surfaceDepth: number;
+  };
+  /** Occupied pixels (packed class != EMPTY). */
+  nonEmpty: number;
+  /** Occupied-pixel count per packed class (base class + receiver bit),
+   *  keyed by integer string; EMPTY omitted. Bounded by construction. */
+  classCounts: Record<string, number>;
+  /** Depth extent over the whole target (empty pixels are exactly 1). */
+  minDepth: number;
+  maxDepth: number;
+  /** The deepest pixel in layer coordinates — the far-probe anchor. */
+  deepestPixel: [number, number];
+  /** Pixels at the far sentinel (depth >= 0.9999): the empty-region census
+   *  the far probe needs. An enclosed dungeon render usually has ~none. */
+  sentinelPixels: number;
+  /** Centroid of the sentinel pixels (layer coords), when any exist. */
+  sentinelCentroid: [number, number] | null;
+}
+
 export interface GameDeferredRenderer {
   /** The scene router. game-main registers objects/routes as it spawns them. */
   readonly router: GameDeferredScene;
@@ -257,6 +288,11 @@ export interface GameDeferredRenderer {
    *  attachment read per attachment, only when a gate asks. Null on a
    *  legacy boot (game-main guards). */
   readSurfaceAt(ndcX: number, ndcY: number): Promise<GameSurfaceSample>;
+  /** WHOLE-G-buffer digest (task-6 evidence seam): per-attachment FNV-1a
+   *  over the logical texels plus the class histogram and depth extent.
+   *  Four full-attachment readbacks per call, only when a gate asks; the
+   *  result is plain data so it crosses CDP untouched. */
+  hashSurface(): Promise<GameSurfaceHash>;
   /** PostAaSink. The post chain hands us the capture target when any effect
    *  is active, null for the canvas; the layer AND the forward pass present
    *  into whatever this holds. */
@@ -437,6 +473,95 @@ export function createGameDeferredRenderer(deps: GameDeferredRendererDeps): Game
         metalness: nm[3]!,
         cls: ec[3]!,
         depth: dep[0]!,
+      };
+    },
+
+    async hashSurface() {
+      const target = layer.targets.resolved;
+      const w = target.width, h = target.height;
+      // One full-attachment read per attachment, decoded row by row with the
+      // 256-byte WebGPU row stride (the same hazard readSurfaceAt dodges).
+      // Returns ONLY bounded numbers: four FNV-1a digests over the logical
+      // bytes, the class histogram, and the depth extent — the raw buffers
+      // never leave the page.
+      const FNV_OFFSET = 0x811c9dc5;
+      const hashRows = (bytes: Uint8Array, rowBytes: number, padded: number): number => {
+        let h32 = FNV_OFFSET;
+        for (let y = 0; y < h; y++) {
+          const row = y * padded;
+          for (let i = 0; i < rowBytes; i++) {
+            h32 ^= bytes[row + i]!;
+            h32 = Math.imul(h32, 0x01000193) >>> 0;
+          }
+        }
+        return h32 >>> 0;
+      };
+      const h2f = (bits: number): number => {
+        const s = (bits & 0x8000) >> 15, exp = (bits & 0x7c00) >> 10, frac = bits & 0x3ff;
+        return exp === 0 ? (s ? -0 : 0) * (frac ? Number.NaN : 1)
+          : exp === 31 ? (s ? -1 : 1) * (frac ? Number.NaN : Infinity)
+          : (s ? -1 : 1) * (1 + frac / 1024) * 2 ** (exp - 15);
+      };
+      const readRaw = async (name: SurfaceAttachmentName): Promise<{ bytes: Uint8Array; half: boolean; channels: number }> => {
+        const textureIndex = target.textures.findIndex((t) => t.name === name);
+        if (textureIndex < 0) throw new Error(`resolved target is missing attachment '${name}'`);
+        const tex = target.textures[textureIndex]!;
+        const channels = tex.format === THREE.RedFormat ? 1 : 4;
+        const half = tex.type === THREE.HalfFloatType;
+        const raw = await renderer.readRenderTargetPixelsAsync(target, 0, 0, w, h, textureIndex);
+        return { bytes: new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength), half, channels };
+      };
+      const [albedo, nm, ec, dep] = await Promise.all([
+        readRaw('albedoRoughness'), readRaw('normalMetalness'), readRaw('emissionClass'), readRaw('surfaceDepth'),
+      ]);
+      const albedoRow = w * 4 * 2, nmRow = w * 4 * 2, ecRow = w * 4 * 2, depRow = w * 4;
+      const albedoPadded = Math.ceil(albedoRow / 256) * 256;
+      const nmPadded = Math.ceil(nmRow / 256) * 256;
+      const ecPadded = Math.ceil(ecRow / 256) * 256;
+      const depPadded = Math.ceil(depRow / 256) * 256;
+      // Class histogram + depth extent, decoded per pixel from emissionClass
+      // and surfaceDepth. One pass over the frame, in page.
+      const classCounts: Record<string, number> = {};
+      let nonEmpty = 0;
+      let minDepth = Number.POSITIVE_INFINITY;
+      let maxDepth = 0;
+      let deepest: [number, number] = [0, 0];
+      let sentinelPixels = 0;
+      let sx = 0, sy = 0;
+      const ecU16 = new Uint16Array(ec.bytes.buffer, ec.bytes.byteOffset, ec.bytes.byteLength / 2);
+      const depF32 = new Float32Array(dep.bytes.buffer, dep.bytes.byteOffset, dep.bytes.byteLength / 4);
+      const ecStride = ecPadded / 2, depStride = depPadded / 4;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const cls = h2f(ecU16[y * ecStride + x * 4 + 3]!);
+          const d = depF32[y * depStride + x]!;
+          if (cls > 0.5) {
+            nonEmpty++;
+            const key = String(Math.round(cls));
+            classCounts[key] = (classCounts[key] ?? 0) + 1;
+          }
+          if (Number.isFinite(d)) {
+            if (d < minDepth) minDepth = d;
+            if (d > maxDepth) { maxDepth = d; deepest = [x, y]; }
+            if (d >= 0.9999) { sentinelPixels++; sx += x; sy += y; }
+          }
+        }
+      }
+      return {
+        width: w, height: h,
+        hashes: {
+          albedoRoughness: hashRows(albedo.bytes, albedoRow, albedoPadded),
+          normalMetalness: hashRows(nm.bytes, nmRow, nmPadded),
+          emissionClass: hashRows(ec.bytes, ecRow, ecPadded),
+          surfaceDepth: hashRows(dep.bytes, depRow, depPadded),
+        },
+        nonEmpty,
+        classCounts,
+        minDepth: Number.isFinite(minDepth) ? minDepth : 1,
+        maxDepth,
+        deepestPixel: deepest,
+        sentinelPixels,
+        sentinelCentroid: sentinelPixels > 0 ? [Math.round(sx / sentinelPixels), Math.round(sy / sentinelPixels)] : null,
       };
     },
 

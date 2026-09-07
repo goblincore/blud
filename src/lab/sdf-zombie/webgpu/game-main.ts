@@ -124,6 +124,7 @@ import {
   deferredEnvironmentFromRig,
   resolveGameBootMode,
   type GameDeferredRendererDiagnostics,
+  type GameSurfaceHash,
 } from './game-deferred-renderer';
 import { legacyFlashKnee, type GameLightCandidate } from './game-deferred-lights';
 import type { DeferredDebugView } from './deferred-layer';
@@ -4035,6 +4036,21 @@ async function main() {
   };
   import.meta.hot?.dispose(clearDepthProbes);
 
+  /** debugRegisteredTree helpers: depth of `o` below `root`, world-position
+   *  rounding, and a bounded descendant count for the truncation flag. */
+  const nodeDepth = (root: THREE.Object3D, o: THREE.Object3D): number => {
+    let d = 0;
+    let p: THREE.Object3D | null = o;
+    while (p && p !== root) { d++; p = p.parent; }
+    return d;
+  };
+  const round2 = (v: number) => Math.round(v * 100) / 100;
+  const countDescendants = (root: THREE.Object3D): number => {
+    let n = 0;
+    root.traverse(() => { n++; });
+    return n - 1;
+  };
+
   (window as unknown as { __sdfGame: unknown }).__sdfGame = {
     telemetry: telemetryControls ? {
       start: () => telemetryControls.start(), stop: () => telemetryControls.stop(), mark: () => telemetryControls.mark(),
@@ -4486,6 +4502,60 @@ async function main() {
      *  metadata — follow setGunTuning on the live frame. Null-safe on legacy. */
     readSurfaceAt: (ndcX: number, ndcY: number) =>
       deferredApi ? deferredApi.readSurfaceAt(ndcX, ndcY) : Promise.resolve(null),
+    /** WHOLE-G-buffer digest (task-6 regression-gate seam): four per-
+     *  attachment FNV-1a digests over the logical texels plus the class
+     *  histogram and depth extent, computed IN PAGE — raw attachments never
+     *  cross CDP. The gate's invariance oracle: with the scene frozen, every
+     *  LIGHT/SAMPLING change (beam, exposure, shadow maps) must leave these
+     *  digests bit-identical, while geometry changes (wounds, chunks, kit
+     *  loads) move them. Null on a legacy boot. */
+    hashSurface: (): Promise<GameSurfaceHash | null> =>
+      deferredApi ? deferredApi.hashSurface() : Promise.resolve(null),
+    /** Bounded SUBTREE INSPECTOR (task-6 kit/prop evidence seam): finds the
+     *  first scene descendant whose name contains `namePart` (the deferred
+     *  rig groups are named `deferred-rig-<character>-…`), walks its
+     *  descendants breadth-first up to `maxNodes`, and reports each node's
+     *  world position, material names and ROUTER route/receiver. This is the
+     *  "actual named kit descendants / material routing" evidence the task-5
+     *  review demands — a mesh-count increment is not kit proof. */
+    debugRegisteredTree: (namePart: string, maxNodes = 48) => {
+      let root: THREE.Object3D | null = null;
+      scene.traverse((o) => {
+        if (root) return;
+        if (o.name && o.name.includes(namePart)) root = o;
+      });
+      if (!root) return { found: false, namePart };
+      const r = root as THREE.Object3D;
+      const nodes: Record<string, unknown>[] = [];
+      const queue: THREE.Object3D[] = [r];
+      let seen = 0;
+      while (queue.length > 0 && nodes.length < maxNodes && seen < maxNodes * 4) {
+        const o = queue.shift()!;
+        seen++;
+        const p = new THREE.Vector3();
+        o.getWorldPosition(p);
+        const mats: string[] = [];
+        const m = (o as THREE.Mesh).material;
+        if (Array.isArray(m)) for (const mm of m) mats.push(String(mm.name || mm.type));
+        else if (m) mats.push(String(m.name || m.type));
+        nodes.push({
+          name: o.name || `<${o.type}>`, depth: nodeDepth(r, o),
+          isMesh: (o as THREE.Mesh).isMesh === true, visible: o.visible,
+          materials: mats, pos: [round2(p.x), round2(p.y), round2(p.z)],
+          route: deferredApi?.router.routeOf(o) ?? null,
+          receiver: deferredApi?.router.receiverOf(o) ?? null,
+        });
+        for (const c of o.children) queue.push(c);
+      }
+      return {
+        found: true, name: r.name,
+        route: deferredApi?.router.routeOf(r) ?? null,
+        receiver: deferredApi?.router.receiverOf(r) ?? null,
+        totalDescendants: countDescendants(r),
+        truncated: seen >= maxNodes * 4 || nodes.length >= maxNodes,
+        nodes,
+      };
+    },
     /** CONTROLLED FORWARD DEPTH PROBES (composition review fix evidence
      *  seam). Spawns up to three unregistered blended sprites (pure R, G, B —
      *  depth-tested, no depth write) at world points the caller picks from
@@ -4494,10 +4564,14 @@ async function main() {
      *  inferring depth from broad image deltas. Unregistered renderables are
      *  left alone by the forward route and hidden from the G-buffer passes
      *  by the router, so the probes only ever composite. */
-    spawnDepthProbes: (spots: Vec3[]) => {
+    spawnDepthProbes: (spots: Vec3[], scale = 0.14) => {
       clearDepthProbes();
-      const colors = [0xff0000, 0x00ff00, 0x0000ff];
-      for (let i = 0; i < spots.length && i < 3; i++) {
+      // Task-6 gate: up to EIGHT distinct probes per spawn (a depth-bracket
+      // ladder along one ray needs side-by-side colours in one frame; three
+      // forced a spawn-per-depth cycle). Colours stay maximally separable in
+      // a 7x7 screenshot sample.
+      const colors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xff00ff, 0x00ffff, 0xff8000, 0x8040ff];
+      for (let i = 0; i < spots.length && i < colors.length; i++) {
         const s = new THREE.Sprite(new THREE.SpriteMaterial({
           color: colors[i]!,
           transparent: true,
@@ -4507,7 +4581,7 @@ async function main() {
         }));
         s.name = `depth-probe-${i}`;
         s.position.set(spots[i]![0], spots[i]![1], spots[i]![2]);
-        s.scale.setScalar(0.14);
+        s.scale.setScalar(scale);
         scene.add(s);
         depthProbes.push(s);
       }
