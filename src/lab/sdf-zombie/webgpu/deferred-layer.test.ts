@@ -723,11 +723,24 @@ describe('flashlight shadow sampling in the light stage (hybrid deferred M2 task
     // Bit 4 set (>= 15.5) = level-only receiver -> the map WITHOUT the
     // inflated flesh proxies. The selection must use the raw packed value
     // (cls), never baseCls — a decoded class 2 would pick the wrong map.
-    // (WGSL select() rejects texture handles, so both texels load and the
-    // stored SCALAR is selected — pinned here so a rewrite to handle-select
-    // fails in unit tests before it fails on device.)
+    // (Continuation review: the policy is an explicit BRANCH and each
+    // branch loads ONLY its own map — one selected map feeds the 3x3
+    // kernel, per spec. WGSL select() rejects texture handles, so the
+    // scalar-select form must NOT come back.)
     expect(DEFERRED_LIGHT_WGSL).toContain('let levelOnly = cls >= 15.5;');
-    expect(DEFERRED_LIGHT_WGSL).toContain('select(storedFull, storedLevel, levelOnly)');
+    expect(DEFERRED_LIGHT_WGSL).toContain('if (levelOnly) {');
+    expect(DEFERRED_LIGHT_WGSL).not.toContain('select(storedFull, storedLevel, levelOnly)');
+    // Each branch loads exactly one map: the level-only branch must not
+    // touch fullDepth and vice versa.
+    const branch = DEFERRED_LIGHT_WGSL.indexOf('if (levelOnly) {');
+    const end = DEFERRED_LIGHT_WGSL.indexOf('contribution = contribution * (lit /', branch);
+    const body = DEFERRED_LIGHT_WGSL.slice(branch, end);
+    const levelPart = body.slice(0, body.indexOf('} else {'));
+    const fullPart = body.slice(body.indexOf('} else {'));
+    expect(levelPart).toContain('textureLoad(levelDepth, t, 0).x');
+    expect(levelPart).not.toContain('textureLoad(fullDepth, t, 0).x');
+    expect(fullPart).toContain('textureLoad(fullDepth, t, 0).x');
+    expect(fullPart).not.toContain('textureLoad(levelDepth, t, 0).x');
   });
 
   it('applies visibility ONLY to the designated flashlight contribution inside the loop', () => {

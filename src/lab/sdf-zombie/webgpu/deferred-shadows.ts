@@ -143,15 +143,6 @@ function validateLayers(value: number | readonly number[], label: string): reado
   return list as readonly number[];
 }
 
-/** three's own shadow-map side convention (WebGLShadowMap.getDepthMaterial):
- *  the shadow pass renders the BACK of single-sided geometry, which pushes
- *  the stored depth deeper and reduces acne; DoubleSide stays DoubleSide. */
-function shadowSideOf(side: THREE.Side): THREE.Side {
-  if (side === THREE.FrontSide) return THREE.BackSide;
-  if (side === THREE.BackSide) return THREE.FrontSide;
-  return THREE.DoubleSide;
-}
-
 interface CloneEntry {
   source: THREE.Mesh;
   full: THREE.Mesh | null;
@@ -248,21 +239,39 @@ export function createDeferredFlashlightShadows(
   };
 
   // ---- depth materials -----------------------------------------------------
-  const opaqueDepthMat = new MeshBasicNodeMaterial();
-  opaqueDepthMat.colorNode = vec4(projectedDepthNode, 0, 0, 1);
-  opaqueDepthMat.fog = false; // game scene fog must never bend stored depth
+  // The shadow map shows exactly what a camera AT THE LIGHT sees: a clone
+  // rasterises with its SOURCE's own material side. three's automatic shadow
+  // passes instead render BACK faces for FrontSide materials (shadowSide) to
+  // push stored depth deeper; here that convention would silently drop every
+  // single-plane wall of a room lit from its inside (the shadow pass would
+  // cull the only face the light sees), losing exactly the back/double-sided
+  // and plane casters a level is built from. Self-shadow acne is handled by
+  // the FLASHLIGHT_SHADOW_BIAS constant instead of by culling.
+  const makeOpaqueDepthMat = (side: THREE.Side): MeshBasicNodeMaterial => {
+    const mat = new MeshBasicNodeMaterial();
+    mat.side = side;
+    mat.colorNode = vec4(projectedDepthNode, 0, 0, 1);
+    mat.fog = false; // game scene fog must never bend stored depth
+    return mat;
+  };
+  const opaqueDepthBySide: Readonly<Record<number, MeshBasicNodeMaterial>> = {
+    [THREE.FrontSide]: makeOpaqueDepthMat(THREE.FrontSide),
+    [THREE.BackSide]: makeOpaqueDepthMat(THREE.BackSide),
+    [THREE.DoubleSide]: makeOpaqueDepthMat(THREE.DoubleSide),
+  };
 
   const cutoutCache = new Map<THREE.Material, MeshBasicNodeMaterial>();
   const shadowMaterialFor = (material: THREE.Material | THREE.Material[]): MeshBasicNodeMaterial => {
     const src = Array.isArray(material) ? material[0]! : material;
+    const side = src.side;
     const alphaTest = (src as THREE.Material & { alphaTest?: number }).alphaTest ?? 0;
     const map = (src as THREE.MeshStandardMaterial).map;
-    if (!map || !(alphaTest > 0)) return opaqueDepthMat;
+    if (!map || !(alphaTest > 0)) return opaqueDepthBySide[side] ?? opaqueDepthBySide[THREE.FrontSide]!;
     const cached = cutoutCache.get(src);
     if (cached) return cached;
     const mat = new MeshBasicNodeMaterial();
     mat.fog = false;
-    mat.side = shadowSideOf(src.side);
+    mat.side = side;
     // Identity texture transform assumed (the game's cutout casters use
     // repeat-free maps); the map itself — and therefore which texels are
     // holes — is the SOURCE's own.
@@ -372,41 +381,70 @@ export function createDeferredFlashlightShadows(
   };
 
   // ---- explicit raster passes ---------------------------------------------
+  // The shadow passes OWN their renderer state: a caller mid-frame may carry
+  // autoClearDepth=false (accumulating passes keep hardware depth across
+  // moving casters — stale silhouettes), autoClearColor=false (stale shadow
+  // texels), or an MRT setup (the maps are SINGLE-attachment R32F targets;
+  // a caller's MRT would redirect or split the writes). Every touched field
+  // is forced for the pass and restored in finally, on success AND throw.
   const prevColor = new THREE.Color();
+  interface SavedRenderState {
+    target: THREE.RenderTarget | null;
+    autoClear: boolean;
+    autoClearColor: boolean;
+    autoClearDepth: boolean;
+    clearDepth: number;
+    mrt: ReturnType<typeof renderer.getMRT>;
+  }
+  const saveRenderState = (): SavedRenderState => ({
+    target: renderer.getRenderTarget(),
+    autoClear: renderer.autoClear,
+    autoClearColor: renderer.autoClearColor,
+    autoClearDepth: renderer.autoClearDepth,
+    clearDepth: renderer.getClearDepth(),
+    mrt: renderer.getMRT(),
+  });
+  const forceShadowState = (): void => {
+    renderer.autoClear = true;               // clear colour to FAR + depth to 1
+    renderer.autoClearColor = true;          // no stale texels across frames
+    renderer.autoClearDepth = true;          // no stale hardware depth
+    renderer.setMRT(null);                   // single-attachment targets
+    renderer.setClearColor(FAR_CLEAR, 1);    // empty texel = far depth
+    renderer.setClearDepth(1);
+  };
+  const restoreRenderState = (prev: SavedRenderState): void => {
+    renderer.setRenderTarget(prev.target);
+    renderer.autoClear = prev.autoClear;
+    renderer.autoClearColor = prev.autoClearColor;
+    renderer.autoClearDepth = prev.autoClearDepth;
+    renderer.setMRT(prev.mrt);
+    renderer.setClearDepth(prev.clearDepth);
+  };
   const submitMap = (scene: THREE.Scene, target: THREE.RenderTarget): void => {
-    const prevTarget = renderer.getRenderTarget();
-    const prevAutoClear = renderer.autoClear;
-    const prevClearDepth = renderer.getClearDepth();
     renderer.getClearColor(prevColor);
     const prevAlpha = renderer.getClearAlpha();
+    const prev = saveRenderState();
     try {
       renderer.setRenderTarget(target);
-      renderer.autoClear = true;               // clear colour to FAR + depth to 1
-      renderer.setClearColor(FAR_CLEAR, 1);    // empty texel = far depth
-      renderer.setClearDepth(1);
+      forceShadowState();
       void renderer.render(scene, lightCam);
     } finally {
-      renderer.setRenderTarget(prevTarget);
-      renderer.autoClear = prevAutoClear;
+      restoreRenderState(prev);
       renderer.setClearColor(prevColor, prevAlpha);
-      renderer.setClearDepth(prevClearDepth);
     }
   };
 
   const clearMap = (target: THREE.RenderTarget): void => {
-    const prevTarget = renderer.getRenderTarget();
-    const prevClearDepth = renderer.getClearDepth();
     renderer.getClearColor(prevColor);
     const prevAlpha = renderer.getClearAlpha();
+    const prev = saveRenderState();
     try {
       renderer.setRenderTarget(target);
-      renderer.setClearColor(FAR_CLEAR, 1);
-      renderer.setClearDepth(1);
+      forceShadowState();
       renderer.clear(true, true, false);
     } finally {
-      renderer.setRenderTarget(prevTarget);
+      restoreRenderState(prev);
       renderer.setClearColor(prevColor, prevAlpha);
-      renderer.setClearDepth(prevClearDepth);
     }
   };
 
@@ -498,7 +536,7 @@ export function createDeferredFlashlightShadows(
       disposed = true;
       fullTarget.dispose();
       levelTarget.dispose();
-      opaqueDepthMat.dispose();
+      for (const mat of Object.values(opaqueDepthBySide)) mat.dispose();
       for (const mat of cutoutCache.values()) mat.dispose();
       cutoutCache.clear();
       clones.clear();

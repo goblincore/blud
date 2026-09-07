@@ -4,23 +4,49 @@
 // (deferred-shadows.ts) driving the deferred layer's receiver-aware sampling.
 // One deferred frame contains:
 //
-//   - a stone room (floor + 4 walls, MeshStandardMaterial adapted by the
+//   - a stone room (floor + 3 walls, MeshStandardMaterial adapted by the
 //     task-3 router, receiver 'full') — the floor is the proxy-shadow screen
-//   - a PILLAR between the flashlight and the zombie — the level-occlusion
-//     of flesh screen
+//   - a ceiling-hung stone SLAB between the flashlight and the zombie — the
+//     level-occlusion-of-flesh screen (its shadow crosses the body's front)
 //   - the SDF zombie surface view (level-only, class 18)
 //   - the occluder hull's INFLATED shadow twin (SHADOW_HULL_LAYER, casts
 //     into the full map) AND its shrunken occlusion twin (castShadow false —
 //     must never be collected)
-//   - an alpha-cutout mapped plane as a caster (exercises the cutout depth
-//     material on device)
+//   - an alpha-cutout mapped plane as a caster, hung high so its own shadow
+//     lands on the back wall (exercises the cutout depth material on device
+//     without polluting the floor-mask counts)
 //   - the flashlight (slot 0) + three practicals through the task-3 light list
 //
 // The driver (scripts/deferred-shadow-check.mjs) captures lit-target hashes,
 // on/off masks with coordinates, counters and screenshots. CPU classification
-// (pillar AABB + inflated hull spheres against the reconstructed world
+// (slab AABB + inflated hull spheres against the reconstructed world
 // positions) makes the assertions statistical and independent of any single
 // pixel.
+//
+// GEOMETRY IS ANALYTIC, not eyeballed (continuation review: the original
+// pillar covered the WHOLE body in camera projection and the resolved
+// G-buffer held zero flesh pixels). With C = CAM_START, L the flashlight
+// pose (rig offset [0.25,-0.15,+0.1] view-space => L ~= (3.175, 2.449, 1.903)),
+// target plane the torso front z=0.17, slab z in [0.8565, 0.8965], slab x in
+// [1.35, 1.53]:
+//
+//   s(z)  = (Cz - 0.17) / (Cz - z)  (camera magnification to the torso plane)
+//   sL(z) = (Lz - 0.17) / (Lz - z)  (light magnification)
+//
+//   CAMERA projection (all four x/z corners, s at both slab z faces):
+//   the slab covers camera-ray crossings x in [1.25, 1.44]; body points
+//   (|x| <= 0.363) cross at x <= 1.16 => the WHOLE body stays visible from
+//   the camera (the slab only covers floor/wall behind-right of it).
+//   LIGHT projection: x_shadow(x_edge) = Lx + sL*(x_edge - Lx), sL(0.8965)
+//   ~= 1.655, sL(0.8565) ~= 1.721 => shadow band x in [0.05, 0.42] on the
+//   torso plane => crosses the spine front (r 0.15) and the right arm
+//   (0.147..0.337): fat 'shadowed AND visible' evidence.
+//   Slab y [1.6, 3.0] (ceiling-hung): its FLOOR shadow only starts where the
+//   ray through its bottom edge (y=1.6) lands, ~3.6m down-beam (z ~= -1.1),
+//   so the NEAR half of the hull-proxy streak on the floor stays pillar-free
+//   and the driver's proxy-vs-other floor fraction holds (~0.9 in simulation).
+//   A floor-standing slab was REJECTED: its shadow tongue runs co-linear with
+//   the proxy streak and starves the proxy-explained count.
 
 import * as THREE from 'three/webgpu';
 import { createLabRenderer, type LabRendererHandle } from './lab-renderer';
@@ -48,19 +74,20 @@ const STEP_DT = 1 / 60;
 const ROOM_HALF = 3.6;
 const ROOM_HEIGHT = 3.0;
 
-/** Camera/light layout. The flashlight rides ~0.25 m right of the camera
- *  (FLASHLIGHT_OFFSET), so an occluder blocking light->flesh ALSO nearly
- *  blocks camera->flesh — the observable is the PARALLAX BAND: a pillar
- *  sliver that covers the body's left half from the camera while its shadow
- *  (offset by the light's parallax) falls on the VISIBLE right half. The
- *  window is x [1.24,1.50] (covers body x_b < 0 from the camera at t=0.559),
- *  and z [0.69,0.99] (light rays to the chest cross it; camera rays to the
- *  floor BEHIND the body pass over z>0.99, keeping the proxy shadow
- *  visible). Moving the camera to the -x side moves the proxy shadow to the
- *  +x side of the body (the motion check, asserted in WORLD space). */
-const CAM_START = { pos: [3.4, 1.9, 2.0] as Vec3, look: [0, 1.05, -0.4] as Vec3 };
-const CAM_FLIPPED = { pos: [-2.8, 1.9, 1.6] as Vec3, look: [0, 1.05, -0.4] as Vec3 };
-const PILLAR = { centre: [1.37, 1.5, 0.84] as Vec3, half: [0.13, 1.5, 0.15] as Vec3 };
+/** Camera/light layout. The flashlight rides the rig offset [0.25,-0.15,+0.1]
+ *  (view space) off the camera, so the slab casts ACROSS the body while the
+ *  body stays fully visible from the camera (see the analytic projection note
+ *  above). The camera is raised to y 2.55 so the light is steep enough for the
+ *  inflated hull's proxy shadow to land on the VISIBLE floor near the body
+ *  instead of flying to the far wall. Moving the camera to the -x side moves
+ *  the proxy shadow to the +x side of the body (the motion check, asserted in
+ *  WORLD space). */
+const CAM_START = { pos: [2.9, 2.55, 2.0] as Vec3, look: [0, 1.0, -0.4] as Vec3 };
+const CAM_FLIPPED = { pos: [-2.8, 2.55, 1.6] as Vec3, look: [0, 1.0, -0.4] as Vec3 };
+/** Ceiling-hung stone slab: the LEVEL occluder. x [1.35,1.53] (on the light->
+ *  torso beam), y [1.6,3.0] (hung: bottom edge high enough that its floor
+ *  shadow starts BEYOND the proxy streak's near half), z [0.8565,0.8965]. */
+const SLAB = { centre: [1.44, 2.3, 0.8765] as Vec3, half: [0.09, 0.7, 0.02] as Vec3 };
 const DARKENED_RATIO = 0.85; // lit < off * 0.85 counts as darkened
 
 const errors: string[] = [];
@@ -229,26 +256,30 @@ async function main() {
     room.add(wall);
   }
 
-  // The pillar: the LEVEL occluder between flashlight (+x) and zombie.
-  const pillar = new THREE.Mesh(
-    new THREE.BoxGeometry(PILLAR.half[0]! * 2, PILLAR.half[1]! * 2, PILLAR.half[2]! * 2),
+  // The hanging slab: the LEVEL occluder between flashlight (+x) and zombie.
+  // Geometry derivation in the header comment. Hung from the ceiling (no
+  // chain mesh — the SDF/analytics only need the slab's own shadow).
+  const slab = new THREE.Mesh(
+    new THREE.BoxGeometry(SLAB.half[0]! * 2, SLAB.half[1]! * 2, SLAB.half[2]! * 2),
     mkMat(wallTex, 1),
   );
-  pillar.name = 'pillar';
-  pillar.position.set(...PILLAR.centre);
+  slab.name = 'slab';
+  slab.position.set(...SLAB.centre);
 
   // The alpha-cutout caster (grate stand-in): reproduces the cutout depth
-  // material path on device.
+  // material path on device. Hung HIGH so its own shadow lands on the back
+  // wall (z = -3.6), not on the floor — the floor masks must stay
+  // proxy/slab-explained only.
   const cutout = new THREE.Mesh(
     new THREE.PlaneGeometry(1, 1),
     new THREE.MeshStandardMaterial({ map: cutoutTexture(), alphaTest: 0.5, transparent: false, side: THREE.DoubleSide }),
   );
   cutout.name = 'cutout-caster';
-  cutout.position.set(0.9, 0.75, -1.2);
+  cutout.position.set(0.9, 2.2, -1.2);
   cutout.rotation.y = Math.PI / 3;
 
   const meshScene = new THREE.Scene();
-  meshScene.add(room, pillar, cutout);
+  meshScene.add(room, slab, cutout);
   // game-main's eligibility pass: every mesh casts and receives.
   meshScene.traverse((o) => {
     if (o instanceof THREE.Mesh) { o.castShadow = true; o.receiveShadow = true; }
@@ -281,7 +312,7 @@ async function main() {
   const meshRouter: GameDeferredScene = createGameDeferredScene(meshScene);
   const sdfRouter = createGameDeferredScene(sdfScene);
   meshRouter.register(room, 'mesh', 'full');
-  meshRouter.register(pillar, 'mesh', 'full');
+  meshRouter.register(slab, 'mesh', 'full');
   meshRouter.register(cutout, 'mesh', 'full');
   sdfRouter.register(surfaceView.object, 'sdf', 'level-only');
   meshRouter.sync();
@@ -363,7 +394,7 @@ const readLit = async (): Promise<ReadBuffer> => readTargetChannel(handle, defer
     const invVp = new THREE.Matrix4()
       .multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse).invert();
     const lightPos = flashlight.spot.getWorldPosition(new THREE.Vector3()).toArray() as Vec3;
-    const pillarCentre = PILLAR.centre, pillarHalf = PILLAR.half;
+    const slabCentre = SLAB.centre, slabHalf = SLAB.half;
 
     let foCount = 0, foOn = 0, foOff = 0; let foCoord: [number, number] | null = null;
     let fcCount = 0, fcOn = 0, fcOff = 0; let fcCoord: [number, number] | null = null;
@@ -382,12 +413,12 @@ const readLit = async (): Promise<ReadBuffer> => readTargetChannel(handle, defer
         if (baseCls < 0.5 || d >= 1) continue;
         const litOn = on.data[o4]!, litOff = off.data[o4]!;
         const world = worldOf(x, y, depth, invVp);
-        const pillarHit = rayHitsAABB(lightPos, world, pillarCentre, pillarHalf);
+        const pillarHit = rayHitsAABB(lightPos, world, slabCentre, slabHalf);
         if (baseCls > 1.5 && baseCls < 2.5) {
           if (pillarHit) { foCount++; foOn += litOn; foOff += litOff; if (!foCoord) foCoord = [x, y]; }
           else { fcCount++; fcOn += litOn; fcOff += litOff; if (!fcCoord) fcCoord = [x, y]; }
         } else if (baseCls < 1.5 && normal.data[o4 + 1]! > 0.9) {
-          const pillarHit = rayHitsAABB(lightPos, world, pillarCentre, pillarHalf);
+          const pillarHit = rayHitsAABB(lightPos, world, slabCentre, slabHalf);
           let proxyHit = false;
           if (!pillarHit) {
             for (const s of hullSpheres) {
@@ -478,11 +509,12 @@ const readLit = async (): Promise<ReadBuffer> => readTargetChannel(handle, defer
       step(1);
       return hashBuffer(await readLit());
     },
-    /** Census + anchor round-trip: project the chest world point to a pixel,
- *  report the class AT that pixel, reconstruct its world position through
-     *  the same invVp the masks use, and report it back — the decisive test
-     *  for whether flesh is visible and whether the CPU reconstruction is
-     *  faithful. */
+    /** Census + anchor round-trip: project known world points to pixels,
+     *  report the class AT those pixels, and reconstruct their world
+     *  positions through the same invVp the masks use. The two anchors are
+     *  analytically placed: clearA on the left chest (visible AND unshadowed
+     *  — the slab's shadow band starts at x ~ +0.05), shadowA on the torso
+     *  front inside the slab's shadow band ([0.05, 0.42]). */
     async classProbe(which: 'resolved' | 'sdf' = 'resolved') {
       step(1);
       const resolved = which === 'resolved' ? deferredLayer.targets.resolved : deferredLayer.targets.sdf;
@@ -495,8 +527,11 @@ const readLit = async (): Promise<ReadBuffer> => readTargetChannel(handle, defer
       }
       camera.updateMatrixWorld();
       const proj = new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
-      const anchor = [0, 1.25, 0.12] as Vec3;
-      const v = new THREE.Vector4(anchor[0], anchor[1], anchor[2], 1).applyMatrix4(proj);
+      const anchors: { clearA: Vec3; shadowA: Vec3 } = {
+        clearA: [-0.15, 1.3, 0.15],
+        shadowA: [0.22, 1.3, 0.15],
+      };
+      const v = new THREE.Vector4(anchors.clearA[0], anchors.clearA[1], anchors.clearA[2], 1).applyMatrix4(proj);
       const px = Math.round(((v.x / v.w + 1) / 2) * FIXED_W);
       const py = Math.round((1 - v.y / v.w) / 2 * FIXED_H);
       const at = (x: number, y: number) => {
@@ -506,7 +541,14 @@ const readLit = async (): Promise<ReadBuffer> => readTargetChannel(handle, defer
       const anchorAt = at(px, py);
       const invVp = proj.clone().invert();
       const recon = worldOf(px, py, depth, invVp);
-      return { counts, anchorPixel: [px, py], anchorAt, reconstructed: recon, expected: anchor };
+      const projected: Record<string, { pixel: [number, number]; at: { cls: number; depth: number }; reconstructed: Vec3 }> = {};
+      for (const [name, a] of Object.entries(anchors)) {
+        const av = new THREE.Vector4(a[0], a[1], a[2], 1).applyMatrix4(proj);
+        const ax = Math.round(((av.x / av.w + 1) / 2) * FIXED_W);
+        const ay = Math.round((1 - av.y / av.w) / 2 * FIXED_H);
+        projected[name] = { pixel: [ax, ay], at: at(ax, ay), reconstructed: worldOf(ax, ay, depth, invVp) };
+      }
+      return { counts, anchorPixel: [px, py], anchorAt, reconstructed: recon, anchors: projected };
     },
     /** Shadow-map contents census: min/max/far-texel-count per map. An all-far
      *  map means the raster pass produced nothing; content means the maps are

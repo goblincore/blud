@@ -23,11 +23,16 @@ function mockShadowRenderer() {
   let current: THREE.RenderTarget | null = null;
   let clearR = 0, clearG = 0, clearB = 0, clearA = 1;
   let depth = 1;
+  let mrt: unknown = null;
   const render = vi.fn();
   const clear = vi.fn();
   const renderer = {
     autoClear: true,
+    autoClearColor: true,
+    autoClearDepth: true,
     coordinateSystem: THREE.WebGPUCoordinateSystem,
+    getMRT: () => mrt,
+    setMRT: (m: unknown) => { mrt = m; },
     getRenderTarget: () => current,
     setRenderTarget: (t: THREE.RenderTarget | null) => { current = t; },
     render,
@@ -46,6 +51,7 @@ function mockShadowRenderer() {
     clearLog: [] as { targetTexture?: THREE.Texture; color: number[] }[],
     clearColor: () => [clearR, clearG, clearB, clearA] as const,
     getCurrent: () => current,
+    getMRT: () => mrt,
   };
 }
 
@@ -567,6 +573,166 @@ describe('binding() and the light view-projection', () => {
       expect(() => factory.binding(16)).toThrow(RangeError);
     } finally {
       factory.dispose();
+    }
+  });
+});
+
+describe('shadow-pass renderer state ownership (continuation review)', () => {
+  /** Caller state that must survive an update untouched. */
+  function setNonDefaultCallerState(renderer: THREE.WebGPURenderer): void {
+    renderer.autoClear = false;
+    renderer.autoClearColor = false;
+    renderer.autoClearDepth = false;
+    renderer.setClearDepth(0.5);
+    renderer.setClearColor(new THREE.Color(0.2, 0.3, 0.4), 0.5);
+    renderer.setMRT({ fake: 'caller-mrt' } as never);
+  }
+
+  interface DuringState {
+    autoClear: boolean; autoClearColor: boolean; autoClearDepth: boolean;
+    clearDepth: number; color: readonly [number, number, number, number]; mrt: unknown;
+  }
+
+  function captureDuringRender(mock: ReturnType<typeof mockShadowRenderer>): DuringState[] {
+    const during: DuringState[] = [];
+    const r = mock.renderer;
+    mock.render.mockImplementation(() => {
+      during.push({
+        autoClear: r.autoClear,
+        autoClearColor: r.autoClearColor,
+        autoClearDepth: r.autoClearDepth,
+        clearDepth: r.getClearDepth(),
+        color: mock.clearColor(),
+        mrt: r.getMRT(),
+      });
+    });
+    return during;
+  }
+
+  it('forces autoClearColor/autoClearDepth/MRT/clear state during the map renders and restores the caller afterwards', async () => {
+    const mock = mockShadowRenderer();
+    const f = casterFixture();
+    const factory = createDeferredFlashlightShadows(mock.renderer, { size: 128 });
+    try {
+      setNonDefaultCallerState(mock.renderer);
+      const during = captureDuringRender(mock);
+      factory.update(f.scene, f.spot, UPDATE);
+      await oneFrame();
+      expect(during.length).toBe(2);
+      for (const s of during) {
+        expect(s.autoClear).toBe(true);
+        expect(s.autoClearColor).toBe(true);
+        expect(s.autoClearDepth).toBe(true);
+        expect(s.clearDepth).toBe(1);
+        expect(s.color[0]).toBe(1);       // FAR_CLEAR r=1
+        expect(s.mrt).toBeNull();          // single-attachment targets
+      }
+      // Caller state fully restored.
+      const r = mock.renderer;
+      expect(r.autoClear).toBe(false);
+      expect(r.autoClearColor).toBe(false);
+      expect(r.autoClearDepth).toBe(false);
+      expect(r.getClearDepth()).toBe(0.5);
+      expect(mock.clearColor()).toEqual([0.2, 0.3, 0.4, 0.5]);
+      expect(mock.getMRT()).toEqual({ fake: 'caller-mrt' });
+      expect(mock.getCurrent()).toBeNull();
+    } finally {
+      factory.dispose();
+    }
+  });
+
+  it('restores caller state even when a map render throws', async () => {
+    const mock = mockShadowRenderer();
+    const f = casterFixture();
+    const factory = createDeferredFlashlightShadows(mock.renderer, { size: 128 });
+    try {
+      setNonDefaultCallerState(mock.renderer);
+      mock.render.mockImplementation(() => { throw new Error('boom'); });
+      expect(() => factory.update(f.scene, f.spot, UPDATE)).toThrow('boom');
+      const r = mock.renderer;
+      expect(r.autoClear).toBe(false);
+      expect(r.autoClearColor).toBe(false);
+      expect(r.autoClearDepth).toBe(false);
+      expect(r.getClearDepth()).toBe(0.5);
+      expect(mock.clearColor()).toEqual([0.2, 0.3, 0.4, 0.5]);
+      expect(mock.getMRT()).toEqual({ fake: 'caller-mrt' });
+      expect(mock.getCurrent()).toBeNull();
+    } finally {
+      factory.dispose();
+    }
+  });
+
+  it('the disable-path far clear also runs with owned state and preserves the caller', async () => {
+    const mock = mockShadowRenderer();
+    const f = casterFixture();
+    const factory = createDeferredFlashlightShadows(mock.renderer, { size: 128 });
+    try {
+      factory.update(f.scene, f.spot, UPDATE);
+      await oneFrame();
+      setNonDefaultCallerState(mock.renderer);
+      const clearStates: Array<{ mrt: unknown; clearDepth: number; color: readonly [number, number, number, number] }> = [];
+      const r = mock.renderer;
+      mock.clear.mockImplementation(() => {
+        clearStates.push({ mrt: r.getMRT(), clearDepth: r.getClearDepth(), color: mock.clearColor() });
+      });
+      factory.update(f.scene, f.spot, { ...UPDATE, enabled: false });
+      await oneFrame();
+      expect(factory.diagnostics().renderedMaps).toBe(0);
+      expect(clearStates.length).toBe(2); // both maps invalidated to far
+      for (const s of clearStates) {
+        expect(s.mrt).toBeNull();
+        expect(s.clearDepth).toBe(1);
+        expect(s.color[0]).toBe(1);
+      }
+      expect(r.autoClear).toBe(false);
+      expect(r.autoClearColor).toBe(false);
+      expect(r.autoClearDepth).toBe(false);
+      expect(r.getClearDepth()).toBe(0.5);
+      expect(mock.clearColor()).toEqual([0.2, 0.3, 0.4, 0.5]);
+      expect(mock.getMRT()).toEqual({ fake: 'caller-mrt' });
+    } finally {
+      factory.dispose();
+    }
+  });
+
+  it('clone depth materials carry the SOURCE side (front walls stay visible to the light; back/doublesided casters keep theirs)', async () => {
+    const mock = mockShadowRenderer();
+    const f = casterFixture();
+    const factory = createDeferredFlashlightShadows(mock.renderer, { size: 128 });
+    const back = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5),
+      new THREE.MeshStandardMaterial({ side: THREE.BackSide }));
+    try {
+      // A BackSide source must keep BackSide (three's shadowSide convention
+      // would FLIP it — under the eye-side convention it must not).
+      back.castShadow = true;
+      back.layers.set(0);
+      back.position.set(0, 0.5, 0.5);
+      f.scene.add(back);
+      factory.update(f.scene, f.spot, UPDATE);
+      await oneFrame();
+      const fullScene = mock.render.mock.calls[0]![0] as THREE.Scene;
+      const meshes = fullScene.children.filter((c) => (c as THREE.Mesh).isMesh) as THREE.Mesh[];
+      const srcByGeometry = new Map<THREE.BufferGeometry, THREE.Mesh>([
+        [f.wall.geometry, f.wall],
+        [f.pillar.geometry, f.pillar],
+        [f.cutout.geometry, f.cutout],
+        [f.hull.geometry, f.hull],
+        [back.geometry, back],
+      ]);
+      expect(meshes.length).toBe(srcByGeometry.size);
+      const materialsBySide = new Map<number, THREE.Material>();
+      for (const m of meshes) {
+        const src = srcByGeometry.get(m.geometry)!;
+        const mat = m.material as THREE.Material;
+        expect(mat.side).toBe((src.material as THREE.Material).side);
+        if (src !== f.cutout) materialsBySide.set(mat.side, mat);
+      }
+      // Front-side opaque casters SHARE one depth material; the BackSide one
+      // gets its own; the cutout's is per-source (alpha discard).
+      expect(materialsBySide.size).toBe(2);
+    } finally {
+      factory.dispose();
+      back.geometry.dispose();
     }
   });
 });

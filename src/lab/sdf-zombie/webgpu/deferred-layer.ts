@@ -357,9 +357,10 @@ export const DEFERRED_LIGHT_WGSL = /* wgsl */ `fn deferredLight(
           // packed emissionClass.a — set = level-only receiver, which reads
           // the map WITHOUT the inflated flesh proxies so a character's own
           // hull cannot shadow its flesh; everything else reads the full map.
-          // WGSL select() rejects texture handles, so BOTH texels load and
-          // the SCALAR is selected (unconditional loads, no divergence; 18
-          // loads per shaded pixel inside the 3x3 kernel).
+          // The policy is an explicit BRANCH and each pixel loads ONLY its
+          // selected map (spec: one selected map feeds the 3x3 kernel) —
+          // WGSL select() rejects texture handles, so the branch wraps the
+          // loads; it can never collapse to a scalar select.
           let levelOnly = cls >= 15.5;
           // NDC -> texel. Row 0 is +Y in this framebuffer-identity chain
           // (the same convention as the world reconstruction above), so the
@@ -371,13 +372,21 @@ export const DEFERRED_LIGHT_WGSL = /* wgsl */ `fn deferredLight(
           // (z/w, [0,1], far = 1); a sample is lit when the fragment's depth
           // is not behind the stored one by more than the bias.
           var lit = 0.0;
-          for (var dy = -${FLASHLIGHT_SHADOW_KERNEL_RADIUS}; dy <= ${FLASHLIGHT_SHADOW_KERNEL_RADIUS}; dy = dy + 1) {
-            for (var dx = -${FLASHLIGHT_SHADOW_KERNEL_RADIUS}; dx <= ${FLASHLIGHT_SHADOW_KERNEL_RADIUS}; dx = dx + 1) {
-              let t = clamp(vec2<i32>(baseTexel) + vec2<i32>(dx, dy), vec2<i32>(0, 0), vec2<i32>(shadowMapSize) - vec2<i32>(1, 1));
-              let storedFull = textureLoad(fullDepth, t, 0).x;
-              let storedLevel = textureLoad(levelDepth, t, 0).x;
-              let stored = select(storedFull, storedLevel, levelOnly);
-              if (sNdc.z <= stored + shadowBias) { lit = lit + 1.0; }
+          if (levelOnly) {
+            for (var dy = -${FLASHLIGHT_SHADOW_KERNEL_RADIUS}; dy <= ${FLASHLIGHT_SHADOW_KERNEL_RADIUS}; dy = dy + 1) {
+              for (var dx = -${FLASHLIGHT_SHADOW_KERNEL_RADIUS}; dx <= ${FLASHLIGHT_SHADOW_KERNEL_RADIUS}; dx = dx + 1) {
+                let t = clamp(vec2<i32>(baseTexel) + vec2<i32>(dx, dy), vec2<i32>(0, 0), vec2<i32>(shadowMapSize) - vec2<i32>(1, 1));
+                let stored = textureLoad(levelDepth, t, 0).x;
+                if (sNdc.z <= stored + shadowBias) { lit = lit + 1.0; }
+              }
+            }
+          } else {
+            for (var dy = -${FLASHLIGHT_SHADOW_KERNEL_RADIUS}; dy <= ${FLASHLIGHT_SHADOW_KERNEL_RADIUS}; dy = dy + 1) {
+              for (var dx = -${FLASHLIGHT_SHADOW_KERNEL_RADIUS}; dx <= ${FLASHLIGHT_SHADOW_KERNEL_RADIUS}; dx = dx + 1) {
+                let t = clamp(vec2<i32>(baseTexel) + vec2<i32>(dx, dy), vec2<i32>(0, 0), vec2<i32>(shadowMapSize) - vec2<i32>(1, 1));
+                let stored = textureLoad(fullDepth, t, 0).x;
+                if (sNdc.z <= stored + shadowBias) { lit = lit + 1.0; }
+              }
             }
           }
           contribution = contribution * (lit / ${ (2 * FLASHLIGHT_SHADOW_KERNEL_RADIUS + 1) ** 2 }.0);
@@ -914,9 +923,11 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
 
     setFlashlightShadow(binding) {
       assertAlive();
-      // Task-1 reservation: validate and store ONLY. Nothing samples this
-      // until the task-4 shadow module lands; a bound-but-unimplemented
-      // binding must not change any output.
+      // M2 task 4: validate and store. The lit stage samples the binding
+      // every render when binding.enabled is true (receiver-aware PCF from
+      // the two maps); enabled=false keeps the maps bound but un-sampled —
+      // bit-identical to the null binding (the M1 default), which the GPU
+      // gate pins by hash.
       if (binding !== null) {
         if (typeof binding !== 'object') throw new TypeError('setFlashlightShadow: binding must be an object or null');
         if (!(binding.fullDepth as unknown as { isTexture?: boolean })?.isTexture
