@@ -1,6 +1,6 @@
 import { AMBIENT_AT, WALL_CONTRIBUTION } from './ambient.wgsl';
 import { TILE_MAX_ENTRIES } from './tile-cull';
-import { MAX_PRIMS, MAX_CLUSTERS } from '../validate';
+import { MAX_PRIMS, MAX_CLUSTERS, BONE_SEG_MAX } from '../validate';
 
 /** Extra metres added to the per-ray tile sphere test (tileCfg.x == 2) so the
  *  off-ray shading probes — calcNormal's 0.0015 eps and the AO probe at
@@ -1449,8 +1449,25 @@ export const APPLY_BONES = /* wgsl */ `fn applyBones(dIn: f32, p: vec3<f32>, dat
   // and sets the TAIL texel's .w to 1 as an enabled flag. Zeros = the old
   // flat loop, byte-identical. Off, the whole cull is a no-op.
   let tail = textureLoad(data, vec2<i32>(${2 * MAX_CLUSTERS}, ${ROW_CLUSTER_RANGE} + band), 0);
-  if (tail.w > 0.5) {
-    // Enabled path: one sphere per flesh cluster's bone range. The cull is
+  if (tail.w > 1.5) {
+    // MODE 2 — per-SEGMENT spheres (bone-segment spheres): one bound sphere
+    // per rigid segment the rig poses bones by (skull, one axial BoneFrame
+    // per spine/pelvis segment, one limb bone per bind-point pair, one for
+    // the organs), packed at columns 2*MAX_CLUSTERS+1.. of the same two
+    // rows. Same EXACT hard-min no-op as the cluster path: bones fold with
+    // a hard min against d, the WOUNDED running field, so a segment whose
+    // sphere is farther than d * distort can never win the min.
+    for (var s = 0; s < ${BONE_SEG_MAX}; s = s + 1) {
+      if (s >= i32(tail.z)) { break; }
+      let sr = textureLoad(data, vec2<i32>(${2 * MAX_CLUSTERS + 1} + s, ${ROW_CLUSTER_RANGE} + band), 0);
+      let sb = textureLoad(data, vec2<i32>(${2 * MAX_CLUSTERS + 1} + s, ${ROW_CLUSTER_BOUNDS} + band), 0);
+      if (length(p - sb.xyz) - sb.w > d * sr.z) { continue; }
+      d = foldBoneRange(d, p, data, i32(sr.x), i32(sr.y), band);
+    }
+    // The tail (overflow segments) folds unconditionally.
+    d = foldBoneRange(d, p, data, i32(tail.x), i32(tail.y), band);
+  } else if (tail.w > 0.5) {
+    // MODE 1 — enabled path: one sphere per flesh cluster's bone range. The cull is
     // the EXACT hard-min no-op — bones fold with a hard min, so a bone whose
     // sphere is farther than the running field d can never win. d here is
     // the WOUNDED field (the call site passes dmg), which is exactly what

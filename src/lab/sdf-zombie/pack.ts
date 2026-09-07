@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/pack.ts
 import type { BuiltBody, Primitive } from './types';
 import { bendCtrl } from './vec';
-import { MAX_CLUSTERS, MAX_PRIMS } from './validate';
+import { MAX_CLUSTERS, MAX_PRIMS, BONE_SEG_MAX } from './validate';
 import { boxReach, shellReach, strandReach } from './extent';
 
 export const PRIM_STRIDE = 4;    // vec4
@@ -83,6 +83,22 @@ export interface PackedBody {
    */
   boneClusterBounds: Float32Array;
   boneClusterRange: Float32Array;
+  /**
+   * BONE-SEGMENT SPHERES (boneCullMode: 'segment', 2026-09-07). The finer
+   * cull granularity: one bound sphere per RIGID SEGMENT — the skull unit,
+   * one axial BoneFrame per spine/pelvis segment, one limb bone per
+   * bind-point pair, one for the organs — the units applyRig poses bones by
+   * and tags with Primitive.boneSegment. Stored in the free columns
+   * 2*MAX_CLUSTERS+1 .. 2*MAX_CLUSTERS+BONE_SEG_MAX of the SAME two cluster
+   * rows; the header texel at column 2*MAX_CLUSTERS (index MAX_CLUSTERS of
+   * boneClusterRange) carries [tailStart, tailCount, segCount, 2].
+   * boneSegmentRange[s] = x start, y count, z DISTORTION factor, w 0 — same
+   * shape as the cluster ranges. Segments past BONE_SEG_MAX overflow to the
+   * tail. All zero unless mode 2 packed (an untagged body falls back to the
+   * cluster layout instead — lab bodies and chunks carry no tags).
+   */
+  boneSegmentBounds: Float32Array;
+  boneSegmentRange: Float32Array;
   /**
    * BOUND GROUPS: the fold's cull unit. A cluster is a limb, and a limb's one
    * sphere is fat — the schoolgirl's leg sphere (0.57 m, centred at the
@@ -174,6 +190,17 @@ export interface PackOpts {
    * one texel read. See boneClusterBounds / boneClusterRange.
    */
   packBoneClusters?: boolean;
+  /**
+   * Three-way bone cull (bone-segment spheres): 'off' (default) is the old
+   * flat loop with all-zero cull texels; 'cluster' is the per-flesh-cluster
+   * sphere layout packBoneClusters wrote; 'segment' groups the inside-flesh
+   * rows by Primitive.boneSegment (the rigid units applyRig poses by) with
+   * one fitSphere each, header mode 2. 'segment' on a body with ANY untagged
+   * live bone/organ falls back to the exact 'cluster' layout (header .w = 1)
+   * so lab bodies and chunks never break. packBoneClusters: true is an alias
+   * for 'cluster' when boneCullMode is absent.
+   */
+  boneCullMode?: 'off' | 'cluster' | 'segment';
 }
 
 export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {}): PackedBody {
@@ -319,7 +346,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
   // same contract as prims.
   const restBones = (rest ?? body).bonePrims ?? [];
   const packBones = opts.packBones ?? true;
-  const packBoneClusters = opts.packBoneClusters ?? false;
+  const boneCullMode = opts.boneCullMode ?? (opts.packBoneClusters ? 'cluster' : 'off');
   // One pair of texels per CLUSTER plus one tail texel (index MAX_CLUSTERS),
   // stored in the free columns of ROW_CLUSTER_BOUNDS / ROW_CLUSTER_RANGE —
   // see the PackedBody doc for the layout. Only op writes anything;
@@ -327,6 +354,9 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
   // shader's flat-fallback signal.
   const boneClusterBounds = new Float32Array((MAX_CLUSTERS + 1) * CLUSTER_STRIDE);
   const boneClusterRange = new Float32Array((MAX_CLUSTERS + 1) * CLUSTER_STRIDE);
+  // Per-SEGMENT texels (mode 2), columns 2*MAX_CLUSTERS+1.. of the same rows.
+  const boneSegmentBounds = new Float32Array(BONE_SEG_MAX * CLUSTER_STRIDE);
+  const boneSegmentRange = new Float32Array(BONE_SEG_MAX * CLUSTER_STRIDE);
   let boneCount = 0;
   // The writable path shared by the flat and grouped loops — one place for
   // the dead/op encoding and the rest pairing, so a grouped reorder cannot
@@ -337,7 +367,9 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
     boneCount++;
   };
 
-  if (packBoneClusters) {
+  // The per-flesh-cluster grouping (mode 1), kept byte-identical to the
+  // shipped packBoneClusters layout — the bench's A/B reference leg.
+  const packClustered = (): void => {
     // Group the live inside-flesh rows by owning cluster (bone.limb ===
     // cluster.limb). Organs — and any bone matching no cluster — go to the
     // tail, which the shader folds unconditionally (it is the fallback for
@@ -380,6 +412,55 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
     // whenever this option is on, 0 when off — the shader's flat-fallback
     // signal. z = 1: the tail folds unconditionally, no distortion factor.
     boneClusterRange.set([tStart, tail.length, 1, 1], MAX_CLUSTERS * CLUSTER_STRIDE);
+  };
+
+  if (boneCullMode === 'segment') {
+    // The live inside-flesh rows, in pack order. Segment mode needs the set
+    // up front: ANY untagged row falls the whole pack back to the cluster
+    // layout (lab bodies and chunks carry no boneSegment tags).
+    const live: { b: Primitive; j: number }[] = [];
+    (body.bonePrims ?? []).forEach((b, j) => {
+      if (!body.clusters[b.cluster]?.alive) return;
+      if (!packBones && b.op === 'bone') return;
+      live.push({ b, j });
+    });
+    if (live.some(x => typeof x.b.boneSegment !== 'number')) {
+      packClustered();
+    } else {
+      // Bucket by the rigid-segment tag applyRig assigned and write segment
+      // by segment in ASCENDING id order (determinism, not first-seen), each
+      // with the same fitSphere + distortOf the cluster path uses. Buckets
+      // past BONE_SEG_MAX overflow to the tail, which folds unconditionally.
+      const buckets = new Map<number, { b: Primitive; j: number }[]>();
+      for (const x of live) {
+        const s = x.b.boneSegment!;
+        const bucket = buckets.get(s);
+        if (bucket) bucket.push(x); else buckets.set(s, [x]);
+      }
+      let segCount = 0;
+      const tail: { b: Primitive; j: number }[] = [];
+      for (const id of [...buckets.keys()].sort((a, b) => a - b)) {
+        const bucket = buckets.get(id)!;
+        if (segCount >= BONE_SEG_MAX) { tail.push(...bucket); continue; }
+        const start = body.prims.length + boneCount;
+        for (const { b, j } of bucket) writeBone(b, j);
+        const prims = bucket.map(x => x.b);
+        const fit = fitSphere(prims);
+        const distort = distortOf(prims);
+        const o = segCount * CLUSTER_STRIDE;
+        boneSegmentBounds.set([fit.center[0], fit.center[1], fit.center[2], fit.radius], o);
+        boneSegmentRange.set([start, bucket.length, distort, 0], o);
+        segCount++;
+      }
+      const tStart = body.prims.length + boneCount;
+      for (const { b, j } of tail) writeBone(b, j);
+      // Header texel (column 2*MAX_CLUSTERS of ROW_CLUSTER_RANGE): tail
+      // range in xy, segCount in z, and w = 2 — the shader's segment-mode
+      // flag. The cluster slots 0..MAX_CLUSTERS-1 stay ZERO in this mode.
+      boneClusterRange.set([tStart, tail.length, segCount, 2], MAX_CLUSTERS * CLUSTER_STRIDE);
+    }
+  } else if (boneCullMode === 'cluster') {
+    packClustered();
   } else {
     (body.bonePrims ?? []).forEach((b, j) => {
       if (!body.clusters[b.cluster]?.alive) return;
@@ -455,6 +536,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
   return {
     primA, primB, primScale, primQuat, primShape, primBend, primColor, primShell, primClip, primWarp, primStrand, restA, restB, clusterBounds, clusterRange,
     boneClusterBounds, boneClusterRange,
+    boneSegmentBounds, boneSegmentRange,
     groupBounds, groupRange, clusterGroups, groupCount,
     primCount: body.prims.length,
     clusterCount: body.clusters.length,

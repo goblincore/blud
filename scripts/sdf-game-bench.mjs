@@ -217,6 +217,11 @@ const ALL_LEGS = {
   // spatially-culled alternative to bone-mesh-on — keeps the bones in the
   // field, recovers a fraction of the bone-mesh-on win (gib -25-30%).
   'bone-cull-on': { setBoneCull: true },
+  // Bone-SEGMENT sphere cull ON: one sphere per rigid segment (skull / axial
+  // BoneFrame / limb bone / organs) culls the inside-flesh rows. The finer
+  // granularity the cluster verdict asked for — a chest pixel should skip
+  // the pelvis, the skull and the shins.
+  'bone-seg-on': { setBoneCullMode: 'segment' },
 };
 // BENCH_LEGS lets a validation pass run one leg without the whole matrix.
 const LEGS = process.env.BENCH_LEGS
@@ -259,6 +264,7 @@ async function applyLeg(name) {
     __sdfGame.setWoundList(false);
     __sdfGame.setBoneMesh(false);
     __sdfGame.setBoneCull(false);
+    __sdfGame.setBoneCullMode('off');
     // Chunk pass: split ONLY in passes mode, so the timer can label chunks;
     // every other mode benches the shipped single pass.
     __sdfGame.setChunkPass(${JSON.stringify(PASSES ? 'split' : 'merged')});

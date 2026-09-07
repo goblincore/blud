@@ -32,6 +32,17 @@ export const MAX_PRIMS = 128;
 export const MAX_CLUSTERS = 6;
 
 /**
+ * Bone-SEGMENT sphere ceiling (bone-segment spheres, 2026-09-07): one bound
+ * sphere per rigid segment — the skull unit, one axial BoneFrame per
+ * spine/pelvis segment, one limb bone per bind-point pair, one for the
+ * organs — written into the free columns 13..44 (2*MAX_CLUSTERS+1 ..) of
+ * ROW_CLUSTER_BOUNDS / ROW_CLUSTER_RANGE, with the mode header at column 12
+ * (2*MAX_CLUSTERS). Segments beyond the cap overflow to the tail, which the
+ * shader folds unconditionally. See pack.ts PackedBody.boneSegmentBounds.
+ */
+export const BONE_SEG_MAX = 32;
+
+/**
  * Per-cluster primitive ceiling — the REAL shader bound, and the one that used
  * to go unchecked.
  *

@@ -1,0 +1,46 @@
+{
+  "off": {
+    "rasterised": 39206,
+    "hits": 24394,
+    "bonesTotal": 140964,
+    "meanPerRay": 3.595470081110034,
+    "meanPerPayingRay": 363.30927835051546,
+    "payingShare": 0.009896444421772177,
+    "meanOnHit": 5.087316553250799,
+    "maxBones": 2244,
+    "bodiesOnScreen": 10
+  },
+  "cluster": {
+    "rasterised": 39206,
+    "hits": 24394,
+    "bonesTotal": 124475,
+    "meanPerRay": 3.1748966994847727,
+    "meanPerPayingRay": 320.8118556701031,
+    "payingShare": 0.009896444421772177,
+    "meanOnHit": 4.47454292039026,
+    "maxBones": 1914,
+    "bodiesOnScreen": 10
+  },
+  "segment": {
+    "rasterised": 39206,
+    "hits": 24394,
+    "bonesTotal": 72830,
+    "meanPerRay": 1.8576238330867725,
+    "meanPerPayingRay": 187.70618556701032,
+    "payingShare": 0.009896444421772177,
+    "meanOnHit": 2.6366319586783638,
+    "maxBones": 1149,
+    "bodiesOnScreen": 10
+  },
+  "off-again": {
+    "rasterised": 39207,
+    "hits": 24394,
+    "bonesTotal": 140964,
+    "meanPerRay": 3.595378376310353,
+    "meanPerPayingRay": 363.30927835051546,
+    "payingShare": 0.009896192006529447,
+    "meanOnHit": 5.087316553250799,
+    "maxBones": 2244,
+    "bodiesOnScreen": 10
+  }
+}

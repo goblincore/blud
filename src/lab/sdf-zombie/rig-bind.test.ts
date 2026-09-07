@@ -396,6 +396,89 @@ describe('bone prims ride the rig (wound pass r2)', () => {
   });
 });
 
+describe('applyRig — rigid segment tags (bone-segment spheres)', () => {
+  // Every inside-flesh prim (bones AND organs) leaves applyRig tagged with
+  // the rigid unit it poses by: skull-rigid, an axial BoneFrame, or a limb
+  // bone's two bind points. pack.ts groups bone rows by this tag for the
+  // per-segment sphere cull, so the tags must BE the pose units.
+  const body = buildBody(compileBlob(parseBlob(zombieSrc)));
+  const bound = bindRig(body);
+  const out = applyRig(body, bound);
+
+  it('tags every posed inside-flesh prim with a small dense non-negative int', () => {
+    expect(out.bonePrims.length).toBeGreaterThan(0);
+    const tags: number[] = [];
+    for (const p of out.bonePrims) {
+      expect(typeof p.boneSegment).toBe('number');
+      expect(Number.isInteger(p.boneSegment)).toBe(true);
+      expect(p.boneSegment!).toBeGreaterThanOrEqual(0);
+      tags.push(p.boneSegment!);
+    }
+    // Dense: no gaps — max tag + 1 === number of distinct tags.
+    expect(Math.max(...tags) + 1).toBe(new Set(tags).size);
+  });
+
+  it('shares a tag within one axial BoneFrame and splits across frames', () => {
+    // Organs are excluded here on purpose: a torso organ carries a BoneFrame
+    // (it POSES with the pelvis segment) but is TAGGED 'organs' — the tag is
+    // the cull segment, not the pose frame, and organs cull as one unit.
+    const groups = new Map<string, number[]>();
+    bound.boneFrames.forEach((f, i) => {
+      if (body.bonePrims[i]!.op === 'organ') return;
+      const key = `${f.head}-${f.tail}`;
+      groups.set(key, [...(groups.get(key) ?? []), i]);
+    });
+    // The zombie has several axial segments (pelvis, spine, neck) and rib
+    // pairs, so some frame holds more than one bone prim.
+    expect(groups.size).toBeGreaterThan(1);
+    expect(Math.max(...[...groups.values()].map(g => g.length))).toBeGreaterThan(1);
+    const seen = new Set<number>();
+    for (const idxs of groups.values()) {
+      const t = out.bonePrims[idxs[0]!]!.boneSegment!;
+      for (const i of idxs) expect(out.bonePrims[i]!.boneSegment).toBe(t);
+      expect(seen.has(t)).toBe(false); // distinct frames, distinct tags
+      seen.add(t);
+    }
+  });
+
+  it('poses every skull-rigid bone under ONE shared tag', () => {
+    const skullBones = [...(bound.head?.bones.keys() ?? [])];
+    expect(skullBones.length).toBeGreaterThan(0);
+    const t = out.bonePrims[skullBones[0]!]!.boneSegment!;
+    expect(typeof t).toBe('number'); // tagged at all — the shares below pin WHAT
+    for (const i of skullBones) expect(out.bonePrims[i]!.boneSegment).toBe(t);
+  });
+
+  it('splits limb bones by their bind-point pair (an arm tag is not a shin tag)', () => {
+    const skullSet = new Set(bound.head?.bones.keys() ?? []);
+    const groups = new Map<string, number[]>();
+    body.bonePrims.forEach((_, i) => {
+      if (skullSet.has(i) || bound.boneFrames.has(i)) return;
+      const bind = bound.boneBinding[i]!;
+      const key = `${bind.a.point}-${bind.b.point}`;
+      groups.set(key, [...(groups.get(key) ?? []), i]);
+    });
+    // Upper arm, forearm, thigh, shin — at least two limb segments.
+    expect(groups.size).toBeGreaterThanOrEqual(2);
+    const seen = new Set<number>();
+    for (const idxs of groups.values()) {
+      const t = out.bonePrims[idxs[0]!]!.boneSegment!;
+      for (const i of idxs) expect(out.bonePrims[i]!.boneSegment).toBe(t);
+      expect(seen.has(t)).toBe(false);
+      seen.add(t);
+    }
+  });
+
+  it('tags every organ with ONE tag no bone carries', () => {
+    const organs = out.bonePrims.filter(p => p.op === 'organ');
+    expect(organs.length).toBeGreaterThan(0);
+    const organTag = organs[0]!.boneSegment!;
+    for (const p of organs) expect(p.boneSegment).toBe(organTag);
+    for (const p of out.bonePrims.filter(q => q.op !== 'organ'))
+      expect(p.boneSegment).not.toBe(organTag);
+  });
+});
+
 describe('rig-bind on .blob bone names (soldier)', () => {
   const body = buildBody(compileBlob(parseBlob(soldierSrc)));
   const bound = bindRig(body);

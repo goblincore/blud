@@ -28,7 +28,7 @@ import {
   FACE_MELT_SAG, FACE_MELT_STRETCH, FACE_MELT_FADE_LO, DEPTH_PREPASS_MARCH, DEPTH_PRE_FETCH, WOUND_STEP_MUL,
 } from './march.wgsl';
 import { MAX_WOUNDS } from '../damage';
-import { MAX_CLUSTERS } from '../validate';
+import { MAX_CLUSTERS, BONE_SEG_MAX } from '../validate';
 // Raw source import: the row-table docstrings are TS comments, invisible to
 // every exported WGSL string, and the Done-when "docstring no longer lies"
 // check needs the file's actual text.
@@ -1865,6 +1865,35 @@ describe('bone cluster cull (packBoneClusters)', () => {
     expect(FOLD_BONE_RANGE).toContain('d = min(d, sd)');
     expect(FOLD_BONE_RANGE).toContain(`vec2<i32>(i, ${ROW_PRIM_SHAPE}`);
     expect(FOLD_BONE_RANGE).toContain(`if (i >= ${MAX_PRIMS}) { break; }`);
+  });
+});
+
+describe('bone segment cull (boneCullMode: segment, mode 2)', () => {
+  // The finer granularity: one sphere per RIGID SEGMENT (skull / axial
+  // BoneFrame / limb bone / organs) in the free columns 2*MAX_CLUSTERS+1..
+  // of the same two rows, gated by the header texel's mode in .w.
+  it('branches on the header mode: 2 segment, 1 cluster, 0 flat', () => {
+    expect(APPLY_BONES).toContain('tail.w > 1.5');
+    expect(APPLY_BONES).toContain('} else if (tail.w > 0.5) {');
+  });
+
+  it('reads the segment texels at column 2*MAX_CLUSTERS+1 + s, bounded by BONE_SEG_MAX and the header count', () => {
+    expect(APPLY_BONES).toContain(`for (var s = 0; s < ${BONE_SEG_MAX}; s = s + 1)`);
+    expect(APPLY_BONES).toContain('if (s >= i32(tail.z)) { break; }');
+    expect(APPLY_BONES).toContain(`vec2<i32>(${2 * MAX_CLUSTERS + 1} + s, ${ROW_CLUSTER_RANGE}`);
+    expect(APPLY_BONES).toContain(`vec2<i32>(${2 * MAX_CLUSTERS + 1} + s, ${ROW_CLUSTER_BOUNDS}`);
+  });
+
+  it('uses the exact hard-min cull test against the WOUNDED running field', () => {
+    expect(APPLY_BONES).toContain('length(p - sb.xyz) - sb.w > d * sr.z');
+  });
+
+  it('folds through foldBoneRange — never an inline copy — and still folds the tail', () => {
+    expect(APPLY_BONES).toContain('foldBoneRange(d, p, data, i32(sr.x), i32(sr.y), band)');
+    expect(APPLY_BONES).toContain('foldBoneRange(d, p, data, i32(tail.x), i32(tail.y), band)');
+    // The mode-1 branch and the flat fallback stay verbatim.
+    expect(APPLY_BONES).toContain('foldBoneRange(d, p, data, i32(cr.x), i32(cr.y), band)');
+    expect(APPLY_BONES).toContain('foldBoneRange(d, p, data, first, i32(boneCount), band)');
   });
 });
 

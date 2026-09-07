@@ -919,10 +919,17 @@ async function main() {
   // bone loop; the bench's bone-cull-on leg flips it. Takes effect on the
   // next upload; promotion to ON is the owner's call after the numbers.
   let boneCull = false;
+  // Three-way cull state (bone-segment spheres): boneCull stays the boolean
+  // view (off vs any cull) the old seam reports.
+  let boneCullMode: 'off' | 'cluster' | 'segment' = 'off';
+  function applyBoneCullMode(mode: 'off' | 'cluster' | 'segment'): void {
+    boneCullMode = mode;
+    boneCull = mode !== 'off';
+    for (const a of actors) a.view.setBoneCullMode(mode);
+    for (const c of liveChunks) c.view.setBoneCullMode(mode);
+  }
   function applyBoneCull(on: boolean): void {
-    boneCull = on;
-    for (const a of actors) a.view.setBoneCull(on);
-    for (const c of liveChunks) c.view.setBoneCull(on);
+    applyBoneCullMode(on ? 'cluster' : 'off');
   }
   function applyBoneMesh(on: boolean): void {
     boneMesh = on;
@@ -4820,6 +4827,11 @@ async function main() {
      *  on the next per-frame pack, so a live flip needs a frame to land. */
     setBoneCull(on: boolean) { applyBoneCull(on); },
     get boneCull() { return boneCull; },
+    /** Three-way bone cull (bone-segment spheres): 'off' / 'cluster' (the
+     *  parked per-flesh-cluster spheres) / 'segment' (per rigid segment).
+     *  setBoneCull(on) is the boolean shorthand for off/cluster. */
+    setBoneCullMode(mode: 'off' | 'cluster' | 'segment') { applyBoneCullMode(mode); },
+    get boneCullMode() { return boneCullMode; },
     /** Per-ray wound list (march.wgsl.ts, counts2.w): build the reachable
      *  wound set once per pixel and fold only those. OFF is bit-identical. */
     setWoundList(on: boolean) {
