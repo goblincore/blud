@@ -4061,6 +4061,16 @@ async function main() {
       const v = new THREE.Vector3(x, y, z).project(camera);
       return { x: v.x, y: v.y, z: v.z };
     },
+    /** The exact inverse of screenPosOf: the world point `dist` metres along
+     *  the live camera ray through an NDC point (depth-probe evidence seam —
+     *  lets a gate place a forward sprite on a pixel it has already verified
+     *  is empty-far in the raw G-buffer). */
+    screenRayToWorld(ndcX: number, ndcY: number, dist: number) {
+      const v = new THREE.Vector3(ndcX, ndcY, 0.5).unproject(camera);
+      v.sub(camera.position).normalize();
+      const w = camera.position.clone().addScaledVector(v, dist);
+      return [w.x, w.y, w.z] as Vec3;
+    },
     /** Teleport to a room's centre, facing +z. */
     teleport(roomId: number) {
       const r = ROOMS.find(r => r.id === roomId);

@@ -35,7 +35,7 @@
           ],
           "lum": 28,
           "clipPct": 0.2,
-          "darkPct": 45.2
+          "darkPct": 45
         }
       }
     },
@@ -44,19 +44,19 @@
       "detail": {
         "canvasDepthWrites": true,
         "frame": {
-          "nonDarkPct": 79.8,
+          "nonDarkPct": 79.7,
           "w": 1280,
           "h": 800
         },
         "fpv": {
           "mean": [
             21,
-            15,
+            14,
             8
           ],
-          "lum": 15,
+          "lum": 14,
           "clipPct": 0,
-          "darkPct": 53.1
+          "darkPct": 53.4
         }
       }
     },
@@ -65,41 +65,67 @@
       "detail": {
         "travelled": 1.13,
         "pos": [
-          5.93,
+          5.94,
           -4.42
         ]
       }
     },
     {
-      "name": "null-front-behind-depth",
+      "name": "wall-push-image-change",
       "detail": {
         "open": {
           "mean": [
             21,
-            15,
+            14,
             8
           ],
-          "lum": 15,
+          "lum": 14,
           "clipPct": 0,
-          "darkPct": 53.1
+          "darkPct": 53.4
         },
         "corner": {
           "mean": [
-            57,
-            38,
+            59,
+            39,
             30
           ],
-          "lum": 42,
+          "lum": 43,
           "clipPct": 0,
-          "darkPct": 46.7
+          "darkPct": 46.1
         },
-        "delta": 27
+        "delta": 29
+      }
+    },
+    {
+      "name": "null-front-behind-depth-probes",
+      "detail": {
+        "front": {
+          "r": 201,
+          "g": 9,
+          "b": 10
+        },
+        "behind": {
+          "r": 246,
+          "g": 201,
+          "b": 202
+        },
+        "far": {
+          "r": 11,
+          "g": 11,
+          "b": 84
+        },
+        "farCase": "deepest-background",
+        "rawDepth": {
+          "front": 0.9086071848869324,
+          "behind": 0.97855544090271,
+          "far": 0.984031617641449
+        }
       }
     },
     {
       "name": "null-resize",
       "detail": {
-        "nonDarkPct": 86,
+        "nonDarkPct": 79.1,
         "w": 1100,
         "h": 700
       }
@@ -107,17 +133,17 @@
     {
       "name": "endpoint-gain0",
       "detail": {
-        "torsoDrop": 34,
+        "torsoDrop": 37,
         "wallDelta": 1,
         "torso": {
           "mean": [
-            62,
-            40,
+            61,
+            39,
             32
           ],
-          "lum": 45,
+          "lum": 44,
           "clipPct": 0.2,
-          "darkPct": 14.8
+          "darkPct": 14.7
         },
         "flashKey": {
           "fleshKeyIntensity": 0,
@@ -138,34 +164,245 @@
         },
         "torsoShoulder0": {
           "mean": [
-            91,
-            74,
-            75
+            93,
+            76,
+            76
           ],
-          "lum": 80,
-          "clipPct": 1.1,
-          "darkPct": 14.9
+          "lum": 82,
+          "clipPct": 1.2,
+          "darkPct": 14.6
         },
         "torsoShoulder05": {
           "mean": [
-            91,
-            75,
-            75
+            93,
+            76,
+            76
           ],
-          "lum": 80,
-          "clipPct": 1.1,
-          "darkPct": 14.8
+          "lum": 81,
+          "clipPct": 1.2,
+          "darkPct": 14.6
         },
         "presents": [
-          95,
-          119,
-          127
+          109,
+          133,
+          141
         ]
+      }
+    },
+    {
+      "name": "live-gun-tuning",
+      "detail": {
+        "gunTexel": {
+          "cls": 17,
+          "depth": 0.9664345383644104,
+          "box": [
+            689,
+            556,
+            769,
+            636
+          ]
+        },
+        "raw": {
+          "matte": {
+            "pixel": [
+              455,
+              447
+            ],
+            "size": {
+              "width": 800,
+              "height": 600
+            },
+            "albedo": [
+              0.2049560546875,
+              0.2149658203125,
+              0.2449951171875
+            ],
+            "roughness": 0.5,
+            "normal": [
+              -0.0867919921875,
+              0.99267578125,
+              -0.07928466796875
+            ],
+            "metalness": 0.199951171875,
+            "cls": 17,
+            "depth": 0.9664345383644104
+          },
+          "mirror": {
+            "pixel": [
+              455,
+              447
+            ],
+            "size": {
+              "width": 800,
+              "height": 600
+            },
+            "albedo": [
+              0.2049560546875,
+              0.2149658203125,
+              0.2449951171875
+            ],
+            "roughness": 0.04998779296875,
+            "normal": [
+              -0.086669921875,
+              0.99267578125,
+              -0.078857421875
+            ],
+            "metalness": 1,
+            "cls": 17,
+            "depth": 0.9664345383644104
+          }
+        },
+        "composedDelta": 18,
+        "handNormalDelta": 0.367919921875,
+        "restored": {
+          "roughness": 0.30000001192092896,
+          "envMapIntensity": 1.1,
+          "metalness": 1,
+          "handNormalScale": 2
+        }
+      }
+    },
+    {
+      "name": "cone-edge-stability",
+      "detail": {
+        "a": {
+          "mean": [
+            62,
+            46,
+            42
+          ],
+          "lum": 50,
+          "clipPct": 0.1,
+          "darkPct": 19.5
+        },
+        "b": {
+          "mean": [
+            47,
+            37,
+            34
+          ],
+          "lum": 39,
+          "clipPct": 0.1,
+          "darkPct": 21.5
+        },
+        "delta": 11
+      }
+    },
+    {
+      "name": "redirect-front-behind-depth-probes",
+      "detail": {
+        "front": {
+          "r": 206,
+          "g": 15,
+          "b": 15
+        },
+        "behind": {
+          "r": 245,
+          "g": 200,
+          "b": 201
+        },
+        "far": {
+          "r": 11,
+          "g": 11,
+          "b": 80
+        },
+        "farCase": "deepest-background",
+        "rawDepth": {
+          "front": 0.9086071848869324,
+          "behind": 0.97855544090271,
+          "far": 0.984031617641449
+        }
+      }
+    },
+    {
+      "name": "redirect-restored",
+      "detail": {
+        "canvasDepthWrites": false,
+        "output": {
+          "width": 800,
+          "height": 600
+        }
+      }
+    },
+    {
+      "name": "calibration-near-mid-far",
+      "detail": {
+        "deferred_1.8m": {
+          "mean": [
+            105,
+            86,
+            86
+          ],
+          "lum": 93,
+          "clipPct": 0.6,
+          "darkPct": 9.6
+        },
+        "deferred_3.5m": {
+          "mean": [
+            59,
+            50,
+            51
+          ],
+          "lum": 54,
+          "clipPct": 0.2,
+          "darkPct": 8.3
+        },
+        "deferred_6m": {
+          "mean": [
+            33,
+            29,
+            29
+          ],
+          "lum": 30,
+          "clipPct": 0.1,
+          "darkPct": 6.6
+        }
+      }
+    },
+    {
+      "name": "calibration-legacy",
+      "detail": {
+        "legacy_1.8m": {
+          "mean": [
+            115,
+            92,
+            94
+          ],
+          "lum": 101,
+          "clipPct": 0.3,
+          "darkPct": 0.4
+        },
+        "legacy_3.5m": {
+          "mean": [
+            82,
+            68,
+            70
+          ],
+          "lum": 74,
+          "clipPct": 0.3,
+          "darkPct": 0
+        },
+        "legacy_6m": {
+          "mean": [
+            37,
+            30,
+            28
+          ],
+          "lum": 32,
+          "clipPct": 0.2,
+          "darkPct": 0.1
+        }
+      }
+    },
+    {
+      "name": "done",
+      "detail": {
+        "note": "legacy calibration captured"
       }
     }
   ],
   "pageErrors": [],
-  "pass": false,
+  "pass": true,
   "records": {
     "captures": {
       "comp-deferred-fpv-post-on.png": {
@@ -178,7 +415,7 @@
             ],
             "lum": 28,
             "clipPct": 0.2,
-            "darkPct": 45.2
+            "darkPct": 45
           },
           "litWall": {
             "mean": [
@@ -201,7 +438,7 @@
             "darkPct": 0
           },
           "frame": {
-            "nonDarkPct": 81.3,
+            "nonDarkPct": 81.5,
             "w": 1280,
             "h": 800
           }
@@ -212,12 +449,12 @@
           "fpv": {
             "mean": [
               21,
-              15,
+              14,
               8
             ],
-            "lum": 15,
+            "lum": 14,
             "clipPct": 0,
-            "darkPct": 53.1
+            "darkPct": 53.4
           },
           "litWall": {
             "mean": [
@@ -240,7 +477,7 @@
             "darkPct": 0
           },
           "frame": {
-            "nonDarkPct": 79.8,
+            "nonDarkPct": 79.7,
             "w": 1280,
             "h": 800
           }
@@ -250,13 +487,13 @@
         "stats": {
           "fpv": {
             "mean": [
-              57,
-              38,
+              59,
+              39,
               30
             ],
-            "lum": 42,
+            "lum": 43,
             "clipPct": 0,
-            "darkPct": 46.7
+            "darkPct": 46.1
           },
           "litWall": {
             "mean": [
@@ -264,7 +501,7 @@
               14,
               15
             ],
-            "lum": 14,
+            "lum": 15,
             "clipPct": 0,
             "darkPct": 0
           },
@@ -279,7 +516,7 @@
             "darkPct": 0
           },
           "frame": {
-            "nonDarkPct": 86.3,
+            "nonDarkPct": 86.9,
             "w": 1280,
             "h": 800
           }
@@ -288,7 +525,7 @@
       "comp-null-resized.png": {
         "stats": {
           "frame": {
-            "nonDarkPct": 86,
+            "nonDarkPct": 79.1,
             "w": 1100,
             "h": 700
           }
@@ -298,21 +535,70 @@
         "stats": {
           "torso": {
             "mean": [
-              62,
-              40,
+              61,
+              39,
               32
             ],
-            "lum": 45,
+            "lum": 44,
             "clipPct": 0.2,
-            "darkPct": 14.8
+            "darkPct": 14.7
+          },
+          "fpv": {
+            "mean": [
+              20,
+              14,
+              7
+            ],
+            "lum": 14,
+            "clipPct": 0,
+            "darkPct": 53.7
+          },
+          "litWall": {
+            "mean": [
+              14,
+              14,
+              15
+            ],
+            "lum": 14,
+            "clipPct": 0,
+            "darkPct": 0
+          },
+          "darkWall": {
+            "mean": [
+              16,
+              12,
+              14
+            ],
+            "lum": 14,
+            "clipPct": 0,
+            "darkPct": 0
+          },
+          "frame": {
+            "nonDarkPct": 79.6,
+            "w": 1280,
+            "h": 800
+          }
+        }
+      },
+      "comp-endpoint-default.png": {
+        "stats": {
+          "torso": {
+            "mean": [
+              91,
+              75,
+              76
+            ],
+            "lum": 81,
+            "clipPct": 0.5,
+            "darkPct": 14.6
           },
           "fpv": {
             "mean": [
               21,
-              14,
+              15,
               8
             ],
-            "lum": 14,
+            "lum": 15,
             "clipPct": 0,
             "darkPct": 53
           },
@@ -343,69 +629,20 @@
           }
         }
       },
-      "comp-endpoint-default.png": {
-        "stats": {
-          "torso": {
-            "mean": [
-              90,
-              74,
-              75
-            ],
-            "lum": 79,
-            "clipPct": 0.5,
-            "darkPct": 14.9
-          },
-          "fpv": {
-            "mean": [
-              21,
-              14,
-              8
-            ],
-            "lum": 15,
-            "clipPct": 0,
-            "darkPct": 53.4
-          },
-          "litWall": {
-            "mean": [
-              14,
-              14,
-              15
-            ],
-            "lum": 14,
-            "clipPct": 0,
-            "darkPct": 0
-          },
-          "darkWall": {
-            "mean": [
-              16,
-              12,
-              14
-            ],
-            "lum": 14,
-            "clipPct": 0,
-            "darkPct": 0
-          },
-          "frame": {
-            "nonDarkPct": 79.8,
-            "w": 1280,
-            "h": 800
-          }
-        }
-      },
       "comp-endpoint-shoulder0.png": {
         "stats": {
           "torso": {
             "mean": [
-              91,
-              74,
-              75
+              93,
+              76,
+              76
             ],
-            "lum": 80,
-            "clipPct": 1.1,
-            "darkPct": 14.9
+            "lum": 82,
+            "clipPct": 1.2,
+            "darkPct": 14.6
           },
           "frame": {
-            "nonDarkPct": 79.5,
+            "nonDarkPct": 79.7,
             "w": 1280,
             "h": 800
           }
@@ -415,35 +652,45 @@
         "stats": {
           "torso": {
             "mean": [
-              91,
-              75,
-              75
+              93,
+              76,
+              76
             ],
-            "lum": 80,
-            "clipPct": 1.1,
-            "darkPct": 14.8
+            "lum": 81,
+            "clipPct": 1.2,
+            "darkPct": 14.6
           },
           "frame": {
-            "nonDarkPct": 79.9,
+            "nonDarkPct": 79.8,
             "w": 1280,
             "h": 800
           }
         }
       },
-      "comp-tuning-default.png": {
+      "comp-tuning-matte.png": {
         "stats": {
           "fpv": {
             "mean": [
-              22,
-              15,
-              8
+              27,
+              20,
+              13
             ],
-            "lum": 15,
-            "clipPct": 0,
-            "darkPct": 52.7
+            "lum": 20,
+            "clipPct": 0.2,
+            "darkPct": 36.2
+          },
+          "gunBox": {
+            "mean": [
+              24,
+              19,
+              17
+            ],
+            "lum": 20,
+            "clipPct": 0.1,
+            "darkPct": 26.7
           },
           "frame": {
-            "nonDarkPct": 79.5,
+            "nonDarkPct": 82.1,
             "w": 1280,
             "h": 800
           }
@@ -453,16 +700,178 @@
         "stats": {
           "fpv": {
             "mean": [
-              21,
-              15,
+              20,
+              14,
               8
             ],
-            "lum": 15,
+            "lum": 14,
             "clipPct": 0,
-            "darkPct": 53.4
+            "darkPct": 54.1
+          },
+          "gunBox": {
+            "mean": [
+              2,
+              2,
+              1
+            ],
+            "lum": 2,
+            "clipPct": 0,
+            "darkPct": 91.6
           },
           "frame": {
-            "nonDarkPct": 79.4,
+            "nonDarkPct": 79.6,
+            "w": 1280,
+            "h": 800
+          }
+        }
+      },
+      "comp-cone-edge-a.png": {
+        "stats": {
+          "torso": {
+            "mean": [
+              62,
+              46,
+              42
+            ],
+            "lum": 50,
+            "clipPct": 0.1,
+            "darkPct": 19.5
+          },
+          "frame": {
+            "nonDarkPct": 82.4,
+            "w": 1280,
+            "h": 800
+          }
+        }
+      },
+      "comp-cone-edge-b.png": {
+        "stats": {
+          "torso": {
+            "mean": [
+              47,
+              37,
+              34
+            ],
+            "lum": 39,
+            "clipPct": 0.1,
+            "darkPct": 21.5
+          },
+          "frame": {
+            "nonDarkPct": 82.3,
+            "w": 1280,
+            "h": 800
+          }
+        }
+      },
+      "comp-cal-deferred-1.8m.png": {
+        "stats": {
+          "torso": {
+            "mean": [
+              105,
+              86,
+              86
+            ],
+            "lum": 93,
+            "clipPct": 0.6,
+            "darkPct": 9.6
+          },
+          "frame": {
+            "nonDarkPct": 81.9,
+            "w": 1280,
+            "h": 800
+          }
+        }
+      },
+      "comp-cal-deferred-3.5m.png": {
+        "stats": {
+          "torso": {
+            "mean": [
+              59,
+              50,
+              51
+            ],
+            "lum": 54,
+            "clipPct": 0.2,
+            "darkPct": 8.3
+          },
+          "frame": {
+            "nonDarkPct": 86.8,
+            "w": 1280,
+            "h": 800
+          }
+        }
+      },
+      "comp-cal-deferred-6m.png": {
+        "stats": {
+          "torso": {
+            "mean": [
+              33,
+              29,
+              29
+            ],
+            "lum": 30,
+            "clipPct": 0.1,
+            "darkPct": 6.6
+          },
+          "frame": {
+            "nonDarkPct": 81.6,
+            "w": 1280,
+            "h": 800
+          }
+        }
+      },
+      "comp-cal-legacy-1.8m.png": {
+        "stats": {
+          "torso": {
+            "mean": [
+              115,
+              92,
+              94
+            ],
+            "lum": 101,
+            "clipPct": 0.3,
+            "darkPct": 0.4
+          },
+          "frame": {
+            "nonDarkPct": 83.4,
+            "w": 1280,
+            "h": 800
+          }
+        }
+      },
+      "comp-cal-legacy-3.5m.png": {
+        "stats": {
+          "torso": {
+            "mean": [
+              82,
+              68,
+              70
+            ],
+            "lum": 74,
+            "clipPct": 0.3,
+            "darkPct": 0
+          },
+          "frame": {
+            "nonDarkPct": 94,
+            "w": 1280,
+            "h": 800
+          }
+        }
+      },
+      "comp-cal-legacy-6m.png": {
+        "stats": {
+          "torso": {
+            "mean": [
+              37,
+              30,
+              28
+            ],
+            "lum": 32,
+            "clipPct": 0.2,
+            "darkPct": 0.1
+          },
+          "frame": {
+            "nonDarkPct": 96.2,
             "w": 1280,
             "h": 800
           }
