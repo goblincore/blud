@@ -1,0 +1,13 @@
+{
+  "checks": [],
+  "pageErrors": [
+    [
+      "THREE.TSL: Length of parameters exceeds maximum length of function 'vec4()' type.",
+      "Stack trace not available. Enable \"THREE.Node.captureStackTrace\" to capture stack traces."
+    ]
+  ],
+  "pass": false,
+  "records": {
+    "captures": {}
+  }
+}

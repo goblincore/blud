@@ -332,6 +332,38 @@ describe('scoped draws on the ORIGINAL objects', () => {
     s.dispose();
   });
 
+  it('SPRITES never reach a G-buffer pass (soldier-flash MRT pipeline hazard)', () => {
+    // Composition review fix regression: a THREE.Sprite (the world-space
+    // soldier muzzle flash) submitted against the 4-attachment MRT target
+    // compiles a ONE-attachment pipeline and WebGPU rejects the whole
+    // command buffer. Registered OR unregistered, a sprite is hidden from
+    // the mesh/sdf draws (reported unsupported when routed) and left alone
+    // in the forward draw only when unregistered.
+    const scene = new THREE.Scene();
+    const root = new THREE.Group(); root.name = 'arms-root';
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xffe6bf }));
+    sprite.name = 'flash';
+    root.add(sprite);
+    const loose = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xffffff }));
+    loose.name = 'soldier-flash';
+    scene.add(root, loose);
+    const { renderer, submitted } = mockRenderer();
+    const s = createGameDeferredScene(scene);
+    s.register(root, 'mesh', 'level-only');
+    s.sync();
+    s.draw('mesh', renderer, camera());
+    const hidden = new Set(submitted[0]!.hidden);
+    expect(hidden.has(sprite)).toBe(true); // routed: hidden + reported
+    expect(hidden.has(loose)).toBe(true); // unregistered: hidden from G-buffer
+    expect(s.diagnostics().unsupported.join('\n')).toContain('non-mesh renderable routed mesh');
+    // Forward: the unregistered flash still draws (the effect must survive).
+    s.draw('forward', renderer, camera());
+    const fwd = new Set(submitted[1]!.hidden);
+    expect(fwd.has(loose)).toBe(false);
+    expect(fwd.has(sprite)).toBe(true); // routed mesh: G-buffer member only
+    s.dispose();
+  });
+
   it('a game-hidden subtree stays hidden and untouched in every draw (no force-showing)', () => {
     const scene = new THREE.Scene();
     const dead = new THREE.Group(); dead.name = 'dead-actor';

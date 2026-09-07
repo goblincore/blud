@@ -20,6 +20,7 @@ type AdapterMat = {
   vertexColors: boolean;
   map: THREE.Texture | null;
   normalMap: THREE.Texture | null;
+  emissiveMap: THREE.Texture | null;
   lights: boolean;
 };
 
@@ -97,5 +98,29 @@ describe('createDeferredMeshMaterial material preservation (game materials)', ()
     expect(adapter.emissive.g).toBeCloseTo(src.emissive.g, 6);
     expect(adapter.emissive.b).toBeCloseTo(src.emissive.b, 6);
     expect(adapter.emissiveIntensity).toBe(2.2);
+  });
+
+  it('an emissiveMap source keeps the map by reference (the r185 vec4 trap is a GPU-side witness)', () => {
+    // With an emissiveMap, three r185's MaterialNode multiplies the emissive
+    // colour by the RAW texture sample (vec4 — MaterialNode.js:225 has no
+    // .rgb swizzle), so the mrt emissionClass join MUST swizzle .rgb or the
+    // WGSL join exceeds vec4 and the validator rejects the whole graph at
+    // build time. The rejection only materialises inside a node BUILDER
+    // (JoinNode.generate — error() at generate, not construct), so the pure
+    // witness is the on-device composition check
+    // (scripts/deferred-game-composition-check.mjs, arms route: page errors
+    // before the fix, clean after); here we pin the reference contract only.
+    const tex = new THREE.Texture();
+    const src = new THREE.MeshStandardMaterial({
+      emissive: new THREE.Color(0xffffff),
+      emissiveMap: tex,
+      emissiveIntensity: 1.4,
+      map: tex,
+    });
+    const adapter = createDeferredMeshMaterial(src) as AdapterMat;
+    expect(adapter.emissiveMap).toBe(tex);
+    expect(adapter.map).toBe(tex);
+    expect(adapter.mrtNode).not.toBeNull();
+    expect(adapter.mrtNode!.outputNodes.emissionClass).toBeDefined();
   });
 });

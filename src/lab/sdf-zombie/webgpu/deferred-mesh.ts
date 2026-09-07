@@ -118,10 +118,19 @@ export function createDeferredMeshMaterial(
 
   // Names must match SURFACE_ATTACHMENT_NAMES — three's MRTNode matches
   // outputs to the current render target's textures BY NAME.
+  // NOTE the .rgb on materialEmissive (composition review fix): three
+  // r185's MaterialNode multiplies the emissive COLOR by the emissiveMap
+  // SAMPLE WITHOUT an .rgb swizzle (MaterialNode.js:225), so a material
+  // with an emissiveMap (the watch screen) exposes materialEmissive as a
+  // VEC4 (map alpha rides along). Without the swizzle the join below is a
+  // 5-component vec4 and the WGSL function validator rejects the whole
+  // graph: "Length of parameters exceeds maximum length of function
+  // 'vec4()'" — the arms never reached the G-buffer. materialColor keeps
+  // its .rgb for the same reason (the map path is vec4 there too).
   mat.mrtNode = mrt({
     albedoRoughness: vec4(materialColor.rgb, materialRoughness),
     normalMetalness: vec4(normalWorld, materialMetalness),
-    emissionClass: vec4(materialEmissive, surfaceKind),
+    emissionClass: vec4(materialEmissive.rgb, surfaceKind),
     surfaceDepth: vec4(clipDepth, 0.0, 0.0, 1.0),
   });
   mat.surfaceKind = surfaceKind;

@@ -263,11 +263,14 @@ export function createGameDeferredScene(scene: THREE.Scene): GameDeferredScene {
   function recomputeDiagnostics(): void {
     unsupported.clear();
     // Only RENDERABLES carry a material contract; Groups are containers and
-    // are diagnosed through their children.
+    // are diagnosed through their children. SPRITES included (composition
+    // review fix): the viewmodel GLBs carry them, and a Sprite routed mesh
+    // must be reported/hid, not silently submitted against the MRT pass.
     const isRenderable = (o: THREE.Object3D): boolean =>
       (o as THREE.Mesh).isMesh === true
       || (o as THREE.Points).isPoints === true
-      || (o as THREE.Line).isLine === true;
+      || (o as THREE.Line).isLine === true
+      || (o as THREE.Sprite).isSprite === true;
     for (const [object, entry] of catalog) {
       if (entry.route !== 'mesh' && entry.route !== 'sdf') continue;
       if (!isRenderable(object)) continue;
@@ -341,10 +344,18 @@ export function createGameDeferredScene(scene: THREE.Scene): GameDeferredScene {
         // early-outs on visible=false) — meshes-with-mesh-children of mixed
         // routes do not occur in this game and are not supported. A node the
         // GAME had hidden is never touched: that subtree is intended off.
+        // Renderables that carry a material contract. SPRITES included
+        // (composition review fix): the viewmodel GLBs contain them, and a
+        // Sprite reaching the MRT pass compiles a ONE-attachment pipeline
+        // against a FOUR-attachment target — WebGPU rejects the pipeline
+        // and the whole command buffer ("Color target has no corresponding
+        // fragment stage output"), blacking the frame. Like Points/Lines,
+        // they are hidden + reported, never silently submitted.
         const isRenderable = (object: THREE.Object3D): boolean =>
           (object as THREE.Mesh).isMesh === true
           || (object as THREE.Points).isPoints === true
-          || (object as THREE.Line).isLine === true;
+          || (object as THREE.Line).isLine === true
+          || (object as THREE.Sprite).isSprite === true;
         const visit = (object: THREE.Object3D): void => {
           if (!object.visible) return; // game-hidden: subtree off, untouched
           const entry = catalog.get(object);
