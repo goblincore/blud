@@ -233,3 +233,33 @@ quiet machine:
 ```sh
 BENCH_PASSES=1 BENCH_LEGS=baseline,bone-mesh-on BENCH_ROOMS=3,4 BENCH_REPEATS=3 scripts/sdf-game-bench.sh
 ```
+
+## Run 8 — bone tubes ON, quiet machine (run8-bone-tubes/)
+
+`sdf:march` exclusive ms per rep (walk / fire / gib), load < 4.5 at start:
+
+| | room 3 | room 4 |
+| --- | --- | --- |
+| baseline | 8.0/8.7/10.5 · 10.8/12.1/13.3 · 13.4/17.2/26.7 | 6.1/7.1/7.1 · 13.9/11.9/11.5 · 21.0/20.6/22.6 |
+| bone-mesh-on | 7.8/7.1/7.0 · 10.2/9.5/9.7 · 9.9/12.4/12.4 | 6.1/7.2/6.7 · 12.8/11.0/9.7 · 20.9/16.0/15.7 |
+
+Baseline spread 32–58%, the leg 15%; but the direction is the same in all
+six wounded comparisons: **fire −15–20%, gib −25–30%**, polys +0.3 ms for the
+tubes. Walk unchanged (no wound, gate closed, bones never folded). This is
+the largest single lever measured today, and it is a mechanism that already
+exists (`setBoneMesh`, default OFF pending the owner's look verdict on the
+tubes).
+
+### The root cause, stated once
+
+`nearWound` (1 within 2× a crater's radius) switches a pixel into a
+different, much heavier field evaluation on EVERY march step and every
+post-hit probe: (a) the wound loop, (b) `applyBones` — every bone AND organ
+prim (zombie: 68–90 rows) folded with NO spatial cull, (c) the owner
+re-fold. Run 5 priced (a) at ~0 (earlyout-off), run 6 priced (c) at 0–20%,
+run 8 priced (b) at 25–30% of the wounded march by removing bones from the
+field. What remains after (b) is the zone itself: more pixels in the zone
+and more steps per pixel as craters stack. Levers, in order: ship bone
+tubes (or a spatially-culled bone fold: cluster/group spheres for bones the
+way flesh has them); organs only under deep craters; then the zone's step
+count via a wound-aware entry bound.
