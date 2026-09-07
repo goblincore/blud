@@ -1,0 +1,264 @@
+{
+  "method": "CPU simulation/render submission plus GPU queue completion per unpaced frame; no GPU timestamps or combat FPS claim",
+  "capture": "rounded run summaries retained from live DOM result; raw per-frame samples not archived",
+  "settings": {
+    "width": 640,
+    "height": 480,
+    "sdfScale": 1,
+    "fxaa": true,
+    "smear": 0.25,
+    "bleed": false,
+    "frozen": true,
+    "actor": 1,
+    "room": 1,
+    "distance": 1,
+    "aimY": 1.22
+  },
+  "load1Before": 2.24,
+  "load1During": 3.71,
+  "runs": [
+    {
+      "rep": 0,
+      "mode": "baseline",
+      "intactSamples": 100,
+      "intactP50Ms": 10.4,
+      "stages": [
+        {
+          "stage": "front",
+          "steadySamples": 120,
+          "p50Ms": 11.1,
+          "p95Ms": 13.6,
+          "meanMs": 11.11417,
+          "transitionSamples": 24,
+          "transitionP50Ms": 10.2,
+          "firstHitStampAndFrameMs": [
+            14.7,
+            12.1
+          ],
+          "visualWounds": 8,
+          "gameplayWounds": 8
+        },
+        {
+          "stage": "all-four",
+          "steadySamples": 120,
+          "p50Ms": 11,
+          "p95Ms": 13.3,
+          "meanMs": 11.14167,
+          "transitionSamples": 24,
+          "transitionP50Ms": 11.7,
+          "firstHitStampAndFrameMs": [
+            11.5,
+            11.3
+          ],
+          "visualWounds": 16,
+          "gameplayWounds": 16
+        }
+      ]
+    },
+    {
+      "rep": 0,
+      "mode": "candidate",
+      "intactSamples": 100,
+      "intactP50Ms": 10,
+      "stages": [
+        {
+          "stage": "front",
+          "steadySamples": 120,
+          "p50Ms": 12.3,
+          "p95Ms": 15,
+          "meanMs": 12.4,
+          "transitionSamples": 24,
+          "transitionP50Ms": 11.6,
+          "firstHitStampAndFrameMs": [
+            14.3,
+            13.8
+          ],
+          "visualWounds": 4,
+          "gameplayWounds": 8
+        },
+        {
+          "stage": "all-four",
+          "steadySamples": 120,
+          "p50Ms": 12.2,
+          "p95Ms": 15.4,
+          "meanMs": 12.4725,
+          "transitionSamples": 24,
+          "transitionP50Ms": 12.7,
+          "firstHitStampAndFrameMs": [
+            13.9,
+            14.5
+          ],
+          "visualWounds": 8,
+          "gameplayWounds": 16
+        }
+      ]
+    },
+    {
+      "rep": 1,
+      "mode": "candidate",
+      "intactSamples": 100,
+      "intactP50Ms": 10,
+      "stages": [
+        {
+          "stage": "front",
+          "steadySamples": 120,
+          "p50Ms": 11.9,
+          "p95Ms": 14.9,
+          "meanMs": 12.1125,
+          "transitionSamples": 24,
+          "transitionP50Ms": 11.7,
+          "firstHitStampAndFrameMs": [
+            12.4,
+            13
+          ],
+          "visualWounds": 4,
+          "gameplayWounds": 8
+        },
+        {
+          "stage": "all-four",
+          "steadySamples": 120,
+          "p50Ms": 11.9,
+          "p95Ms": 15,
+          "meanMs": 12.16083,
+          "transitionSamples": 24,
+          "transitionP50Ms": 12.3,
+          "firstHitStampAndFrameMs": [
+            13.6,
+            13.3
+          ],
+          "visualWounds": 8,
+          "gameplayWounds": 16
+        }
+      ]
+    },
+    {
+      "rep": 1,
+      "mode": "baseline",
+      "intactSamples": 100,
+      "intactP50Ms": 10.3,
+      "stages": [
+        {
+          "stage": "front",
+          "steadySamples": 120,
+          "p50Ms": 10.9,
+          "p95Ms": 13.9,
+          "meanMs": 11.17167,
+          "transitionSamples": 24,
+          "transitionP50Ms": 10.6,
+          "firstHitStampAndFrameMs": [
+            11.3,
+            11.1
+          ],
+          "visualWounds": 8,
+          "gameplayWounds": 8
+        },
+        {
+          "stage": "all-four",
+          "steadySamples": 120,
+          "p50Ms": 11,
+          "p95Ms": 13.4,
+          "meanMs": 11.0775,
+          "transitionSamples": 24,
+          "transitionP50Ms": 10.8,
+          "firstHitStampAndFrameMs": [
+            13.2,
+            11.4
+          ],
+          "visualWounds": 16,
+          "gameplayWounds": 16
+        }
+      ]
+    },
+    {
+      "rep": 2,
+      "mode": "baseline",
+      "intactSamples": 100,
+      "intactP50Ms": 10.1,
+      "stages": [
+        {
+          "stage": "front",
+          "steadySamples": 120,
+          "p50Ms": 10.8,
+          "p95Ms": 12.9,
+          "meanMs": 10.92583,
+          "transitionSamples": 24,
+          "transitionP50Ms": 10.2,
+          "firstHitStampAndFrameMs": [
+            11.8,
+            12.4
+          ],
+          "visualWounds": 8,
+          "gameplayWounds": 8
+        },
+        {
+          "stage": "all-four",
+          "steadySamples": 120,
+          "p50Ms": 11,
+          "p95Ms": 13.2,
+          "meanMs": 11.13167,
+          "transitionSamples": 24,
+          "transitionP50Ms": 10.8,
+          "firstHitStampAndFrameMs": [
+            11.8,
+            11.1
+          ],
+          "visualWounds": 16,
+          "gameplayWounds": 16
+        }
+      ]
+    },
+    {
+      "rep": 2,
+      "mode": "candidate",
+      "intactSamples": 100,
+      "intactP50Ms": 10,
+      "stages": [
+        {
+          "stage": "front",
+          "steadySamples": 120,
+          "p50Ms": 11.7,
+          "p95Ms": 14.4,
+          "meanMs": 11.905,
+          "transitionSamples": 24,
+          "transitionP50Ms": 11.3,
+          "firstHitStampAndFrameMs": [
+            15.1,
+            13.6
+          ],
+          "visualWounds": 4,
+          "gameplayWounds": 8
+        },
+        {
+          "stage": "all-four",
+          "steadySamples": 120,
+          "p50Ms": 12,
+          "p95Ms": 15,
+          "meanMs": 12.19667,
+          "transitionSamples": 24,
+          "transitionP50Ms": 11.9,
+          "firstHitStampAndFrameMs": [
+            12.6,
+            14.4
+          ],
+          "visualWounds": 8,
+          "gameplayWounds": 16
+        }
+      ]
+    }
+  ],
+  "comparison": [
+    {
+      "stage": "front",
+      "baselineP50Ms": 10.9,
+      "candidateP50Ms": 11.9,
+      "changePercent": 9.17431
+    },
+    {
+      "stage": "all-four",
+      "baselineP50Ms": 11,
+      "candidateP50Ms": 12,
+      "changePercent": 9.09091
+    }
+  ],
+  "passed": true
+}

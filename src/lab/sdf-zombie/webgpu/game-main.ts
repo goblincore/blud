@@ -153,9 +153,9 @@ const RES_RUNGS = {
 } as const satisfies Record<string, RenderCap>;
 type ResRung = keyof typeof RES_RUNGS;
 const DEFAULT_RES: ResRung = '800';
-function resRungFromUrl(): ResRung {
+function resRungFromUrl(fallback: ResRung = DEFAULT_RES): ResRung {
   const v = new URLSearchParams(location.search).get('res');
-  return v && v in RES_RUNGS ? (v as ResRung) : DEFAULT_RES;
+  return v && v in RES_RUNGS ? (v as ResRung) : fallback;
 }
 
 // The zombie's shared flat face sheet (zombie.blob has no `sheet` block) —
@@ -187,9 +187,10 @@ function headShape(b: BuildResult): { centre: Vec3; axes: Vec3 } | null {
 }
 
 async function main() {
+  const boundedWoundPreview = import.meta.env.DEV && new URLSearchParams(location.search).has('bounded-wounds');
   const mount = document.getElementById('app');
   if (!mount) throw new Error('#app not found');
-  const resKey = resRungFromUrl();
+  const resKey = resRungFromUrl(boundedWoundPreview ? '640' : DEFAULT_RES);
   const handle = await createLabRenderer(mount, RES_RUNGS[resKey]);
   const { scene, camera } = handle;
   const telemetry = new GameTelemetry();
@@ -707,7 +708,7 @@ async function main() {
         const craters: { pos: Vec3; radius: number }[] = [];
         for (const a of actors) {
           const prims = a.posed().prims;
-          for (const w of a.wounds()) craters.push({ pos: woundWorldPos(prims, w, 0), radius: w.radius });
+          for (const w of a.visualWounds()) craters.push({ pos: woundWorldPos(prims, w, boundedWoundPreview ? a.pose().yaw : 0), radius: w.radius });
         }
         boneInstancer.setWounds(craters);
       }
@@ -1269,6 +1270,7 @@ async function main() {
     const zombieId = nextId++;
     const actor = createZombieActor({
       id: zombieId, room: room.id, body: placed, view, character, start,
+      boundedWounds: boundedWoundPreview,
       ...(name === 'soldier' ? {
         mind: makeSoldierMind(),
         onFire: ({ origin: muz, direction: dir }) => {
@@ -1417,7 +1419,7 @@ async function main() {
         ? actors.flatMap(a => {
           const prims = a.posed().prims;
           const yaw = a.pose().yaw;
-          return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, yaw), radius: w.radius }));
+          return a.visualWounds().map(w => ({ centre: woundWorldPos(prims, w, yaw), radius: w.radius }));
         })
         : [],
     );
@@ -2890,6 +2892,9 @@ async function main() {
     });
     stepPlayer(player, input, dt, [...colliders, ...zombieBoxes]);
 
+    // Damage transitions use their own clock; frozen pose captures must
+    // still show a newly selected preset. Refresh exclusions as it grows.
+    for (const a of actors) if (a.advanceWoundPreview(dt)) frozenHullBuilt = false;
     if (!wanderFrozen) {
       frozenHullBuilt = false;
       // --- brain input + crowd separation, BEFORE the actors step ----------
@@ -2999,7 +3004,7 @@ async function main() {
           ? actors.flatMap(a => {
             const prims = a.posed().prims;
             const yaw = a.pose().yaw;
-            return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, yaw), radius: w.radius }));
+            return a.visualWounds().map(w => ({ centre: woundWorldPos(prims, w, yaw), radius: w.radius }));
           })
           : [],
         // The pre-pass ships disabled and nothing consumes the occluder
@@ -3028,7 +3033,7 @@ async function main() {
           ? actors.flatMap(a => {
             const prims = a.posed().prims;
             const yaw = a.pose().yaw;
-            return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, yaw), radius: w.radius }));
+            return a.visualWounds().map(w => ({ centre: woundWorldPos(prims, w, yaw), radius: w.radius }));
           })
           : [],
         { occluder: sdfLayer.occluderEnabled },
@@ -3961,6 +3966,7 @@ async function main() {
         hit: a.hit, hitSlug: a.hitSlug,
         woundCount: () => a.wounds().length,
         woundList: () => [...a.wounds()],
+        visualWoundList: () => [...a.visualWounds()],
       } : undefined;
     },
     /** Where every wound of a body sits IN WORLD SPACE right now — the
@@ -5616,7 +5622,7 @@ async function main() {
           ? actors.flatMap(a => {
             const prims = a.posed().prims;
             const yaw = a.pose().yaw;
-            return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, yaw), radius: w.radius }));
+            return a.visualWounds().map(w => ({ centre: woundWorldPos(prims, w, yaw), radius: w.radius }));
           })
           : [],
         // Same rule as the frame loop: only rebuild the occluder half when

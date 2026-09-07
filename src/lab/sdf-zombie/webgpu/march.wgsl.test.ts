@@ -388,8 +388,8 @@ describe('ported features reach the entry point', () => {
     // untapered prim (plain-capsule branch inside coneCap); `cpos` is zero
     // unless prof > 1.5, which is the Bezier branch inside sdPrim.
     const foldGroup = HELPERS.find(h => declaredName(h) === 'foldGroup')!;
-    expect(foldGroup).toContain('var sd = sdPrim(p, idx, data, r2, prof, cpos, band);');
-    expect(foldGroup).toContain('if (ori) { sd = sdPrimO(p, idx, data, r2, prof, cpos, band); }');
+    expect(foldGroup).toContain('var sd: f32;');
+    expect(foldGroup).toContain('if (ori) { sd = sdPrimO(p, idx, data, r2, prof, cpos, band); }\n    else { sd = sdPrim(p, idx, data, r2, prof, cpos, band); }');
     expect(foldGroup).toContain('if (sd < gFoldBest) { gFoldBest = sd; gFoldBestIdx = f32(idx); gFoldBestDistort = grp.z; }');
     // Mask, not the old magnitude window — a chamfered BOX is prof 9 and falls
     // outside it. See the box-bit block below and pack.ts.

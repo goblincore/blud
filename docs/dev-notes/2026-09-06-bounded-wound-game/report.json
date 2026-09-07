@@ -1,0 +1,122 @@
+{
+  "scope": "Opt-in bounded analytic torso game preview; correctness only, no timing claim",
+  "errors": [],
+  "staged": {
+    "d": 1.2,
+    "cov": 0.049460416666666666,
+    "body": 1
+  },
+  "before": [],
+  "hits1": {
+    "count": 1,
+    "gameplay": 1,
+    "visual": [
+      {
+        "primIdx": 9,
+        "local": [
+          0.09163416382373821,
+          0,
+          0.10136948886064713
+        ],
+        "radius": 0.075,
+        "type": "pellet",
+        "ageSec": 0,
+        "axis0": [
+          0,
+          0.9998476951563913,
+          -0.017452406437280486
+        ],
+        "rimScale": 1,
+        "carveDepth": 0.08100000000000006,
+        "carveN": [
+          -1,
+          0,
+          8.569533971325427e-16
+        ],
+        "severRadius": 0.1,
+        "presetCut": true
+      }
+    ],
+    "uploaded": 1,
+    "types": [
+      -1,
+      0
+    ]
+  },
+  "hits20": {
+    "count": 20,
+    "gameplay": 16,
+    "visual": [
+      {
+        "primIdx": 9,
+        "local": [
+          0.09163416382373821,
+          0,
+          0.10136948886064713
+        ],
+        "radius": 0.12,
+        "type": "pellet",
+        "ageSec": 0,
+        "axis0": [
+          0,
+          0.9998476951563913,
+          -0.017452406437280486
+        ],
+        "rimScale": 1,
+        "carveDepth": 0.08100000000000006,
+        "carveN": [
+          -1,
+          0,
+          8.569533971325427e-16
+        ],
+        "severRadius": 0.1,
+        "presetCut": true
+      },
+      {
+        "primIdx": 9,
+        "local": [
+          0.09163416382373817,
+          0.03,
+          0.048369488860647125
+        ],
+        "radius": 0.07,
+        "type": "pellet",
+        "ageSec": 0,
+        "axis0": [
+          0,
+          0.9998476951563913,
+          -0.017452406437280486
+        ],
+        "rimScale": 1,
+        "carveDepth": 0.08100000000000006,
+        "carveN": [
+          -1,
+          0,
+          8.569533971325427e-16
+        ],
+        "severRadius": 0.1,
+        "presetCut": true
+      }
+    ],
+    "uploaded": 2,
+    "types": [
+      -1,
+      -1
+    ]
+  },
+  "occupancy": {
+    "targetW": 800,
+    "targetH": 600,
+    "screenPx": 480000,
+    "rasterised": 35164,
+    "hits": 23741,
+    "misses": 11423,
+    "occupancy": 0.6751507223296553,
+    "coverage": 0.07325833333333333,
+    "meanStepsHit": 4.812644791710543,
+    "meanStepsMiss": 7.979690098923225,
+    "missStepShare": 0.44375855001484843,
+    "bodiesOnScreen": 1
+  },
+  "passed": true
+}
