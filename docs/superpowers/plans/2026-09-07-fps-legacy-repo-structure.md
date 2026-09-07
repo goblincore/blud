@@ -22,10 +22,9 @@ Physically separate the active SDF FPS (`src/fps`), the retired game
 assets, renderer, gameplay or tuning. Then add explicit active/legacy/all
 build+test commands and update documentation last. The relocation and the broader
 GPU validation happen only after the M2 review/integration and queue/resource
-gate — Stage 2's initial move is sequenced **after** that gate, and the
-no-GPU/no-build/no-main-checkout constraints of this dispatch apply to the
-execution of **this** plan (they are recorded in the dated dev-notes, not as
-global rules).
+gate. The no-GPU/no-build restrictions applied only to preparing this
+documentation in Stage 1. Stage 2 must perform the validation in §8 after its
+resource gate; it is not exempt from build or runtime checks.
 
 No gameplay/renderer/tuning changes are in scope. Any runtime difference that
 would be required to match behaviour is out of scope and must be raised, not
@@ -159,7 +158,7 @@ its real dual-consumer modules need; it must **not** import either application
 Verified shared set (move exactly these):
 
 - `shared/vec.ts` — standalone object-shaped muzzle Vec3 (NOT the SDF tuple `Vec3`
-  from `src/fps/vec.ts`, and NOT a dependency on legacy `particles.ts` — see §3.2).
+  from `src/fps/types.ts`, and NOT a dependency on legacy `particles.ts` — see §3.2).
 - `shared/muzzle-pos.ts` — from `src/game/weapons/muzzle-pos.ts`, typed against
   `shared/vec.ts`.
 - `shared/tuning.ts` — the **general-constant subset** of `src/game/gibs/tuning.ts`
@@ -230,7 +229,7 @@ Plan:
 stack). Before moving the gib stack to legacy, replace that type import with a
 **standalone object-shaped interface** declared in `shared/vec.ts` (for example
 `interface MuzzleVec3 { x: number; y: number; z: number }`). Do **not** reuse the
-SDF tuple `Vec3` (`[number, number, number]` in `src/fps/vec.ts`) and do **not**
+SDF tuple `Vec3` (`[number, number, number]` in `src/fps/types.ts`) and do **not**
 create a dependency on legacy `particles.ts`.
 
 **Consumers:** `src/legacy/main.ts` (legacy) + `src/fps/webgpu/game-main.ts`
@@ -295,7 +294,8 @@ import/path surface at the execution HEAD (Step 0) before step 1.
   `src/fps/characters/<name>.blob` (was `src/lab/sdf-zombie/characters/<name>.blob`).
   `saveFace` still writes `public/assets/lab/faces/<file>.png` — **unchanged**.
   Update `vite.config.ts` import to `./src/fps/dev-save`, and the relative
-  `./sdf-zombie/{blob-parse,blob-emit,blob-compile,panel}` imports to `./fps/...`.
+  imports to sibling paths: `./blob-parse`, `./blob-emit`, `./blob-compile`,
+  and `./panel`. They must not point into a nonexistent `src/fps/fps/`.
 - `scripts/gen_notblood_tables.py` writes `src/shared/notblood-tables.gen.ts`
   (was `src/game/notblood/notblood-tables.gen.ts`); update the `OUT_PATH` constant.
 - `vite.config.ts` `build.rollupOptions.input`: point at the moved HTML/module
@@ -336,38 +336,91 @@ import/path surface at the execution HEAD (Step 0) before step 1.
 
 ---
 
-## 7. Build / test command split (Stage 2 — implement, but specify exactly here)
+## 7. Build / test command split (Stage 2 implementation contract)
 
-To be added in Stage 2 (do **not** implement now; these are the intended
-commands/configs):
+Keep the installed Vite 5 and Vitest 2.1.9; no dependency upgrade is required.
+These files and commands are created during Stage 2, not this documentation pass.
 
-- `tsconfig.fps.json`, `tsconfig.legacy.json`, `tsconfig.shared.json` — each
-  `extends` `tsconfig.json` and sets `include` to its subtree
-  (`"src/fps"`, `"src/legacy"`, `"src/shared"`). The root `tsconfig.json` retains
-  `include: ["src"]` so the **combined tree is always typechecked**; no scope is
-  silently excluded from `tsc`.
-- `vite.config.ts` `test.projects` (Vitest projects), one per test scope:
-  - `fps`: `include: ['src/fps/**/*.test.ts']`
-  - `legacy`: `include: ['src/legacy/**/*.test.ts']`
-  - `shared`: `include: ['src/shared/**/*.test.ts']`
-  - `tools`: `include: ['scripts/**/*.test.ts']`
-  - Keep `exclude` for `node_modules`, `.claude`, `docs`, `dist`.
-  Shared tests run in their own project (once); `fps` and `legacy` run only their
-  own app tests; `tools` keeps the shell-out script tests. Nothing is dropped —
-  `src/legacy` is not merely excluded from Vitest while `tsc` still scans it, and
-  scripts tests always run.
-- Package scripts:
-  - `"build:fps": "tsc -p tsconfig.fps.json --noEmit && vite build"`
-  - `"build:legacy": "tsc -p tsconfig.legacy.json --noEmit && vite build"`
-  - `"build:all": "tsc -p tsconfig.json --noEmit && vite build"`
-  - `"test:fps": "vitest run --project fps"`
-  - `"test:legacy": "vitest run --project legacy"`
-  - `"test": "vitest run"` (existing) becomes the combined/all run, exercising
-    every project (fps + legacy + shared + tools); the combined tree is typechecked
-    via `build:all`.
-- `vite.config.ts` `build.rollupOptions.input` keeps the URL→module list (§1.1)
-  updated to the new paths so each entry is a valid build input; the probe/scratch
-  HTML stay served-not-built.
+### Typechecking
+
+Create `tsconfig.fps.json`, `tsconfig.legacy.json`, `tsconfig.shared.json`, each
+extending `./tsconfig.json` and setting `include` to its subtree (`["src/fps"]`,
+`["src/legacy"]`, `["src/shared"]`). Imported shared dependencies remain checked
+when checking an application. Root `tsconfig.json` retains `include: ["src"]`
+for the combined check. Preserve existing compiler options and source exceptions.
+
+### Tests — use Vitest 2 workspaces
+
+Create `vitest.workspace.ts` (Vitest 2 uses this, not `test.projects`):
+
+```ts
+import { defineWorkspace } from 'vitest/config';
+
+export default defineWorkspace([
+  { extends: './vite.config.ts', test: { name: 'fps', include: ['src/fps/**/*.test.ts'] } },
+  { extends: './vite.config.ts', test: { name: 'legacy', include: ['src/legacy/**/*.test.ts'] } },
+  { extends: './vite.config.ts', test: { name: 'shared', include: ['src/shared/**/*.test.ts'] } },
+  { extends: './vite.config.ts', test: { name: 'tools', include: ['scripts/**/*.test.ts'] } },
+]);
+```
+
+When adding the workspace, remove `test.include` from `vite.config.ts`: the
+workspace owns collection. Vite merges inherited include arrays by concatenation,
+so leaving the current broad root include would make every project collect both
+apps. Inherit only `happy-dom`, the root excludes and other non-collection
+settings. Each test belongs to one workspace project. `test:fps` and `test:legacy` also run shared tests;
+`test:tools` runs script tests; `test:all` and `test` collect all four projects
+once, including scripts. Compare pre/post-move test file lists and counts; do not
+infer complete collection from a green filtered run.
+
+### Builds — select different inputs, not just different typechecks
+
+Convert the existing `vite.config.ts` export to `defineConfig(({ mode }) => ... )`,
+retaining its plugins, telemetry define, checkout-local `.vite` cache and test
+settings. Name its complete production input maps `fpsInputs` and `legacyInputs`.
+The FPS map uses these existing HTML files (their module paths change in §6):
+`index.html`, `sdf-game.html`, `sdf-lab.html`, `sdf-lab-webgpu.html`,
+`sdf-lab-webgl-bench.html`, `sdf-lab-webgpu-bench.html`, `sdf-bench.html`,
+`humanoid-sdf-spike.html`, `sdf-hull-spike.html`. Legacy inputs are `legacy.html`
+and `theme-preview.html`. Step 0 must add any M2 production HTML inputs introduced
+after this base to the correct map; retain every previously built entry.
+Serve-only diagnostics remain serve-only. Inside the config factory assign:
+
+```ts
+const input = mode === 'fps' ? fpsInputs
+  : mode === 'legacy' ? legacyInputs
+  : { ...fpsInputs, ...legacyInputs };
+const outDir = mode === 'fps' ? 'dist/fps'
+  : mode === 'legacy' ? 'dist/legacy' : 'dist/all';
+```
+
+Use that exact `input` as `build.rollupOptions.input` and `outDir` as
+`build.outDir`, retaining other Rollup/build settings. The two maps must use
+unique keys, so combining them cannot drop an entry. Set the default `preview`
+script to `vite preview --outDir dist/all`. Vite copies the existing public
+assets in each build; this split separates runtime entry graphs, not asset
+packaging. Existing extracted-asset distribution restrictions remain unchanged.
+
+### Package scripts
+
+```json
+"build": "npm run build:all",
+"build:fps": "tsc -p tsconfig.fps.json --noEmit && vite build --mode fps",
+"build:legacy": "tsc -p tsconfig.legacy.json --noEmit && vite build --mode legacy",
+"build:all": "tsc -p tsconfig.json --noEmit && vite build --mode all",
+"typecheck:shared": "tsc -p tsconfig.shared.json --noEmit",
+"test:fps": "vitest run --project fps --project shared",
+"test:legacy": "vitest run --project legacy --project shared",
+"test:tools": "vitest run --project tools",
+"test:all": "vitest run",
+"test": "vitest run",
+"preview": "vite preview --outDir dist/all"
+```
+
+After the resource gate run each new build/typecheck/test command, including the
+combined commands. Inspect each build's HTML input/output set and each test
+project's collection; invoking the same unfiltered Vite build under different
+script names would not satisfy the split.
 
 ---
 

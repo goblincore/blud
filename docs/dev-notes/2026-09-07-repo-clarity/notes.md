@@ -216,3 +216,29 @@ unchanged.
 - Future-file paths (e.g. `src/fps/...`, `src/shared/...`, `legacy.html`, the staged
   tsconfig/vitest configs and npm scripts) are **specified for Stage 2**, not created
   here.
+
+
+## Coordinator final review — 2026-09-07
+
+Reviewed correction commit `3e7527b7`; its diff is documentation-only, relative
+links resolve, and package changes remain exactly the three approved launch
+scripts. The independent scoped review confirmed the original guide, shared
+export, memory and permanent-policy findings were addressed.
+
+Corrected residual handoff errors: dev-save imports become siblings in `src/fps`,
+SDF Vec3 lives in `types.ts`, the AOE distinction is target distance rather than
+blast origin, and comparison instructions start one server. Stage 1's temporary
+no-build/GPU restriction no longer applies to executing Stage 2. Installed
+Vitest 2.1.9 exports `defineWorkspace` and supports `--project`; the plan now uses
+`vitest.workspace.ts` rather than unsupported `test.projects`. Separate Vite
+modes select separate production input maps and output directories; script names
+alone do not establish a build split. Shared/tools/combined tests stay explicit.
+
+These are plan/reference corrections, not physical migration or runtime changes.
+Stage 2 configuration/build/gameplay validation remains required after the
+reviewed/integrated M2 prerequisite. No full suite, production build, browser or
+GPU check was run for this documentation review.
+
+Scoped final review also caught inherited Vitest include arrays: the plan removes
+the broad root `test.include` when installing workspace-owned collection, so
+project include arrays cannot concatenate into an all-tests run in every scope.

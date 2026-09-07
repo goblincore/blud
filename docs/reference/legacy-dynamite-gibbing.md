@@ -123,10 +123,10 @@ own representation):
   Build units and tics (`src/sim/*`); the active side converts to metres/seconds at
   the tuning layer and floats (see §2). Float SDF flight vs fixed-point old sim
   will not reproduce per-tick bit-identical positions.
-- **SDF-surface AOE vs sprite-center AOE.** The active resolver sources the blast
-  from the SDF surface/hit; the old `GibSystem.spawnExplosion` sources it from the
-  projectile/sprite center. Radii and damage share the tuning values
-  (`EXPLOSION_STANDARD`), but the shaping differs by construction.
+- **SDF-surface AOE vs sprite-center AOE.** Both resolvers receive a blast
+  origin. The active resolver measures distance to the target SDF surface;
+  the old `GibSystem.spawnExplosion` measures distance to the target sprite
+  center. Shared tuning provenance does not make those distance tests identical.
 - **Fuse values differ by role.** `DYNAMITE_COOK.fuseMaxSec = 2.0` is the in-hand
   cook/overcook + alt-fire/drop fuse (`src/game/gibs/tuning.ts`), aligned to
   `maxChargeSec`; the sim's separate `THROW.fuseMaxTics = Math.round(1.5 * TICS_PER_SEC)`
@@ -144,8 +144,7 @@ One Vite dev server serves everything. Start it once, then open the matching URL
 (no second server — the retired game and the labs share the same `vite` root):
 
 ```
-npm run dev           # open browser at /sdf-game.html (active FPS); or `npx vite` to serve without opening
-npm run dev:legacy    # open browser at /index.html (retired game)
+npx vite             # one server; open the URLs below on its printed local origin
 ```
 
 Comparison URLs — the **dynamite/gib demo is NOT `/sdf-game.html`**:
