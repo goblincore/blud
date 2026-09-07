@@ -76,8 +76,18 @@ type CameraPoseName = 'overview' | 'mesh-front' | 'sdf-front' | 'wound';
  *  (mesh occludes flesh); sdf-front puts the zombie between camera and pillar
  *  (flesh occludes mesh); wound is the chest-crater close-up. */
 const CAMERA_POSES: Record<CameraPoseName, { pos: Vec3; look: Vec3 }> = {
-  overview: { pos: [1.9, 1.95, 3.7], look: [0, 1.05, 0] },
-  'mesh-front': { pos: [-0.5, 1.5, 3.0], look: [0.28, 1.1, 0] },
+  // overview must see the WHOLE zombie: the original (1.9, 1.95, 3.7) put the
+  // pillar dead on the camera->zombie line (x=0.539 at the pillar's z, pillar
+  // spans 0.35..0.75) and hid the body behind it. This side keeps the pillar
+  // and crate in frame but off the sightline.
+  overview: { pos: [-2.2, 2.0, 3.3], look: [0.1, 1.0, 0] },
+  // mesh-front must genuinely interpose the pillar WITHOUT swallowing the
+  // whole body: from (1.5, 2.1) the pillar subtends ~16° centred 7° off the
+  // zombie axis, covering the body's right ~60% (mesh occludes flesh) while
+  // the left ~40% stays visible (flesh beats the far wall) in the SAME frame.
+  // The original (-0.5, 3.0) missed the pillar entirely (x=0.007 at its
+  // depth); (1.6, 2.9) hid all but 19 px of flesh.
+  'mesh-front': { pos: [1.5, 1.5, 2.1], look: [0, 1.15, 0] },
   'sdf-front': { pos: [0.42, 1.5, -2.9], look: [0.5, 1.15, 0.6] },
   wound: { pos: [0.16, 1.44, 1.02], look: [0.04, 1.24, 0.1] },
 };
