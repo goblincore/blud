@@ -28,15 +28,44 @@ import {
   positionWorld, normalWorld,
   materialColor, materialRoughness, materialMetalness, materialEmissive,
 } from 'three/tsl';
-import { SURFACE_CLASS_MESH } from './deferred-surface';
+import {
+  SURFACE_CLASS_MESH, encodeSurfaceClass,
+  type SurfaceOutputOptions,
+} from './deferred-surface';
+
+/** Diagnostics marker, the task-2 convention (MaterialWithSurfaceClass in
+ *  zombie-gpu.ts): the PACKED class + shadow receiver this adapter writes
+ *  into emissionClass.a, observable without a device. Frozen at construction
+ *  — the game constructs per mode, and the scene router caches adapters per
+ *  (source material, receiver), so a policy change rebinds rather than
+ *  mutates a shared graph. */
+export interface DeferredMeshMaterial extends MeshStandardNodeMaterial {
+  surfaceKind: number;
+}
 
 /**
  * Builds the deferred surface producer for `source`. Texture REFERENCES are
  * shared (not cloned) so the fixture's maps stay single-owned; the returned
  * material is owned by the caller and must be disposed with the layer.
+ *
+ * M2 TASK 3 (game materials). `options.shadowReceiver` packs the flashlight
+ * shadow receiver into emissionClass.a beside the mesh class
+ * (encodeSurfaceClass; default 'full' = the M1 encoding EXACTLY, so the M1
+ * fixture and every existing call is unchanged). Everything the game's
+ * MeshStandardMaterials carry that the G-buffer must preserve comes through:
+ * maps by reference, alphaTest cutout, side, vertexColors, emissive.
+ * `fog` is forced OFF — the game scene carries scene.fog and fog is a
+ * lit-stage term evaluated once in the shared light pass, never pre-baked
+ * into unlit albedo. envMap is deliberately NOT copied: it is a
+ * light/view-dependent term and would violate the unlit G-buffer rule.
  */
-export function createDeferredMeshMaterial(source: THREE.MeshStandardMaterial): MeshStandardNodeMaterial {
-  const mat = new MeshStandardNodeMaterial();
+export function createDeferredMeshMaterial(
+  source: THREE.MeshStandardMaterial,
+  options?: SurfaceOutputOptions,
+): DeferredMeshMaterial {
+  const receiver = options?.shadowReceiver ?? 'full';
+  const surfaceKind = encodeSurfaceClass(SURFACE_CLASS_MESH, receiver);
+  const mat = new MeshStandardNodeMaterial() as DeferredMeshMaterial;
   mat.color.copy(source.color);
   mat.map = source.map;
   mat.normalMap = source.normalMap;
@@ -50,6 +79,10 @@ export function createDeferredMeshMaterial(source: THREE.MeshStandardMaterial): 
   mat.emissiveIntensity = source.emissiveIntensity;
   mat.alphaTest = source.alphaTest;
   mat.side = source.side;
+  mat.vertexColors = source.vertexColors;
+  // Unlit AND unfogged: the game's dungeon scene.fog must never tint the
+  // G-buffer's albedo (the lit stage owns distance fog; see setEnvironment).
+  mat.fog = false;
 
   // Opaque/cutout only in this milestone — no transparency support claimed.
   mat.transparent = false;
@@ -68,9 +101,10 @@ export function createDeferredMeshMaterial(source: THREE.MeshStandardMaterial): 
   mat.mrtNode = mrt({
     albedoRoughness: vec4(materialColor.rgb, materialRoughness),
     normalMetalness: vec4(normalWorld, materialMetalness),
-    emissionClass: vec4(materialEmissive, SURFACE_CLASS_MESH),
+    emissionClass: vec4(materialEmissive, surfaceKind),
     surfaceDepth: vec4(clipDepth, 0.0, 0.0, 1.0),
   });
+  mat.surfaceKind = surfaceKind;
 
   return mat;
 }
