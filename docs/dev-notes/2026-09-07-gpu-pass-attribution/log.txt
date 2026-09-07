@@ -1,0 +1,126 @@
+lab-servers: starting vite on 5277
+lab-servers: starting chrome (headless) on debug port 9277
+bench http://localhost:5277/sdf-game.html  (1280x800, repeats=3, rooms=1,2,3,4)
+backend: webgpu
+  rep0 baseline room1: median 7.55 ms (max chunk 61.06)
+      passes: sdf:march 4.62, sdf:polys 1.67, post:fxaa 0.24, post:blit 0.13
+  rep0 baseline room2: median 8.29 ms (max chunk 29.14)
+      passes: sdf:march 6.04, goo:density 2.58, sdf:polys 0.54, post:fxaa 0.21
+  rep0 baseline room3: median 14.15 ms (max chunk 23.63)
+      passes: sdf:march 9.40, goo:density 5.27, sdf:polys 0.53, post:fxaa 0.23
+  rep0 baseline room4: median 17.76 ms (max chunk 48.42)
+      passes: sdf:march 13.40, goo:density 9.64, sdf:polys 0.53, post:fxaa 0.23
+  rep1 baseline room1: median 8.09 ms (max chunk 29.69)
+      passes: sdf:march 5.39, sdf:polys 1.26, goo:density 0.62, post:fxaa 0.24
+  rep1 baseline room2: median 8.41 ms (max chunk 29.85)
+      passes: sdf:march 6.09, goo:density 2.00, sdf:polys 0.53, post:fxaa 0.22
+  rep1 baseline room3: median 13.97 ms (max chunk 24.66)
+      passes: sdf:march 9.42, goo:density 3.43, sdf:polys 0.53, post:fxaa 0.23
+  rep1 baseline room4: median 21.75 ms (max chunk 40.97)
+      passes: sdf:march 13.12, goo:density 8.62, sdf:polys 0.54, post:fxaa 0.22
+  rep2 baseline room1: median 8.74 ms (max chunk 21.70)
+      passes: sdf:march 5.70, sdf:polys 1.40, goo:density 0.81, post:fxaa 0.22
+  rep2 baseline room2: median 13.52 ms (max chunk 34.86)
+      passes: sdf:march 10.47, goo:density 8.36, sdf:polys 0.54, post:fxaa 0.22
+  rep2 baseline room3: median 14.66 ms (max chunk 24.88)
+      passes: sdf:march 9.41, goo:density 2.38, sdf:polys 0.54, post:fxaa 0.23
+  rep2 baseline room4: median 19.03 ms (max chunk 37.65)
+      passes: sdf:march 13.12, goo:density 11.59, sdf:polys 0.53, post:fxaa 0.23
+# Per-pass GPU attribution
+
+1280x800, repeats=3, rooms=1,2,3,4
+
+Pass ms = median over repeats of the per-frame GPU pass time p50 (overall,
+all segments). Share = of the labelled total. Gap = fenced frame p50 minus
+the labelled total: CPU submit, inter-pass bubbles, unlabelled work.
+
+## baseline
+
+| pass | room 1 ms | share | room 2 ms | share | room 3 ms | share | room 4 ms | share |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| sdf:march | 5.39 | 67% | 6.09 | 62% | 9.41 | 67% | 13.12 | 55% |
+| goo:density | 0.62 | 8% | 2.58 | 26% | 3.43 | 25% | 9.64 | 40% |
+| sdf:polys | 1.40 | 17% | 0.54 | 5% | 0.53 | 4% | 0.53 | 2% |
+| post:fxaa | 0.24 | 3% | 0.22 | 2% | 0.23 | 2% | 0.23 | 1% |
+| post:blit | 0.13 | 2% | 0.12 | 1% | 0.12 | 1% | 0.12 | 1% |
+| post:smear | 0.07 | 1% | 0.07 | 1% | 0.07 | 0% | 0.07 | 0% |
+| sdf:composite | 0.06 | 1% | 0.06 | 1% | 0.06 | 0% | 0.06 | 0% |
+| sdf:shell-hull | 0.05 | 1% | 0.03 | 0% | 0.06 | 0% | 0.04 | 0% |
+| goo:surface | 0.04 | 0% | 0.04 | 0% | 0.04 | 0% | 0.04 | 0% |
+| sdf:occluder | 0.01 | 0% | 0.02 | 0% | 0.02 | 0% | 0.02 | 0% |
+| effects | 0.01 | 0% | 0.00 | 0% | 0.00 | 0% | 0.00 | 0% |
+| **labelled total** | **8.00** | 100% | **9.75** | 100% | **13.98** | 100% | **23.88** | 100% |
+| fenced frame p50 | 8.09 |  | 8.41 |  | 14.15 |  | 19.03 |  |
+| gap (frame − passes) | 0.09 | 1% of frame | -1.34 | -16% of frame | 0.17 | 1% of frame | -4.85 | -25% of frame |
+
+Per segment (top passes, room 4):
+
+- **walk** (7.84 ms labelled): sdf:march 5.90, sdf:polys 1.40, post:fxaa 0.22, post:blit 0.13, post:smear 0.07
+- **fire** (26.71 ms labelled): sdf:march 13.12, goo:density 12.47, sdf:polys 0.52, post:fxaa 0.23, post:blit 0.12
+- **gib** (43.36 ms labelled): goo:density 21.35, sdf:march 20.88, sdf:polys 0.52, post:fxaa 0.23, post:blit 0.12
+
+## Repeatability (fenced frame p50 across repeats)
+
+| leg | room | reps | spread % of min |
+| --- | ---: | --- | ---: |
+| baseline | 1 | 7.55 / 8.09 / 8.74 | 16% |
+| baseline | 2 | 8.29 / 8.41 / 13.52 | 63% |
+| baseline | 3 | 14.15 / 13.97 / 14.66 | 5% |
+| baseline | 4 | 17.76 / 21.75 / 19.03 | 22% |
+
+wrote /private/tmp/claude-501/-Users-donny-Projects-blud--claude-worktrees-soldier-character-animations-ecac9a/535d71ff-6d07-49c2-995a-d38cd8962dff/scratchpad/passes/passes.md and /private/tmp/claude-501/-Users-donny-Projects-blud--claude-worktrees-soldier-character-animations-ecac9a/535d71ff-6d07-49c2-995a-d38cd8962dff/scratchpad/passes/passes.json
+
+## Throughput (chunked + fenced) — median chunk-mean ms, median of repeats
+
+| leg | room | spawned | overall | walk | fire | gib | worst chunk |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| baseline | 1 | 1 | 8.09 | 7.32 | 8.09 | 9.61 | 29.69 |
+| baseline | 2 | 2 | 8.41 | 7.41 | 8.41 | 13.67 | 29.85 |
+| baseline | 3 | 3 | 14.15 | 9.52 | 14.64 | 14.71 | 24.66 |
+| baseline | 4 | 4 | 19.03 | 8.41 | 19.03 | 26.33 | 40.97 |
+
+## Repeatability — READ THIS BEFORE ANY DELTA
+
+Spread of the overall median across identical repeats. A leg whose
+spread exceeds the delta you care about has not measured anything.
+On 2026-08-31 three identical runs read 10.1 / 5.6 / 56.1 ms on a busy
+machine, which is why this section exists.
+
+| leg | room | reps (overall median ms) | spread | spread % of min |
+| --- | ---: | --- | ---: | ---: |
+| baseline | 1 | 7.55 / 8.09 / 8.74 | 1.19 | 16% |
+| baseline | 2 | 8.29 / 8.41 / 13.52 | 5.23 | 63% |
+| baseline | 3 | 14.15 / 13.97 / 14.66 | 0.69 | 5% |
+| baseline | 4 | 17.76 / 21.75 / 19.03 | 3.99 | 22% |
+
+**Worst repeat spread: 63%.** Judge each delta
+against ITS OWN legs' spread, not against this worst case — one noisy leg
+does not invalidate a delta measured between two quiet ones. A delta smaller
+than either leg's spread is UNRESOLVED, not zero.
+
+## Census — what was ON SCREEN while those numbers were taken
+
+A cost column is unreadable without this. Read `bodies` first: if it
+falls through the run, the cheap segments were timing an empty room.
+
+| room | segment | bodies in→out | wounds in→out | chunks in→out |
+| ---: | --- | ---: | ---: | ---: |
+| 1 | walk | 8→8 | 0→0 | 0→0 |
+| 1 | fire | 8→8 | 0→16 | 0→0 |
+| 1 | gib | 8→8 | 16→16 | 0→0 |
+| 2 | walk | 10→3 | 0→0 | 0→0 |
+| 2 | fire | 3→3 | 0→16 | 0→0 |
+| 2 | gib | 3→3 | 16→16 | 0→0 |
+| 3 | walk | 9→8 | 0→0 | 0→0 |
+| 3 | fire | 8→10 | 0→16 | 0→0 |
+| 3 | gib | 10→7 | 16→17 | 0→0 |
+| 4 | walk | 5→4 | 0→0 | 0→0 |
+| 4 | fire | 4→4 | 0→16 | 0→0 |
+| 4 | gib | 4→4 | 16→16 | 0→0 |
+
+## Spike (fenced per frame, baseline only) — ratios within a run ONLY
+
+| room | bodies | p50 | p95 | max | max/p50 | worst segment |
+| ---: | ---: | ---: | ---: | ---: | ---: | --- |
+
+wrote /private/tmp/claude-501/-Users-donny-Projects-blud--claude-worktrees-soldier-character-animations-ecac9a/535d71ff-6d07-49c2-995a-d38cd8962dff/scratchpad/passes/bench.json and /private/tmp/claude-501/-Users-donny-Projects-blud--claude-worktrees-soldier-character-animations-ecac9a/535d71ff-6d07-49c2-995a-d38cd8962dff/scratchpad/passes/bench.md

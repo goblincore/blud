@@ -51,6 +51,14 @@ export class GameTelemetry {
   begin(): { start: number; generation: number } | undefined {
     return this.active ? { start: this.now(), generation: this.generation } : undefined;
   }
+  /** Hand back the phase totals accumulated since the last drain (or frame)
+   *  and reset them. The bench's 'passes' mode reads CPU phases per stepped
+   *  frame this way, since no frame observer runs while the loop is off. */
+  drainPhases(): Record<string, number> {
+    const out = this.phases;
+    this.phases = {};
+    return out;
+  }
   end(name: string, token: ReturnType<GameTelemetry['begin']>) {
     if (!this.active || !token || token.generation !== this.generation) return;
     const end = this.now(), ms = end - token.start;

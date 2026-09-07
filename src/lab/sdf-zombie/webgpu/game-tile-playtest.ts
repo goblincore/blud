@@ -12,6 +12,7 @@ export interface GameTileView {
 export interface GameTileDiagnostics {
   allowed: boolean;
   enabled: boolean;
+  rayCull: boolean;
   bound: number;
   active: number;
   fallbacks: { gridOverflow: number; groupOverflow: number; missingBinding: number };
@@ -35,6 +36,7 @@ export function createGameTilePlaytest(options: GameTilePlaytestOptions) {
   const owned = new Map<ComputeTileBinding, Allocation>();
   const tracked = new Map<GameTileView, Allocation>();
   let enabled = options.allowed && (options.initiallyEnabled ?? true);
+  let rayCull = false;
   let disposed = false;
   let active = 0;
   const emptyFallbacks = () => ({ gridOverflow: 0, groupOverflow: 0, missingBinding: 0 });
@@ -58,6 +60,7 @@ export function createGameTilePlaytest(options: GameTilePlaytestOptions) {
       if (!binding) return;
       const allocation = owned.get(binding);
       if (!allocation || disposed) throw new Error('Game tile binding is not owned by this controller');
+      view.tiles?.setRayCull(rayCull);
       tracked.set(view, allocation);
     },
     refresh(camera: PerspectiveCamera, grid: GameTileGrid, liveViews: Iterable<GameTileView>) {
@@ -99,6 +102,12 @@ export function createGameTilePlaytest(options: GameTilePlaytestOptions) {
         active++;
       }
     },
+    /** Per-ray sphere compaction (prototype lever). Applies to every tracked
+     *  view now and to views tracked later. */
+    setRayCull(on: boolean) {
+      rayCull = on;
+      for (const view of tracked.keys()) view.tiles?.setRayCull(on);
+    },
     setEnabled(on: boolean) {
       enabled = options.allowed && !disposed && on;
       if (enabled) return; // The next refresh bins before enabling any view.
@@ -108,7 +117,7 @@ export function createGameTilePlaytest(options: GameTilePlaytestOptions) {
     },
     /** Counts actor views for the latest refresh; fallback causes are exclusive. */
     diagnostics(): GameTileDiagnostics {
-      return { allowed: options.allowed, enabled, bound: tracked.size, active, fallbacks: { ...fallbacks } };
+      return { allowed: options.allowed, enabled, rayCull, bound: tracked.size, active, fallbacks: { ...fallbacks } };
     },
     dispose() {
       if (disposed) return;

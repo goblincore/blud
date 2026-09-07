@@ -84,7 +84,8 @@ import {
   wgslFn, texture3D as tslTexture3D, texture as tslTexture, screenUV as tslScreenUV, vec4 as tslVec4,
   length as tslLength, sub as tslSub, positionWorld, cameraPosition, uniform as tslUniform,
 } from 'three/tsl';
-import { runBench, type BenchDeps } from './game-bench';
+import { runBench, type BenchDeps, type BenchMode } from './game-bench';
+import { installPassTiming, beginPassFrame, setPassLabel } from './gpu-pass-timing';
 import { GameTelemetry, type FrameTiming } from './game-telemetry';
 import { createTelemetryControls } from './game-telemetry-controls';
 import { createGameTilePlaytest } from './game-tile-playtest';
@@ -192,6 +193,10 @@ async function main() {
   if (!mount) throw new Error('#app not found');
   const resKey = resRungFromUrl(boundedWoundPreview ? '640' : DEFAULT_RES);
   const handle = await createLabRenderer(mount, RES_RUNGS[resKey]);
+  // Per-pass GPU timestamps (gpu-pass-timing.ts). Wraps the backend's uid
+  // builder once; costs a string concat per pass. Read through
+  // __sdfGame.bench({ mode: 'passes' }) or __sdfGame.passTimings().
+  const passTiming = installPassTiming(handle.renderer);
   const { scene, camera } = handle;
   const telemetry = new GameTelemetry();
 
@@ -606,6 +611,9 @@ async function main() {
   let chunkObjects: () => THREE.Object3D[] = () => [];
   let refreshActorTiles = () => {};
   handle.setDrawFn(() => postAa.render(() => {
+    // Anything rendered before a site claims a label lands in 'frame:other'
+    // — a non-zero row there means an unlabelled pass exists.
+    setPassLabel('frame:other');
     flashlight.update(camera);
     // Hand the march the same beam the meshes get. The SDF bodies shade
     // inside the march and cannot see the scene's SpotLight at all (the
@@ -907,6 +915,33 @@ async function main() {
   boneInstancer.object.visible = false;
   scene.add(boneInstancer.object);
   let boneMesh = false;
+  // Bone-cluster sphere cull (packBoneClusters). OFF ships — the old flat
+  // bone loop; the bench's bone-cull-on leg flips it. Takes effect on the
+  // next upload; promotion to ON is the owner's call after the numbers.
+  // BONE CULL SHIPS 'segment' (owner call, 2026-09-07). Per-rigid-segment
+  // bone spheres: exact (identical hit counts across off/cluster/segment,
+  // pixel gate at the noise floor), bone evaluations -48% on a wounded
+  // frozen scene. Measured wounded-march win is small (~5-7% in room 3,
+  // unresolved in room 4) — culling has reached the point where what is
+  // left near a torso wound is genuinely near; the remaining bone cost goes
+  // away only by taking bones out of the field (baked bone-segment meshes,
+  // after deferred). Applied to every actor at spawn (spawnEnemy) and to
+  // late toggles via setBoneCullMode. Chunks stay on the flat fold.
+  // Evidence: docs/dev-notes/2026-09-07-bone-segment-spheres/notes.md.
+  const GAME_BONE_CULL_MODE = 'segment' as 'off' | 'cluster' | 'segment';
+  let boneCull = GAME_BONE_CULL_MODE !== 'off';
+  // Three-way cull state (bone-segment spheres): boneCull stays the boolean
+  // view (off vs any cull) the old seam reports.
+  let boneCullMode: 'off' | 'cluster' | 'segment' = GAME_BONE_CULL_MODE;
+  function applyBoneCullMode(mode: 'off' | 'cluster' | 'segment'): void {
+    boneCullMode = mode;
+    boneCull = mode !== 'off';
+    for (const a of actors) a.view.setBoneCullMode(mode);
+    for (const c of liveChunks) c.view.setBoneCullMode(mode);
+  }
+  function applyBoneCull(on: boolean): void {
+    applyBoneCullMode(on ? 'cluster' : 'off');
+  }
   function applyBoneMesh(on: boolean): void {
     boneMesh = on;
     boneInstancer.object.visible = on;
@@ -1290,6 +1325,9 @@ async function main() {
       navigation: encounterNav,
       onSever: (piece, stumpWound) => onSeverDispatch?.(actor, piece, stumpWound),
     });
+    // Ship default + any live toggle: a late spawn must not fall back to the
+    // flat bone fold while the rest of the room culls.
+    actor.view.setBoneCullMode(boneCullMode);
     encounterHomes.set(actor.id,[...start] as Vec3);
     return actor;
   }
@@ -3808,7 +3846,15 @@ async function main() {
       start: () => telemetryControls.start(), stop: () => telemetryControls.stop(), mark: () => telemetryControls.mark(),
       get active() { return telemetry.active; }, lastCapture: () => telemetryControls.lastCapture(),
     } : null,
+    /** Pass-timing seam: march the gib chunks in their own labelled pass
+     *  ('split'), skip them ('skip', wrong frame on purpose), or the shipped
+     *  single pass ('merged'). See sdf-layer.ts setChunkPass. */
+    setChunkPass: (mode: 'merged' | 'split' | 'skip') => sdfLayer.setChunkPass(mode),
+    get chunkPass() { return sdfLayer.chunkPass; },
     setTiles: setGameTiles,
+    /** Prototype: per-ray sphere compaction of the tile list. Only has an
+     *  effect while tiles are on (tiles-playtest). */
+    setTileRayCull: (on: boolean) => gameTiles.setRayCull(on),
     tiles: () => gameTiles.diagnostics(),
     backend: handle.backend,
     /** Set the player pose. y defaults to 0 (feet on the floor). */
@@ -4186,6 +4232,10 @@ async function main() {
     // -------------------------------------------------------------------
     /** The GPU completion fence. Trust the fence, never a timestamp value. */
     resolveGpu: () => handle.resolveGpu(),
+    /** Per-pass GPU timestamps since the last call, labelled by pass site
+     *  (gpu-pass-timing.ts). Ad-hoc probe; the bench's 'passes' mode is the
+     *  measured form. `installed` false = no timestamp tracking on this page. */
+    passTimings: async () => ({ installed: passTiming.installed, samples: await passTiming.collect() }),
     // setAdaptive / setSdfScale already exist further down this object and
     // are better than the versions this block first added (they also clear
     // the adaptive sample window and report the whole ladder). Not
@@ -4471,14 +4521,23 @@ async function main() {
       areaPriority?: boolean;
       splatFadeTail?: number;
       passGate?: { density?: boolean; blur?: boolean; surface?: boolean };
+      /** Density target fraction of the SDF size (ship 0.5). */
+      densityScale?: number;
+      /** Density quads per frame, at most GOO_TUNING.maxParticles (1000). */
+      particleCap?: number;
     }) {
       if (!gooLayer) return { unavailable: true };
+      if (o.densityScale !== undefined) gooLayer.setDensityScale(o.densityScale);
+      if (o.particleCap !== undefined) gooLayer.setParticleCap(o.particleCap);
       if (o.surfaceAtDensityRes !== undefined) gooLayer.setSurfaceAtDensityRes(o.surfaceAtDensityRes);
       if (o.minTexelRadius !== undefined) gooLayer.setMinTexelRadius(o.minTexelRadius);
       if (o.areaPriority !== undefined) gooLayer.setAreaPriority(o.areaPriority);
       if (o.splatFadeTail !== undefined) gooLayer.setSplatFadeTail(o.splatFadeTail);
       if (o.passGate !== undefined) gooLayer.setPassGate(o.passGate);
       return {
+        densityScale: gooLayer.densityScale,
+        particleCap: gooLayer.particleCap,
+        targetSize: gooLayer.targetSize,
         surfaceAtDensityRes: gooLayer.surfaceAtDensityRes,
         minTexelRadius: gooLayer.minTexelRadius,
         areaPriority: gooLayer.areaPriority,
@@ -4770,6 +4829,29 @@ async function main() {
       woundCullRequested = on;
       for (const a of actors) a.view.setWoundCull(on);
     },
+    /** ATTRIBUTION ONLY: the per-limb owner re-fold under another cluster's
+     *  wound (march.wgsl.ts, counts2.z). OFF renders a wrong frame on
+     *  purpose; it exists to price the mechanism in the passes bench. */
+    setOwnerRefold(on: boolean) {
+      for (const a of actors) a.view.uniforms.counts2.value.z = on ? 0 : 1;
+    },
+    get ownerRefold() { return (actors[0]?.view.uniforms.counts2.value.z ?? 0) < 0.5; },
+    /** Bone-cluster sphere cull (packBoneClusters). OFF ships — the old flat
+     *  bone loop; the bench's bone-cull-on leg flips it for A/B. Takes effect
+     *  on the next per-frame pack, so a live flip needs a frame to land. */
+    setBoneCull(on: boolean) { applyBoneCull(on); },
+    get boneCull() { return boneCull; },
+    /** Three-way bone cull (bone-segment spheres): 'off' / 'cluster' (the
+     *  parked per-flesh-cluster spheres) / 'segment' (per rigid segment).
+     *  setBoneCull(on) is the boolean shorthand for off/cluster. */
+    setBoneCullMode(mode: 'off' | 'cluster' | 'segment') { applyBoneCullMode(mode); },
+    get boneCullMode() { return boneCullMode; },
+    /** Per-ray wound list (march.wgsl.ts, counts2.w): build the reachable
+     *  wound set once per pixel and fold only those. OFF is bit-identical. */
+    setWoundList(on: boolean) {
+      for (const a of actors) a.view.uniforms.counts2.value.w = on ? 1 : 0;
+    },
+    get woundList() { return (actors[0]?.view.uniforms.counts2.value.w ?? 0) > 0.5; },
     // Tracks the REQUESTED state, not the uniform: an unwounded body never
     // uploads wounds, so its bound radius stays at the 1e9 identity even
     // with the cull on, and reading the uniform back would lie.
@@ -4997,7 +5079,7 @@ async function main() {
      * the value back afterwards avoids provoking it in the first place.
      */
     async bench(o: {
-      room?: number; mode?: 'throughput' | 'spike';
+      room?: number; mode?: BenchMode;
       /** 'closeup' — the static frozen-frame scenario (buildCloseup): no
        *  teleport, no shots; the DRIVER stages camera + wounds before
        *  calling. Default 'firefight' — the scripted walk/fire/gib. */
@@ -5020,16 +5102,34 @@ async function main() {
       handle.setLoopRunning(false);
       const hadAdaptive = adaptiveEnabled;
       adaptiveEnabled = false;
+      const hadTelemetry = telemetry.active;
+      if (o.mode === 'passes') telemetry.active = true;
       try {
         const deps: BenchDeps = {
-          step: (dt) => handle.step(dt),
+          step: (dt) => { beginPassFrame(); handle.step(dt); },
+          // 'passes' mode: CPU tick/draw plus the telemetry phases the tick
+          // already brackets (blood sim, goo sync, body step, ...). Telemetry
+          // is switched active for the run so begin()/end() record; no frame
+          // observer runs while the loop is off, so nothing else is captured.
+          stepTimed: (dt) => {
+            beginPassFrame();
+            telemetry.drainPhases();
+            const t = handle.stepTimed(dt);
+            const out: Record<string, number> = { 'cpu:tick': t.tickMs, 'cpu:draw': t.drawMs };
+            for (const [k, v] of Object.entries(telemetry.drainPhases())) out[`cpu:phase:${k}`] = v;
+            return out;
+          },
           resolveGpu: () => handle.resolveGpu(),
+          passTimings: () => passTiming.collect(),
           now: () => performance.now(),
           hidden: () => document.hidden,
           census: () => ({
             bodies: bodiesOnScreen(),
             wounds: actors.reduce((n, a) => n + a.wounds().length, 0),
             chunks: liveChunks.length,
+            droplets: bloodSim.droplets.length,
+            splats: bloodSim.splats.length,
+            gooQuads: gooLayer?.liveCount ?? 0,
           }),
           perform: (a) => {
             switch (a.kind) {
@@ -5097,6 +5197,7 @@ async function main() {
         return result;
       } finally {
         adaptiveEnabled = hadAdaptive;
+        telemetry.active = hadTelemetry;
         adaptiveState = initialAdaptiveState(performance.now(), adaptiveState.rung);
         handle.setLoopRunning(true);
       }
