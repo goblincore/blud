@@ -149,9 +149,9 @@ const RES_RUNGS = {
 } as const satisfies Record<string, RenderCap>;
 type ResRung = keyof typeof RES_RUNGS;
 const DEFAULT_RES: ResRung = '800';
-function resRungFromUrl(): ResRung {
+function resRungFromUrl(fallback: ResRung = DEFAULT_RES): ResRung {
   const v = new URLSearchParams(location.search).get('res');
-  return v && v in RES_RUNGS ? (v as ResRung) : DEFAULT_RES;
+  return v && v in RES_RUNGS ? (v as ResRung) : fallback;
 }
 
 // The zombie's shared flat face sheet (zombie.blob has no `sheet` block) —
@@ -186,7 +186,7 @@ async function main() {
   const boundedWoundPreview = import.meta.env.DEV && new URLSearchParams(location.search).has('bounded-wounds');
   const mount = document.getElementById('app');
   if (!mount) throw new Error('#app not found');
-  const resKey = resRungFromUrl();
+  const resKey = resRungFromUrl(boundedWoundPreview ? '640' : DEFAULT_RES);
   const handle = await createLabRenderer(mount, RES_RUNGS[resKey]);
   const { scene, camera } = handle;
   const telemetry = new GameTelemetry();
@@ -424,10 +424,6 @@ async function main() {
   // The draw chain, exactly as the bench stands it up.
   // -----------------------------------------------------------------------
   const postAa = createPostAa(handle.renderer);
-  if (boundedWoundPreview) {
-    postAa.setFxaa(false);
-    postAa.setSmear(0);
-  }
   // THE FISHEYE. The camera renders WIDER than the player sees and the blit
   // squeezes it back, which is what buys the bulge without losing the frame
   // to a warp that reaches off the buffer. `centerFovDeg` is the look knob;
