@@ -428,12 +428,29 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
   // Bones pose in the SAME pass with the SAME machinery — a bone left at rest
   // would float while its limb moves. Skull-owned bones take the rigid-head
   // branch exactly as the face prims do.
+  //
+  // Each bone prim is also TAGGED with its rigid segment (boneSegment), the
+  // unit the bone-segment sphere cull groups rows by (pack.ts): the skull
+  // unit, one axial BoneFrame per spine/pelvis segment, one limb bone per
+  // bind-point pair, and one segment for every organ. Ids are dense small
+  // ints assigned in first-seen order — deterministic because the map is.
+  const segIds = new Map<string, number>();
+  const segOf = (key: string): number => {
+    let v = segIds.get(key);
+    if (v === undefined) { v = segIds.size; segIds.set(key, v); }
+    return v;
+  };
   const bonePrims: Primitive[] = body.bonePrims.map((p, i) => {
     const face = rigid?.bones.get(i);
-    if (face && rigid) {
-      return { ...p, a: add(rigid.origin, face.a), b: add(rigid.origin, face.b), orient: rigid.q };
-    }
     const frame = bound.boneFrames.get(i);
+    const boneSegment = segOf(
+      p.op === 'organ' ? 'organs'
+      : face && rigid ? 'head'
+      : frame ? `axial:${frame.head}-${frame.tail}`
+      : `limb:${p.limb}:${bound.boneBinding[i]!.a.point}-${bound.boneBinding[i]!.b.point}`);
+    if (face && rigid) {
+      return { ...p, a: add(rigid.origin, face.a), b: add(rigid.origin, face.b), orient: rigid.q, boneSegment };
+    }
     if (frame) {
       // Same composition as headTransform: the known body yaw first (the
       // segment is near-vertical, so a bare shortest-arc rotation between rest
@@ -441,9 +458,9 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
       const h = pos[frame.head]!.pos;
       const dir = normalize(sub(pos[frame.tail]!.pos, h));
       const q = segmentQuat(frame.restDir, dir, bodyYaw);
-      return { ...p, a: add(h, qRotate(q, frame.restA)), b: add(h, qRotate(q, frame.restB)), orient: q };
+      return { ...p, a: add(h, qRotate(q, frame.restA)), b: add(h, qRotate(q, frame.restB)), orient: q, boneSegment };
     }
-    return { ...p, ...poseEnds(bound.boneBinding[i]!) };
+    return { ...p, ...poseEnds(bound.boneBinding[i]!), boneSegment };
   });
 
   const clusters: ClusterInfo[] = body.clusters.map(c => {

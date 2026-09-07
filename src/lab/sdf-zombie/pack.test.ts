@@ -8,8 +8,8 @@ import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
 import { ZOMBIE } from './body';
 import { bindRig, applyRig } from './rig-bind';
 import { severLimb } from './sever';
-import { MAX_CLUSTERS, MAX_PRIMS } from './validate';
-import type { BuiltBody, Primitive, Vec3 } from './types';
+import { MAX_CLUSTERS, MAX_PRIMS, BONE_SEG_MAX } from './validate';
+import type { BuiltBody, LimbId, Primitive, Vec3 } from './types';
 
 // Every shipped character, keyed by file basename (the prof snapshot below
 // names these). Eager glob so a character ADDED later without a snapshot row
@@ -695,5 +695,352 @@ describe('packBones (bone tubes)', () => {
     for (let i = body.prims.length; i < body.prims.length + p.boneCount; i++) {
       expect(p.primScale[i * PRIM_STRIDE + 3]).toBe(W_ORGAN);
     }
+  });
+});
+
+describe('bone cluster spheres (packBoneClusters)', () => {
+  // A body with two flesh clusters (torso, head) and two bone rows on each,
+  // all untapered uniform-scale so the sphere sanity check is the simple
+  // endpoint+radius-containment run 8's fitSphere guarantees.
+  const mkBone = (i: number, a: Vec3, b: Vec3, limb: LimbId, cluster: number): Primitive => ({
+    a, b, radius: 0.02 + i * 0.001, scale: [1, 1, 1] as Vec3, blendK: 0, limb, cluster, op: 'bone',
+  });
+  const mkFlesh = (a: Vec3, b: Vec3, limb: LimbId, cluster: number): Primitive => ({
+    a, b, radius: 0.1, scale: [1, 1, 1] as Vec3, blendK: 0.02, limb, cluster,
+  });
+  const mkCluster = (id: number, limb: LimbId, start: number, count: number): BuiltBody['clusters'][number] =>
+    ({ id, limb, start, count, center: [0, 0, 0] as Vec3, radius: 0.3, alive: true });
+
+  const posed = (): BuiltBody => ({
+    prims: [
+      mkFlesh([0, 0, 0], [0, 0.3, 0], 'torso', 0),
+      mkFlesh([0.4, 0, 0], [0.7, 0, 0], 'head', 1),
+    ],
+    clusters: [mkCluster(0, 'torso', 0, 1), mkCluster(1, 'head', 1, 1)],
+    bones: new Map(),
+    bonePrims: [
+      mkBone(0, [0, 0.05, 0], [0, 0.2, 0], 'torso', 0),
+      mkBone(1, [0, 0.22, 0], [0, 0.28, 0], 'torso', 0),
+      mkBone(2, [0.4, 0.05, 0], [0.5, 0.05, 0], 'head', 1),
+      mkBone(3, [0.45, 0.15, 0], [0.55, 0.15, 0], 'head', 1),
+    ],
+  });
+
+  // A rest body with the SAME bones but offset +1 in x, so a rest-vs-posed
+  // mismatch after reordering is detectable (the whole point of test 3).
+  const restBody = (): BuiltBody => {
+    const b = posed();
+    return {
+      ...b,
+      prims: b.prims.map(p => ({ ...p, a: [p.a[0] + 1, p.a[1], p.a[2]] as Vec3, b: [p.b[0] + 1, p.b[1], p.b[2]] as Vec3 })),
+      bonePrims: b.bonePrims.map(p => ({ ...p, a: [p.a[0] + 1, p.a[1], p.a[2]] as Vec3, b: [p.b[0] + 1, p.b[1], p.b[2]] as Vec3 })),
+    };
+  };
+
+  it('sizes both new arrays for MAX_CLUSTERS clusters plus one tail texel', () => {
+    const p = packBody(posed(), undefined, { packBoneClusters: true });
+    expect(p.boneClusterRange).toHaveLength((MAX_CLUSTERS + 1) * CLUSTER_STRIDE);
+    expect(p.boneClusterBounds).toHaveLength((MAX_CLUSTERS + 1) * CLUSTER_STRIDE);
+  });
+
+  it('writes per-cluster contiguous, non-overlapping ranges + a tail that tiles the bone span', () => {
+    const body = posed();
+    const p = packBody(body, undefined, { packBoneClusters: true });
+    // For each cluster WITH bones: [start, count, distort, 0], start >= prims.length.
+    // Clusters in this fixture both have bones; assert both are populated.
+    const c0 = Array.from(p.boneClusterRange.slice(0, CLUSTER_STRIDE));
+    const c1 = Array.from(p.boneClusterRange.slice(CLUSTER_STRIDE, 2 * CLUSTER_STRIDE));
+    expect(c0[1]!).toBeGreaterThan(0);
+    expect(c1[1]!).toBeGreaterThan(0);
+    for (const start of [c0[0]!, c1[0]!]) expect(start).toBeGreaterThanOrEqual(body.prims.length);
+    // Contiguous and non-overlapping: cluster0 [2,4), cluster1 [4,6).
+    expect(c0[0]!).toBe(body.prims.length);
+    expect(c0[0]! + c0[1]!).toBe(c1[0]!);
+    expect(c1[0]! + c1[1]!).toBe(body.prims.length + p.boneCount);
+    // Tail texel (index MAX_CLUSTERS) carries [tailStart, tailCount, 1, 1] —
+    // the .w = 1 is the shader's enabled flag, and this fixture has no tail.
+    const to = MAX_CLUSTERS * CLUSTER_STRIDE;
+    const tail = Array.from(p.boneClusterRange.slice(to, to + CLUSTER_STRIDE));
+    expect(tail[2]!).toBe(1);
+    expect(tail[3]!).toBe(1);
+    expect(tail[0]! + tail[1]!).toBe(body.prims.length + p.boneCount);
+    // The union of all cluster ranges plus the tail range is exactly the bone span.
+    expect(c1[0]! + c1[1]!).toBe(body.prims.length + p.boneCount);
+  });
+
+  it('writes a bound sphere that contains every bone of that cluster (endpoint + thickness)', () => {
+    const p = packBody(posed(), undefined, { packBoneClusters: true });
+    for (let c = 0; c < MAX_CLUSTERS; c++) {
+      const o = c * CLUSTER_STRIDE;
+      const start = p.boneClusterRange[o]!;
+      const count = p.boneClusterRange[o + 1]!;
+      if (count < 0.5) continue; // no bones in this cluster
+      const cx = p.boneClusterBounds[o]!, cy = p.boneClusterBounds[o + 1]!, cz = p.boneClusterBounds[o + 2]!, r = p.boneClusterBounds[o + 3]!;
+      for (let i = start; i < start + count; i++) {
+        const oo = i * PRIM_STRIDE;
+        const a = [p.primA[oo]!, p.primA[oo + 1]!, p.primA[oo + 2]!];
+        const b = [p.primB[oo]!, p.primB[oo + 1]!, p.primB[oo + 2]!];
+        const rad = p.primA[oo + 3]!;
+        const scale = [p.primScale[oo]!, p.primScale[oo + 1]!, p.primScale[oo + 2]!];
+        const reach = rad * Math.max(...scale);
+        for (const q of [a, b]) {
+          const d = Math.hypot(q[0]! - cx, q[1]! - cy, q[2]! - cz);
+          expect(d + reach).toBeLessThanOrEqual(r + 1e-6);
+        }
+      }
+    }
+  });
+
+  it('keeps rest rows paired with their posed rows after reordering', () => {
+    const body = posed();
+    const rest = restBody();
+    const p = packBody(body, rest, { packBoneClusters: true });
+    // Map each packed bone row back to its ORIGINAL index via its posed a.
+    const posedA = (j: number) => body.bonePrims[j]!.a;
+    for (let k = 0; k < p.boneCount; k++) {
+      const oo = (body.prims.length + k) * PRIM_STRIDE;
+      const px = p.primA[oo]!, py = p.primA[oo + 1]!, pz = p.primA[oo + 2]!;
+      // Find the original bone whose posed a equals this packed row's a.
+      // Compare against f32 values: the pack stores float32, so a double
+      // 0.22 vs its f32 is ~1.6e-9 and a 1e-9 tolerance would miss it.
+      let match = -1;
+      for (let j = 0; j < body.bonePrims.length; j++) {
+        const q = posedA(j);
+        if (Math.abs(px - f32(q[0])) < 1e-6 && Math.abs(py - f32(q[1])) < 1e-6 && Math.abs(pz - f32(q[2])) < 1e-6) { match = j; break; }
+      }
+      expect(match).toBeGreaterThanOrEqual(0);
+      const rb = rest.bonePrims[match]!;
+      expect(p.restA[oo]).toBe(f32(rb.a[0]));
+      expect(p.restA[oo + 1]).toBe(f32(rb.a[1]));
+      expect(p.restA[oo + 2]).toBe(f32(rb.a[2]));
+      expect(p.restB[oo]).toBe(f32(rb.b[0]));
+      expect(p.restB[oo + 1]).toBe(f32(rb.b[1]));
+      expect(p.restB[oo + 2]).toBe(f32(rb.b[2]));
+    }
+  });
+
+  it('leaves both arrays zero and the original order when the option is OFF (default)', () => {
+    const body = posed();
+    const a = packBody(body);
+    const b = packBody(body, undefined, { packBoneClusters: false });
+    // OFF and default are bit-for-bit the same.
+    const keys = ['primA', 'primB', 'primScale', 'primQuat', 'primShape', 'primBend', 'restA', 'restB', 'clusterBounds', 'clusterRange', 'groupBounds', 'groupRange', 'clusterGroups'] as const;
+    for (const key of keys) expect(Array.from(b[key]), key).toEqual(Array.from(a[key] as Float32Array));
+    // Both new arrays all zero (the shader's flat-fallback signal).
+    expect(Array.from(a.boneClusterRange).every(v => v === 0)).toBe(true);
+    expect(Array.from(a.boneClusterBounds).every(v => v === 0)).toBe(true);
+    // Bone rows stay in ORIGINAL order — the flat path iterates bonePrims in index order.
+    for (let k = 0; k < a.boneCount; k++) {
+      const oo = (a.primCount + k) * PRIM_STRIDE;
+      const bone = body.bonePrims[k]!;
+      expect(a.primA[oo]).toBe(f32(bone.a[0]));
+      expect(a.primA[oo + 1]).toBe(f32(bone.a[1]));
+    }
+  });
+});
+
+describe('bone segment spheres (boneCullMode: segment)', () => {
+  // Same two-cluster body as the cluster-sphere fixture, but every
+  // inside-flesh row carries the rigid-segment tag applyRig assigns: 4 bones
+  // across 3 segments (ids deliberately out of order and non-zero-based in
+  // bone order, so sorting is exercised) plus 2 organs sharing one segment.
+  const mkBone = (i: number, a: Vec3, b: Vec3, limb: LimbId, cluster: number, seg: number): Primitive => ({
+    a, b, radius: 0.02 + i * 0.001, scale: [1, 1, 1] as Vec3, blendK: 0, limb, cluster, op: 'bone', boneSegment: seg,
+  });
+  const mkOrgan = (i: number, a: Vec3, b: Vec3, cluster: number, seg: number): Primitive => ({
+    a, b, radius: 0.02 + i * 0.001, scale: [1, 1, 1] as Vec3, blendK: 0, limb: 'torso', cluster, op: 'organ', boneSegment: seg,
+  });
+  const mkFlesh = (a: Vec3, b: Vec3, limb: LimbId, cluster: number): Primitive => ({
+    a, b, radius: 0.1, scale: [1, 1, 1] as Vec3, blendK: 0.02, limb, cluster,
+  });
+  const mkCluster = (id: number, limb: LimbId, start: number, count: number): BuiltBody['clusters'][number] =>
+    ({ id, limb, start, count, center: [0, 0, 0] as Vec3, radius: 0.3, alive: true });
+
+  const posed = (): BuiltBody => ({
+    prims: [
+      mkFlesh([0, 0, 0], [0, 0.3, 0], 'torso', 0),
+      mkFlesh([0.4, 0, 0], [0.7, 0, 0], 'head', 1),
+    ],
+    clusters: [mkCluster(0, 'torso', 0, 1), mkCluster(1, 'head', 1, 1)],
+    bones: new Map(),
+    bonePrims: [
+      mkBone(0, [0, 0.05, 0], [0, 0.2, 0], 'torso', 0, 1),
+      mkBone(1, [0, 0.22, 0], [0, 0.28, 0], 'torso', 0, 1),
+      mkBone(2, [0.4, 0.05, 0], [0.5, 0.05, 0], 'head', 1, 0),
+      mkBone(3, [0.45, 0.15, 0], [0.55, 0.15, 0], 'head', 1, 2),
+      mkOrgan(4, [0.02, 0.1, 0.02], [0.06, 0.14, 0.02], 0, 3),
+      mkOrgan(5, [0.03, 0.16, 0.02], [0.07, 0.19, 0.02], 0, 3),
+    ],
+  });
+
+  // A rest body with the SAME bones but offset +1 in x, so a rest-vs-posed
+  // mismatch after reordering is detectable.
+  const restBody = (): BuiltBody => {
+    const b = posed();
+    return {
+      ...b,
+      prims: b.prims.map(p => ({ ...p, a: [p.a[0] + 1, p.a[1], p.a[2]] as Vec3, b: [p.b[0] + 1, p.b[1], p.b[2]] as Vec3 })),
+      bonePrims: b.bonePrims.map(p => ({ ...p, a: [p.a[0] + 1, p.a[1], p.a[2]] as Vec3, b: [p.b[0] + 1, p.b[1], p.b[2]] as Vec3 })),
+    };
+  };
+
+  const HDR = MAX_CLUSTERS * CLUSTER_STRIDE; // the header texel, column 12
+
+  it('sizes both segment arrays and writes the mode-2 header at column MAX_CLUSTERS', () => {
+    const body = posed();
+    const p = packBody(body, undefined, { boneCullMode: 'segment' });
+    expect(p.boneSegmentRange).toHaveLength(BONE_SEG_MAX * CLUSTER_STRIDE);
+    expect(p.boneSegmentBounds).toHaveLength(BONE_SEG_MAX * CLUSTER_STRIDE);
+    const hdr = Array.from(p.boneClusterRange.slice(HDR, HDR + CLUSTER_STRIDE));
+    expect(hdr[3]).toBe(2);   // mode 2
+    expect(hdr[2]).toBe(4);   // segCount: 3 bone segments + 1 organ segment
+    // Fully tagged body: the tail is EMPTY and starts at the end of the span.
+    expect(hdr[1]).toBe(0);
+    expect(hdr[0]).toBe(body.prims.length + p.boneCount);
+    // The cluster slots (0..MAX_CLUSTERS-1) stay ZERO in mode 2 — the shader
+    // ignores them, and leaving them clean keeps the layout honest.
+    expect(Array.from(p.boneClusterRange.slice(0, HDR)).every(v => v === 0)).toBe(true);
+    expect(Array.from(p.boneClusterBounds).every(v => v === 0)).toBe(true);
+  });
+
+  it('writes per-segment contiguous, non-overlapping ranges that tile the bone span with the tail', () => {
+    const body = posed();
+    const p = packBody(body, undefined, { boneCullMode: 'segment' });
+    const hdr = Array.from(p.boneClusterRange.slice(HDR, HDR + CLUSTER_STRIDE));
+    const segCount = hdr[2]!;
+    let cursor = body.prims.length;
+    for (let s = 0; s < segCount; s++) {
+      const o = s * CLUSTER_STRIDE;
+      const start = p.boneSegmentRange[o]!;
+      const count = p.boneSegmentRange[o + 1]!;
+      expect(count).toBeGreaterThanOrEqual(1);
+      expect(start).toBe(cursor);
+      expect(p.boneSegmentRange[o + 2]!).toBeGreaterThanOrEqual(1); // distort
+      expect(p.boneSegmentRange[o + 3]).toBe(0);
+      cursor += count;
+    }
+    // Beyond segCount the arrays stay zero.
+    for (let s = segCount; s < BONE_SEG_MAX; s++) {
+      const o = s * CLUSTER_STRIDE;
+      expect(p.boneSegmentRange[o + 1]).toBe(0);
+    }
+    // Union of segment ranges + tail = the whole bone span.
+    expect(hdr[0]).toBe(cursor);
+    expect(hdr[0]! + hdr[1]!).toBe(body.prims.length + p.boneCount);
+  });
+
+  it('bounds every bone row of a segment in that segment sphere (endpoint + thickness)', () => {
+    const p = packBody(posed(), undefined, { boneCullMode: 'segment' });
+    const segCount = p.boneClusterRange[HDR + 2]!;
+    expect(segCount).toBeGreaterThan(0);
+    for (let s = 0; s < segCount; s++) {
+      const o = s * CLUSTER_STRIDE;
+      const start = p.boneSegmentRange[o]!;
+      const count = p.boneSegmentRange[o + 1]!;
+      const cx = p.boneSegmentBounds[o]!, cy = p.boneSegmentBounds[o + 1]!, cz = p.boneSegmentBounds[o + 2]!, r = p.boneSegmentBounds[o + 3]!;
+      expect(count).toBeGreaterThan(0);
+      for (let i = start; i < start + count; i++) {
+        const oo = i * PRIM_STRIDE;
+        const a = [p.primA[oo]!, p.primA[oo + 1]!, p.primA[oo + 2]!];
+        const b = [p.primB[oo]!, p.primB[oo + 1]!, p.primB[oo + 2]!];
+        const rad = p.primA[oo + 3]!;
+        const scale = [p.primScale[oo]!, p.primScale[oo + 1]!, p.primScale[oo + 2]!];
+        const reach = rad * Math.max(...scale);
+        for (const q of [a, b]) {
+          const d = Math.hypot(q[0]! - cx, q[1]! - cy, q[2]! - cz);
+          expect(d + reach).toBeLessThanOrEqual(r + 1e-6);
+        }
+      }
+    }
+  });
+
+  it('keeps rest rows paired with their posed rows after the segment reorder', () => {
+    const body = posed();
+    const rest = restBody();
+    const p = packBody(body, rest, { boneCullMode: 'segment' });
+    // Segment mode must actually have engaged (else this pins nothing).
+    expect(p.boneClusterRange[HDR + 3]).toBe(2);
+    const posedA = (j: number) => body.bonePrims[j]!.a;
+    for (let k = 0; k < p.boneCount; k++) {
+      const oo = (body.prims.length + k) * PRIM_STRIDE;
+      const px = p.primA[oo]!, py = p.primA[oo + 1]!, pz = p.primA[oo + 2]!;
+      let match = -1;
+      for (let j = 0; j < body.bonePrims.length; j++) {
+        const q = posedA(j);
+        if (Math.abs(px - f32(q[0])) < 1e-6 && Math.abs(py - f32(q[1])) < 1e-6 && Math.abs(pz - f32(q[2])) < 1e-6) { match = j; break; }
+      }
+      expect(match).toBeGreaterThanOrEqual(0);
+      const rb = rest.bonePrims[match]!;
+      expect(p.restA[oo]).toBe(f32(rb.a[0]));
+      expect(p.restA[oo + 1]).toBe(f32(rb.a[1]));
+      expect(p.restA[oo + 2]).toBe(f32(rb.a[2]));
+      expect(p.restB[oo]).toBe(f32(rb.b[0]));
+      expect(p.restB[oo + 1]).toBe(f32(rb.b[1]));
+      expect(p.restB[oo + 2]).toBe(f32(rb.b[2]));
+    }
+  });
+
+  it('packs organs as exactly one segment and leaves the tail empty on a tagged body', () => {
+    const body = posed();
+    const p = packBody(body, undefined, { boneCullMode: 'segment' });
+    const hdr = Array.from(p.boneClusterRange.slice(HDR, HDR + CLUSTER_STRIDE));
+    expect(hdr[1]).toBe(0); // tail empty
+    // Every ORGAN row falls inside exactly one segment's range.
+    const organSegs = new Set<number>();
+    const segCount = hdr[2]!;
+    for (let s = 0; s < segCount; s++) {
+      const o = s * CLUSTER_STRIDE;
+      const start = p.boneSegmentRange[o]!;
+      const count = p.boneSegmentRange[o + 1]!;
+      for (let i = start; i < start + count; i++) {
+        if (p.primScale[i * PRIM_STRIDE + 3] === W_ORGAN) organSegs.add(s);
+      }
+    }
+    expect(organSegs.size).toBe(1);
+  });
+
+  it('mode cluster is byte-identical to packBoneClusters: true', () => {
+    const body = posed();
+    const a = packBody(body, undefined, { boneCullMode: 'cluster' });
+    const b = packBody(body, undefined, { packBoneClusters: true });
+    const keys = ['primA', 'primB', 'primScale', 'primQuat', 'primShape', 'primBend', 'restA', 'restB',
+      'clusterBounds', 'clusterRange', 'boneClusterBounds', 'boneClusterRange',
+      'boneSegmentBounds', 'boneSegmentRange', 'groupBounds', 'groupRange', 'clusterGroups'] as const;
+    for (const key of keys) expect(Array.from(a[key] as Float32Array), key).toEqual(Array.from(b[key] as Float32Array));
+  });
+
+  it('mode off (default) writes all-zero cull arrays and keeps the flat bone order', () => {
+    const body = posed();
+    const a = packBody(body);
+    const b = packBody(body, undefined, { boneCullMode: 'off' });
+    const keys = ['primA', 'primB', 'primScale', 'primShape', 'primBend', 'restA', 'restB'] as const;
+    for (const key of keys) expect(Array.from(b[key] as Float32Array), key).toEqual(Array.from(a[key] as Float32Array));
+    expect(Array.from(a.boneSegmentRange).every(v => v === 0)).toBe(true);
+    expect(Array.from(a.boneSegmentBounds).every(v => v === 0)).toBe(true);
+    expect(Array.from(a.boneClusterRange).every(v => v === 0)).toBe(true);
+    // Bone rows stay in ORIGINAL order.
+    for (let k = 0; k < a.boneCount; k++) {
+      const oo = (a.primCount + k) * PRIM_STRIDE;
+      const bone = body.bonePrims[k]!;
+      expect(a.primA[oo]).toBe(f32(bone.a[0]));
+      expect(a.primA[oo + 1]).toBe(f32(bone.a[1]));
+    }
+  });
+
+  it('falls back to cluster grouping (header .w = 1) when any live inside-flesh row lacks a tag', () => {
+    const body = posed();
+    // Untag one bone — lab bodies and chunks never carry tags, and they must
+    // not break: segment mode degrades to the exact cluster layout.
+    const untagged = { ...body.bonePrims[2]! };
+    delete untagged.boneSegment;
+    body.bonePrims[2] = untagged;
+    const p = packBody(body, undefined, { boneCullMode: 'segment' });
+    const ref = packBody(body, undefined, { packBoneClusters: true });
+    expect(p.boneClusterRange[HDR + 3]).toBe(1);
+    expect(Array.from(p.boneClusterRange)).toEqual(Array.from(ref.boneClusterRange));
+    expect(Array.from(p.boneClusterBounds)).toEqual(Array.from(ref.boneClusterBounds));
+    expect(Array.from(p.boneSegmentRange).every(v => v === 0)).toBe(true);
+    expect(Array.from(p.boneSegmentBounds).every(v => v === 0)).toBe(true);
+    expect(p.boneCount).toBe(ref.boneCount);
   });
 });

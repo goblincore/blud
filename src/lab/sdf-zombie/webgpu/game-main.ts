@@ -915,6 +915,22 @@ async function main() {
   boneInstancer.object.visible = false;
   scene.add(boneInstancer.object);
   let boneMesh = false;
+  // Bone-cluster sphere cull (packBoneClusters). OFF ships — the old flat
+  // bone loop; the bench's bone-cull-on leg flips it. Takes effect on the
+  // next upload; promotion to ON is the owner's call after the numbers.
+  let boneCull = false;
+  // Three-way cull state (bone-segment spheres): boneCull stays the boolean
+  // view (off vs any cull) the old seam reports.
+  let boneCullMode: 'off' | 'cluster' | 'segment' = 'off';
+  function applyBoneCullMode(mode: 'off' | 'cluster' | 'segment'): void {
+    boneCullMode = mode;
+    boneCull = mode !== 'off';
+    for (const a of actors) a.view.setBoneCullMode(mode);
+    for (const c of liveChunks) c.view.setBoneCullMode(mode);
+  }
+  function applyBoneCull(on: boolean): void {
+    applyBoneCullMode(on ? 'cluster' : 'off');
+  }
   function applyBoneMesh(on: boolean): void {
     boneMesh = on;
     boneInstancer.object.visible = on;
@@ -4806,6 +4822,22 @@ async function main() {
       for (const a of actors) a.view.uniforms.counts2.value.z = on ? 0 : 1;
     },
     get ownerRefold() { return (actors[0]?.view.uniforms.counts2.value.z ?? 0) < 0.5; },
+    /** Bone-cluster sphere cull (packBoneClusters). OFF ships — the old flat
+     *  bone loop; the bench's bone-cull-on leg flips it for A/B. Takes effect
+     *  on the next per-frame pack, so a live flip needs a frame to land. */
+    setBoneCull(on: boolean) { applyBoneCull(on); },
+    get boneCull() { return boneCull; },
+    /** Three-way bone cull (bone-segment spheres): 'off' / 'cluster' (the
+     *  parked per-flesh-cluster spheres) / 'segment' (per rigid segment).
+     *  setBoneCull(on) is the boolean shorthand for off/cluster. */
+    setBoneCullMode(mode: 'off' | 'cluster' | 'segment') { applyBoneCullMode(mode); },
+    get boneCullMode() { return boneCullMode; },
+    /** Per-ray wound list (march.wgsl.ts, counts2.w): build the reachable
+     *  wound set once per pixel and fold only those. OFF is bit-identical. */
+    setWoundList(on: boolean) {
+      for (const a of actors) a.view.uniforms.counts2.value.w = on ? 1 : 0;
+    },
+    get woundList() { return (actors[0]?.view.uniforms.counts2.value.w ?? 0) > 0.5; },
     // Tracks the REQUESTED state, not the uniform: an unwounded body never
     // uploads wounds, so its bound radius stays at the 1e9 identity even
     // with the cull on, and reading the uniform back would lie.

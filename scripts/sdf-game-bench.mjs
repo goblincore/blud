@@ -203,11 +203,25 @@ const ALL_LEGS = {
   // The per-limb owner re-fold (march.wgsl.ts ~L1505): the one wound-path
   // mechanism never priced. OFF is a wrong frame on purpose.
   'owner-refold-off': { setOwnerRefold: false },
+  // PER-RAY WOUND LIST (march.wgsl.ts, counts2.w): build the reachable wound
+  // set once per pixel and fold only those. OFF is bit-identical, so this
+  // leg prices the preload against the per-step full-wound fold.
+  'wound-list-on': { setWoundList: true },
   // Bone tubes ON: skeleton drawn as instanced tubes in the polygon pass
   // instead of folded into the field inside wounds (bone-tubes, default OFF
   // pending the look verdict). Prices the inside-flesh rows the nearWound
   // gate opens.
   'bone-mesh-on': { setBoneMesh: true },
+  // Bone-cluster sphere cull ON: one per-flesh-cluster sphere culls the
+  // inside-flesh rows (bones/organs) before folding them inside wounds. The
+  // spatially-culled alternative to bone-mesh-on — keeps the bones in the
+  // field, recovers a fraction of the bone-mesh-on win (gib -25-30%).
+  'bone-cull-on': { setBoneCull: true },
+  // Bone-SEGMENT sphere cull ON: one sphere per rigid segment (skull / axial
+  // BoneFrame / limb bone / organs) culls the inside-flesh rows. The finer
+  // granularity the cluster verdict asked for — a chest pixel should skip
+  // the pelvis, the skull and the shins.
+  'bone-seg-on': { setBoneCullMode: 'segment' },
 };
 // BENCH_LEGS lets a validation pass run one leg without the whole matrix.
 const LEGS = process.env.BENCH_LEGS
@@ -247,7 +261,10 @@ async function applyLeg(name) {
     __sdfGame.setWoundEarlyOut(true);
     __sdfGame.setWoundCull(true);
     __sdfGame.setOwnerRefold(true);
+    __sdfGame.setWoundList(false);
     __sdfGame.setBoneMesh(false);
+    __sdfGame.setBoneCull(false);
+    __sdfGame.setBoneCullMode('off');
     // Chunk pass: split ONLY in passes mode, so the timer can label chunks;
     // every other mode benches the shipped single pass.
     __sdfGame.setChunkPass(${JSON.stringify(PASSES ? 'split' : 'merged')});
