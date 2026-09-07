@@ -478,6 +478,85 @@ describe('setOutputTarget (hybrid deferred M2 task 1)', () => {
   });
 });
 
+describe('target-present material depth config (task1 continuation regression)', () => {
+  function makeLayer() {
+    const m = mockRenderer();
+    const layer = createDeferredLayer(m.renderer, { width: 64, height: 64, sdfScale: 1 });
+    return { ...m, layer };
+  }
+
+  /** The material of the quad in the scene submitted to the renderer at
+   *  `callIndex` — the ACTUAL object a real renderer would compile, not an
+   *  internal reference. */
+  function submittedMaterial(render: ReturnType<typeof vi.fn>, callIndex: number) {
+    const scene = render.mock.calls[callIndex]![0] as THREE.Scene;
+    const mats: Array<THREE.MeshBasicNodeMaterial> = [];
+    for (const child of scene.children) {
+      if ((child as THREE.Mesh).isMesh) mats.push((child as THREE.Mesh).material as THREE.MeshBasicNodeMaterial);
+    }
+    expect(mats).toHaveLength(1);
+    return mats[0]!;
+  }
+
+  it('the owned-target presentation material reaches the renderer with depthWrite=true, fixed at construction', () => {
+    // Regression (base 93904144): quadPass reset depthWrite=false AFTER the
+    // material had been given depthWrite=true, so the only compile produced a
+    // depth-less fragment shader and a forward quad behind the body painted
+    // over it (task1-composition.json: behind afterLum 0.387 -> 4). A
+    // NodeMaterial's fragment-depth output is selected at graph compile time
+    // from depthWrite/depthNode — the flag must survive construction and hold
+    // at the first render.
+    const { render, layer } = makeLayer();
+    try {
+      const sceneTarget = new THREE.RenderTarget(64, 64);
+      layer.setOutputTarget(sceneTarget);
+      layer.render(new THREE.Scene(), new THREE.Scene(), new THREE.PerspectiveCamera());
+      // 7 submissions: clear-mesh, mesh, clear-sdf, sdf, resolve, light, present.
+      const mat = submittedMaterial(render, 6);
+      expect(mat.depthWrite).toBe(true);
+      expect(mat.depthTest).toBe(false);
+      // The fragment-depth graph is actually wired, not just the flag.
+      expect(mat.depthNode).not.toBeNull();
+      expect(mat.depthNode).toBeDefined();
+      sceneTarget.dispose();
+    } finally {
+      layer.dispose();
+    }
+  });
+
+  it('the canvas presentation material stays depthless — the M1 default is untouched', () => {
+    const { render, layer } = makeLayer();
+    try {
+      layer.render(new THREE.Scene(), new THREE.Scene(), new THREE.PerspectiveCamera());
+      const mat = submittedMaterial(render, 6);
+      expect(mat.depthWrite).toBe(false);
+      expect(mat.depthNode).toBeNull();
+    } finally {
+      layer.dispose();
+    }
+  });
+
+  it('depthWrite stays true across repeated renders and after setOutputTarget(null -> target)', () => {
+    const { render, layer } = makeLayer();
+    try {
+      const sceneTarget = new THREE.RenderTarget(64, 64);
+      layer.render(new THREE.Scene(), new THREE.Scene(), new THREE.PerspectiveCamera()); // canvas
+      layer.setOutputTarget(sceneTarget);
+      layer.render(new THREE.Scene(), new THREE.Scene(), new THREE.PerspectiveCamera()); // target
+      layer.setOutputTarget(null);
+      layer.render(new THREE.Scene(), new THREE.Scene(), new THREE.PerspectiveCamera()); // canvas again
+      // Calls 1 and 3 are target-present (7 passes each), call 4 canvas.
+      expect(submittedMaterial(render, 13).depthWrite).toBe(true);
+      expect(submittedMaterial(render, 13).depthNode).not.toBeNull();
+      expect(submittedMaterial(render, 20).depthWrite).toBe(false);
+      expect(submittedMaterial(render, 20).depthNode).toBeNull();
+      sceneTarget.dispose();
+    } finally {
+      layer.dispose();
+    }
+  });
+});
+
 describe('render draw hooks (hybrid deferred M2 task 1)', () => {
   function makeLayer() {
     const m = mockRenderer();

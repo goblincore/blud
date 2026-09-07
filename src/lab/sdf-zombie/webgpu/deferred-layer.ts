@@ -472,9 +472,16 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
   quadCam.position.z = 1;
   const quadGeom = new THREE.PlaneGeometry(2, 2);
 
-  function quadPass(mat: MeshBasicNodeMaterial): THREE.Scene {
+  // depthWrite is the CALLER's choice, passed explicitly: a NodeMaterial's
+  // fragment-depth output is selected at graph compile time from this flag,
+  // so it must be correct at construction. The default (false) keeps every
+  // fullscreen pass depthless; the target-present pass opts into writes
+  // (continuation fix: the blanket `depthWrite = false` here used to clobber
+  // targetPresentMat's true AFTER it was assigned, silently stripping the
+  // fragment depth write).
+  function quadPass(mat: MeshBasicNodeMaterial, opts?: { depthWrite?: boolean }): THREE.Scene {
     mat.depthTest = false;
-    mat.depthWrite = false;
+    mat.depthWrite = opts?.depthWrite ?? false;
     mat.transparent = false;
     const quad = new THREE.Mesh(quadGeom, mat);
     quad.frustumCulled = false;
@@ -565,6 +572,8 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
   // Caller-owned color+depth target: fullscreen opaque presentation — depth
   // tests are pointless for a quad that covers every pixel, but depth WRITES
   // are the point (the resolved depth lands in the caller's depth buffer).
+  // The write flag is passed THROUGH quadPass so it holds at construction,
+  // before the material's first (and only) compile.
   const targetPresentMat = new MeshBasicNodeMaterial();
   targetPresentMat.colorNode = presentFn(presentArgs()) as never;
   targetPresentMat.depthNode = presentDepthFn({
@@ -572,9 +581,7 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
     surfaceDepth: texture(resolvedTex.surfaceDepth),
     flipY: uFlipY,
   }) as never;
-  targetPresentMat.depthTest = false;
-  targetPresentMat.depthWrite = true;
-  const targetPresentScene = quadPass(targetPresentMat);
+  const targetPresentScene = quadPass(targetPresentMat, { depthWrite: true });
 
   const _view = new THREE.Matrix4();
   const _vp = new THREE.Matrix4();
