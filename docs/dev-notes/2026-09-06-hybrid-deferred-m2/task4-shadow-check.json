@@ -51,80 +51,69 @@
     {
       "name": "flesh-level-occlusion",
       "detail": {
-        "count": 1446,
-        "meanOn": 0.28883667836380533,
-        "meanOff": 4.224275074559128,
+        "count": 1487,
+        "meanOn": 0.3096034775344654,
+        "meanOff": 4.212925431867855,
         "sampleCoord": [
           354,
           235
         ],
-        "ratio": 0.06837544271284231
+        "ratio": 0.07348895263906884
       }
     },
     {
       "name": "no-hull-self-shadow",
       "detail": {
-        "count": 2446,
-        "meanOn": 3.368307342903593,
-        "meanOff": 3.445818547820421,
+        "count": 2405,
+        "meanOn": 3.40796558277027,
+        "meanOff": 3.4395649931782746,
         "sampleCoord": [
           350,
           237
         ],
-        "ratio": 0.9775057206753222
+        "ratio": 0.9908129631303156
       }
-    }
-  ],
-  "errors": [],
-  "pass": false,
-  "bootDiag": null,
-  "firstPair": {
-    "onHash": "90102336",
-    "offHash": "7cbb9112",
-    "masks": {
-      "fleshOccluded": {
-        "count": 1446,
-        "meanOn": 0.28883667836380533,
-        "meanOff": 4.224275074559128,
-        "sampleCoord": [
-          354,
-          235
-        ]
-      },
-      "fleshClear": {
-        "count": 2446,
-        "meanOn": 3.368307342903593,
-        "meanOff": 3.445818547820421,
-        "sampleCoord": [
-          350,
-          237
-        ]
-      },
-      "floor": {
-        "darkenedProxy": 330,
-        "darkenedOther": 41,
-        "clearProxy": 23,
-        "proxyDarkenedFraction": 0.9348441926345609,
-        "largestComponent": 56,
+    },
+    {
+      "name": "proxy-shadow-on-stone",
+      "detail": {
+        "darkenedProxy": 539,
+        "darkenedOther": 39,
+        "clearProxy": 94,
+        "proxyDarkenedFraction": 0.8515007898894155,
+        "proxyPrecision": 0.9325259515570934,
+        "largestComponent": 337,
         "componentSizes": [
-          56,
-          36,
-          35,
-          23,
-          20
+          337,
+          171,
+          40,
+          16,
+          4
         ],
         "centroid": [
-          343.80323450134773,
-          313.28032345013474
+          343.9948096885813,
+          313.85640138408303
         ],
-        "proxyShadowMeanWorldX": -2.0814755214189695,
+        "proxyShadowMeanWorldX": -2.0391771472106597,
         "sampleCoords": [
+          [
+            343,
+            275
+          ],
+          [
+            338,
+            276
+          ],
           [
             339,
             276
           ],
           [
             340,
+            276
+          ],
+          [
+            341,
             276
           ],
           [
@@ -140,7 +129,23 @@
             276
           ],
           [
+            334,
+            277
+          ],
+          [
+            335,
+            277
+          ],
+          [
+            342,
+            277
+          ],
+          [
             343,
+            277
+          ],
+          [
+            344,
             277
           ],
           [
@@ -148,6 +153,18 @@
             278
           ],
           [
+            333,
+            278
+          ],
+          [
+            334,
+            278
+          ],
+          [
+            335,
+            278
+          ],
+          [
             336,
             278
           ],
@@ -168,52 +185,197 @@
             278
           ],
           [
-            343,
+            341,
             278
-          ],
-          [
-            344,
-            278
-          ],
-          [
-            336,
-            279
-          ],
-          [
-            338,
-            279
           ],
           [
             342,
-            279
+            278
+          ]
+        ]
+      }
+    },
+    {
+      "name": "same-frame-light-motion",
+      "detail": {
+        "meanWorldXBefore": -2.0391771472106597,
+        "meanWorldXAfter": 1.9260682788918093,
+        "centroidBefore": [
+          343.9948096885813,
+          313.85640138408303
+        ],
+        "centroidAfter": [
+          412.628664495114,
+          304.83469055374593
+        ],
+        "matrixChanged": true
+      }
+    },
+    {
+      "name": "map-render-ablation",
+      "detail": {
+        "renderedMapsDisabled": 0,
+        "renderedMapsReenabled": 2,
+        "offBaseHash": "e6d53eaf",
+        "offHashAbl": "e6d53eaf",
+        "reOnHash": "233db216"
+      }
+    }
+  ],
+  "errors": [],
+  "pass": true,
+  "bootDiag": {
+    "shadows": {
+      "renderedMaps": 2,
+      "fullCasters": 7,
+      "levelCasters": 6,
+      "size": 1024,
+      "enabled": true,
+      "unsupported": []
+    },
+    "layer": {
+      "bound": false,
+      "sampling": false
+    },
+    "hullSpheres": 51
+  },
+  "firstPair": {
+    "onHash": "90102336",
+    "offHash": "7cbb9112",
+    "masks": {
+      "fleshOccluded": {
+        "count": 1487,
+        "meanOn": 0.3096034775344654,
+        "meanOff": 4.212925431867855,
+        "sampleCoord": [
+          354,
+          235
+        ]
+      },
+      "fleshClear": {
+        "count": 2405,
+        "meanOn": 3.40796558277027,
+        "meanOff": 3.4395649931782746,
+        "sampleCoord": [
+          350,
+          237
+        ]
+      },
+      "floor": {
+        "darkenedProxy": 539,
+        "darkenedOther": 39,
+        "clearProxy": 94,
+        "proxyDarkenedFraction": 0.8515007898894155,
+        "proxyPrecision": 0.9325259515570934,
+        "largestComponent": 337,
+        "componentSizes": [
+          337,
+          171,
+          40,
+          16,
+          4
+        ],
+        "centroid": [
+          343.9948096885813,
+          313.85640138408303
+        ],
+        "proxyShadowMeanWorldX": -2.0391771472106597,
+        "sampleCoords": [
+          [
+            343,
+            275
+          ],
+          [
+            338,
+            276
+          ],
+          [
+            339,
+            276
+          ],
+          [
+            340,
+            276
+          ],
+          [
+            341,
+            276
+          ],
+          [
+            342,
+            276
           ],
           [
             343,
-            279
+            276
           ],
           [
             344,
-            279
-          ],
-          [
-            333,
-            280
+            276
           ],
           [
             334,
-            280
+            277
           ],
           [
             335,
-            280
+            277
+          ],
+          [
+            342,
+            277
+          ],
+          [
+            343,
+            277
+          ],
+          [
+            344,
+            277
+          ],
+          [
+            332,
+            278
+          ],
+          [
+            333,
+            278
+          ],
+          [
+            334,
+            278
+          ],
+          [
+            335,
+            278
           ],
           [
             336,
-            280
+            278
           ],
           [
             337,
-            280
+            278
+          ],
+          [
+            338,
+            278
+          ],
+          [
+            339,
+            278
+          ],
+          [
+            340,
+            278
+          ],
+          [
+            341,
+            278
+          ],
+          [
+            342,
+            278
           ]
         ]
       },
@@ -221,6 +383,147 @@
         3.1746275798534125,
         2.4493729813269884,
         1.9027688553145705
+      ]
+    }
+  },
+  "movedPair": {
+    "onHash": "233db216",
+    "offHash": "e6d53eaf",
+    "masks": {
+      "fleshOccluded": {
+        "count": 0,
+        "meanOn": 0,
+        "meanOff": 0,
+        "sampleCoord": null
+      },
+      "fleshClear": {
+        "count": 5024,
+        "meanOn": 4.691383872062537,
+        "meanOff": 4.691859615836174,
+        "sampleCoord": [
+          447,
+          230
+        ]
+      },
+      "floor": {
+        "darkenedProxy": 1221,
+        "darkenedOther": 7,
+        "clearProxy": 212,
+        "proxyDarkenedFraction": 0.8520586182833217,
+        "proxyPrecision": 0.994299674267101,
+        "largestComponent": 1185,
+        "componentSizes": [
+          1185,
+          43
+        ],
+        "centroid": [
+          412.628664495114,
+          304.83469055374593
+        ],
+        "proxyShadowMeanWorldX": 1.9260682788918093,
+        "sampleCoords": [
+          [
+            407,
+            258
+          ],
+          [
+            406,
+            259
+          ],
+          [
+            407,
+            259
+          ],
+          [
+            408,
+            259
+          ],
+          [
+            409,
+            259
+          ],
+          [
+            410,
+            259
+          ],
+          [
+            411,
+            259
+          ],
+          [
+            412,
+            259
+          ],
+          [
+            405,
+            260
+          ],
+          [
+            406,
+            260
+          ],
+          [
+            407,
+            260
+          ],
+          [
+            408,
+            260
+          ],
+          [
+            409,
+            260
+          ],
+          [
+            410,
+            260
+          ],
+          [
+            411,
+            260
+          ],
+          [
+            412,
+            260
+          ],
+          [
+            414,
+            260
+          ],
+          [
+            416,
+            260
+          ],
+          [
+            405,
+            261
+          ],
+          [
+            406,
+            261
+          ],
+          [
+            407,
+            261
+          ],
+          [
+            408,
+            261
+          ],
+          [
+            409,
+            261
+          ],
+          [
+            410,
+            261
+          ]
+        ]
+      },
+      "lightPos": [
+        -2.7790154435127943,
+        2.4543066193397127,
+        1.8922369334749471
       ]
     }
   }
