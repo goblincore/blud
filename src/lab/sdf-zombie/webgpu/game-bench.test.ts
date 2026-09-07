@@ -110,3 +110,56 @@ describe('runBench spike mode', () => {
     expect(spiked.overall.max).toBeCloseTo(200, 5);
   });
 });
+
+describe('runBench passes', () => {
+  it('sums per-pass samples by label per frame, per segment and overall, largest first', async () => {
+    const scenario = buildFirefight({ room: 4, walkFrames: 20, fireFrames: 20, gibFrames: 20 });
+    const { deps } = fakeDeps(() => 10);
+    // The fake page records two labels per stepped frame; the bench drains
+    // them after each chunk. Frame numbering is the fake's own counter.
+    let frame = 0;
+    const pending: { frame: number; label: string; kind: 'render' | 'compute'; ms: number }[] = [];
+    const step = deps.step;
+    deps.step = (dt) => {
+      frame++;
+      pending.push({ frame, label: 'sdf:march', kind: 'render', ms: 6 });
+      pending.push({ frame, label: 'post:blit', kind: 'render', ms: 1 });
+      pending.push({ frame, label: 'compute:tile-bin', kind: 'compute', ms: 0.5 });
+      step(dt);
+    };
+    deps.passTimings = async () => pending.splice(0);
+    const r = await runBench(deps, scenario, { mode: 'passes', chunkFrames: 10, warmup: 5 });
+    expect(r.mode).toBe('passes');
+    expect(r.passes?.available).toBe(true);
+    // Warmup samples were drained and discarded: only the 60 scenario frames count.
+    expect(r.passes?.overall.frames).toBe(60);
+    expect(Object.keys(r.passes!.overall.labels)).toEqual(['sdf:march', 'post:blit', 'compute:tile-bin']);
+    expect(r.passes!.overall.labels['sdf:march']!.p50).toBe(6);
+    expect(r.passes!.overall.labels['sdf:march']!.n).toBe(60);
+    const walk = r.passes!.segments.find((s) => s.name === 'walk')!;
+    expect(walk.frames).toBe(20);
+    expect(walk.labels['post:blit']!.mean).toBe(1);
+    // Frame timing still reported exactly as throughput would.
+    expect(r.overall.p50).toBe(10);
+  });
+
+  it('folds per-frame CPU labels from stepTimed into the same tables', async () => {
+    const scenario = buildFirefight({ room: 4, walkFrames: 10, fireFrames: 10, gibFrames: 10 });
+    const { deps } = fakeDeps(() => 10);
+    const step = deps.step;
+    deps.stepTimed = (dt) => { step(dt); return { 'cpu:tick': 7, 'cpu:draw': 2, 'cpu:phase:goo-sync': 3 }; };
+    deps.passTimings = async () => [];
+    const r = await runBench(deps, scenario, { mode: 'passes', chunkFrames: 10, warmup: 0 });
+    expect(r.passes!.overall.labels['cpu:tick']!.p50).toBe(7);
+    expect(r.passes!.overall.labels['cpu:tick']!.n).toBe(30);
+    expect(r.passes!.segments.find((s) => s.name === 'fire')!.labels['cpu:phase:goo-sync']!.mean).toBe(3);
+  });
+
+  it('reports unavailable, not zeros, when the page has no pass timings', async () => {
+    const scenario = buildFirefight({ room: 4, walkFrames: 10, fireFrames: 10, gibFrames: 10 });
+    const { deps } = fakeDeps(() => 10);
+    const r = await runBench(deps, scenario, { mode: 'passes', chunkFrames: 10, warmup: 0 });
+    expect(r.passes?.available).toBe(false);
+    expect(r.passes?.overall.labels).toEqual({});
+  });
+});

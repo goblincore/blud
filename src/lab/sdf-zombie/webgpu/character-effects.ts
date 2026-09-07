@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import type { Vec3 } from '../types';
 import { flashPixels } from './flash-sprite';
+import { setPassLabel } from './gpu-pass-timing';
 
 /** Translucent character effects must follow the SDF composite: drawing
  * them in the polygon pass lets the later flesh colour erase the flash.
@@ -13,6 +14,7 @@ export function createCharacterEffects(renderer: THREE.WebGPURenderer) {
       if (!scene.children.some(o => o.visible)) return;
       const autoClear = renderer.autoClear;
       renderer.autoClear = false;
+      setPassLabel('effects');
       try { void renderer.render(scene, camera); }
       finally { renderer.autoClear = autoClear; }
     },

@@ -66,6 +66,7 @@ import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { wgslFn, texture, uv, vec2, vec4, uniform } from 'three/tsl';
 import { computeRenderSize, canvasCssSize } from './lab-renderer';
 import { FISHEYE_WGSL, makeLens, type Lens } from './fisheye';
+import { setPassLabel } from './gpu-pass-timing';
 
 /** The owner-approved defaults: FXAA on, modest smear, nearest upscale. */
 export const POST_AA_DEFAULTS = {
@@ -569,6 +570,7 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       }
       if (targetsNeedInit) {
         targetsNeedInit = false;
+        setPassLabel('init');
         for (const t of [sceneTarget, fxaaTarget, histA, histB]) {
           renderer.setRenderTarget(t);
           void renderer.render(emptyScene, quadCam);
@@ -582,6 +584,7 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       let src = sceneTarget;
       let srcIsDisplay = false;
       if (fxaaOn) {
+        setPassLabel('post:fxaa');
         renderer.setRenderTarget(fxaaTarget);
         void renderer.render(fxaaScene, quadCam);
         src = fxaaTarget;
@@ -594,6 +597,7 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
         blendCurTex.value = src.texture;
         blendHistTex.value = histRead.texture;
         uBlendCfg.value.set(historyValid ? smear : 0, srcIsDisplay ? 1 : 0);
+        setPassLabel('post:smear');
         renderer.setRenderTarget(histWrite);
         void renderer.render(blendScene, quadCam);
         const t = histRead;
@@ -614,6 +618,7 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       renderer.getDrawingBufferSize(drawSize);
       uBlitCfg.value.set(uFlipY.value, srcIsDisplay ? 1 : 0, sharpOn ? 1 : 0, 0);
       uBlitDst.value.set(drawSize.x, drawSize.y);
+      setPassLabel('post:blit');
       renderer.setRenderTarget(null);
       const prevAutoClear = renderer.autoClear;
       renderer.autoClear = false;

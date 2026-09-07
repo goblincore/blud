@@ -1,6 +1,11 @@
 import { AMBIENT_AT, WALL_CONTRIBUTION } from './ambient.wgsl';
 import { TILE_MAX_ENTRIES } from './tile-cull';
 import { MAX_PRIMS } from '../validate';
+
+/** Extra metres added to the per-ray tile sphere test (tileCfg.x == 2) so the
+ *  off-ray shading probes — calcNormal's 0.0015 eps and the AO probe at
+ *  n * 0.06 — still see every group the ray's own march did. */
+export const RAY_CULL_SLACK = '0.07';
 // src/lab/sdf-zombie/webgpu/march.wgsl.ts
 //
 // WGSL port of march.glsl.ts. Kept as a near line-for-line translation on
@@ -1497,7 +1502,13 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   // limb with only ITS wounds applied. This retains authored blend seams
   // without letting an arm crater erase a nearby jaw when the arm rises.
   // No wounds/unscoped chunk wounds take the original path exactly.
-  if ((nearWound > 0.5 || dmg != carved) && gWoundOwners != 0u && volumePose0.w < 0.5) {
+  //
+  // counts2.z is the ATTRIBUTION GATE (pass timing, 2026-09-07): 1 skips
+  // this re-fold entirely — a WRONG frame on purpose (a raised arm's crater
+  // can erase the jaw again) that prices the mechanism. 0, the shipped
+  // value, is bit-identical to the pre-gate shader; only the bench's
+  // owner-refold-off leg sets it (__sdfGame.setOwnerRefold).
+  if ((nearWound > 0.5 || dmg != carved) && gWoundOwners != 0u && volumePose0.w < 0.5 && counts2.z < 0.5) {
     let owners = gWoundOwners;
     for (var c = 0; c < 8; c = c + 1) {
       if (c >= i32(counts.y)) { break; }
@@ -2146,16 +2157,38 @@ export const MARCH_BODY = /* wgsl */ `fn marchBody(
     let tid = clamp(vec2<i32>(floor(screenUV * vec2<f32>(f32(gx), f32(gy)))), vec2<i32>(0, 0), vec2<i32>(gx - 1, gy - 1));
     let head = (*tileHdr)[tid.y * gx + tid.x];
     let n = min(head.y, ${TILE_MAX_ENTRIES}u);
-    gTileN = f32(n);
-    // Entry stream: TILE_STRIDE vec4s per entry at base head.x. Same record
-    // layout the CPU binner packs; kTileWrite emits it verbatim.
+    // PER-RAY SPHERE COMPACTION (prototype, tileCfg.x == 2). The tile list
+    // is a 16px-wide frustum's worth of groups, projected at each sphere's
+    // NEAREST depth and clamped outward to whole tiles, so a single ray
+    // carries groups it never comes near. One ray-vs-sphere test per entry,
+    // HERE and never per step, drops those before any marching. The sphere
+    // is inflated the way both cull sites already agree on: the binner's
+    // blendReach (counts.w * 4) scaled by the group's distortion factor as
+    // the per-step foldGroup test scales its threshold, plus RAY_CULL_SLACK
+    // for the post-hit probes that leave the ray (calcNormal eps, the AO
+    // probe at n * 0.06) — those sample the same gTile list.
+    let rayCull = tileCfg.x > 1.5;
+    let reach = counts.w * 4.0 + ${RAY_CULL_SLACK};
+    var w = 0;
     for (var e = 0; e < ${TILE_MAX_ENTRIES}; e = e + 1) {
       if (e >= i32(n)) { break; }
+      // Entry stream: TILE_STRIDE vec4s per entry at base head.x. Same record
+      // layout the CPU binner packs; kTileWrite emits it verbatim.
       let lin = (head.x + u32(e)) * 3u;
-      gTileBounds[e] = (*tileEnt)[lin];
-      gTileGrp[e] = (*tileEnt)[lin + 1u];
-      gTileBand[e] = (*tileEnt)[lin + 2u].x * ${DATA_ROWS}.0;
+      let b = (*tileEnt)[lin];
+      let g = (*tileEnt)[lin + 1u];
+      if (rayCull) {
+        let oc = b.xyz - camPos;
+        let tc = max(dot(oc, rd), 0.0);
+        let rInf = b.w + reach * max(g.z, 1.0);
+        if (dot(oc, oc) - tc * tc > rInf * rInf) { continue; }
+      }
+      gTileBounds[w] = b;
+      gTileGrp[w] = g;
+      gTileBand[w] = (*tileEnt)[lin + 2u].x * ${DATA_ROWS}.0;
+      w = w + 1;
     }
+    gTileN = f32(w);
   }
   // OCCLUDER PRE-PASS. occT is the distance to the nearest point of a
   // conservative INNER hull of the scene — geometry guaranteed to lie inside

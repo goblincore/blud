@@ -59,6 +59,9 @@ export interface LabRendererHandle {
   /** The measured display refresh in ms. Measured, never assumed. */
   readonly refreshMs: number;
   step(dtSec: number): void;
+  /** step(), returning the synchronous CPU ms of the tick callback and of
+   *  the draw (encode + submit) separately. */
+  stepTimed(dtSec: number): { tickMs: number; drawMs: number };
   /**
    * Awaits the GPU timestamp resolve. The VALUE is discarded on purpose: with
    * several render calls per frame and a fire-and-forget resolve in the loop,
@@ -379,6 +382,13 @@ export async function createLabRenderer(mount: HTMLElement, cap?: RenderCap): Pr
     setFrameObserver(observer) { frameObserver = observer; },
     backend: backendName,
     step(dtSec) { cb(dtSec); drawFn(); },
+    stepTimed(dtSec) {
+      const t0 = performance.now();
+      cb(dtSec);
+      const t1 = performance.now();
+      drawFn();
+      return { tickMs: t1 - t0, drawMs: performance.now() - t1 };
+    },
     async resolveGpu() {
       try {
         await renderer.resolveTimestampsAsync();

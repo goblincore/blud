@@ -38,6 +38,7 @@
 // dispatch-size churn ever happens either.
 
 import * as THREE from 'three/webgpu';
+import { withPassLabel } from './gpu-pass-timing';
 import { wgslFn, uniform, storage, instanceIndex, compute } from 'three/tsl';
 import { TILE_MAX_ENTRIES, TILE_SIZE_PX, type TileGroupInput } from './tile-cull';
 
@@ -401,7 +402,7 @@ export function createComputeTileBinding(
 
       // ONE pass, kernels in dependency order; same-queue ordering puts the
       // finished data ahead of everything three renders this frame.
-      renderer.compute([rangeNode, countsNode, scanNode, writeNode]);
+      withPassLabel('compute:tile-bin', () => renderer.compute([rangeNode, countsNode, scanNode, writeNode]));
     },
     async readback() {
       if (disposed) throw new Error('tile binding disposed');

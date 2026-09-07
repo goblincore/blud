@@ -35,6 +35,16 @@ const ROOM_IDS = (process.env.BENCH_ROOMS ?? '1,2,3,4').split(',').map(Number);
 // Results rows and meta record it, so a stored bench.json is never ambiguous
 // about what state the page was in.
 const PRELUDE = process.env.BENCH_PRELUDE ?? '';
+// BENCH_PASSES=1 — per-pass GPU timestamp attribution (gpu-pass-timing.ts).
+// Runs the matrix in the harness's 'passes' mode: the same fence-per-chunk
+// frame timing as throughput, PLUS every render/compute pass summed by its
+// site label per frame. Writes passes.md / passes.json and SKIPS the spike
+// pass. Pass durations are GPU pass time only (no CPU submit, no gaps), so
+// their sum sits below the fenced frame — read SHARES, and read the gap.
+const PASSES = process.env.BENCH_PASSES === '1';
+// BENCH_QUERY — extra URL query appended to sdf-game.html, for levers gated
+// on a page flag (the tile-culling playtest needs `tiles-playtest`).
+const QUERY = process.env.BENCH_QUERY ?? '';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const fail = (msg) => { console.error(`FAIL: ${msg}`); process.exit(1); };
@@ -88,7 +98,7 @@ await send('Emulation.setDeviceMetricsOverride', {
   width: W, height: H, deviceScaleFactor: 1, mobile: false,
 });
 
-const url = `http://localhost:${VITE}/sdf-game.html`;
+const url = `http://localhost:${VITE}/sdf-game.html${QUERY ? `?${QUERY}` : ''}`;
 console.log(`bench ${url}  (${W}x${H}, repeats=${REPEATS}, rooms=${ROOM_IDS.join(',')}${PRELUDE ? `, prelude: ${PRELUDE}` : ''})`);
 
 /**
@@ -163,6 +173,41 @@ const ALL_LEGS = {
   'steps-32': { setMarchSteps: 32 },
   'steps-24': { setMarchSteps: 24 },
   'steps-16': { setMarchSteps: 16 },
+  // TILE-LIST LEGS — need BENCH_QUERY=tiles-playtest or setTiles is a no-op
+  // (the controller is not `allowed` without the page flag). 'tiles-on' is
+  // the existing per-tile group list; 'tiles-raycull' adds the per-ray
+  // sphere compaction prototype at the march entry (march.wgsl.ts, tileCfg.x
+  // == 2). Baseline is the cluster walk with tiles OFF, as shipped.
+  'tiles-on': { setTiles: true },
+  'tiles-raycull': { setTiles: true, setTileRayCull: true },
+  // GOO DENSITY LEVERS (pass attribution 2026-09-07: goo:density equals the
+  // march once blood flies). Run with BENCH_PASSES=1 and read the
+  // goo:density row. 'goo-density-off' is the diagnostic ceiling — a wrong
+  // frame on purpose — that bounds what any lever can recover.
+  'goo-dens-0.35': { setGooPerf: { densityScale: 0.35 } },
+  'goo-dens-0.25': { setGooPerf: { densityScale: 0.25 } },
+  'goo-dens-0.125': { setGooPerf: { densityScale: 0.125 } },
+  'goo-cap-300': { setGooPerf: { particleCap: 300, areaPriority: true } },
+  'goo-cap-150': { setGooPerf: { particleCap: 150, areaPriority: true } },
+  'goo-mintexel-1': { setGooPerf: { minTexelRadius: 1 } },
+  'goo-density-off': { setGooPerf: { passGate: { density: false } } },
+  // MARCH ATTRIBUTION LEGS (2026-09-07: the march is the whole GPU frame and
+  // grows 8 -> 19 -> 31 ms walk/fire/gib). Each prices one wound/chunk
+  // mechanism against the shipped state. 'chunks-skip' is a diagnostic
+  // ceiling (wrong frame on purpose); the rest are real levers or the old
+  // values of levers that already shipped.
+  'wstep-0.6': { setWoundStep: 0.6 },
+  'wound-earlyout-off': { setWoundEarlyOut: false },
+  'wound-cull-off': { setWoundCull: false },
+  'chunks-skip': { setChunkPass: 'skip' },
+  // The per-limb owner re-fold (march.wgsl.ts ~L1505): the one wound-path
+  // mechanism never priced. OFF is a wrong frame on purpose.
+  'owner-refold-off': { setOwnerRefold: false },
+  // Bone tubes ON: skeleton drawn as instanced tubes in the polygon pass
+  // instead of folded into the field inside wounds (bone-tubes, default OFF
+  // pending the look verdict). Prices the inside-flesh rows the nearWound
+  // gate opens.
+  'bone-mesh-on': { setBoneMesh: true },
 };
 // BENCH_LEGS lets a validation pass run one leg without the whole matrix.
 const LEGS = process.env.BENCH_LEGS
@@ -193,6 +238,21 @@ async function applyLeg(name) {
     // — the state every baseline in these notes was taken in — and task 9's
     // table keeps it OFF per the plan.
     __sdfGame.setHullExitBound(false);
+    // Tiles ship OFF (playtest-gated); pinned so the tile legs are the A/B.
+    __sdfGame.setTiles(false);
+    __sdfGame.setTileRayCull(false);
+    // Wound levers at the GAME's shipped state (game-main.ts GAME_* consts:
+    // near-wound step 1.0, early-out on, union-reach cull on).
+    __sdfGame.setWoundStep(1.0);
+    __sdfGame.setWoundEarlyOut(true);
+    __sdfGame.setWoundCull(true);
+    __sdfGame.setOwnerRefold(true);
+    __sdfGame.setBoneMesh(false);
+    // Chunk pass: split ONLY in passes mode, so the timer can label chunks;
+    // every other mode benches the shipped single pass.
+    __sdfGame.setChunkPass(${JSON.stringify(PASSES ? 'split' : 'merged')});
+    // Goo perf seams at their shipped state (goo-layer.ts defaults).
+    __sdfGame.setGooPerf({ densityScale: 0.5, particleCap: 1000, minTexelRadius: 0, areaPriority: false, splatFadeTail: 0, surfaceAtDensityRes: false, passGate: { density: true, blur: true, surface: true } });
     return 1;
   })()`);
   for (const [fn, arg] of Object.entries(overrides)) {
@@ -219,7 +279,7 @@ async function runLeg(name, room, mode) {
   const label = `${name}/room${room}/${mode}`;
   const opts = mode === 'spike'
     ? `{ room: ${room}, mode: "spike", warmup: ${WARMUP}, label: ${JSON.stringify(label)} }`
-    : `{ room: ${room}, mode: "throughput", warmup: ${WARMUP}, chunkFrames: ${CHUNK}, label: ${JSON.stringify(label)} }`;
+    : `{ room: ${room}, mode: ${JSON.stringify(mode)}, warmup: ${WARMUP}, chunkFrames: ${CHUNK}, label: ${JSON.stringify(label)} }`;
   await evaluate(`__sdfGame.bench(${opts})`);
   const raw = await evaluate('JSON.stringify(window.__gameBench)');
   const r = JSON.parse(raw);
@@ -238,9 +298,14 @@ const results = [];
 for (let rep = 0; rep < REPEATS; rep++) {
   for (const leg of Object.keys(LEGS)) {
     for (const room of ROOM_IDS) {
-      const r = await runLeg(leg, room, 'throughput');
+      const r = await runLeg(leg, room, PASSES ? 'passes' : 'throughput');
       results.push({ rep, leg, room, prelude: PRELUDE, ...r });
       process.stdout.write(`  rep${rep} ${leg} room${room}: median ${r.overall.p50.toFixed(2)} ms (max chunk ${r.overall.max.toFixed(2)})\n`);
+      if (PASSES && r.passes) {
+        if (!r.passes.available) console.warn(`  WARN ${leg}/room${room}: no pass samples — timestamp tracking absent?`);
+        const top = Object.values(r.passes.overall.labels).slice(0, 4).map((l) => `${l.name} ${l.p50.toFixed(2)}`).join(', ');
+        process.stdout.write(`      passes: ${top}\n`);
+      }
     }
   }
 }
@@ -273,7 +338,8 @@ for (const leg of Object.keys(LEGS)) {
 //    Read the max/p50 RATIO, which is what says whether a moment blows up.
 // ---------------------------------------------------------------------------
 const spikes = [];
-for (const room of ROOM_IDS) {
+if (PASSES) writePassReport();
+for (const room of PASSES ? [] : ROOM_IDS) {
   const r = await runLeg('baseline', room, 'spike');
   spikes.push({ room, prelude: PRELUDE, ...r });
   process.stdout.write(`  spike room${room}: p50 ${r.overall.p50.toFixed(2)} max ${r.overall.max.toFixed(2)} ms\n`);
@@ -326,8 +392,8 @@ lines.push('');
 lines.push('A cost column is unreadable without this. Read `bodies` first: if it');
 lines.push('falls through the run, the cheap segments were timing an empty room.');
 lines.push('');
-lines.push('| room | segment | bodies in→out | wounds in→out | chunks in→out |');
-lines.push('| ---: | --- | ---: | ---: | ---: |');
+lines.push('| room | segment | bodies in→out | wounds in→out | chunks in→out | droplets in→out | goo quads in→out |');
+lines.push('| ---: | --- | ---: | ---: | ---: | ---: | ---: |');
 for (const room of ROOM_IDS) {
   // Prefer baseline, but fall back to ANY leg for this room — a BENCH_LEGS
   // filter can exclude baseline, and an empty census table is worse than a
@@ -338,7 +404,7 @@ for (const room of ROOM_IDS) {
   for (const seg of r.segments) {
     if (!seg.census) continue;
     const { first: a, last: b } = seg.census;
-    lines.push(`| ${room} | ${seg.name} | ${a.bodies}→${b.bodies} | ${a.wounds}→${b.wounds} | ${a.chunks}→${b.chunks} |`);
+    lines.push(`| ${room} | ${seg.name} | ${a.bodies}→${b.bodies} | ${a.wounds}→${b.wounds} | ${a.chunks}→${b.chunks} | ${a.droplets ?? '-'}→${b.droplets ?? '-'} | ${a.gooQuads ?? '-'}→${b.gooQuads ?? '-'} |`);
   }
 }
 lines.push('');
@@ -357,3 +423,113 @@ console.log(report);
 writeFileSync(`${OUT}/bench.md`, report);
 console.log(`wrote ${OUT}/bench.json and ${OUT}/bench.md`);
 process.exit(0);
+
+// ---------------------------------------------------------------------------
+// PASS ATTRIBUTION REPORT (BENCH_PASSES=1). Per leg: one table, rows = pass
+// labels, one column per room = median across repeats of the overall p50 of
+// that pass's per-frame GPU time, with its share of the labelled total. The
+// last rows are the labelled total, the fenced frame p50, and the GAP between
+// them — CPU submit, inter-pass bubbles, and anything the timestamps cannot
+// see. A large gap is itself a finding.
+// ---------------------------------------------------------------------------
+function writePassReport() {
+  const out = [];
+  out.push('# Per-pass GPU attribution');
+  out.push('');
+  out.push(`${W}x${H}, repeats=${REPEATS}, rooms=${ROOM_IDS.join(',')}${PRELUDE ? `, prelude: ${PRELUDE}` : ''}${QUERY ? `, query: ${QUERY}` : ''}`);
+  out.push('');
+  out.push('Pass ms = median over repeats of the per-frame GPU pass time p50 (overall,');
+  out.push('all segments). Share = of the labelled total. Gap = fenced frame p50 minus');
+  out.push('the labelled total: CPU submit, inter-pass bubbles, unlabelled work.');
+  out.push('');
+  const perSeg = {};
+  for (const leg of Object.keys(LEGS)) {
+    const rs = results.filter((r) => r.leg === leg && r.passes?.available);
+    if (!rs.length) { out.push(`## ${leg}: NO PASS SAMPLES`); out.push(''); continue; }
+    const allLabels = [...new Set(rs.flatMap((r) => Object.keys(r.passes.overall.labels)))];
+    const labels = allLabels.filter((l) => !l.startsWith('cpu:'));
+    const cpuLabels = allLabels.filter((l) => l.startsWith('cpu:'));
+    const cell = (room, label) => {
+      const xs = results.filter((r) => r.leg === leg && r.room === room && r.passes?.available)
+        .map((r) => r.passes.overall.labels[label]?.p50 ?? 0);
+      return xs.length ? med(xs) : 0;
+    };
+    const totals = Object.fromEntries(ROOM_IDS.map((room) => [room, labels.reduce((n, l) => n + cell(room, l), 0)]));
+    const frameP50 = Object.fromEntries(ROOM_IDS.map((room) => {
+      const xs = results.filter((r) => r.leg === leg && r.room === room).map((r) => r.overall.p50);
+      return [room, xs.length ? med(xs) : 0];
+    }));
+    // Order labels by their cost in the LAST room (the busiest), largest first.
+    const last = ROOM_IDS[ROOM_IDS.length - 1];
+    labels.sort((a, b) => cell(last, b) - cell(last, a));
+    out.push(`## ${leg}`);
+    out.push('');
+    out.push(`| pass | ${ROOM_IDS.map((r) => `room ${r} ms | share`).join(' | ')} |`);
+    out.push(`| --- | ${ROOM_IDS.map(() => '---: | ---:').join(' | ')} |`);
+    for (const l of labels) {
+      out.push(`| ${l} | ${ROOM_IDS.map((room) => { const v = cell(room, l); const t = totals[room]; return `${v.toFixed(2)} | ${t > 0 ? (100 * v / t).toFixed(0) : '0'}%`; }).join(' | ')} |`);
+    }
+    // Per-label medians do not add: the "labelled total" is the sum of
+    // medians (a share denominator), while the GPU SPAN row is the median of
+    // per-frame first-start-to-last-end — the honest per-frame GPU time.
+    const spanP50 = Object.fromEntries(ROOM_IDS.map((room) => {
+      const xs = results.filter((r) => r.leg === leg && r.room === room && r.passes?.available).map((r) => r.passes.overall.span.p50);
+      return [room, xs.length ? med(xs) : 0];
+    }));
+    out.push(`| **labelled total (sum of medians)** | ${ROOM_IDS.map((room) => `**${totals[room].toFixed(2)}** | 100%`).join(' | ')} |`);
+    out.push(`| GPU span p50 (first start → last end) | ${ROOM_IDS.map((room) => `${spanP50[room].toFixed(2)} | `).join(' | ')} |`);
+    out.push(`| fenced frame p50 | ${ROOM_IDS.map((room) => `${frameP50[room].toFixed(2)} | `).join(' | ')} |`);
+    out.push(`| gap (frame − span) | ${ROOM_IDS.map((room) => `${(frameP50[room] - spanP50[room]).toFixed(2)} | ${frameP50[room] > 0 ? (100 * (frameP50[room] - spanP50[room]) / frameP50[room]).toFixed(0) : '0'}% of frame`).join(' | ')} |`);
+    out.push('');
+    if (cpuLabels.length) {
+      // CPU side, per stepped frame: tick (sim) and draw (encode + submit)
+      // totals, then the telemetry phases inside the tick. Phases overlap
+      // nothing and nest inside cpu:tick; they do not add to a total.
+      cpuLabels.sort((a, b) => cell(last, b) - cell(last, a));
+      out.push(`CPU per frame (ms, median over repeats of p50):`);
+      out.push('');
+      out.push(`| cpu | ${ROOM_IDS.map((r) => `room ${r}`).join(' | ')} |`);
+      out.push(`| --- | ${ROOM_IDS.map(() => '---:').join(' | ')} |`);
+      for (const l of cpuLabels) out.push(`| ${l} | ${ROOM_IDS.map((room) => cell(room, l).toFixed(2)).join(' | ')} |`);
+      out.push('');
+    }
+    // Per-segment view of the same leg, one line per segment: top three passes.
+    out.push(`Per segment (top passes, room ${last}):`);
+    out.push('');
+    for (const segName of ['walk', 'fire', 'gib']) {
+      const rows = results.filter((r) => r.leg === leg && r.room === last && r.passes?.available)
+        .map((r) => r.passes.segments.find((s) => s.name === segName)).filter(Boolean);
+      if (!rows.length) continue;
+      const segLabels = [...new Set(rows.flatMap((s) => Object.keys(s.labels)))];
+      const segCell = (l) => med(rows.map((s) => s.labels[l]?.p50 ?? 0));
+      const ranked = segLabels.map((l) => [l, segCell(l)]).sort((a, b) => b[1] - a[1]);
+      const tot = ranked.reduce((n, [, v]) => n + v, 0);
+      perSeg[`${leg}/${segName}`] = ranked;
+      const cen = results.find((r) => r.leg === leg && r.room === last)?.segments.find((s) => s.name === segName)?.census;
+      const cenTxt = cen ? ` — droplets ${cen.first.droplets ?? '-'}→${cen.last.droplets ?? '-'}, goo quads ${cen.first.gooQuads ?? '-'}→${cen.last.gooQuads ?? '-'}` : '';
+      out.push(`- **${segName}** (${tot.toFixed(2)} ms labelled${cenTxt}): ${ranked.slice(0, 5).map(([l, v]) => `${l} ${v.toFixed(2)}`).join(', ')}`);
+    }
+    out.push('');
+  }
+  out.push('## Repeatability (fenced frame p50 across repeats)');
+  out.push('');
+  out.push('| leg | room | reps | spread % of min |');
+  out.push('| --- | ---: | --- | ---: |');
+  for (const leg of Object.keys(LEGS)) {
+    for (const room of ROOM_IDS) {
+      const xs = results.filter((r) => r.leg === leg && r.room === room).map((r) => r.overall.p50);
+      if (!xs.length) continue;
+      const mn = Math.min(...xs), mx = Math.max(...xs);
+      out.push(`| ${leg} | ${room} | ${xs.map((x) => x.toFixed(2)).join(' / ')} | ${mn > 0 ? (100 * (mx - mn) / mn).toFixed(0) : '0'}% |`);
+    }
+  }
+  out.push('');
+  const text = out.join('\n');
+  console.log(text);
+  writeFileSync(`${OUT}/passes.md`, text);
+  writeFileSync(`${OUT}/passes.json`, JSON.stringify({
+    meta: { url, W, H, repeats: REPEATS, rooms: ROOM_IDS, backend, prelude: PRELUDE, when: new Date().toISOString() },
+    results, perSeg,
+  }, null, 2));
+  console.log(`wrote ${OUT}/passes.md and ${OUT}/passes.json`);
+}

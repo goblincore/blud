@@ -573,6 +573,10 @@ export interface ViewTileBinding {
     grid: { widthPx: number; heightPx: number },
   ): void;
   setEnabled(on: boolean): void;
+  /** Per-ray sphere compaction of the tile list (prototype): with tiles
+   *  enabled, tileCfg.x becomes 2 and the march drops entries whose inflated
+   *  sphere the pixel's ray never enters. Off by default. */
+  setRayCull(on: boolean): void;
   dispose(): void;
 }
 
@@ -1359,6 +1363,7 @@ export interface GpuViewOpts {
 function wireViewTiles(
   binding: ComputeTileBinding, tileCfg: THREE.Vector4,
 ): ViewTileBinding {
+  let rayCull = false;
   return {
     bin(groups, camera, maxBlendK, grid) {
       binding.bin(groups, camera, maxBlendK, grid);
@@ -1373,7 +1378,11 @@ function wireViewTiles(
       );
     },
     setEnabled(on) {
-      tileCfg.x = on ? 1 : 0;
+      tileCfg.x = on ? (rayCull ? 2 : 1) : 0;
+    },
+    setRayCull(on) {
+      rayCull = on;
+      if (tileCfg.x > 0) tileCfg.x = on ? 2 : 1;
     },
     dispose() { /* owned by the caller */ },
   };
@@ -1449,7 +1458,9 @@ export function createZombieGpuView(
     writeRow(ROW_CLUSTER_GROUPS, p.clusterGroups, p.clusterCount);
     dataTex.needsUpdate = true;
     u.counts.value.set(p.primCount, p.clusterCount, p.carveCount, p.maxBlendK);
-    u.counts2.value.set(p.boneCount, bareBones ? 1 : 0, 0, 0);
+    // z is the owner re-fold attribution gate (march.wgsl.ts) — a settings
+    // channel that must survive every upload, like perfCfg.
+    u.counts2.value.set(p.boneCount, bareBones ? 1 : 0, u.counts2.value.z, 0);
     return p;
   }
 
@@ -2050,7 +2061,7 @@ export function createChunkGpuView(
     // counts2.y is the BARE-BONES bypass: a bone-only chunk (the melt's
     // released skeleton groups) has no wound to be near, and the nearWound
     // gate would march an empty field — the chunk would be invisible.
-    u.counts2.value.set(packed.boneCount, nextPrims.length === 0 ? 1 : 0, 0, 0);
+    u.counts2.value.set(packed.boneCount, nextPrims.length === 0 ? 1 : 0, u.counts2.value.z, 0);
     u.marchCfg.value.x = 48; // chunks are small; fewer steps
     // Torn-meat gore mask — for FLESH chunks. A bone-only chunk (the melt's
     // released skeleton groups) is not torn meat; the mask would paint bare

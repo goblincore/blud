@@ -51,6 +51,7 @@ import {
   attribute,
 } from 'three/tsl';
 import type { BloodSim } from '../blood-sim';
+import { setPassLabel } from './gpu-pass-timing';
 
 /**
  * The goo feel knobs. Everything the panel does not expose is still a named
@@ -654,6 +655,24 @@ export interface GooLayer {
    */
   setPassGate(g: { density?: boolean; blur?: boolean; surface?: boolean }): void;
   readonly passGate: { density: boolean; blur: boolean; surface: boolean };
+  /**
+   * PERF LEVER (2026-09-07 pass attribution): density target size as a
+   * fraction of the SDF layer's, overriding GOO_TUNING.densityScale at
+   * runtime. The density pass is FILL-BOUND — up to a thousand large
+   * additive quads into the target — so its cost scales with this squared.
+   * Reallocates the targets on change (same first-clear discipline as
+   * setSize). Lower is blurrier by construction; the surface pass already
+   * upsamples nearest.
+   */
+  setDensityScale(v: number): void;
+  readonly densityScale: number;
+  /**
+   * PERF LEVER: cap on density quads posed per frame, under
+   * GOO_TUNING.maxParticles. With areaPriority on the largest survive;
+   * otherwise insertion order (droplets, then splats).
+   */
+  setParticleCap(n: number): void;
+  readonly particleCap: number;
   /** 'overlay' (default) composites the goo over the finished frame with no
    * depth involvement. 'depth' restores the original reconstructed-depth
    * interleaving — kept as the escape hatch if the overlay reads wrong
@@ -972,6 +991,10 @@ export function createGooLayer(
   let minTexelRadius = 0;
   let areaPriority = false;
   let splatFadeTail = 0;
+  let densityScale: number = GOO_TUNING.densityScale;
+  let particleCap: number = GOO_TUNING.maxParticles;
+  let lastSdfW = 0;
+  let lastSdfH = 0;
   const passGate = { density: true, blur: true, surface: true };
   // Area-priority scratch: candidate world positions/extents, collected once
   // per sync, reused across frames (never reallocated in steady state).
@@ -1084,6 +1107,7 @@ export function createGooLayer(
 
       if (targetsNeedInit) {
         targetsNeedInit = false;
+        setPassLabel('init');
         // All four targets — the blur pair AND the low-res surface target
         // need the same explicit first clear as the density target itself:
         // setSize reallocates the backing texture, and a lazily-initialised
@@ -1110,6 +1134,7 @@ export function createGooLayer(
       // and a cleared-to-1 alpha is a gut mask of 1 in every EMPTY pixel —
       // a/r would clamp to full gut across the whole layer (organs r3).
       renderer.setClearColor(0x000000);
+      setPassLabel('goo:density');
       renderer.setRenderTarget(target);
       if (passGate.density) void renderer.render(gooScene, camera);
       renderer.setClearColor(prevClear);
@@ -1121,6 +1146,7 @@ export function createGooLayer(
       // the surface reads the raw density target below.
       const blurred = uBlurPx.value > 0;
       if (blurred && passGate.blur) {
+        setPassLabel('goo:blur');
         renderer.setRenderTarget(blurA);
         void renderer.render(blurH.scene, quadCam);
         renderer.setRenderTarget(blurB);
@@ -1140,6 +1166,7 @@ export function createGooLayer(
       // setMode() still takes effect on the very next frame rather than
       // waiting for a blurPx = 0 crossing.
       if (!passGate.surface) return;
+      setPassLabel('goo:surface');
       if (surfaceAtDensityRes) {
         // ITEM 1 path. Stage 1: the SAME shading graphs (makeOverlayMat /
         // makeLowDepthMat over the same density texture and uniform nodes)
@@ -1251,7 +1278,7 @@ export function createGooLayer(
           count++;
         }
         orderIndicesByAreaDesc(candArea, count, candOrder);
-        const fill = Math.min(count, GOO_TUNING.maxParticles);
+        const fill = Math.min(count, particleCap);
         for (let k = 0; k < fill; k++) {
           const c = candOrder[k]!;
           p.set(candX[c]!, candY[c]!, candZ[c]!);
@@ -1266,7 +1293,7 @@ export function createGooLayer(
           quads.setMatrixAt(n++, m);
         }
       } else {
-        for (let i = 0; i < sim.droplets.length && n < GOO_TUNING.maxParticles; i++) {
+        for (let i = 0; i < sim.droplets.length && n < particleCap; i++) {
           const d = sim.droplets[i]!;
           // Mist cutoff: the fine beads stay in the billboard view; everything
           // else feeds the density field. Scraps always go.
@@ -1301,7 +1328,7 @@ export function createGooLayer(
         // space by the stamp yaw so pools still smear directionally. Droplets
         // take the budget first — they are the flying action — but the splat
         // ring is capped at 256 so both fit.
-        for (let i = 0; i < sim.splats.length && n < GOO_TUNING.maxParticles; i++) {
+        for (let i = 0; i < sim.splats.length && n < particleCap; i++) {
           const sp = sim.splats[i]!;
           const gr = sp.size * GOO_TUNING.splatGooScale * 2; // quad edge = 2x radius
           if (tooSmall(gr / 2, sp.pos[0], 0.02, sp.pos[2])) continue;
@@ -1347,8 +1374,10 @@ export function createGooLayer(
     },
 
     setSize(sdfWidth, sdfHeight) {
-      const w = Math.max(1, Math.round(sdfWidth * GOO_TUNING.densityScale));
-      const h = Math.max(1, Math.round(sdfHeight * GOO_TUNING.densityScale));
+      lastSdfW = sdfWidth;
+      lastSdfH = sdfHeight;
+      const w = Math.max(1, Math.round(sdfWidth * densityScale));
+      const h = Math.max(1, Math.round(sdfHeight * densityScale));
       target.setSize(w, h);
       blurA.setSize(w, h);
       blurB.setSize(w, h);
@@ -1406,6 +1435,15 @@ export function createGooLayer(
     setMinTexelRadius(v) { minTexelRadius = Math.max(0, Math.min(16, v)); },
     setAreaPriority(on) { areaPriority = on; },
     setSplatFadeTail(v) { splatFadeTail = Math.max(0, Math.min(GOO_TUNING.maxParticles, Math.round(v))); },
+    setDensityScale(v) {
+      const next = Math.max(0.05, Math.min(1, v));
+      if (next === densityScale) return;
+      densityScale = next;
+      if (lastSdfW > 0 && lastSdfH > 0) this.setSize(lastSdfW, lastSdfH);
+    },
+    get densityScale() { return densityScale; },
+    setParticleCap(n) { particleCap = Math.max(0, Math.min(GOO_TUNING.maxParticles, Math.floor(n))); },
+    get particleCap() { return particleCap; },
     setPassGate(g) {
       if (g.density !== undefined) passGate.density = g.density;
       if (g.blur !== undefined) passGate.blur = g.blur;
