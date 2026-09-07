@@ -565,7 +565,7 @@ export function createZombieActor(opts: {
     current = r.body;
     if (r.stumpWound) {
       woundRing.stamp(r.stumpWound, posed, bodyYaw);
-      torsoWounds?.record(r.stumpWound, posed, false);
+      torsoWounds?.record(r.stumpWound, current, false);
       pendingWounds.push(r.stumpWound);
     }
     pendingSevered.push(limb);
@@ -877,7 +877,7 @@ export function createZombieActor(opts: {
     // arrive already resolved against a posed body, with no single impact
     // point to anchor to.
     woundRing.stampBundle(blastWounds);
-    if (torsoWounds) for (const w of blastWounds) torsoWounds.record(w, posed);
+    if (torsoWounds) for (const w of blastWounds) torsoWounds.record(w, current);
     for (const w of blastWounds) pendingWounds.push(w);
     if (blastWounds.length === 0) return;
     posed = applyRig(current, bound, bodyYaw);
@@ -913,7 +913,7 @@ export function createZombieActor(opts: {
     // below and before flushHitTail re-solves the pose, so it is the
     // placement, uncontaminated by the reaction to it.
     woundRing.stamp(wound, field, bodyYaw);
-    torsoWounds?.record(wound, field);
+    torsoWounds?.record(wound, current);
     pendingWounds.push(wound);
     pendingShot = {
       type: wound.type,
