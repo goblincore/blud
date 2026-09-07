@@ -1147,22 +1147,44 @@ null
           anchors.push({ node: km.name, label: pt.label, w: pt.w });
         }
       }
-      let kitTexel = null, kitNode = null;
-      for (const a of anchors.slice(0, 14)) {
-        const ksp = await evaluate(`__sdfGame.screenPosOf(${a.w[0]}, ${a.w[1]}, ${a.w[2]})`);
-        if (!ksp || Math.abs(ksp.x) > 0.95 || Math.abs(ksp.y) > 0.95 || ksp.z >= 1) continue;
-        for (let dy = -2; dy <= 2 && !kitTexel; dy++) {
-          for (let dx = -2; dx <= 2 && !kitTexel; dx++) {
-            const s = await evaluate(`__sdfGame.readSurfaceAt(${(ksp.x + dx * 0.03).toFixed(4)}, ${(ksp.y + dy * 0.03).toFixed(4)})`);
-            if (s.cls > 16.5 && s.cls < 17.5 && s.depth < 0.995
-              && Math.abs(s.depth - ksp.z) <= 0.06) { kitTexel = s; kitNode = a.label; }
+      // ONE batched lattice census per anchor (sampleSurfacePoints draws a
+      // still once per call); a hit is cls 17 at the anchor's own depth so
+      // the FPV viewmodel (also cls 17, ~0.5 m from the eye) cannot
+      // masquerade as kit.
+      const scanKit = async () => {
+        for (const a of anchors.slice(0, 14)) {
+          const ksp = await evaluate(`__sdfGame.screenPosOf(${a.w[0]}, ${a.w[1]}, ${a.w[2]})`);
+          if (!ksp || Math.abs(ksp.x) > 0.95 || Math.abs(ksp.y) > 0.95 || ksp.z >= 1) continue;
+          const pts = [];
+          for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) pts.push({ x: +(ksp.x + dx * 0.03).toFixed(4), y: +(ksp.y + dy * 0.03).toFixed(4) });
+          const samples = await evaluate(`__sdfGame.sampleSurfacePoints(${JSON.stringify(pts)})`);
+          if (!samples) continue;
+          const hitIdx = samples.findIndex((s) => s.cls > 16.5 && s.cls < 17.5 && s.depth < 0.995 && Math.abs(s.depth - ksp.z) <= 0.06);
+          if (hitIdx >= 0) {
+            const s = samples[hitIdx];
+            return { texel: s, node: a.label, ndc: pts[hitIdx], depth: +s.depth.toFixed(5) };
           }
         }
-        if (kitTexel) break;
+        return null;
+      };
+      // Kit visibility depends on the spawn pose and view angle: one facing
+      // can hide every kit piece behind the body. Orbit the character —
+      // east/north/west/south — and take the first side that paints kit
+      // pixels, recording which side. The body pose stays LOCKED; only the
+      // camera walks around it.
+      let kitTexel = null, kitNode = null, kitSide = 0;
+      const SIDE_OFFSETS = [[1.5, 0], [0, 1.5], [-1.5, 0], [0, -1.5]];
+      for (let side = 0; side < SIDE_OFFSETS.length && !kitTexel; side++) {
+        const [ox, oz] = SIDE_OFFSETS[side];
+        if (side > 0) {
+          await faceTarget(zc.pos[0] + ox, zc.pos[2] + oz, zc.pos[0], zc.pos[2], -0.05);
+        }
+        const hit = await scanKit();
+        if (hit) { kitTexel = hit.texel; kitNode = hit.node; kitSide = side; }
       }
       rendered[name] = {
         id: spawned.id, torsoAnchor, fleshDepth: +fleshHit.depth.toFixed(5),
-        kitMeshes: meshNodes.length, kitNodePainted: kitNode,
+        kitMeshes: meshNodes.length, kitNodePainted: kitNode, kitSide,
         kitTexel: kitTexel ? +kitTexel.depth.toFixed(5) : null,
         kitMaterials: meshNodes.flatMap((n) => n.materials).slice(0, 8),
         heldPropNodes: propNodes ? propNodes.map((n) => n.name) : undefined,
