@@ -88,12 +88,35 @@ sphere is not too tight. (The whole-image noise floor is large because blood/
 goo animate even when the wanderers are frozen; the counter's IDENTICAL hits is
 the load-immune proof that the geometry is bit-identical.)
 
-## Bench (Step 7)
+## Bench (Step 7) — run by the owner session after the agent timed out on load
 
-_PENDING — machine load was 35.6 at writing time; the bench below is run on a
-quiet machine and appended._
+Quiet-ish machine (load 4.4 at start, 7.3 at end; per-leg spread 9–18%),
+`BENCH_PASSES=1 BENCH_LEGS=baseline,bone-cull-on,bone-mesh-on BENCH_ROOMS=3,4 BENCH_REPEATS=3`
+(`bench/passes.md`). `sdf:march` exclusive ms, median of 3 (per-rep in passes.json):
 
-- Bones stay in the field (the tubes failed the look verdict); the cull is the
-  fix.
-- Verdict: _PENDING_ (ship-ON candidate / park / unresolved), with the fraction
-  of the bone-mesh-on win recovered.
+| | r3 fire | r3 gib | r4 fire | r4 gib |
+| --- | ---: | ---: | ---: | ---: |
+| baseline | 13.5 | 19.9 | 14.6 | 21.4 |
+| bone-cull-on | 12.8 (−5%) | 19.5 (unresolved) | 13.8 (−5%) | 24.0 (unresolved) |
+| bone-mesh-on | 11.7 (−13%) | 15.3 (−23%) | 12.4 (−15%) | 18.9 (−12%) |
+
+## Verdict: PARK as-is; the granularity is wrong, not the idea
+
+Exact (counter gate: identical hits) and nearly free, but it recovers only
+~5% of the wounded march in fire and nothing resolvable in gib, against
+13–23% for removing bones from the field. Its own counter said so first:
+bone evaluations fell 18%, not the ~80% a good cull would give. A chest
+crater's pixels are in the TORSO cluster, and that cluster's single sphere
+holds ribs + spine + pelvis + (for the zombie) most of the skeleton — so
+near a torso wound the cull skips only the limb bones, which were never the
+bulk. Organs fold unconditionally in the tail on top.
+
+**Follow-up that should work:** bound bones per RIGID SEGMENT rather than
+per flesh cluster — the axial `BoneFrame` segments rig-bind already poses
+bones by (each vertebra's rib pair, the pelvis, the skull), plus one sphere
+for the organ tail. That is the granularity flesh gets from its bound
+GROUPS (two to four prims each), and it is what would let a chest pixel
+skip the pelvis and the skull. Same texel trick (free columns), one more
+texel row of ranges if six clusters' worth of segments do not fit in the
+free columns. Ship-ON of the cluster version is harmless but not worth a
+flag flip on its own.
