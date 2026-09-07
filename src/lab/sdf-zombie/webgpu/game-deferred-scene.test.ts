@@ -386,6 +386,144 @@ describe('scoped draws on the ORIGINAL objects', () => {
   });
 });
 
+describe('live source-material refresh (review fix)', () => {
+  /** Narrow read of what render was handed for a mesh during a draw. */
+  function submittedMaterialOf(
+    submitted: { swaps: { object: THREE.Object3D; material: THREE.Material | THREE.Material[] }[] }[],
+    drawIndex: number,
+    mesh: THREE.Object3D,
+  ): THREE.Material {
+    const hit = submitted[drawIndex]!.swaps.find((e) => e.object === mesh);
+    expect(hit).toBeDefined();
+    return hit!.material as THREE.Material;
+  }
+
+  it('source mutations after the first draw reach the CACHED adapter (the game setGunTuning flow)', () => {
+    const scene = new THREE.Scene();
+    const src = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.9, metalness: 0.0 });
+    const mesh = stdMesh('gun', src);
+    scene.add(mesh);
+    const { renderer, submitted } = mockRenderer();
+    const s = createGameDeferredScene(scene);
+    s.register(mesh, 'mesh');
+    s.sync();
+
+    // First draw caches the adapter with the source's initial state.
+    s.draw('mesh', renderer, camera());
+    const first = submittedMaterialOf(submitted, 0, mesh) as unknown as {
+      roughness: number; metalness: number; normalScale: THREE.Vector2; map: unknown;
+    };
+    expect(first).not.toBe(src);
+    expect(first.roughness).toBe(0.9);
+    expect(first.metalness).toBe(0.0);
+
+    // The game's setGunTuning flow: mutate the SOURCE (scalars, vector,
+    // texture reference), then needsUpdate = true — three's setter bumps
+    // src.version. The adapter handed to the renderer on the NEXT draw
+    // must carry the new state.
+    src.roughness = 0.3;
+    src.metalness = 0.8;
+    src.normalScale.setScalar(1.4);
+    const texB = new THREE.Texture();
+    texB.name = 'rebind';
+    src.map = texB;
+    src.needsUpdate = true;
+
+    s.draw('mesh', renderer, camera());
+    const second = submittedMaterialOf(submitted, 1, mesh) as unknown as {
+      roughness: number; metalness: number; normalScale: THREE.Vector2; map: unknown;
+    };
+    // Cache REUSE: the same adapter object, refreshed in place — not a
+    // rebuilt material and never the source itself.
+    expect(second).toBe(first);
+    expect(second).not.toBe(src);
+    expect(second.roughness).toBe(0.3);
+    expect(second.metalness).toBe(0.8);
+    expect(second.normalScale.x).toBe(1.4);
+    expect(second.map).toBe(texB);
+    // The draw restored the ORIGINAL material reference.
+    expect(mesh.material).toBe(src);
+
+    // Repeated UNCHANGED draws keep reusing the cached adapter, state stable.
+    s.draw('mesh', renderer, camera());
+    const third = submittedMaterialOf(submitted, 2, mesh) as unknown as { roughness: number };
+    expect(third).toBe(first);
+    expect(third.roughness).toBe(0.3);
+
+    s.dispose();
+  });
+
+  it('each receiver\'s cached adapter notices source changes; receiver metadata survives the refresh', () => {
+    const scene = new THREE.Scene();
+    const src = new THREE.MeshStandardMaterial({ roughness: 0.9, metalness: 0.0 });
+    const fullMesh = stdMesh('full-receiver', src);
+    const levelMesh = stdMesh('level-receiver', src);
+    scene.add(fullMesh, levelMesh);
+    const { renderer, submitted } = mockRenderer();
+    const s = createGameDeferredScene(scene);
+    s.register(fullMesh, 'mesh', 'full');
+    s.register(levelMesh, 'mesh', 'level-only');
+    s.sync();
+
+    s.draw('mesh', renderer, camera());
+    const fullA = submittedMaterialOf(submitted, 0, fullMesh) as unknown as {
+      surfaceKind: number; roughness: number;
+    };
+    const levelA = submittedMaterialOf(submitted, 0, levelMesh) as unknown as {
+      surfaceKind: number; roughness: number;
+    };
+    expect(fullA).not.toBe(levelA); // distinct adapters per receiver
+    expect(fullA.surfaceKind).toBe(encodeSurfaceClass(1, 'full'));
+    expect(levelA.surfaceKind).toBe(encodeSurfaceClass(1, 'level-only'));
+
+    src.roughness = 0.25;
+    src.metalness = 0.5;
+    src.needsUpdate = true;
+    s.draw('mesh', renderer, camera());
+    const fullB = submittedMaterialOf(submitted, 1, fullMesh) as unknown as {
+      surfaceKind: number; roughness: number; metalness: number;
+    };
+    const levelB = submittedMaterialOf(submitted, 1, levelMesh) as unknown as {
+      surfaceKind: number; roughness: number; metalness: number;
+    };
+    expect(fullB).toBe(fullA);
+    expect(levelB).toBe(levelA);
+    expect(fullB.roughness).toBe(0.25);
+    expect(levelB.roughness).toBe(0.25);
+    expect(fullB.metalness).toBe(0.5);
+    expect(levelB.metalness).toBe(0.5);
+    // The packed receiver metadata is frozen per adapter: a refresh never
+    // rewrites which shadow receiver the adapter claims.
+    expect(fullB.surfaceKind).toBe(encodeSurfaceClass(1, 'full'));
+    expect(levelB.surfaceKind).toBe(encodeSurfaceClass(1, 'level-only'));
+
+    s.dispose();
+  });
+
+  it('dispose after refreshes disposes each adapter exactly once; source material/textures untouched', () => {
+    const scene = new THREE.Scene();
+    const src = new THREE.MeshStandardMaterial({ roughness: 0.9 });
+    const mesh = stdMesh('wall', src);
+    scene.add(mesh);
+    const { renderer, submitted } = mockRenderer();
+    const s = createGameDeferredScene(scene);
+    s.register(mesh, 'mesh');
+    s.sync();
+    s.draw('mesh', renderer, camera());
+
+    src.roughness = 0.3;
+    src.needsUpdate = true;
+    s.draw('mesh', renderer, camera());
+    const adapter = submittedMaterialOf(submitted, 1, mesh);
+    const adapterDispose = vi.spyOn(adapter, 'dispose');
+    const srcDispose = vi.spyOn(src, 'dispose');
+
+    s.dispose();
+    expect(adapterDispose).toHaveBeenCalledTimes(1);
+    expect(srcDispose).not.toHaveBeenCalled();
+  });
+});
+
 describe('lifecycle', () => {
   it('dispose drops the catalog, disposes OWNED adapters only, and rejects further use', () => {
     const scene = new THREE.Scene();

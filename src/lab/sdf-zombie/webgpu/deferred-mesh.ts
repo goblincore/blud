@@ -44,6 +44,39 @@ export interface DeferredMeshMaterial extends MeshStandardNodeMaterial {
 }
 
 /**
+ * The surface state copied FROM a game MeshStandardMaterial onto a deferred
+ * adapter: scalars, colors and texture REFERENCES (the maps stay
+ * single-owned by the game). Used at construction AND on every source
+ * refresh — the game mutates its Standard materials live (setGunTuning
+ * changes roughness/metalness/normalScale and rebinds maps), so the router
+ * re-runs this when the source's version counter moves.
+ *
+ * Deliberately NOT copied: envMap (unlit G-buffer rule) and the structural
+ * G-buffer contract — fog, transparent, blending, depth, lights — which
+ * createDeferredMeshMaterial forces; plus mrtNode/surfaceKind, frozen per
+ * adapter because a cached (source, receiver) pair never changes receiver.
+ */
+export function copyDeferredMeshSurfaceState(
+  source: THREE.MeshStandardMaterial,
+  target: DeferredMeshMaterial,
+): void {
+  target.color.copy(source.color);
+  target.map = source.map;
+  target.normalMap = source.normalMap;
+  target.normalScale.copy(source.normalScale);
+  target.roughness = source.roughness;
+  target.roughnessMap = source.roughnessMap;
+  target.metalness = source.metalness;
+  target.metalnessMap = source.metalnessMap;
+  target.emissive.copy(source.emissive);
+  target.emissiveMap = source.emissiveMap;
+  target.emissiveIntensity = source.emissiveIntensity;
+  target.alphaTest = source.alphaTest;
+  target.side = source.side;
+  target.vertexColors = source.vertexColors;
+}
+
+/**
  * Builds the deferred surface producer for `source`. Texture REFERENCES are
  * shared (not cloned) so the fixture's maps stay single-owned; the returned
  * material is owned by the caller and must be disposed with the layer.
@@ -66,20 +99,7 @@ export function createDeferredMeshMaterial(
   const receiver = options?.shadowReceiver ?? 'full';
   const surfaceKind = encodeSurfaceClass(SURFACE_CLASS_MESH, receiver);
   const mat = new MeshStandardNodeMaterial() as DeferredMeshMaterial;
-  mat.color.copy(source.color);
-  mat.map = source.map;
-  mat.normalMap = source.normalMap;
-  mat.normalScale.copy(source.normalScale);
-  mat.roughness = source.roughness;
-  mat.roughnessMap = source.roughnessMap;
-  mat.metalness = source.metalness;
-  mat.metalnessMap = source.metalnessMap;
-  mat.emissive.copy(source.emissive);
-  mat.emissiveMap = source.emissiveMap;
-  mat.emissiveIntensity = source.emissiveIntensity;
-  mat.alphaTest = source.alphaTest;
-  mat.side = source.side;
-  mat.vertexColors = source.vertexColors;
+  copyDeferredMeshSurfaceState(source, mat);
   // Unlit AND unfogged: the game's dungeon scene.fog must never tint the
   // G-buffer's albedo (the lit stage owns distance fog; see setEnvironment).
   mat.fog = false;
