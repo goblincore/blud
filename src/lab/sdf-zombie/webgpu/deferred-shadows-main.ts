@@ -556,10 +556,18 @@ const readLit = async (): Promise<ReadBuffer> => readTargetChannel(handle, defer
     const prevBound = state.bound;
     const prevSampling = state.samplingEnabled;
     try {
-      const slotsPre = slotSnapshot();
-      // Baseline at the CURRENT pose: factory path, sampling off.
+      // TRUE null-first slot identity: clear any stored binding first, so the
+      // per-slot null restore runs and each slot returns to its own owned
+      // fallback — the exact state whose shared-texture collapse this fix is
+      // about. (The gate reaches this check with the factory binding stored
+      // and sampling on; a snapshot taken there would show caller maps.)
       state.customBinding = null;
-      api.setSampling(false);
+      api.clearBinding();
+      step(2);
+      const slotsPre = slotSnapshot();
+      // Baseline at the CURRENT pose: null binding, sampling off — the M1
+      // default the restoration must reproduce.
+      state.customBinding = null;
       step(2);
       const offLit = await readLit();
       const offHash = hashBuffer(offLit);
@@ -607,10 +615,12 @@ const readLit = async (): Promise<ReadBuffer> => readTargetChannel(handle, defer
       state.customBinding = customBinding(full1, level0, true);
       step(2);
       const litB = await readLit();
-      // Restore the factory path BEFORE disposing the const textures, so no
-      // render ever sees a disposed texture.
+      // Null-restore BEFORE disposing the const textures, so no render ever
+      // sees a disposed texture: clearBinding puts the layer back on the
+      // null path (per-slot owned fallbacks) — the state whose hash must
+      // reproduce the M1 baseline.
       state.customBinding = null;
-      api.setSampling(false);
+      api.clearBinding();
       step(2);
       const restoredHash = hashBuffer(await readLit());
       const slotsRestored = slotSnapshot();

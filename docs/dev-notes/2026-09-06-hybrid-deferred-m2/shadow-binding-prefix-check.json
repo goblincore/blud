@@ -44,7 +44,7 @@
     {
       "name": "sampling-changes-output",
       "detail": {
-        "onHash": "58c12ae",
+        "onHash": "90102336",
         "offHash": "7cbb9112"
       }
     },
@@ -65,13 +65,13 @@
       "name": "no-hull-self-shadow",
       "detail": {
         "count": 2405,
-        "meanOn": 3.421604770335239,
+        "meanOn": 3.40796558277027,
         "meanOff": 3.4395649931782746,
         "sampleCoord": [
           350,
           237
         ],
-        "ratio": 0.9947783446806046
+        "ratio": 0.9908129631303156
       }
     },
     {
@@ -218,83 +218,12 @@
         "renderedMapsReenabled": 2,
         "offBaseHash": "e6d53eaf",
         "offHashAbl": "e6d53eaf",
-        "reOnHash": "4814a92d"
-      }
-    },
-    {
-      "name": "binding-identity-const-depths",
-      "detail": {
-        "mapSize": [
-          8,
-          8
-        ],
-        "bias": 0.0025,
-        "counts": {
-          "inFrustumPx": 263579,
-          "fullLitPx": 40785,
-          "fullDarkPx": 30443,
-          "fleshLitPx": 5024,
-          "fleshDarkPx": 5024
-        },
-        "litRange": {
-          "maxOff": 6.83984375
-        },
-        "full": {
-          "darkenedFraction": 0.7464263822483757,
-          "meanDarkening": 0.12510787386957348,
-          "meanOff": 0.14450091798910253,
-          "maxRelDiffSwapped": 0,
-          "sampleCoord": [
-            402,
-            160
-          ]
-        },
-        "level": {
-          "darkenedFractionSwapped": 1,
-          "meanDarkeningSwapped": 4.441660176416871,
-          "meanOffSwapped": 4.691859615836174,
-          "maxRelDiffA": 0,
-          "sampleCoord": [
-            447,
-            230
-          ]
-        }
-      }
-    },
-    {
-      "name": "binding-identity-off-inert",
-      "detail": {
-        "offHash": "e6d53eaf",
-        "boundOffHash": "e6d53eaf"
-      }
-    },
-    {
-      "name": "binding-identity-slots-restore",
-      "detail": {
-        "pre": {
-          "fullUuid": "e4a3b7d8-a6ab-4a27-a64a-8e6c7f724a38",
-          "levelUuid": "e7b24f32-d768-4c21-929c-1d4390a58f3d",
-          "fullIsOwnedFallback": true,
-          "levelIsOwnedFallback": true
-        },
-        "bound": {
-          "fullUuid": "079b9514-ee4e-4148-9dab-91afd4e24eef",
-          "levelUuid": "515f4da1-881d-43e3-bdac-c758d6fe9ac0",
-          "fullIsOwnedFallback": false,
-          "levelIsOwnedFallback": false
-        },
-        "restored": {
-          "fullUuid": "e4a3b7d8-a6ab-4a27-a64a-8e6c7f724a38",
-          "levelUuid": "e7b24f32-d768-4c21-929c-1d4390a58f3d",
-          "fullIsOwnedFallback": true,
-          "levelIsOwnedFallback": true
-        },
-        "restoredLitHash": "e6d53eaf"
+        "reOnHash": "233db216"
       }
     }
   ],
   "errors": [],
-  "pass": true,
+  "pass": false,
   "bootDiag": {
     "shadows": {
       "renderedMaps": 2,
@@ -311,7 +240,7 @@
     "hullSpheres": 51
   },
   "firstPair": {
-    "onHash": "58c12ae",
+    "onHash": "90102336",
     "offHash": "7cbb9112",
     "masks": {
       "fleshOccluded": {
@@ -325,7 +254,7 @@
       },
       "fleshClear": {
         "count": 2405,
-        "meanOn": 3.421604770335239,
+        "meanOn": 3.40796558277027,
         "meanOff": 3.4395649931782746,
         "sampleCoord": [
           350,
@@ -458,7 +387,7 @@
     }
   },
   "movedPair": {
-    "onHash": "4814a92d",
+    "onHash": "233db216",
     "offHash": "e6d53eaf",
     "masks": {
       "fleshOccluded": {
@@ -469,7 +398,7 @@
       },
       "fleshClear": {
         "count": 5024,
-        "meanOn": 4.691859615836174,
+        "meanOn": 4.691383872062537,
         "meanOff": 4.691859615836174,
         "sampleCoord": [
           447,
@@ -631,7 +560,7 @@
       "fullLitPx": 40785,
       "fullDarkPx": 30443,
       "fleshLitPx": 5024,
-      "fleshDarkPx": 5024
+      "fleshDarkPx": 0
     },
     "litRange": {
       "maxOff": 6.83984375
@@ -647,34 +576,16 @@
       ]
     },
     "level": {
-      "darkenedFractionSwapped": 1,
-      "meanDarkeningSwapped": 4.441660176416871,
+      "darkenedFractionSwapped": 0,
+      "meanDarkeningSwapped": 0,
       "meanOffSwapped": 4.691859615836174,
-      "maxRelDiffA": 0,
-      "sampleCoord": [
-        447,
-        230
-      ]
+      "maxRelDiffA": 0.9699865861837693,
+      "sampleCoord": null
     },
     "slots": {
-      "pre": {
-        "fullUuid": "e4a3b7d8-a6ab-4a27-a64a-8e6c7f724a38",
-        "levelUuid": "e7b24f32-d768-4c21-929c-1d4390a58f3d",
-        "fullIsOwnedFallback": true,
-        "levelIsOwnedFallback": true
-      },
-      "bound": {
-        "fullUuid": "079b9514-ee4e-4148-9dab-91afd4e24eef",
-        "levelUuid": "515f4da1-881d-43e3-bdac-c758d6fe9ac0",
-        "fullIsOwnedFallback": false,
-        "levelIsOwnedFallback": false
-      },
-      "restored": {
-        "fullUuid": "e4a3b7d8-a6ab-4a27-a64a-8e6c7f724a38",
-        "levelUuid": "e7b24f32-d768-4c21-929c-1d4390a58f3d",
-        "fullIsOwnedFallback": true,
-        "levelIsOwnedFallback": true
-      }
+      "pre": null,
+      "bound": null,
+      "restored": null
     },
     "restoredLitHash": "e6d53eaf"
   }
