@@ -1,0 +1,398 @@
+{
+ "phase": "face:error",
+ "checks": [
+  {
+   "name": "P0-boot-deferred-task7",
+   "detail": {
+    "fleshDisplay": true,
+    "shadow": {
+     "generationRequested": true,
+     "sampling": true,
+     "renderedMaps": 2,
+     "fullCasters": 99,
+     "levelCasters": 98,
+     "size": 1024,
+     "unsupported": []
+    },
+    "sizes": {
+     "width": 800,
+     "height": 600,
+     "sdfScale": 1,
+     "sdfTargetSize": {
+      "width": 800,
+      "height": 600
+     },
+     "outputTarget": {
+      "width": 800,
+      "height": 600
+     }
+    }
+   }
+  },
+  {
+   "name": "P1-material-capture-zombie",
+   "detail": {
+    "deferred": {
+     "lum": 70,
+     "brightPct": 1.4,
+     "clipPct": 0.2
+    },
+    "legacy": {
+     "lum": 98,
+     "brightPct": 17.7,
+     "clipPct": 0.4
+    },
+    "note": "aesthetic judgment lives in review.md; these numbers are the matched-view evidence"
+   }
+  },
+  {
+   "name": "P1-material-capture-soldier",
+   "detail": {
+    "deferred": {
+     "lum": 72,
+     "brightPct": 4.9,
+     "clipPct": 0.8
+    },
+    "legacy": {
+     "lum": 91,
+     "brightPct": 6.2,
+     "clipPct": 1.8
+    },
+    "note": "aesthetic judgment lives in review.md; these numbers are the matched-view evidence"
+   }
+  },
+  {
+   "name": "P1-material-capture-goblin",
+   "detail": {
+    "deferred": {
+     "lum": 63,
+     "brightPct": 2.1,
+     "clipPct": 0.4
+    },
+    "legacy": {
+     "lum": 122,
+     "brightPct": 26.6,
+     "clipPct": 8.9
+    },
+    "note": "aesthetic judgment lives in review.md; these numbers are the matched-view evidence"
+   }
+  }
+ ],
+ "pageErrors": [],
+ "pass": false,
+ "scope": "task7-material-shadow",
+ "fullAcceptance": false,
+ "pageErrorsDropped": 0,
+ "error": "AssertionError [ERR_ASSERTION]: S1: no floor candidate darkens >8% with sampling on (max drop 0.0%) — cast shadows missing\n    at file:///Users/donny/.claude/dispatch/worktrees/2026-09-06-hybrid-deferred-m2-task-7-continue-1/scripts/deferred-game-shadow-check.mjs:347:10",
+ "records": {
+  "captures": {
+   "task7-mat-deferred-zombie.png": {
+    "points": {},
+    "regions": {
+     "subject": {
+      "mean": [
+       85,
+       61,
+       62
+      ],
+      "lum": 70,
+      "clipPct": 0.2,
+      "darkPct": 11.2,
+      "brightPct": 1.4
+     }
+    },
+    "frame": {
+     "nonDarkPct": 74.6,
+     "w": 1380,
+     "h": 733
+    }
+   },
+   "task7-mat-deferred-soldier.png": {
+    "points": {},
+    "regions": {
+     "subject": {
+      "mean": [
+       87,
+       63,
+       65
+      ],
+      "lum": 72,
+      "clipPct": 0.8,
+      "darkPct": 27,
+      "brightPct": 4.9
+     }
+    },
+    "frame": {
+     "nonDarkPct": 77.8,
+     "w": 1380,
+     "h": 733
+    }
+   },
+   "task7-mat-deferred-goblin.png": {
+    "points": {},
+    "regions": {
+     "subject": {
+      "mean": [
+       81,
+       54,
+       53
+      ],
+      "lum": 63,
+      "clipPct": 0.4,
+      "darkPct": 19.2,
+      "brightPct": 2.1
+     }
+    },
+    "frame": {
+     "nonDarkPct": 77.8,
+     "w": 1380,
+     "h": 733
+    }
+   },
+   "task7-mat-legacy-zombie.png": {
+    "points": {},
+    "regions": {
+     "subject": {
+      "mean": [
+       112,
+       92,
+       92
+      ],
+      "lum": 98,
+      "clipPct": 0.4,
+      "darkPct": 1,
+      "brightPct": 17.7
+     }
+    },
+    "frame": {
+     "nonDarkPct": 80.8,
+     "w": 1380,
+     "h": 733
+    }
+   },
+   "task7-mat-legacy-soldier.png": {
+    "points": {},
+    "regions": {
+     "subject": {
+      "mean": [
+       93,
+       91,
+       88
+      ],
+      "lum": 91,
+      "clipPct": 1.8,
+      "darkPct": 3.3,
+      "brightPct": 6.2
+     }
+    },
+    "frame": {
+     "nonDarkPct": 80.3,
+     "w": 1380,
+     "h": 733
+    }
+   },
+   "task7-mat-legacy-goblin.png": {
+    "points": {},
+    "regions": {
+     "subject": {
+      "mean": [
+       126,
+       118,
+       121
+      ],
+      "lum": 122,
+      "clipPct": 8.9,
+      "darkPct": 4.2,
+      "brightPct": 26.6
+     }
+    },
+    "frame": {
+     "nonDarkPct": 78.9,
+     "w": 1380,
+     "h": 733
+    }
+   },
+   "task7-shadow-on.png": {
+    "points": {},
+    "regions": {},
+    "frame": {
+     "nonDarkPct": 74.7,
+     "w": 1380,
+     "h": 733
+    }
+   },
+   "task7-shadow-sampling-off.png": {
+    "points": {},
+    "regions": {},
+    "frame": {
+     "nonDarkPct": 74.7,
+     "w": 1380,
+     "h": 733
+    }
+   }
+  },
+  "stages": {
+   "materials": {
+    "deferred-zombie": {
+     "actor": "zombie",
+     "renderer": "deferred",
+     "anchor": [
+      -4.8,
+      1.05,
+      -4.8
+     ],
+     "subject": {
+      "mean": [
+       85,
+       61,
+       62
+      ],
+      "lum": 70,
+      "clipPct": 0.2,
+      "darkPct": 11.2,
+      "brightPct": 1.4
+     },
+     "frame": {
+      "nonDarkPct": 74.6,
+      "w": 1380,
+      "h": 733
+     }
+    },
+    "deferred-soldier": {
+     "actor": "soldier",
+     "renderer": "deferred",
+     "anchor": [
+      -4.8,
+      1.05,
+      -4.8
+     ],
+     "subject": {
+      "mean": [
+       87,
+       63,
+       65
+      ],
+      "lum": 72,
+      "clipPct": 0.8,
+      "darkPct": 27,
+      "brightPct": 4.9
+     },
+     "frame": {
+      "nonDarkPct": 77.8,
+      "w": 1380,
+      "h": 733
+     }
+    },
+    "deferred-goblin": {
+     "actor": "goblin",
+     "renderer": "deferred",
+     "anchor": [
+      -4.8,
+      1.05,
+      -4.8
+     ],
+     "subject": {
+      "mean": [
+       81,
+       54,
+       53
+      ],
+      "lum": 63,
+      "clipPct": 0.4,
+      "darkPct": 19.2,
+      "brightPct": 2.1
+     },
+     "frame": {
+      "nonDarkPct": 77.8,
+      "w": 1380,
+      "h": 733
+     }
+    },
+    "legacy-zombie": {
+     "actor": "zombie",
+     "renderer": "legacy",
+     "anchor": [
+      -4.8,
+      1.05,
+      -4.8
+     ],
+     "subject": {
+      "mean": [
+       112,
+       92,
+       92
+      ],
+      "lum": 98,
+      "clipPct": 0.4,
+      "darkPct": 1,
+      "brightPct": 17.7
+     },
+     "frame": {
+      "nonDarkPct": 80.8,
+      "w": 1380,
+      "h": 733
+     }
+    },
+    "legacy-soldier": {
+     "actor": "soldier",
+     "renderer": "legacy",
+     "anchor": [
+      -4.8,
+      1.05,
+      -4.8
+     ],
+     "subject": {
+      "mean": [
+       93,
+       91,
+       88
+      ],
+      "lum": 91,
+      "clipPct": 1.8,
+      "darkPct": 3.3,
+      "brightPct": 6.2
+     },
+     "frame": {
+      "nonDarkPct": 80.3,
+      "w": 1380,
+      "h": 733
+     }
+    },
+    "legacy-goblin": {
+     "actor": "goblin",
+     "renderer": "legacy",
+     "anchor": [
+      -4.8,
+      1.05,
+      -4.8
+     ],
+     "subject": {
+      "mean": [
+       126,
+       118,
+       121
+      ],
+      "lum": 122,
+      "clipPct": 8.9,
+      "darkPct": 4.2,
+      "brightPct": 26.6
+     },
+     "frame": {
+      "nonDarkPct": 78.9,
+      "w": 1380,
+      "h": 733
+     }
+    }
+   }
+  }
+ },
+ "ports": {
+  "vite": 5356,
+  "cdp": 9356
+ },
+ "viewport": {
+  "width": 800,
+  "height": 600
+ },
+ "generatedAt": "2026-09-07T22:19:35.509Z"
+}
