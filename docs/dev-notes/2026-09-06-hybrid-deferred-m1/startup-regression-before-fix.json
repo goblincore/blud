@@ -1,0 +1,5 @@
+{
+  "checks": [],
+  "errors": [],
+  "failure": "AssertionError [ERR_ASSERTION]: default page must animate without clicking Run"
+}

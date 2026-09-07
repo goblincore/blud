@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Blud — hybrid deferred comparison (M1)</title>
+<style>
+  body { margin: 0; background: #0d0a0c; color: #eee; font: 13px monospace; overflow: hidden; }
+  #app { width: 100vw; height: 100vh; }
+  #panel {
+    position: fixed; top: 8px; right: 8px; z-index: 10;
+    background: rgba(0,0,0,0.78); padding: 10px; border: 1px solid #444;
+    width: 220px; line-height: 1.7; font-size: 11px;
+  }
+  #panel label { display: flex; justify-content: space-between; gap: 6px; align-items: center; }
+  #panel select, #panel button { font: 11px monospace; background: #221a1e; color: #eee; border: 1px solid #555; }
+  #status {
+    position: fixed; top: 8px; left: 8px; z-index: 10;
+    background: rgba(0,0,0,0.68); padding: 6px 8px; border: 1px solid #444; font-size: 11px;
+  }
+  #errors { color: #ff6464; font-size: 11px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="status">booting…</div>
+  <div id="panel"><div id="errors"></div></div>
+  <script type="module" src="/src/lab/sdf-zombie/webgpu/deferred-main.ts"></script>
+</body>
+</html>

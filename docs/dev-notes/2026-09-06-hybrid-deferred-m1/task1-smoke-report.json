@@ -1,0 +1,83 @@
+{
+  "ready": true,
+  "diagnostics": {
+    "width": 320,
+    "height": 180,
+    "sdfScale": 1,
+    "sdfTargetSize": {
+      "width": 320,
+      "height": 180
+    },
+    "lightCount": 1,
+    "lightCapacity": 16,
+    "debugView": "lit",
+    "limits": {
+      "supported": true,
+      "ok": true,
+      "checks": [
+        {
+          "name": "maxColorAttachments",
+          "required": 4,
+          "actual": 8
+        },
+        {
+          "name": "maxColorAttachmentBytesPerSample",
+          "required": 28,
+          "actual": 32
+        }
+      ]
+    }
+  },
+  "projectedPixel": {
+    "px": 107,
+    "py": 56
+  },
+  "center": {
+    "depth": [
+      0.9715597033500671
+    ],
+    "emissionClass": [
+      0,
+      0,
+      0,
+      1
+    ],
+    "normalMetalness": [
+      -0.06646728515625,
+      -0.027374267578125,
+      0.9970703125,
+      0
+    ],
+    "albedoRoughness": [
+      0.184326171875,
+      0.194580078125,
+      0.20849609375,
+      0.74853515625
+    ]
+  },
+  "corner": {
+    "depth": [
+      1
+    ],
+    "class": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "litA": [
+    0.04974365234375,
+    0.047149658203125,
+    0.0447998046875,
+    1
+  ],
+  "litB": [
+    0.034393310546875,
+    0.032623291015625,
+    0.031005859375,
+    1
+  ],
+  "surfaceInvariant": true,
+  "litChanged": true
+}

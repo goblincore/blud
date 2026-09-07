@@ -2264,3 +2264,48 @@ describe('final-hit analytic normal integration', () => {
     for (const src of [MAP_BODY, CONE_MARCH, DEPTH_PREPASS_MARCH, WOUND_SHADOW]) expect(src).not.toContain('ngBody(');
   });
 });
+
+// Hybrid deferred M1 task 2: MARCH_BODY is assembled from named sections so
+// the deferred surface entry (deferred-sdf.ts) shares the trace and material
+// text verbatim. These pin the ASSEMBLY — the surface entry itself is pinned
+// in deferred-sdf.test.ts.
+describe('MARCH_BODY section split (hybrid deferred M1 task 2)', () => {
+  it('is exactly fn marchBody + params + trace + surface-prep + light', async () => {
+    const m = await import('./march.wgsl');
+    expect(m.MARCH_BODY).toBe(
+      `fn marchBody${m.MARCH_BODY_PARAMS}${m.MARCH_BODY_TRACE}${m.MARCH_BODY_SURFACE_PREP}${m.MARCH_BODY_LIGHT}`,
+    );
+    // The entry point still satisfies the wgslFn ^-anchor.
+    expect(MARCH_BODY.startsWith('fn marchBody(')).toBe(true);
+  });
+
+  it('the wet/specPow/glow hoist is arithmetic-neutral: each term defined ONCE, before the flashlight', () => {
+    // The hoist exists so the surface entry can exit before lighting while
+    // sharing the terms. A duplicated definition would mean the two entries
+    // diverged — the failure this split exists to prevent.
+    expect(MARCH_BODY.match(/\blet specPow\b/g)).toHaveLength(1);
+    expect(MARCH_BODY.match(/var wet = /g)).toHaveLength(1);
+    expect(MARCH_BODY.match(/let glow = /g)).toHaveLength(1);
+    expect(MARCH_BODY.indexOf('let specPow')).toBeLessThan(MARCH_BODY.indexOf('ANALYTIC FLASHLIGHT'));
+    expect(MARCH_BODY.indexOf('let wetWound')).toBeLessThan(MARCH_BODY.indexOf('ANALYTIC FLASHLIGHT'));
+    expect(MARCH_BODY.indexOf('let glow =')).toBeLessThan(MARCH_BODY.indexOf('ANALYTIC FLASHLIGHT'));
+    // shine consumes the shared exponent — the legacy inline mix, named.
+    expect(MARCH_BODY).toContain('let shine = pow(max(dot(n, H), 0.0), specPow);');
+    expect(MARCH_BODY).toContain('let specPow = mix(mix(128.0, 4.0, surfCfg.y), 220.0, gloss);');
+  });
+
+  it('the light tail keeps every light-dependent term — nothing leaked into the shared sections', async () => {
+    const m = await import('./march.wgsl');
+    for (const marker of [
+      'ANALYTIC FLASHLIGHT', 'ambientAt(', 'woundShadow(', 'levelShadow(',
+      'var fleshLit', 'softShoulder(', '0.04045',
+    ]) {
+      expect(m.MARCH_BODY_LIGHT).toContain(marker);
+      // The trace and surface-prep are the sections the surface entry reuses;
+      // they must stay light-free (signatures legitimately NAME the light
+      // params — check the bodies only).
+      expect(m.MARCH_BODY_TRACE).not.toContain(marker);
+      expect(m.MARCH_BODY_SURFACE_PREP).not.toContain(marker);
+    }
+  });
+});

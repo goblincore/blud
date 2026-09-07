@@ -394,3 +394,86 @@ describe('wound union-reach bound (close-up wound-cull task, 2026-09-05)', () =>
     view.dispose();
   });
 });
+
+// Hybrid deferred M1 task 2: the opt-in surface output. The G-buffer WGSL
+// itself is pinned in deferred-sdf.test.ts; these pin the VIEW side — that
+// no existing caller opts in implicitly, that the legacy depth-alpha output
+// survives, and that a surface view keeps the whole view contract.
+describe('deferred surface output mode (hybrid deferred M1 task 2)', () => {
+  // The material as NodeMaterial-shaped — mrtNode/outputNode/colorNode/
+  // depthNode are NodeMaterial slots, null unless the builder set them.
+  type MarchMat = {
+    mrtNode: { outputNodes: Record<string, unknown> } | null;
+    outputNode: unknown; colorNode: unknown; depthNode: unknown;
+    side: THREE.Side; depthWrite: boolean;
+  };
+  const marchMat = (view: ReturnType<typeof createZombieGpuView>): MarchMat =>
+    (view.object as THREE.Mesh).material as unknown as MarchMat;
+
+  it('an ordinary createZombieGpuView(body, existingOpts) stays on legacy output', () => {
+    const view = createZombieGpuView(body, {});
+    const mat = marchMat(view);
+    // No MRT anywhere, and the legacy lit RGB + clip-depth-in-alpha output
+    // (the sdf-layer composite's depth channel) is intact.
+    expect(mat.mrtNode).toBeNull();
+    expect(mat.outputNode).toBeTruthy();
+    expect(mat.colorNode).toBeTruthy();
+    expect(mat.depthNode).toBeTruthy();
+    expect(mat.side).toBe(THREE.BackSide);
+    expect(mat.depthWrite).toBe(true);
+    view.dispose();
+  });
+
+  it('output: surface emits the four named attachments and NO legacy colour/alpha output', () => {
+    const view = createZombieGpuView(body, { output: 'surface' });
+    const mat = marchMat(view);
+    expect(mat.mrtNode).toBeTruthy();
+    const names = Object.keys(mat.mrtNode!.outputNodes);
+    expect(names.sort()).toEqual(
+      ['albedoRoughness', 'normalMetalness', 'emissionClass', 'surfaceDepth'].sort(),
+    );
+    // The mrtNode IS the output struct (the task-1 MRTNode mechanism), so the
+    // legacy colorNode/outputNode must NOT be set — a stray lit/depth-alpha
+    // output would fight the MRT contract.
+    expect(mat.colorNode).toBeNull();
+    expect(mat.outputNode).toBeNull();
+    // The hardware depthNode still carries the traced hit depth: the proxy
+    // box depth-tests exactly as the lit path does.
+    expect(mat.depthNode).toBeTruthy();
+    expect(mat.depthWrite).toBe(true);
+    expect(mat.side).toBe(THREE.BackSide);
+    view.dispose();
+  });
+
+  it('a surface view keeps the full view contract: same uniforms block, same setters, same disposal', () => {
+    const view = createZombieGpuView(body, { output: 'surface' });
+    // Same uniform block shape the lit view binds — one binding block feeds
+    // both entries (the 81-input parser pin lives in deferred-sdf.test.ts).
+    expect(view.uniforms.counts.value.x).toBeGreaterThan(0);
+    // Proxy geometry and the cone twin are present and unchanged.
+    expect(view.object).toBeInstanceOf(THREE.Mesh);
+    expect(view.coneObject).toBeInstanceOf(THREE.Mesh);
+    // The mutators all run against the surface view unchanged.
+    const wounds: [number, number, number][] = [[0, 1.0, 0.35]];
+    view.setWounds(wounds, [0.2], [1], [0]);
+    expect(view.uniforms.woundCfg.value.x).toBe(1);
+    view.setRootShift(0.5, -0.25);
+    expect(view.uniforms.faceCfg3.value.z).toBeCloseTo(0.5, 6);
+    view.setFaceTexture(blankFaceTexture(), new THREE.Vector4(1, 1, 0, 0), 0.5);
+    expect(view.uniforms.faceCfg2.value.y).toBeCloseTo(0.5, 6);
+    view.update(body);
+    expect(view.getTileGroups().length).toBeGreaterThan(0);
+    // Owns and disposes its own fallback volume like the lit view.
+    view.dispose();
+  });
+
+  it('the cone and depth-prepass twins never enter surface mode', () => {
+    // The deferred SDF scene gets view.object only; the twins keep their
+    // own single-output materials regardless of the view's output mode.
+    const view = createZombieGpuView(body, { output: 'surface' });
+    const coneMat = (view.coneObject as THREE.Mesh).material as unknown as MarchMat;
+    expect(coneMat.mrtNode).toBeNull();
+    expect(coneMat.outputNode).toBeTruthy();
+    view.dispose();
+  });
+});

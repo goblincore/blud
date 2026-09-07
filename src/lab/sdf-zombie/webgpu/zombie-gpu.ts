@@ -38,6 +38,7 @@ import {
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
   ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS,
 } from './march.wgsl';
+import { sdfSurfaceMarch, sdfSurfaceMrtNodes } from './deferred-sdf';
 
 export interface ZombieGpuView {
   object: THREE.Object3D;
@@ -849,6 +850,14 @@ export function createMarchMaterial(
   levelShadow?: { light: THREE.SpotLight },
   rays?: MarchRayOverride,
   depthPre?: DepthPreSource,
+  // Hybrid deferred M1 (task 2), POSITIONALLY LAST. 'lit' (the default) is
+  // the existing path, byte-identical. 'surface' swaps the entry for
+  // sdfSurfaceMarch — SAME signature, so the one binding block below serves
+  // both — and replaces the lit outputNode with the four named G-buffer MRT
+  // attachments (deferred-sdf.ts). The march argument is ignored in surface
+  // mode: the whole point is that no caller-supplied variant of the marcher
+  // may diverge from the production trace/material sections.
+  output: 'lit' | 'surface' = 'lit',
 ) {
   const dataNode = dataTex instanceof THREE.Texture
     ? texture(dataTex)
@@ -870,7 +879,7 @@ export function createMarchMaterial(
       ? (levelShadow.light.shadow.map?.depthTexture ?? fallbackLevelShadowTexture())
       : fallbackLevelShadowTexture(),
   );
-  const marched = march({
+  const marched = (output === 'surface' ? sdfSurfaceMarch : march)({
     worldPos: (rays?.worldPos ?? positionWorld) as never,
     camPos: cameraPosition,
     data: dataNode,
@@ -1048,9 +1057,33 @@ export function createMarchMaterial(
 
   // Depth from the marched hit, so the body composites with real geometry.
   // WebGPU clip z is already [0,1] — no `* 0.5 + 0.5` remap, unlike the GLSL.
-  const hitPos = add(cameraPosition, mul(rayDir, marched.w as never));
+  //
+  // SURFACE MODE (hybrid deferred M1 task 2): the trace result is cached with
+  // toVar so the whole fragment — three MRT readbacks, the surfaceDepth
+  // attachment and this depthNode — evaluates the march ONCE. The readbacks
+  // additionally take the cached result as an input (the `dep` parameter in
+  // deferred-sdf.ts), which is what orders their global reads AFTER the trace
+  // write in the generated WGSL; toVar alone does not prove that ordering.
+  const tracedHit = output === 'surface'
+    ? (marched as unknown as { toVar: (name: string) => Swizzled }).toVar('sdfTrace')
+    : marched;
+  const hitPos = add(cameraPosition, mul(rayDir, tracedHit.w as never));
   const clip = mul(cameraProjectionMatrix, mul(cameraViewMatrix, vec4(hitPos, 1.0)));
   const depth = clip.z.div(clip.w);
+
+  if (output === 'surface') {
+    // The four named attachments (deferred-surface.ts) via the material-level
+    // mrtNode — the same mechanism as the task-1 mesh producer. depthNode
+    // keeps the REAL traced hit depth in the hardware depth buffer, so the
+    // proxy box depth-tests exactly as the lit path does. No colorNode/
+    // outputNode: with a material mrtNode the output struct IS the MRT (the
+    // task-1 note on MRTNode.js), and the deferred SDF target has no legacy
+    // depth-alpha channel to feed.
+    material.mrtNode = sdfSurfaceMrtNodes(tracedHit, depth) as never;
+    material.depthNode = depth;
+    material.depthWrite = true;
+    return material;
+  }
 
   material.colorNode = vec4(marched.xyz as never, 1.0);
   material.depthNode = depth;
@@ -1342,6 +1375,18 @@ export interface GpuViewOpts {
    * ORGANS only and counts2.x becomes the organ count.
    */
   packBones?: boolean;
+  /**
+   * Hybrid deferred M1 (task 2): 'surface' makes this view's march material
+   * emit the four named surface G-buffer attachments (deferred-sdf.ts,
+   * class 2 flesh) instead of lit colour, for the deferred layer's SDF
+   * producer pass. Default 'lit' — every existing caller keeps the legacy
+   * lit + depth-alpha output without opting in. The traced body, normals,
+   * wounds and constants are IDENTICAL in both modes; surface mode only
+   * exits before the light-dependent tail. The view's proxy geometry,
+   * update/setWounds/setFaceTexture and disposal rules are unchanged, and
+   * task 3 reaches the producer mesh/material through view.object.
+   */
+  output?: 'lit' | 'surface';
 }
 
 /** Wires an externally-owned GPU binding into a view: the material gets the
@@ -1456,7 +1501,7 @@ export function createZombieGpuView(
     dataTex, volumeTex, u,
     marchBody,
     opts.cone, opts.occluder, tileNodes, opts.shell, opts.prev, opts.levelShadow,
-    undefined, opts.depthPre);
+    undefined, opts.depthPre, opts.output);
 
   // The coarse twin: same field, same proxy box, no shading, its own mesh on
   // its own layer. Writes the conservative start distance into .x, and the

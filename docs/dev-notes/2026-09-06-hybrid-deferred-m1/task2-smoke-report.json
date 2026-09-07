@@ -1,0 +1,60 @@
+{
+  "adapter": {
+    "maxColorAttachments": 8,
+    "maxColorAttachmentBytesPerSample": 32
+  },
+  "fleshPixelCount": 43975,
+  "sample": {
+    "pixel": [
+      400,
+      300
+    ],
+    "depth": 0.9774133563041687,
+    "cls": 2,
+    "emissionRgb": [
+      0,
+      0,
+      0
+    ],
+    "normal": [
+      0.0224151611328125,
+      -0.44091796875,
+      0.89697265625
+    ],
+    "metal": 0,
+    "albedo": [
+      0.5517578125,
+      0.14404296875,
+      0.168212890625
+    ],
+    "rough": 0.150390625,
+    "normalLen": 0.9997354853537092
+  },
+  "corner": {
+    "depth": 1,
+    "cls": 0
+  },
+  "classDepthMismatches": 0,
+  "wrongClass": 0,
+  "surfaceInvariant": true,
+  "woundDepthDiffs": 36228,
+  "woundAlbedoDiffs": 92004,
+  "parityCompared": 43975,
+  "parityMaxDiff": 0,
+  "shaders": {
+    "totalCompiled": 14,
+    "surfaceShaderCount": 1,
+    "mrtReadbackShaderCount": 1,
+    "litShaderCount": 1,
+    "perSurfaceShader": [
+      {
+        "marchCallFound": true,
+        "marchLoops": 1,
+        "readbackCallsAfterMarch": true,
+        "readbackCallsFound": true
+      }
+    ],
+    "litHasNoSurfaceGlobals": true
+  },
+  "consoleErrors": []
+}
