@@ -6,10 +6,11 @@
 // Every check is an ASSERTION against real GPU output: router-adapted room
 // coverage, on-device alphaTest survival through the G-buffer pass, scoped
 // exclusion of forward/unsupported/unregistered renderables, late kit-child
-// discovery with adapter receiver bits, and the deterministic shared light
+// discovery with adapter receiver bits, the deterministic shared light
 // list (flashlight slot 0, inactive muzzle omitted, 16-slot cap, muzzle
-// invariance of the flashlight entry). Evidence lands in
-// docs/dev-notes/2026-09-06-hybrid-deferred-m2/.
+// invariance of the flashlight entry), and live SOURCE-material tuning
+// reaching the CACHED adapter's raw surface output (review fix). Evidence
+// lands in docs/dev-notes/2026-09-06-hybrid-deferred-m2/.
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 
@@ -184,6 +185,31 @@ try {
   const shot = await send('Page.captureScreenshot', { format: 'png' });
   writeFileSync(`${out}/task3-scene.png`, Buffer.from(shot.result.data, 'base64'));
   check('capture-written', { file: `${out}/task3-scene.png` });
+
+  // ---- live source tuning reaches the CACHED adapter (review fix) ---------------
+  // The setGunTuning flow end-to-end on device: mutate the SOURCE Standard
+  // material after its first draw, step (which draws through the router),
+  // then read the RAW surface channels — not the returned settings — at the
+  // floor anchor. The floor's roughness is scalar × roughnessMap texel, so
+  // the roughness ratio (not a fixed delta) is the robust assertion.
+  const surfBefore = await evaluate('__deferredScene.readFloorSurface()');
+  await evaluate('__deferredScene.tuneFloorMaterial({ roughness: 0.2, metalness: 0.85 })');
+  await evaluate('__deferredScene.step(2)');
+  const surfAfter = await evaluate('__deferredScene.readFloorSurface()');
+  await evaluate('__deferredScene.tuneFloorMaterial({ roughness: 0.95, metalness: 0.0 })'); // restore the authored finish
+  await evaluate('__deferredScene.step(1)');
+  assert.ok(surfBefore.roughness > 0.3, `floor must start matte (authored 0.95 through a roughnessMap), got ${surfBefore.roughness}`);
+  assert.ok(surfBefore.metalness < 0.05, `floor must start non-metal (authored 0.0), got ${surfBefore.metalness}`);
+  assert.ok(
+    surfAfter.roughness < surfBefore.roughness * 0.5,
+    `raw surface roughness must DROP with the source (map-scaled): ${surfBefore.roughness} -> ${surfAfter.roughness}`,
+  );
+  assert.ok(
+    surfAfter.metalness > 0.7,
+    `raw surface metalness must RISE with the source: ${surfBefore.metalness} -> ${surfAfter.metalness}`,
+  );
+  assert.deepEqual(surfAfter.pixel, surfBefore.pixel, 'both reads must sample the same floor pixel');
+  check('live-source-tuning-reaches-adapter', { before: surfBefore, after: surfAfter });
 
   results.pass = true;
 } finally {

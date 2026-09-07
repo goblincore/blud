@@ -168,7 +168,8 @@ async function main() {
   };
   const room = new THREE.Group();
   room.name = 'room';
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(ROOM_HALF * 2, ROOM_HALF * 2), mkMat(floorTex, 3));
+  const floorMaterial = mkMat(floorTex, 3); // held for the live-tuning seam
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(ROOM_HALF * 2, ROOM_HALF * 2), floorMaterial);
   floor.rotation.x = -Math.PI / 2;
   room.add(floor);
   for (const x of [-ROOM_HALF, ROOM_HALF]) {
@@ -377,6 +378,36 @@ async function main() {
     },
     fire(on: boolean) { muzzleLight.intensity = on ? 4 : 0; },
     moveMuzzle() { muzzleRig.position.set(4, 0.5, -2); },
+    /** LIVE-TUNING SEAM (M2 review fix): mutate a SOURCE Standard material
+     *  exactly the way game-main's setGunTuning does — scalars first, then
+     *  needsUpdate = true (three's setter bumps the version counter) — and
+     *  report what the source now carries. The G-buffer must follow on the
+     *  next draw through the router's cached adapter. */
+    tuneFloorMaterial(t: { roughness?: number; metalness?: number }) {
+      if (t.roughness !== undefined) floorMaterial.roughness = t.roughness;
+      if (t.metalness !== undefined) floorMaterial.metalness = t.metalness;
+      floorMaterial.needsUpdate = true;
+      return { roughness: floorMaterial.roughness, metalness: floorMaterial.metalness };
+    },
+    /** RAW surface channels at the floor anchor pixel: roughness is
+     *  albedoRoughness.w and metalness is normalMetalness.w (both vec4s are
+     *  <vec3 term, scalar> — the scalar is the FOURTH channel, the +3 read
+     *  index; index 2 of normalMetalness is the normal's z). Read from the
+     *  RESOLVED target — the resolve pass copies producer attachment data
+     *  through by nearest depth (the light pass writes to the lit target,
+     *  never into resolved), so these are the unlit material terms. */
+    async readFloorSurface() {
+      const resolved = deferredLayer.targets.resolved;
+      const albedoRoughness = await readAttachment(handle, resolved, 'albedoRoughness');
+      const normalMetalness = await readAttachment(handle, resolved, 'normalMetalness');
+      const { pixel } = project(LAYOUT.floor);
+      const o = (pixel[1] * albedoRoughness.width + pixel[0]) * 4;
+      return {
+        pixel,
+        roughness: albedoRoughness.data[o + 3]!,
+        metalness: normalMetalness.data[o + 3]!,
+      };
+    },
     lights() { return lastLights; },
     /** Flashlight entry must be identical before/after moving only the muzzle. */
     muzzleInvariance() {
