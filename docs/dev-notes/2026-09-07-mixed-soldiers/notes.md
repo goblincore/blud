@@ -15,3 +15,11 @@ Verification: unit/integration coverage for layout connectivity and spawn cleara
 References: [Valve — The AI Systems of Left 4 Dead](https://cdn.fastly.steamstatic.com/apps/valve/2009/ai_systems_of_l4d_mike_booth.pdf), especially separation of perception, path following and local avoidance; [Jeff Orkin — Three States and a Plan](https://gdcvault.com/play/1013282/Three-States-and-a-Plan). These informed the small coordinator; this does not introduce a GOAP framework.
 
 Validation results: full suite **233 files / 3,676 tests passed**; production build passed (existing large-chunk advisory); final focused navigation/director/actor recheck **36 tests passed** after preserving committed halts. Real WebGPU smoke observed all three room5 soldiers firing across runs, red/brass instance pools filling, shell centres resting at y=.012, and room5 zombie14 following the retreat into room2. No browser errors. Soldier cross-room movement is also exercised directly by the actor integration test. Screenshot: `/tmp/mixed-soldiers.png` (local ephemeral QA artifact).
+
+## Main integration
+
+Integrated main through `e2f0e0b7` (bounded/localized wound rendering) without conflicts. Both real WebGPU smoke drivers passed on the combined code: multiple shooters, floor shells, cross-room pursuit, then soldier corpse mesh baking and restoration on a new hit. Production build passed. The traffic pass snapshots desired routes before yielding, so reversed actor enumeration cannot remove the right-of-way decision; a regression covers the original narrower passage too.
+
+The live port5184 server serves `.worktrees/soldier-polish`; keep that worktree/branch while the server is in use. Main checkout's pre-existing reference-image deletion and untracked face assets are unrelated and were left untouched. Integration is local; no remote push requested.
+
+Final combined verification: **236 test files / 3,697 tests passed**, TypeScript and production build passed, both WebGPU smoke drivers passed with zero browser errors. Main is advanced to this tested code plus these notes.
