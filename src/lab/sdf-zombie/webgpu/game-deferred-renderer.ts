@@ -60,6 +60,7 @@ import {
   type GameLightCandidate,
 } from './game-deferred-lights';
 import { createGameDeferredScene, type GameDeferredScene } from './game-deferred-scene';
+import { type SurfaceAttachmentName } from './deferred-surface';
 
 // ---------------------------------------------------------------------------
 // Boot-mode resolution (pure — unit-tested without a renderer)
@@ -232,9 +233,30 @@ export interface GameDeferredRendererDiagnostics {
   canvasDepthWrites: boolean;
 }
 
+/** One raw RESOLVED G-buffer texel (see readSurfaceAt). Vectors are plain
+ *  number tuples so the value crosses the CDP boundary untouched. */
+export interface GameSurfaceSample {
+  /** Layer pixel the NDC point mapped to. */
+  pixel: [number, number];
+  size: { width: number; height: number };
+  albedo: [number, number, number];
+  roughness: number;
+  normal: [number, number, number];
+  metalness: number;
+  cls: number;
+  depth: number;
+}
+
 export interface GameDeferredRenderer {
   /** The scene router. game-main registers objects/routes as it spawns them. */
   readonly router: GameDeferredScene;
+  /** RAW G-buffer sample at one NDC point of the RESOLVED surface target
+   *  (composition review fix evidence seam): roughness is albedoRoughness.w,
+   *  metalness is normalMetalness.w, plus albedo RGB, the view-space normal,
+   *  the packed surface class and the resolved depth. Bounded: one full-
+   *  attachment read per attachment, only when a gate asks. Null on a
+   *  legacy boot (game-main guards). */
+  readSurfaceAt(ndcX: number, ndcY: number): Promise<GameSurfaceSample>;
   /** PostAaSink. The post chain hands us the capture target when any effect
    *  is active, null for the canvas; the layer AND the forward pass present
    *  into whatever this holds. */
@@ -365,6 +387,57 @@ export function createGameDeferredRenderer(deps: GameDeferredRendererDeps): Game
     setDebugView(view) {
       layer.setDebugView(view);
       lastDebugView = view;
+    },
+
+    async readSurfaceAt(ndcX, ndcY) {
+      const target = layer.targets.resolved;
+      const w = target.width, h = target.height;
+      const px = Math.min(w - 1, Math.max(0, Math.round(((ndcX + 1) / 2) * w)));
+      const py = Math.min(h - 1, Math.max(0, Math.round(((1 - ndcY) / 2) * h)));
+      // One full-attachment read per attachment (the fixture-proven pattern —
+      // partial-rect readbacks hit the 256-byte row-padding hazard for free).
+      // Half floats decode manually (WebGPU rows are 256-byte aligned, so a
+      // row's uint16 stride is paddedRowBytes/2); the r32f depth reads as f32.
+      const read = async (name: SurfaceAttachmentName): Promise<Float32Array> => {
+        const textureIndex = target.textures.findIndex((t) => t.name === name);
+        if (textureIndex < 0) throw new Error(`resolved target is missing attachment '${name}'`);
+        const tex = target.textures[textureIndex]!;
+        const channels = tex.format === THREE.RedFormat ? 1 : 4;
+        const half = tex.type === THREE.HalfFloatType;
+        const raw = await renderer.readRenderTargetPixelsAsync(target, 0, 0, w, h, textureIndex);
+        const src = new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength);
+        const out = new Float32Array(channels);
+        if (!half) {
+          const f32 = new Float32Array(src.buffer, src.byteOffset, src.byteLength / 4);
+          for (let c = 0; c < channels; c++) out[c] = f32[(py * w + px) * channels + c]!;
+          return out;
+        }
+        const rowBytes = w * channels * 2;
+        const paddedRowBytes = Math.ceil(rowBytes / 256) * 256;
+        const u16 = new Uint16Array(src.buffer, src.byteOffset, src.byteLength / 2);
+        const rowU16 = py * (paddedRowBytes / 2); // stride in uint16 units
+        const o = px * channels;
+        for (let c = 0; c < channels; c++) {
+          const bits = u16[rowU16 + o + c]!;
+          const s = (bits & 0x8000) >> 15, exp = (bits & 0x7c00) >> 10, frac = bits & 0x3ff;
+          out[c] = exp === 0 ? (s ? -0 : 0) * (frac ? Number.NaN : 1)
+            : exp === 31 ? (s ? -1 : 1) * (frac ? Number.NaN : Infinity)
+            : (s ? -1 : 1) * (1 + frac / 1024) * 2 ** (exp - 15);
+        }
+        return out;
+      };
+      const [albedo, nm, ec, dep] = await Promise.all([
+        read('albedoRoughness'), read('normalMetalness'), read('emissionClass'), read('surfaceDepth'),
+      ]);
+      return {
+        pixel: [px, py], size: { width: w, height: h },
+        albedo: [albedo[0]!, albedo[1]!, albedo[2]!],
+        roughness: albedo[3]!,
+        normal: [nm[0]!, nm[1]!, nm[2]!],
+        metalness: nm[3]!,
+        cls: ec[3]!,
+        depth: dep[0]!,
+      };
     },
 
     render(camera) {

@@ -61,6 +61,23 @@ const evaluate = async (expression) => {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const check = (name, detail) => { checks.push({ name, detail }); console.log('PASS', name, JSON.stringify(detail)); };
 
+/** Mean 7x7 colour at one pixel of a FRESH capture (the loop is frozen
+ *  between steps, so this is the same frame `shot` saw). */
+const pointColor = async (x, y) => {
+  const s = await send('Page.captureScreenshot', { format: 'png' });
+  return await evaluate(`(async () => {
+    const res = await fetch('data:image/png;base64,' + ${JSON.stringify(s?.result?.data)});
+    const bmp = await createImageBitmap(await res.blob());
+    const c = new OffscreenCanvas(bmp.width, bmp.height);
+    const ctx = c.getContext('2d');
+    ctx.drawImage(bmp, 0, 0);
+    const d = ctx.getImageData(${Math.max(0, x - 3)}, ${Math.max(0, y - 3)}, 7, 7).data;
+    let r = 0, g = 0, b = 0; const n = d.length / 4;
+    for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; }
+    return { r: Math.round(r / n), g: Math.round(g / n), b: Math.round(b / n) };
+  })()`);
+};
+
 const aimYawAt = (px, pz, tx, tz) => Math.atan2(tx - px, -(tz - pz));
 
 const frameStats = async (b64, regions) => await evaluate(`(async () => {
@@ -226,8 +243,65 @@ try {
   const fpvDelta = Math.abs(cornerStats.fpv.lum - openStats.fpv.lum);
   assert.ok(fpvDelta >= 6,
     `gun band must change when the viewmodel is pushed against geometry (delta ${fpvDelta})`);
-  check('null-front-behind-depth', { open: openStats.fpv, corner: cornerStats.fpv, delta: fpvDelta });
+  // EXPLICITLY AN IMAGE-CHANGE SANITY, NOT DEPTH PROOF: a broad band delta
+  // shows the frame changed, not that any forward pixel was depth-rejected.
+  // The conclusive front/behind/far evidence is the controlled probe stage
+  // below (and its post-aa-on repetition).
+  check('wall-push-image-change', { open: openStats.fpv, corner: cornerStats.fpv, delta: fpvDelta });
   noNewErrors('null-output depth');
+
+  // CONTROLLED FRONT/BEHIND/FAR DEPTH PROBES (the review's occlusion
+  // requirement). Three blended depth-tested forward sprites at world points
+  // chosen from RAW resolved-depth pixels read back first:
+  //   front  — 0.55 m from the body centre toward the eye: nearer than the
+  //            body surface its pixel shows -> MUST composite (visible red),
+  //   behind — 0.12 m PAST the body centre: its pixel's ray terminates on
+  //            the body surface in front of it -> MUST be depth-rejected,
+  //   far    — 1.35 m above the body, in verified empty space (far
+  //            sentinel exactly 1) -> MUST draw (no false occlusion).
+  const depthSpots = (z) => {
+    let tx = (z.pos[0] + 1.8) - z.pos[0], tz = z.pos[2] - z.pos[2];
+    const tl = Math.hypot(tx, tz); tx /= tl; tz /= tl;
+    return {
+      front: [z.pos[0] + tx * 0.55, 1.2, z.pos[2] + tz * 0.55],
+      behind: [z.pos[0] - tx * 0.12, 1.2, z.pos[2] - tz * 0.12],
+      far: [z.pos[0], 2.55, z.pos[2]],
+    };
+  };
+  const RED = (c) => c.r > 190 && c.g < 80 && c.b < 80;
+  const BLUE = (c) => c.b > 190 && c.r < 80 && c.g < 80;
+  const depthProbeStage = async (label) => {
+    const spots = depthSpots(z0);
+    const sp = {};
+    for (const [k, w] of Object.entries(spots)) {
+      sp[k] = await evaluate(`__sdfGame.screenPosOf(${w[0]}, ${w[1]}, ${w[2]})`);
+      assert.ok(sp[k] && Math.abs(sp[k].x) <= 0.95 && Math.abs(sp[k].y) <= 0.95,
+        `${label}: ${k} probe must project inside the frame (${JSON.stringify(sp[k])})`);
+    }
+    const raw = {};
+    for (const k of ['front', 'behind', 'far']) {
+      raw[k] = await evaluate(`__sdfGame.readSurfaceAt(${sp[k].x}, ${sp[k].y})`);
+    }
+    assert.ok(raw.front.depth < 1 && raw.behind.depth < 1,
+      `${label}: front/behind probe pixels must sit on opaque body depth (${raw.front.depth}/${raw.behind.depth})`);
+    assert.ok(raw.front.cls < 16.5,
+      `${label}: front probe pixel must not be the viewmodel (cls ${raw.front.cls})`);
+    assert.ok(raw.far.depth >= 0.9995,
+      `${label}: far probe pixel must be the empty far sentinel (depth ${raw.far.depth})`);
+    await evaluate(`__sdfGame.spawnDepthProbes(${JSON.stringify([spots.front, spots.behind, spots.far])}); __sdfGame.step(2);`);
+    const px = (k) => [Math.round((sp[k].x + 1) / 2 * 1280), Math.round((1 - sp[k].y) / 2 * 800)];
+    const cFront = await pointColor(...px('front'));
+    const cBehind = await pointColor(...px('behind'));
+    const cFar = await pointColor(...px('far'));
+    await evaluate('__sdfGame.clearDepthProbes(); __sdfGame.step(1);');
+    assert.ok(RED(cFront), `${label}: FRONT probe must composite over the opaque body pixel (got ${JSON.stringify(cFront)})`);
+    assert.ok(!RED(cBehind), `${label}: BEHIND probe must be depth-rejected by the body surface (got ${JSON.stringify(cBehind)})`);
+    assert.ok(BLUE(cFar), `${label}: FAR probe must draw over the empty far sentinel (got ${JSON.stringify(cFar)})`);
+    return { front: cFront, behind: cBehind, far: cFar, rawDepth: { front: raw.front.depth, behind: raw.behind.depth, far: raw.far.depth } };
+  };
+  const nullProbes = await depthProbeStage('null');
+  check('null-front-behind-depth-probes', nullProbes);
+  noNewErrors('controlled depth probes (null path)');
 
   // Resize under the null path.
   await send('Emulation.setDeviceMetricsOverride', { width: 1100, height: 700, deviceScaleFactor: 1, mobile: false });
@@ -282,15 +356,81 @@ try {
   assert.equal(restoredDiag.lights.flashKey.fleshShoulderKnee, 0.65, 'defaults restored');
   noNewErrors('flashlight endpoints');
 
-  // 5. LIVE GUN/HAND TUNING reaches the composed surface (adapter refresh).
-  const tuningA = await shot('comp-tuning-default.png', { fpv: FPV_REGIONS.fpv }, {});
+  // 5. LIVE GUN/HAND TUNING reaches the composed surface AND the raw
+  //    G-buffer channels. The FPV gear is a small, dark fraction of the old
+  //    broad band and its metalness is AUTHORED at 1 already, so a
+  //    roughness-only nudge cannot move a 480x290 band mean (measured on
+  //    this HEAD: band delta 0 while an 80px box at the gun moved 50 lum).
+  //    The rebuilt probe asserts what the review demands:
+  //    (a) RAW resolved-G-buffer channels at the named gun landmark (the
+  //        breech world point) follow BOTH scalars after a draw,
+  //    (b) the COMPOSED tight box around the gun's actual screen position
+  //        visibly changes across a matte/mirror contrast,
+  //    (c) the hand's raw NORMAL follows handNormalScale (map re-copy).
+  const breech = await evaluate('__sdfGame.breechWorld()[0]');
+  const gunSp = await evaluate(`__sdfGame.screenPosOf(${breech[0]}, ${breech[1]}, ${breech[2]})`);
+  assert.ok(gunSp && Math.abs(gunSp.x) <= 0.9 && Math.abs(gunSp.y) <= 0.9, `gun landmark in frame: ${JSON.stringify(gunSp)}`);
+  const gunRaw0 = await evaluate(`__sdfGame.readSurfaceAt(${gunSp.x}, ${gunSp.y})`);
+  assert.ok(gunRaw0, 'readSurfaceAt seam must answer');
+  assert.ok(gunRaw0.cls > 16.5 && gunRaw0.cls < 17.5,
+    `the breech texel must be the level-only mesh route (cls 17), got ${gunRaw0.cls}`);
   const current = await evaluate('__sdfGame.setGunTuning({})');
+  // Matte contrast: moves BOTH knobs away from the authored finish.
+  await evaluate('__sdfGame.setGunTuning({ roughness: 0.5, metalness: 0.2 }); __sdfGame.step(3);');
+  const gunRawMatte = await evaluate(`__sdfGame.readSurfaceAt(${gunSp.x}, ${gunSp.y})`);
+  const tuningA = await shot('comp-tuning-matte.png', { fpv: FPV_REGIONS.fpv, gunBox }, {});
+  // Mirror contrast: roughness floor, metalness ceiling.
   await evaluate('__sdfGame.setGunTuning({ roughness: 0.05, metalness: 1 }); __sdfGame.step(3);');
-  const tuningB = await shot('comp-tuning-mirror.png', { fpv: FPV_REGIONS.fpv }, {});
-  const tuneDelta = Math.abs(tuningA.fpv.lum - tuningB.fpv.lum);
-  assert.ok(tuneDelta >= 4, `setGunTuning must move the composed gun band (delta ${tuneDelta})`);
+  const gunRawMirror = await evaluate(`__sdfGame.readSurfaceAt(${gunSp.x}, ${gunSp.y})`);
+  const tuningB = await shot('comp-tuning-mirror.png', { fpv: FPV_REGIONS.fpv, gunBox }, {});
+  const sameTexel = gunRawMatte.depth === gunRaw0.depth && gunRawMirror.depth === gunRaw0.depth;
+  assert.ok(sameTexel, `all three samples must hit the same texel (depths ${gunRaw0.depth}/${gunRawMatte.depth}/${gunRawMirror.depth})`);
+  assert.ok(Math.abs(gunRawMatte.roughness - 0.5) <= 0.02,
+    `raw roughness must follow the matte scalar (got ${gunRawMatte.roughness})`);
+  assert.ok(Math.abs(gunRawMatte.metalness - 0.2) <= 0.02,
+    `raw metalness must follow the matte scalar (got ${gunRawMatte.metalness})`);
+  assert.ok(Math.abs(gunRawMirror.roughness - 0.05) <= 0.02,
+    `raw roughness must follow the mirror scalar (got ${gunRawMirror.roughness})`);
+  assert.ok(Math.abs(gunRawMirror.metalness - 1) <= 0.02,
+    `raw metalness must follow the mirror scalar (got ${gunRawMirror.metalness})`);
+  assert.ok(
+    Math.abs(gunRawMatte.albedo[0] - gunRaw0.albedo[0]) <= 0.02
+    && Math.abs(gunRawMirror.albedo[0] - gunRaw0.albedo[0]) <= 0.02,
+    `unlit albedo must NOT move when only scalars change (${JSON.stringify(gunRaw0.albedo)} -> ${JSON.stringify(gunRawMatte.albedo)})`);
+  const gunBox = [
+    Math.max(0, Math.round((gunSp.x + 1) / 2 * 1280) - 40),
+    Math.max(0, Math.round((1 - gunSp.y) / 2 * 800) - 40),
+    Math.min(1280, Math.round((gunSp.x + 1) / 2 * 1280) + 40),
+    Math.min(800, Math.round((1 - gunSp.y) / 2 * 800) + 40),
+  ];
+  const tuneDelta = Math.abs(tuningA.gunBox.lum - tuningB.gunBox.lum);
+  assert.ok(tuneDelta >= 20,
+    `the composed gun must visibly change matte->mirror at its own screen box ${JSON.stringify(gunBox)} (delta ${tuneDelta})`);
+  // (c) the HAND: find a level-only mesh texel with goblin-green albedo in
+  // the lower-left FPV quadrant, then prove handNormalScale re-copies the
+  // normal map through the adapter into the G-buffer.
+  let hand = null;
+  outer: for (let nx = -0.4; nx <= -0.05; nx += 0.035) {
+    for (let ny = -0.9; ny <= -0.5; ny += 0.04) {
+      const s = await evaluate(`__sdfGame.readSurfaceAt(${nx.toFixed(3)}, ${ny.toFixed(3)})`);
+      if (s.cls > 16.5 && s.cls < 17.5 && s.albedo[1] > 0.08 && s.albedo[1] > s.albedo[0] * 1.25) {
+        hand = { nx, ny, n: s.normal }; break outer;
+      }
+    }
+  }
+  assert.ok(hand, 'no goblin-green hand texel found in the lower-left FPV quadrant');
+  await evaluate(`__sdfGame.setGunTuning({ handNormalScale: ${(current.handNormalScale ?? 2) * 3} }); __sdfGame.step(3);`);
+  const handAfter = await evaluate(`__sdfGame.readSurfaceAt(${hand.nx.toFixed(3)}, ${hand.ny.toFixed(3)})`);
+  const handNormalDelta = Math.abs(handAfter.normal[0] - hand.n[0])
+    + Math.abs(handAfter.normal[1] - hand.n[1]) + Math.abs(handAfter.normal[2] - hand.n[2]);
+  assert.ok(handNormalDelta > 0.02,
+    `handNormalScale must move the hand texel's raw NORMAL (L1 ${handNormalDelta.toFixed(4)})`);
   await evaluate(`__sdfGame.setGunTuning({ roughness: ${current.roughness}, metalness: ${current.metalness}, envMapIntensity: ${current.envMapIntensity}, handNormalScale: ${current.handNormalScale} }); __sdfGame.step(2);`);
-  check('live-gun-tuning', { before: tuningA.fpv, after: tuningB.fpv, delta: tuneDelta, restored: current });
+  check('live-gun-tuning', {
+    gunTexel: { cls: gunRaw0.cls, depth: gunRaw0.depth, box: gunBox },
+    raw: { matte: gunRawMatte, mirror: gunRawMirror },
+    composedDelta: tuneDelta, handNormalDelta, restored: current,
+  });
   noNewErrors('gun tuning');
 
   // 4. CONE-EDGE STABILITY: muzzle-lit body at the beam boundary — sweeping
@@ -315,6 +455,18 @@ try {
     `flesh tone must stay continuous across the beam-boundary sweep (delta ${edgeDelta})`);
   check('cone-edge-stability', { a: edgeA.torso, b: edgeB.torso, delta: edgeDelta });
   noNewErrors('cone edge');
+
+  // 5b. THE SAME PROBES ON THE POST-AA REDIRECT PATH (fxaa+smear on, lens
+  //     kept at k=0 so pixel positions stay unwarped): depth compositing
+  //     must survive the output-target transition. Stage 6 below then
+  //     restores the authored lens.
+  await evaluate('__sdfGame.setFxaa(true); __sdfGame.setSmear(0.25); __sdfGame.setFisheye(90); __sdfGame.step(4);');
+  const diagRedirectNow = await evaluate('__sdfGame.deferredDiagnostics()');
+  assert.equal(diagRedirectNow.canvasDepthWrites, false, 'post-aa on must turn the canvas-depth present OFF');
+  assert.ok(diagRedirectNow.sizes.outputTarget, 'post-aa on must hand the coordinator a real target');
+  const redirectProbes = await depthProbeStage('redirect');
+  check('redirect-front-behind-depth-probes', redirectProbes);
+  noNewErrors('controlled depth probes (redirect path)');
 
   // 6. NEAR/MID/FAR CALIBRATION TABLE (post-aa ON again, default beam).
   await evaluate('__sdfGame.setFxaa(true); __sdfGame.setSmear(0.25); __sdfGame.setFisheye(60); __sdfGame.step(3);');

@@ -4020,6 +4020,21 @@ async function main() {
   }, () => captureTelemetryScene('visual-issue')) : null;
   import.meta.hot?.dispose(() => telemetryControls?.dispose());
 
+  // CONTROLLED FORWARD DEPTH PROBES (evidence seam backing __sdfGame
+  // spawnDepthProbes/clearDepthProbes below). Deliberately UNREGISTERED:
+  // the router hides unregistered renderables from the mesh/sdf G-buffer
+  // passes and leaves them alone in the forward route, so these sprites
+  // only ever composite depth-tested over the presented frame.
+  const depthProbes: THREE.Sprite[] = [];
+  const clearDepthProbes = () => {
+    for (const s of depthProbes) {
+      scene.remove(s);
+      s.material.dispose();
+    }
+    depthProbes.length = 0;
+  };
+  import.meta.hot?.dispose(clearDepthProbes);
+
   (window as unknown as { __sdfGame: unknown }).__sdfGame = {
     telemetry: telemetryControls ? {
       start: () => telemetryControls.start(), stop: () => telemetryControls.stop(), mark: () => telemetryControls.mark(),
@@ -4456,6 +4471,39 @@ async function main() {
      *  touching the source THREE lights (task 6/7 calibration seam). */
     setDeferredLightGain: (v: number) => deferredApi?.setLightGain(v),
     setDeferredDebugView: (v: DeferredDebugView) => deferredApi?.setDebugView(v),
+    /** RAW G-buffer sample at an NDC point (composition review fix evidence
+     *  seam): lets a gate assert the gun/hand SURFACE CHANNELS — not just
+     *  metadata — follow setGunTuning on the live frame. Null-safe on legacy. */
+    readSurfaceAt: (ndcX: number, ndcY: number) =>
+      deferredApi ? deferredApi.readSurfaceAt(ndcX, ndcY) : Promise.resolve(null),
+    /** CONTROLLED FORWARD DEPTH PROBES (composition review fix evidence
+     *  seam). Spawns up to three unregistered blended sprites (pure R, G, B —
+     *  depth-tested, no depth write) at world points the caller picks from
+     *  known depth pixels, so a gate can distinguish FRONT-visible /
+     *  BEHIND-occluded / empty-far behaviour of the composed frame instead of
+     *  inferring depth from broad image deltas. Unregistered renderables are
+     *  left alone by the forward route and hidden from the G-buffer passes
+     *  by the router, so the probes only ever composite. */
+    spawnDepthProbes: (spots: Vec3[]) => {
+      clearDepthProbes();
+      const colors = [0xff0000, 0x00ff00, 0x0000ff];
+      for (let i = 0; i < spots.length && i < 3; i++) {
+        const s = new THREE.Sprite(new THREE.SpriteMaterial({
+          color: colors[i]!,
+          transparent: true,
+          blending: THREE.NormalBlending,
+          depthWrite: false,
+          depthTest: true,
+        }));
+        s.name = `depth-probe-${i}`;
+        s.position.set(spots[i]![0], spots[i]![1], spots[i]![2]);
+        s.scale.setScalar(0.14);
+        scene.add(s);
+        depthProbes.push(s);
+      }
+      return depthProbes.map((s) => s.name);
+    },
+    clearDepthProbes: () => clearDepthProbes(),
     // ---------------------------------------------------------------
     // THE FISHEYE. setFisheye(deg) sets the apparent vertical FOV at
     // screen CENTRE; setRenderFov(deg) sets what the camera actually
