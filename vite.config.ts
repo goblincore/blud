@@ -74,6 +74,10 @@ function labDevSave(): Plugin {
 }
 
 export default defineConfig({
+  // Worktrees share node_modules, but must not overwrite another dev server's
+  // optimized Three/TSL modules: mixed module copies collide on node IDs and
+  // silently drop shader includes. Keep the optimizer cache in this checkout.
+  cacheDir: resolve(__dirname, '.vite'),
   define: { 'import.meta.env.VITE_TELEMETRY_BUILD': JSON.stringify(telemetryBuild) },
   plugins: [labDevSave()],
   test: {

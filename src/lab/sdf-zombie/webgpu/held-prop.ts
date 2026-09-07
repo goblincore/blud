@@ -1,6 +1,6 @@
 // src/lab/sdf-zombie/webgpu/held-prop.ts
 //
-// A held polygon prop (the soldier's shorty) on the DEFAULT layer, posed
+// A held polygon prop (the soldier's shotgun) on the DEFAULT layer, posed
 // every frame from the motion frame's gun pose (carry.ts gunPoseFromArm, the
 // right forearm) with the post-shot muzzle rise on top; released on collapse
 // or gib into prop-drop.ts's tumble, where it lands and stays.
@@ -10,6 +10,7 @@
 // with flesh with nothing added here.
 import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { Vec3 } from '../types';
 import { GUN_GRIP, gunPoint, muzzleRise, type GunPose } from '../carry';
 import { releaseProp, stepDrop, type DropState } from '../prop-drop';
@@ -24,17 +25,39 @@ export interface HeldProp {
   release(handVel: Vec3, seed: number): void;
   /** Advance a released prop. No-op while held or resting. */
   step(dt: number, floorY: number): void;
-  /** World muzzle (midpoint of the two bores) for the last posed frame. */
-  muzzle(): Vec3;
+  /** World muzzle for the last posed frame; optional forward offset for gas. */
+  muzzle(forward?: number): Vec3;
   /** True once released. */
   readonly released: boolean;
+  /** Reclaim the prop for a fresh body; the caller supplies its next held pose. */
+  reset(): void;
   dispose(): void;
 }
 
-export async function loadHeldProp(url: string): Promise<HeldProp> {
+export async function loadHeldProp(url: string, renderer?: THREE.WebGPURenderer): Promise<HeldProp> {
   const gltf = await new GLTFLoader().loadAsync(url);
   const object = new THREE.Group();
   object.add(gltf.scene);
+  // Like the armour, PBR gun metal needs something to reflect. This is a
+  // prop-only reflection source; it does not change the level's lighting.
+  let environment: THREE.RenderTarget | null = null;
+  if (renderer) {
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const room = new RoomEnvironment();
+    environment = pmrem.fromScene(room, 0.04);
+    room.dispose();
+    pmrem.dispose();
+    object.traverse(o => {
+      const material = (o as THREE.Mesh).material;
+      for (const m of Array.isArray(material) ? material : material ? [material] : []) {
+        const std = m as THREE.MeshStandardMaterial;
+        if (std.isMeshStandardMaterial) {
+          std.envMap = environment!.texture;
+          std.envMapIntensity = 0.65;
+        }
+      }
+    });
+  }
   object.matrixAutoUpdate = false;
   const pos = new THREE.Vector3(), q = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1);
   let last: GunPose = { root: [0, 0, 0], quat: [0, 0, 0, 1] };
@@ -50,6 +73,10 @@ export async function loadHeldProp(url: string): Promise<HeldProp> {
   return {
     object,
     get released() { return drop !== null; },
+    reset() {
+      drop = null;
+      object.visible = true;
+    },
     pose(gun, sinceFire, bodyRight) {
       if (drop) return;
       const rise = muzzleRise(sinceFire);
@@ -70,8 +97,12 @@ export async function loadHeldProp(url: string): Promise<HeldProp> {
       last = { root: drop.pos, quat: drop.quat };
       write(drop.pos, drop.quat);
     },
-    muzzle() { return gunPoint(last, GUN_GRIP.muzzle); },
+    muzzle(forward = 0) {
+      return gunPoint(last, [GUN_GRIP.muzzle[0], GUN_GRIP.muzzle[1], GUN_GRIP.muzzle[2] + forward]);
+    },
     dispose() {
+      object.removeFromParent();
+      environment?.dispose();
       object.traverse(o => {
         const mesh = o as THREE.Mesh;
         mesh.geometry?.dispose();

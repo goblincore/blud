@@ -1,5 +1,6 @@
 // src/lab/sdf-zombie/carry.test.ts
 import { describe, it, expect } from 'vitest';
+import shotgunSource from '../../../public/assets/lab/soldier-shotgun.glb?raw';
 import {
   CARRIES, GUN_GRIP, armPivot, gunPoseFromArm, lookQuat, gunPoint,
 } from './carry';
@@ -55,6 +56,28 @@ describe('carry maths', () => {
       const fore = gunPoint(pose, GUN_GRIP.foreHand);
       expect(len(sub(fore, shoulderL)), name).toBeLessThan(0.48);
       expect(len(sub(fore, shoulderL)), name).toBeGreaterThan(0.15);
+    }
+  });
+});
+
+
+describe('soldier shotgun asset attachments', () => {
+  it('keeps hand spacing compact while the exaggerated muzzle extends beyond the support hand', () => {
+    expect(len(sub(GUN_GRIP.foreHand, GUN_GRIP.gripHand))).toBeLessThan(0.24);
+    expect(len(sub(GUN_GRIP.muzzle, GUN_GRIP.gripHand))).toBeGreaterThan(0.47);
+  });
+
+  it('runtime grip and shot origins match the exported model locators', () => {
+    // GLB metadata is UTF-8 JSON before the binary chunk; the binary payload
+    // is irrelevant to the attachment contract and is never decoded here.
+    const binaryChunk = shotgunSource.indexOf('BIN\0');
+    const model = JSON.parse(shotgunSource.slice(shotgunSource.indexOf('{'), shotgunSource.lastIndexOf('}', binaryChunk) + 1));
+    const nodes = new Map<string, { translation: number[] }>(model.nodes.map((node: { name: string; translation: number[] }) => [node.name, node]));
+    for (const [name, expected] of [
+      ['Grip_Hand', GUN_GRIP.gripHand], ['Fore_Hand', GUN_GRIP.foreHand], ['Muzzle', GUN_GRIP.muzzle],
+    ] as const) {
+      const actual = nodes.get(name)!.translation;
+      expected.forEach((value, i) => expect(actual[i], name).toBeCloseTo(value, 6));
     }
   });
 });

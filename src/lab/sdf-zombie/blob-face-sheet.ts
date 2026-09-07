@@ -43,7 +43,8 @@ export interface FaceSheetParams {
   /** Eye brightness, 0..1. This is what keys the emissive glow. */
   eyeGlow: number;
   /**
-   * Luma above which a texel EMITS. The shader's glow mask is
+   * Luma above which a texel EMITS, or red dominance when eyeGlowRedOnly=1.
+   * The default shader glow mask is
    * smoothstep(eyeGlowCut, 1, luma), so this is what decides whether a baked
    * face's painted eyes light up at all -- and it was panel-only until
    * 2026-09-04, which meant a character could not keep its own value.
@@ -64,6 +65,9 @@ export interface FaceSheetParams {
    * it moves no existing character.
    */
   eyeGlowAmp: number;
+  /** Select bright saturated red texels for glow, including in Replace mode.
+   * Off by default so photo decals and existing luma masks stay unchanged. */
+  eyeGlowRedOnly: number;
   /**
    * With `decal 0` (multiply), modulate by the bake's LUMINANCE instead of its
    * rgb. Multiplying two coloured values compounds their hue -- a skin-toned
@@ -216,6 +220,7 @@ export const DEFAULT_SHEET: FaceSheetParams = {
   eyeGlow: 1.0,
   eyeGlowCut: 0.88,
   eyeGlowAmp: 1.6,
+  eyeGlowRedOnly: 0,
   blendLuma: 1,
   texRelief: 1.4,
   texStrength: 1.0,

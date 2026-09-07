@@ -9,6 +9,15 @@ import { MAX_PRIMS } from '../validate';
 
 const STRIDE = 64; // any stride; tests below read through the same layout math
 
+it('keeps the wounded limb identity and clears it when a slot is reused for an unscoped chunk wound', () => {
+  const t = new Float32Array(STRIDE * DATA_ROWS * 4);
+  writeWounds(t, [[0,1.4,0]], [.13], [1], [0], undefined, undefined,
+    { stride: STRIDE }, undefined, [false], [{ cluster: 2, start: 18, count: 6 }]);
+  expect(read(t, ROW_WOUND_FLAGS, 0)).toEqual([0,3,18,24]);
+  writeWounds(t, [[0,1.4,0]], [.13], [1], [0], undefined, undefined, { stride: STRIDE });
+  expect(read(t, ROW_WOUND_FLAGS, 0)).toEqual([0,0,0,0]);
+});
+
 const read = (texels: Float32Array, row: number, i: number) =>
   [...texels.slice((row * STRIDE * 4 + i * 4), (row * STRIDE * 4 + i * 4) + 4)];
 

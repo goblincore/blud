@@ -1,13 +1,42 @@
 // src/lab/sdf-zombie/webgpu/character-view.test.ts
-import { describe, it, expect } from 'vitest';
-import { buildCharacterBody, compileCharacterSheet } from './character-view';
+import { describe, it, expect, vi } from 'vitest';
+import { buildCharacterBody, compileCharacterSheet, createWoundRing } from './character-view';
 import { characterEntry, characterNames } from '../character-registry';
+import { severLimb } from '../sever';
 
 // The GPU half needs a device and is covered by the capture gate instead.
 // These cover the pure half: building and sheet compilation, which is where
 // the bugs have actually been.
 
 describe('buildCharacterBody', () => {
+  it('uploads the shoulder wound with arm ownership rather than a whole-body carve', () => {
+    const body = buildCharacterBody(characterEntry('soldier'), [0,0,0], []);
+    const primIdx = body.prims.findIndex(p => p.bone === 'upperarm.l');
+    const ring = createWoundRing();
+    ring.set([{ primIdx, local:[0,0,0], radius:.13, type:'blast', ageSec:0 }]);
+    const setWounds = vi.fn();
+    ring.refresh({ setWounds } as any, body, 0);
+    const owners = setWounds.mock.calls[0]![7];
+    const cluster = body.prims[primIdx]!.cluster;
+    expect(body.clusters[cluster]!.limb).toBe('armL');
+    expect(owners).toEqual([{ cluster, start:body.clusters[cluster]!.start, count:body.clusters[cluster]!.count }]);
+  });
+
+  it('retains anatomical wound ownership after its arm cluster is severed', () => {
+    const body = buildCharacterBody(characterEntry('soldier'), [0,0,0], []);
+    const primIdx = body.prims.findIndex(p => p.bone === 'upperarm.l');
+    const ring = createWoundRing();
+    ring.set([{ primIdx, local:[0,0,0], radius:.13, type:'blast', ageSec:0 }]);
+    const severed = severLimb(body, 'armL').body;
+    const cluster = body.prims[primIdx]!.cluster;
+    expect(severed.clusters[cluster]!.alive).toBe(false);
+    const setWounds = vi.fn();
+    ring.refresh({ setWounds } as any, severed, 0);
+    expect(setWounds.mock.calls[0]![7]).toEqual([
+      { cluster, start:body.clusters[cluster]!.start, count:body.clusters[cluster]!.count },
+    ]);
+  });
+
   it('builds every registered character without errors', () => {
     for (const name of characterNames()) {
       const errs: string[] = [];
@@ -27,6 +56,19 @@ describe('buildCharacterBody', () => {
 });
 
 describe('compileCharacterSheet', () => {
+  it('opts only the soldier into red-pixel emission while retaining Replace', () => {
+    for (const name of characterNames()) {
+      const { sheet, error } = compileCharacterSheet(characterEntry(name));
+      expect(error).toBeNull();
+      if (name === 'soldier') {
+        expect(sheet).toMatchObject({ decal: 1, eyeGlowRedOnly: 1 });
+        expect(sheet!.eyeGlowAmp).toBeGreaterThan(0);
+      } else if (sheet) {
+        expect(sheet.eyeGlowRedOnly).toBe(0);
+      }
+    }
+  });
+
   it('returns the blob own sheet when it declares one', () => {
     // The soldier has an owner-tuned bake; the zombie has no sheet block.
     expect(compileCharacterSheet(characterEntry('soldier')).sheet).not.toBeNull();

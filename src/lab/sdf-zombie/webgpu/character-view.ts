@@ -43,6 +43,7 @@ import type { VisualWound } from '../shared-wounds/torso';
 import type { FaceSheetParams } from '../blob-face-sheet';
 import { loadKit, type KitOverlay } from './kit-overlay';
 import { loadHeldProp, type HeldProp } from './held-prop';
+import { createMuzzleFlash } from './character-effects';
 import { createZombieGpuView, type ZombieGpuView } from './zombie-gpu';
 import {
   MAX_WOUNDS, pushWound, WOUND_PROFILES, woundCarveNormal, woundWorldPos,
@@ -341,6 +342,15 @@ export function createWoundRing(): WoundRing {
           // an uncapped slot explicitly so it cannot inherit an old cap.
           return n ? { n, depth: w.carveDepth ?? 0 } : visual ? { n: [0, 0, 0] as Vec3, depth: 0 } : null;
         }),
+        wounds.map(w => {
+          // Severing retains wound history and primitive indices. A hidden
+          // cluster still owns its wounds; null would turn them into global
+          // cutters that can erase surviving head/torso flesh.
+          const cluster = posed.clusters.findIndex(c =>
+            w.primIdx >= c.start && w.primIdx < c.start + c.count);
+          const c = posed.clusters[cluster];
+          return c ? { cluster, start: c.start, count: c.count } : null;
+        }),
       );
     },
   };
@@ -387,6 +397,8 @@ export interface CharacterView {
   muzzle(): Vec3 | null;
   /** Let the held prop go (collapse, gib). */
   releaseProp(vel: Vec3, seed: number): void;
+  /** Restore equipment and clear detached armor when a fresh body replaces this one. */
+  resetEquipment(): void;
   dispose(): void;
 }
 
@@ -395,6 +407,8 @@ export interface CharacterViewOpts {
   start: Vec3;
   renderer: THREE.WebGPURenderer;
   scene: THREE.Scene;
+  /** Transparent character effects, rendered after the SDF composite. */
+  effectsScene?: THREE.Scene;
   /** Passed through to createZombieGpuView unchanged — the caller still owns
    *  the sdf layer, the flashlight and the lighting preset. Use the exact
    *  parameter type createZombieGpuView already declares; do not invent a
@@ -449,15 +463,25 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
   // simply undressed/unarmed, which is exactly how it rendered before.
   let kit: KitOverlay | null = null;
   let heldProp: HeldProp | null = null;
+  let disposed = false;
+  const wounds = createWoundRing();
+  const muzzleFlash = entry.profile.prop && opts.effectsScene ? createMuzzleFlash() : null;
+  if (muzzleFlash) opts.effectsScene!.add(muzzleFlash.object);
   const kitUrl = entry.kit;
   if (kitUrl) {
-    loadKit(kitUrl, opts.renderer, [0, 0, 0])
-      .then(k => { kit = k; opts.scene.add(k.object); })
+    loadKit(kitUrl, opts.renderer, [0, 0, 0], entry.name === 'soldier')
+      .then(k => {
+        if (disposed) { k.dispose(); return; }
+        kit = k; opts.scene.add(k.object, k.debris);
+      })
       .catch(e => console.error(`[kit] ${kitUrl} failed to load; rendering the body undressed`, e));
   }
   if (entry.profile.prop) {
-    loadHeldProp(entry.profile.prop.url)
-      .then(p => { heldProp = p; opts.scene.add(p.object); })
+    loadHeldProp(entry.profile.prop.url, opts.renderer)
+      .then(p => {
+        if (disposed) { p.dispose(); return; }
+        heldProp = p; opts.scene.add(p.object);
+      })
       .catch(e => console.error(`[prop] ${entry.profile.prop!.url} failed to load; rendering unarmed`, e));
   }
 
@@ -465,7 +489,7 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
     entry,
     body,
     gpu,
-    wounds: createWoundRing(),
+    wounds,
     get palette() { return out.palette; },
     get kit() { return kit; },
     get prop() { return heldProp; },
@@ -475,13 +499,16 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
       // the gun; the kit simply keeps following the (fallen) rig.
       if (!kit && !heldProp) return;
       const frames = boneFrames(body, bound, bodyYaw);
-      kit?.pose(frames);
+      kit?.pose(frames, { body, wounds: wounds.all(), dt });
       if (heldProp) {
         if (frame?.gun && !heldProp.released) {
           heldProp.pose(frame.gun, sinceFire, rotateYaw([1, 0, 0], bodyYaw));
         }
         if (frame?.collapsed && !heldProp.released) heldProp.release([0, 0, 0], releaseSeed);
         heldProp.step(Math.min(dt, 1 / 30), 0);
+        // Gas begins just outside the bore, so the barrel doesn't punch a
+        // black hole through the hot core when viewed from the side.
+        muzzleFlash?.pose(!heldProp.released && frame?.gun ? heldProp.muzzle(0.018) : null, sinceFire);
       }
     },
     muzzle() {
@@ -489,11 +516,21 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
     },
     releaseProp(vel, seed) {
       heldProp?.release(vel, seed);
+      muzzleFlash?.pose(null, Infinity);
+    },
+    resetEquipment() {
+      kit?.resetDamage();
+      heldProp?.reset();
+      muzzleFlash?.pose(null, Infinity);
     },
     dispose() {
+      if (disposed) return;
+      disposed = true;
+      kit?.object.removeFromParent();
       gpu.dispose();
       kit?.dispose();
       heldProp?.dispose();
+      muzzleFlash?.dispose();
     },
   };
 }

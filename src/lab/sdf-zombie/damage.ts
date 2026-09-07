@@ -30,6 +30,8 @@ export const WOUND_PROFILES: Record<WoundType, WoundProfile> = {
 };
 
 export interface Wound {
+  /** Exposed stump decoration, not another projectile injury. */
+  injuryIgnored?: boolean;
   /** Index into the built primitive array — the primitive this wound rides. */
   primIdx: number;
   /** Hit position in that primitive's local frame (u, v, w along the basis

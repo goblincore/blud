@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import { parseBlob } from './sdf-zombie/blob-parse';
 import { emitBlob } from './sdf-zombie/blob-emit';
 import { compileSheetImage } from './sdf-zombie/blob-compile';
+import { MATERIAL_SLIDERS } from './sdf-zombie/panel';
 
 export interface SaveResult { ok: boolean; path?: string; error?: string }
 
@@ -48,18 +49,28 @@ export function saveFace(root: string, name: string, bytes: Uint8Array): SaveRes
   return { ok: true, path: rel };
 }
 
-/** Rewrites the character's `palette` baseColor line in place. */
-export function savePalette(root: string, name: string, payload: { baseColor: number[] }): SaveResult {
+/** Saves skin color and the material section's sliders, preserving other authored fields. */
+export function savePalette(root: string, name: string, payload: unknown): SaveResult {
   const b = loadBlob(root, name);
   if ('error' in b) return { ok: false, error: b.error };
-  const c = (payload as { baseColor?: unknown }).baseColor;
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload))
+    return { ok: false, error: 'expected a skin/material object' };
+  const values = payload as Record<string, unknown>;
+  const c = values.baseColor;
   if (!Array.isArray(c) || c.length !== 3 || !c.every(v => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1))
     return { ok: false, error: 'baseColor must be three numbers in 0..1' };
-  const keys = Object.keys(payload);
-  if (keys.length !== 1 || keys[0] !== 'baseColor') return { ok: false, error: 'only baseColor can be saved' };
+  const palette: Record<string, number[]> = { baseColor: c.map(v => Math.round(v * 1000) / 1000) };
+  for (const [key, value] of Object.entries(values)) {
+    if (key === 'baseColor') continue;
+    const slider = MATERIAL_SLIDERS.find(s => s.key === key);
+    if (!slider) return { ok: false, error: `unknown material setting: ${key}` };
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < slider.min || value > slider.max)
+      return { ok: false, error: `${key} must be a number in ${slider.min}..${slider.max}` };
+    palette[key] = [value];
+  }
   let out: string;
   try {
-    out = emitBlob(parseBlob(b.src), { palette: { baseColor: c.map(v => Math.round(v * 1000) / 1000) } });
+    out = emitBlob(parseBlob(b.src), { palette });
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
   const rel = blobPath(name);
   writeFileSync(join(root, rel), out);

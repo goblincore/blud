@@ -70,7 +70,7 @@ export const SOLDIER_PROFILE: MotionProfile = {
   armStyle: 'carry',
   carries: { walk: 'low', run: 'chest', fire: 'aim' },
   turnRate: 5.5,
-  prop: { url: '/assets/lab/shorty-double.glb' },
+  prop: { url: '/assets/lab/soldier-shotgun.glb' },
 };
 
 const BY_NAME: Record<string, MotionProfile> = {
