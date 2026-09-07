@@ -130,6 +130,23 @@ function isActive(light: THREE.Light): boolean {
 export function buildGameDeferredLights(
   candidates: readonly GameLightCandidate[],
   cameraWorld: THREE.Vector3,
+  /** M2 task 5 (game wiring): multiplies every converted light's intensity
+   *  WITHOUT touching the source lights — the game adapter's one exposure
+   *  knob. A bare number is the scale itself; `{ intensityScale }` is the
+   *  named form. Default (no third argument) is 1 and keeps task-3
+   *  behaviour byte-identical. Deliberate: three's decay-2 approximation is
+   *  calibrated per capture in tasks 6-7 through this single scale, not
+   *  through per-light fudges. */
+  scale: number | { intensityScale?: number } = 1,
+): GameDeferredLightSet {
+  return buildGameDeferredLightsInner(candidates, cameraWorld,
+    typeof scale === 'object' ? (scale.intensityScale ?? 1) : scale);
+}
+
+function buildGameDeferredLightsInner(
+  candidates: readonly GameLightCandidate[],
+  cameraWorld: THREE.Vector3,
+  intensityScale: number,
 ): GameDeferredLightSet {
   const seen = new Set<string>();
   for (const c of candidates) {
@@ -144,7 +161,11 @@ export function buildGameDeferredLights(
 
   const take = (c: GameLightCandidate) => {
     if (lights.length >= MAX_DEFERRED_LIGHTS) { dropped.push(c.id); return; }
-    lights.push(convertPointOrSpot(c.light as THREE.PointLight | THREE.SpotLight));
+    const converted = convertPointOrSpot(c.light as THREE.PointLight | THREE.SpotLight);
+    // The scale rides the CONVERTED record — source lights are never mutated
+    // (data-only conversion is this module's whole contract).
+    if (intensityScale !== 1) converted.intensity *= intensityScale;
+    lights.push(converted);
     ids.push(c.id);
   };
 

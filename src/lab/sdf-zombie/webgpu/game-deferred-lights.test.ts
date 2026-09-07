@@ -227,6 +227,23 @@ describe('data-only conversion', () => {
     ).toThrow(/dup/);
   });
 
+  it('task-5 intensityScale: default 1 is the identity; the scale hits the converted record only', () => {
+    const fire = new THREE.PointLight(new THREE.Color(1.0, 0.46, 0.13), 5, 8, 2);
+    const identity = buildGameDeferredLights(
+      [{ id: 'p', role: 'practical', light: fire }], ORIGIN,
+    ).lights[0]!;
+    const scaled = buildGameDeferredLights(
+      [{ id: 'p', role: 'practical', light: fire }], ORIGIN, { intensityScale: 1.6 },
+    ).lights[0]!;
+    expect(identity.intensity).toBeCloseTo(5 * DEFERRED_INTENSITY_SCALE, 6);
+    expect(scaled.intensity).toBeCloseTo(5 * DEFERRED_INTENSITY_SCALE * 1.6, 6);
+    // DATA-ONLY: the source light is never mutated by the scale.
+    expect(fire.intensity).toBe(5);
+    // Everything else about the conversion is unchanged by the scale.
+    expect(scaled.range).toBe(identity.range);
+    expect(scaled.color).toEqual(identity.color);
+  });
+
   it('drops non point/spot practicals instead of guessing their conversion', () => {
     const dir = new THREE.DirectionalLight(0xffffff, 1);
     const result = buildGameDeferredLights([{ id: 'sun', role: 'practical', light: dir }], ORIGIN);
