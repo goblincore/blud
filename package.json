@@ -4,7 +4,9 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --open /sdf-game.html",
+    "dev:fps": "vite --open /sdf-game.html",
+    "dev:legacy": "vite --open /index.html",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",

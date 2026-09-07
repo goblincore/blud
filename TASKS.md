@@ -18,6 +18,24 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ---
 
+## Orientation — active vs. historical
+
+> **The active project is the SDF-rendered FPS.** It lives in
+> `src/lab/sdf-zombie/` (the "lab" name is historical, not obsolete). The
+> **retired project** is the sprite/bestiary/arena procedural-generation game
+> and the old NotBlood simulation — kept runnable only as a **behavior
+> reference** for dynamite and gibbing.
+>
+> Entries below that describe the retired sprite game or the old NotBlood sim
+> (the pre-SDF M-series and the old-game backlog) are **historical / reference
+> only** — preserved for provenance, not current work. Do not treat historical
+> roadmap entries as in-flight.
+>
+> Current vs. proposed source layout: [docs/architecture/repository-map.md](docs/architecture/repository-map.md).
+> Legacy dynamite/gibbing reference: [docs/reference/legacy-dynamite-gibbing.md](docs/reference/legacy-dynamite-gibbing.md).
+
+---
+
 ## Current focus
 
 **[x] Soldier combat/animation polish — owner approved; merged to main (909b6a87).** Fixed movement, aim, recoil, gait and lab controls. [First pass](docs/dev-notes/2026-09-06-soldier-polish/notes.md).

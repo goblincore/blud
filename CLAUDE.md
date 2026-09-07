@@ -1,38 +1,53 @@
 # Blud — Claude Code project context
 
-Blood-inspired FPS (short-run roguelike, Weird West × online brainrot setting, claymation sprite enemies with voxel-gib explosions). **TypeScript + Three.js + Rapier3D.js**. Priority: gib/weapon physics *feel* first.
+Blood-inspired FPS. TypeScript + Three.js + Rapier3D.js.
 
-## First thing every session
+**The active project is the SDF-rendered FPS** in
+[`src/lab/sdf-zombie/`](src/lab/sdf-zombie) (the "lab" name is historical, not a
+marker of obsolete code). The retired sprite/bestiary/arena/NotBlood game is
+reference-only for behavior comparison (dynamite, gibbing).
 
-**Read [`TASKS.md`](TASKS.md) first.** It's the cross-cutting status board: what's in-flight, what's blocked, what's done, and what the next action is. Everything else in this file is a pointer.
+## Start here
+
+- **Status board:** [`TASKS.md`](TASKS.md) — in-flight, blocked, done, next action.
+- **Source map (current vs. proposed):** [`docs/architecture/repository-map.md`](docs/architecture/repository-map.md)
+- **Legacy dynamite/gibbing reference:** [`docs/reference/legacy-dynamite-gibbing.md`](docs/reference/legacy-dynamite-gibbing.md)
+- **Cross-harness agent context:** [`AGENTS.md`](AGENTS.md)
+
+## Running
+
+| Command | Opens | Target |
+| --- | --- | --- |
+| `npm run dev` / `npm run dev:fps` | `/sdf-game.html` | Active SDF FPS |
+| `npm run dev:legacy` | `/index.html` | Retired legacy game |
+| `npx vite` | *(no browser)* | Plain server for automation |
+
+The retired game and the active FPS's *legacy rendering mode* are **different
+concepts** — do not conflate them.
+
+## Assets
+
+- **Extracted Blood assets are dev placeholders only** — never commit, never
+  ship. `.gitignore` enforces this for `public/assets/**/*-placeholder*` and
+  `assets-source/blood-extracted/`.
+- [`scripts/link-dev-assets.sh`](scripts/link-dev-assets.sh) links the gitignored
+  placeholders from the primary checkout into a worktree (run once per worktree,
+  or the game will not boot). It does not extract them for a fresh clone.
 
 ## Repo layout
 
-| Path                             | Purpose |
-| -------------------------------- | ------- |
-| `TASKS.md`                       | Status board — start here |
-| `docs/superpowers/specs/`        | Design specs (one per direction change) |
-| `docs/superpowers/plans/`        | Implementation plans (one per milestone) |
-| `docs/tuning-sources.md`         | NotBlood-extracted enemy HP, damage, timers, gib threshold (=160) |
-| `docs/tuning-sources-gibs.md`    | Gib picnum map (tile 2154 = hero blood chunk; 1267/8/9/1454/1456 = body chunks) |
-| `docs/dev-notes/`                | Ad-hoc dev notes (sprite extraction, palette decoding, etc) |
-| `scripts/extract_blood_sprites.py` | Blood RFF/ART → PNG (dev placeholder pipeline, never ships) |
-| `scripts/link-dev-assets.sh`     | Link the gitignored Blood placeholders into a fresh worktree (run once per worktree, or the game will not boot) |
-| `assets-source/blood-extracted/` | Cached extracted Blood asset dump (**gitignored, dev only, never ship**) |
-| `src/`                           | Game code (created by M1 dispatch tasks) |
-| `public/`                        | Static web assets served by Vite |
-
-## Reference docs
-
-- Design: [docs/superpowers/specs/2026-04-20-blud-design.md](docs/superpowers/specs/2026-04-20-blud-design.md)
-- Current plan (M1 — engine & movement): [docs/superpowers/plans/2026-04-20-blud-m1-engine-movement.md](docs/superpowers/plans/2026-04-20-blud-m1-engine-movement.md)
-
-## Execution pattern
-
-Implementation runs via `~/go/bin/dispatch-ui` at <http://localhost:8090> using model `zai/glm-5.3-flash` on the `pi` harness (the only zai model with vision — `input: ["text","image"]` — which character work needs, since the agent must read reference plates and its own turntable frames). M1's 11 tasks are already queued at `~/.claude/dispatch/plans/2026-04-20-blud-m1-task-{1..11}.md` with serial `depends_on` chain — trigger task-1 manually, the rest auto-flow.
+| Path | Purpose |
+| --- | --- |
+| `src/lab/sdf-zombie/` | Active SDF game + character tools + WebGPU lab + benchmarks |
+| `src/game/`, `src/sim/`, `src/main.ts` | Retired game + old NotBlood sim (reference only) |
+| `docs/superpowers/specs/` | Design specs (one per direction change) |
+| `docs/superpowers/plans/` | Implementation plans (one per milestone) |
+| `docs/tuning-sources.md`, `docs/tuning-sources-gibs.md` | NotBlood value sources |
+| `docs/dev-notes/` | Ad-hoc dev notes |
+| `public/` | Static web assets served by Vite |
 
 ## Guardrails
 
-- **Extracted Blood assets are dev placeholders only** — never commit to git, never ship. `.gitignore` enforces this for `public/assets/**/*-placeholder*` and `assets-source/blood-extracted/`.
-- **Phase 1 gate (end of M5)**: 30min in the arena must feel fun before writing any level code. Don't build levels on top of bad feel.
-- **When in doubt, update `TASKS.md`** to reflect new state or a newly-discovered task.
+- Extracted Blood assets: dev placeholders only, never commit/ship.
+- Prefer focused tests; don't claim a build/test/GPU pass from lightweight checks.
+- When in doubt, update `TASKS.md` to reflect new state.
