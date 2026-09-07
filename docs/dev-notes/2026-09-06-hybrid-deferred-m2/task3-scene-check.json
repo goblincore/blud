@@ -124,6 +124,27 @@
       "detail": {
         "file": "docs/dev-notes/2026-09-06-hybrid-deferred-m2/task3-scene.png"
       }
+    },
+    {
+      "name": "live-source-tuning-reaches-adapter",
+      "detail": {
+        "before": {
+          "pixel": [
+            394,
+            362
+          ],
+          "roughness": 0.65185546875,
+          "metalness": 0
+        },
+        "after": {
+          "pixel": [
+            394,
+            362
+          ],
+          "roughness": 0.13720703125,
+          "metalness": 0.849609375
+        }
+      }
     }
   ],
   "errors": [],
