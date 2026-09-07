@@ -322,6 +322,8 @@ export function createBoneInstancer(max = 256, options?: SurfaceOutputOptions): 
       normalMetalness: vec4(material.normalNode as never, float(0)),
       emissionClass: vec4(float(0), float(0), float(0), float(kind)),
       surfaceDepth: vec4(clip.z.div(clip.w) as never, float(0), float(0), float(1)),
+      // Mesh response has no authored flesh parameters; still write every MRT lane.
+      surfaceParams: vec4(float(0), float(0), float(0), float(1)),
     }) as never;
     material.blending = THREE.NoBlending; // MRT producer — the M1 mesh rule
     // Route-diagnostic marker ON THE MATERIAL (the same stamp zombie-gpu's

@@ -19,7 +19,7 @@ describe('motion profiles', () => {
     expect(p.gait.walk).toBe(MARCH);
     expect(p.gait.run).toBe(RUN);
     expect(p.carries).toEqual({ walk: 'low', run: 'chest', fire: 'aim' });
-    expect(p.prop?.url).toBe('/assets/lab/shorty-double.glb');
+    expect(p.prop?.url).toBe('/assets/lab/soldier-shotgun.glb');
     expect(p.cruise).toBeGreaterThan(WANDER_TUNING.speed);
   });
   it('runWeight: 0 below the band, 1 above, linear between', () => {

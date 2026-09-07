@@ -67,9 +67,9 @@ export interface Lens {
   renderFovDeg: number;
 }
 
-/** The owner-approved look: render 90 vertical, read 60 at screen centre. */
+/** The owner-approved look: render 72 vertical, read 60 at screen centre. */
 export const FISHEYE_DEFAULTS = {
-  renderFovDeg: 90,
+  renderFovDeg: 72,
   centerFovDeg: 60,
 } as const;
 

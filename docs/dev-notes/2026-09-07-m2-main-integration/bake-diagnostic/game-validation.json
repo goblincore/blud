@@ -1,0 +1,75 @@
+{
+  "phase": "complete",
+  "checks": [
+    {
+      "name": "P5-bake-transition",
+      "detail": {
+        "id": 1,
+        "centre": [
+          3.999967932701111,
+          0.19737785682082176,
+          -4.84812593460083
+        ],
+        "radius": 0.21779043780356785,
+        "offDepth": 0.9456414580345154,
+        "distanceToCentre": 0.20721863332134438,
+        "baked": 1,
+        "totalBakes": 1,
+        "lastBakeInfo": {
+          "verts": 7032,
+          "tris": 14060
+        },
+        "bakedTexelDepth": 0.93789,
+        "bakedNormal": {
+          "dot": 0.369,
+          "nlen": 0.9998,
+          "selectedPixel": [
+            341,
+            357
+          ],
+          "selectedNdc": [
+            -0.14625,
+            -0.19167
+          ],
+          "centreNdc": [
+            -0.14625,
+            -0.19167
+          ]
+        }
+      }
+    }
+  ],
+  "pageErrors": [],
+  "pass": true,
+  "scope": "bake-diagnostic",
+  "fullAcceptance": false,
+  "excludedFeatures": {
+    "boneTubes": "Owner retired this experimental path for visual reasons on 2026-09-07; validate SDF bones and baked geometry instead."
+  },
+  "pageErrorsDropped": 0,
+  "generatedAt": "2026-09-07T23:05:49.279Z",
+  "ports": {
+    "vite": 5376,
+    "cdp": 9376
+  },
+  "viewport": {
+    "width": 800,
+    "height": 600
+  },
+  "records": {
+    "captures": {
+      "task6-baked-chunk.png": {
+        "points": {},
+        "regions": {},
+        "frame": {
+          "nonDarkPct": 40.3,
+          "w": 800,
+          "h": 600
+        }
+      }
+    },
+    "stages": {
+      "bakeViewAttempts": []
+    }
+  }
+}

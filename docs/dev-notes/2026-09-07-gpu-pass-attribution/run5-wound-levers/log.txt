@@ -1,0 +1,388 @@
+lab-servers: starting vite on 5277
+lab-servers: starting chrome (headless) on debug port 9277
+bench http://localhost:5277/sdf-game.html  (1280x800, repeats=2, rooms=3,4)
+backend: webgpu
+  rep0 baseline room3: median 19.63 ms (max chunk 28.40)
+      passes: sdf:march 11.84, cpu:tick 4.30, cpu:phase:wound-hit 4.00, cpu:draw 2.40
+  rep0 baseline room4: median 20.25 ms (max chunk 42.67)
+      passes: sdf:march 12.16, cpu:tick 4.50, cpu:phase:wound-hit 3.40, cpu:draw 2.30
+  rep0 wstep-0.6 room3: median 21.95 ms (max chunk 31.26)
+      passes: sdf:march 13.27, cpu:tick 4.30, cpu:phase:wound-hit 3.90, cpu:draw 2.40
+  rep0 wstep-0.6 room4: median 15.97 ms (max chunk 27.10)
+      passes: sdf:march 9.73, cpu:tick 4.10, cpu:phase:wound-hit 3.70, cpu:draw 2.30
+  rep0 wound-earlyout-off room3: median 16.05 ms (max chunk 23.70)
+      passes: sdf:march 10.59, cpu:tick 4.50, cpu:phase:wound-hit 4.00, cpu:draw 2.50
+  rep0 wound-earlyout-off room4: median 22.53 ms (max chunk 39.26)
+      passes: sdf:march 15.31, cpu:tick 4.60, cpu:phase:wound-hit 4.20, cpu:draw 2.50
+  rep0 wound-cull-off room3: median 20.79 ms (max chunk 30.56)
+      passes: sdf:march 12.47, cpu:tick 4.40, cpu:phase:wound-hit 4.00, cpu:draw 2.50
+  rep0 wound-cull-off room4: median 29.21 ms (max chunk 68.12)
+      passes: sdf:march 19.64, cpu:tick 4.50, cpu:phase:wound-hit 3.60, cpu:draw 2.40
+  rep0 bleed-off room3: median 14.54 ms (max chunk 23.23)
+      passes: sdf:march 10.52, cpu:phase:wound-hit 4.80, cpu:tick 4.10, cpu:draw 2.10
+  rep0 bleed-off room4: median 20.74 ms (max chunk 38.43)
+      passes: sdf:march 14.51, cpu:tick 4.30, cpu:phase:wound-hit 2.70, cpu:draw 2.20
+  rep0 chunks-skip room3: median 19.84 ms (max chunk 29.84)
+      passes: sdf:march 12.20, cpu:phase:wound-hit 4.90, cpu:tick 4.40, cpu:draw 2.40
+  rep0 chunks-skip room4: median 28.40 ms (max chunk 48.41)
+      passes: sdf:march 16.33, cpu:tick 4.60, cpu:phase:wound-hit 2.70, cpu:draw 2.40
+  rep1 baseline room3: median 21.72 ms (max chunk 32.63)
+      passes: sdf:march 13.18, cpu:tick 4.70, cpu:phase:wound-hit 4.30, cpu:draw 2.70
+  rep1 baseline room4: median 26.53 ms (max chunk 47.11)
+      passes: sdf:march 15.59, cpu:tick 4.60, cpu:phase:wound-hit 4.10, cpu:draw 2.40
+  rep1 wstep-0.6 room3: median 20.88 ms (max chunk 33.76)
+      passes: sdf:march 11.83, cpu:tick 4.70, cpu:draw 2.60, cpu:phase:body-step 2.00
+  rep1 wstep-0.6 room4: median 31.93 ms (max chunk 68.80)
+      passes: sdf:march 19.46, cpu:tick 4.80, cpu:phase:wound-hit 4.20, cpu:draw 2.40
+  rep1 wound-earlyout-off room3: median 22.44 ms (max chunk 32.70)
+      passes: sdf:march 12.35, cpu:phase:wound-hit 5.20, cpu:tick 4.80, cpu:draw 2.70
+  rep1 wound-earlyout-off room4: median 20.22 ms (max chunk 35.66)
+      passes: sdf:march 12.07, cpu:tick 5.60, cpu:draw 3.00, cpu:phase:body-step 2.50
+  rep1 wound-cull-off room3: median 19.89 ms (max chunk 36.42)
+      passes: sdf:march 12.80, cpu:tick 5.20, cpu:draw 2.90, gpu:idle 2.30
+  rep1 wound-cull-off room4: median 15.95 ms (max chunk 33.11)
+      passes: sdf:march 11.95, cpu:tick 5.00, cpu:phase:wound-hit 3.10, cpu:draw 2.60
+  rep1 bleed-off room3: median 14.96 ms (max chunk 24.31)
+      passes: sdf:march 9.92, cpu:phase:wound-hit 5.10, cpu:tick 4.30, cpu:draw 2.10
+  rep1 bleed-off room4: median 20.92 ms (max chunk 43.21)
+      passes: sdf:march 14.75, cpu:tick 4.60, cpu:phase:wound-hit 3.80, cpu:draw 2.30
+  rep1 chunks-skip room3: median 15.62 ms (max chunk 25.38)
+      passes: sdf:march 11.56, cpu:phase:wound-hit 4.60, cpu:tick 4.40, cpu:draw 2.60
+  rep1 chunks-skip room4: median 21.73 ms (max chunk 38.20)
+      passes: sdf:march 13.01, cpu:tick 4.50, cpu:phase:wound-hit 3.10, cpu:draw 2.40
+# Per-pass GPU attribution
+
+1280x800, repeats=2, rooms=3,4
+
+Pass ms = median over repeats of the per-frame GPU pass time p50 (overall,
+all segments). Share = of the labelled total. Gap = fenced frame p50 minus
+the labelled total: CPU submit, inter-pass bubbles, unlabelled work.
+
+## baseline
+
+| pass | room 3 ms | share | room 4 ms | share |
+| --- | ---: | ---: | ---: | ---: |
+| sdf:march | 13.18 | 77% | 15.59 | 84% |
+| gpu:idle | 1.93 | 11% | 1.14 | 6% |
+| sdf:polys | 0.57 | 3% | 0.54 | 3% |
+| sdf:composite | 0.21 | 1% | 0.38 | 2% |
+| post:fxaa | 0.36 | 2% | 0.36 | 2% |
+| goo:surface | 0.41 | 2% | 0.32 | 2% |
+| post:blit | 0.17 | 1% | 0.14 | 1% |
+| post:smear | 0.08 | 0% | 0.09 | 0% |
+| sdf:shell-hull | 0.08 | 0% | 0.05 | 0% |
+| sdf:occluder | 0.02 | 0% | 0.03 | 0% |
+| goo:density | 0.01 | 0% | 0.01 | 0% |
+| **labelled total (sum of medians)** | **17.03** | 100% | **18.66** | 100% |
+| GPU span p50 (first start → last end) | 18.47 |  | 20.83 |  |
+| fenced frame p50 | 21.72 |  | 26.53 |  |
+| gap (frame − span) | 3.25 | 15% of frame | 5.70 | 21% of frame |
+
+CPU per frame (ms, median over repeats of p50):
+
+| cpu | room 3 | room 4 |
+| --- | ---: | ---: |
+| cpu:tick | 4.70 | 4.60 |
+| cpu:phase:wound-hit | 4.30 | 4.10 |
+| cpu:draw | 2.70 | 2.40 |
+| cpu:phase:body-step | 2.00 | 2.10 |
+| cpu:phase:blood-simulation-and-sync | 0.10 | 0.10 |
+| cpu:phase:wound-flush | 0.00 | 0.00 |
+| cpu:phase:projectiles-and-hits | 0.00 | 0.00 |
+| cpu:phase:chunks-and-guts | 0.00 | 0.00 |
+| cpu:phase:goo-sync | 0.00 | 0.00 |
+
+Per segment (top passes, room 4):
+
+- **walk** (17.07 ms labelled — droplets 0→0, goo quads 0→0): sdf:march 6.36, cpu:tick 4.10, cpu:draw 2.30, cpu:phase:body-step 1.90, gpu:idle 1.03
+- **fire** (36.13 ms labelled — droplets 0→71, goo quads 0→294): sdf:march 15.59, cpu:phase:wound-hit 6.10, cpu:tick 5.00, cpu:draw 2.50, cpu:phase:body-step 2.10
+- **gib** (41.99 ms labelled — droplets 71→13, goo quads 294→263): sdf:march 25.86, cpu:tick 4.90, cpu:draw 2.50, gpu:idle 2.48, cpu:phase:body-step 2.20
+
+## wstep-0.6
+
+| pass | room 3 ms | share | room 4 ms | share |
+| --- | ---: | ---: | ---: | ---: |
+| sdf:march | 13.27 | 73% | 19.46 | 84% |
+| gpu:idle | 1.73 | 10% | 2.24 | 10% |
+| sdf:polys | 0.56 | 3% | 0.57 | 2% |
+| post:fxaa | 0.39 | 2% | 0.29 | 1% |
+| sdf:composite | 0.58 | 3% | 0.19 | 1% |
+| post:blit | 0.15 | 1% | 0.17 | 1% |
+| goo:surface | 0.71 | 4% | 0.14 | 1% |
+| post:smear | 0.10 | 1% | 0.09 | 0% |
+| sdf:shell-hull | 0.09 | 0% | 0.06 | 0% |
+| sdf:occluder | 0.03 | 0% | 0.03 | 0% |
+| goo:density | 0.01 | 0% | 0.02 | 0% |
+| sdf:march-chunks | 0.57 | 3% | 0.00 | 0% |
+| **labelled total (sum of medians)** | **18.19** | 100% | **23.27** | 100% |
+| GPU span p50 (first start → last end) | 18.25 |  | 24.27 |  |
+| fenced frame p50 | 21.95 |  | 31.93 |  |
+| gap (frame − span) | 3.70 | 17% of frame | 7.66 | 24% of frame |
+
+CPU per frame (ms, median over repeats of p50):
+
+| cpu | room 3 | room 4 |
+| --- | ---: | ---: |
+| cpu:tick | 4.70 | 4.80 |
+| cpu:phase:wound-hit | 3.90 | 4.20 |
+| cpu:draw | 2.60 | 2.40 |
+| cpu:phase:body-step | 2.00 | 2.10 |
+| cpu:phase:blood-simulation-and-sync | 0.10 | 0.10 |
+| cpu:phase:wound-flush | 0.00 | 0.00 |
+| cpu:phase:projectiles-and-hits | 0.00 | 0.00 |
+| cpu:phase:chunks-and-guts | 0.00 | 0.00 |
+| cpu:phase:goo-sync | 0.00 | 0.00 |
+| cpu:phase:chunk-bake-swap | 0.40 | 0.00 |
+
+Per segment (top passes, room 4):
+
+- **walk** (18.06 ms labelled — droplets 0→0, goo quads 0→0): sdf:march 6.68, cpu:tick 4.30, cpu:draw 2.40, cpu:phase:body-step 2.00, gpu:idle 1.45
+- **fire** (41.24 ms labelled — droplets 0→61, goo quads 0→286): sdf:march 20.50, cpu:tick 5.50, cpu:phase:wound-hit 5.30, cpu:draw 2.70, gpu:idle 2.51
+- **gib** (47.34 ms labelled — droplets 61→13, goo quads 286→263): sdf:march 30.59, cpu:tick 5.10, gpu:idle 3.46, cpu:draw 2.50, cpu:phase:body-step 2.30
+
+## wound-earlyout-off
+
+| pass | room 3 ms | share | room 4 ms | share |
+| --- | ---: | ---: | ---: | ---: |
+| sdf:march | 12.35 | 76% | 15.31 | 79% |
+| gpu:idle | 2.14 | 13% | 2.02 | 10% |
+| sdf:march-chunks | 0.00 | 0% | 0.59 | 3% |
+| sdf:polys | 0.58 | 4% | 0.58 | 3% |
+| post:fxaa | 0.31 | 2% | 0.26 | 1% |
+| post:blit | 0.15 | 1% | 0.20 | 1% |
+| sdf:composite | 0.17 | 1% | 0.13 | 1% |
+| post:smear | 0.08 | 0% | 0.09 | 0% |
+| goo:surface | 0.24 | 1% | 0.08 | 0% |
+| sdf:shell-hull | 0.09 | 1% | 0.05 | 0% |
+| sdf:occluder | 0.03 | 0% | 0.03 | 0% |
+| goo:density | 0.01 | 0% | 0.01 | 0% |
+| **labelled total (sum of medians)** | **16.14** | 100% | **19.35** | 100% |
+| GPU span p50 (first start → last end) | 17.78 |  | 17.52 |  |
+| fenced frame p50 | 22.44 |  | 22.53 |  |
+| gap (frame − span) | 4.66 | 21% of frame | 5.01 | 22% of frame |
+
+CPU per frame (ms, median over repeats of p50):
+
+| cpu | room 3 | room 4 |
+| --- | ---: | ---: |
+| cpu:tick | 4.80 | 5.60 |
+| cpu:phase:wound-hit | 5.20 | 4.20 |
+| cpu:draw | 2.70 | 3.00 |
+| cpu:phase:body-step | 2.10 | 2.50 |
+| cpu:phase:chunk-bake-swap | 0.00 | 0.40 |
+| cpu:phase:blood-simulation-and-sync | 0.10 | 0.10 |
+| cpu:phase:wound-flush | 0.00 | 0.00 |
+| cpu:phase:projectiles-and-hits | 0.00 | 0.00 |
+| cpu:phase:chunks-and-guts | 0.00 | 0.00 |
+| cpu:phase:goo-sync | 0.00 | 0.00 |
+
+Per segment (top passes, room 4):
+
+- **walk** (22.83 ms labelled — droplets 0→0, goo quads 0→0): sdf:march 7.60, cpu:tick 5.90, cpu:draw 3.30, cpu:phase:body-step 2.60, gpu:idle 2.05
+- **fire** (34.90 ms labelled — droplets 0→71, goo quads 0→293): sdf:march 15.31, cpu:tick 5.70, cpu:phase:wound-hit 4.20, cpu:draw 3.00, cpu:phase:body-step 2.40
+- **gib** (44.78 ms labelled — droplets 71→9, goo quads 293→261): sdf:march 27.58, cpu:tick 5.20, gpu:idle 3.18, cpu:draw 2.70, cpu:phase:body-step 2.30
+
+## wound-cull-off
+
+| pass | room 3 ms | share | room 4 ms | share |
+| --- | ---: | ---: | ---: | ---: |
+| sdf:march | 12.80 | 74% | 19.64 | 87% |
+| gpu:idle | 2.30 | 13% | 1.39 | 6% |
+| sdf:polys | 0.61 | 4% | 0.55 | 2% |
+| sdf:composite | 0.36 | 2% | 0.27 | 1% |
+| post:fxaa | 0.28 | 2% | 0.25 | 1% |
+| goo:surface | 0.18 | 1% | 0.16 | 1% |
+| post:blit | 0.18 | 1% | 0.14 | 1% |
+| sdf:march-chunks | 0.36 | 2% | 0.09 | 0% |
+| post:smear | 0.09 | 0% | 0.07 | 0% |
+| sdf:shell-hull | 0.09 | 1% | 0.07 | 0% |
+| sdf:occluder | 0.03 | 0% | 0.03 | 0% |
+| goo:density | 0.02 | 0% | 0.01 | 0% |
+| **labelled total (sum of medians)** | **17.30** | 100% | **22.68** | 100% |
+| GPU span p50 (first start → last end) | 18.01 |  | 24.03 |  |
+| fenced frame p50 | 20.79 |  | 29.21 |  |
+| gap (frame − span) | 2.78 | 13% of frame | 5.18 | 18% of frame |
+
+CPU per frame (ms, median over repeats of p50):
+
+| cpu | room 3 | room 4 |
+| --- | ---: | ---: |
+| cpu:tick | 5.20 | 5.00 |
+| cpu:phase:wound-hit | 4.00 | 3.60 |
+| cpu:draw | 2.90 | 2.60 |
+| cpu:phase:body-step | 2.30 | 2.20 |
+| cpu:phase:chunk-bake-swap | 0.40 | 0.50 |
+| cpu:phase:blood-simulation-and-sync | 0.10 | 0.10 |
+| cpu:phase:wound-flush | 0.00 | 0.00 |
+| cpu:phase:projectiles-and-hits | 0.00 | 0.00 |
+| cpu:phase:chunks-and-guts | 0.00 | 0.00 |
+| cpu:phase:goo-sync | 0.00 | 0.00 |
+
+Per segment (top passes, room 4):
+
+- **walk** (19.50 ms labelled — droplets 0→0, goo quads 0→0): sdf:march 7.37, cpu:tick 4.90, cpu:draw 2.70, cpu:phase:body-step 2.30, gpu:idle 1.03
+- **fire** (40.68 ms labelled — droplets 0→71, goo quads 0→293): sdf:march 19.64, cpu:phase:wound-hit 7.00, cpu:tick 5.00, cpu:draw 2.50, gpu:idle 2.37
+- **gib** (72.90 ms labelled — droplets 71→12, goo quads 293→262): sdf:march 54.80, cpu:tick 5.10, gpu:idle 4.33, cpu:draw 2.70, cpu:phase:body-step 2.20
+
+## bleed-off
+
+| pass | room 3 ms | share | room 4 ms | share |
+| --- | ---: | ---: | ---: | ---: |
+| sdf:march | 10.52 | 79% | 14.75 | 86% |
+| gpu:idle | 1.63 | 12% | 1.23 | 7% |
+| sdf:polys | 0.53 | 4% | 0.54 | 3% |
+| post:fxaa | 0.24 | 2% | 0.24 | 1% |
+| post:blit | 0.14 | 1% | 0.14 | 1% |
+| sdf:composite | 0.06 | 0% | 0.07 | 0% |
+| post:smear | 0.06 | 0% | 0.07 | 0% |
+| sdf:shell-hull | 0.06 | 0% | 0.05 | 0% |
+| goo:surface | 0.04 | 0% | 0.05 | 0% |
+| sdf:occluder | 0.02 | 0% | 0.02 | 0% |
+| **labelled total (sum of medians)** | **13.30** | 100% | **17.15** | 100% |
+| GPU span p50 (first start → last end) | 12.40 |  | 16.47 |  |
+| fenced frame p50 | 14.96 |  | 20.92 |  |
+| gap (frame − span) | 2.56 | 17% of frame | 4.45 | 21% of frame |
+
+CPU per frame (ms, median over repeats of p50):
+
+| cpu | room 3 | room 4 |
+| --- | ---: | ---: |
+| cpu:tick | 4.30 | 4.60 |
+| cpu:phase:wound-hit | 5.10 | 3.80 |
+| cpu:draw | 2.10 | 2.30 |
+| cpu:phase:body-step | 1.90 | 2.00 |
+| cpu:phase:wound-flush | 0.00 | 0.00 |
+| cpu:phase:projectiles-and-hits | 0.00 | 0.00 |
+| cpu:phase:chunks-and-guts | 0.00 | 0.00 |
+| cpu:phase:blood-simulation-and-sync | 0.00 | 0.00 |
+| cpu:phase:goo-sync | 0.00 | 0.00 |
+
+Per segment (top passes, room 4):
+
+- **walk** (16.69 ms labelled — droplets 0→0, goo quads 0→0): sdf:march 6.49, cpu:tick 4.00, cpu:draw 2.10, cpu:phase:body-step 1.80, gpu:idle 1.16
+- **fire** (30.54 ms labelled — droplets 0→0, goo quads 0→0): sdf:march 14.75, cpu:tick 4.90, cpu:phase:wound-hit 3.80, cpu:draw 2.50, cpu:phase:body-step 2.10
+- **gib** (39.91 ms labelled — droplets 0→0, goo quads 0→0): sdf:march 26.79, cpu:tick 5.00, cpu:draw 2.60, cpu:phase:body-step 2.30, gpu:idle 1.70
+
+## chunks-skip
+
+| pass | room 3 ms | share | room 4 ms | share |
+| --- | ---: | ---: | ---: | ---: |
+| sdf:march | 12.20 | 78% | 16.33 | 84% |
+| gpu:idle | 1.73 | 11% | 1.70 | 9% |
+| sdf:polys | 0.54 | 3% | 0.53 | 3% |
+| post:fxaa | 0.36 | 2% | 0.25 | 1% |
+| sdf:composite | 0.14 | 1% | 0.20 | 1% |
+| goo:surface | 0.27 | 2% | 0.19 | 1% |
+| post:blit | 0.14 | 1% | 0.14 | 1% |
+| post:smear | 0.08 | 0% | 0.07 | 0% |
+| sdf:shell-hull | 0.08 | 1% | 0.05 | 0% |
+| sdf:occluder | 0.02 | 0% | 0.03 | 0% |
+| goo:density | 0.01 | 0% | 0.01 | 0% |
+| **labelled total (sum of medians)** | **15.59** | 100% | **19.51** | 100% |
+| GPU span p50 (first start → last end) | 17.63 |  | 21.24 |  |
+| fenced frame p50 | 19.84 |  | 28.40 |  |
+| gap (frame − span) | 2.21 | 11% of frame | 7.16 | 25% of frame |
+
+CPU per frame (ms, median over repeats of p50):
+
+| cpu | room 3 | room 4 |
+| --- | ---: | ---: |
+| cpu:tick | 4.40 | 4.60 |
+| cpu:phase:wound-hit | 4.90 | 3.10 |
+| cpu:draw | 2.60 | 2.40 |
+| cpu:phase:body-step | 1.90 | 2.00 |
+| cpu:phase:blood-simulation-and-sync | 0.10 | 0.10 |
+| cpu:phase:wound-flush | 0.00 | 0.00 |
+| cpu:phase:projectiles-and-hits | 0.00 | 0.00 |
+| cpu:phase:chunks-and-guts | 0.00 | 0.00 |
+| cpu:phase:goo-sync | 0.00 | 0.00 |
+
+Per segment (top passes, room 4):
+
+- **walk** (17.06 ms labelled — droplets 0→0, goo quads 0→0): sdf:march 6.61, cpu:tick 4.10, cpu:draw 2.30, cpu:phase:body-step 1.90, gpu:idle 0.93
+- **fire** (34.05 ms labelled — droplets 0→55, goo quads 0→283): sdf:march 16.33, cpu:tick 5.00, cpu:phase:wound-hit 3.10, gpu:idle 2.75, cpu:draw 2.50
+- **gib** (43.04 ms labelled — droplets 55→0, goo quads 283→256): sdf:march 27.63, cpu:tick 5.10, gpu:idle 3.21, cpu:draw 2.70, cpu:phase:body-step 2.30
+
+## Repeatability (fenced frame p50 across repeats)
+
+| leg | room | reps | spread % of min |
+| --- | ---: | --- | ---: |
+| baseline | 3 | 19.63 / 21.72 | 11% |
+| baseline | 4 | 20.25 / 26.53 | 31% |
+| wstep-0.6 | 3 | 21.95 / 20.88 | 5% |
+| wstep-0.6 | 4 | 15.97 / 31.93 | 100% |
+| wound-earlyout-off | 3 | 16.05 / 22.44 | 40% |
+| wound-earlyout-off | 4 | 22.53 / 20.22 | 11% |
+| wound-cull-off | 3 | 20.79 / 19.89 | 5% |
+| wound-cull-off | 4 | 29.21 / 15.95 | 83% |
+| bleed-off | 3 | 14.54 / 14.96 | 3% |
+| bleed-off | 4 | 20.74 / 20.92 | 1% |
+| chunks-skip | 3 | 19.84 / 15.62 | 27% |
+| chunks-skip | 4 | 28.40 / 21.73 | 31% |
+
+wrote /private/tmp/claude-501/-Users-donny-Projects-blud--claude-worktrees-soldier-character-animations-ecac9a/535d71ff-6d07-49c2-995a-d38cd8962dff/scratchpad/wounds/passes.md and /private/tmp/claude-501/-Users-donny-Projects-blud--claude-worktrees-soldier-character-animations-ecac9a/535d71ff-6d07-49c2-995a-d38cd8962dff/scratchpad/wounds/passes.json
+
+## Throughput (chunked + fenced) — median chunk-mean ms, median of repeats
+
+| leg | room | spawned | overall | walk | fire | gib | worst chunk |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| baseline | 3 | 3 | 21.72 | 15.13 | 22.18 | 23.70 | 32.63 |
+| baseline | 4 | 4 | 26.53 | 10.46 | 26.53 | 32.47 | 47.11 |
+| wstep-0.6 | 3 | 3 | 21.95 | 12.66 | 23.04 | 31.63 | 33.76 |
+| wstep-0.6 | 4 | 4 | 31.93 | 11.02 | 31.93 | 39.18 | 68.80 |
+| wound-earlyout-off | 3 | 3 | 22.44 | 13.22 | 22.78 | 23.61 | 32.70 |
+| wound-earlyout-off | 4 | 4 | 22.53 | 13.58 | 22.53 | 32.73 | 39.26 |
+| wound-cull-off | 3 | 3 | 20.79 | 13.83 | 23.71 | 32.75 | 36.42 |
+| wound-cull-off | 4 | 4 | 29.21 | 10.65 | 29.21 | 62.77 | 68.12 |
+| bleed-off | 3 | 3 | 14.96 | 9.56 | 16.39 | 16.89 | 24.31 |
+| bleed-off | 4 | 4 | 20.92 | 8.94 | 20.92 | 33.80 | 43.21 |
+| chunks-skip | 3 | 3 | 19.84 | 13.49 | 20.53 | 21.83 | 29.84 |
+| chunks-skip | 4 | 4 | 28.40 | 11.15 | 28.40 | 33.50 | 48.41 |
+
+## Repeatability — READ THIS BEFORE ANY DELTA
+
+Spread of the overall median across identical repeats. A leg whose
+spread exceeds the delta you care about has not measured anything.
+On 2026-08-31 three identical runs read 10.1 / 5.6 / 56.1 ms on a busy
+machine, which is why this section exists.
+
+| leg | room | reps (overall median ms) | spread | spread % of min |
+| --- | ---: | --- | ---: | ---: |
+| baseline | 3 | 19.63 / 21.72 | 2.09 | 11% |
+| baseline | 4 | 20.25 / 26.53 | 6.28 | 31% |
+| wstep-0.6 | 3 | 21.95 / 20.88 | 1.07 | 5% |
+| wstep-0.6 | 4 | 15.97 / 31.93 | 15.96 | 100% |
+| wound-earlyout-off | 3 | 16.05 / 22.44 | 6.39 | 40% |
+| wound-earlyout-off | 4 | 22.53 / 20.22 | 2.31 | 11% |
+| wound-cull-off | 3 | 20.79 / 19.89 | 0.90 | 5% |
+| wound-cull-off | 4 | 29.21 / 15.95 | 13.26 | 83% |
+| bleed-off | 3 | 14.54 / 14.96 | 0.42 | 3% |
+| bleed-off | 4 | 20.74 / 20.92 | 0.18 | 1% |
+| chunks-skip | 3 | 19.84 / 15.62 | 4.22 | 27% |
+| chunks-skip | 4 | 28.40 / 21.73 | 6.67 | 31% |
+
+**Worst repeat spread: 100%.** Judge each delta
+against ITS OWN legs' spread, not against this worst case — one noisy leg
+does not invalidate a delta measured between two quiet ones. A delta smaller
+than either leg's spread is UNRESOLVED, not zero.
+
+## Census — what was ON SCREEN while those numbers were taken
+
+A cost column is unreadable without this. Read `bodies` first: if it
+falls through the run, the cheap segments were timing an empty room.
+
+| room | segment | bodies in→out | wounds in→out | chunks in→out | droplets in→out | goo quads in→out |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| 3 | walk | 9→8 | 0→0 | 0→0 | 0→0 | 0→0 |
+| 3 | fire | 8→10 | 0→16 | 0→0 | 0→67 | 0→289 |
+| 3 | gib | 10→7 | 16→17 | 0→0 | 67→10 | 289→262 |
+| 4 | walk | 6→4 | 0→0 | 0→0 | 0→0 | 0→0 |
+| 4 | fire | 4→4 | 0→16 | 0→0 | 0→71 | 0→294 |
+| 4 | gib | 4→6 | 16→17 | 0→0 | 71→13 | 294→263 |
+
+## Spike (fenced per frame, baseline only) — ratios within a run ONLY
+
+| room | bodies | p50 | p95 | max | max/p50 | worst segment |
+| ---: | ---: | ---: | ---: | ---: | ---: | --- |
+
+wrote /private/tmp/claude-501/-Users-donny-Projects-blud--claude-worktrees-soldier-character-animations-ecac9a/535d71ff-6d07-49c2-995a-d38cd8962dff/scratchpad/wounds/bench.json and /private/tmp/claude-501/-Users-donny-Projects-blud--claude-worktrees-soldier-character-animations-ecac9a/535d71ff-6d07-49c2-995a-d38cd8962dff/scratchpad/wounds/bench.md

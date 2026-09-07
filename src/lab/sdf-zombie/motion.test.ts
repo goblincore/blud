@@ -18,7 +18,7 @@ import { stepRig, type RigPoint } from './rig';
 import { relaxRopeConstraints, COLLAPSE_TUNING } from './collapse';
 import { makeRng, WANDER_TUNING, headingDir, type WanderBounds } from './wander';
 import { attackPose, ATTACK_TUNING } from './attack';
-import { len, normalize, sub, dot, qRotate } from './vec';
+import { cross, len, normalize, sub, dot, qRotate } from './vec';
 import type { LimbId, Vec3 } from './types';
 import type { Wound } from './damage';
 import { compileBlob } from './blob-compile';
@@ -555,19 +555,16 @@ describe('soldier motion — profile, lean, carry', () => {
     expect(walk.frame.gaitName).toBe('march');
   });
 
-  it('the run lean pitches the head forward of the hips by ~sin(12°)·height', () => {
+  it('the run lean pitches the living chest forward of the hips by the authored angle', () => {
     const j = soldierJoints();
-    // headAlive false isolates the lean from the head aim: the soldier's
-    // rest skull points straight UP (unlike the zombie's hunch), so the
-    // horizon gaze drives the head to its 0.5 rad pitch clamp and would
-    // swamp the lean measurement (the composition is additive — no ordering
-    // or cone re-anchoring separates them). Cf. the idle-pose test above.
-    const { frame } = run(j, makeMotionState(3, [0, 0, 0]), CFG, 90,
-      () => ({ ...NO_SIGNALS(), headAlive: false }));
-    const hips = frame.restPose[j.index.hips]!, head = frame.restPose[j.index.head]!;
-    const dz = head[2] - hips[2];
-    const rise = head[1] - hips[1];
+    // Chest excludes the head-aim override. A missing soldier head is fatal,
+    // so headAlive:false would test collapse rather than standing run lean.
+    const { frame } = run(j, makeMotionState(3, [0, 0, 0]), CFG, 90);
+    const hips = frame.restPose[j.index.hips]!, chest = frame.restPose[j.index.chest]!;
+    const dz = chest[2] - hips[2];
+    const rise = chest[1] - hips[1];
     const expected = Math.sin(RUN.torsoLean * Math.PI / 180) * Math.hypot(rise, dz);
+    expect(frame.collapsed).toBe(false);
     expect(dz).toBeGreaterThan(expected * 0.6);
     expect(dz).toBeLessThan(expected * 1.6);
   });
@@ -577,8 +574,7 @@ describe('soldier motion — profile, lean, carry', () => {
     const cfg: MotionConfig = { enabled: true, wander: false, profile: SOLDIER_PROFILE, forceSpeed: 0, carryOverride: 'hip' };
     const { frame } = run(j, makeMotionState(3, [0, 0, 0]), cfg, 30);
     const P = frame.restPose;
-    const right = rotateYaw([1, 0, 0], frame.bodyYaw);
-    const gun = gunPoseFromArm(P[j.index.elbowR]!, P[j.index.handR]!, right, CARRIES.hip.gunPitch);
+    const gun = frame.gun!;
     const fore = gunPoint(gun, GUN_GRIP.foreHand);
     expect(len(sub(P[j.index.handL]!, fore))).toBeLessThan(0.02);
     for (const [s, e, h, lens] of [
@@ -878,7 +874,10 @@ describe('soldier aimed movement', () => {
     const forward = qRotate(frame.gun!.quat, [0, 0, 1]);
     expect(dot(forward, headingDir(frame.bodyYaw))).toBeGreaterThan(0.995);
     expect(Math.abs(forward[1])).toBeLessThan(0.03);
-    expect(P[j.index.handR]![1]).toBeGreaterThan(P[j.index.shoulderR]![1] - 0.2);
+    expect(P[j.index.handR]![1]).toBeGreaterThan(P[j.index.shoulderR]![1] - 0.08);
+    // A stocked shotgun must seat at the shoulder, not float behind the ribs.
+    const stock = gunPoint(frame.gun!, [0, 0, -0.26]);
+    expect(len(sub(stock, P[j.index.shoulderR]!))).toBeLessThan(j.arm.R[0] * (0.08 / 0.26));
     expect(len(sub(P[j.index.handL]!, gunPoint(frame.gun!, GUN_GRIP.foreHand)))).toBeLessThan(0.005);
     for (const [s, e, h, lens] of [
       ['shoulderL', 'elbowL', 'handL', j.arm.L], ['shoulderR', 'elbowR', 'handR', j.arm.R],
@@ -908,6 +907,36 @@ describe('soldier aimed movement', () => {
     const j = soldierJoints();
     const { frame } = run(j, makeMotionState(3, [0, 0, 0]), { ...cfg, faceHeading: Math.PI / 2 } as MotionConfig, 30);
     expect(frame.bodyYaw).toBeCloseTo(Math.PI / 2, 6);
+  });
+});
+
+describe('soldier injury response', () => {
+  it('losing one leg or the head causes a structural fall, while a zombie still hops on one leg', () => {
+    const leg = { ...NO_SIGNALS(), missing: { ...INTACT, legL: true } };
+    for (const signals of [leg, { ...NO_SIGNALS(), headAlive: false }]) {
+      const j = soldierJoints();
+      const result = stepMotion(makeMotionState(5, [0, 0, 0]), j,
+        { enabled: true, wander: true, profile: SOLDIER_PROFILE }, signals,
+        stubPoints(j), BOUNDS, makeRng(5));
+      expect(result.frame.collapsed).toBe(true);
+    }
+    const j = realJoints();
+    const zombie = stepMotion(makeMotionState(5, [0, 0, 0]), j,
+      { enabled: true, wander: true }, leg, stubPoints(j), BOUNDS, makeRng(5));
+    expect(zombie.frame.collapsed).toBe(false);
+    expect(zombie.frame.hop).toBe(true);
+  });
+
+  it('a wounded standing soldier visibly shortens the hurt leg stride and travels slower', () => {
+    const j = soldierJoints();
+    const start = makeMotionState(5, [0, 0, 0]);
+    start.wander = { ...start.wander, heading: 0, speed: SOLDIER_PROFILE.cruise, target: [0, 0, 3] };
+    const cfg: MotionConfig = { enabled: true, wander: true, profile: SOLDIER_PROFILE, faceHeading: 0 };
+    const healthy = run(j, start, cfg, 40);
+    const hurt = run(j, start, cfg, 40, () => ({ ...NO_SIGNALS(), wounded: { ...INTACT, legL: true } }));
+    expect(hurt.frame.collapsed).toBe(false);
+    expect(hurt.state.wander.pos[2]).toBeLessThan(healthy.state.wander.pos[2] * 0.85);
+    expect(hurt.frame.speed).toBeLessThan(healthy.frame.speed * 0.75);
   });
 });
 
@@ -990,5 +1019,174 @@ describe('soldier running ready carry', () => {
       points = P.map(p => ({ pos: [...p] as Vec3, prev: [...p] as Vec3, pinned: false }));
       state = next.state;
     }
+  });
+});
+
+
+describe('soldier aim armor clearance', () => {
+  it('clears the vest with a lowered, bent support elbow that leaves the face visible', () => {
+    const j = soldierJoints();
+    const { frame } = run(j, makeMotionState(3, [0, 0, 0]), {
+      enabled: true, wander: false, profile: SOLDIER_PROFILE, forceSpeed: 0, carryOverride: 'aim',
+    }, 90);
+    const P = frame.restPose, shoulder = P[j.index.shoulderR]!;
+    // Rear lower receiver corner is the part that previously buried in the vest.
+    const receiver = gunPoint(frame.gun!, [0.0295, -0.045, -0.081]);
+    expect(receiver[1]).toBeGreaterThan(shoulder[1]);
+    expect(P[j.index.elbowR]![0]).toBeLessThan(shoulder[0] - 0.1);
+    expect(P[j.index.elbowL]![1]).toBeLessThan(P[j.index.shoulderL]![1] - 0.06);
+    // The support elbow clears the plate in front, rather than rising over it.
+    expect(P[j.index.elbowL]![2]).toBeGreaterThan(P[j.index.shoulderL]![2] + 0.18);
+    expect(len(sub(P[j.index.handL]!, P[j.index.shoulderL]!))).toBeLessThan((j.arm.L[0] + j.arm.L[1]) * .92);
+  });
+});
+
+describe('soldier shuffle lanes', () => {
+  it('lets the rig absorb a blast without tearing the pinned pelvis from the hips', () => {
+    const body = buildBody(compileBlob(parseBlob(soldierSrc)));
+    let rig = bindRig(body).rig;
+    const j = makeMotionJoints(body, rig.restPose)!;
+    let state = makeMotionState(8, [0, 0, 0]);
+    state.wander = { ...state.wander, target: [20, 0, 0], speed: SOLDIER_PROFILE.cruise };
+    const rest = len(sub(j.base[j.index.pelvis]!, j.base[j.index.hips]!));
+    let maxStretch = 0;
+    for (let i = 0; i < 100; i++) {
+      const sig = NO_SIGNALS();
+      if (i === 60) sig.shot = { type: 'blast', dirWorld: [1, 0, 0], woundWorld: rig.points[j.index.chest]!.pos, torso: true };
+      const r = stepMotion(state, j, { enabled: true, wander: true, profile: SOLDIER_PROFILE, faceHeading: 0 }, sig, rig.points,
+        { minX: -30, maxX: 30, minZ: -30, maxZ: 30 }, makeRng(8));
+      rig = stepRig({ ...rig, restPose: r.frame.restPose, posePins: r.frame.posePins }, DT,
+        { gravity: r.frame.gravity, restStiffness: STANDING_RIG.restStiffness * r.frame.restPull, damping: .06, iterations: 4 });
+      state = r.state;
+      maxStretch = Math.max(maxStretch, len(sub(rig.points[j.index.pelvis]!.pos, rig.points[j.index.hips]!.pos)) - rest);
+    }
+    expect(maxStretch).toBeLessThan(.04);
+  });
+
+  it.each(['strafe', 'patrol'] as const)('holds weight-bearing boots still through the real rig with visibly flexed knees (%s)', mode => {
+    const body = buildBody(compileBlob(parseBlob(soldierSrc)));
+    let rig = bindRig(body).rig;
+    const j = makeMotionJoints(body, rig.restPose)!;
+    let state = makeMotionState(8, [0, 0, 0]);
+    state.wander = { ...state.wander, target: mode === 'patrol' ? [0, 0, 20] : [20, 0, 0], speed: SOLDIER_PROFILE.cruise };
+    let maxSlip = 0, minBend = Infinity, contacts = 0;
+    for (let i = 0; i < 240; i++) {
+      const r = stepMotion(state, j, { enabled: true, wander: true, profile: SOLDIER_PROFILE, ...(mode === 'strafe' ? { faceHeading: 0 } : {}) }, NO_SIGNALS(), rig.points,
+        { minX: -30, maxX: 30, minZ: -30, maxZ: 30 }, makeRng(8));
+      const next = stepRig({ ...rig, restPose: r.frame.restPose, posePins: r.frame.posePins }, DT,
+        { gravity: r.frame.gravity, restStiffness: STANDING_RIG.restStiffness * r.frame.restPull, damping: .06, iterations: 4 });
+      if (i > 30) for (const side of ['L', 'R'] as const) {
+        if (state[`plant${side}`].phase !== 'stance' || r.state[`plant${side}`].phase !== 'stance') continue;
+        const h = next.points[j.index[`hip${side}`]]!.pos, k = next.points[j.index[`knee${side}`]]!.pos, f = next.points[j.index[`foot${side}`]]!.pos;
+        const delta = sub(f, rig.points[j.index[`foot${side}`]]!.pos);
+        maxSlip = Math.max(maxSlip, Math.hypot(delta[0], delta[2]));
+        minBend = Math.min(minBend, Math.acos(Math.max(-1, Math.min(1, dot(normalize(sub(k, h)), normalize(sub(f, k)))))));
+        contacts++;
+      }
+      state = r.state;
+      rig = next;
+    }
+    if (mode === 'patrol') {
+      const torso = sub(rig.points[j.index.neck]!.pos, rig.points[j.index.hips]!.pos);
+      expect(dot(torso, headingDir(state.bodyYaw)), 'patrol torso hunches forward over the hips').toBeGreaterThan(.10);
+    }
+    expect(contacts).toBeGreaterThan(60);
+    expect(maxSlip, 'planted boots must survive rig integration without skating').toBeLessThan(.002);
+    expect(minBend, 'support knees stay flexed by at least 25 degrees').toBeGreaterThan(25 * Math.PI / 180);
+    expect(Math.hypot(state.wander.pos[0], state.wander.pos[2]), 'firm contacts must still permit travel').toBeGreaterThan(2);
+  });
+
+  it.each([0, .001, Math.PI])('keeps aimed floor support when travel is longitudinal (%s)', angle => {
+    const j = soldierJoints();
+    let state = makeMotionState(8, [0, 0, 0]);
+    state.wander = { ...state.wander, target: [20 * Math.sin(angle), 0, 20 * Math.cos(angle)], speed: SOLDIER_PROFILE.cruise };
+    let points = stubPoints(j);
+    let maxUnsupported = 0;
+    for (let i = 0; i < 180; i++) {
+      const r = stepMotion(state, j, { enabled: true, wander: true, profile: SOLDIER_PROFILE, faceHeading: 0 }, NO_SIGNALS(), points,
+        { minX: -30, maxX: 30, minZ: -30, maxZ: 30 }, makeRng(8));
+      state = r.state;
+      const p = r.frame.restPose;
+      maxUnsupported = Math.max(maxUnsupported, Math.min(p[j.index.footL]![1], p[j.index.footR]![1]) - j.groundY);
+      points = p.map(pos => ({ pos, prev: pos, pinned: false }));
+    }
+    expect(maxUnsupported, 'straight travel must not lift both support targets').toBeLessThan(.03);
+  });
+
+  it.each([
+    { direction: -1, yaw: 0, hz: 60 }, { direction: 1, yaw: 0, hz: 60 },
+    { direction: -1, yaw: 1.1, hz: 30 }, { direction: 1, yaw: -2.2, hz: 120 },
+  ])('keeps strafing grounded with forward knees ($direction, yaw $yaw, $hz Hz)', ({ direction, yaw, hz }) => {
+    const j = soldierJoints();
+    let state = makeMotionState(8, [0, 0, 0]);
+    state.bodyYaw = yaw;
+    state.wander = { ...state.wander, target: rotateYaw([direction * 20, 0, 0], yaw), speed: SOLDIER_PROFILE.cruise };
+    let points = stubPoints(j);
+    let maxSideBend = 0, maxStretch = 0, maxLift = 0, maxUnsupported = 0, maxSpread = 0, maxFootSpeed = 0;
+    for (let i = 0; i < 3 * hz; i++) {
+      if (i === hz) state.wander = { ...state.wander, target: rotateYaw([-direction * 20, 0, 0], yaw) };
+      const r = stepMotion(state, j, { enabled: true, wander: i < 2 * hz, profile: SOLDIER_PROFILE, faceHeading: yaw }, { ...NO_SIGNALS(), dt: 1 / hz }, points,
+        { minX: -30, maxX: 30, minZ: -30, maxZ: 30 }, makeRng(8));
+      state = r.state;
+      const p = r.frame.restPose;
+      const footL = p[j.index.footL]!, footR = p[j.index.footR]!;
+      if (i > 0) {
+        const speed = Math.max(len(sub(footL, points[j.index.footL]!.pos)) * hz, len(sub(footR, points[j.index.footR]!.pos)) * hz);
+        maxFootSpeed = Math.max(maxFootSpeed, speed);
+      }
+      maxLift = Math.max(maxLift, footL[1] - j.groundY, footR[1] - j.groundY);
+      maxUnsupported = Math.max(maxUnsupported, Math.min(footL[1], footR[1]) - j.groundY);
+      maxSpread = Math.max(maxSpread, len(sub(footL, footR)));
+      for (const side of ['L', 'R'] as const) {
+        const h = p[j.index[`hip${side}`]]!, k = p[j.index[`knee${side}`]]!, f = p[j.index[`foot${side}`]]!;
+        // A hinge knee lies in the hip/ankle/body-forward plane, even when
+        // the foot steps sideways. Reflection alone permits a sideways bow.
+        const axis = normalize(sub(f, h));
+        const sideways = normalize(cross(axis, headingDir(yaw)));
+        maxSideBend = Math.max(maxSideBend, Math.abs(dot(sub(k, h), sideways)));
+        maxStretch = Math.max(maxStretch, Math.abs(len(sub(k, h)) - j.leg[side][0]), Math.abs(len(sub(f, k)) - j.leg[side][1]));
+      }
+      points = p.map(pos => ({ pos, prev: pos, pinned: false }));
+    }
+    expect(maxSideBend, 'sideways knee bow in metres').toBeLessThan(.01);
+    expect(maxStretch, 'leg segment length error in metres').toBeLessThan(.005);
+    expect(maxLift, 'shuffle boot clearance').toBeLessThan(.12);
+    expect(maxUnsupported, 'at least one boot supports the stance').toBeLessThan(.03);
+    expect(maxSpread, 'no sideways splits, including a direction reversal').toBeLessThan(.7);
+    expect(maxFootSpeed, 'no foot teleport at a stop or reversal').toBeLessThan(8);
+  });
+
+  it.each([-1, 1])('keeps feet on their own side while travelling laterally (%s)', direction => {
+    const j = soldierJoints();
+    let state = makeMotionState(8, [0,0,0]);
+    state.wander = { ...state.wander, target: [direction * 20,0,0], speed: SOLDIER_PROFILE.cruise };
+    let points = stubPoints(j);
+    for (let i = 0; i < 180; i++) {
+      const r = stepMotion(state, j, { enabled: true, wander: true, profile: SOLDIER_PROFILE, faceHeading: 0 }, NO_SIGNALS(), points,
+        { minX: -30, maxX: 30, minZ: -30, maxZ: 30 }, makeRng(8));
+      state = r.state;
+      const p = r.frame.restPose;
+      for (const name of ['footL','footR'] as const) {
+        const side = Math.sign(j.base[j.index[name]]![0] - j.pelvis[0]);
+        expect(side * (p[j.index[name]]![0] - p[j.index.pelvis]![0])).toBeGreaterThan(.06);
+      }
+      points = p.map(pos => ({ pos, prev: pos, pinned: false }));
+    }
+  });
+});
+
+
+describe('soldier impact-driven death', () => {
+  it.each([-1, 1])('a lethal side impact throws the body in the incoming direction (%s)', side => {
+    const j = soldierJoints();
+    const { frame, state } = run(j, makeMotionState(9, [0,0,0]),
+      { enabled:true, wander:false, profile:SOLDIER_PROFILE }, 30, i => ({ ...NO_SIGNALS(),
+        fatal: true, forcedCollapse: true,
+        shot: i === 0 ? { type:'blast', dirWorld:[side,0,0], woundWorld:[0,1.2,0], torso:true } : null,
+      }));
+    expect(frame.collapsed).toBe(true);
+    expect(frame.restPose[j.index.pelvis]![1] - j.groundY).toBeLessThan(.5);
+    expect(side * (frame.restPose[j.index.pelvis]![0] - j.pelvis[0])).toBeGreaterThan(.6);
+    expect(state.fallImpact).toEqual([side,0,0]);
   });
 });

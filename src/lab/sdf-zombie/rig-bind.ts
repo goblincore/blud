@@ -359,11 +359,13 @@ export function bindRig(body: BuildResult): BoundRig {
 
 /** Snap every rigid tip to anchor + yawed rest offset (pos AND prev, so the
  *  verlet carries no velocity into the next step). Pure; returns new points. */
-export function pinTips(points: readonly RigPoint[], tips: readonly RigidTip[], bodyYaw = 0): RigPoint[] {
+export function pinTips(points: readonly RigPoint[], tips: readonly RigidTip[], bodyYaw = 0, targets?: readonly Vec3[]): RigPoint[] {
   if (tips.length === 0) return points as RigPoint[];
   const out = points.slice();
   for (const t of tips) {
-    const pos = add(out[t.anchor]!.pos, bodyYaw === 0 ? t.rest : rotateYaw(t.rest, bodyYaw));
+    const offset = targets ? vscale(normalize(sub(targets[t.point]!, targets[t.anchor]!)), len(t.rest))
+      : bodyYaw === 0 ? t.rest : rotateYaw(t.rest, bodyYaw);
+    const pos = add(out[t.anchor]!.pos, offset);
     out[t.point] = { ...out[t.point]!, pos, prev: pos };
   }
   return out;
@@ -400,7 +402,7 @@ export function pinTips(points: readonly RigPoint[], tips: readonly RigidTip[], 
  */
 export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): BuildResult {
   const pos = bound.rig.points;
-  const rigid = bound.head ? headTransform(bound.head, pos, bodyYaw) : null;
+  const rigid = bound.head ? headTransform(bound.head, pos, bodyYaw, bound.rig.headFollowsRig) : null;
   const poseEnds = (bind: PrimBind): { a: Vec3; b: Vec3 } => {
     let a = bind.a.offset, b = bind.b.offset;
     if (bind.armFrame) {
@@ -426,12 +428,29 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
   // Bones pose in the SAME pass with the SAME machinery — a bone left at rest
   // would float while its limb moves. Skull-owned bones take the rigid-head
   // branch exactly as the face prims do.
+  //
+  // Each bone prim is also TAGGED with its rigid segment (boneSegment), the
+  // unit the bone-segment sphere cull groups rows by (pack.ts): the skull
+  // unit, one axial BoneFrame per spine/pelvis segment, one limb bone per
+  // bind-point pair, and one segment for every organ. Ids are dense small
+  // ints assigned in first-seen order — deterministic because the map is.
+  const segIds = new Map<string, number>();
+  const segOf = (key: string): number => {
+    let v = segIds.get(key);
+    if (v === undefined) { v = segIds.size; segIds.set(key, v); }
+    return v;
+  };
   const bonePrims: Primitive[] = body.bonePrims.map((p, i) => {
     const face = rigid?.bones.get(i);
-    if (face && rigid) {
-      return { ...p, a: add(rigid.origin, face.a), b: add(rigid.origin, face.b), orient: rigid.q };
-    }
     const frame = bound.boneFrames.get(i);
+    const boneSegment = segOf(
+      p.op === 'organ' ? 'organs'
+      : face && rigid ? 'head'
+      : frame ? `axial:${frame.head}-${frame.tail}`
+      : `limb:${p.limb}:${bound.boneBinding[i]!.a.point}-${bound.boneBinding[i]!.b.point}`);
+    if (face && rigid) {
+      return { ...p, a: add(rigid.origin, face.a), b: add(rigid.origin, face.b), orient: rigid.q, boneSegment };
+    }
     if (frame) {
       // Same composition as headTransform: the known body yaw first (the
       // segment is near-vertical, so a bare shortest-arc rotation between rest
@@ -439,9 +458,9 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
       const h = pos[frame.head]!.pos;
       const dir = normalize(sub(pos[frame.tail]!.pos, h));
       const q = segmentQuat(frame.restDir, dir, bodyYaw);
-      return { ...p, a: add(h, qRotate(q, frame.restA)), b: add(h, qRotate(q, frame.restB)), orient: q };
+      return { ...p, a: add(h, qRotate(q, frame.restA)), b: add(h, qRotate(q, frame.restB)), orient: q, boneSegment };
     }
-    return { ...p, ...poseEnds(bound.boneBinding[i]!) };
+    return { ...p, ...poseEnds(bound.boneBinding[i]!), boneSegment };
   });
 
   const clusters: ClusterInfo[] = body.clusters.map(c => {
@@ -493,7 +512,7 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
  * rest direction to the clamped solve — the residual only ever expresses the
  * in-cone look-at tilt it can see.
  */
-function headTransform(h: HeadRigid, pos: readonly RigPoint[], bodyYaw = 0): {
+function headTransform(h: HeadRigid, pos: readonly RigPoint[], bodyYaw = 0, followRig = false): {
   origin: Vec3;
   prims: Map<number, { a: Vec3; b: Vec3 }>;
   bones: Map<number, { a: Vec3; b: Vec3 }>;
@@ -505,7 +524,7 @@ function headTransform(h: HeadRigid, pos: readonly RigPoint[], bodyYaw = 0): {
   const dir = normalize(sub(tip, pivot));
   // The cone anchor turns with the body: at yaw 0 this is exactly h.restDir.
   const rest = bodyYaw === 0 ? h.restDir : rotateYaw(h.restDir, bodyYaw);
-  const clamped = clampDir(dir, rest, IK_TUNING.headMaxYaw, IK_TUNING.headMaxPitch);
+  const clamped = followRig ? dir : clampDir(dir, rest, IK_TUNING.headMaxYaw, IK_TUNING.headMaxPitch);
   // qMul(a, b) applies b first: the body turn, then the in-cone residual.
   const q = segmentQuat(h.restDir, clamped, bodyYaw);
 
@@ -541,7 +560,7 @@ export function headQuatOf(bound: BoundRig, bodyYaw = 0): Quat | null {
   // rotation the skull masses were posed with): explicit body yaw first,
   // then the in-cone residual off the TURNED rest direction.
   const rest = bodyYaw === 0 ? h.restDir : rotateYaw(h.restDir, bodyYaw);
-  const clamped = clampDir(
+  const clamped = bound.rig.headFollowsRig ? normalize(sub(tip, pivot)) : clampDir(
     normalize(sub(tip, pivot)), rest, IK_TUNING.headMaxYaw, IK_TUNING.headMaxPitch);
   return segmentQuat(h.restDir, clamped, bodyYaw);
 }

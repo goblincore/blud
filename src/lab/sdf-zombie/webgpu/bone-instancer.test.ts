@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type * as THREE from 'three/webgpu';
 import type { Primitive } from '../types';
 import { packBoneInstances, INSTANCE_FLOATS, BONE_QROT_WGSL, BONE_VERTEX_WGSL, BONE_SURFACE_WGSL, BONE_SHADE_WGSL, BONE_HASH_WGSL, BONE_NOISE_WGSL, boneInstanceArrays, createBoneInstancer } from './bone-instancer';
-import { encodeSurfaceClass } from './deferred-surface';
+import { encodeSurfaceClass, SURFACE_ATTACHMENT_NAMES } from './deferred-surface';
 
 const bone = (over: Partial<Primitive>): Primitive => ({
   a: [0, 0, 0], b: [0, 0.2, 0], radius: 0.02, scale: [1, 1, 1], blendK: 0,
@@ -107,7 +107,9 @@ describe('material/light split (M2 task 2)', () => {
     expect(surf.surfaceKind).toBe(1);
     const surfMat = surf.object.material as unknown as { mrtNode: { outputNodes: Record<string, unknown> } | null; colorNode: unknown; positionNode: unknown; normalNode: unknown };
     expect(Object.keys(surfMat.mrtNode!.outputNodes).sort())
-      .toEqual(['albedoRoughness', 'emissionClass', 'normalMetalness', 'surfaceDepth']);
+      .toEqual([...SURFACE_ATTACHMENT_NAMES].sort());
+    const params = surfMat.mrtNode!.outputNodes.surfaceParams as { node: { nodes: Array<{ node: { value: number } }> } };
+    expect(params.node.nodes.map(n => n.node.value)).toEqual([0, 0, 0, 1]);
     expect(surfMat.colorNode).toBeNull();
     // The bone positionNode and normalNode are retained in BOTH modes.
     expect(surfMat.positionNode).toBeTruthy();

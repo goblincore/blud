@@ -9,7 +9,7 @@ import * as THREE from 'three/webgpu';
 import {
   createBakedChunkMaterial, CHUNK_SHADE_WGSL, CHUNK_SURFACE_WGSL,
 } from './baked-chunks';
-import { encodeSurfaceClass } from './deferred-surface';
+import { encodeSurfaceClass, SURFACE_ATTACHMENT_NAMES } from './deferred-surface';
 
 describe('createBakedChunkMaterial — default lit path (M1 behavior)', () => {
   it('stays lit: colorNode output, no MRT, live lighting uniforms', () => {
@@ -41,7 +41,7 @@ describe('createBakedChunkMaterial — default lit path (M1 behavior)', () => {
 });
 
 describe('createBakedChunkMaterial — surface mode (M2 task 2)', () => {
-  it('emits the four named attachments from the baked vertex terms, no lit color', () => {
+  it('emits every surface attachment from the baked vertex terms, no lit color', () => {
     const baked = createBakedChunkMaterial({ output: 'surface' });
     const mat = baked.material as unknown as {
       mrtNode: { outputNodes: Record<string, unknown> } | null;
@@ -49,7 +49,9 @@ describe('createBakedChunkMaterial — surface mode (M2 task 2)', () => {
       blending: THREE.Blending;
     };
     expect(Object.keys(mat.mrtNode!.outputNodes).sort())
-      .toEqual(['albedoRoughness', 'emissionClass', 'normalMetalness', 'surfaceDepth']);
+      .toEqual([...SURFACE_ATTACHMENT_NAMES].sort());
+    const params = mat.mrtNode!.outputNodes.surfaceParams as { node: { nodes: Array<{ node: { value: number } }> } };
+    expect(params.node.nodes.map(n => n.node.value)).toEqual([0, 0, 0, 1]);
     expect(mat.colorNode).toBeNull();
     expect(mat.blending).toBe(THREE.NoBlending);
     // Mesh-class receiver, 'full' default.

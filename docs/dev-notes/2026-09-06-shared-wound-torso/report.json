@@ -1,0 +1,146 @@
+{
+  "scope": "Standalone bounded torso comparison; no gameplay or timing claim",
+  "frames": [
+    {
+      "yaw": 0,
+      "stage": 0,
+      "analytic": {
+        "hits": 54904,
+        "cavity": 0,
+        "meanHitSteps": 1,
+        "exhausted": 0
+      },
+      "sampled": {
+        "hits": 54904,
+        "cavity": 0,
+        "meanHitSteps": 1,
+        "exhausted": 0
+      },
+      "hitDelta": 0
+    },
+    {
+      "yaw": 0,
+      "stage": 1,
+      "analytic": {
+        "hits": 54904,
+        "cavity": 2819,
+        "meanHitSteps": 1.2574311525571906,
+        "exhausted": 0
+      },
+      "sampled": {
+        "hits": 54904,
+        "cavity": 2781,
+        "meanHitSteps": 1.4993260964592743,
+        "exhausted": 0
+      },
+      "hitDelta": 0
+    },
+    {
+      "yaw": 0,
+      "stage": 2,
+      "analytic": {
+        "hits": 54904,
+        "cavity": 7241,
+        "meanHitSteps": 1.656363835057555,
+        "exhausted": 0
+      },
+      "sampled": {
+        "hits": 54904,
+        "cavity": 7208,
+        "meanHitSteps": 2.3161700422555733,
+        "exhausted": 0
+      },
+      "hitDelta": 0
+    },
+    {
+      "yaw": 0.5,
+      "stage": 0,
+      "analytic": {
+        "hits": 52586,
+        "cavity": 0,
+        "meanHitSteps": 1,
+        "exhausted": 0
+      },
+      "sampled": {
+        "hits": 52586,
+        "cavity": 0,
+        "meanHitSteps": 1,
+        "exhausted": 0
+      },
+      "hitDelta": 0
+    },
+    {
+      "yaw": 0.5,
+      "stage": 1,
+      "analytic": {
+        "hits": 52586,
+        "cavity": 2136,
+        "meanHitSteps": 1.196535199482752,
+        "exhausted": 0
+      },
+      "sampled": {
+        "hits": 52586,
+        "cavity": 2109,
+        "meanHitSteps": 1.3881641501540334,
+        "exhausted": 0
+      },
+      "hitDelta": 0
+    },
+    {
+      "yaw": 0.5,
+      "stage": 2,
+      "analytic": {
+        "hits": 52586,
+        "cavity": 5611,
+        "meanHitSteps": 1.5679078081618683,
+        "exhausted": 0
+      },
+      "sampled": {
+        "hits": 52586,
+        "cavity": 5574,
+        "meanHitSteps": 2.135948731601567,
+        "exhausted": 0
+      },
+      "hitDelta": 0
+    },
+    {
+      "transitionMs": 0,
+      "hits": 109808,
+      "exhausted": 0
+    },
+    {
+      "transitionMs": 40,
+      "hits": 109808,
+      "exhausted": 0
+    },
+    {
+      "transitionMs": 80,
+      "hits": 109808,
+      "exhausted": 0
+    },
+    {
+      "transitionMs": 120,
+      "hits": 109808,
+      "exhausted": 0
+    },
+    {
+      "transitionMs": 160,
+      "hits": 109808,
+      "exhausted": 0
+    }
+  ],
+  "info": {
+    "libraryBytes": 262144,
+    "resolution": 32,
+    "state": {
+      "current": 0,
+      "target": 0,
+      "queued": 0,
+      "startedAt": 0
+    },
+    "errors": [],
+    "lipschitz": 1.7320525396196846
+  },
+  "resetDuringPlayback": true,
+  "passed": true
+}

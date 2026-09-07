@@ -26,7 +26,7 @@ function walk(s: PlayerState, input: { x: number; z: number; jump: boolean }, st
 
 describe('ring layout', () => {
   it('is a ring: each tunnel joins adjacent rooms, in order 1-2-3-4-1', () => {
-    expect(TUNNELS.map(t => [t.a, t.b])).toEqual([[1, 2], [2, 3], [3, 4], [4, 1]]);
+    expect(TUNNELS.filter(t => t.a !== 5 && t.b !== 5).map(t => [t.a, t.b])).toEqual([[1, 2], [2, 3], [3, 4], [4, 1]]);
   });
 
   it('has no diagonal shortcut: the centre block is solid', () => {
@@ -37,8 +37,8 @@ describe('ring layout', () => {
     expect(r).toBeGreaterThan(BAND_HALF - 1e-6);
   });
 
-  it('rooms are quadrants around a solid cross, not arbitrary boxes', () => {
-    for (const r of ROOMS) {
+  it('original rooms are quadrants around a solid cross, not arbitrary boxes', () => {
+    for (const r of ROOMS.filter(r => r.id <= 4)) {
       expect(r.maxX - r.minX).toBeCloseTo(8);
       expect(r.maxZ - r.minZ).toBeCloseTo(8);
       expect(Math.abs((r.minX + r.maxX) / 2)).toBeCloseTo(4.8);
@@ -47,8 +47,8 @@ describe('ring layout', () => {
   });
 
   it('zombie counts escalate 1/2/3/4 around the ring, ten total', () => {
-    expect(ROOMS.map(r => r.zombies)).toEqual([1, 2, 3, 4]);
-    expect(ROOMS.reduce((n, r) => n + r.zombies, 0)).toBe(10);
+    expect(ROOMS.filter(r => r.id <= 4).map(r => r.zombies)).toEqual([1, 2, 3, 4]);
+    expect(ROOMS.filter(r => r.id <= 4).reduce((n, r) => n + r.zombies, 0)).toBe(10);
   });
 
   it('accents are FIRE braziers — warm in every room (SUPERSEDES hue distinctness)', () => {
@@ -114,6 +114,7 @@ describe('ring layout', () => {
       const spots = spawnPoints(r);
       expect(spots.length).toBe(r.zombies);
       for (const p of spots) {
+        expect(resolveCapsule([...p], levelColliders())).toBe(false);
         expect(p[0]).toBeGreaterThan(r.minX);
         expect(p[0]).toBeLessThan(r.maxX);
         expect(p[2]).toBeGreaterThan(r.minZ);
@@ -210,7 +211,10 @@ describe('ring layout', () => {
           // Room half-size to the wall (4 m); ceiling 3.0 - 1.6 = 1.4 m.
           expect(t!, `${r.name} ${name} too far`).toBeLessThan(5);
         }
-        expect(t!, `${r.name} ${name} unbounded void`).toBeLessThan(15);
+        // Aligned mouths can now expose the far annex wall through room2.
+        const levelSpan = Math.max(...ROOMS.map(room => room.maxX))
+          - Math.min(...ROOMS.map(room => room.minX));
+        expect(t!, `${r.name} ${name} unbounded void`).toBeLessThan(levelSpan);
       }
     }
   });
@@ -262,7 +266,8 @@ describe('walking the ring', () => {
 
   it('crosses tunnel 1-2 east from room 1 into room 2', () => {
     const s = makePlayer(-2, -4.8, Math.PI / 2); // forward = +x
-    walk(s, fwd, 60 * 4);
+    // Stop in room2 before continuing through the new eastern passage.
+    walk(s, fwd, 60 * 2);
     expect(enclosureKeyAt(s.pos[0], s.pos[2])).toBe('room2');
   });
 
@@ -314,7 +319,8 @@ describe('walking the ring', () => {
     for (let i = 0; i < 60 * 30; i++) {
       s.yaw += Math.sin(i * 0.013) * 0.05 + 0.01;
       stepPlayer(s, { x: 0, z: 1, jump: i % 300 === 0 }, 1 / 60, colliders);
-      expect(Math.abs(s.pos[0])).toBeLessThan(OUTER);
+      expect(s.pos[0]).toBeGreaterThan(-OUTER);
+      expect(s.pos[0]).toBeLessThan(Math.max(...ROOMS.map(r => r.maxX)));
       expect(Math.abs(s.pos[2])).toBeLessThan(OUTER);
       expect(s.pos[1]).toBeGreaterThanOrEqual(0);
       expect(enclosureKeyAt(s.pos[0], s.pos[2])).not.toBe('void');
@@ -324,5 +330,88 @@ describe('walking the ring', () => {
   it('eye height rides the capsule', () => {
     const s = makePlayer(0, 0, 0);
     expect(eyeOf(s)[1]).toBeCloseTo(PLAYER.eye);
+  });
+});
+
+
+describe('mixed encounter annex', () => {
+  it('adds five combatants east of room2 with three soldier slots', () => {
+    const room = ROOMS.find(r => r.id === 5);
+    expect(room).toBeDefined();
+    expect(room!.minX).toBeGreaterThan(ROOMS[1]!.maxX);
+    expect(room!.zombies).toBe(5);
+    expect(room!.soldiers).toBe(3);
+    expect(ROOMS[0]!.soldiers).toBe(1);
+    expect(spawnPoints(room!)).toHaveLength(5);
+    expect(enclosureKeyAt(14.4, -4.8)).toBe('room5');
+    const tunnels = TUNNELS.filter(t => t.a === 5 || t.b === 5);
+    expect(tunnels).toHaveLength(1);
+    expect([tunnels[0]!.a, tunnels[0]!.b]).toEqual([2, 5]);
+    expect(tunnels[0]!.maxZ - tunnels[0]!.minZ).toBeGreaterThanOrEqual(2);
+  });
+
+  it('admits two lateral capsule lanes through both new doorway mouths', () => {
+    const colliders = levelColliders();
+    // Sample the full approach, both mouths and the corridor; the offset
+    // lanes also fit two capsules side by side, rather than only a centre ray.
+    for (const z of [-5.3, -4.3]) {
+      for (let x = 7.8; x <= 11.4; x += 0.05) {
+        const pos: [number, number, number] = [x, 0, z];
+        expect(resolveCapsule(pos, colliders), `blocked at ${x}, ${z}`).toBe(false);
+        expect(enclosureKeyAt(x, z)).not.toBe('void');
+      }
+    }
+  });
+
+  it('walks through the annex tunnel in either direction', () => {
+    for (const [x, yaw, destination] of [
+      [7.8, Math.PI / 2, 'room5'], [11.4, -Math.PI / 2, 'room2'],
+    ] as const) {
+      const s = makePlayer(x, -4.8, yaw);
+      walk(s, { x: 0, z: 1, jump: false }, 60);
+      expect(enclosureKeyAt(s.pos[0], s.pos[2])).toBe(destination);
+    }
+  });
+
+  it('has cover with clear north and south lateral routes', () => {
+    expect(FURNITURE.filter(f => f.room === 5).length).toBeGreaterThanOrEqual(2);
+    const colliders = levelColliders();
+    for (const z of [-7.7, -1.9]) {
+      for (let x = 11.4; x <= 17.4; x += 0.1) {
+        expect(resolveCapsule([x, 0, z], colliders)).toBe(false);
+      }
+    }
+  });
+
+  it('matches visible annex wall planes to collision and leaves the mouths open', () => {
+    const colliders = levelColliders();
+    const { planes, boxes } = levelSurfaces();
+    const walls = planes.filter(p => p.axis !== 1 && p.min[0] >= OUTER);
+    expect(walls.length).toBeGreaterThan(0);
+    for (const p of walls) {
+      const mid: [number, number, number] = [
+        (p.min[0] + p.max[0]) / 2,
+        (p.min[1] + p.max[1]) / 2,
+        (p.min[2] + p.max[2]) / 2,
+      ];
+      expect(colliders.some(b => mid.every((v, axis) =>
+        v >= b.min[axis]! - 1e-6 && v <= b.max[axis]! + 1e-6))).toBe(true);
+    }
+    for (const x of [8.8, 10.4]) {
+      expect(planes.some(p => p.axis === 0 && Math.abs(p.min[0] - x) < 1e-6
+        && p.min[1] < 1.7 && p.max[1] > 0.3 && p.min[2] < -4.8 && p.max[2] > -4.8)).toBe(false);
+    }
+    for (const b of boxes.filter(b => b.min[0] >= OUTER)) {
+      expect(colliders.some(c => c.min.every((v, i) => v === b.min[i])
+        && c.max.every((v, i) => v === b.max[i]))).toBe(true);
+    }
+  });
+
+  it('keeps a walking capsule inside all three closed annex sides', () => {
+    for (const [x, z, yaw] of [[17, -4.8, Math.PI / 2], [17, -7.5, 0], [17, -2, Math.PI]]) {
+      const s = makePlayer(x!, z!, yaw!);
+      walk(s, { x: 0, z: 1, jump: false }, 180);
+      expect(enclosureKeyAt(s.pos[0], s.pos[2])).toBe('room5');
+    }
   });
 });

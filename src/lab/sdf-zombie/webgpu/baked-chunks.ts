@@ -126,7 +126,7 @@ export interface BakedChunkMaterial {
  *  per-vertex so sharing costs nothing.
  *
  *  M2 task 2: trailing `options` selects the output mode. Surface mode
- *  builds the four named G-buffer attachments from the baked vertex terms
+ *  builds the five named G-buffer attachments from the baked vertex terms
  *  (albedo/roughness via chunkSurface, world normal, mesh class + shadow
  *  receiver, projected clip depth) and never touches the light compose —
  *  the SAME material split as the bone instancer, and the lit path below
@@ -146,6 +146,8 @@ export function createBakedChunkMaterial(options?: SurfaceOutputOptions): BakedC
       normalMetalness: vec4(normalWorld, float(0)),
       emissionClass: vec4(float(0), float(0), float(0), float(kind)),
       surfaceDepth: vec4(clip.z.div(clip.w) as never, float(0), float(0), float(1)),
+      // Mesh response has no authored flesh parameters; still write every MRT lane.
+      surfaceParams: vec4(float(0), float(0), float(0), float(1)),
     }) as never;
     material.blending = THREE.NoBlending; // MRT producer — the M1 mesh rule
     // Route-diagnostic marker ON THE MATERIAL — see the same stamp in

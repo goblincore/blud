@@ -1,0 +1,48 @@
+{
+  "cases": [
+    {
+      "cap": 0,
+      "second": -1,
+      "scalarError": 0,
+      "gradientError": 0.0009572291746735573,
+      "valid": 56
+    },
+    {
+      "cap": 0,
+      "second": 0,
+      "scalarError": 0,
+      "gradientError": 0.001074013183824718,
+      "valid": 62
+    },
+    {
+      "cap": 0.025,
+      "second": -1,
+      "scalarError": 0,
+      "gradientError": 0.0009572291746735573,
+      "valid": 46
+    },
+    {
+      "cap": 0.025,
+      "second": 0,
+      "scalarError": 0,
+      "gradientError": 0.001074013183824718,
+      "valid": 55
+    },
+    {
+      "cap": 0.06,
+      "second": -1,
+      "scalarError": 0,
+      "gradientError": 0.0009572291746735573,
+      "valid": 50
+    },
+    {
+      "cap": 0.06,
+      "second": 0,
+      "scalarError": 0,
+      "gradientError": 0.001074013183824718,
+      "valid": 56
+    }
+  ],
+  "errors": [],
+  "passed": true
+}

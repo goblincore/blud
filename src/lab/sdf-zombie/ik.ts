@@ -154,6 +154,26 @@ export function poleReflect(root: Vec3, mid: Vec3, end: Vec3, pole: Vec3): Vec3 
   return sub(onAxis, off); // 2*onAxis - mid: the mirror image across the line
 }
 
+/** Exact two-bone hinge for an authored floor contact. Unlike an iterative
+ * solve seeded from a nearly straight clip pose, flexion is determined by
+ * the contact geometry, and a reachable ankle has no convergence drift. */
+export function solveHingeLeg(hip: Vec3, target: Vec3, lengths: readonly [number, number], pole: Vec3): { knee: Vec3; foot: Vec3 } {
+  const [a, b] = lengths;
+  if (a + b < 1e-9) return { knee: hip, foot: hip };
+  const delta = sub(target, hip);
+  const distance = len(delta);
+  const axis: Vec3 = distance > 1e-9 ? scale(delta, 1 / distance) : [0, -1, 0];
+  const d = clamp(distance, Math.max(1e-9, Math.abs(a - b)), a + b);
+  const along = (a * a - b * b + d * d) / (2 * d);
+  const height = Math.sqrt(Math.max(0, a * a - along * along));
+  let forward = sub(pole, scale(axis, dot(pole, axis)));
+  if (len(forward) < 1e-9) forward = cross(axis, Math.abs(axis[0]) < .9 ? [1, 0, 0] : UP);
+  return {
+    knee: add(add(hip, scale(axis, along)), scale(normalize(forward), height)),
+    foot: distance >= Math.abs(a - b) && distance <= a + b ? target : add(hip, scale(axis, d)),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Foot plant.
 // ---------------------------------------------------------------------------

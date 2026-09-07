@@ -291,15 +291,16 @@ const faceTarget = async (px, pz, tx, tz, pitch = -0.12) => {
  *  observation aims and verifies at the point itself: two camera read-backs
  *  converge the pitch, then the point's own projection is the in-frame
  *  assertion. */
-const facePoint = async (x, y, z, dist = 1.2) => {
+const facePoint = async (x, y, z, dist = 1.2, azimuth = 0) => {
   await enterSimPhase('facePoint');
   const cam0 = await evaluate('__sdfGame.cameraWorld()');
-  const yaw = aimYawAt(x + dist, z, x, z);
+  const px = x + Math.cos(azimuth) * dist, pz = z + Math.sin(azimuth) * dist;
+  const yaw = aimYawAt(px, pz, x, z);
   let pitch = Math.atan2(y - cam0[1], dist);
-  await evaluate(`__sdfGame.setPose(${x + dist}, ${z}, ${yaw}, ${pitch}); __sdfGame.step(2);`);
+  await evaluate(`__sdfGame.setPose(${px}, ${pz}, ${yaw}, ${pitch}); __sdfGame.step(2);`);
   const cam1 = await evaluate('__sdfGame.cameraWorld()');
   pitch = Math.atan2(y - cam1[1], Math.hypot(x - cam1[0], z - cam1[2]));
-  await evaluate(`__sdfGame.setPose(${x + dist}, ${z}, ${yaw}, ${pitch}); __sdfGame.step(4);`);
+  await evaluate(`__sdfGame.setPose(${px}, ${pz}, ${yaw}, ${pitch}); __sdfGame.step(4);`);
   await settleAndLock();
   return await assertInFrame('facePoint', x, y, z, 0.97);
 };
@@ -1204,10 +1205,10 @@ null
   //     fact; the gate proves BOTH RENDER as SDF producers. Pellet flight
   //     and detachment are simulation: the whole sever loop runs unlocked.
   await enterSimPhase('P5-sever');
-  const severTargets = (await evaluate('__sdfGame.zombies()')).filter(q => q.room === 2);
-  assert.ok(severTargets.length >= 2, 'fresh gameplay cast needs two room-2 zombies');
+  const severTargets = (await evaluate('__sdfGame.zombies()')).filter(q => q.room === 2 || q.room === 3);
+  assert.ok(severTargets.length >= 2, 'fresh gameplay cast needs at least two room-2/3 zombies');
   let target = severTargets[0];
-  let targetIndex = 0;
+  let targetIndex = 0, shotsAtTarget = 0;
   // aimSurface deliberately ignores targets closer than 1.5m.
   await faceTarget(target.pos[0] + 1.8, target.pos[2], target.pos[0], target.pos[2], -0.18);
   await enterSimPhase('P5-sever'); // faceTarget ends locked; pellets need live ticks
@@ -1218,6 +1219,14 @@ null
   const limbs = ['armL', 'armR', 'legL', 'legR', 'head', 'torso'];
   let limbIndex = 0, shotsAtLimb = 0;
   for (let attempt = 0; attempt < 60 && severed < 2; attempt++) {
+    if (shotsAtTarget >= 8 && targetIndex + 1 < severTargets.length) {
+      targetIndex++; shotsAtTarget=0; limbIndex=0; shotsAtLimb=0;
+      target=(await evaluate('__sdfGame.zombies()')).find(q=>q.id===severTargets[targetIndex].id);
+      assert.ok(target, 'next sever subject must still exist');
+      await faceTarget(target.pos[0]+1.8,target.pos[2],target.pos[0],target.pos[2],-0.18);
+      await enterSimPhase('P5-sever');
+      await evaluate('__sdfGame.freeze(true)');
+    }
     const limb = limbs[limbIndex % limbs.length];
     const aimed = await evaluate(`__sdfGame.aimSurface(${JSON.stringify(limb)},${target.id})`);
     if (!aimed) { limbIndex++; shotsAtLimb=0; continue; }
@@ -1234,7 +1243,7 @@ null
     if (!predicted) { limbIndex++; shotsAtLimb=0; continue; }
     const ok = await evaluate('__sdfGame.fireSlug()');
     if (!ok) { await evaluate('__sdfGame.step(40)'); continue; }
-    shotsAtLimb++;
+    shotsAtLimb++; shotsAtTarget++;
     await evaluate('__sdfGame.step(24)');
     const now = await evaluate('__sdfGame.chunkStats()');
     severed = now.livePieces.filter(p=>!chunkIdsBefore.includes(p.id)).length;
@@ -1243,7 +1252,7 @@ null
     if (severed === 1 && targetIndex === 0) {
       // Two live producers need not come from the same damaged/frozen body.
       // Select the second ordinary gameplay zombie explicitly.
-      targetIndex=1;
+      targetIndex=1; shotsAtTarget=0;
       target=(await evaluate('__sdfGame.zombies()')).find(q=>q.id===severTargets[1].id);
       assert.ok(target, 'second sever subject must still exist');
       await faceTarget(target.pos[0]+1.8,target.pos[2],target.pos[0],target.pos[2],-0.18);
@@ -1291,10 +1300,49 @@ null
   const newlySeveredPieces = census.livePieces.filter(p => !chunkIdsBefore.includes(p.id));
   assert.ok(newlySeveredPieces.length >= 2, 'two newly severed pieces must remain live for inspection');
   for (const initial of newlySeveredPieces.slice(0, 2)) {
-    await facePoint(initial.centre[0], initial.centre[1], initial.centre[2], 1.2);
-    const piece = (await evaluate('__sdfGame.chunkStats()')).livePieces.find(p=>p.id===initial.id);
-    assert.ok(piece, `live chunk ${initial.id} disappeared during inspection`);
-    const hit = await sampleChunk(piece, 18);
+    // Main's wound/physics changes alter where detached pieces land. A single
+    // fixed +X view can be behind furniture; inspect cardinal views without
+    // weakening exact-producer on/off depth and world-distance attribution.
+    let hit = null, piece = initial;
+    const attempts = [];
+    for (const azimuth of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+      await facePoint(...piece.centre, 1.2, azimuth);
+      piece = (await evaluate('__sdfGame.chunkStats()')).livePieces.find(p=>p.id===initial.id);
+      assert.ok(piece, `live chunk ${initial.id} disappeared during inspection`);
+      try { hit = await sampleChunk(piece, 18); break; }
+      catch (error) {
+        if (!String(error.message).includes('no class-18 pixel attributable')) throw error;
+        attempts.push({azimuth, centre:piece.centre, radius:piece.radius, error:error.message});
+      }
+    }
+    records.stages.chunkViewAttempts ??= {};
+    records.stages.chunkViewAttempts[initial.id] = attempts;
+    saveEvidence();
+    if (!hit) {
+      // Cosmetic limb physics collides with the floor only; a production
+      // sever can settle inside the level wall. Prove that occlusion rather
+      // than mistaking it for a missing SDF producer. The same exact chunk
+      // on/off and distance assertions still apply with level isolated.
+      await shot(`task6-chunk-${initial.id}-occluded.png`, {}, {}, {minFrameNonDark:0});
+      try {
+        await evaluate('__sdfGame.setLevelMeshVisible(false)');
+        hit = await sampleChunk(piece, 18);
+      } finally {
+        await evaluate('__sdfGame.setLevelMeshVisible(true); __sdfGame.step(1)');
+      }
+      const gunVisible = await evaluate('__sdfGame.viewModelAnchor.visible');
+      let cover;
+      try {
+        await evaluate('__sdfGame.viewModelAnchor.visible = false');
+        cover = (await evaluate(`__sdfGame.sampleSurfacePoints(${JSON.stringify([hit.ndc])})`))[0];
+      } finally {
+        await evaluate(`__sdfGame.viewModelAnchor.visible = ${gunVisible}; __sdfGame.step(1)`);
+      }
+      assert.equal(cover.cls, 1, 'isolated chunk must have been hidden by level geometry');
+      assert.ok(cover.depth < hit.texel.depth, 'level occluder must be closer than the isolated chunk');
+      attempts.push({isolation:'level-hidden', levelDepth:cover.depth, chunkDepth:hit.texel.depth});
+    }
+    assert.ok(hit, `chunk ${initial.id}: no attributable pixel from any cardinal view`);
     chunkTexels.push({id:piece.id, centre:piece.centre, texelDepth:hit.texel.depth,
       cls:hit.texel.cls, offDepth:hit.offDepth, distanceToCentre:hit.distance});
   }
@@ -1338,8 +1386,20 @@ null
     bakedPiece.centre[0]+bakedPiece.radius<roomBounds.maxX &&
     bakedPiece.centre[2]-bakedPiece.radius>roomBounds.minZ &&
     bakedPiece.centre[2]+bakedPiece.radius<roomBounds.maxZ, 'settled bake must clear room walls');
-  await facePoint(bakedPiece.centre[0], bakedPiece.centre[1], bakedPiece.centre[2], 1.1);
-  const bakedHit = await sampleChunk(bakedPiece, 17);
+  let bakedHit = null;
+  const bakeViews = [];
+  for (const azimuth of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+    await facePoint(...bakedPiece.centre, 1.1, azimuth);
+    try { bakedHit = await sampleChunk(bakedPiece, 17); break; }
+    catch (error) {
+      if (!String(error.message).includes('no class-17 pixel attributable')) throw error;
+      bakeViews.push({azimuth, centre:bakedPiece.centre, radius:bakedPiece.radius, error:error.message});
+    }
+  }
+  records.stages.bakeViewAttempts = bakeViews;
+  saveEvidence();
+  if (!bakedHit) await shot('task6-baked-unresolved.png', {}, {}, {minFrameNonDark:0});
+  assert.ok(bakedHit, 'baked piece must have an attributable pixel from a cardinal view');
   const bakedTexel = bakedHit.texel;
   const bakedNormal = await normalTowardCam(bakedHit.ndc, bakedTexel, 0.0, 'baked chunk');
   await shot('task6-baked-chunk.png', {}, {}, { minFrameNonDark: 8 });

@@ -26,13 +26,14 @@ function setup(allowed = true) {
   });
   function actor(groupCount = 1) {
     const binding = controller.createBinding();
-    const state = { enabled: false, bins: [] as { groups: TileGroupInput[]; camera: PerspectiveCamera; blend: number; grid: typeof grid }[] };
+    const state = { enabled: false, rayCull: false, bins: [] as { groups: TileGroupInput[]; camera: PerspectiveCamera; blend: number; grid: typeof grid }[] };
     let groups = Array.from({ length: groupCount }, () => ({ ...group }));
     const view: GameTileView = {
       uniforms: { counts: { value: { w: 0.125 } } },
       getTileGroups: () => groups,
       tiles: binding ? {
         setEnabled(on) { state.enabled = on; },
+        setRayCull(on) { state.rayCull = on; },
         bin(groups, camera, blend, grid) { state.bins.push({ groups, camera, blend, grid }); },
         dispose() {},
       } : undefined,
@@ -82,6 +83,19 @@ describe('game tile playtest lifecycle', () => {
     expect(a.state.bins).toHaveLength(2);
     expect(a.state.enabled && b.state.enabled).toBe(true);
     expect(controller.diagnostics().active).toBe(2);
+  });
+
+  it('pushes the ray-cull lever to tracked views and to views tracked later', () => {
+    const { controller, actor } = setup();
+    const a = actor();
+    expect(a.state.rayCull).toBe(false);
+    controller.setRayCull(true);
+    expect(a.state.rayCull).toBe(true);
+    const b = actor();
+    expect(b.state.rayCull).toBe(true);
+    expect(controller.diagnostics().rayCull).toBe(true);
+    controller.setRayCull(false);
+    expect(a.state.rayCull && b.state.rayCull).toBe(false);
   });
 
   it.each([{ widthPx: 1921, heightPx: 720 }, { widthPx: 1280, heightPx: 1089 }])(

@@ -100,6 +100,8 @@ export interface ActorSignals {
   missing: MissingLimbs;
   headAlive: boolean;
   forcedCollapse: boolean;
+  downed?: boolean;
+  fatal?: boolean;
   freshWounds: Wound[];
 }
 
@@ -170,6 +172,8 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
         missing: signals.missing,
         headAlive: signals.headAlive,
         forcedCollapse: signals.forcedCollapse,
+        downed: signals.downed,
+        fatal: signals.fatal,
         freshWounds: signals.freshWounds,
       },
       m.bound.rig.points, input.bounds, input.rng,
@@ -189,7 +193,7 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
     m.lastBodyYaw = f.bodyYaw;
 
     let points = stepRig(
-      { ...m.bound.rig, restPose: f.restPose, bodyYaw: f.bodyYaw }, sdt,
+      { ...m.bound.rig, restPose: f.restPose, bodyYaw: f.bodyYaw, posePins: f.posePins }, sdt,
       {
         gravity: f.gravity,
         damping: 0.06,
@@ -199,14 +203,14 @@ export function stepActorMotion(m: ActorMotion, input: ActorStepInput): MotionFr
     ).points;
     if (f.ropes.length) points = relaxRopeConstraints(points, f.ropes);
     // Hand tips and toes ride their anchor rigidly (rig-bind.ts RigidTip).
-    points = pinTips(points, m.bound.tips, f.bodyYaw);
+    points = pinTips(points, m.bound.tips, f.bodyYaw, input.profile?.name === 'soldier' && f.collapsed ? f.restPose : undefined);
     if (f.collapsed) {
-      points = applyFloorContact(points, m.motionJoints.groundY - MOTION_TUNING.floorPad);
+      points = applyFloorContact(points, f.floorY);
     }
     m.bound = {
       ...m.bound,
-      rig: constrainRigBends({ ...m.bound.rig, points, restPose: f.restPose, bodyYaw: f.bodyYaw },
-        f.collapsed ? m.motionJoints.groundY - MOTION_TUNING.floorPad : undefined),
+      rig: constrainRigBends({ ...m.bound.rig, points, headFollowsRig: input.profile?.name === 'soldier' && f.collapsed, restPose: f.restPose, bodyYaw: f.bodyYaw },
+        f.collapsed ? f.floorY : undefined),
     };
     // Fire kicks: point shoves THROUGH the rig, after the bend constraints
     // for the sub-step. Only the first sub-step's frame carries them (fire

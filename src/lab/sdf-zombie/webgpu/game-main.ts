@@ -1,3 +1,6 @@
+import { createEncounterNavigation } from './encounter-navigation';
+import { createEncounterDirector, type EncounterAgent } from './encounter-director';
+import { createSoldierCorpseBakes } from './soldier-corpse-bake';
 import { buildNormalBodyPointFn } from './normal-gradient.wgsl';
 import { finiteGradient, woundGradient, type V3, type WoundInput } from './normal-gradient-reference';
 import { classifyNormalSupport, normalHitPoint } from './normal-gradient-support';
@@ -56,6 +59,7 @@ import { createOccluderHull, buildHullInstances, HULL_SHRINK, type HullInstance 
 import { type BuildResult } from '../build-body';
 import { parseBlob } from '../blob-parse';
 import { createCharacterView, compileCharacterSheet } from './character-view';
+import { createCharacterEffects } from './character-effects';
 import { characterEntry, characterNames } from '../character-registry';
 import { rotateYaw } from '../gait';
 import { makeSoldierMind } from './enemy-mind';
@@ -80,7 +84,8 @@ import {
   wgslFn, texture3D as tslTexture3D, texture as tslTexture, screenUV as tslScreenUV, vec4 as tslVec4,
   length as tslLength, sub as tslSub, positionWorld, cameraPosition, uniform as tslUniform,
 } from 'three/tsl';
-import { runBench, type BenchDeps } from './game-bench';
+import { runBench, type BenchDeps, type BenchMode } from './game-bench';
+import { installPassTiming, beginPassFrame, setPassLabel } from './gpu-pass-timing';
 import { GameTelemetry, type FrameTiming } from './game-telemetry';
 import { createTelemetryControls } from './game-telemetry-controls';
 import { createGameTilePlaytest } from './game-tile-playtest';
@@ -158,9 +163,9 @@ const RES_RUNGS = {
 } as const satisfies Record<string, RenderCap>;
 type ResRung = keyof typeof RES_RUNGS;
 const DEFAULT_RES: ResRung = '800';
-function resRungFromUrl(): ResRung {
+function resRungFromUrl(fallback: ResRung = DEFAULT_RES): ResRung {
   const v = new URLSearchParams(location.search).get('res');
-  return v && v in RES_RUNGS ? (v as ResRung) : DEFAULT_RES;
+  return v && v in RES_RUNGS ? (v as ResRung) : fallback;
 }
 
 // The zombie's shared flat face sheet (zombie.blob has no `sheet` block) —
@@ -192,10 +197,15 @@ function headShape(b: BuildResult): { centre: Vec3; axes: Vec3 } | null {
 }
 
 async function main() {
+  const boundedWoundPreview = import.meta.env.DEV && new URLSearchParams(location.search).has('bounded-wounds');
   const mount = document.getElementById('app');
   if (!mount) throw new Error('#app not found');
-  const resKey = resRungFromUrl();
+  const resKey = resRungFromUrl(boundedWoundPreview ? '640' : DEFAULT_RES);
   const handle = await createLabRenderer(mount, RES_RUNGS[resKey]);
+  // Per-pass GPU timestamps (gpu-pass-timing.ts). Wraps the backend's uid
+  // builder once; costs a string concat per pass. Read through
+  // __sdfGame.bench({ mode: 'passes' }) or __sdfGame.passTimings().
+  const passTiming = installPassTiming(handle.renderer);
   const { scene, camera } = handle;
   const telemetry = new GameTelemetry();
 
@@ -232,6 +242,9 @@ async function main() {
   // The world: grey-box meshes from the same layout that feeds collision.
   // -----------------------------------------------------------------------
   const colliders = levelColliders();
+  const encounterNav = createEncounterNavigation(ROOMS, TUNNELS, colliders);
+  const encounter = createEncounterDirector(encounterNav, colliders);
+  const encounterHomes = new Map<number, Vec3>();
   const surfaces = levelSurfaces();
   const levelGroup = new THREE.Group();
   levelGroup.name = 'ring-level';
@@ -451,6 +464,7 @@ async function main() {
   // The draw chain, exactly as the bench stands it up.
   // -----------------------------------------------------------------------
   const postAa = createPostAa(handle.renderer);
+  const characterEffects = createCharacterEffects(handle.renderer);
   // THE FISHEYE. The camera renders WIDER than the player sees and the blit
   // squeezes it back, which is what buys the bulge without losing the frame
   // to a warp that reaches off the buffer. `centerFovDeg` is the look knob;
@@ -539,6 +553,7 @@ async function main() {
       // display decode; without it, deferred flesh keeps the flat M1
       // bounded approximation the owner rejected.
       fleshDisplay: () => true,
+      renderEffects: (camera) => characterEffects.render(camera),
       flashlight: flashlight.spot,
       width: postAa.contentSize.width,
       height: postAa.contentSize.height,
@@ -706,6 +721,9 @@ async function main() {
   let lightClockFrozen = false;
   let flickerClockFrozenAt = 0;
   handle.setDrawFn(() => postAa.render(() => {
+    // Anything rendered before a site claims a label lands in 'frame:other'
+    // — a non-zero row there means an unlabelled pass exists.
+    setPassLabel('frame:other');
     flashlight.update(camera);
 
     // ---- COMMON per-frame updates (both render modes) ---------------------
@@ -735,7 +753,7 @@ async function main() {
         const craters: { pos: Vec3; radius: number }[] = [];
         for (const a of actors) {
           const prims = a.posed().prims;
-          for (const w of a.wounds()) craters.push({ pos: woundWorldPos(prims, w, 0), radius: w.radius });
+          for (const w of a.visualWounds()) craters.push({ pos: woundWorldPos(prims, w, boundedWoundPreview ? a.pose().yaw : 0), radius: w.radius });
         }
         boneInstancer.setWounds(craters);
       }
@@ -854,6 +872,7 @@ async function main() {
     } else {
       sdfLayer.render(scene, camera);
     }
+    characterEffects.render(camera);
   }));
 
   const occluderHull = createOccluderHull();
@@ -1048,6 +1067,33 @@ async function main() {
   scene.add(boneInstancer.object);
   deferredApi?.router.register(boneInstancer.object, 'mesh', 'level-only');
   let boneMesh = false;
+  // Bone-cluster sphere cull (packBoneClusters). OFF ships — the old flat
+  // bone loop; the bench's bone-cull-on leg flips it. Takes effect on the
+  // next upload; promotion to ON is the owner's call after the numbers.
+  // BONE CULL SHIPS 'segment' (owner call, 2026-09-07). Per-rigid-segment
+  // bone spheres: exact (identical hit counts across off/cluster/segment,
+  // pixel gate at the noise floor), bone evaluations -48% on a wounded
+  // frozen scene. Measured wounded-march win is small (~5-7% in room 3,
+  // unresolved in room 4) — culling has reached the point where what is
+  // left near a torso wound is genuinely near; the remaining bone cost goes
+  // away only by taking bones out of the field (baked bone-segment meshes,
+  // after deferred). Applied to every actor at spawn (spawnEnemy) and to
+  // late toggles via setBoneCullMode. Chunks stay on the flat fold.
+  // Evidence: docs/dev-notes/2026-09-07-bone-segment-spheres/notes.md.
+  const GAME_BONE_CULL_MODE = 'segment' as 'off' | 'cluster' | 'segment';
+  let boneCull = GAME_BONE_CULL_MODE !== 'off';
+  // Three-way cull state (bone-segment spheres): boneCull stays the boolean
+  // view (off vs any cull) the old seam reports.
+  let boneCullMode: 'off' | 'cluster' | 'segment' = GAME_BONE_CULL_MODE;
+  function applyBoneCullMode(mode: 'off' | 'cluster' | 'segment'): void {
+    boneCullMode = mode;
+    boneCull = mode !== 'off';
+    for (const a of actors) a.view.setBoneCullMode(mode);
+    for (const c of liveChunks) c.view.setBoneCullMode(mode);
+  }
+  function applyBoneCull(on: boolean): void {
+    applyBoneCullMode(on ? 'cluster' : 'off');
+  }
   function applyBoneMesh(on: boolean): void {
     boneMesh = on;
     boneInstancer.object.visible = on;
@@ -1360,6 +1406,7 @@ async function main() {
       start,
       renderer: handle.renderer,
       scene: deferredMode ? rigGroup : scene,
+      effectsScene: characterEffects.scene,
       errors: errs,
       // The panel's ratio, once the owner has touched it, overrides whatever
       // the doc would have done (nothing today; an authored ratio from the
@@ -1372,7 +1419,8 @@ async function main() {
     gameTiles.track(view, tileBinding);
     // Bone tubes: with the mesh ON the field stops packing bone rows (task 5).
     view.setPackBones(!boneMesh);
-    view.applyMaterial(flesh, LIGHT_PRESETS['practical-hard-key']);
+    view.applyMaterial(name === 'soldier' ? character.palette ?? flesh : flesh,
+      LIGHT_PRESETS['practical-hard-key']);
     // The panel's ramp rides ON TOP of the material: applyMaterial just
     // wrote the preset defaults, so a tuned panel must re-stamp its values
     // or a rebuild would silently reset the ramp (the silent-reset class
@@ -1403,6 +1451,19 @@ async function main() {
       view.uniforms.faceProj.value.set(
         sheet.projScaleX, sheet.projScaleY, sheet.projCentreX, sheet.projCentreY,
       );
+      // Keep the soldier's authored face consistent with the lab. Projection
+      // alone still left the zombie's full-strength tint, relief and glow on
+      // his head, washing out the jaw and turning the entire face orange.
+      if (name === 'soldier') {
+        view.uniforms.faceCfg.value.set(
+          sheet.enabled ? (sheet.decal > 0.5 ? 2 : sheet.blendLuma > 0.5 ? 3 : 1) : 0,
+          sheet.texStrength, sheet.faceForward, sheet.texRelief,
+        );
+        view.uniforms.faceCfg2.value.x = sheet.projSpherical;
+        view.uniforms.faceCfg2.value.z = sheet.eyeGlowCut;
+        view.uniforms.faceCfg2.value.w = sheet.eyeGlowAmp;
+        view.uniforms.faceGlowRedOnly.value = sheet.eyeGlowRedOnly;
+      }
     } else {
       view.uniforms.faceProj.value.set(0.45, 0.58, 0.5, 0.56);
     }
@@ -1440,39 +1501,37 @@ async function main() {
     rigGroup.userData.gameActorId = zombieId;
     const actor = createZombieActor({
       id: zombieId, room: room.id, body: placed, view, character, start,
+      boundedWounds: boundedWoundPreview,
       ...(name === 'soldier' ? {
         mind: makeSoldierMind(),
         onFire: ({ origin: muz, direction: dir }) => {
           if (!character.prop || character.prop.released) return;
+          encounter.shot(zombieId);
           nextSeed = (nextSeed * 1664525 + 1013904223) >>> 0;
           // ONE barrel: the double-barrel volley is the player's signature,
           // and the soldier throwing the same wall of lead reads as a second
           // player rather than an enemy.
           soldierPellets.push(...spawnPellets(muz, dir, 1, nextSeed));
-          spawnMuzzleFlash(muz);
         },
       } : {}),
       profile: characterEntry(name).profile,
       seed: 1337 + nextId * 101,
       bounds: wanderBounds(room),
       furniture: roomFurniture,
+      navigation: encounterNav,
       onSever: (piece, stumpWound) => onSeverDispatch?.(actor, piece, stumpWound),
     });
+    // Ship default + any live toggle: a late spawn must not fall back to the
+    // flat bone fold while the rest of the room culls.
+    actor.view.setBoneCullMode(boneCullMode);
+    encounterHomes.set(actor.id,[...start] as Vec3);
     return actor;
   }
 
-  /** Which room the lone soldier holds.
-   *
-   *  ROOM 1, and it is the PLAYER'S START ROOM with exactly one spawn point —
-   *  so he stands alone in front of you the moment you boot, with no zombie
-   *  noise to read the state machine through. There is no ranged arbiter yet,
-   *  so a second soldier would shoot through the first. */
-  const SOLDIER_ROOM = 1;
-
   function spawnAll(errs: string[]): void {
     for (const room of ROOMS) {
-      for (const start of spawnPoints(room)) {
-        const name = room.id === SOLDIER_ROOM ? 'soldier' : 'zombie';
+      for (const [index,start] of spawnPoints(room).entries()) {
+        const name = index < (room.soldiers ?? 0) ? 'soldier' : 'zombie';
         actors.push(spawnEnemy(name, room, start, errs));
       }
     }
@@ -1509,6 +1568,7 @@ async function main() {
     template: ChunkTemplate;
   }
   const bakedChunks: BakedChunk[] = [];
+  let soldierCorpses: ReturnType<typeof createSoldierCorpseBakes> | null = null;
   // One material for every baked chunk — one pipeline, N meshes. Lighting
   // uniforms are LIVE (refreshed per frame beside the bone instancer's);
   // albedo is per-vertex so sharing costs nothing.
@@ -1571,10 +1631,13 @@ async function main() {
    *  !wanderFrozen, and a FROZEN bench leg calling setWoundTuning must not
    *  march through a stale hull. */
   function rebuildCast(): void {
+    soldierCorpses?.dispose();
+    encounter.clear(); encounterHomes.clear();
     for (const a of actors) {
       scene.remove(a.view.object);
       scene.remove(a.view.coneObject);
-      a.view.dispose();
+      if (a.character) a.character.dispose();
+      else a.view.dispose();
     }
     actors.length = 0;
     const errs: string[] = [];
@@ -1590,7 +1653,7 @@ async function main() {
         ? actors.flatMap(a => {
           const prims = a.posed().prims;
           const yaw = a.pose().yaw;
-          return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, yaw), radius: w.radius }));
+          return a.visualWounds().map(w => ({ centre: woundWorldPos(prims, w, yaw), radius: w.radius }));
         })
         : [],
     );
@@ -2287,24 +2350,6 @@ async function main() {
    *  They stop at solid level geometry and expire; actor damage remains a later phase. */
   const soldierPellets: Projectile[] = [];
   const soldierPelletViews: THREE.Mesh[] = [];
-  /** World-space muzzle flashes. Separate from flashGroup, which is the FPV
-   *  weapon's single viewmodel-parented flash and cannot be at two places. */
-  const soldierFlashes: { sprite: THREE.Sprite; life: number }[] = [];
-  const SOLDIER_FLASH_SEC = 0.06;
-
-  function spawnMuzzleFlash(at: Vec3): void {
-    const tex = flashTextures[Math.floor(Math.random() * flashTextures.length)];
-    if (!tex) return;   // pool not built yet
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: tex, color: 0xffe6bf, transparent: true,
-      blending: THREE.AdditiveBlending, depthWrite: false,
-    }));
-    s.position.set(at[0], at[1], at[2]);
-    s.material.rotation = Math.random() * Math.PI * 2;
-    s.scale.setScalar(0.45);
-    scene.add(s);
-    soldierFlashes.push({ sprite: s, life: SOLDIER_FLASH_SEC });
-  }
   const pelletGeo = new THREE.SphereGeometry(GRAPESHOT.radius, 10, 8);
   const pelletMat = new THREE.MeshBasicMaterial({ color: 0xffcf7a });
   const pelletViews: THREE.Mesh[] = [];
@@ -2427,6 +2472,27 @@ async function main() {
   const chunkBakeJobs = createChunkBakeJobs(() => new Worker(
     new URL('./chunk-bake.worker.ts', import.meta.url), { type: 'module' },
   ));
+  // Completed corpses arrive asynchronously. A persistent registered parent
+  // gives every replacement mesh the same route and removes it automatically
+  // from the router when damage restores the live SDF body.
+  const soldierCorpseGroup = new THREE.Group();
+  soldierCorpseGroup.name = 'soldier-corpses';
+  scene.add(soldierCorpseGroup);
+  deferredApi?.router.register(soldierCorpseGroup, 'mesh', 'level-only');
+  soldierCorpses = createSoldierCorpseBakes(soldierCorpseGroup, () => {
+    if (!bakedChunkMat) {
+      // Whichever finishes first (corpse or detached chunk) must seed the
+      // same mode-aware shared material.
+      bakedChunkMat = createBakedChunkMaterial(
+        deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined,
+      );
+      bakedChunkSeed?.(bakedChunkMat);
+    }
+    return bakedChunkMat.material;
+  });
+  const disposeCorpses = () => soldierCorpses?.dispose();
+  window.addEventListener('pagehide', disposeCorpses);
+  import.meta.hot?.dispose(() => { disposeCorpses(); window.removeEventListener('pagehide',disposeCorpses); });
   let chunkBakeInput: ChunkBakeData | null = null;
   let lastBakeSwapMs = 0;
   let lastBakeRequestMs = 0;
@@ -3134,25 +3200,30 @@ async function main() {
       lastWalkPos = [player.pos[0], player.pos[2]];
     }
     // Zombies are soft obstacles: one fat AABB each, rebuilt per frame.
-    const zombieBoxes = actors.map(a => {
+    const zombieBoxes = actors.filter(a=>!a.motionFrame()?.collapsed).map(a => {
       const p = a.pose().pos;
       return { min: [p[0] - 0.35, 0, p[2] - 0.35] as Vec3, max: [p[0] + 0.35, 1.8, p[2] + 0.35] as Vec3 };
     });
     stepPlayer(player, input, dt, [...colliders, ...zombieBoxes]);
 
+    // Damage transitions use their own clock; frozen pose captures must
+    // still show a newly selected preset. Refresh exclusions as it grows.
+    for (const a of actors) if (a.advanceWoundPreview(dt)) frozenHullBuilt = false;
     if (!wanderFrozen) {
       frozenHullBuilt = false;
       // --- brain input + crowd separation, BEFORE the actors step ----------
       // Order matters: separating first means this frame's step() and its
       // view.update() render the corrected positions, so a resolved overlap
       // is never a frame late on screen.
-      const pRoom = playerRoomId();
+      const pRoom = encounterNav.roomAt(player.pos);
       const pInfo = pRoom > 0
         ? { x: player.pos[0], z: player.pos[2], room: pRoom }
         : null;
-      const alertRoom = shotAlert ? pRoom : -1;
+      const snapshots: EncounterAgent[] = actors.map(a=>({id:a.id,pos:a.pose().pos,yaw:a.pose().yaw,room:a.room,
+        home:encounterHomes.get(a.id)??a.pose().pos,soldier:!a.mind().meleeCapable,disabled:!!a.motionFrame()?.collapsed}));
+      const orders=encounter.update(snapshots,pInfo,shotAlert,dt);
       shotAlert = false;
-      for (const a of actors) a.setBrainInput(pInfo, a.room === alertRoom);
+      for (const a of actors) a.setEncounterOrder(orders.get(a.id)!);
 
       // --- melee ring: who may swing this frame ---------------------------
       // Claimants are the alert bodies that are actually in the encounter; an
@@ -3166,7 +3237,7 @@ async function main() {
           // while having no swing to throw. Submitting him would make him
           // compete for a token AND be spaced at melee radius against the
           // zombies, distorting their positioning.
-          .filter(a => a.mind().meleeCapable
+          .filter(a => a.mind().meleeCapable && orders.get(a.id)?.visible && !a.motionFrame()?.collapsed
             && a.mind().debug().alert && a.mind().debug().state !== 'idle')
           .map(a => {
             const p = a.pose().pos;
@@ -3188,8 +3259,8 @@ async function main() {
         const p = a.pose().pos;
         return {
           x: p[0], z: p[2],
-          r: a.engagedForCrowd() ? ENGAGED_RADIUS : ZOMBIE_RADIUS,
-          mobile: true,
+          r: enclosureKeyAt(p[0],p[2]).startsWith('tunnel') ? .34 : a.engagedForCrowd() ? ENGAGED_RADIUS : .45,
+          mobile: !a.motionFrame()?.collapsed,
         };
       });
       // The player is an ANCHOR: zombies slide off him rather than shove him.
@@ -3200,6 +3271,7 @@ async function main() {
       actors.forEach((a, i) => a.nudge(push[i]![0], push[i]![1]));
 
       const bodyTiming = telemetry.begin();
+      soldierCorpses?.update(actors,dt);
       for (const a of actors) a.step(dt);
       // 'body-step' CLOSES HERE, before the kit pose below, because that is
       // the boundary main's telemetry numbers were taken with. Widening a
@@ -3218,7 +3290,7 @@ async function main() {
       for (const a of actors) {
         if (!a.character) continue;
         const p = a.pose();
-        a.character.pose(a.posed(), a.boundRig(), p.yaw, a.sinceFire(), a.motionFrame(), dt, a.id);
+        a.character.pose(a.body, a.boundRig(), p.yaw, a.sinceFire(), a.motionFrame(), dt, a.id);
       }
       const now = performance.now() / 1000;
       for (const a of actors) {
@@ -3246,7 +3318,7 @@ async function main() {
           ? actors.flatMap(a => {
             const prims = a.posed().prims;
             const yaw = a.pose().yaw;
-            return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, yaw), radius: w.radius }));
+            return a.visualWounds().map(w => ({ centre: woundWorldPos(prims, w, yaw), radius: w.radius }));
           })
           : [],
         // The pre-pass ships disabled and nothing consumes the occluder
@@ -3275,7 +3347,7 @@ async function main() {
           ? actors.flatMap(a => {
             const prims = a.posed().prims;
             const yaw = a.pose().yaw;
-            return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, yaw), radius: w.radius }));
+            return a.visualWounds().map(w => ({ centre: woundWorldPos(prims, w, yaw), radius: w.radius }));
           })
           : [],
         { occluder: sdfLayer.occluderEnabled },
@@ -3690,6 +3762,7 @@ async function main() {
         actor: a.id, model: 'zombie', pose: a.pose(), wounds: a.wounds().map(w => describeRecordedWound(a, w)),
         aliveRegions: a.posed().clusters.filter(c => c.alive).map(c => c.limb),
       });
+      soldierCorpses?.update(actors,0); // restore damaged snapshots before this draw
       telemetry.end('wound-flush', flushTiming);
       telemetry.end('projectiles-and-hits', projectileTiming);
       // SOLDIER PELLETS SIT OUTSIDE 'projectiles-and-hits' ON PURPOSE — see
@@ -3720,17 +3793,6 @@ async function main() {
           v.scale.setScalar(p.radius / GRAPESHOT.radius);
         } else {
           v.visible = false;
-        }
-      }
-      for (let i = soldierFlashes.length - 1; i >= 0; i--) {
-        const f = soldierFlashes[i]!;
-        f.life -= dt;
-        if (f.life <= 0) {
-          scene.remove(f.sprite);
-          f.sprite.material.dispose();
-          soldierFlashes.splice(i, 1);
-        } else {
-          f.sprite.material.opacity = f.life / SOLDIER_FLASH_SEC;
         }
       }
       // Sync the mesh pool to the sim list — growing it on demand (the
@@ -4093,7 +4155,15 @@ async function main() {
       start: () => telemetryControls.start(), stop: () => telemetryControls.stop(), mark: () => telemetryControls.mark(),
       get active() { return telemetry.active; }, lastCapture: () => telemetryControls.lastCapture(),
     } : null,
+    /** Pass-timing seam: march the gib chunks in their own labelled pass
+     *  ('split'), skip them ('skip', wrong frame on purpose), or the shipped
+     *  single pass ('merged'). See sdf-layer.ts setChunkPass. */
+    setChunkPass: (mode: 'merged' | 'split' | 'skip') => sdfLayer.setChunkPass(mode),
+    get chunkPass() { return sdfLayer.chunkPass; },
     setTiles: setGameTiles,
+    /** Prototype: per-ray sphere compaction of the tile list. Only has an
+     *  effect while tiles are on (tiles-playtest). */
+    setTileRayCull: (on: boolean) => gameTiles.setRayCull(on),
     tiles: () => gameTiles.diagnostics(),
     backend: handle.backend,
     /** Set the player pose. y defaults to 0 (feet on the floor). */
@@ -4138,7 +4208,7 @@ async function main() {
       player.pitch = 0;
       return true;
     },
-    /** Enclosure key under the player's feet ('room1'..'room4', tunnel, 'void'). */
+    /** Enclosure key under the player's feet ('room1'..'room5', tunnel, 'void'). */
     room: () => enclosureKeyAt(player.pos[0], player.pos[2]),
     /** Hand-step N frames at dt seconds each; stops the rAF loop first. */
     step(n: number, dt = 1 / 60) {
@@ -4174,11 +4244,12 @@ async function main() {
     /** Every zombie: id, room, live ground pose. */
     zombies: () => actors.map(a => ({ id: a.id, room: a.room, ...a.pose() })),
     /** Per-actor brain readout — the crowd/AI capture driver's oracle. */
+    encounter: () => encounter.debug(),
     brains: () => actors.map(a => {
       const b = a.mind().debug();
       const p = a.pose().pos;
       return {
-        id: a.id, room: a.room, state: b.state, alert: b.alert,
+        id: a.id, room: a.room, kind: a.mind().meleeCapable ? 'zombie' : 'soldier', phase:a.debug().phase, state: b.state, alert: b.alert,
         swingT: b.swingT, side: b.side, variant: b.variant,
         hasToken: a.debug().hasToken,
         aimT: b.aimT, cooldown: b.cooldown, sinceFire: a.sinceFire(),
@@ -4287,8 +4358,10 @@ async function main() {
       return a ? {
         get body() { return a.body; },
         view: a.view, posed: a.posed, boundRig: a.boundRig, pose: a.pose, room: a.room,
+        hit: a.hit, hitSlug: a.hitSlug,
         woundCount: () => a.wounds().length,
         woundList: () => [...a.wounds()],
+        visualWoundList: () => [...a.visualWounds()],
       } : undefined;
     },
     /** Where every wound of a body sits IN WORLD SPACE right now — the
@@ -4508,6 +4581,10 @@ async function main() {
     // -------------------------------------------------------------------
     /** The GPU completion fence. Trust the fence, never a timestamp value. */
     resolveGpu: () => handle.resolveGpu(),
+    /** Per-pass GPU timestamps since the last call, labelled by pass site
+     *  (gpu-pass-timing.ts). Ad-hoc probe; the bench's 'passes' mode is the
+     *  measured form. `installed` false = no timestamp tracking on this page. */
+    passTimings: async () => ({ installed: passTiming.installed, samples: await passTiming.collect() }),
     // setAdaptive / setSdfScale already exist further down this object and
     // are better than the versions this block first added (they also clear
     // the adaptive sample window and report the whole ladder). Not
@@ -5009,14 +5086,23 @@ async function main() {
       areaPriority?: boolean;
       splatFadeTail?: number;
       passGate?: { density?: boolean; blur?: boolean; surface?: boolean };
+      /** Density target fraction of the SDF size (ship 0.5). */
+      densityScale?: number;
+      /** Density quads per frame, at most GOO_TUNING.maxParticles (1000). */
+      particleCap?: number;
     }) {
       if (!gooLayer) return { unavailable: true };
+      if (o.densityScale !== undefined) gooLayer.setDensityScale(o.densityScale);
+      if (o.particleCap !== undefined) gooLayer.setParticleCap(o.particleCap);
       if (o.surfaceAtDensityRes !== undefined) gooLayer.setSurfaceAtDensityRes(o.surfaceAtDensityRes);
       if (o.minTexelRadius !== undefined) gooLayer.setMinTexelRadius(o.minTexelRadius);
       if (o.areaPriority !== undefined) gooLayer.setAreaPriority(o.areaPriority);
       if (o.splatFadeTail !== undefined) gooLayer.setSplatFadeTail(o.splatFadeTail);
       if (o.passGate !== undefined) gooLayer.setPassGate(o.passGate);
       return {
+        densityScale: gooLayer.densityScale,
+        particleCap: gooLayer.particleCap,
+        targetSize: gooLayer.targetSize,
         surfaceAtDensityRes: gooLayer.surfaceAtDensityRes,
         minTexelRadius: gooLayer.minTexelRadius,
         areaPriority: gooLayer.areaPriority,
@@ -5308,6 +5394,29 @@ async function main() {
       woundCullRequested = on;
       for (const a of actors) a.view.setWoundCull(on);
     },
+    /** ATTRIBUTION ONLY: the per-limb owner re-fold under another cluster's
+     *  wound (march.wgsl.ts, counts2.z). OFF renders a wrong frame on
+     *  purpose; it exists to price the mechanism in the passes bench. */
+    setOwnerRefold(on: boolean) {
+      for (const a of actors) a.view.uniforms.counts2.value.z = on ? 0 : 1;
+    },
+    get ownerRefold() { return (actors[0]?.view.uniforms.counts2.value.z ?? 0) < 0.5; },
+    /** Bone-cluster sphere cull (packBoneClusters). OFF ships — the old flat
+     *  bone loop; the bench's bone-cull-on leg flips it for A/B. Takes effect
+     *  on the next per-frame pack, so a live flip needs a frame to land. */
+    setBoneCull(on: boolean) { applyBoneCull(on); },
+    get boneCull() { return boneCull; },
+    /** Three-way bone cull (bone-segment spheres): 'off' / 'cluster' (the
+     *  parked per-flesh-cluster spheres) / 'segment' (per rigid segment).
+     *  setBoneCull(on) is the boolean shorthand for off/cluster. */
+    setBoneCullMode(mode: 'off' | 'cluster' | 'segment') { applyBoneCullMode(mode); },
+    get boneCullMode() { return boneCullMode; },
+    /** Per-ray wound list (march.wgsl.ts, counts2.w): build the reachable
+     *  wound set once per pixel and fold only those. OFF is bit-identical. */
+    setWoundList(on: boolean) {
+      for (const a of actors) a.view.uniforms.counts2.value.w = on ? 1 : 0;
+    },
+    get woundList() { return (actors[0]?.view.uniforms.counts2.value.w ?? 0) > 0.5; },
     // Tracks the REQUESTED state, not the uniform: an unwounded body never
     // uploads wounds, so its bound radius stays at the 1e9 identity even
     // with the cull on, and reading the uniform back would lie.
@@ -5535,7 +5644,7 @@ async function main() {
      * the value back afterwards avoids provoking it in the first place.
      */
     async bench(o: {
-      room?: number; mode?: 'throughput' | 'spike';
+      room?: number; mode?: BenchMode;
       /** 'closeup' — the static frozen-frame scenario (buildCloseup): no
        *  teleport, no shots; the DRIVER stages camera + wounds before
        *  calling. Default 'firefight' — the scripted walk/fire/gib. */
@@ -5558,16 +5667,34 @@ async function main() {
       handle.setLoopRunning(false);
       const hadAdaptive = adaptiveEnabled;
       adaptiveEnabled = false;
+      const hadTelemetry = telemetry.active;
+      if (o.mode === 'passes') telemetry.active = true;
       try {
         const deps: BenchDeps = {
-          step: (dt) => handle.step(dt),
+          step: (dt) => { beginPassFrame(); handle.step(dt); },
+          // 'passes' mode: CPU tick/draw plus the telemetry phases the tick
+          // already brackets (blood sim, goo sync, body step, ...). Telemetry
+          // is switched active for the run so begin()/end() record; no frame
+          // observer runs while the loop is off, so nothing else is captured.
+          stepTimed: (dt) => {
+            beginPassFrame();
+            telemetry.drainPhases();
+            const t = handle.stepTimed(dt);
+            const out: Record<string, number> = { 'cpu:tick': t.tickMs, 'cpu:draw': t.drawMs };
+            for (const [k, v] of Object.entries(telemetry.drainPhases())) out[`cpu:phase:${k}`] = v;
+            return out;
+          },
           resolveGpu: () => handle.resolveGpu(),
+          passTimings: () => passTiming.collect(),
           now: () => performance.now(),
           hidden: () => document.hidden,
           census: () => ({
             bodies: bodiesOnScreen(),
             wounds: actors.reduce((n, a) => n + a.wounds().length, 0),
             chunks: liveChunks.length,
+            droplets: bloodSim.droplets.length,
+            splats: bloodSim.splats.length,
+            gooQuads: gooLayer?.liveCount ?? 0,
           }),
           perform: (a) => {
             switch (a.kind) {
@@ -5635,6 +5762,7 @@ async function main() {
         return result;
       } finally {
         adaptiveEnabled = hadAdaptive;
+        telemetry.active = hadTelemetry;
         adaptiveState = initialAdaptiveState(performance.now(), adaptiveState.rung);
         handle.setLoopRunning(true);
       }
@@ -6160,7 +6288,7 @@ async function main() {
           ? actors.flatMap(a => {
             const prims = a.posed().prims;
             const yaw = a.pose().yaw;
-            return a.wounds().map(w => ({ centre: woundWorldPos(prims, w, yaw), radius: w.radius }));
+            return a.visualWounds().map(w => ({ centre: woundWorldPos(prims, w, yaw), radius: w.radius }));
           })
           : [],
         // Same rule as the frame loop: only rebuild the occluder half when
@@ -6231,6 +6359,8 @@ async function main() {
     /** Settled-chunk bake (close-up task 5). ON at boot (GAME_CHUNK_BAKE);
      *  off is pixel-identical. Toggling mid-session only affects FUTURE
      *  settles — baked pieces stay baked until shot or recycled. */
+    soldierCorpseBake: () => soldierCorpses?.stats(),
+    setSoldierCorpseBake(on: boolean) { soldierCorpses?.setEnabled(on); },
     setChunkBake(on: boolean) {
       chunkBakeEnabled = on;
       if (!on) cancelChunkBake();

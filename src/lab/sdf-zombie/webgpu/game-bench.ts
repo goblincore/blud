@@ -26,6 +26,7 @@
 // put the cost in the wrong column.
 
 import { actionsAt, segmentAt, type BenchAction, type Scenario } from './game-bench-scenario';
+import { aggregatePassSamples, attributePassSamples, type PassSample } from './gpu-pass-timing';
 
 export interface BenchDeps {
   /** Drive exactly one frame at this timestep. */
@@ -49,6 +50,21 @@ export interface BenchDeps {
    * that visible in the output instead of leaving it to be discovered.
    */
   census?(): SceneCensus;
+  /**
+   * Drain the per-pass GPU timestamps recorded since the last call (see
+   * gpu-pass-timing.ts). Only the 'passes' mode calls it, once per fenced
+   * chunk, so the samples cover exactly that chunk's frames. Optional: a page
+   * without timestamp tracking runs 'passes' as plain throughput and reports
+   * an empty pass table rather than zeros.
+   */
+  passTimings?(): Promise<PassSample[]>;
+  /**
+   * Drive one frame like step(), returning per-frame CPU ms by label
+   * ('cpu:tick', 'cpu:draw', and any 'cpu:phase:*' the page measures).
+   * Only the 'passes' mode uses it; the labels land in the same per-segment
+   * tables as the GPU passes so CPU and GPU can be read side by side.
+   */
+  stepTimed?(dtSec: number): Record<string, number>;
 }
 
 /** A cheap count of what the frame contained. */
@@ -59,10 +75,26 @@ export interface SceneCensus {
   wounds: number;
   /** Gib chunks in flight. */
   chunks: number;
+  /** Blood sim droplets alive (all kinds). */
+  droplets?: number;
+  /** Persistent floor splats. */
+  splats?: number;
+  /** Density quads the goo layer posed last frame (its live fill). */
+  gooQuads?: number;
 }
 
+export type BenchMode = 'throughput' | 'spike' | 'passes';
+
 export interface BenchOpts {
-  mode: 'throughput' | 'spike';
+  /**
+   * 'passes' is throughput's fence-per-chunk timing PLUS a per-pass GPU
+   * timestamp table: after each chunk's fence the page's timestamp pools are
+   * drained and every frame's passes are summed by label. Its frame numbers
+   * are comparable to throughput's (same fencing); its pass numbers are GPU
+   * pass durations, which exclude CPU submit and inter-pass gaps, so they
+   * add up to LESS than the fenced frame. Read the pass table for SHARES.
+   */
+  mode: BenchMode;
   /** Frames per fenced chunk. Forced to 1 in spike mode. */
   chunkFrames?: number;
   /** Frames run and discarded before sampling starts. */
@@ -78,8 +110,32 @@ export interface SegmentSummary {
   census?: { first: SceneCensus; last: SceneCensus };
 }
 
+/** Per-pass GPU time for one segment: label -> summary over that segment's
+ *  frames (one sample per frame per label). */
+export interface PassSegmentSummary {
+  name: string;
+  /** Frames that contributed pass samples. */
+  frames: number;
+  /** EXCLUSIVE ms per label (attributePassSamples): completion-order
+   *  charges that partition the frame's GPU span. THE number to read. */
+  labels: Record<string, SegmentSummary>;
+  /** Wall ms per label (pass end minus start). Overlapping passes make
+   *  these sum past the frame; kept for the overlap it reveals. */
+  wall: Record<string, SegmentSummary>;
+  /** The frame's GPU span, first pass start to last pass end. */
+  span: SegmentSummary;
+}
+
+export interface PassReport {
+  /** False when the page recorded no pass samples at all (no timestamp
+   *  tracking, or the install did not take) — the table is then empty. */
+  available: boolean;
+  overall: PassSegmentSummary;
+  segments: PassSegmentSummary[];
+}
+
 export interface BenchResult {
-  mode: 'throughput' | 'spike';
+  mode: BenchMode;
   label: string;
   /** False when any frame was stepped while the page was hidden. */
   valid: boolean;
@@ -88,6 +144,8 @@ export interface BenchResult {
   chunkFrames: number;
   overall: SegmentSummary;
   segments: SegmentSummary[];
+  /** Only in 'passes' mode. */
+  passes?: PassReport;
 }
 
 export const BENCH_DEFAULTS = {
@@ -124,10 +182,24 @@ export async function runBench(
   const dt = opts.dtSec ?? BENCH_DEFAULTS.dtSec;
 
   let hiddenSteps = 0;
+  const cpuTimed = opts.mode === 'passes' && typeof deps.stepTimed === 'function';
+  const cpuBySegment = new Map<string, Map<string, number[]>>();
+  const cpuAll = new Map<string, number[]>();
+  const pushCpu = (m: Map<string, number[]>, label: string, ms: number) => {
+    let a = m.get(label); if (!a) { a = []; m.set(label, a); } a.push(ms);
+  };
+  let currentSeg = '';
   const stepOnce = (frame: number) => {
     if (deps.hidden()) hiddenSteps++;
     for (const a of actionsAt(scenario, frame)) deps.perform(a);
-    deps.step(dt);
+    if (cpuTimed) {
+      const cpu = deps.stepTimed!(dt);
+      let seg = cpuBySegment.get(currentSeg);
+      if (!seg) { seg = new Map(); cpuBySegment.set(currentSeg, seg); }
+      for (const [label, ms] of Object.entries(cpu)) { pushCpu(seg, label, ms); pushCpu(cpuAll, label, ms); }
+    } else {
+      deps.step(dt);
+    }
   };
 
   // Warmup performs frame 0's actions ONCE up front, so the page is already in
@@ -144,6 +216,41 @@ export async function runBench(
   const bySegment = new Map<string, number[]>();
   const censusBySegment = new Map<string, { first: SceneCensus; last: SceneCensus }>();
   const all: number[] = [];
+  // 'passes' mode: label -> per-frame ms, per segment and overall.
+  const passMode = opts.mode === 'passes' && typeof deps.passTimings === 'function';
+  const passBySegment = new Map<string, Map<string, number[]>>();
+  const passAll = new Map<string, number[]>();
+  const wallBySegment = new Map<string, Map<string, number[]>>();
+  const wallAll = new Map<string, number[]>();
+  const spanBySegment = new Map<string, number[]>();
+  const spanAll: number[] = [];
+  let passFramesAll = 0;
+  const passFramesBySegment = new Map<string, number>();
+  const push = (m: Map<string, number[]>, label: string, ms: number) => {
+    let a = m.get(label); if (!a) { a = []; m.set(label, a); } a.push(ms);
+  };
+  // Samples recorded during warmup (and by the live loop before the bench)
+  // are drained and DISCARDED so the first chunk's table is only its own.
+  if (passMode) await deps.passTimings!();
+  const recordPasses = async (segName: string) => {
+    const samples = await deps.passTimings!();
+    const wallPerFrame = aggregatePassSamples(samples);
+    const { exclusive, span } = attributePassSamples(samples);
+    let seg = passBySegment.get(segName);
+    if (!seg) { seg = new Map(); passBySegment.set(segName, seg); }
+    let wseg = wallBySegment.get(segName);
+    if (!wseg) { wseg = new Map(); wallBySegment.set(segName, wseg); }
+    let sseg = spanBySegment.get(segName);
+    if (!sseg) { sseg = []; spanBySegment.set(segName, sseg); }
+    for (const [frame, byLabel] of exclusive) {
+      passFramesAll++;
+      passFramesBySegment.set(segName, (passFramesBySegment.get(segName) ?? 0) + 1);
+      for (const [label, ms] of byLabel) { push(seg, label, ms); push(passAll, label, ms); }
+      for (const [label, ms] of wallPerFrame.get(frame) ?? []) { push(wseg, label, ms); push(wallAll, label, ms); }
+      const sp = span.get(frame) ?? 0;
+      sseg.push(sp); spanAll.push(sp);
+    }
+  };
   const record = (name: string, ms: number) => {
     let bucket = bySegment.get(name);
     if (!bucket) { bucket = []; bySegment.set(name, bucket); }
@@ -160,6 +267,7 @@ export async function runBench(
       try { return deps.census(); } catch { return null; }
     };
     const firstCensus = takeCensus();
+    currentSeg = seg.name;
     let f = seg.from;
     while (f < seg.to) {
       const n = Math.min(chunkFrames, seg.to - f);
@@ -167,6 +275,7 @@ export async function runBench(
       for (let i = 0; i < n; i++) stepOnce(f + i);
       await deps.resolveGpu();
       record(seg.name, (deps.now() - t0) / n);
+      if (passMode) await recordPasses(seg.name);
       f += n;
     }
     const lastCensus = takeCensus();
@@ -175,9 +284,41 @@ export async function runBench(
     }
   }
 
+  // CPU labels ride the same maps as the GPU passes (distinguished by their
+  // 'cpu:' prefix), so one table reads both sides of the frame.
+  const merged = (gpu: Map<string, number[]>, cpu: Map<string, number[]> | undefined): Map<string, number[]> => {
+    if (!cpu) return gpu;
+    const out = new Map(gpu);
+    for (const [k, v] of cpu) out.set(k, v);
+    return out;
+  };
+  const summariseLabels = (m: Map<string, number[]>): Record<string, SegmentSummary> => {
+    const out: Record<string, SegmentSummary> = {};
+    // Largest first, so a table reads top-down without sorting.
+    const entries = [...m.entries()].map(([label, xs]) => summarise(label, xs))
+      .sort((a, b) => b.p50 - a.p50);
+    for (const s of entries) out[s.name] = s;
+    return out;
+  };
+  const passes: PassReport | undefined = opts.mode === 'passes' ? {
+    available: passFramesAll > 0,
+    overall: {
+      name: 'overall', frames: passFramesAll,
+      labels: summariseLabels(merged(passAll, cpuAll)), wall: summariseLabels(wallAll), span: summarise('span', spanAll),
+    },
+    segments: scenario.segments.map((s) => ({
+      name: s.name,
+      frames: passFramesBySegment.get(s.name) ?? 0,
+      labels: summariseLabels(merged(passBySegment.get(s.name) ?? new Map(), cpuBySegment.get(s.name))),
+      wall: summariseLabels(wallBySegment.get(s.name) ?? new Map()),
+      span: summarise('span', spanBySegment.get(s.name) ?? []),
+    })),
+  } : undefined;
+
   return {
     mode: opts.mode,
     label: opts.label ?? '',
+    ...(passes ? { passes } : {}),
     valid: hiddenSteps === 0,
     hiddenSteps,
     frames: scenario.frames,

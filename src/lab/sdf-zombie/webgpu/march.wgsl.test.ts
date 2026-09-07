@@ -23,11 +23,12 @@ import {
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META, ROW_PRIM_SHAPE,
   ROW_PRIM_BEND, ROW_PRIM_SHELL, ROW_PRIM_WARP, ROW_PRIM_STRAND, ROW_PRIM_CLIP, NOISE_LOCAL, WOUND_MASK, WOUND_SHADOW, SD_SHELL,
-  ROW_WOUND_CAP, APPLY_BONES, ROW_WOUND_FLAGS, TISSUE_RAMP, SD_ROUND_BOX, LEVEL_SHADOW,
+  ROW_WOUND_CAP, APPLY_BONES, FOLD_BONE_RANGE, ROW_WOUND_FLAGS, TISSUE_RAMP, SD_ROUND_BOX, LEVEL_SHADOW,
   CALC_NORMAL,
   FACE_MELT_SAG, FACE_MELT_STRETCH, FACE_MELT_FADE_LO, DEPTH_PREPASS_MARCH, DEPTH_PRE_FETCH, WOUND_STEP_MUL,
 } from './march.wgsl';
 import { MAX_WOUNDS } from '../damage';
+import { MAX_CLUSTERS, BONE_SEG_MAX } from '../validate';
 // Raw source import: the row-table docstrings are TS comments, invisible to
 // every exported WGSL string, and the Done-when "docstring no longer lies"
 // check needs the file's actual text.
@@ -237,7 +238,7 @@ describe('ported features reach the entry point', () => {
     // w = 1e9 is the no-cull identity (chunk torn ends, hands view).
     expect(APPLY_WOUNDS).toContain('woundBound: vec4<f32>');
     const iBound = APPLY_WOUNDS.indexOf('if (length(p - woundBound.xyz) > woundBound.w) { return vec2<f32>(dIn, 0.0); }');
-    const iLoop = APPLY_WOUNDS.indexOf('for (var i = 0; i < 16; i = i + 1)');
+    const iLoop = APPLY_WOUNDS.indexOf('for (var k = 0; k < 16; k = k + 1)');
     const iFirstLoad = APPLY_WOUNDS.indexOf(`vec2<i32>(i, ${ROW_WOUND})`);
     expect(iBound).toBeGreaterThan(-1);
     expect(iLoop).toBeGreaterThan(iBound);
@@ -388,8 +389,8 @@ describe('ported features reach the entry point', () => {
     // untapered prim (plain-capsule branch inside coneCap); `cpos` is zero
     // unless prof > 1.5, which is the Bezier branch inside sdPrim.
     const foldGroup = HELPERS.find(h => declaredName(h) === 'foldGroup')!;
-    expect(foldGroup).toContain('var sd = sdPrim(p, idx, data, r2, prof, cpos, band);');
-    expect(foldGroup).toContain('if (ori) { sd = sdPrimO(p, idx, data, r2, prof, cpos, band); }');
+    expect(foldGroup).toContain('var sd: f32;');
+    expect(foldGroup).toContain('if (ori) { sd = sdPrimO(p, idx, data, r2, prof, cpos, band); }\n    else { sd = sdPrim(p, idx, data, r2, prof, cpos, band); }');
     expect(foldGroup).toContain('if (sd < gFoldBest) { gFoldBest = sd; gFoldBestIdx = f32(idx); gFoldBestDistort = grp.z; }');
     // Mask, not the old magnitude window — a chamfered BOX is prof 9 and falls
     // outside it. See the box-bit block below and pack.ts.
@@ -722,8 +723,9 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     // for. Re-pin when a slot is added ON PURPOSE — a silent change here is
     // the phantom-input bug. +1 windDrift, +1 bodyAnchor (shell warp), +1 woundBound
     // (wound-cull), +2 depth prepass (depthPreTex, depthPreCfg) - all appended after
-    // the level-shadow tail, in that order.
-    expect(names.length).toBe(81);
+    // the level-shadow tail, in that order. +1 opt-in faceGlowRedOnly mask.
+    expect(names.length).toBe(82);
+    expect(names).toContain('faceGlowRedOnly');
     expect(names.slice(-6)).toEqual(['windDrift', 'bodyAnchor', 'woundBound', 'depthPreTex', 'depthPreCfg', 'normalGradientCfg']);
     // meltCfg sits between bodyHalf and the level-shadow tail, matching the
     // JS binding object in createMarchMaterial (positional — a swap silently
@@ -1012,7 +1014,10 @@ describe('data texture layout', () => {
       // with "wound" in the name but no wound-count loop (woundShadow's
       // 14-step penumbra march) are pinned by their own tests instead.
       if (!src.includes('i32(woundCfg.x)')) continue;
-      expect(src).toContain(`i < ${MAX_WOUNDS}`);
+      // The loop variable name can change (the per-ray wound list folds by k);
+      // pin only the BOUND, which is the MAX_WOUNDS literal that can drift
+      // from damage.ts. Match `var x = 0; x < 16` for any identifier x.
+      expect(src).toMatch(new RegExp(`var\\s+[a-z]\\w*\\s*=\\s*0\\s*;\\s*[a-z]\\w*\\s*<\\s*${MAX_WOUNDS}\\b`));
     }
   });
 });
@@ -1753,8 +1758,9 @@ describe('bone fold (wound pass r2)', () => {
   it('guards the bone counter too — debugCfg.x == 0 pays no counting', () => {
     // gore r3 refinement 3. The counter exists because the timing bench could
     // not resolve the bone fold at all (+0.0% under a 4% spread); it must not
-    // become a cost of its own on the shipping path.
-    expect(APPLY_BONES).toContain('if (gDebugMode > 0.5) { gDebugBones');
+    // become a cost of its own on the shipping path. It lives in the extracted
+    // foldBoneRange helper, the one place the per-bone loop exists.
+    expect(FOLD_BONE_RANGE).toContain('if (gDebugMode > 0.5) { gDebugBones');
   });
 
   it('reads the shape and bend rows, so authored curvature actually renders', () => {
@@ -1764,9 +1770,9 @@ describe('bone fold (wound pass r2)', () => {
     // not draw. If this regresses, curved bones silently go straight again.
     // The row constants are template-interpolated, so the emitted WGSL holds
     // their NUMBERS — assert against the constants, not their names.
-    expect(APPLY_BONES).toContain(`vec2<i32>(i, ${ROW_PRIM_SHAPE}`);
-    expect(APPLY_BONES).toContain(`vec2<i32>(i, ${ROW_PRIM_BEND}`);
-    expect(APPLY_BONES).not.toContain('sdPrim(p, i, data, -1.0, 0.0');
+    expect(FOLD_BONE_RANGE).toContain(`vec2<i32>(i, ${ROW_PRIM_SHAPE}`);
+    expect(FOLD_BONE_RANGE).toContain(`vec2<i32>(i, ${ROW_PRIM_BEND}`);
+    expect(FOLD_BONE_RANGE).not.toContain('sdPrim(p, i, data, -1.0, 0.0');
   });
 
   it('bounds the groove test so W_BONE is not read as a groove', () => {
@@ -1774,8 +1780,8 @@ describe('bone fold (wound pass r2)', () => {
   });
 
   it('folds bone as a hard min, never a smooth min', () => {
-    expect(APPLY_BONES).toContain('min(');
-    expect(APPLY_BONES).not.toContain('smin(');
+    expect(FOLD_BONE_RANGE).toContain('min(');
+    expect(FOLD_BONE_RANGE).not.toContain('smin(');
   });
 
   it('gates the bone loop on nearWound so undamaged bodies pay nothing', () => {
@@ -1794,7 +1800,7 @@ describe('bone fold (wound pass r2)', () => {
   });
 
   it('lets a bone prim win bestIdx so shading can identify it', () => {
-    expect(APPLY_BONES).toContain('gFoldBestIdx');
+    expect(FOLD_BONE_RANGE).toContain('gFoldBestIdx');
   });
 
   // DEVIATION GUARDS. The dispatched task text carried boneCount on
@@ -1823,6 +1829,71 @@ describe('bone fold (wound pass r2)', () => {
     expect(APPLY_BONES).toContain('i32(counts.x)');
     expect(APPLY_BONES).toContain('i32(boneCount)');
     expect(APPLY_BONES).not.toContain('> 4.5');
+  });
+});
+
+describe('bone cluster cull (packBoneClusters)', () => {
+  // The sphere cull: one bound sphere per flesh cluster's bone rows, stored
+  // in the free texels (columns MAX_CLUSTERS.. and 2*MAX_CLUSTERS) of
+  // ROW_CLUSTER_BOUNDS/ROW_CLUSTER_RANGE. Data-driven — the tail texel's .w
+  // is the enabled flag; zeros = the old flat loop.
+  it('reads the cluster bone-range texels at column MAX_CLUSTERS + c', () => {
+    expect(APPLY_BONES).toContain(`vec2<i32>(${MAX_CLUSTERS} + c, ${ROW_CLUSTER_RANGE}`);
+    expect(APPLY_BONES).toContain(`vec2<i32>(${MAX_CLUSTERS} + c, ${ROW_CLUSTER_BOUNDS}`);
+  });
+
+  it('reads the tail texel at column 2 * MAX_CLUSTERS and folds it', () => {
+    expect(APPLY_BONES).toContain(`vec2<i32>(${2 * MAX_CLUSTERS}, ${ROW_CLUSTER_RANGE}`);
+    expect(APPLY_BONES).toContain('foldBoneRange(d, p, data, i32(tail.x), i32(tail.y), band)');
+  });
+
+  it('uses the exact hard-min cull test (no blendK smin margin)', () => {
+    expect(APPLY_BONES).toContain('length(p - cb.xyz) - cb.w > d * cr.z');
+  });
+
+  it('keeps the flat fallback for the zero-texel gate', () => {
+    expect(APPLY_BONES).toContain('tail.w > 0.5');
+    expect(APPLY_BONES).toContain('foldBoneRange(d, p, data, first, i32(boneCount), band)');
+  });
+
+  it('extracts the per-bone loop into ONE helper — no duplicated loop body', () => {
+    expect(FOLD_BONE_RANGE).toContain('fn foldBoneRange');
+    expect(APPLY_BONES).toContain('foldBoneRange(d, p, data, i32(cr.x), i32(cr.y), band)');
+    // The shape read, counter and hard min must live only in the helper, so
+    // the cluster path and the flat fallback cannot drift.
+    expect(FOLD_BONE_RANGE).toContain('gDebugBones');
+    expect(FOLD_BONE_RANGE).toContain('d = min(d, sd)');
+    expect(FOLD_BONE_RANGE).toContain(`vec2<i32>(i, ${ROW_PRIM_SHAPE}`);
+    expect(FOLD_BONE_RANGE).toContain(`if (i >= ${MAX_PRIMS}) { break; }`);
+  });
+});
+
+describe('bone segment cull (boneCullMode: segment, mode 2)', () => {
+  // The finer granularity: one sphere per RIGID SEGMENT (skull / axial
+  // BoneFrame / limb bone / organs) in the free columns 2*MAX_CLUSTERS+1..
+  // of the same two rows, gated by the header texel's mode in .w.
+  it('branches on the header mode: 2 segment, 1 cluster, 0 flat', () => {
+    expect(APPLY_BONES).toContain('tail.w > 1.5');
+    expect(APPLY_BONES).toContain('} else if (tail.w > 0.5) {');
+  });
+
+  it('reads the segment texels at column 2*MAX_CLUSTERS+1 + s, bounded by BONE_SEG_MAX and the header count', () => {
+    expect(APPLY_BONES).toContain(`for (var s = 0; s < ${BONE_SEG_MAX}; s = s + 1)`);
+    expect(APPLY_BONES).toContain('if (s >= i32(tail.z)) { break; }');
+    expect(APPLY_BONES).toContain(`vec2<i32>(${2 * MAX_CLUSTERS + 1} + s, ${ROW_CLUSTER_RANGE}`);
+    expect(APPLY_BONES).toContain(`vec2<i32>(${2 * MAX_CLUSTERS + 1} + s, ${ROW_CLUSTER_BOUNDS}`);
+  });
+
+  it('uses the exact hard-min cull test against the WOUNDED running field', () => {
+    expect(APPLY_BONES).toContain('length(p - sb.xyz) - sb.w > d * sr.z');
+  });
+
+  it('folds through foldBoneRange — never an inline copy — and still folds the tail', () => {
+    expect(APPLY_BONES).toContain('foldBoneRange(d, p, data, i32(sr.x), i32(sr.y), band)');
+    expect(APPLY_BONES).toContain('foldBoneRange(d, p, data, i32(tail.x), i32(tail.y), band)');
+    // The mode-1 branch and the flat fallback stay verbatim.
+    expect(APPLY_BONES).toContain('foldBoneRange(d, p, data, i32(cr.x), i32(cr.y), band)');
+    expect(APPLY_BONES).toContain('foldBoneRange(d, p, data, first, i32(boneCount), band)');
   });
 });
 

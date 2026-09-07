@@ -165,6 +165,13 @@ export function emitBlob(doc: BlobDoc, override: EmitOverride = {}): string {
         ? l.raw
         : spliceFaceValue(l, l.words[1]!, overrideValue),
     );
+    // Sliders can author a field previously inherited from the palette preset.
+    if (l.words[0] === 'palette' && override.palette) {
+      for (const [key, values] of Object.entries(override.palette)) {
+        if (doc.palette?.[key] === undefined)
+          out.push(`  ${key} ${values.join(' ')}`);
+      }
+    }
   }
   out.push(...doc.trailingTrivia);
 

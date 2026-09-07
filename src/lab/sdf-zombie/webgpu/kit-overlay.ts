@@ -43,6 +43,9 @@
 import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { createKitDamage } from './kit-damage';
+import type { BuildResult } from '../build-body';
+import type { Wound } from '../damage';
 import type { Vec3 } from '../types';
 import { kitBoneKey } from '../rig-frames';
 
@@ -171,6 +174,8 @@ const LOOK_DEFAULT = { metalness: 0.05, roughness: 0.35, envIntensity: 0.9 };
 export interface KitOverlay {
   /** Add to the scene on the DEFAULT layer. Parent of the loaded glTF scene. */
   object: THREE.Object3D;
+  /** Detached pieces remain in world space when the attached kit is hidden. */
+  debris: THREE.Group;
   /** Bone nodes from the .wam skeleton, by name — the seam a future rig bind
    *  will drive. Exposed now so the shape of that work is visible, and so a
    *  render can be sanity-checked against the .blob skeleton by name. */
@@ -185,7 +190,8 @@ export interface KitOverlay {
    * At rest every frame is (bind head, identity) and the result is exactly
    * the static placement this overlay had before it could move.
    */
-  pose(frames: ReadonlyMap<string, { pos: Vec3; quat: readonly number[] }>): void;
+  pose(frames: ReadonlyMap<string, { pos: Vec3; quat: readonly number[] }>, damage?: { body: BuildResult; wounds: readonly Wound[]; dt: number }): void;
+  resetDamage(): void;
   dispose(): void;
 }
 
@@ -204,6 +210,7 @@ export interface KitOverlay {
  */
 export async function loadKit(
   url: string, renderer: THREE.WebGPURenderer, root: Vec3 = [0, 0, 0],
+  breakable = false,
 ): Promise<KitOverlay> {
   const gltf = await new GLTFLoader().loadAsync(url);
 
@@ -226,8 +233,10 @@ export async function loadKit(
   object.position.set(root[0], root[1], root[2]);
 
   const bones = new Map<string, THREE.Bone>();
+  const skinned: THREE.SkinnedMesh[] = [];
   gltf.scene.traverse(o => {
     if ((o as THREE.Bone).isBone) bones.set(o.name, o as THREE.Bone);
+    if ((o as THREE.SkinnedMesh).isSkinnedMesh) skinned.push(o as THREE.SkinnedMesh);
     // Both sides matter: a pauldron is a shell seen from outside AND from
     // under the arm, and a kilt authored with open caps has no back face at
     // all, so a single-sided material makes it vanish from half the turntable.
@@ -235,7 +244,9 @@ export async function loadKit(
     for (const mat of Array.isArray(m) ? m : m ? [m] : []) {
       mat.side = THREE.DoubleSide;
       const std = mat as THREE.MeshStandardMaterial;
-      const look = LOOK[mat.name] ?? LOOK_DEFAULT;
+      const look = breakable && mat.name === 'plate'
+        ? { metalness: 0.70, roughness: 0.24, envIntensity: 0.90 }
+        : LOOK[mat.name] ?? LOOK_DEFAULT;
       if (std.isMeshStandardMaterial) {
         std.metalness = look.metalness;
         std.roughness = look.roughness;
@@ -274,7 +285,9 @@ export async function loadKit(
   const byKey = new Map<string, THREE.Bone>();
   for (const b of ordered) byKey.set(b.name, b);
   const frameFor = new Map<THREE.Bone, { pos: Vec3; quat: readonly number[] }>();
-  const pose: KitOverlay['pose'] = (frames) => {
+  const damageView = breakable ? createKitDamage(object) : null;
+  const debris = damageView?.debris ?? new THREE.Group();
+  const pose: KitOverlay['pose'] = (frames, damage) => {
     frameFor.clear();
     for (const [name, f] of frames) {
       const b = byKey.get(kitBoneKey(name));
@@ -291,13 +304,23 @@ export async function loadKit(
         if (parentWorld) b.matrixWorld.multiplyMatrices(parentWorld, bindLocal.get(b)!);
       }
     }
+    // Three caches the skinned bounds on first render. Our world-space bone
+    // motion leaves the mesh transform stationary, so that cached sphere
+    // stayed behind as the soldier walked away. Camera turns then culled his
+    // entire kit. Refresh after posing to keep ordinary frustum culling valid.
+    for (const mesh of skinned) mesh.computeBoundingSphere();
+    if (damage) damageView?.update(damage.body, damage.wounds, damage.dt);
   };
 
   return {
     object,
+    debris,
     bones,
     pose,
+    resetDamage() { damageView?.reset(); object.visible = true; },
     dispose() {
+      damageView?.dispose();
+      debris.removeFromParent();
       env.dispose();
       object.traverse(o => {
         const mesh = o as THREE.Mesh;

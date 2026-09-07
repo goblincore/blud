@@ -1,0 +1,117 @@
+{
+  "phase": "facePoint",
+  "checks": [],
+  "pageErrors": [
+    "THREE.WebGPURenderer: Render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_624): Color target has no corresponding fragment stage output but writeMask (ColorWriteMask::(Red|Green|Blue|Alpha)) is not zero.\n - While validating targets[4] framebuffer output.\n - While validating fragment state.\n - While calling [Device].CreateRenderPipeline([RenderPipelineDescriptor \"\"renderPipeline_MeshBasicNodeMaterial_624\"\"]).\n",
+    "THREE.WebGPURenderer: Uncaptured WebGPU GPUValidationError: [Invalid RenderPipeline \"renderPipeline_MeshBasicNodeMaterial_624\"] is invalid due to a previous error.\n - While encoding [RenderPassEncoder (unlabeled)].SetPipeline([Invalid RenderPipeline \"renderPipeline_MeshBasicNodeMaterial_624\"]).\n - While finishing [CommandEncoder \"renderContext_3\"].\n",
+    "THREE.WebGPURenderer: Uncaptured WebGPU GPUValidationError: [Invalid CommandBuffer from CommandEncoder \"renderContext_3\"] is invalid due to a previous error.\n - While calling [Queue].Submit([[Invalid CommandBuffer from CommandEncoder \"renderContext_3\"]])\n",
+    "THREE.WebGPURenderer: Uncaptured WebGPU GPUValidationError: [Invalid RenderPipeline \"renderPipeline_MeshBasicNodeMaterial_624\"] is invalid due to a previous error.\n - While encoding [RenderPassEncoder (unlabeled)].SetPipeline([Invalid RenderPipeline \"renderPipeline_MeshBasicNodeMaterial_624\"]).\n - While finishing [CommandEncoder \"renderContext_3\"].\n",
+    "THREE.WebGPURenderer: Uncaptured WebGPU GPUValidationError: [Invalid CommandBuffer from CommandEncoder \"renderContext_3\"] is invalid due to a previous error.\n - While calling [Queue].Submit([[Invalid CommandBuffer from CommandEncoder \"renderContext_3\"]])\n",
+    "THREE.WebGPURenderer: Uncaptured WebGPU GPUValidationError: [Invalid RenderPipeline \"renderPipeline_MeshBasicNodeMaterial_624\"] is invalid due to a previous error.\n - While encoding [RenderPassEncoder (unlabeled)].SetPipeline([Invalid RenderPipeline \"renderPipeline_MeshBasicNodeMaterial_624\"]).\n - While finishing [CommandEncoder \"renderContext_3\"].\n",
+    "THREE.WebGPURenderer: Uncaptured WebGPU GPUValidationError: [Invalid CommandBuffer from CommandEncoder \"renderContext_3\"] is invalid due to a previous error.\n - While calling [Queue].Submit([[Invalid CommandBuffer from CommandEncoder \"renderContext_3\"]])\n",
+    "THREE.WebGPURenderer: Uncaptured WebGPU GPUValidationError: [Invalid RenderPipeline \"renderPipeline_MeshBasicNodeMaterial_624\"] is invalid due to a previous error.\n - While encoding [RenderPassEncoder (unlabeled)].SetPipeline([Invalid RenderPipeline \"renderPipeline_MeshBasicNodeMaterial_624\"]).\n - While finishing [CommandEncoder \"renderContext_3\"].\n",
+    "THREE.WebGPURenderer: Uncaptured WebGPU GPUValidationError: [Invalid CommandBuffer from CommandEncoder \"renderContext_3\"] is invalid due to a previous error.\n - While calling [Queue].Submit([[Invalid CommandBuffer from CommandEncoder \"renderContext_3\"]])\n",
+    "THREE.WebGPURenderer: Render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_624): Color target has no corresponding fragment stage output but writeMask (ColorWriteMask::(Red|Green|Blue|Alpha)) is not zero.\n - While validating targets[4] framebuffer output.\n - While validating fragment state.\n - While calling [Device].CreateRenderPipeline([RenderPipelineDescriptor \"\"renderPipeline_MeshBasicNodeMaterial_624\"\"]).\n",
+    "THREE.WebGPURenderer: Uncaptured WebGPU GPUValidationError: [Invalid RenderPipeline \"renderPipeline_MeshBasicNodeMaterial_624\"] is invalid due to a previous error.\n - While encoding [RenderPassEncoder (unlabeled)].SetPipeline([Invalid RenderPipeline \"renderPipeline_MeshBasicNodeMaterial_624\"]).\n - While finishing [CommandEncoder \"renderContext_3\"].\n",
+    "THREE.WebGPURenderer: Uncaptured WebGPU GPUValidationError: [Invalid CommandBuffer from CommandEncoder \"renderContext_3\"] is invalid due to a previous error.\n - While calling [Queue].Submit([[Invalid CommandBuffer from CommandEncoder \"renderContext_3\"]])\n",
+    "THREE.WebGPURenderer: Render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_624): Color target has no corresponding fragment stage output but writeMask (ColorWriteMask::(Red|Green|Blue|Alpha)) is not zero.\n - While validating targets[4] framebuffer output.\n - While validating fragment state.\n - While calling [Device].CreateRenderPipeline([RenderPipelineDescriptor \"\"renderPipeline_MeshBasicNodeMaterial_624\"\"]).\n",
+    "THREE.WebGPURenderer: Uncaptured WebGPU GPUValidationError: [Invalid RenderPipeline \"renderPipeline_MeshBasicNodeMaterial_624\"] is invalid due to a previous error.\n - While encoding [RenderPassEncoder (unlabeled)].SetPipeline([Invalid RenderPipeline \"renderPipeline_MeshBasicNodeMaterial_624\"]).\n - While finishing [CommandEncoder \"renderContext_3\"].\n",
+    "THREE.WebGPURenderer: Uncaptured WebGPU GPUValidationError: [Invalid CommandBuffer from CommandEncoder \"renderContext_3\"] is invalid due to a previous error.\n - While calling [Queue].Submit([[Invalid CommandBuffer from CommandEncoder \"renderContext_3\"]])\n",
+    "THREE.WebGPURenderer: Render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_624): Color target has no corresponding fragment stage output but writeMask (ColorWriteMask::(Red|Green|Blue|Alpha)) is not zero.\n - While validating targets[4] framebuffer output.\n - While validating fragment state.\n - While calling [Device].CreateRenderPipeline([RenderPipelineDescriptor \"\"renderPipeline_MeshBasicNodeMaterial_624\"\"]).\n",
+    "THREE.WebGPURenderer: Uncaptured WebGPU GPUValidationError: [Invalid RenderPipeline \"renderPipeline_MeshBasicNodeMaterial_624\"] is invalid due to a previous error.\n - While encoding [RenderPassEncoder (unlabeled)].SetPipeline([Invalid RenderPipeline \"renderPipeline_MeshBasicNodeMaterial_624\"]).\n - While finishing [CommandEncoder \"renderContext_3\"].\n",
+    "THREE.WebGPURenderer: Uncaptured WebGPU GPUValidationError: [Invalid CommandBuffer from CommandEncoder \"renderContext_3\"] is invalid due to a previous error.\n - While calling [Queue].Submit([[Invalid CommandBuffer from CommandEncoder \"renderContext_3\"]])\n",
+    "THREE.WebGPURenderer: Render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_624): Color target has no corresponding fragment stage output but writeMask (ColorWriteMask::(Red|Green|Blue|Alpha)) is not zero.\n - While validating targets[4] framebuffer output.\n - While validating fragment state.\n - While calling [Device].CreateRenderPipeline([RenderPipelineDescriptor \"\"renderPipeline_MeshBasicNodeMaterial_624\"\"]).\n",
+    "THREE.WebGPURenderer: Uncaptured WebGPU GPUValidationError: [Invalid RenderPipeline \"renderPipeline_MeshBasicNodeMaterial_624\"] is invalid due to a previous error.\n - While encoding [RenderPassEncoder (unlabeled)].SetPipeline([Invalid RenderPipeline \"renderPipeline_MeshBasicNodeMaterial_624\"]).\n - While finishing [CommandEncoder \"renderContext_3\"].\n",
+    "THREE.WebGPURenderer: Uncaptured WebGPU GPUValidationError: [Invalid CommandBuffer from CommandEncoder \"renderContext_3\"] is invalid due to a previous error.\n - While calling [Queue].Submit([[Invalid CommandBuffer from CommandEncoder \"renderContext_3\"]])\n",
+    "THREE.WebGPURenderer: Render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_624): Color target has no corresponding fragment stage output but writeMask (ColorWriteMask::(Red|Green|Blue|Alpha)) is not zero.\n - While validating targets[4] framebuffer output.\n - While validating fragment state.\n - While calling [Device].CreateRenderPipeline([RenderPipelineDescriptor \"\"renderPipeline_MeshBasicNodeMaterial_624\"\"]).\n",
+    "THREE.WebGPURenderer: Uncaptured WebGPU GPUValidationError: [Invalid RenderPipeline \"renderPipeline_MeshBasicNodeMaterial_624\"] is invalid due to a previous error.\n - While encoding [RenderPassEncoder (unlabeled)].SetPipeline([Invalid RenderPipeline \"renderPipeline_MeshBasicNodeMaterial_624\"]).\n - While finishing [CommandEncoder \"renderContext_3\"].\n",
+    "THREE.WebGPURenderer: Uncaptured WebGPU GPUValidationError: [Invalid CommandBuffer from CommandEncoder \"renderContext_3\"] is invalid due to a previous error.\n - While calling [Queue].Submit([[Invalid CommandBuffer from CommandEncoder \"renderContext_3\"]])\n",
+    "THREE.WebGPURenderer: Render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_624): Color target has no corresponding fragment stage output but writeMask (ColorWriteMask::(Red|Green|Blue|Alpha)) is not zero.\n - While validating targets[4] framebuffer output.\n - While validating fragment state.\n - While calling [Device].CreateRenderPipeline([RenderPipelineDescriptor \"\"renderPipeline_MeshBasicNodeMaterial_624\"\"]).\n",
+    "THREE.WebGPURenderer: Uncaptured WebGPU GPUValidationError: [Invalid RenderPipeline \"renderPipeline_MeshBasicNodeMaterial_624\"] is invalid due to a previous error.\n - While encoding [RenderPassEncoder (unlabeled)].SetPipeline([Invalid RenderPipeline \"renderPipeline_MeshBasicNodeMaterial_624\"]).\n - While finishing [CommandEncoder \"renderContext_3\"].\n",
+    "THREE.WebGPURenderer: Uncaptured WebGPU GPUValidationError: [Invalid CommandBuffer from CommandEncoder \"renderContext_3\"] is invalid due to a previous error.\n - While calling [Queue].Submit([[Invalid CommandBuffer from CommandEncoder \"renderContext_3\"]])\n",
+    "THREE.WebGPURenderer: Render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_624): Color target has no corresponding fragment stage output but writeMask (ColorWriteMask::(Red|Green|Blue|Alpha)) is not zero.\n - While validating targets[4] framebuffer output.\n - While validating fragment state.\n - While calling [Device].CreateRenderPipeline([RenderPipelineDescriptor \"\"renderPipeline_MeshBasicNodeMaterial_624\"\"]).\n",
+    "THREE.WebGPURenderer: Uncaptured WebGPU GPUValidationError: [Invalid RenderPipeline \"renderPipeline_MeshBasicNodeMaterial_624\"] is invalid due to a previous error.\n - While encoding [RenderPassEncoder (unlabeled)].SetPipeline([Invalid RenderPipeline \"renderPipeline_MeshBasicNodeMaterial_624\"]).\n - While finishing [CommandEncoder \"renderContext_3\"].\n",
+    "THREE.WebGPURenderer: Uncaptured WebGPU GPUValidationError: [Invalid CommandBuffer from CommandEncoder \"renderContext_3\"] is invalid due to a previous error.\n - While calling [Queue].Submit([[Invalid CommandBuffer from CommandEncoder \"renderContext_3\"]])\n",
+    "THREE.WebGPURenderer: Render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_624): Color target has no corresponding fragment stage output but writeMask (ColorWriteMask::(Red|Green|Blue|Alpha)) is not zero.\n - While validating targets[4] framebuffer output.\n - While validating fragment state.\n - While calling [Device].CreateRenderPipeline([RenderPipelineDescriptor \"\"renderPipeline_MeshBasicNodeMaterial_624\"\"]).\n",
+    "THREE.WebGPURenderer: Uncaptured WebGPU GPUValidationError: [Invalid RenderPipeline \"renderPipeline_MeshBasicNodeMaterial_624\"] is invalid due to a previous error.\n - While encoding [RenderPassEncoder (unlabeled)].SetPipeline([Invalid RenderPipeline \"renderPipeline_MeshBasicNodeMaterial_624\"]).\n - While finishing [CommandEncoder \"renderContext_3\"].\n",
+    "THREE.WebGPURenderer: Uncaptured WebGPU GPUValidationError: [Invalid CommandBuffer from CommandEncoder \"renderContext_3\"] is invalid due to a previous error.\n - While calling [Queue].Submit([[Invalid CommandBuffer from CommandEncoder \"renderContext_3\"]])\n"
+  ],
+  "pass": false,
+  "scope": "full",
+  "fullAcceptance": false,
+  "excludedFeatures": {
+    "boneTubes": "Owner retired this experimental path for visual reasons on 2026-09-07; validate SDF bones and baked geometry instead."
+  },
+  "pageErrorsDropped": 0,
+  "failure": {
+    "phase": "facePoint",
+    "message": "baked piece must have an attributable pixel from a cardinal view",
+    "stack": "AssertionError [ERR_ASSERTION]: baked piece must have an attributable pixel from a cardinal view\n    at file:///Users/donny/Projects/blud/.worktrees/m2-main-integration/scripts/.tmp-m2-bake-diagnostic.mjs:572:10"
+  },
+  "generatedAt": "2026-09-07T23:03:50.515Z",
+  "ports": {
+    "vite": 5376,
+    "cdp": 9376
+  },
+  "viewport": {
+    "width": 800,
+    "height": 600
+  },
+  "records": {
+    "captures": {
+      "task6-baked-unresolved.png": {
+        "points": {},
+        "regions": {},
+        "frame": {
+          "nonDarkPct": 25.3,
+          "w": 800,
+          "h": 600
+        }
+      }
+    },
+    "stages": {
+      "bakeViewAttempts": [
+        {
+          "azimuth": 0,
+          "centre": [
+            3.999967932701111,
+            0.19737785682082176,
+            -4.84812593460083
+          ],
+          "radius": 0.21779043780356785,
+          "error": "chunk 1: no class-17 pixel attributable to this producer"
+        },
+        {
+          "azimuth": 1.5707963267948966,
+          "centre": [
+            3.999967932701111,
+            0.19737785682082176,
+            -4.84812593460083
+          ],
+          "radius": 0.21779043780356785,
+          "error": "chunk 1: no class-17 pixel attributable to this producer"
+        },
+        {
+          "azimuth": 3.141592653589793,
+          "centre": [
+            3.999967932701111,
+            0.19737785682082176,
+            -4.84812593460083
+          ],
+          "radius": 0.21779043780356785,
+          "error": "chunk 1: no class-17 pixel attributable to this producer"
+        },
+        {
+          "azimuth": -1.5707963267948966,
+          "centre": [
+            3.999967932701111,
+            0.19737785682082176,
+            -4.84812593460083
+          ],
+          "radius": 0.21779043780356785,
+          "error": "chunk 1: no class-17 pixel attributable to this producer"
+        }
+      ]
+    }
+  }
+}

@@ -191,6 +191,9 @@ export interface GameDeferredRendererDeps {
    *  game-main passes () => true; absent/undefined keeps the M1 bounded
    *  evaluation bit-for-bit (fixtures, spike scenes). */
   fleshDisplay?: () => boolean;
+  /** Separate transparent effects, drawn after routed forward content while
+   * the completed colour/depth output remains bound and auto-clear is off. */
+  renderEffects?: (camera: THREE.PerspectiveCamera) => void;
   /** The flashlight spot the shadow maps follow. */
   flashlight: THREE.SpotLight;
   /** Shadow-map edge length. Default 1024 — the spec's number, also the
@@ -702,6 +705,7 @@ export function createGameDeferredRenderer(deps: GameDeferredRendererDeps): Game
           renderer.autoClear = false;
           camera.layers.set(0);
           router.draw('forward', renderer, camera);
+          deps.renderEffects?.(camera);
         } finally {
           camera.layers.mask = previousMask;
           renderer.autoClear = previousAutoClear;

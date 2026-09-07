@@ -31,7 +31,7 @@ export interface MindInput {
   /** Melee-ring verdict. Meaningless to a soldier; ignored by that mind. */
   hasToken: boolean;
   /** Melee-ring tangential shuffle. Ignored by the soldier mind, which rolls
-   *  its own strafe sign — there is no ranged arbiter yet. */
+   *  its own strafe sign; the encounter director grants ranged firing lanes. */
   drift: -1 | 0 | 1;
   /** Fresh 0..1 per frame. The zombie rolls swing variants with it, the
    *  soldier rolls firing opportunities. */
@@ -40,6 +40,7 @@ export interface MindInput {
    *  mind ignores it. */
   rollDrift: number;
   lineOfSight?: boolean;
+  mayFire?: boolean;
   bounds?: WanderBounds;
   canMoveTo?: (point: Vec3) => boolean;
 }
@@ -126,6 +127,7 @@ export function makeZombieMind(): EnemyMind {
         hasToken: input.hasToken,
         drift: input.drift,
         roll: input.roll,
+        lineOfSight: input.lineOfSight,
       });
       brain = out.brain;
       return {
@@ -169,6 +171,7 @@ export function makeSoldierMind(): EnemyMind {
         roll: input.roll,
         rollDrift: input.rollDrift,
         lineOfSight: input.lineOfSight,
+        mayFire: input.mayFire,
         bounds: input.bounds,
         canMoveTo: input.canMoveTo,
       });

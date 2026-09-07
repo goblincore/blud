@@ -398,6 +398,9 @@ export interface Primitive {
   glow?: number;
   /** See PrimDef.metal. Carried through mirror, resolve and the rig untouched. */
   metal?: boolean;
+  /** Rigid-segment id for inside-flesh prims (bones/organs), assigned by
+   *  applyRig; pack groups bone rows by it. CPU-only — never a GPU row. */
+  boneSegment?: number;
   /** See PrimDef.core. */
   core?: boolean;
   /** See PrimDef.shell. Carried through mirror, resolve and the rig untouched. */

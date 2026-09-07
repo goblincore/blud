@@ -35,6 +35,7 @@ import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { wgslFn, texture, uv, vec4, uniform } from 'three/tsl';
 import { createConeUniforms, createDepthPreUniforms, type ConeSource, type DepthPreSource, type OccluderSource, type PrevSource } from './zombie-gpu';
+import { setPassLabel } from './gpu-pass-timing';
 
 // ---------------------------------------------------------------------------
 // HALF-RATE (lever C2, temporal amortisation) — render the march every OTHER
@@ -373,6 +374,17 @@ export interface SdfLayer {
    *  bounded by the depth every nearer pass recorded. */
   setDepthGate(on: boolean): void;
   readonly depthGate: boolean;
+  /**
+   * ATTRIBUTION SEAM (pass timing, 2026-09-07). With the depth gate off the
+   * bodies and the gib chunks march in ONE pass. 'split' draws the chunks in
+   * a second pass into the same target (autoClear off, same depth test —
+   * the hardware resolves the overlap exactly as one pass would) so the
+   * pass timer can label them apart ('sdf:march' vs 'sdf:march-chunks').
+   * 'skip' omits the chunk pass entirely: a WRONG frame on purpose, the
+   * diagnostic ceiling for what chunk work costs. 'merged' is the ship path.
+   */
+  setChunkPass(mode: 'merged' | 'split' | 'skip'): void;
+  readonly chunkPass: 'merged' | 'split' | 'skip';
   /** One-pixel footprint radius per unit distance (tan(fovY/2) / passHeight),
    *  for the march's AA epsilon. Follows the adaptive resolution ladder. */
   readonly pixelConeK: number;
@@ -434,6 +446,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   const prevUniforms = { enabled: uniform(0) };
   let bodies: THREE.Object3D[] = [];
   let chunks: THREE.Object3D[] = [];
+  let chunkPass: 'merged' | 'split' | 'skip' = 'merged';
   // The blit is an identity copy target -> prev in texture space: both are
   // render targets with the same orientation, so no flipY enters (the canvas
   // composite needs one; a target-to-target copy does not).
@@ -641,6 +654,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
 
       if (targetsNeedInit) {
         targetsNeedInit = false;
+        setPassLabel('init');
         // The clear colour is irrelevant: a disabled pre-pass is never
         // FETCHED (the enable uniforms gate occFetch/coneFetch), and an
         // enabled one clears for real at the top of its own pass.
@@ -662,6 +676,10 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       // The depth-prepass twins must not rasterise into the polygonal pass
       // either — the disable above covers only the SDF layer itself.
       camera.layers.disable(DEPTH_PREPASS_LAYER);
+      // Pass timing labels (gpu-pass-timing.ts): the polygonal pass also
+      // carries the level's shadow-map passes, which three renders inside
+      // this one render() call.
+      setPassLabel('sdf:polys');
       renderer.setRenderTarget(outputTarget);
       void renderer.render(scene, camera);
 
@@ -678,6 +696,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       // for the wide level so it ignores the (unwritten) coarse texture, and 1
       // for the narrow one. No binding has to be swapped between passes.
       if (coneUniforms.enabled.value > 0.5) {
+        setPassLabel('sdf:cone');
         camera.layers.set(CONE_LAYER);
 
         coneUniforms.k.value = coneKFor(CONE_TILE);
@@ -698,6 +717,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       // zero, which occFetch reads as "nothing here" rather than as a
       // zero-length ray.
       if (occluderUniforms.enabled.value > 0.5) {
+        setPassLabel('sdf:occluder');
         camera.layers.set(OCCLUDER_LAYER);
         renderer.setRenderTarget(occluder);
         // BLACK, explicitly, and restored afterwards. The renderer's clear
@@ -724,6 +744,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       // Front and back are separated by side + depth function rather than by
       // two meshes: one instanced hull, drawn twice.
       if (shellUniforms.enabled.value > 0.5) {
+        setPassLabel('sdf:shell-hull');
         const prevClear = renderer.getClearColor(clearColorScratch).getHex();
         const prevDepth = renderer.getClearDepth();
         renderer.setClearColor(0x000000);
@@ -757,6 +778,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       // here every ray would start at 10 cm minus a footprint, INSIDE the
       // body at close range. Zero is the "no start" sentinel.
       if (depthPreUniforms.cfg.value.x > 0.5) {
+        setPassLabel('sdf:depth-pre');
         camera.layers.set(DEPTH_PREPASS_LAYER);
         renderer.setRenderTarget(depthPre);
         const prevClear = renderer.getClearColor(clearColorScratch).getHex();
@@ -770,6 +792,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       // alpha at 1.0, which is the "nothing here" sentinel the composite
       // discards on.
       camera.layers.set(SDF_LAYER);
+      setPassLabel('sdf:march');
       if (prevUniforms.enabled.value > 0.5 && bodies.length > 0) {
         // Front-to-back per-body passes (perf round 2 task 5). Clear once,
         // then one pass per body nearest-first, each preceded by a blit of
@@ -790,14 +813,32 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
         const passes: THREE.Object3D[][] = [...ordered.map(o => [o]), chunks];
         for (const group of passes) {
           if (group.length === 0) continue;
+          setPassLabel('sdf:prev-blit');
           renderer.setRenderTarget(prev);
           void renderer.render(blitScene, quadCam);
           for (const o of group) o.visible = true;
+          setPassLabel('sdf:march');
           renderer.setRenderTarget(target);
           void renderer.render(scene, camera);
           for (const o of group) o.visible = false;
         }
         renderer.autoClear = prevAuto;
+        for (const [o, v] of wasVisible) o.visible = v;
+      } else if (chunkPass !== 'merged' && chunks.length > 0) {
+        // Bodies first (clears), then the chunks on top with autoClear off.
+        const wasVisible = new Map<THREE.Object3D, boolean>();
+        for (const o of chunks) { wasVisible.set(o, o.visible); o.visible = false; }
+        renderer.setRenderTarget(target);
+        void renderer.render(scene, camera);
+        if (chunkPass === 'split') {
+          for (const [o, v] of wasVisible) o.visible = v;
+          for (const o of bodies) { if (!wasVisible.has(o)) { wasVisible.set(o, o.visible); o.visible = false; } }
+          setPassLabel('sdf:march-chunks');
+          const prevAuto = renderer.autoClear;
+          renderer.autoClear = false;
+          void renderer.render(scene, camera);
+          renderer.autoClear = prevAuto;
+        }
         for (const [o, v] of wasVisible) o.visible = v;
       } else {
         renderer.setRenderTarget(target);
@@ -806,6 +847,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       } // !hold
 
       // Pass 3 — composite up. autoClear off, or this wipes pass 1.
+      setPassLabel('sdf:composite');
       camera.layers.mask = restore;
       renderer.setRenderTarget(outputTarget);
       const prevAutoClear = renderer.autoClear;
@@ -858,6 +900,8 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     prev: { texture: prev.texture, uniforms: prevUniforms },
     setBodies(list, chunkList) { bodies = list; chunks = chunkList; },
     setDepthGate(on) { prevUniforms.enabled.value = on ? 1 : 0; },
+    setChunkPass(mode) { chunkPass = mode; },
+    get chunkPass() { return chunkPass; },
     get depthGate() { return prevUniforms.enabled.value > 0.5; },
     setHalfRate(on) {
       if (on === halfRate) return;

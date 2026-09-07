@@ -170,7 +170,7 @@ function mockCoordinatorRenderer() {
 
 /** A coordinator over an empty room: one flashlight candidate, dungeon env,
  *  small layer so the tests stay cheap. */
-function makeCoordinator(renderer: THREE.WebGPURenderer): GameDeferredRenderer {
+function makeCoordinator(renderer: THREE.WebGPURenderer, renderEffects?: (camera: THREE.PerspectiveCamera) => void): GameDeferredRenderer {
   const scene = new THREE.Scene();
   const spot = new THREE.SpotLight(0xffffff, 90, 16, Math.PI * 0.12, 0.45, 1.6);
   spot.position.set(0, 2, 0);
@@ -181,12 +181,45 @@ function makeCoordinator(renderer: THREE.WebGPURenderer): GameDeferredRenderer {
     lights: () => [{ id: 'flashlight', role: 'flashlight', light: spot }],
     environment: () => deferredEnvironmentFromRig(DUNGEON_RIG),
     flashlight: spot,
+    renderEffects,
     width: 64,
     height: 48,
   });
 }
 
 describe('the coordinator frame composition (mock-device, real factories)', () => {
+  it('renders separate character effects into completed depth and restores the caller target even on failure', () => {
+    const mock = mockCoordinatorRenderer();
+    const rt = new THREE.RenderTarget(64, 48);
+    const unrelated = new THREE.RenderTarget(8, 8);
+    const cam = new THREE.PerspectiveCamera();
+    const effectScene = new THREE.Scene();
+    let fail = false;
+    const effect = vi.fn((camera: THREE.PerspectiveCamera) => {
+      expect(camera).toBe(cam);
+      expect(mock.renderer.getRenderTarget()).toBe(rt);
+      expect(mock.renderer.autoClear).toBe(false);
+      expect(mock.calls.at(-1)).toEqual({ target: rt, ortho: false });
+      mock.renderer.render(effectScene, camera);
+      if (fail) throw new Error('effects failed');
+    });
+    const api = makeCoordinator(mock.renderer, effect);
+    api.setOutputTarget(rt);
+    mock.renderer.setRenderTarget(unrelated);
+    api.render(cam);
+    expect(effect).toHaveBeenCalledOnce();
+    expect(mock.calls.at(-1)).toEqual({ target: rt, ortho: false });
+    expect(mock.renderer.getRenderTarget()).toBe(unrelated);
+    expect(mock.renderer.autoClear).toBe(true);
+    fail = true;
+    api.render(cam);
+    expect(effect).toHaveBeenCalledTimes(2);
+    expect(mock.renderer.getRenderTarget()).toBe(unrelated);
+    expect(mock.renderer.autoClear).toBe(true);
+    expect(api.diagnostics().errors.some(e => e.includes('effects failed'))).toBe(true);
+    api.dispose(); rt.dispose(); unrelated.dispose();
+  });
+
   it('forwards the post-aa target to the layer and keeps canvas depth off', () => {
     const mock = mockCoordinatorRenderer();
     const api = makeCoordinator(mock.renderer);

@@ -2,7 +2,7 @@ import { wgslFn } from 'three/tsl';
 import {
   HELPERS, ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_SHAPE, ROW_PRIM_QUAT,
   ROW_CLUSTER_RANGE, ROW_CLUSTER_BOUNDS, ROW_CLUSTER_GROUPS,
-  ROW_GROUP_RANGE, ROW_GROUP_BOUNDS, ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_PRIM_BEND,
+  ROW_GROUP_RANGE, ROW_GROUP_BOUNDS, ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS, ROW_PRIM_BEND,
 } from './march.wgsl';
 import { MAX_PRIMS } from '../validate';
 import { TILE_MAX_ENTRIES } from './tile-cull';
@@ -200,7 +200,7 @@ const NG_EXCLUDED = /* wgsl */ `fn ngExcluded(p: vec3<f32>, bounds: vec4<f32>, g
       let S = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SCALE} + band), 0);
       if (S.w > 0.5) { continue; }
       let T = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SHAPE} + band), 0);
-      if (T.x >= 0.0 || (i32(T.y) & 47) != 0) { gNgReason = 1; }
+      if (T.x >= 0.0 || (i32(T.y) & 47) != 0) { gNgReason = 1; return lower; }
     }
   }
   return lower;
@@ -286,9 +286,29 @@ export const NG_WOUNDS = /* wgsl */ `fn ngWounds(base: vec4<f32>, p: vec3<f32>, 
       if (abs(r - reach) <= R) { gNgReason = 3; }
       if (r > reach) { continue; }
     }
+    // mapBody restores foreign clusters after localized carving. Until that
+    // union has an analytic counterpart, differentiate the actual scalar
+    // field through calcNormal's fallback for any surviving scoped wound.
+    let owner = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS}), 0).y;
+    if (owner > 0.0) { gNgReason = 1; return d; }
     let wMeta = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_META}), 0);
     let capRow = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_CAP}), 0);
     let cap = vec4<f32>(capRow.xyz, select(1e5, capRow.w, capRow.w > 0.0));
+    if (wMeta.x < -0.5) {
+      let sphere = w.w - r;
+      let slab = cap.w - dot(v, cap.xyz);
+      let cutter = min(sphere, slab);
+      let cutterLip = max(1.0, length(cap.xyz));
+      if (r <= R) { gNgReason = 2; }
+      if (abs(r - 2.0 * w.w) <= R) { gNgReason = 3; }
+      if (abs(sphere - slab) <= (1.0 + length(cap.xyz)) * R && cutter + (gNgLip + cutterLip) * R >= d.x) { gNgReason = 3; }
+      if (abs(d.x - cutter) <= (gNgLip + cutterLip) * R) { gNgReason = 3; }
+      let gradient = select(-cap.xyz, -v / max(r, 1e-8), sphere <= slab);
+      if (cutter > d.x) { d = vec4<f32>(cutter, gradient); }
+      gNgLip = max(gNgLip, cutterLip);
+      if (r < 2.0 * w.w) { gNgNear = 1.0; }
+      continue;
+    }
     let burn = wMeta.x > 1.5;
     let depth = select(w.w, w.w * 0.35 * clamp(wMeta.y, 0.0, 1.0), burn);
     let rim = vec3<f32>(depth * cfg.w * wMeta.w, max(depth * cfg2.x, 1e-4), depth * cfg.z * wMeta.z * select(1.0, 0.25, burn));
@@ -386,6 +406,7 @@ export const NG_BODY = /* wgsl */ `fn ngBody(p: vec3<f32>, data: texture_2d<f32>
       // separate rest-frame/owner contract; do not silently mis-anchor them.
       if (gTileBand[e] != 0.0) { gNgReason = 1; return d; }
       d = ngGroup(d, p, data, counts, 0, gTileBounds[e], gTileGrp[e]);
+      if (gNgReason == 1) { return d; }
     }
   }
   for (var c = 0; c < 8; c = c + 1) {
@@ -412,6 +433,9 @@ export const NG_BODY = /* wgsl */ `fn ngBody(p: vec3<f32>, data: texture_2d<f32>
       } else if (clusterSkipped) {
         let excluded = ngExcluded(p, bounds, grp, data, 0);
       } else { d = ngGroup(d, p, data, counts, 0, bounds, grp); }
+      // Unsupported is final throughout the group walk. Numerical reasons
+      // may still be superseded by unsupported, so retain their diagnostic order.
+      if (gNgReason == 1) { return d; }
     }
   }
   if (gNgReason != 0) { return d; }

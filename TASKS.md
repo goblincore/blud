@@ -18,17 +18,40 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ---
 
+## Orientation — active vs. historical
+
+> **The active project is the SDF-rendered FPS.** It lives in
+> `src/lab/sdf-zombie/` (the "lab" name is historical, not obsolete). The
+> **retired project** is the sprite/bestiary/arena procedural-generation game
+> and the old NotBlood simulation — kept runnable only as a **behavior
+> reference** for dynamite and gibbing.
+>
+> Entries below that describe the retired sprite game or the old NotBlood sim
+> (the pre-SDF M-series and the old-game backlog) are **historical / reference
+> only** — preserved for provenance, not current work. Do not treat historical
+> roadmap entries as in-flight.
+>
+> Current vs. proposed source layout: [docs/architecture/repository-map.md](docs/architecture/repository-map.md).
+> Legacy dynamite/gibbing reference: [docs/reference/legacy-dynamite-gibbing.md](docs/reference/legacy-dynamite-gibbing.md).
+
+---
+
 ## Current focus
 
-**[~] Hybrid deferred renderer (M2) — task 5 wired + light-calibrated on `codex/dispatch/2026-09-06-hybrid-deferred-m2-task-5-continue-1`; tasks 6–7 next.**
-Opt-in `?renderer=deferred` boots both modes error-free; flesh blowout root-caused to the falloff-family mismatch (march linear key vs three I/d²) and fixed with a per-slot march-key conversion + flesh highlight shoulder at calibrated gain 0.5. Boot driver now rejects black frames, blowouts and facing-away captures (12/12, inspected captures). [task-5 report](docs/dev-notes/2026-09-06-hybrid-deferred-m2/task-5.md); composition correction queued before task 6; NOT merged, legacy stays default.
+**[~] Hybrid deferred renderer (M2) — material repair accepted by owner manual playtest on 2026-09-07; integrated with latest main.** The merged build passes all 34 gameplay GPU checks with zero page errors and the CPU/build checks. [Integration notes](docs/dev-notes/2026-09-07-m2-main-integration/notes.md). Task 7 stopped at owner request; gamma/flashlight tuning and unfinished automated shadow/performance validation remain follow-ups. Deferred remains opt-in.
 
-**[~] Soldier combat/animation polish — ready for owner playtest on `codex/soldier-polish`.** Fixed endless strafe targets, slow/misaligned aim, absent recoil, discontinuous gait, run carry, and lab run controls. [Findings and preview](docs/dev-notes/2026-09-06-soldier-polish/notes.md); not merged pending feel check.
+**[x] Soldier combat/animation polish — owner approved; merged to main (909b6a87).** Fixed movement, aim, recoil, gait and lab controls. [First pass](docs/dev-notes/2026-09-06-soldier-polish/notes.md).
+
+**[x] Soldier shotgun/readability — merged to local main (64aa78ee).** Exaggerated low-poly semiauto, bent support-arm aim, shared lab/game muzzle flash. [Design and captures](docs/dev-notes/2026-09-06-soldier-shotgun/notes.md).
+
+**[x] Soldier appearance and damage pass — merged to local main (64aa78ee).** Bulk/olive armor, tuned face and red eyes, localized armor loss/severs/collapse, scoped wounds, skin save and Vite cache fixes. [Result and gotchas](docs/dev-notes/2026-09-06-soldier-bulk/notes.md).
+
+**[~] SDF FRAME ATTRIBUTION — measured 2026-09-07 on branch `claude/bvh-sdf-raymarching-f02f18`; two dispatch tasks in flight.** Per-pass GPU timestamps (`BENCH_PASSES=1 scripts/sdf-game-bench.sh`, `gpu-pass-timing.ts`) show the march IS the frame and wounds grow it 6 → 26 ms; the near-wound bone/organ fold (no spatial cull) is 25–30% of that, the goo density pass is free. Both dispatch tasks landed and are PARKED with numbers: per-ray wound list ≈0; bone sphere cull at cluster granularity exact but −5% fire only (bone evals −18%: the torso cluster's one sphere holds ribs+spine+pelvis) vs tubes −13–23%. Per-rigid-segment bone spheres then built (Kimi dispatch), exact, bone evals −48%, **SHIPPED ON** as the game default (−5–7% wounded march in room 3; culling is now exhausted). Chain merged into this branch. NEXT real lever: baked bone-segment meshes as G-buffer members after deferred M2 is green. [Segment notes](docs/dev-notes/2026-09-07-bone-segment-spheres/notes.md). Bone tubes stay OFF (look); baked bone-segment meshes wait for deferred. [Eight runs + root cause](docs/dev-notes/2026-09-07-gpu-pass-attribution/notes.md) · [plans](docs/superpowers/plans/2026-09-07-bone-sphere-cull.md) · Obsidian `Claude Notes/Blud/2026-09-07-sdf-frame-attribution-and-wound-cost.md`.
 
 **[~] Game tile visual playtest + telemetry — integrated on main; owner visual run next, before performance comparisons.**
 [Usage](docs/dev-notes/2026-09-06-game-tiles-telemetry/notes.md): `?tiles-playtest`, F6 tiles, F8 record/save, F9 geometry/wound marker; ordinary tile default off, no GPU timing claim.
 
-**SOLDIER ANIMATION — BUILT, AWAITING OWNER LOOK (2026-09-05).** The soldier
+**SOLDIER ANIMATION — historical implementation notes (2026-09-05); completed and superseded by the approved passes above.** The soldier
 marches, runs, carries the shorty and hip-fires it in the lab; the skinned
 kit and the gun ride the rig (`rig-frames.ts` → `KitOverlay.pose`,
 `held-prop.ts`). Gait is now a PROFILE (`SHAMBLE` = the zombie verbatim,
@@ -58,7 +81,8 @@ repo via the dev-only `/__lab/save-*` endpoints
 [plan](docs/superpowers/plans/2026-09-05-soldier-animation.md) ·
 [strips](docs/dev-notes/2026-09-05-soldier-animation/notes.md)
 
-**[~] SOLDIER SHOOT-BACK AI (phase 2) — DESIGN APPROVED 2026-09-06, awaiting plan.**
+**[x] SOLDIER SHOOT-BACK AI (phase 2) — implemented and polished on main.**
+The following is the original implementation/dispatch context; current state is summarized above.
 The first enemy that shoots back, and the milestone where the game learns
 enemies come in KINDS. New pure `soldier-brain.ts` (standoff band → aim →
 fire → recover → reposition, backpedal when rushed); `brain.ts` is untouched

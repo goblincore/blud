@@ -199,7 +199,9 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   soldier: {
     name: 'soldier', src: soldierBlobSrc,
     kit: '/assets/lab/soldier-kit.gltf',
-    face: bakedFace('soldier-face.png'),
+    // Measured from the original PNG, excluding alpha < 8, exactly like
+    // the lab's applyMeanOf. The fallback 1 halved its level in the game.
+    face: { ...bakedFace('soldier-face.png'), mean: 0.5035671273079847 },
     profile: SOLDIER_PROFILE,
   },
   female: {

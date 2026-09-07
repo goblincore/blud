@@ -1,6 +1,11 @@
 import { AMBIENT_AT, WALL_CONTRIBUTION } from './ambient.wgsl';
 import { TILE_MAX_ENTRIES } from './tile-cull';
-import { MAX_PRIMS } from '../validate';
+import { MAX_PRIMS, MAX_CLUSTERS, BONE_SEG_MAX } from '../validate';
+
+/** Extra metres added to the per-ray tile sphere test (tileCfg.x == 2) so the
+ *  off-ray shading probes — calcNormal's 0.0015 eps and the AO probe at
+ *  n * 0.06 — still see every group the ray's own march did. */
+export const RAY_CULL_SLACK = '0.07';
 // src/lab/sdf-zombie/webgpu/march.wgsl.ts
 //
 // WGSL port of march.glsl.ts. Kept as a near line-for-line translation on
@@ -100,7 +105,8 @@ export const ROW_WOUND_META = 6;
  *  LAB (which uploads no caps) pixel-stable across this change. */
 export const ROW_WOUND_CAP = 18;
 /** Per-wound flags (entrails, 2026-09-02): x = 1 when this wound opened a
- *  CAVITY, 0 otherwise; yzw spare.
+ *  CAVITY, 0 otherwise; y = owning cluster + 1 (0 = unscoped),
+ *  zw = owning flesh primitive span [start, end).
  *
  *  A new row rather than a bit on wMeta because wMeta is full — x type,
  *  y age, z splayScale, w offsetScale — and rather than a new code on
@@ -937,8 +943,18 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
   // that a far sample pays nothing per-wound.
   if (length(p - woundBound.xyz) > woundBound.w) { return vec2<f32>(dIn, 0.0); }
   let n = i32(woundCfg.x);
-  for (var i = 0; i < 16; i = i + 1) {
-    if (i >= n) { break; }
+  // PER-RAY WOUND LIST (counts2.w gate, 2026-09-07): with the gate ON the
+  // loop iterates only the preloaded reachable set; with it OFF this is the
+  // same iteration sequence as before (k == i, same break on n), so OFF is
+  // bit-identical to the shipped shader.
+  for (var k = 0; k < 16; k = k + 1) {
+    var i = k;
+    if (gWoundListOn > 0.5) {
+      if (k >= gWoundN) { break; }
+      i = gWoundList[k];
+    } else {
+      if (k >= n) { break; }
+    }
     let w = textureLoad(data, vec2<i32>(i, ${ROW_WOUND}), 0);
     let r = length(p - w.xyz);
     // Reach of this wound's influence, beyond which the carve, the fillet
@@ -954,6 +970,9 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
     // keeps its reference bit-identical.)
     let reach = w.w * max(2.0, 2.0 * woundCfg.w + 3.0 * woundCfg2.x) + 4.0 * woundCfg.y + 0.25;
     if (perfCfg.y > 0.5 && r > reach) { continue; }
+    let owner = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS}), 0).y;
+    if (gWoundCluster > 0.0 && owner > 0.0 && owner != gWoundCluster) { continue; }
+    if (owner > 0.0) { gWoundOwners = gWoundOwners | (1u << u32(owner)); }
     let wMeta = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_META}), 0);
     // Depth slab (2026-08-27): the sphere stays centred on the uploaded
     // anchor — the lab's deep bowl — and is clipped by a plane through the
@@ -977,6 +996,13 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
     // reference stable.
     let wCap = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_CAP}), 0);
     let capEff = select(1.0e5, wCap.w, wCap.w > 0.0);
+    // Bounded torso preview: a fixed sphere recipe, with its owner's depth
+    // cap. Negative type is upload-only; stock gameplay types remain 0..2.
+    if (wMeta.x < -0.5) {
+      d = max(d, min(w.w - r, capEff - dot(p - w.xyz, wCap.xyz)));
+      if (r < w.w * 2.0) { near = 1.0; }
+      continue;
+    }
     let isBurn = wMeta.x > 1.5;
     let depth = select(w.w, w.w * 0.35 * clamp(wMeta.y, 0.0, 1.0), isBurn);
     d = smax(d, min(-(r - depth), capEff - dot(p - w.xyz, wCap.xyz)), woundCfg.y);
@@ -987,7 +1013,13 @@ export const APPLY_WOUNDS = /* wgsl */ `fn applyWounds(dIn: f32, p: vec3<f32>, d
     d = d - exp(-x * x) * amp * rimLocal;
   }
   return vec2<f32>(d, near);
-}`
+}
+// Per-map ownership selection. 0 keeps the original whole-body carve;
+// a positive cluster id restricts the independent limb field below.
+var<private> gWoundCluster: f32 = 0.0;
+var<private> gWoundOwners: u32 = 0u;
+// Set only for final surface shading; -1 retains unscoped chunk/volume masks.
+var<private> gWoundShadePrim: f32 = -1.0;`
 
 // 0 at the surface far from wounds, 1 deep inside one. ONE mask, shared by
 // every wound shading term — the owner-decided shape of this function
@@ -1012,6 +1044,9 @@ export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, nrm: vec3<f32>,
   let n = i32(woundCfg.x);
   for (var i = 0; i < 16; i = i + 1) {
     if (i >= n) { break; }
+    let flags = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS}), 0);
+    if (flags.y > 0.0 && gWoundShadePrim >= 0.0 &&
+        (gWoundShadePrim < flags.z || gWoundShadePrim >= flags.w)) { continue; }
     let w = textureLoad(data, vec2<i32>(i, ${ROW_WOUND}), 0);
     let contribution = 1.0 - smoothstep(0.0, w.w * 1.6, length(p - w.xyz));
     m = max(m, contribution);
@@ -1019,7 +1054,6 @@ export const WOUND_MASK = /* wgsl */ `fn woundMask(p: vec3<f32>, nrm: vec3<f32>,
     // accumulated only over wounds whose flags row says the hit opened a
     // cavity. Deliberately NOT a second footprint — a second mask edge is
     // how the 2026-08-23 halo happened.
-    let flags = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS}), 0);
     if (flags.x > 0.5) { cav = max(cav, contribution); }
   }
   return vec3<f32>(m, m, cav);
@@ -1056,6 +1090,9 @@ export const CHAR_MASK = /* wgsl */ `fn charMask(p: vec3<f32>, data: texture_2d<
   let n = i32(woundCfg.x);
   for (var i = 0; i < 16; i = i + 1) {
     if (i >= n) { break; }
+    let flags = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS}), 0);
+    if (flags.y > 0.0 && gWoundShadePrim >= 0.0 &&
+        (gWoundShadePrim < flags.z || gWoundShadePrim >= flags.w)) { continue; }
     let wMeta = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_META}), 0);
     if (wMeta.x < 1.5) { continue; }
     let w = textureLoad(data, vec2<i32>(i, ${ROW_WOUND}), 0);
@@ -1235,8 +1272,9 @@ export const FOLD_GROUP = /* wgsl */ `fn foldGroup(dIn: f32, p: vec3<f32>, data:
         cpos = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_BEND} + band), 0).xyz;
       }
     }
-    var sd = sdPrim(p, idx, data, r2, prof, cpos, band);
+    var sd: f32;
     if (ori) { sd = sdPrimO(p, idx, data, r2, prof, cpos, band); }
+    else { sd = sdPrim(p, idx, data, r2, prof, cpos, band); }
     // A SHELL (profile bit 2, value 4) thins the closed base field to a
     // sheet and clips it: abs(dBase) - thick, then a rounded-rim clip against
     // the shell plane. Only shell prims read the two extra rows, and only in
@@ -1316,7 +1354,18 @@ var<private> gTileActive: f32 = 0.0;
 var<private> gTileN: f32 = 0.0;
 var<private> gTileBounds: array<vec4<f32>, ${TILE_MAX_ENTRIES}>;
 var<private> gTileGrp: array<vec4<f32>, ${TILE_MAX_ENTRIES}>;
-var<private> gTileBand: array<f32, ${TILE_MAX_ENTRIES}>;`;
+var<private> gTileBand: array<f32, ${TILE_MAX_ENTRIES}>;
+// PER-RAY WOUND LIST (counts2.w gate, 2026-09-07). Built ONCE per pixel at
+// the march entry (see MARCH_BODY) and folded by APPLY_WOUNDS every step
+// through the gWoundListOn gate. Private vars are per-invocation and start
+// at their INITIALISERS (never at a previous fragment's value), so the
+// cone/depth pre-pass chains — separate invocations that never run the
+// preload — keep gWoundListOn 0 and fold the full 16-wound loop, which is
+// CONSERVATIVE by construction (the cone certifies emptiness against the
+// full field, and any correctly-binned list is a subset of it).
+var<private> gWoundListOn: f32 = 0.0;
+var<private> gWoundN: i32 = 0;
+var<private> gWoundList: array<i32, 16>;`;
 
 // Folds bone into the field, AFTER wounds have been carved.
 //
@@ -1350,11 +1399,16 @@ var<private> gTileBand: array<f32, ${TILE_MAX_ENTRIES}>;`;
 // Lives between FOLD_GROUP and MAP_BODY, not next to APPLY_WOUNDS as first
 // drafted: it assigns gFoldBestIdx, which is declared at FOLD_GROUP's tail,
 // and WGSL wants declaration before use.
-export const APPLY_BONES = /* wgsl */ `fn applyBones(dIn: f32, p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, boneCount: f32, band: i32) -> f32 {
+// The per-bone fold, extracted OUT of applyBones so the cluster-cull path
+// and the flat fallback share ONE loop body (a cull fix or an smin change
+// lands in one place). Used to exist inline in applyBones; the plan's
+// exactness argument is that the sphere cull is a hard-min no-op, so both
+// paths must produce the identical field when the fold reaches the same
+// rows. start/count are ABSOLUTE packed indices [start, start+count).
+export const FOLD_BONE_RANGE = /* wgsl */ `fn foldBoneRange(dIn: f32, p: vec3<f32>, data: texture_2d<f32>, start: i32, count: i32, band: i32) -> f32 {
   var d = dIn;
-  let first = i32(counts.x);
-  let last = first + i32(boneCount);
-  for (var i = first; i < last; i = i + 1) {
+  var end = start + count;
+  for (var i = start; i < end; i = i + 1) {
     if (i >= ${MAX_PRIMS}) { break; }
     // SHAPE AND BEND, read exactly as foldGroup reads them.
     //
@@ -1387,6 +1441,57 @@ export const APPLY_BONES = /* wgsl */ `fn applyBones(dIn: f32, p: vec3<f32>, dat
   return d;
 }`;
 
+export const APPLY_BONES = /* wgsl */ `fn applyBones(dIn: f32, p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, boneCount: f32, band: i32) -> f32 {
+  var d = dIn;
+  let first = i32(counts.x);
+  // Data-driven gate (packBoneClusters): the packer writes the bone-cluster
+  // texels into the free columns of ROW_CLUSTER_BOUNDS / ROW_CLUSTER_RANGE,
+  // and sets the TAIL texel's .w to 1 as an enabled flag. Zeros = the old
+  // flat loop, byte-identical. Off, the whole cull is a no-op.
+  let tail = textureLoad(data, vec2<i32>(${2 * MAX_CLUSTERS}, ${ROW_CLUSTER_RANGE} + band), 0);
+  if (tail.w > 1.5) {
+    // MODE 2 — per-SEGMENT spheres (bone-segment spheres): one bound sphere
+    // per rigid segment the rig poses bones by (skull, one axial BoneFrame
+    // per spine/pelvis segment, one limb bone per bind-point pair, one for
+    // the organs), packed at columns 2*MAX_CLUSTERS+1.. of the same two
+    // rows. Same EXACT hard-min no-op as the cluster path: bones fold with
+    // a hard min against d, the WOUNDED running field, so a segment whose
+    // sphere is farther than d * distort can never win the min.
+    for (var s = 0; s < ${BONE_SEG_MAX}; s = s + 1) {
+      if (s >= i32(tail.z)) { break; }
+      let sr = textureLoad(data, vec2<i32>(${2 * MAX_CLUSTERS + 1} + s, ${ROW_CLUSTER_RANGE} + band), 0);
+      let sb = textureLoad(data, vec2<i32>(${2 * MAX_CLUSTERS + 1} + s, ${ROW_CLUSTER_BOUNDS} + band), 0);
+      if (length(p - sb.xyz) - sb.w > d * sr.z) { continue; }
+      d = foldBoneRange(d, p, data, i32(sr.x), i32(sr.y), band);
+    }
+    // The tail (overflow segments) folds unconditionally.
+    d = foldBoneRange(d, p, data, i32(tail.x), i32(tail.y), band);
+  } else if (tail.w > 0.5) {
+    // MODE 1 — enabled path: one sphere per flesh cluster's bone range. The cull is
+    // the EXACT hard-min no-op — bones fold with a hard min, so a bone whose
+    // sphere is farther than the running field d can never win. d here is
+    // the WOUNDED field (the call site passes dmg), which is exactly what
+    // the exactness argument needs: a far limb's bones must not be culled
+    // from a pixel whose flesh is already dragged toward them by a wound.
+    for (var c = 0; c < ${MAX_CLUSTERS}; c = c + 1) {
+      let cr = textureLoad(data, vec2<i32>(${MAX_CLUSTERS} + c, ${ROW_CLUSTER_RANGE} + band), 0);
+      if (cr.y < 0.5) { continue; }
+      let cb = textureLoad(data, vec2<i32>(${MAX_CLUSTERS} + c, ${ROW_CLUSTER_BOUNDS} + band), 0);
+      if (length(p - cb.xyz) - cb.w > d * cr.z) { continue; }
+      d = foldBoneRange(d, p, data, i32(cr.x), i32(cr.y), band);
+    }
+    // The tail (organs and limb-less bones) folds unconditionally — it is
+    // the fallback for viscera, which rides no cluster sphere.
+    d = foldBoneRange(d, p, data, i32(tail.x), i32(tail.y), band);
+  } else {
+    // Flat fallback — the pre-cull loop over the whole contiguous span
+    // [counts.x, counts.x + boneCount). Byte-identical to the shipped
+    // shader: pack wrote zero bone-cluster texels.
+    d = foldBoneRange(d, p, data, first, i32(boneCount), band);
+  }
+  return d;
+}`;
+
 export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, counts2: vec4<f32>, noiseCfg: vec4<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>, volumeTex: texture_3d<f32>, volumePose0: vec4<f32>, volumePose1: vec4<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>, perfCfg: vec4<f32>, woundBound: vec4<f32>) -> vec4<f32> {
   var d = 1e9;
   // Argmin tracking now lives in private globals shared with foldGroup
@@ -1395,6 +1500,8 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   gFoldBest = 1e9;
   gFoldBestIdx = -1.0;
   gFoldBestDistort = 1.0;
+  gWoundCluster = 0.0;
+  gWoundOwners = 0u;
   // VOLUME BRANCH (X1.26): volumePose0.w is the enable flag. Enabled, the
   // baked texture IS the body — d comes from sampleHandVolume and the whole
   // primitive/cluster fold is skipped (counts are zeroed by the hands view,
@@ -1467,6 +1574,54 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   let dmgRes = applyWounds(carved, p, data, woundCfg, woundCfg2, perfCfg, woundBound);
   var dmg = dmgRes.x;
   let nearWound = dmgRes.y;
+  // Preserve independently moving limbs under somebody else's wound.
+  // Keep the original smooth body/carve fold, then union each threatened
+  // limb with only ITS wounds applied. This retains authored blend seams
+  // without letting an arm crater erase a nearby jaw when the arm rises.
+  // No wounds/unscoped chunk wounds take the original path exactly.
+  //
+  // counts2.z is the ATTRIBUTION GATE (pass timing, 2026-09-07): 1 skips
+  // this re-fold entirely — a WRONG frame on purpose (a raised arm's crater
+  // can erase the jaw again) that prices the mechanism. 0, the shipped
+  // value, is bit-identical to the pre-gate shader; only the bench's
+  // owner-refold-off leg sets it (__sdfGame.setOwnerRefold).
+  if ((nearWound > 0.5 || dmg != carved) && gWoundOwners != 0u && volumePose0.w < 0.5 && counts2.z < 0.5) {
+    let owners = gWoundOwners;
+    for (var c = 0; c < 8; c = c + 1) {
+      if (c >= i32(counts.y)) { break; }
+      if ((owners & ~(1u << u32(c + 1))) == 0u) { continue; }
+      let cr = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_RANGE}), 0);
+      if (cr.z < 0.5) { continue; }
+      let cb = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_BOUNDS}), 0);
+      let gs = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_GROUPS}), 0);
+      if (length(p - cb.xyz) - cb.w > (dmg + counts.w * 4.0) * gs.z) { continue; }
+      let savedBest = gFoldBest;
+      let savedIdx = gFoldBestIdx;
+      let savedDistort = gFoldBestDistort;
+      gFoldBest = 1e9;
+      gFoldBestIdx = -1.0;
+      gFoldBestDistort = 1.0;
+      var limb = 1e9;
+      for (var gi = 0; gi < 64; gi = gi + 1) {
+        if (gi >= i32(gs.y)) { break; }
+        let group = i32(gs.x) + gi;
+        let range = textureLoad(data, vec2<i32>(group, ${ROW_GROUP_RANGE}), 0);
+        let bounds = textureLoad(data, vec2<i32>(group, ${ROW_GROUP_BOUNDS}), 0);
+        limb = foldGroup(limb, p, data, counts, 0, bounds, range);
+      }
+      gWoundCluster = f32(c + 1);
+      let limbCarved = applyCarves(limb, p, data, counts);
+      let limbDamage = applyWounds(limbCarved, p, data, woundCfg, woundCfg2, perfCfg, woundBound).x;
+      if (limbDamage < dmg) {
+        dmg = limbDamage;
+      } else {
+        gFoldBest = savedBest;
+        gFoldBestIdx = savedIdx;
+        gFoldBestDistort = savedDistort;
+      }
+    }
+    gWoundCluster = 0.0;
+  }
   // Inside-flesh rows, gated on nearWound (see APPLY_BONES): ORGANS, plus
   // bones only when packBones is on (the shipped default until bone tubes
   // ship). Outside a wound the call is provably a no-op — the inside-flesh
@@ -1853,6 +2008,7 @@ export const DEPTH_PREPASS_MARCH = /* wgsl */ `fn depthPrepassMarch(
 //   faceCfg    x enabled, y strength, z forward (+1/-1), w relief
 //   faceCfg2   x projMode (0 planar, 1 spherical), y mean, z glowThreshold,
 //              w glowStrength
+//   faceGlowRedOnly  opt-in bright red mask, also enabled for Replace faces
 //   faceCfg3   x glowFlicker, y timeSeconds, zw = noise root shift (xz world;
 //              the y shift is zero — root translation is ground-plane)
 //   faceProj   xy = scale of head-space xy -> uv, zw = uv centre
@@ -2001,6 +2157,7 @@ export const MARCH_BODY_PARAMS = /* wgsl */ `(
   visceraDepth: f32,
   faceCfg: vec4<f32>,
   faceCfg2: vec4<f32>,
+  faceGlowRedOnly: f32,
   faceCfg3: vec4<f32>,
   faceProj: vec4<f32>,
   faceAtlas: vec4<f32>,
@@ -2033,11 +2190,11 @@ export const MARCH_BODY_PARAMS = /* wgsl */ `(
   prevT: f32,
   bodyCentre: vec3<f32>,
   bodyHalf: vec3<f32>,
-  // Melt progress in x, yzw spare (zombie melt task 6). Zero everywhere but a
+  // Melt progress in x, yzw spare - zombie melt task 6. Zero everywhere but a
   // melting body and its released bone chunks; the flesh-only wet-red ramp
   // below is bit-identical to the pre-melt shader while it is 0.
   meltCfg: vec4<f32>,
-  // Level-only shadow (perf round 2 task 7) — bound positionally LAST to
+  // Level-only shadow - perf round 2 task 7 — bound positionally LAST to
   // match createMarchMaterial's binding order. The gate is cfg.x — zero
   // keeps the march bit-identical to the pre-task-7 shader.
   // NOTE FOR THE NEXT EDITOR — the wgslFn parser regexes the parameter list
@@ -2109,15 +2266,59 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
     let tid = clamp(vec2<i32>(floor(screenUV * vec2<f32>(f32(gx), f32(gy)))), vec2<i32>(0, 0), vec2<i32>(gx - 1, gy - 1));
     let head = (*tileHdr)[tid.y * gx + tid.x];
     let n = min(head.y, ${TILE_MAX_ENTRIES}u);
-    gTileN = f32(n);
-    // Entry stream: TILE_STRIDE vec4s per entry at base head.x. Same record
-    // layout the CPU binner packs; kTileWrite emits it verbatim.
+    // PER-RAY SPHERE COMPACTION (prototype, tileCfg.x == 2). The tile list
+    // is a 16px-wide frustum's worth of groups, projected at each sphere's
+    // NEAREST depth and clamped outward to whole tiles, so a single ray
+    // carries groups it never comes near. One ray-vs-sphere test per entry,
+    // HERE and never per step, drops those before any marching. The sphere
+    // is inflated the way both cull sites already agree on: the binner's
+    // blendReach (counts.w * 4) scaled by the group's distortion factor as
+    // the per-step foldGroup test scales its threshold, plus RAY_CULL_SLACK
+    // for the post-hit probes that leave the ray (calcNormal eps, the AO
+    // probe at n * 0.06) — those sample the same gTile list.
+    let rayCull = tileCfg.x > 1.5;
+    let reach = counts.w * 4.0 + ${RAY_CULL_SLACK};
+    var w = 0;
     for (var e = 0; e < ${TILE_MAX_ENTRIES}; e = e + 1) {
       if (e >= i32(n)) { break; }
+      // Entry stream: TILE_STRIDE vec4s per entry at base head.x. Same record
+      // layout the CPU binner packs; kTileWrite emits it verbatim.
       let lin = (head.x + u32(e)) * 3u;
-      gTileBounds[e] = (*tileEnt)[lin];
-      gTileGrp[e] = (*tileEnt)[lin + 1u];
-      gTileBand[e] = (*tileEnt)[lin + 2u].x * ${DATA_ROWS}.0;
+      let b = (*tileEnt)[lin];
+      let g = (*tileEnt)[lin + 1u];
+      if (rayCull) {
+        let oc = b.xyz - camPos;
+        let tc = max(dot(oc, rd), 0.0);
+        let rInf = b.w + reach * max(g.z, 1.0);
+        if (dot(oc, oc) - tc * tc > rInf * rInf) { continue; }
+      }
+      gTileBounds[w] = b;
+      gTileGrp[w] = g;
+      gTileBand[w] = (*tileEnt)[lin + 2u].x * ${DATA_ROWS}.0;
+      w = w + 1;
+    }
+    gTileN = f32(w);
+  }
+  // PER-RAY WOUND LIST (counts2.w gate, 2026-09-07). Built ONCE per pixel:
+  // a wound whose REACH sphere the ray never enters cannot change this
+  // ray's field on any step, nor the post-hit probes within RAY_CULL_SLACK
+  // of the ray. Same reach formula as applyWounds (pinned by test, + slack
+  // for the off-ray probes). The cone/depth pre-pass chains never run this
+  // block, so their gWoundListOn stays 0 and they fold every wound —
+  // conservative by construction.
+  gWoundListOn = select(0.0, 1.0, counts2.w > 0.5);
+  if (gWoundListOn > 0.5) {
+    gWoundN = 0;
+    let nW = min(i32(woundCfg.x), 16);
+    for (var i = 0; i < 16; i = i + 1) {
+      if (i >= nW) { break; }
+      let w = textureLoad(data, vec2<i32>(i, ${ROW_WOUND}), 0);
+      let reach = w.w * max(2.0, 2.0 * woundCfg.w + 3.0 * woundCfg2.x) + 4.0 * woundCfg.y + 0.25 + ${RAY_CULL_SLACK};
+      let oc = w.xyz - camPos;
+      let tc = max(dot(oc, rd), 0.0);
+      if (dot(oc, oc) - tc * tc > reach * reach) { continue; }
+      gWoundList[gWoundN] = i;
+      gWoundN = gWoundN + 1;
     }
   }
   // OCCLUDER PRE-PASS. occT is the distance to the nearest point of a
@@ -2721,6 +2922,7 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
       fbm(anchor * 22.0), fbm(anchor * 22.0 + 5.0), fbm(anchor * 22.0 + 11.0)) * detailAmp);
   }
 
+  gWoundShadePrim = select(-1.0, f32(hitBest), hitBest >= 0 && hitBest < i32(counts.x));
   let wmBoth = woundMask(p, n, data, woundCfg, woundCfg2);
   let wm = wmBoth.x;      // colouring / wet / cavity shading
   let wmRim = wmBoth.y;   // fresnel fade, covers the lip
@@ -2942,10 +3144,20 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
       let W = vec3<f32>(0.2126, 0.7152, 0.0722);
       // DECAL mode (faceCfg.x == 2): the sheet is a colour image baked off a
       // reference mesh and pasted on as albedo where its alpha is set, the way
-      // a PSX face was painted onto a head. No glow -- a photo is bright in
+      // a PSX face was painted onto a head. No luma glow -- a photo is bright in
       // many places that are not eyes -- and no relief, because its luminance
       // edges (hairline, lips) are colour changes, not height.
       faceGlow = smoothstep(faceCfg2.z, 1.0, dot(tex.rgb, W)) * facing * tex.a * (1.0 - decal);
+      // Opt-in painted red eyes: brightness alone would select skin/teeth.
+      // Red dominance rejects those, and the brightness gate rejects dark
+      // reddish hair/mouth pixels. This mask works with Replace albedo too.
+      if (faceGlowRedOnly > 0.5) {
+        let redDominance = (tex.r - max(tex.g, tex.b)) / max(tex.r, 0.001);
+        let redMask = smoothstep(min(faceCfg2.z, 0.999), 1.0, redDominance)
+                    * smoothstep(0.35, 0.70, tex.r);
+        faceGlow = redMask * facing * tex.a * clamp(faceCfg.y, 0.0, 1.0)
+                 * clamp(faceCfg2.w, 0.0, 1.0);
+      }
 
       // Otherwise a MULTIPLIER, not a replacement: the generated sheet carries
       // baked lighting, so pasting it in as albedo and lighting it again
@@ -3524,10 +3736,9 @@ export const HELPERS = [
   SD_SHELL,
   Q_ROT, Q_MUL, Q_FROM_TO, REST_POINT,
   APPLY_CARVES, APPLY_WOUNDS, WOUND_MASK, TISSUE_RAMP, CHAR_MASK, SAMPLE_VOLUME,
-  FOLD_GROUP, APPLY_BONES, MAP_BODY, CALC_NORMAL, WOUND_SHADOW, TEXEL, FLICKER, SOFT_SHOULDER,
+  FOLD_GROUP, FOLD_BONE_RANGE, APPLY_BONES, MAP_BODY, CALC_NORMAL, WOUND_SHADOW, TEXEL, FLICKER, SOFT_SHOULDER,
   WALL_CONTRIBUTION, AMBIENT_AT, LEVEL_SHADOW,
   // Quarter-res depth prepass fetch (close-up task 3). No field deps — it is
   // a textureLoad — so it rides last, ahead of MARCH_BODY which calls it.
   DEPTH_PRE_FETCH,
 ];
-
