@@ -20,6 +20,9 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**[~] Hybrid deferred renderer (M2) — task 5 wired + light-calibrated on `codex/dispatch/2026-09-06-hybrid-deferred-m2-task-5-continue-1`; tasks 6–7 next.**
+Opt-in `?renderer=deferred` boots both modes error-free; flesh blowout root-caused to the falloff-family mismatch (march linear key vs three I/d²) and fixed with a per-slot march-key conversion + flesh highlight shoulder at calibrated gain 0.5. Boot driver now rejects black frames, blowouts and facing-away captures (12/12, inspected captures). [task-5 report](docs/dev-notes/2026-09-06-hybrid-deferred-m2/task-5.md); composition correction queued before task 6; NOT merged, legacy stays default.
+
 **[~] Soldier combat/animation polish — ready for owner playtest on `codex/soldier-polish`.** Fixed endless strafe targets, slow/misaligned aim, absent recoil, discontinuous gait, run carry, and lab run controls. [Findings and preview](docs/dev-notes/2026-09-06-soldier-polish/notes.md); not merged pending feel check.
 
 **[~] Game tile visual playtest + telemetry — integrated on main; owner visual run next, before performance comparisons.**
