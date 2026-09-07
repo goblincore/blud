@@ -85,12 +85,12 @@ try {
     anchors: s.anchors.map((a) => ({ name: a.name, want: a.want, hit: a.hit })),
   }, null, 2));
   const byName = Object.fromEntries(s.anchors.map((a) => [a.name, a]));
-  for (const name of ['body', 'floor', 'sideWall', 'cutoutSolid']) {
+  for (const name of ['bodyChest', 'floor', 'sideWall', 'cutoutSolid']) {
     const a = byName[name];
     assert.ok(a.hit, `${name}: no class-${a.want} pixel near its anchor ${JSON.stringify(a.pixel)}`);
   }
-  assert.equal(byName.body.hit.cls, 18, 'the SDF body must read flesh+level-only (18)');
-  assert.ok(byName.body.hit.depth > 0 && byName.body.hit.depth < 1, 'body surfaceDepth must be a real hit');
+  assert.equal(byName.bodyChest.hit.cls, 18, 'the SDF body must read flesh+level-only (18) at the chest probe');
+  assert.ok(byName.bodyChest.hit.depth > 0 && byName.bodyChest.hit.depth < 1, 'body surfaceDepth must be a real hit');
   assert.ok((s.classCounts['1'] ?? 0) > 2000, `router-adapted room coverage expected >2000 px of class 1, got ${s.classCounts['1']}`);
   assert.ok((s.classCounts['18'] ?? 0) > 1000, `SDF body coverage expected >1000 px of class 18, got ${s.classCounts['18']}`);
   const covered = Object.entries(s.classCounts).filter(([k]) => k !== '0').reduce((a, [, n]) => a + n, 0);
@@ -99,19 +99,26 @@ try {
 
   // ---- alphaTest survives the adapter (on device) ----------------------------
   const solid = byName.cutoutSolid, hole = byName.cutoutHole;
-  assert.ok(hole.hit, `the cutout HOLE must show the empty sentinel (class 0) at ${JSON.stringify(hole.pixel)}`);
+  assert.equal(hole.hit.cls, 0, `the cutout HOLE anchor must read the empty class at ${JSON.stringify(hole.pixel)}, got ${hole.hit.cls}`);
   assert.ok(hole.hit.depth > 0.999, `the hole must be EMPTY background (depth 1), got ${hole.hit.depth}`);
   assert.ok(solid.hit.depth < 1, `the solid cell must be a real hit, got ${solid.hit.depth}`);
+  // The plane is flat and camera-facing: its per-pixel clip-depth spread is
+  // far below 0.01, so the hit must land within 0.01 of the projected anchor
+  // depth (f32 storage + half-texel interpolation are the only noise).
   assert.ok(
-    solid.hit.clipDepth !== undefined && Math.abs(solid.hit.depth - solid.clipDepth) < 0.05,
-    `solid cell depth ${solid.hit.depth} must be near the plane's clip depth ${solid.clipDepth} — alphaTest must not eat it`,
+    Number.isFinite(solid.clipDepth) && Math.abs(solid.hit.depth - solid.clipDepth) < 0.01,
+    `solid cell depth ${solid.hit.depth} must match the plane's clip depth ${solid.clipDepth} — alphaTest must not eat it`,
   );
-  check('alpha-cutout-survives-adapter', { solid: solid.hit, hole: hole.hit });
+  check('alpha-cutout-survives-adapter', { solid: solid.hit, hole: hole.hit, clipDepth: solid.clipDepth });
 
   // ---- scoped exclusion: forward / unsupported / unregistered ----------------
+  // These anchors sit against EMPTY background (see LAYOUT): the exact
+  // anchor pixel must read class 0 AND hardware-clear depth. A leak would
+  // put the object's class/depth on the anchor pixel itself.
   for (const name of ['forwardSphere', 'unsupportedMesh', 'helperSphere']) {
     const a = byName[name];
-    assert.ok(a.hit, `${name} must be OUT of the producer pass (empty sentinel expected at ${JSON.stringify(a.pixel)})`);
+    assert.ok(a.hit, `${name} must be probed (empty sentinel expected at ${JSON.stringify(a.pixel)})`);
+    assert.equal(a.hit.cls, 0, `${name} must not write a class at its anchor, got ${a.hit.cls}`);
     assert.ok(a.hit.depth > 0.999, `${name} must not write depth, got ${a.hit.depth}`);
   }
   check('scoped-exclusion-forward-unsupported-unregistered', {
@@ -138,8 +145,11 @@ try {
   assert.deepEqual(lightsB.ids, lightsA.ids, 'the rebuilt list must be frame-to-frame repeatable');
   check('light-list-selection', { ids: lights.ids, dropped: lights.dropped, flashlightIndex: lights.flashlightIndex, count: lights.count });
 
-  // Fire the muzzle: it becomes its own second slot.
+  // Fire the muzzle: it becomes its own second slot. The draw function (and
+  // with it the per-frame light rebuild) only runs on step(), so a draw must
+  // happen between firing and reading the cached lastLights.
   await evaluate('__deferredScene.fire(true)');
+  await evaluate('__deferredScene.step(1)');
   lights = await evaluate('__deferredScene.lights()');
   assert.equal(lights.ids[1], 'muzzle', 'an active muzzle takes the slot after the flashlight');
   assert.ok(!lights.dropped.includes('muzzle'), 'an active muzzle is not dropped');
@@ -147,12 +157,14 @@ try {
   const invariant = await evaluate('__deferredScene.muzzleInvariance()');
   assert.equal(invariant, true, 'moving only the muzzle must not change the flashlight entry');
   await evaluate('__deferredScene.fire(false)');
+  await evaluate('__deferredScene.step(1)'); // restore the inactive-muzzle frame
   check('light-list-muzzle-priority-invariance', { activeIds: lights.ids.slice(0, 3), muzzleInvariance: invariant });
 
   // ---- late kit child: async discovery + adapter receiver bits on device -----
   let before = await evaluate('__deferredScene.readSurfaces()');
   const kitBefore = before.anchors.find((a) => a.name === 'kitChild');
-  assert.ok(kitBefore.hit, 'before the kit lands its anchor must be the empty sentinel');
+  assert.ok(kitBefore.hit, 'before the kit lands its anchor must be probed');
+  assert.equal(kitBefore.hit.cls, 0, 'before the kit lands its anchor must read the empty class');
   assert.ok(kitBefore.hit.depth > 0.999, 'before the kit lands its anchor must be empty background');
   const route = await evaluate('__deferredScene.addKitChild()');
   assert.equal(route, 'mesh', 'sync() must discover the late kit child under the registered parent');

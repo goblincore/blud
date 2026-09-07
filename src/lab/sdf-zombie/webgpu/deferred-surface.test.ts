@@ -95,6 +95,16 @@ describe('createSurfaceTarget', () => {
     }
   });
 
+  it('pins the literal attachment order the G-buffer consumers rely on', () => {
+    // NOT [...SURFACE_ATTACHMENT_NAMES] on purpose: fixtures and the resolve
+    // pass reason about POSITIONS (0=albedo … 3=depth) and the task-3 GPU
+    // gate read by name. A reorder here must fail loudly, not silently
+    // re-bind which attachment carries the class vs the depth.
+    expect([...SURFACE_ATTACHMENT_NAMES]).toEqual([
+      'albedoRoughness', 'normalMetalness', 'emissionClass', 'surfaceDepth',
+    ]);
+  });
+
   it('clamps fractional positive dimensions to >= 1 texel', () => {
     const target = createSurfaceTarget(0.4, 2.6);
     try {

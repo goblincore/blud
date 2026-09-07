@@ -32,7 +32,7 @@ import {
 import {
   buildGameDeferredLights, type GameLightCandidate,
 } from './game-deferred-lights';
-import { SURFACE_ATTACHMENT_NAMES } from './deferred-surface';
+import type { SurfaceAttachmentName } from './deferred-surface';
 import { stoneTextures } from '../../../game/level/stone-textures';
 import { buildBody, DEFAULT_BUILD_OPTS, type BuildResult } from '../build-body';
 import { parseBlob } from '../blob-parse';
@@ -50,16 +50,30 @@ const ROOM_HEIGHT = 3.0;
 
 const CAMERA_POSE = { pos: [0.1, 2.6, 7.2] as Vec3, look: [0.1, 1.0, 0] as Vec3 };
 
-/** World anchors the driver probes. */
+/** World anchors the driver probes.
+ *
+ *  Probe-placement rules learned the hard way (2026-09-07 fixture review):
+ *  - 'body' is the TRANSLATE/SPAWN root at the floor — probing it is a
+ *    floor/feet ambiguity. The flesh probe is the chest (task-2's
+ *    PROBE.body convention), never the root.
+ *  - An exclusion anchor (want class 0) is only meaningful against EMPTY
+ *    background. At ±2.8, y=0.8 the anchor ray continued past the excluded
+ *    object into the side wall at x=±3.6, so the wall's class-1 coverage
+ *    sat behind the probe and the sentinel could never be observed. The
+ *    exclusion meshes now sit at y=2.0 near mid-room, where the ray exits
+ *    past the walls' z extent (|z|>3.6) and the floor's far edge into
+ *    genuine background.
+ */
 const LAYOUT = {
   body: [0, 0, 0] as Vec3,
+  bodyChest: [0, 1.25, 0.12] as Vec3,
   floor: [0, 0, 0.6] as Vec3,
   sideWall: [3.55, 1.4, 0] as Vec3,
   cutoutSolid: [1.5, 1.5, 0.5] as Vec3,
   cutoutHole: [2.1, 1.5, 0.5] as Vec3,
   forwardSphere: [-1.8, 1.4, 0.5] as Vec3,
-  unsupportedMesh: [2.8, 0.8, 0.5] as Vec3,
-  helperSphere: [-2.8, 0.8, 0.5] as Vec3,
+  unsupportedMesh: [2.0, 2.0, -0.5] as Vec3,
+  helperSphere: [-2.0, 2.0, -0.5] as Vec3,
   kitChild: [-1.0, 1.0, -0.5] as Vec3,
 };
 
@@ -77,7 +91,12 @@ function decodeHalf(bits: number): number {
 
 interface ReadBuffer { width: number; height: number; channels: number; data: Float32Array }
 
-async function readAttachment(handle: LabRendererHandle, target: THREE.RenderTarget, name: string): Promise<ReadBuffer> {
+/** Readback is BY ATTACHMENT NAME and typed to SURFACE_ATTACHMENT_NAMES so a
+ *  rename or reorder breaks here at compile time, not silently on device.
+ *  (The 2026-09-07 trap: index-destructuring all four attachments as
+ *  [emission, depth] actually bound albedoRoughness → 'emission' and
+ *  normalMetalness.x → 'depth', misreading roughness as the class.) */
+async function readAttachment(handle: LabRendererHandle, target: THREE.RenderTarget, name: SurfaceAttachmentName): Promise<ReadBuffer> {
   const textureIndex = target.textures.findIndex((t) => t.name === name);
   if (textureIndex < 0) throw new Error(`target is missing attachment '${name}'`);
   const tex = target.textures[textureIndex]!;
@@ -315,6 +334,16 @@ async function main() {
     return null;
   };
 
+  /** The EXACT anchor pixel's class and depth — no search window. Empty-
+   *  sentinel probes (want 0) must use this: a spiral search would happily
+   *  walk off a leaked object and match true background, hiding exactly the
+   *  leak it exists to catch. Returns the actual observed class either way
+   *  so a failure names what was found instead of the wanted value. */
+  const classAt = (emission: ReadBuffer, depth: ReadBuffer, x: number, y: number) => {
+    const o = (y * emission.width + x) * 4;
+    return { cls: Math.round(emission.data[o + 3]!), depth: depth.data[y * depth.width + x]! };
+  };
+
   let kitAdded = false;
   const api = {
     errors,
@@ -360,13 +389,14 @@ async function main() {
     diagnostics(): { mesh: GameDeferredSceneDiagnostics; sdf: GameDeferredSceneDiagnostics } {
       return { mesh: meshRouter.diagnostics(), sdf: sdfRouter.diagnostics() };
     },
-    /** Class/depth census of one raw producer target (debug evidence). */
+    /** Class/depth census of one raw producer target (debug evidence).
+     *  Reads the two relevant attachments BY NAME: the class lives in the
+     *  emissionClass alpha and the depth in the r32f surfaceDepth. */
     async readTarget(which: 'mesh' | 'sdf' | 'resolved') {
       const target = which === 'mesh' ? deferredLayer.targets.mesh
         : which === 'sdf' ? deferredLayer.targets.sdf : deferredLayer.targets.resolved;
-      const [emission, depth] = (await Promise.all(
-        SURFACE_ATTACHMENT_NAMES.map((n) => readAttachment(handle, target, n)),
-      )) as [ReadBuffer, ReadBuffer];
+      const emission = await readAttachment(handle, target, 'emissionClass');
+      const depth = await readAttachment(handle, target, 'surfaceDepth');
       const counts: Record<string, number> = {};
       for (let i = 3; i < emission.data.length; i += 4) {
         const cls = Math.round(emission.data[i]!);
@@ -382,23 +412,36 @@ async function main() {
     },
     async readSurfaces() {
       const resolved = deferredLayer.targets.resolved;
-      const [emission, depth] = (await Promise.all(
-        SURFACE_ATTACHMENT_NAMES.map((n) => readAttachment(handle, resolved, n)),
-      )) as [ReadBuffer, ReadBuffer];
+      // BY NAME (see readAttachment): class from emissionClass alpha, depth
+      // from the r32f surfaceDepth — never an index destructure.
+      const emission = await readAttachment(handle, resolved, 'emissionClass');
+      const depth = await readAttachment(handle, resolved, 'surfaceDepth');
       const classCounts: Record<string, number> = {};
       for (let i = 3; i < emission.data.length; i += 4) {
         const cls = Math.round(emission.data[i]!);
         classCounts[String(cls)] = (classCounts[String(cls)] ?? 0) + 1;
       }
       const want: Record<string, number> = {
-        body: 18, floor: 1, sideWall: 1, cutoutSolid: 1, cutoutHole: 0,
+        bodyChest: 18, floor: 1, sideWall: 1, cutoutSolid: 1, cutoutHole: 0,
         forwardSphere: 0, unsupportedMesh: 0, helperSphere: 0,
         kitChild: kitAdded ? 17 : 0,
       };
-      const anchors = Object.entries(LAYOUT).map(([name, p]) => {
+      // 'body' is the spawn root — floor/feet ambiguous, never probed.
+      const anchors = Object.entries(LAYOUT).filter(([name]) => name !== 'body').map(([name, p]) => {
         const { pixel, clipDepth } = project(p);
-        const hit = findClass(emission, depth, pixel[0], pixel[1], want[name]!, name === 'body' ? 24 : 16);
-        return { name, world: p, pixel, clipDepth, want: want[name], hit };
+        const inBounds = pixel[0] >= 0 && pixel[0] < emission.width && pixel[1] >= 0 && pixel[1] < emission.height;
+        const probe = want[name]!;
+        // want 0 → judge the exact anchor pixel (see classAt); anything else
+        // may search a small window for its class (projection rounding, the
+        // SDF shell sitting a hair in front of the anchor point).
+        const hit = !inBounds ? null
+          : probe === 0
+            ? (() => {
+                const at = classAt(emission, depth, pixel[0], pixel[1]);
+                return { pixel: [pixel[0], pixel[1]] as [number, number], depth: at.depth, cls: at.cls };
+              })()
+            : findClass(emission, depth, pixel[0], pixel[1], probe, name === 'bodyChest' ? 24 : 16);
+        return { name, world: p, pixel, clipDepth, want: probe, hit };
       });
       return {
         width: resolved.width, height: resolved.height,
