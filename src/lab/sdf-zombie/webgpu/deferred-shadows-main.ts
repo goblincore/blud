@@ -89,6 +89,16 @@ const CAM_FLIPPED = { pos: [-2.8, 2.55, 1.6] as Vec3, look: [0, 1.0, -0.4] as Ve
  *  shadow starts BEYOND the proxy streak's near half), z [0.8565,0.8965]. */
 const SLAB = { centre: [1.44, 2.3, 0.8765] as Vec3, half: [0.09, 0.7, 0.02] as Vec3 };
 const DARKENED_RATIO = 0.85; // lit < off * 0.85 counts as darkened
+/** Floor classification is GEOMETRIC, never the G-buffer normal: floorCobble
+ *  carries a normalMap, so the resolved normal is a SHADING normal — the old
+ *  normal.y>.9 gate poked holes in the floor mask before the coherence flood
+ *  fill (saved evidence: 330 proxy px fragmented into 56-px components).
+ *  The floor is the y≈0 plane bounded by the room extent, on the mesh class. */
+const FLOOR_Y_TOL = 0.005;
+const isFloorPoint = (w: Vec3): boolean =>
+  Math.abs(w[1]!) <= FLOOR_Y_TOL
+  && Math.abs(w[0]!) <= ROOM_HALF + FLOOR_Y_TOL
+  && Math.abs(w[2]!) <= ROOM_HALF + FLOOR_Y_TOL;
 
 const errors: string[] = [];
 
@@ -182,7 +192,10 @@ interface MaskEvidence {
   fleshClear: { count: number; meanOn: number; meanOff: number; sampleCoord: [number, number] | null };
   floor: {
     darkenedProxy: number; darkenedOther: number; clearProxy: number;
+    /** RECALL: darkened proxy-explained px / all proxy-crossing px. */
     proxyDarkenedFraction: number;
+    /** PRECISION: darkened proxy-explained px / all darkened floor px. */
+    proxyPrecision: number;
     largestComponent: number;
     /** Top 5 darkened-mask 4-connected component sizes (coherence evidence). */
     componentSizes: number[];
@@ -382,8 +395,10 @@ const readLit = async (): Promise<ReadBuffer> => readTargetChannel(handle, defer
   /** World position of a resolved pixel (inverse view-projection + clip depth). */
   const worldOf = (px: number, py: number, depthBuf: ReadBuffer, invVp: THREE.Matrix4): Vec3 => {
     const d = depthBuf.data[py * depthBuf.width + px]!;
-    const ndcX = (px / FIXED_W) * 2 - 1;
-    const ndcY = 1 - (py / FIXED_H) * 2;
+    // Pixel CENTERS, not integer corners (a 0.5-texel bias skews every
+    // classifier and the anchor round-trip by ~5mm at body distance).
+    const ndcX = ((px + 0.5) / FIXED_W) * 2 - 1;
+    const ndcY = 1 - ((py + 0.5) / FIXED_H) * 2;
     const v = new THREE.Vector4(ndcX, ndcY, d, 1).applyMatrix4(invVp);
     return [v.x / v.w, v.y / v.w, v.z / v.w];
   };
@@ -392,7 +407,9 @@ const readLit = async (): Promise<ReadBuffer> => readTargetChannel(handle, defer
     const resolved = deferredLayer.targets.resolved;
     const emission = await readAttachment(handle, resolved, 'emissionClass');
     const depth = await readAttachment(handle, resolved, 'surfaceDepth');
-    const normal = await readAttachment(handle, resolved, 'normalMetalness');
+    // NOTE: the normal attachment is deliberately NOT read here — floor
+    // classification must stay independent of the cobble normalMap (see
+    // isFloorPoint above).
     camera.updateMatrixWorld();
     const invVp = new THREE.Matrix4()
       .multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse).invert();
@@ -420,8 +437,9 @@ const readLit = async (): Promise<ReadBuffer> => readTargetChannel(handle, defer
         if (baseCls > 1.5 && baseCls < 2.5) {
           if (pillarHit) { foCount++; foOn += litOn; foOff += litOff; if (!foCoord) foCoord = [x, y]; }
           else { fcCount++; fcOn += litOn; fcOff += litOff; if (!fcCoord) fcCoord = [x, y]; }
-        } else if (baseCls < 1.5 && normal.data[o4 + 1]! > 0.9) {
-          const pillarHit = rayHitsAABB(lightPos, world, slabCentre, slabHalf);
+        } else if (baseCls < 1.5 && isFloorPoint(world)) {
+          // The slab's pillarHit was already tested above; the floor pixels
+          // it darkens are slab-explained (darkenedOther), never proxy.
           let proxyHit = false;
           if (!pillarHit) {
             for (const s of hullSpheres) {
@@ -470,6 +488,7 @@ const readLit = async (): Promise<ReadBuffer> => readTargetChannel(handle, defer
       floor: {
         darkenedProxy: darkProxy, darkenedOther: darkOther, clearProxy,
         proxyDarkenedFraction: darkProxy + clearProxy ? darkProxy / (darkProxy + clearProxy) : 0,
+        proxyPrecision: darkProxy + darkOther ? darkProxy / (darkProxy + darkOther) : 0,
         largestComponent: largest,
         componentSizes: componentSizes.sort((a, b) => b - a).slice(0, 5),
         centroid: darkTotal ? [sumX / darkTotal, sumY / darkTotal] : null,
@@ -586,6 +605,12 @@ const readLit = async (): Promise<ReadBuffer> => readTargetChannel(handle, defer
       const offLit = await readLit();
       const offHash = hashBuffer(offLit);
       const masks = await computeMasks(onLit, offLit);
+      // RESTORE sampling ON before returning: screenshots taken after a
+      // capture are labelled 'on' and must actually show the shadow (the
+      // previous version left the scene in the OFF state, so
+      // task4-shadow-on.png captured a shadowless frame).
+      api.setSampling(true);
+      step(2);
       return { on: 'on', off: 'off', masks, onHash, offHash };
     },
     dispose() {

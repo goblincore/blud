@@ -66,9 +66,21 @@ const screenshot = async (name) => {
 };
 
 const results = { checks, errors, pass: false };
-/** First on/off capture (masks included) — written into the failure record
- *  too, so a failed gate still carries its GPU evidence for diagnosis. */
+/** On/off captures — written into the failure record too, so a failed gate
+ *  still carries its GPU evidence for diagnosis. */
 let firstPairEvidence = null;
+let movedPairEvidence = null;
+let bootDiag = null;
+/** A labelled capture must happen in the state its label claims: assert the
+ *  layer/shadow diagnostics right before the screenshot (the previous
+ *  version wrote 'on'-labelled screenshots from an OFF scene). */
+const assertCaptureState = async (label, sampling) => {
+  const d = await evaluate('__deferredShadows.diagnostics()');
+  assert.equal(d.layer.sampling, sampling, `${label}: sampling must be ${sampling} at capture`);
+  assert.equal(d.layer.bound, true, `${label}: shadow binding must be stored at capture`);
+  assert.equal(d.shadows.enabled, true, `${label}: shadow generation must be enabled at capture`);
+  assert.equal(d.shadows.renderedMaps, 2, `${label}: both maps must render at capture`);
+};
 try {
   await send('Page.enable'); await send('Runtime.enable');
   await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
@@ -88,6 +100,7 @@ try {
 
   // ---- caster counters --------------------------------------------------------
   const diag = await evaluate('__deferredShadows.diagnostics()');
+  bootDiag = diag;
   assert.equal(diag.shadows.renderedMaps, 2, 'both maps must render when enabled');
   assert.ok(diag.shadows.fullCasters >= 5, `full map expects room+pillar+cutout+hull, got ${JSON.stringify(diag.shadows)}`);
   assert.ok(diag.shadows.levelCasters >= 4, `level map expects room+pillar+cutout (no hull), got ${JSON.stringify(diag.shadows)}`);
@@ -139,6 +152,10 @@ try {
   assert.ok(m.floor.largestComponent > 150, `proxy shadow not coherent: largest component ${m.floor.largestComponent}`);
   check('proxy-shadow-on-stone', m.floor);
 
+  // Capture-state assertion + settle beat before the labelled screenshot
+  // (capturePair restores sampling ON; assert it actually happened).
+  await assertCaptureState('task4-shadow-on', true);
+  await sleep(150);
   await screenshot('task4-shadow-on.png');
 
   // ---- same-frame light motion --------------------------------------------------
@@ -152,6 +169,7 @@ try {
   const movedMatrix = await evaluate('(function(){ __deferredShadows.step(1); return __deferredShadows.bindingMatrixSnapshot(); })()');
   assert.notDeepStrictEqual(movedMatrix, before.matrix, 'binding viewProjection must update in the same frame as the light move');
   const pair2 = await evaluate('__deferredShadows.capturePair()');
+  movedPairEvidence = { onHash: pair2.onHash, offHash: pair2.offHash, masks: pair2.masks };
   const wx1 = before.masks.floor.proxyShadowMeanWorldX, wx2 = pair2.masks.floor.proxyShadowMeanWorldX;
   assert.ok(wx1 !== null && wx2 !== null, 'both poses must produce a proxy-explained floor shadow');
   // Light flips sides (+x -> -x): the WORLD shadow region flips to the other
@@ -162,38 +180,57 @@ try {
   assert.ok(movedPx > 40, `screen shadow centroid must move with the light: ${JSON.stringify([c1, c2])}`);
   check('same-frame-light-motion', { meanWorldXBefore: wx1, meanWorldXAfter: wx2, centroidBefore: c1, centroidAfter: c2, matrixChanged: true });
 
+  await assertCaptureState('task4-shadow-on-moved', true);
+  await sleep(150);
   await screenshot('task4-shadow-on-moved.png');
 
   // ---- map-render ablation (?spotshadow=0 semantics) -----------------------------
+  // The camera has MOVED since the boot-pose nullHash above, so the
+  // generation-off output is compared against a sampling-off baseline at the
+  // CURRENT pose (the previous version compared across poses, which could
+  // not isolate the shadow's contribution). Every diagnostics() read below
+  // happens AFTER a stepped frame (litHash steps) — the previous version
+  // read the PREVIOUS frame's counters.
   await evaluate('__deferredShadows.setSampling(false)');
+  const offBaseHash = await evaluate('__deferredShadows.litHash()'); // stepped: maps on, sampling off
+  const offBaseDiag = await evaluate('__deferredShadows.diagnostics()');
+  assert.equal(offBaseDiag.layer.sampling, false, 'baseline: sampling off');
+  assert.equal(offBaseDiag.shadows.renderedMaps, 2, 'baseline: maps still render');
   await evaluate('__deferredShadows.setMaps(false)');
-  const abl = await evaluate('__deferredShadows.diagnostics()');
+  const offHashAbl = await evaluate('__deferredShadows.litHash()'); // stepped: draw fn ran with maps disabled
+  const abl = await evaluate('__deferredShadows.diagnostics()');    // post-step counters, not stale
   assert.equal(abl.shadows.renderedMaps, 0, 'disabled update must render ZERO maps');
   assert.equal(abl.shadows.enabled, false);
-  const offHashAbl = await evaluate('__deferredShadows.litHash()');
-  assert.equal(offHashAbl, nullHash, 'no stale shadow may remain while disabled');
-  // Re-enable: maps render again, sampling reproduces the shadow.
+  assert.equal(offHashAbl, offBaseHash, 'no stale shadow may remain while disabled (same-pose baseline)');
+  // Re-enable: maps render again (assert AFTER a stepped frame), sampling
+  // reproduces the shadow.
   await evaluate('__deferredShadows.setMaps(true)');
+  const reHash = await evaluate('__deferredShadows.litHash()'); // stepped: maps render again, sampling off
   const reDiag = await evaluate('__deferredShadows.diagnostics()');
   assert.equal(reDiag.shadows.renderedMaps, 2, 're-enabled update must render both maps again');
-  const reHash = await evaluate('__deferredShadows.litHash()');
+  assert.equal(reDiag.layer.sampling, false);
+  assert.equal(reHash, offBaseHash, 're-enabled but not sampling must match the off baseline');
   await evaluate('__deferredShadows.setSampling(true)');
   const reOnHash = await evaluate('__deferredShadows.litHash()');
   assert.notEqual(reOnHash, reHash, 're-enabled sampling must darken again (no lockout)');
-  check('map-render-ablation', { renderedMapsDisabled: 0, renderedMapsReenabled: reDiag.shadows.renderedMaps, offHashAbl, reOnHash });
+  check('map-render-ablation', { renderedMapsDisabled: abl.shadows.renderedMaps, renderedMapsReenabled: reDiag.shadows.renderedMaps, offBaseHash, offHashAbl, reOnHash });
 
   // ---- shadow-off screenshot + evidence ------------------------------------------
   await evaluate('__deferredShadows.setSampling(false)');
   await evaluate('__deferredShadows.step(2)');
+  const offShotDiag = await evaluate('__deferredShadows.diagnostics()');
+  assert.equal(offShotDiag.layer.sampling, false, 'task4-shadow-off: sampling must be off at capture');
+  assert.equal(offShotDiag.shadows.renderedMaps, 2, 'task4-shadow-off: generation stays on, sampling off');
+  await sleep(150);
   await screenshot('task4-shadow-off.png');
 
+  results.pass = true;
   writeFileSync(`${out}/task4-shadow-check.json`, JSON.stringify({
     ...results,
-    bootDiag: diag,
+    bootDiag, // assigned right after boot diagnostics
     firstPair: { onHash: pair.onHash, offHash: pair.offHash, masks: pair.masks },
     movedPair: { onHash: pair2.onHash, offHash: pair2.offHash, masks: pair2.masks },
   }, null, 2));
-  results.pass = true;
   console.log('ALL CHECKS PASS');
 } finally {
   // Close the owned tab + socket on SUCCESS as well as failure. The full
@@ -205,8 +242,9 @@ try {
   if (!results.pass) {
     writeFileSync(`${out}/task4-shadow-check.json`, JSON.stringify({
       ...results,
-      bootDiag: typeof diag !== 'undefined' ? diag : null,
+      bootDiag, // safe across TDZ: declared (null) before try
       firstPair: firstPairEvidence,
+      movedPair: movedPairEvidence,
     }, null, 2));
   }
 }

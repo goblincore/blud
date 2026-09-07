@@ -480,11 +480,14 @@ export function createDeferredFlashlightShadows(
       updateLightCamera(light);
 
       if (!opts.enabled) {
-        // Skip BOTH map renders. Clear the maps to far exactly once per
-        // disable transition (and at first boot) so no stale silhouette can
-        // survive a later re-enable (spec: "clear/reset maps at boot ...
-        // disabled transitions"). While disabled: zero render submissions.
-        if (mapsValid) invalidateMaps();
+        // Skip BOTH map renders. Clear the maps to far exactly ONCE per
+        // enable->disable TRANSITION — keyed on lastEnabled, not mapsValid
+        // (invalidateMaps re-arms mapsValid, so a mapsValid gate re-cleared
+        // both targets on EVERY disabled frame). First-boot clearing is
+        // binding()'s !mapsValid guard. While disabled: zero render
+        // submissions and zero clears (spec: "clear/reset maps at boot ...
+        // disabled transitions").
+        if (lastEnabled) invalidateMaps();
         renderedMaps = 0;
         lastEnabled = false;
         return;

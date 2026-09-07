@@ -506,6 +506,33 @@ describe('disabled state, clears, and zero render calls', () => {
       factory.dispose();
     }
   });
+
+  it('after an enabled period, repeated disabled updates clear exactly once (transition-only, no per-frame work)', async () => {
+    const mock = mockShadowRenderer();
+    const f = casterFixture();
+    const factory = createDeferredFlashlightShadows(mock.renderer, { size: 128 });
+    try {
+      factory.update(f.scene, f.spot, UPDATE);
+      await oneFrame();
+      expect(mock.render).toHaveBeenCalledTimes(2);
+      factory.update(f.scene, f.spot, { ...UPDATE, enabled: false });
+      await oneFrame();
+      const clearsAfterTransition = mock.clear.mock.calls.length;
+      expect(clearsAfterTransition).toBeGreaterThanOrEqual(2); // transition cleared both maps
+      for (let i = 0; i < 3; i++) {
+        factory.update(f.scene, f.spot, { ...UPDATE, enabled: false });
+        await oneFrame();
+      }
+      // Zero further clears AND zero further renders while disabled.
+      expect(mock.render).toHaveBeenCalledTimes(2);
+      expect(mock.clear.mock.calls.length).toBe(clearsAfterTransition);
+      const d = factory.diagnostics();
+      expect(d.renderedMaps).toBe(0);
+      expect(d.enabled).toBe(false);
+    } finally {
+      factory.dispose();
+    }
+  });
 });
 
 describe('binding() and the light view-projection', () => {
