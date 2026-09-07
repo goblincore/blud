@@ -459,7 +459,7 @@ async function main() {
   postAa.addSink(sdfLayer);
   /** SDF pass scale relative to the capped buffer. 1.0 = 1:1 (default).
    *  Runtime-adjustable for the cost table + adaptive ladder. */
-  let sdfScale = 1.0;
+  let sdfScale = boundedWoundPreview ? 0.9 : 1.0;
   // Texture round-trip probe rig (texRoundTrip below) — built lazily on the
   // first call, page-lifetime, never rendered by the frame loop. A diagnostic
   // of the 2026-09-04 close-up task; nothing outside texRoundTrip touches it.
