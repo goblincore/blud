@@ -342,7 +342,7 @@ export function createWoundRing(): WoundRing {
           // an uncapped slot explicitly so it cannot inherit an old cap.
           return n ? { n, depth: w.carveDepth ?? 0 } : visual ? { n: [0, 0, 0] as Vec3, depth: 0 } : null;
         }),
-        wounds.map(w => {
+        rows.map(w => {
           // Severing retains wound history and primitive indices. A hidden
           // cluster still owns its wounds; null would turn them into global
           // cutters that can erase surviving head/torso flesh.

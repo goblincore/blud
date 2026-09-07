@@ -1,5 +1,9 @@
 # Four-region torso preview: coverage and measured tradeoff
 
+## Integration with main
+
+The local main integration also includes the soldier's newer localized wound ownership. Visual-row uploads now keep ownership aligned with reordered preset rows. Scoped wounds conservatively use the scalar finite-difference normal fallback until analytic normals support the localized cluster union. The measurements below predate that integration and are historical evidence, not timings of the merged revision. The bounded wound mode remains development-only and opt-in; no performance promotion is claimed.
+
 The approved follow-up separates upper/lower torso and front/back damage. The first impact in each region retains its own primitive-local anchor, tangent plane and depth cap. Region identity is classified against the current **rest** body; the live pose is used only to render the stored wound frames. Each region has the same immutable intact/light/heavy recipe and independent 160 ms state machine. Maximum torso cost is eight cutter rows. Reserving two rows per live region leaves eight stock fallback rows when all four are active, within the existing 16-row upload budget. Gameplay/sever history is unchanged.
 
 Preview: http://localhost:5289/sdf-game.html?slug&bounded-wounds

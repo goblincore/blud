@@ -2,7 +2,7 @@ import { wgslFn } from 'three/tsl';
 import {
   HELPERS, ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_SHAPE, ROW_PRIM_QUAT,
   ROW_CLUSTER_RANGE, ROW_CLUSTER_BOUNDS, ROW_CLUSTER_GROUPS,
-  ROW_GROUP_RANGE, ROW_GROUP_BOUNDS, ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_PRIM_BEND,
+  ROW_GROUP_RANGE, ROW_GROUP_BOUNDS, ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS, ROW_PRIM_BEND,
 } from './march.wgsl';
 import { MAX_PRIMS } from '../validate';
 import { TILE_MAX_ENTRIES } from './tile-cull';
@@ -286,6 +286,11 @@ export const NG_WOUNDS = /* wgsl */ `fn ngWounds(base: vec4<f32>, p: vec3<f32>, 
       if (abs(r - reach) <= R) { gNgReason = 3; }
       if (r > reach) { continue; }
     }
+    // mapBody restores foreign clusters after localized carving. Until that
+    // union has an analytic counterpart, differentiate the actual scalar
+    // field through calcNormal's fallback for any surviving scoped wound.
+    let owner = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS}), 0).y;
+    if (owner > 0.0) { gNgReason = 1; return d; }
     let wMeta = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_META}), 0);
     let capRow = textureLoad(data, vec2<i32>(i, ${ROW_WOUND_CAP}), 0);
     let cap = vec4<f32>(capRow.xyz, select(1e5, capRow.w, capRow.w > 0.0));

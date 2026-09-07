@@ -3,12 +3,31 @@ import { describe, it, expect, vi } from 'vitest';
 import { buildCharacterBody, compileCharacterSheet, createWoundRing } from './character-view';
 import { characterEntry, characterNames } from '../character-registry';
 import { severLimb } from '../sever';
+import type { Wound } from '../damage';
 
 // The GPU half needs a device and is covered by the capture gate instead.
 // These cover the pure half: building and sheet compilation, which is where
 // the bugs have actually been.
 
 describe('buildCharacterBody', () => {
+  it('keeps wound ownership aligned when bounded visual rows reorder and collapse history', () => {
+    const body = buildCharacterBody(characterEntry('soldier'), [0,0,0], []);
+    const arm = body.prims.findIndex(p => p.bone === 'upperarm.l');
+    const torso = body.prims.findIndex(p => p.limb === 'torso' && p.op === 'add');
+    const wound = (primIdx: number): Wound => ({ primIdx, local:[0,0,0], radius:.13, type:'blast', ageSec:0 });
+    const ring = createWoundRing();
+    ring.set([wound(torso), wound(torso), wound(arm)]);
+    const visual = [wound(arm), { ...wound(torso), presetCut: true as const }];
+    const setWounds = vi.fn();
+    ring.refresh({ setWounds } as any, body, 0, visual);
+    expect(setWounds.mock.calls[0]![7]).toEqual(visual.map(w => {
+      const cluster = body.prims[w.primIdx]!.cluster;
+      const c = body.clusters[cluster]!;
+      return { cluster, start:c.start, count:c.count };
+    }));
+    expect(setWounds.mock.calls[0]![2]).toEqual([1, -1]);
+  });
+
   it('uploads the shoulder wound with arm ownership rather than a whole-body carve', () => {
     const body = buildCharacterBody(characterEntry('soldier'), [0,0,0], []);
     const primIdx = body.prims.findIndex(p => p.bone === 'upperarm.l');
