@@ -997,8 +997,9 @@ async function main() {
         readAttachment(handle, deferredLayer.targets.resolved, 'surfaceDepth'),
       ]);
       const resolvedClassAt = (bufs: typeof resolvedA, x: number, y: number) => ({
-        cls: decodeSurfaceClass(Math.round(bufs[0]!.data[y * w + x]!)).baseClass,
-        depth: bufs[1]!.data[y * w + x]!,
+        // emissionClass is RGBA: the class channel is +3 (readSurfaces rule).
+        cls: decodeSurfaceClass(Math.round(bufs[0]!.data[(y * w + x) * 4 + 3]!)).baseClass,
+        depth: bufs[1]!.data[y * w + x]!, // surfaceDepth is R: 1 channel
       });
 
       const chestPx = project(new THREE.Vector3(...CHEST));
