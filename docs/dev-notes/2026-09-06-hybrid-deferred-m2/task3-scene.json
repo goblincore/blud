@@ -1,0 +1,95 @@
+{
+  "classCounts": {
+    "0": 477610,
+    "1": 2390
+  },
+  "anchors": [
+    {
+      "name": "body",
+      "want": 18,
+      "hit": null
+    },
+    {
+      "name": "floor",
+      "want": 1,
+      "hit": null
+    },
+    {
+      "name": "sideWall",
+      "want": 1,
+      "hit": null
+    },
+    {
+      "name": "cutoutSolid",
+      "want": 1,
+      "hit": {
+        "pixel": [
+          481,
+          278
+        ],
+        "depth": 0,
+        "cls": 1
+      }
+    },
+    {
+      "name": "cutoutHole",
+      "want": 0,
+      "hit": {
+        "pixel": [
+          515,
+          278
+        ],
+        "depth": 0,
+        "cls": 0
+      }
+    },
+    {
+      "name": "forwardSphere",
+      "want": 0,
+      "hit": {
+        "pixel": [
+          291,
+          284
+        ],
+        "depth": 0,
+        "cls": 0
+      }
+    },
+    {
+      "name": "unsupportedMesh",
+      "want": 0,
+      "hit": {
+        "pixel": [
+          552,
+          317
+        ],
+        "depth": 0,
+        "cls": 0
+      }
+    },
+    {
+      "name": "helperSphere",
+      "want": 0,
+      "hit": {
+        "pixel": [
+          236,
+          317
+        ],
+        "depth": 0,
+        "cls": 0
+      }
+    },
+    {
+      "name": "kitChild",
+      "want": 0,
+      "hit": {
+        "pixel": [
+          345,
+          295
+        ],
+        "depth": 0,
+        "cls": 0
+      }
+    }
+  ]
+}

@@ -213,16 +213,17 @@ export function createGameDeferredScene(scene: THREE.Scene): GameDeferredScene {
 
   function recomputeDiagnostics(): void {
     unsupported.clear();
+    // Only RENDERABLES carry a material contract; Groups are containers and
+    // are diagnosed through their children.
+    const isRenderable = (o: THREE.Object3D): boolean =>
+      (o as THREE.Mesh).isMesh === true
+      || (o as THREE.Points).isPoints === true
+      || (o as THREE.Line).isLine === true;
     for (const [object, entry] of catalog) {
       if (entry.route !== 'mesh' && entry.route !== 'sdf') continue;
+      if (!isRenderable(object)) continue;
       const mesh = object as THREE.Mesh;
-      if (!(mesh as unknown as { isMesh?: boolean }).isMesh) {
-        if ((mesh as unknown as { material?: unknown }).material !== undefined) {
-          reportUnsupported(object, mesh.material as THREE.Material, 'non-mesh renderable routed mesh');
-        }
-        continue;
-      }
-      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      const mats = Array.isArray(mesh.material) ? mesh.material : mesh.material ? [mesh.material] : [];
       for (const mat of mats) {
         const verdict = materialEligibility(mat);
         // 'mesh' admits adapted Standard materials and surface producers;
@@ -309,9 +310,12 @@ export function createGameDeferredScene(scene: THREE.Scene): GameDeferredScene {
               return; // a hidden renderable blinds its subtree by design
             }
           }
-          if (member === true && route === 'mesh') {
+          if (member === true && route === 'mesh' && isRenderable(object)) {
             const mesh = object as THREE.Mesh;
             if (!(mesh as unknown as { isMesh?: boolean }).isMesh) {
+              // A renderable that is neither Mesh nor a surface producer
+              // (Points/Lines routed mesh) cannot carry the MRT contract.
+              // GROUPS never land here — they fall through to their children.
               const k = key(object, (mesh.material ?? mesh) as THREE.Material, 'non-mesh renderable routed mesh');
               if (!unsupported.has(k) && !reportedLive.has(k) && reportedLive.size < MAX_UNSUPPORTED) {
                 reportedLive.add(k);
