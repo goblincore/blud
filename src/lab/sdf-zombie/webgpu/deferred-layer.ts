@@ -186,6 +186,18 @@ export interface DeferredLayerDiagnostics {
    *  flag is only the sampling side, so the two toggles stay distinguishable
    *  in evidence (spec: sampling toggle vs map-render toggle). */
   flashlightShadowEnabled: boolean;
+  /** Per-slot shadow texture identity (review fix, 2026-09-06): the CURRENT
+   *  bound texture's uuid and whether it is the layer's own fallback, for
+   *  each of the two shadow slots. The two slots must never report the same
+   *  uuid — a shared texture collapses both TextureNodes into ONE compiled
+   *  uniform binding (TextureNode.getUniformHash is value.uuid, UniformNode
+   *  generate dedupes by hash) that per-slot .value writes cannot split. */
+  shadowSlots: {
+    fullUuid: string;
+    levelUuid: string;
+    fullIsOwnedFallback: boolean;
+    levelIsOwnedFallback: boolean;
+  };
   /** What was actually verified against the device, if a device was visible. */
   limits: { supported: boolean; ok: boolean; checks: DeferredLimitCheck[] };
 }
@@ -213,6 +225,11 @@ export interface DeferredLayer {
    *  bit-identical output. Both depth maps remain the CALLER's textures —
    *  the layer never disposes them. */
   setFlashlightShadow(binding: DeferredFlashlightShadowBinding | null): void;
+  /** DIAGNOSTIC ONLY (review fix, 2026-09-06): the layer-owned 1x1 far-depth
+   *  fallback texture per shadow slot. NOT caller-managed — dispose() owns
+   *  them; do not dispose these. Exposed so tests can pin the two slots'
+   *  distinct identity, far content, and exactly-once disposal. */
+  debugShadowFallbacks(): { full: THREE.DataTexture; level: THREE.DataTexture };
   dispose(): void;
   diagnostics(): DeferredLayerDiagnostics;
   /** Producer and resolved targets, for the task-3 GPU gate. Read-only:
@@ -527,7 +544,18 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
   // binding is stored; with shadowEnabled 0 the WGSL never loads from them.
   // A stored binding REBINDS the TextureNodes' .value (the setFaceTexture
   // mechanism) — a data-only change, never a pipeline rebuild.
-  const shadowFallbackTexture = (() => {
+  // REVIEW FIX (2026-09-06): the two slots get DISTINCT owned fallback
+  // textures (different UUIDs — that is the whole point). A TextureNode's
+  // uniform hash IS its value's uuid (three TextureNode.getUniformHash), and
+  // UniformNode.generate dedupes uniforms by that hash: two TextureNodes
+  // over ONE texture collapse into ONE compiled uniform binding, and later
+  // per-slot .value writes cannot split it (both nodes feed the same
+  // nodeUniform; the shared slot then follows ONE of the two maps — GPU
+  // evidence: shadow-binding-prefix-check.json, level-only receivers sampled
+  // the full map, 0.97 relative change under a const-0 full map). Distinct
+  // initial values give the two slots independent hashes and therefore
+  // independent bindings for the life of the compiled pipeline.
+  const makeShadowFallbackTexture = (): THREE.DataTexture => {
     const tex = new THREE.DataTexture(new Float32Array([1]), 1, 1, THREE.RedFormat, THREE.FloatType);
     tex.minFilter = THREE.NearestFilter;
     tex.magFilter = THREE.NearestFilter;
@@ -535,9 +563,11 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
     tex.generateMipmaps = false;
     tex.needsUpdate = true;
     return tex;
-  })();
-  const uShadowFullDepth = texture(shadowFallbackTexture);
-  const uShadowLevelDepth = texture(shadowFallbackTexture);
+  };
+  const shadowFallbackFull = makeShadowFallbackTexture();
+  const shadowFallbackLevel = makeShadowFallbackTexture();
+  const uShadowFullDepth = texture(shadowFallbackFull);
+  const uShadowLevelDepth = texture(shadowFallbackLevel);
   const uShadowViewProj = uniform(new THREE.Matrix4());
   const uShadowLightIndex = uniform(-1);
   const uShadowBias = uniform(0);
@@ -716,6 +746,12 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
       uShadowMapSize.value.set(b.mapSize.x, b.mapSize.y);
       uShadowEnabled.value = b.enabled ? 1 : 0;
     } else {
+      // Null binding: each slot returns to ITS OWN fallback — never a shared
+      // texture (a shared value is exactly what collapsed both slots into
+      // one compiled uniform binding before the review fix). shadowEnabled 0
+      // keeps the evaluation the M1 unshadowed default.
+      uShadowFullDepth.value = shadowFallbackFull;
+      uShadowLevelDepth.value = shadowFallbackLevel;
       uShadowEnabled.value = 0;
     }
   }
@@ -968,8 +1004,18 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
         outputTargetActive: outputTarget !== null,
         flashlightShadowBound: flashlightShadow !== null,
         flashlightShadowEnabled: flashlightShadow !== null && flashlightShadow.enabled,
+        shadowSlots: {
+          fullUuid: uShadowFullDepth.value.uuid,
+          levelUuid: uShadowLevelDepth.value.uuid,
+          fullIsOwnedFallback: uShadowFullDepth.value === shadowFallbackFull,
+          levelIsOwnedFallback: uShadowLevelDepth.value === shadowFallbackLevel,
+        },
         limits,
       };
+    },
+
+    debugShadowFallbacks() {
+      return { full: shadowFallbackFull, level: shadowFallbackLevel };
     },
 
     targets: { mesh: meshTarget, sdf: sdfTarget, resolved: resolvedTarget, lit: litTarget },
@@ -982,7 +1028,8 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
       resolvedTarget.dispose();
       litTarget.dispose();
       lightTexture.dispose();
-      shadowFallbackTexture.dispose();
+      shadowFallbackFull.dispose();
+      shadowFallbackLevel.dispose();
       quadGeom.dispose();
       clearMat.dispose();
       resolveMat.dispose();

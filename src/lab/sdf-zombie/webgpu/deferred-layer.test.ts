@@ -885,6 +885,116 @@ describe('setFlashlightShadow reservation (hybrid deferred M2 task 1)', () => {
   });
 });
 
+describe('shadow slot binding identity (review fix, 2026-09-06)', () => {
+  /** Two DISTINCT caller textures with distinct uuids — the identity the two
+   *  slots must preserve through the compiled uniform binding. */
+  const constTex = (v: number): THREE.DataTexture => {
+    const t = new THREE.DataTexture(new Float32Array([v]), 1, 1, THREE.RedFormat, THREE.FloatType);
+    t.minFilter = THREE.NearestFilter;
+    t.magFilter = THREE.NearestFilter;
+    t.needsUpdate = true;
+    return t;
+  };
+  const bindingWith = (fullDepth: THREE.Texture, levelDepth: THREE.Texture, enabled = true) =>
+    ({
+      fullDepth,
+      levelDepth,
+      viewProjection: new THREE.Matrix4(),
+      lightIndex: 0,
+      bias: 0.0025,
+      mapSize: new THREE.Vector2(8, 8),
+      enabled,
+    } satisfies DeferredFlashlightShadowBinding);
+
+  it('starts the two shadow slots on DISTINCT owned far-depth fallback textures', () => {
+    // Regression: both TextureNodes used to be built over ONE fallback, whose
+    // shared uuid collapsed them into one compiled uniform binding.
+    const m = mockRenderer();
+    const layer = createDeferredLayer(m.renderer, { width: 64, height: 64, sdfScale: 1 });
+    try {
+      const slots = layer.diagnostics().shadowSlots;
+      expect(slots.fullUuid).toBeTruthy();
+      expect(slots.fullUuid).not.toBe(slots.levelUuid);
+      expect(slots.fullIsOwnedFallback).toBe(true);
+      expect(slots.levelIsOwnedFallback).toBe(true);
+      const fb = layer.debugShadowFallbacks();
+      expect(fb.full).not.toBe(fb.level);
+      expect(fb.full.uuid).toBe(slots.fullUuid);
+      expect(fb.level.uuid).toBe(slots.levelUuid);
+      // Each fallback is its slot's far depth: 1x1 R32F-styled nearest texture
+      // holding 1 (unoccluded), so a stray sample can only ever report lit.
+      for (const t of [fb.full, fb.level]) {
+        expect(t.image.width).toBe(1);
+        expect(t.image.height).toBe(1);
+        expect(t.format).toBe(THREE.RedFormat);
+        expect(t.type).toBe(THREE.FloatType);
+        expect(t.minFilter).toBe(THREE.NearestFilter);
+        expect(t.magFilter).toBe(THREE.NearestFilter);
+        expect((t.image.data as Float32Array)[0]).toBe(1);
+      }
+    } finally {
+      layer.dispose();
+    }
+  });
+
+  it('rebinds each slot independently and restores ITS OWN fallback on null', () => {
+    const m = mockRenderer();
+    const layer = createDeferredLayer(m.renderer, { width: 64, height: 64, sdfScale: 1 });
+    const camera = new THREE.PerspectiveCamera();
+    camera.coordinateSystem = THREE.WebGPUCoordinateSystem;
+    try {
+      const fb = layer.debugShadowFallbacks();
+      const texA = constTex(0);
+      const texB = constTex(1);
+      expect(texA.uuid).not.toBe(texB.uuid);
+      layer.setFlashlightShadow(bindingWith(texA, texB));
+      layer.render(new THREE.Scene(), new THREE.Scene(), camera); // refreshShadowUniforms runs here
+      let slots = layer.diagnostics().shadowSlots;
+      expect(slots.fullUuid).toBe(texA.uuid);
+      expect(slots.levelUuid).toBe(texB.uuid);
+      expect(slots.fullIsOwnedFallback).toBe(false);
+      expect(slots.levelIsOwnedFallback).toBe(false);
+      layer.setFlashlightShadow(null);
+      layer.render(new THREE.Scene(), new THREE.Scene(), camera);
+      slots = layer.diagnostics().shadowSlots;
+      expect(slots.fullUuid).toBe(fb.full.uuid);
+      expect(slots.levelUuid).toBe(fb.level.uuid);
+      expect(slots.fullUuid).not.toBe(slots.levelUuid);
+      expect(slots.fullIsOwnedFallback).toBe(true);
+      expect(slots.levelIsOwnedFallback).toBe(true);
+    } finally {
+      layer.dispose();
+    }
+  });
+
+  it('disposes each owned fallback exactly once (and never the caller maps)', () => {
+    const m = mockRenderer();
+    const layer = createDeferredLayer(m.renderer, { width: 64, height: 64, sdfScale: 1 });
+    const camera = new THREE.PerspectiveCamera();
+    camera.coordinateSystem = THREE.WebGPUCoordinateSystem;
+    const texA = constTex(0);
+    const texB = constTex(1);
+    const fullSpy = vi.fn();
+    const levelSpy = vi.fn();
+    const callerSpy = vi.fn();
+    layer.debugShadowFallbacks().full.addEventListener('dispose', fullSpy);
+    layer.debugShadowFallbacks().level.addEventListener('dispose', levelSpy);
+    texA.addEventListener('dispose', callerSpy);
+    texB.addEventListener('dispose', callerSpy);
+    try {
+      layer.setFlashlightShadow(bindingWith(texA, texB));
+      layer.render(new THREE.Scene(), new THREE.Scene(), camera);
+      layer.dispose();
+      expect(fullSpy).toHaveBeenCalledTimes(1);
+      expect(levelSpy).toHaveBeenCalledTimes(1);
+      // Caller-owned maps must survive the layer's dispose untouched.
+      expect(callerSpy).not.toHaveBeenCalled();
+    } finally {
+      layer.dispose(); // idempotent
+    }
+  });
+});
+
 describe('dispose', () => {
   it('disposes every owned target and refuses to render afterwards', () => {
     const { renderer } = mockRenderer();

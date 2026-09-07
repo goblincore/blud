@@ -16,13 +16,22 @@
 //                               shadow centroid flip to the new pose
 //   map-render-ablation         disabled update -> renderedMaps 0, no stale
 //                               shadow on re-enable (hash returns)
+//   binding-identity-off-inert  custom per-slot maps bound, sampling off == M1
+//   binding-identity-const-depths  constant-depth R32F maps (full=0, level=1,
+//                               then swapped): each slot darkens ONLY its own
+//                               receivers — the decisive per-slot binding test
+//   binding-identity-slots-restore  slots report DISTINCT owned fallbacks;
+//                               null restore reproduces the M1 output hash
 // Evidence (masks with coordinates, counters, hashes) lands in
 // docs/dev-notes/2026-09-06-hybrid-deferred-m2/.
+// SHADOW_CHECK_OUT=<file> renames the evidence JSON (the review-fix pre-fix
+// run uses shadow-binding-prefix-check.json to preserve the passing record).
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 
 const vite = Number(process.argv[2] ?? 5330), cdp = Number(process.argv[3] ?? 9330);
 const out = 'docs/dev-notes/2026-09-06-hybrid-deferred-m2';
+const outFile = process.env.SHADOW_CHECK_OUT ?? 'task4-shadow-check.json';
 mkdirSync(out, { recursive: true });
 
 const tab = await (await fetch(`http://127.0.0.1:${cdp}/json/new?about:blank`, { method: 'PUT' })).json();
@@ -76,6 +85,7 @@ const results = { checks, errors, pass: false };
 let firstPairEvidence = null;
 let movedPairEvidence = null;
 let bootDiag = null;
+let bindingEvidence = null;
 /** A labelled capture must happen in the state its label claims: assert the
  *  layer/shadow diagnostics right before the screenshot (the previous
  *  version wrote 'on'-labelled screenshots from an OFF scene). */
@@ -220,6 +230,67 @@ try {
   assert.notEqual(reOnHash, reHash, 're-enabled sampling must darken again (no lockout)');
   check('map-render-ablation', { renderedMapsDisabled: abl.shadows.renderedMaps, renderedMapsReenabled: reDiag.shadows.renderedMaps, offBaseHash, offHashAbl, reOnHash });
 
+  // ---- binding identity (review fix, 2026-09-06) ----------------------------------
+  // The two shadow slots must stay INDEPENDENTLY bindable after the layer's
+  // null-first compile. Constant-depth R32F maps make every in-frustum
+  // receiver a discriminator with no threshold ambiguity: under full=0 a
+  // full receiver loses its ENTIRE flashlight contribution; under level=1 a
+  // level-only receiver keeps all of it. The swap must reverse both. Pre-fix
+  // both slots collapsed onto ONE shared uniform (TextureNode uniform hash =
+  // texture uuid; both TextureNodes held the SAME fallback), so full
+  // receivers stayed lit under full=0 and everything darkened under the
+  // swap — recorded in shadow-binding-prefix-check.json.
+  const bid = await evaluate('__deferredShadows.bindingIdentityCheck()');
+  bindingEvidence = bid;
+  assert.equal(bid.baseline.boundOffHash, bid.baseline.offHash,
+    `a per-slot custom binding with sampling disabled must not change the M1 output: ${JSON.stringify(bid.baseline)}`);
+  assert.ok(bid.counts.inFrustumPx > 5000,
+    `in-frustum receiver coverage too small: ${JSON.stringify(bid.counts)}`);
+  assert.ok(bid.counts.fullLitPx > 300 && bid.counts.fleshLitPx > 300,
+    `receiver populations too small to discriminate: ${JSON.stringify(bid.counts)}`);
+  assert.ok(bid.litRange.maxOff < 1000,
+    `raw linear lit values must stay far from saturation: ${JSON.stringify(bid.litRange)}`);
+  // Decisive: full receivers darken under const-0 FULL map; level-only
+  // receivers are untouched while only the full map is const-0.
+  assert.ok(bid.full.darkenedFraction > 0.3,
+    `full receivers must darken under the const-0 full map: ${JSON.stringify(bid.full)}`);
+  assert.ok(bid.full.meanDarkening > 0.01,
+    `darkened full receivers lost too little light: ${JSON.stringify(bid.full)}`);
+  assert.ok(bid.level.maxRelDiffA < 0.001,
+    `level-only receivers must be untouched while ONLY the full map is const-0: ${JSON.stringify(bid.level)}`);
+  // Decisive, swapped: level-only receivers darken under const-0 LEVEL map;
+  // full receivers are untouched.
+  assert.ok(bid.level.darkenedFractionSwapped > 0.3,
+    `level-only receivers must darken under the const-0 level map (swapped): ${JSON.stringify(bid.level)}`);
+  assert.ok(bid.level.meanDarkeningSwapped > 0.01,
+    `darkened level-only receivers lost too little light: ${JSON.stringify(bid.level)}`);
+  assert.ok(bid.full.maxRelDiffSwapped < 0.001,
+    `full receivers must be untouched while ONLY the level map is const-0: ${JSON.stringify(bid.full)}`);
+  check('binding-identity-const-depths', {
+    mapSize: bid.mapSize, bias: bid.bias, counts: bid.counts, litRange: bid.litRange,
+    full: bid.full, level: bid.level,
+  });
+  // Slot identity + per-slot null restoration (needs the fixed layer's
+  // diagnostics().shadowSlots).
+  assert.ok(bid.slots?.pre, 'layer diagnostics expose no shadowSlots — the binding-identity fix is not present');
+  assert.notEqual(bid.slots.pre.fullUuid, bid.slots.pre.levelUuid,
+    'the two shadow slots must start on DISTINCT owned fallback textures (different UUIDs)');
+  assert.ok(bid.slots.pre.fullIsOwnedFallback && bid.slots.pre.levelIsOwnedFallback,
+    `both slots must start on their OWN fallbacks: ${JSON.stringify(bid.slots.pre)}`);
+  assert.ok(bid.slots.bound && bid.slots.bound.fullUuid !== bid.slots.pre.fullUuid
+    && bid.slots.bound.levelUuid !== bid.slots.pre.levelUuid,
+    `a stored binding must rebind BOTH slots away from the fallbacks: ${JSON.stringify(bid.slots.bound)}`);
+  assert.ok(bid.slots.restored.fullIsOwnedFallback && bid.slots.restored.levelIsOwnedFallback
+    && bid.slots.restored.fullUuid !== bid.slots.restored.levelUuid,
+    `null rebinding must restore each slot to ITS OWN fallback: ${JSON.stringify(bid.slots.restored)}`);
+  assert.equal(bid.restoredLitHash, bid.baseline.offHash,
+    'null restore must reproduce the M1 output at the same pose');
+  check('binding-identity-off-inert', bid.baseline);
+  check('binding-identity-slots-restore', {
+    pre: bid.slots.pre, bound: bid.slots.bound, restored: bid.slots.restored,
+    restoredLitHash: bid.restoredLitHash,
+  });
+
   // ---- shadow-off screenshot + evidence ------------------------------------------
   await evaluate('__deferredShadows.setSampling(false)');
   await evaluate('__deferredShadows.step(2)');
@@ -230,11 +301,12 @@ try {
   await screenshot('task4-shadow-off.png');
 
   results.pass = true;
-  writeFileSync(`${out}/task4-shadow-check.json`, JSON.stringify({
+  writeFileSync(`${out}/${outFile}`, JSON.stringify({
     ...results,
     bootDiag, // assigned right after boot diagnostics
     firstPair: { onHash: pair.onHash, offHash: pair.offHash, masks: pair.masks },
     movedPair: { onHash: pair2.onHash, offHash: pair2.offHash, masks: pair2.masks },
+    binding: bindingEvidence,
   }, null, 2));
   console.log('ALL CHECKS PASS');
 } finally {
@@ -245,11 +317,12 @@ try {
   try { await send('Page.close'); } catch { /* tab may already be gone */ }
   try { ws.close(); } catch { /* already closed */ }
   if (!results.pass) {
-    writeFileSync(`${out}/task4-shadow-check.json`, JSON.stringify({
+    writeFileSync(`${out}/${outFile}`, JSON.stringify({
       ...results,
       bootDiag, // safe across TDZ: declared (null) before try
       firstPair: firstPairEvidence,
       movedPair: movedPairEvidence,
+      binding: bindingEvidence,
     }, null, 2));
   }
 }

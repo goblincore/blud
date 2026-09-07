@@ -50,8 +50,8 @@
 
 import * as THREE from 'three/webgpu';
 import { createLabRenderer, type LabRendererHandle } from './lab-renderer';
-import { createDeferredLayer, type DeferredLayer } from './deferred-layer';
-import { createDeferredFlashlightShadows, type DeferredFlashlightShadowFactory } from './deferred-shadows';
+import { createDeferredLayer, type DeferredLayer, type DeferredFlashlightShadowBinding } from './deferred-layer';
+import { createDeferredFlashlightShadows, FLASHLIGHT_SHADOW_BIAS, type DeferredFlashlightShadowFactory } from './deferred-shadows';
 import { createZombieGpuView, type ZombieGpuView } from './zombie-gpu';
 import { createGameDeferredScene, type GameDeferredScene } from './game-deferred-scene';
 import { buildGameDeferredLights, type GameLightCandidate } from './game-deferred-lights';
@@ -357,7 +357,17 @@ async function main() {
   camera.lookAt(...CAM_START.look);
   camera.updateMatrixWorld();
 
-  const state = { mapsEnabled: true, bound: false, samplingEnabled: false };
+  // customBinding (review fix, 2026-09-06): when set it REPLACES the factory
+  // binding for the binding-identity check — deliberately different constant-
+  // depth maps bound per slot after the null-first compile. The drawFn spreads
+  // it per frame and resolves the flashlight index exactly like the factory
+  // path; `enabled` on the object is the sampling toggle for that binding.
+  const state = {
+    mapsEnabled: true,
+    bound: false,
+    samplingEnabled: false,
+    customBinding: null as DeferredFlashlightShadowBinding | null,
+  };
   const lightCandidates = (): GameLightCandidate[] => [
     { id: 'flashlight', role: 'flashlight', light: flashlight.spot },
     ...practicals,
@@ -372,7 +382,13 @@ async function main() {
     });
     const set = buildGameDeferredLights(lightCandidates(), camera.position);
     deferredLayer.setLights(set.lights);
-    deferredLayer.setFlashlightShadow(state.bound ? shadows.binding(set.flashlightIndex >= 0 ? set.flashlightIndex : 0, state.samplingEnabled) : null);
+    let binding: DeferredFlashlightShadowBinding | null = null;
+    if (state.customBinding) {
+      binding = { ...state.customBinding, lightIndex: set.flashlightIndex >= 0 ? set.flashlightIndex : 0 };
+    } else if (state.bound) {
+      binding = shadows.binding(set.flashlightIndex >= 0 ? set.flashlightIndex : 0, state.samplingEnabled);
+    }
+    deferredLayer.setFlashlightShadow(binding);
     deferredLayer.render(meshScene, sdfScene, camera, {
       drawMesh: () => meshRouter.draw('mesh', handle.renderer, camera),
       drawSdf: () => sdfRouter.draw('sdf', handle.renderer, camera),
@@ -499,6 +515,198 @@ const readLit = async (): Promise<ReadBuffer> => readTargetChannel(handle, defer
     };
   };
 
+  // ---- binding identity (review fix, 2026-09-06) ---------------------------
+  // The decisive discriminator for the two shadow slots. The light pipeline
+  // compiled NULL-FIRST (boot rendered with no binding stored), so on the
+  // pre-fix code both TextureNodes hashed to the SAME uniform (one shared
+  // fallback texture) and no later .value write could split them. This check
+  // binds deliberately different CONSTANT-depth R32F maps per slot —
+  // full=0 / level-only=1, then swapped — under a matrix that puts every
+  // room receiver strictly in-frustum at clip depth [0.25, 0.75], far from
+  // the comparison bias. With full=0 every in-frustum FULL receiver must
+  // lose its ENTIRE designated-flashlight contribution (delta = the whole
+  // contribution, unambiguous) while level-only receivers are untouched to
+  // readback precision; the swap must reverse both. Raw linear lit-target
+  // readback only; practicals/ambient/emission cancel in the per-pixel
+  // deltas. NOTE: intentionally declared with an explicit type wide enough
+  // to compile against BOTH the pre-fix and post-fix layer (the fix adds
+  // diagnostics().shadowSlots; pre-fix the field is absent and slot evidence
+  // records as null — the GPU assertions still carry the reproduction).
+  const CONST_MAP = 8; // constant-depth map edge, texels; mapSize matches
+  interface SlotSnapshot { fullUuid: string; levelUuid: string; fullIsOwnedFallback: boolean; levelIsOwnedFallback: boolean }
+  const slotSnapshot = (): SlotSnapshot | null => {
+    const d = deferredLayer.diagnostics() as unknown as Record<string, unknown>;
+    const s = d.shadowSlots as SlotSnapshot | undefined;
+    return s ? { ...s } : null;
+  };
+  async function bindingIdentityCheck() {
+    const constTex = (v: number): THREE.DataTexture => {
+      const t = new THREE.DataTexture(
+        new Float32Array(CONST_MAP * CONST_MAP).fill(v), CONST_MAP, CONST_MAP,
+        THREE.RedFormat, THREE.FloatType,
+      );
+      t.minFilter = THREE.NearestFilter;
+      t.magFilter = THREE.NearestFilter;
+      t.colorSpace = THREE.NoColorSpace;
+      t.generateMipmaps = false;
+      t.needsUpdate = true;
+      return t;
+    };
+    const owned: THREE.DataTexture[] = [];
+    const prevBound = state.bound;
+    const prevSampling = state.samplingEnabled;
+    try {
+      const slotsPre = slotSnapshot();
+      // Baseline at the CURRENT pose: factory path, sampling off.
+      state.customBinding = null;
+      api.setSampling(false);
+      step(2);
+      const offLit = await readLit();
+      const offHash = hashBuffer(offLit);
+      const resolved = deferredLayer.targets.resolved;
+      const emission = await readAttachment(handle, resolved, 'emissionClass');
+      const depth = await readAttachment(handle, resolved, 'surfaceDepth');
+      camera.updateMatrixWorld();
+      const invVp = new THREE.Matrix4()
+        .multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse).invert();
+      // world -> clip with w = 1: xy compressed to a tenth (the whole room is
+      // in-frustum), z affine onto [0.25, 0.75] across world z in [-3.6, 3].
+      // Receivers land orders of magnitude away from the comparison bias.
+      const M = new THREE.Matrix4().set(
+        0.1, 0, 0, 0,
+        0, 0.1, 0, 0,
+        0, 0, 1 / 6, 0.25,
+        0, 0, 0, 1,
+      );
+      const customBinding = (full: THREE.DataTexture, level: THREE.DataTexture, enabled: boolean): DeferredFlashlightShadowBinding => ({
+        fullDepth: full,
+        levelDepth: level,
+        viewProjection: M,
+        lightIndex: 0, // drawFn resolves the real flashlight index per frame
+        bias: FLASHLIGHT_SHADOW_BIAS,
+        mapSize: new THREE.Vector2(CONST_MAP, CONST_MAP),
+        enabled,
+      });
+      // Phase 0: custom maps bound but sampling OFF — must be output-neutral.
+      // Phase A: full=0 (every in-frustum full receiver occluded), level=1
+      // (every in-frustum level-only receiver lit). Same slot textures, the
+      // enabled flag is the only difference between the two binding objects.
+      const full0 = constTex(0), level1 = constTex(1);
+      owned.push(full0, level1);
+      state.customBinding = customBinding(full0, level1, false);
+      step(2);
+      const boundOffHash = hashBuffer(await readLit());
+      state.customBinding = customBinding(full0, level1, true);
+      step(2);
+      const litA = await readLit();
+      const slotsBound = slotSnapshot();
+      // Phase B: SWAPPED constants — full=1, level-only=0. Both slots must
+      // respond independently.
+      const full1 = constTex(1), level0 = constTex(0);
+      owned.push(full1, level0);
+      state.customBinding = customBinding(full1, level0, true);
+      step(2);
+      const litB = await readLit();
+      // Restore the factory path BEFORE disposing the const textures, so no
+      // render ever sees a disposed texture.
+      state.customBinding = null;
+      api.setSampling(false);
+      step(2);
+      const restoredHash = hashBuffer(await readLit());
+      const slotsRestored = slotSnapshot();
+      // Per-receiver aggregation over the resolved G-buffer.
+      const LIGHT_FLOOR = 0.05;   // ignore pixels the flashlight barely reaches
+      const DARK_REL = 0.05;      // >5% of the pixel's light lost = darkened
+      const SAME_REL = 0.001;     // 0.1%: readback-identical arithmetic
+      let inFrustumPx = 0;
+      let fullLitPx = 0, fullDarkPx = 0, fleshLitPx = 0, fleshDarkPx = 0;
+      let fullOffSum = 0, fullDarkDeltaSum = 0, fleshOffSum = 0, fleshDarkDeltaSum = 0;
+      let fullMaxRelDiffB = 0, fleshMaxRelDiffA = 0, maxOff = 0;
+      let fullSampleCoord: [number, number] | null = null;
+      let fleshSampleCoord: [number, number] | null = null;
+      const cp = new THREE.Vector4();
+      for (let y = 0; y < FIXED_H; y++) {
+        for (let x = 0; x < FIXED_W; x++) {
+          const o4 = (y * FIXED_W + x) * 4;
+          const clsRaw = emission.data[o4 + 3]!;
+          const d = depth.data[y * FIXED_W + x]!;
+          const baseCls = clsRaw - Math.floor(clsRaw / 16) * 16;
+          if (baseCls < 0.5 || d >= 1) continue;
+          const levelOnly = clsRaw >= 15.5;
+          const world = worldOf(x, y, depth, invVp);
+          cp.set(world[0]!, world[1]!, world[2]!, 1).applyMatrix4(M);
+          const w = cp.w;
+          const sx = cp.x / w, sy = cp.y / w, sz = cp.z / w;
+          if (w <= 0 || sx < -1 || sx > 1 || sy < -1 || sy > 1 || sz <= 0 || sz >= 1) continue;
+          inFrustumPx++;
+          const off = offLit.data[o4]!;
+          const a = litA.data[o4]!;
+          const b = litB.data[o4]!;
+          if (off > maxOff) maxOff = off;
+          const relDiff = (v: number, ref: number) => Math.abs(v - ref) / Math.max(ref, 1e-3);
+          if (levelOnly) {
+            // Phase A must leave level-only receivers untouched.
+            const relA = relDiff(a, off);
+            if (relA > fleshMaxRelDiffA) fleshMaxRelDiffA = relA;
+            if (off > LIGHT_FLOOR) {
+              fleshLitPx++;
+              fleshOffSum += off;
+              const delta = off - b; // phase B must darken them
+              if (delta > DARK_REL * off) {
+                fleshDarkPx++;
+                fleshDarkDeltaSum += delta;
+                if (!fleshSampleCoord) fleshSampleCoord = [x, y];
+              }
+            }
+          } else {
+            // Phase B must leave full receivers untouched.
+            const relB = relDiff(b, off);
+            if (relB > fullMaxRelDiffB) fullMaxRelDiffB = relB;
+            if (off > LIGHT_FLOOR) {
+              fullLitPx++;
+              fullOffSum += off;
+              const delta = off - a; // phase A must darken them
+              if (delta > DARK_REL * off) {
+                fullDarkPx++;
+                fullDarkDeltaSum += delta;
+                if (!fullSampleCoord) fullSampleCoord = [x, y];
+              }
+            }
+          }
+        }
+      }
+      return {
+        mapSize: [CONST_MAP, CONST_MAP] as [number, number],
+        bias: FLASHLIGHT_SHADOW_BIAS,
+        matrix: [...M.elements],
+        baseline: { offHash, boundOffHash },
+        counts: { inFrustumPx, fullLitPx, fullDarkPx, fleshLitPx, fleshDarkPx },
+        litRange: { maxOff },
+        full: {
+          darkenedFraction: fullLitPx ? fullDarkPx / fullLitPx : 0,
+          meanDarkening: fullDarkPx ? fullDarkDeltaSum / fullDarkPx : 0,
+          meanOff: fullLitPx ? fullOffSum / fullLitPx : 0,
+          maxRelDiffSwapped: fullMaxRelDiffB,
+          sampleCoord: fullSampleCoord,
+        },
+        level: {
+          darkenedFractionSwapped: fleshLitPx ? fleshDarkPx / fleshLitPx : 0,
+          meanDarkeningSwapped: fleshDarkPx ? fleshDarkDeltaSum / fleshDarkPx : 0,
+          meanOffSwapped: fleshLitPx ? fleshOffSum / fleshLitPx : 0,
+          maxRelDiffA: fleshMaxRelDiffA,
+          sampleCoord: fleshSampleCoord,
+        },
+        slots: { pre: slotsPre, bound: slotsBound, restored: slotsRestored },
+        restoredLitHash: restoredHash,
+      };
+    } finally {
+      state.customBinding = null;
+      state.bound = prevBound;
+      state.samplingEnabled = prevSampling;
+      for (const t of owned) t.dispose();
+    }
+  }
+
   // ---- driver seam ----------------------------------------------------------
   const step = (n = 1) => { for (let i = 0; i < n; i++) handle.step(STEP_DT); };
 
@@ -535,6 +743,7 @@ const readLit = async (): Promise<ReadBuffer> => readTargetChannel(handle, defer
       step(1);
       return hashBuffer(await readLit());
     },
+    bindingIdentityCheck,
     /** Census + anchor round-trip: project known world points to pixels,
      *  report the class AT those pixels, and reconstruct their world
      *  positions through the same invVp the masks use. The two anchors are
