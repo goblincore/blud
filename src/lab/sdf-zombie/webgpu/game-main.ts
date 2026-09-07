@@ -520,6 +520,12 @@ async function main() {
         return candidates;
       },
       environment: () => deferredEnvironmentFromRig(dungeonOn ? DUNGEON_RIG : GALLERY_RIG),
+      // M2 task 5: the flashlight slot's march-key response for deferred
+      // flesh, read LIVE from beamTuning — the same gain/shoulder the legacy
+      // march replays per frame, so setBeamTuning moves BOTH paths together
+      // and the constants cannot drift apart. knee = 1 - shoulder (the
+      // softShoulder parameterisation the march shader uses).
+      flashKey: () => ({ gain: beamTuning.gain, knee: 1 - beamTuning.shoulder }),
       flashlight: flashlight.spot,
       width: postAa.contentSize.width,
       height: postAa.contentSize.height,

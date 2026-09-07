@@ -141,8 +141,16 @@ function isShadowReceiver(v: unknown): v is ShadowReceiver {
 
 /** Adapter-eligible check: the material either adapts to a surface producer
  *  (Standard family) or already IS a surface producer (the task-2 factories'
- *  marker). Returns 'adapt' | 'asis' | the reason it cannot enter. */
-function materialEligibility(mat: THREE.Material): 'adapt' | 'asis' | string {
+ *  marker). Returns 'adapt' | 'asis' | the reason it cannot enter.
+ *
+ *  EXPORTED FOR REGRESSION (M2 task 5): the bone-instancer and baked-chunk
+ *  factories must carry `surfaceKind` ON THE MATERIAL — this function reads
+ *  the material, never the factory handle, and the task-5 boot check found
+ *  handle-only exposure hiding both producers as unsupported. The tests in
+ *  bone-instancer.test.ts / baked-chunks.test.ts drive THIS function against
+ *  real factory materials so a removed stamp fails here, not on a live
+ *  game boot. */
+export function materialEligibility(mat: THREE.Material): 'adapt' | 'asis' | string {
   if (mat.transparent) {
     return 'transparent; route it forward';
   }

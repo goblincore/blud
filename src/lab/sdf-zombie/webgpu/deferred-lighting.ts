@@ -9,7 +9,17 @@
 //   v0  position.xyz,  kind (0 = point, 1 = spot)
 //   v1  direction.xyz, range  (units; range <= 0 rejected)
 //   v2  color.rgb,     intensity
-//   v3  cosInner, cosOuter, 0, 0
+//   v3  cosInner, cosOuter, fleshKeyIntensity, fleshShoulderKnee
+//
+//   v3.z / v3.w (M2 task 5 game conversion, 2026-09-07): the flashlight slot's
+//   MARCH-KEY response for FLESH-class receivers, and the flesh highlight
+//   shoulder knee. The legacy march shades bodies with
+//   `beamGain * (1 - d/range)^2` — a linear-to-range window, NO inverse
+//   square — plus softShoulder(knee) so a beam-lit body keeps its wound
+//   detail, while three's physical I/d^2 stays authoritative for the level.
+//   One packed light therefore serves TWO receiver models: flesh evaluates
+//   v3.z, everything else evaluates v2.w. Both default to 0 = feature off,
+//   which is bit-identical to the pre-task-5 behaviour (every M1 fixture).
 //
 // (v0..v3 in the order the WGSL light pass reads them: textureLoad columns
 // 0..3 of the 4x16 RGBA32F light data texture, row = light index.)
@@ -37,6 +47,16 @@ export interface DeferredLight {
   range: number;
   cosInner: number;
   cosOuter: number;
+  /** Flesh-class key intensity under the MARCH falloff model
+   *  (`key * (1 - d/range)^2` — see the packed-layout note on v3.z). Absent
+   *  or 0: flesh evaluates the packed physical `intensity` like every other
+   *  class. Only the game's flashlight slot sets it. */
+  fleshKeyIntensity?: number;
+  /** softShoulder knee applied to the flesh-class lit sum (packed v3.w).
+   *  0/absent = off. Mirrors the march's beam shoulder (spotCfg2.y 0.35 →
+   *  knee 0.65): compresses [knee, inf) into [knee, 1) monotonically so two
+   *  differently-bright flesh texels stay different inside the beam. */
+  fleshShoulderKnee?: number;
 }
 
 function assertFiniteTriple(value: readonly [number, number, number], label: string): void {
@@ -64,6 +84,12 @@ export function packDeferredLights(lights: readonly DeferredLight[]): { data: Fl
       if (!Number.isFinite(v)) throw new RangeError(`lights[${i}].${label} must be finite, got ${v}`);
     }
     if (light.range <= 0) throw new RangeError(`lights[${i}].range must be positive, got ${light.range}`);
+    const key = light.fleshKeyIntensity ?? 0;
+    if (!Number.isFinite(key) || key < 0) throw new RangeError(`lights[${i}].fleshKeyIntensity must be finite >= 0, got ${key}`);
+    const knee = light.fleshShoulderKnee ?? 0;
+    if (!Number.isFinite(knee) || knee < 0 || knee >= 0.95) {
+      throw new RangeError(`lights[${i}].fleshShoulderKnee must be finite in [0, 0.95), got ${knee}`);
+    }
     for (let c = 0; c < 3; c++) {
       if (light.color[c]! < 0) throw new RangeError(`lights[${i}].color[${c}] must be >= 0, got ${light.color[c]}`);
     }
@@ -82,6 +108,8 @@ export function packDeferredLights(lights: readonly DeferredLight[]): { data: Fl
     data[o + 11] = light.intensity;
     data[o + 12] = light.cosInner;
     data[o + 13] = light.cosOuter;
+    data[o + 14] = light.fleshKeyIntensity ?? 0;
+    data[o + 15] = light.fleshShoulderKnee ?? 0;
   });
   return { data, count: lights.length };
 }

@@ -1,5 +1,6 @@
 // src/lab/sdf-zombie/webgpu/bone-instancer.test.ts
 import { describe, expect, it } from 'vitest';
+import type * as THREE from 'three/webgpu';
 import type { Primitive } from '../types';
 import { packBoneInstances, INSTANCE_FLOATS, BONE_QROT_WGSL, BONE_VERTEX_WGSL, BONE_SURFACE_WGSL, BONE_SHADE_WGSL, BONE_HASH_WGSL, BONE_NOISE_WGSL, boneInstanceArrays, createBoneInstancer } from './bone-instancer';
 import { encodeSurfaceClass } from './deferred-surface';
@@ -127,5 +128,40 @@ describe('material/light split (M2 task 2)', () => {
     surf.setWounds([{ pos: [0, 0, 0], radius: 0.2 }]);
     expect(surf.uniforms.woundCount.value).toBe(1);
     surf.dispose();
+  });
+});
+
+// M2 task 5 regression (2026-09-07): the task-3 router admits surface
+// producers by reading surfaceKind ON THE MATERIAL (materialEligibility) —
+// the factory handle getter above is diagnostic sugar and predates the
+// router. The task-5 game boot found surface-mode bone tubes diagnosed
+// UNSUPPORTED (hidden from the G-buffer pass) because the stamp lived only
+// on the handle. These tests drive the router's ACTUAL admission function
+// against the material the factory hands to three, so a removed stamp fails
+// here instead of on a live game boot.
+describe('router eligibility through the actual material (not the handle)', () => {
+  it('materialEligibility admits a surface-mode bone material as a producer', async () => {
+    const { materialEligibility } = await import('./game-deferred-scene');
+    const surf = createBoneInstancer(8, { output: 'surface' });
+    const mat = surf.object.material as THREE.Material;
+    expect((mat as unknown as { surfaceKind: number }).surfaceKind)
+      .toBe(encodeSurfaceClass(1, 'full'));
+    expect(materialEligibility(mat)).toBe('asis');
+    surf.dispose();
+  });
+
+  it('a level-only receiver material is admitted the same way', async () => {
+    const { materialEligibility } = await import('./game-deferred-scene');
+    const lvl = createBoneInstancer(8, { output: 'surface', shadowReceiver: 'level-only' });
+    expect(materialEligibility(lvl.object.material as THREE.Material)).toBe('asis');
+    lvl.dispose();
+  });
+
+  it('an unstamped MeshBasicNodeMaterial is still rejected (the check does work)', async () => {
+    const { materialEligibility } = await import('./game-deferred-scene');
+    const { MeshBasicNodeMaterial } = await import('three/webgpu');
+    const verdict = materialEligibility(new MeshBasicNodeMaterial());
+    expect(verdict).not.toBe('asis');
+    expect(verdict).not.toBe('adapt');
   });
 });

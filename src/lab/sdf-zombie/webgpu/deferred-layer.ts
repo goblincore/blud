@@ -262,6 +262,18 @@ export interface DeferredLayer {
  * clamped, reduced specular — its bounded class-specific response. Emission
  * is additive linear radiance.
  *
+ * M2 TASK 5 — TWO RECEIVER MODELS SHARE ONE PACKED LIGHT. The legacy march
+ * shades bodies with its analytic beam (`beamGain * (1 - d/range)^2`, a
+ * linear-to-range window with NO inverse square, plus a highlight shoulder
+ * so a beam-lit body keeps its wound detail), while three's physical
+ * I/d^2 lights the level. A slot that carries `fleshKeyIntensity` (v3.z > 0)
+ * is therefore evaluated under the march's model FOR FLESH ONLY; every other
+ * class (and every slot without the field) keeps the packed physical
+ * intensity. `fleshShoulderKnee` (v3.w > 0, accumulated across slots as the
+ * max) compresses the flesh lit sum EXCLUDING emission with the march's
+ * softShoulder curve. Both fields default to 0: bit-identical to the
+ * pre-task-5 evaluation, which is what every M1 fixture pins.
+ *
  * M2 TASK 4 — the flashlight shadow lookup is INLINED into this one function
  * (wgslFn takes ONE function per string — the bone-tubes lesson — so a
  * visibility helper would silently draw nothing). When shadowEnabled is 0
@@ -328,6 +340,7 @@ export const DEFERRED_LIGHT_WGSL = /* wgsl */ `fn deferredLight(
   // range render pure black and read as MISSING data in captures.
   acc = acc + ambient * baseDiff;
   let count = i32(lightCount);
+  var fleshKnee = 0.0;
   for (var i = 0; i < ${MAX_DEFERRED_LIGHTS}; i = i + 1) {
     if (i >= count) { break; }
     let v0 = textureLoad(lights, vec2<i32>(0, i), 0);
@@ -341,7 +354,7 @@ export const DEFERRED_LIGHT_WGSL = /* wgsl */ `fn deferredLight(
     let ratio = clamp(d / range, 0.0, 1.0);
     let window = 1.0 - ratio * ratio * ratio * ratio;
     if (window <= 0.0) { continue; }
-    var att = v2.w * window * window / d2;
+    var att = select(v2.w * window * window / d2, v3.z * window * window, isFlesh && v3.z > 0.0);
     if (v0.w > 0.5) {
       // Spot: smoothstep falloff between cosOuter and cosInner.
       let cd = dot(-toL / d, normalize(v1.xyz));
@@ -411,6 +424,24 @@ export const DEFERRED_LIGHT_WGSL = /* wgsl */ `fn deferredLight(
       }
     }
     acc = acc + contribution;
+    fleshKnee = max(fleshKnee, v3.w);
+  }
+  // M2 task 5 — flesh highlight shoulder (accumulated v3.w, 0 = off). The
+  // march compresses a beam-lit body with softShoulder(knee) because a hard-
+  // clipped body DELETES its wounds: crater, lip and clean skin all clamp to
+  // the same white exactly when the player is close enough to aim. Same
+  // curve, same gate, applied to the flesh lit sum EXCLUDING emission (the
+  // march likewise adds glow after the shoulder). Monotonic above the knee,
+  // identity below it, so differing flesh texels stay differing. Multiple
+  // shoulder-carrying slots collapse to the strongest knee (in practice
+  // there is exactly one: the flashlight).
+  if (isFlesh && fleshKnee > 0.0) {
+    let head = max(1.0 - fleshKnee, 1e-4);
+    let body = acc - emission;
+    let over = max(body - vec3<f32>(fleshKnee), vec3<f32>(0.0));
+    let compressed = vec3<f32>(fleshKnee) + head * (vec3<f32>(1.0) - exp(-over / head));
+    acc = emission + select(body, compressed,
+      vec3<bool>(body.x > fleshKnee, body.y > fleshKnee, body.z > fleshKnee));
   }
   // M2 task 1: game distance fog, evaluated ONLY here in the lit stage (raw
   // surface and debug outputs never read it). Linear three.js-style falloff

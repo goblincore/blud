@@ -250,4 +250,44 @@ describe('data-only conversion', () => {
     expect(result.ids).toEqual([]);
     expect(result.dropped).toEqual(['sun']);
   });
+
+  // ---- M2 task 5: the flashlight's march-key stamp (flesh receiver model).
+  describe('flashKey stamp', () => {
+    const flash = () => new THREE.SpotLight(0xffffff, 90, 16, Math.PI * 0.12, 0.45, 1.6);
+    const key = { gain: 4, knee: 0.65 };
+
+    it('absent flashKey keeps the record unstamped (task-3 shape)', () => {
+      const l = buildGameDeferredLights([{ id: 'flashlight', role: 'flashlight', light: flash() }], ORIGIN).lights[0]!;
+      expect(l.fleshKeyIntensity).toBeUndefined();
+      expect(l.fleshShoulderKnee).toBeUndefined();
+    });
+
+    it('stamps ONLY the flashlight slot; muzzle and practicals stay physical', () => {
+      const muzzle = new THREE.PointLight(0xffcf95, 3, 16, 1.7);
+      const result = buildGameDeferredLights(
+        [
+          { id: 'flashlight', role: 'flashlight', light: flash() },
+          { id: 'muzzle', role: 'muzzle', light: muzzle },
+          point('p1', 1, 0, 0),
+        ],
+        ORIGIN,
+        { flashKey: key },
+      );
+      expect(result.lights[0]!.fleshKeyIntensity).toBe(4);
+      expect(result.lights[0]!.fleshShoulderKnee).toBe(0.65);
+      expect(result.lights[1]!.fleshKeyIntensity).toBeUndefined();
+      expect(result.lights[2]!.fleshKeyIntensity).toBeUndefined();
+    });
+
+    it('the intensity scale moves the stamped key gain too (one exposure knob)', () => {
+      const l = buildGameDeferredLights(
+        [{ id: 'flashlight', role: 'flashlight', light: flash() }],
+        ORIGIN,
+        { intensityScale: 0.5, flashKey: key },
+      ).lights[0]!;
+      expect(l.fleshKeyIntensity).toBeCloseTo(2, 6);
+      expect(l.fleshShoulderKnee).toBe(0.65); // a curve shape, not an intensity
+      expect(l.intensity).toBeCloseTo(90 * 0.5, 6); // the physical level intensity scales too
+    });
+  });
 });

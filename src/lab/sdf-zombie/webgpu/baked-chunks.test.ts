@@ -76,3 +76,23 @@ describe('createBakedChunkMaterial — surface mode (M2 task 2)', () => {
     expect(CHUNK_SURFACE_WGSL).toContain('return vec4<f32>(albedo.rgb, rough);');
   });
 });
+
+// M2 task 5 regression (2026-09-07): same shape as the bone-instancer one —
+// the router reads material.surfaceKind (materialEligibility), not the
+// factory handle. A removed stamp must fail HERE, not on a live game boot
+// where the baked chunk silently vanishes from its pass.
+describe('router eligibility through the actual material (not the handle)', () => {
+  it('materialEligibility admits a surface-mode baked-chunk material as a producer', async () => {
+    const { materialEligibility } = await import('./game-deferred-scene');
+    const baked = createBakedChunkMaterial({ output: 'surface' });
+    expect(materialEligibility(baked.material as THREE.Material)).toBe('asis');
+    baked.dispose();
+  });
+
+  it('a level-only receiver material is admitted the same way', async () => {
+    const { materialEligibility } = await import('./game-deferred-scene');
+    const baked = createBakedChunkMaterial({ output: 'surface', shadowReceiver: 'level-only' });
+    expect(materialEligibility(baked.material as THREE.Material)).toBe('asis');
+    baked.dispose();
+  });
+});

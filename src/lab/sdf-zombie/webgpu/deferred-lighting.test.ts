@@ -111,3 +111,36 @@ describe('deferred light data texture', () => {
     }
   });
 });
+
+describe('march-key flesh fields (M2 task 5 game conversion)', () => {
+  it('defaults absent fields to packed zeros (the M1 fixture shape)', () => {
+    const packed = packDeferredLights([point]);
+    expect(packed.data[14]).toBe(0);
+    expect(packed.data[15]).toBe(0);
+  });
+
+  it('packs fleshKeyIntensity at o+14 and fleshShoulderKnee at o+15', () => {
+    const packed = packDeferredLights([{ ...point, fleshKeyIntensity: 4, fleshShoulderKnee: 0.65 }]);
+    expect(packed.data[12]).toBe(point.cosInner);
+    expect(packed.data[13]).toBe(point.cosOuter);
+    expect(packed.data[14]).toBe(4);
+    expect(packed.data[15]).toBeCloseTo(0.65, 6);
+  });
+
+  it('zeros the key fields in inactive slots (no residue after a smaller pack)', () => {
+    const key: DeferredLight = { ...point, fleshKeyIntensity: 4, fleshShoulderKnee: 0.65 };
+    const packed = packDeferredLights([key]);
+    expect(packed.data[14 + DEFERRED_LIGHT_STRIDE_FLOATS]).toBe(0);
+    expect(packed.data[15 + DEFERRED_LIGHT_STRIDE_FLOATS]).toBe(0);
+  });
+
+  it('rejects a negative key intensity', () => {
+    expect(() => packDeferredLights([{ ...point, fleshKeyIntensity: -1 }])).toThrow(/fleshKeyIntensity/);
+  });
+
+  it('rejects a nonfinite or over-range shoulder knee', () => {
+    expect(() => packDeferredLights([{ ...point, fleshShoulderKnee: Number.NaN }])).toThrow(/fleshShoulderKnee/);
+    expect(() => packDeferredLights([{ ...point, fleshShoulderKnee: 0.95 }])).toThrow(/fleshShoulderKnee/);
+    expect(() => packDeferredLights([{ ...point, fleshShoulderKnee: 0.9 }])).not.toThrow();
+  });
+});

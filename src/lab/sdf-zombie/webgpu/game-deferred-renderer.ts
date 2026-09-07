@@ -55,6 +55,7 @@ import {
 } from './deferred-shadows';
 import {
   buildGameDeferredLights,
+  type GameDeferredFlashKey,
   type GameDeferredLightSet,
   type GameLightCandidate,
 } from './game-deferred-lights';
@@ -167,6 +168,13 @@ export interface GameDeferredRendererDeps {
   lights: () => readonly GameLightCandidate[];
   /** LIVE environment, re-read every frame (the rig can flip at runtime). */
   environment: () => DeferredEnvironment;
+  /** LIVE march-key response for the flashlight slot, re-read every frame
+   *  (M2 task 5): the legacy march's beam gain and highlight-shoulder knee
+   *  for flesh receivers. Undefined/absent = the slot keeps pure
+   *  packed-intensity behaviour (the task-3/fixture shape). Reading game-
+   *  main's beamTuning through a getter keeps setBeamTuning and the deferred
+   *  path on one source of truth. */
+  flashKey?: () => GameDeferredFlashKey | undefined;
   /** The flashlight spot the shadow maps follow. */
   flashlight: THREE.SpotLight;
   /** Shadow-map edge length. Default 1024 — the spec's number, also the
@@ -186,8 +194,15 @@ export interface GameDeferredRendererDiagnostics {
   frames: number;
   /** Route catalog: object counts per route + unsupported material names. */
   router: ReturnType<GameDeferredScene['diagnostics']>;
-  /** The last frame's shared light selection. */
-  lights: { ids: string[]; dropped: string[]; flashlightIndex: number };
+  /** The last frame's shared light selection. `flashKey` records the
+   *  flashlight's stamped march-key fields (or null when the slot carries
+   *  none) so a gate can pin that the conversion actually landed. */
+  lights: {
+    ids: string[];
+    dropped: string[];
+    flashlightIndex: number;
+    flashKey: { fleshKeyIntensity: number; fleshShoulderKnee: number } | null;
+  };
   /** Shadow generation (maps) vs sampling (the lit stage's use of them).
    *  Deliberately separate toggles with separate evidence — the spec's
    *  "sampling-only toggle with distinct counters". */
@@ -347,7 +362,10 @@ export function createGameDeferredRenderer(deps: GameDeferredRendererDeps): Game
 
         // 2. The shared light list from LIVE candidates.
         camera.updateMatrixWorld();
-        lastLights = buildGameDeferredLights(deps.lights(), camera.position, { intensityScale: lightGain });
+        lastLights = buildGameDeferredLights(deps.lights(), camera.position, {
+          intensityScale: lightGain,
+          flashKey: deps.flashKey?.(),
+        });
         layer.setLights(lastLights.lights);
 
         // 3. Environment (ambient + fog) from the live rig.
@@ -399,6 +417,12 @@ export function createGameDeferredRenderer(deps: GameDeferredRendererDeps): Game
           ids: [...lastLights.ids],
           dropped: [...lastLights.dropped],
           flashlightIndex: lastLights.flashlightIndex,
+          flashKey: (() => {
+            const rec = lastLights.flashlightIndex >= 0 ? lastLights.lights[lastLights.flashlightIndex] : undefined;
+            return rec?.fleshKeyIntensity !== undefined && rec?.fleshShoulderKnee !== undefined
+              ? { fleshKeyIntensity: rec.fleshKeyIntensity, fleshShoulderKnee: rec.fleshShoulderKnee }
+              : null;
+          })(),
         },
         shadow: {
           generationRequested: shadowGeneration,

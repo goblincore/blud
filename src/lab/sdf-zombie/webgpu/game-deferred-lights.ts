@@ -40,6 +40,16 @@ export interface GameLightCandidate {
   light: THREE.Light;
 }
 
+/** M2 task 5: the flashlight slot's MARCH-KEY response for flesh receivers
+ *  (see DeferredLight.fleshKeyIntensity / .fleshShoulderKnee). `gain` is the
+ *  legacy march's beam gain (game-main beamTuning.gain — passed through a
+ *  live getter so setBeamTuning cannot desync the deferred path); `knee` is
+ *  its highlight shoulder (1 - beamTuning.shoulder). */
+export interface GameDeferredFlashKey {
+  gain: number;
+  knee: number;
+}
+
 export interface GameDeferredLightSet {
   lights: DeferredLight[];
   /** ids parallel to `lights` — the selection record. */
@@ -136,17 +146,25 @@ export function buildGameDeferredLights(
    *  named form. Default (no third argument) is 1 and keeps task-3
    *  behaviour byte-identical. Deliberate: three's decay-2 approximation is
    *  calibrated per capture in tasks 6-7 through this single scale, not
-   *  through per-light fudges. */
-  scale: number | { intensityScale?: number } = 1,
+   *  through per-light fudges.
+   *
+   * `flashKey` stamps the FLASHLIGHT slot only with the march-key fields
+   * (fleshKeyIntensity / fleshShoulderKnee — packed v3.z/v3.w). Absent: the
+   * slot keeps pure packed-intensity behaviour (task-3 record, the fixture
+   * shape). The intensity scale multiplies the stamped key gain too, so the
+   * exposure knob moves both receiver models together. */
+  scale: number | { intensityScale?: number; flashKey?: GameDeferredFlashKey } = 1,
 ): GameDeferredLightSet {
+  const opts = typeof scale === 'object' ? scale : { intensityScale: scale };
   return buildGameDeferredLightsInner(candidates, cameraWorld,
-    typeof scale === 'object' ? (scale.intensityScale ?? 1) : scale);
+    opts.intensityScale ?? 1, opts.flashKey);
 }
 
 function buildGameDeferredLightsInner(
   candidates: readonly GameLightCandidate[],
   cameraWorld: THREE.Vector3,
   intensityScale: number,
+  flashKey: GameDeferredFlashKey | undefined,
 ): GameDeferredLightSet {
   const seen = new Set<string>();
   for (const c of candidates) {
@@ -159,12 +177,21 @@ function buildGameDeferredLightsInner(
   const dropped: string[] = [];
   let flashlightIndex = -1;
 
-  const take = (c: GameLightCandidate) => {
+  const take = (c: GameLightCandidate, key?: GameDeferredFlashKey) => {
     if (lights.length >= MAX_DEFERRED_LIGHTS) { dropped.push(c.id); return; }
     const converted = convertPointOrSpot(c.light as THREE.PointLight | THREE.SpotLight);
     // The scale rides the CONVERTED record — source lights are never mutated
-    // (data-only conversion is this module's whole contract).
-    if (intensityScale !== 1) converted.intensity *= intensityScale;
+    // (data-only conversion is this module's whole contract). The stamped
+    // march-key gain scales with the same knob so the exposure moves both
+    // receiver models together.
+    if (key) {
+      converted.fleshKeyIntensity = key.gain;
+      converted.fleshShoulderKnee = key.knee;
+    }
+    if (intensityScale !== 1) {
+      converted.intensity *= intensityScale;
+      if (converted.fleshKeyIntensity !== undefined) converted.fleshKeyIntensity *= intensityScale;
+    }
     lights.push(converted);
     ids.push(c.id);
   };
@@ -175,7 +202,7 @@ function buildGameDeferredLightsInner(
   for (const c of candidates) {
     if (c.role !== 'flashlight') continue;
     if (!flashTaken && isActive(c.light)) {
-      take(c);
+      take(c, flashKey);
       flashTaken = true;
     } else {
       dropped.push(c.id);
