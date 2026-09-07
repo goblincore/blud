@@ -4,16 +4,134 @@
       "name": "boot-deferred",
       "detail": {
         "mode": "deferred",
-        "present": 31
+        "present": 32
+      }
+    },
+    {
+      "name": "deferred-diagnostics",
+      "detail": {
+        "counts": {
+          "mesh": 199,
+          "sdf": 10,
+          "forward": 0,
+          "exclude": 14
+        },
+        "lights": [
+          "flashlight",
+          "fire-00",
+          "fire-02",
+          "fire-01",
+          "fire-04",
+          "fire-03"
+        ],
+        "dropped": [
+          "muzzle"
+        ],
+        "shadow": {
+          "generationRequested": true,
+          "sampling": true,
+          "renderedMaps": 2,
+          "fullCasters": 99,
+          "levelCasters": 98,
+          "size": 1024,
+          "unsupported": []
+        },
+        "sizes": {
+          "width": 800,
+          "height": 600,
+          "sdfScale": 1,
+          "sdfTargetSize": {
+            "width": 800,
+            "height": 600
+          },
+          "outputTarget": {
+            "width": 800,
+            "height": 600
+          }
+        }
+      }
+    },
+    {
+      "name": "soldier-captured",
+      "detail": {
+        "room1": {
+          "id": 1,
+          "room": 1,
+          "pos": [
+            -4.206126435844296,
+            0,
+            -4.752741787306656
+          ],
+          "yaw": 1.0437944901923433
+        }
+      }
+    },
+    {
+      "name": "wounded-zombie",
+      "detail": {
+        "blast": {
+          "radiusM": 4.6875,
+          "bodiesHit": 2,
+          "totalWounds": 32
+        },
+        "woundCount": 16
+      }
+    },
+    {
+      "name": "goblin-kit-face",
+      "detail": {
+        "id": 11,
+        "meshCount": 199,
+        "afterMesh": 200
+      }
+    },
+    {
+      "name": "detached-chunk",
+      "detail": {
+        "sdfBefore": 11,
+        "routed": "chunk proxy registered sdf; baked swap registers mesh"
+      }
+    },
+    {
+      "name": "sampling-toggle",
+      "detail": {
+        "sampling": false,
+        "renderedMaps": 2
+      }
+    },
+    {
+      "name": "generation-toggle",
+      "detail": {
+        "generationRequested": false,
+        "sampling": true,
+        "renderedMaps": 0,
+        "fullCasters": 99,
+        "levelCasters": 98,
+        "size": 1024,
+        "unsupported": []
+      }
+    },
+    {
+      "name": "boot-legacy",
+      "detail": {
+        "mode": "legacy",
+        "present": 92
+      }
+    },
+    {
+      "name": "unknown-renderer-value",
+      "detail": {
+        "warnText": "",
+        "booted": true
       }
     }
   ],
   "pageErrors": [],
-  "pass": false,
+  "pass": true,
   "records": {
     "deferredBootDiag": {
       "mode": "deferred",
-      "frames": 30,
+      "frames": 31,
       "router": {
         "counts": {
           "mesh": 199,
@@ -21,9 +139,7 @@
           "forward": 0,
           "exclude": 14
         },
-        "unsupported": [
-          "Mesh ← MeshBasicNodeMaterial (unsupported material for the opaque MRT pass)"
-        ]
+        "unsupported": []
       },
       "lights": {
         "ids": [

@@ -298,7 +298,16 @@ export function createGameDeferredRenderer(deps: GameDeferredRendererDeps): Game
 
   return {
     router,
-    setOutputTarget(target) { outputTarget = target; },
+    setOutputTarget(target) {
+      // BOTH sides must know: the layer presents into this target, and the
+      // coordinator's forward pass composites into the same one afterwards.
+      // Forwarding only the local field (the first wiring) left the layer
+      // presenting to the CANVAS while post-aa blitted a target that only
+      // ever received the forward pass — an opaque world erased by the blit
+      // (found by the task-5 GPU boot check, 2026-09-07).
+      outputTarget = target;
+      layer.setOutputTarget(target);
+    },
     setSize(w, h) {
       width = w;
       height = h;

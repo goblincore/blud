@@ -140,9 +140,9 @@ try {
   assert.ok(blast.totalWounds > 0, `the blast must wound: ${JSON.stringify(blast)}`);
   await evaluate('__sdfGame.step(30)');
   const wounds = await evaluate(`__sdfGame.debugWounds(${z.id})`);
-  assert.ok(wounds.wounds?.length > 0, 'the wounded ring must carry the blast');
+  assert.ok(Array.isArray(wounds) && wounds.length > 0, 'the wounded ring must carry the blast');
   await shot('task5-deferred-wounded.png');
-  check('wounded-zombie', { blast, woundCount: wounds.wounds.length });
+  check('wounded-zombie', { blast, woundCount: wounds.length });
 
   // Goblin: kit + generated face, spawned through the SAME spawn path.
   const beforeMesh = (await evaluate('__sdfGame.deferredDiagnostics()')).router.counts.mesh;
@@ -155,11 +155,17 @@ try {
   check('goblin-kit-face', { id: goblin.id, meshCount: beforeMesh, afterMesh });
 
   // Detached chunk: point-blank slugs into a body until something severs.
+  // Aim convention (aimAtNearestSurfa... the page's own): forward is
+  // (+sin yaw, -cos yaw), so facing the target is yaw = atan2(dx, -dz); the
+  // eye sits ~1.7 m, so pitch dips slightly at a torso 1 m away.
   const sdfBefore = (await evaluate('__sdfGame.deferredDiagnostics()')).router.counts.sdf;
   const target = z;
+  const aimYawAt = (px, pz, tx, tz) => Math.atan2(tx - px, -(tz - pz));
   let severed = false;
-  for (let i = 0; i < 14 && !severed; i++) {
-    await evaluate(`__sdfGame.setPose(${target.pos[0] + 0.9}, ${target.pos[2]}, ${Math.PI}); __sdfGame.step(1);`);
+  for (let i = 0; i < 20 && !severed; i++) {
+    const px = target.pos[0] + 0.9, pz = target.pos[2];
+    const yaw = aimYawAt(px, pz, target.pos[0], target.pos[2]);
+    await evaluate(`__sdfGame.setPose(${px}, ${pz}, ${yaw}, -0.18); __sdfGame.step(1);`);
     await evaluate('__sdfGame.fireSlug()');
     await evaluate('__sdfGame.step(20)');
     const sdfNow = (await evaluate('__sdfGame.deferredDiagnostics()')).router.counts.sdf;

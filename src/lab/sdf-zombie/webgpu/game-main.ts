@@ -1279,12 +1279,21 @@ async function main() {
     // inflated hull casts onto the ROOM (the full map) but must not swallow
     // its own illumination (the level-only map).
     const viewGpuOpts: GpuViewOpts = {
-      cone: sdfLayer.cone,
-      tiles: tileBinding,
+      // DEFERRED MODE: no cone twin binding. sdf-layer.render never runs in
+      // this mode, so the cone target would stay uninitialised — a WebGPU
+      // lazy-init submit conflict that rejects the WHOLE producer pass
+      // (symptom: an empty G-buffer, black world behind the forward
+      // viewmodel). The tile binding is undefined unless the DEV
+      // ?tiles-playtest is on (game-tile-playtest gates it), so it rides in
+      // both modes harmlessly. Tiles are re-enabled for the surface path by
+      // the same playtest, which bins them itself.
       ...(deferredMode ? {
         output: 'surface' as const,
         shadowReceiver: 'level-only' as const,
+        ...(tileBinding ? { tiles: tileBinding } : {}),
       } : {
+        cone: sdfLayer.cone,
+        tiles: tileBinding,
         occluder: sdfLayer.occluder,
         // The outer hull's bounds. Passing them unconditionally is safe:
         // the fetch identities (0 / 1e9) make the march bit-identical while
