@@ -38,60 +38,60 @@
       "name": "P1-render-control",
       "detail": {
         "hashes": {
-          "albedoRoughness": 3480081861,
-          "normalMetalness": 4262513036,
-          "emissionClass": 981701222,
-          "surfaceDepth": 643334694
+          "albedoRoughness": 3526112295,
+          "normalMetalness": 1281107517,
+          "emissionClass": 874067238,
+          "surfaceDepth": 1885772862
         },
         "nonEmpty": 480000,
         "classCounts": {
-          "1": 426322,
+          "1": 431370,
           "17": 36400,
-          "18": 17278
+          "18": 12230
         },
         "sentinelPixels": 0,
         "deepOccupied": 0,
-        "maxDepth": 0.994732,
+        "maxDepth": 0.994211,
         "pose": {
           "pos": [
-            8.48,
+            7.027611173874938,
             0,
-            -4.136598517214702
+            -4.425442838832357
           ],
           "yaw": -1.5707963267948966,
           "pitch": -0.12
         },
         "actorPos": [
-          6.931788945020168,
+          5.283862571895545,
           0,
-          -4.136231680613403
+          -4.413599650081268
         ]
       }
     },
     {
       "name": "P1-sampling-invariance",
       "detail": {
-        "litDelta": -1,
-        "lit0": 59,
-        "litSampling": 60
+        "litDelta": -2,
+        "lit0": 48,
+        "litSampling": 50
       }
     },
     {
       "name": "P1-gain-invariance",
       "detail": {
-        "litDelta": 20
+        "litDelta": 17
       }
     },
     {
       "name": "P1-beam-invariance",
       "detail": {
-        "litDelta": 17
+        "litDelta": 11
       }
     },
     {
       "name": "P1-generation-invariance",
       "detail": {
-        "litDelta": -1,
+        "litDelta": -2,
         "renderedMaps": 0
       }
     },
@@ -104,26 +104,825 @@
           251
         ]
       }
+    },
+    {
+      "name": "P2-route-level-mesh",
+      "detail": {
+        "cls": 1,
+        "depth": 0.96235,
+        "ndc": [
+          -0.85,
+          -0.5
+        ]
+      }
+    },
+    {
+      "name": "P2-route-flesh-sdf",
+      "detail": {
+        "cls": 18,
+        "depth": 0.93722
+      }
+    },
+    {
+      "name": "P2-route-fpv-gun",
+      "detail": {
+        "cls": 17,
+        "depth": 0.65411
+      }
+    },
+    {
+      "name": "P2-sdf-bones-and-readback-parity",
+      "detail": {
+        "boneMesh": false,
+        "pixel": [
+          400,
+          348
+        ]
+      }
+    },
+    {
+      "name": "P2-route-forward-probe-nearer",
+      "detail": {
+        "pixel": [
+          255,
+          14,
+          14
+        ]
+      }
+    },
+    {
+      "name": "P2-route-forward-probe-behind-occluded",
+      "detail": {
+        "behind": [
+          251,
+          215,
+          214
+        ]
+      }
+    },
+    {
+      "name": "P2-normal-direction-flesh",
+      "detail": {
+        "dot": 0.826,
+        "nlen": 0.9996,
+        "selectedPixel": [
+          400,
+          348
+        ],
+        "selectedNdc": [
+          0.00125,
+          -0.16167
+        ],
+        "centreNdc": [
+          0,
+          -0.16264
+        ]
+      }
+    },
+    {
+      "name": "depth-bracket:wall-tight",
+      "detail": {
+        "ndc": [
+          -0.84875,
+          -0.5016666666666667
+        ],
+        "resolvedAtCentre": 0.9623472690582275,
+        "centreCls": 1,
+        "bracket": [
+          -0.00024999999999997247,
+          0.00024999999999997247
+        ],
+        "centre": 0,
+        "tolerance": 0.0004999999999999449,
+        "probes": [
+          {
+            "delta": -0.0004999999999999449,
+            "dRes": 0.962347,
+            "cls": 1,
+            "drawn": true,
+            "sampled": [
+              255,
+              0,
+              0
+            ],
+            "displayed": [
+              240,
+              1,
+              0
+            ],
+            "measurement": "linear-composite"
+          },
+          {
+            "delta": -0.00024999999999997247,
+            "dRes": 0.962347,
+            "cls": 1,
+            "drawn": true,
+            "sampled": [
+              255,
+              0,
+              0
+            ],
+            "displayed": [
+              232,
+              1,
+              1
+            ],
+            "measurement": "linear-composite"
+          },
+          {
+            "delta": 0.00024999999999997247,
+            "dRes": 0.962347,
+            "cls": 1,
+            "drawn": false,
+            "sampled": [
+              0.7781982421875,
+              0.6108856201171875,
+              0.5568981170654297
+            ],
+            "displayed": [
+              14,
+              8,
+              7
+            ],
+            "measurement": "linear-composite"
+          },
+          {
+            "delta": 0.0004999999999999449,
+            "dRes": 0.962347,
+            "cls": 1,
+            "drawn": false,
+            "sampled": [
+              0.7781982421875,
+              0.6108856201171875,
+              0.5568981170654297
+            ],
+            "displayed": [
+              11,
+              8,
+              7
+            ],
+            "measurement": "linear-composite"
+          }
+        ]
+      }
+    },
+    {
+      "name": "depth-bracket:flesh",
+      "detail": {
+        "ndc": [
+          0.0012499999999999734,
+          -0.16166666666666663
+        ],
+        "resolvedAtCentre": 0.9372227191925049,
+        "centreCls": 18,
+        "bracket": [
+          -0.0020000000000000018,
+          0.0020000000000000018
+        ],
+        "centre": 0,
+        "tolerance": 0.0040000000000000036,
+        "probes": [
+          {
+            "delta": -0.0040000000000000036,
+            "dRes": 0.937223,
+            "cls": 18,
+            "drawn": true,
+            "sampled": [
+              255,
+              0,
+              0
+            ],
+            "displayed": [
+              255,
+              14,
+              14
+            ],
+            "measurement": "linear-composite"
+          },
+          {
+            "delta": -0.0020000000000000018,
+            "dRes": 0.937223,
+            "cls": 18,
+            "drawn": true,
+            "sampled": [
+              255,
+              0,
+              0
+            ],
+            "displayed": [
+              255,
+              10,
+              10
+            ],
+            "measurement": "linear-composite"
+          },
+          {
+            "delta": 0.0020000000000000018,
+            "dRes": 0.937223,
+            "cls": 18,
+            "drawn": false,
+            "sampled": [
+              248.15185546875,
+              181.787109375,
+              179.67041015625
+            ],
+            "displayed": [
+              252,
+              216,
+              215
+            ],
+            "measurement": "linear-composite"
+          },
+          {
+            "delta": 0.0040000000000000036,
+            "dRes": 0.937223,
+            "cls": 18,
+            "drawn": false,
+            "sampled": [
+              248.15185546875,
+              181.787109375,
+              179.67041015625
+            ],
+            "displayed": [
+              252,
+              220,
+              219
+            ],
+            "measurement": "linear-composite"
+          }
+        ]
+      }
+    },
+    {
+      "name": "depth-bracket:gun",
+      "detail": {
+        "ndc": [
+          0.13874999999999993,
+          -0.4883333333333333
+        ],
+        "resolvedAtCentre": 0.6541115045547485,
+        "centreCls": 17,
+        "bracket": [
+          -0.0020000000000000018,
+          0.0020000000000000018
+        ],
+        "centre": 0,
+        "tolerance": 0.0040000000000000036,
+        "probes": [
+          {
+            "delta": -0.0040000000000000036,
+            "dRes": 0.654112,
+            "cls": 17,
+            "drawn": true,
+            "sampled": [
+              255,
+              0,
+              0
+            ],
+            "displayed": [
+              239,
+              0,
+              0
+            ],
+            "measurement": "linear-composite"
+          },
+          {
+            "delta": -0.0020000000000000018,
+            "dRes": 0.654112,
+            "cls": 17,
+            "drawn": true,
+            "sampled": [
+              255,
+              0,
+              0
+            ],
+            "displayed": [
+              123,
+              0,
+              0
+            ],
+            "measurement": "linear-composite"
+          },
+          {
+            "delta": 0.0020000000000000018,
+            "dRes": 0.654112,
+            "cls": 17,
+            "drawn": false,
+            "sampled": [
+              0,
+              0,
+              0
+            ],
+            "displayed": [
+              2,
+              0,
+              0
+            ],
+            "measurement": "linear-composite"
+          },
+          {
+            "delta": 0.0040000000000000036,
+            "dRes": 0.654112,
+            "cls": 17,
+            "drawn": false,
+            "sampled": [
+              0,
+              0,
+              0
+            ],
+            "displayed": [
+              0,
+              0,
+              0
+            ],
+            "measurement": "linear-composite"
+          }
+        ]
+      }
+    },
+    {
+      "name": "depth-bracket:far-deepest-real-scene",
+      "detail": {
+        "ndc": [
+          -0.03874999999999995,
+          0.018333333333333313
+        ],
+        "resolvedAtCentre": 0.9942106008529663,
+        "centreCls": 1,
+        "bracket": [
+          -0.0030000000000000027,
+          0.005739399147033697
+        ],
+        "centre": 0.0013696995735168471,
+        "tolerance": 0.0087393991470337,
+        "probes": [
+          {
+            "delta": -0.0030000000000000027,
+            "dRes": 0.994211,
+            "cls": 1,
+            "drawn": true,
+            "sampled": [
+              255,
+              0,
+              0
+            ],
+            "displayed": [
+              236,
+              1,
+              2
+            ],
+            "measurement": "linear-composite"
+          },
+          {
+            "delta": 0.005739399147033697,
+            "dRes": 0.994211,
+            "cls": 1,
+            "drawn": false,
+            "sampled": [
+              2.03887939453125,
+              2.2937393188476562,
+              2.8034591674804688
+            ],
+            "displayed": [
+              26,
+              23,
+              27
+            ],
+            "measurement": "linear-composite"
+          },
+          {
+            "delta": 0.005739399147033697,
+            "dRes": 0.994211,
+            "cls": 1,
+            "drawn": false,
+            "sampled": [
+              2.03887939453125,
+              2.2937393188476562,
+              2.8034591674804688
+            ],
+            "displayed": [
+              22,
+              24,
+              27
+            ],
+            "measurement": "linear-composite"
+          }
+        ]
+      }
+    },
+    {
+      "name": "far-true-empty:redirect",
+      "detail": {
+        "case": "true-empty-created",
+        "depths": [
+          0.99,
+          0.9995,
+          0.99995
+        ],
+        "rays": [
+          [
+            -0.75,
+            0.6
+          ],
+          [
+            0,
+            0.8
+          ],
+          [
+            0.75,
+            0.6
+          ]
+        ],
+        "probes": [
+          {
+            "depth": 0.99,
+            "drawn": true,
+            "sampled": [
+              239,
+              0,
+              0
+            ]
+          },
+          {
+            "depth": 0.9995,
+            "drawn": true,
+            "sampled": [
+              0,
+              239,
+              0
+            ]
+          },
+          {
+            "depth": 0.99995,
+            "drawn": true,
+            "sampled": [
+              0,
+              0,
+              239
+            ]
+          }
+        ],
+        "emptyCensus": {
+          "nonEmpty": 51023,
+          "sentinelPixels": 428977,
+          "deepOccupied": 0
+        },
+        "restoredBitExact": true
+      }
+    },
+    {
+      "name": "depth-bracket:wall-null-path",
+      "detail": {
+        "ndc": [
+          -0.84875,
+          -0.5016666666666667
+        ],
+        "resolvedAtCentre": 0.9623472690582275,
+        "centreCls": 1,
+        "bracket": [
+          -0.00024999999999997247,
+          0.00024999999999997247
+        ],
+        "centre": 0,
+        "tolerance": 0.0004999999999999449,
+        "probes": [
+          {
+            "delta": -0.0004999999999999449,
+            "dRes": 0.962347,
+            "cls": 1,
+            "drawn": true,
+            "sampled": [
+              255,
+              0,
+              0
+            ],
+            "displayed": [
+              255,
+              0,
+              0
+            ],
+            "measurement": "canvas"
+          },
+          {
+            "delta": -0.00024999999999997247,
+            "dRes": 0.962347,
+            "cls": 1,
+            "drawn": true,
+            "sampled": [
+              255,
+              0,
+              0
+            ],
+            "displayed": [
+              255,
+              0,
+              0
+            ],
+            "measurement": "canvas"
+          },
+          {
+            "delta": 0.00024999999999997247,
+            "dRes": 0.962347,
+            "cls": 1,
+            "drawn": false,
+            "sampled": [
+              10,
+              8,
+              7
+            ],
+            "displayed": [
+              10,
+              8,
+              7
+            ],
+            "measurement": "canvas"
+          },
+          {
+            "delta": 0.0004999999999999449,
+            "dRes": 0.962347,
+            "cls": 1,
+            "drawn": false,
+            "sampled": [
+              10,
+              8,
+              7
+            ],
+            "displayed": [
+              10,
+              8,
+              7
+            ],
+            "measurement": "canvas"
+          }
+        ]
+      }
+    },
+    {
+      "name": "depth-bracket:flesh-null-path",
+      "detail": {
+        "ndc": [
+          0.0012499999999999734,
+          -0.16166666666666663
+        ],
+        "resolvedAtCentre": 0.9372227191925049,
+        "centreCls": 18,
+        "bracket": [
+          -0.0020000000000000018,
+          0.0020000000000000018
+        ],
+        "centre": 0,
+        "tolerance": 0.0040000000000000036,
+        "probes": [
+          {
+            "delta": -0.0040000000000000036,
+            "dRes": 0.937223,
+            "cls": 18,
+            "drawn": true,
+            "sampled": [
+              255,
+              0,
+              0
+            ],
+            "displayed": [
+              255,
+              0,
+              0
+            ],
+            "measurement": "canvas"
+          },
+          {
+            "delta": -0.0020000000000000018,
+            "dRes": 0.937223,
+            "cls": 18,
+            "drawn": true,
+            "sampled": [
+              255,
+              0,
+              0
+            ],
+            "displayed": [
+              255,
+              0,
+              0
+            ],
+            "measurement": "canvas"
+          },
+          {
+            "delta": 0.0020000000000000018,
+            "dRes": 0.937223,
+            "cls": 18,
+            "drawn": false,
+            "sampled": [
+              252,
+              220,
+              218
+            ],
+            "displayed": [
+              252,
+              220,
+              218
+            ],
+            "measurement": "canvas"
+          },
+          {
+            "delta": 0.0040000000000000036,
+            "dRes": 0.937223,
+            "cls": 18,
+            "drawn": false,
+            "sampled": [
+              252,
+              220,
+              219
+            ],
+            "displayed": [
+              252,
+              220,
+              219
+            ],
+            "measurement": "canvas"
+          }
+        ]
+      }
+    },
+    {
+      "name": "far-true-empty:null-path",
+      "detail": {
+        "case": "true-empty-created",
+        "depths": [
+          0.99,
+          0.9995,
+          0.99995
+        ],
+        "rays": [
+          [
+            -0.75,
+            0.6
+          ],
+          [
+            0,
+            0.8
+          ],
+          [
+            0.75,
+            0.6
+          ]
+        ],
+        "probes": [
+          {
+            "depth": 0.99,
+            "drawn": true,
+            "sampled": [
+              255,
+              0,
+              0
+            ]
+          },
+          {
+            "depth": 0.9995,
+            "drawn": true,
+            "sampled": [
+              0,
+              255,
+              0
+            ]
+          },
+          {
+            "depth": 0.99995,
+            "drawn": true,
+            "sampled": [
+              0,
+              0,
+              255
+            ]
+          }
+        ],
+        "emptyCensus": {
+          "nonEmpty": 51023,
+          "sentinelPixels": 428977,
+          "deepOccupied": 0
+        },
+        "restoredBitExact": true
+      }
+    },
+    {
+      "name": "P6-depth-summary",
+      "detail": {
+        "redirect": {
+          "wall": 0.0004999999999999449,
+          "flesh": 0.0040000000000000036,
+          "gun": 0.0040000000000000036
+        },
+        "far": {
+          "redirect": {
+            "case": "true-empty-created",
+            "depths": [
+              0.99,
+              0.9995,
+              0.99995
+            ],
+            "restored": true
+          },
+          "null": {
+            "case": "true-empty-created",
+            "depths": [
+              0.99,
+              0.9995,
+              0.99995
+            ],
+            "restored": true
+          },
+          "redirect2": {
+            "case": "redirect-restored-digest-stable"
+          },
+          "deepestRealScene": [
+            -0.0030000000000000027,
+            0.005739399147033697
+          ]
+        }
+      }
+    },
+    {
+      "name": "P7a-scale",
+      "detail": {
+        "half": {
+          "width": 400,
+          "height": 300
+        },
+        "restored": "hash==h0"
+      }
+    },
+    {
+      "name": "P7a-resize",
+      "detail": {
+        "down": {
+          "nonDarkPct": 77.4,
+          "w": 1000,
+          "h": 700
+        },
+        "up": {
+          "nonDarkPct": 76.4,
+          "w": 800,
+          "h": 600
+        }
+      }
     }
   ],
   "pageErrors": [],
   "pass": false,
+  "scope": "full",
+  "fullAcceptance": false,
+  "excludedFeatures": {
+    "boneTubes": "Owner retired this experimental path for visual reasons on 2026-09-07; validate SDF bones and baked geometry instead."
+  },
   "pageErrorsDropped": 0,
-  "generatedAt": "2026-09-07T16:03:32.948Z",
+  "failure": {
+    "phase": "faceTarget",
+    "message": "goblin: kit pixels missing from the G-buffer at every projected kit node (tried [\"mesh_0\",\"mesh_0_1\",\"mesh_0_2\",\"mesh_0_3\"])",
+    "stack": "AssertionError [ERR_ASSERTION]: goblin: kit pixels missing from the G-buffer at every projected kit node (tried [\"mesh_0\",\"mesh_0_1\",\"mesh_0_2\",\"mesh_0_3\"])\n    at file:///Users/donny/.claude/dispatch/worktrees/2026-09-06-hybrid-deferred-m2-task-6-continue-4/scripts/deferred-game-check.mjs:1083:14\n    at async file:///Users/donny/.claude/dispatch/worktrees/2026-09-06-hybrid-deferred-m2-task-6-continue-4/scripts/deferred-game-check.mjs:925:3"
+  },
+  "generatedAt": "2026-09-07T18:13:59.784Z",
   "ports": {
     "vite": 5326,
     "cdp": 9326
   },
   "viewport": {
-    "width": 1280,
-    "height": 800
+    "width": 800,
+    "height": 600
   },
   "records": {
-    "captures": {},
+    "captures": {
+      "task6-resize-down.png": {
+        "points": {},
+        "regions": {},
+        "frame": {
+          "nonDarkPct": 77.4,
+          "w": 1000,
+          "h": 700
+        }
+      },
+      "task6-resize-up.png": {
+        "points": {},
+        "regions": {},
+        "frame": {
+          "nonDarkPct": 76.4,
+          "w": 800,
+          "h": 600
+        }
+      },
+      "task6-char-zombie.png": {
+        "points": {},
+        "regions": {},
+        "frame": {
+          "nonDarkPct": 75.6,
+          "w": 800,
+          "h": 600
+        }
+      }
+    },
     "stages": {
       "bootDiag": {
         "mode": "deferred",
-        "frames": 189,
+        "frames": 125,
         "canvasDepthWrites": false,
         "router": {
           "counts": {
@@ -227,26 +1026,39 @@
         "width": 800,
         "height": 600,
         "hashes": {
-          "albedoRoughness": 3480081861,
-          "normalMetalness": 4262513036,
-          "emissionClass": 981701222,
-          "surfaceDepth": 643334694
+          "albedoRoughness": 3526112295,
+          "normalMetalness": 1281107517,
+          "emissionClass": 874067238,
+          "surfaceDepth": 1885772862
         },
         "nonEmpty": 480000,
         "classCounts": {
-          "1": 426322,
+          "1": 431370,
           "17": 36400,
-          "18": 17278
+          "18": 12230
         },
-        "minDepth": 0.5195043087005615,
-        "maxDepth": 0.9947323203086853,
+        "minDepth": 0.5195068717002869,
+        "maxDepth": 0.9942106008529663,
         "deepestPixel": [
-          422,
-          291
+          384,
+          294
         ],
         "sentinelPixels": 0,
         "deepOccupied": 0,
         "sentinelCentroid": null
+      },
+      "nullDepth": {
+        "wall": 0.0004999999999999449,
+        "flesh": 0.0040000000000000036,
+        "far": {
+          "case": "true-empty-created",
+          "depths": [
+            0.99,
+            0.9995,
+            0.99995
+          ],
+          "restored": true
+        }
       }
     }
   }

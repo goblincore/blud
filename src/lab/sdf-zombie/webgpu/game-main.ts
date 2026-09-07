@@ -4611,8 +4611,31 @@ async function main() {
       while (queue.length > 0 && nodes.length < maxNodes && seen < maxNodes * 4) {
         const o = queue.shift()!;
         seen++;
-        const p = new THREE.Vector3();
-        o.getWorldPosition(p);
+        // POSED MATRIX, not getWorldPosition: kit/prop nodes pose by writing
+        // matrixWorld DIRECTLY with matrixWorldAutoUpdate=false (kit-overlay
+        // bone nodes, held-prop's object) precisely so three's update pass
+        // cannot overwrite the rig solve. getWorldPosition() calls
+        // updateWorldMatrix(true, false), which recomputes matrixWorld from
+        // the (zero) local transform and reported every kit mesh at the
+        // world origin — the gate then projected [0,0,0] and missed the kit
+        // entirely. matrixWorld's translation is the LAST POSED matrix —
+        // what the last render actually rasterised (normally-updated nodes
+        // carry the same value after a render).
+        const pe = o.matrixWorld.elements;
+        const p = { x: pe[12], y: pe[13], z: pe[14] };
+        // SKINNED kit pieces: the node itself stays at its import transform
+        // (identity) and the VERTICES ride the skeleton, so the node origin
+        // is never where the piece paints. Report the SKELETON's posed bone
+        // translations (bounded) as the render-space anchors — kit-overlay
+        // writes bone matrixWorld directly in world space, so these are the
+        // exact positions the last render drew at.
+        const sk = (o as THREE.SkinnedMesh).skeleton;
+        const bones: Array<[number, number, number]> | undefined = sk
+          ? sk.bones.slice(0, 6).map((b) => {
+            const be = b.matrixWorld.elements;
+            return [+be[12].toFixed(3), +be[13].toFixed(3), +be[14].toFixed(3)] as [number, number, number];
+          })
+          : undefined;
         const mats: string[] = [];
         const m = (o as THREE.Mesh).material;
         if (Array.isArray(m)) for (const mm of m) mats.push(String(mm.name || mm.type));
@@ -4620,6 +4643,8 @@ async function main() {
         nodes.push({
           name: o.name || `<${o.type}>`, depth: nodeDepth(r, o),
           isMesh: (o as THREE.Mesh).isMesh === true, visible: o.visible,
+          isSkinnedMesh: (o as THREE.SkinnedMesh).isSkinnedMesh === true,
+          bones,
           materials: mats, pos: [round2(p.x), round2(p.y), round2(p.z)],
           route: deferredApi?.router.routeOf(o) ?? null,
           receiver: deferredApi?.router.receiverOf(o) ?? null,

@@ -968,16 +968,22 @@ null
     allowMinotaurFace404 = false;
     assert.ok(spawned && spawned.id > 0, `${name}: spawn failed ${JSON.stringify(spawned)}`);
     await evaluate('__sdfGame.step(8)'); // hull build + pose for the new body
-    await settleAndLock();
-    // Kit characters load glTF async — the router re-walks per RENDER (locked
-    // renders included), so discovery works under the lock. A kit that never
-    // lands FAILS here with evidence (the F-kit-load-race carry-forward:
-    // reproduced, not waived).
     const kitChar = ['goblin', 'clown', 'clown-alt', 'soldier'].includes(name);
+    if (!kitChar) await settleAndLock();
+    // Kit characters load glTF async — the router re-walks per RENDER (locked
+    // renders included), so DISCOVERY works under the lock. But the kit POSE
+    // only runs in the unfrozen tick (character.pose is inside the
+    // !wanderFrozen branch), so the wait runs in a SIM phase and the kit gets
+    // unfrozen ticks to solve onto the rig before the lock. A kit that never
+    // lands FAILS here with evidence (the F-kit-load-race carry-forward:
+    // reproduced, not waived). matrixWorldAutoUpdate=false keeps the last
+    // solved bone matrices under the lock — the kit rides the frozen pose.
     if (kitChar) {
+      await enterSimPhase(`P3-kit-wait:${name}`);
       await waitFor(`__sdfGame.deferredDiagnostics().router.counts.mesh >= ${before + 1}`,
         `${name}: kit descendants never reached the mesh route`, 40, 400);
-      await evaluate('__sdfGame.step(6)');
+      await evaluate('__sdfGame.step(6)'); // unfrozen: kit solves onto the rig
+      await settleAndLock();
     }
     let minotaurRepro = null;
     if (name === 'minotaur') {
@@ -1034,10 +1040,7 @@ null
     assert.ok(fleshHit, `${name}: no flesh (cls 18) texel found around the projected torso ` +
       `(anchors tried 1.1/0.7/1.5, ndc ${JSON.stringify(torsoSp)})`);
     // Kit evidence: named descendants, routed, with material names, plus
-    // VISIBLE KIT PIXELS. Kit mesh node ORIGINS ride bones and can sit
-    // inside the flesh, so the scan walks up to four kit mesh nodes and a
-    // 5x5 NDC lattice around each projection — first cls-17 hit wins. A
-    // kit that routes but paints NO pixels fails here.
+    // VISIBLE KIT PIXELS (anchor selection + attribution below).
     let kitTree = null, kitTexel = null, kitNode = null;
     if (kitChar) {
       kitTree = await evaluate(`__sdfGame.debugRegisteredTree('rig-${name}', 64)`);
@@ -1049,6 +1052,15 @@ null
         `${name}: kit meshes must route 'mesh': ${JSON.stringify(meshNodes.map((n) => [n.name, n.route]))}`);
       assert.ok(meshNodes.some((n) => (n.materials ?? []).length > 0),
         `${name}: kit meshes must carry named materials`);
+      // VISIBLE KIT PIXELS with honest attribution. Kit pieces are
+      // SKINNED meshes: the node origin is identity and the vertices ride
+      // the skeleton, so the anchors are the POSED BONE positions the seam
+      // reports (non-skinned kit/prop nodes use their own posed origin).
+      // Each candidate hit must (a) be cls 17 AND (b) sit at the anchor's
+      // own depth (|texel - anchor| <= 0.06) — the FPV viewmodel is also
+      // cls 17 but lives ~0.5 m from the eye, an order nearer than a body
+      // anchor at 1.5 m, so the depth test attributes the pixel to the kit
+      // and not to a gun pixel that happens to overlap the lattice.
       const heldPropNames = ['shorty', 'gunroot', 'foreend', 'barrels', 'frame'];
       let propNodes = null;
       if (name === 'soldier') {
@@ -1061,13 +1073,21 @@ null
         assert.ok(propNodes.every((n) => n.route === 'mesh'),
           `soldier: held-prop nodes must route 'mesh': ${JSON.stringify(propNodes.map((n) => [n.name, n.route]))}`);
       }
+      const anchors = [];
       for (const km of (propNodes?.length ? propNodes : meshNodes).slice(0, 4)) {
-        const ksp = await evaluate(`__sdfGame.screenPosOf(${km.pos[0]}, ${km.pos[1]}, ${km.pos[2]})`);
+        const pts = (km.bones?.length ? km.bones.slice(0, 4).map((b) => ({ w: b, label: `${km.name}:bone` }))
+          : [{ w: km.pos, label: km.name }]);
+        for (const pt of pts) anchors.push({ node: km.name, label: pt.label, w: pt.w });
+      }
+      let kitTexel = null, kitNode = null;
+      for (const a of anchors.slice(0, 10)) {
+        const ksp = await evaluate(`__sdfGame.screenPosOf(${a.w[0]}, ${a.w[1]}, ${a.w[2]})`);
         if (!ksp || Math.abs(ksp.x) > 0.95 || Math.abs(ksp.y) > 0.95 || ksp.z >= 1) continue;
         for (let dy = -2; dy <= 2 && !kitTexel; dy++) {
           for (let dx = -2; dx <= 2 && !kitTexel; dx++) {
-            const s = await evaluate(`__sdfGame.readSurfaceAt(${(ksp.x + dx * 0.035).toFixed(4)}, ${(ksp.y + dy * 0.035).toFixed(4)})`);
-            if (s.cls > 16.5 && s.cls < 17.5 && s.depth < 0.995) { kitTexel = s; kitNode = km.name; }
+            const s = await evaluate(`__sdfGame.readSurfaceAt(${(ksp.x + dx * 0.03).toFixed(4)}, ${(ksp.y + dy * 0.03).toFixed(4)})`);
+            if (s.cls > 16.5 && s.cls < 17.5 && s.depth < 0.995
+              && Math.abs(s.depth - ksp.z) <= 0.06) { kitTexel = s; kitNode = a.label; }
           }
         }
         if (kitTexel) break;
@@ -1080,8 +1100,8 @@ null
         heldPropNodes: propNodes ? propNodes.map((n) => n.name) : undefined,
         minotaur404: minotaurRepro,
       };
-      assert.ok(kitTexel, `${name}: kit pixels missing from the G-buffer at every projected kit node ` +
-        `(tried ${JSON.stringify((propNodes?.length ? propNodes : meshNodes).slice(0, 4).map((n) => n.name))})`);
+      assert.ok(kitTexel, `${name}: kit pixels missing from the G-buffer at every posed kit anchor ` +
+        `(tried ${JSON.stringify(anchors.slice(0, 10).map((a) => a.label))})`);
     } else {
       rendered[name] = { id: spawned.id, torsoAnchor, fleshDepth: +fleshHit.depth.toFixed(5), minotaur404: minotaurRepro };
     }
