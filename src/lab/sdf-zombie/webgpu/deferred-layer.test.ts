@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { createDeferredLayer, DEFERRED_LIGHT_WGSL, type DeferredLayer } from './deferred-layer';
+import {
+  createDeferredLayer, DEFERRED_LIGHT_WGSL, DEFERRED_PRESENT_WGSL,
+  type DeferredLayer, type DeferredFlashlightShadowBinding,
+} from './deferred-layer';
 import { MAX_DEFERRED_LIGHTS, type DeferredLight } from './deferred-lighting';
 import { SURFACE_ATTACHMENT_NAMES } from './deferred-surface';
 
@@ -354,6 +357,329 @@ describe('coordinator review fixes (2026-09-06, task1 commit 7c9974e8)', () => {
       expect(() => layer.render(new THREE.Scene(), new THREE.Scene(), new THREE.PerspectiveCamera())).toThrow('boom');
       expect(renderer.autoClearDepth).toBe(false);
       expect(getClearDepth()).toBe(0);
+    } finally {
+      layer.dispose();
+    }
+  });
+});
+
+/** A per-pass recorder: captures renderer state at each render submission. */
+function recordPasses(renderer: ReturnType<typeof mockRenderer>['renderer'], getCurrent: () => unknown) {
+  const passes: Array<{ target: unknown; autoClear: boolean; autoClearDepth: boolean; clearDepth: number }> = [];
+  (renderer.render as ReturnType<typeof vi.fn>).mockImplementation(() => {
+    passes.push({
+      target: getCurrent(),
+      autoClear: renderer.autoClear,
+      autoClearDepth: renderer.autoClearDepth,
+      clearDepth: renderer.getClearDepth(),
+    });
+  });
+  return passes;
+}
+
+describe('setOutputTarget (hybrid deferred M2 task 1)', () => {
+  function makeLayer() {
+    const m = mockRenderer();
+    const layer = createDeferredLayer(m.renderer, { width: 64, height: 64, sdfScale: 1 });
+    return { ...m, layer };
+  }
+
+  it('presents into the owned target, clearing it first, and restores caller state', () => {
+    const { renderer, layer, getCurrent, getClearDepth } = makeLayer();
+    try {
+      const sceneTarget = new THREE.RenderTarget(64, 64);
+      layer.setOutputTarget(sceneTarget);
+      expect(layer.diagnostics().outputTargetActive).toBe(true);
+
+      const passes = recordPasses(renderer, getCurrent);
+      const callerTarget = new THREE.RenderTarget(2, 2);
+      renderer.setRenderTarget(callerTarget);
+      renderer.autoClear = false;
+      renderer.autoClearDepth = false;
+      renderer.setClearDepth(0);
+
+      layer.render(new THREE.Scene(), new THREE.Scene(), new THREE.PerspectiveCamera());
+
+      // clear-mesh, mesh, clear-sdf, sdf, resolve, light, present — the LAST
+      // submission must target the owned scene target WITH a clear enabled
+      // (the destination depth reset the frame contract requires).
+      expect(passes).toHaveLength(7);
+      const present = passes[6]!;
+      expect(present.target).toBe(sceneTarget);
+      expect(present.autoClear).toBe(true);
+      expect(present.autoClearDepth).toBe(true);
+      expect(present.clearDepth).toBe(1);
+      // And the caller's hostile state is fully restored afterwards.
+      expect(getCurrent()).toBe(callerTarget);
+      expect(renderer.autoClear).toBe(false);
+      expect(renderer.autoClearDepth).toBe(false);
+      expect(getClearDepth()).toBe(0);
+      callerTarget.dispose();
+    } finally {
+      layer.dispose();
+    }
+  });
+
+  it('setOutputTarget(null) restores the M1 canvas default', () => {
+    const { renderer, layer, getCurrent } = makeLayer();
+    try {
+      const sceneTarget = new THREE.RenderTarget(64, 64);
+      layer.setOutputTarget(sceneTarget);
+      layer.setOutputTarget(null);
+      expect(layer.diagnostics().outputTargetActive).toBe(false);
+      const passes = recordPasses(renderer, getCurrent);
+      layer.render(new THREE.Scene(), new THREE.Scene(), new THREE.PerspectiveCamera());
+      expect(passes[6]!.target).toBeNull();
+      sceneTarget.dispose();
+    } finally {
+      layer.dispose();
+    }
+  });
+
+  it('rejects layer-owned targets and depth-less targets up front', () => {
+    const { layer } = makeLayer();
+    try {
+      expect(() => layer.setOutputTarget(layer.targets.mesh)).toThrow(/own targets/);
+      expect(() => layer.setOutputTarget(layer.targets.resolved)).toThrow(/own targets/);
+      expect(() => layer.setOutputTarget(layer.targets.lit)).toThrow(/own targets/);
+      expect(() => layer.setOutputTarget(layer.targets.sdf)).toThrow(/own targets/);
+      const noDepth = new THREE.RenderTarget(8, 8, { depthBuffer: false });
+      expect(() => layer.setOutputTarget(noDepth)).toThrow(/depth/);
+      noDepth.dispose();
+      expect(layer.diagnostics().outputTargetActive).toBe(false);
+    } finally {
+      layer.dispose();
+    }
+  });
+
+  it('rejects a size-mismatched target at render time and recovers after the caller resizes', () => {
+    const { renderer, layer, getCurrent } = makeLayer();
+    try {
+      const sceneTarget = new THREE.RenderTarget(32, 16);
+      layer.setOutputTarget(sceneTarget);
+      const passes = recordPasses(renderer, getCurrent);
+      expect(() => layer.render(new THREE.Scene(), new THREE.Scene(), new THREE.PerspectiveCamera()))
+        .toThrow(/size/);
+      sceneTarget.setSize(64, 64);
+      layer.render(new THREE.Scene(), new THREE.Scene(), new THREE.PerspectiveCamera());
+      expect(passes.filter(Boolean).length).toBeGreaterThan(0);
+      sceneTarget.dispose();
+    } finally {
+      layer.dispose();
+    }
+  });
+
+  it('refuses setOutputTarget after dispose', () => {
+    const { layer } = makeLayer();
+    const sceneTarget = new THREE.RenderTarget(64, 64);
+    layer.dispose();
+    expect(() => layer.setOutputTarget(sceneTarget)).toThrow(/disposed/);
+    sceneTarget.dispose();
+  });
+});
+
+describe('render draw hooks (hybrid deferred M2 task 1)', () => {
+  function makeLayer() {
+    const m = mockRenderer();
+    const layer = createDeferredLayer(m.renderer, { width: 64, height: 64, sdfScale: 1 });
+    return { ...m, layer };
+  }
+
+  it('hooks replace the scene renders, run once at their producer target with autoClear off', () => {
+    const { renderer, layer, getCurrent, render } = makeLayer();
+    try {
+      // Recorded INSIDE each hook: the state the hook itself observes.
+      const hookSeen: Array<{ target: unknown; autoClear: boolean }> = [];
+      const drawMesh = vi.fn(() => { hookSeen.push({ target: getCurrent(), autoClear: renderer.autoClear }); });
+      const drawSdf = vi.fn(() => { hookSeen.push({ target: getCurrent(), autoClear: renderer.autoClear }); });
+      const meshScene = new THREE.Scene();
+      const sdfScene = new THREE.Scene();
+      layer.render(meshScene, sdfScene, new THREE.PerspectiveCamera(), { drawMesh, drawSdf });
+
+      expect(drawMesh).toHaveBeenCalledTimes(1);
+      expect(drawSdf).toHaveBeenCalledTimes(1);
+      // Each hook ran at its OWN producer target, with the sentinel clear
+      // already submitted and autoClear off — exactly the state the M1 scene
+      // renders see.
+      expect(hookSeen).toHaveLength(2);
+      expect(hookSeen[0]!.target).toBe(layer.targets.mesh);
+      expect(hookSeen[0]!.autoClear).toBe(false);
+      expect(hookSeen[1]!.target).toBe(layer.targets.sdf);
+      expect(hookSeen[1]!.autoClear).toBe(false);
+
+      // 5 renderer passes: clear-mesh, clear-sdf, resolve, light, present.
+      expect(render).toHaveBeenCalledTimes(5);
+      for (const call of render.mock.calls) {
+        expect(call[0]).not.toBe(meshScene);
+        expect(call[0]).not.toBe(sdfScene);
+      }
+    } finally {
+      layer.dispose();
+    }
+  });
+
+  it('a hook on one producer leaves the other on the M1 scene render', () => {
+    const { renderer, layer, render } = makeLayer();
+    try {
+      const drawSdf = vi.fn();
+      const meshScene = new THREE.Scene();
+      const sdfScene = new THREE.Scene();
+      layer.render(meshScene, sdfScene, new THREE.PerspectiveCamera(), { drawSdf });
+      expect(drawSdf).toHaveBeenCalledTimes(1);
+      expect(render).toHaveBeenCalledTimes(6); // clear-mesh, MESH, clear-sdf, resolve, light, present
+      expect(render.mock.calls[1]![0]).toBe(meshScene);
+    } finally {
+      layer.dispose();
+    }
+  });
+
+  it('a thrown draw hook propagates and restores every piece of renderer state', () => {
+    const { renderer, layer, render, getCurrent, getMrt, getClearDepth, setMrt } = makeLayer();
+    try {
+      const meshScene = new THREE.Scene();
+      meshScene.background = new THREE.Color(0x112233);
+      const callerMrt = { caller: true };
+      setMrt(callerMrt);
+      renderer.autoClearDepth = false;
+      renderer.setClearDepth(0);
+      let calls = 0;
+      const drawMesh = vi.fn(() => {
+        calls++;
+        throw new Error('hook boom');
+      });
+      expect(() => layer.render(meshScene, new THREE.Scene(), new THREE.PerspectiveCamera(), { drawMesh }))
+        .toThrow('hook boom');
+      expect(calls).toBe(1);
+      // The state the layer mutated for its owned passes is back.
+      expect(getCurrent()).toBeNull();
+      expect(renderer.autoClear).toBe(true);
+      expect(renderer.autoClearDepth).toBe(false);
+      expect(getClearDepth()).toBe(0);
+      expect(getMrt()).toBe(callerMrt);
+      expect((meshScene.background as THREE.Color).getHex()).toBe(0x112233);
+      // And the passes after the hook never ran.
+      expect(render.mock.calls.length).toBeLessThanOrEqual(1);
+    } finally {
+      layer.dispose();
+    }
+  });
+});
+
+describe('game environment (hybrid deferred M2 task 1)', () => {
+  function makeLayer() {
+    const m = mockRenderer();
+    const layer = createDeferredLayer(m.renderer, { width: 64, height: 64, sdfScale: 1 });
+    return { ...m, layer };
+  }
+
+  it('defaults to the M1 ambient with fog disabled, reported in diagnostics', () => {
+    const { layer } = makeLayer();
+    try {
+      const env = layer.diagnostics().environment!;
+      expect(env.ambient).toEqual([0.05, 0.05, 0.055]);
+      expect(env.fogEnabled).toBe(false);
+      expect(Number.isFinite(env.fogNear) && Number.isFinite(env.fogFar)).toBe(true);
+      expect(env.fogFar).toBeGreaterThan(env.fogNear);
+    } finally {
+      layer.dispose();
+    }
+  });
+
+  it('copies the caller environment (no aliasing) and reports it back', () => {
+    const { layer } = makeLayer();
+    try {
+      const ambient = new THREE.Color(0.2, 0.1, 0.05);
+      const fogColor = new THREE.Color(0.01, 0.02, 0.03);
+      layer.setEnvironment({ ambient, fogColor, fogNear: 2, fogFar: 30, fogEnabled: true });
+      ambient.setRGB(9, 9, 9);
+      fogColor.setRGB(9, 9, 9);
+      const env = layer.diagnostics().environment!;
+      expect(env.ambient).toEqual([0.2, 0.1, 0.05]);
+      expect(env.fogColor).toEqual([0.01, 0.02, 0.03]);
+      expect(env.fogNear).toBe(2);
+      expect(env.fogFar).toBe(30);
+      expect(env.fogEnabled).toBe(true);
+    } finally {
+      layer.dispose();
+    }
+  });
+
+  it('rejects invalid environments and keeps the previous one', () => {
+    const { layer } = makeLayer();
+    try {
+      layer.setEnvironment({ ambient: new THREE.Color(0.1, 0.1, 0.1), fogColor: new THREE.Color(), fogNear: 2, fogFar: 30, fogEnabled: true });
+      expect(() => layer.setEnvironment({ ambient: new THREE.Color(Number.NaN, 0, 0), fogColor: new THREE.Color(), fogNear: 1, fogFar: 10, fogEnabled: false })).toThrow();
+      expect(() => layer.setEnvironment({ ambient: new THREE.Color(), fogColor: new THREE.Color(), fogNear: 10, fogFar: 10, fogEnabled: true })).toThrow(/fogFar/);
+      expect(() => layer.setEnvironment({ ambient: new THREE.Color(), fogColor: new THREE.Color(), fogNear: 5, fogFar: Number.POSITIVE_INFINITY, fogEnabled: true })).toThrow();
+      const env = layer.diagnostics().environment!;
+      expect(env.fogNear).toBe(2);
+      expect(env.fogFar).toBe(30);
+    } finally {
+      layer.dispose();
+    }
+  });
+
+  it('fog and ambient exist ONLY in the lit stage — the surface/debug outputs never read them', () => {
+    // Structural pin: the lit WGSL evaluates fog behind an explicit enable
+    // gate; the present WGSL (albedo/normal/depth/material debug views) reads
+    // neither ambient nor fog, so raw surface outputs stay unaffected.
+    expect(DEFERRED_LIGHT_WGSL).toContain('fogEnabled');
+    expect(DEFERRED_LIGHT_WGSL).toContain('fogNear');
+    expect(DEFERRED_LIGHT_WGSL).toContain('distance(camPos, world)');
+    expect(DEFERRED_PRESENT_WGSL).not.toContain('fog');
+    expect(DEFERRED_PRESENT_WGSL).not.toContain('ambient');
+  });
+
+  it('the lit stage branches on the DECODED base class while the attachment keeps the raw encoding', () => {
+    // emissionClass.a may carry the packed receiver bit (bit 4). Lighting and
+    // the material debug view must decode it; nothing may rewrite the
+    // attachment (the raw value selects the shadow map per receiver in task 4).
+    expect(DEFERRED_LIGHT_WGSL).toContain('floor(cls / 16.0) * 16.0');
+    expect(DEFERRED_PRESENT_WGSL).toContain('floor(cls / 16.0) * 16.0');
+  });
+});
+
+describe('setFlashlightShadow reservation (hybrid deferred M2 task 1)', () => {
+  it('stores the binding, reports it, and resets on null', () => {
+    const m = mockRenderer();
+    const layer = createDeferredLayer(m.renderer, { width: 64, height: 64, sdfScale: 1 });
+    try {
+      expect(layer.diagnostics().flashlightShadowBound).toBe(false);
+      const binding = {
+        fullDepth: new THREE.Texture(),
+        levelDepth: new THREE.Texture(),
+        viewProjection: new THREE.Matrix4(),
+        lightIndex: 0,
+        bias: 0.002,
+        mapSize: new THREE.Vector2(1024, 1024),
+        enabled: true,
+      } satisfies DeferredFlashlightShadowBinding;
+      layer.setFlashlightShadow(binding);
+      expect(layer.diagnostics().flashlightShadowBound).toBe(true);
+      layer.setFlashlightShadow(null);
+      expect(layer.diagnostics().flashlightShadowBound).toBe(false);
+    } finally {
+      layer.dispose();
+    }
+  });
+
+  it('rejects malformed bindings rather than storing them', () => {
+    const m = mockRenderer();
+    const layer = createDeferredLayer(m.renderer, { width: 64, height: 64, sdfScale: 1 });
+    try {
+      const base = {
+        fullDepth: new THREE.Texture(),
+        levelDepth: new THREE.Texture(),
+        viewProjection: new THREE.Matrix4(),
+        lightIndex: 0,
+        bias: 0.002,
+        mapSize: new THREE.Vector2(1024, 1024),
+        enabled: true,
+      };
+      expect(() => layer.setFlashlightShadow({ ...base, bias: Number.NaN } as never)).toThrow();
+      expect(() => layer.setFlashlightShadow({ ...base, mapSize: new THREE.Vector2(0, 1024) } as never)).toThrow();
+      expect(() => layer.setFlashlightShadow({ ...base, viewProjection: 'nope' } as never)).toThrow();
+      expect(layer.diagnostics().flashlightShadowBound).toBe(false);
     } finally {
       layer.dispose();
     }

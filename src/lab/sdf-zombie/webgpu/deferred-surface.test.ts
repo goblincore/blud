@@ -7,6 +7,12 @@ import {
   getSurfaceTextures,
   SURFACE_ATTACHMENT_NAMES,
   SURFACE_COLOR_BYTES_PER_SAMPLE,
+  encodeSurfaceClass,
+  decodeSurfaceClass,
+  SURFACE_CLASS_EMPTY,
+  SURFACE_CLASS_MESH,
+  SURFACE_CLASS_FLESH,
+  SURFACE_CLASS_FLAT,
 } from './deferred-surface';
 
 describe('selectSurface (CPU reference for the resolve rule)', () => {
@@ -115,6 +121,70 @@ describe('createSurfaceTarget', () => {
     } finally {
       target.dispose();
     }
+  });
+});
+
+describe('surface-class receiver metadata (hybrid deferred M2 task 1)', () => {
+  // The contract: low four bits retain classes 0..3, bit 4 selects the
+  // level-only shadow receiver, full has no bit, and EMPTY stays exactly zero
+  // (the clear sentinel must never grow a receiver bit).
+  it('encodes the plan examples exactly', () => {
+    expect(encodeSurfaceClass(1, 'level-only')).toBe(17);
+    expect(encodeSurfaceClass(2, 'full')).toBe(2);
+    expect(encodeSurfaceClass(0, 'level-only')).toBe(0);
+  });
+
+  it('decodes the plan examples exactly', () => {
+    expect(decodeSurfaceClass(18)).toEqual({ baseClass: 2, receiver: 'level-only' });
+    expect(decodeSurfaceClass(17)).toEqual({ baseClass: 1, receiver: 'level-only' });
+    expect(decodeSurfaceClass(3)).toEqual({ baseClass: 3, receiver: 'full' });
+    expect(decodeSurfaceClass(0)).toEqual({ baseClass: 0, receiver: 'full' });
+  });
+
+  it('full receiver is the identity on every existing class', () => {
+    for (const cls of [SURFACE_CLASS_EMPTY, SURFACE_CLASS_MESH, SURFACE_CLASS_FLESH, SURFACE_CLASS_FLAT]) {
+      expect(encodeSurfaceClass(cls, 'full')).toBe(cls);
+      // So the M1 producers (which write the bare constants) are already
+      // valid full-receiver encodings without any producer change.
+      expect(decodeSurfaceClass(cls)).toEqual({ baseClass: cls, receiver: 'full' });
+    }
+  });
+
+  it('round-trips every base class through both receivers', () => {
+    // Base 0 is exempt BY CONTRACT (empty stays exactly zero, tested above).
+    for (let base = 1; base <= 15; base++) {
+      for (const receiver of ['full', 'level-only'] as const) {
+        const encoded = encodeSurfaceClass(base, receiver);
+        expect(decodeSurfaceClass(encoded)).toEqual({ baseClass: base, receiver });
+      }
+    }
+  });
+
+  it('level-only sets exactly bit 4 and leaves the low bits untouched', () => {
+    for (let base = 1; base <= 15; base++) {
+      expect(encodeSurfaceClass(base, 'level-only') & 0b1111).toBe(base);
+      expect(encodeSurfaceClass(base, 'level-only') & 0b10000).toBe(0b10000);
+      expect(encodeSurfaceClass(base, 'level-only') - encodeSurfaceClass(base, 'full')).toBe(16);
+    }
+  });
+
+  it('rejects invalid base classes rather than corrupting packed metadata', () => {
+    expect(() => encodeSurfaceClass(1.5, 'full')).toThrow(/integer/);
+    expect(() => encodeSurfaceClass(-1, 'level-only')).toThrow();
+    expect(() => encodeSurfaceClass(16, 'full')).toThrow();
+    expect(() => encodeSurfaceClass(Number.NaN, 'full')).toThrow();
+    expect(() => encodeSurfaceClass(Number.POSITIVE_INFINITY, 'full')).toThrow();
+  });
+
+  it('rejects unknown receivers', () => {
+    expect(() => encodeSurfaceClass(1, 'sometimes' as never)).toThrow(/receiver/);
+  });
+
+  it('decode rejects values that cannot have been produced by encode', () => {
+    expect(() => decodeSurfaceClass(-1)).toThrow();
+    expect(() => decodeSurfaceClass(32)).toThrow();
+    expect(() => decodeSurfaceClass(2.5)).toThrow();
+    expect(() => decodeSurfaceClass(Number.NaN)).toThrow();
   });
 });
 

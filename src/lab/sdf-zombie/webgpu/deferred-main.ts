@@ -33,8 +33,15 @@ import {
   createDeferredLayer, type DeferredDebugView, type DeferredLayer,
 } from './deferred-layer';
 import { createDeferredMeshMaterial } from './deferred-mesh';
-import { MAX_DEFERRED_LIGHTS, type DeferredLight } from './deferred-lighting';
-import { SURFACE_ATTACHMENT_NAMES } from './deferred-surface';
+import {
+  MAX_DEFERRED_LIGHTS, type DeferredLight,
+} from './deferred-lighting';
+import {
+  SURFACE_ATTACHMENT_NAMES, decodeSurfaceClass,
+} from './deferred-surface';
+import {
+  DEFERRED_ENVIRONMENT_DEFAULTS, type DeferredEnvironment,
+} from './deferred-layer';
 import { buildBody, DEFAULT_BUILD_OPTS, type BuildResult } from '../build-body';
 import { parseBlob } from '../blob-parse';
 import { compileBlob, compileFace } from '../blob-compile';
@@ -481,6 +488,40 @@ async function main() {
 
   // ---- camera ---------------------------------------------------------------
   const camera = handle.camera;
+
+  // ---- M2 task 1: output-target composition fixtures ------------------------
+  // Owned by the page (never the layer): the offscreen present target the
+  // composition smoke presents into, an EMPTY mesh scene for frame B, and the
+  // three forward quads drawn INTO the presented frame. All disposed with the
+  // page (see the unload teardown).
+  const FORWARD_QUAD_SIZE = 0.06;
+  const compTarget = new THREE.RenderTarget(FIXED_W, FIXED_H, {
+    depthBuffer: true,
+    type: THREE.HalfFloatType,
+    format: THREE.RGBAFormat,
+    minFilter: THREE.NearestFilter,
+    magFilter: THREE.NearestFilter,
+  });
+  compTarget.texture.colorSpace = THREE.NoColorSpace; // linear, like the game scene target
+  compTarget.texture.generateMipmaps = false;
+  const emptyMeshScene = new THREE.Scene();
+  const forwardScene = new THREE.Scene();
+  const forwardMat = new THREE.MeshBasicNodeMaterial();
+  forwardMat.color.setRGB(4, 4, 4); // unlit HDR white — reads over any lit surface
+  forwardMat.depthTest = true; // THE point: compose against the presented depth
+  forwardMat.depthWrite = true;
+  const forwardQuadGeom = new THREE.PlaneGeometry(FORWARD_QUAD_SIZE, FORWARD_QUAD_SIZE);
+  const mkForwardQuad = (name: string) => {
+    const mesh = new THREE.Mesh(forwardQuadGeom, forwardMat);
+    mesh.name = name;
+    mesh.visible = false;
+    mesh.frustumCulled = false;
+    forwardScene.add(mesh);
+    return mesh;
+  };
+  const forwardFront = mkForwardQuad('forward-front');
+  const forwardBehind = mkForwardQuad('forward-behind');
+  const forwardFar = mkForwardQuad('forward-far');
   let pose: CameraPoseName = 'overview';
   const applyPose = (name: CameraPoseName) => {
     pose = name;
@@ -583,7 +624,9 @@ async function main() {
     const litSum: Record<string, number> = { mesh: 0, flesh: 0 };
     const litN: Record<string, number> = { mesh: 0, flesh: 0 };
     for (let i = 0; i < w * h; i++) {
-      const cls = Math.round(emission.data[i * 4 + 3]!);
+      // M2 task 1: report the DECODED base class (producers may pack a shadow
+      // receiver into bit 4; default M1 classes decode to themselves).
+      const cls = decodeSurfaceClass(Math.round(emission.data[i * 4 + 3]!)).baseClass;
       const key = cls === 0 ? 'empty' : cls === 1 ? 'mesh' : cls === 2 ? 'flesh' : cls === 3 ? 'flat' : 'other';
       coverage[key]!++;
       if (cls === 1 || cls === 2) {
@@ -606,7 +649,7 @@ async function main() {
       },
       probes: (opts.probes ?? []).map(([x, y]) => ({
         x, y,
-        cls: Math.round(emission.data[(y * w + x) * 4 + 3]!),
+        cls: decodeSurfaceClass(Math.round(emission.data[(y * w + x) * 4 + 3]!)).baseClass,
         depth: depth.data[y * w + x]!,
         albedo: sampleAt(albedo, x, y),
         normal: sampleAt(normal, x, y),
@@ -846,6 +889,239 @@ async function main() {
       updateLights();
       refresh();
     },
+
+    // ---- M2 task 1 seams --------------------------------------------------
+    /** Lit-stage environment (ambient + distance fog). null restores the M1
+     *  defaults exactly. Arrays are [r, g, b] linear. */
+    setLayerEnvironment(env: {
+      ambient: [number, number, number];
+      fogColor: [number, number, number];
+      fogNear: number;
+      fogFar: number;
+      fogEnabled: boolean;
+    } | null) {
+      const toColor = (a: [number, number, number]) => new THREE.Color(a[0], a[1], a[2]);
+      const value: DeferredEnvironment = env
+        ? {
+            ambient: toColor(env.ambient),
+            fogColor: toColor(env.fogColor),
+            fogNear: env.fogNear,
+            fogFar: env.fogFar,
+            fogEnabled: env.fogEnabled,
+          }
+        : {
+            ambient: DEFERRED_ENVIRONMENT_DEFAULTS.ambient.clone(),
+            fogColor: DEFERRED_ENVIRONMENT_DEFAULTS.fogColor.clone(),
+            fogNear: DEFERRED_ENVIRONMENT_DEFAULTS.fogNear,
+            fogFar: DEFERRED_ENVIRONMENT_DEFAULTS.fogFar,
+            fogEnabled: DEFERRED_ENVIRONMENT_DEFAULTS.fogEnabled,
+          };
+      deferredLayer.setEnvironment(value);
+      refresh();
+    },
+    /** RESERVED flashlight shadow binding (M2 task 4). Stored by the layer;
+     *  nothing samples it — the GPU gate pins that binding changes no output.
+     *  Plain JSON-able input: the page builds the THREE objects (textures are
+     *  dummies until task 4 owns real shadow maps). */
+    setSpotShadowBinding(binding: {
+      lightIndex: number;
+      bias: number;
+      mapSize: [number, number];
+      enabled: boolean;
+    } | null) {
+      deferredLayer.setFlashlightShadow(binding === null ? null : {
+        fullDepth: new THREE.Texture(),
+        levelDepth: new THREE.Texture(),
+        viewProjection: new THREE.Matrix4(),
+        lightIndex: binding.lightIndex,
+        bias: binding.bias,
+        mapSize: new THREE.Vector2(binding.mapSize[0], binding.mapSize[1]),
+        enabled: binding.enabled,
+      });
+      refresh();
+    },
+    /**
+     * The task-1 output-target composition smoke, entirely in-page and
+     * deterministic (caller freezes lights and picks a pose first — the gate
+     * uses 'wound' with orbs hidden):
+     *
+     * Frame A — the layer presents into an OWNED color+depth target, then a
+     *   known forward white quad is drawn INTO that target with depth tests,
+     *   in front of the chest (must win) and behind it (must be occluded by
+     *   the presented body depth — the behind quad sits on a separate,
+     *   in-page-computed pixel so the front quad cannot mask it).
+     * Frame B — the same with an EMPTY mesh scene, so the body silhouette
+     *   leaves truly empty pixels (depth 1): a forward quad there must be
+     *   visible, proving empty pixels wrote far depth.
+     *
+     * Returns per-pixel color before/after plus resolved class/depth, and
+     * restores canvas presentation before returning.
+     */
+    async presentComposition() {
+      if (mode !== 'deferred') throw new Error('presentComposition requires deferred mode');
+      const w = deferredLayer.targets.resolved.width;
+      const h = deferredLayer.targets.resolved.height;
+      // Keep the owned target matched to the layer even after setResolution.
+      if (compTarget.width !== w || compTarget.height !== h) compTarget.setSize(w, h);
+      const readTarget = () => readTextureIndex(handle, compTarget, 0);
+      const sample = (buf: { width: number; data: Float32Array }, x: number, y: number) => {
+        const o = (y * buf.width + x) * 4;
+        return [buf.data[o]!, buf.data[o + 1]!, buf.data[o + 2]!];
+      };
+      const lum = (c: number[]) => 0.2126 * c[0]! + 0.7152 * c[1]! + 0.0722 * c[2]!;
+
+      // Deterministic forward composition inputs.
+      const CHEST: Vec3 = [0, 1.2, 0];
+      camera.updateMatrixWorld();
+      const camPos = new THREE.Vector3().setFromMatrixPosition(camera.matrixWorld);
+      const toChest = new THREE.Vector3(...CHEST).sub(camPos);
+      const distChest = toChest.length();
+      const dir = toChest.clone().normalize();
+      const project = (p: THREE.Vector3) => {
+        const proj = new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+        const v = new THREE.Vector4(p.x, p.y, p.z, 1).applyMatrix4(proj);
+        return [(v.x / v.w + 1) / 2 * w, (1 - v.y / v.w) / 2 * h] as [number, number];
+      };
+      const placeQuad = (mesh: THREE.Mesh, at: THREE.Vector3) => {
+        mesh.position.copy(at);
+        mesh.lookAt(camPos);
+        mesh.updateMatrixWorld();
+      };
+
+      // Frame A: full scenes into the owned target.
+      deferredLayer.setOutputTarget(compTarget);
+      deferredLayer.render(meshScene, sdfScene, camera);
+      await completeGpu();
+      const resolvedA = await Promise.all([
+        readAttachment(handle, deferredLayer.targets.resolved, 'emissionClass'),
+        readAttachment(handle, deferredLayer.targets.resolved, 'surfaceDepth'),
+      ]);
+      const resolvedClassAt = (bufs: typeof resolvedA, x: number, y: number) => ({
+        cls: decodeSurfaceClass(Math.round(bufs[0]!.data[y * w + x]!)).baseClass,
+        depth: bufs[1]!.data[y * w + x]!,
+      });
+
+      const chestPx = project(new THREE.Vector3(...CHEST));
+      const cx = Math.round(chestPx[0]);
+      const cy = Math.round(chestPx[1]);
+      if (cx < 40 || cx >= w - 260 || cy < 20 || cy >= h - 20) {
+        throw new Error(`chest projection off the usable frame: ${JSON.stringify(chestPx)}`);
+      }
+      const chestSurface = resolvedClassAt(resolvedA, cx, cy);
+
+      // Screen-space radius of a quad of WORLD half-size s at distance d.
+      const pixelRadius = (p: THREE.Vector3, s: number) => {
+        const right = new THREE.Vector3().crossVectors(camera.up, dir).normalize();
+        return Math.abs(project(p.clone().add(right.multiplyScalar(s)))[0] - project(p)[0]);
+      };
+      const frontDist = distChest * 0.45;
+      const frontPos = camPos.clone().add(dir.clone().multiplyScalar(frontDist));
+      const frontHalfPx = pixelRadius(frontPos, FORWARD_QUAD_SIZE / 2);
+      const behindDist = distChest * 1.6;
+      const behindPos = camPos.clone().add(dir.clone().multiplyScalar(behindDist));
+      const behindHalfPx = pixelRadius(behindPos, FORWARD_QUAD_SIZE / 2);
+      // The behind quad's pixel: beside the front quad, still on the body —
+      // walk +x until the resolved surface there is flesh (bounded scan).
+      let bx = Math.round(chestPx[0] + frontHalfPx + behindHalfPx + 12);
+      while (bx < w - 4) {
+        const s = resolvedClassAt(resolvedA, bx, cy);
+        if (s.cls === 2 && s.depth < 1) break;
+        bx += 4;
+      }
+      if (bx >= w - 4) throw new Error('no flesh pixel beside the front quad for the behind quad');
+      placeQuad(forwardFront, frontPos);
+      // Behind quad: on the camera ray through pixel (bx, cy), at behindDist
+      // — guaranteed beside the front quad AND on the body's presented depth
+      // column.
+      {
+        const proj = new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse).invert();
+        const ndc = new THREE.Vector3(bx / w * 2 - 1, 1 - cy / h * 2, chestSurface.depth);
+        const world = ndc.applyMatrix4(proj);
+        const rayDir = world.sub(camPos).normalize();
+        placeQuad(forwardBehind, camPos.clone().add(rayDir.multiplyScalar(behindDist)));
+      }
+
+      forwardFront.visible = true;
+      forwardBehind.visible = true;
+      forwardFar.visible = false;
+      const beforeA = await readTarget();
+      const prevTarget = handle.renderer.getRenderTarget();
+      const prevAutoClear = handle.renderer.autoClear;
+      handle.renderer.setRenderTarget(compTarget);
+      handle.renderer.autoClear = false; // compose INTO the presented frame
+      handle.renderer.render(forwardScene, camera);
+      handle.renderer.setRenderTarget(prevTarget);
+      handle.renderer.autoClear = prevAutoClear;
+      await completeGpu();
+      const afterA = await readTarget();
+
+      // Frame B: EMPTY mesh scene — the body silhouette leaves empty pixels.
+      deferredLayer.render(emptyMeshScene, sdfScene, camera);
+      await completeGpu();
+      const resolvedB = await Promise.all([
+        readAttachment(handle, deferredLayer.targets.resolved, 'emissionClass'),
+        readAttachment(handle, deferredLayer.targets.resolved, 'surfaceDepth'),
+      ]);
+      // First truly empty pixel to the right of the chest (class 0, far).
+      let ex = Math.round(chestPx[0] + 60);
+      while (ex < w - 40) {
+        const s = resolvedClassAt(resolvedB, ex, cy);
+        if (s.cls === 0 && s.depth >= 1) break;
+        ex += 2;
+      }
+      if (ex >= w - 40) throw new Error('no empty pixel found beside the body for the far-quad probe');
+      {
+        const proj = new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse).invert();
+        const ndc = new THREE.Vector3(ex / w * 2 - 1, 1 - cy / h * 2, 0.5);
+        const world = ndc.applyMatrix4(proj);
+        const rayDir = world.sub(camPos).normalize();
+        placeQuad(forwardFar, camPos.clone().add(rayDir.multiplyScalar(0.7)));
+      }
+      forwardFront.visible = false;
+      forwardBehind.visible = false;
+      forwardFar.visible = true;
+      const beforeB = await readTarget();
+      handle.renderer.setRenderTarget(compTarget);
+      handle.renderer.autoClear = false;
+      handle.renderer.render(forwardScene, camera);
+      handle.renderer.setRenderTarget(prevTarget);
+      handle.renderer.autoClear = prevAutoClear;
+      await completeGpu();
+      const afterB = await readTarget();
+
+      // Restore canvas presentation and the normal scenes.
+      deferredLayer.setOutputTarget(null);
+      forwardFront.visible = false;
+      forwardBehind.visible = false;
+      forwardFar.visible = false;
+      draw();
+      await completeGpu();
+
+      return {
+        size: [w, h],
+        chest: { px: [cx, cy], ...chestSurface },
+        front: {
+          px: [cx, cy], before: sample(beforeA, cx, cy), after: sample(afterA, cx, cy),
+          beforeLum: Math.round(lum(sample(beforeA, cx, cy)) * 1000) / 1000,
+          afterLum: Math.round(lum(sample(afterA, cx, cy)) * 1000) / 1000,
+        },
+        behind: {
+          px: [bx, cy],
+          ...resolvedClassAt(resolvedA, bx, cy),
+          before: sample(beforeA, bx, cy), after: sample(afterA, bx, cy),
+          beforeLum: Math.round(lum(sample(beforeA, bx, cy)) * 1000) / 1000,
+          afterLum: Math.round(lum(sample(afterA, bx, cy)) * 1000) / 1000,
+        },
+        empty: {
+          px: [ex, cy],
+          ...resolvedClassAt(resolvedB, ex, cy),
+          before: sample(beforeB, ex, cy), after: sample(afterB, ex, cy),
+          beforeLum: Math.round(lum(sample(beforeB, ex, cy)) * 1000) / 1000,
+          afterLum: Math.round(lum(sample(afterB, ex, cy)) * 1000) / 1000,
+        },
+        outputRestored: deferredLayer.diagnostics().outputTargetActive === false,
+      };
+    },
     /** Luminance-weighted centroid of the lit target inside a square window
      *  around (cx, cy), above the window's own baseline. The GPU-side world
      *  reconstruction shifts where a cone of light lands; this measures where
@@ -1006,6 +1282,10 @@ async function main() {
     surfaceView.dispose();
     orbGeo.dispose();
     for (const d of [...roomDef.disposables, ...roomLeg.disposables]) d.dispose();
+    // M2 task 1 composition fixtures (page-owned, layer never touches them).
+    compTarget.dispose();
+    forwardMat.dispose();
+    forwardQuadGeom.dispose();
     handle.renderer.dispose();
   });
 }

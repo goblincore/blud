@@ -5,7 +5,9 @@
 // Every check below is an ASSERTION against real GPU output (readbacks,
 // screenshots, generated WGSL). A shader/GPU validation error fails the run —
 // nothing is waived by a timeout or merely logged. Evidence (validation.json,
-// PNGs) lands in docs/dev-notes/2026-09-06-hybrid-deferred-m1/.
+// PNGs) lands in docs/dev-notes/2026-09-06-hybrid-deferred-m1/; the M2 task-1
+// section (T1) additionally writes its evidence into
+// docs/dev-notes/2026-09-06-hybrid-deferred-m2/.
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 
@@ -44,9 +46,10 @@ const evaluate = async (expression) => {
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const check = (name, detail) => { checks.push({ name, detail }); console.log('PASS', name, JSON.stringify(detail)); };
-const shot = async (name) => {
+const shot = async (name, dir = out) => {
   const s = await send('Page.captureScreenshot', { format: 'png' });
-  writeFileSync(`${out}/task3-${name}.png`, Buffer.from(s.result.data, 'base64'));
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(`${dir}/${name}.png`, Buffer.from(s.result.data, 'base64'));
   console.log('SHOT', name);
 };
 
@@ -420,6 +423,81 @@ try {
     await shot(`orbs-t${t}`);
   }
   check('captures-written', { scales: [1, 0.5], orbTimes: [0, 0.7, 1.4, 2.1] });
+
+  // ---- T1. M2 task 1: owned output target, forward composition, environment
+  // Evidence lands in docs/dev-notes/2026-09-06-hybrid-deferred-m2/.
+  const m2 = 'docs/dev-notes/2026-09-06-hybrid-deferred-m2';
+  await evaluate('__deferredLab.setMode("deferred"); __deferredLab.setCameraPose("wound")');
+  await evaluate('__deferredLab.setOrbsVisible(false); __deferredLab.setLightTime(0.7); __deferredLab.setDebugView("lit")');
+  await step();
+
+  // Owned-target present + forward composition: a known white quad in FRONT
+  // of the chest must win against the presented depth; one BEHIND it (on a
+  // separate pixel) must be occluded by the body; with the mesh scene EMPTY a
+  // quad in a truly-empty region must be visible (empty pixels wrote far
+  // depth). Canvas presentation is restored at the end.
+  const compRep = await evaluate('__deferredLab.presentComposition()');
+  assert.ok(compRep.outputRestored, 'canvas presentation must be restored after the owned-target render');
+  assert.equal(compRep.chest.cls, 2, `chest probe pixel must resolve as flesh (${JSON.stringify(compRep.chest)})`);
+  assert.ok(compRep.front.beforeLum > 0, `chest pixel must show lit content (${JSON.stringify(compRep.front)})`);
+  assert.ok(compRep.front.afterLum - compRep.front.beforeLum > 1.0,
+    `front quad must WIN against the presented depth (${JSON.stringify(compRep.front)})`);
+  assert.equal(compRep.behind.cls, 2, 'behind pixel must resolve as flesh');
+  assert.ok(compRep.behind.depth < 1, 'behind pixel must carry a real body depth');
+  assert.ok(Math.abs(compRep.behind.afterLum - compRep.behind.beforeLum) < 0.25,
+    `behind quad must be OCCLUDED by the presented body depth (${JSON.stringify(compRep.behind)})`);
+  assert.equal(compRep.empty.cls, 0, 'frame-B probe pixel must be empty');
+  assert.equal(compRep.empty.depth, 1, 'empty pixels must present far depth');
+  assert.ok(compRep.empty.beforeLum < 0.05, `empty pixel must present black before the forward draw (${compRep.empty.beforeLum})`);
+  assert.ok(compRep.empty.afterLum - compRep.empty.beforeLum > 1.0,
+    `forward quad in an empty region must be VISIBLE — empty depth must be far (${JSON.stringify(compRep.empty)})`);
+  check('owned-target-forward-composition', compRep);
+  writeFileSync(`${m2}/task1-composition.json`, JSON.stringify(compRep, null, 2));
+  await shot('task1-canvas-restored', m2);
+
+  // Environment: defaults are the M1 constants with fog OFF; setting the same
+  // defaults explicitly is lit-identical; enabling fog changes the LIT stage
+  // only (surface hashes untouched) and darkens distant flesh toward fogColor;
+  // restoring returns the exact baseline hash.
+  const envState = await surfaces();
+  const litBase = envState.hashes.lit;
+  const surfaceHashes = (({ albedo, normal, emission, depth }) => ({ albedo, normal, emission, depth }))(envState.hashes);
+  const dEnv = (await diag()).layer.environment;
+  assert.deepEqual(dEnv.ambient, [0.05, 0.05, 0.055], `M1 ambient default (${JSON.stringify(dEnv)})`);
+  assert.equal(dEnv.fogEnabled, false, 'fog must default OFF (M1 behaviour)');
+  await evaluate('__deferredLab.setLayerEnvironment(null)');
+  await step();
+  assert.equal((await surfaces()).hashes.lit, litBase, 'explicit default environment must be lit-identical');
+  await evaluate('__deferredLab.setLayerEnvironment({ ambient: [0.05, 0.05, 0.055], fogColor: [0, 0, 0], fogNear: 0.5, fogFar: 2.5, fogEnabled: true })');
+  await step();
+  const fogged = await surfaces();
+  assert.notEqual(fogged.hashes.lit, litBase, 'fog must change the lit stage');
+  for (const k of Object.keys(surfaceHashes)) {
+    assert.equal(fogged.hashes[k], surfaceHashes[k], `fog must NOT touch the ${k} surface output`);
+  }
+  assert.ok(fogged.litMean.flesh < envState.litMean.flesh,
+    `fog must darken flesh toward fogColor (${fogged.litMean.flesh} vs ${envState.litMean.flesh})`);
+  assert.equal((await surfaces({ probes: [[400, 300]] })).probes[0].cls, 2, 'flesh probes must still decode as flesh under fog');
+  await evaluate('__deferredLab.setLayerEnvironment(null)');
+  await step();
+  assert.equal((await surfaces()).hashes.lit, litBase, 'environment restore must return the exact M1 baseline');
+  check('environment-defaults-and-fog', { litBase, fogFlesh: fogged.litMean.flesh, baseFlesh: envState.litMean.flesh });
+
+  // Flashlight shadow binding RESERVATION: stored + reported, changes no
+  // output until task 4 implements sampling.
+  assert.equal((await diag()).layer.flashlightShadowBound, false, 'no shadow binding by default');
+  await evaluate('__deferredLab.setSpotShadowBinding({ lightIndex: 0, bias: 0.001, mapSize: [1024, 1024], enabled: true })');
+  await step();
+  const boundState = await surfaces();
+  assert.equal((await diag()).layer.flashlightShadowBound, true, 'binding must be reported as stored');
+  for (const k of ['lit', ...Object.keys(surfaceHashes)]) {
+    assert.equal(boundState.hashes[k], k === 'lit' ? litBase : surfaceHashes[k],
+      `a RESERVED binding must not change ${k} output`);
+  }
+  await evaluate('__deferredLab.setSpotShadowBinding(null)');
+  await step();
+  assert.equal((await diag()).layer.flashlightShadowBound, false, 'null resets the binding');
+  check('flashlight-shadow-reservation', { bound: true, outputUnchanged: true });
 
   // ---- N. repeated alternating completed-frame wall timing -----------------
   // Geometry/camera/resolution match. Shading does NOT: legacy flesh sees only

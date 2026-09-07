@@ -46,6 +46,78 @@ export const SURFACE_CLASS_MESH = 1;
 export const SURFACE_CLASS_FLESH = 2;
 export const SURFACE_CLASS_FLAT = 3;
 
+/**
+ * Which flashlight shadow map samples this surface (hybrid deferred M2, spec
+ * docs/superpowers/specs/2026-09-06-hybrid-deferred-m2-design.md):
+ *
+ *   'full'       — the full caster map (level geometry + inflated character
+ *                  proxies); sampled by standard opaque mesh receivers so
+ *                  characters cast onto the environment.
+ *   'level-only' — the level-only map (no inflated flesh proxies); sampled by
+ *                  flesh and bone/tissue receivers (and equipment riding an
+ *                  actor) so a character's own hull cannot swallow its
+ *                  illumination.
+ */
+export type ShadowReceiver = 'full' | 'level-only';
+
+/** Bit 4 of the packed emissionClass.a value: set = level-only receiver. */
+export const SURFACE_RECEIVER_LEVEL_ONLY_BIT = 16;
+/** The base class occupies the low four bits (classes 0..3 today, 0..15 legal). */
+export const SURFACE_CLASS_MASK = 0b1111;
+
+/**
+ * Packs a material class and its shadow receiver into one emissionClass.a
+ * scalar WITHOUT a fifth attachment: the low four bits keep the base class,
+ * bit 4 selects the level-only receiver, 'full' sets no bit.
+ *
+ * The EMPTY class always encodes to exactly 0 regardless of receiver — a
+ * surface that is not there has no receiver, and the clear sentinel must
+ * never grow a bit. Base classes above 15 (or negative/noninteger) are
+ * REJECTED rather than folded into the receiver bits.
+ */
+export function encodeSurfaceClass(baseClass: number, receiver: ShadowReceiver): number {
+  if (!Number.isInteger(baseClass) || baseClass < 0 || baseClass > SURFACE_CLASS_MASK) {
+    throw new RangeError(
+      `surface base class must be an integer in [0, ${SURFACE_CLASS_MASK}], got ${baseClass}`,
+    );
+  }
+  if (receiver !== 'full' && receiver !== 'level-only') {
+    throw new RangeError(`unknown shadow receiver '${receiver}' (expected 'full' | 'level-only')`);
+  }
+  if (baseClass === SURFACE_CLASS_EMPTY) return SURFACE_CLASS_EMPTY;
+  return receiver === 'level-only' ? baseClass + SURFACE_RECEIVER_LEVEL_ONLY_BIT : baseClass;
+}
+
+/**
+ * Unpacks what encodeSurfaceClass packed. Values outside the representable
+ * range (noninteger, negative, above bit 4) are rejected: a class readback
+ * that fails validation means a producer or resolve bug, never silently
+ * misclassified receivers.
+ */
+export function decodeSurfaceClass(encoded: number): { baseClass: number; receiver: ShadowReceiver } {
+  if (!Number.isInteger(encoded) || encoded < 0 || encoded > SURFACE_RECEIVER_LEVEL_ONLY_BIT + SURFACE_CLASS_MASK) {
+    throw new RangeError(`encoded surface class must be an integer in [0, 31], got ${encoded}`);
+  }
+  return {
+    baseClass: encoded & SURFACE_CLASS_MASK,
+    receiver: (encoded & SURFACE_RECEIVER_LEVEL_ONLY_BIT) !== 0 ? 'level-only' : 'full',
+  };
+}
+
+/**
+ * Trailing options shared by the surface-producing factories (M2 tasks 2+).
+ * Every field is optional and defaults to the existing lit behaviour, so all
+ * current call sites stay lit and unchanged.
+ */
+export interface SurfaceOutputOptions {
+  /** 'lit' (default) keeps the existing lit output; 'surface' emits the
+   *  four named G-buffer attachments instead. */
+  output?: 'lit' | 'surface';
+  /** Which flashlight shadow map this producer's surface samples. Default
+   *  'full' (the existing opaque-mesh receiver category). */
+  shadowReceiver?: ShadowReceiver;
+}
+
 function assertClipDepth(value: number, label: string): void {
   if (!Number.isFinite(value) || value < 0 || value > 1) {
     throw new RangeError(`${label} must be a finite clip depth in [0, 1], got ${value}`);

@@ -45,6 +45,28 @@
 // LIGHTS. M1 lighting is explicitly UNSHADOWED. The light buffer is a fixed
 // 16-slot DataTexture (deferred-lighting.ts); setLights is a data upload,
 // never a rebuild. No per-light field sampling, no legacy gamma compensation.
+// The flashlight shadow BINDING API (setFlashlightShadow) exists from M2
+// task 1 but stores only — sampling lands with the shadow module in task 4.
+//
+// M2 TASK 1 ADDITIONS. Three opt-in seams, all defaulting to exact M1
+// behaviour:
+//
+//   setOutputTarget(t | null) — present into a caller-owned color+depth
+//     target (game composition) instead of the canvas. The target path clears
+//     the destination, presents with DEPTH WRITES (depthNode = the resolved
+//     surfaceDepth, empty = far), and treats the target as LINEAR: the one
+//     display encode stays on the canvas path / the game's post chain.
+//   render(..., hooks?)       — drawMesh/drawSdf replace the corresponding
+//     producer scene render, running at the owned target with the sentinel
+//     clear already submitted and autoClear off (game per-draw rebinding).
+//   setEnvironment(...)       — game ambient + distance fog evaluated ONLY in
+//     the lit stage. Defaults are the M1 constants with fog off; surface and
+//     debug outputs never read either.
+//
+// emissionClass.a may now carry packed receiver metadata (low 4 bits = base
+// class, bit 4 = level-only shadow receiver, deferred-surface.ts). Lighting
+// and the material debug view DECODE it; the attachment keeps the raw packed
+// value for the task-4 shadow-receiver selection.
 
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
@@ -74,6 +96,52 @@ export interface DeferredLayerOptions {
   sdfScale: number;
 }
 
+/** Optional per-producer draw overrides (M2 task 1). When present, the hook
+ *  REPLACES the corresponding producer scene render: it runs at the owned
+ *  producer target, after that target's sentinel clear, with autoClear off —
+ *  exactly the state the default renderer.render(scene, camera) sees. A hook
+ *  that throws unwinds through the layer's finally: every piece of renderer
+ *  state is restored, then the error propagates. Absent hooks leave the M1
+ *  path bit-identical. */
+export interface DeferredRenderHooks {
+  drawMesh?: () => void;
+  drawSdf?: () => void;
+}
+
+/** Game environment terms for the lit stage (M2 task 1). Defaults restore the
+ *  M1 fixture exactly: constant ambient, fog disabled. */
+export interface DeferredEnvironment {
+  ambient: THREE.Color;
+  fogColor: THREE.Color;
+  fogNear: number;
+  fogFar: number;
+  fogEnabled: boolean;
+}
+
+/** The per-frame flashlight shadow inputs (M2 spec). RESERVED in task 1:
+ *  setFlashlightShadow validates and stores the binding; no shader samples it
+ *  until the shadow module lands in task 4. null = unshadowed, the M1
+ *  default. Both depth maps are the CALLER's textures — the layer never
+ *  disposes them. */
+export interface DeferredFlashlightShadowBinding {
+  fullDepth: THREE.Texture;
+  levelDepth: THREE.Texture;
+  viewProjection: THREE.Matrix4;
+  lightIndex: number;
+  bias: number;
+  mapSize: THREE.Vector2;
+  enabled: boolean;
+}
+
+/** M1-compatible defaults: the fixture's constant ambient, fog off. */
+export const DEFERRED_ENVIRONMENT_DEFAULTS: DeferredEnvironment = {
+  ambient: new THREE.Color(0.05, 0.05, 0.055),
+  fogColor: new THREE.Color(0, 0, 0),
+  fogNear: 1,
+  fogFar: 40,
+  fogEnabled: false,
+};
+
 export interface DeferredLimitCheck {
   name: string;
   required: number;
@@ -88,15 +156,42 @@ export interface DeferredLayerDiagnostics {
   lightCount: number;
   lightCapacity: number;
   debugView: DeferredDebugView;
+  /** Lit-stage environment (M2 task 1). */
+  environment: {
+    ambient: [number, number, number];
+    fogColor: [number, number, number];
+    fogNear: number;
+    fogFar: number;
+    fogEnabled: boolean;
+  };
+  /** True while the present pass writes into a caller-owned target. */
+  outputTargetActive: boolean;
+  /** True while a flashlight shadow binding is STORED. Sampling starts in
+   *  task 4 — this flag makes the reservation observable without claiming
+   *  any visual effect. */
+  flashlightShadowBound: boolean;
   /** What was actually verified against the device, if a device was visible. */
   limits: { supported: boolean; ok: boolean; checks: DeferredLimitCheck[] };
 }
 
 export interface DeferredLayer {
   resize(width: number, height: number, sdfScale: number): void;
-  render(meshScene: THREE.Scene, sdfScene: THREE.Scene, camera: THREE.PerspectiveCamera): void;
+  render(meshScene: THREE.Scene, sdfScene: THREE.Scene, camera: THREE.PerspectiveCamera, hooks?: DeferredRenderHooks): void;
   setLights(lights: readonly DeferredLight[]): void;
   setDebugView(view: DeferredDebugView): void;
+  /** Present into a caller-owned color+depth target (game composition) instead
+   *  of the canvas. The target must have a depth buffer, must not be one of
+   *  the layer's own targets (read-while-write hazard), and its size must
+   *  match the layer's (checked at render time). null restores the M1 canvas
+   *  default. The target receives LINEAR color — the single display encode
+   *  stays on the canvas path / the game's post chain. */
+  setOutputTarget(target: THREE.RenderTarget | null): void;
+  /** Lit-stage environment (ambient + distance fog). Validates and COPIES:
+   *  later mutation of the caller's colors cannot leak into the layer. */
+  setEnvironment(environment: DeferredEnvironment): void;
+  /** RESERVED (M2 task 4): validates and stores the flashlight shadow
+   *  binding; nothing samples it yet. null = unshadowed (M1 default). */
+  setFlashlightShadow(binding: DeferredFlashlightShadowBinding | null): void;
   dispose(): void;
   diagnostics(): DeferredLayerDiagnostics;
   /** Producer and resolved targets, for the task-3 GPU gate. Read-only:
@@ -139,15 +234,24 @@ export const DEFERRED_LIGHT_WGSL = /* wgsl */ `fn deferredLight(
   lightCount: f32,
   invViewProj: mat4x4<f32>,
   camPos: vec3<f32>,
-  ambient: vec3<f32>
+  ambient: vec3<f32>,
+  fogColor: vec3<f32>,
+  fogNear: f32,
+  fogFar: f32,
+  fogEnabled: f32
 ) -> vec4<f32> {
   let dims = vec2<f32>(textureDimensions(surfaceDepth, 0));
   let c = clamp(vec2<i32>(floor(px)), vec2<i32>(0, 0), vec2<i32>(dims) - vec2<i32>(1, 1));
   let gE = textureLoad(emissionClass, c, 0);
   let emission = gE.xyz;
   let cls = gE.w;
+  // M2 task 1: emissionClass.a may carry packed receiver metadata — base
+  // class in the low four bits, bit 4 = level-only shadow receiver
+  // (deferred-surface.ts). Lighting branches on the DECODED base class; the
+  // raw packed value stays in the attachment for the task-4 shadow lookup.
+  let baseCls = cls - floor(cls / 16.0) * 16.0;
   let depth = textureLoad(surfaceDepth, c, 0).x;
-  if (cls < 0.5 || depth >= 1.0) { return vec4<f32>(emission, 1.0); }
+  if (baseCls < 0.5 || depth >= 1.0) { return vec4<f32>(emission, 1.0); }
   let gA = textureLoad(albedoRoughness, c, 0);
   let gN = textureLoad(normalMetalness, c, 0);
   // World position from clip depth, pixel coordinate, inverse view-projection.
@@ -166,7 +270,7 @@ export const DEFERRED_LIGHT_WGSL = /* wgsl */ `fn deferredLight(
   let viewDir = normalize(camPos - world);
   let baseDiff = albedo * (1.0 - metal);
   let specCol = mix(vec3<f32>(0.04), albedo, metal);
-  let isFlesh = cls > 1.5 && cls < 2.5;
+  let isFlesh = baseCls > 1.5 && baseCls < 2.5;
   var acc = emission;
   // Constant ambient floor (M1 fixture choice): the shared light pass has no
   // probe/enclosure bounce — the legacy path's fill/scatter terms are the
@@ -208,6 +312,17 @@ export const DEFERRED_LIGHT_WGSL = /* wgsl */ `fn deferredLight(
     if (isFlesh) { spec = min(spec, 1.0) * 0.35; }
     acc = acc + v2.xyz * att * (baseDiff * ndl + specCol * spec * ndl);
   }
+  // M2 task 1: game distance fog, evaluated ONLY here in the lit stage (raw
+  // surface and debug outputs never read it). Linear three.js-style falloff
+  // from fogNear to fogFar against fogColor, gated behind the enable flag so
+  // the M1 default (off) is a single branch. Emission fogs with the lit
+  // surface — a glowing thing across the room is behind the same air. Empty
+  // pixels returned above and stay unfogged: the backdrop is the present
+  // pass's / the game composite's business, not a surface term.
+  if (fogEnabled > 0.5) {
+    let fogF = clamp((distance(camPos, world) - fogNear) / max(fogFar - fogNear, 1e-4), 0.0, 1.0);
+    acc = mix(acc, fogColor, fogF);
+  }
   return vec4<f32>(acc, 1.0);
 }`;
 
@@ -216,7 +331,7 @@ export const DEFERRED_LIGHT_WGSL = /* wgsl */ `fn deferredLight(
  * bright ((1-d)^0.35); material maps class id to a colour (0 empty black,
  * 1 mesh blue, 2 flesh red, 3 flat green).
  */
-const DEFERRED_PRESENT_WGSL = /* wgsl */ `fn deferredPresent(
+export const DEFERRED_PRESENT_WGSL = /* wgsl */ `fn deferredPresent(
   px: vec2<f32>,
   lit: texture_2d<f32>,
   albedoRoughness: texture_2d<f32>,
@@ -237,11 +352,34 @@ const DEFERRED_PRESENT_WGSL = /* wgsl */ `fn deferredPresent(
     return vec4<f32>(vec3<f32>(pow(1.0 - d, 0.35)), 1.0);
   }
   let cls = textureLoad(emissionClass, c, 0).w;
+  // Decode the packed value (deferred-surface.ts) so an encoded flesh sample
+  // still maps to the flesh colour; the raw value stays in the attachment.
+  let baseCls = cls - floor(cls / 16.0) * 16.0;
   var col = vec3<f32>(0.0, 0.0, 0.0);
-  if (cls > 0.5 && cls < 1.5) { col = vec3<f32>(0.2, 0.5, 1.0); }
-  else if (cls > 1.5 && cls < 2.5) { col = vec3<f32>(1.0, 0.3, 0.2); }
-  else if (cls > 2.5) { col = vec3<f32>(0.3, 1.0, 0.4); }
+  if (baseCls > 0.5 && baseCls < 1.5) { col = vec3<f32>(0.2, 0.5, 1.0); }
+  else if (baseCls > 1.5 && baseCls < 2.5) { col = vec3<f32>(1.0, 0.3, 0.2); }
+  else if (baseCls > 2.5) { col = vec3<f32>(0.3, 1.0, 0.4); }
   return vec4<f32>(col, 1.0);
+}`;
+
+/**
+ * The present pass's DEPTH output (M2 task 1): the resolved surfaceDepth of
+ * the same texel the colour just presented, flip and all. Written through the
+ * material's depthNode so a caller-owned output target ends the frame with
+ * hardware depth IDENTICAL to the resolved G-buffer — forward effects then
+ * composite against it. Empty pixels carry the far sentinel (exactly 1).
+ * Canvas presentation keeps depth writes off (M1 default) — the canvas has no
+ * downstream consumer.
+ */
+export const DEFERRED_PRESENT_DEPTH_WGSL = /* wgsl */ `fn deferredPresentDepth(
+  px: vec2<f32>,
+  surfaceDepth: texture_2d<f32>,
+  flipY: f32
+) -> f32 {
+  let dims = vec2<f32>(textureDimensions(surfaceDepth, 0));
+  var c = clamp(vec2<i32>(floor(px)), vec2<i32>(0, 0), vec2<i32>(dims) - vec2<i32>(1, 1));
+  if (flipY > 0.5) { c.y = i32(dims.y) - 1 - c.y; }
+  return textureLoad(surfaceDepth, c, 0).x;
 }`;
 
 function checkAdapterLimits(renderer: THREE.WebGPURenderer): DeferredLayerDiagnostics['limits'] {
@@ -303,8 +441,15 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
   const uCamPos = uniform(new THREE.Vector3());
   /** Constant ambient floor — see the deferredLight WGSL note. Fixed for M1;
    *  not a per-light term, so it cannot leak light-dependence into surface
-   *  data (it lives in the lit target only). */
-  const uAmbient = uniform(new THREE.Color(0.05, 0.05, 0.055));
+   *  data (it lives in the lit target only). M2 task 1: settable through
+   *  setEnvironment, defaulting to exactly this value. */
+  const uAmbient = uniform(new THREE.Color(DEFERRED_ENVIRONMENT_DEFAULTS.ambient.r, DEFERRED_ENVIRONMENT_DEFAULTS.ambient.g, DEFERRED_ENVIRONMENT_DEFAULTS.ambient.b));
+  /** Lit-stage distance fog (M2 task 1). Defaults are DISABLED fog, so the
+   *  M1 output is unchanged until a caller opts in. */
+  const uFogColor = uniform(new THREE.Color(DEFERRED_ENVIRONMENT_DEFAULTS.fogColor.r, DEFERRED_ENVIRONMENT_DEFAULTS.fogColor.g, DEFERRED_ENVIRONMENT_DEFAULTS.fogColor.b));
+  const uFogNear = uniform(DEFERRED_ENVIRONMENT_DEFAULTS.fogNear);
+  const uFogFar = uniform(DEFERRED_ENVIRONMENT_DEFAULTS.fogFar);
+  const uFogEnabled = uniform(DEFERRED_ENVIRONMENT_DEFAULTS.fogEnabled ? 1 : 0);
   /** dest-to-sdf texel ratio for the nearest low-res fetch. */
   const uSdfRatio = uniform(new THREE.Vector2(sdfW / width, sdfH / height));
   /** Present-pass debug selector (DEBUG_VIEW_INDEX). */
@@ -314,6 +459,11 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
 
   let lightCount = 0;
   let debugView: DeferredDebugView = 'lit';
+  /** Caller-owned present target (M2 task 1). null = canvas (M1 default). */
+  let outputTarget: THREE.RenderTarget | null = null;
+  /** Stored flashlight shadow binding (M2 task 1). Reserved: nothing samples
+   *  it until task 4. */
+  let flashlightShadow: DeferredFlashlightShadowBinding | null = null;
 
   // ---- fullscreen pass scaffolding ----------------------------------------
   // The ortho quad camera at z = 1, so the z = 0 plane sits inside [0, 1]
@@ -381,11 +531,20 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
     invViewProj: uInvViewProj,
     camPos: uCamPos,
     ambient: uAmbient,
+    fogColor: uFogColor,
+    fogNear: uFogNear,
+    fogFar: uFogFar,
+    fogEnabled: uFogEnabled,
   }) as never;
   const lightScene = quadPass(lightMat);
 
-  // 7. Present / debug views, to the canvas.
+  // 7. Present / debug views, to the canvas by default (M1) or to a
+  // caller-owned output target (M2 task 1, setOutputTarget). The depthNode
+  // carries the resolved surfaceDepth of the presented texel; it is only
+  // WRITTEN on the target path (presentMat.depthWrite toggled per frame) —
+  // the canvas path stays the M1 depth-less presentation.
   const presentFn = wgslFn(DEFERRED_PRESENT_WGSL);
+  const presentDepthFn = wgslFn(DEFERRED_PRESENT_DEPTH_WGSL);
   const presentMat = new MeshBasicNodeMaterial();
   presentMat.colorNode = presentFn({
     px: screenCoordinate,
@@ -395,6 +554,11 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
     emissionClass: texture(resolvedTex.emissionClass),
     surfaceDepth: texture(resolvedTex.surfaceDepth),
     view: uView,
+    flipY: uFlipY,
+  }) as never;
+  presentMat.depthNode = presentDepthFn({
+    px: screenCoordinate,
+    surfaceDepth: texture(resolvedTex.surfaceDepth),
     flipY: uFlipY,
   }) as never;
   const presentScene = quadPass(presentMat);
@@ -426,8 +590,17 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
       uSdfRatio.value.set(sdfW / width, sdfH / height);
     },
 
-    render(meshScene, sdfScene, camera) {
+    render(meshScene, sdfScene, camera, hooks) {
       assertAlive();
+      // M2 task 1: an owned output target must match the layer's size — a
+      // mismatch would silently edge-smear the presentation (nearest clamped
+      // loads), so it is a loud error instead. Checked here (not in resize)
+      // so the caller may resize in either order.
+      if (outputTarget && (outputTarget.width !== width || outputTarget.height !== height)) {
+        throw new Error(
+          `output target size ${outputTarget.width}x${outputTarget.height} does not match layer size ${width}x${height} — resize them together`,
+        );
+      }
       const previousTarget = renderer.getRenderTarget();
       const previousAutoClear = renderer.autoClear;
       // Coordinator review fix 5: autoClear=true does NOT imply a hardware
@@ -456,6 +629,10 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
         backgroundNode: (s as THREE.Scene & { backgroundNode?: unknown }).backgroundNode ?? null,
       }));
       try {
+        // Present-pass depth writes are a per-frame property: ON only for the
+        // owned-output-target path, restored in finally so a throw mid-present
+        // cannot leave it on.
+        presentMat.depthWrite = outputTarget !== null;
         // Coordinator review fix 2: a FRESH PerspectiveCamera defaults to
         // WebGL clip conventions; WebGPURenderer only rewrites its
         // coordinateSystem/projection during the first geometry render —
@@ -489,13 +666,15 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
         renderer.autoClear = true;
         void renderer.render(clearScene, quadCam);
         renderer.autoClear = false;
-        void renderer.render(meshScene, camera);
+        if (hooks?.drawMesh) hooks.drawMesh();
+        else void renderer.render(meshScene, camera);
 
         renderer.setRenderTarget(sdfTarget);
         renderer.autoClear = true;
         void renderer.render(clearScene, quadCam);
         renderer.autoClear = false;
-        void renderer.render(sdfScene, camera);
+        if (hooks?.drawSdf) hooks.drawSdf();
+        else void renderer.render(sdfScene, camera);
 
         renderer.setRenderTarget(resolvedTarget);
         void renderer.render(resolveScene, quadCam);
@@ -503,15 +682,27 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
         renderer.setRenderTarget(litTarget);
         void renderer.render(lightScene, quadCam);
 
-        renderer.setRenderTarget(null);
-        renderer.autoClear = previousAutoClear;
-        void renderer.render(presentScene, quadCam);
+        if (outputTarget) {
+          // M2 task 1: present into the caller-owned target. autoClear=true
+          // resets the destination color AND hardware depth (clearDepth is
+          // already forced to 1 for the whole frame) before the fullscreen
+          // quad rewrites every pixel with depth writes on — the frame
+          // contract's "clear destination depth before presenting".
+          renderer.setRenderTarget(outputTarget);
+          renderer.autoClear = true;
+          void renderer.render(presentScene, quadCam);
+        } else {
+          renderer.setRenderTarget(null);
+          renderer.autoClear = previousAutoClear;
+          void renderer.render(presentScene, quadCam);
+        }
       } finally {
         renderer.setRenderTarget(previousTarget);
         renderer.autoClear = previousAutoClear;
         renderer.autoClearDepth = previousAutoClearDepth;
         renderer.setClearDepth(previousClearDepth);
         renderer.setMRT(previousMrt);
+        presentMat.depthWrite = false;
         for (const prev of previousBackgrounds) {
           prev.scene.background = prev.background;
           (prev.scene as THREE.Scene & { backgroundNode?: unknown }).backgroundNode = prev.backgroundNode;
@@ -539,6 +730,74 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
       uView.value = DEBUG_VIEW_INDEX[view];
     },
 
+    setOutputTarget(target) {
+      assertAlive();
+      if (target === outputTarget) return;
+      if (target !== null) {
+        if (
+          target === meshTarget || target === sdfTarget
+          || target === resolvedTarget || target === litTarget
+        ) {
+          throw new Error('setOutputTarget: the layer\'s own targets are read by the present pass — passing one back is a read-while-write hazard');
+        }
+        if (!target.depthBuffer) {
+          throw new Error('setOutputTarget: the target must have a depth buffer — the present pass writes the resolved depth into it');
+        }
+      }
+      outputTarget = target;
+    },
+
+    setEnvironment(environment) {
+      assertAlive();
+      // Validate BEFORE any uniform moves, so a rejected set keeps the
+      // previous environment (same discipline as setLights).
+      const { ambient, fogColor, fogNear, fogFar, fogEnabled } = environment;
+      if (!(ambient as unknown as { isColor?: boolean }).isColor) throw new TypeError('setEnvironment: ambient must be a THREE.Color');
+      if (!(fogColor as unknown as { isColor?: boolean }).isColor) throw new TypeError('setEnvironment: fogColor must be a THREE.Color');
+      for (const [label, v] of [
+        ['ambient.r', ambient.r], ['ambient.g', ambient.g], ['ambient.b', ambient.b],
+        ['fogColor.r', fogColor.r], ['fogColor.g', fogColor.g], ['fogColor.b', fogColor.b],
+        ['fogNear', fogNear], ['fogFar', fogFar],
+      ] as const) {
+        if (!Number.isFinite(v)) throw new RangeError(`setEnvironment: ${label} must be finite, got ${v}`);
+      }
+      if (fogNear < 0) throw new RangeError(`setEnvironment: fogNear must be >= 0, got ${fogNear}`);
+      if (fogFar <= fogNear) throw new RangeError(`setEnvironment: fogFar (${fogFar}) must be greater than fogNear (${fogNear})`);
+      // Copy — later mutation of the caller's Color objects cannot leak in.
+      uAmbient.value.copy(ambient);
+      uFogColor.value.copy(fogColor);
+      uFogNear.value = fogNear;
+      uFogFar.value = fogFar;
+      uFogEnabled.value = fogEnabled ? 1 : 0;
+    },
+
+    setFlashlightShadow(binding) {
+      assertAlive();
+      // Task-1 reservation: validate and store ONLY. Nothing samples this
+      // until the task-4 shadow module lands; a bound-but-unimplemented
+      // binding must not change any output.
+      if (binding !== null) {
+        if (typeof binding !== 'object') throw new TypeError('setFlashlightShadow: binding must be an object or null');
+        if (!(binding.fullDepth as unknown as { isTexture?: boolean })?.isTexture
+          || !(binding.levelDepth as unknown as { isTexture?: boolean })?.isTexture) {
+          throw new TypeError('setFlashlightShadow: fullDepth and levelDepth must be THREE.Textures');
+        }
+        if (!(binding.viewProjection as unknown as { isMatrix4?: boolean })?.isMatrix4) {
+          throw new TypeError('setFlashlightShadow: viewProjection must be a THREE.Matrix4');
+        }
+        if (!Number.isFinite(binding.bias)) throw new RangeError('setFlashlightShadow: bias must be finite');
+        if (!Number.isInteger(binding.lightIndex) || binding.lightIndex < 0 || binding.lightIndex >= MAX_DEFERRED_LIGHTS) {
+          throw new RangeError(`setFlashlightShadow: lightIndex must be an integer in [0, ${MAX_DEFERRED_LIGHTS}), got ${binding.lightIndex}`);
+        }
+        const { mapSize } = binding;
+        if (!mapSize || !Number.isFinite(mapSize.x) || !Number.isFinite(mapSize.y) || mapSize.x <= 0 || mapSize.y <= 0) {
+          throw new RangeError('setFlashlightShadow: mapSize must be finite and positive');
+        }
+        if (typeof binding.enabled !== 'boolean') throw new TypeError('setFlashlightShadow: enabled must be a boolean');
+      }
+      flashlightShadow = binding;
+    },
+
     diagnostics() {
       return {
         width,
@@ -548,6 +807,15 @@ export function createDeferredLayer(renderer: THREE.WebGPURenderer, options: Def
         lightCount,
         lightCapacity: MAX_DEFERRED_LIGHTS,
         debugView,
+        environment: {
+          ambient: [uAmbient.value.r, uAmbient.value.g, uAmbient.value.b],
+          fogColor: [uFogColor.value.r, uFogColor.value.g, uFogColor.value.b],
+          fogNear: uFogNear.value,
+          fogFar: uFogFar.value,
+          fogEnabled: uFogEnabled.value > 0.5,
+        },
+        outputTargetActive: outputTarget !== null,
+        flashlightShadowBound: flashlightShadow !== null,
         limits,
       };
     },
