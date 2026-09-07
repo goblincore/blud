@@ -1,6 +1,6 @@
 # Hybrid Deferred M2 Implementation Plan
 
-Owner scope clarification (2026-09-07): mouse is unused and strand-fixture belongs to SDF hair rendering, unrelated to current gameplay. Exclude these two explicitly from the gameplay gate. Other in-scope spawn failures remain failures, not automatic exclusions. Baked geometry/lifecycle acceptance remains required.
+Owner scope clarification (2026-09-07): the full gameplay gate covers **zombie, soldier, and goblin**. Zombie and soldier are currently in game; goblin is expected soon. Clown variants and all other unused characters, including mouse, plus strand/hair and box lab fixtures are outside this gate. This supersedes historical all-registry coverage requirements below. Every selected actor must spawn successfully; no generic exception waivers. Wounds, detached/shared chunks, baked geometry, depth, lighting, resolution and legacy checks remain required.
 
 ## Owner scope update — 2026-09-07
 

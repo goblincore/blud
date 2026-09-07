@@ -2538,6 +2538,7 @@ async function main() {
   function spawnChunkPiece(
     piece: { limb: string; origin: Vec3; prims: Primitive[]; tornAt: Vec3[]; bones: Primitive[] },
     template: { uniforms: import('./zombie-gpu').MarchUniforms; volumeTexture: THREE.Texture },
+    initialVelocity?: Vec3,
   ) {
     const rng = mulberry32(nextSeed++);
     const vel: Vec3 = [
@@ -2546,7 +2547,7 @@ async function main() {
       (rng() - 0.5) * 4.5,
     ];
     const state = makeChunk(
-      piece.limb as never, piece.origin, vel,
+      piece.limb as never, piece.origin, initialVelocity ?? vel,
       chunkExtent(piece.prims, piece.origin), primsLongAxis(piece.prims, piece.origin),
       rng, 'limb',
     );
@@ -3930,11 +3931,12 @@ async function main() {
    * connected would be measuring something the scenario never described.
    */
   const MIN_STANDOFF = 1.5;
-  function aimAtNearestSurface(limb?: string): boolean {
+  function aimAtNearestSurface(limb?: string, actorId?: number): boolean {
     const eye = eyeOf(player);
     const candidates = actors
+      .filter(a => actorId === undefined || a.id === actorId)
       .map((a) => {
-        const c = a.posed().clusters.find(cc => cc.limb === (limb ?? 'torso'))?.center;
+        const c = a.posed().clusters.find(cc => cc.limb === (limb ?? 'torso') && (actorId === undefined || cc.alive))?.center;
         return c ? { c: [...c] as Vec3, d: Math.hypot(c[0] - eye[0], c[1] - eye[1], c[2] - eye[2]) } : null;
       })
       .filter((x): x is { c: Vec3; d: number } => x !== null && x.d >= MIN_STANDOFF)
@@ -3957,7 +3959,9 @@ async function main() {
       // first the predictor confirms.
       player.yaw = Math.atan2(cand.c[0] - eye[0], -(cand.c[2] - eye[2]));
       player.pitch = Math.atan2(cand.c[1] - eye[1], Math.hypot(cand.c[0] - eye[0], cand.c[2] - eye[2]));
-      if (predictSlugHitNow().actorId >= 0) return true;
+      // Scoped diagnostics settle the real viewmodel after this orientation
+      // and verify the predictor there; its muzzle transform is stale here.
+      if (actorId !== undefined || predictSlugHitNow().actorId >= 0) return true;
     }
     player.yaw = yaw0;
     player.pitch = pitch0;
@@ -4768,7 +4772,7 @@ async function main() {
     /** Aim at the nearest body's surface. Exposed so a driver can stage a
      *  shot the same way the bench scenario does. Optional `limb` aims at
      *  that cluster's centre instead of the torso (same confirm gate). */
-    aimSurface: (limb?: string) => aimAtNearestSurface(limb),
+    aimSurface: (limb?: string, actorId?: number) => aimAtNearestSurface(limb, actorId),
     /** aimSurface('head') — the bone-tubes reel's head-shot staging. */
     aimHead: () => aimAtNearestSurface('head'),
 
@@ -6193,7 +6197,7 @@ async function main() {
      *  a controlled size so drivers get a target whose radius they know.
      *  A severed hand-gob's 4.6 cm bounding sphere is a sniper target; this
      *  is the same machinery at a testable size. */
-    spawnTestChunk: (x: number, y: number, z: number, radius = 0.12) => {
+    spawnTestChunk: (x: number, y: number, z: number, radius = 0.12, stationary = false) => {
       const prims: Primitive[] = [];
       const rng = mulberry32(nextSeed++);
       for (let i = 0; i < 6; i++) {
@@ -6212,6 +6216,7 @@ async function main() {
       spawnChunkPiece(
         { limb: 'torso', origin: [x, y + radius, z] as Vec3, prims, tornAt: [], bones: [] },
         { uniforms: actors[0]!.view.uniforms, volumeTexture: actors[0]!.view.volumeTexture },
+        stationary ? [0, 0, 0] : undefined,
       );
       return prims.length;
     },

@@ -1,5 +1,5 @@
 {
-  "phase": "P3-spawn:cyclops",
+  "phase": "complete",
   "checks": [
     {
       "name": "P0-boot-deferred",
@@ -38,33 +38,33 @@
       "name": "P1-render-control",
       "detail": {
         "hashes": {
-          "albedoRoughness": 3669523099,
-          "normalMetalness": 2910483351,
-          "emissionClass": 1148666345,
-          "surfaceDepth": 1156526017
+          "albedoRoughness": 369285704,
+          "normalMetalness": 4156797107,
+          "emissionClass": 1491020659,
+          "surfaceDepth": 3157060915
         },
         "nonEmpty": 480000,
         "classCounts": {
-          "1": 432297,
-          "17": 36425,
-          "18": 11278
+          "1": 430778,
+          "17": 36400,
+          "18": 12822
         },
         "sentinelPixels": 0,
         "deepOccupied": 0,
-        "maxDepth": 0.994146,
+        "maxDepth": 0.99419,
         "pose": {
           "pos": [
-            6.867211404675362,
+            6.9822662648971345,
             0,
-            -4.48740841983964
+            -4.437792845772785
           ],
           "yaw": -1.5707963267948966,
           "pitch": -0.12
         },
         "actorPos": [
-          5.118660787541764,
+          5.237548248504855,
           0,
-          -4.461767789938386
+          -4.422032668506576
         ]
       }
     },
@@ -72,20 +72,20 @@
       "name": "P1-sampling-invariance",
       "detail": {
         "litDelta": -2,
-        "lit0": 45,
-        "litSampling": 47
+        "lit0": 48,
+        "litSampling": 50
       }
     },
     {
       "name": "P1-gain-invariance",
       "detail": {
-        "litDelta": 16
+        "litDelta": 17
       }
     },
     {
       "name": "P1-beam-invariance",
       "detail": {
-        "litDelta": 10
+        "litDelta": 12
       }
     },
     {
@@ -120,7 +120,7 @@
       "name": "P2-route-flesh-sdf",
       "detail": {
         "cls": 18,
-        "depth": 0.90333
+        "depth": 0.93771
       }
     },
     {
@@ -144,9 +144,9 @@
       "name": "P2-route-forward-probe-nearer",
       "detail": {
         "pixel": [
-          254,
-          12,
-          12
+          255,
+          14,
+          14
         ]
       }
     },
@@ -154,17 +154,17 @@
       "name": "P2-route-forward-probe-behind-occluded",
       "detail": {
         "behind": [
-          239,
-          188,
-          190
+          251,
+          212,
+          212
         ]
       }
     },
     {
       "name": "P2-normal-direction-flesh",
       "detail": {
-        "dot": 0.702,
-        "nlen": 0.9997,
+        "dot": 0.847,
+        "nlen": 0.9999,
         "selectedPixel": [
           400,
           348
@@ -186,7 +186,7 @@
           -0.84875,
           -0.5016666666666667
         ],
-        "resolvedAtCentre": 0.9623470902442932,
+        "resolvedAtCentre": 0.9623469710350037,
         "centreCls": 1,
         "bracket": [
           -0.00024999999999997247,
@@ -208,7 +208,7 @@
             "displayed": [
               240,
               1,
-              1
+              0
             ],
             "measurement": "linear-composite"
           },
@@ -223,7 +223,7 @@
               0
             ],
             "displayed": [
-              239,
+              233,
               1,
               1
             ],
@@ -235,14 +235,14 @@
             "cls": 1,
             "drawn": false,
             "sampled": [
-              1.4328575134277344,
-              0.9785842895507812,
-              0.7183742523193359
+              0.9445381164550781,
+              0.6960010528564453,
+              0.5855941772460938
             ],
             "displayed": [
-              21,
-              12,
-              9
+              17,
+              10,
+              8
             ],
             "measurement": "linear-composite"
           },
@@ -252,14 +252,14 @@
             "cls": 1,
             "drawn": false,
             "sampled": [
-              1.4328575134277344,
-              0.9785842895507812,
-              0.7183742523193359
+              0.9445381164550781,
+              0.6960010528564453,
+              0.5855941772460938
             ],
             "displayed": [
-              17,
               13,
-              9
+              10,
+              8
             ],
             "measurement": "linear-composite"
           }
@@ -273,7 +273,7 @@
           0.0012499999999999734,
           -0.16166666666666663
         ],
-        "resolvedAtCentre": 0.9033344984054565,
+        "resolvedAtCentre": 0.9377145171165466,
         "centreCls": 18,
         "bracket": [
           -0.0020000000000000018,
@@ -284,7 +284,7 @@
         "probes": [
           {
             "delta": -0.0040000000000000036,
-            "dRes": 0.903334,
+            "dRes": 0.937715,
             "cls": 18,
             "drawn": true,
             "sampled": [
@@ -293,15 +293,15 @@
               0
             ],
             "displayed": [
-              254,
-              12,
-              12
+              255,
+              14,
+              14
             ],
             "measurement": "linear-composite"
           },
           {
             "delta": -0.0020000000000000018,
-            "dRes": 0.903334,
+            "dRes": 0.937715,
             "cls": 18,
             "drawn": true,
             "sampled": [
@@ -310,43 +310,43 @@
               0
             ],
             "displayed": [
-              254,
-              9,
-              9
+              255,
+              10,
+              10
             ],
             "measurement": "linear-composite"
           },
           {
             "delta": 0.0020000000000000018,
-            "dRes": 0.903334,
+            "dRes": 0.937715,
             "cls": 18,
             "drawn": false,
             "sampled": [
-              228.603515625,
-              136.46484375,
-              140.44921875
+              247.90283203125,
+              183.15673828125,
+              182.65869140625
             ],
             "displayed": [
-              243,
-              190,
-              192
+              252,
+              217,
+              217
             ],
             "measurement": "linear-composite"
           },
           {
             "delta": 0.0040000000000000036,
-            "dRes": 0.903334,
+            "dRes": 0.937715,
             "cls": 18,
             "drawn": false,
             "sampled": [
-              228.603515625,
-              136.46484375,
-              140.44921875
+              247.90283203125,
+              183.15673828125,
+              182.65869140625
             ],
             "displayed": [
-              243,
-              193,
-              195
+              252,
+              220,
+              220
             ],
             "measurement": "linear-composite"
           }
@@ -360,7 +360,7 @@
           0.13874999999999993,
           -0.4883333333333333
         ],
-        "resolvedAtCentre": 0.6541110277175903,
+        "resolvedAtCentre": 0.6541119813919067,
         "centreCls": 17,
         "bracket": [
           -0.0020000000000000018,
@@ -371,7 +371,7 @@
         "probes": [
           {
             "delta": -0.0040000000000000036,
-            "dRes": 0.654111,
+            "dRes": 0.654112,
             "cls": 17,
             "drawn": true,
             "sampled": [
@@ -388,7 +388,7 @@
           },
           {
             "delta": -0.0020000000000000018,
-            "dRes": 0.654111,
+            "dRes": 0.654112,
             "cls": 17,
             "drawn": true,
             "sampled": [
@@ -397,7 +397,7 @@
               0
             ],
             "displayed": [
-              84,
+              243,
               0,
               0
             ],
@@ -405,7 +405,7 @@
           },
           {
             "delta": 0.0020000000000000018,
-            "dRes": 0.654111,
+            "dRes": 0.654112,
             "cls": 17,
             "drawn": false,
             "sampled": [
@@ -422,7 +422,7 @@
           },
           {
             "delta": 0.0040000000000000036,
-            "dRes": 0.654111,
+            "dRes": 0.654112,
             "cls": 17,
             "drawn": false,
             "sampled": [
@@ -444,21 +444,21 @@
       "name": "depth-bracket:far-deepest-real-scene",
       "detail": {
         "ndc": [
-          -0.04625000000000001,
-          0.018333333333333313
+          0.05624999999999991,
+          0.021666666666666612
         ],
-        "resolvedAtCentre": 0.9941462278366089,
+        "resolvedAtCentre": 0.9941899180412292,
         "centreCls": 1,
         "bracket": [
           -0.0030000000000000027,
-          0.005803772163391119
+          0.0057600819587707575
         ],
-        "centre": 0.001401886081695558,
-        "tolerance": 0.008803772163391121,
+        "centre": 0.0013800409793853774,
+        "tolerance": 0.00876008195877076,
         "probes": [
           {
             "delta": -0.0030000000000000027,
-            "dRes": 0.994146,
+            "dRes": 0.99419,
             "cls": 1,
             "drawn": true,
             "sampled": [
@@ -467,15 +467,15 @@
               0
             ],
             "displayed": [
-              141,
-              60,
-              61
+              201,
+              149,
+              153
             ],
             "measurement": "linear-composite"
           },
           {
-            "delta": 0.005803772163391119,
-            "dRes": 0.994146,
+            "delta": 0.0057600819587707575,
+            "dRes": 0.99419,
             "cls": 1,
             "drawn": false,
             "sampled": [
@@ -484,15 +484,15 @@
               2.8034591674804688
             ],
             "displayed": [
-              73,
-              54,
-              56
+              201,
+              149,
+              153
             ],
             "measurement": "linear-composite"
           },
           {
-            "delta": 0.005803772163391119,
-            "dRes": 0.994146,
+            "delta": 0.0057600819587707575,
+            "dRes": 0.99419,
             "cls": 1,
             "drawn": false,
             "sampled": [
@@ -501,9 +501,9 @@
               2.8034591674804688
             ],
             "displayed": [
-              71,
-              54,
-              56
+              201,
+              149,
+              153
             ],
             "measurement": "linear-composite"
           }
@@ -563,8 +563,8 @@
           }
         ],
         "emptyCensus": {
-          "nonEmpty": 50142,
-          "sentinelPixels": 429858,
+          "nonEmpty": 51668,
+          "sentinelPixels": 428332,
           "deepOccupied": 0
         },
         "restoredBitExact": true
@@ -577,7 +577,7 @@
           -0.84875,
           -0.5016666666666667
         ],
-        "resolvedAtCentre": 0.9623470902442932,
+        "resolvedAtCentre": 0.9623469710350037,
         "centreCls": 1,
         "bracket": [
           -0.00024999999999997247,
@@ -626,14 +626,14 @@
             "cls": 1,
             "drawn": false,
             "sampled": [
-              17,
-              13,
-              9
+              14,
+              10,
+              8
             ],
             "displayed": [
-              17,
-              13,
-              9
+              14,
+              10,
+              8
             ],
             "measurement": "canvas"
           },
@@ -643,14 +643,14 @@
             "cls": 1,
             "drawn": false,
             "sampled": [
-              17,
-              13,
-              9
+              14,
+              10,
+              8
             ],
             "displayed": [
-              17,
-              13,
-              9
+              14,
+              10,
+              8
             ],
             "measurement": "canvas"
           }
@@ -664,7 +664,7 @@
           0.0012499999999999734,
           -0.16166666666666663
         ],
-        "resolvedAtCentre": 0.9033344984054565,
+        "resolvedAtCentre": 0.9377145171165466,
         "centreCls": 18,
         "bracket": [
           -0.0020000000000000018,
@@ -675,7 +675,7 @@
         "probes": [
           {
             "delta": -0.0040000000000000036,
-            "dRes": 0.903334,
+            "dRes": 0.937715,
             "cls": 18,
             "drawn": true,
             "sampled": [
@@ -692,7 +692,7 @@
           },
           {
             "delta": -0.0020000000000000018,
-            "dRes": 0.903334,
+            "dRes": 0.937715,
             "cls": 18,
             "drawn": true,
             "sampled": [
@@ -709,35 +709,35 @@
           },
           {
             "delta": 0.0020000000000000018,
-            "dRes": 0.903334,
+            "dRes": 0.937715,
             "cls": 18,
             "drawn": false,
             "sampled": [
-              243,
-              193,
-              196
+              252,
+              220,
+              220
             ],
             "displayed": [
-              243,
-              193,
-              196
+              252,
+              220,
+              220
             ],
             "measurement": "canvas"
           },
           {
             "delta": 0.0040000000000000036,
-            "dRes": 0.903334,
+            "dRes": 0.937715,
             "cls": 18,
             "drawn": false,
             "sampled": [
-              243,
-              193,
-              196
+              252,
+              220,
+              220
             ],
             "displayed": [
-              243,
-              193,
-              196
+              252,
+              220,
+              220
             ],
             "measurement": "canvas"
           }
@@ -797,8 +797,8 @@
           }
         ],
         "emptyCensus": {
-          "nonEmpty": 50142,
-          "sentinelPixels": 429858,
+          "nonEmpty": 51668,
+          "sentinelPixels": 428332,
           "deepOccupied": 0
         },
         "restoredBitExact": true
@@ -836,7 +836,7 @@
           },
           "deepestRealScene": [
             -0.0030000000000000027,
-            0.005803772163391119
+            0.0057600819587707575
           ]
         }
       }
@@ -855,36 +855,372 @@
       "name": "P7a-resize",
       "detail": {
         "down": {
-          "nonDarkPct": 77.2,
+          "nonDarkPct": 77.4,
           "w": 1000,
           "h": 700
         },
         "up": {
-          "nonDarkPct": 75.9,
+          "nonDarkPct": 76.4,
           "w": 800,
           "h": 600
         }
       }
+    },
+    {
+      "name": "P3-gameplay-characters-rendered",
+      "detail": {
+        "registeredCount": 16,
+        "renderedCount": 3,
+        "excluded": {
+          "clown": "Unused character, outside owner-selected gameplay scope",
+          "clown-alt": "Unused character, outside owner-selected gameplay scope",
+          "mouse": "Unused character, outside owner-selected gameplay scope",
+          "cyclops": "Unused character, outside owner-selected gameplay scope",
+          "schoolgirl": "Unused character, outside owner-selected gameplay scope",
+          "schoolgirl-alt": "Unused character, outside owner-selected gameplay scope",
+          "schoolgirl-described": "Unused character, outside owner-selected gameplay scope",
+          "strand-fixture": "SDF hair-rendering fixture, outside gameplay scope",
+          "bonewalker": "Unused character, outside owner-selected gameplay scope",
+          "dragon": "Unused character, outside owner-selected gameplay scope",
+          "box-fixture": "Lab rendering fixture, outside gameplay scope",
+          "minotaur": "Unused character, outside owner-selected gameplay scope",
+          "female": "Unused character, outside owner-selected gameplay scope"
+        },
+        "rendered": {
+          "zombie": {
+            "id": 11,
+            "torsoAnchor": 1.1,
+            "fleshDepth": 0.93213,
+            "minotaur404": null
+          },
+          "soldier": {
+            "id": 12,
+            "torsoAnchor": 1.1,
+            "fleshDepth": 0.93588,
+            "kitMeshes": 36,
+            "kitAnchor": "barrel0",
+            "kitSide": 0,
+            "kitAttribution": {
+              "ndc": {
+                "x": 0.14201984819201965,
+                "y": -0.3367583293319589
+              },
+              "offDepth": 0.9723619818687439,
+              "selectedNodes": [
+                "barrel0",
+                "barrel1",
+                "bead",
+                "bore0",
+                "bore1",
+                "cone0",
+                "cone1",
+                "crown0",
+                "crown1",
+                "fe_cap",
+                "foreend",
+                "mouth0",
+                "mouth1",
+                "rib_top",
+                "body",
+                "grip_panel1",
+                "grip_panel-1",
+                "guard",
+                "guard_tang_f",
+                "guard_tang_r",
+                "hinge",
+                "hinge001",
+                "trig0",
+                "trig1",
+                "t004",
+                "t004_1",
+                "t006",
+                "t006_1",
+                "extractor",
+                "shell_head_L",
+                "shell_hull_L",
+                "shell_head_R",
+                "shell_hull_R",
+                "toplever"
+              ]
+            },
+            "kitTexel": 0.90931,
+            "kitMaterials": [
+              "plate",
+              "webbing",
+              "Blue",
+              "Blue",
+              "Brass",
+              "Bore",
+              "Bore",
+              "Bore"
+            ],
+            "heldPropNodes": [
+              "barrel0",
+              "barrel1",
+              "bead",
+              "bore0",
+              "bore1",
+              "cone0",
+              "cone1",
+              "crown0",
+              "crown1",
+              "fe_cap",
+              "foreend",
+              "mouth0",
+              "mouth1",
+              "rib_top",
+              "body",
+              "grip_panel1",
+              "grip_panel-1",
+              "guard",
+              "guard_tang_f",
+              "guard_tang_r",
+              "hinge",
+              "hinge001",
+              "trig0",
+              "trig1",
+              "t004",
+              "t004_1",
+              "t006",
+              "t006_1",
+              "extractor",
+              "shell_head_L",
+              "shell_hull_L",
+              "shell_head_R",
+              "shell_hull_R",
+              "toplever"
+            ],
+            "minotaur404": null
+          },
+          "goblin": {
+            "id": 13,
+            "torsoAnchor": 1.1,
+            "fleshDepth": 0.93867,
+            "kitMeshes": 6,
+            "kitAnchor": "mesh_0",
+            "kitSide": 0,
+            "kitAttribution": {
+              "ndc": {
+                "x": -0.039855590954107,
+                "y": -0.3581321929695448
+              },
+              "offDepth": 0.936355710029602,
+              "selectedNodes": [
+                "mesh_0",
+                "mesh_0_1",
+                "mesh_0_2",
+                "mesh_0_3",
+                "mesh_0_4",
+                "mesh_0_5"
+              ]
+            },
+            "kitTexel": 0.93631,
+            "kitMaterials": [
+              "iron",
+              "leather",
+              "band",
+              "screen",
+              "glass",
+              "brass"
+            ],
+            "minotaur404": null
+          }
+        },
+        "meshGrowth": 110
+      }
+    },
+    {
+      "name": "P4-zombie-wounds",
+      "detail": {
+        "actor": 11,
+        "hit": [
+          -5.058512904197492,
+          1.1540928162528972,
+          -5.4534922229091025
+        ],
+        "woundCount": 1,
+        "changedPixels": 33,
+        "ndc": {
+          "x": -0.016386393001062385,
+          "y": -0.23400851053090044
+        },
+        "beforeAlbedo": [
+          0.81982421875,
+          0.43994140625,
+          0.4599609375
+        ],
+        "afterAlbedo": [
+          0.802734375,
+          0.35888671875,
+          0.38330078125
+        ]
+      }
+    },
+    {
+      "name": "P5-two-shared-chunks",
+      "detail": {
+        "severed": 2,
+        "chunks": [
+          {
+            "id": 1,
+            "centre": [
+              5.103355450615884,
+              0.2542500000000001,
+              -6.278672239340762
+            ],
+            "texelDepth": 0.9597600102424622,
+            "cls": 18,
+            "offDepth": 0.9640831351280212,
+            "distanceToCentre": 0.21547997719955703
+          },
+          {
+            "id": 2,
+            "centre": [
+              4.389542898093935,
+              0.062,
+              -5.281530153217914
+            ],
+            "texelDepth": 0.9478859305381775,
+            "cls": 18,
+            "offDepth": 0.9503605365753174,
+            "distanceToCentre": 0.0712690325757766
+          }
+        ],
+        "sharedMaterial": "createSharedChunkGpuMaterial (single instance)"
+      }
+    },
+    {
+      "name": "P5-bake-transition",
+      "detail": {
+        "id": 3,
+        "centre": [
+          4.05859112739563,
+          0.1755526140332222,
+          -4.784013509750366
+        ],
+        "radius": 0.21428750963313697,
+        "offDepth": 0.9479964971542358,
+        "distanceToCentre": 0.1840614419082211,
+        "baked": 3,
+        "totalBakes": 3,
+        "lastBakeInfo": {
+          "verts": 1618,
+          "tris": 3232
+        },
+        "bakedTexelDepth": 0.94433,
+        "bakedNormal": {
+          "dot": 0.234,
+          "nlen": 0.9995,
+          "selectedPixel": [
+            385,
+            328
+          ],
+          "selectedNdc": [
+            -0.03625,
+            -0.095
+          ],
+          "centreNdc": [
+            -0.03625,
+            -0.095
+          ]
+        }
+      }
+    },
+    {
+      "name": "P5-actor-rebuild",
+      "detail": {
+        "idsBefore": 10,
+        "idsAfter": 10,
+        "freshIds": true,
+        "fleshDepth": 0.93535
+      }
+    },
+    {
+      "name": "P5b-muzzle-vs-flashlight",
+      "detail": {
+        "beamOn": 23,
+        "muzzle": 59,
+        "expired": 24,
+        "beamOff": 14,
+        "muzzleNoBeam": 56,
+        "slots": {
+          "flashlightIndex": 0,
+          "idsWithMuzzle": 7
+        }
+      }
+    },
+    {
+      "name": "P7b-css-cap-640",
+      "detail": {
+        "resolution": {
+          "rung": "640",
+          "cap": {
+            "mode": "fixed",
+            "width": 640,
+            "height": 480
+          },
+          "content": {
+            "width": 640,
+            "height": 480
+          },
+          "letterboxed": true
+        },
+        "frame": {
+          "nonDarkPct": 84.4,
+          "w": 800,
+          "h": 600
+        },
+        "gunCls": 17
+      }
+    },
+    {
+      "name": "P8-default-legacy",
+      "detail": {
+        "mode": "legacy",
+        "frame": {
+          "nonDarkPct": 78.3,
+          "w": 800,
+          "h": 600
+        }
+      }
+    },
+    {
+      "name": "P8-explicit-legacy",
+      "detail": {
+        "mode": "legacy",
+        "present": 214
+      }
     }
   ],
   "pageErrors": [],
-  "pass": false,
+  "pass": true,
   "scope": "full",
-  "fullAcceptance": false,
+  "fullAcceptance": true,
   "excludedFeatures": {
     "boneTubes": "Owner retired this experimental path for visual reasons on 2026-09-07; validate SDF bones and baked geometry instead.",
     "characters": {
-      "mouse": "Unused character, excluded by owner",
-      "strand-fixture": "SDF hair-rendering fixture, excluded by owner"
+      "clown": "Unused character, outside owner-selected gameplay scope",
+      "clown-alt": "Unused character, outside owner-selected gameplay scope",
+      "mouse": "Unused character, outside owner-selected gameplay scope",
+      "cyclops": "Unused character, outside owner-selected gameplay scope",
+      "schoolgirl": "Unused character, outside owner-selected gameplay scope",
+      "schoolgirl-alt": "Unused character, outside owner-selected gameplay scope",
+      "schoolgirl-described": "Unused character, outside owner-selected gameplay scope",
+      "strand-fixture": "SDF hair-rendering fixture, outside gameplay scope",
+      "bonewalker": "Unused character, outside owner-selected gameplay scope",
+      "dragon": "Unused character, outside owner-selected gameplay scope",
+      "box-fixture": "Lab rendering fixture, outside gameplay scope",
+      "minotaur": "Unused character, outside owner-selected gameplay scope",
+      "female": "Unused character, outside owner-selected gameplay scope"
     }
   },
   "pageErrorsDropped": 0,
-  "failure": {
-    "phase": "P3-spawn:cyclops",
-    "message": "{\"id\":636,\"result\":{\"result\":{\"type\":\"object\",\"subtype\":\"error\",\"className\":\"Error\",\"description\":\"Error: zombie 15: no motion joints\\n    at createZombieActor (http://localhost:5346/src/lab/sdf-zombie/webgpu/game-actor.ts:133:18)\\n    at spawnEnemy (http://localhost:5346/src/lab/sdf-zombie/webgpu/game-main.ts:865:19)\\n    at Object.spawnDebugCharacter (http://localhost:5346/src/lab/sdf-zombie/webgpu/game-main.ts:5326:21)\\n    at <anonymous>:1:11\",\"objectId\":\"2459288093016230123.2.1\"},\"exceptionDetails\":{\"exceptionId\":1,\"text\":\"Uncaught\",\"lineNumber\":132,\"columnNumber\":11,\"scriptId\":\"33\",\"stackTrace\":{\"callFrames\":[{\"functionName\":\"createZombieActor\",\"scriptId\":\"33\",\"url\":\"http://localhost:5346/src/lab/sdf-zombie/webgpu/game-actor.ts\",\"lineNumber\":132,\"columnNumber\":17},{\"functionName\":\"spawnEnemy\",\"scriptId\":\"5\",\"url\":\"http://localhost:5346/src/lab/sdf-zombie/webgpu/game-main.ts\",\"lineN",
-    "stack": "Error: {\"id\":636,\"result\":{\"result\":{\"type\":\"object\",\"subtype\":\"error\",\"className\":\"Error\",\"description\":\"Error: zombie 15: no motion joints\\n    at createZombieActor (http://localhost:5346/src/lab/sdf-zombie/webgpu/game-actor.ts:133:18)\\n    at spawnEnemy (http://localhost:5346/src/lab/sdf-zombie/webgpu/game-main.ts:865:19)\\n    at Object.spawnDebugCharacter (http://localhost:5346/src/lab/sdf-zombie/webgpu/game-main.ts:5326:21)\\n    at <anonymous>:1:11\",\"objectId\":\"2459288093016230123.2.1\"},\"exceptionDetails\":{\"exceptionId\":1,\"text\":\"Uncaught\",\"lineNumber\":132,\"columnNumber\":11,\"scriptId\":\"33\",\"stackTrace\":{\"callFrames\":[{\"functionName\":\"createZombieActor\",\"scriptId\":\"33\",\"url\":\"http://localhost:5346/src/lab/sdf-zombie/webgpu/game-actor.ts\",\"lineNumber\":132,\"columnNumber\":17},{\"functionName\":\"spawnEnemy\",\"scriptId\":\"5\",\"url\":\"http://localhost:5346/src/lab/sdf-zombie/webgpu/game-main.ts\",\"lineN\n    at evaluate (file:///Users/donny/Projects/blud/.worktrees/m2-full-direct/scripts/deferred-game-check.mjs:113:52)\n    at async file:///Users/donny/Projects/blud/.worktrees/m2-full-direct/scripts/deferred-game-check.mjs:992:21\n    at async file:///Users/donny/Projects/blud/.worktrees/m2-full-direct/scripts/deferred-game-check.mjs:944:3"
-  },
-  "generatedAt": "2026-09-07T20:07:22.983Z",
+  "gameplayCharacters": [
+    "zombie",
+    "soldier",
+    "goblin"
+  ],
+  "generatedAt": "2026-09-07T21:10:50.674Z",
   "ports": {
     "vite": 5346,
     "cdp": 9346
@@ -899,7 +1235,7 @@
         "points": {},
         "regions": {},
         "frame": {
-          "nonDarkPct": 77.2,
+          "nonDarkPct": 77.4,
           "w": 1000,
           "h": 700
         }
@@ -908,7 +1244,7 @@
         "points": {},
         "regions": {},
         "frame": {
-          "nonDarkPct": 75.9,
+          "nonDarkPct": 76.4,
           "w": 800,
           "h": 600
         }
@@ -917,7 +1253,16 @@
         "points": {},
         "regions": {},
         "frame": {
-          "nonDarkPct": 76.5,
+          "nonDarkPct": 76.1,
+          "w": 800,
+          "h": 600
+        }
+      },
+      "task6-char-soldier.png": {
+        "points": {},
+        "regions": {},
+        "frame": {
+          "nonDarkPct": 75.5,
           "w": 800,
           "h": 600
         }
@@ -926,25 +1271,92 @@
         "points": {},
         "regions": {},
         "frame": {
-          "nonDarkPct": 76.1,
+          "nonDarkPct": 86.4,
           "w": 800,
           "h": 600
         }
       },
-      "task6-char-clown.png": {
+      "task6-zombie-wounded.png": {
         "points": {},
         "regions": {},
         "frame": {
-          "nonDarkPct": 86.6,
+          "nonDarkPct": 75.7,
           "w": 800,
           "h": 600
         }
       },
-      "task6-char-clown-alt.png": {
+      "task6-two-chunks.png": {
         "points": {},
         "regions": {},
         "frame": {
-          "nonDarkPct": 81.3,
+          "nonDarkPct": 58.4,
+          "w": 800,
+          "h": 600
+        }
+      },
+      "task6-baked-chunk.png": {
+        "points": {},
+        "regions": {},
+        "frame": {
+          "nonDarkPct": 54.3,
+          "w": 800,
+          "h": 600
+        }
+      },
+      "task6-muzzle-beam-on.png": {
+        "points": {},
+        "regions": {
+          "wall": {
+            "mean": [
+              27,
+              22,
+              20
+            ],
+            "lum": 23,
+            "clipPct": 0,
+            "darkPct": 15.9
+          }
+        },
+        "frame": {
+          "nonDarkPct": 57.5,
+          "w": 800,
+          "h": 600
+        }
+      },
+      "task6-muzzle-muzzle-flash.png": {
+        "points": {},
+        "regions": {
+          "wall": {
+            "mean": [
+              71,
+              60,
+              47
+            ],
+            "lum": 59,
+            "clipPct": 0.1,
+            "darkPct": 0.5
+          }
+        },
+        "frame": {
+          "nonDarkPct": 91.9,
+          "w": 800,
+          "h": 600
+        }
+      },
+      "task6-res640.png": {
+        "points": {},
+        "regions": {},
+        "frame": {
+          "nonDarkPct": 84.4,
+          "w": 800,
+          "h": 600
+        }
+      },
+      "task6-legacy-default.png": {
+        "points": {},
+        "regions": {},
+        "frame": {
+          "nonDarkPct": 78.3,
           "w": 800,
           "h": 600
         }
@@ -953,7 +1365,7 @@
     "stages": {
       "bootDiag": {
         "mode": "deferred",
-        "frames": 119,
+        "frames": 123,
         "canvasDepthWrites": false,
         "router": {
           "counts": {
@@ -1057,22 +1469,22 @@
         "width": 800,
         "height": 600,
         "hashes": {
-          "albedoRoughness": 3669523099,
-          "normalMetalness": 2910483351,
-          "emissionClass": 1148666345,
-          "surfaceDepth": 1156526017
+          "albedoRoughness": 369285704,
+          "normalMetalness": 4156797107,
+          "emissionClass": 1491020659,
+          "surfaceDepth": 3157060915
         },
         "nonEmpty": 480000,
         "classCounts": {
-          "1": 432297,
-          "17": 36425,
-          "18": 11278
+          "1": 430778,
+          "17": 36400,
+          "18": 12822
         },
-        "minDepth": 0.5195081233978271,
-        "maxDepth": 0.9941462278366089,
+        "minDepth": 0.5195086598396301,
+        "maxDepth": 0.9941899180412292,
         "deepestPixel": [
-          381,
-          294
+          422,
+          293
         ],
         "sentinelPixels": 0,
         "deepOccupied": 0,
@@ -1080,10 +1492,10 @@
       },
       "farHash": {
         "deepestPixel": [
-          381,
-          294
+          422,
+          293
         ],
-        "maxDepth": 0.994146,
+        "maxDepth": 0.99419,
         "width": 800,
         "height": 600
       },
@@ -1104,17 +1516,131 @@
         "zombie": {
           "id": 11,
           "torsoAnchor": 1.1,
-          "fleshDepth": 0.84155,
+          "fleshDepth": 0.93213,
+          "minotaur404": null
+        },
+        "soldier": {
+          "id": 12,
+          "torsoAnchor": 1.1,
+          "fleshDepth": 0.93588,
+          "kitMeshes": 36,
+          "kitAnchor": "barrel0",
+          "kitSide": 0,
+          "kitAttribution": {
+            "ndc": {
+              "x": 0.14201984819201965,
+              "y": -0.3367583293319589
+            },
+            "offDepth": 0.9723619818687439,
+            "selectedNodes": [
+              "barrel0",
+              "barrel1",
+              "bead",
+              "bore0",
+              "bore1",
+              "cone0",
+              "cone1",
+              "crown0",
+              "crown1",
+              "fe_cap",
+              "foreend",
+              "mouth0",
+              "mouth1",
+              "rib_top",
+              "body",
+              "grip_panel1",
+              "grip_panel-1",
+              "guard",
+              "guard_tang_f",
+              "guard_tang_r",
+              "hinge",
+              "hinge001",
+              "trig0",
+              "trig1",
+              "t004",
+              "t004_1",
+              "t006",
+              "t006_1",
+              "extractor",
+              "shell_head_L",
+              "shell_hull_L",
+              "shell_head_R",
+              "shell_hull_R",
+              "toplever"
+            ]
+          },
+          "kitTexel": 0.90931,
+          "kitMaterials": [
+            "plate",
+            "webbing",
+            "Blue",
+            "Blue",
+            "Brass",
+            "Bore",
+            "Bore",
+            "Bore"
+          ],
+          "heldPropNodes": [
+            "barrel0",
+            "barrel1",
+            "bead",
+            "bore0",
+            "bore1",
+            "cone0",
+            "cone1",
+            "crown0",
+            "crown1",
+            "fe_cap",
+            "foreend",
+            "mouth0",
+            "mouth1",
+            "rib_top",
+            "body",
+            "grip_panel1",
+            "grip_panel-1",
+            "guard",
+            "guard_tang_f",
+            "guard_tang_r",
+            "hinge",
+            "hinge001",
+            "trig0",
+            "trig1",
+            "t004",
+            "t004_1",
+            "t006",
+            "t006_1",
+            "extractor",
+            "shell_head_L",
+            "shell_hull_L",
+            "shell_head_R",
+            "shell_hull_R",
+            "toplever"
+          ],
           "minotaur404": null
         },
         "goblin": {
-          "id": 12,
+          "id": 13,
           "torsoAnchor": 1.1,
-          "fleshDepth": 0.97121,
+          "fleshDepth": 0.93867,
           "kitMeshes": 6,
-          "kitNodePainted": "mesh_0:bone",
+          "kitAnchor": "mesh_0",
           "kitSide": 0,
-          "kitTexel": 0.93704,
+          "kitAttribution": {
+            "ndc": {
+              "x": -0.039855590954107,
+              "y": -0.3581321929695448
+            },
+            "offDepth": 0.936355710029602,
+            "selectedNodes": [
+              "mesh_0",
+              "mesh_0_1",
+              "mesh_0_2",
+              "mesh_0_3",
+              "mesh_0_4",
+              "mesh_0_5"
+            ]
+          },
+          "kitTexel": 0.93631,
           "kitMaterials": [
             "iron",
             "leather",
@@ -1124,48 +1650,58 @@
             "brass"
           ],
           "minotaur404": null
-        },
-        "clown": {
-          "id": 13,
-          "torsoAnchor": 1.1,
-          "fleshDepth": 0.94058,
-          "kitMeshes": 9,
-          "kitNodePainted": "mesh_0:bone",
-          "kitSide": 0,
-          "kitTexel": 0.93624,
-          "kitMaterials": [
-            "hoodblue",
-            "hoodpink",
-            "yellow",
-            "grey",
-            "red",
-            "pink",
-            "blue",
-            "nose"
-          ],
-          "minotaur404": null
-        },
-        "clown-alt": {
-          "id": 14,
-          "torsoAnchor": 0.7,
-          "fleshDepth": 0.93296,
-          "kitMeshes": 9,
-          "kitNodePainted": "mesh_0:bone",
-          "kitSide": 1,
-          "kitTexel": 0.89724,
-          "kitMaterials": [
-            "royal",
-            "yellow",
-            "grey",
-            "red",
-            "pink",
-            "blue",
-            "purple",
-            "nose"
-          ],
-          "minotaur404": null
         }
-      }
+      },
+      "zombieWounds": {
+        "actor": 11,
+        "hit": [
+          -5.058512904197492,
+          1.1540928162528972,
+          -5.4534922229091025
+        ],
+        "woundCount": 1,
+        "changedPixels": 33,
+        "ndc": {
+          "x": -0.016386393001062385,
+          "y": -0.23400851053090044
+        },
+        "beforeAlbedo": [
+          0.81982421875,
+          0.43994140625,
+          0.4599609375
+        ],
+        "afterAlbedo": [
+          0.802734375,
+          0.35888671875,
+          0.38330078125
+        ]
+      },
+      "twoChunks": [
+        {
+          "id": 1,
+          "centre": [
+            5.103355450615884,
+            0.2542500000000001,
+            -6.278672239340762
+          ],
+          "texelDepth": 0.9597600102424622,
+          "cls": 18,
+          "offDepth": 0.9640831351280212,
+          "distanceToCentre": 0.21547997719955703
+        },
+        {
+          "id": 2,
+          "centre": [
+            4.389542898093935,
+            0.062,
+            -5.281530153217914
+          ],
+          "texelDepth": 0.9478859305381775,
+          "cls": 18,
+          "offDepth": 0.9503605365753174,
+          "distanceToCentre": 0.0712690325757766
+        }
+      ]
     }
   }
 }

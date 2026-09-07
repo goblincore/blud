@@ -1,0 +1,93 @@
+{
+  "phase": "complete",
+  "checks": [
+    {
+      "name": "material-capture-legacy",
+      "detail": {
+        "actor": {
+          "id": 2,
+          "room": 2,
+          "pos": [
+            5.320347523423118,
+            0,
+            -4.4081867282917555
+          ],
+          "yaw": 1.403651034003756
+        },
+        "pose": {
+          "pos": [
+            7.120347523423118,
+            0,
+            -4.4081867282917555
+          ],
+          "yaw": -1.5707963267948966,
+          "pitch": -0.12
+        }
+      }
+    },
+    {
+      "name": "material-capture-deferred",
+      "detail": {
+        "actor": {
+          "id": 2,
+          "room": 2,
+          "pos": [
+            5.058108729177475,
+            0,
+            -4.492298133188468
+          ],
+          "yaw": 1.035809999918938
+        },
+        "pose": {
+          "pos": [
+            6.8581087291774745,
+            0,
+            -4.492298133188468
+          ],
+          "yaw": -1.5707963267948966,
+          "pitch": -0.12
+        }
+      }
+    }
+  ],
+  "pageErrors": [],
+  "pass": true,
+  "scope": "material-parity-captures",
+  "fullAcceptance": false,
+  "excludedFeatures": {
+    "boneTubes": "Owner retired this experimental path for visual reasons on 2026-09-07; validate SDF bones and baked geometry instead."
+  },
+  "pageErrorsDropped": 0,
+  "generatedAt": "2026-09-07T20:51:02.995Z",
+  "ports": {
+    "vite": 5346,
+    "cdp": 9346
+  },
+  "viewport": {
+    "width": 800,
+    "height": 600
+  },
+  "records": {
+    "captures": {
+      "material-legacy.png": {
+        "points": {},
+        "regions": {},
+        "frame": {
+          "nonDarkPct": 81.3,
+          "w": 800,
+          "h": 600
+        }
+      },
+      "material-deferred.png": {
+        "points": {},
+        "regions": {},
+        "frame": {
+          "nonDarkPct": 76,
+          "w": 800,
+          "h": 600
+        }
+      }
+    },
+    "stages": {}
+  }
+}

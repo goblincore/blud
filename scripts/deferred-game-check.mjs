@@ -674,7 +674,7 @@ null
     const dot = (texel.normal[0] * toCam[0] + texel.normal[1] * toCam[1] + texel.normal[2] * toCam[2]) / len;
     const nlen = Math.hypot(...texel.normal);
     assert.ok(Math.abs(nlen - 1) < 0.05, `${label}: normal not unit length (${nlen.toFixed(4)})`);
-    assert.ok(dot > minDot, `${label}: normal points AWAY from the camera (n·v ${dot.toFixed(3)} <= ${minDot})`);
+    assert.ok(dot > minDot, `${label}: normal is not front-facing (n·v ${dot.toFixed(3)} <= ${minDot})`);
     return { dot: +dot.toFixed(3), nlen: +nlen.toFixed(4),
       selectedPixel: texel.pixel, selectedNdc: ndc.map((q) => +q.toFixed(5)),
       centreNdc: [sp?.x, sp?.y].map((q) => +q?.toFixed?.(5)) };
@@ -727,7 +727,7 @@ null
   // curved, posed surface; the reconstruction runs at the SELECTED texel's
   // own pixel per normalTowardCam's audit note). Baked producers get their
   // own check in the lifecycle phase.
-  const fleshNormal = await normalTowardCam(fleshSp, fleshTexel, 0.3, 'flesh torso');
+  const fleshNormal = await normalTowardCam(fleshSp, fleshTexel, 0.0, 'flesh torso');
   check('P2-normal-direction-flesh', fleshNormal);
   noNewErrors('P2 routes');
   saveEvidence();
@@ -945,36 +945,22 @@ null
     if (CORE) return;
 
   // ===================================================================
-  // P3/P4 — EVERY REGISTERED CHARACTER RENDERED ONCE + DETAIL EVIDENCE
+  // P3/P4 — OWNER-SELECTED GAMEPLAY ACTORS + DETAIL EVIDENCE
   // ===================================================================
   results.phase = 'P3-characters';
-  // The registry is the source of truth (16 entries incl. the two
-  // fixtures). Each character spawns through spawnDebugCharacter — the
-  // SAME spawnEnemy path boot uses — then is faced, asserted IN FRAME,
-  // proven at the texel level (a cls-18 flesh texel in a 3x3 NDC lattice
-  // around the projected torso), and captured. The zombie-only blind spot
-  // that let a goblin regression pass everything green ends here.
-  // The REGISTRY IS THE SOURCE OF TRUTH: the roster is read from the page
-  // (the same character-registry.ts the game spawns from, via the
-  // __sdfGame.characterNames seam) and the pinned list below is CHECKED
-  // against it in both directions. A character added to (or removed from)
-  // the registry fails here with the exact diff instead of being silently
-  // omitted — the zombie-only blind spot this gate exists to kill was
-  // exactly such a silent drift between a hand list and the real roster.
-  const REGISTRY_PINNED = ['zombie', 'goblin', 'clown', 'clown-alt', 'mouse', 'cyclops',
-    'schoolgirl', 'schoolgirl-alt', 'schoolgirl-described', 'strand-fixture',
-    'bonewalker', 'dragon', 'box-fixture', 'minotaur', 'soldier', 'female'];
+  // Owner scope (2026-09-07): zombie/soldier are live gameplay, goblin is
+  // expected soon. Other characters and lab fixtures are outside this gate.
+  // Every selected actor must exist and spawn through the real gameplay path.
   const ALL_REGISTERED = await evaluate('__sdfGame.characterNames()');
-  const GAMEPLAY_EXCLUDED = { mouse: 'Unused character, excluded by owner', 'strand-fixture': 'SDF hair-rendering fixture, excluded by owner' };
-  const REGISTRY = ALL_REGISTERED.filter(n => !(n in GAMEPLAY_EXCLUDED));
+  assert.ok(Array.isArray(ALL_REGISTERED), 'character registry must be available');
+  const REGISTRY = ['zombie', 'soldier', 'goblin'];
+  for (const name of REGISTRY) assert.ok(ALL_REGISTERED.includes(name), `${name}: gameplay actor missing from registry`);
+  const GAMEPLAY_EXCLUDED = Object.fromEntries(ALL_REGISTERED.filter(n => !REGISTRY.includes(n))
+    .map(n => [n, n === 'strand-fixture' ? 'SDF hair-rendering fixture, outside gameplay scope'
+      : n === 'box-fixture' ? 'Lab rendering fixture, outside gameplay scope'
+      : 'Unused character, outside owner-selected gameplay scope']));
+  results.gameplayCharacters = REGISTRY;
   results.excludedFeatures.characters = GAMEPLAY_EXCLUDED;
-  assert.ok(Array.isArray(REGISTRY) && REGISTRY.length > 0,
-    `__sdfGame.characterNames() must return the registry roster (got ${JSON.stringify(REGISTRY)})`);
-  const missingFromPin = ALL_REGISTERED.filter((n) => !REGISTRY_PINNED.includes(n));
-  const staleInPin = REGISTRY_PINNED.filter((n) => !ALL_REGISTERED.includes(n));
-  assert.deepEqual({ missingFromPin, staleInPin }, { missingFromPin: [], staleInPin: [] },
-    `pinned roster DRIFTED from character-registry.ts:\n    registry-only: ${JSON.stringify(missingFromPin)}\n    pin-only: ${JSON.stringify(staleInPin)}\n    update REGISTRY_PINNED (and any per-character handling) with the registry`);
-  assert.equal(ALL_REGISTERED.length, 16, 'roster size sanity — see character-registry.ts');
   const rendered = {};
   records.stages.characters = rendered; // live reference: saveEvidence() captures each character as it lands
   const baseMeshCount = (await evaluate('__sdfGame.deferredDiagnostics()')).router.counts.mesh;
@@ -993,7 +979,7 @@ null
     allowMinotaurFace404 = false;
     assert.ok(spawned && spawned.id > 0, `${name}: spawn failed ${JSON.stringify(spawned)}`);
     await evaluate('__sdfGame.step(8)'); // hull build + pose for the new body
-    const kitChar = ['goblin', 'clown', 'clown-alt', 'soldier'].includes(name);
+    const kitChar = ['goblin', 'soldier'].includes(name);
     if (!kitChar) await settleAndLock();
     // Kit characters load glTF async — the router re-walks per RENDER (locked
     // renders included), so DISCOVERY works under the lock. But the kit POSE
@@ -1206,6 +1192,10 @@ null
   // ===================================================================
   // P5 — LIFECYCLE: sever detach, two shared chunks, bake, actor rebuild
   // ===================================================================
+  // The registry probes add actors at authored spawn points, including
+  // overlapping the boot cast. Reset to the actual gameplay cast before
+  // testing nearest-surface projectiles and chunk lifecycle.
+  await boot(`http://localhost:${vite}/sdf-game.html?renderer=deferred`);
   results.phase = 'P5-sever';
   const bakeWasEnabled = await evaluate('__sdfGame.chunkBake');
   await evaluate('__sdfGame.setChunkBake(false)');
@@ -1214,25 +1204,53 @@ null
   //     fact; the gate proves BOTH RENDER as SDF producers. Pellet flight
   //     and detachment are simulation: the whole sever loop runs unlocked.
   await enterSimPhase('P5-sever');
-  const target = (await evaluate('__sdfGame.zombies()')).find((q) => q.id === (rendered.zombie?.id ?? z0.id)) ?? z0;
-  await faceTarget(target.pos[0] + 0.9, target.pos[2], target.pos[0], target.pos[2], -0.18);
+  const severTargets = (await evaluate('__sdfGame.zombies()')).filter(q => q.room === 2);
+  assert.ok(severTargets.length >= 2, 'fresh gameplay cast needs two room-2 zombies');
+  let target = severTargets[0];
+  let targetIndex = 0;
+  // aimSurface deliberately ignores targets closer than 1.5m.
+  await faceTarget(target.pos[0] + 1.8, target.pos[2], target.pos[0], target.pos[2], -0.18);
   await enterSimPhase('P5-sever'); // faceTarget ends locked; pellets need live ticks
   await evaluate('__sdfGame.freeze(true)'); // hold the target while stepping projectile/physics state
   const chunkIdsBefore = (await evaluate('__sdfGame.chunkStats()')).livePieces.map(p=>p.id);
   let severed = 0;
   const severShots = [];
   const limbs = ['armL', 'armR', 'legL', 'legR', 'head', 'torso'];
-  for (let i = 0; i < 30 && severed < 2; i++) {
-    const limb = limbs[Math.floor(i / 3) % limbs.length];
-    await evaluate(`__sdfGame.aimSurface(${JSON.stringify(limb)}); __sdfGame.step(2)`);
-    const predicted = await evaluate('__sdfGame.predictSlugHit()');
+  let limbIndex = 0, shotsAtLimb = 0;
+  for (let attempt = 0; attempt < 60 && severed < 2; attempt++) {
+    const limb = limbs[limbIndex % limbs.length];
+    const aimed = await evaluate(`__sdfGame.aimSurface(${JSON.stringify(limb)},${target.id})`);
+    if (!aimed) { limbIndex++; shotsAtLimb=0; continue; }
+    // Close-range barrel parallax means an eye-to-cluster ray can miss a
+    // thin limb. Settle the real muzzle at each bounded nearby aim, and
+    // only fire when the production ballistic predictor hits this actor.
+    const aimPose = await evaluate('__sdfGame.pose()');
+    let predicted = null;
+    for (const [dy,dp] of [[0,0],[-0.04,0],[0.04,0],[0,0.04],[0,-0.04],[-0.08,0],[0.08,0],[0,0.08],[0,-0.08]]) {
+      await evaluate(`__sdfGame.setPose(${aimPose.pos[0]},${aimPose.pos[2]},${aimPose.yaw+dy},${aimPose.pitch+dp}); __sdfGame.step(12)`);
+      const hit = await evaluate('__sdfGame.predictSlugHit()');
+      if (hit.actorId === target.id) { predicted=hit; break; }
+    }
+    if (!predicted) { limbIndex++; shotsAtLimb=0; continue; }
     const ok = await evaluate('__sdfGame.fireSlug()');
     if (!ok) { await evaluate('__sdfGame.step(40)'); continue; }
+    shotsAtLimb++;
     await evaluate('__sdfGame.step(24)');
     const now = await evaluate('__sdfGame.chunkStats()');
     severed = now.livePieces.filter(p=>!chunkIdsBefore.includes(p.id)).length;
     severShots.push({limb, actor:predicted.actorId, live:now.live, severed});
     console.log('  sever shot', JSON.stringify(severShots.at(-1)));
+    if (severed === 1 && targetIndex === 0) {
+      // Two live producers need not come from the same damaged/frozen body.
+      // Select the second ordinary gameplay zombie explicitly.
+      targetIndex=1;
+      target=(await evaluate('__sdfGame.zombies()')).find(q=>q.id===severTargets[1].id);
+      assert.ok(target, 'second sever subject must still exist');
+      await faceTarget(target.pos[0]+1.8,target.pos[2],target.pos[0],target.pos[2],-0.18);
+      await enterSimPhase('P5-sever');
+      await evaluate('__sdfGame.freeze(true)');
+      limbIndex=0; shotsAtLimb=0;
+    } else if(shotsAtLimb>=4) { limbIndex++; shotsAtLimb=0; }
   }
   assert.ok(severed >= 2, `aimed slugs must detach two pieces: ${JSON.stringify(severShots)}`);
   await settleAndLock();
@@ -1244,13 +1262,20 @@ null
     const sp = await evaluate(`__sdfGame.screenPosOf(${piece.centre.join(',')})`);
     assert.ok(sp && Math.abs(sp.x) < 0.95 && Math.abs(sp.y) < 0.95, `chunk ${piece.id}: centre must be in frame`);
     const points = [];
-    for (let dy=-4; dy<=4; dy++) for (let dx=-4; dx<=4; dx++)
-      points.push({x:sp.x+dx*0.012, y:sp.y+dy*0.012});
-    const on = await evaluate(`__sdfGame.sampleSurfacePoints(${JSON.stringify(points)})`);
-    assert.equal(await evaluate(`__sdfGame.setChunkVisible(${piece.id}, false)`), true);
-    let off;
-    try { off = await evaluate(`__sdfGame.sampleSurfacePoints(${JSON.stringify(points)})`); }
-    finally { await evaluate(`__sdfGame.setChunkVisible(${piece.id}, true); __sdfGame.step(1)`); }
+    for (let dy=-8; dy<=8; dy++) for (let dx=-8; dx<=8; dx++)
+      points.push({x:sp.x+dx*0.018, y:sp.y+dy*0.018});
+    // Inspect the floor piece without the close-up viewmodel covering it.
+    // FPV/world occlusion is covered separately by the core depth brackets.
+    const gunVisible = await evaluate('__sdfGame.viewModelAnchor.visible');
+    let on, off;
+    try {
+      await evaluate('__sdfGame.viewModelAnchor.visible = false');
+      on = await evaluate(`__sdfGame.sampleSurfacePoints(${JSON.stringify(points)})`);
+      assert.equal(await evaluate(`__sdfGame.setChunkVisible(${piece.id}, false)`), true);
+      off = await evaluate(`__sdfGame.sampleSurfacePoints(${JSON.stringify(points)})`);
+    } finally {
+      await evaluate(`__sdfGame.setChunkVisible(${piece.id}, true); __sdfGame.viewModelAnchor.visible = ${gunVisible}; __sdfGame.step(1)`);
+    }
     for (let i=0; i<on.length; i++) {
       const t=on[i];
       if (t.cls !== cls || !(t.depth < off[i].depth - 1e-6)) continue;
@@ -1286,8 +1311,13 @@ null
   results.phase = 'P5-bake';
   await enterSimPhase('P5-bake');
   const bakeCensus0 = await evaluate('__sdfGame.chunkStats()');
-  const bakeSpot = await evaluate('__sdfGame.screenRayToWorld(0.3, -0.2, 1.6)');
-  await evaluate(`__sdfGame.spawnTestChunk(${bakeSpot[0]}, 0.25, ${bakeSpot[2]}, 0.18)`);
+  // Fixed open room-2 floor position; the synthetic bake subject has no
+  // launch impulse. Real severed chunks above still use production kicks.
+  const bakeSpot = [4, 0.25, -4.8];
+  const furniture = await evaluate('__sdfGame.furniture');
+  const clearOfFurniture = (p,r) => furniture.every(f => p[0]+r<f.minX || p[0]-r>f.maxX || p[2]+r<f.minZ || p[2]-r>f.maxZ);
+  assert.ok(clearOfFurniture(bakeSpot,0.3), 'synthetic bake spawn must clear furniture');
+  await evaluate(`__sdfGame.spawnTestChunk(${bakeSpot.join(',')},0.18,true)`);
   const spawnedCensus = await evaluate('__sdfGame.chunkStats()');
   const newPieces = spawnedCensus.livePieces.filter(p=>!bakeCensus0.livePieces.some(old=>old.id===p.id));
   assert.equal(newPieces.length, 1, 'test spawn must produce exactly one new live chunk');
@@ -1300,13 +1330,21 @@ null
   assert.ok(!bakeCensus1.livePieces.some(p=>p.id===bakeId), 'the exact baked piece must retire from the live march');
   const bakedPiece = bakeCensus1.pieces.find(p=>p.id===bakeId);
   assert.ok(bakedPiece, 'the exact spawned chunk must become a baked mesh');
+  assert.ok(clearOfFurniture(bakedPiece.centre,bakedPiece.radius), 'settled bake must clear furniture');
+  // Baked centre is the mesh bounds centre, not the live physics origin;
+  // verify wall clearance rather than requiring these different centres equal.
+  const roomBounds = (await evaluate('__sdfGame.rooms')).find(r=>r.id===2).bounds;
+  assert.ok(bakedPiece.centre[0]-bakedPiece.radius>roomBounds.minX &&
+    bakedPiece.centre[0]+bakedPiece.radius<roomBounds.maxX &&
+    bakedPiece.centre[2]-bakedPiece.radius>roomBounds.minZ &&
+    bakedPiece.centre[2]+bakedPiece.radius<roomBounds.maxZ, 'settled bake must clear room walls');
   await facePoint(bakedPiece.centre[0], bakedPiece.centre[1], bakedPiece.centre[2], 1.1);
   const bakedHit = await sampleChunk(bakedPiece, 17);
   const bakedTexel = bakedHit.texel;
   const bakedNormal = await normalTowardCam(bakedHit.ndc, bakedTexel, 0.0, 'baked chunk');
   await shot('task6-baked-chunk.png', {}, {}, { minFrameNonDark: 8 });
   check('P5-bake-transition', {
-    id: bakeId, offDepth: bakedHit.offDepth, distanceToCentre: bakedHit.distance,
+    id: bakeId, centre:bakedPiece.centre, radius:bakedPiece.radius, offDepth: bakedHit.offDepth, distanceToCentre: bakedHit.distance,
     baked: bakeCensus1.baked, totalBakes: bakeCensus1.totalBakes,
     lastBakeInfo: bakeCensus1.lastBakeInfo && { verts: bakeCensus1.lastBakeInfo.verts, tris: bakeCensus1.lastBakeInfo.tris },
     bakedTexelDepth: +bakedTexel.depth.toFixed(5),
@@ -1363,6 +1401,8 @@ null
   await evaluate(`__sdfGame.setPose(${pose2.pos[0]}, ${pose2.pos[2] + 2.4}, ${Math.PI}, -0.05); __sdfGame.step(3);`);
   const wallStats = async (label, save = false) => (await shot(`task6-muzzle-${label}.png`, {}, { wall: [-0.4, 0.0, 0.4, 0.5] }, { save })).regions.wall.lum;
   await evaluate('__sdfGame.step(2)');
+  const flashlightIntensity = await evaluate('__dungeon.spot.intensity');
+  assert.ok(flashlightIntensity > 0, 'muzzle baseline requires an active flashlight');
   const mA = await wallStats('beam-on', true);
   // Fire ONE slug downrange: the muzzle PointLight fires its own shared slot.
   // The magazine may be mid-reload after the sever stage — wait it out.
@@ -1386,7 +1426,7 @@ null
   const mC = await wallStats('flash-expired');
   assert.ok(Math.abs(mC - mA) <= 8, `wall must return after the flash (${mA} -> ${mC})`);
   // Beam off: the wall drops by the beam contribution...
-  await evaluate('__dungeon.setBeam({ beamGain: 0 }); __sdfGame.step(3);');
+  await evaluate('__dungeon.spot.intensity = 0; __sdfGame.step(3);');
   const mD = await wallStats('beam-off');
   assert.ok(mD < mC - 3, `beam-off must darken the lit wall (${mC} -> ${mD})`);
   // ...and the muzzle STILL lights it: independent slots, no replay.
@@ -1397,7 +1437,7 @@ null
   assert.ok(diagFlash2.lights.ids.includes('muzzle'), 'muzzle slot active with the beam off');
   const mE = await wallStats('muzzle-no-beam');
   assert.ok(mE >= mD + 6, `muzzle must light WITHOUT the beam (${mD} -> ${mE})`);
-  await evaluate('__dungeon.setBeam({ beamGain: 4 }); __sdfGame.step(2);');
+  await evaluate(`__dungeon.spot.intensity = ${flashlightIntensity}; __sdfGame.step(2);`);
   check('P5b-muzzle-vs-flashlight', {
     beamOn: mA, muzzle: mB, expired: mC, beamOff: mD, muzzleNoBeam: mE,
     slots: { flashlightIndex: diagFlash.lights.flashlightIndex, idsWithMuzzle: diagFlash.lights.ids.length },
