@@ -823,10 +823,29 @@ null
   // (the deepest sightline, per-pixel verified, numeric tolerance), then the
   // TRUE-EMPTY sentinel proof on the created empty region — no silent
   // waiver of the far-sentinel requirement.
+  //
+  // The hash's deepestPixel can sit on a GRAZING sightline (a wall corner
+  // clipped by sub-pixel). One continuation run saw exactly that: the hash
+  // reported the pixel occupied while the bracket's re-read of the same
+  // texel came back empty-class, and the bracket refused to run. Rather
+  // than retry blindly, search a small texel neighbourhood for the deepest
+  // OCCUPIED texel and bracket THERE — still a real, per-pixel-verified
+  // far sightline, with the search recorded as evidence. Empty everywhere
+  // in the neighbourhood still fails loudly.
   const hFar = await evaluate('__sdfGame.hashSurface()');
-  const farNdcX = ((hFar.deepestPixel[0] + 0.5) / hFar.width) * 2 - 1;
-  const farNdcY = 1 - ((hFar.deepestPixel[1] + 0.5) / hFar.height) * 2;
-  const farDeepest = await bracketAt('far-deepest-real-scene', [farNdcX, farNdcY], [-0.003, 0.01, 0.05], 0.05, 0.12);
+  records.stages.farHash = { deepestPixel: hFar.deepestPixel, maxDepth: +hFar.maxDepth.toFixed(6), width: hFar.width, height: hFar.height };
+  let farPick = null;
+  for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [2, 0], [-2, 0], [0, 2], [0, -2]]) {
+    const nx = ((hFar.deepestPixel[0] + 0.5 + dx) / hFar.width) * 2 - 1;
+    const ny = 1 - ((hFar.deepestPixel[1] + 0.5 + dy) / hFar.height) * 2;
+    const s = await evaluate(`__sdfGame.readSurfaceAt(${nx.toFixed(5)}, ${ny.toFixed(5)})`);
+    if (s && s.cls > 0.5 && s.depth < 1) { farPick = { ndc: [nx, ny], s, dx, dy }; break; }
+  }
+  assert.ok(farPick, 'no occupied texel near the deepest pixel — cannot bracket the far sightline');
+  const farDeepest = await bracketAt('far-deepest-real-scene', farPick.ndc, [-0.003, 0.01, 0.05], 0.05, 0.12);
+  if (farPick.dx || farPick.dy) {
+    console.log(`  far bracket used texel offset (${farPick.dx},${farPick.dy}) from the hash's deepest pixel`);
+  }
   const farRecord = await emptyStage('redirect');
 
   // The same wall bracket on the NULL path (post-aa fully off): the canvas
