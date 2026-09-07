@@ -9,7 +9,7 @@ import { ZOMBIE } from './body';
 import { bindRig, applyRig } from './rig-bind';
 import { severLimb } from './sever';
 import { MAX_CLUSTERS, MAX_PRIMS } from './validate';
-import type { BuiltBody, Primitive, Vec3 } from './types';
+import type { BuiltBody, LimbId, Primitive, Vec3 } from './types';
 
 // Every shipped character, keyed by file basename (the prof snapshot below
 // names these). Eager glob so a character ADDED later without a snapshot row
@@ -694,6 +694,147 @@ describe('packBones (bone tubes)', () => {
     expect(p.boneCount).toBe(organs);
     for (let i = body.prims.length; i < body.prims.length + p.boneCount; i++) {
       expect(p.primScale[i * PRIM_STRIDE + 3]).toBe(W_ORGAN);
+    }
+  });
+});
+
+describe('bone cluster spheres (packBoneClusters)', () => {
+  // A body with two flesh clusters (torso, head) and two bone rows on each,
+  // all untapered uniform-scale so the sphere sanity check is the simple
+  // endpoint+radius-containment run 8's fitSphere guarantees.
+  const mkBone = (i: number, a: Vec3, b: Vec3, limb: LimbId, cluster: number): Primitive => ({
+    a, b, radius: 0.02 + i * 0.001, scale: [1, 1, 1] as Vec3, blendK: 0, limb, cluster, op: 'bone',
+  });
+  const mkFlesh = (a: Vec3, b: Vec3, limb: LimbId, cluster: number): Primitive => ({
+    a, b, radius: 0.1, scale: [1, 1, 1] as Vec3, blendK: 0.02, limb, cluster,
+  });
+  const mkCluster = (id: number, limb: LimbId, start: number, count: number): BuiltBody['clusters'][number] =>
+    ({ id, limb, start, count, center: [0, 0, 0] as Vec3, radius: 0.3, alive: true });
+
+  const posed = (): BuiltBody => ({
+    prims: [
+      mkFlesh([0, 0, 0], [0, 0.3, 0], 'torso', 0),
+      mkFlesh([0.4, 0, 0], [0.7, 0, 0], 'head', 1),
+    ],
+    clusters: [mkCluster(0, 'torso', 0, 1), mkCluster(1, 'head', 1, 1)],
+    bones: new Map(),
+    bonePrims: [
+      mkBone(0, [0, 0.05, 0], [0, 0.2, 0], 'torso', 0),
+      mkBone(1, [0, 0.22, 0], [0, 0.28, 0], 'torso', 0),
+      mkBone(2, [0.4, 0.05, 0], [0.5, 0.05, 0], 'head', 1),
+      mkBone(3, [0.45, 0.15, 0], [0.55, 0.15, 0], 'head', 1),
+    ],
+  });
+
+  // A rest body with the SAME bones but offset +1 in x, so a rest-vs-posed
+  // mismatch after reordering is detectable (the whole point of test 3).
+  const restBody = (): BuiltBody => {
+    const b = posed();
+    return {
+      ...b,
+      prims: b.prims.map(p => ({ ...p, a: [p.a[0] + 1, p.a[1], p.a[2]] as Vec3, b: [p.b[0] + 1, p.b[1], p.b[2]] as Vec3 })),
+      bonePrims: b.bonePrims.map(p => ({ ...p, a: [p.a[0] + 1, p.a[1], p.a[2]] as Vec3, b: [p.b[0] + 1, p.b[1], p.b[2]] as Vec3 })),
+    };
+  };
+
+  it('sizes both new arrays for MAX_CLUSTERS clusters plus one tail texel', () => {
+    const p = packBody(posed(), undefined, { packBoneClusters: true });
+    expect(p.boneClusterRange).toHaveLength((MAX_CLUSTERS + 1) * CLUSTER_STRIDE);
+    expect(p.boneClusterBounds).toHaveLength((MAX_CLUSTERS + 1) * CLUSTER_STRIDE);
+  });
+
+  it('writes per-cluster contiguous, non-overlapping ranges + a tail that tiles the bone span', () => {
+    const body = posed();
+    const p = packBody(body, undefined, { packBoneClusters: true });
+    // For each cluster WITH bones: [start, count, distort, 0], start >= prims.length.
+    // Clusters in this fixture both have bones; assert both are populated.
+    const c0 = Array.from(p.boneClusterRange.slice(0, CLUSTER_STRIDE));
+    const c1 = Array.from(p.boneClusterRange.slice(CLUSTER_STRIDE, 2 * CLUSTER_STRIDE));
+    expect(c0[1]!).toBeGreaterThan(0);
+    expect(c1[1]!).toBeGreaterThan(0);
+    for (const start of [c0[0]!, c1[0]!]) expect(start).toBeGreaterThanOrEqual(body.prims.length);
+    // Contiguous and non-overlapping: cluster0 [2,4), cluster1 [4,6).
+    expect(c0[0]!).toBe(body.prims.length);
+    expect(c0[0]! + c0[1]!).toBe(c1[0]!);
+    expect(c1[0]! + c1[1]!).toBe(body.prims.length + p.boneCount);
+    // Tail texel (index MAX_CLUSTERS) carries [tailStart, tailCount, 1, 1] —
+    // the .w = 1 is the shader's enabled flag, and this fixture has no tail.
+    const to = MAX_CLUSTERS * CLUSTER_STRIDE;
+    const tail = Array.from(p.boneClusterRange.slice(to, to + CLUSTER_STRIDE));
+    expect(tail[2]!).toBe(1);
+    expect(tail[3]!).toBe(1);
+    expect(tail[0]! + tail[1]!).toBe(body.prims.length + p.boneCount);
+    // The union of all cluster ranges plus the tail range is exactly the bone span.
+    expect(c1[0]! + c1[1]!).toBe(body.prims.length + p.boneCount);
+  });
+
+  it('writes a bound sphere that contains every bone of that cluster (endpoint + thickness)', () => {
+    const p = packBody(posed(), undefined, { packBoneClusters: true });
+    for (let c = 0; c < MAX_CLUSTERS; c++) {
+      const o = c * CLUSTER_STRIDE;
+      const start = p.boneClusterRange[o]!;
+      const count = p.boneClusterRange[o + 1]!;
+      if (count < 0.5) continue; // no bones in this cluster
+      const cx = p.boneClusterBounds[o]!, cy = p.boneClusterBounds[o + 1]!, cz = p.boneClusterBounds[o + 2]!, r = p.boneClusterBounds[o + 3]!;
+      for (let i = start; i < start + count; i++) {
+        const oo = i * PRIM_STRIDE;
+        const a = [p.primA[oo]!, p.primA[oo + 1]!, p.primA[oo + 2]!];
+        const b = [p.primB[oo]!, p.primB[oo + 1]!, p.primB[oo + 2]!];
+        const rad = p.primA[oo + 3]!;
+        const scale = [p.primScale[oo]!, p.primScale[oo + 1]!, p.primScale[oo + 2]!];
+        const reach = rad * Math.max(...scale);
+        for (const q of [a, b]) {
+          const d = Math.hypot(q[0]! - cx, q[1]! - cy, q[2]! - cz);
+          expect(d + reach).toBeLessThanOrEqual(r + 1e-6);
+        }
+      }
+    }
+  });
+
+  it('keeps rest rows paired with their posed rows after reordering', () => {
+    const body = posed();
+    const rest = restBody();
+    const p = packBody(body, rest, { packBoneClusters: true });
+    // Map each packed bone row back to its ORIGINAL index via its posed a.
+    const posedA = (j: number) => body.bonePrims[j]!.a;
+    for (let k = 0; k < p.boneCount; k++) {
+      const oo = (body.prims.length + k) * PRIM_STRIDE;
+      const px = p.primA[oo]!, py = p.primA[oo + 1]!, pz = p.primA[oo + 2]!;
+      // Find the original bone whose posed a equals this packed row's a.
+      // Compare against f32 values: the pack stores float32, so a double
+      // 0.22 vs its f32 is ~1.6e-9 and a 1e-9 tolerance would miss it.
+      let match = -1;
+      for (let j = 0; j < body.bonePrims.length; j++) {
+        const q = posedA(j);
+        if (Math.abs(px - f32(q[0])) < 1e-6 && Math.abs(py - f32(q[1])) < 1e-6 && Math.abs(pz - f32(q[2])) < 1e-6) { match = j; break; }
+      }
+      expect(match).toBeGreaterThanOrEqual(0);
+      const rb = rest.bonePrims[match]!;
+      expect(p.restA[oo]).toBe(f32(rb.a[0]));
+      expect(p.restA[oo + 1]).toBe(f32(rb.a[1]));
+      expect(p.restA[oo + 2]).toBe(f32(rb.a[2]));
+      expect(p.restB[oo]).toBe(f32(rb.b[0]));
+      expect(p.restB[oo + 1]).toBe(f32(rb.b[1]));
+      expect(p.restB[oo + 2]).toBe(f32(rb.b[2]));
+    }
+  });
+
+  it('leaves both arrays zero and the original order when the option is OFF (default)', () => {
+    const body = posed();
+    const a = packBody(body);
+    const b = packBody(body, undefined, { packBoneClusters: false });
+    // OFF and default are bit-for-bit the same.
+    const keys = ['primA', 'primB', 'primScale', 'primQuat', 'primShape', 'primBend', 'restA', 'restB', 'clusterBounds', 'clusterRange', 'groupBounds', 'groupRange', 'clusterGroups'] as const;
+    for (const key of keys) expect(Array.from(b[key]), key).toEqual(Array.from(a[key] as Float32Array));
+    // Both new arrays all zero (the shader's flat-fallback signal).
+    expect(Array.from(a.boneClusterRange).every(v => v === 0)).toBe(true);
+    expect(Array.from(a.boneClusterBounds).every(v => v === 0)).toBe(true);
+    // Bone rows stay in ORIGINAL order — the flat path iterates bonePrims in index order.
+    for (let k = 0; k < a.boneCount; k++) {
+      const oo = (a.primCount + k) * PRIM_STRIDE;
+      const bone = body.bonePrims[k]!;
+      expect(a.primA[oo]).toBe(f32(bone.a[0]));
+      expect(a.primA[oo + 1]).toBe(f32(bone.a[1]));
     }
   });
 });

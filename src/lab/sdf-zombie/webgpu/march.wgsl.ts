@@ -1,6 +1,6 @@
 import { AMBIENT_AT, WALL_CONTRIBUTION } from './ambient.wgsl';
 import { TILE_MAX_ENTRIES } from './tile-cull';
-import { MAX_PRIMS } from '../validate';
+import { MAX_PRIMS, MAX_CLUSTERS } from '../validate';
 
 /** Extra metres added to the per-ray tile sphere test (tileCfg.x == 2) so the
  *  off-ray shading probes — calcNormal's 0.0015 eps and the AO probe at
@@ -1399,11 +1399,16 @@ var<private> gWoundList: array<i32, 16>;`;
 // Lives between FOLD_GROUP and MAP_BODY, not next to APPLY_WOUNDS as first
 // drafted: it assigns gFoldBestIdx, which is declared at FOLD_GROUP's tail,
 // and WGSL wants declaration before use.
-export const APPLY_BONES = /* wgsl */ `fn applyBones(dIn: f32, p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, boneCount: f32, band: i32) -> f32 {
+// The per-bone fold, extracted OUT of applyBones so the cluster-cull path
+// and the flat fallback share ONE loop body (a cull fix or an smin change
+// lands in one place). Used to exist inline in applyBones; the plan's
+// exactness argument is that the sphere cull is a hard-min no-op, so both
+// paths must produce the identical field when the fold reaches the same
+// rows. start/count are ABSOLUTE packed indices [start, start+count).
+export const FOLD_BONE_RANGE = /* wgsl */ `fn foldBoneRange(dIn: f32, p: vec3<f32>, data: texture_2d<f32>, start: i32, count: i32, band: i32) -> f32 {
   var d = dIn;
-  let first = i32(counts.x);
-  let last = first + i32(boneCount);
-  for (var i = first; i < last; i = i + 1) {
+  var end = start + count;
+  for (var i = start; i < end; i = i + 1) {
     if (i >= ${MAX_PRIMS}) { break; }
     // SHAPE AND BEND, read exactly as foldGroup reads them.
     //
@@ -1432,6 +1437,40 @@ export const APPLY_BONES = /* wgsl */ `fn applyBones(dIn: f32, p: vec3<f32>, dat
     // min claims gFoldBestIdx so shading reads a bone prim's primScale.w.
     if (sd < d) { gFoldBestIdx = f32(i); }
     d = min(d, sd);
+  }
+  return d;
+}`;
+
+export const APPLY_BONES = /* wgsl */ `fn applyBones(dIn: f32, p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, boneCount: f32, band: i32) -> f32 {
+  var d = dIn;
+  let first = i32(counts.x);
+  // Data-driven gate (packBoneClusters): the packer writes the bone-cluster
+  // texels into the free columns of ROW_CLUSTER_BOUNDS / ROW_CLUSTER_RANGE,
+  // and sets the TAIL texel's .w to 1 as an enabled flag. Zeros = the old
+  // flat loop, byte-identical. Off, the whole cull is a no-op.
+  let tail = textureLoad(data, vec2<i32>(${2 * MAX_CLUSTERS}, ${ROW_CLUSTER_RANGE} + band), 0);
+  if (tail.w > 0.5) {
+    // Enabled path: one sphere per flesh cluster's bone range. The cull is
+    // the EXACT hard-min no-op — bones fold with a hard min, so a bone whose
+    // sphere is farther than the running field d can never win. d here is
+    // the WOUNDED field (the call site passes dmg), which is exactly what
+    // the exactness argument needs: a far limb's bones must not be culled
+    // from a pixel whose flesh is already dragged toward them by a wound.
+    for (var c = 0; c < ${MAX_CLUSTERS}; c = c + 1) {
+      let cr = textureLoad(data, vec2<i32>(${MAX_CLUSTERS} + c, ${ROW_CLUSTER_RANGE} + band), 0);
+      if (cr.y < 0.5) { continue; }
+      let cb = textureLoad(data, vec2<i32>(${MAX_CLUSTERS} + c, ${ROW_CLUSTER_BOUNDS} + band), 0);
+      if (length(p - cb.xyz) - cb.w > d * cr.z) { continue; }
+      d = foldBoneRange(d, p, data, i32(cr.x), i32(cr.y), band);
+    }
+    // The tail (organs and limb-less bones) folds unconditionally — it is
+    // the fallback for viscera, which rides no cluster sphere.
+    d = foldBoneRange(d, p, data, i32(tail.x), i32(tail.y), band);
+  } else {
+    // Flat fallback — the pre-cull loop over the whole contiguous span
+    // [counts.x, counts.x + boneCount). Byte-identical to the shipped
+    // shader: pack wrote zero bone-cluster texels.
+    d = foldBoneRange(d, p, data, first, i32(boneCount), band);
   }
   return d;
 }`;
@@ -3613,7 +3652,7 @@ export const HELPERS = [
   SD_SHELL,
   Q_ROT, Q_MUL, Q_FROM_TO, REST_POINT,
   APPLY_CARVES, APPLY_WOUNDS, WOUND_MASK, TISSUE_RAMP, CHAR_MASK, SAMPLE_VOLUME,
-  FOLD_GROUP, APPLY_BONES, MAP_BODY, CALC_NORMAL, WOUND_SHADOW, TEXEL, FLICKER, SOFT_SHOULDER,
+  FOLD_GROUP, FOLD_BONE_RANGE, APPLY_BONES, MAP_BODY, CALC_NORMAL, WOUND_SHADOW, TEXEL, FLICKER, SOFT_SHOULDER,
   WALL_CONTRIBUTION, AMBIENT_AT, LEVEL_SHADOW,
   // Quarter-res depth prepass fetch (close-up task 3). No field deps — it is
   // a textureLoad — so it rides last, ahead of MARCH_BODY which calls it.

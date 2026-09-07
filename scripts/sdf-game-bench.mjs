@@ -212,6 +212,11 @@ const ALL_LEGS = {
   // pending the look verdict). Prices the inside-flesh rows the nearWound
   // gate opens.
   'bone-mesh-on': { setBoneMesh: true },
+  // Bone-cluster sphere cull ON: one per-flesh-cluster sphere culls the
+  // inside-flesh rows (bones/organs) before folding them inside wounds. The
+  // spatially-culled alternative to bone-mesh-on — keeps the bones in the
+  // field, recovers a fraction of the bone-mesh-on win (gib -25-30%).
+  'bone-cull-on': { setBoneCull: true },
 };
 // BENCH_LEGS lets a validation pass run one leg without the whole matrix.
 const LEGS = process.env.BENCH_LEGS
@@ -253,6 +258,7 @@ async function applyLeg(name) {
     __sdfGame.setOwnerRefold(true);
     __sdfGame.setWoundList(false);
     __sdfGame.setBoneMesh(false);
+    __sdfGame.setBoneCull(false);
     // Chunk pass: split ONLY in passes mode, so the timer can label chunks;
     // every other mode benches the shipped single pass.
     __sdfGame.setChunkPass(${JSON.stringify(PASSES ? 'split' : 'merged')});

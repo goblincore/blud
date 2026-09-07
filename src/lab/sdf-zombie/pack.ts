@@ -69,6 +69,21 @@ export interface PackedBody {
   clusterBounds: Float32Array; // xyz = centre, w = radius
   clusterRange: Float32Array;  // x = start, y = count, z = alive, w = 1 when the cluster carries oriented prims
   /**
+   * BONE-CLUSTER SPHERES (packBoneClusters). One bound sphere per flesh
+   * cluster's BONE rows, so a near-wound pixel folds the pelvis's bones but
+   * not the skull's. Stored in the FREE texels of ROW_CLUSTER_BOUNDS /
+   * ROW_CLUSTER_RANGE (columns MAX_CLUSTERS..2*MAX_CLUSTERS, plus one tail
+   * texel at 2*MAX_CLUSTERS), so no new row (and no DATA_ROWS bump) is
+   * needed. Indexed [c] for cluster c; [MAX_CLUSTERS] is the TAIL.
+   * boneClusterRange[c] = x start, y count, z DISTORTION factor, w 0.
+   * boneClusterBounds[c] = xyz centre, w radius. The tail texel's .w is the
+   * cull's ENABLED FLAG: 1 whenever packBoneClusters is on, 0 when off —
+   * the shader's flat-fallback signal (see march.wgsl.ts APPLY_BONES).
+   * All zero when the option is off, and the bone rows stay in fold order.
+   */
+  boneClusterBounds: Float32Array;
+  boneClusterRange: Float32Array;
+  /**
    * BOUND GROUPS: the fold's cull unit. A cluster is a limb, and a limb's one
    * sphere is fat — the schoolgirl's leg sphere (0.57 m, centred at the
    * thigh) swallows the skirt and the other leg, so a pixel near the hip
@@ -151,6 +166,14 @@ export interface PackOpts {
    * and boneCount counts organs. Byte-identical rows when true.
    */
   packBones?: boolean;
+  /**
+   * Write the bone-cluster sphere + range texels (packBoneClusters). Default
+   * FALSE — the old flat loop. ON, the BONE rows are grouped cluster by
+   * cluster (then a tail for organs and limb-less bones) and each cluster's
+   * bound sphere is written, so the shader can cull a far limb's bones with
+   * one texel read. See boneClusterBounds / boneClusterRange.
+   */
+  packBoneClusters?: boolean;
 }
 
 export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {}): PackedBody {
@@ -296,14 +319,74 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
   // same contract as prims.
   const restBones = (rest ?? body).bonePrims ?? [];
   const packBones = opts.packBones ?? true;
+  const packBoneClusters = opts.packBoneClusters ?? false;
+  // One pair of texels per CLUSTER plus one tail texel (index MAX_CLUSTERS),
+  // stored in the free columns of ROW_CLUSTER_BOUNDS / ROW_CLUSTER_RANGE —
+  // see the PackedBody doc for the layout. Only op writes anything;
+  // allocating here guarantees the OFF path yields all-zero arrays, the
+  // shader's flat-fallback signal.
+  const boneClusterBounds = new Float32Array((MAX_CLUSTERS + 1) * CLUSTER_STRIDE);
+  const boneClusterRange = new Float32Array((MAX_CLUSTERS + 1) * CLUSTER_STRIDE);
   let boneCount = 0;
-  (body.bonePrims ?? []).forEach((b, j) => {
-    if (!body.clusters[b.cluster]?.alive) return;
-    if (!packBones && b.op === 'bone') return;
+  // The writable path shared by the flat and grouped loops — one place for
+  // the dead/op encoding and the rest pairing, so a grouped reorder cannot
+  // drift the rows that fold.
+  const writeBone = (b: Primitive, j: number): void => {
     writePrim(b, body.prims.length + boneCount,
       b.dead ? W_DEAD : b.op === 'organ' ? W_ORGAN : W_BONE, restBones[j]);
     boneCount++;
-  });
+  };
+
+  if (packBoneClusters) {
+    // Group the live inside-flesh rows by owning cluster (bone.limb ===
+    // cluster.limb). Organs — and any bone matching no cluster — go to the
+    // tail, which the shader folds unconditionally (it is the fallback for
+    // viscera, which rides no cluster). Write cluster by cluster, then the
+    // tail, so the shader can cull each cluster's bones with one sphere test
+    // before folding its contiguous range.
+    const buckets: { b: Primitive; j: number }[][] = body.clusters.map(() => []);
+    const tail: { b: Primitive; j: number }[] = [];
+    (body.bonePrims ?? []).forEach((b, j) => {
+      if (!body.clusters[b.cluster]?.alive) return;
+      if (!packBones && b.op === 'bone') return;
+      let owner = -1;
+      if (b.op !== 'organ') {
+        for (let c = 0; c < body.clusters.length; c++) {
+          if (b.limb === body.clusters[c]!.limb) { owner = c; break; }
+        }
+      }
+      (owner >= 0 ? buckets[owner]! : tail).push({ b, j });
+    });
+    buckets.forEach((bucket, c) => {
+      if (bucket.length === 0) return;
+      const start = body.prims.length + boneCount;
+      const prims = bucket.map(x => x.b);
+      for (const { b, j } of bucket) writeBone(b, j);
+      // The SAME sphere fit the group fold uses (fitSphere) — NOT a
+      // hand-rolled formula — applied to this cluster's posed bone prims.
+      // fitSphere includes a bent prim's control point, so a curved rib is
+      // bound over the Bezier hull, exactly as the flesh groups bind a bent
+      // prim. Radius sits at the reach (endpoints + thickness); the shader's
+      // hard-min test then has the margin the cull needs.
+      const fit = fitSphere(prims);
+      const distort = distortOf(prims);
+      const o = c * CLUSTER_STRIDE;
+      boneClusterBounds.set([fit.center[0], fit.center[1], fit.center[2], fit.radius], o);
+      boneClusterRange.set([start, bucket.length, distort, 0], o);
+    });
+    const tStart = body.prims.length + boneCount;
+    for (const { b, j } of tail) writeBone(b, j);
+    // The tail texel's .w is the cull's ENABLED FLAG (march.wgsl.ts): 1
+    // whenever this option is on, 0 when off — the shader's flat-fallback
+    // signal. z = 1: the tail folds unconditionally, no distortion factor.
+    boneClusterRange.set([tStart, tail.length, 1, 1], MAX_CLUSTERS * CLUSTER_STRIDE);
+  } else {
+    (body.bonePrims ?? []).forEach((b, j) => {
+      if (!body.clusters[b.cluster]?.alive) return;
+      if (!packBones && b.op === 'bone') return;
+      writeBone(b, j);
+    });
+  }
 
   const clusterBounds = new Float32Array(MAX_CLUSTERS * CLUSTER_STRIDE);
   const clusterRange = new Float32Array(MAX_CLUSTERS * CLUSTER_STRIDE);
@@ -371,6 +454,7 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
 
   return {
     primA, primB, primScale, primQuat, primShape, primBend, primColor, primShell, primClip, primWarp, primStrand, restA, restB, clusterBounds, clusterRange,
+    boneClusterBounds, boneClusterRange,
     groupBounds, groupRange, clusterGroups, groupCount,
     primCount: body.prims.length,
     clusterCount: body.clusters.length,

@@ -17,7 +17,7 @@ import {
 } from 'three/tsl';
 import type { BuildResult } from '../build-body';
 import { packBody, PRIM_STRIDE, W_BONE, W_ORGAN } from '../pack';
-import { MAX_PRIMS } from '../validate';
+import { MAX_PRIMS, MAX_CLUSTERS } from '../validate';
 import { MAX_WOUNDS } from '../damage';
 import { chunkPoint, squashFactors, type Chunk } from '../gib-chunks';
 import type { FleshMaterial, LightPreset } from '../material';
@@ -119,6 +119,12 @@ export interface ZombieGpuView {
    * field for the instanced-tube renderer and counts2.x counts organs only.
    */
   setPackBones(on: boolean): void;
+  /**
+   * One bound sphere per flesh cluster's bone rows (packBoneClusters). Default
+   * FALSE — the old flat bone loop, bit-identical. TRUE takes effect on the
+   * NEXT update(); __sdfGame.setBoneCull flips it live for the bench.
+   */
+  setBoneCull(on: boolean): void;
   /**
    * Lift the march's nearWound gate on the inside-flesh rows (counts2.y) —
    * the melt's skeleton must fold WITHOUT a wound, because the melt sags
@@ -1182,8 +1188,8 @@ export function createDataTexture() {
   tex.needsUpdate = true;
 
   /** Writes one row of the data texture from a packed Float32Array. */
-  function writeRow(row: number, src: Float32Array, count: number) {
-    const base = row * MAX_PRIMS * 4;
+  function writeRow(row: number, src: Float32Array, count: number, col = 0) {
+    const base = row * MAX_PRIMS * 4 + col * 4;
     for (let i = 0; i < count * 4; i++) texels[base + i] = src[i]!;
   }
   return { tex, texels, writeRow };
@@ -1400,10 +1406,22 @@ export function createZombieGpuView(
 
   // Posed bound groups of the LAST upload (perf task 5): the binner's input.
   let lastGroups: import('./tile-cull').TileGroupInput[] = [];
+  // The last upload()'s args, so setBoneCull / setPackBones can re-pack
+  // the SAME posed body immediately (used by the frozen-frame exactness gate
+  // — a.step is gated on !wanderFrozen, so the per-frame re-pack a cull flag
+  // usually rides is skipped). Stored here; the pose does not change on a
+  // re-pack, so the frame is bit-identical to the pre-toggle frame.
+  let lastUploadNext: BuildResult | undefined;
+  let lastUploadRest: BuildResult | undefined;
 
   // Bone tubes: FALSE once the instanced-tube renderer owns the bones — the
   // pack then writes ORGANS only and counts2.x counts organs.
   let packBones = opts.packBones ?? true;
+  // Bone-cluster spheres (packBoneClusters): TRUE culls the inside-flesh rows
+  // with one per-flesh-cluster sphere before folding them. FALSE (ship) is the
+  // old flat loop; pack writes zero bone-cluster texels and the shader falls
+  // back. __sdfGame.setBoneCull flips it; takes effect on the NEXT upload.
+  let packBoneClusters = false;
   // BARE BONES (melt task 5): TRUE lifts the march's nearWound gate on the
   // inside-flesh rows (counts2.y), so the skeleton folds WITHOUT a wound.
   // Only the melt sets this: it sags the flesh off the bones on purpose, and
@@ -1421,7 +1439,9 @@ export function createZombieGpuView(
   let woundBoundR = 1e9;
 
   function upload(next: BuildResult, rest?: BuildResult) {
-    const p = packBody(next, rest, { packBones });
+    lastUploadNext = next;
+    lastUploadRest = rest;
+    const p = packBody(next, rest, { packBones, packBoneClusters });
     lastGroups = [];
     for (let g = 0; g < p.groupCount; g++) {
       const o = g * 4;
@@ -1451,6 +1471,12 @@ export function createZombieGpuView(
     writeRow(ROW_PRIM_CLIP, p.primClip, MAX_PRIMS);
     writeRow(ROW_CLUSTER_BOUNDS, p.clusterBounds, p.clusterCount);
     writeRow(ROW_CLUSTER_RANGE, p.clusterRange, p.clusterCount);
+    // Bone-cluster spheres (packBoneClusters): stored in the free texels at
+    // column MAX_CLUSTERS of the SAME rows. MAX_CLUSTERS+1 texels — one per
+    // cluster index plus the tail (the shader's enabled flag). Zeros when the
+    // option is off (pack zeroed them), which is the shader's flat fallback.
+    writeRow(ROW_CLUSTER_BOUNDS, p.boneClusterBounds, MAX_CLUSTERS + 1, MAX_CLUSTERS);
+    writeRow(ROW_CLUSTER_RANGE, p.boneClusterRange, MAX_CLUSTERS + 1, MAX_CLUSTERS);
     // Full width: a shorter list than last frame must zero the tail, which
     // is the shader's end-of-list sentinel.
     writeRow(ROW_GROUP_BOUNDS, p.groupBounds, MAX_PRIMS);
@@ -1639,6 +1665,14 @@ export function createZombieGpuView(
     levelShadowTex: (material as unknown as MaterialWithLevelShadowTex).levelShadowTex,
     getTileGroups() { return lastGroups; },
     setPackBones(on) { packBones = on; },
+    setBoneCull(on) {
+      if (on === packBoneClusters) return;
+      packBoneClusters = on;
+      // Re-pack the SAME posed body so the cull takes effect without waiting
+      // for the next per-frame update — the frozen-frame exactness gate needs
+      // a frame to flip the flag without advancing the pose.
+      if (lastUploadNext) upload(lastUploadNext, lastUploadRest);
+    },
     setBonesBare(on) { bareBones = on; },
     setMelt(progress) { u.meltCfg.value.x = progress; },
     update(next, rest) {
@@ -1748,6 +1782,13 @@ export interface ChunkGpuView {
   /** Bone tubes: flip the packBones layout (pack.ts PackOpts.packBones).
    *  Re-packs immediately from the last reset() args. */
   setPackBones(on: boolean): void;
+  /** Bone-cluster cull (packBoneClusters). A chunk stays on the FLAT bone
+   *  fold: it is one cluster whose bones re-transform every frame, so a
+   *  baked bone-cluster sphere would go stale — and the chunk's own cluster
+   *  sphere already culls it as a unit. This seam exists so __sdfGame's
+   *  setBoneCull can address every view uniformly; it does not change a
+   *  chunk. See the body view's setBoneCull. */
+  setBoneCull(on: boolean): void;
   /** Everything the settled-chunk BAKE needs (close-up task 5): the
    *  CURRENT world-space field inputs of this view — flesh prims, bone
    *  prims, torn ends with their girth radii — plus the transform and the
@@ -2098,6 +2139,8 @@ export function createChunkGpuView(
       // rows flip NOW, not on the next sever.
       if (lastReset) reset(lastReset.c, lastReset.prims, lastReset.tornAt, lastReset.bones);
     },
+    // Chunks stay on the FLAT bone fold — see ChunkGpuView.setBoneCull.
+    setBoneCull() {},
     bakeData() {
       const c = current;
       const { sx, sy, sz } = squashFactors(c);

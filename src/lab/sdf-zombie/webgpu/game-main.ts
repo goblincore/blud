@@ -915,6 +915,15 @@ async function main() {
   boneInstancer.object.visible = false;
   scene.add(boneInstancer.object);
   let boneMesh = false;
+  // Bone-cluster sphere cull (packBoneClusters). OFF ships — the old flat
+  // bone loop; the bench's bone-cull-on leg flips it. Takes effect on the
+  // next upload; promotion to ON is the owner's call after the numbers.
+  let boneCull = false;
+  function applyBoneCull(on: boolean): void {
+    boneCull = on;
+    for (const a of actors) a.view.setBoneCull(on);
+    for (const c of liveChunks) c.view.setBoneCull(on);
+  }
   function applyBoneMesh(on: boolean): void {
     boneMesh = on;
     boneInstancer.object.visible = on;
@@ -4806,6 +4815,11 @@ async function main() {
       for (const a of actors) a.view.uniforms.counts2.value.z = on ? 0 : 1;
     },
     get ownerRefold() { return (actors[0]?.view.uniforms.counts2.value.z ?? 0) < 0.5; },
+    /** Bone-cluster sphere cull (packBoneClusters). OFF ships — the old flat
+     *  bone loop; the bench's bone-cull-on leg flips it for A/B. Takes effect
+     *  on the next per-frame pack, so a live flip needs a frame to land. */
+    setBoneCull(on: boolean) { applyBoneCull(on); },
+    get boneCull() { return boneCull; },
     /** Per-ray wound list (march.wgsl.ts, counts2.w): build the reachable
      *  wound set once per pixel and fold only those. OFF is bit-identical. */
     setWoundList(on: boolean) {
