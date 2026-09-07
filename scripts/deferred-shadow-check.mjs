@@ -66,6 +66,9 @@ const screenshot = async (name) => {
 };
 
 const results = { checks, errors, pass: false };
+/** First on/off capture (masks included) — written into the failure record
+ *  too, so a failed gate still carries its GPU evidence for diagnosis. */
+let firstPairEvidence = null;
 try {
   await send('Page.enable'); await send('Runtime.enable');
   await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
@@ -111,6 +114,7 @@ try {
   await assertNoPageErrors('after map census');
 
   const pair = await evaluate('__deferredShadows.capturePair()');
+  firstPairEvidence = { onHash: pair.onHash, offHash: pair.offHash, masks: pair.masks };
   await assertNoPageErrors('after sampling-on capture');
   assert.notEqual(pair.onHash, pair.offHash, 'shadow sampling must change the lit output');
   check('sampling-changes-output', { onHash: pair.onHash, offHash: pair.offHash });
@@ -194,10 +198,15 @@ try {
 } finally {
   // Close the owned tab + socket on SUCCESS as well as failure. The full
   // evidence file is written above on success; the finally block must not
-  // clobber it — it only preserves the failure record.
+  // clobber it — it only preserves the failure record WITH whatever evidence
+  // was already gathered (masks, hashes), never a bare pass:false.
   try { await send('Page.close'); } catch { /* tab may already be gone */ }
   try { ws.close(); } catch { /* already closed */ }
   if (!results.pass) {
-    writeFileSync(`${out}/task4-shadow-check.json`, JSON.stringify(results, null, 2));
+    writeFileSync(`${out}/task4-shadow-check.json`, JSON.stringify({
+      ...results,
+      bootDiag: typeof diag !== 'undefined' ? diag : null,
+      firstPair: firstPairEvidence,
+    }, null, 2));
   }
 }

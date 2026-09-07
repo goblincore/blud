@@ -183,7 +183,10 @@ interface MaskEvidence {
   floor: {
     darkenedProxy: number; darkenedOther: number; clearProxy: number;
     proxyDarkenedFraction: number;
-    largestComponent: number; centroid: [number, number] | null;
+    largestComponent: number;
+    /** Top 5 darkened-mask 4-connected component sizes (coherence evidence). */
+    componentSizes: number[];
+    centroid: [number, number] | null;
     /** Mean WORLD x of the proxy-explained darkened floor pixels — the
      *  world-space handle the motion check flips (light +x -> shadow -x). */
     proxyShadowMeanWorldX: number | null;
@@ -441,6 +444,7 @@ const readLit = async (): Promise<ReadBuffer> => readTargetChannel(handle, defer
     // Largest 4-connected component of the darkened floor mask (coherence).
     const seen = new Uint8Array(FIXED_W * FIXED_H);
     let largest = 0;
+    const componentSizes: number[] = [];
     const stack: number[] = [];
     for (let i = 0; i < darkMask.length; i++) {
       if (!darkMask[i] || seen[i]) continue;
@@ -457,6 +461,7 @@ const readLit = async (): Promise<ReadBuffer> => readTargetChannel(handle, defer
           if (darkMask[ni] && !seen[ni]) { seen[ni] = 1; stack.push(ni); }
         }
       }
+      componentSizes.push(size);
       largest = Math.max(largest, size);
     }
     return {
@@ -465,7 +470,9 @@ const readLit = async (): Promise<ReadBuffer> => readTargetChannel(handle, defer
       floor: {
         darkenedProxy: darkProxy, darkenedOther: darkOther, clearProxy,
         proxyDarkenedFraction: darkProxy + clearProxy ? darkProxy / (darkProxy + clearProxy) : 0,
-        largestComponent: largest, centroid: darkTotal ? [sumX / darkTotal, sumY / darkTotal] : null,
+        largestComponent: largest,
+        componentSizes: componentSizes.sort((a, b) => b - a).slice(0, 5),
+        centroid: darkTotal ? [sumX / darkTotal, sumY / darkTotal] : null,
         proxyShadowMeanWorldX: proxyWorldN ? proxyWorldX / proxyWorldN : null,
         sampleCoords: darkCoords,
       },
