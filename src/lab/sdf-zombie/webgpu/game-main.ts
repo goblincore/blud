@@ -118,7 +118,15 @@ import {
   createBakedChunkMaterial, type BakedChunkMaterial,
 } from './baked-chunks';
 import { chunkExtent } from '../extent';
-import { createChunkGpuView, createSharedChunkGpuMaterial, type ChunkGpuView } from './zombie-gpu';
+import { createChunkGpuView, createSharedChunkGpuMaterial, type ChunkGpuView, type GpuViewOpts } from './zombie-gpu';
+import {
+  createGameDeferredRenderer,
+  deferredEnvironmentFromRig,
+  resolveGameBootMode,
+  type GameDeferredRendererDiagnostics,
+} from './game-deferred-renderer';
+import type { GameLightCandidate } from './game-deferred-lights';
+import type { DeferredDebugView } from './deferred-layer';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { Primitive } from '../types';
@@ -189,6 +197,18 @@ async function main() {
   const handle = await createLabRenderer(mount, RES_RUNGS[resKey]);
   const { scene, camera } = handle;
   const telemetry = new GameTelemetry();
+
+  // RENDER MODE — parsed ONCE at boot (hybrid deferred M2 task 5). Absent or
+  // 'legacy' boots the legacy path unchanged; 'deferred' opts into the
+  // deferred coordinator below. An explicit deferred request on a backend
+  // that is not really WebGPU (WebGPURenderer silently falls back to WebGL;
+  // handle.backend is the honest signal) is FATAL and visible on the page —
+  // silently benchmarking legacy while claiming deferred is the one failure
+  // this seam must never produce.
+  const bootMode = resolveGameBootMode(new URLSearchParams(location.search).get('renderer'), handle.backend);
+  if (bootMode.warning) console.warn(`[sdf-game] ${bootMode.warning}`);
+  if (bootMode.fatal) throw new Error(bootMode.fatal);
+  const deferredMode = bootMode.mode === 'deferred';
 
   // FRAME PACING. Present on a 30 fps cadence instead of taking whatever slot
   // rAF hands us. Unpaced, a ~33 ms frame on a 60 Hz display alternates between
@@ -363,7 +383,14 @@ async function main() {
   scene.add(flashlight.levelShadow);
   scene.add(flashlight.levelShadow.target);
 
-  handle.renderer.shadowMap.enabled = true;
+  // DEFERRED MODE: three's own shadow traversal is OFF. The deferred shadow
+  // maps (deferred-shadows.ts) are explicit raster passes that never consult
+  // renderer.shadowMap, and every opaque surface is an unlit G-buffer
+  // producer — three's per-light shadow maps would be 1024² passes of pure
+  // waste per renderer.render call. Boot-time decision: three r185 WebGPU
+  // crashes when castShadow is toggled after maps were built, so this ships
+  // as a boot property like the legacy ?spotshadow=0 ablation above.
+  handle.renderer.shadowMap.enabled = !deferredMode;
   handle.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   levelGroup.traverse((o) => {
     if (o instanceof THREE.Mesh) { o.castShadow = true; o.receiveShadow = true; }
@@ -456,6 +483,58 @@ async function main() {
   }
   const sdfLayer = createSdfLayer(handle.renderer);
   postAa.addSink(sdfLayer);
+
+  // -----------------------------------------------------------------------
+  // THE DEFERRED COORDINATOR (?renderer=deferred only — M2 task 5). Owns the
+  // deferred frame composition: shadow maps -> shared light list ->
+  // environment -> G-buffer (mesh + SDF producer passes through the task-3
+  // router) -> lit present -> forward content. It does NOT own simulation:
+  // the light candidates and the environment are LIVE callbacks re-read
+  // every frame, so boot never reads a not-yet-initialised game variable
+  // (the muzzle light in particular is created inside the async gun load —
+  // the closure reads `muzzleLight`, assigned when it resolves).
+  //
+  // Both the sdf layer and this coordinator are post-aa SINKS: whichever one
+  // the frame actually draws presents into postAa's capture target (or the
+  // canvas when every post effect is off). The legacy sdfLayer is still
+  // created and sized in deferred mode — it is the sizing oracle the goo and
+  // the resolution ladder already agree on — but its render is never called,
+  // so its targets stay uninitialised and cost nothing.
+  // -----------------------------------------------------------------------
+  /** The muzzle PointLight, assigned when the gun GLB resolves (it is
+   *  allocated once at intensity 0 and modulated per shot). Read live by the
+   *  coordinator's lights() callback. */
+  let muzzleLight: THREE.PointLight | null = null;
+  const spotShadowParam = new URLSearchParams(location.search).get('spotshadow');
+  const deferredApi = deferredMode
+    ? createGameDeferredRenderer({
+      renderer: handle.renderer,
+      scene,
+      lights: () => {
+        const candidates: GameLightCandidate[] = [
+          { id: 'flashlight', role: 'flashlight', light: flashlight.spot },
+        ];
+        if (muzzleLight) candidates.push({ id: 'muzzle', role: 'muzzle', light: muzzleLight });
+        flickerLights.forEach((f, i) =>
+          candidates.push({ id: `fire-${String(i).padStart(2, '0')}`, role: 'practical', light: f.light }));
+        return candidates;
+      },
+      environment: () => deferredEnvironmentFromRig(dungeonOn ? DUNGEON_RIG : GALLERY_RIG),
+      flashlight: flashlight.spot,
+      width: postAa.contentSize.width,
+      height: postAa.contentSize.height,
+    })
+    : null;
+  if (deferredApi) {
+    // Boot ablation (?spotshadow=0): the shadow maps never render. The
+    // sampling-only diagnostic toggle lives on __sdfGame below.
+    deferredApi.setShadowGeneration(spotShadowParam !== '0');
+    postAa.addSink(deferredApi);
+    // Static scene routes. Everything ASYNC (kit/prop groups, chunks, baked
+    // meshes, bone tubes) registers at its own creation site below.
+    deferredApi.router.register(levelGroup, 'mesh', 'full');
+    deferredApi.router.register(accentGroup, 'mesh', 'full');
+  }
   /** SDF pass scale relative to the capped buffer. 1.0 = 1:1 (default).
    *  Runtime-adjustable for the cost table + adaptive ladder. */
   let sdfScale = 1.0;
@@ -499,6 +578,9 @@ async function main() {
   function sizeSdfLayer() {
     const s = postAa.contentSize;
     sdfLayer.setSize(s.width, s.height);
+    // The deferred layer tracks the same capped buffer (post-aa hands it the
+    // same capture target as a sink).
+    deferredApi?.setSize(s.width, s.height);
     sdfLayer.setConeGeometry(camera.fov, sdfLayer.targetSize.height);
     // Density follows the SDF layer at GOO_TUNING.densityScale. Called from
     // here rather than a separate resize listener (lab-main's shape) because
@@ -514,6 +596,7 @@ async function main() {
   function applySdfScale(v: number) {
     sdfScale = Math.min(1, Math.max(0.2, v));
     sdfLayer.setScale(sdfScale);
+    deferredApi?.setScale(sdfScale);
     sizeSdfLayer();
     // The AA footprint (aaCfg.x) is ONE PIXEL at the current SDF pass height;
     // a rung change moved that height, so refresh every live view (perf round
@@ -598,6 +681,54 @@ async function main() {
   let refreshActorTiles = () => {};
   handle.setDrawFn(() => postAa.render(() => {
     flashlight.update(camera);
+
+    // ---- COMMON per-frame updates (both render modes) ---------------------
+    // Fire flicker. Cheap and deliberately not random per frame — a smooth
+    // two-rate wobble reads as flame; white noise reads as a broken light.
+    // Runs in BOTH modes: the deferred practicals are the same PointLights,
+    // read live by the coordinator's light list.
+    {
+      const ft = performance.now() * 0.001;
+      for (const f of flickerLights) {
+        const w = Math.sin(ft * 7.3 + f.phase) * 0.5 + Math.sin(ft * 17.1 + f.phase * 2.3) * 0.25;
+        f.light.intensity = f.base * (1 + w * 0.14);
+      }
+    }
+    // Bone tubes: feed this frame's posed bones (actors stepped in tick
+    // ahead of this draw; chunks repacked world-space there too — posed()
+    // and posedBones() are always current). Both modes: in deferred mode the
+    // instancer is a level-only G-buffer producer with the SAME packing.
+    if (boneMesh) {
+      {
+        const craters: { pos: Vec3; radius: number }[] = [];
+        for (const a of actors) {
+          const prims = a.posed().prims;
+          for (const w of a.wounds()) craters.push({ pos: woundWorldPos(prims, w, 0), radius: w.radius });
+        }
+        boneInstancer.setWounds(craters);
+      }
+      boneInstancer.update([
+        ...actors.map(a => { const p = a.posed(); return { prims: p.bonePrims ?? [], alive: p.clusters.map(c => c.alive) }; }),
+        ...liveChunks.map(c => ({ prims: c.view.posedBones() })),
+      ]);
+    }
+    refreshActorTiles();
+
+    // ---- DEFERRED BRANCH (?renderer=deferred) -----------------------------
+    // No per-body beam replay here BY DESIGN: the bodies are unlit surface
+    // producers whose lighting comes from the deferred light stage, where the
+    // muzzle flash is its OWN light entry (the task-3 light list) — never a
+    // bias replayed into the flashlight's body uniforms like the legacy
+    // branch below. The coordinator's render does shadows -> opaque ->
+    // depth presentation -> forward content; goo nests around it exactly as
+    // it nests the legacy sdf render (both are post-aa output sinks).
+    if (deferredApi) {
+      if (gooEnabled && gooLayer) gooLayer.render(camera, () => deferredApi.render(camera));
+      else deferredApi.render(camera);
+      return;
+    }
+
+    // ---- LEGACY BRANCH (default; unchanged behaviour) ---------------------
     // Hand the march the same beam the meshes get. The SDF bodies shade
     // inside the march and cannot see the scene's SpotLight at all (the
     // owner's "characters aren't lit by the light direction" report), so
@@ -681,34 +812,11 @@ async function main() {
         bu.spotCfg2.value.set(beamTuning.gain, beamTuning.shoulder, beamTuning.keyFloor, 0);
       }
     }
-    // Fire flicker. Cheap and deliberately not random per frame — a smooth
-    // two-rate wobble reads as flame; white noise reads as a broken light.
-    const ft = performance.now() * 0.001;
-    for (const f of flickerLights) {
-      const w = Math.sin(ft * 7.3 + f.phase) * 0.5 + Math.sin(ft * 17.1 + f.phase * 2.3) * 0.25;
-      f.light.intensity = f.base * (1 + w * 0.14);
-    }
     // Front-to-back per-body passes (perf round 2 task 5): register this
     // frame's bodies and chunks. With the gate off the lists are not walked.
+    // LEGACY ONLY — the deferred mode's SDF producer pass is fed by the
+    // router, not by sdf-layer's body list.
     sdfLayer.setBodies(actors.map(a => a.view.object), chunkObjects());
-    // Bone tubes: feed this frame's posed bones (actors stepped in tick
-    // ahead of this draw; chunks repacked world-space there too — posed()
-    // and posedBones() are always current).
-    if (boneMesh) {
-      {
-        const craters: { pos: Vec3; radius: number }[] = [];
-        for (const a of actors) {
-          const prims = a.posed().prims;
-          for (const w of a.wounds()) craters.push({ pos: woundWorldPos(prims, w, 0), radius: w.radius });
-        }
-        boneInstancer.setWounds(craters);
-      }
-      boneInstancer.update([
-        ...actors.map(a => { const p = a.posed(); return { prims: p.bonePrims ?? [], alive: p.clusters.map(c => c.alive) }; }),
-        ...liveChunks.map(c => ({ prims: c.view.posedBones() })),
-      ]);
-    }
-    refreshActorTiles();
     if (gooEnabled && gooLayer) {
       gooLayer.render(camera, () => sdfLayer.render(scene, camera));
     } else {
@@ -731,6 +839,11 @@ async function main() {
   occluderHull.shadowObject.layers.set(SHADOW_HULL_LAYER);
   occluderHull.shadowObject.castShadow = true;
   scene.add(occluderHull.shadowObject);
+  // DEFERRED MODE: the occlusion hull and its inflated shadow twin are
+  // march/composite helpers, never G-buffer or forward content — the shadow
+  // module finds the twin through its SHADOW_HULL_LAYER membership instead.
+  deferredApi?.router.register(occluderHull.object, 'exclude');
+  deferredApi?.router.register(occluderHull.shadowObject, 'exclude');
 
   // OCCLUDER PRE-PASS OFF (2026-09-01). Its tMax clamp is gone from the
   // march -- the distance it rasterises is only accurate in the near field
@@ -874,6 +987,8 @@ async function main() {
   outerHull.exitObject.layers.set(SHELL_EXIT_LAYER);
   scene.add(outerHull.entryObject);
   scene.add(outerHull.exitObject);
+  deferredApi?.router.register(outerHull.entryObject, 'exclude');
+  deferredApi?.router.register(outerHull.exitObject, 'exclude');
   // SHELL ON BY DEFAULT (owner visual pass, 2026-08-31). Worth -40%/-54%
   // frame time (room 4/3) at real-render parity below the same-state noise
   // floor. The hull is populated by the frame loop before the first draw
@@ -892,10 +1007,14 @@ async function main() {
   // chunks. 256 overflowed on the first frame.
   // 2026-09-03 skeleton re-author: 67 drawn bones per zombie (12 rib pairs as
   // hoops, clavicles, a 15-piece pelvis), x10 bodies = 670 > 512.
-  const boneInstancer = createBoneInstancer(1024);
+  const boneInstancer = createBoneInstancer(1024,
+    // DEFERRED MODE: the tubes are a level-only G-buffer producer (tissue —
+    // a body's own hull must not swallow their light).
+    deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined);
   boneInstancer.object.layers.set(0);
   boneInstancer.object.visible = false;
   scene.add(boneInstancer.object);
+  deferredApi?.router.register(boneInstancer.object, 'mesh', 'level-only');
   let boneMesh = false;
   function applyBoneMesh(on: boolean): void {
     boneMesh = on;
@@ -1149,19 +1268,23 @@ async function main() {
     // registry. It rides in through `gpu`, which is createZombieGpuView's own
     // parameter type, so nothing about the seam had to widen to carry it.
     const tileBinding = gameTiles.createBinding();
-    const character = createCharacterView({
-      name,
-      start,
-      renderer: handle.renderer,
-      scene,
-      errors: errs,
-      // The panel's ratio, once the owner has touched it, overrides whatever
-      // the doc would have done (nothing today; an authored ratio from the
-      // bones block, later).
-      ...(boneRatioOverride !== null ? { boneRatio: boneRatioOverride } : {}),
-      gpu: {
-        cone: sdfLayer.cone,
-        tiles: tileBinding,
+    // DEFERRED MODE GPU OPTIONS. The view becomes a level-only surface
+    // producer (unlit G-buffer; the deferred light stage lights it), and the
+    // legacy pre-pass sources are NOT bound: sdf-layer.render never runs in
+    // this mode, so its targets would stay uninitialised (the lazy-init
+    // submit conflict sdf-layer's targetsNeedInit comment describes). Every
+    // one of these opts is optional by construction — the task-2 producer
+    // fixture is the precedent — and the fetch identities make the march
+    // bit-identical without them. LEVEL-ONLY receiver: a character's own
+    // inflated hull casts onto the ROOM (the full map) but must not swallow
+    // its own illumination (the level-only map).
+    const viewGpuOpts: GpuViewOpts = {
+      cone: sdfLayer.cone,
+      tiles: tileBinding,
+      ...(deferredMode ? {
+        output: 'surface' as const,
+        shadowReceiver: 'level-only' as const,
+      } : {
         occluder: sdfLayer.occluder,
         // The outer hull's bounds. Passing them unconditionally is safe:
         // the fetch identities (0 / 1e9) make the march bit-identical while
@@ -1181,7 +1304,27 @@ async function main() {
         // few dozen boxes.
         depthPre: sdfLayer.depthPre,
         levelShadow: { light: flashlight.levelShadow },
-      },
+      }),
+    };
+    // DEFERRED MODE: kit and prop load ASYNC and are added to the scene when
+    // their glTF resolves — a per-actor group is what lets ONE registration
+    // (propagated to descendants by the router's sync) catch them whenever
+    // they land, including across rebuilds. Legacy adds them straight to the
+    // scene, unchanged (the group is not even attached there).
+    const rigGroup = new THREE.Group();
+    rigGroup.name = `deferred-rig-${name}-${start[0]!.toFixed(2)}-${start[2]!.toFixed(2)}`;
+    if (deferredMode) scene.add(rigGroup);
+    const character = createCharacterView({
+      name,
+      start,
+      renderer: handle.renderer,
+      scene: deferredMode ? rigGroup : scene,
+      errors: errs,
+      // The panel's ratio, once the owner has touched it, overrides whatever
+      // the doc would have done (nothing today; an authored ratio from the
+      // bones block, later).
+      ...(boneRatioOverride !== null ? { boneRatio: boneRatioOverride } : {}),
+      gpu: viewGpuOpts,
     });
     const placed = character.body;
     const view = character.gpu;
@@ -1242,6 +1385,16 @@ async function main() {
     }
     scene.add(view.object);
     scene.add(view.coneObject);
+    // DEFERRED MODE registrations: the proxy box is the SDF producer; the
+    // coarse twin (always built) and the depth-pre twin (legacy only — the
+    // deferred view opts omit it) are march helpers that must never reach a
+    // G-buffer or forward pass; the kit/prop group is level-only tissue.
+    if (deferredApi) {
+      deferredApi.router.register(view.object, 'sdf');
+      deferredApi.router.register(view.coneObject, 'exclude');
+      if (view.depthPreObject) deferredApi.router.register(view.depthPreObject, 'exclude');
+      deferredApi.router.register(rigGroup, 'mesh', 'level-only');
+    }
     const zombieId = nextId++;
     const actor = createZombieActor({
       id: zombieId, room: room.id, body: placed, view, character, start,
@@ -1933,6 +2086,9 @@ async function main() {
     // both up from the first pass, which the owner reported as barely lighting
     // its surroundings.
     flashLight = new THREE.PointLight(0xffcf95, 0, 16, 1.7);
+    // The deferred coordinator's muzzle candidate reads this (live closure) —
+    // its own light entry, never a replay into the body flashlight uniforms.
+    muzzleLight = flashLight;
     // A little AHEAD of the bores, so it throws light down the room instead of
     // mostly onto the gun's own barrels.
     flashLight.position.set(MUZZLE_VIEW.x, MUZZLE_VIEW.y, MUZZLE_VIEW.z - 0.10);
@@ -2172,7 +2328,13 @@ async function main() {
   // SDF chunk path — the same pipeline the lab gibs with, capped and
   // recycled so a gore party cannot churn views unboundedly.
   const MAX_CHUNKS = 12;
-  const chunkMaterial = createSharedChunkGpuMaterial(sdfLayer.prev);
+  // DEFERRED MODE: the shared chunk material carries the surface mode for
+  // every detached chunk (one graph per output mode — the task-2 contract);
+  // the legacy prev source is only bound in legacy mode.
+  const chunkMaterial = createSharedChunkGpuMaterial(
+    deferredMode ? undefined : sdfLayer.prev,
+    deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined,
+  );
   const chunkViews: ChunkGpuView[] = [];
   const spareChunkViews: ChunkGpuView[] = [];
   const liveChunks: { id: number; state: ReturnType<typeof makeChunk>; view: ChunkGpuView; template: ChunkTemplate }[] = [];
@@ -2185,6 +2347,7 @@ async function main() {
     const i = bakedChunks.indexOf(b);
     if (i >= 0) bakedChunks.splice(i, 1);
     scene.remove(b.mesh);
+    deferredApi?.router.unregister(b.mesh);
     b.mesh.geometry.dispose(); // material is shared; geometry is per-bake
     return b.view;
   }
@@ -2221,13 +2384,22 @@ async function main() {
     const swapTiming = telemetry.begin();
     const baked = unpackChunkBake(done.result);
     if (!bakedChunkMat) {
-      bakedChunkMat = createBakedChunkMaterial();
+      bakedChunkMat = createBakedChunkMaterial(
+        // DEFERRED MODE: baked chunks are static flesh — level-only receivers
+        // with a surface G-buffer producer material.
+        deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined,
+      );
       bakedChunkSeed?.(bakedChunkMat);
     }
     liveChunks.splice(index, 1);
     const mesh = new THREE.Mesh(baked.geometry, bakedChunkMat.material);
     mesh.frustumCulled = true; // it is a static bounded mesh — let three cull it
     scene.add(mesh);
+    // DEFERRED MODE: the bake swaps the piece between producer routes —
+    // marched proxy (SDF producer) -> static mesh (level-only G-buffer
+    // producer). The proxy is only HIDDEN (its registration stays valid for
+    // the recycle ring).
+    deferredApi?.router.register(mesh, 'mesh', 'level-only');
     entry.view.object.visible = false; // the proxy box leaves the SDF passes
     bakedChunks.push({
       id: entry.id, mesh, view: entry.view,
@@ -2341,10 +2513,14 @@ async function main() {
         state, piece.prims, template.uniforms,
         piece.tornAt.length ? piece.tornAt : undefined,
         template.volumeTexture, chunkMaterial, piece.bones,
+        // Matching options with the shared material (task-2 contract: with a
+        // shared material the material's mode wins; the view must agree).
+        deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined,
       );
       view.setPackBones(!boneMesh);
       view.object.layers.set(SDF_LAYER);
       scene.add(view.object);
+      deferredApi?.router.register(view.object, 'sdf');
       chunkViews.push(view);
       liveChunks.push({ id: nextChunkId++, state, view, template });
     }
@@ -4198,6 +4374,29 @@ async function main() {
     get fxaa() { return postAa.fxaa; },
     setSmear: (v: number) => postAa.setSmear(v),
     get smear() { return postAa.smear; },
+    // ---------------------------------------------------------------
+    // DEFERRED RENDERER SEAM (M2 task 5). Everything is null-safe: on a
+    // legacy boot they are no-ops / report the legacy mode, so a capture
+    // script can call them unconditionally. diagnostics() is a bounded,
+    // JSON-serialisable record for the task-6 gate: routes, unsupported
+    // materials, light selection, shadow generation-vs-sampling counters
+    // (deliberately SEPARATE toggles), sizes and errors.
+    // ---------------------------------------------------------------
+    get renderMode() { return deferredMode ? 'deferred' : 'legacy'; },
+    deferredDiagnostics: (): GameDeferredRendererDiagnostics | { mode: 'legacy' } =>
+      deferredApi ? deferredApi.diagnostics() : { mode: 'legacy' as const },
+    /** Shadow map GENERATION. false skips both raster passes; the boot
+     *  ?spotshadow=0 seeds this. */
+    setSpotShadow: (on: boolean) => deferredApi?.setShadowGeneration(on),
+    get spotShadow() { return deferredApi?.diagnostics().shadow.generationRequested ?? null; },
+    /** Diagnostic SAMPLING-only toggle: maps keep rendering, the lit stage
+     *  ignores them. Its counter state lives in deferredDiagnostics().shadow
+     *  (sampling flag vs renderedMaps — the two never conflate). */
+    setSpotShadowSampling: (on: boolean) => deferredApi?.setShadowSampling(on),
+    /** The one exposure knob — scales the CONVERTED deferred lights without
+     *  touching the source THREE lights (task 6/7 calibration seam). */
+    setDeferredLightGain: (v: number) => deferredApi?.setLightGain(v),
+    setDeferredDebugView: (v: DeferredDebugView) => deferredApi?.setDebugView(v),
     // ---------------------------------------------------------------
     // THE FISHEYE. setFisheye(deg) sets the apparent vertical FOV at
     // screen CENTRE; setRenderFov(deg) sets what the camera actually

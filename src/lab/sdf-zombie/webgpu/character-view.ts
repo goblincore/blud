@@ -390,7 +390,11 @@ export interface CharacterViewOpts {
   name: string;
   start: Vec3;
   renderer: THREE.WebGPURenderer;
-  scene: THREE.Scene;
+  /** Where async kit/prop objects attach. Scene in every existing caller;
+   *  the deferred game passes a per-actor GROUP so one router registration
+   *  propagates to the kit/prop whenever their glTF resolves (M2 task 5).
+   *  Only .add() is used — Object3D is the honest type. */
+  scene: THREE.Object3D;
   /** Passed through to createZombieGpuView unchanged — the caller still owns
    *  the sdf layer, the flashlight and the lighting preset. Use the exact
    *  parameter type createZombieGpuView already declares; do not invent a
