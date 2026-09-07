@@ -3036,6 +3036,16 @@ async function main() {
   // captures that must be reproducible across boots (pixel parity, staged
   // benches) need the freeze to predate the first frame. Default unchanged.
   let wanderFrozen = new URLSearchParams(location.search).has('frozen');
+  /** TASK-6 DIAGNOSTIC RENDER LOCK. When true, tick(dt) returns BEFORE any
+   *  simulation mutation (player step, bob, recoil, weapon smoothing, flash
+   *  envelopes, smoke, chunks) — __sdfGame.step(n) becomes n pure re-renders
+   *  of a bit-frozen state, and readback seams (hashSurface/readSurfaceAt)
+   *  see a deterministic frame. freeze() alone never did this: it only pins
+   *  the WANDERERS, while stepPlayer/bob/weapon smoothing kept mutating the
+   *  camera and view-model every tick — two "identical" renders drifted as
+   *  the teleported player's head-bob decayed. Default OFF; only the gate
+   *  sets it, so legacy gameplay is untouched. */
+  let simLocked = false;
   /** Whether the hulls have been built for the CURRENT frozen stretch — see
    *  the frozen-from-boot hull build in tick. */
   let frozenHullBuilt = false;
@@ -3053,6 +3063,7 @@ async function main() {
   let lastWalkPos: [number, number] | null = null;
 
   function tick(dt: number) {
+    if (simLocked) return; // render-lock: drawFn still runs; nothing mutates.
     let input: MoveInput = {
       x: (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0),
       z: (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0),
@@ -4111,6 +4122,11 @@ async function main() {
     /** Freeze/unfreeze the wanderers (pose, rig and shader clock all pin). */
     freeze: (on: boolean) => { wanderFrozen = on; },
     get frozen() { return wanderFrozen; },
+    /** TASK-6 RENDER LOCK: while on, tick() mutates nothing (see simLocked),
+     *  so step(n) is n deterministic re-renders. Turn OFF around any state
+     *  change; settle transients with step(~90); turn back on to observe. */
+    setRenderLock: (on: boolean) => { simLocked = on; },
+    get renderLock() { return simLocked; },
     setProbeWeight: pushProbeWeight,
     get probeWeight() { return probeWeight; },
     /** Every zombie: id, room, live ground pose. */
@@ -4499,18 +4515,37 @@ async function main() {
     setDeferredDebugView: (v: DeferredDebugView) => deferredApi?.setDebugView(v),
     /** RAW G-buffer sample at an NDC point (composition review fix evidence
      *  seam): lets a gate assert the gun/hand SURFACE CHANNELS — not just
-     *  metadata — follow setGunTuning on the live frame. Null-safe on legacy. */
-    readSurfaceAt: (ndcX: number, ndcY: number) =>
-      deferredApi ? deferredApi.readSurfaceAt(ndcX, ndcY) : Promise.resolve(null),
+     *  metadata — follow setGunTuning on the live frame. Draws a still frame
+     *  FIRST so the sample always reflects the CURRENT state, never a stale
+     *  earlier frame. Null-safe on legacy. */
+    readSurfaceAt: (ndcX: number, ndcY: number) => {
+      if (!deferredApi) return Promise.resolve(null);
+      handle.drawOnce();
+      return deferredApi.readSurfaceAt(ndcX, ndcY);
+    },
     /** WHOLE-G-buffer digest (task-6 regression-gate seam): four per-
      *  attachment FNV-1a digests over the logical texels plus the class
      *  histogram and depth extent, computed IN PAGE — raw attachments never
-     *  cross CDP. The gate's invariance oracle: with the scene frozen, every
-     *  LIGHT/SAMPLING change (beam, exposure, shadow maps) must leave these
-     *  digests bit-identical, while geometry changes (wounds, chunks, kit
-     *  loads) move them. Null on a legacy boot. */
-    hashSurface: (): Promise<GameSurfaceHash | null> =>
-      deferredApi ? deferredApi.hashSurface() : Promise.resolve(null),
+     *  cross CDP. Draws a still frame FIRST, so two consecutive calls are
+     *  two SEPARATE renders of the current state — the no-change repeated-
+     *  render control the gate needs — not one target read twice. Null on
+     *  a legacy boot. */
+    hashSurface: (): Promise<GameSurfaceHash | null> => {
+      if (!deferredApi) return Promise.resolve(null);
+      handle.drawOnce();
+      return deferredApi.hashSurface();
+    },
+    /** TASK-6 TRUE-EMPTY PROOF SEAM: hide/show the static level meshes
+     *  (dungeon shell + accents). With them hidden and the camera aimed at
+     *  the (now absent) ceiling, verified rays see NO producer at any depth:
+     *  the G-buffer there is the far sentinel with an empty class — the
+     *  deterministic true-empty region this enclosed dungeon otherwise
+     *  lacks. The router's sync() skips visible=false subtrees, so this is
+     *  exact for both the G-buffer and the forward pass. */
+    setLevelMeshVisible: (on: boolean) => {
+      levelGroup.visible = on;
+      accentGroup.visible = on;
+    },
     /** Bounded SUBTREE INSPECTOR (task-6 kit/prop evidence seam): finds the
      *  first scene descendant whose name contains `namePart` (the deferred
      *  rig groups are named `deferred-rig-<character>-…`), walks its

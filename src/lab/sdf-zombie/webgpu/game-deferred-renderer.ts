@@ -271,10 +271,16 @@ export interface GameSurfaceHash {
   maxDepth: number;
   /** The deepest pixel in layer coordinates — the far-probe anchor. */
   deepestPixel: [number, number];
-  /** Pixels at the far sentinel (depth >= 0.9999): the empty-region census
-   *  the far probe needs. An enclosed dungeon render usually has ~none. */
+  /** Pixels at the far sentinel (depth >= 0.9999) with an EMPTY class —
+   *  the empty-region census the far probe needs. Depth alone does not make
+   *  a pixel empty: an occupied pixel with a degenerate depth is a defect,
+   *  not a sentinel. Occupied pixels that still read >= 0.9999 are counted
+   *  separately in deepOccupied. */
   sentinelPixels: number;
-  /** Centroid of the sentinel pixels (layer coords), when any exist. */
+  /** Pixels at depth >= 0.9999 that carry a NON-empty class. A healthy
+   *  render has zero; nonzero is honest evidence of a depth/class defect. */
+  deepOccupied: number;
+  /** Centroid of the TRUE sentinel pixels (layer coords), when any exist. */
   sentinelCentroid: [number, number] | null;
 }
 
@@ -527,6 +533,7 @@ export function createGameDeferredRenderer(deps: GameDeferredRendererDeps): Game
       let maxDepth = 0;
       let deepest: [number, number] = [0, 0];
       let sentinelPixels = 0;
+      let deepOccupied = 0;
       let sx = 0, sy = 0;
       const ecU16 = new Uint16Array(ec.bytes.buffer, ec.bytes.byteOffset, ec.bytes.byteLength / 2);
       const depF32 = new Float32Array(dep.bytes.buffer, dep.bytes.byteOffset, dep.bytes.byteLength / 4);
@@ -543,7 +550,12 @@ export function createGameDeferredRenderer(deps: GameDeferredRendererDeps): Game
           if (Number.isFinite(d)) {
             if (d < minDepth) minDepth = d;
             if (d > maxDepth) { maxDepth = d; deepest = [x, y]; }
-            if (d >= 0.9999) { sentinelPixels++; sx += x; sy += y; }
+            if (d >= 0.9999) {
+              // SENTINEL = far depth AND empty class. An occupied pixel at
+              // the far depth is a depth/class defect, counted honestly.
+              if (cls > 0.5) deepOccupied++;
+              else { sentinelPixels++; sx += x; sy += y; }
+            }
           }
         }
       }
@@ -561,6 +573,7 @@ export function createGameDeferredRenderer(deps: GameDeferredRendererDeps): Game
         maxDepth,
         deepestPixel: deepest,
         sentinelPixels,
+        deepOccupied,
         sentinelCentroid: sentinelPixels > 0 ? [Math.round(sx / sentinelPixels), Math.round(sy / sentinelPixels)] : null,
       };
     },

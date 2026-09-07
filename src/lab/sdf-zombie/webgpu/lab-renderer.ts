@@ -56,6 +56,11 @@ export interface LabRendererHandle {
   setFrameCap(fps: number): void;
   /** The active cap in fps, 0 when uncapped. */
   readonly frameCap: number;
+  /** Draw ONE frame without the tick callback. The task-6 game gate's
+   *  still-render seam: hashSurface/readSurfaceAt re-render through this so
+   *  two consecutive readbacks of a locked scene are two SEPARATE renders,
+   *  not the same target read twice. Pure re-present — no simulation. */
+  drawOnce(): void;
   /** The measured display refresh in ms. Measured, never assumed. */
   readonly refreshMs: number;
   step(dtSec: number): void;
@@ -379,6 +384,7 @@ export async function createLabRenderer(mount: HTMLElement, cap?: RenderCap): Pr
     setFrameObserver(observer) { frameObserver = observer; },
     backend: backendName,
     step(dtSec) { cb(dtSec); drawFn(); },
+    drawOnce() { drawFn(); },
     async resolveGpu() {
       try {
         await renderer.resolveTimestampsAsync();
