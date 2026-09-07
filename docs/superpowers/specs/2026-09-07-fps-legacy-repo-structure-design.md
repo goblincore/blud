@@ -94,10 +94,17 @@ both projects. See the [Stage 2 plan](../plans/2026-09-07-fps-legacy-repo-struct
 
 - Stage 2 begins only after the deferred-rendering migration is reviewed and
   integrated **and** Stage 1 is in place.
-- Before Stage 2 moves: verify no active runtime import from legacy, no shared
-  import that belongs to a single side, old game still runnable, active FPS and
-  authoring tools work, old references/provenance retained, and test
-  counts/baselines preserved. No gameplay or renderer tuning changes.
+- Before Stage 2 moves: **base-source inventory** the current active/legacy/shared
+  import surface so each move step is exact. Do **not** treat "no active runtime
+  import from legacy" as a pre-move condition — today's tree is intentionally
+  interleaved and the active side still imports shared modules under `src/game/`.
+  "No active runtime import from `src/legacy`" is a **post-move acceptance
+  invariant** enforced after the relocation, not a precondition.
+- Post-move acceptance: no active runtime import from `src/legacy`; `src/shared`
+  holds only real dual consumers (plus their own non-application dependencies,
+  never either application); old game still runnable; active FPS and authoring
+  tools work; old references/provenance retained; test counts/baselines preserved.
+  No gameplay or renderer tuning changes.
 
 ## Stage 1 verification (lightweight only)
 

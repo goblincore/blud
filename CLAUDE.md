@@ -1,6 +1,7 @@
 # Blud — Claude Code project context
 
-Blood-inspired FPS. TypeScript + Three.js + Rapier3D.js.
+Blood-inspired FPS. TypeScript + Three.js. (Rapier3D.js is used only by the
+retired sprite game, not the active SDF FPS.)
 
 **The active project is the SDF-rendered FPS** in
 [`src/lab/sdf-zombie/`](src/lab/sdf-zombie) (the "lab" name is historical, not a
@@ -28,11 +29,16 @@ concepts** — do not conflate them.
 ## Assets
 
 - **Extracted Blood assets are dev placeholders only** — never commit, never
-  ship. `.gitignore` enforces this for `public/assets/**/*-placeholder*` and
-  `assets-source/blood-extracted/`.
-- [`scripts/link-dev-assets.sh`](scripts/link-dev-assets.sh) links the gitignored
-  placeholders from the primary checkout into a worktree (run once per worktree,
-  or the game will not boot). It does not extract them for a fresh clone.
+  ship. `.gitignore` enforces this for `public/assets/**/*-placeholder*`,
+  `assets-source/blood-extracted/`, `public/assets/post-fx/` and
+  `public/assets/map-research/`.
+- The **active FPS** (`/sdf-game.html`) uses tracked `public/assets/lab/*` assets
+  and needs no placeholder link. The **retired game** (`/index.html`) and the
+  lab's post-fx path need dev assets: run
+  [`scripts/link-dev-assets.sh`](scripts/link-dev-assets.sh) once per worktree to
+  symlink the gitignored placeholders from the primary checkout into the worktree
+  (it fills holes only; it does not extract for a fresh clone). The **WebGL lab**
+  (`/sdf-lab.html`) post-fx additionally loads `/assets/post-fx/BLOOD.PAL.png`.
 
 ## Repo layout
 

@@ -38,18 +38,25 @@ The old `/index.html` still serves legacy until Stage 2.
 
 ## Rules
 
-- **Memory:** Use the DualMem launcher
-  (`~/.config/dualmem/bin/dualmem-run`) for cross-session memory. **Do not**
-  create a `MEMORY.md` or a `/memory/` persistence. Record durable code facts
-  with `--files` pinned to the source file(s).
-- **Tests:** Run focused tests, not the whole suite, unless asked. GPU captures,
-  production builds, previews and heavy indexing are out of scope here — do not
-  run them casually.
+- **Memory:** Every session starts by running **both** launcher commands:
+
+  ```
+  ~/.config/dualmem/bin/dualmem-run context "session context" --budget 3000
+  ~/.config/dualmem/bin/dualmem-run context "session context" --budget 1500 --ns claude:infra
+  ```
+
+  Search memory **before** broad grep/glob exploration for how something works or
+  where it lives. **Do not** create a `MEMORY.md` or a `/memory/` persistence.
+  Record durable code facts with `--files` pinned to the source file(s).
+- **Verification:** Run the verification appropriate to the change (focused tests
+  for local edits; a build/typecheck for cross-cutting edits). Coordinate any
+  GPU / heavy job to avoid concurrent measurements; own and clean up only your
+  own resources; respect user-authorized work and preserve unrelated edits.
 - **Resource ownership:** Extracted Blood assets are **dev placeholders only** —
-  never commit, never ship. `.gitignore` enforces this (`public/assets/**/*-placeholder*`
-  and `assets-source/blood-extracted/`). `scripts/link-dev-assets.sh` links
-  them from the primary checkout into a worktree; it does not extract them for a
-  fresh clone.
+  never commit, never ship. `.gitignore` enforces this (`public/assets/**/*-placeholder*`,
+  `assets-source/blood-extracted/`, `public/assets/post-fx/`,
+  `public/assets/map-research/`). `scripts/link-dev-assets.sh` links them from the
+  primary checkout into a worktree; it does not extract them for a fresh clone.
 - **Shared modules:** some `src/game/*` modules are shared by both projects
   (e.g. `game/gibs/tuning.ts`, `game/weapons/muzzle-pos.ts`). Pay attention to
   provenance — do not move the old tree blindly. See the repository map.
@@ -59,4 +66,9 @@ The old `/index.html` still serves legacy until Stage 2.
 - Prefer evidence over claims: run the verification, record the output, report
   limits honestly. Do not claim a full build/test/gameplay/GPU pass from
   lightweight checks.
-- No merge/push or primary-checkout edits without explicit instruction.
+- **Repo boundaries:** Don't merge/push or edit the primary checkout beyond the
+  user-authorized scope of the current task; preserve unrelated edits. Transient
+  task constraints (e.g. "no GPU, no build, no main-checkout edits" for a specific
+  dispatch) belong in that task's dated plan/dev-notes, not here — this file sets
+  durable guidance and does not add approval requirements for routine authorized
+  development.

@@ -83,54 +83,110 @@ Provenance / value source docs:
 
 ## 3. Current SDF counterparts
 
-The active game already ports these behaviors as **pure functions** that mirror
-the sim **through data**, not by importing the sim (the lab has no `SimState`):
+The active-side dynamite/gib math lives as **pure functions** that mirror the
+sim **through data**, not by importing the sim (the lab has no `SimState`). These
+are **reusable active-project modules**, not all of which are wired into the
+playable FPS (`/sdf-game.html`):
+
+- The **dynamite-throw** modules (`dynamite-flight`, `fpv`, `hands`,
+  `dynamite-prop`) are mounted by the **WebGPU lab**
+  (`/sdf-lab-webgpu.html` → `src/lab/sdf-zombie/webgpu/lab-main.ts`). That is a
+  separate entrypoint from the FPS — `webgpu/game-main.ts` has no dynamite
+  integration (see §4).
+- `explosion-aoe` and `blood-sim` are used by **both** the WebGPU lab (via
+  `fpv-mode`) **and** the active FPS (`webgpu/game-main.ts` imports
+  `resolveExplosion` / `blood-sim`).
 
 | Behavior | Active SDF module | Notes |
 | --- | --- | --- |
 | Thrown-bundle flight / fuse / bounce | `src/lab/sdf-zombie/dynamite-flight.ts` | Pure `(state,dt) → state`; mirrors `src/sim/thing.ts` mover + `src/sim/projectile.ts` fuse **without importing them**. Imports `DYNAMITE_COOK`/`BALLISTIC_BOUNDS` from `game/gibs/tuning.ts`. Fixed 120 Hz sub-steps. |
 | Explosion AOE resolver | `src/lab/sdf-zombie/explosion-aoe.ts` | Pure resolver — blast wounds, launch impulses, damage credit, gib decision, air-vs-ground VFX, FPV kick. Mirrors `GibSystem.spawnExplosion` through constants; imports `EXPLOSION_STANDARD`/`EXPLOSION_LAUNCH`/`GIB_THRESHOLD`/... from `game/gibs/tuning.ts`. |
 | Blood trail / splat / gib burst | `src/lab/sdf-zombie/blood-sim.ts` | FX_13 burst, FX_27 trails, splat stamps. Imports `BLOOD_TRAIL`/`GIB_BURST`/`BLOOD_SPLAT` from `game/gibs/tuning.ts`. Also carries wound-bleed emitters. |
-| First-person throw / cook state machine | `src/lab/sdf-zombie/fpv.ts` | Pure FPV controller with the `DYNAMITE_COOK` state machine (idle → cooking → thrown → cooldown; overscook self-detonates). Imports `DYNAMITE_COOK`/`BALLISTIC_BOUNDS` from `game/gibs/tuning.ts`. |
+| First-person throw / cook state machine | `src/lab/sdf-zombie/fpv.ts` | Pure FPV controller with the `DYNAMITE_COOK` cook machine. Phases are `'idle' | 'cooking' | 'cooldown'`; on release it emits a `throw` **signal** (charge fraction + speed), and the wiring composes the direction and hands the flight to `dynamite-flight.ts`. There is **no** `'thrown'` cook phase. Holding past `fuseMaxSec` returns to `idle` with an `overcook` signal. Imports `DYNAMITE_COOK`/`BALLISTIC_BOUNDS` from `game/gibs/tuning.ts`. |
 | FPV hands | `src/lab/sdf-zombie/hands.ts` | SDF flesh hands, camera-local prims. Imports `DYNAMITE_COOK` from `game/gibs/tuning.ts`. |
-| Dynamite prop | `src/lab/sdf-zombie/webgpu/dynamite-prop.ts` | WebGPU-side bundled prop (active game path). |
+| Dynamite prop | `src/lab/sdf-zombie/webgpu/dynamite-prop.ts` | WebGPU-side bundled prop. Reusable active-project module — mounted by `webgpu/lab-main.ts` (the `/sdf-lab-webgpu.html` lab), **not** by `webgpu/game-main.ts` (the FPS). |
 
-> These are **already-ported** modules; do not imply dynamite/gibbing starts from
-> zero in the active game. The ports deliberately mirror legacy behavior through
-> data/constants to stay bit-identical.
+> These are **already-authored** active-project modules (mirrored from legacy
+> through data/constants); do not imply dynamite/gibbing starts from zero in the
+> active project. They are **not** bit-identical reimplementations — see the
+> "Not bit-identical" note below.
+
+### Not bit-identical (intentional differences)
+
+The active modules mirror legacy behavior **through shared tuning/constants**, but
+each implementation is its own deterministic design — they are **not**
+bit-identical cross-implementation reimplementations. Known intentional
+differences (do not "fix" the runtime to collapse them; the active side keeps its
+own representation):
+
+- **Fixed-point vs floating-point motion.** The old sim keeps Blood's fixed-point
+  Build units and tics (`src/sim/*`); the active side converts to metres/seconds at
+  the tuning layer and floats (see §2). Float SDF flight vs fixed-point old sim
+  will not reproduce per-tick bit-identical positions.
+- **SDF-surface AOE vs sprite-center AOE.** The active resolver sources the blast
+  from the SDF surface/hit; the old `GibSystem.spawnExplosion` sources it from the
+  projectile/sprite center. Radii and damage share the tuning values
+  (`EXPLOSION_STANDARD`), but the shaping differs by construction.
+- **Fuse values differ by role.** `DYNAMITE_COOK.fuseMaxSec = 2.0` is the in-hand
+  cook/overcook + alt-fire/drop fuse (`src/game/gibs/tuning.ts`), aligned to
+  `maxChargeSec`; the sim's separate `THROW.fuseMaxTics = Math.round(1.5 * TICS_PER_SEC)`
+  (`= 1.5 * 120`, `src/sim/projectile.ts`) is an alt-fire/safety fuse. These are two
+  different values, not a single "the fuse" constant.
+- **Determinism is per-module, not across implementations.** A module is
+  deterministic for the same input within its own representation; that is not
+  parity with the other side.
 
 ---
 
 ## 4. How to run comparisons
 
-Both games are served from the same Vite dev server. Start it, then open the
-matching URL:
+One Vite dev server serves everything. Start it once, then open the matching URL
+(no second server — the retired game and the labs share the same `vite` root):
 
 ```
-npm run dev:fps        # active game  → /sdf-game.html
-npm run dev:legacy     # retired game → /index.html
+npm run dev           # open browser at /sdf-game.html (active FPS); or `npx vite` to serve without opening
+npm run dev:legacy    # open browser at /index.html (retired game)
 ```
 
-Comparisons commonly wanted:
+Comparison URLs — the **dynamite/gib demo is NOT `/sdf-game.html`**:
+
+| URL | What it is | What to use it for |
+| --- | --- | --- |
+| `/index.html` | Retired game (`src/main.ts`) | Reference behavior (authoritative sim + weapon presentation). |
+| `/sdf-lab-webgpu.html` | WebGPU lab (`webgpu/lab-main.ts`) — the SDF dynamite demo. Its **`fpv: enter`** button, or **Tab**, toggles FPV; left-click = cook, release = throw. | Compare SDF dynamite/gib math. |
+| `/sdf-game.html` | **Active FPS** (`webgpu/game-main.ts`) — playable, but **has no dynamite integration**. | Play the active game, **not** the dynamite comparison. |
+
+Common comparisons:
 
 - **Dynamite throw feel** — cook/charge timing, throw arc, fuse, self-detonate:
   compare the retired `src/game/weapons/dynamite.ts` + `src/sim/*` against the
-  active `dynamite-flight.ts` + `fpv.ts`.
+  active `dynamite-flight.ts` + `fpv.ts` (drive the active side through
+  `/sdf-lab-webgpu.html`'s FPV mode).
 - **Gib / blood counts & velocities** — compare the retired
   `src/game/gibs/*` + `src/game/notblood/*` against the active
   `explosion-aoe.ts` + `blood-sim.ts`.
 
-Both pages may need the linked dev assets (see below). The two pages are
-independent entrypoints; a GPU/rendering validation pass is separate and is not
-part of this reference.
+The retired game and the WebGL lab's post-fx path may need dev assets linked
+(see §5); the active FPS (`/sdf-game.html`) uses only tracked
+`public/assets/lab/` assets. A GPU/rendering validation pass is separate and is
+not part of this reference.
 
 ---
 
 ## 5. Asset prerequisites
 
-- **Dev placeholder assets:** run
+- **Active FPS (`/sdf-game.html`):** uses tracked `public/assets/lab/*` assets
+  only — no linked placeholders needed to serve it.
+- **Retired game (`/index.html`):** needs the gitignored extracted Blood sprite
+  placeholders. Run
   [`scripts/link-dev-assets.sh`](../../scripts/link-dev-assets.sh) once per
-  worktree. It symlinks the gitignored Blood placeholders from the primary
-  checkout into this worktree; it does **not** extract them for a fresh clone.
-- **Never commit or ship** `public/assets/**/*-placeholder*` or
-  `assets-source/blood-extracted/` (dev only).
+  worktree. It symlinks the gitignored placeholders **from the primary checkout**
+  into this worktree; it does **not** extract them for a fresh clone.
+- **WebGL lab `/sdf-lab.html` post-fx:** the forward/WebGL path
+  (`lab-main.ts` → `vfx/post-fx/composer.ts`) loads
+  `/assets/post-fx/BLOOD.PAL.png` (a gitignored baked palette LUT under
+  `public/assets/post-fx/`). The WebGPU lab (`/sdf-lab-webgpu.html`) does **not**
+  load it.
+- **Never commit or ship** the dev-only placeholders/LUTs:
+  `public/assets/**/*-placeholder*`, `assets-source/blood-extracted/`,
+  `public/assets/post-fx/`, `public/assets/map-research/`.

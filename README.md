@@ -1,8 +1,10 @@
 # Blud
 
-Blood-inspired FPS: a short-run roguelike in a Weird West setting with claymation
-enemies and voxel-gib explosions. TypeScript + Vite 5 + Three.js 0.185 +
-Rapier3D.js.
+Blood-inspired FPS. **The active project is the SDF-rendered FPS** in
+[`src/lab/sdf-zombie/`](src/lab/sdf-zombie) (the "lab" name is a historical
+artifact, **not** a marker of obsolete code). TypeScript + Vite 5 + Three.js
+0.185. Rapier3D.js is **not** the active game's physics/renderer stack — it is
+used only by the retired sprite game (see "What is retired").
 
 ## What is active
 
@@ -15,6 +17,10 @@ rendering stays opt-in and unmerged work is not described as shipped.
 
 - **Active game entrypoint:** `/sdf-game.html` → `src/lab/sdf-zombie/webgpu/game-main.ts`
 - **Character/tooling lab:** `/sdf-lab.html`, `/sdf-lab-webgpu.html`
+- **SDF dynamite/FPV demo:** `/sdf-lab-webgpu.html` is the lab that mounts the
+  dynamite prop and the FPV cook/throw machine (its **`fpv: enter`** button or
+  **Tab** toggles FPV). `/sdf-game.html` is the playable FPS but has **no**
+  dynamite integration.
 
 ## What is retired (reference-only)
 
@@ -41,19 +47,27 @@ physical migration in Stage 2.
 npm install
 ```
 
-A fresh worktree or clone additionally needs the gitignored dev-placeholder
-assets linked in (the game will not boot without them — Vite's SPA fallback
-masks the missing files as a confusing JSON parse error):
+The **active FPS** (`/sdf-game.html`) serves from the tracked
+`public/assets/lab/*` assets, so it needs no extra step. Two other things are
+dev-only and are **not** auto-extracted:
 
-```
-scripts/link-dev-assets.sh
-```
+- **Retired game (`/index.html`)** needs the gitignored extracted Blood sprite
+  placeholders. This is the entrypoint that fails without them (Vite's SPA
+  fallback answers a missing file with `index.html` + a `200`, so the manifest
+  fetch "succeeds" and the boot dies on a JSON parse error). Run
+  [`scripts/link-dev-assets.sh`](scripts/link-dev-assets.sh) once per worktree to
+  symlink the placeholders **from your primary checkout** into this worktree. It
+  only fills holes; it does **not** extract assets for a fresh clone.
+- **WebGL lab (`/sdf-lab.html`) post-fx** loads `/assets/post-fx/BLOOD.PAL.png`
+  (a gitignored baked palette LUT under `public/assets/post-fx/`, via
+  `lab-main.ts` → `vfx/post-fx/composer.ts`). Without it the WebGL lab's post-fx
+  path won't render its palette-grade output. (The WebGPU lab
+  `/sdf-lab-webgpu.html` does not load it.)
 
-> This script symlinks the extracted Blood placeholder assets **from your
-> primary checkout** into the current worktree. It only fills holes; it does
-> not extract assets for a fresh clone. **Never commit or ship these assets** —
-> they are dev placeholders, enforced by `.gitignore` (`public/assets/**/*-placeholder*`
-> and `assets-source/blood-extracted/`).
+> **Never commit or ship** the dev-only placeholders/LUTs — enforced by
+> `.gitignore` (`public/assets/**/*-placeholder*`,
+> `assets-source/blood-extracted/`, `public/assets/post-fx/`,
+> `public/assets/map-research/`).
 
 ## Run
 

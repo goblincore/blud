@@ -68,6 +68,12 @@ GLB clips and GLSL/WGSL sources alongside their TS modules. Lab entrypoints:
 | `/shared-wounds-probe.html` | `src/lab/sdf-zombie/shared-wounds/probe.js` |
 | `/bounded-wounds-bench.html` | `docs/dev-notes/2026-09-07-bounded-torso-regions/bench.js` |
 
+> The **dynamite/FPV demo is `/sdf-lab-webgpu.html`** (`webgpu/lab-main.ts`, which
+> mounts `fpv`, `fpv-mode`, `dynamite-prop` and the FPV `fpv: enter` button / Tab
+> toggle). `/sdf-game.html` (`webgpu/game-main.ts`) is the **active playable FPS but
+> has no dynamite integration** — its header states "no panel, no wounds, no
+> chunks, no dynamite."
+
 ### 1.2 Direct external imports from the active tree
 
 The active game does **not** self-contain all of its dependencies. Verified
@@ -124,12 +130,21 @@ ACTIVE (src/lab/sdf-zombie)  ──imports──►  SHARED  ──imports──
 
 Shared consumers (only these keep their currently duplicated roles):
 
-- `game/gibs/tuning.ts` — data only, dual consumer.
-- `game/weapons/muzzle-pos.ts` — dual consumer (game + active).
+- `game/gibs/tuning.ts` — **the general-constant subset only** is dual-consumer
+  (active imports `BU_PER_METER`, `EXPLOSION_*`, `GIB_THRESHOLD`,
+  `GROUND_BURST_THRESHOLD_M`, `EXPLOSION_VFX_HEIGHT_SCALE`, `BLOOD_TRAIL`,
+  `BLOOD_SPLAT`, `GIB_BURST`, `DYNAMITE_COOK`, `BALLISTIC_BOUNDS`). The
+  old-enemy tables/profiles (`AXE_ZOMBIE` … `WAVE_PRESETS`, `GibProfile`,
+  `pickChunkPicnum`, `rollChunkCount`, `HUMANOID_FLESH_PICNUMS`, `BONE_PICNUMS`)
+  stay **retired** — the active side does not import them. `tuning.ts` (shared)
+  imports `notblood-tables.gen.ts` (generated; writer `scripts/gen_notblood_tables.py`).
+- `game/weapons/muzzle-pos.ts` — dual consumer (game + active). Its `Vec3` type
+  currently comes from `game/gibs/particles.ts` (retired); Stage 2 replaces it with
+  a standalone object-shaped interface in `shared/vec.ts`. See the plan §3.2.
 - `game/level/theme-material-set.ts` + `stone-textures.ts` — active-consumed.
-- `engine/renderer.ts` — dual consumer.
+- `engine/renderer.ts` — dual consumer (`main.ts`, `lab-main.ts`, `webgl-bench.ts`).
 - `vfx/post-fx/*` — dual consumer.
-- `lab/dev-save.ts` — build tooling.
+- `lab/dev-save.ts` — build tooling (moves with the active tree in Stage 2).
 
 ---
 
