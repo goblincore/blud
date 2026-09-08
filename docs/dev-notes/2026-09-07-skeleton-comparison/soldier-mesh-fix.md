@@ -56,3 +56,11 @@ exit 0
 
 No browser or GPU job was run in this task. The coordinator owns the serial
 post-fix soldier capture and visual acceptance.
+
+## Coordinator verification
+
+Source review approved. Final shared volume/volume-GPU tests: 24/24 passed; production build passed (chunk-size warning). Implementer contract/mesh tests: 31/31; appearance/mesh tests: 19/19; TypeScript passed.
+
+GPU captures in `/tmp/soldier-mesh-fixed` and `/tmp/skull-mesh-close-fixed` render the new material and stable-bind fix. Soldier was advanced one live simulation step before freezing; inspected boots show no pink side strips. This is a bounded pose check, not exhaustive moving-combat acceptance. Exposed zombie skull shows front-facing socket/nose/teeth material cues, not newly sculpted cavities.
+
+Harness exits nonzero because repeated frozen frames differ, including procedural baseline; no parity or performance verdict. Captures include an empty-draw warning and favicon warning, with no shader compilation/runtime error. Captures started while the soldier fix was uncommitted, so recorded HEAD is df700f4b; tested source was subsequently committed as 20b9b887. Owned CDP ports 9396/9397 released; user preview remains on 5396.
