@@ -1110,12 +1110,9 @@ async function main() {
   scene.add(boneInstancer.object);
   deferredApi?.router.register(boneInstancer.object, 'mesh', 'level-only');
   let boneMesh = false;
-  // SKELETON REPRESENTATION COMPARISON (task 2): opt-in ?skeleton=mesh dev
-  // experiment. Extracted per-segment bone meshes (skeleton-spike/mesh.ts)
-  // posed by the contract frames, shaded by the march's own boneShade
-  // (mesh-renderer.ts). The selector refuses deferred + production builds;
-  // absence of the query preserves the baseline EXACTLY (nothing below
-  // runs). Chunks keep procedural bones — actor bones only.
+  // Accepted actor skeleton default: extracted meshes in forward mode.
+  // ?skeleton=procedural restores the reference; volume remains dev-only.
+  // Deferred and detached chunks retain procedural bones.
   const skeletonMode = resolveSkeletonMode(location.search, {
     dev: import.meta.env.DEV, deferred: deferredMode,
   });

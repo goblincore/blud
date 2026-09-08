@@ -7,6 +7,14 @@ and the [Stage 2 plan](../superpowers/plans/2026-09-07-fps-legacy-repo-structure
 
 ---
 
+## Active skeleton runtime (2026-09-08)
+
+Forward FPS actors now use mesh skeletons by default in development and production.
+The implementation remains under `src/lab/sdf-zombie/webgpu/skeleton-spike/`.
+`?skeleton=procedural` selects the SDF reference; volume remains dev-only and
+both deferred rendering and detached chunks retain procedural bones.
+See [accepted state and limitations](../dev-notes/2026-09-07-skeleton-comparison/wrap-up.md).
+
 ## 1. Current-state tree (facts)
 
 Source lives under `src/`. The active game and tooling sits under

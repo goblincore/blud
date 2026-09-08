@@ -4,6 +4,11 @@
 > Per-milestone step-by-step tasks live in `docs/superpowers/plans/`.
 > This file is **coarse-grained state only** — keep rows to ≤2 lines and link out for detail.
 
+## Skeleton migration wrap-up — 2026-09-08
+
+- [x] Mesh actor skeletons accepted and merged into main; now the forward default, including production.
+- [-] Further aesthetic tuning paused; cavity brightness remains open. [Handoff](docs/dev-notes/2026-09-07-skeleton-comparison/wrap-up.md).
+
 ## Legend
 
 | Mark | Meaning | | Prefix | Scope |

@@ -72,3 +72,13 @@ The old `/index.html` still serves legacy until Stage 2.
   dispatch) belong in that task's dated plan/dev-notes, not here — this file sets
   durable guidance and does not add approval requirements for routine authorized
   development.
+
+## Accepted skeleton default — 2026-09-08
+
+Forward FPS actor skeletons now default to mesh in development and production.
+Use `?skeleton=procedural` for the SDF reference; `?skeleton=volume` remains
+dev-only. Deferred rendering and detached chunks retain procedural bones.
+The mesh path lives in `webgpu/skeleton-spike/` despite the historical name.
+Skull geometry/eye damage and material polish are accepted; stop further polish
+unless requested. Torso cavity brightness remains a documented limitation.
+See `docs/dev-notes/2026-09-07-skeleton-comparison/wrap-up.md`.
