@@ -15,6 +15,7 @@ import { sdBody, sdPrimitive, smax } from '../../validate';
 import type { Vec3 } from '../../types';
 import { add, len, sub } from '../../vec';
 import zombieSrc from '../../characters/zombie.blob?raw';
+import soldierSrc from '../../characters/soldier.blob?raw';
 import {
   composedBoneDistance, createSkeletonSources, type BoneFieldSource,
 } from './contract';
@@ -249,5 +250,28 @@ describe('posed — round trips and measured rigidity error', () => {
     // Rib bend up to 0.162 m at this pose's spine tilt: |bend| * tilt scale.
     // 3 mm covers the measured value by ~10x; the number goes in the report.
     expect(worstBent).toBeLessThan(0.003);
+  });
+});
+
+describe('soldier limb mesh pose', () => {
+  it('derives stable local geometry after motion has rewritten rig.restPose', () => {
+    const soldier = buildBody(compileBlob(parseBlob(soldierSrc)), DEFAULT_BUILD_OPTS);
+    const soldierBound = bindRig(soldier);
+    const pristine = createSkeletonSources(soldier, soldierBound, { character: 'soldier' });
+    const elbowPos = soldier.bones.get('upperarm.l')!.tail;
+    const handIdx = soldierBound.rig.restPose.findIndex(p => len(sub(p, elbowPos)) < 1e-9);
+    expect(handIdx).toBeGreaterThanOrEqual(0);
+    const rewrittenRestPose = soldierBound.rig.restPose.map((p, i) =>
+      i === handIdx ? add(p, [0, 0.35, 0.25]) : p);
+    const delayedBound: BoundRig = {
+      ...soldierBound,
+      rig: { ...soldierBound.rig, restPose: rewrittenRestPose },
+    };
+    const delayed = createSkeletonSources(soldier, delayedBound, { character: 'soldier' });
+
+    // Extraction/cache identity belongs to stable actor.body geometry. A
+    // rewritten motion target must not bake the raised weapon pose into it.
+    expect(delayed.map(s => s.revision)).toEqual(pristine.map(s => s.revision));
+    expect(Math.max(...delayed.map(s => s.poseEndpointError()))).toBeLessThan(1e-9);
   });
 });

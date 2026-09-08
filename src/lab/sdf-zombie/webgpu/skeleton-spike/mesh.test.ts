@@ -14,6 +14,8 @@ import { buildBody, DEFAULT_BUILD_OPTS } from '../../build-body';
 import { bindRig } from '../../rig-bind';
 import type { Vec3 } from '../../types';
 import zombieSrc from '../../characters/zombie.blob?raw';
+import soldierSrc from '../../characters/soldier.blob?raw';
+import { sdBody } from '../../validate';
 import { gradientOf } from '../surface-nets-cpu';
 import { createSkeletonSources, type BoneFieldSource } from './contract';
 import { SegmentMeshCache, extractSegmentMesh, MESH_CELL, type SegmentMesh } from './mesh';
@@ -22,6 +24,26 @@ import { createSegmentMeshRenderer } from './mesh-renderer';
 const body = buildBody(compileBlob(parseBlob(zombieSrc)), DEFAULT_BUILD_OPTS);
 const bound = bindRig(body);
 const sources = createSkeletonSources(body, bound, { character: 'zombie' });
+
+describe('soldier mesh containment', () => {
+  it('keeps every extracted bone vertex behind the authored flesh surface', () => {
+    const soldier = buildBody(compileBlob(parseBlob(soldierSrc)), DEFAULT_BUILD_OPTS);
+    const soldierSources = createSkeletonSources(soldier, bindRig(soldier), { character: 'soldier' });
+    let worst = -Infinity;
+    let worstSegment = '';
+    for (const source of soldierSources) {
+      const mesh = extractSegmentMesh(source);
+      const pos = mesh.geometry.getAttribute('position');
+      for (let i = 0; i < pos.count; i++) {
+        const p = source.toWorld([pos.getX(i), pos.getY(i), pos.getZ(i)]);
+        const d = sdBody(p, soldier);
+        if (d > worst) { worst = d; worstSegment = source.segment; }
+      }
+      mesh.geometry.dispose();
+    }
+    expect(worst, `worst soldier segment: ${worstSegment}`).toBeLessThanOrEqual(-0.004);
+  });
+});
 
 const headSrc = sources.find(s => s.segment === 'head')!;
 /** Rib carrier: the axial segment with the most member prims (rib hoops). */

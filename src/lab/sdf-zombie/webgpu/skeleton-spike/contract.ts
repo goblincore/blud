@@ -206,12 +206,17 @@ export function createSkeletonSources(
     // Limb: one segment per bind-point pair, anchored at endpoint A's joint.
     const bind = bound.boneBinding[i]!;
     const key = `limb:${p.limb}:${bind.a.point}-${bind.b.point}`;
-    // Local B is expressed in the A-anchor frame via the bind-time joint
-    // positions (rig.restPose — bindRig's own rest, before any game step
-    // rewrites it): localB = (restJointB + offsetB) - restJointA.
-    const restJointA = bound.rig.restPose[bind.a.point]!;
-    const restJointB = bound.rig.restPose[bind.b.point]!;
-    const localB = sub(add(restJointB, bind.b.offset), restJointA);
+    // Local B is expressed in the A-anchor frame from the immutable rest-body
+    // endpoint and bind offset. Do not read the rig's mutable motion target.
+    // Recover the bind-time A anchor from the stable body endpoint and its
+    // stable bind offset. `rig.restPose` is a live motion target: soldier
+    // weapon IK rewrites it before the renderer's first lazy source build.
+    // Reading it here baked that raised pose into otherwise-rest geometry,
+    // then pose() applied the live arm rotation a second time (the long pink
+    // arm/boot protrusions). The body endpoint is the cache identity and is
+    // immutable for this source revision, so derive both locals from it.
+    const restJointA = sub(p.a, bind.a.offset);
+    const localB = sub(p.b, restJointA);
     defOf(key, () => ({
       key, rigidity: 'limb', members: [], local: [],
       poseOf: () => {
