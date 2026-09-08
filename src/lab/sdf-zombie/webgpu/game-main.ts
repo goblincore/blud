@@ -53,6 +53,10 @@ import {
 import { dungeonMaterialSet } from '../../../game/level/theme-material-set';
 import { createOuterHull } from './shell-hull-outer';
 import { createBoneInstancer } from './bone-instancer';
+import { createSkeletonSources, type BoneFieldSource } from './skeleton-spike/contract';
+import { SegmentMeshCache } from './skeleton-spike/mesh';
+import { createSegmentMeshRenderer } from './skeleton-spike/mesh-renderer';
+import { resolveSkeletonMode } from './skeleton-spike/selector';
 import { createPostAa } from './post-aa';
 import { type ZombieGpuView } from './zombie-gpu';
 import { createOccluderHull, buildHullInstances, HULL_SHRINK, type HullInstance } from './occluder-hull';
@@ -762,6 +766,23 @@ async function main() {
         ...liveChunks.map(c => ({ prims: c.view.posedBones() })),
       ]);
     }
+    // skeleton=mesh: re-pose this frame's segment meshes + crater exposure.
+    // Sever re-derive: the actor's posed body reference changes — rebuild
+    // the sources (revision changes, the cache extracts fresh geometry).
+    if (segMeshRenderer) {
+      const craters: { pos: Vec3; radius: number }[] = [];
+      for (const a of actors) {
+        const prims = a.posed().prims;
+        for (const w of a.visualWounds()) craters.push({ pos: woundWorldPos(prims, w, boundedWoundPreview ? a.pose().yaw : 0), radius: w.radius });
+      }
+      segMeshRenderer.setWounds(craters);
+      segMeshRenderer.update(actors.map(a => {
+        let e = skeletonSources.get(a);
+        if (!e) { e = buildSkeletonSources(a, 'zombie'); skeletonSources.set(a, e); a.view.setPackBones(false); }
+        else if (e.body !== a.posed()) { e = buildSkeletonSources(a, e.name); skeletonSources.set(a, e); }
+        return e.sources;
+      }));
+    }
     refreshActorTiles();
 
     // ---- DEFERRED BRANCH (?renderer=deferred) -----------------------------
@@ -852,6 +873,15 @@ async function main() {
       boneInstancer.uniforms.spotCfg.value.set(spotOn, cosInner, cosOuter, flashlight.spot.distance);
       boneInstancer.uniforms.spotColor.value.copy(flashlight.spot.color);
       boneInstancer.uniforms.spotCfg2.value.set(beamTuning.gain, beamTuning.shoulder, beamTuning.keyFloor, 0);
+      if (segMeshRenderer) {
+        // skeleton=mesh: the SAME beam — segment boneShade is the march's
+        // formula on the same uniform values, like the tubes.
+        segMeshRenderer.uniforms.spotPos.value.copy(flashlight.spot.position);
+        segMeshRenderer.uniforms.spotAxis.value.copy(sAxis);
+        segMeshRenderer.uniforms.spotCfg.value.set(spotOn, cosInner, cosOuter, flashlight.spot.distance);
+        segMeshRenderer.uniforms.spotColor.value.copy(flashlight.spot.color);
+        segMeshRenderer.uniforms.spotCfg2.value.set(beamTuning.gain, beamTuning.shoulder, beamTuning.keyFloor, 0);
+      }
       // Baked chunks ride the same beam — same values, same formula.
       if (bakedChunkMat) {
         const bu = bakedChunkMat.uniforms;
@@ -1067,6 +1097,36 @@ async function main() {
   scene.add(boneInstancer.object);
   deferredApi?.router.register(boneInstancer.object, 'mesh', 'level-only');
   let boneMesh = false;
+  // SKELETON REPRESENTATION COMPARISON (task 2): opt-in ?skeleton=mesh dev
+  // experiment. Extracted per-segment bone meshes (skeleton-spike/mesh.ts)
+  // posed by the contract frames, shaded by the march's own boneShade
+  // (mesh-renderer.ts). The selector refuses deferred + production builds;
+  // absence of the query preserves the baseline EXACTLY (nothing below
+  // runs). Chunks keep procedural bones — actor bones only.
+  const skeletonMode = resolveSkeletonMode(location.search, {
+    dev: import.meta.env.DEV, deferred: deferredMode,
+  });
+  if (import.meta.env.DEV && new URLSearchParams(location.search).get('skeleton') === 'mesh' && skeletonMode !== 'mesh') {
+    console.warn('[sdf-game] skeleton=mesh refused (deferred mode) — procedural bones');
+  }
+  const segMeshCache = skeletonMode === 'mesh' ? new SegmentMeshCache() : null;
+  const segMeshRenderer = segMeshCache ? createSegmentMeshRenderer(segMeshCache) : null;
+  if (segMeshRenderer) scene.add(segMeshRenderer.object);
+  const skeletonSources = new Map<ZombieActor, { body: BuildResult; name: string; sources: BoneFieldSource[] }>();
+  /** Contract recipe (fixture-contract.md): sources bind against the
+   *  actor's CURRENT body + bound rig and follow the live rig/yaw through
+   *  accessors. Called at spawn (rig at rest) and on sever re-derive
+   *  (body reference change — mid-pose re-bind is a documented prototype
+   *  approximation for limb local frames, re-measured in task 4). */
+  const buildSkeletonSources = (actor: ZombieActor, name: string) => ({
+    body: actor.posed(),
+    name,
+    sources: createSkeletonSources(actor.posed(), actor.boundRig(), {
+      character: name,
+      rig: () => actor.boundRig().rig,
+      bodyYaw: () => actor.pose().yaw,
+    }),
+  });
   // Bone-cluster sphere cull (packBoneClusters). OFF ships — the old flat
   // bone loop; the bench's bone-cull-on leg flips it. Takes effect on the
   // next upload; promotion to ON is the owner's call after the numbers.
@@ -1524,6 +1584,15 @@ async function main() {
     // Ship default + any live toggle: a late spawn must not fall back to the
     // flat bone fold while the rest of the room culls.
     actor.view.setBoneCullMode(boneCullMode);
+    // skeleton=mesh: contract sources at REST bind (before any tick steps
+    // the rig — stepActorMotion rewrites restPose, which limb local frames
+    // are derived from), then the field drops this actor's bone rows so
+    // the segment meshes are the ONLY bone surface (smax-then-min exposure
+    // via depth composition — mesh-renderer.ts header).
+    if (segMeshCache) {
+      skeletonSources.set(actor, buildSkeletonSources(actor, name));
+      actor.view.setPackBones(false);
+    }
     encounterHomes.set(actor.id,[...start] as Vec3);
     return actor;
   }
@@ -1597,6 +1666,17 @@ async function main() {
       const fill = v.lightCfg.value.y, key = v.keyColor.value, pw = v.bounceCfg.value.x;
       boneInstancer.uniforms.ambient.value.setRGB(
         fill * key.r + pw * mr * 0.5, fill * key.g + pw * mg * 0.5, fill * key.b + pw * mb * 0.5);
+    }
+    // skeleton=mesh: the segment renderer owns the SAME uniform value types
+    // (boneInstancerUniforms) — seed it identically so mesh bone cannot
+    // drift from the march's key either.
+    if (segMeshRenderer) {
+      segMeshRenderer.uniforms.lightDir.value.copy(v.lightDir.value);
+      segMeshRenderer.uniforms.keyColor.value.copy(v.keyColor.value);
+      segMeshRenderer.uniforms.lightCfg.value.copy(v.lightCfg.value);
+      segMeshRenderer.uniforms.boneColor.value.copy(v.boneColor.value);
+      segMeshRenderer.uniforms.deepColor.value.copy(v.deepColor.value);
+      segMeshRenderer.uniforms.ambient.value.copy(boneInstancer.uniforms.ambient.value);
     }
   }
   // Baked chunks (close-up task 5): same seed from body 1's view — the
@@ -5029,6 +5109,10 @@ async function main() {
       return { stain: l.x, wet: l.y, spec: l.z, fres: l.w };
     },
     get boneMesh() { return boneMesh; },
+    /** skeleton=mesh diagnostics: null unless the dev selector resolved;
+     *  otherwise the renderer's coverage stats — proof the intended path
+     *  ran (segments/verts > 0) and extraction health flags. */
+    skeletonMesh: () => segMeshRenderer ? { mode: skeletonMode, ...segMeshRenderer.stats, cacheEntries: segMeshCache!.size, cacheTotals: segMeshCache!.totals } : null,
     boneTubes: () => ({
       count: boneInstancer.count,
       overflowed: boneInstancer.overflowed,

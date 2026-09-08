@@ -223,7 +223,7 @@ export interface BoneInstancer {
  *  CONCRETE value types (ReturnType-of-literal, the zombie-gpu defaultUniforms
  *  idiom) — a hand-written ReturnType<typeof uniform> erases .value to
  *  unknown and the game wiring could not copy into it. */
-const boneInstancerUniforms = () => ({
+export const boneInstancerUniforms = () => ({
   boneColor: uniform(new THREE.Color(0.93, 0.89, 0.80)),
     deepColor: uniform(new THREE.Color(0.45, 0.06, 0.05)),
     ambient: uniform(new THREE.Color(0.06, 0.06, 0.06)),
