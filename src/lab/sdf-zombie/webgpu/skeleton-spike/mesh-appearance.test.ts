@@ -65,7 +65,7 @@ describe('tissuePatchClasses', () => {
     expect(maxDelta).toBeGreaterThan(0.25);
   });
 
-  it('suppresses exposed ivory on the skull while keeping it on other bones', () => {
+  it('restores broad skull ivory while keeping body tissue unchanged', () => {
     let skullIvory = 0, ribIvory = 0, n = 0;
     for (let r = 0; r < 6; r++) for (let i = 0; i < 60; i++) for (let j = 0; j < 25; j++) {
       const p: [number, number, number] = [r * 0.31 + i * 0.16 / 59, r * 0.13 + j * 0.05 / 24, r * 0.07];
@@ -73,8 +73,8 @@ describe('tissuePatchClasses', () => {
       if (tissuePatchClasses(p, 0).ivory > 0.5) ribIvory++;
       n++;
     }
-    expect(skullIvory / n).toBeLessThan(0.02);
-    expect(ribIvory).toBeGreaterThan(skullIvory);
+    expect(skullIvory / n).toBeGreaterThan(0.35);
+    expect(skullIvory).toBeGreaterThan(ribIvory);
   });
 });
 
@@ -95,9 +95,9 @@ describe('skullFeatureMasks', () => {
   });
 
   it('reads as TWO tooth rows separated by the mouth line', () => {
-    const upper = skullFeatureMasks(face(0.034, -0.49));
-    const lower = skullFeatureMasks(face(0.034, -0.57));
-    const bite = skullFeatureMasks(face(0.034, -0.53));
+    const upper = skullFeatureMasks(face(0.034, -0.34));
+    const lower = skullFeatureMasks(face(0.034, -0.42));
+    const bite = skullFeatureMasks(face(0.034, -0.38));
     expect(upper.upperTeeth).toBeGreaterThan(0.7);
     expect(upper.lowerTeeth).toBe(0);
     expect(lower.lowerTeeth).toBeGreaterThan(0.7);
@@ -109,14 +109,14 @@ describe('skullFeatureMasks', () => {
   });
 
   it('confines teeth and cavities to the front of the skull', () => {
-    expect(skullFeatureMasks([0.22, -0.49, -0.8]).upperTeeth).toBe(0);
-    expect(skullFeatureMasks([0.22, -0.57, -0.8]).lowerTeeth).toBe(0);
-    expect(skullFeatureMasks([0.22, -0.53, -0.8]).cavity).toBe(0);
-    expect(skullFeatureMasks(face(0.8, -0.53)).cavity).toBeLessThan(0.01);
+    expect(skullFeatureMasks([0.22, -0.34, -0.8]).upperTeeth).toBe(0);
+    expect(skullFeatureMasks([0.22, -0.42, -0.8]).lowerTeeth).toBe(0);
+    expect(skullFeatureMasks([0.22, -0.38, -0.8]).cavity).toBe(0);
+    expect(skullFeatureMasks(face(0.8, -0.38)).cavity).toBeLessThan(0.01);
   });
 
   it('lays out an irregular human tooth row, not a uniform fence', () => {
-    const y = -0.53 + 0.03; // mid-crown of the upper row
+    const y = -0.38 + 0.03; // mid-crown of the upper row
     const runs: number[] = [];
     let inRun = false, start = 0;
     for (let x = -0.6; x <= 0.6; x += 0.001) {

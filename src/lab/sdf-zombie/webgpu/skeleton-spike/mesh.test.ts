@@ -8,6 +8,7 @@
 // what these tests pin — within extraction-cell error, holes and
 // disconnected components preserved, cache invalidation + disposal exact).
 import { describe, it, expect } from 'vitest';
+import { meshBoneSource } from './mesh-skull';
 import { parseBlob } from '../../blob-parse';
 import { compileBlob } from '../../blob-compile';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../../build-body';
@@ -178,7 +179,7 @@ describe('extractSegmentMesh — real zombie segments', () => {
     ['pelvis', () => pelvisSrc],
     ['ribs', () => ribSrc],
   ])('%s: every vertex lands ON the field within extraction-cell error', (_label, pick) => {
-    const s = pick();
+    const s = meshBoneSource(pick());
     const m = extractSegmentMesh(s);
     const v = meshVerts(m);
     let worst = 0;
@@ -195,7 +196,7 @@ describe('extractSegmentMesh — real zombie segments', () => {
     ['pelvis', () => pelvisSrc],
     ['ribs', () => ribSrc],
   ])('%s: mesh stays inside the contract bounds (no leak room)', (_label, pick) => {
-    const s = pick();
+    const s = meshBoneSource(pick());
     const m = extractSegmentMesh(s);
     m.geometry.computeBoundingBox();
     const bb = m.geometry.boundingBox!;
@@ -212,7 +213,7 @@ describe('extractSegmentMesh — real zombie segments', () => {
     ['pelvis', () => pelvisSrc],
     ['ribs', () => ribSrc],
   ])('%s: authored surface is covered — no holes, no dropped components', (_label, pick) => {
-    const s = pick();
+    const s = meshBoneSource(pick());
     const m = extractSegmentMesh(s);
     // Sample the segment's own field: uniform points in bounds, keep the
     // near-surface ones, Newton-pull them ONTO the surface, then require a

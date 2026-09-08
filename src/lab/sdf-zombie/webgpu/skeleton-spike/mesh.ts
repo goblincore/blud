@@ -23,7 +23,10 @@
 // Pure CPU + 'three' (like chunk-bake-geometry.ts): no three/webgpu, no
 // DOM, so vitest can import this file directly. The TSL renderer lives in
 // mesh-renderer.ts.
+// The approved mesh-only zombie skull art adapter now subtracts anatomical
+// recesses and mandible planes before extraction; other anatomy is unchanged.
 import * as THREE from 'three';
+import { meshBoneSource } from './mesh-skull';
 import { extractHullSoup, fitHullGrid } from '../surface-nets-cpu';
 import type { BoneFieldSource } from './contract';
 import type { Vec3 } from '../../types';
@@ -58,6 +61,7 @@ export interface SegmentMesh {
  * vertices ON the field), distort 1 as in the chunk bake.
  */
 export function extractSegmentMesh(source: BoneFieldSource, cellSize = MESH_CELL): SegmentMesh {
+  source = meshBoneSource(source);
   const t0 = performance.now();
   const { min, max } = source.bounds;
   const centre: Vec3 = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2];
@@ -111,7 +115,7 @@ export class SegmentMeshCache {
   constructor(readonly cellSize: number = MESH_CELL) {}
 
   keyOf(source: BoneFieldSource): string {
-    return `${source.revision}@${this.cellSize}`;
+    return `${meshBoneSource(source).revision}@${this.cellSize}`;
   }
 
   get(source: BoneFieldSource): SegmentMesh {

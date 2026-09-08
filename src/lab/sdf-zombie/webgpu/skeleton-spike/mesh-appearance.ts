@@ -65,8 +65,8 @@ export interface TissueClasses {
 }
 
 /** Discontinuous painted tissue classes: three independent local-space noise
- * fields thresholded into distinct zones. `headFlag` suppresses ivory on the
- * skull so the cranium stays tissue-covered. Mirrors the surface WGSL. */
+ * fields thresholded into distinct zones. `headFlag` restores broad ivory patches on the
+ * skull while retaining selective dark attachment tissue. Mirrors the surface WGSL. */
 export function tissuePatchClasses(pLocal: Vec3, headFlag: number): TissueClasses {
   const blotch = noiseOffset(pLocal, 20.0, [4.2, 17.7, 2.9]);
   const warp = noiseOffset(pLocal, 6.0, [11.5, 1.7, 23.3]);
@@ -76,21 +76,22 @@ export function tissuePatchClasses(pLocal: Vec3, headFlag: number): TissueClasse
   const blood = smoothstep(0.50, 0.60, patchT);
   const connect = smoothstep(0.34, 0.48, weave * 0.68 + warp * 0.32) * (1 - blood * 0.85);
   const ivory = smoothstep(0.53, 0.65, blotch * 0.5 + grain * 0.5)
-    * (1 - blood * 0.85) * (1 - headFlag * 0.9);
+    * (1 - blood * 0.85) * (1 - headFlag) + headFlag * (0.72 + 0.28 * grain) * (1 - blood * 0.85);
   return { blood, connect, ivory };
 }
 
 /** Front-only skull cavity coverage (sockets, nasal opening, mouth). */
 export function meshSkullCavity(q: Vec3, headFlag: number): number {
-  const front = smoothstep(0.18, 0.58, q[2]) * headFlag;
+  const front = smoothstep(0.05, 0.23, q[2]) * headFlag;
   const sockets = Math.max(
     ellipse(q[0], q[1], -0.36, 0.22, 0.27, 0.25),
     ellipse(q[0], q[1], 0.36, 0.22, 0.27, 0.25),
   ) * front;
   const nose = ellipse(q[0], q[1], 0, -0.08, 0.15, 0.25)
     * smoothstep(-0.34, -0.02, q[1]) * front;
-  const mouth = ellipse(q[0], q[1], 0, -0.53, 0.52, 0.19) * front;
-  return Math.max(Math.max(sockets, nose), mouth);
+  const mouth = ellipse(q[0], q[1], 0, -0.38, 0.52, 0.19) * front;
+  const cheeks = Math.max(ellipse(q[0], q[1], -0.55, -0.19, 0.23, 0.22), ellipse(q[0], q[1], 0.55, -0.19, 0.23, 0.22)) * front;
+  return Math.max(Math.max(sockets, nose), Math.max(mouth, cheeks));
 }
 
 /** Irregular branching vessels in the tissue immediately around each eye
@@ -122,7 +123,7 @@ export function meshSocketVessels(q: Vec3, headFlag: number): number {
 export function meshToothRow(q: Vec3, upper: number): number {
   const ax = Math.abs(q[0]);
   const side = q[0] >= 0 ? 1 : -1;
-  const bite = -0.53;
+  const bite = -0.38;
   let best = 0;
   for (let i = 0; i < 7; i++) {
     const r1 = boneHash3([i, side, 3]);
@@ -152,15 +153,15 @@ export interface SkullFeatureMasks {
  * material cues rather than geometry cuts; keeping the math here makes their
  * scale, occlusion and tooth irregularity testable without a GPU. */
 export function skullFeatureMasks(q: Vec3, headFlag = 1): SkullFeatureMasks {
-  const front = smoothstep(0.18, 0.58, q[2]) * headFlag;
+  const front = smoothstep(0.05, 0.23, q[2]) * headFlag;
   const sockets = Math.max(
     ellipse(q[0], q[1], -0.36, 0.22, 0.27, 0.25),
     ellipse(q[0], q[1], 0.36, 0.22, 0.27, 0.25),
   ) * front;
   const nose = ellipse(q[0], q[1], 0, -0.08, 0.15, 0.25)
     * smoothstep(-0.34, -0.02, q[1]) * front;
-  const mouth = ellipse(q[0], q[1], 0, -0.53, 0.52, 0.19) * front;
-  const cavity = Math.max(Math.max(sockets, nose), mouth);
+  const mouth = ellipse(q[0], q[1], 0, -0.38, 0.52, 0.19) * front;
+  const cavity = meshSkullCavity(q, headFlag);
   const upperTeeth = meshToothRow(q, 1) * cavity;
   const lowerTeeth = meshToothRow(q, 0) * cavity;
   return { front, sockets, nose, mouth, cavity, upperTeeth, lowerTeeth, teeth: Math.max(upperTeeth, lowerTeeth) };
@@ -199,7 +200,7 @@ export const MESH_TOOTH_ROW_WGSL = /* wgsl */ `fn meshToothRow(q: vec3<f32>, upp
   var best = 0.0;
   let ax = abs(q.x);
   let side = select(-1.0, 1.0, q.x >= 0.0);
-  let bite = -0.53;
+  let bite = -0.38;
   for (var i = 0; i < 7; i = i + 1) {
     let fi = f32(i);
     let r1 = boneHash(vec3<f32>(fi, side, 3.0));
@@ -226,14 +227,16 @@ export const MESH_TOOTH_ROW_WGSL = /* wgsl */ `fn meshToothRow(q: vec3<f32>, upp
 }`;
 
 export const MESH_SKULL_CAVITY_WGSL = /* wgsl */ `fn meshSkullCavity(q: vec3<f32>, headFlag: f32) -> f32 {
-  let front = smoothstep(0.18, 0.58, q.z) * headFlag;
+  let front = smoothstep(0.05, 0.23, q.z) * headFlag;
   let eyeL = 1.0 - smoothstep(0.72, 1.0, length((q.xy - vec2<f32>(-0.36, 0.22)) / vec2<f32>(0.27, 0.25)));
   let eyeR = 1.0 - smoothstep(0.72, 1.0, length((q.xy - vec2<f32>( 0.36, 0.22)) / vec2<f32>(0.27, 0.25)));
   let sockets = max(eyeL, eyeR) * front;
   let nose = (1.0 - smoothstep(0.72, 1.0, length((q.xy - vec2<f32>(0.0, -0.08)) / vec2<f32>(0.15, 0.25))))
     * smoothstep(-0.34, -0.02, q.y) * front;
-  let mouth = (1.0 - smoothstep(0.72, 1.0, length((q.xy - vec2<f32>(0.0, -0.53)) / vec2<f32>(0.52, 0.19)))) * front;
-  return max(max(sockets, nose), mouth);
+  let mouth = (1.0 - smoothstep(0.72, 1.0, length((q.xy - vec2<f32>(0.0, -0.38)) / vec2<f32>(0.52, 0.19)))) * front;
+  let cheekL = 1.0 - smoothstep(0.72, 1.0, length((q.xy - vec2<f32>(-0.55, -0.19)) / vec2<f32>(0.23, 0.22)));
+  let cheekR = 1.0 - smoothstep(0.72, 1.0, length((q.xy - vec2<f32>(0.55, -0.19)) / vec2<f32>(0.23, 0.22)));
+  return max(max(sockets, nose), max(mouth, max(cheekL, cheekR) * front));
 }`;
 
 /** Branching red vessels around the eye sockets (front/head only). */
@@ -275,18 +278,18 @@ export const MESH_BONE_SURFACE_WGSL = /* wgsl */ `fn meshBoneSurface(pWorld: vec
   let blood = smoothstep(0.50, 0.60, patchT);
   let connect = smoothstep(0.34, 0.48, weave * 0.68 + warp * 0.32) * (1.0 - blood * 0.85);
   let ivory = smoothstep(0.53, 0.65, blotch * 0.5 + grain * 0.5)
-    * (1.0 - blood * 0.85) * (1.0 - feature.w * 0.9);
+    * (1.0 - blood * 0.85) * (1.0 - feature.w) + feature.w * (0.72 + 0.28 * grain) * (1.0 - blood * 0.85);
   let bloodCol = mix(vec3<f32>(0.055, 0.004, 0.008), deepColor * 0.55, 0.35);
   let connectCol = vec3<f32>(0.62, 0.19, 0.19);
   let ivoryCol = boneColor * vec3<f32>(0.86, 0.74, 0.62);
-  var albedo = vec3<f32>(0.30, 0.085, 0.075);
-  albedo = mix(albedo, connectCol, connect);
+  var albedo = mix(vec3<f32>(0.30, 0.085, 0.075), boneColor * vec3<f32>(0.92, 0.86, 0.66), feature.w);
+  albedo = mix(albedo, connectCol, connect * (1.0 - feature.w * 0.70));
   albedo = mix(albedo, bloodCol, blood);
   albedo = mix(albedo, ivoryCol, ivory * 0.8);
 
   // LOCALIZED skull cavity: a dark blood recess, not a lit convex patch.
-  // The volume/SDF reference has a real concavity; the mesh surface is smooth,
-  // so the recess is carried by albedo and by killing its gloss in meshBoneWet.
+  // The mesh sculpt provides real recesses; dark albedo and restrained gloss
+  // reinforce those anatomical cavities.
   let cav = meshSkullCavity(feature.xyz, feature.w);
   albedo = mix(albedo, deepColor * 0.055, cav * 0.92);
 
@@ -308,7 +311,7 @@ export const MESH_BONE_SURFACE_WGSL = /* wgsl */ `fn meshBoneSurface(pWorld: vec
   // Wound exposure STAIN the attachment dark; it must not wash the crater
   // toward bright pink (that was the mesh-vs-volume brightness gap).
   let stainW = smoothstep(0.18, 0.85, expo) * (0.55 + 0.45 * grain);
-  albedo = mix(albedo, mix(deepColor * 0.45, vec3<f32>(0.28, 0.012, 0.02), grain), stainW * 0.55);
+  albedo = mix(albedo, mix(deepColor * 0.45, vec3<f32>(0.28, 0.012, 0.02), grain), stainW * mix(0.55, 0.22, feature.w));
   return vec4<f32>(albedo, expo);
 }`;
 
