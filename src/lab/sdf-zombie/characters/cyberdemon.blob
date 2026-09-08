@@ -1,0 +1,319 @@
+# CYBERDEMON — the Breachhead. A siege brute for the FPS roster: a heavy human
+# chassis of meat and industrial prosthetics, built to close distance.
+#
+# AUTHORED FROM PROSE. There is no reference mesh and no reference plate for
+# this character — by owner instruction, deliberately. So `blob:measure` and
+# `blob:rings` do not apply (they exit 2 without a reference), and NO number
+# below is "measured": every one is a design decision. The comment on each
+# non-obvious number says WHY it is what it is, which is the house rule for a
+# character with no mesh to fit against.
+#
+# WHO HE IS. The roster's heavy. The soldier is the ordinary grunt; this is
+# what the grunt calls when a wall has to stop existing. He is not a monster
+# species — he is a big man who has been rebuilt, and the rebuild is winning.
+# The flesh that is left is the expensive part; everything that could be
+# swapped for hydraulics has been.
+#
+# THE THREE BEATS that carry the silhouette (the brief's fixed four, made
+# concrete):
+#   1. THE RAM ARM. The left arm is gone above the elbow. In its place: a
+#      shoulder cowl the size of a helmet, a hydraulic upper arm and a blocky
+#      forearm ending in a blunt crusher head (all in cyberdemon-kit.wam).
+#      It is heavier and longer than the flesh arm, so the figure reads
+#      lopsided from every yaw — the ASYMMETRY is the silhouette.
+#   2. THE LOOM. A bundle of exposed red cabling runs from the back power
+#      unit, over the right shoulder, across the chest to the left socket.
+#      Authored with `strand=` — the format's own bundle primitive — so it
+#      reads as parallel conduits, a loom, not as veins.
+#   3. THE SUNKEN HEAD. A small, forward-thrust skull with a heavy brow shelf,
+#      tucked between the shoulder masses, with two lit optic eyes under the
+#      shelf. A brute's head is SMALL on a brute's body; that ratio is the
+#      read. Eyes are emissive PRIMS, not texture (the gargoyle road).
+#
+# NOT A MINOTAUR. No horns, no bovine muzzle, no hooves — the brief forbids
+# the silhouette minotaur.blob already owns, and this file was written without
+# opening it. The face is a blunt, flat-browed, short-muzzled brute face: an
+# ape's, not a bull's. The mouth is the ONLY thing on the generated decal
+# (make-cyberdemon-face.py); all other facial structure is prims.
+#
+# ASYMMETRY MAP: left arm replaced (flesh stump + kit), left leg sheathed in a
+# load-bearing greave (kit over flesh), right arm and right leg bare flesh,
+# skull plated on the left only. This file is flesh, stump, socket and the
+# soft loom; the hard parts are characters/cyberdemon-kit.wam.
+model cyberdemon
+  # A head taller than the soldier (2.04) and a foot over the zombie (1.78):
+  # the roster needs a body that reads "heavy" at arena distance, and height
+  # is the cheapest way to say it. 2.15 also gives the kit's cowl room to sit
+  # over the shoulder without swallowing the neck.
+  height 2.15
+  # Checked, not decorative — see blob-checks.ts. A coiled charge stance: the
+  # knees fold FORWARD (humanoid), not back (digitigrade).
+  stance humanoid
+
+skeleton
+  # Hip line at 1.12 (root 1.02 + len 0.10; children attach at the TAIL).
+  # 0.52 of height — short legs, long torso and a heavy shoulder yoke is the
+  # brute proportion; a 0.55+ hip line reads lanky, which is the opposite of
+  # the brief. The pelvis LEN restores the crotch-to-hip-line segment the
+  # WAM kit needs (WAM's root is a bare point; see goblin-kit.wam).
+  root pelvis at 1.02 len=0.10
+
+  # Hunched chain: the upper body leans FORWARD over the hips (pitch 10 then
+  # 6, ~16 deg total) because the brief is "built to close distance" — a
+  # charging posture, not a standing one. The neck pitches BACK (-8) so the
+  # face still looks at the horizon instead of the floor, and the skull picks
+  # up a small +4 so the crown sits level.
+  bone spine parent=pelvis dir=up pitch=10 len=0.30
+  bone chest parent=spine  dir=up pitch=6  len=0.30
+  bone neck  parent=chest  dir=up pitch=-8 len=0.10
+  bone skull parent=neck   dir=up pitch=4  len=0.24
+
+  mirror
+    # Shoulder socket at x ~0.245, y ~1.766 — just proud of the chest's
+    # ~0.22 half-width (the goblin lesson: shoulder reach is a function of
+    # chest width). tilt=12 lifts the clavicle so the yoke slopes up into the
+    # neck like a brute's trap, not a coat hanger.
+    bone clavicle parent=chest    dir=side tilt=12 len=0.26
+    # Arms hang down and WELL out (tilt 16 then 6): a heavy body's arms cannot
+    # hang flush or they meld into the lats, and this character is wider than
+    # anything else in the cast. pitch 10/8 carries the hands forward of the
+    # hips — the knuckles are ahead of the thighs, ready.
+    bone upperArm parent=clavicle dir=down pitch=10 tilt=18 len=0.36
+    bone foreArm  parent=upperArm dir=down pitch=8  tilt=6  len=0.34
+    bone hand     parent=foreArm  dir=down pitch=4           len=0.13
+    # Legs: thighs splayed to 0.115 (a heavy man stands wide), knee folds
+    # forward 12 deg and the shin comes back -14 so the ankle lands under the
+    # hip. Net knee offset from the hip->ankle line ~+0.11 m — a deep coil,
+    # deliberately: this is the pose of someone about to lunge.
+    bone thigh    parent=pelvis dir=down pitch=12 side=0.135 len=0.50
+    bone shin     parent=thigh  dir=down pitch=-14          len=0.48
+    # The foot bone only positions the foot prims (the house pattern).
+    bone foot     parent=shin   dir=fwd                     len=0.17
+  end
+
+body
+  # ============================================================
+  # TORSO — four masses: haunch, waist, chest, trap yoke. Kept deliberately
+  # NARROW in x (half-width ~0.22 at the chest) and deep instead: the goblin
+  # paid twice for a wide torso whose arms then read as bulges, and this
+  # character's arms are already further out than anyone's. Depth is where a
+  # brute's mass lives anyway.
+  # ============================================================
+  # Haunch: the wide seat the legs root into. r 0.185 x wide 1.25 = 0.231
+  # half-width, 0.20 half-depth — hips slightly narrower than the chest, so
+  # the figure reads top-heavy.
+  blob torso on pelvis at=0.30 r=0.195 wide=1.35 tall=1.05 deep=1.15 blend=0.016
+  # Waist: cinched to 0.17 half-width so there is a break between haunch and
+  # chest — without it the three masses blend into one barrel.
+  blob torso on spine at=0.20 r=0.180 wide=1.15 tall=1.10 deep=1.10 blend=0.016
+  # Chest: the biggest single mass, and the one the shoulders hang off.
+  # r 0.185 x wide 1.20 = 0.222 half-width, deep 1.10 = 0.204.
+  blob torso on chest at=0.50 r=0.195 wide=1.22 tall=1.15 deep=1.18 blend=0.016
+  # Trap yoke: a shelf across the top of the chest, wide 2.0 so it reaches
+  # past both shoulder sockets and the head can sink between them (the
+  # gargoyle's traps idiom, which is what makes a small head read as small).
+  blob torso on chest at=0.95 r=0.135 wide=1.75 tall=0.80 deep=1.00 blend=0.012
+  # Pectorals: two slabs on the chest FRONT, offset forward and up. Without
+  # them the chest is a barrel and the figure reads barrel-chested, not
+  # slab-chested; `both` mirrors offset.x so one line makes the pair.
+  blob torso on chest at=0.62 r=0.085 wide=1.25 deep=0.75 blend=0.010 offset=(0.080,0.010,0.120) both
+
+  # ============================================================
+  # NECK — thick column (r 0.088 against the zombie's 0.045). A brute has no
+  # visible neck; this is the shortest, fattest one that still fuses head to
+  # torso without the skull floating.
+  # ============================================================
+  bar head on neck from=0.05 to=0.95 r=0.088 deep=0.90 blend=0.008
+
+  # ============================================================
+  # RIGHT ARM — BARE FLESH. This is the "other side left as flesh" half of
+  # the brief's asymmetry, so it is deliberately plain: deltoid, upper arm,
+  # forearm, fist. No plates, no sleeve.
+  # ============================================================
+  # Deltoid: r 0.105 over a shoulder socket at x 0.245 — the cap sits proud
+  # of the trap yoke so the joint reads from the front.
+  blob arm on upperArm at=0.08 r=0.115 blend=0.012 side=r core
+  bar  arm on upperArm from=0.14 to=0.92 r=0.100 r2=0.076 blend=0.008 side=r
+  bar  arm on foreArm  from=0.06 to=0.94 r=0.090 r2=0.064 blend=0.008 side=r
+  # Fist: a blunt block, slightly deeper than wide (a fist is). wide/tall 1.0
+  # keeps it from reading as a paw.
+  blob arm on hand at=0.55 r=0.085 wide=1.05 tall=0.95 deep=1.20 blend=0.010 side=r
+  # Knuckle row: one bar across the front of the fist. `both` is unavailable
+  # (this is one side), so the bar is centred and the fist's own width does
+  # the splay.
+  bar  arm on hand from=0.85 to=1.05 r=0.030 r2=0.022 blend=0.004 chamfer offset=(0,0.030,0.055) side=r
+
+  # ============================================================
+  # LEFT ARM — THE STUMP. The arm is amputated mid-upper-arm; everything
+  # below the cut is the kit's hydraulic ram (cyberdemon-kit.wam). The stump
+  # is authored to end at t~0.58 so the cowl has flesh to grip and the cut
+  # face hides inside the shoulder housing. Deltoid matches the right side
+  # exactly — the rebuild starts AT the socket, not at the shoulder.
+  # ============================================================
+  blob arm on upperArm at=0.08 r=0.115 blend=0.012 side=l core
+  # The cut tapers slightly (r2 0.086) so the flesh looks pulled into the
+  # socket rather than chopped square.
+  bar  arm on upperArm from=0.14 to=0.58 r=0.100 r2=0.094 blend=0.008 side=l
+
+  # ============================================================
+  # LEGS — both flesh. The left is SHEATHED by the kit's greave, not replaced;
+  # the brief asks for one limb replaced (the arm) and the asymmetry is
+  # carried down the same side by the greave.
+  # ============================================================
+  # Thigh: r 0.125 x deep 1.05 — the heaviest limb segment, tapering to 0.085
+  # at the knee so the joint stays slim.
+  blob leg on thigh at=0.05 r=0.138 blend=0.012 mirror core
+  bar  leg on thigh from=0.12 to=0.94 r=0.130 r2=0.092 deep=1.05 blend=0.012 mirror
+  # Calf: a mass at the BACK of the shin (offset -z) — without it the shin is
+  # a cone and the leg reads as a peg.
+  # (to=1.05, not 0.90: the shin has to reach INTO the foot mass or the ankle
+  # is a 9 mm air gap — strandedOf caught it at 9.3 mm on the first pass.)
+  bar  leg on shin  from=0.05 to=1.05 r=0.105 r2=0.068 blend=0.010 mirror
+  blob leg on shin  at=0.28 r=0.098 wide=1.00 tall=1.15 deep=0.85 blend=0.010 offset=(0,-0.010,-0.048) mirror
+  # Foot: one long mass along the foot bone (deep 2.4 = 0.18 half-depth) so
+  # the heel sits behind the ankle and the toe reaches past the toe joint.
+  # offset y -0.095 drops it from the ankle (y 0.165) until the sole is on
+  # the ground: 0.165 - 0.095 - (0.075 x tall 0.95) = 0.001.
+  blob leg on foot at=0.35 r=0.082 wide=1.15 tall=0.95 deep=2.40 blend=0.012 offset=(0,-0.087,0) mirror
+  # Toe cap: a squarer, slightly darker block at the front of the foot. Reads
+  # as a booted toe on the flesh leg without being a kit part.
+  bar  leg on foot from=0.62 to=1.02 r=0.068 r2=0.052 wide=1.05 tall=0.80 deep=1.00 blend=0.008 offset=(0,-0.087,0) mirror color=3a2f2c
+
+  # ============================================================
+  # THE LOOM — beat 2. Three `strand=` bundles (5 conduits each) run from
+  # the back power unit, over the RIGHT shoulder, across the upper chest and
+  # into the LEFT socket. They sit a centimetre proud of the skin: an exposed
+  # conduit is strapped ON the body, and flush would read as paint.
+  # `strand=` is the format's bundle primitive; using it here is the whole
+  # reason the loom reads as a loom instead of as a fat vein.
+  # ============================================================
+  # Segment A — the CHEST BAND: a horizontal loom across the upper chest
+  # from the left socket to the right shoulder. The curve bows FORWARD
+  # (bend.z) to follow the pecs: measured torso front at y 1.68 is z 0.27,
+  # so the chord midpoint at z 0.20 needs a 0.12 bow to land the bundle
+  # centre just inside the skin (bundle reach ~0.047 m -> ~3 cm proud).
+  bar torso on chest from=1.0 to=1.0 offset=(0.19,-0.034,0.117) tip=(-0.38,0,0) bend=(0,0,0.12) r=0.036 strand=4 wave=0.09 cycles=2 fat=0.85 blend=0.004 color=b81414 gloss=0.45
+  # Segment B — over the RIGHT shoulder: from the band's right end, up over
+  # the trap and down the back of the neck to the top of the back unit.
+  bar torso on chest from=1.0 to=1.0 offset=(-0.19,-0.034,0.117) tip=(0.06,0.08,-0.22) bend=(0.01,0.03,0.03) r=0.034 strand=4 wave=0.09 cycles=2 fat=0.85 blend=0.004 color=b81414 gloss=0.45
+  # Segment C — the BACK RUN: from the shoulder bundle down the right side of
+  # the spine into the power unit. Measured back surface: z -0.13 at y 1.55
+  # (x -0.12), z -0.11 at y 1.35 (x -0.06); the path rides just inside it.
+  bar torso on spine from=1.0 to=1.0 offset=(-0.13,0.345,-0.072) tip=(0.07,-0.41,-0.09) bend=(0.02,-0.02,-0.05) r=0.034 strand=4 wave=0.09 cycles=2 fat=0.85 blend=0.004 color=b81414 gloss=0.45
+
+  # ============================================================
+  # HEAD — beat 3. All structure is PRIMS (the gargoyle road: no reference
+  # mesh means blob:face-bake cannot run, and a fully painted face is the
+  # documented failure mode). The face block below is shrunk to a NUB so it
+  # emits nothing; the decal carries the mouth and nothing else.
+  # The skull bone runs (0,1.813,0.070) -> (0,2.052,0.086); `at=` is a
+  # fraction along it and `offset=` is a world displacement from that point.
+  # ============================================================
+  # Cranium: the dominant mass and deliberately the FATTEST unpainted head
+  # prim, because lab-main's headShape() picks that one as the decal's hs
+  # frame — pick it, do not leave it to chance (thornbeast lesson). r 0.135 x
+  # tall 1.30 = 0.176 semi-height; centred y 1.976 so the crown lands on
+  # 2.151, i.e. the declared height.
+  blob head on skull at=0.68 r=0.135 wide=1.10 tall=1.30 deep=1.15 blend=0.006
+  # Cheek/jaw mass: wide (1.60) and low, the jowls of a heavy man. r 0.092 x
+  # wide 1.60 = 0.147 < the cranium's 0.176, so the hs frame stays the cranium.
+  blob head on skull at=0.28 r=0.092 wide=1.60 tall=0.90 deep=1.10 blend=0.005 offset=(0,-0.040,0.045)
+  # Brow shelf: TWO prims, asymmetric on purpose — the left (augmented) side
+  # is heavier and squarer, the right side lighter. Both sit at y ~2.00, z
+  # ~0.19, jutting past the cranium's front so the eye sockets are shadowed.
+  blob head on skull at=0.62 r=0.058 wide=1.35 tall=0.62 deep=0.80 blend=0.004 offset=(0.075,0.042,0.112) color=4a3b3a
+  blob head on skull at=0.62 r=0.050 wide=1.30 tall=0.55 deep=0.75 blend=0.004 offset=(-0.072,0.038,0.108) color=4a3b3a
+  # Muzzle: SHORT and blunt (deep 1.25, not a bull's snout). Front at z 0.289
+  # — it clears the brow so the mouth decal has a surface to land on, but
+  # only by 6 cm, which keeps the mouth at |hs| ~1.6 (well inside the 1.95
+  # decal fade the thornbeast paid for).
+  blob head on skull at=0.40 r=0.062 wide=1.30 tall=0.85 deep=1.25 blend=0.005 offset=(0,-0.055,0.135)
+  # Nose pad: a small blunt wedge between the brows. No bridge — a brute's
+  # nose is a smear, not a beak.
+  blob head on skull at=0.52 r=0.030 wide=1.10 tall=0.90 deep=1.00 blend=0.004 offset=(0,-0.005,0.175)
+  # Jaw/chin: the mass under the mouth. r 0.072 x wide 1.35 = 0.097; bottom at
+  # y 1.730, which is 7 cm below the cranium's bottom (1.800) — the heavy
+  # under-jaw that makes the head read as a brute's, not a skull's.
+  blob head on skull at=0.18 r=0.072 wide=1.35 tall=0.70 deep=1.15 blend=0.005 offset=(0,-0.075,0.085)
+  # OPTIC EYES — the lit pair. Colour IS the emission (`glow=`), so these read
+  # in a dim room with no light in the scene. Asymmetric by design: the left
+  # optic is the replacement (bigger, a lens in a socket), the right is the
+  # man's own eye (smaller). Both are painted, which also keeps them out of
+  # the hs-frame pick.
+  blob head on skull at=0.60 r=0.024 blend=0.003 chamfer offset=(0.058,0.020,0.150) tip=(0.006,0.004,0.030) color=8fe6ff glow=1.0
+  blob head on skull at=0.60 r=0.018 blend=0.003 chamfer offset=(-0.058,0.020,0.150) tip=(-0.005,0.003,0.026) color=8fe6ff glow=1.0
+
+# ============================================================
+# FACE DECAL — the mouth and NOTHING else. There is no reference mesh, so
+# blob:face-bake cannot run; the gargoyle is the precedent for a mesh-less
+# face (all structure is prims, the decal carries the mouth). The PNG is
+# generated by scripts/make-cyberdemon-face.py, which is committed beside it —
+# the gargoyle's has no generator and cannot be regenerated without redrawing
+# it by hand.
+#
+# The sheet's own GLOW is gated OFF (eyeGlowCut 0.99, eyeGlowAmp 0): the
+# gargoyle's near-white teeth cleared the default cut and rendered as glowing
+# red fangs, and the all-white-sheet-glows-red trap is one of the two this
+# project already paid for. The eyes are emissive PRIMS and need no help.
+#
+# projScale is a FREQUENCY (lower = bigger), and the numbers below are solved
+# against the cranium hs frame printed by the checker:
+#   cranium centre (0, 1.976, 0.081), axes (0.149, 0.176, 0.155).
+#   Mouth target: world (0, 1.840, 0.289) -> hs (0.00, -0.77, 1.35).
+#   The image draws the mouth centred at uv (0.50, 0.50), so
+#   centreY = 0.50 - (-0.77 x scaleY) and centreX = 0.50.
+# scaleX/scaleY 0.30 make the mouth ~0.36 of the texture wide, which is the
+# fraction the script draws.
+# ============================================================
+sheet
+  image       cyberdemon-face.png
+  decal       0
+  projScaleX  0.30
+  projScaleY  0.30
+  projCentreX 0.50
+  projCentreY 0.73
+  eyeGlowCut  0.99
+  eyeGlowAmp  0
+
+# Face block: SHRUNK TO A NUB. headRadius 0.001 kills the emitted skull
+# ellipsoid pair; browHeavy/noseLength 0 gate the emitted brow and nose off
+# (facePrims emits only while those are > 0.0005). The head above is authored
+# prims; this keeps the block present (and the lab's face panel live) without
+# imposing the house oval. Same trick as gargoyle.blob.
+face
+  headRadius 0.001
+  headWidth  1.0
+  headHeight 1.0
+  headDepth  1.0
+  jawWidth   1.0
+  jawHeight  1.0
+  jawDrop    0
+  jawJut     0
+  noseLength 0
+  noseWidth  1.0
+  noseDrop   0
+  browHeavy  0
+  browRise   0
+  headBlend  0.006
+
+# Ash-grey mauve flesh: a man who has not seen sun in a long time, with the
+# grime of the rebuild in it. Linear values; the shader sRGB-encodes, which
+# lifts the low channels hard, so the numbers are darker than they read.
+# baseColor 0.30/0.16/0.14 is a desaturated maroon-grey — NOT the zombie's
+# pink and not the gargoyle's blue stone. mottleColor is COOL (0.10/0.12/0.16)
+# so the variation reads as dirt ON the body rather than darker meat IN it
+# (the mottle-hue rule in the palette reference). Wound interior stays red.
+palette
+  baseColor     0.320 0.200 0.185
+  deepColor     0.500 0.080 0.080
+  charColor     0.090 0.070 0.070
+  specIntensity 0.50
+  specRoughness 0.42
+  fresnelBoost  0.35
+  translucency  0.08
+  wetness       0.18
+  surfaceNoiseAmp    0.06
+  silhouetteNoiseAmp 0.02
+  mottleAmp     0.45
+  mottleScale   2.0
+  mottleColor   0.080 0.100 0.140
