@@ -314,6 +314,9 @@ try {
       if (lifecycle && mode === 'volume') {
         run.lifecycle = await lifecycleSmoke();
         save();
+        // lifecycleSmoke rebuilds the cast, so select a current actor before captures.
+        run.stage = await stage(scale);
+        assert.equal(run.stage.deterministic, true, `missing deterministic seams: ${run.stage.missing?.join(',')}`);
       }
       await settleAndLock();
       run.diagnostic = await diagnostic();
