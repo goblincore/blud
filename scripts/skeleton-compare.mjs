@@ -133,20 +133,30 @@ const diagnostic = () => evaluate(`(async () => {
   const volumeEvals = typeof g.skeletonVolumeEvals === 'function' ? await g.skeletonVolumeEvals() : null;
   const combined = typeof g.skeletonDiagnostics === 'function' ? g.skeletonDiagnostics() : null;
   return { requested: new URLSearchParams(location.search).get('skeleton') || 'procedural',
-    backend: g.backend, mesh, volume, volumeEvals, combined };
+    backend: g.backend, boneMesh: g.boneMesh, mesh, volume, volumeEvals, combined };
 })()`);
 
 const assertActivePath = (mode, diag) => {
   assert.equal(diag.backend, 'webgpu', 'game backend must be WebGPU');
   assert.equal(diag.requested, mode, 'loaded query must name the requested mode');
+  if (diag.combined?.activeMode != null) {
+    assert.equal(diag.combined.activeMode, mode, 'combined diagnostic must prove the requested mode is active');
+  } else if (mode === 'procedural') {
+    // Compatibility with snapshots predating skeletonDiagnostics().
+    assert.equal(diag.mesh, null, 'procedural mode must not have an active mesh renderer');
+    assert.equal(diag.volume, null, 'procedural mode must not have an active volume renderer');
+    assert.equal(diag.boneMesh, false, 'procedural mode must not use polygonal bone tubes');
+  }
   if (mode === 'mesh') {
     assert.equal(diag.mesh?.mode, 'mesh', 'mesh diagnostic must prove mesh mode is active');
     assert.ok((diag.mesh?.segments ?? 0) > 0, 'mesh mode must render at least one segment');
   }
   if (mode === 'volume') {
-    assert.ok(diag.volume || diag.combined, 'volume mode needs an active-path diagnostic; refusing procedural fallback');
-    const d = diag.volume ?? diag.combined;
-    assert.equal(d.mode, 'volume', 'volume diagnostic must prove volume mode is active');
+    const d = diag.volume ?? diag.combined?.volume ?? diag.combined;
+    assert.ok(d, 'volume mode needs an active-path diagnostic; refusing procedural fallback');
+    if (diag.combined?.activeMode == null) {
+      assert.equal(d.mode, 'volume', 'volume diagnostic must prove volume mode is active');
+    }
     assert.ok((d.segments ?? d.activeSegments ?? d.sampledSegments ?? d.grids ?? 0) > 0,
       'volume mode must report at least one sampled/active segment');
   }
@@ -213,9 +223,10 @@ try {
     run = { mode, scale, startedAt: now(), status: 'running', pageErrors: [], captures: [] };
     evidence.runs.push(run); save();
     try {
-      const url = `http://127.0.0.1:${vite}/sdf-game.html?frozen=1&skeleton=${mode}`;
+      const url = `http://localhost:${vite}/sdf-game.html?frozen=1&skeleton=${mode}`;
       run.url = url;
-      await send('Page.navigate', { url });
+      const navigation = await send('Page.navigate', { url });
+      if (navigation.result?.errorText) throw new Error(`navigation failed: ${navigation.result.errorText}`);
       const deadline = Date.now() + bootMs;
       while (Date.now() < deadline) {
         if (run.pageErrors.some((e) => e.kind === 'exception' || e.kind === 'console.error' || e.kind === 'log.error')) break;
