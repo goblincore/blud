@@ -79,7 +79,7 @@ describe('segment grid bake', () => {
       const g = bakeSegmentGrid(src, VOLUME_CELL);
       expect(g.bytes).toBe(g.data.length * 4);
       const [nx, ny, nz] = g.dims;
-      for (const [x, y, z] of [[0, 0, 0], [nx - 1, ny - 1, nz - 1], [nx >> 1, ny >> 1, nz >> 1]]) {
+      for (const [x, y, z] of [[0, 0, 0], [nx - 1, ny - 1, nz - 1], [nx >> 1, ny >> 1, nz >> 1]] as [number, number, number][]) {
         const p: Vec3 = [g.origin[0]! + x * g.spacing, g.origin[1]! + y * g.spacing, g.origin[2]! + z * g.spacing];
         expect(Math.abs(g.data[x + nx * (y + ny * z)]! - src.distance(p))).toBeLessThan(1e-6);
       }
@@ -114,6 +114,35 @@ describe('segment grid bake', () => {
     for (const p of inside) {
       expect(Math.abs(sampleSegmentGrid(g, p).d - skull.distance(p))).toBeLessThanOrEqual(g.errorBound);
     }
+  });
+
+  it('measured Lipschitz constant of every segment field stays ≤ 1 (bound premise)', () => {
+    // The outside-domain lower bound and the h·√3/2 interpolation bound
+    // both rest on the field being 1-Lipschitz. sdPrimitive guarantees it
+    // structurally for capsule/box/cone prims (minScale multiply), but the
+    // bent-cone branch (ribs) is an approximation — MEASURE it: central
+    // differences over a cloud per segment, assert the max |grad| stays
+    // within a float-tolerance slack of 1.
+    const eps = 1e-4;
+    let globalMax = 0, globalSeg = '';
+    for (const s of sources) {
+      const g = bakeSegmentGrid(s, VOLUME_CELL);
+      let segMax = 0;
+      for (const p of gridCloud(g, 150)) {
+        let sum = 0;
+        for (let k = 0; k < 3; k++) {
+          const pp = [p[0], p[1], p[2]] as [number, number, number];
+          const pm = [p[0], p[1], p[2]] as [number, number, number];
+          pp[k] = pp[k]! + eps; pm[k] = pm[k]! - eps;
+          const d = (s.distance(pp) - s.distance(pm)) / (2 * eps);
+          sum += d * d;
+        }
+        segMax = Math.max(segMax, Math.sqrt(sum));
+      }
+      if (segMax > globalMax) { globalMax = segMax; globalSeg = s.segment; }
+      expect(segMax).toBeLessThanOrEqual(1.02);
+    }
+    console.log(`[volume] measured max |grad| over all segments=${globalMax.toFixed(4)} (worst: ${globalSeg}) — 1-Lipschitz premise holds`);
   });
 
   it('outside-domain returns a conservative LOWER bound, flagged, not an edge clamp', () => {
@@ -176,15 +205,22 @@ describe('composition and pose semantics', () => {
     const posed = applyRig(body, { ...bound, rig });
     const oracle = (p: Vec3): number => {
       let d = Infinity;
-      for (const b of posed.bonePrims) {
-        if (b.op === 'organ' || !posed.clusters[b.cluster]?.alive) continue;
+      // SEGMENT-ATTRIBUTED oracle: the sampled grid holds ONE segment's
+      // field, so the oracle must fold only that segment's member prims.
+      // (The original min over ALL posed bonePrims let a NEIGHBOUR
+      // segment's bone win near a joint and produced a bogus 19mm 'error'
+      // against the leg grid — diagnosed 2026-09-08, task-3a recovery.)
+      posed.bonePrims.forEach((b, i) => {
+        if (b.op === 'organ' || !posed.clusters[b.cluster]?.alive) return;
+        if (segKey(i) !== leg.segment) return;
         const sd = sdPrimitive(p, b);
         if (sd < d) d = sd;
-      }
+      });
       return d;
     };
     // applyRig's ladder, duplicated (as contract.test does) so the test can
-    // attribute member prims to a source for the caveat allowance.
+    // attribute member prims to a source for the oracle fold and the caveat
+    // allowance.
     const segKey = (i: number): string | null => {
       const p = body.bonePrims[i]!;
       if (p.op === 'organ') return null;
@@ -280,10 +316,9 @@ describe('cache, atlas, segment ids', () => {
     expect(cache.get(skull, VOLUME_CELL)).toBe(a);
     expect(cache.get(skull, VOLUME_CELL * 2)).not.toBe(a);
     expect(cache.stats().grids).toBe(2);
-    // A re-derived body (anatomy change) produces a NEW revision → new key.
-    const body2 = buildBody(compileBlob(parseBlob(zombieSrc)), {
-      ...DEFAULT_BUILD_OPTS, ratio: DEFAULT_BUILD_OPTS.ratio,
-    });
+    // A re-derived body of the SAME content produces the SAME revision →
+    // the same cache key (this is what lets actors share grids).
+    const body2 = buildBody(compileBlob(parseBlob(zombieSrc)), DEFAULT_BUILD_OPTS);
     const sources2 = createSkeletonSources(body2, bindRig(body2), { character: 'zombie' });
     expect(sources2.find(s => s.segment === 'head')!.revision).toBe(skull.revision); // same content → SAME key (share across actors)
     cache.dispose();
@@ -303,7 +338,7 @@ describe('cache, atlas, segment ids', () => {
     // Every node value survives the pack at its (x, y, z0+z) slot.
     for (const meta of atlas.metas) {
       const [nx, ny] = [meta.grid.dims[0], meta.grid.dims[1]];
-      for (const [x, y, z] of [[0, 0, 0], [nx - 1, ny - 1, meta.grid.dims[2] - 1]]) {
+      for (const [x, y, z] of [[0, 0, 0], [nx - 1, ny - 1, meta.grid.dims[2] - 1]] as [number, number, number][]) {
         const src = meta.grid.data[x + nx * (y + ny * z)]!;
         const dst = atlas.data[x + atlas.dims[0] * (y + atlas.dims[1] * (meta.z0 + z))]!;
         expect(dst).toBe(src);

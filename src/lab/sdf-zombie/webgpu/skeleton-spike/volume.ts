@@ -13,14 +13,24 @@
 // OUTSIDE-GRID POLICY (spec: "Never clamp to an edge texel and pretend it
 // represents arbitrary outside distance"): a query outside the node domain
 // returns interp(clamp(p)) - |p - clamp(p)| - errorBound. The field is
-// 1-Lipschitz, so true d(p) ≥ true d(q) - |p-q| ≥ interp(q) - errorBound
-// - |p-q|: a PROVABLE LOWER BOUND, conservative for sphere tracing (it can
-// slow a step, never skip a surface — and an UNDERESTIMATED bone distance
-// would bulge bone through intact flesh, so provable-lower is the only
-// acceptable direction). It reports `inside: false`; the composition
-// helper segmentDistance() and the GPU path (volume.wgsl.ts) treat
-// inside=false as a PROCEDURAL FALLBACK signal — fold the segment's prim
-// rows exactly, count the fallback — never march far-field on the bound.
+// 1-Lipschitz BY CONSTRUCTION of the source field it samples (verified
+// 2026-09-08, task-3a): validate.sdPrimitive multiplies every capsule/box/
+// cone base by minScale, so |grad| ≤ minScale·(1/minScale) = 1 per prim,
+// and the segment field is a HARD MIN over prims — min preserves the
+// constant. Two qualifications, honestly stated: (1) the bent-cone branch
+// (sdBentCone, the rib case) is an approximation whose gradient is not
+// proven ≤1 — volume.test.ts measures max |grad| by central differences
+// over every segment and asserts ≤ 1 + tolerance; (2) the bound guards
+// the SAME computed field the oracle uses, not a true Euclidean distance.
+// So: true d(p) ≥ true d(q) - |p-q| ≥ interp(q) - errorBound - |p-q| —
+// a conservative LOWER bound for sphere tracing (it can slow a step,
+// never skip a surface — and an UNDERESTIMATED bone distance would bulge
+// bone through intact flesh, so provable-lower is the only acceptable
+// direction). It reports `inside: false`; the composition helper
+// segmentDistance() treats inside=false as a PROCEDURAL FALLBACK signal
+// — fold the segment's prim rows exactly, count the fallback — never
+// march far-field on the bound. The proposed GPU path (volume.wgsl.ts,
+// NOT YET WRITTEN — task 3b) must implement the same fallback rule.
 //
 // ERROR BOUND: declared as `errorBound = cellSize`. Node values are exact;
 // trilinear interpolation of a 1-Lipschitz field errs by at most
@@ -30,10 +40,10 @@
 // volume.test.ts and reported in task-3.md — never silently folded into
 // acceptance criteria.
 //
-// FORMAT: Float32 per node (uploaded as r32float 3D — NOT filterable in
-// WebGPU, hence the manual trilinear in volume.wgsl.ts, the same choice
-// the X1.26 hand volume made). No quantization error; bytes are reported
-// per grid and per cache.
+// FORMAT: Float32 per node (to be uploaded as r32float 3D — NOT
+// filterable in WebGPU, hence the manual trilinear the GPU sampler must
+// replicate, the same choice the X1.26 hand volume made). No quantization
+// error; bytes are reported per grid and per cache.
 //
 // Caching (fixture-contract.md invalidation rules): key is
 // `${source.revision}@${cellSize}` — revision is the contract content
@@ -131,7 +141,7 @@ function outsideLowerBound(grid: SegmentGrid, p: Point3): number {
   const [nx, ny, nz] = grid.dims;
   const h = grid.spacing;
   const lo = grid.origin;
-  const q: Vec3 = [0, 0, 0];
+  const q: [number, number, number] = [0, 0, 0];
   for (let k = 0; k < 3; k++) {
     const hik = lo[k]! + (grid.dims[k]! - 1) * h;
     q[k] = Math.min(hik, Math.max(lo[k]!, p[k]!));
@@ -181,7 +191,8 @@ export function sampleSegmentGrid(grid: SegmentGrid, p: Point3): GridSample {
 }
 
 /**
- * The composition rule the GPU path implements (volume.wgsl.ts): sample
+ * The composition rule the proposed GPU path must implement
+ * (volume.wgsl.ts — task 3b, not yet written): sample
  * the grid; if the query fell outside the baked domain, FALL BACK to the
  * source's exact procedural distance and count it. This is the honest
  * answer to "segments touching": near a joint a point can sit outside a
@@ -200,7 +211,8 @@ export function segmentDistance(
 }
 
 /**
- * Per-segment GPU metadata for the atlas sample path (volume.wgsl.ts).
+ * Per-segment GPU metadata for the proposed atlas sample path
+ * (volume.wgsl.ts — task 3b).
  * `segId` is applyRig's dense boneSegment int — pack.ts buckets ascending
  * by it, so the GPU loop and these records share one order.
  */
@@ -261,12 +273,6 @@ export function buildSegmentAtlas(
   };
 }
 
-/**
- * applyRig's dense boneSegment id per contract segment key (the segOf
- * ladder in rig-bind.ts assigns ids in first-seen bonePrims order,
- * INCLUDING the 'organs' segment the contract excludes). pack.ts buckets
- * ascending by this id; the GPU meta texture must be row-aligned with it.
- */
 /**
  * applyRig's dense boneSegment id per contract segment key (the segOf
  * ladder in rig-bind.ts assigns ids in first-seen bonePrims order,
