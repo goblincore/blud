@@ -1,0 +1,305 @@
+# Gargoyle — a hunched stone beast for the FPS roster, authored from the
+# roth_gargoyle reference mesh (docs/dev-notes/refs/gargoyle-mesh/gargoyle.glb,
+# a static unrigged render of the Realm of the Haunting gargoyle beast; the
+# mesh is INSPIRATION, not a fit target — owner, 2026-09-07).
+#
+# THE READ, in silhouette order: a hunched mass riding LOW digitigrade legs,
+# long clawed arms hanging past the hips, a heavy-jawed head thrust forward
+# under two forward-curling horns and flanked by big bat ears, folded wing
+# fans rising behind the shoulders, and a long tail curling to the ground.
+# Grey-blue weathered stone, olive-green wing membrane, near-black horns and
+# claws, glowing ember eyes.
+#
+# MESH MEASUREMENTS (scripts/gargoyle-probe2.ts, 2026-09-07): the reference
+# crouches at 1.859 m (feet y -0.942, wing spur +0.917 in glTF units; the
+# file is centred at the origin). Authored at 2.05 m = mesh x 1.103 so every
+# `# fit:` number below is `probe x 1.1` unless the comment says why not.
+# Parts, from the probe's region clouds (ground frame, before x1.1):
+#   haunch half-width 0.27-0.30, hip line ~0.45-0.50 (extreme crouch; stood
+#     up to 0.53 here so the shamble gait reads — the dragon precedent is
+#     0.225 of height, this is 0.26)
+#   torso: belly half-width 0.23-0.25, chest half-width 0.25-0.30, the chest
+#     and head jutting FORWARD over the hips (heavy hunch)
+#   head: crown ~1.30-1.43, jaw ~0.70, face front z to 0.95 — a head as wide
+#     as the shoulders; horns rise to ~1.5, wing spurs to 1.86
+#   arms: shoulder ~0.62-0.70, hands hang to y 0.10-0.17 in FRONT of the body
+#     (z 0.34-0.64) — knuckle-dragger reach
+#   legs: digitigrade, hock FORWARD of the knee (bird fold, dragon stance
+#     solution to checkStance: knee behind the hip->hock chord)
+#   tail: thick at the haunch, thinning, curls to the ground at z -0.65..-0.9
+#   wings: y 0.42..1.86, x to +-0.78, z to -0.91 behind (asymmetric in the
+#     pose; authored symmetric and folded)
+#
+# FACE: the mesh's UVs REPEAT (uv % 1 wraps; find_eyes probe returned eye
+# texels scattered over the whole model), so blob:face-bake would sample
+# garbage — no sheet block, no decal. The face is authored prims in the
+# goblin idiom instead: brow shelf, wide flat nose, underbite fangs, bat
+# ears, and glow= prims for the ember eyes (glow added 2026-09-03 for
+# exactly this).
+model gargoyle
+  height 2.05
+  # Checked, not decorative — the bird fold (hock forward, knee back) is the
+  # reference's leg and the dragon's precedent. See blob-checks.ts.
+  stance digitigrade
+
+skeleton
+  # Hip line at 0.57 (root 0.44 + len 0.13; children attach at the TAIL).
+  # 0.28 of height — between the crouched reference (~0.25) and a readable
+  # shamble; the dragon's is 0.225. First pass had the whole figure at
+  # ~1.7 m of flesh (compiled extents) against the declared 2.05 — the
+  # chain below was re-lengthened so the crown reaches ~1.72 and the horn
+  # tips ~1.9-1.95, which is what "2.05" means for a horned, winged figure.
+  root pelvis at 0.44 len=0.13
+
+  # Hunched chain: the reference's chest and head both jut FORWARD over the
+  # hips (torso probe: belly centre z +0.25, chest +0.18, face to z 0.95).
+  # pitches sum to a ~45 deg lean from hip to skull — hunched, not broken.
+  bone spine parent=pelvis dir=up pitch=18 len=0.28
+  bone chest parent=spine dir=up pitch=14 len=0.24
+  # The neck thrusts forward (26 deg) so the head rides ahead of the chest,
+  # and the skull continues up-forward to carry the jaw under the brow.
+  bone neck  parent=chest dir=up pitch=26 len=0.18
+  bone skull parent=neck  dir=up pitch=16 len=0.24
+
+  # TAIL — two unmapped bones fitted to the reference centreline (probe:
+  # haunch z -0.25 -> ground curl z -0.9, tip resting). No rig joints, so it
+  # rides the pelvis frame; the .blob pose IS the pose.
+  bone tail  parent=pelvis dir=down pitch=-55 tilt=-28 len=0.42
+  bone tail2 parent=tail  dir=down pitch=-40 tilt=-16 len=0.40
+
+  mirror
+  # WINGS — folded fans off the LOWER-UPPER back (parent spine, not chest:
+  # on chest they rooted at the neck and read as head-wings). Reference:
+  # peaks above the head, membrane hanging to mid-back. Unmapped bones:
+  # folded wings do not flap; they ride the torso frame. NEGATIVE pitch:
+  # a first pass used positive pitch and swept the fans FORWARD past the
+  # head (compiled wing2 tail z +0.56); folded wings go out and BACK.
+  bone wing1 parent=spine dir=up pitch=-12 tilt=68 len=0.55
+  bone wing2 parent=wing1 dir=down pitch=30 tilt=48 len=0.50
+
+    # Shoulder socket at x ~0.23, just proud of the chest's ~0.20 half-width
+    # (goblin lesson: shoulder reach is a function of chest width).
+    bone clavicle parent=chest  dir=side len=0.16 side=0.07
+    # Arms hang down-forward-out: the reference's hands land at y 0.10-0.17,
+    # z +0.34..0.64 (knuckle-dragger). Chain: 0.30 + 0.28 + 0.13 + claws.
+    bone upperarm parent=clavicle dir=down tilt=14 pitch=22 len=0.30
+    bone forearm  parent=upperarm dir=down tilt=6  pitch=18 len=0.28
+    bone hand     parent=forearm  dir=down pitch=28 len=0.13
+    # Digitigrade, the dragon's solution: near-vertical thigh, hock FORWARD
+    # (pitch +14) so the knee falls behind the hip->hock chord, long
+    # metatarsus down-forward to the toe joint at the ground (foot pitch 67).
+    # Hip (0.10, 0.57) -> knee (0.145, 0.292, +0.029) -> hock (0.145, 0.098,
+    # +0.077) -> toe (0.145, 0.012, +0.280); kneeOffset -16 mm = digitigrade.
+    bone thigh parent=pelvis dir=down pitch=6  tilt=10 side=0.10 len=0.28
+    bone shin  parent=thigh  dir=down pitch=14            len=0.20
+    bone foot  parent=shin   dir=down pitch=67            len=0.22
+  end
+
+body
+  # ============================================================
+  # TORSO — haunch, belly, chest, each one blended mass; the stone-sculpt
+  # read comes from the palette's mottle, not from lumps.
+  # ============================================================
+  # Haunch: the wide seat the legs and tail root into. fit: mesh haunch
+  # half-width 0.27-0.30 x 1.1 -> semi 0.30/0.26 x deep.
+  blob torso on pelvis at=0.35 r=0.165 wide=1.60 tall=1.05 deep=1.25 blend=0.020
+  # Belly: mesh half-width 0.23-0.25 x1.1 -> 0.19 semi. deep 1.75 carries the
+  # reference's forward-hung gut (belly front z ~0.35 mesh x1.1 = 0.39).
+  blob torso on spine at=0.45 r=0.150 wide=1.25 tall=1.10 deep=1.75 blend=0.020
+  # Chest: broad and DEEP (the hunch rides it over the hips); mesh chest
+  # half-width to 0.30 clipped window, x1.1 -> 0.22 semi.
+  blob torso on chest at=0.35 r=0.150 wide=1.45 tall=1.20 deep=1.55 blend=0.020
+  # Traps yoke: a shoulder shelf so the head sinks between massive shoulders
+  # like the reference (the skull's jaw line sits below the shoulder tops).
+  blob torso on neck at=0.22 r=0.095 wide=2.30 tall=0.70 deep=1.10 blend=0.014
+
+  # Neck: thick beast column (r 0.075 — the zombie's is 0.045).
+  bar head on neck from=0.05 to=0.95 r=0.075 deep=0.90 blend=0.008
+
+  # ============================================================
+  # ARMS — the knuckle-dragger reach. One mass per segment plus palm and
+  # claw fingers; heavy deltoid into a tapered forearm.
+  # ============================================================
+  # Deltoid cap: mesh upper-arm r ~0.075-0.085 x1.1. core: the painted claws
+  # below are fatter per-prim than the shaft's taper end (house rule).
+  blob arm on upperarm at=0.10 r=0.095 blend=0.012 mirror core
+  bar  arm on upperarm from=0.15 to=0.95 r=0.085 r2=0.055 blend=0.010 mirror
+  bar  arm on forearm  from=0.05 to=0.90 r=0.070 r2=0.048 blend=0.008 mirror
+  # Palm: blunt mitt, slightly deepened for the claw row.
+  blob arm on hand at=0.55 r=0.055 wide=1.10 tall=0.90 deep=1.30 blend=0.006 mirror
+  # Fingers: two knuckle bars per hand, each carrying a chamfered claw that
+  # curls down-forward past the palm. `both` is exclusive with `mirror`, so
+  # the splay comes from the two lines' x offsets — under plain mirror the
+  # .r copy reflects offset.x, so each hand ends with claws at +-0.03.
+  bar arm on hand from=0.85 to=1.10 r=0.026 r2=0.016 blend=0.004 chamfer offset=(0.030,0.010,0.005) tip=(0.012,-0.055,0.052) mirror
+  bar arm on hand from=0.85 to=1.10 r=0.024 r2=0.014 blend=0.004 chamfer offset=(-0.028,0.008,0.002) tip=(-0.010,-0.052,0.048) mirror
+
+  # ============================================================
+  # LEGS — digitigrade: fat thigh, slim shin, swollen hock, long
+  # metatarsus, three-toed ground pad with claws.
+  # ============================================================
+  blob leg on thigh at=0.05 r=0.110 blend=0.012 mirror core
+  # Thigh cone: mesh thigh r ~0.10 x1.1, flattened deep=1.05 like the dragon's.
+  bar  leg on thigh from=0.10 to=0.95 r=0.105 r2=0.065 deep=1.05 blend=0.012 mirror
+  bar  leg on shin  from=0.05 to=0.95 r=0.060 r2=0.048 blend=0.008 mirror
+  # Hock: the swollen heel joint (dragon's foot t0 blob precedent).
+  blob leg on foot at=0.02 r=0.075 blend=0.010 mirror
+  # Metatarsus: the long forward column to the toe joint at the ground.
+  bar  leg on foot from=0.10 to=0.85 r=0.062 r2=0.052 tall=1.10 deep=0.95 blend=0.010 mirror
+  # Toe pad: the ground-contact fan (mesh foot spans ~0.35 x1.1 wide).
+  blob leg on foot at=1.00 offset=(0.030,-0.020,0.030) r=0.055 wide=1.50 tall=0.70 deep=1.50 blend=0.008 mirror
+  # Claws: centre plus one splayed line — the .r foot's reflected offsets
+  # put the second at the mirrored x, so each foot shows a splayed pair
+  # around the centre claw. Dark, chamfered to points.
+  bar leg on foot from=0.98 to=1.10 r=0.028 r2=0.006 blend=0.004 chamfer offset=(0.030,-0.030,0.085) tip=(0.010,-0.035,0.055) mirror color=2b211b
+  bar leg on foot from=0.98 to=1.10 r=0.024 r2=0.005 blend=0.004 chamfer offset=(-0.030,-0.030,0.080) tip=(-0.012,-0.032,0.050) mirror color=2b211b
+
+  # ============================================================
+  # WINGS — folded fans behind the shoulders (torso cluster: nothing severs
+  # them, which is right for v1). Struts stone; membrane olive-green like
+  # the reference's, hung to swing BELOW-BEHIND the strut line (the wing
+  # panel is what makes the silhouette, so it is the biggest prim pair on
+  # the character after the torso masses).
+  # ============================================================
+  bar torso on wing1 from=0.08 to=0.92 r=0.072 r2=0.050 blend=0.010 mirror
+  # The spur claw at the folded wing's PEAK — seated at the strut's own end
+  # (wing1) so it roots in the strut flesh. A first pass rode wing2's tail
+  # and stranded 104 mm clear of the fan (blob-checks strandedOf).
+  bar torso on wing1 from=0.92 to=1.10 r=0.042 r2=0.006 blend=0.004 chamfer mirror color=2b211b
+  # Upper membrane fan: rises above-behind from the mid-strut to past the
+  # spur joint.
+  bar torso on wing1 from=0.35 to=0.75 r=0.115 r2=0.065 wide=1.70 deep=0.26 blend=0.012 offset=(0,-0.02,-0.03) tip=(0.02,-0.26,-0.10) mirror color=3c4a26
+  # Lower membrane fan: hangs from the strut root down the flank to
+  # mid-back height (the reference's membrane reaches y ~0.5).
+  bar torso on wing1 from=0.30 to=0.62 r=0.095 r2=0.055 wide=1.30 deep=0.24 blend=0.012 offset=(0,-0.16,-0.06) tip=(0.02,-0.30,-0.10) mirror color=35431f
+  bar torso on wing2 from=0.25 to=0.70 r=0.095 r2=0.055 wide=1.45 deep=0.24 blend=0.012 offset=(0,-0.06,-0.04) tip=(0.03,-0.24,-0.06) mirror color=3c4a26
+
+  # ============================================================
+  # TAIL — two bent tapered bars along the tail bones: thick at the haunch,
+  # thinning to the ground curl (probe: r ~0.09 base -> 0.03 tip, x1.1).
+  # ============================================================
+  bar torso on tail  from=0.06 to=0.92 r=0.095 r2=0.055 bend=(0.02,-0.05,0.06) blend=0.012
+  bar torso on tail2 from=0.05 to=0.95 r=0.050 r2=0.014 bend=(0.03,-0.08,0.02) blend=0.008 chamfer
+
+  # ============================================================
+  # HEAD — CHISELED STONE, not the house oval. Every other character's skull
+  # is the face block's parameterised ELLIPSOID pair (facePrims: cranium +
+  # jaw spheres); the owner asked for a head that is not "an orb or oval
+  # variation" (2026-09-07) — refined, in the goblin idiom: MULTIPLE BLENDED
+  # ORBS plus shaped prims, not one ellipsoid and not boxes (an all-box
+  # pass read as a monitor and was replaced same-day). The face block is
+  # SHRUNK TO A NUB (headRadius 0.001, brow/nose gates at 0 — it validates
+  # keys only, no ranges) and the head is authored prims on the skull bone:
+  #   cranium dome -> cheek/jaw mass -> muzzle orb -> nose pad,
+  #   paired brow ridges, ember eyes under them, corner fangs,
+  #   bat ears, forward-curling horns. No sheet block (the reference mesh's
+  #   UVs repeat, so a bake would sample garbage).
+  # The skull bone runs (0,1.231,0.224) -> (0,1.462,0.290); offsets are
+  # world axes off the anchored point, per the grammar.
+  # ============================================================
+  # The head is BLENDED ORBS in the goblin idiom (owner, 2026-09-07: "not a
+  # blockhead — multiple blended orbs plus shaped prims"). An all-box first
+  # pass read as a monitor; this one sculpts the same masses out of rounded
+  # forms whose tight blends keep the seams legible: cranium -> cheek/jaw
+  # mass -> muzzle orb, plus paired brow ridges, a flat nose pad, ember
+  # eyes, corner fangs, bat ears and horns. Skull bone
+  # (0,1.231,0.224) -> (0,1.462,0.290); offsets are world axes.
+  # Cranium: the dome, taller than wide, centred at the bone's tail.
+  blob head on skull at=0.95 r=0.150 wide=1.30 tall=1.50 deep=1.40 blend=0.006 offset=(0,0.010,0)
+  # Cheek/jaw mass: a WIDER rounded mass low on the skull — the width step
+  # against the cranium is what gives the head its beast silhouette without
+  # any flat plane. Painted a step darker: the seam reads as the mouth's
+  # shadow (grooves on a face are the failed idiom; face.ts's header).
+  blob head on skull at=0.45 r=0.125 wide=1.75 tall=1.00 deep=1.45 blend=0.005 offset=(0,-0.105,0.085) color=6e727c
+  # Muzzle orb: rounded, riding on the cheek mass and jutting forward.
+  blob head on skull at=0.70 r=0.085 wide=1.45 tall=0.85 deep=1.30 blend=0.005 offset=(0,-0.020,0.190)
+  # Snout: a pointy tapered nose hooking down-forward off the muzzle top —
+  # the flat pad this replaced read bulbous (owner, 2026-09-07).
+  bar head on skull from=0.62 to=0.68 r=0.032 r2=0.009 blend=0.003 chamfer offset=(0,0.008,0.252) tip=(0,-0.055,0.075)
+  # Brow ridges: paired heavy ridges over the eyes (both = the pair), the
+  # heaviest brow in the cast.
+  blob head on skull at=0.72 r=0.052 wide=1.30 tall=0.70 deep=0.85 blend=0.004 offset=(0.072,0.086,0.212) tip=(0.034,0.034,0.012) both
+  # Ember eyes: glow prims tucked under the ridges (colour IS the emission).
+  blob head on skull at=0.60 r=0.024 r2=0.009 blend=0.003 offset=(0.070,0.024,0.246) tip=(0.024,0.032,0.010) both color=ff5a1a glow=0.9
+  # Fangs live in the PAINTED grin (gargoyle-face.png's corner teeth) — a
+  # geometric fang pair here read as a walrus goatee hanging past the chin
+  # (owner, 2026-09-07) and duplicated what the decal already draws.
+  # Bat ears: BIG and TALL, swept out-up-back, thin (deep=0.55), chamfer
+  # crease — the reference's ears are half the head width each; a first
+  # pass with the goblin's ear dimensions read as nubs at 2 m.
+  blob head on skull at=0.85 r=0.075 r2=0.005 wide=1.90 tall=2.60 deep=0.40 blend=0.002 chamfer offset=(0.185,0.080,-0.020) tip=(0.240,0.320,-0.040) both
+  # Horns: from the crown, curving up-FORWARD (the reference's horns lean
+  # over the brow), chamfered to points, dark.
+  bar head on skull from=0.95 to=1.00 r=0.036 r2=0.005 blend=0.004 chamfer offset=(0.075,0.170,0.030) tip=(0.100,0.300,0.150) bend=(0.010,0.060,0.090) both color=2b211b
+
+# The sheet block: a HAND-AUTHORED grin decal (public/assets/lab/faces/
+# gargoyle-face.png — dark mouth + near-white teeth, alpha 0 elsewhere) at
+# MULTIPLY, so the mouth takes the body's light. The owner asked for an evil
+# toothy grin; a prim tooth row would eat the budget and read as the failed
+# painted-face idiom, and the reference mesh's UVs repeat so a BAKE would
+# sample garbage — a painted decal is the third road. The decal's row was
+# located against the CRANIUM hs frame (the fattest head prim is the
+# cranium by volume, not the cheek): upper lip at image row ~282/512. Two
+# traps already paid for here: an ALL-WHITE identity sheet GLOWS RED (raw
+# luma clears the glow cut), and near-white TEETH do too — hence
+# eyeGlowCut 0.99 + eyeGlowAmp 0 gating the sheet's glow off entirely; the
+# ember eyes are prims and do not need it.
+sheet
+  image       gargoyle-face.png
+  decal       0
+  projScaleX  0.19
+  projScaleY  0.22
+  projCentreX 0.50
+  projCentreY 0.47
+  # The near-white TEETH clear the default glow cut and rendered as glowing
+  # red fangs (the white-sheet trap again). Nothing in THIS texture may
+  # glow — the ember eyes are prims — so gate the sheet's glow off hard.
+  eyeGlowCut  0.99
+  eyeGlowAmp  0
+
+# Face block: SHRUNK TO A NUB — headRadius 0.001 kills the emitted skull
+# ellipsoid pair, browHeavy/noseLength 0 gate the emitted brow and nose off
+# (facePrims emits only while those are > 0.0005). The head is authored
+# prims above; this nub keeps the face block present (and the lab's face
+# panel live) without imposing the house oval on this character. This
+# is the first character to suppress the emitted skull — if a later one
+# copies it, consider a named `face skull off` word rather than a magic
+# radius (grammar gap to raise, not to route around quietly).
+face
+  headRadius 0.001
+  headWidth  1.0
+  headHeight 1.0
+  headDepth  1.0
+  jawWidth   1.0
+  jawHeight  1.0
+  jawDrop    0
+  jawJut     0
+  noseLength 0
+  noseWidth  1.0
+  noseDrop   0
+  browHeavy  0
+  browRise   0
+  headBlend  0.006
+  headRise   0
+  headLead   0
+
+# Weathered grey-blue stone: dark linear base (the shader sRGB-encodes, so
+# authored numbers are darker than the rendered stone), pale mineral mottle
+# a half-stop up, dry specular (wetness 0.15 — stone is not skin), no
+# translucency, low fresnel. Wound interior stays the house red. The base
+# was lifted one step (0.13->0.165) after the first head read near-black
+# under the lab key — flat box faces catch less light than blended ovoids.
+palette
+  baseColor     0.165 0.175 0.225
+  deepColor     0.50 0.08 0.08
+  charColor     0.09 0.08 0.08
+  specIntensity 0.45
+  specRoughness 0.38
+  fresnelBoost  0.40
+  translucency  0.05
+  wetness       0.15
+  surfaceNoiseAmp    0.05
+  silhouetteNoiseAmp 0.02
+  mottleAmp     0.40
+  mottleScale   2.2
+  mottleColor   0.300 0.290 0.250
