@@ -1,0 +1,273 @@
+# Thornbeast — a bramble-hulk for the FPS roster, authored from a 2D concept
+# plate (docs/dev-notes/refs/thornbeast-reference.png, a Meshy AI generation
+# the owner supplied). The plate is INSPIRATION and DIRECTION, not a fit
+# target — the owner explicitly did not provide a mesh for exactly the reason
+# the gargoyle notes record: measuring ate the session. Every number below is
+# therefore EYEBALLED off the plate and tuned by eye against turntable frames;
+# the `# plate:` comments say what each number is matching.
+#
+# THE READ, in silhouette order: a rust-barked hulk with a MASSIVE shoulder
+# yoke riding over a small sunken head, arms so long the clawed fingertips
+# reach the knees, rows of pale thorns raking back along the outer forearms,
+# quill fans bursting from the shoulders and upper back, thin legs ending in
+# big two-claw talon feet. No tail, no wings, no big ears — the gargoyle owns
+# all three; this one is thorns. The hide is rust-brown bark blotched with
+# olive-green; thorns and claws are pale bone; the eyes are two tiny embers
+# sunk under a heavy monobrow shelf.
+#
+# FACE: no mesh exists to bake, so the face is authored prims in the
+# goblin/gargoyle idiom (multiple blended orbs + shaped prims, face block
+# shrunk to a nub) plus a HAND-AUTHORED maw decal at MULTIPLY — the gargoyle's
+# third-road precedent (painted prims read as a visor; the generated sheet
+# reads as the zombie; geometric teeth read as a walrus goatee).
+model thornbeast
+  height 2.1
+  # Checked, not decorative: the plate's legs bend like a man's (knee forward,
+  # ankle back under the body) — unlike the gargoyle's bird fold, which is the
+  # deliberate point of difference. See blob-checks.ts.
+  stance humanoid
+
+skeleton
+  # Hip line at 1.10 (root 0.98 + len 0.12; children attach at the TAIL).
+  # 0.52 of height — a tall gangly upright hulk, NOT the gargoyle's crouched
+  # 0.28: the plate's legs are long and the mass rides high on the yoke.
+  root pelvis at 0.98 len=0.12
+
+  # Hunched chain: the plate's chest sits forward over the hips and the head
+  # sinks INTO the yoke, so the pitches lean the spine ~26 deg total while the
+  # SHORT forward-thrust neck drops the skull between the shoulders — the jaw
+  # mass hangs BELOW the shoulder tops (the sunken read the plate has and the
+  # gargoyle comment calls "jaw line below the shoulder tops"). Neck+skull
+  # pitch 22+10, NOT steeper: at 30+22 the face plane tipped so far under the
+  # slab's brim that it lived in its own shadow and vanished from every
+  # front camera. Crown of the head lands ~1.9; the crown thorns carry the
+  # figure to the declared 2.1.
+  bone spine parent=pelvis dir=up pitch=14 len=0.27
+  bone chest parent=spine dir=up pitch=12 len=0.25
+  bone neck  parent=chest dir=up pitch=22 len=0.11
+  bone skull parent=neck  dir=up pitch=10 len=0.15
+
+  mirror
+    # Shoulder socket at x ~0.20, just proud of the chest's ~0.23 half-width
+    # (the yoke blob below owns the width; the goblin lesson is shoulder reach
+    # is a function of chest width).
+    bone clavicle parent=chest  dir=side len=0.13 side=0.07
+    # The absurd reach: upper 0.42 + fore 0.40 + hand 0.15 puts the wrist at
+    # y ~0.87 and the fingertips at knee level (~0.62) — the plate's hands
+    # hang past mid-thigh, in FRONT of the body (z ~0.2, clear of the thighs).
+    bone upperarm parent=clavicle dir=down tilt=10 pitch=8  len=0.42
+    bone forearm  parent=upperarm dir=down tilt=4  pitch=6  len=0.40
+    bone hand     parent=forearm  dir=down pitch=14 len=0.15
+    # Humanoid leg: thigh pitch +4, shin pitch -6 so the knee falls FORWARD of
+    # the hip->ankle chord (+42 mm, passes checkStance as humanoid); the ankle
+    # swings back under the body. Big talon foot: a long slanted segment to a
+    # toe joint at the ground (foot pitch 42).
+    bone thigh parent=pelvis dir=down pitch=4  tilt=8 side=0.10 len=0.50
+    bone shin  parent=thigh  dir=down pitch=-6            len=0.46
+    bone foot  parent=shin   dir=down pitch=42            len=0.18
+  end
+
+body
+  # ============================================================
+  # TORSO — four masses: haunch, belly, chest, and the YOKE. The yoke is the
+  # character: a shoulder shelf 0.61 wide, WIDER than the chest and rising
+  # above the head's jaw — the plate's shoulders are its whole silhouette.
+  # The bark read comes from the palette's mottle.
+  # ============================================================
+  blob torso on pelvis at=0.45 r=0.150 wide=1.55 tall=1.00 deep=1.20 blend=0.020
+  blob torso on spine  at=0.40 r=0.145 wide=1.40 tall=1.05 deep=1.55 blend=0.020
+  blob torso on chest  at=0.40 r=0.150 wide=1.70 tall=1.25 deep=1.40 blend=0.020
+  # The yoke: rides the neck bone so it caps the chest from above and swallows
+  # the jaw (the head sinks in). semi-x 0.31 — the widest prim on the body.
+  blob torso on neck   at=0.25 r=0.105 wide=2.95 tall=0.80 deep=1.05 blend=0.014
+
+  # Neck: thick column, mostly swallowed by the yoke (the head sits IN it).
+  bar head on neck from=0.05 to=0.95 r=0.068 deep=0.90 blend=0.008
+
+  # ============================================================
+  # ARMS — the reach. One mass per segment plus palm and three claw lines
+  # per hand; the forearm bars carry thorn rows (below). Heavy deltoid caps
+  # so the arms read as growing out of the yoke, not pinned to it.
+  # ============================================================
+  blob arm on upperarm at=0.10 r=0.105 blend=0.012 mirror core
+  bar  arm on upperarm from=0.15 to=0.95 r=0.082 r2=0.052 blend=0.010 mirror
+  bar  arm on forearm  from=0.05 to=0.92 r=0.062 r2=0.040 blend=0.008 mirror
+  blob arm on hand at=0.50 r=0.050 wide=1.10 tall=0.85 deep=1.30 blend=0.006 mirror
+  # Fingers: three knuckle bars per hand. Under plain mirror each line's
+  # offset.x reflects on the .r hand, so the splayed pair lands at +-0.028 on
+  # BOTH hands and the centre line fills the middle — a three-claw spread
+  # matching the plate's long spiky fingers. chamfer + small r2 = claw points.
+  bar arm on hand from=0.80 to=1.35 r=0.022 r2=0.008 blend=0.004 chamfer offset=(0.028,0.008,0.004) tip=(0.010,-0.062,0.052) mirror
+  bar arm on hand from=0.80 to=1.35 r=0.020 r2=0.007 blend=0.004 chamfer offset=(0.000,0.006,0.000) tip=(0.000,-0.070,0.046) mirror
+  bar arm on hand from=0.80 to=1.35 r=0.022 r2=0.008 blend=0.004 chamfer offset=(-0.028,0.008,-0.002) tip=(-0.010,-0.058,0.048) mirror
+  # Knuckle thorn: one pale spike off the back of each hand.
+  bar arm on hand from=0.30 to=0.55 r=0.013 r2=0.002 blend=0.003 chamfer offset=(0.005,0.048,-0.012) tip=(0.004,0.045,-0.045) mirror color=c9b896
+
+  # ============================================================
+  # LEGS — humanoid, thin under the massive top: fat thigh tapering hard,
+  # slim shin, swollen ankle, one long slanted talon segment to a toe pad and
+  # a splayed two-claw pair (the plate's feet show two big forward talons).
+  # ============================================================
+  blob leg on thigh at=0.05 r=0.105 blend=0.012 mirror core
+  bar  leg on thigh from=0.10 to=0.95 r=0.095 r2=0.060 deep=1.05 blend=0.012 mirror
+  bar  leg on shin  from=0.05 to=0.95 r=0.055 r2=0.042 blend=0.008 mirror
+  blob leg on foot  at=0.02 r=0.060 blend=0.010 mirror
+  bar  leg on foot  from=0.10 to=0.90 r=0.055 r2=0.045 blend=0.010 mirror
+  # Toe pad: the ground-contact fan under the talon segment's end.
+  blob leg on foot at=1.00 offset=(0.030,-0.015,0.030) r=0.050 wide=1.40 tall=0.70 deep=1.40 blend=0.008 mirror
+  # Talons: dark, chamfered to points, a splayed pair per foot (as with the
+  # fingers, each line's offset.x reflects on the .r foot).
+  bar leg on foot from=0.95 to=1.12 r=0.026 r2=0.005 blend=0.004 chamfer offset=(0.028,-0.025,0.075) tip=(0.010,-0.028,0.050) mirror color=26201a
+  bar leg on foot from=0.95 to=1.12 r=0.024 r2=0.005 blend=0.004 chamfer offset=(-0.028,-0.025,0.070) tip=(-0.012,-0.026,0.046) mirror color=26201a
+
+  # ============================================================
+  # THORNS — the plate's signature. Pale bone (c9b896) so they read against
+  # the rust hide at gameplay distance; every base is seated INSIDE its host
+  # prim's flesh (the gargoyle wing-spur strandedOf lesson) and rakes BACK
+  # like a bramble. Kept to 16 thorn prims total so the cluster budget and
+  # the raymarch cost stay at the gargoyle's scale. First pass had thin
+  # quills off the clavicles and they read as insect ANTENNAE framing the
+  # head — round 2 moves the big pair onto the YOKE itself, thick, rising
+  # up-out like the plate's shoulder burst.
+  # ============================================================
+  # Yoke burst: one BIG thick pair rising up-out-back off the yoke's top
+  # slope, plus a smaller pair behind it (both = the pair; neck is a centre
+  # bone, torso cluster — nothing severs). Bases are seated INSIDE the yoke
+  # ellipsoid (centre ~(0,1.631,0.130), semi 0.31/0.084/0.11) — a first pass
+  # launched them off the slope's AIR and strandedOf caught 33 mm of float.
+  bar torso on neck from=0.30 to=0.90 r=0.030 r2=0.005 blend=0.003 chamfer offset=(0.200,0.029,0.056) tip=(0.110,0.260,-0.090) both color=c9b896
+  bar torso on neck from=0.20 to=0.70 r=0.022 r2=0.003 blend=0.003 chamfer offset=(0.240,0.024,-0.034) tip=(0.090,0.180,-0.130) both color=c9b896
+  # Forearm row, outer: rakes back-up off the outer edge (offset.x mirrors
+  # outward on the .r arm); pokes well clear of the r~0.055 forearm flesh.
+  bar arm on forearm from=0.30 to=0.55 r=0.018 r2=0.003 blend=0.003 chamfer offset=(0.058,0.015,-0.020) tip=(0.022,0.055,-0.075) mirror color=c9b896
+  # Forearm row, rear: sits on the back of the forearm, pointing back.
+  bar arm on forearm from=0.55 to=0.78 r=0.016 r2=0.003 blend=0.003 chamfer offset=(-0.008,0.010,-0.058) tip=(-0.005,0.055,-0.065) mirror color=c9b896
+  # Back fan: two tall quills per side bursting up-back off the chest bone.
+  bar torso on chest from=0.75 to=1.35 r=0.030 r2=0.005 blend=0.003 chamfer offset=(0.060,0.070,-0.105) tip=(0.055,0.230,-0.160) both color=c9b896
+  bar torso on chest from=0.45 to=0.95 r=0.022 r2=0.004 blend=0.003 chamfer offset=(0.120,0.030,-0.120) tip=(0.090,0.130,-0.200) both color=c9b896
+
+  # ============================================================
+  # HEAD — sunk into the yoke, in the goblin/gargoyle idiom: BLENDED ORBS
+  # plus shaped prims (owner 2026-09-07: not an oval, not a blockhead). The
+  # skull bone runs (0,1.702,0.172) -> (0,1.841,0.228); offsets are world
+  # axes off the anchored point. PROPORTION LESSON (paid for twice): a round
+  # cranium (r 0.125, tall 1.15) swallowed every face prim — the eyes cleared
+  # the muzzle front by 2 mm and the whole face read as a blank dome from
+  # ahead. The plate's head is a LOW FLAT WEDGE: cranium slab wide> tall, and
+  # the brow/eyes/muzzle stacked down its FRONT-BOTTOM slope, the muzzle the
+  # most-forward prim. The jaw mass dips below the clavicle tops (~1.607):
+  # the sunken read. NO big ears (gargoyle owns them), no geometric teeth
+  # (walrus-goatee failure — the decal owns teeth).
+  # ============================================================
+  # Cranium: the low wide slab — semi 0.213/0.098/0.115, top ~1.90 where the
+  # crown thorns root. deep 1.00: the decal's hs frame normalises by THIS prim
+  # (fattest UNPAINTED head prim, radius*maxScale — lab-main's headShape; the
+  # painted cheek is skipped), and the FRONT LIP must not overhang the face —
+  # at deep 1.25 the lip reached z 0.371 and hid the brow/muzzle from every
+  # front camera below head height (paid for across four close-ups).
+  blob head on skull at=0.85 r=0.115 wide=1.85 tall=0.85 deep=1.00 blend=0.006 offset=(0,-0.020,0)
+  # Cheek/jaw mass: the WIDEST-scaled head prim, and UNPAINTED on purpose —
+  # lab-main's headShape (fattest UNPAINTED head prim, radius*maxScale) picks
+  # it as the decal's hs frame. That is load-bearing: the maw sits at the
+  # cheek's own height, so |hs| at the muzzle front stays ~1.5, inside the
+  # decal's facing fade — against the cranium's frame it was 2.1 and the decal
+  # faded to nothing (four close-ups paid for this). Its lower step against
+  # the cranium still reads as the maw's shadow.
+  blob head on skull at=0.40 r=0.115 wide=1.90 tall=1.00 deep=1.20 blend=0.005 offset=(0,-0.130,0.060)
+  # Muzzle: the wide short barrel, the MOST FORWARD prim on the body (front
+  # z ~0.48) — no pointy snout (the gargoyle owns the hook); this mouth is
+  # all width. It must clear the cranium's front lip (z ~0.35) by a wide
+  # margin or the brim occludes the whole maw from the game's eye height.
+  blob head on skull at=0.45 r=0.075 wide=1.70 tall=0.70 deep=1.10 blend=0.005 offset=(0,-0.100,0.210)
+  # Maw slot: a dark-painted thin crescent along the muzzle's lower front —
+  # Brow ridges: PAIRED, tapered, angled outer-UP (the gargoyle's angry
+  # slant — a first pass drooped and read sad). Seated ON the cranium slab's
+  # front slope (q ~0.6 — half-embedded, the gargoyle's eyes sat at q 1.13),
+  # NOT floating: an earlier monobrow ledge hung 88 mm clear of the slab
+  # with nothing beneath, and the owner read it as floating, rightly.
+  blob head on skull at=0.55 r=0.030 r2=0.020 blend=0.003 offset=(0.055,0.039,0.146) tip=(0.040,0.045,0.030) both color=c9b896
+  # Ember eyes: tapered wedges on the slab's slope just under the ridges,
+  # half-embedded (q ~1.05) so only the ember pokes out — a deep-set glow,
+  # not a floating ball. High-set like the plate's eyes: low placements
+  # drowned in the slab's shade. Each sits in a DARK-PAINTED socket ring —
+  # on lit rust hide the bare ember washed out; the dark ring is the
+  # contrast that makes it read as a sunken ember at gameplay distance.
+  blob head on skull at=0.55 r=0.026 r2=0.009 blend=0.003 offset=(0.062,-0.004,0.118) tip=(0.018,0.020,0.010) both color=ff6a1a glow=0.9
+  blob head on skull at=0.55 r=0.034 wide=1.30 tall=1.00 deep=0.45 blend=0.002 offset=(0.058,-0.002,0.104) both color=241408
+  # Upper teeth: four small crooked points hanging from the muzzle's lower
+  # front into the maw slot's dark band — inside the mouth line, NOT hanging
+  # past the jaw (the gargoyle's walrus-goatee failure). Pale bone so they
+  # read against the dark slot.
+  bar head on skull from=0.40 to=0.44 r=0.009 r2=0.003 blend=0.003 chamfer offset=(0.018,-0.132,0.266) tip=(0.006,-0.022,0.010) both color=c9b896
+  bar head on skull from=0.40 to=0.44 r=0.009 r2=0.003 blend=0.003 chamfer offset=(0.052,-0.132,0.266) tip=(0.006,-0.022,0.010) both color=c9b896
+  # Crown thorns: a centre spike and a splayed pair, rising up-back (the
+  # plate's head crest). Bases seated INSIDE the slab's top (an earlier
+  # offset launched them from the air above it).
+  bar head on skull from=0.90 to=1.25 r=0.022 r2=0.004 blend=0.003 chamfer offset=(0,0.062,-0.020) tip=(0,0.130,-0.100) color=c9b896
+  bar head on skull from=0.95 to=1.20 r=0.015 r2=0.002 blend=0.003 chamfer offset=(0.070,0.036,-0.045) tip=(0.115,0.090,-0.135) both color=c9b896
+  # Maw slot: a dark-painted thin crescent along the muzzle's lower front —
+  # reads as the open mouth shadow the plate shows. This REPLACED a hand-
+  # authored maw decal after four close-up rounds: the decal pipeline itself
+  # is fine (gargoyle's grin) but this head's hs frame is hostile to it —
+  # against the cranium the muzzle sat at |hs| 2.1, inside the 1.95-2.55
+  # facing fade, and against every frame prim the projection kept missing the
+  # moving target of brim-occlusion + frame-prim choice + cache. A painted
+  # slot has no projection to miss. Thin (tall 0.28) so it reads as a LINE.
+  blob head on skull at=0.42 r=0.055 wide=1.75 tall=0.28 deep=0.55 blend=0.003 offset=(0,-0.155,0.265) color=1a0f08
+  # Cheek thorns were REMOVED: every placement tried read as horizontal
+  # handlebar rods crossing at the clavicle line (the head sits low enough
+  # that its jaw level IS the shoulder line) — the crown + yoke burst carry
+  # the thorn read without them.
+
+# NO sheet block: the maw decal experiment was removed (see the maw slot in
+# the head section), so the character falls back to the shared zombie-flat
+# sheet like the dragon and the mouse. The face block below is shrunk to a
+# nub — headRadius 0.001 kills the emitted skull ellipsoid pair,
+# noseLength/browHeavy 0 gate the emitted nose and brow off — because the
+# head is authored prims above (gargoyle precedent). If a later character
+# copies this, raise the named `face skull off` word rather than copying the
+# magic radius again.
+
+# Face block: SHRUNK TO A NUB — the head is authored prims above (gargoyle
+# precedent: headRadius 0.001 kills the emitted skull ellipsoid pair,
+# noseLength/browHeavy 0 gate the emitted nose and brow off). If a later
+# character copies this, raise the named `face skull off` word rather than
+# copying the magic radius again.
+face
+  headRadius 0.001
+  headWidth  1.0
+  headHeight 1.0
+  headDepth  1.0
+  jawWidth   1.0
+  jawHeight  1.0
+  jawDrop    0
+  jawJut     0
+  noseLength 0
+  noseWidth  1.0
+  noseDrop   0
+  browHeavy  0
+  browRise   0
+  headBlend  0.006
+  headRise   0
+  headLead   0
+
+# Rust bark: dark linear base (the shader sRGB-encodes, lifting low channels
+# hard — authored numbers are darker than the rendered hide), olive-green
+# mottle a HUE away so the blotches read as variation in the bark, not dirt
+# on it (reference.md's palette rule). Dry-ish specular, no translucency.
+# Wound interior stays the house red. Raising mottleAmp drags the mean toward
+# the mottle, so the base sits a half-stop above the target rust.
+palette
+  baseColor     0.230 0.100 0.035
+  deepColor     0.50 0.08 0.08
+  charColor     0.09 0.08 0.08
+  specIntensity 0.40
+  specRoughness 0.42
+  fresnelBoost  0.35
+  translucency  0.05
+  wetness       0.20
+  surfaceNoiseAmp    0.06
+  silhouetteNoiseAmp 0.02
+  mottleAmp     0.55
+  mottleScale   3.0
+  mottleColor   0.140 0.170 0.045
