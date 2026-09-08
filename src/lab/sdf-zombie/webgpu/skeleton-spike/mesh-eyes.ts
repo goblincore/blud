@@ -166,3 +166,11 @@ export const MESH_EYE_EMISSION_WGSL = /* wgsl */ `fn meshEyeEmission(p: vec3<f32
   let glow = pupil * 0.38 + (iris - pupil) * 0.075;
   return vec3<f32>(0.95, 0.05, 0.07) * glow;
 }`;
+
+/** A projectile impact must be local to the skull and near this eye. The
+ * broader pellet reach models the shock of a shotgun hit without affecting
+ * the far eye on a grazing side hit or any other actor. */
+export function meshEyeImpactIndices(eyes: readonly MeshEyePlacement[], hit: Vec3, kind: 'pellet' | 'slug'): number[] {
+  const reach = kind === 'slug' ? 0.19 : 0.135;
+  return eyes.flatMap((eye, i) => Math.hypot(...eye.center.map((v, axis) => v - hit[axis]!)) <= reach + eye.radius ? [i] : []);
+}

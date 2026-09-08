@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  meshEyePlacements, meshEyeShading, meshEyeVessels, meshEyeVolume,
+  meshEyeImpactIndices, meshEyePlacements, meshEyeShading, meshEyeVessels, meshEyeVolume,
   MESH_EYE_GLOW_PUPIL,
 } from './mesh-eyes';
 import type { BoneFieldSource } from './contract';
@@ -159,4 +159,41 @@ it('parents eyes to the real head pose and removes them with sever/revision/clea
   expect(renderer.object.children).toHaveLength(0);
   renderer.dispose();
   cache.dispose();
+});
+
+describe('localized projectile eye shock', () => {
+  const eyes = [{ center: [-0.07, 0, 0] as [number, number, number], radius: 0.02 }, { center: [0.07, 0, 0] as [number, number, number], radius: 0.02 }];
+  it('a central shotgun skull hit can eject both eyes', () => {
+    expect(meshEyeImpactIndices(eyes, [0, 0.04, 0.07], 'pellet')).toEqual([0, 1]);
+  });
+  it('a grazing lateral hit does not remove the far eye', () => {
+    expect(meshEyeImpactIndices(eyes, [-0.16, 0, 0], 'pellet')).toEqual([0]);
+  });
+  it('torso and remote head hits do not eject eyes', () => {
+    expect(meshEyeImpactIndices(eyes, [0, -0.5, 0], 'slug')).toEqual([]);
+    expect(meshEyeImpactIndices(eyes, [0, 0, -0.3], 'pellet')).toEqual([]);
+  });
+});
+
+it('persists owned eye loss through revision and actor reorder, and clears debris', () => {
+  const body = buildBody(compileBlob(parseBlob(zombieSrc)), DEFAULT_BUILD_OPTS);
+  const source = createSkeletonSources(body, bindRig(body), { character: 'zombie' }).find(s => s.segment === 'head')!;
+  const cache = new SegmentMeshCache(); const renderer = createSegmentMeshRenderer(cache);
+  const a = {}, b = {};
+  renderer.update([[source], [source]], [a, b]);
+  const eye = renderer.object.children[0]!.children[0]!;
+  const point = source.toWorld([eye.position.x, eye.position.y, eye.position.z]);
+  expect(renderer.impact(a, [source], point, [0, 0, -1], 'slug')).toBe(2);
+  expect(renderer.impact(a, [source], point, [0, 0, -1], 'slug')).toBe(0);
+  expect(renderer.eyeState(b).missing).toEqual([]);
+  renderer.update([[source], [{ ...source, revision: source.revision + '-changed' }]], [b, a]);
+  expect(renderer.object.children.filter(m => m.children.some(e => e.visible))).toHaveLength(1);
+  expect(renderer.eyeState(a).missing).toEqual([0, 1]);
+  const debris = renderer.object.children.find(m => m.name === 'skeleton-ejected-eye')!;
+  const before = debris.position.clone(); renderer.stepDebris(0.05);
+  expect(debris.position.distanceTo(before)).toBeGreaterThan(0);
+  renderer.update([[source]], [b]);
+  expect(renderer.eyeState(a).debris).toBe(0);
+  renderer.clear(); expect(renderer.eyeState(a).missing).toEqual([]);
+  renderer.dispose(); cache.dispose();
 });

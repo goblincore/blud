@@ -1,3 +1,4 @@
+import { meshBoneSource } from './mesh-skull';
 // src/lab/sdf-zombie/webgpu/skeleton-spike/mesh-renderer.ts
 //
 // SKELETON REPRESENTATION COMPARISON — Task 2: forward-mode renderer for
@@ -58,7 +59,7 @@ import {
   MESH_SPEC_SCALE, MESH_FRES_SCALE,
 } from './mesh-appearance';
 import {
-  meshEyePlacements, MESH_EYE_EMISSION_WGSL, MESH_EYE_SURFACE_WGSL, MESH_EYE_VESSEL_WGSL,
+  meshEyePlacements, meshEyeImpactIndices, MESH_EYE_EMISSION_WGSL, MESH_EYE_SURFACE_WGSL, MESH_EYE_VESSEL_WGSL,
 } from './mesh-eyes';
 
 const MAX_WOUNDS_TEX = 64;
@@ -68,7 +69,10 @@ export interface SegmentMeshRenderer {
   uniforms: BoneInstancerUniforms;
   /** Re-pose every actor's segments for this frame. `entries[i]` is actor
    *  i's CURRENT contract sources (rebuild the entry on sever re-derive). */
-  update(entries: ReadonlyArray<readonly BoneFieldSource[]>): void;
+  update(entries: ReadonlyArray<readonly BoneFieldSource[]>, owners?: readonly object[]): void;
+  impact(owner: object, sources: readonly BoneFieldSource[], point: readonly [number, number, number], direction: readonly [number, number, number], kind: 'pellet' | 'slug'): number;
+  stepDebris(dt: number): void;
+  eyeState(owner: object): { missing: number[]; debris: number };
   /** This frame's craters (world centre + radius) for the exposure gradient. */
   setWounds(wounds: ReadonlyArray<{ pos: readonly [number, number, number]; radius: number }>): void;
   /** Coverage accounting for diagnostics: meshed segment/vertex/triangle
@@ -158,13 +162,17 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache): SegmentMeshR
   eyeMaterial.depthTest = true;
   eyeMaterial.depthWrite = true;
   const eyeGeometry = new THREE.SphereGeometry(1, 24, 16);
-  const syncEyes = (mesh: THREE.Mesh, source: BoneFieldSource) => {
+  let absent = new WeakMap<object, Set<number>>();
+  const debris: { mesh: THREE.Mesh; velocity: THREE.Vector3; age: number; owner: object }[] = [];
+  const syncEyes = (mesh: THREE.Mesh, source: BoneFieldSource, owner: object) => {
     // Called only on creation/revision swap; removing children leaves shared
     // geometry/material alive until renderer disposal.
     mesh.clear();
-    for (const { center, radius } of meshEyePlacements(source)) {
+    for (const [index, { center, radius }] of meshEyePlacements(meshBoneSource(source)).entries()) {
+      if (absent.get(owner)?.has(index)) continue;
       const eye = new THREE.Mesh(eyeGeometry, eyeMaterial);
       eye.name = 'skeleton-fleshy-eye';
+      eye.userData.eyeIndex = index;
       eye.position.set(...center);
       eye.scale.setScalar(radius);
       mesh.add(eye);
@@ -195,6 +203,9 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache): SegmentMeshR
   const clear = () => {
     for (const slot of slots) for (const mesh of slot.meshes) group.remove(mesh);
     slots.length = 0;
+    absent = new WeakMap();
+    for (const d of debris) group.remove(d.mesh);
+    debris.length = 0;
     stats.actors = stats.segments = stats.rigid = stats.limb = stats.hidden = 0;
     stats.verts = stats.tris = stats.overflow = stats.clamped = stats.droppedQuads = 0;
     group.visible = false;
@@ -203,14 +214,52 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache): SegmentMeshR
   return {
     object: group,
     uniforms: u,
-    update(entries) {
+    impact(owner, sources, point, direction, kind) {
+      const head = sources.find(s => s.segment === 'head' && s.isLive() && s.character === 'zombie');
+      if (!head) return 0;
+      const eyes = meshEyePlacements(meshBoneSource(head));
+      const lost = absent.get(owner) ?? new Set<number>();
+      absent.set(owner, lost);
+      let count = 0;
+      for (const i of meshEyeImpactIndices(eyes, head.toLocal(point), kind)) {
+        if (lost.has(i)) continue;
+        lost.add(i); count++;
+        const eye = eyes[i]!;
+        const mesh = new THREE.Mesh(eyeGeometry, eyeMaterial);
+        mesh.name = 'skeleton-ejected-eye';
+        mesh.position.set(...head.toWorld(eye.center));
+        mesh.scale.setScalar(eye.radius);
+        mesh.quaternion.set(...head.pose().quat);
+        const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(mesh.quaternion);
+        const velocity = forward.multiplyScalar(1.8).addScaledVector(new THREE.Vector3(...direction), 0.6);
+        velocity.y += 1.15;
+        debris.push({ mesh, velocity, age: 0, owner }); group.add(mesh);
+      }
+      return count;
+    },
+    eyeState(owner) { return { missing: [...(absent.get(owner) ?? [])], debris: debris.filter(d => d.owner === owner).length }; },
+    stepDebris(dt) {
+      const step = Math.min(Math.max(dt, 0), 0.05);
+      for (let i = debris.length - 1; i >= 0; i--) {
+        const d = debris[i]!; d.age += step;
+        d.velocity.y -= 9.8 * step;
+        d.mesh.position.addScaledVector(d.velocity, step);
+        d.mesh.rotateX(step * 7); d.mesh.rotateY(step * 4);
+        if (d.mesh.position.y < 0.025) { d.mesh.position.y = 0.025; d.velocity.multiplyScalar(0.35); d.velocity.y = Math.abs(d.velocity.y); }
+        if (d.age > 2.5) { group.remove(d.mesh); debris.splice(i, 1); }
+      }
+    },
+    update(entries, owners) {
       stats.actors = entries.length;
       stats.segments = stats.rigid = stats.limb = stats.hidden = 0;
       stats.verts = stats.tris = 0;
       stats.overflow = stats.clamped = stats.droppedQuads = 0;
+      const liveOwners = new Set(owners ?? entries);
+      for (let i = debris.length - 1; i >= 0; i--) if (owners && !liveOwners.has(debris[i]!.owner)) { group.remove(debris[i]!.mesh); debris.splice(i, 1); }
       entries.forEach((srcs, ai) => {
         let slot = slots[ai];
         if (!slot) { slot = { meshes: [], keys: [] }; slots[ai] = slot; }
+        const owner = owners?.[ai] ?? slot;
         // Shrink/grow the slot to the source set (sever re-derive changes it).
         while (slot.meshes.length > srcs.length) {
           const m = slot.meshes.pop()!;
@@ -225,15 +274,18 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache): SegmentMeshR
             mesh = new THREE.Mesh(baked.geometry, material);
             mesh.frustumCulled = true; // per-segment bounds are tight and real
             mesh.layers.set(0);
-            syncEyes(mesh, s);
+            syncEyes(mesh, s, owner);
             group.add(mesh);
             slot!.meshes[si] = mesh;
             slot!.keys[si] = baked.key;
           } else if (slot!.keys[si] !== baked.key) {
             mesh.geometry = baked.geometry; // revision swap; cache owns disposal
-            syncEyes(mesh, s);
+            syncEyes(mesh, s, owner);
             slot!.keys[si] = baked.key;
           }
+          for (const eye of mesh.children) eye.visible = !absent.get(owner)?.has(eye.userData.eyeIndex);
+          // Actor ordering may change when a neighbour is removed.
+          if (mesh.userData.eyeOwner !== owner) { syncEyes(mesh, s, owner); mesh.userData.eyeOwner = owner; }
           stats.segments++;
           if (s.rigidity === 'rigid') stats.rigid++; else stats.limb++;
           if (baked.overflow) stats.overflow++;
@@ -249,10 +301,11 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache): SegmentMeshR
           mesh.quaternion.set(pose.quat[0], pose.quat[1], pose.quat[2], pose.quat[3]);
         });
       });
-      // Actors removed since last frame: hide their whole slot.
+      // Release removed slots so they cannot retain actor ownership.
       for (let ai = entries.length; ai < slots.length; ai++) {
-        for (const m of slots[ai]!.meshes) m.visible = false;
+        for (const m of slots[ai]!.meshes) { m.visible = false; group.remove(m); }
       }
+      slots.length = entries.length;
       group.visible = stats.segments > 0;
     },
     setWounds(wounds) {

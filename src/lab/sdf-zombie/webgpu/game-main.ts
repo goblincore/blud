@@ -783,7 +783,7 @@ async function main() {
         if (!e) { e = buildSkeletonSources(a, 'zombie'); skeletonSources.set(a, e); a.view.setPackBones(false); }
         else if (e.body !== a.body) { e = buildSkeletonSources(a, e.name); skeletonSources.set(a, e); }
         return e.sources;
-      }));
+      }), actors);
     }
     // skeleton=volume: only the tiny pose/meta texture changes per frame.
     // A body-reference change means sever/rebuild and therefore a new
@@ -3318,6 +3318,7 @@ async function main() {
 
   function tick(dt: number) {
     if (simLocked) return; // render-lock: drawFn still runs; nothing mutates.
+    segMeshRenderer?.stepDebris(dt);
     let input: MoveInput = {
       x: (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0),
       z: (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0),
@@ -3905,6 +3906,10 @@ async function main() {
             // the ring tail (a hit that also severs puts a stump there).
             if (!hitThisFrame.has(hitActor)) { hitActor.beginHits(); hitThisFrame.add(hitActor); }
             const hitTiming = telemetry.begin();
+            if (segMeshRenderer) {
+              const sources = skeletonSources.get(hitActor)?.sources;
+              if (sources) segMeshRenderer.impact(hitActor, sources, hitPoint, dirN, p.kind);
+            }
             const stamped = p.kind === 'slug'
               ? hitActor.hitSlug(hitPoint, dirN)
               : hitActor.hit(hitPoint, dirN);
@@ -5197,6 +5202,24 @@ async function main() {
     /** skeleton=mesh diagnostics: null unless the dev selector resolved;
      *  otherwise the renderer's coverage stats — proof the intended path
      *  ran (segments/verts > 0) and extraction health flags. */
+    /** Deterministic actual-hit fixture: front-centre skull slug, same eye
+     * event and actor damage path as travelling projectiles. */
+    hitMeshSkull: (bodyId?: number) => {
+      const a = bodyId === undefined ? actors[0] : actors.find(q => q.id === bodyId);
+      if (!a || !segMeshRenderer) return null;
+      const sources = skeletonSources.get(a)?.sources;
+      const head = sources?.find(s => s.segment === 'head' && s.isLive());
+      if (!sources || !head) return null;
+      const b = head.bounds;
+      const point = head.toWorld([(b.min[0] + b.max[0]) / 2, b.min[1] + (b.max[1] - b.min[1]) * 0.61, b.max[2]]);
+      const origin = head.toWorld([0, 0, 0]);
+      const front = head.toWorld([0, 0, 1]);
+      const direction: Vec3 = [origin[0] - front[0], origin[1] - front[1], origin[2] - front[2]];
+      const ejected = segMeshRenderer.impact(a, sources, point, direction, 'slug');
+      a.beginHits(); const wound = a.hitSlug(point, direction); a.endHits();
+      return { actor: a.id, point, ejected, stamped: !!wound };
+    },
+    meshEyeState: (bodyId?: number) => { const a = bodyId === undefined ? actors[0] : actors.find(q => q.id === bodyId); return a && segMeshRenderer ? segMeshRenderer.eyeState(a) : null; },
     skeletonMesh: () => segMeshRenderer ? { mode: skeletonMode, ...segMeshRenderer.stats, cacheEntries: segMeshCache!.size, cacheTotals: segMeshCache!.totals } : null,
     /** Synchronous active-path proof for capture harnesses. */
     skeletonDiagnostics: () => ({
