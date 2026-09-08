@@ -1,3 +1,12 @@
+// src/lab/sdf-zombie/webgpu/skeleton-spike/segment-diagnostics.test.ts
+//
+// DIAGNOSTIC, not a regression gate (renamed from scratch zz-measure.test.ts).
+// Prints the zombie segment census, per-segment pose endpoint error, local
+// bounds, and the world-axis bend gap of bent rigid segments. Figures are
+// recorded in docs/dev-notes/2026-09-07-skeleton-comparison/task-1.md.
+// Limitation: the 60-step gravity settle leaves the spine near-upright, so
+// the bent-rib gap measures ~0 here; re-run on a tilted pose before trusting
+// rib parity under animation.
 import { it } from 'vitest';
 import { parseBlob } from '../../blob-parse';
 import { compileBlob } from '../../blob-compile';
@@ -7,7 +16,7 @@ import { stepRig } from '../../rig';
 import zombieSrc from '../../characters/zombie.blob?raw';
 import { createSkeletonSources } from './contract';
 
-it('measure', () => {
+it('diagnostic: segment census, endpoint error, bounds', () => {
   const body = buildBody(compileBlob(parseBlob(zombieSrc)), DEFAULT_BUILD_OPTS);
   const bound = bindRig(body);
   let rig = bound.rig;
@@ -21,7 +30,7 @@ it('measure', () => {
     console.log(`${s.rigidity.padEnd(6)} ${s.segment.padEnd(28)} prims=${s.primCount} endpErr=${(s.poseEndpointError() * 1000).toFixed(3)}mm bounds=[${s.bounds.min.map(v=>v.toFixed(3))}]..[${s.bounds.max.map(v=>v.toFixed(3))}]`);
 });
 
-it('measure-bent-gap', async () => {
+it('diagnostic: world-axis bend gap on bent rigid segments', async () => {
   const { applyRig } = await import('../../rig-bind');
   const { sdPrimitive } = await import('../../validate');
   const body = buildBody(compileBlob(parseBlob(zombieSrc)), DEFAULT_BUILD_OPTS);

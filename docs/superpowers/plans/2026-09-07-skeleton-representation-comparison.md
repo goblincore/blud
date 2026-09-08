@@ -4,6 +4,8 @@
 
 **Goal:** Compare faithful skeleton meshes and sampled skeleton SDFs while preserving forward character readability.
 
+**Owner clarification (2026-09-08, supersedes exact-parity requirements):** the existing skeleton is a useful reference, not an exact visual target. Fewer ribs, a better mesh skull shape and other deliberate anatomy improvements are explicitly allowed. Keep broadly compatible scale, rigging, recognizable anatomy and gameplay readability. Label intentional art differences separately from bugs. Source/extraction accuracy tests validate the CHOSEN shape; they must not force every prototype to reproduce the old anatomy or the old world-axis bend/squash quirks. Do not spend budget perfecting old-geometry parity. The hard gates are: no clipping, no leaks through intact flesh, no broken wound reveals/severing, no distracting shading mismatches; reuse authored forward lighting conventions. Intentional improved rigid bend behaviour is allowed — record differences rather than defaulting back to procedural merely to imitate quirks. Zombie first, soldier next.
+
 **Architecture:** Shared rigid-segment field fixtures feed two isolated representations. Meshes must match forward shading and field exposure; volumes stay within the existing field/shading path. Evidence determines a recommendation, not automatic integration.
 
 **Tech Stack:** TypeScript, Three.js WebGPU/TSL/WGSL, existing CPU field and mesh extraction, Vitest, private CDP GPU capture.
@@ -45,14 +47,14 @@ export interface BoneFieldSource {
 ```
 `distance` consumes segment-local metres and contains bone geometry only, preserving its authored operations; organs are excluded. If bone-to-segment assignment crosses a smooth union/nonrigid boundary, explicitly describe and retain procedural fallback rather than incorrectly slicing it. Extend this contract only with actual documented needs.
 
-- [ ] Map bone packing and posed transforms end to end. Identify exact field composition, normal/material selection, wound clipping and existing mesh exposure; distinguish bones from organs and explain why a separate mesh cannot automatically duplicate those operations.
-- [ ] Inspect shell, volume/texture and bake experiments via rg --files and DualMem; record reusable components and their measured limits. Do not assume a shell is a baked distance volume.
-- [ ] Implement the minimal source adapter with regression tests using real zombie skull, pelvis and rib segments. Test local->posed->local round trips and source distance agreement, including subtraction cavities. Example assertion (use real fixture values):
+- [x] Map bone packing and posed transforms end to end. Identify exact field composition, normal/material selection, wound clipping and existing mesh exposure; distinguish bones from organs and explain why a separate mesh cannot automatically duplicate those operations.
+- [x] Inspect shell, volume/texture and bake experiments via rg --files and DualMem; record reusable components and their measured limits. Do not assume a shell is a baked distance volume.
+- [x] Implement the minimal source adapter with regression tests using real zombie skull, pelvis and rib segments. using real zombie skull, pelvis and rib segments. Test local->posed->local round trips and source distance agreement, including subtraction cavities. Example assertion (use real fixture values):
 ```ts
 expect(Math.abs(source.distance(p) - referenceDistance(p))).toBeLessThan(1e-6);
 ```
-- [ ] Define reproducible fixture states for intact, head wound, pelvis wound, rib exposure, bent limb and sever; pin camera, light, timestep, resolution and character configuration. Save actual state fields/signatures in fixture-contract.md for both implementers. Do not create a second gameplay simulation.
-- [ ] Run focused tests/typecheck. Record feasibility risks, exact file/function landmarks and minimum next implementation steps. Commit a usable foundation or a clearly documented blocked finding; do not claim a visual or GPU pass from CPU tests.
+- [x] Define reproducible fixture states for intact, head wound, pelvis wound, rib exposure, bent limb and sever; pinned in docs/dev-notes/2026-09-07-skeleton-comparison/fixture-contract.md.; pin camera, light, timestep, resolution and character configuration. Save actual state fields/signatures in fixture-contract.md for both implementers. Do not create a second gameplay simulation.
+- [x] Run focused tests/typecheck. Record feasibility risks, exact file/function landmarks and minimum next implementation steps. Results in docs/dev-notes/2026-09-07-skeleton-comparison/task-1.md. Record feasibility risks, exact file/function landmarks and minimum next implementation steps. Commit a usable foundation or a clearly documented blocked finding; do not claim a visual or GPU pass from CPU tests.
 
 ### Task 2: Faithful mesh prototype with forward shading
 
@@ -65,10 +67,10 @@ expect(Math.abs(source.distance(p) - referenceDistance(p))).toBeLessThan(1e-6);
 **Interfaces:** Consume BoneFieldSource. Export a cached geometry factory with explicit disposal and keys including source revision and extraction resolution. Expose opt-in mesh through a development `skeleton=mesh` query, with absence preserving baseline. Record exact API for task 3.
 
 - [ ] Read Task 1 findings first; if its field adapter is incomplete, finish only the prerequisite needed for a meaningful mesh prototype and record scope consumed.
-- [ ] Add failing tests proving mesh bounds and sampled surfaces match authored skull/pelvis/ribs within extraction-cell error; preserve holes and disconnected components. Use existing surface extraction where applicable. Test cache invalidation and disposal. Do not substitute capsules or tubes.
+- [ ] Add failing tests proving mesh bounds and sampled surfaces match the CHOSEN skull/pelvis/rib anatomy (authored or deliberately improved — owner clarification) within extraction-cell error; preserve holes and disconnected components. Use existing surface extraction where applicable. Test cache invalidation and disposal. Do not substitute capsules or tubes.
 - [ ] Build cached segment-local meshes and pose using existing bone frames. Retain procedural handling for nonrigid/smooth-union cases until proven, and record coverage/fallback counts.
 - [ ] Integrate in forward mode behind the selector. Match existing bone material, fill/key/flashlight, wetness, Fresnel, gamma and normal conventions; factor shared shading only if it preserves baseline. Implement the correct wound/flesh exposure rule, not only depth hiding. If that cannot fit the task budget, retain an isolated anatomy fixture and report gameplay parity NOT achieved.
-- [ ] Verify shader compilation and inspect matched baseline/mesh skull, pelvis and rib captures under darkness and flashlight plus one posed/sever state. Include normal/depth views and per-mode switches proving the intended path was used. No performance measurements in this task.
+- [ ] Verify shader compilation and inspect matched baseline/mesh skull, pelvis and rib captures under darkness and flashlight plus one posed/sever state. Include normal/depth views and per-mode switches proving the intended path was used. No performance measurements in this task. Exact pixel parity is NOT required (owner clarification); gate on clipping, leaks, wound reveals and shading mismatch.
 - [ ] Run focused tests/typecheck/build. Commit before extended capture; report visible seams, missing wound interactions, shading differences and next steps without calling them acceptable. Keep prototype opt-in and runnable.
 
 ### Task 3: Sampled skeleton SDF prototype in the shared shading path
@@ -100,7 +102,7 @@ expect(Math.abs(source.distance(p) - referenceDistance(p))).toBeLessThan(1e-6);
 
 - [ ] Read all earlier reports and validate actual implementation coverage. Mark missing candidates unavailable rather than benchmarking a procedural fallback as the candidate. If neither candidate is functionally ready, produce a concrete blocker report and stop.
 - [ ] Build bounded CDP capture that owns its resources, saves after each fixture, and checks deterministic state. Baseline repeatability first; disable/freeze cosmetic variation consistently without changing tested bone shading. Capture zombie then soldier; goblin optional after required cases.
-- [ ] Inspect matched intact/head/pelvis/rib/bent-joint/sever images at scales 1 and 0.5, darkness/flashlight/wet response. Record source-specific defects and whether mesh lighting really matches forward. Do not grade using whole-frame brightness alone. Include actual mode-use counters to detect fallback-only runs.
+- [ ] Inspect matched intact/head/pelvis/rib/bent-joint/sever images at scales 1 and 0.5, darkness/flashlight/wet response. Record source-specific defects and whether mesh lighting really matches forward. Do not grade using whole-frame brightness alone. Include actual mode-use counters to detect fallback-only runs. Label intentional art differences separately from bugs.
 - [ ] Commit visual/functional findings before timing. Check for competing GPU work or actively rendering previews; if busy record timing unavailable, preserve resources and finish rather than wait. Never close user tabs or kill foreign processes.
 - [ ] On an idle GPU use three interleaved repetitions with eight warmup frames and 32 measured frames per fixture/mode, actual GPU queue/timestamps, bounded runtime. Record median/p95/raw samples, spread, adapter and end-to-end total as well as pass costs. No production-FPS claims from hand-stepped wall time. Report bake latency, triangles/grid bytes, CPU upload, cache growth and fallback rate. If baseline spread exceeds 10%, label small deltas unresolved.
 - [ ] Produce a recommendation: mesh, volume, neither, or insufficient evidence. Explain how much of the measured gain survives with correct lighting/shape and what must happen before production. Keep forward/procedural default. Include reproducible launch commands for owner playtest; no automatic merge/push.

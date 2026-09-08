@@ -242,8 +242,8 @@ export function createSkeletonSources(
     // Surface AABB: endpoints AND Bezier control points, fattened by the
     // same reach the cluster refit uses (scale reaches corners, a box
     // reaches past its radius).
-    const lo: Vec3 = [Infinity, Infinity, Infinity];
-    const hi: Vec3 = [-Infinity, -Infinity, -Infinity];
+    const lo: [number, number, number] = [Infinity, Infinity, Infinity];
+    const hi: [number, number, number] = [-Infinity, -Infinity, -Infinity];
     for (const pr of prims) {
       const reach = Math.max(pr.radius, pr.radiusB ?? pr.radius)
         * Math.max(pr.scale[0], pr.scale[1], pr.scale[2])
