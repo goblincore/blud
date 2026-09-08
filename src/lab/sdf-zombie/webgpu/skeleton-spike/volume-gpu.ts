@@ -186,3 +186,41 @@ export function createSegmentMetaTexture(meta: Float32Array): THREE.DataTexture 
   texture.needsUpdate = true;
   return texture;
 }
+
+/** Per-view live pose binding. The atlas texture is shared by revision and
+ * owned by the caller; each actor owns only this tiny mutable meta texture. */
+export class SegmentVolumeBinding {
+  readonly meta: Float32Array;
+  readonly metaTexture: THREE.DataTexture;
+  private readonly revisions: Map<string, string>;
+  private disposed = false;
+
+  constructor(
+    readonly atlas: SegmentAtlas,
+    readonly atlasTexture: THREE.Data3DTexture,
+    sources: readonly BoneFieldSource[],
+  ) {
+    this.meta = packSegmentMeta(atlas);
+    this.metaTexture = createSegmentMetaTexture(this.meta);
+    this.revisions = new Map(sources.map(source => [source.segment, source.revision]));
+    this.update(sources);
+  }
+
+  update(sources: readonly BoneFieldSource[]): void {
+    if (this.disposed) throw new Error('SegmentVolumeBinding used after dispose()');
+    for (const source of sources) {
+      const expected = this.revisions.get(source.segment);
+      if (expected !== undefined && expected !== source.revision) {
+        throw new Error(`Segment volume revision changed for ${source.segment}; rebuild atlas before pose upload`);
+      }
+    }
+    writeSegmentPose(this.meta, this.atlas, sources);
+    this.metaTexture.needsUpdate = true;
+  }
+
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.metaTexture.dispose();
+  }
+}

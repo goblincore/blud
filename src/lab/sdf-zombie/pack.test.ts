@@ -916,7 +916,7 @@ describe('bone segment spheres (boneCullMode: segment)', () => {
       expect(count).toBeGreaterThanOrEqual(1);
       expect(start).toBe(cursor);
       expect(p.boneSegmentRange[o + 2]!).toBeGreaterThanOrEqual(1); // distort
-      expect(p.boneSegmentRange[o + 3]).toBe(0);
+      expect(p.boneSegmentRange[o + 3]).toBe(s);
       cursor += count;
     }
     // Beyond segCount the arrays stay zero.
@@ -927,6 +927,21 @@ describe('bone segment spheres (boneCullMode: segment)', () => {
     // Union of segment ranges + tail = the whole bone span.
     expect(hdr[0]).toBe(cursor);
     expect(hdr[0]! + hdr[1]!).toBe(body.prims.length + p.boneCount);
+  });
+
+  it('preserves sparse authored segment ids when dead segments compact live slots', () => {
+    const body = posed();
+    const firstId = Math.min(...body.bonePrims.map(b => b.boneSegment!).filter(Number.isFinite));
+    const deadCluster = body.bonePrims.find(b => b.boneSegment === firstId)!.cluster;
+    const severed = { ...body, clusters: body.clusters.map((c, i) => i === deadCluster ? { ...c, alive: false } : c) };
+    const expectedIds = [...new Set(severed.bonePrims
+      .filter(b => severed.clusters[b.cluster]?.alive)
+      .map(b => b.boneSegment!))].sort((a, b) => a - b);
+    const packed = packBody(severed, undefined, { boneCullMode: 'segment' });
+    const segCount = packed.boneClusterRange[HDR + 2]!;
+    const storedIds = Array.from({ length: segCount }, (_, slot) => packed.boneSegmentRange[slot * CLUSTER_STRIDE + 3]!);
+    expect(storedIds).toEqual(expectedIds);
+    expect(storedIds[0]).toBeGreaterThan(firstId);
   });
 
   it('bounds every bone row of a segment in that segment sphere (endpoint + thickness)', () => {

@@ -57,6 +57,8 @@ import { createSkeletonSources, type BoneFieldSource } from './skeleton-spike/co
 import { SegmentMeshCache } from './skeleton-spike/mesh';
 import { createSegmentMeshRenderer } from './skeleton-spike/mesh-renderer';
 import { resolveSkeletonMode } from './skeleton-spike/selector';
+import { SegmentVolumeCache, buildSegmentAtlas, boneSegmentKeyMap } from './skeleton-spike/volume';
+import { SegmentVolumeBinding, createSegmentAtlasTexture } from './skeleton-spike/volume-gpu';
 import { createPostAa } from './post-aa';
 import { type ZombieGpuView } from './zombie-gpu';
 import { createOccluderHull, buildHullInstances, HULL_SHRINK, type HullInstance } from './occluder-hull';
@@ -779,9 +781,20 @@ async function main() {
       segMeshRenderer.update(actors.map(a => {
         let e = skeletonSources.get(a);
         if (!e) { e = buildSkeletonSources(a, 'zombie'); skeletonSources.set(a, e); a.view.setPackBones(false); }
-        else if (e.body !== a.posed()) { e = buildSkeletonSources(a, e.name); skeletonSources.set(a, e); }
+        else if (e.body !== a.body) { e = buildSkeletonSources(a, e.name); skeletonSources.set(a, e); }
         return e.sources;
       }));
+    }
+    // skeleton=volume: only the tiny pose/meta texture changes per frame.
+    // A body-reference change means sever/rebuild and therefore a new
+    // revision-keyed atlas; stale same-name grids are never re-enabled.
+    if (segVolumeCache) {
+      for (const actor of actors) {
+        const state = skeletonVolumes.get(actor);
+        if (!state) continue;
+        if (state.body !== actor.body) bindSkeletonVolume(actor, state.name);
+        else state.binding.update(state.sources);
+      }
     }
     refreshActorTiles();
 
@@ -1109,30 +1122,84 @@ async function main() {
   if (import.meta.env.DEV && new URLSearchParams(location.search).get('skeleton') === 'mesh' && skeletonMode !== 'mesh') {
     console.warn('[sdf-game] skeleton=mesh refused (deferred mode) — procedural bones');
   }
-  // skeleton=volume (task 3b): the selector resolves it, but the march
-  // wiring (volume.wgsl.ts into APPLY_BONES + zombie-gpu bindings) is NOT
-  // LANDED yet — warn and stay procedural rather than silently render the
-  // wrong path. See docs/dev-notes/2026-09-07-skeleton-comparison/task-3b.md.
-  if (import.meta.env.DEV && skeletonMode === 'volume') {
-    console.warn('[sdf-game] skeleton=volume resolved but march integration is not landed (task 3b) — procedural bones');
-  }
   const segMeshCache = skeletonMode === 'mesh' ? new SegmentMeshCache() : null;
   const segMeshRenderer = segMeshCache ? createSegmentMeshRenderer(segMeshCache) : null;
   if (segMeshRenderer) scene.add(segMeshRenderer.object);
   const skeletonSources = new Map<ZombieActor, { body: BuildResult; name: string; sources: BoneFieldSource[] }>();
+  const segVolumeCache = skeletonMode === 'volume' ? new SegmentVolumeCache() : null;
+  type SharedVolumeAtlas = ReturnType<typeof buildSegmentAtlas> & {
+    texture: ReturnType<typeof createSegmentAtlasTexture>;
+    refs: number;
+  };
+  const sharedVolumeAtlases = new Map<string, SharedVolumeAtlas>();
+  let volumeAtlasBuilds = 0;
+  const skeletonVolumes = new Map<ZombieActor, {
+    body: BuildResult; name: string; sources: BoneFieldSource[];
+    key: string; binding: SegmentVolumeBinding;
+  }>();
   /** Contract recipe (fixture-contract.md): sources bind against the
    *  actor's CURRENT body + bound rig and follow the live rig/yaw through
    *  accessors. Called at spawn (rig at rest) and on sever re-derive
    *  (body reference change — mid-pose re-bind is a documented prototype
    *  approximation for limb local frames, re-measured in task 4). */
   const buildSkeletonSources = (actor: ZombieActor, name: string) => ({
-    body: actor.posed(),
+    body: actor.body,
     name,
-    sources: createSkeletonSources(actor.posed(), actor.boundRig(), {
+    sources: createSkeletonSources(actor.body, actor.boundRig(), {
       character: name,
       rig: () => actor.boundRig().rig,
       bodyYaw: () => actor.pose().yaw,
     }),
+  });
+  const acquireVolumeAtlas = (actor: ZombieActor, sources: readonly BoneFieldSource[]) => {
+    const key = sources.map(source => source.revision).sort().join('|');
+    let shared = sharedVolumeAtlases.get(key);
+    if (!shared) {
+      const segIds = boneSegmentKeyMap(actor.body, actor.boundRig());
+      const atlas = buildSegmentAtlas(sources.flatMap(source => {
+        const segId = segIds.get(source.segment);
+        return segId === undefined ? [] : [{ segId, grid: segVolumeCache!.get(source) }];
+      }));
+      shared = Object.assign(atlas, { texture: createSegmentAtlasTexture(atlas), refs: 0 });
+      sharedVolumeAtlases.set(key, shared);
+      volumeAtlasBuilds++;
+    }
+    shared.refs++;
+    return { key, shared };
+  };
+  const releaseVolumeAtlas = (key: string) => {
+    const shared = sharedVolumeAtlases.get(key);
+    if (!shared || --shared.refs > 0) return;
+    shared.texture.dispose();
+    for (const meta of shared.metas) segVolumeCache?.evict(meta.grid);
+    sharedVolumeAtlases.delete(key);
+  };
+  const bindSkeletonVolume = (actor: ZombieActor, name: string) => {
+    const prior = skeletonVolumes.get(actor);
+    if (prior) { prior.binding.dispose(); releaseVolumeAtlas(prior.key); }
+    const state = buildSkeletonSources(actor, name);
+    const { key, shared } = acquireVolumeAtlas(actor, state.sources);
+    const binding = new SegmentVolumeBinding(shared, shared.texture, state.sources);
+    actor.view.setSkeletonVolume(shared.texture, binding.metaTexture);
+    actor.view.setBoneCullMode('segment');
+    // Analytic primitive gradients cannot represent a sampled field.
+    actor.view.uniforms.normalGradientCfg.value.x = 0;
+    skeletonVolumes.set(actor, { ...state, key, binding });
+  };
+  const releaseSkeletonActor = (actor: ZombieActor) => {
+    skeletonSources.delete(actor);
+    const volume = skeletonVolumes.get(actor);
+    if (!volume) return;
+    volume.binding.dispose();
+    releaseVolumeAtlas(volume.key);
+    skeletonVolumes.delete(actor);
+  };
+  import.meta.hot?.dispose(() => {
+    for (const state of skeletonVolumes.values()) state.binding.dispose();
+    skeletonVolumes.clear();
+    for (const atlas of sharedVolumeAtlases.values()) atlas.texture.dispose();
+    sharedVolumeAtlases.clear();
+    segVolumeCache?.dispose();
   });
   // Bone-cluster sphere cull (packBoneClusters). OFF ships — the old flat
   // bone loop; the bench's bone-cull-on leg flips it. Takes effect on the
@@ -1600,6 +1667,9 @@ async function main() {
       skeletonSources.set(actor, buildSkeletonSources(actor, name));
       actor.view.setPackBones(false);
     }
+    // Task 3 is zombie-first. Other characters keep exact procedural bones
+    // until their source fixtures have been validated.
+    if (segVolumeCache && name === 'zombie') bindSkeletonVolume(actor, name);
     encounterHomes.set(actor.id,[...start] as Vec3);
     return actor;
   }
@@ -1721,6 +1791,7 @@ async function main() {
     soldierCorpses?.dispose();
     encounter.clear(); encounterHomes.clear();
     for (const a of actors) {
+      releaseSkeletonActor(a);
       scene.remove(a.view.object);
       scene.remove(a.view.coneObject);
       if (a.character) a.character.dispose();
@@ -5120,6 +5191,24 @@ async function main() {
      *  otherwise the renderer's coverage stats — proof the intended path
      *  ran (segments/verts > 0) and extraction health flags. */
     skeletonMesh: () => segMeshRenderer ? { mode: skeletonMode, ...segMeshRenderer.stats, cacheEntries: segMeshCache!.size, cacheTotals: segMeshCache!.totals } : null,
+    /** Synchronous active-path proof for capture harnesses. */
+    skeletonDiagnostics: () => ({
+      requestedMode: skeletonMode,
+      activeMode: skeletonMode === 'volume'
+        ? (skeletonVolumes.size > 0 ? 'volume' : 'procedural')
+        : skeletonMode === 'mesh'
+          ? (segMeshRenderer && segMeshRenderer.stats.segments > 0 ? 'mesh' : 'procedural')
+          : 'procedural',
+      volume: segVolumeCache ? {
+        actors: skeletonVolumes.size,
+        grids: segVolumeCache.stats().grids,
+        gridBytes: segVolumeCache.stats().bytes,
+        atlases: sharedVolumeAtlases.size,
+        atlasBytes: [...sharedVolumeAtlases.values()].reduce((sum, atlas) => sum + atlas.bytes, 0),
+        bakeMs: [...sharedVolumeAtlases.values()].reduce((sum, atlas) => sum + atlas.totalBakeMs, 0),
+        atlasBuilds: volumeAtlasBuilds,
+      } : null,
+    }),
     boneTubes: () => ({
       count: boneInstancer.count,
       overflowed: boneInstancer.overflowed,
@@ -5422,7 +5511,7 @@ async function main() {
      *  than the bodies. */
     setNormalGradient(mode: 0 | 1) {
       normalGradientMode = mode === 1 ? 1 : 0;
-      for (const a of actors) a.view.uniforms.normalGradientCfg.value.x = normalGradientMode;
+      for (const a of actors) a.view.uniforms.normalGradientCfg.value.x = skeletonVolumes.has(a) ? 0 : normalGradientMode;
       for (const c of chunkViews) c.uniforms.normalGradientCfg.value.x = normalGradientMode;
     },
     setNormalGradientDebug(mode: 0 | 1 | 2) {

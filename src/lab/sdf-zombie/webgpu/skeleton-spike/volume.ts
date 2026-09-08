@@ -322,6 +322,12 @@ export class SegmentVolumeCache {
     return { grids: this.grids.size, bytes };
   }
 
+  /** Drop a grid after the last shared atlas using it is released. */
+  evict(grid: SegmentGrid): void {
+    if (this.disposed) return;
+    if (this.grids.get(grid.key) === grid) this.grids.delete(grid.key);
+  }
+
   dispose(): void {
     this.grids.clear();
     this.disposed = true;

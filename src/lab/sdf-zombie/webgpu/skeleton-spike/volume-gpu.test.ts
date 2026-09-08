@@ -14,13 +14,14 @@
 //  - WGSL structural pins (the semantic elements the GPU sampler must keep)
 import { describe, it, expect } from 'vitest';
 import type { BoneFieldSource, Point3, SegmentPose } from './contract';
-import { bakeSegmentGrid, buildSegmentAtlas, sampleSegmentGrid } from './volume';
+import { bakeSegmentGrid, buildSegmentAtlas, sampleSegmentGrid, SegmentVolumeCache } from './volume';
 import {
   BONE_SEG_MAX,
   SEG_META_ROW_DIMS,
   SEG_META_ROW_GRID,
   SEG_META_ROW_POSE,
   SEG_META_ROW_QUAT,
+  SegmentVolumeBinding,
   createSegmentAtlasTexture,
   createSegmentMetaTexture,
   packSegmentMeta,
@@ -29,6 +30,7 @@ import {
   writeSegmentPose,
 } from './volume-gpu';
 import { SEG_VOLUME_WGSL } from './volume.wgsl';
+import { APPLY_BONES, MAP_BODY } from '../march.wgsl';
 
 /** Synthetic sphere-field source with a mutable pose/live flag. */
 function fakeSource(opts: {
@@ -189,18 +191,71 @@ describe('writeSegmentPose', () => {
     expect(meta[p3 + 3]).toBe(0);
   });
 
-  it('segVolumeToLocal matches contract toLocal under a rotated pose', () => {
-    const pose: SegmentPose = { origin: [0.3, -0.7, 1.1], quat: [0.1825742, 0.3651484, 0.5477226, 0.7302967] };
-    const s = fakeSource({ segment: 'head', pose });
-    for (let i = 0; i < 100; i++) {
-      const p: Point3 = [Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1];
-      const viaContract = s.toLocal(p);
-      const viaTwin = segVolumeToLocal(p, pose.quat, pose.origin);
-      for (let k = 0; k < 3; k++) expect(viaTwin[k]!).toBeCloseTo(viaContract[k]!, 7);
-      // And toWorld∘toLocal is identity.
-      const back = s.toWorld(viaContract);
-      for (let k = 0; k < 3; k++) expect(back[k]!).toBeCloseTo(p[k]!, 7);
-    }
+  it('segVolumeToLocal independently inverts a known 90-degree Z rotation', () => {
+    const h = Math.SQRT1_2;
+    // Local +X rotates to world +Y, then translates by [1,2,3].
+    const local = segVolumeToLocal([1, 3, 3], [0, 0, h, h], [1, 2, 3]);
+    expect(local[0]).toBeCloseTo(1, 7);
+    expect(local[1]).toBeCloseTo(0, 7);
+    expect(local[2]).toBeCloseTo(0, 7);
+  });
+});
+
+describe('SegmentVolumeBinding', () => {
+  it('uploads live poses without reallocating and owns only its meta texture', () => {
+    const { a, b, atlas } = makeAtlas();
+    const atlasTexture = createSegmentAtlasTexture(atlas);
+    const binding = new SegmentVolumeBinding(atlas, atlasTexture, [a, b]);
+    const firstMeta = binding.metaTexture;
+    let metaDisposed = false;
+    let atlasDisposed = false;
+    firstMeta.addEventListener('dispose', () => { metaDisposed = true; });
+    atlasTexture.addEventListener('dispose', () => { atlasDisposed = true; });
+
+    a.setPose({ origin: [4, 5, 6], quat: [0, 0, 0, 1] });
+    binding.update([a, b]);
+    expect(binding.metaTexture).toBe(firstMeta);
+    const p1 = (SEG_META_ROW_POSE * BONE_SEG_MAX + 1) * 4;
+    expect([...binding.meta.slice(p1, p1 + 4)]).toEqual([4, 5, 6, 1]);
+
+    binding.dispose();
+    expect(metaDisposed).toBe(true);
+    expect(atlasDisposed).toBe(false);
+  });
+
+  it('refuses a stale same-name revision instead of enabling the old grid', () => {
+    const { a, b, atlas } = makeAtlas();
+    const atlasTexture = createSegmentAtlasTexture(atlas);
+    const binding = new SegmentVolumeBinding(atlas, atlasTexture, [a, b]);
+    const changed = { ...a, revision: `${a.revision}:changed` };
+    expect(() => binding.update([changed, b])).toThrow(/revision/i);
+    binding.dispose();
+    atlasTexture.dispose();
+  });
+});
+
+describe('SegmentVolumeCache lifecycle', () => {
+  it('evicts a released revision so repeated anatomy rebuilds cannot grow forever', () => {
+    const source = fakeSource({ segment: 'head' });
+    const cache = new SegmentVolumeCache();
+    const grid = cache.get(source, CELL);
+    expect(cache.stats().grids).toBe(1);
+    cache.evict(grid);
+    expect(cache.stats()).toEqual({ grids: 0, bytes: 0 });
+    cache.dispose();
+  });
+});
+
+describe('march volume integration', () => {
+  it('samples each live segment and falls back to its exact procedural range outside the grid', () => {
+    expect(APPLY_BONES).toContain('segVolumeDistance(p');
+    expect(APPLY_BONES).toContain('segVolumeAtlas');
+    expect(APPLY_BONES).toContain('segVolumeMeta');
+    expect(APPLY_BONES).toContain('let segId = i32(sr.w)');
+    expect(APPLY_BONES).toContain('vec2<i32>(segId, 0)');
+    expect(APPLY_BONES).toMatch(/if \(sampled\.y > 0\.5\)[\s\S]*min\(d, sampled\.x\)/);
+    expect(APPLY_BONES).toMatch(/else[\s\S]*foldBoneRange\(d, p, data, i32\(sr\.x\), i32\(sr\.y\), band\)/);
+    expect(MAP_BODY).toContain('applyBones(dmg, p, data, counts, counts2.x, 0, segVolumeAtlas, segVolumeMeta)');
   });
 });
 

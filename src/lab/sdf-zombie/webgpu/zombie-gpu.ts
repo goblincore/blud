@@ -146,6 +146,8 @@ export interface ZombieGpuView {
    * NEXT update(). Only the melt sets this.
    */
   setBonesBare(on: boolean): void;
+  /** Rebind opt-in sampled-skeleton resources. The caller owns them. */
+  setSkeletonVolume(atlas: THREE.Texture, meta: THREE.Texture): void;
   /** Melt progress 0..1 → meltCfg.x (zombie melt task 6). Only the lab's
    *  melting body (and its released bone chunks) ever set this non-zero. */
   setMelt(progress: number): void;
@@ -584,6 +586,24 @@ function fallbackLevelShadowTexture() {
   return fallbackLevelShadow;
 }
 
+let fallbackSegmentVolume: { atlas: THREE.Data3DTexture; meta: THREE.DataTexture } | null = null;
+function fallbackSegmentVolumeTextures() {
+  if (!fallbackSegmentVolume) {
+    const atlas = new THREE.Data3DTexture(new Float32Array(8), 2, 2, 2);
+    atlas.format = THREE.RedFormat;
+    atlas.type = THREE.FloatType;
+    atlas.minFilter = atlas.magFilter = THREE.NearestFilter;
+    atlas.needsUpdate = true;
+    const meta = new THREE.DataTexture(new Float32Array(BONE_SEG_MAX * 4 * 4), BONE_SEG_MAX, 4);
+    meta.format = THREE.RGBAFormat;
+    meta.type = THREE.FloatType;
+    meta.minFilter = meta.magFilter = THREE.NearestFilter;
+    meta.needsUpdate = true;
+    fallbackSegmentVolume = { atlas, meta };
+  }
+  return fallbackSegmentVolume;
+}
+
 /** A tiled view's binning surface: delegates to the owner's GPU binding and
  *  flips this view's tileCfg gate. */
 export interface ViewTileBinding {
@@ -625,6 +645,10 @@ type Swizzled = { xyz: unknown; w: unknown };
  *  as setFaceTexture. */
 interface MaterialWithLevelShadowTex {
   levelShadowTex: { value: THREE.Texture };
+}
+interface MaterialWithSegmentVolume {
+  segVolumeAtlas: { value: THREE.Texture };
+  segVolumeMeta: { value: THREE.Texture };
 }
 /** Surface-mode march materials carry the packed emission-class uniform
  *  (M2 task 2): base class + shadow receiver bit, flippable at runtime via
@@ -903,6 +927,9 @@ export function createMarchMaterial(
   const volumeNode = volumeTex instanceof THREE.Texture
     ? texture3D(volumeTex)
     : volumeTex as ReturnType<typeof texture3D>;
+  const segFallback = fallbackSegmentVolumeTextures();
+  const segVolumeAtlasNode = texture3D(segFallback.atlas);
+  const segVolumeMetaNode = texture(segFallback.meta);
   // Hoisted above the march call: the accumulated-depth gate's cosRay reads
   // the same ray the march integrates.
   const rayDir = normalize(sub(positionWorld, cameraPosition));
@@ -929,6 +956,8 @@ export function createMarchMaterial(
     volumeInvExtent: u.volumeInvExtent,
     volumeWarp: u.volumeWarp,
     volumeClip: u.volumeClip,
+    segVolumeAtlas: segVolumeAtlasNode,
+    segVolumeMeta: segVolumeMetaNode,
     counts: u.counts,
     counts2: u.counts2,
     marchCfg: (rays?.marchCfg ?? u.marchCfg) as never,
@@ -1093,6 +1122,10 @@ export function createMarchMaterial(
    *  owner's per-frame rebind (see the comment at its creation). */
   (material as unknown as MaterialWithLevelShadowTex).levelShadowTex =
     levelShadowTexNode as unknown as { value: THREE.Texture };
+  (material as unknown as MaterialWithSegmentVolume).segVolumeAtlas =
+    segVolumeAtlasNode as unknown as { value: THREE.Texture };
+  (material as unknown as MaterialWithSegmentVolume).segVolumeMeta =
+    segVolumeMetaNode as unknown as { value: THREE.Texture };
 
   // Depth from the marched hit, so the body composites with real geometry.
   // WebGPU clip z is already [0,1] — no `* 0.5 + 0.5` remap, unlike the GLSL.
@@ -1618,6 +1651,9 @@ export function createZombieGpuView(
   }
 
   const packed = upload(body);
+  const segFallback = fallbackSegmentVolumeTextures();
+  const coneSegAtlas = texture3D(segFallback.atlas);
+  const coneSegMeta = texture(segFallback.meta);
   const material = createMarchMaterial(
     dataTex, volumeTex, u,
     marchBody,
@@ -1641,6 +1677,8 @@ export function createZombieGpuView(
     volumeInvExtent: u.volumeInvExtent,
     volumeWarp: u.volumeWarp,
     volumeClip: u.volumeClip,
+    segVolumeAtlas: coneSegAtlas,
+    segVolumeMeta: coneSegMeta,
     counts: u.counts,
     counts2: u.counts2,
     marchCfg: u.marchCfg,
@@ -1739,7 +1777,11 @@ export function createZombieGpuView(
   // range — the decay that killed the occluder pre-pass.
   let depthPreMesh: THREE.Mesh | undefined;
   let depthPreMaterial: MeshBasicNodeMaterial | undefined;
+  let depthSegAtlasNode: ReturnType<typeof texture3D> | undefined;
+  let depthSegMetaNode: ReturnType<typeof texture> | undefined;
   if (opts.depthPre) {
+    depthSegAtlasNode = texture3D(segFallback.atlas);
+    depthSegMetaNode = texture(segFallback.meta);
     const depthPreT = depthPreMarch({
       worldPos: positionWorld,
       camPos: cameraPosition,
@@ -1751,6 +1793,8 @@ export function createZombieGpuView(
       volumeInvExtent: u.volumeInvExtent,
       volumeWarp: u.volumeWarp,
       volumeClip: u.volumeClip,
+      segVolumeAtlas: depthSegAtlasNode,
+      segVolumeMeta: depthSegMetaNode,
       counts: u.counts,
       counts2: u.counts2,
       marchCfg: u.marchCfg,
@@ -1774,6 +1818,7 @@ export function createZombieGpuView(
     depthPreMesh.position.copy(mesh.position);
   }
 
+  const mainSegmentVolume = material as unknown as MaterialWithSegmentVolume;
   return {
     object: mesh,
     coneObject: coneMesh,
@@ -1799,6 +1844,14 @@ export function createZombieGpuView(
       if (lastUploadNext) upload(lastUploadNext, lastUploadRest);
     },
     setBonesBare(on) { bareBones = on; },
+    setSkeletonVolume(atlas, meta) {
+      mainSegmentVolume.segVolumeAtlas.value = atlas;
+      mainSegmentVolume.segVolumeMeta.value = meta;
+      (coneSegAtlas as unknown as { value: THREE.Texture }).value = atlas;
+      (coneSegMeta as unknown as { value: THREE.Texture }).value = meta;
+      if (depthSegAtlasNode) (depthSegAtlasNode as unknown as { value: THREE.Texture }).value = atlas;
+      if (depthSegMetaNode) (depthSegMetaNode as unknown as { value: THREE.Texture }).value = meta;
+    },
     setMelt(progress) { u.meltCfg.value.x = progress; },
     update(next, rest) {
       const p = upload(next, rest);

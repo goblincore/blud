@@ -92,8 +92,8 @@ export interface PackedBody {
    * 2*MAX_CLUSTERS+1 .. 2*MAX_CLUSTERS+BONE_SEG_MAX of the SAME two cluster
    * rows; the header texel at column 2*MAX_CLUSTERS (index MAX_CLUSTERS of
    * boneClusterRange) carries [tailStart, tailCount, segCount, 2].
-   * boneSegmentRange[s] = x start, y count, z DISTORTION factor, w 0 — same
-   * shape as the cluster ranges. Segments past BONE_SEG_MAX overflow to the
+   * boneSegmentRange[s] = x start, y count, z DISTORTION factor, w original
+   * authored boneSegment id. Segments past BONE_SEG_MAX overflow to the
    * tail. All zero unless mode 2 packed (an untagged body falls back to the
    * cluster layout instead — lab bodies and chunks carry no tags).
    */
@@ -449,7 +449,10 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
         const distort = distortOf(prims);
         const o = segCount * CLUSTER_STRIDE;
         boneSegmentBounds.set([fit.center[0], fit.center[1], fit.center[2], fit.radius], o);
-        boneSegmentRange.set([start, bucket.length, distort, 0], o);
+        // w preserves the authored boneSegment id. Live segment slots are
+        // compacted after severing, so the slot index is not a stable atlas
+        // metadata key.
+        boneSegmentRange.set([start, bucket.length, distort, id], o);
         segCount++;
       }
       const tStart = body.prims.length + boneCount;

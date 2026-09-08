@@ -1,34 +1,70 @@
-# Skeleton comparison — Task 3b: volume GPU integration
+# Skeleton comparison — Task 3b: volume runtime integration
 
-Status: **IN PROGRESS** — branch `codex/dispatch/2026-09-08-skeleton-task-3b-volume-integration`,
-base = task-3a recovery (5e4b38a6). Started 2026-09-08.
+Status: **IMPLEMENTED, GPU boot verified; visual acceptance pending** on branch
+`codex/dispatch/2026-09-08-skeleton-task-3b-volume-integration`, based on `e347020c`.
 
-## Plan (bounded slice)
+## Runtime path
 
-1. `volume.wgsl.ts` — WGSL manual-trilinear r32float atlas sampler mirroring
-   `sampleSegmentGrid` semantics exactly (domain check → clamped-index
-   trilinear inside; outside ⇒ caller falls back to the procedural
-   `foldBoneRange` and counts it). Not filterable ⇒ manual interp, per the
-   X1.26 `sampleHandVolumeFrame` precedent.
-2. Host-side packing (pure CPU, vitest): per-segId meta rows (origin,
-   spacing, dims, z0) aligned to pack.ts's ascending `boneSegment` order via
-   `boneSegmentKeyMap`; per-frame pose rows (world quat + origin, live flag)
-   from `source.pose()`/`isLive()`. Organs row = disabled (procedural by
-   contract).
-3. CPU twin `sampleAtlasTrilinear` + parity test against
-   `sampleSegmentGrid` (validates atlas addressing `x + maxNx*(y +
-   maxNy*(z0+z))`, the error-prone part) on a small synthetic grid — fast,
-   no 57s bake.
-4. `resolveSkeletonMode` 'volume' case (dev, forward only) + tests;
-   game-main warns and keeps procedural until wiring lands (mirrors the
-   mesh-deferred refusal).
-5. Commit this interface milestone BEFORE attempting march.wgsl/zombie-gpu
-   wiring. GPU boot only if trivially bounded; Task 4 owns captures.
+`?skeleton=volume` is development-only and forward-only. The missing query,
+production builds, deferred mode, mesh mode, non-zombie actors, organs, chunks,
+overflow segments, and every outside-grid query retain the procedural path.
 
-## Log
+The mode-2 bone-segment loop now reads one segment-local `r32float` atlas. An
+in-domain manual-trilinear sample hard-mins into the already-carved flesh field,
+so wounds, bone material selection, wetness, flashlight, ambient, and the rest
+of the existing forward shading remain in the same march. Outside the grid or
+without an enabled atlas row, the loop runs the exact existing
+`foldBoneRange`. Organs remain in the procedural tail.
 
-- (start) Read task-3.md, fixture-contract.md, volume.ts, selector.ts,
-  foldBoneRange/APPLY_BONES in march.wgsl.ts. MODE-2 per-segment sphere path
-  (tail.w > 1.5) is the natural fold insertion point: one bound per segment
-  already, so a volume branch can replace `foldBoneRange` per surviving
-  segment with an atlas sample + fallback.
+Each distinct revision set owns one shared atlas texture. Eleven zombie actors
+therefore used one atlas, while every actor owns only a 32 x 4 RGBA pose/meta
+texture. Pose rows update in place each frame. Sources bind to stable
+`actor.body`, not the freshly allocated `actor.posed()` result; ordinary
+animation does not rebuild. Sever/body replacement rebuilds sources and atlas
+only when the revision set changes. Refcounts dispose the old atlas and evict
+its grids after the last actor releases it; cast rebuild and HMR release all
+per-actor metadata.
+
+Live segment slots compact after severing. `pack.ts` stores the original
+`boneSegment` id in the segment-range `.w`; the shader uses that id for atlas
+metadata while using the compact slot for bounds/ranges. This prevents a
+surviving segment from sampling a dead neighbour's grid.
+
+Sampled fields use finite-difference normals. The analytic primitive-gradient
+path is disabled for volume actors because its bone derivative describes the
+procedural primitive, not the atlas sample.
+
+## Diagnostics
+
+`__sdfGame.skeletonDiagnostics()` synchronously reports `requestedMode`, the
+actually constructed `activeMode`, and volume `{ actors, grids, gridBytes,
+atlases, atlasBytes, bakeMs, atlasBuilds }`. `atlasBuilds` is cumulative and
+must stay fixed across ordinary animation. Shader debug mode 8 emits sampled
+segment evaluations in red and procedural fallbacks in green. No public
+readback wrapper was added in this bounded task, so the runtime fallback rate
+is not yet measured.
+
+## Verification and evidence
+
+- Focused pack, volume GPU, march WGSL, zombie GPU and deferred signature
+  suites: **335/335 passed**.
+- `npm run build`: **passed** (`tsc --noEmit` and Vite production build).
+- Coordinator GPU smoke before the sparse-id/lifecycle follow-up fixes: WebGPU
+  boot and rendering succeeded with no WGSL validation error; 11 zombie actors,
+  18 grids, one 11.67 MB atlas, 5.57 s bake; intact repeat was byte-identical
+  and a wound capture rendered. Evidence is in
+  `/tmp/skeleton-volume-smoke/validation.json` and sibling PNGs. A baseline-
+  shared 404 remained in console classification and was not a shader failure.
+- GPU lifecycle recheck and owner visual judgement are pending against the
+  final commit. CPU/build success does not prove anatomy, clipping, wound
+  reveal, sever, or shading acceptance.
+
+## Known limitations
+
+- Zombie only. Soldier and other character sources stay procedural.
+- Five-millimetre grids cost several seconds to bake at startup and 11.67 MB
+  for the observed zombie atlas.
+- The shader counters exist, but outside-grid fallback rate has not been read
+  back.
+- Deliberate rigid rib bend/squash differences remain allowed by the owner;
+  broken surfaces, leaks, clipping, or failed wound reveals are still bugs.

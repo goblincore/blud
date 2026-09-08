@@ -249,7 +249,7 @@ describe('ported features reach the entry point', () => {
     for (const src of [MAP_BODY, CALC_NORMAL, CONE_MARCH, WOUND_SHADOW, MARCH_BODY]) {
       expect(src).toContain('woundBound: vec4<f32>');
     }
-    expect(MARCH_BODY).toContain('woundShadow(p, L, abs(woundShadowCfg.y), data, counts, counts2, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg, woundBound)');
+    expect(MARCH_BODY).toContain('woundShadow(p, L, abs(woundShadowCfg.y), data, counts, counts2, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound)');
     // MARCH_BODY's binding is positional — woundBound sits LAST, after the
     // level-shadow slots (the parser-count test above pins the full order).
     const tail = MARCH_BODY.slice(MARCH_BODY.indexOf('levelShadowCfg: vec4<f32>'));
@@ -378,7 +378,7 @@ describe('ported features reach the entry point', () => {
     // carries anything: y/z/w were the parked melt spike's lanes and are
     // literal zeros since the 2026-09-04 merge removed it. The gloss/metal
     // kill this pins is unchanged.)
-    expect(MARCH_BODY).toContain('calcNormal(p, data, counts, counts2, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg, woundBound)');
+    expect(MARCH_BODY).toContain('calcNormal(p, data, counts, counts2, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound)');
     expect(MARCH_BODY).toContain('let anchor = restPoint(p, data, hitBest, noiseLocal(p, noiseShift));');
     expect(MARCH_BODY).toContain('fbm(anchor * 22.0)');
     expect(MARCH_BODY).not.toContain('fbm(p * 22.0)');
@@ -407,7 +407,7 @@ describe('ported features reach the entry point', () => {
     // march does (X1.26).
     const coneMarch = CONE_MARCH;
     expect(coneMarch).toContain(
-      'mapBody(camPos + rd * t, data, counts, counts2, vec4<f32>(0.0), woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg, woundBound).x');
+      'mapBody(camPos + rd * t, data, counts, counts2, vec4<f32>(0.0), woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound).x');
   });
 
   it('tracks the dominant group distortion in a private global and divides the footprint epsilon by it', () => {
@@ -671,7 +671,7 @@ describe('wound soft shadow (iq rsmshadows, wound-zone gated)', () => {
     expect(MARCH_BODY).not.toContain('lightCfg.y * wShadow');
     // ...and strength mixes TOWARD 1 so the slider scales, never inverts.
     expect(MARCH_BODY).toContain(
-      'woundShadow(p, L, abs(woundShadowCfg.y), data, counts, counts2, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg, woundBound), woundShadowCfg.x');
+      'woundShadow(p, L, abs(woundShadowCfg.y), data, counts, counts2, woundCfg, woundCfg2, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound), woundShadowCfg.x');
   });
 });
 
@@ -724,7 +724,7 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     // the phantom-input bug. +1 windDrift, +1 bodyAnchor (shell warp), +1 woundBound
     // (wound-cull), +2 depth prepass (depthPreTex, depthPreCfg) - all appended after
     // the level-shadow tail, in that order. +1 opt-in faceGlowRedOnly mask.
-    expect(names.length).toBe(82);
+    expect(names.length).toBe(84);
     expect(names).toContain('faceGlowRedOnly');
     expect(names.slice(-6)).toEqual(['windDrift', 'bodyAnchor', 'woundBound', 'depthPreTex', 'depthPreCfg', 'normalGradientCfg']);
     // meltCfg sits between bodyHalf and the level-shadow tail, matching the
@@ -882,7 +882,7 @@ describe('baked hand volume branch (X1.26 task B2)', () => {
     // volume argument does not fail to compile — WGSL has no named args —
     // the generated node call simply mismatches. Every call, every source.
     const needed = ['volumeTex', 'volumePose0', 'volumePose1', 'volumeMin',
-      'volumeInvExtent', 'volumeWarp', 'volumeClip'];
+      'volumeInvExtent', 'volumeWarp', 'volumeClip', 'segVolumeAtlas', 'segVolumeMeta'];
     for (const src of [...HELPERS, MARCH_BODY, CONE_MARCH]) {
       let at = src.indexOf('mapBody(');
       while (at >= 0) {
@@ -1577,7 +1577,7 @@ describe('adjacent-slab clip sampling (X1.27 task C2)', () => {
     // Every calcNormal mapBody tap (4 of them) carries it — and the perfCfg
     // and woundBound pass-throughs behind it (perf round 2 task 3, close-up
     // wound-cull task).
-    expect((calcNormal.match(/volumeWarp, volumeClip, perfCfg, woundBound\)/g) ?? []).length).toBe(4);
+    expect((calcNormal.match(/volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound\)/g) ?? []).length).toBe(4);
   });
 });
 
@@ -1672,7 +1672,7 @@ describe('perf instrumentation heatmaps (raymarcher-perf task 2)', () => {
     expect(foldGroup).toContain('if (gDebugMode > 0.5) { gDebugPrims = gDebugPrims + 1.0; }');
     // The march entry: init + per-step count guarded on the uniform itself.
     expect(MARCH_BODY).toContain(
-      'if (debugCfg.x > 0.5) { gDebugMode = debugCfg.x; gDebugPrims = 0.0; gDebugSteps = 0.0; gDebugBones = 0.0; }');
+      'if (debugCfg.x > 0.5) { gDebugMode = debugCfg.x; gDebugPrims = 0.0; gDebugSteps = 0.0; gDebugBones = 0.0; gDebugVolumeSamples = 0.0; gDebugVolumeFallbacks = 0.0; }');
     expect(MARCH_BODY).toContain(
       'if (debugCfg.x > 0.5) { gDebugSteps = gDebugSteps + 1.0; }');
     // No UNGUARDED write anywhere: strip the guarded forms, and no
@@ -1817,7 +1817,7 @@ describe('bone fold (wound pass r2)', () => {
     // without a wound. The bypass must never REPLACE the gate — an intact
     // body still skips the bone fold exactly.
     expect(MAP_BODY).toMatch(/\(nearWound > 0\.5 \|\| counts2\.y > 0\.5\) && counts2\.x > 0\.0/);
-    expect(MAP_BODY).toContain('applyBones(dmg, p, data, counts, counts2.x, 0)');
+    expect(MAP_BODY).toContain('applyBones(dmg, p, data, counts, counts2.x, 0, segVolumeAtlas, segVolumeMeta)');
     expect(MARCH_BODY).toContain('counts2: vec4<f32>');
     expect(MARCH_BODY).not.toMatch(/woundCfg2\.w[^;]*applyBones/);
   });
