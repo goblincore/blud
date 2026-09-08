@@ -41,8 +41,8 @@ function clusterBounds(b: ReturnType<typeof built>, l: string) {
     if (p.op === 'sub') continue;
     for (const e of [p.a, p.b]) {
       for (let i = 0; i < 3; i++) {
-        mn[i] = Math.min(mn[i], e[i] - p.radius * p.scale[i]);
-        mx[i] = Math.max(mx[i], e[i] + p.radius * p.scale[i]);
+        mn[i] = Math.min(mn[i]!, e[i]! - p.radius * p.scale[i]!);
+        mx[i] = Math.max(mx[i]!, e[i]! + p.radius * p.scale[i]!);
       }
     }
   }
@@ -166,8 +166,10 @@ describe('cyberdemon.blob', () => {
       .filter(p => (p.glow ?? 0) > 0.5);
     expect(eyes).toHaveLength(2);
     const [a, c] = eyes;
-    expect(a.color).toEqual(c.color);
-    const [r, g, bl] = a.color!;
+    expect(a).toBeDefined();
+    expect(c).toBeDefined();
+    expect(a!.color).toEqual(c!.color);
+    const [r, g, bl] = a!.color!;
     expect(bl).toBeGreaterThan(r);       // cyan-white, not amber
     expect(g).toBeGreaterThan(r);
   });
