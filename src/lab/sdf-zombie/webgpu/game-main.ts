@@ -1109,6 +1109,13 @@ async function main() {
   if (import.meta.env.DEV && new URLSearchParams(location.search).get('skeleton') === 'mesh' && skeletonMode !== 'mesh') {
     console.warn('[sdf-game] skeleton=mesh refused (deferred mode) — procedural bones');
   }
+  // skeleton=volume (task 3b): the selector resolves it, but the march
+  // wiring (volume.wgsl.ts into APPLY_BONES + zombie-gpu bindings) is NOT
+  // LANDED yet — warn and stay procedural rather than silently render the
+  // wrong path. See docs/dev-notes/2026-09-07-skeleton-comparison/task-3b.md.
+  if (import.meta.env.DEV && skeletonMode === 'volume') {
+    console.warn('[sdf-game] skeleton=volume resolved but march integration is not landed (task 3b) — procedural bones');
+  }
   const segMeshCache = skeletonMode === 'mesh' ? new SegmentMeshCache() : null;
   const segMeshRenderer = segMeshCache ? createSegmentMeshRenderer(segMeshCache) : null;
   if (segMeshRenderer) scene.add(segMeshRenderer.object);

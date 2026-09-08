@@ -15,4 +15,9 @@ describe('resolveSkeletonMode', () => {
   it('ignores unknown values', () => {
     expect(resolveSkeletonMode('?skeleton=tubes', { dev: true, deferred: false })).toBe('procedural');
   });
+  it('resolves volume only in dev forward mode', () => {
+    expect(resolveSkeletonMode('?skeleton=volume', { dev: true, deferred: false })).toBe('volume');
+    expect(resolveSkeletonMode('?skeleton=volume', { dev: true, deferred: true })).toBe('procedural');
+    expect(resolveSkeletonMode('?skeleton=volume', { dev: false, deferred: false })).toBe('procedural');
+  });
 });
