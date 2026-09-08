@@ -21,7 +21,7 @@
 // incorrect rule this wiring avoids.
 //
 // SHADING: mesh-only material terms keep wound exposure in world space but
-// anchor dirt and the broad skull face cues in segment-local space, so they
+// anchor wet tissue and the broad skull face cues in segment-local space, so they
 // follow animation. BONE_SHADE_WGSL remains the shared forward light compose
 // (fill/key/flashlight cone, wet specular, Fresnel), fed by real geometry
 // positionWorld/normalWorld. Same uniform factory and per-frame seeding in
@@ -37,7 +37,7 @@
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
-  attribute, wgslFn, uniform, texture, vec4, positionLocal, positionWorld, normalWorld, cameraPosition,
+  attribute, wgslFn, max, texture, vec4, positionLocal, positionWorld, normalWorld, cameraPosition,
 } from 'three/tsl';
 import {
   BONE_HASH_WGSL, BONE_NOISE_WGSL, BONE_SHADE_WGSL,
@@ -46,6 +46,7 @@ import {
 import type { BoneFieldSource } from './contract';
 import type { SegmentMeshCache } from './mesh';
 import { meshAppearanceCoord, MESH_BONE_SURFACE_WGSL } from './mesh-appearance';
+import { meshEyePlacements, MESH_EYE_SURFACE_WGSL } from './mesh-eyes';
 
 const MAX_WOUNDS_TEX = 64;
 
@@ -100,14 +101,35 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache): SegmentMeshR
     boneColor: u.boneColor, deepColor: u.deepColor, look: u.look,
     woundTex: texture(woundTex), woundCount: u.woundCount,
   }) as unknown as { xyz: unknown; w: unknown };
-  const material = new MeshBasicNodeMaterial();
-  material.colorNode = vec4(shade({
+  // Mesh-local gloss floor: no changes to shared tube/volume shader defaults.
+  const wetLook = vec4(u.look.x, u.look.y, max(u.look.z, 0.85), max(u.look.w, 0.12));
+  const lit = (surface: unknown) => vec4(shade({
     p: positionWorld, n: normalWorld, camPos: cameraPosition,
-    deepColor: u.deepColor, ambient: u.ambient, look: u.look,
+    deepColor: u.deepColor, ambient: u.ambient, look: wetLook,
     lightDir: u.lightDir, keyColor: u.keyColor, lightCfg: u.lightCfg,
     spotPos: u.spotPos, spotAxis: u.spotAxis, spotCfg: u.spotCfg, spotCfg2: u.spotCfg2, spotColor: u.spotColor,
-    surfaceIn: surf as never,
+    surfaceIn: surface as never,
   }) as never, 1.0);
+  const material = new MeshBasicNodeMaterial();
+  material.colorNode = lit(surf);
+  const eyeMaterial = new MeshBasicNodeMaterial();
+  const eyeSurface = wgslFn(MESH_EYE_SURFACE_WGSL)({ p: positionLocal });
+  eyeMaterial.colorNode = lit(eyeSurface);
+  eyeMaterial.depthTest = true;
+  eyeMaterial.depthWrite = true;
+  const eyeGeometry = new THREE.SphereGeometry(1, 24, 16);
+  const syncEyes = (mesh: THREE.Mesh, source: BoneFieldSource) => {
+    // Called only on creation/revision swap; removing children leaves shared
+    // geometry/material alive until renderer disposal.
+    mesh.clear();
+    for (const { center, radius } of meshEyePlacements(source)) {
+      const eye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+      eye.name = 'skeleton-fleshy-eye';
+      eye.position.set(...center);
+      eye.scale.setScalar(radius);
+      mesh.add(eye);
+    }
+  };
   material.depthWrite = true;
   material.depthTest = true;
   material.side = THREE.FrontSide;
@@ -163,11 +185,13 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache): SegmentMeshR
             mesh = new THREE.Mesh(baked.geometry, material);
             mesh.frustumCulled = true; // per-segment bounds are tight and real
             mesh.layers.set(0);
+            syncEyes(mesh, s);
             group.add(mesh);
             slot!.meshes[si] = mesh;
             slot!.keys[si] = baked.key;
           } else if (slot!.keys[si] !== baked.key) {
             mesh.geometry = baked.geometry; // revision swap; cache owns disposal
+            syncEyes(mesh, s);
             slot!.keys[si] = baked.key;
           }
           stats.segments++;
@@ -205,6 +229,8 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache): SegmentMeshR
     dispose() {
       clear();
       material.dispose();
+      eyeMaterial.dispose();
+      eyeGeometry.dispose();
       woundTex.dispose();
     },
   };

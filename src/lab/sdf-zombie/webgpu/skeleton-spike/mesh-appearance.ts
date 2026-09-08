@@ -53,13 +53,19 @@ export const MESH_BONE_SURFACE_WGSL = /* wgsl */ `fn meshBoneSurface(pWorld: vec
   }
   expo = smoothstep(0.0, 1.0, expo);
 
-  // Two local-space scales make broad age/crevice wash plus stuck-on flecks.
-  let nz = boneNoise(pLocal * 42.0) * 0.62 + boneNoise(pLocal * 125.0 + vec3<f32>(7.1, 3.3, 9.7)) * 0.38;
-  let flecks = smoothstep(0.58, 0.79, boneNoise(pLocal * 190.0 + vec3<f32>(2.0, 5.0, 1.0)));
-  let crevice = smoothstep(0.34, 0.82, nz) * (0.55 + 0.45 * flecks);
-  let stain = clamp(look.x + 0.16 + crevice * 0.48 - expo * 0.28, 0.0, 1.0);
-  var albedo = mix(boneColor * vec3<f32>(0.88, 0.83, 0.72), deepColor * 0.68, stain);
-  albedo = albedo * (1.0 - 0.18 * flecks);
+  // Continuous burgundy membrane with rose attachment bands. The broad
+  // tissue gradient dominates; small ivory windows reveal underlying bone.
+  let broad = boneNoise(pLocal * 24.0 + vec3<f32>(7.1, 3.3, 9.7));
+  let fibers = boneNoise(pLocal * vec3<f32>(105.0, 28.0, 105.0));
+  let tissue = smoothstep(0.28, 0.75, broad * 0.72 + fibers * 0.28);
+  let burgundy = mix(vec3<f32>(0.15, 0.009, 0.021), deepColor, 0.3);
+  let pink = vec3<f32>(0.58, 0.16, 0.20);
+  var albedo = mix(burgundy, pink, tissue * 0.82);
+  let ivory = smoothstep(0.78, 0.94, broad) * (1.0 - feature.w * 0.8);
+  albedo = mix(albedo, boneColor * vec3<f32>(0.88, 0.75, 0.64), ivory * 0.65);
+  // Fresh crater exposure brightens the red attachment tissue, never strips
+  // the whole surface back to chalk-white bone.
+  albedo = mix(albedo, pink, expo * 0.18);
 
   // Broad frontal skull read. +z is the face direction in zombie.blob's
   // explicit head-local rig frame. These marks never wrap around the back.
@@ -76,7 +82,7 @@ export const MESH_BONE_SURFACE_WGSL = /* wgsl */ `fn meshBoneSurface(pWorld: vec
   let teeth = mouth * toothBand * (1.0 - seams * 0.65);
   let cavity = max(max(sockets, nose), mouth);
   albedo = mix(albedo, deepColor * 0.18, cavity);
-  albedo = mix(albedo, boneColor * vec3<f32>(0.72, 0.66, 0.53), teeth * 0.82);
+  albedo = mix(albedo, boneColor * vec3<f32>(0.76, 0.59, 0.47), teeth * 0.72);
   albedo = mix(albedo, deepColor * 0.12, seams);
   return vec4<f32>(albedo, expo);
 }`;
