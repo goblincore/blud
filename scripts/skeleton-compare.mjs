@@ -208,11 +208,26 @@ try {
       pageError('console.error', m.params.args.map((a) => a.value ?? a.description ?? '').join(' '));
     }
     if (m.method === 'Log.entryAdded' && ['error', 'warning'].includes(m.params.entry.level)) {
-      pageError(`log.${m.params.entry.level}`, m.params.entry.text);
+      const entry = m.params.entry;
+      pageError(`log.${entry.level}`, {
+        text: entry.text,
+        url: entry.url ?? null,
+        networkRequestId: entry.networkRequestId ?? null,
+        source: entry.source,
+      });
+    }
+    if (m.method === 'Network.responseReceived' && m.params.response.status >= 400) {
+      pageError('network.http', {
+        status: m.params.response.status,
+        statusText: m.params.response.statusText,
+        url: m.params.response.url,
+        networkRequestId: m.params.requestId,
+        type: m.params.type,
+      });
     }
   };
   ws.onclose = () => { for (const request of pending.values()) request.reject(new Error('CDP connection closed')); };
-  await send('Page.enable'); await send('Runtime.enable'); await send('Log.enable');
+  await send('Page.enable'); await send('Runtime.enable'); await send('Log.enable'); await send('Network.enable');
   await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
   await send('Page.addScriptToEvaluateOnNewDocument', { source: `
     addEventListener('unhandledrejection', e => console.error('[skeleton-compare] unhandled rejection', e.reason));
