@@ -55,9 +55,15 @@ is not yet measured.
   and a wound capture rendered. Evidence is in
   `/tmp/skeleton-volume-smoke/validation.json` and sibling PNGs. A baseline-
   shared 404 remained in console classification and was not a shader failure.
-- GPU lifecycle recheck and owner visual judgement are pending against the
-  final commit. CPU/build success does not prove anatomy, clipping, wound
-  reveal, sever, or shading acceptance.
+- Final-commit GPU lifecycle probe: **passed**. `atlasBuilds` stayed 1 across
+  20 simulation steps; cast rebuild incremented it to 2 and returned to 11
+  actors, one atlas and 18 grids at the baseline byte count. No shader errors
+  were reported. The harness later failed because it retained the pre-rebuild
+  actor id while actor ids intentionally continue; this is a harness staging
+  defect after the completed lifecycle assertions, not a runtime failure.
+  Evidence: `/tmp/skeleton-volume-lifecycle/validation.json`.
+- Owner visual judgement is pending. CPU/build and lifecycle success do not
+  prove anatomy, clipping, wound reveal, sever, or shading acceptance.
 
 ## Known limitations
 

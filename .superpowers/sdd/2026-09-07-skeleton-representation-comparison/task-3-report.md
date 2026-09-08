@@ -16,7 +16,10 @@ Verification: focused suites **335/335 passed**; `npm run build` passed. An
 initial coordinator GPU smoke rendered successfully with no WGSL validation
 errors (11 actors, 18 grids, one 11.67 MB atlas, 5.57 s bake, repeat capture
 byte-identical). That smoke preceded the final sparse-id and lifecycle fixes;
-final GPU lifecycle and owner visual checks remain coordinator-owned.
+The final-commit lifecycle probe also passed: atlas builds stayed fixed across
+20 steps and one cast rebuild returned to 11 actors, one atlas and 18 grids
+with no shader errors. The later capture stage hit a stale pre-rebuild actor id
+in the harness; owner visual acceptance remains pending.
 
 Detailed behavior, commands, evidence and limitations:
 `docs/dev-notes/2026-09-07-skeleton-comparison/task-3b.md`.
