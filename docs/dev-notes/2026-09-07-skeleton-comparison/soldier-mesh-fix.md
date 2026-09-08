@@ -64,3 +64,30 @@ Source review approved. Final shared volume/volume-GPU tests: 24/24 passed; prod
 GPU captures in `/tmp/soldier-mesh-fixed` and `/tmp/skull-mesh-close-fixed` render the new material and stable-bind fix. Soldier was advanced one live simulation step before freezing; inspected boots show no pink side strips. This is a bounded pose check, not exhaustive moving-combat acceptance. Exposed zombie skull shows front-facing socket/nose/teeth material cues, not newly sculpted cavities.
 
 Harness exits nonzero because repeated frozen frames differ, including procedural baseline; no parity or performance verdict. Captures include an empty-draw warning and favicon warning, with no shader compilation/runtime error. Captures started while the soldier fix was uncommitted, so recorded HEAD is df700f4b; tested source was subsequently committed as 20b9b887. Owned CDP ports 9396/9397 released; user preview remains on 5396.
+
+## Follow-up: bent-knee gameplay reproduction (2026-09-08)
+
+The stable-bind fix was necessary but did not fix limb rotation. Non-arm
+segments returned an identity quaternion and followed only joint A. Baked shins
+therefore translated with the knee but did not turn toward the live ankle.
+
+CPU reproduction uses soldier `solveHingeLeg` with grounded ankles and torso
+lowered by 0.12 m / 0.30 m. Before this follow-up, worst shin vertices protruded
+0.191767 m / 0.297393 m outside the actual `applyRig` flesh field.
+
+Non-arm two-anchor segments now rotate their carrier primitive's bind axis onto
+its live endpoint axis, including `poseEnds` world-axis offsets. The origin is
+compensated to preserve endpoint A. Zero-length/single-anchor segments retain
+identity. This is still a rigid approximation: spacing stretch and differing
+member offsets are measured by `poseEndpointError`; no scale or procedural
+flesh/bone posing changed. The existing quaternion inverse works for volume.
+
+Both squat regressions now require every extracted leg vertex at least 4 mm
+inside flesh. A third test runs the actual `stepMotion` + `stepRig` soldier
+strafe for 240 frames, reuses the cached meshes, and checks all leg vertices
+every 15 frames against the live posed body with the same 4 mm margin.
+
+Coordinator GPU reproduction: `/tmp/skeleton-moving-check.mjs`, move camera to
+3 m, then `freeze(false); step(120, 1/60); freeze(true)`. The baseline capture
+`/tmp/soldier-crouch-before/mesh-r1-intact-a.png` reproduces the reported rods.
+GPU acceptance remains coordinator-owned.

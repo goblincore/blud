@@ -11,10 +11,15 @@ import { describe, it, expect } from 'vitest';
 import { parseBlob } from '../../blob-parse';
 import { compileBlob } from '../../blob-compile';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../../build-body';
-import { bindRig } from '../../rig-bind';
+import { applyRig, bindRig } from '../../rig-bind';
 import type { Vec3 } from '../../types';
 import zombieSrc from '../../characters/zombie.blob?raw';
 import soldierSrc from '../../characters/soldier.blob?raw';
+import { makeMotionJoints, makeMotionState, stepMotion, STANDING_RIG } from '../../motion';
+import { stepRig } from '../../rig';
+import { makeRng } from '../../wander';
+import { SOLDIER_PROFILE } from '../../motion-profile';
+import { solveHingeLeg } from '../../ik';
 import { sdBody } from '../../validate';
 import { gradientOf } from '../surface-nets-cpu';
 import { createSkeletonSources, type BoneFieldSource } from './contract';
@@ -26,6 +31,67 @@ const bound = bindRig(body);
 const sources = createSkeletonSources(body, bound, { character: 'zombie' });
 
 describe('soldier mesh containment', () => {
+  it('contains cached leg meshes throughout 240 live soldier strafe steps', () => {
+    const soldier = buildBody(compileBlob(parseBlob(soldierSrc)), DEFAULT_BUILD_OPTS);
+    const bound = bindRig(soldier);
+    const joints = makeMotionJoints(soldier, bound.rig.restPose)!;
+    const sources = createSkeletonSources(soldier, bound, { character: 'soldier', rig: () => bound.rig });
+    const meshes = sources.filter(s => s.segment.startsWith('limb:leg')).map(source => ({ source, mesh: extractSegmentMesh(source) }));
+    let state = makeMotionState(8, [0, 0, 0]);
+    state.wander = { ...state.wander, target: [20, 0, 0], speed: SOLDIER_PROFILE.cruise };
+    const random = makeRng(8);
+    let worst = -Infinity, segment = '', worstFrame = -1;
+    for (let frame = 0; frame < 240; frame++) {
+      const r = stepMotion(state, joints, { enabled: true, wander: true, profile: SOLDIER_PROFILE, faceHeading: 0 }, {
+        dt: 1 / 60, shot: null, fire: false, wounded: { armL: false, armR: false, legL: false, legR: false },
+        severed: [], missing: { legL: false, legR: false, armL: false, armR: false }, headAlive: true, forcedCollapse: false, freshWounds: [],
+      }, bound.rig.points, { minX: -30, maxX: 30, minZ: -30, maxZ: 30 }, random);
+      bound.rig = stepRig({ ...bound.rig, restPose: r.frame.restPose, posePins: r.frame.posePins }, 1 / 60,
+        { gravity: r.frame.gravity, restStiffness: STANDING_RIG.restStiffness * r.frame.restPull, damping: .06, iterations: 4 });
+      state = r.state;
+      if (frame % 15 !== 0) continue;
+      const posed = applyRig(soldier, bound, r.frame.bodyYaw);
+      for (const { source, mesh } of meshes) {
+        const pos = mesh.geometry.getAttribute('position');
+        for (let i = 0; i < pos.count; i++) {
+          const d = sdBody(source.toWorld([pos.getX(i), pos.getY(i), pos.getZ(i)]), posed);
+          if (d > worst) { worst = d; segment = source.segment; worstFrame = frame; }
+        }
+      }
+    }
+    for (const { mesh } of meshes) mesh.geometry.dispose();
+    expect(worst, `frame ${worstFrame}, ${segment}`).toBeLessThanOrEqual(-0.004);
+  });
+  it.each([0.12, 0.3])('contains leg meshes through a grounded hinge squat of %s metres', drop => {
+    const soldier = buildBody(compileBlob(parseBlob(soldierSrc)), DEFAULT_BUILD_OPTS);
+    const bound = bindRig(soldier);
+    const joints = makeMotionJoints(soldier, bound.rig.restPose)!;
+    const sources = createSkeletonSources(soldier, bound, { character: 'soldier', rig: () => bound.rig });
+    // Same exact two-bone solver and pinned contacts used by soldier footwork.
+    const points = bound.rig.points.map(p => ({ ...p, pos: [p.pos[0], p.pos[1] - drop, p.pos[2]] as Vec3 }));
+    for (const side of ['L', 'R'] as const) {
+      const hip = joints.index[`hip${side}`], knee = joints.index[`knee${side}`];
+      const foot = joints.index[`foot${side}`], toe = joints.index[`toe${side}`];
+      const solved = solveHingeLeg(points[hip]!.pos, bound.rig.points[foot]!.pos, joints.leg[side], [0, 0, 1]);
+      points[knee]!.pos = solved.knee;
+      points[foot]!.pos = solved.foot;
+      points[toe]!.pos = bound.rig.points[toe]!.pos;
+    }
+    bound.rig = { ...bound.rig, points };
+    const posed = applyRig(soldier, bound);
+    let worst = -Infinity, segment = '';
+    for (const source of sources.filter(s => s.segment.startsWith('limb:leg'))) {
+      const mesh = extractSegmentMesh(source);
+      const pos = mesh.geometry.getAttribute('position');
+      for (let i = 0; i < pos.count; i++) {
+        const p = source.toWorld([pos.getX(i), pos.getY(i), pos.getZ(i)]);
+        const d = sdBody(p, posed);
+        if (d > worst) { worst = d; segment = source.segment; }
+      }
+      mesh.geometry.dispose();
+    }
+    expect(worst, `worst squat segment: ${segment}`).toBeLessThanOrEqual(-0.004);
+  });
   it('keeps every extracted bone vertex behind the authored flesh surface', () => {
     const soldier = buildBody(compileBlob(parseBlob(soldierSrc)), DEFAULT_BUILD_OPTS);
     const soldierSources = createSkeletonSources(soldier, bindRig(soldier), { character: 'soldier' });

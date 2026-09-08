@@ -27,8 +27,9 @@
 //     zombie's ribs are bent (bend up to 0.162), so this is the rib case.
 //  2. LIMB SEGMENTS ARE TWO ANCHORS, NOT ONE FRAME. Per-endpoint binds pose
 //     a = jointPosA + offA, b = jointPosB + offB (offsets rotated only for
-//     arm bones via armFrame). One rigid frame reproduces endpoint A exactly
-//     and endpoint B up to verlet joint-spacing slack.
+//     arm bones via armFrame). One rigid frame reproduces its carrier endpoint A exactly
+//     and endpoint B up to joint-spacing/offset slack. Other members share
+//     that frame; poseEndpointError measures every member.
 //  3. LIMB SQUASH STAYS WORLD-AXIS. applyRig sets prim.orient ONLY on the
 //     head and axial paths, so a limb bone's ellipsoid scale never turns
 //     with the limb in the shipped field. A rigid local bake rotates the
@@ -226,6 +227,18 @@ export function createSkeletonSources(
         if (bind.armFrame) {
           const dir = normalize(sub(pts()[bind.armFrame.tail]!.pos, pts()[bind.armFrame.head]!.pos));
           return { origin, quat: segmentQuat(bind.armFrame.restDir, dir, yawNow()) };
+        }
+        // A two-anchor leg must follow BOTH live endpoints. Keeping identity
+        // here translated the whole baked shin by the knee while leaving its
+        // ankle at the bind direction, exposing long rods in a squat.
+        // Rotate the actual primitive axis (including world-axis offsets),
+        // then compensate the origin so endpoint A still matches poseEnds.
+        const restAxis = sub(p.b, p.a);
+        if (len(restAxis) > 1e-9 && bind.a.point !== bind.b.point) {
+          const a = add(origin, bind.a.offset);
+          const b = add(pts()[bind.b.point]!.pos, bind.b.offset);
+          const quat = segmentQuat(normalize(restAxis), normalize(sub(b, a)), 0);
+          return { origin: sub(a, qRotate(quat, bind.a.offset)), quat };
         }
         return { origin, quat: [0, 0, 0, 1] };
       },
