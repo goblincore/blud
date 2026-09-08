@@ -21,12 +21,15 @@
 // incorrect rule this wiring avoids.
 //
 // SHADING: mesh-only material terms keep wound exposure in world space but
-// anchor wet tissue and the broad skull face cues in segment-local space, so they
-// follow animation. BONE_SHADE_WGSL remains the shared forward light compose
-// (fill/key/flashlight cone, wet specular, Fresnel), fed by real geometry
-// positionWorld/normalWorld. Same uniform factory and per-frame seeding in
-// game-main keep the existing lighting conventions. LIT FORWARD MODE ONLY —
-// deferred G-buffer output is NOT
+// anchor wet tissue, the painted patch classes, the two tooth rows and the
+// broad skull face cues in segment-local space, so they follow animation.
+// Specular/Fresnel gain is a per-fragment gloss mask from an independent
+// wetness field (dry tissue matte, wet patches glossy, cavities unlit);
+// there is no blanket gloss floor. BONE_SHADE_WGSL remains the shared forward
+// light compose (fill/key/flashlight cone, wet specular, Fresnel), fed by real
+// geometry positionWorld/normalWorld. Same uniform factory and per-frame
+// seeding in game-main keep the existing lighting conventions. LIT FORWARD
+// MODE ONLY — deferred G-buffer output is NOT
 // implemented for this prototype (the game wiring refuses skeleton=mesh
 // under ?renderer=deferred and reports it).
 //
@@ -37,7 +40,7 @@
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
-  attribute, wgslFn, max, texture, vec4, positionLocal, positionWorld, normalWorld, cameraPosition,
+  attribute, wgslFn, mul, texture, vec4, positionLocal, positionWorld, normalWorld, cameraPosition,
 } from 'three/tsl';
 import {
   BONE_HASH_WGSL, BONE_NOISE_WGSL, BONE_SHADE_WGSL,
@@ -45,7 +48,11 @@ import {
 } from '../bone-instancer';
 import type { BoneFieldSource } from './contract';
 import type { SegmentMeshCache } from './mesh';
-import { meshAppearanceCoord, MESH_BONE_SURFACE_WGSL } from './mesh-appearance';
+import {
+  meshAppearanceCoord, MESH_BONE_SURFACE_WGSL, MESH_BONE_WET_WGSL,
+  MESH_SKULL_CAVITY_WGSL, MESH_TOOTH_ROW_WGSL,
+  MESH_SPEC_SCALE, MESH_FRES_SCALE,
+} from './mesh-appearance';
 import { meshEyePlacements, MESH_EYE_SURFACE_WGSL } from './mesh-eyes';
 
 const MAX_WOUNDS_TEX = 64;
@@ -88,33 +95,47 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache): SegmentMeshR
   woundTex.generateMipmaps = false;
   woundTex.needsUpdate = true;
 
-  // Dependency-ordered includes, the bone-instancer idiom: hash -> noise ->
-  // mesh-local surface material terms -> unchanged forward light compose.
-  const [, , surfaceFn, shade] = [
-    BONE_HASH_WGSL, BONE_NOISE_WGSL, MESH_BONE_SURFACE_WGSL, BONE_SHADE_WGSL,
-  ].reduce<ReturnType<typeof wgslFn>[]>(
-    (acc, src) => [...acc, wgslFn(src, acc.slice(-1))], [],
-  );
+  // Dependency-ordered includes, the bone-instancer idiom. Each function is
+  // built with every EARLIER function as an include (transitive include
+  // resolution), so the order below is load-bearing: hash -> noise -> tooth
+  // row -> skull cavity -> surface material -> wet gloss -> unchanged forward
+  // light compose.
+  const fns: ReturnType<typeof wgslFn>[] = [];
+  for (const src of [
+    BONE_HASH_WGSL, BONE_NOISE_WGSL, MESH_TOOTH_ROW_WGSL, MESH_SKULL_CAVITY_WGSL,
+    MESH_BONE_SURFACE_WGSL, MESH_BONE_WET_WGSL, BONE_SHADE_WGSL,
+  ]) fns.push(wgslFn(src, fns.slice()));
+  const [surfaceFn, wetFn, shade] = [fns[4]!, fns[5]!, fns[6]!];
+  const featureAttr = attribute('meshFeature', 'vec4');
   const surf = surfaceFn({
     pWorld: positionWorld, pLocal: positionLocal,
-    feature: attribute('meshFeature', 'vec4'),
+    feature: featureAttr,
     boneColor: u.boneColor, deepColor: u.deepColor, look: u.look,
     woundTex: texture(woundTex), woundCount: u.woundCount,
   }) as unknown as { xyz: unknown; w: unknown };
-  // Mesh-local gloss floor: no changes to shared tube/volume shader defaults.
-  const wetLook = vec4(u.look.x, u.look.y, max(u.look.z, 0.85), max(u.look.w, 0.12));
-  const lit = (surface: unknown) => vec4(shade({
+  // Per-fragment gloss from an INDEPENDENT wetness field: dry tissue stays
+  // matte, wet patches keep a tight highlight, skull cavities get none. This
+  // replaces the old blanket `max(look.z, 0.85)` gloss floor.
+  const gloss = wetFn({ pLocal: positionLocal, feature: featureAttr, expo: surf.w }) as never;
+  const meshLook = vec4(
+    u.look.x, u.look.y,
+    mul(mul(u.look.z, gloss), MESH_SPEC_SCALE),
+    mul(mul(u.look.w, gloss), MESH_FRES_SCALE),
+  );
+  const lit = (surface: unknown, look: unknown) => vec4(shade({
     p: positionWorld, n: normalWorld, camPos: cameraPosition,
-    deepColor: u.deepColor, ambient: u.ambient, look: wetLook,
+    deepColor: u.deepColor, ambient: u.ambient, look: look as never,
     lightDir: u.lightDir, keyColor: u.keyColor, lightCfg: u.lightCfg,
     spotPos: u.spotPos, spotAxis: u.spotAxis, spotCfg: u.spotCfg, spotCfg2: u.spotCfg2, spotColor: u.spotColor,
     surfaceIn: surface as never,
   }) as never, 1.0);
   const material = new MeshBasicNodeMaterial();
-  material.colorNode = lit(surf);
+  material.colorNode = lit(surf, meshLook);
   const eyeMaterial = new MeshBasicNodeMaterial();
   const eyeSurface = wgslFn(MESH_EYE_SURFACE_WGSL)({ p: positionLocal });
-  eyeMaterial.colorNode = lit(eyeSurface);
+  // Eyes keep the previous uniform look path exactly (u.look === the old
+  // wetLook under defaults); the eye material never reads meshFeature.
+  eyeMaterial.colorNode = lit(eyeSurface, u.look);
   eyeMaterial.depthTest = true;
   eyeMaterial.depthWrite = true;
   const eyeGeometry = new THREE.SphereGeometry(1, 24, 16);
