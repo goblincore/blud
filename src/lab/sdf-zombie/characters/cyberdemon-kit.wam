@@ -1,0 +1,306 @@
+# Cyberdemon kit — the POLYGON half of the character, authored in WAM.
+#
+# WHY TWO LANGUAGES FOR ONE CHARACTER: see goblin-kit.wam's header — flesh in
+# .blob because blended SDFs are round by construction and smooth-min rounds
+# every edge a cowl, a rivet or a boot sole needs; plate in .wam because that
+# is the other half of the trade. The cyberdemon needs the split more than
+# anyone: his whole read is INDUSTRIAL — machined housings, a hydraulic ram, a
+# vented power unit — and none of that survives an SDF fold.
+#
+# THE SKELETON BELOW MIRRORS characters/cyberdemon.blob AND MUST TRACK IT.
+# Two conversions apply and neither is optional (goblin-kit.wam's header is
+# the spec):
+#
+#   * UNITS. WAM lengths are fractions of `height`; .blob's are metres. The
+#     cyberdemon's height is 2.15, so every number here is the .blob metre
+#     value / 2.15. Every ring below carries its metre value in the comment.
+#   * PITCH SIGN ON `down` BONES. WAM's pitch tips an `up` bone forward and a
+#     `down` bone BACKWARD; .blob's always carries toward +z. Up bones (spine,
+#     chest, neck, skull) share pitch verbatim; every down bone (upperArm,
+#     foreArm, hand, thigh, shin) NEGATES it. Silent either way — this is what
+#     gave the goblin kangaroo knees. `tilt` needs no flip.
+#
+# FLESH THIS WRAPS, marched off cyberdemon.blob with sdBody bisects PER
+# LIMB-ISOLATED CLUSTER (scripts/tmp-style probe; marching the whole body from
+# the spine runs into the merged arm field). Full widths/depths in METRES,
+# converted to height fractions below. w = x span, d = z span:
+#
+#   upperArm.l (the stump)  t0.1 w=0.236 d=0.236   t0.3 w=0.220 d=0.210
+#                           t0.5 w=0.202 d=0.194   t0.7 w=0.170 d=0.170
+#                           t0.9 w=0.000 (flesh ends ~t0.84)
+#   thigh.l                 t0.3 w=0.248 d=0.268   t0.6 w=0.220 d=0.234
+#                           t0.9 w=0.200 d=0.210
+#   shin.l                  t0.1 w=0.208 d=0.234   t0.5 w=0.184 d=0.190
+#                           t0.9 w=0.148 d=0.154
+#   foot.l                  t0.1 w=0.144   t0.3 w=0.116   t0.5 w=0.016
+#                           (bone runs fwd; d is the foot's LENGTH, 0.162)
+#   torso BACK surface      y1.30 z=-0.148  y1.42 z=-0.110  y1.55 z=-0.162
+#                           y1.66 z=-0.142  y1.78 z=-0.030
+#
+# RING MARGINS: +10-20% over the measured flesh. `style chunky` makes every
+# loft 8-sided, and a facet midpoint sits at cos(22.5) = 92.4% of the nominal
+# radius — a ring sized exactly to the flesh lets the smooth body bulge
+# through between facets (the clown hood lesson). The stump's housing takes
+# the most margin: it is the socket cover, and it is meant to read as a hard
+# shell OVER flesh, not a second skin.
+#
+# EVERY PIECE IS AN OPEN SHELL (cap none) except where a cap faces NO flesh:
+# the shoulder cowl's dome top, the boot's sole and the power unit's front and
+# back plates. A `cap flat` through a limb puts a disc with a vertex dead on
+# the bone axis — the goblin kit's belt/greave bug.
+#
+# ASYMMETRY: every part below is on the LEFT side (`.l`) except the power unit,
+# the collar and the right cable port. The right arm and right leg are FLESH
+# in the .blob and stay bare here — that is the character (owner brief).
+#
+# BUILD:  scripts/build-wam-kit.sh cyberdemon
+#   -> public/assets/lab/cyberdemon-kit.gltf, loaded via the character
+#      registry's `kit` URL. WAM lives outside this repo, so the compiled
+#      glTF is committed.
+#
+# EXPECTED LINTS, correct to ignore (the same three as the goblin kit): this
+# is the machinery, not the character — pelvis/neck/skull/forearm/hand/foot
+# have no geometry near them on some bones (that flesh lives in the .blob, and
+# the left forearm has NO flesh at all by design), and the lowest-geometry
+# lint is satisfied by the boot standing on y=0. A warning about anything else
+# is real.
+model cyberdemon-kit
+  height 2.15
+  # chunky = 8-sided lofts. Faceted plate against smooth raymarched flesh is
+  # the contrast this split is for.
+  style chunky
+
+palette
+  # Gunmetal: cool, dark, machined. Kept DARK on purpose — the metal word in
+  # kit-overlay.ts suppresses diffuse and tints the spec by this colour, so a
+  # light albedo plus a hot spec reads as white plastic (the soldier lesson).
+  steel   #4c525a
+  # Near-black housings: the socket cover and the ram, the parts that should
+  # read as silhouette rather than as surface.
+  gun     #23262b
+  # Hydraulic fittings and the piston rods.
+  brass   #8a6a2e
+  # Optic housing: near-black glass, like the goblin's shades.
+  lens    #14161a
+
+skeleton
+  # .blob's `root pelvis at 1.02 len=0.10` is a BONE from crotch to hip line;
+  # WAM's root is a bare POINT, so `hips` restores the missing segment and
+  # every .blob `parent=pelvis` becomes `parent=hips`. Leaving it out is a
+  # silent 10 cm error (goblin-kit.wam).
+  root pelvis at 0.474419
+  bone hips   parent=pelvis dir=up len=0.046512
+  # up-bone pitches verbatim from the .blob.
+  bone spine  parent=hips   dir=up pitch=10  len=0.139535
+  bone chest  parent=spine  dir=up pitch=6   len=0.139535
+  bone neck   parent=chest  dir=up pitch=-8  len=0.046512
+  bone skull  parent=neck   dir=up pitch=4   len=0.111628
+  mirror
+    # clavicle is dir=side (pitch is a no-op there; tilt swings it toward +y
+    # in both languages) and foot is dir=fwd (pitch and tilt inert) — both
+    # hand-written, matching the .blob verbatim.
+    bone clavicle parent=chest    dir=side tilt=12 len=0.120930
+    # down-bone pitches NEGATED from the .blob: upperArm 10->-10,
+    # foreArm 8->-8, hand 4->-4, thigh 12->-12, shin -14->14.
+    bone upperArm parent=clavicle dir=down pitch=-10 tilt=18 len=0.167442
+    bone foreArm  parent=upperArm dir=down pitch=-8  tilt=6  len=0.158140
+    bone hand     parent=foreArm  dir=down pitch=-4           len=0.060465
+    bone thigh    parent=hips     dir=down pitch=-12 side=0.062791 len=0.232558
+    bone shin     parent=thigh    dir=down pitch=14           len=0.223256
+    bone foot     parent=shin     dir=fwd                     len=0.079070
+  end
+
+parts
+  # ==========================================================================
+  # LEFT MECH ARM — explicit `.l` targets, NO mirror block: the right arm is
+  # flesh and must stay bare. The flesh stump under this reaches bone t~0.84;
+  # the housing covers to t~0.91 so the cut is inside the shell.
+  # ==========================================================================
+  # SHOULDER COWL — the socket cover and the character's loudest silhouette
+  # feature. Aimed down the arm (pitch -10, tilt 18 = the .blob's arm axis).
+  # Rings from a dome cap over the deltoid (flesh 0.236 m at t0.1) to a collar
+  # at the elbow end. Widest ring 0.30 m against a 0.236 m deltoid: 27% proud,
+  # which is what makes it read as a HOUSING rather than a pad.
+  loft cowl bone=upperArm.l at=0.0 dir=down pitch=-10 tilt=18 len=0.075 material=gun side=0.008
+    ring 0.00 w=0.072 d=0.070
+    ring 0.22 w=0.132 d=0.126
+    ring 0.45 w=0.130 d=0.124
+    ring 0.74 w=0.124 d=0.118
+    ring 1.00 w=0.114 d=0.110
+    cap start=dome end=none
+
+  # UPPER-ARM HOUSING — continues the cowl down to the elbow, clearing the
+  # stump (flesh 0.202 m at t0.5, 0.170 at t0.7). Slightly narrower than the
+  # cowl so the shoulder reads as a separate mass.
+  loft upperhousing bone=upperArm.l at=0.40 dir=down pitch=-10 tilt=18 len=0.085 material=steel
+    ring 0.00 w=0.122 d=0.116
+    ring 0.35 w=0.116 d=0.110
+    ring 0.70 w=0.108 d=0.104
+    ring 1.00 w=0.100 d=0.098
+    cap start=none end=none
+
+  # ELBOW BLOCK — a hard box at the joint. In WAM a box's axes follow the bone
+  # frame, so w is across, h is along the bone, d is front-back.
+  attach elbow bone=upperArm.l at=1.0 kind=box size=0.0465 w=0.0484 h=0.0465 d=0.0512 material=gun
+
+  # FOREARM HOUSING — there is NO forearm flesh on this side (the arm is
+  # replaced, not covered), so this is free-standing and sized for the read,
+  # not for clearance: a box-section sleeve swelling toward the ram.
+  loft forearmhousing bone=foreArm.l at=0.02 dir=down pitch=-8 tilt=6 len=0.155 material=steel shape=squarish
+    ring 0.00 w=0.058 d=0.062
+    ring 0.30 w=0.068 d=0.072
+    ring 0.70 w=0.074 d=0.078
+    ring 1.00 w=0.070 d=0.074
+    cap start=none end=none
+
+  # PISTON — a bright brass cylinder riding the top of the forearm housing,
+  # with a rod back to the elbow block. Two pieces, because a piston is a
+  # barrel and a rod, and the step between them is what makes it read as
+  # hydraulic rather than as a pipe.
+  loft pistonbone bones=foreArm.l..foreArm.l material=brass
+    ring 0.18 w=0.030 d=0.030 up=0.040
+    ring 0.86 w=0.026 d=0.026 up=0.040
+    cap start=flat end=flat
+  loft pistonrod bones=foreArm.l..foreArm.l material=steel
+    ring 0.02 w=0.014 d=0.014 up=0.040
+    ring 0.30 w=0.014 d=0.014 up=0.040
+    cap start=flat end=flat
+
+  # WRIST COLLAR — the joint ring between the forearm housing and the ram.
+  # Added after the first render read the ram as a block FLOATING below the
+  # arm: the housing and the ram were both 0.15 m across but met at a step,
+  # and a step with a material change between it reads as a gap.
+  loft wrist bones=hand.l..hand.l material=brass
+    ring 0.00 w=0.078 d=0.082
+    ring 0.22 w=0.082 d=0.086
+    cap start=none end=none
+
+  # RAM HEAD — the fist replacement: a blunt, slightly flared crusher. Mass at
+  # the FAR end (the goblin cleaver lesson: a tool's weight sits where it hits),
+  # flat face so it reads as a battering ram, not a boxing glove. Starts at
+  # hand t=0.0 (the wrist collar) rather than 0.10, so the two overlap.
+  loft ram bone=hand.l at=0.0 dir=down pitch=-4 len=0.108 material=gun shape=squarish
+    ring 0.00 w=0.076 d=0.080
+    ring 0.35 w=0.084 d=0.088
+    ring 0.80 w=0.098 d=0.100
+    ring 1.00 w=0.100 d=0.102
+    cap start=none end=flat
+
+  # RAM STUDS — three short brass bosses on the striking face. The ram face is
+  # at the loft's far end; the studs are attached to it rather than aimed by
+  # hand, so they cannot drift off the face when the rings are retuned.
+  attach stud0 bone=hand.l at=0.0 kind=box offset=(0,-0.106,0.007) size=0.009 w=0.0074 h=0.0074 d=0.0074 material=brass on=ram
+  attach stud1 bone=hand.l at=0.0 kind=box offset=(0.014,-0.106,0.007) size=0.009 w=0.0074 h=0.0074 d=0.0074 material=brass on=ram
+  attach stud2 bone=hand.l at=0.0 kind=box offset=(-0.014,-0.106,0.007) size=0.009 w=0.0074 h=0.0074 d=0.0074 material=brass on=ram
+
+  # ==========================================================================
+  # LEFT LEG — the SHEATHED side. Flesh underneath (the .blob keeps both legs
+  # fleshy); the kit only wraps the left one, which carries the asymmetry down
+  # to the ground.
+  # ==========================================================================
+  # GREAVE — follows the shin from below the knee to the ankle. Flesh w:
+  # 0.208 m at t0.1 (0.0967), 0.184 at t0.5 (0.0856), 0.148 at t0.9 (0.0688).
+  # Rings ~+15% and then the chunky facet allowance.
+  loft greave bones=shin.l..shin.l material=steel
+    ring 0.08 w=0.118 d=0.124
+    ring 0.35 w=0.116 d=0.122
+    ring 0.65 w=0.104 d=0.110
+    ring 0.92 w=0.094 d=0.100
+    cap start=none end=none
+
+  # KNEE PLATE — a shield over the joint, proud at the front (dtop) and snug
+  # behind (dbot), strapped on rather than painted around.
+  loft knee bones=thigh.l..shin.l material=steel shape=squarish
+    ring 0.36 w=0.108 dtop=0.128 dbot=0.104
+    ring 0.42 w=0.126 dtop=0.148 dbot=0.112
+    ring 0.52 w=0.126 dtop=0.150 dbot=0.112
+    ring 0.58 w=0.106 dtop=0.128 dbot=0.104
+    cap start=none end=none
+
+  # BOOT — lofted along the foot bone continued, `frame=up` so d is HEIGHT and
+  # the sole sits on y=0. The foot flesh (0.165 m tall, 0.144 m wide, mass
+  # centre y 0.078) needs a shell 0.17 m tall by 0.18 m wide at the heel,
+  # tapering to 0.10 x 0.12 at the toe. Ring centres are dropped 0.087 m from
+  # the ankle so the sole lands on the floor: 0.165 - 0.087 - 0.075 = 0.003.
+  loft boot bone=foot.l at=0.0 dir=fwd len=0.112 frame=up offset=(0,-0.0405,0) material=gun
+    ring 0.00 w=0.086 d=0.075
+    ring 0.22 w=0.086 d=0.075
+    ring 0.48 w=0.078 d=0.066
+    ring 0.74 w=0.066 d=0.054
+    ring 0.92 w=0.052 d=0.042
+    ring 1.00 w=0.040 d=0.034
+    # BOTH caps open: the heel and toe caps would be discs THROUGH the foot
+    # flesh (the goblin belt/greave bug — a `cap flat` on a limb-wrapping tube
+    # puts a vertex dead on the bone axis). kit-overlay renders double-sided,
+    # which is what an open shell needs.
+    cap start=none end=none
+
+  # ==========================================================================
+  # BACK — the power unit. Authored ONCE, centred, outside the mirror.
+  # ==========================================================================
+  # POWER UNIT — a slab across the upper back. Lofted along the hips..chest
+  # chain with frame=fwd, offset 0.107 back: the measured back surface runs
+  # z -0.148 (y1.30) to -0.162 (y1.55), so a 0.10 m-thick slab centred at
+  # z -0.230 has its front face 1.8 cm INSIDE the flesh and its back face
+  # 12 cm clear. That tuck is deliberate — a pack is strapped ON, and a pack
+  # that touches nothing floats.
+  # NOTE: `offset=` on a bones=a..b CHAIN loft is IGNORED by the compiler
+  # (mesh.py applies it only on the bone= branch) — the first build put the
+  # unit dead on the spine axis, 15 cm inside the chest. The backward shift is
+  # per-ring `fwd=-0.107` instead, which the ring code does apply.
+  loft powerunit bones=hips..chest material=gun frame=fwd shape=squarish
+    ring 0.30 w=0.150 d=0.0465 fwd=-0.107
+    ring 0.38 w=0.164 d=0.0465 fwd=-0.107
+    ring 0.78 w=0.164 d=0.0465 fwd=-0.107
+    ring 0.88 w=0.146 d=0.0465 fwd=-0.107
+    cap start=flat end=flat
+
+  # VENT FINS — three thin plates standing off the unit's back face. `on=` is
+  # deliberately NOT used: the unit's back face is flat and its position is
+  # known from the ring table, so a hand offset is exact and needs no snap.
+  attach fin0 bone=spine kind=box at=0.75 offset=(0,0,-0.0707) size=0.0065 w=0.0605 h=0.0065 d=0.0102 material=steel
+  attach fin1 bone=spine kind=box at=0.88 offset=(0,0,-0.0707) size=0.0065 w=0.0605 h=0.0065 d=0.0102 material=steel
+  attach fin2 bone=spine kind=box at=1.00 offset=(0,0,-0.0707) size=0.0065 w=0.0605 h=0.0065 d=0.0102 material=steel
+
+  # COLLAR — a raised hard collar behind the neck, joining the unit to the
+  # cowl line so the machinery reads as one harness.
+  # On the NECK bone, not the chest: at the chest tail the lower rim sat 87 mm
+  # inside the trap yoke (the chain-loft offset bug's twin — a collar that low
+  # is inside the torso by construction). From neck t 0.35 the shell wraps the
+  # neck column (r 0.088 m) with ~20 mm of air and only kisses the yoke.
+  loft collar bone=neck at=0.35 dir=up pitch=-14 len=0.052 frame=fwd offset=(0,0,-0.055) material=steel shape=squarish
+    ring 0.00 w=0.112 d=0.016
+    ring 0.30 w=0.120 d=0.020
+    ring 0.80 w=0.098 d=0.018
+    ring 1.00 w=0.080 d=0.014
+    cap start=flat end=flat
+
+  # RIGHT CABLE PORT — a small machined plate where the red loom leaves the
+  # chest band and turns over the shoulder. NOT armour: it is the fitting that
+  # justifies the cable ending there instead of in mid-air, and it is the only
+  # hard part on the flesh side, which keeps the asymmetry legible.
+  attach port bone=chest at=1.0 offset=(-0.0698,0.0093,0.0326) size=0.0140 w=0.0177 h=0.0121 d=0.0140 material=brass
+
+  # OPTIC HOUSING — a ring of plate around the LEFT eye only (the replacement
+  # optic; the right eye is the man's own). Placed on the skull bone in world
+  # axes: the eye prim sits at (0.061, 1.979, 0.245) with r 0.024, so the
+  # housing is a shallow box centred just proud of it.
+  attach optichousing bone=skull at=0.60 offset=(0.0284,0.0103,0.0767) size=0.0112 w=0.0177 h=0.0158 d=0.0074 material=gun
+
+textures
+  # Machined steel: a painted top-light, fine noise, ao in the crevices. Dark,
+  # because the METAL read lives in kit-overlay.ts's LOOK table.
+  texture steel base=#4c525a
+    gradient axis=v from=-0.10 to=0.14
+    noise scale=0.14 amount=0.030
+    ao amount=0.18
+  # Housings: matte near-black, almost no variation. A gun housing should read
+  # as one shape, not as a surface.
+  texture gun base=#23262b
+    noise scale=0.20 amount=0.015
+    ao amount=0.22
+  # Brass: brighter, with a stronger vertical ramp so the piston rods catch
+  # the key.
+  texture brass base=#8a6a2e
+    gradient axis=v from=-0.12 to=0.20
+    ao amount=0.12

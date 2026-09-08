@@ -34,6 +34,7 @@ import minotaurBlobSrc from './characters/minotaur.blob?raw';
 import soldierBlobSrc from './characters/soldier.blob?raw';
 import femaleBlobSrc from './characters/female.blob?raw';
 import gargoyleBlobSrc from './characters/gargoyle.blob?raw';
+import cyberdemonBlobSrc from './characters/cyberdemon.blob?raw';
 import {
   ZOMBIE_PROFILE, SOLDIER_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
@@ -218,6 +219,25 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     // declared value; the face step re-measures off the decoded pixels.
     face: { url: '/assets/lab/faces/gargoyle-face.png', rect: [0, 0, 512, 512, 512, 512], mean: 1 },
     profile: motionProfileFor('gargoyle'),
+  },
+  cyberdemon: {
+    name: 'cyberdemon', src: cyberdemonBlobSrc,
+    // The hard half: the shoulder cowl, the hydraulic ram arm, the back power
+    // unit and the left greave/boot. Compiled from characters/cyberdemon-kit.wam
+    // by scripts/build-wam-kit.sh; committed as the glTF.
+    kit: '/assets/lab/cyberdemon-kit.gltf',
+    // The .blob's sheet block declares cyberdemon-face.png — a GENERATED,
+    // mouth-only decal at MULTIPLY (there is no reference mesh, so
+    // blob:face-bake cannot run; scripts/make-cyberdemon-face.py draws it).
+    // mean is the declared value; the face step re-measures off the decoded
+    // pixels.
+    face: { url: '/assets/lab/faces/cyberdemon-face.png', rect: [0, 0, 512, 512, 512, 512], mean: 1 },
+    // The zombie shamble, deliberately: it is the cast's HEAVY walk (long
+    // stance duty, low bob, reaching arms), and the brief's "built to close
+    // distance" is exactly a heavy body leaning at you. A bespoke march/run
+    // profile is a rig/gameplay change, not part of this character's
+    // authoring task.
+    profile: motionProfileFor('cyberdemon'),
   },
 };
 
