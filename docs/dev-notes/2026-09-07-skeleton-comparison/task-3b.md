@@ -76,3 +76,13 @@ is not yet measured.
   back.
 - Deliberate rigid rib bend/squash differences remain allowed by the owner;
   broken surfaces, leaks, clipping, or failed wound reveals are still bugs.
+
+## Final coordinator check (2026-09-08)
+
+Source `bb372e47`: all three modes booted WebGPU and rendered intact/wound captures with no shader validation or runtime errors. The volume leg passed three captures and the lifecycle assertions: 20 simulation steps did not increase atlasBuilds; deliberate cast rebuild/restore each built one atlas, returning to 11 actors, 1 atlas, 18 grids and original residency bytes. The exact favicon-only 404 is retained as a non-rendering warning.
+
+The overall driver exits 1 because procedural and mesh repeat screenshots differ; both completed functional smoke but cannot support strict pixel parity. Volume repeated captures matched in this run. This is not full gameplay, sever visual acceptance, soldier-volume coverage, or performance evidence. Owner manual playtest is the next visual gate; active previews prevent controlled timing claims.
+
+Evidence: `/tmp/skeleton-final-smoke/validation.json` and sibling captures. Reproduce with `SKELETON_MODES=procedural,mesh,volume SKELETON_SCALES=1 SKELETON_LIFECYCLE=1 SKELETON_CDP_MS=60000 node scripts/skeleton-compare.mjs 5396 9396 /tmp/skeleton-final-smoke` after starting owned servers via scripts/lab-servers.sh.
+
+Current owner preview: http://localhost:5396/sdf-game.html?skeleton=volume (also mesh/procedural selectors). Defaults remain unchanged; nothing merged or pushed. Final code review and scoped fixes are complete.
