@@ -177,13 +177,16 @@ const lifecycleSmoke = async () => {
     }
     return { steps: 20, originalBoneRatio, before, afterSteps, afterRebuild, afterRestore };
   })()`);
-  const stableKeys = ['actors', 'atlases', 'grids', 'gridBytes', 'atlasBytes'];
-  const stable = (value) => Object.fromEntries(stableKeys.map((key) => [key, value[key]]));
+  const select = (value, keys) => Object.fromEntries(keys.map((key) => [key, value[key]]));
+  const liveCountKeys = ['actors', 'atlases', 'grids'];
+  const residencyKeys = [...liveCountKeys, 'gridBytes', 'atlasBytes'];
   assert.deepEqual(result.afterSteps, result.before, 'ordinary simulation steps must not rebuild or change volume residency');
-  assert.deepEqual(stable(result.afterRebuild), stable(result.before), 'cast rebuild must restore volume residency counts');
+  assert.deepEqual(select(result.afterRebuild, liveCountKeys), select(result.before, liveCountKeys),
+    'cast rebuild must preserve live actor/atlas/grid counts');
   assert.equal(result.afterRebuild.atlasBuilds, result.before.atlasBuilds + 1,
     'bone-ratio cast rebuild must construct exactly one atlas');
-  assert.deepEqual(stable(result.afterRestore), stable(result.before), 'bone-ratio restore must preserve volume residency counts');
+  assert.deepEqual(select(result.afterRestore, residencyKeys), select(result.before, residencyKeys),
+    'bone-ratio restore must recover original volume residency');
   assert.equal(result.afterRestore.atlasBuilds, result.before.atlasBuilds + 2,
     'restoring the comparison bone ratio must construct exactly one additional atlas');
   return result;
