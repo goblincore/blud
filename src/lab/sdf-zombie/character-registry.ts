@@ -34,6 +34,7 @@ import minotaurBlobSrc from './characters/minotaur.blob?raw';
 import soldierBlobSrc from './characters/soldier.blob?raw';
 import femaleBlobSrc from './characters/female.blob?raw';
 import gargoyleBlobSrc from './characters/gargoyle.blob?raw';
+import thornbeastBlobSrc from './characters/thornbeast.blob?raw';
 import {
   ZOMBIE_PROFILE, SOLDIER_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
@@ -218,6 +219,14 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     // declared value; the face step re-measures off the decoded pixels.
     face: { url: '/assets/lab/faces/gargoyle-face.png', rect: [0, 0, 512, 512, 512, 512], mean: 1 },
     profile: motionProfileFor('gargoyle'),
+  },
+  thornbeast: {
+    name: 'thornbeast', src: thornbeastBlobSrc,
+    // No sheet block: the maw is a painted prim (the decal experiment lost
+    // to this head's hostile hs frame — see the .blob's maw-slot comment), so
+    // the shared zombie flat applies, exactly like the dragon and the mouse.
+    face: ZOMBIE_FLAT,
+    profile: motionProfileFor('thornbeast'),
   },
 };
 
