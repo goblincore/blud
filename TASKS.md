@@ -9,6 +9,15 @@
 - [x] Mesh actor skeletons accepted and merged into main; now the forward default, including production.
 - [-] Further aesthetic tuning paused; cavity brightness remains open. [Handoff](docs/dev-notes/2026-09-07-skeleton-comparison/wrap-up.md).
 
+## Roster — cyberdemon — 2026-09-08
+
+- [x] `cyberdemon` merged (`bc95b19f`): the first character authored from a PROSE
+  BRIEF ONLY — no reference mesh, no plate. SDF flesh + WAM kit. [Spec](docs/superpowers/specs/2026-09-08-cyberdemon-character-design.md).
+- [ ] Two accepted cosmetic weaknesses to fix later: the lit eyes read as a cyan
+  visor band (the failure mode `face.ts` documents), and the red chest cabling reads as a flat band, not bundled loom.
+- [!] Its dispatch run CRASHED with dispatch-ui and committed nothing; the work was
+  rescued off the worktree. `blob:render-check` has not been run on it.
+
 ## Legend
 
 | Mark | Meaning | | Prefix | Scope |
