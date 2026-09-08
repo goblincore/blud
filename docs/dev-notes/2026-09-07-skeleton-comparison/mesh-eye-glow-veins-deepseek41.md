@@ -188,3 +188,7 @@ git apply --check /tmp/ds41-mesh-eye-diff.patch && git apply /tmp/ds41-mesh-eye-
 
 User-owned preview ports 5396/5397 were not touched; own ports 5406/9406 were
 cleaned (no listeners remain).
+
+## Coordinator browser review
+
+Actual Chrome game pipeline initially failed with duplicate boneHash/boneNoise declarations. The eye chain created fresh TSL nodes while the shared shade chain already included those functions. Reusing the same hash/noise node objects fixes pipeline generation. Focused eye/appearance tests25/25 and TypeScript pass after the fix. Browser capture `/tmp/ds41-glow-fixed/mesh-r1-torso-wound.png` renders successfully; shader/runtime errors gone. Driver still exits nonzero for known frozen-frame drift, not a pipeline error. First material pass accepted by owner; combined eye preview on5408 awaits owner visual acceptance.

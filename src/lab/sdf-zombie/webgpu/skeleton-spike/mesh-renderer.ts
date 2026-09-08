@@ -138,9 +138,11 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache): SegmentMeshR
   const material = new MeshBasicNodeMaterial();
   material.colorNode = lit(surf, meshLook);
   // Eye shader chain: hash -> noise -> sclera vessels -> surface -> emission.
-  const eyeFns: ReturnType<typeof wgslFn>[] = [];
+  // Reuse identical TSL nodes: shade already includes these dependencies.
+  // Recreating them emits duplicate WGSL declarations in the eye pipeline.
+  const eyeFns: ReturnType<typeof wgslFn>[] = fns.slice(0, 2);
   for (const src of [
-    BONE_HASH_WGSL, BONE_NOISE_WGSL, MESH_EYE_VESSEL_WGSL, MESH_EYE_SURFACE_WGSL, MESH_EYE_EMISSION_WGSL,
+    MESH_EYE_VESSEL_WGSL, MESH_EYE_SURFACE_WGSL, MESH_EYE_EMISSION_WGSL,
   ]) eyeFns.push(wgslFn(src, eyeFns.slice()));
   const [eyeSurfaceFn, eyeEmissionFn] = [eyeFns[3]!, eyeFns[4]!];
   const eyeMaterial = new MeshBasicNodeMaterial();
