@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  meshAppearanceCoord, meshGlossMask, meshSkullCavity, meshToothRow,
+  meshAppearanceCoord, meshGlossMask, meshSkullCavity, meshSocketVessels, meshToothRow,
   skullFeatureMasks, tissuePatchClasses, MESH_GLOSS_DRY,
 } from './mesh-appearance';
 
@@ -129,6 +129,65 @@ describe('skullFeatureMasks', () => {
     expect(teeth.length).toBeGreaterThanOrEqual(12);
     // Widths and gaps vary; a uniform fence would have identical runs.
     expect(Math.max(...teeth) - Math.min(...teeth)).toBeGreaterThan(0.008);
+  });
+});
+
+describe('meshSocketVessels', () => {
+  /** Annulus around either socket, in the ring's own normalized units. */
+  const ringDistance = (x: number, y: number) => Math.min(
+    Math.hypot((x + 0.36) / 0.30, (y - 0.22) / 0.28),
+    Math.hypot((x - 0.36) / 0.30, (y - 0.22) / 0.28),
+  );
+
+  const scan = () => {
+    let ringMax = 0, ringOn = 0, ringN = 0, outsideMax = 0;
+    for (let i = 0; i <= 100; i++) for (let j = 0; j <= 100; j++) {
+      const x = -1 + i / 100 * 2, y = -1 + j / 100 * 2;
+      const v = meshSocketVessels([x, y, 0.9], 1);
+      const d = ringDistance(x, y);
+      if (d >= 0.7 && d <= 1.2) {
+        ringN++;
+        if (v > 0.5) ringOn++;
+        ringMax = Math.max(ringMax, v);
+      } else if (d > 1.5) {
+        outsideMax = Math.max(outsideMax, v);
+      }
+    }
+    return { ringMax, ringOn, ringN, outsideMax };
+  };
+
+  it('paints irregular vessels in the eye-socket ring only', () => {
+    const s = scan();
+    expect(s.ringMax).toBeGreaterThan(0.6);
+    expect(s.ringOn / s.ringN).toBeGreaterThan(0.05);
+    expect(s.ringOn / s.ringN).toBeLessThan(0.7);
+    // Nothing outside the ring: the markings do not wrap the skull.
+    expect(s.outsideMax).toBe(0);
+  });
+
+  it('is head- and front-scoped: nothing on other bones or the back of the skull', () => {
+    expect(meshSocketVessels([-0.12, 0.22, 0.9], 0)).toBe(0);
+    expect(meshSocketVessels([0, 0.9, 0.9], 1)).toBe(0);
+    for (let i = 0; i < 32; i++) {
+      const a = i / 32 * Math.PI * 2;
+      expect(meshSocketVessels([Math.cos(a) * 0.8, Math.sin(a) * 0.8, -0.6], 1)).toBe(0);
+    }
+  });
+
+  it('keeps the vessel sheen local: veins stay wet while the socket recess is matte', () => {
+    let vein: [number, number, number] | null = null;
+    for (let i = 0; i <= 200 && !vein; i++) {
+      const x = -1 + i / 200 * 2;
+      for (let j = 0; j <= 200; j++) {
+        const y = -1 + j / 200 * 2;
+        const q: [number, number, number] = [x, y, 0.9];
+        if (meshSocketVessels(q, 1) > 0.4) { vein = q; break; }
+      }
+    }
+    expect(vein).not.toBeNull();
+    const p: [number, number, number] = [0.01, 1.6, 0.05];
+    expect(meshGlossMask(p, vein!, 1, 0)).toBeGreaterThan(0.12);
+    expect(meshGlossMask(p, [-0.36, 0.22, 0.9], 1, 0)).toBeLessThan(0.05);
   });
 });
 

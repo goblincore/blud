@@ -93,6 +93,28 @@ export function meshSkullCavity(q: Vec3, headFlag: number): number {
   return Math.max(Math.max(sockets, nose), mouth);
 }
 
+/** Irregular branching vessels in the tissue immediately around each eye
+ * socket: an annulus that starts just behind the seated eyeball, peaks on the
+ * socket rim and fades out before the temple. Front-only and head-only, so the
+ * markings stay eye-local instead of wrapping the skull. Mirrors the
+ * socket-vein WGSL. */
+export function meshSocketVessels(q: Vec3, headFlag: number): number {
+  const front = smoothstep(0.10, 0.42, q[2]) * headFlag;
+  const ring = (cx: number) => {
+    const d = Math.hypot((q[0] - cx) / 0.30, (q[1] - 0.22) / 0.28);
+    return smoothstep(0.55, 0.80, d) * (1 - smoothstep(1.02, 1.38, d));
+  };
+  const around = Math.max(ring(-0.36), ring(0.36)) * front;
+  const n1 = noiseOffset(q, 26.0, [5.3, 13.1, 8.7]);
+  const n2 = noiseOffset(q, 58.0, [21.7, 4.9, 16.3]);
+  const ridge = Math.max(
+    Math.pow(1 - Math.abs(n1 * 2 - 1), 5),
+    Math.pow(1 - Math.abs(n2 * 2 - 1), 8) * 0.7,
+  );
+  const veinPatch = smoothstep(0.40, 0.62, noiseOffset(q, 8.0, [9.4, 3.6, 27.2]));
+  return ridge * veinPatch * around;
+}
+
 /** One tooth row on a widening human arc: seven teeth per side, mirrored,
  * with per-tooth hash jitter for width, crown height, centre offset and
  * incisal-edge alignment. `upper` 1 = maxillary (hangs below the bite line),
@@ -161,7 +183,9 @@ export function meshGlossMask(pLocal: Vec3, q: Vec3, headFlag: number, expo: num
   const wet = lerp(smoothstep(0.30, 0.68, w1 * 0.62 + w2 * 0.38), 0.9, clamp01(expo) * 0.45);
   let gloss = lerp(MESH_GLOSS_DRY, MESH_GLOSS_WET, wet);
   gloss *= 1 - 0.97 * meshSkullCavity(q, headFlag);
-  return gloss;
+  // Socket vessels are wet tissue: they keep a sheen even inside the otherwise
+  // matte dark socket recess, but only where the local vessel field says so.
+  return Math.max(gloss, meshSocketVessels(q, headFlag) * 0.45);
 }
 
 // ---------------------------------------------------------------------------
@@ -212,6 +236,21 @@ export const MESH_SKULL_CAVITY_WGSL = /* wgsl */ `fn meshSkullCavity(q: vec3<f32
   return max(max(sockets, nose), mouth);
 }`;
 
+/** Branching red vessels around the eye sockets (front/head only). */
+export const MESH_SOCKET_VESSEL_WGSL = /* wgsl */ `fn meshSocketVessels(q: vec3<f32>, headFlag: f32) -> f32 {
+  let front = smoothstep(0.10, 0.42, q.z) * headFlag;
+  let dl = length((q.xy - vec2<f32>(-0.36, 0.22)) / vec2<f32>(0.30, 0.28));
+  let dr = length((q.xy - vec2<f32>( 0.36, 0.22)) / vec2<f32>(0.30, 0.28));
+  let ringL = smoothstep(0.55, 0.80, dl) * (1.0 - smoothstep(1.02, 1.38, dl));
+  let ringR = smoothstep(0.55, 0.80, dr) * (1.0 - smoothstep(1.02, 1.38, dr));
+  let around = max(ringL, ringR) * front;
+  let n1 = boneNoise(q * 26.0 + vec3<f32>(5.3, 13.1, 8.7));
+  let n2 = boneNoise(q * 58.0 + vec3<f32>(21.7, 4.9, 16.3));
+  let ridge = max(pow(1.0 - abs(n1 * 2.0 - 1.0), 5.0), pow(1.0 - abs(n2 * 2.0 - 1.0), 8.0) * 0.7);
+  let veinPatch = smoothstep(0.40, 0.62, boneNoise(q * 8.0 + vec3<f32>(9.4, 3.6, 27.2)));
+  return ridge * veinPatch * around;
+}`;
+
 /** Mesh-only material terms. World position remains reserved for crater
  * exposure; local position drives all random variation so stains follow the
  * posed segment. feature.xyz is the normalized local frame above, feature.w
@@ -251,6 +290,11 @@ export const MESH_BONE_SURFACE_WGSL = /* wgsl */ `fn meshBoneSurface(pWorld: vec
   let cav = meshSkullCavity(feature.xyz, feature.w);
   albedo = mix(albedo, deepColor * 0.055, cav * 0.92);
 
+  // IRREGULAR BRANCHING VESSELS around each seated eye: red tissue markings
+  // in the socket ring, painted over the dark recess. Eye-local, front-only.
+  let veins = meshSocketVessels(feature.xyz, feature.w);
+  albedo = mix(albedo, vec3<f32>(0.46, 0.020, 0.030), veins * 0.8);
+
   // TWO tooth rows, front-only via the cavity gate. Upper crowns hang below
   // the bite line, lower crowns rise above it, with the dark mouth cavity
   // showing through the gap so both rows read.
@@ -277,5 +321,8 @@ export const MESH_BONE_WET_WGSL = /* wgsl */ `fn meshBoneWet(pLocal: vec3<f32>, 
   var gloss = mix(0.05, 1.0, wet);
   let cav = meshSkullCavity(feature.xyz, feature.w);
   gloss = gloss * (1.0 - 0.97 * cav);
+  // Socket vessels stay wet inside the matte recess, but only where the
+  // vessel field is present — the rest of the cavity remains highlight-free.
+  gloss = max(gloss, meshSocketVessels(feature.xyz, feature.w) * 0.45);
   return gloss;
 }`;

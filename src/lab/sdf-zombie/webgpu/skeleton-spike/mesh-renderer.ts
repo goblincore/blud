@@ -21,13 +21,17 @@
 // incorrect rule this wiring avoids.
 //
 // SHADING: mesh-only material terms keep wound exposure in world space but
-// anchor wet tissue, the painted patch classes, the two tooth rows and the
-// broad skull face cues in segment-local space, so they follow animation.
+// anchor wet tissue, the painted patch classes, the two tooth rows, the
+// irregular socket vessels and the broad skull face cues in segment-local
+// space, so they follow animation.
 // Specular/Fresnel gain is a per-fragment gloss mask from an independent
 // wetness field (dry tissue matte, wet patches glossy, cavities unlit);
 // there is no blanket gloss floor. BONE_SHADE_WGSL remains the shared forward
 // light compose (fill/key/flashlight cone, wet specular, Fresnel), fed by real
-// geometry positionWorld/normalWorld. Same uniform factory and per-frame
+// geometry positionWorld/normalWorld. The seated eyes reuse that compose with
+// u.look and add a restrained light-independent red pupil/iris emission AFTER
+// it: the glow is per-eye, reads in darkness and is never a scene light.
+// Same uniform factory and per-frame
 // seeding in game-main keep the existing lighting conventions. LIT FORWARD
 // MODE ONLY — deferred G-buffer output is NOT
 // implemented for this prototype (the game wiring refuses skeleton=mesh
@@ -38,9 +42,9 @@
 // pose with the contract's two-anchor approximation (measured 1.26 mm
 // worst, task-1.md — below the 1 cm extraction cell).
 import * as THREE from 'three/webgpu';
-import { MeshBasicNodeMaterial } from 'three/webgpu';
+import { MeshBasicNodeMaterial, type Node } from 'three/webgpu';
 import {
-  attribute, wgslFn, mul, texture, vec4, positionLocal, positionWorld, normalWorld, cameraPosition,
+  attribute, wgslFn, mul, add, texture, vec4, positionLocal, positionWorld, normalWorld, cameraPosition,
 } from 'three/tsl';
 import {
   BONE_HASH_WGSL, BONE_NOISE_WGSL, BONE_SHADE_WGSL,
@@ -50,10 +54,12 @@ import type { BoneFieldSource } from './contract';
 import type { SegmentMeshCache } from './mesh';
 import {
   meshAppearanceCoord, MESH_BONE_SURFACE_WGSL, MESH_BONE_WET_WGSL,
-  MESH_SKULL_CAVITY_WGSL, MESH_TOOTH_ROW_WGSL,
+  MESH_SKULL_CAVITY_WGSL, MESH_SOCKET_VESSEL_WGSL, MESH_TOOTH_ROW_WGSL,
   MESH_SPEC_SCALE, MESH_FRES_SCALE,
 } from './mesh-appearance';
-import { meshEyePlacements, MESH_EYE_SURFACE_WGSL } from './mesh-eyes';
+import {
+  meshEyePlacements, MESH_EYE_EMISSION_WGSL, MESH_EYE_SURFACE_WGSL, MESH_EYE_VESSEL_WGSL,
+} from './mesh-eyes';
 
 const MAX_WOUNDS_TEX = 64;
 
@@ -98,14 +104,14 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache): SegmentMeshR
   // Dependency-ordered includes, the bone-instancer idiom. Each function is
   // built with every EARLIER function as an include (transitive include
   // resolution), so the order below is load-bearing: hash -> noise -> tooth
-  // row -> skull cavity -> surface material -> wet gloss -> unchanged forward
-  // light compose.
+  // row -> skull cavity -> socket vessels -> surface material -> wet gloss ->
+  // unchanged forward light compose.
   const fns: ReturnType<typeof wgslFn>[] = [];
   for (const src of [
     BONE_HASH_WGSL, BONE_NOISE_WGSL, MESH_TOOTH_ROW_WGSL, MESH_SKULL_CAVITY_WGSL,
-    MESH_BONE_SURFACE_WGSL, MESH_BONE_WET_WGSL, BONE_SHADE_WGSL,
+    MESH_SOCKET_VESSEL_WGSL, MESH_BONE_SURFACE_WGSL, MESH_BONE_WET_WGSL, BONE_SHADE_WGSL,
   ]) fns.push(wgslFn(src, fns.slice()));
-  const [surfaceFn, wetFn, shade] = [fns[4]!, fns[5]!, fns[6]!];
+  const [surfaceFn, wetFn, shade] = [fns[5]!, fns[6]!, fns[7]!];
   const featureAttr = attribute('meshFeature', 'vec4');
   const surf = surfaceFn({
     pWorld: positionWorld, pLocal: positionLocal,
@@ -131,11 +137,22 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache): SegmentMeshR
   }) as never, 1.0);
   const material = new MeshBasicNodeMaterial();
   material.colorNode = lit(surf, meshLook);
+  // Eye shader chain: hash -> noise -> sclera vessels -> surface -> emission.
+  const eyeFns: ReturnType<typeof wgslFn>[] = [];
+  for (const src of [
+    BONE_HASH_WGSL, BONE_NOISE_WGSL, MESH_EYE_VESSEL_WGSL, MESH_EYE_SURFACE_WGSL, MESH_EYE_EMISSION_WGSL,
+  ]) eyeFns.push(wgslFn(src, eyeFns.slice()));
+  const [eyeSurfaceFn, eyeEmissionFn] = [eyeFns[3]!, eyeFns[4]!];
   const eyeMaterial = new MeshBasicNodeMaterial();
-  const eyeSurface = wgslFn(MESH_EYE_SURFACE_WGSL)({ p: positionLocal });
+  const eyeSurface = eyeSurfaceFn({ p: positionLocal });
+  const eyeEmission = eyeEmissionFn({ p: positionLocal }) as unknown as { xyz: Node<'vec3'> };
   // Eyes keep the previous uniform look path exactly (u.look === the old
-  // wetLook under defaults); the eye material never reads meshFeature.
-  eyeMaterial.colorNode = lit(eyeSurface, u.look);
+  // wetLook under defaults); the eye material never reads meshFeature. The
+  // restrained red pupil/iris glow is added AFTER the light compose: a
+  // per-eye emissive term, not a scene light, and it never reaches the bone
+  // material or the shared light uniforms.
+  const eyeShaded = lit(eyeSurface, u.look) as unknown as { xyz: Node<'vec3'> };
+  eyeMaterial.colorNode = vec4(add(eyeShaded.xyz, eyeEmission.xyz), 1.0);
   eyeMaterial.depthTest = true;
   eyeMaterial.depthWrite = true;
   const eyeGeometry = new THREE.SphereGeometry(1, 24, 16);
