@@ -27,6 +27,7 @@ const cdpMs = integer(process.env.SKELETON_CDP_MS ?? '30000', 'CDP deadline');
 const bootMs = Math.min(integer(process.env.SKELETON_BOOT_MS ?? '60000', 'boot deadline'), overallMs);
 const width = integer(process.env.SKELETON_W ?? '960', 'width');
 const height = integer(process.env.SKELETON_H ?? '720', 'height');
+const lifecycle = process.env.SKELETON_LIFECYCLE === '1';
 
 assert.deepEqual(modes.filter((v) => !['procedural', 'mesh', 'volume'].includes(v)), [],
   'SKELETON_MODES may contain only procedural,mesh,volume');
@@ -53,7 +54,7 @@ const evidence = {
   schema: 1,
   startedAt: now(),
   source: { branch: git(['branch', '--show-current']), commit: git(['rev-parse', 'HEAD']) },
-  request: { vite, cdp, modes, scales, width, height, overallMs, cdpMs, bootMs },
+  request: { vite, cdp, modes, scales, width, height, overallMs, cdpMs, bootMs, lifecycle },
   purpose: 'functional smoke and matched captures; no timing or performance verdict',
   runs: [],
   errors: [],
@@ -79,6 +80,16 @@ const boundedFetch = async (url, init = {}) => {
   const response = await fetch(url, { ...init, signal });
   if (!response.ok) throw new Error(`${init.method ?? 'GET'} ${url}: HTTP ${response.status}`);
   return response;
+};
+
+const isTabIcon404 = (url, status) => {
+  try {
+    const parsed = new URL(url);
+    return status === 404 && parsed.protocol === 'http:' && parsed.hostname === 'localhost'
+      && parsed.port === String(vite) && parsed.pathname === '/favicon.ico' && parsed.search === '';
+  } catch {
+    return false;
+  }
 };
 
 const pageError = (kind, value) => {
@@ -135,6 +146,48 @@ const diagnostic = () => evaluate(`(async () => {
   return { requested: new URLSearchParams(location.search).get('skeleton') || 'procedural',
     backend: g.backend, boneMesh: g.boneMesh, mesh, volume, volumeEvals, combined };
 })()`);
+
+const lifecycleSmoke = async () => {
+  const result = await evaluate(`(() => {
+    const g = window.__sdfGame;
+    if (typeof g.skeletonDiagnostics !== 'function' || typeof g.setWoundTuning !== 'function') {
+      throw new Error('lifecycle smoke needs skeletonDiagnostics and setWoundTuning');
+    }
+    const counts = () => {
+      const d = g.skeletonDiagnostics();
+      if (d.activeMode !== 'volume' || !d.volume) throw new Error('lifecycle smoke requires active volume mode');
+      const v = d.volume;
+      return { actors: v.actors, atlases: v.atlases, grids: v.grids, gridBytes: v.gridBytes,
+        atlasBytes: v.atlasBytes, bakeMs: v.bakeMs, atlasBuilds: v.atlasBuilds };
+    };
+    const originalBoneRatio = g.woundTuning?.boneRatio;
+    if (!Number.isFinite(originalBoneRatio)) throw new Error('lifecycle smoke needs finite woundTuning.boneRatio');
+    const before = counts();
+    g.setLoopRunning(false); g.freeze(false); g.step(20, 1 / 60); g.freeze(true);
+    const afterSteps = counts();
+    let afterRebuild;
+    let afterRestore;
+    try {
+      g.setWoundTuning({ boneRatio: originalBoneRatio + 0.0001 });
+      afterRebuild = counts();
+    } finally {
+      g.setWoundTuning({ boneRatio: originalBoneRatio });
+      afterRestore = counts();
+      g.freeze(true);
+    }
+    return { steps: 20, originalBoneRatio, before, afterSteps, afterRebuild, afterRestore };
+  })()`);
+  const stableKeys = ['actors', 'atlases', 'grids', 'gridBytes', 'atlasBytes'];
+  const stable = (value) => Object.fromEntries(stableKeys.map((key) => [key, value[key]]));
+  assert.deepEqual(result.afterSteps, result.before, 'ordinary simulation steps must not rebuild or change volume residency');
+  assert.deepEqual(stable(result.afterRebuild), stable(result.before), 'cast rebuild must restore volume residency counts');
+  assert.equal(result.afterRebuild.atlasBuilds, result.before.atlasBuilds + 1,
+    'bone-ratio cast rebuild must construct exactly one atlas');
+  assert.deepEqual(stable(result.afterRestore), stable(result.before), 'bone-ratio restore must preserve volume residency counts');
+  assert.equal(result.afterRestore.atlasBuilds, result.before.atlasBuilds + 2,
+    'restoring the comparison bone ratio must construct exactly one additional atlas');
+  return result;
+};
 
 const assertActivePath = (mode, diag) => {
   assert.equal(diag.backend, 'webgpu', 'game backend must be WebGPU');
@@ -209,20 +262,24 @@ try {
     }
     if (m.method === 'Log.entryAdded' && ['error', 'warning'].includes(m.params.entry.level)) {
       const entry = m.params.entry;
-      pageError(`log.${entry.level}`, {
+      const tabIcon404 = isTabIcon404(entry.url, 404) && /\b404\b/.test(entry.text);
+      pageError(tabIcon404 ? 'log.warning' : `log.${entry.level}`, {
         text: entry.text,
         url: entry.url ?? null,
         networkRequestId: entry.networkRequestId ?? null,
         source: entry.source,
+        nonRendering: tabIcon404,
       });
     }
     if (m.method === 'Network.responseReceived' && m.params.response.status >= 400) {
-      pageError('network.http', {
+      const tabIcon404 = isTabIcon404(m.params.response.url, m.params.response.status);
+      pageError(tabIcon404 ? 'network.warning' : 'network.http', {
         status: m.params.response.status,
         statusText: m.params.response.statusText,
         url: m.params.response.url,
         networkRequestId: m.params.requestId,
         type: m.params.type,
+        nonRendering: tabIcon404,
       });
     }
   };
@@ -251,6 +308,10 @@ try {
       assert.equal(await evaluate('window.__sdfGame?.backend ?? null'), 'webgpu', 'game did not boot WebGPU before deadline');
       run.stage = await stage(scale);
       assert.equal(run.stage.deterministic, true, `missing deterministic seams: ${run.stage.missing?.join(',')}`);
+      if (lifecycle && mode === 'volume') {
+        run.lifecycle = await lifecycleSmoke();
+        save();
+      }
       await settleAndLock();
       run.diagnostic = await diagnostic();
       assertActivePath(mode, run.diagnostic);
@@ -268,7 +329,7 @@ try {
       await capture('torso-wound');
       run.diagnosticAfterWound = await diagnostic();
       assertActivePath(mode, run.diagnosticAfterWound);
-      assert.deepEqual(run.pageErrors.filter((e) => e.kind !== 'log.warning'), [], 'page errors occurred');
+      assert.deepEqual(run.pageErrors.filter((e) => !['log.warning', 'network.warning'].includes(e.kind)), [], 'page errors occurred');
       assert.ok(run.repeatable, `${mode} scale ${scale}: locked intact captures differ; smoke completed but parity is unsuitable`);
       run.status = 'passed'; run.completedAt = now(); save();
       console.log(`PASS ${mode} scale=${scale} (${run.captures.length} captures)`);
