@@ -231,7 +231,10 @@ describe('composition and pose semantics', () => {
       return `limb:${p.limb}:${b.a.point}-${b.b.point}`;
     };
     const cache = new SegmentVolumeCache();
-    const leg = live.find(s => s.segment.startsWith('limb:') && s.poseEndpointError() > 1e-3)!;
+    // Exercise the worst current limb without requiring a minimum defect.
+    // Correct two-anchor leg rotation can put every endpoint below 1 mm.
+    const leg = live.filter(s => s.segment.startsWith('limb:'))
+      .reduce((a, b) => a.poseEndpointError() >= b.poseEndpointError() ? a : b);
     const g = cache.get(leg, VOLUME_CELL);
     // Principled allowance for the DOCUMENTED reference quirks the rigid
     // frame intentionally fixes (owner clarification 2026-09-08: allowed,
