@@ -33,6 +33,7 @@ import boxFixtureBlobSrc from './characters/box-fixture.blob?raw';
 import minotaurBlobSrc from './characters/minotaur.blob?raw';
 import soldierBlobSrc from './characters/soldier.blob?raw';
 import femaleBlobSrc from './characters/female.blob?raw';
+import gargoyleBlobSrc from './characters/gargoyle.blob?raw';
 import {
   ZOMBIE_PROFILE, SOLDIER_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
@@ -208,6 +209,15 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     name: 'female', src: femaleBlobSrc,
     face: bakedFace('female-face.png'),
     profile: motionProfileFor('female'),
+  },
+  gargoyle: {
+    name: 'gargoyle', src: gargoyleBlobSrc,
+    // The .blob's sheet block declares gargoyle-face.png — a hand-authored
+    // grin decal at MULTIPLY (the reference mesh's UVs repeat, so a face
+    // BAKE would sample garbage; see the .blob header). mean is the
+    // declared value; the face step re-measures off the decoded pixels.
+    face: { url: '/assets/lab/faces/gargoyle-face.png', rect: [0, 0, 512, 512, 512, 512], mean: 1 },
+    profile: motionProfileFor('gargoyle'),
   },
 };
 
