@@ -20,13 +20,13 @@
 // hiding WITHOUT removing the field bones would double-draw — that is the
 // incorrect rule this wiring avoids.
 //
-// SHADING: the march's own bone look, verbatim — BONE_SURFACE_WGSL (wound
-// exposure, mottle, stain, albedo) + BONE_SHADE_WGSL (fill/key/flashlight
-// cone, wet specular, Fresnel) from bone-instancer.ts, fed by real
-// geometry positionWorld/normalWorld instead of the tube vertex sweep.
-// Same uniform factory (boneInstancerUniforms), same per-frame seeding in
-// game-main, so the authored forward lighting conventions are reused, not
-// re-derived. LIT FORWARD MODE ONLY — deferred G-buffer output is NOT
+// SHADING: mesh-only material terms keep wound exposure in world space but
+// anchor dirt and the broad skull face cues in segment-local space, so they
+// follow animation. BONE_SHADE_WGSL remains the shared forward light compose
+// (fill/key/flashlight cone, wet specular, Fresnel), fed by real geometry
+// positionWorld/normalWorld. Same uniform factory and per-frame seeding in
+// game-main keep the existing lighting conventions. LIT FORWARD MODE ONLY —
+// deferred G-buffer output is NOT
 // implemented for this prototype (the game wiring refuses skeleton=mesh
 // under ?renderer=deferred and reports it).
 //
@@ -37,14 +37,15 @@
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
-  wgslFn, uniform, texture, vec4, positionWorld, normalWorld, cameraPosition,
+  attribute, wgslFn, uniform, texture, vec4, positionLocal, positionWorld, normalWorld, cameraPosition,
 } from 'three/tsl';
 import {
-  BONE_HASH_WGSL, BONE_NOISE_WGSL, BONE_SURFACE_WGSL, BONE_SHADE_WGSL,
+  BONE_HASH_WGSL, BONE_NOISE_WGSL, BONE_SHADE_WGSL,
   boneInstancerUniforms, type BoneInstancerUniforms,
 } from '../bone-instancer';
 import type { BoneFieldSource } from './contract';
 import type { SegmentMeshCache } from './mesh';
+import { meshAppearanceCoord, MESH_BONE_SURFACE_WGSL } from './mesh-appearance';
 
 const MAX_WOUNDS_TEX = 64;
 
@@ -87,14 +88,15 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache): SegmentMeshR
   woundTex.needsUpdate = true;
 
   // Dependency-ordered includes, the bone-instancer idiom: hash -> noise ->
-  // surface (material terms) -> shade (light compose).
+  // mesh-local surface material terms -> unchanged forward light compose.
   const [, , surfaceFn, shade] = [
-    BONE_HASH_WGSL, BONE_NOISE_WGSL, BONE_SURFACE_WGSL, BONE_SHADE_WGSL,
+    BONE_HASH_WGSL, BONE_NOISE_WGSL, MESH_BONE_SURFACE_WGSL, BONE_SHADE_WGSL,
   ].reduce<ReturnType<typeof wgslFn>[]>(
     (acc, src) => [...acc, wgslFn(src, acc.slice(-1))], [],
   );
   const surf = surfaceFn({
-    p: positionWorld,
+    pWorld: positionWorld, pLocal: positionLocal,
+    feature: attribute('meshFeature', 'vec4'),
     boneColor: u.boneColor, deepColor: u.deepColor, look: u.look,
     woundTex: texture(woundTex), woundCount: u.woundCount,
   }) as unknown as { xyz: unknown; w: unknown };
@@ -111,6 +113,19 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache): SegmentMeshR
   material.side = THREE.FrontSide;
 
   const slots: ActorSlot[] = [];
+  const preparedGeometry = new WeakSet<THREE.BufferGeometry>();
+  const prepareGeometry = (geometry: THREE.BufferGeometry, source: BoneFieldSource) => {
+    if (preparedGeometry.has(geometry)) return;
+    const pos = geometry.getAttribute('position');
+    const feature = new Float32Array(pos.count * 4);
+    const isHead = source.segment === 'head' ? 1 : 0;
+    for (let i = 0; i < pos.count; i++) {
+      const q = meshAppearanceCoord(source.bounds, [pos.getX(i), pos.getY(i), pos.getZ(i)]);
+      feature.set([q[0], q[1], q[2], isHead], i * 4);
+    }
+    geometry.setAttribute('meshFeature', new THREE.BufferAttribute(feature, 4));
+    preparedGeometry.add(geometry);
+  };
   const stats = {
     actors: 0, segments: 0, rigid: 0, limb: 0, hidden: 0, verts: 0, tris: 0,
     overflow: 0, clamped: 0, droppedQuads: 0,
@@ -142,6 +157,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache): SegmentMeshR
         }
         srcs.forEach((s, si) => {
           const baked = cache.get(s);
+          prepareGeometry(baked.geometry, s);
           let mesh = slot!.meshes[si];
           if (!mesh) {
             mesh = new THREE.Mesh(baked.geometry, material);
