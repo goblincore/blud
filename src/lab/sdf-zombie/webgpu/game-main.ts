@@ -1195,6 +1195,8 @@ async function main() {
     skeletonVolumes.delete(actor);
   };
   import.meta.hot?.dispose(() => {
+    segMeshRenderer?.dispose();
+    segMeshCache?.dispose();
     for (const state of skeletonVolumes.values()) state.binding.dispose();
     skeletonVolumes.clear();
     for (const atlas of sharedVolumeAtlases.values()) atlas.texture.dispose();
@@ -1797,6 +1799,11 @@ async function main() {
       if (a.character) a.character.dispose();
       else a.view.dispose();
     }
+    // No mesh may retain a geometry while the shared cache frees it. Clear
+    // actor slots first, then dispose reusable cached geometries; the next
+    // frame repopulates both from the rebuilt cast.
+    segMeshRenderer?.clear();
+    segMeshCache?.dispose();
     actors.length = 0;
     const errs: string[] = [];
     spawnAll(errs);

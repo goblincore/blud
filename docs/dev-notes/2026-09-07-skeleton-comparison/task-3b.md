@@ -23,7 +23,9 @@ texture. Pose rows update in place each frame. Sources bind to stable
 animation does not rebuild. Sever/body replacement rebuilds sources and atlas
 only when the revision set changes. Refcounts dispose the old atlas and evict
 its grids after the last actor releases it; cast rebuild and HMR release all
-per-actor metadata.
+per-actor metadata. The shared source fix also stops mesh mode from rebuilding
+sources every frame; cast rebuild/HMR now clear mesh actor slots before
+disposing its revision cache, preventing inherited mesh geometry retention.
 
 Live segment slots compact after severing. `pack.ts` stores the original
 `boneSegment` id in the segment-range `.w`; the shader uses that id for atlas

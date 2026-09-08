@@ -63,6 +63,8 @@ export interface SegmentMeshRenderer {
     hidden: number; verts: number; tris: number;
     overflow: number; clamped: number; droppedQuads: number;
   };
+  /** Remove every actor slot while keeping material/uniforms reusable. */
+  clear(): void;
   dispose(): void;
 }
 
@@ -112,6 +114,13 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache): SegmentMeshR
   const stats = {
     actors: 0, segments: 0, rigid: 0, limb: 0, hidden: 0, verts: 0, tris: 0,
     overflow: 0, clamped: 0, droppedQuads: 0,
+  };
+  const clear = () => {
+    for (const slot of slots) for (const mesh of slot.meshes) group.remove(mesh);
+    slots.length = 0;
+    stats.actors = stats.segments = stats.rigid = stats.limb = stats.hidden = 0;
+    stats.verts = stats.tris = stats.overflow = stats.clamped = stats.droppedQuads = 0;
+    group.visible = false;
   };
 
   return {
@@ -176,9 +185,9 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache): SegmentMeshR
       woundTex.needsUpdate = true;
     },
     get stats() { return stats; },
+    clear,
     dispose() {
-      for (const slot of slots) for (const m of slot.meshes) group.remove(m);
-      slots.length = 0;
+      clear();
       material.dispose();
       woundTex.dispose();
     },

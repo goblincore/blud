@@ -17,6 +17,7 @@ import zombieSrc from '../../characters/zombie.blob?raw';
 import { gradientOf } from '../surface-nets-cpu';
 import { createSkeletonSources, type BoneFieldSource } from './contract';
 import { SegmentMeshCache, extractSegmentMesh, MESH_CELL, type SegmentMesh } from './mesh';
+import { createSegmentMeshRenderer } from './mesh-renderer';
 
 const body = buildBody(compileBlob(parseBlob(zombieSrc)), DEFAULT_BUILD_OPTS);
 const bound = bindRig(body);
@@ -153,6 +154,23 @@ describe('extractSegmentMesh — real zombie segments', () => {
     }
     expect(covered).toBeGreaterThan(100); // the samples really probed the surface
     expect(worst).toBeLessThan(MESH_CELL * 1.5);
+  });
+});
+
+describe('SegmentMeshRenderer lifecycle', () => {
+  it('clear releases actor slots before cache disposal and permits reuse', () => {
+    const cache = new SegmentMeshCache();
+    const renderer = createSegmentMeshRenderer(cache);
+    renderer.update([[headSrc]]);
+    expect(renderer.object.children.length).toBe(1);
+    renderer.clear();
+    expect(renderer.object.children.length).toBe(0);
+    expect(renderer.stats.segments).toBe(0);
+    cache.dispose();
+    renderer.update([[headSrc]]);
+    expect(renderer.object.children.length).toBe(1);
+    renderer.dispose();
+    cache.dispose();
   });
 });
 
