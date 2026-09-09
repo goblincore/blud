@@ -242,46 +242,15 @@ export const CONE_TILE_FINE = 0;
  */
 export const COMPOSITE_WGSL = /* wgsl */ `fn sdfComposite(
   layerTex: texture_2d<f32>,
-  prevFieldTex: texture_2d<f32>,
   texCoord: vec2<f32>,
   flipY: f32,
   holdMode: f32,
   heldInv: mat4x4<f32>,
-  curVp: mat4x4<f32>,
-  fieldMode: f32,
-  fieldParityF: f32,
-  fieldComb: f32,
-  outHeight: f32
+  curVp: mat4x4<f32>
 ) -> vec4<f32> {
   let dims = vec2<f32>(textureDimensions(layerTex, 0));
   var st = texCoord;
   if (flipY > 0.5) { st.y = 1.0 - st.y; }
-  // ---- INTERLACED FIELDS -------------------------------------------------
-  // The layer rendered at HALF HEIGHT this frame, covering the scanlines of
-  // one field; prevFieldTex holds the other from last frame. Interleave them
-  // back to full height here. This branch is entered only when fieldMode is
-  // on, so every other path below stays bit-identical (the all-off parity
-  // gate depends on sameness, not equivalence).
-  if (fieldMode > 0.5) {
-    let col = clamp(i32(floor(st.x * dims.x)), 0, i32(dims.x) - 1);
-    let outRow = i32(floor(st.y * outHeight));
-    let tRow = clamp(outRow / 2, 0, i32(dims.y) - 1);
-    var fieldTexel: vec4<f32>;
-    if ((outRow % 2) == i32(fieldParityF)) {
-      fieldTexel = textureLoad(layerTex, vec2<i32>(col, tRow), 0);
-    } else {
-      // The row this frame did not march. fieldComb 1 = hold last frame's
-      // field verbatim, which IS the comb artifact and the point of the
-      // feature; 0 = interpolate vertically from THIS frame's field instead,
-      // trading vertical detail for no comb.
-      let held = textureLoad(prevFieldTex, vec2<i32>(col, tRow), 0);
-      let a = textureLoad(layerTex, vec2<i32>(col, tRow), 0);
-      let b = textureLoad(layerTex, vec2<i32>(col, clamp(tRow + 1, 0, i32(dims.y) - 1)), 0);
-      fieldTexel = mix((a + b) * 0.5, held, fieldComb);
-    }
-    if (fieldTexel.w >= 1.0) { discard; }
-    return fieldTexel;
-  }
   // holdMode: 0 = fresh/classic, 1 = raw hold, 2 = per-pixel reprojection.
   // The classic path below is deliberately UNCHANGED when holdMode < 1.5 —
   // the toggle-OFF frame must stay bit-identical.
@@ -313,6 +282,49 @@ export const COMPOSITE_WGSL = /* wgsl */ `fn sdfComposite(
 }`;
 
 const composite = wgslFn(COMPOSITE_WGSL);
+
+/**
+ * WHOLE-FRAME INTERLEAVE. In field mode the ENTIRE layer — polygonal scene,
+ * march, composite — renders into a half-height buffer, so the flesh and the
+ * polygons on top of it (skeleton meshes, kit, prop, viewmodel) share one
+ * sampling grid and one instant. This pass expands that to full height by
+ * weaving it with the previous frame's half-height output.
+ *
+ * Fielding only the SDF layer left held rows showing one-frame-stale flesh
+ * against current bone — the owner's "weird rendering artifact". Fielding
+ * everything removes it by construction: there is no longer a full-rate layer
+ * to disagree with.
+ *
+ * No discard: by this point the image is composited and opaque.
+ */
+export const FIELD_INTERLEAVE_WGSL = /* wgsl */ `fn sdfFieldInterleave(
+  curTex: texture_2d<f32>,
+  prevTex: texture_2d<f32>,
+  texCoord: vec2<f32>,
+  flipY: f32,
+  parity: f32,
+  comb: f32,
+  outHeight: f32
+) -> vec4<f32> {
+  var st = texCoord;
+  if (flipY > 0.5) { st.y = 1.0 - st.y; }
+  let dims = vec2<f32>(textureDimensions(curTex, 0));
+  let col = clamp(i32(floor(st.x * dims.x)), 0, i32(dims.x) - 1);
+  let outRow = i32(floor(st.y * outHeight));
+  let tRow = clamp(outRow / 2, 0, i32(dims.y) - 1);
+  if ((outRow % 2) == i32(parity)) {
+    return textureLoad(curTex, vec2<i32>(col, tRow), 0);
+  }
+  // The row this frame did not draw. comb 1 = hold last frame's field
+  // verbatim, which IS the interlace artifact; 0 = interpolate vertically
+  // from THIS frame's field, trading vertical detail for no comb.
+  let held = textureLoad(prevTex, vec2<i32>(col, tRow), 0);
+  let a = textureLoad(curTex, vec2<i32>(col, tRow), 0);
+  let b = textureLoad(curTex, vec2<i32>(col, clamp(tRow + 1, 0, i32(dims.y) - 1)), 0);
+  return mix((a + b) * 0.5, held, comb);
+}`;
+
+const fieldInterleave = wgslFn(FIELD_INTERLEAVE_WGSL);
 
 export interface SdfLayer {
   /** Draws the polygonal scene, then the SDF layer, then composites. */
@@ -477,6 +489,9 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   const uFieldParity = uniform(0);
   const uFieldComb = uniform(1);
   const uOutHeight = uniform(1);
+  // Shared with the composite: both convert texCoord->st the same way, so
+  // the interleave cannot pick rows in a different orientation.
+  const uFlipY = uniform(1);
 
   // ---- half-rate state (C2) ------------------------------------------------
   let halfRate = false;
@@ -508,12 +523,37 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   // pass cannot read the target it writes, so each body reads a blit of
   // the previous state. Same format as `target`; its alpha is the clip depth
   // the composite already consumes (1.0 = "nothing recorded here").
-  /** Last frame's field, interleaved with this frame's by the composite. */
+  /** The WHOLE layer's half-height output in field mode — polys, march and
+   *  composite all land here, so nothing on screen is at a different cadence
+   *  from anything else. Needs its own depth: the composite depth-tests the
+   *  flesh against the polygonal pass exactly as it does at full height. */
+  const fieldFull = new THREE.RenderTarget(1, 1, {
+    type: THREE.HalfFloatType, format: THREE.RGBAFormat,
+    minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
+    depthBuffer: true,
+  });
+  /** Last frame's half-height output, woven with this frame's. */
   const fieldPrev = new THREE.RenderTarget(1, 1, {
-    type: THREE.FloatType, format: THREE.RGBAFormat,
+    type: THREE.HalfFloatType, format: THREE.RGBAFormat,
     minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
     depthBuffer: false,
   });
+  const fieldQuadMat = new MeshBasicNodeMaterial();
+  fieldQuadMat.colorNode = fieldInterleave({
+    curTex: texture(fieldFull.texture),
+    prevTex: texture(fieldPrev.texture),
+    texCoord: uv(),
+    flipY: uFlipY,
+    parity: uFieldParity,
+    comb: uFieldComb,
+    outHeight: uOutHeight,
+  }) as never;
+  fieldQuadMat.depthTest = false;
+  fieldQuadMat.depthWrite = false;
+  const fieldQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), fieldQuadMat);
+  fieldQuad.frustumCulled = false;
+  const fieldScene = new THREE.Scene();
+  fieldScene.add(fieldQuad);
   const prev = new THREE.RenderTarget(1, 1, {
     depthBuffer: false,
     type: THREE.FloatType,
@@ -543,7 +583,6 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   // uniform rather than baked in, because "which way up does a render target
   // come back" is a backend property and not something to assume — flip it
   // from the console if a future three version changes its mind.
-  const uFlipY = uniform(1);
 
   // Two chained pre-pass levels: wide then narrow. Each holds the distance
   // every ray in its tile can safely skip.
@@ -633,16 +672,11 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
 
   const sampled = composite({
     layerTex: texture(target.texture),
-    prevFieldTex: texture(fieldPrev.texture),
     texCoord: uv(),
     flipY: uFlipY,
     holdMode: uHoldMode,
     heldInv: uHeldInv,
     curVp: uCurVp,
-    fieldMode: uFieldMode,
-    fieldParityF: uFieldParity,
-    fieldComb: uFieldComb,
-    outHeight: uOutHeight,
   }) as unknown as { xyz: unknown; w: unknown };
 
   const quadMat = new MeshBasicNodeMaterial();
@@ -682,8 +716,14 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     // would composite garbage until the next fresh march.
     forceFreshFrame = true;
     target.setSize(w, h);
-    fieldPrev.setSize(w, h);
     prev.setSize(w, h);
+    // The whole-frame field buffers track the OUTPUT size, not sdfScale: the
+    // polygonal pass has always rendered at full content resolution and must
+    // keep doing so, halved only in the field axis.
+    const fw = Math.max(1, fullW);
+    const fh = fieldMode ? fieldTargetHeight(fullH) : 1;
+    fieldFull.setSize(fw, fh);
+    fieldPrev.setSize(fw, fh);
     occluder.setSize(w, h);
     shellEntry.setSize(w, h);
     shellExit.setSize(w, h);
@@ -792,7 +832,11 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       // carries the level's shadow-map passes, which three renders inside
       // this one render() call.
       setPassLabel('sdf:polys');
-      renderer.setRenderTarget(outputTarget);
+      // In field mode the WHOLE layer lands in the half-height buffer, so the
+      // polygons (skeleton meshes, kit, prop, viewmodel) share the flesh's
+      // sampling grid and instant. Fielding only the SDF layer is what left
+      // stale flesh against current bone on held rows.
+      renderer.setRenderTarget(fieldMode ? fieldFull : outputTarget);
       void renderer.render(scene, camera);
 
       // Passes 1b/1c/1d + 2 — pre-passes and march. SKIPPED ENTIRELY on a
@@ -961,27 +1005,27 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       // Pass 3 — composite up. autoClear off, or this wipes pass 1.
       setPassLabel('sdf:composite');
       camera.layers.mask = restore;
-      renderer.setRenderTarget(outputTarget);
+      renderer.setRenderTarget(fieldMode ? fieldFull : outputTarget);
       const prevAutoClear = renderer.autoClear;
       renderer.autoClear = false;
       void renderer.render(quadScene, quadCam);
       renderer.autoClear = prevAutoClear;
 
-      // Retain this frame's field for the next frame's interleave. Must run
-      // AFTER the composite, which reads the OLD contents of fieldPrev.
-      //
-      // A TRUE TEXTURE COPY, NOT A QUAD BLIT. `target` is written by the
-      // RASTERISER; a fullscreen quad sampling uv() writes with the opposite
-      // Y origin, so blitting produced a vertically MIRRORED retained field —
-      // on screen, an upside-down ghost of the body interleaved with the
-      // right-way-up one (owner-caught). copyTextureToTexture is a GPU copy
-      // with no orientation conversion, so the two fields cannot disagree.
-      // Do not "fix" a future flip by mirroring the row index in the
-      // composite: that hard-codes one platform's convention, which is how
-      // this bug class keeps coming back (see the odd/even pass-count Y-flip
-      // trap in the half-rate notes).
       if (fieldMode) {
-        renderer.copyTextureToTexture(target.texture, fieldPrev.texture);
+        // Weave this half-height frame with the last one, into the real
+        // full-height output. post-aa downstream sees exactly what it always
+        // has, which is why its byte-identical all-off path is untouched.
+        setPassLabel('sdf:field-interleave');
+        renderer.setRenderTarget(outputTarget);
+        void renderer.render(fieldScene, quadCam);
+        // Retain by TRUE TEXTURE COPY, never a quad blit. fieldFull is written
+        // by the rasteriser; a quad sampling uv() writes with the opposite Y
+        // origin, and blitting produced a vertically MIRRORED retained field —
+        // an upside-down ghost of the body woven with the right-way-up one
+        // (owner-caught). Do not "fix" a future flip by mirroring the row
+        // index in the shader: that hard-codes one platform's convention,
+        // which is how this bug class keeps coming back.
+        renderer.copyTextureToTexture(fieldFull.texture, fieldPrev.texture);
         camera.clearViewOffset();
       }
 
