@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   meshAppearanceCoord, meshGlossMask, meshSkullCavity, meshSocketVessels, meshToothRow,
-  skullFeatureMasks, tissuePatchClasses, MESH_GLOSS_DRY,
+  skullFeatureMasks, soldierSteelMask, tissuePatchClasses, MESH_GLOSS_DRY,
 } from './mesh-appearance';
 
 const headBounds = {
@@ -17,6 +17,15 @@ describe('meshAppearanceCoord', () => {
     meshAppearanceCoord(headBounds, [0, 1.615, 0.115]).forEach(v => expect(v).toBeCloseTo(0, 12));
     expect(meshAppearanceCoord(headBounds, headBounds.min)).toEqual([-1, -1, -1]);
     expect(meshAppearanceCoord(headBounds, headBounds.max)).toEqual([1, 1, 1]);
+  });
+});
+
+describe('soldier steel reinforcement',()=>{
+  it('is localized to the front left temple and gated to Soldier heads',()=>{
+    expect(soldierSteelMask([-.48,.08,.9],1)).toBeGreaterThan(.8);
+    expect(soldierSteelMask([.48,.08,.9],1)).toBeLessThan(.05);
+    expect(soldierSteelMask([-.48,.08,-.9],1)).toBe(0);
+    expect(soldierSteelMask([-.48,.08,.9],0)).toBe(0);
   });
 });
 

@@ -5209,11 +5209,14 @@ async function main() {
       const sources = skeletonSources.get(a)?.sources;
       const head = sources?.find(s => s.segment === 'head' && s.isLive());
       if (!sources || !head) return null;
-      const b = head.bounds;
-      const point = head.toWorld([(b.min[0] + b.max[0]) / 2, b.min[1] + (b.max[1] - b.min[1]) * 0.61, b.max[2]]);
-      const origin = head.toWorld([0, 0, 0]);
-      const front = head.toWorld([0, 0, 1]);
-      const direction: Vec3 = [origin[0] - front[0], origin[1] - front[1], origin[2] - front[2]];
+      const b = head.bounds, x=(b.min[0]+b.max[0])/2, y=b.min[1]+(b.max[1]-b.min[1])*.61;
+      // Resolve the posed FLESH surface, not the buried bone bound. Wound depth
+      // probing assumes its anchor starts on skin.
+      const start=head.toWorld([x,y,b.max[2]+.20]), end=head.toWorld([x,y,b.min[2]]);
+      const point=traceProjectile(start,end,p=>sdBody(p,a.posed()));
+      if(!point)return null;
+      const dl=Math.hypot(end[0]-start[0],end[1]-start[1],end[2]-start[2])||1;
+      const direction:Vec3=[(end[0]-start[0])/dl,(end[1]-start[1])/dl,(end[2]-start[2])/dl];
       const ejected = segMeshRenderer.impact(a, sources, point, direction, 'slug');
       a.beginHits(); const wound = a.hitSlug(point, direction); a.endHits();
       return { actor: a.id, point, ejected, stamped: !!wound };

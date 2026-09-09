@@ -52,6 +52,7 @@ import type { MissingLimbs } from '../collapse';
 import type { ZombieGpuView } from './zombie-gpu';
 import { createWoundRing, type CharacterView } from './character-view';
 import { createTorsoWounds } from '../shared-wounds/torso';
+import { soldierVisualWounds } from '../soldier-wounds';
 import type { Aabb } from './game-level';
 import { GUN_GRIP, gunPoint } from '../carry';
 import { qRotate } from '../vec';
@@ -453,6 +454,7 @@ export function createZombieActor(opts: {
   function recordSoldierInjury(w: Wound): void {
     if (!soldierDamage || soldierFatal || w.injuryIgnored || w.type === 'burn') return;
     const prim = current.prims[w.primIdx];
+    if (prim && soldierInjury(current, soldierWounds).missing[prim.limb as keyof MissingLimbs]) return;
     if (prim && !prim.dead && current.clusters.find(c => c.limb === prim.limb)?.alive) soldierWounds.push(w);
   }
   const torsoWounds = opts.boundedWounds ? createTorsoWounds() : null;
@@ -558,7 +560,8 @@ export function createZombieActor(opts: {
     // game push identical carve rows — including the depth-slab normals the
     // lab had ZERO references to before this. The pose is ours to supply: the
     // ring owns the wound DATA, the caller owns the rig it is stamped against.
-    woundRing.refresh(view, posed, bodyYaw, torsoWounds?.visual(posed));
+    const visual=torsoWounds?.visual(posed) ?? (soldierDamage ? soldierVisualWounds(woundRing.all()) : undefined);
+    woundRing.refresh(view, posed, bodyYaw, visual);
   }
 
   function advanceWoundPreview(dt: number): boolean {
@@ -1071,7 +1074,7 @@ export function createZombieActor(opts: {
     damageRevision: () => damageRevision,
     pauseForBake: (paused: boolean) => { bakePaused = paused; },
     wounds: () => woundRing.all(),
-    visualWounds: () => torsoWounds?.visual(posed) ?? woundRing.all(),
+    visualWounds: () => torsoWounds?.visual(posed) ?? (soldierDamage ? soldierVisualWounds(woundRing.all()) : woundRing.all()),
     advanceWoundPreview,
     stampWorldOf: (w: Wound) => woundRing.stampWorldOf(w),
     debug: () => lastDebug ?? {

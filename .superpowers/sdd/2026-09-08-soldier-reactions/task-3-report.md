@@ -1,20 +1,36 @@
 # Task 3 report
 
-## Implemented in this partial handoff
+## Implemented
 
-- Authored a contained, face-sized Soldier cranium and separate jaw.
-- Added a modest three-level paired rib cage, sternum, and rear spine under the armor.
-- Enabled the existing subtractive angular mesh skull sculpt for Soldier under an independent revision while preserving the Zombie branch.
-- Added intent-level Soldier anatomy tests and extended the mesh skull containment/sculpt tests.
+- Authored a contained Soldier cranium and jaw plus three paired rib levels, sternum, and rear spine. The existing mesh skull sculpt now has a separately revisioned Soldier branch and leaves Zombie behavior unchanged.
+- Added Soldier-only render wound lobes. They preserve all real wound rows, add only spare-slot cosmetic rows, use the carve normal's tangent plane for front and side hits, and extend beyond the primary crater rim without entering injury logic.
+- Added localized angular gunmetal at the Soldier skull's left temple and brow through the existing mesh feature attribute and material shader. Zombie feature encoding and appearance remain unchanged.
+- Added fresh-hit armor handling. Each wound object is consumed once, plate bounds are skinned into the current world pose only when new impacts exist, cumulative damage sheds a plate, and severed anatomy still sheds its equipment.
+- Added a deterministic 32-slot billboard spark pool in the existing effects scene. Hit and shed bursts allocate no runtime meshes or materials; the pool hides when empty and resets/disposes with the character.
+- Changed the `hitMeshSkull` debug fixture to trace from outside the posed head through the live flesh SDF and stamp the resolved surface point.
+- Stopped the persistent Soldier injury ledger from appending hits in a limb already classified as structurally missing. Visual wound stamping remains intact.
 
-## Verification
+## Focused verification
 
-`npx vitest run src/lab/sdf-zombie/webgpu/skeleton-spike/mesh-skull.test.ts src/lab/sdf-zombie/characters/soldier-blob.test.ts`
+Run before commit:
 
-Result: 2 files, 8 tests passed.
+```text
+npx vitest run \
+  src/lab/sdf-zombie/characters/soldier-blob.test.ts \
+  src/lab/sdf-zombie/soldier-wounds.test.ts \
+  src/lab/sdf-zombie/webgpu/skeleton-spike/mesh-skull.test.ts \
+  src/lab/sdf-zombie/webgpu/skeleton-spike/mesh-appearance.test.ts \
+  src/lab/sdf-zombie/webgpu/kit-damage.test.ts \
+  src/lab/sdf-zombie/webgpu/character-effects.test.ts \
+  src/lab/sdf-zombie/webgpu/character-view.test.ts \
+  src/lab/sdf-zombie/webgpu/game-actor-soldier.test.ts
+npx tsc --noEmit
+```
 
-No GPU or full build was run in this subtask; the parent owns those checks.
+The focused suite covers authored containment, Soldier/Zombie sculpt gates, front and side ragged offsets, real-row preservation, steel localization, fresh event deduplication, current-pose plate bounds with nonzero body yaw, pool bounds/billboarding/empty visibility/disposal, and existing Soldier damage behavior.
 
-## Remaining Task 3 scope
+## Limits for parent QA
 
-Localized steel shading, Soldier-only cosmetic ragged wound lobes, pose-correct fresh armor events and pooled sparks, and the surface-resolved `hitMeshSkull` fixture remain unimplemented. This commit must be treated as a partial Task 3 handoff.
+- No GPU run or full production build was performed in this task; the parent owns those checks.
+- `boneColor` is useful for Soldier procedural/reference rendering, but the default shared mesh material takes its base bone uniform from the shared renderer setup. Default mesh bloodiness therefore comes primarily from the existing exposure stain, the darker Soldier fat palette, and the new ragged silhouette; GPU QA must judge the final balance.
+- Sparks use a bounded deterministic visual spray from the resolved plate contact. They do not add light sources or change projectile/damage rules.

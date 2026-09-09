@@ -265,6 +265,9 @@ palette
   baseColor     0.522 0.424 0.333
   deepColor     0.50 0.08 0.08
   charColor     0.20 0.12 0.09
+  # Dark, stained exposed structure keeps wounds from reading chalk-white.
+  boneColor     0.52 0.34 0.22
+  fatColor      0.64 0.25 0.18
   specIntensity 0.35
   specRoughness 0.5
   fresnelBoost  1.5

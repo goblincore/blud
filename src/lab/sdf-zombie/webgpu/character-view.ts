@@ -43,7 +43,7 @@ import type { VisualWound } from '../shared-wounds/torso';
 import type { FaceSheetParams } from '../blob-face-sheet';
 import { loadKit, type KitOverlay } from './kit-overlay';
 import { loadHeldProp, type HeldProp } from './held-prop';
-import { createMuzzleFlash } from './character-effects';
+import { createArmorSparks, createMuzzleFlash } from './character-effects';
 import { createEjectionCycle, createShotgunCasings } from './shotgun-casings';
 import { createZombieGpuView, type ZombieGpuView } from './zombie-gpu';
 import {
@@ -471,7 +471,9 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
   let disposed = false;
   const wounds = createWoundRing();
   const muzzleFlash = entry.profile.prop && opts.effectsScene ? createMuzzleFlash() : null;
+  const armorSparks = entry.name === 'soldier' && opts.effectsScene ? createArmorSparks() : null;
   if (muzzleFlash) opts.effectsScene!.add(muzzleFlash.object);
+  if (armorSparks) opts.effectsScene!.add(armorSparks.object);
   const casings = entry.name === 'soldier' ? createShotgunCasings() : null;
   const ejection = createEjectionCycle();
   const ejectOrigin = new THREE.Vector3(), ejectRight = new THREE.Vector3();
@@ -512,7 +514,9 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
         return;
       }
       const frames = boneFrames(body, bound, bodyYaw);
-      kit?.pose(frames, { body, wounds: wounds.all(), dt });
+      const events=kit?.pose(frames, { body, wounds: wounds.all(), bodyYaw, dt }) ?? [];
+      for(const e of events) armorSparks?.burst(e.point,e.kind==='armor-shed'?10:5);
+      armorSparks?.step(dt);
       if (heldProp) {
         if (frame?.gun && !heldProp.released) {
           heldProp.pose(frame.gun, sinceFire, rotateYaw([1, 0, 0], bodyYaw));
@@ -541,6 +545,7 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
     resetEquipment() {
       ejection.reset();
       kit?.resetDamage();
+      armorSparks?.reset();
       heldProp?.reset();
       muzzleFlash?.pose(null, Infinity);
     },
@@ -552,6 +557,7 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
       kit?.dispose();
       heldProp?.dispose();
       muzzleFlash?.dispose();
+      armorSparks?.dispose();
       casings?.dispose();
     },
   };

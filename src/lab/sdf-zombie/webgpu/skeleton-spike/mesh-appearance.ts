@@ -167,6 +167,14 @@ export function skullFeatureMasks(q: Vec3, headFlag = 1): SkullFeatureMasks {
   return { front, sockets, nose, mouth, cavity, upperTeeth, lowerTeeth, teeth: Math.max(upperTeeth, lowerTeeth) };
 }
 
+/** Localized reinforcement visible through the Soldier's left temple/cheek. */
+export function soldierSteelMask(q: Vec3, soldierHead=1): number {
+  const front=smoothstep(0.08,0.42,q[2]);
+  const temple=ellipse(q[0],q[1],-0.48,0.08,0.30,0.42);
+  const brow=ellipse(q[0],q[1],-0.24,0.30,0.42,0.16);
+  return Math.max(temple,brow)*front*soldierHead;
+}
+
 /** Dry gloss floor: dry tissue keeps a barely-there sheen, never a polish. */
 export const MESH_GLOSS_DRY = 0.05;
 /** Gloss at full wetness (glossy patch). */
@@ -259,6 +267,8 @@ export const MESH_SOCKET_VESSEL_WGSL = /* wgsl */ `fn meshSocketVessels(q: vec3<
  * posed segment. feature.xyz is the normalized local frame above, feature.w
  * is 1 for the rigid head source and 0 for every other segment. */
 export const MESH_BONE_SURFACE_WGSL = /* wgsl */ `fn meshBoneSurface(pWorld: vec3<f32>, pLocal: vec3<f32>, feature: vec4<f32>, boneColor: vec3<f32>, deepColor: vec3<f32>, look: vec4<f32>, woundTex: texture_2d<f32>, woundCount: f32) -> vec4<f32> {
+  let headFlag = min(feature.w, 1.0);
+  let soldierHead = step(1.5, feature.w);
   var expo = 0.0;
   for (var i = 0; i < 64; i = i + 1) {
     if (f32(i) >= woundCount) { break; }
@@ -278,24 +288,29 @@ export const MESH_BONE_SURFACE_WGSL = /* wgsl */ `fn meshBoneSurface(pWorld: vec
   let blood = smoothstep(0.50, 0.60, patchT);
   let connect = smoothstep(0.34, 0.48, weave * 0.68 + warp * 0.32) * (1.0 - blood * 0.85);
   let ivory = smoothstep(0.53, 0.65, blotch * 0.5 + grain * 0.5)
-    * (1.0 - blood * 0.85) * (1.0 - feature.w) + feature.w * (0.72 + 0.28 * grain) * (1.0 - blood * 0.85);
+    * (1.0 - blood * 0.85) * (1.0 - headFlag) + headFlag * (0.72 + 0.28 * grain) * (1.0 - blood * 0.85);
   let bloodCol = mix(vec3<f32>(0.055, 0.004, 0.008), deepColor * 0.55, 0.35);
   let connectCol = vec3<f32>(0.62, 0.19, 0.19);
   let ivoryCol = boneColor * vec3<f32>(0.86, 0.74, 0.62);
-  var albedo = mix(vec3<f32>(0.30, 0.085, 0.075), boneColor * vec3<f32>(0.92, 0.86, 0.66), feature.w);
-  albedo = mix(albedo, connectCol, connect * (1.0 - feature.w * 0.70));
+  var albedo = mix(vec3<f32>(0.30, 0.085, 0.075), boneColor * vec3<f32>(0.92, 0.86, 0.66), headFlag);
+  albedo = mix(albedo, connectCol, connect * (1.0 - headFlag * 0.70));
   albedo = mix(albedo, bloodCol, blood);
   albedo = mix(albedo, ivoryCol, ivory * 0.8);
 
   // LOCALIZED skull cavity: a dark blood recess, not a lit convex patch.
   // The mesh sculpt provides real recesses; dark albedo and restrained gloss
   // reinforce those anatomical cavities.
-  let cav = meshSkullCavity(feature.xyz, feature.w);
+  let cav = meshSkullCavity(feature.xyz, headFlag);
+  let steelFront = smoothstep(0.08, 0.42, feature.z);
+  let steelTemple = 1.0 - smoothstep(0.72, 1.0, length(vec2((feature.x + 0.48) / 0.30, (feature.y - 0.08) / 0.42)));
+  let steelBrow = 1.0 - smoothstep(0.72, 1.0, length(vec2((feature.x + 0.24) / 0.42, (feature.y - 0.30) / 0.16)));
+  let steel = max(steelTemple, steelBrow) * steelFront * soldierHead * (1.0 - cav);
+  albedo = mix(albedo, vec3<f32>(0.13, 0.16, 0.17), steel * 0.82);
   albedo = mix(albedo, deepColor * 0.055, cav * 0.92);
 
   // IRREGULAR BRANCHING VESSELS around each seated eye: red tissue markings
   // in the socket ring, painted over the dark recess. Eye-local, front-only.
-  let veins = meshSocketVessels(feature.xyz, feature.w);
+  let veins = meshSocketVessels(feature.xyz, headFlag);
   albedo = mix(albedo, vec3<f32>(0.46, 0.020, 0.030), veins * 0.8);
 
   // TWO tooth rows, front-only via the cavity gate. Upper crowns hang below
@@ -311,7 +326,7 @@ export const MESH_BONE_SURFACE_WGSL = /* wgsl */ `fn meshBoneSurface(pWorld: vec
   // Wound exposure STAIN the attachment dark; it must not wash the crater
   // toward bright pink (that was the mesh-vs-volume brightness gap).
   let stainW = smoothstep(0.18, 0.85, expo) * (0.55 + 0.45 * grain);
-  albedo = mix(albedo, mix(deepColor * 0.45, vec3<f32>(0.28, 0.012, 0.02), grain), stainW * mix(0.55, 0.22, feature.w));
+  albedo = mix(albedo, mix(deepColor * 0.45, vec3<f32>(0.28, 0.012, 0.02), grain), stainW * mix(0.55, 0.22, headFlag));
   return vec4<f32>(albedo, expo);
 }`;
 
@@ -322,10 +337,11 @@ export const MESH_BONE_WET_WGSL = /* wgsl */ `fn meshBoneWet(pLocal: vec3<f32>, 
   let w2 = boneNoise(pLocal * 70.0 + vec3<f32>(19.3, 2.1, 27.4));
   let wet = mix(smoothstep(0.30, 0.68, w1 * 0.62 + w2 * 0.38), 0.9, clamp(expo, 0.0, 1.0) * 0.45);
   var gloss = mix(0.05, 1.0, wet);
-  let cav = meshSkullCavity(feature.xyz, feature.w);
+  let headFlag = min(feature.w, 1.0);
+  let cav = meshSkullCavity(feature.xyz, headFlag);
   gloss = gloss * (1.0 - 0.97 * cav);
   // Socket vessels stay wet inside the matte recess, but only where the
   // vessel field is present — the rest of the cavity remains highlight-free.
-  gloss = max(gloss, meshSocketVessels(feature.xyz, feature.w) * 0.45);
+  gloss = max(gloss, meshSocketVessels(feature.xyz, headFlag) * 0.45);
   return gloss;
 }`;
