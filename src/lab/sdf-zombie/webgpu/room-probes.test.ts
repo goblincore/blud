@@ -44,7 +44,7 @@ describe('roomProbeRequest', () => {
     expect(req.walls.posY).toEqual(room.ceilColor);
     expect(req.light.points).toHaveLength(room.accents.length);
     expect(req.light.points![0]!.pos).toEqual(room.accents[0]!.pos);
-    expect(req.options.occluders).toHaveLength(FURNITURE.filter(f => f.room === room.id).length);
+    expect(req.options!.occluders).toHaveLength(FURNITURE.filter(f => f.room === room.id).length);
     expect(req.box.min[1]).toBe(0);
     expect(req.box.max[1]).toBe(room.height);
   });

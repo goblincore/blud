@@ -162,7 +162,10 @@ resolution: [bodies-style-handoff.md](docs/dev-notes/2026-09-09-perf-spikes/bodi
   times the fill it is the radiosity lift P1 asked to measure.
   [Result](docs/dev-notes/2026-09-09-probe-grid-spike/result.md) ·
   [plan](docs/superpowers/plans/2026-09-09-static-probe-grid-spike.md).
-  Next: body occlusion of probes, flashlight injection, per-room grids in game.
+  **Step 2 shipped ON in the game:** one grid per room baked in a worker at
+  boot (~2 s total), stamped per body at spawn, matched to P1's level.
+  `?probes=0` / `__sdfGame.setProbes(0)` = bit-identical P1. Next: body
+  occlusion of probes, flashlight injection (both dynamic, GPU gather).
 - [x] VHS post-FX wired, ships ON at the owner-tuned **`blud`** preset
   (`VHS_PRESETS.blud`, swept in the panel below 2026-09-09: artefacts up, mush
   down — full intensity + full horizontal blur, noise ~off at 0.005, grade

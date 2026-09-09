@@ -56,3 +56,20 @@ said would need to be measured — and it is available here as one slider.
 1. Body occlusion of probes (proxy capsules), so bodies shadow the floor.
 2. Flashlight injection (the game's dominant light bounces nothing today).
 3. Game-side: one grid per room from the room boxes, gathered at room load.
+
+## Update 2026-09-09 — per-room grids in the game (P3 step 2)
+
+Shipped ON. `room-probes.ts` bakes one 10×4×10 grid per `RoomDef` in a
+module worker at boot (paint colours as albedo, `room.accents` as point
+lights with the same 1/(1+(d/2.2)²) falloff the walls use, that room's
+FURNITURE as occluders, key/fill from `practical-hard-key`), ~125 ms per room,
+all five rooms in ~2 s, and stamps each body's five probe slots at spawn next
+to its enclosure. Gain defaults to each room's matched level at 4× the fill
+(the level of today's P1 at ambientGain 4), so brightness is unchanged and
+only the ambient's direction and hue move. `?probes=0` or
+`__sdfGame.setProbes(0)` is the bit-identical P1 path; `setProbes(1, g)`
+overrides the gain. Verified in real Chrome: five bakes logged, zero errors,
+toggling weight restores the P1 frame; the effect on a lit body is subtle
+under the flashlight (the key dominates) and shows on the shadow side.
+
+Not done: body occlusion of probes, flashlight injection (both dynamic).
