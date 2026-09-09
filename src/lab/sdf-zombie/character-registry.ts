@@ -242,10 +242,11 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
   },
   gnasher: {
     name: 'gnasher', src: gnasherBlobSrc,
-    // Flesh only for now; the horns/tusks kit (gnasher-kit.gltf) and the
-    // generated mouth decal land in their own commits — this entry is flipped
-    // to name them once the files exist, never before (the minotaur lesson:
-    // the lab 404s a declared-but-absent asset silently).
+    // Flesh in the .blob; the horns and forearm tusks are the kit, compiled
+    // from gnasher-kit.wam into a committed glTF (build-wam-kit.sh gnasher).
+    // The face stays GEOMETRY (no decal): the maw, teeth and eyes are prims,
+    // so `face` is the flat nub and no `image` is declared.
+    kit: '/assets/lab/gnasher-kit.gltf',
     face: ZOMBIE_FLAT,
     profile: motionProfileFor('gnasher'),
   },

@@ -188,18 +188,22 @@ describe('gnasher.blob', () => {
     expect(entry.src).toBe(src);
   });
 
-  // Raw-meat brute hide, NOT the zombie's pink and not the minotaur's bright
-  // wet pink. Asserted loosely so art direction stays free, but the invariant
-  // that matters is that the block EXISTS and sets the things no stock preset
-  // sets (a nonzero mottle, a red wound interior).
-  it('wears its own dark raw-meat palette rather than a stock preset', () => {
+  // Raw-meat flesh, and ROUND 2 (owner, 2026-09-08 r2): PINK, not the mud the
+  // r1 base rendered as. So the invariant is a warm pink — red dominant over
+  // green, blue ABOVE green (pink, not brick) — and bright enough to be flesh
+  // rather than dirt, but not the minotaur's bright wet pink: matte, not gloss.
+  // Asserted loosely so art direction stays free, but the block EXISTS and sets
+  // the things no stock preset sets (a nonzero mottle, a red wound interior).
+  it('wears its own pink raw-meat palette rather than a stock preset', () => {
     const m = compilePalette(doc);
     expect(m).not.toBeNull();
     const [r, g, b] = m!.baseColor;
-    expect(r).toBeGreaterThan(g);        // red-brown, not green
-    expect(g).toBeGreaterThanOrEqual(b); // ...and not pink
-    expect(r).toBeLessThan(0.45);        // dark, grimy hide
+    expect(r).toBeGreaterThan(g);         // red-dominant flesh, not green
+    expect(b).toBeGreaterThan(g);         // ROUND 2: PINK — blue above green
+    expect(r).toBeGreaterThan(0.5);       // ...and clearly brighter than the r1 mud
+    expect(r).toBeLessThan(0.85);         // not the minotaur's near-white hot pink
     expect(m!.mottleAmp).toBeGreaterThan(0.3);
     expect(m!.deepColor[0]).toBeGreaterThan(m!.deepColor[1]); // wounds stay red
+    expect(m!.specRoughness).toBeGreaterThan(0.4); // matte, not wet gloss
   });
 });
