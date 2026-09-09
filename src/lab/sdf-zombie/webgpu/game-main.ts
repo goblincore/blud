@@ -1,5 +1,5 @@
 import { createEncounterNavigation } from './encounter-navigation';
-import { createEncounterDirector, type EncounterAgent } from './encounter-director';
+import { createEncounterDirector, clearSight, type EncounterAgent } from './encounter-director';
 import { createSoldierCorpseBakes } from './soldier-corpse-bake';
 import { buildNormalBodyPointFn } from './normal-gradient.wgsl';
 import { finiteGradient, woundGradient, type V3, type WoundInput } from './normal-gradient-reference';
@@ -918,7 +918,8 @@ async function main() {
     // frame's bodies and chunks. With the gate off the lists are not walked.
     // LEGACY ONLY — the deferred mode's SDF producer pass is fed by the
     // router, not by sdf-layer's body list.
-    sdfLayer.setBodies(actors.map(a => a.view.object), chunkObjects());
+    updateVisibleActors();
+    sdfLayer.setBodies(visibleActors.map(a => a.view.object), chunkObjects());
     if (gooEnabled && gooLayer) {
       gooLayer.render(camera, () => sdfLayer.render(scene, camera));
     } else {
@@ -3351,18 +3352,78 @@ async function main() {
   const projScreen = new THREE.Matrix4();
   const bodySphere = new THREE.Sphere(new THREE.Vector3(), 1.1);
 
-  function bodiesOnScreen(): number {
+  // ---- ACTOR VISIBILITY CULL (2026-09-09) --------------------------------
+  //
+  // Before this, `setBodies` took EVERY actor in the level. The SDF proxy
+  // boxes ship `frustumCulled = false` ("the proxy IS the bound") so three
+  // culls nothing, and the GPU occluder pre-pass has been off since
+  // 2026-09-01 — so an enemy behind you, or behind a wall, marched like any
+  // other. That matters more than it used to: enemies now pursue across
+  // rooms, so the player's room holds more bodies than it spawns (bench
+  // census: room 3 spawns 3, saw 8).
+  //
+  // WHAT THIS IS NOT. Phase 0 measured the mesh-skeleton path at 0.5 ms and
+  // the encounter director at 0.2 ms, so there is deliberately NO simulation
+  // LOD here — AI, motion and rig run for every actor exactly as before, and
+  // cross-room pursuit is untouched. This culls only what gets MARCHED, which
+  // is 75-83% of the frame.
+  //
+  // WHERE THE WIN ACTUALLY IS. An off-screen proxy box clips to no fragments
+  // and was already nearly free, so the frustum half buys little on its own.
+  // The occluded case is the real one: on-screen but behind a wall, which
+  // rasterises a full box and marches it. Hence the clearSight test.
+  //
+  // SAFETY. A wrongly culled visible body is a visible bug; a wrongly kept one
+  // is only a cost. So: two sight probes (torso and head — a body leaning out
+  // from cover shows its head first), and becoming visible is INSTANT while
+  // going invisible must persist for CULL_DWELL_MS. Both biases point at
+  // drawing too much, never too little.
+  const CULL_DWELL_MS = 250;
+  /** id -> the last time this actor was seen. Keyed by id, not index: actors
+   *  are spawned and gibbed, and an index would transfer one body's grace
+   *  period to another. */
+  const lastSeenMs = new Map<number, number>();
+  let actorCullEnabled = true;
+  let visibleActors: ZombieActor[] = [];
+  const cullCounts = { visible: 0, total: 0 };
+  const sightA: [number, number, number] = [0, 0, 0];
+
+  /** Recompute this frame's visible set. Called once, before the draw. */
+  function updateVisibleActors(): void {
+    const now = performance.now();
+    cullCounts.total = actors.length;
+    if (!actorCullEnabled) {
+      visibleActors = actors;
+      cullCounts.visible = actors.length;
+      return;
+    }
     projScreen.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     frustum.setFromProjectionMatrix(projScreen);
-    let n = 0;
+    sightA[0] = camera.position.x; sightA[1] = camera.position.y; sightA[2] = camera.position.z;
+    const out: ZombieActor[] = [];
     for (const a of actors) {
       const torso = a.posed().clusters.find(c => c.limb === 'torso');
-      if (!torso) continue;
-      bodySphere.center.set(torso.center[0], torso.center[1], torso.center[2]);
-      if (frustum.intersectsSphere(bodySphere)) n++;
+      // No torso cluster (mid-gib, exotic body): never cull what we cannot
+      // measure — fall back to drawing it.
+      if (!torso) { out.push(a); lastSeenMs.set(a.id, now); continue; }
+      const c = torso.center;
+      bodySphere.center.set(c[0], c[1], c[2]);
+      let seen = frustum.intersectsSphere(bodySphere);
+      if (seen) {
+        // Two probes: torso centre, then a head-height point. A body edging
+        // out of cover reveals its head before its chest.
+        const head: Vec3 = [c[0], c[1] + 0.6, c[2]];
+        seen = clearSight(sightA, c as Vec3, colliders) || clearSight(sightA, head, colliders);
+      }
+      if (seen) lastSeenMs.set(a.id, now);
+      const since = now - (lastSeenMs.get(a.id) ?? -Infinity);
+      if (seen || since < CULL_DWELL_MS) out.push(a);
     }
-    return n;
+    visibleActors = out;
+    cullCounts.visible = out.length;
   }
+
+  function bodiesOnScreen(): number { return cullCounts.visible; }
 
   function updateHud() {
     if (!hudEl) return;
@@ -6719,6 +6780,10 @@ async function main() {
     get sdfScale() { return sdfScale; },
     get sdfTarget() { return sdfLayer.targetSize; },
     /** Adaptive resolution ladder — default OFF so the chosen rung ships. */
+    /** A/B seam for the actor visibility cull (ships ON). The bench's
+     *  `actor-cull-off` leg is the "before" column. */
+    setActorCull(on: boolean) { actorCullEnabled = on; if (!on) lastSeenMs.clear(); },
+    actorCull: () => ({ enabled: actorCullEnabled, ...cullCounts }),
     setAdaptive(on: boolean, budgetMs?: number) {
       adaptiveEnabled = on;
       if (budgetMs !== undefined) adaptiveBudgetMs = budgetMs;
