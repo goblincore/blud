@@ -124,21 +124,33 @@ describe('soldier actor combat wiring', () => {
 
   it('does not emit melee contact on the frame lethal damage collapses the Soldier', () => {
     const b = severLimb(buildBody(compileBlob(parseBlob(soldierSrc))), 'armR').body;
-    const contact = vi.fn();
-    const { actor } = soldier([], undefined, b, contact);
-    actor.setRingInput(true, 0);
-    for (let i = 0; i < 19; i++) {
+    const liveContact = vi.fn(), killedContact = vi.fn();
+    const live = soldier([], undefined, b, liveContact).actor;
+    const killed = soldier([], undefined, b, killedContact).actor;
+    const advanceToContactEdge = (actor: typeof live) => {
+      actor.setRingInput(true, 0);
+      while (actor.debug().swingT < .47) {
+        actor.setBrainInput({ x: 0, z: 1, room: 1 }, true);
+        actor.step(1 / 60);
+      }
+      expect(actor.debug().swingT).toBeGreaterThanOrEqual(.47);
+      expect(actor.debug().swingT).toBeLessThan(.5);
+    };
+    advanceToContactEdge(live);
+    advanceToContactEdge(killed);
+    const skull = killed.posed().prims.find(p => p.bone === 'skull')!;
+    const lethal = woundFromSlug(killed.posed().prims,
+      [skull.a[0], skull.a[1], skull.a[2] + skull.radius], () => 0);
+    lethal.shot = { weapon: 'explosion' };
+    killed.stampBlast([lethal]);
+    for (const actor of [live, killed]) {
       actor.setBrainInput({ x: 0, z: 1, room: 1 }, true);
       actor.step(1 / 60);
     }
-    expect(actor.debug().swingT).toBeGreaterThan(0);
-    expect(actor.debug().swingT).toBeLessThan(.5);
-    expect(contact).not.toHaveBeenCalled();
-    for (let i = 0; i < 24; i++) hitLimb(actor, 'chest');
-    actor.setBrainInput({ x: 0, z: 1, room: 1 }, true);
-    actor.step(1 / 60);
-    expect(actor.motionFrame()!.collapsed).toBe(true);
-    expect(contact).not.toHaveBeenCalled();
+    expect(liveContact).toHaveBeenCalledTimes(1);
+    expect(live.motionFrame()!.collapsed).toBe(false);
+    expect(killed.motionFrame()!.collapsed).toBe(true);
+    expect(killedContact).not.toHaveBeenCalled();
   });
 
   it('survives a full double torso volley; further damage stays cumulative after visual wound eviction', () => {
