@@ -20,6 +20,16 @@
 //   writes). Hides temporal edge crawl and gives the subtle PSX-video motion
 //   blur the owner asked for; ghosting on fast gibs is accepted (and liked).
 //
+//   VHS — the club-mutant soft pipeline ported to WGSL (post-vhs.ts), default
+//   OFF. While a preset is active it runs AFTER FXAA and REPLACES smear: it
+//   owns temporal blending (effective smear 0) but the user's smear SETTING is
+//   preserved, so turning it off restores today's look exactly. It reads a
+//   DEDICATED input ping-pong (the previous INPUT, never its own output — the
+//   motion gate would otherwise latch on the previous frame's chroma split).
+//   The pair is LinearFilter because POST_VHS_WGSL samples with textureSample
+//   and three emits no sampler for a nearest/nearest target; the smear pair
+//   stays NearestFilter and is not reused.
+//
 //   BLIT — the final copy to the canvas. Sharp-upscale OFF: a straight copy
 //   (canvas == content size; CSS does the nearest upscale as today). Sharp
 //   upscale ON: the canvas backing grows to the window and the blit does a
@@ -41,9 +51,10 @@
 // nodes/display/ColorSpaceFunctions.js — anything else would add or remove
 // an encode.
 //
-// ALL-OFF PARITY (the hard gate): with fxaa off, smear 0 and sharp upscale
-// off, render() drops the redirect and calls the chain straight through —
-// bit-identical to the pre-post-aa draw path, not a copy of it.
+// ALL-OFF PARITY (the hard gate): with fxaa off, smear 0, sharp upscale off
+// and VHS off (the default), render() drops the redirect and calls the chain
+// straight through — bit-identical to the pre-post-aa draw path, not a copy
+// of it. The VHS material is never bound on that path.
 //
 // Render-target discipline copied from sdf-layer/goo-layer: explicit first
 // clear after every (re)allocation (the lazy-init same-encoder trap),
@@ -67,6 +78,13 @@ import { wgslFn, texture, uv, vec2, vec4, uniform } from 'three/tsl';
 import { computeRenderSize, canvasCssSize } from './lab-renderer';
 import { FISHEYE_WGSL, makeLens, type Lens } from './fisheye';
 import { setPassLabel } from './gpu-pass-timing';
+import {
+  POST_VHS_WGSL,
+  VHS_PRESETS,
+  effectiveSmear as vhsEffectiveSmear,
+  type VhsPreset,
+  type VhsTerms,
+} from './post-vhs';
 
 /** The owner-approved defaults: FXAA on, modest smear, nearest upscale. */
 export const POST_AA_DEFAULTS = {
@@ -77,6 +95,27 @@ export const POST_AA_DEFAULTS = {
 
 /** Panel slider ceiling — 0.6 is heavy ghosting, beyond is a smear trail. */
 export const POST_AA_SMEAR_MAX = 0.6;
+
+/**
+ * The club-mutant slider ranges, copied from SoftPostFxPipeline.ts's setters
+ * (the port's source of truth). `setVhsTerm` clamps to these so a console
+ * override can never push a term outside what the source pipeline accepted.
+ */
+export const VHS_TERM_RANGES: Record<keyof VhsTerms, readonly [number, number]> = {
+  intensity: [0, 1],
+  blurAmount: [0, 1],
+  noiseAmount: [0, 0.25],
+  gradeAmount: [0, 1],
+  warpAmount: [0, 20],
+  warpFrequency: [0, 20],
+  warpSpeed: [0, 5],
+  chromaAmount: [0, 10],
+  chromaJitter: [0, 10],
+  motionThreshold: [0, 1],
+  chromaBurstChance: [0, 1],
+  chromaBurstStrength: [0, 2],
+  chromaBurstRate: [0, 60],
+};
 
 /**
  * The FXAA pass. Lottes' reduced kernel: a 3x3 luma cross gives the edge
@@ -194,6 +233,26 @@ fn postAaOetf(c: vec3<f32>) -> vec3<f32> {
   let hi = pow(cc, vec3<f32>(0.41666, 0.41666, 0.41666)) * 1.055 - vec3<f32>(0.055, 0.055, 0.055);
   let lo = cc * 12.92;
   return select(hi, lo, cc <= vec3<f32>(0.0031308, 0.0031308, 0.0031308));
+}`;
+
+/**
+ * The VHS input-history copy: a RAW texel copy of the current chain source
+ * (the FXAA output, or the capture when FXAA is off) into the VHS input
+ * ping-pong. Raw — no OETF — because POST_VHS_WGSL's own `isDisplay` flag
+ * decides whether a tap needs encoding; the pair must hold exactly what the
+ * source held. textureLoad like its siblings (integer fetches, no sampler),
+ * entry-flipped so the pair keeps the capture orientation every target does.
+ */
+export const POST_AA_COPY_WGSL = /* wgsl */ `fn postAaCopy(
+  srcTex: texture_2d<f32>,
+  texCoord: vec2<f32>
+) -> vec4<f32> {
+  let dimsF = vec2<f32>(textureDimensions(srcTex, 0));
+  let maxP = vec2<i32>(dimsF) - vec2<i32>(1, 1);
+  // Entry flip, the module invariant (see the file header).
+  let tc = vec2<f32>(texCoord.x, 1.0 - texCoord.y);
+  let px = clamp(vec2<i32>(floor(tc * dimsF)), vec2<i32>(0, 0), maxP);
+  return vec4<f32>(textureLoad(srcTex, px, 0).rgb, 1.0);
 }`;
 
 /**
@@ -329,6 +388,15 @@ export interface PostAa {
   /** Exponential history blend, 0..POST_AA_SMEAR_MAX. */
   setSmear(v: number): void;
   /**
+   * The VHS stage, default OFF. While on it runs AFTER FXAA (or as the entry
+   * pass if FXAA is off) and REPLACES the smear pass — it owns temporal
+   * blending, so the chain's effective smear is 0. The user's smear SETTING is
+   * preserved, so setVhs(null) restores today's look exactly.
+   */
+  setVhs(preset: VhsPreset | null): void;
+  /** A live term override, clamped to VHS_TERM_RANGES. */
+  setVhsTerm(name: keyof VhsTerms, value: number): void;
+  /**
    * Sharp-bilinear final upscale. Grows the canvas backing to the window and
    * filters texel borders in the blit; off restores the capped canvas and
    * the CSS nearest stretch (today's look).
@@ -347,6 +415,14 @@ export interface PostAa {
   readonly lens: Lens;
   readonly fxaa: boolean;
   readonly smear: number;
+  /** The active preset, or null while the VHS stage is off (the default). */
+  readonly vhs: VhsPreset | null;
+  /** The live term values (the preset's, until setVhsTerm overrides one). */
+  readonly vhsTerms: VhsTerms;
+  /** 0 while VHS owns temporal blending, the user's smear setting otherwise. */
+  readonly effectiveSmear: number;
+  /** Whether the last blit read a display-encoded source (diagnostic). */
+  readonly blitSrcIsDisplay: boolean;
   readonly sharpUpscale: boolean;
   /**
    * The capped internal size everything except the final blit runs at,
@@ -389,6 +465,29 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   const histA = new THREE.RenderTarget(1, 1, passOpts);
   const histB = new THREE.RenderTarget(1, 1, passOpts);
 
+  // --- VHS stage (default OFF) -----------------------------------------
+  // The VHS INPUT history is a SECOND ping-pong pair, deliberately NOT
+  // histA/histB. The VHS motion gate compares the current frame against the
+  // previous INPUT; if prevTex were the pass's own output, the previous
+  // frame's chroma split alone would exceed motionThreshold near every edge
+  // and latch the gate on. The pair is LinearFilter rather than the smear
+  // pair's NearestFilter, for a hard binding reason: three refuses to emit a
+  // `<tex>_sampler` for a nearest/nearest target (WGSLNodeBuilder
+  // .isUnfilterable), and POST_VHS_WGSL samples with textureSample at
+  // sub-texel warp/chroma offsets — exactly the Phaser source's default
+  // linear sampler. rgba16float is filterable in WebGPU, so the sampler is
+  // valid. `vhsTarget` is the pass's output; the blit reads it with
+  // textureLoad, so its nearest filter is irrelevant.
+  const vhsPairOpts = {
+    depthBuffer: false,
+    type: THREE.HalfFloatType,
+    minFilter: THREE.LinearFilter,
+    magFilter: THREE.LinearFilter,
+  } as const;
+  const vhsInA = new THREE.RenderTarget(1, 1, vhsPairOpts);
+  const vhsInB = new THREE.RenderTarget(1, 1, vhsPairOpts);
+  const vhsTarget = new THREE.RenderTarget(1, 1, passOpts);
+
   // The single canvas-boundary flip. Stays a uniform as a console escape
   // hatch (setBlitFlipY) — the intermediate passes flip their own sampling
   // so this is correct for every toggle combination at 1.
@@ -414,6 +513,37 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   // construction-time refit() onward; k = 0 is the off switch (an exact
   // identity in the blit) whatever rmax and aspect happen to be.
   const uLens = uniform(new THREE.Vector3(0, 0, 0));
+
+  // --- VHS state. Every field below is inert while `vhsPreset` is null, and
+  // null is the default: the all-off path must not even bind the material. --
+  let vhsPreset: VhsPreset | null = null;
+  /** The input-history half the next VHS pass READS (the other is written). */
+  let vhsRead = vhsInA;
+  let vhsWrite = vhsInB;
+  /** False while the input history holds a stale/garbage frame -> hasPrev 0. */
+  let vhsInputValid = false;
+  /** Last blit source encoding — diagnostic only, see the interface. */
+  let blitSrcIsDisplay = false;
+  const uVhsTime = uniform(0);
+  const uVhsHasPrev = uniform(0);
+  const uVhsIsDisplay = uniform(0);
+  // One uniform per VhsTerms key, written by setVhs/setVhsTerm. Initialised to
+  // 0 because they are never bound while the preset is null.
+  const vhsTermUniforms = {
+    intensity: uniform(0),
+    blurAmount: uniform(0),
+    noiseAmount: uniform(0),
+    gradeAmount: uniform(0),
+    warpAmount: uniform(0),
+    warpFrequency: uniform(0),
+    warpSpeed: uniform(0),
+    chromaAmount: uniform(0),
+    chromaJitter: uniform(0),
+    motionThreshold: uniform(0),
+    chromaBurstChance: uniform(0),
+    chromaBurstStrength: uniform(0),
+    chromaBurstRate: uniform(0),
+  };
 
   // One quad scene per pass, the sdf-layer shape: ortho camera at z = 1 so
   // the plane at z = 0 sits inside [0, 1] rather than on the near plane.
@@ -441,6 +571,7 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     texCoord: uv(),
   }) as unknown as Swizzled;
   const fxaaMat = new MeshBasicNodeMaterial();
+  fxaaMat.name = 'post:fxaa';
   fxaaMat.colorNode = vec4(fxaaOut.xyz as never, 1.0);
   fxaaMat.depthWrite = false;
   fxaaMat.depthTest = false;
@@ -454,11 +585,64 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     cfg: uBlendCfg,
   }) as unknown as Swizzled;
   const blendMat = new MeshBasicNodeMaterial();
+  blendMat.name = 'post:smear';
   blendMat.colorNode = vec4(blendOut.xyz as never, 1.0);
   blendMat.depthWrite = false;
   blendMat.depthTest = false;
   blendMat.fog = false;
   const blendScene = quadScene(blendMat);
+
+  // The VHS input-history copy. Built from POST_AA_COPY_WGSL (textureLoad, no
+  // sampler) and only ever rendered while a preset is active.
+  const vhsCopySrcTex = texture(sceneTarget.texture);
+  const vhsCopyOut = wgslFn(POST_AA_COPY_WGSL)({
+    srcTex: vhsCopySrcTex,
+    texCoord: uv(),
+  }) as unknown as Swizzled;
+  const vhsCopyMat = new MeshBasicNodeMaterial();
+  vhsCopyMat.name = 'post:vhs-input';
+  vhsCopyMat.colorNode = vec4(vhsCopyOut.xyz as never, 1.0);
+  vhsCopyMat.depthWrite = false;
+  vhsCopyMat.depthTest = false;
+  vhsCopyMat.fog = false;
+  const vhsCopyScene = quadScene(vhsCopyMat);
+
+  // The VHS pass itself. `tex` is the CURRENT input (the pair write half just
+  // filled by the copy) and `prevTex` the PREVIOUS input — never this pass's
+  // own output. The texture node doubles as the `samp` argument: three builds
+  // a sampler-typed input from it as `<tex>_sampler`, which exists because the
+  // pair is LinearFilter (see the pair's comment above).
+  const vhsCurTex = texture(vhsInA.texture);
+  const vhsPrevTex = texture(vhsInA.texture);
+  const vhsOut = wgslFn(POST_VHS_WGSL)({
+    tex: vhsCurTex,
+    samp: vhsCurTex,
+    prevTex: vhsPrevTex,
+    uv: uv(),
+    time: uVhsTime,
+    hasPrev: uVhsHasPrev,
+    isDisplay: uVhsIsDisplay,
+    intensity: vhsTermUniforms.intensity,
+    blurAmount: vhsTermUniforms.blurAmount,
+    noiseAmount: vhsTermUniforms.noiseAmount,
+    gradeAmount: vhsTermUniforms.gradeAmount,
+    warpAmount: vhsTermUniforms.warpAmount,
+    warpFrequency: vhsTermUniforms.warpFrequency,
+    warpSpeed: vhsTermUniforms.warpSpeed,
+    chromaAmount: vhsTermUniforms.chromaAmount,
+    chromaJitter: vhsTermUniforms.chromaJitter,
+    motionThreshold: vhsTermUniforms.motionThreshold,
+    chromaBurstChance: vhsTermUniforms.chromaBurstChance,
+    chromaBurstStrength: vhsTermUniforms.chromaBurstStrength,
+    chromaBurstRate: vhsTermUniforms.chromaBurstRate,
+  }) as unknown as Swizzled;
+  const vhsMat = new MeshBasicNodeMaterial();
+  vhsMat.name = 'post:vhs';
+  vhsMat.colorNode = vec4(vhsOut.xyz as never, 1.0);
+  vhsMat.depthWrite = false;
+  vhsMat.depthTest = false;
+  vhsMat.fog = false;
+  const vhsScene = quadScene(vhsMat);
 
   const blitOut = wgslFn(POST_AA_BLIT_WGSL)({
     srcTex: blitSrcTex,
@@ -468,6 +652,7 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     lens: uLens,
   }) as unknown as Swizzled;
   const blitMat = new MeshBasicNodeMaterial();
+  blitMat.name = 'post:blit';
   blitMat.colorNode = vec4(blitOut.xyz as never, 1.0);
   blitMat.depthWrite = false;
   blitMat.depthTest = false;
@@ -537,10 +722,14 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     fxaaTarget.setSize(content.width, content.height);
     histA.setSize(content.width, content.height);
     histB.setSize(content.width, content.height);
+    vhsInA.setSize(content.width, content.height);
+    vhsInB.setSize(content.width, content.height);
+    vhsTarget.setSize(content.width, content.height);
     // setSize reallocates the backing textures: uninitialised again, and the
     // old history is the wrong size besides.
     targetsNeedInit = true;
     historyValid = false;
+    vhsInputValid = false;
     recomputeLens();
   }
   refit();
@@ -551,9 +740,11 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   return {
     render(chain) {
       const smear = uSmear.value;
+      const vhsOn = vhsPreset !== null;
       // A narrowing lens is an effect like any other: it needs the capture
       // redirect, because the blit has to sample a texture rather than be one.
-      const active = fxaaOn || smear > 0 || sharpOn || lens.k > 0;
+      // VHS is a stage too, so it forces the redirected chain even alone.
+      const active = fxaaOn || smear > 0 || sharpOn || lens.k > 0 || vhsOn;
       if (!active) {
         // The parity path: hand the canvas straight back to the chain.
         if (redirected) {
@@ -571,7 +762,7 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       if (targetsNeedInit) {
         targetsNeedInit = false;
         setPassLabel('init');
-        for (const t of [sceneTarget, fxaaTarget, histA, histB]) {
+        for (const t of [sceneTarget, fxaaTarget, histA, histB, vhsInA, vhsInB, vhsTarget]) {
           renderer.setRenderTarget(t);
           void renderer.render(emptyScene, quadCam);
         }
@@ -591,9 +782,36 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
         srcIsDisplay = true;
       }
 
-      // Smear: mix into the write half of the ping-pong, then swap so the
-      // next frame reads what this frame produced.
-      if (smear > 0) {
+      if (vhsOn) {
+        // Copy the current input into the VHS input history — RAW, so the pair
+        // holds exactly the space `src` did. The VHS pass then reads this
+        // frame's input as `tex` and the PREVIOUS input as `prevTex`: the
+        // motion gate must never see the pass's own output (its previous
+        // chroma split would exceed the threshold at every edge and latch on).
+        vhsCopySrcTex.value = src.texture;
+        setPassLabel('post:vhs-input');
+        renderer.setRenderTarget(vhsWrite);
+        void renderer.render(vhsCopyScene, quadCam);
+
+        vhsCurTex.value = vhsWrite.texture;
+        vhsPrevTex.value = vhsRead.texture;
+        uVhsTime.value = performance.now() / 1000;
+        uVhsHasPrev.value = vhsInputValid ? 1 : 0;
+        uVhsIsDisplay.value = srcIsDisplay ? 1 : 0;
+        setPassLabel('post:vhs');
+        renderer.setRenderTarget(vhsTarget);
+        void renderer.render(vhsScene, quadCam);
+        const t = vhsRead;
+        vhsRead = vhsWrite;
+        vhsWrite = t;
+        vhsInputValid = true;
+
+        // VHS output is display-encoded (it graded the taps itself), and VHS
+        // OWNS temporal blending: smear is suppressed to 0 while it is on.
+        src = vhsTarget;
+        srcIsDisplay = true;
+        historyValid = false;
+      } else if (smear > 0) {
         blendCurTex.value = src.texture;
         blendHistTex.value = histRead.texture;
         uBlendCfg.value.set(historyValid ? smear : 0, srcIsDisplay ? 1 : 0);
@@ -617,6 +835,7 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       blitSrcTex.value = src.texture;
       renderer.getDrawingBufferSize(drawSize);
       uBlitCfg.value.set(uFlipY.value, srcIsDisplay ? 1 : 0, sharpOn ? 1 : 0, 0);
+      blitSrcIsDisplay = srcIsDisplay;
       uBlitDst.value.set(drawSize.x, drawSize.y);
       setPassLabel('post:blit');
       renderer.setRenderTarget(null);
@@ -641,7 +860,12 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       // "fix" it — a toggle flips `redirected` and re-runs the loop above.
       if (redirected) s.setOutputTarget(sceneTarget);
     },
-    setFxaa(on) { fxaaOn = on; },
+    setFxaa(on) {
+      fxaaOn = on;
+      // The VHS input pair holds the previous frame's ENCODING; toggling FXAA
+      // changes the source's space, so re-seed rather than compare across it.
+      vhsInputValid = false;
+    },
     setSmear(v) { uSmear.value = Math.max(0, Math.min(POST_AA_SMEAR_MAX, v)); },
     setLens(renderFovDeg, centerFovDeg) {
       lensRenderFov = renderFovDeg;
@@ -655,6 +879,32 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       refit();
     },
     setBlitFlipY(on) { uFlipY.value = on ? 1 : 0; },
+    setVhs(preset) {
+      vhsPreset = preset;
+      // The pair's contents are stale after an off stretch (and after a preset
+      // change the look jumps), so the next VHS frame seeds at hasPrev 0.
+      vhsInputValid = false;
+      if (preset !== null) {
+        const terms = VHS_PRESETS[preset];
+        for (const k of Object.keys(terms) as (keyof VhsTerms)[]) {
+          vhsTermUniforms[k].value = terms[k];
+        }
+      }
+    },
+    setVhsTerm(name, value) {
+      const [lo, hi] = VHS_TERM_RANGES[name];
+      vhsTermUniforms[name].value = Math.max(lo, Math.min(hi, value));
+    },
+    get vhs() { return vhsPreset; },
+    get vhsTerms() {
+      const out = {} as VhsTerms;
+      for (const k of Object.keys(vhsTermUniforms) as (keyof VhsTerms)[]) {
+        out[k] = vhsTermUniforms[k].value;
+      }
+      return out;
+    },
+    get effectiveSmear() { return vhsEffectiveSmear(uSmear.value, vhsPreset !== null); },
+    get blitSrcIsDisplay() { return blitSrcIsDisplay; },
     get fxaa() { return fxaaOn; },
     get smear() { return uSmear.value; },
     get sharpUpscale() { return sharpOn; },
@@ -667,8 +917,13 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       fxaaTarget.dispose();
       histA.dispose();
       histB.dispose();
+      vhsInA.dispose();
+      vhsInB.dispose();
+      vhsTarget.dispose();
       fxaaMat.dispose();
       blendMat.dispose();
+      vhsCopyMat.dispose();
+      vhsMat.dispose();
       blitMat.dispose();
     },
   };

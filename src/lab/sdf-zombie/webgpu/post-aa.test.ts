@@ -14,9 +14,11 @@ import { readFileSync } from 'node:fs';
 import * as THREE from 'three/webgpu';
 import {
   POST_AA_DEFAULTS, POST_AA_SMEAR_MAX,
-  POST_AA_FXAA_WGSL, POST_AA_BLEND_WGSL, POST_AA_BLIT_WGSL,
+  POST_AA_FXAA_WGSL, POST_AA_BLEND_WGSL, POST_AA_BLIT_WGSL, POST_AA_COPY_WGSL,
+  VHS_TERM_RANGES,
   createPostAa,
 } from './post-aa';
+import { POST_VHS_WGSL, VHS_PRESETS } from './post-vhs';
 import { getRenderCap, setRenderCap } from './lab-renderer';
 
 /** The reserved words WGSL reserves even without implementing (spec appendix). */
@@ -172,7 +174,9 @@ describe('post-aa module wiring', () => {
   });
 
   it('every target gets the explicit first clear after (re)allocation', () => {
-    expect(src).toContain('for (const t of [sceneTarget, fxaaTarget, histA, histB])');
+    expect(src).toContain(
+      'for (const t of [sceneTarget, fxaaTarget, histA, histB, vhsInA, vhsInB, vhsTarget])',
+    );
     expect(src).toContain('targetsNeedInit = true;');
   });
 
@@ -215,22 +219,55 @@ describe('post-aa module wiring', () => {
         .map(x => x[1]!)
         .sort();
     };
-    for (const [name, wgsl] of Object.entries(ALL_WGSL)) {
-      const constName = `POST_AA_${name.toUpperCase()}_WGSL`;
+    const callSites: Array<[string, string]> = [
+      ['POST_AA_FXAA_WGSL', POST_AA_FXAA_WGSL],
+      ['POST_AA_BLEND_WGSL', POST_AA_BLEND_WGSL],
+      ['POST_AA_BLIT_WGSL', POST_AA_BLIT_WGSL],
+      ['POST_AA_COPY_WGSL', POST_AA_COPY_WGSL],
+      // The VHS stage binds by name too, sampler included: three's wgslFn
+      // resolves keys against the parsed header, so a missing `samp` would be
+      // silently unbound (and generateInput would substitute float(0)).
+      ['POST_VHS_WGSL', POST_VHS_WGSL],
+    ];
+    for (const [constName, wgsl] of callSites) {
       expect(callSiteKeys(constName)).toEqual(headerParams(wgsl));
     }
   });
+
+  it('the VHS stage owns a filterable input pair, never histA/histB', () => {
+    // three emits NO <tex>_sampler for a nearest/nearest target
+    // (WGSLNodeBuilder.isUnfilterable), so POST_VHS_WGSL's textureSample
+    // needs the pair to be LinearFilter; and the motion gate must read a
+    // dedicated INPUT pair — the smear history is the pass's own output
+    // family and would latch the gate on.
+    expect(src).toMatch(/const vhsInA = new THREE\.RenderTarget\(1, 1, vhsPairOpts\);/);
+    expect(src).toMatch(/const vhsInB = new THREE\.RenderTarget\(1, 1, vhsPairOpts\);/);
+    expect(src).toMatch(/vhsPairOpts = \{[\s\S]*?minFilter: THREE\.LinearFilter[\s\S]*?\}/);
+    expect(src).toContain('samp: vhsCurTex');
+    expect(src).toContain('vhsCurTex.value = vhsWrite.texture');
+    expect(src).toContain('vhsPrevTex.value = vhsRead.texture');
+    expect(src).not.toMatch(/vhsPrevTex\.value = hist(Read|A|B)\.texture/);
+  });
 });
 
-/** A renderer stand-in: the all-off path must not touch it at all. */
+/**
+ * A renderer stand-in: the all-off path must not touch it at all. `passes`
+ * records each rendered scene's material name so a test can tell WHICH stage
+ * ran (the counts alone cannot: fxaa+smear and vhs+blit are both three calls).
+ */
 function stubRenderer() {
-  const calls = { setRenderTarget: 0, render: 0, setSize: 0 };
+  const calls = { setRenderTarget: 0, render: 0, setSize: 0, passes: [] as string[] };
   const renderer = {
     domElement: { style: {} as Record<string, string> },
     autoClear: true,
     setSize() { calls.setSize++; },
     setRenderTarget() { calls.setRenderTarget++; },
-    render() { calls.render++; },
+    render(scene: THREE.Scene) {
+      calls.render++;
+      const mesh = scene.children[0] as THREE.Mesh | undefined;
+      const material = mesh?.material as THREE.Material | undefined;
+      calls.passes.push(material?.name || 'unnamed');
+    },
     getDrawingBufferSize(v: THREE.Vector2) { return v.set(960, 540); },
   } as unknown as THREE.WebGPURenderer;
   return { renderer, calls };
@@ -392,6 +429,84 @@ describe('post-aa all-off parity (the hard gate)', () => {
     expect(chainCalls).toBe(1);
     expect(calls.setRenderTarget).toBe(0);
     expect(calls.render).toBe(0);
+  });
+});
+
+describe('post-aa VHS stage (default OFF)', () => {
+  it('null preset: effectiveSmear tracks the user setting and VHS never renders', () => {
+    const { renderer, calls } = stubRenderer();
+    const post = createPostAa(renderer);
+    post.setFxaa(false);
+    post.setSmear(0.4);
+
+    expect(post.vhs).toBeNull();
+    expect(post.effectiveSmear).toBe(0.4);
+
+    post.render(() => {});
+
+    expect(calls.passes).toContain('post:smear');
+    expect(calls.passes).not.toContain('post:vhs');
+    expect(calls.passes).not.toContain('post:vhs-input');
+  });
+
+  it("'soft': VHS runs after FXAA, skips smear, and the blit reads display space", () => {
+    const { renderer, calls } = stubRenderer();
+    const post = createPostAa(renderer);
+    // FXAA defaults on, so this also pins the stage ORDER.
+    post.setSmear(0.4);
+    post.setVhs('soft');
+
+    expect(post.vhs).toBe('soft');
+    expect(post.effectiveSmear).toBe(0);
+
+    post.render(() => {});
+
+    const stages = calls.passes.filter(p => p.startsWith('post:'));
+    expect(stages).toEqual(['post:fxaa', 'post:vhs-input', 'post:vhs', 'post:blit']);
+    expect(calls.passes).not.toContain('post:smear');
+    // VHS output is display-encoded (it grades the taps itself).
+    expect(post.blitSrcIsDisplay).toBe(true);
+  });
+
+  it('setVhs(null) after a preset restores the previous smear setting exactly', () => {
+    const { renderer } = stubRenderer();
+    const post = createPostAa(renderer);
+    post.setSmear(0.35);
+    post.setVhs('soft');
+    expect(post.effectiveSmear).toBe(0);
+
+    post.setVhs(null);
+
+    expect(post.vhs).toBeNull();
+    expect(post.smear).toBe(0.35);
+    expect(post.effectiveSmear).toBe(0.35);
+  });
+
+  it('setVhsTerm clamps to the club-mutant slider ranges', () => {
+    const { renderer } = stubRenderer();
+    const post = createPostAa(renderer);
+    post.setVhs('soft');
+
+    post.setVhsTerm('noiseAmount', 99);
+    expect(post.vhsTerms.noiseAmount).toBe(VHS_TERM_RANGES.noiseAmount[1]);
+    post.setVhsTerm('noiseAmount', -5);
+    expect(post.vhsTerms.noiseAmount).toBe(0);
+    post.setVhsTerm('chromaAmount', 3.25);
+    expect(post.vhsTerms.chromaAmount).toBe(3.25);
+    post.setVhsTerm('chromaBurstRate', 1e9);
+    expect(post.vhsTerms.chromaBurstRate).toBe(60);
+  });
+
+  it('every term has a range that contains all three presets', () => {
+    const keys = Object.keys(VHS_PRESETS.soft) as (keyof typeof VHS_PRESETS.soft)[];
+    for (const k of keys) {
+      const [lo, hi] = VHS_TERM_RANGES[k];
+      expect(lo).toBeLessThanOrEqual(hi);
+      for (const p of ['soft', 'balanced', 'chaotic'] as const) {
+        expect(VHS_PRESETS[p][k]).toBeGreaterThanOrEqual(lo);
+        expect(VHS_PRESETS[p][k]).toBeLessThanOrEqual(hi);
+      }
+    }
   });
 });
 

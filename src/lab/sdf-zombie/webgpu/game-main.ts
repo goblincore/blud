@@ -64,6 +64,7 @@ import { resolveSkeletonMode } from './skeleton-spike/selector';
 import { SegmentVolumeCache, buildSegmentAtlas, boneSegmentKeyMap } from './skeleton-spike/volume';
 import { SegmentVolumeBinding, createSegmentAtlasTexture } from './skeleton-spike/volume-gpu';
 import { createPostAa } from './post-aa';
+import { type VhsPreset, type VhsTerms } from './post-vhs';
 import { type ZombieGpuView } from './zombie-gpu';
 import { createOccluderHull, buildHullInstances, HULL_SHRINK, type HullInstance } from './occluder-hull';
 import { type BuildResult } from '../build-body';
@@ -502,6 +503,12 @@ async function main() {
   // The draw chain, exactly as the bench stands it up.
   // -----------------------------------------------------------------------
   const postAa = createPostAa(handle.renderer);
+  // Boot-time VHS enable, default OFF: ?vhs=soft|balanced|chaotic. The default
+  // stays null, so the all-off parity path is untouched unless asked for.
+  const vhsParam = new URLSearchParams(location.search).get('vhs');
+  if (vhsParam === 'soft' || vhsParam === 'balanced' || vhsParam === 'chaotic') {
+    postAa.setVhs(vhsParam);
+  }
   const characterEffects = createCharacterEffects(handle.renderer);
   // THE FISHEYE. The camera renders WIDER than the player sees and the blit
   // squeezes it back, which is what buys the bulge without losing the frame
@@ -5077,6 +5084,17 @@ async function main() {
     get fxaa() { return postAa.fxaa; },
     setSmear: (v: number) => postAa.setSmear(v),
     get smear() { return postAa.smear; },
+    // VHS is the fourth chain stage, default OFF. While on it replaces the
+    // smear pass; `effectiveSmear` says which temporal filter is really
+    // running (0 while VHS owns it). Both return the resulting state so a
+    // console caller sees the clamp without a second read.
+    setVhs: (preset: VhsPreset | null) => { postAa.setVhs(preset); return postAa.vhs; },
+    get vhs() { return postAa.vhs; },
+    setVhsTerm: (name: keyof VhsTerms, value: number) => {
+      postAa.setVhsTerm(name, value);
+      return postAa.vhsTerms;
+    },
+    get effectiveSmear() { return postAa.effectiveSmear; },
     // ---------------------------------------------------------------
     // DEFERRED RENDERER SEAM (M2 task 5). Everything is null-safe: on a
     // legacy boot they are no-ops / report the legacy mode, so a capture
