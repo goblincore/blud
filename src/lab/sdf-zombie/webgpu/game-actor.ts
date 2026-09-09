@@ -42,6 +42,7 @@ import {
   type MotionJoints, type MotionState, type MotionSignals,
 } from '../motion';
 import { makeRng, type Rng, type WanderBounds } from '../wander';
+import { rotateYaw } from '../gait';
 import type { BrainPlayer } from '../brain';
 import { makeZombieMind, type EnemyMind } from './enemy-mind';
 import type { MotionProfile } from '../motion-profile';
@@ -272,6 +273,8 @@ export interface ZombieActor {
   /** The decision layer — callers that must distinguish kinds, and the
    *  source of truth for every decision field this interface reports. */
   mind(): EnemyMind;
+  readonly kind: 'zombie' | 'soldier';
+  meleeCapable(): boolean;
   /** The LAST motion frame, or null before the first step. character-view's
    *  pose() reads `gun` (the held prop's transform) and `collapsed` (release
    *  the prop) off it — the whole frame rather than those two fields, so the
@@ -325,6 +328,7 @@ export interface ZombieActor {
     swingT: number;
     /** Ranged vocabulary — the soldier's aim progress 0..1; zombies 0. */
     aimT: number;
+    meleeContacts: number;
   };
   /**
    * One pellet lands at `hitWorld`, travelling along `dirWorld`.
@@ -400,6 +404,8 @@ export function createZombieActor(opts: {
   /** The body fired its weapon this frame. Called from step(); the wiring
    *  spawns the flash and the pellets. */
   onFire?: (shot: { origin: Vec3; direction: Vec3 }) => void;
+  /** Diagnostic/gameplay contact pulse; the game intentionally has no health. */
+  onMeleeContact?: (event: { actorId: number; variant: SwingVariant }) => void;
   /** Receives every detached piece, already placed in world space, plus the
    *  stump wound the sever stamped on the REMAINING body (null when no live
    *  anchor existed) — the bleed emitters register from it directly. */
@@ -454,6 +460,8 @@ export function createZombieActor(opts: {
   const pendingWounds: Wound[] = [];
   const pendingSevered: LimbId[] = [];
   let pendingShot: MotionSignals['shot'] = null;
+  let pendingPelletHits = 0;
+  let meleeContacts = 0;
 
   let lastDebug: ReturnType<ZombieActor['debug']> | null = null;
   let encounterOrder: EncounterOrder | null = null;
@@ -596,12 +604,12 @@ export function createZombieActor(opts: {
     const injury = soldierDamage ? soldierInjury(current, soldierWounds) : null;
     if (injury) soldierFatal ||= injury.fatal;
     const cuttingWounds = soldierDamage ? woundRing.all().filter(w => !w.injuryIgnored) : [...woundRing.all()];
-    const fullCuts = [...new Set([...cutLimbs(current, cuttingWounds, torsoC).filter(limb => !soldierDamage || limb !== 'head'), ...(injury?.sever ?? [])])];
+    const fullCuts = [...new Set([...cutLimbs(current, cuttingWounds, torsoC).filter(limb => !soldierDamage || soldierFatal || limb !== 'head'), ...(injury?.sever ?? [])])];
     for (const limb of fullCuts) {
       detach(limb, severLimb(current, limb));
     }
     for (const cut of cutChains(current, soldierDamage ? cuttingWounds : [...woundRing.all()])) {
-      if (fullCuts.includes(cut.limb) || (soldierDamage && cut.limb === 'head')) continue;
+      if (fullCuts.includes(cut.limb) || (soldierDamage && !soldierFatal && cut.limb === 'head')) continue;
       detach(cut.limb, severDistal(current, cut));
     }
     if (soldierDamage) {
@@ -685,6 +693,7 @@ export function createZombieActor(opts: {
         drift: ringDrift,
         roll: swingRng(),
         rollDrift: swingRng(),
+        missing: missingLimbs(),
         ...(!mind.meleeCapable && !encounterOrder ? {
           bounds: opts.bounds,
           lineOfSight: brainPlayer !== null && !opts.furniture.some(box => segmentHitsBox(
@@ -714,9 +723,9 @@ export function createZombieActor(opts: {
       }
       // Fire is the SAME event for the animation clock and the projectile.
       // Previously the callback fired but CALM.fire stayed false forever.
-      signals.fire = think.fire && !missingLimbs().armR && (!soldierDamage || !missingLimbs().armL)
+      signals.fire = think.fire && !missingLimbs().armR
         && (current.clusters.find(c => c.limb === 'head')?.alive ?? false);
-      if (!mind.meleeCapable) {
+      if (soldierDamage || !mind.meleeCapable) {
         signals.missing = missingLimbs();
         signals.wounded = woundedLimbs();
       }
@@ -729,7 +738,7 @@ export function createZombieActor(opts: {
         signals.fire &&= !soldierFatal && !signals.downed;
         signals.headAlive = current.clusters.find(c => c.limb === 'head')?.alive ?? false;
       }
-      if (think.halt && !mind.meleeCapable) {
+      if (think.halt && (soldierDamage || !mind.meleeCapable)) {
         state = { ...state, wander: { ...state.wander, target: null, speed: 0, idle: 0 } };
       }
       if (think.target) {
@@ -801,6 +810,10 @@ export function createZombieActor(opts: {
       state = stepR.state;
       lastFrame = stepR.frame;
       const f = stepR.frame;
+      if (think.contact && think.attack) {
+        meleeContacts++;
+        opts.onMeleeContact?.({ actorId: opts.id, variant: think.attack.variant });
+      }
       if (opts.navigation && !opts.navigation.canTravel(beforeMove,state.wander.pos)) {
         const dx=beforeMove[0]-state.wander.pos[0],dz=beforeMove[2]-state.wander.pos[2];
         state={...state,wander:{...state.wander,pos:beforeMove,speed:0,target:null}};
@@ -850,7 +863,7 @@ export function createZombieActor(opts: {
         if (i !== undefined) bound = impulseAt(bound, bound.rig.points[i]!.pos, kick.delta);
       }
       if (signals.fire && f.gun && !f.collapsed) {
-        opts.onFire?.({ origin: gunPoint(f.gun, GUN_GRIP.muzzle), direction: qRotate(f.gun.quat, [0, 0, 1]) });
+        opts.onFire?.({ origin: gunPoint(f.gun, GUN_GRIP.muzzle), direction: rotateYaw(qRotate(f.gun.quat, [0, 0, 1]), think.aimError) });
       }
     }
     // Drain the frame's one-shot signals (values are read back by the motion
@@ -889,6 +902,7 @@ export function createZombieActor(opts: {
         side: md.side, variant: md.variant,
         hasToken: md.hasToken,
         aimT: md.aimT,
+        meleeContacts,
       };
     }
   }
@@ -952,6 +966,11 @@ export function createZombieActor(opts: {
   /** The expensive post-impact tail; once per pellet unbatched, once per
    *  batch inside beginHits/endHits. */
   function flushHitTail(): void {
+    if (soldierDamage && pendingPelletHits >= 4) {
+      mind.stagger();
+      if (pendingShot) pendingShot = { ...pendingShot, type: 'blast', gain: Math.min(1.25, pendingPelletHits / 8) };
+    }
+    pendingPelletHits = 0;
     runSeverChecks();
     posed = applyRig(current, bound, bodyYaw);
     view.update(posed, current);
@@ -985,6 +1004,7 @@ export function createZombieActor(opts: {
       // Pellets send no gain: eight arrive together and re-flinch at 1.
       ...(wound.type === 'blast' ? { gain: SLUG_GAIN } : {}),
     };
+    if (wound.type === 'pellet') pendingPelletHits++;
     if (wound.type === 'blast') {
       // Heavy-hit choreography: the mind's stagger stops the walk for
       // blastHoldSec. The ROOT knock stays here — moving the root is a
@@ -1035,6 +1055,8 @@ export function createZombieActor(opts: {
       if (alerted) brainAlerted = true;
     },
     mind: () => mind,
+    kind: mind.kind,
+    meleeCapable: () => soldierDamage ? missingLimbs().armR : mind.meleeCapable,
     setRingInput: (hasToken: boolean, drift: -1 | 0 | 1) => {
       ringToken = hasToken;
       ringDrift = drift;
@@ -1061,6 +1083,7 @@ export function createZombieActor(opts: {
       side: mind.debug().side, variant: mind.debug().variant,
       hasToken: mind.debug().hasToken,
       aimT: mind.debug().aimT,
+      meleeContacts,
     },
     hit,
     hitSlug,

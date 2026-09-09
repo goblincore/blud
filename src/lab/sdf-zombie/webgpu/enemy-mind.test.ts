@@ -87,4 +87,12 @@ describe('makeSoldierMind', () => {
     expect(m.debug().state).toBe('stagger');
     expect(m.step(mindInput()).halt).toBe(true);
   });
+
+  it('keeps soldier identity while becoming melee-capable after gun-arm loss', () => {
+    const m = makeSoldierMind();
+    expect(m.kind).toBe('soldier');
+    m.step(mindInput({ missing: { armL: false, armR: true, legL: false, legR: false } }));
+    expect(m.meleeCapable).toBe(true);
+    expect(m.kind).toBe('soldier');
+  });
 });

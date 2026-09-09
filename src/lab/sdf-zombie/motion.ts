@@ -520,7 +520,7 @@ export function stepMotion(
     severed: profile.name === 'soldier' ? [] : sig.severed,
     missing: sig.missing,
     forced: sig.forcedCollapse || (profile.name === 'soldier'
-      && (!sig.headAlive || sig.downed || sig.missing.legL || sig.missing.legR || sig.missing.armL || sig.missing.armR)),
+      && (!sig.headAlive || sig.downed || sig.missing.legL || sig.missing.legR)),
     ropes: joints.ropes,
   }, dt);
   const collapsed = collapse.phase !== 'standing';
@@ -611,7 +611,7 @@ export function stepMotion(
     ? profile.gait.walk : blendProfiles(profile.gait.walk, profile.gait.run, rw);
 
   // --- fire hold ------------------------------------------------------------
-  const canHold = profile.name !== 'soldier' || (!sig.missing.armL && !sig.missing.armR);
+  const canHold = profile.name !== 'soldier' || !sig.missing.armR;
   const firedNow = !!sig.fire && !collapsed && !!profile.carries && canHold;
   const fireHold = firedNow ? FIRE.holdSec : Math.max(0, state.fireHold - dt);
   const sinceFire = firedNow ? 0 : state.sinceFire + dt;
@@ -759,8 +759,8 @@ export function stepMotion(
   // Composition: the pivot is about the FINAL shoulder target (sway, stagger
   // and lean already ride it), and the elbow/hand's own stagger offsets
   // re-add after the rotation — reactions still move the arms.
-  if (armStyle === 'reach' && gait.pose.reach) {
-    const r = gait.pose.reach;
+  if ((armStyle === 'reach' && gait.pose.reach) || (profile.name === 'soldier' && attack)) {
+    const r = gait.pose.reach ?? { pitchL: 0, pitchR: 0, drop: 0, shift: Z };
     const right = rotateYaw([1, 0, 0], bodyYaw); // the body's right axis, world
     const applyArm = (side: 'L' | 'R') => {
       if (side === 'L' ? sig.missing.armL : sig.missing.armR) return;
@@ -809,6 +809,8 @@ export function stepMotion(
   // --- carry-style arms: the right arm authored, the left hand IK'd --------
   let gun: GunPose | null = null;
   let carryUsed: CarryName | null = null;
+  const strongSoldierReaction = profile.name === 'soldier' && stagger.staggered && stagger.state.kind === 'lurch';
+  const strongReactionWeight = strongSoldierReaction ? clamp(1 - stagger.state.age / 0.65, 0, 1) : 0;
   const carries = profile.carries;
   let carryPose = state.carryPose;
   if (armStyle === 'carry' && carries && !collapsed && canHold) {
@@ -824,6 +826,14 @@ export function stepMotion(
       gunPitch: mix(previous.gunPitch, wanted.gunPitch),
       leftPole: [mix(previous.leftPole[0], wanted.leftPole[0]), mix(previous.leftPole[1], wanted.leftPole[1]), mix(previous.leftPole[2], wanted.leftPole[2])],
     };
+    if (strongReactionWeight > 0) {
+      // Keep the prop bound to the gun hand while the arm is knocked rearward;
+      // the support hand releases and naturally recomposes when this fades.
+      carry.right.pitch += (-0.55 - carry.right.pitch) * strongReactionWeight;
+      carry.right.yaw += (-0.35 - carry.right.yaw) * strongReactionWeight;
+      carry.right.fold += (0.55 - carry.right.fold) * strongReactionWeight;
+      carry.gunPitch += (-0.15 - carry.gunPitch) * strongReactionWeight;
+    }
     carryPose = carry;
     const right = rotateYaw([1, 0, 0], bodyYaw);
     const pelvisX = joints.base[idx.pelvis!]![0];
@@ -843,7 +853,7 @@ export function stepMotion(
       targets[iE] = alignElbow(targets[iS]!, targets[iE]!, targets[iH]!, rotateYaw([-inward, -1, 0.3], bodyYaw));
     }
     // Left arm: FABRIK onto the fore-end, elbow poled outward.
-    if (gun && !sig.missing.armL) {
+    if (gun && !sig.missing.armL && !strongSoldierReaction) {
       const iS = idx.shoulderL!, iE = idx.elbowL!, iH = idx.handL!;
       const target = gunPoint(gun, GUN_GRIP.foreHand);
       const chain = solveChain([targets[iS]!, targets[iE]!, targets[iH]!], joints.arm.L, target, SOLVE);

@@ -3384,7 +3384,7 @@ async function main() {
         ? { x: player.pos[0], z: player.pos[2], room: pRoom }
         : null;
       const snapshots: EncounterAgent[] = actors.map(a=>({id:a.id,pos:a.pose().pos,yaw:a.pose().yaw,room:a.room,
-        home:encounterHomes.get(a.id)??a.pose().pos,soldier:!a.mind().meleeCapable,disabled:!!a.motionFrame()?.collapsed}));
+        home:encounterHomes.get(a.id)??a.pose().pos,soldier:a.kind==='soldier',ranged:a.kind==='soldier'&& !a.meleeCapable(),disabled:!!a.motionFrame()?.collapsed}));
       const orders=encounter.update(snapshots,pInfo,shotAlert,dt);
       shotAlert = false;
       for (const a of actors) a.setEncounterOrder(orders.get(a.id)!);
@@ -3401,7 +3401,7 @@ async function main() {
           // while having no swing to throw. Submitting him would make him
           // compete for a token AND be spaced at melee radius against the
           // zombies, distorting their positioning.
-          .filter(a => a.mind().meleeCapable && orders.get(a.id)?.visible && !a.motionFrame()?.collapsed
+          .filter(a => a.meleeCapable() && orders.get(a.id)?.visible && !a.motionFrame()?.collapsed
             && a.mind().debug().alert && a.mind().debug().state !== 'idle')
           .map(a => {
             const p = a.pose().pos;
@@ -4417,10 +4417,11 @@ async function main() {
       const b = a.mind().debug();
       const p = a.pose().pos;
       return {
-        id: a.id, room: a.room, kind: a.mind().meleeCapable ? 'zombie' : 'soldier', phase:a.debug().phase, state: b.state, alert: b.alert,
+        id: a.id, room: a.room, kind: a.kind, phase:a.debug().phase, state: b.state, alert: b.alert,
         swingT: b.swingT, side: b.side, variant: b.variant,
         hasToken: a.debug().hasToken,
         aimT: b.aimT, cooldown: b.cooldown, sinceFire: a.sinceFire(),
+        meleeContacts: a.debug().meleeContacts,
         speed: a.debug().speed, target: a.debug().target,
         dist: Math.hypot(p[0] - player.pos[0], p[2] - player.pos[2]),
         bearing: Math.atan2(p[0] - player.pos[0], p[2] - player.pos[2]),

@@ -43,6 +43,7 @@ export interface MindInput {
   mayFire?: boolean;
   bounds?: WanderBounds;
   canMoveTo?: (point: Vec3) => boolean;
+  missing?: { armL: boolean; armR: boolean; legL: boolean; legR: boolean };
 }
 
 export interface MindOutput {
@@ -65,6 +66,8 @@ export interface MindOutput {
   engaged: boolean;
   /** The ring may not revoke this body's token. */
   committed: boolean;
+  contact: boolean;
+  aimError: number;
 }
 
 /** Fields every mind reports, merged into ZombieActor.debug() by the actor. */
@@ -90,6 +93,7 @@ export interface MindDebug {
 }
 
 export interface EnemyMind {
+  readonly kind: 'zombie' | 'soldier';
   /**
    * Does this mind ever want a MELEE-RING token?
    *
@@ -116,6 +120,7 @@ export function makeZombieMind(): EnemyMind {
   let brain: Brain = makeBrain();
   let lastToken = false;
   return {
+    kind: 'zombie',
     meleeCapable: true,
     step(input) {
       lastToken = input.hasToken;
@@ -139,6 +144,8 @@ export function makeZombieMind(): EnemyMind {
         faceHeading: null,
         engaged: out.engaged,
         committed: out.committed,
+        contact: false,
+        aimError: 0,
       };
     },
     stagger() { brain = staggerNow(brain); },
@@ -159,10 +166,14 @@ export function makeZombieMind(): EnemyMind {
 export function makeSoldierMind(): EnemyMind {
   let brain: SoldierBrain = makeSoldierBrain();
   let aimT = 0;
+  let lastAttack: MindOutput['attack'] = null;
+  let melee = false;
   return {
+    kind: 'soldier',
     // A rifleman never claims a melee token. See the interface note.
-    meleeCapable: false,
+    get meleeCapable() { return melee; },
     step(input) {
+      melee = !!input.missing?.armR;
       const out = stepSoldierBrain(brain, {
         dt: input.dt,
         self: input.self,
@@ -174,29 +185,35 @@ export function makeSoldierMind(): EnemyMind {
         mayFire: input.mayFire,
         bounds: input.bounds,
         canMoveTo: input.canMoveTo,
+        missing: input.missing,
+        hasToken: input.hasToken,
+        drift: input.drift,
       });
       brain = out.brain;
       aimT = out.aimT;
+      lastAttack = out.attack;
       return {
         target: out.target,
         halt: out.halt,
-        attack: null,
+        attack: out.attack,
         fire: out.fire,
         weaponUp: out.weaponUp,
         faceHeading: out.faceHeading,
         // Not in any ring: there is no ranged arbiter, and submitting a lone
         // soldier at the wider engaged radius would only push him around.
-        engaged: false,
-        committed: false,
+        engaged: out.engaged,
+        committed: out.committed,
+        contact: out.contact,
+        aimError: out.aimError,
       };
     },
     stagger() { brain = staggerSoldierNow(brain); },
     debug: () => ({
       state: brain.state,
       alert: brain.alert,
-      side: 'R',
-      variant: 'none',
-      swingT: 0,
+      side: lastAttack?.side ?? 'R',
+      variant: lastAttack?.variant ?? 'none',
+      swingT: lastAttack?.phase ?? 0,
       holdSecs: brain.holdSecs,
       hasToken: false,
       aimT,

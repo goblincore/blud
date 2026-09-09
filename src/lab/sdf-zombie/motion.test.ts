@@ -911,6 +911,28 @@ describe('soldier aimed movement', () => {
 });
 
 describe('soldier injury response', () => {
+  it('keeps an arm-injured Soldier standing and composes a remaining-arm strike', () => {
+    const j = soldierJoints();
+    const sig = { ...NO_SIGNALS(), missing: { ...INTACT, armR: true } };
+    const calm = stepMotion(makeMotionState(5, [0, 0, 0]), j,
+      { enabled: true, wander: false, profile: SOLDIER_PROFILE }, sig, stubPoints(j), BOUNDS, makeRng(5));
+    const strike = stepMotion(makeMotionState(5, [0, 0, 0]), j,
+      { enabled: true, wander: false, profile: SOLDIER_PROFILE, attack: { phase: .5, side: 'L', variant: 'hook' } }, sig, stubPoints(j), BOUNDS, makeRng(5));
+    expect(strike.frame.collapsed).toBe(false);
+    expect(len(sub(strike.frame.restPose[j.index.handL]!, calm.frame.restPose[j.index.handL]!))).toBeGreaterThan(.15);
+  });
+
+  it('keeps the gun on the right hand while a strong hit releases the support grip', () => {
+    const j = soldierJoints();
+    const result = stepMotion(makeMotionState(5, [0, 0, 0]), j,
+      { enabled: true, wander: false, profile: SOLDIER_PROFILE, carryOverride: 'aim' },
+      { ...NO_SIGNALS(), shot: { type: 'blast', dirWorld: [0, 0, -1], woundWorld: [0, 1, 0], torso: true } },
+      stubPoints(j), BOUNDS, makeRng(5));
+    expect(result.frame.gun).not.toBeNull();
+    expect(len(sub(gunPoint(result.frame.gun!, GUN_GRIP.gripHand), result.frame.restPose[j.index.handR]!))).toBeLessThan(1e-6);
+    expect(len(sub(gunPoint(result.frame.gun!, GUN_GRIP.foreHand), result.frame.restPose[j.index.handL]!))).toBeGreaterThan(.04);
+  });
+
   it('losing one leg or the head causes a structural fall, while a zombie still hops on one leg', () => {
     const leg = { ...NO_SIGNALS(), missing: { ...INTACT, legL: true } };
     for (const signals of [leg, { ...NO_SIGNALS(), headAlive: false }]) {

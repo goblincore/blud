@@ -28,7 +28,8 @@ import type { Vec3 } from './types';
 import { wrapPi, type WanderBounds } from './wander';
 
 export type SoldierState =
-  | 'idle' | 'engage' | 'aim' | 'fire' | 'recover' | 'settle' | 'stagger';
+  | 'idle' | 'engage' | 'aim' | 'fire' | 'recover' | 'settle' | 'stagger'
+  | 'pursue' | 'attack' | 'meleeRecover';
 
 export interface SoldierBrain {
   state: SoldierState;
@@ -88,6 +89,9 @@ export interface SoldierInput {
   bounds?: WanderBounds;
   /** Actor-owned swept-body clearance query; deterministic for this scene. */
   canMoveTo?: (point: Vec3) => boolean;
+  missing?: { armL: boolean; armR: boolean; legL: boolean; legR: boolean };
+  hasToken?: boolean;
+  drift?: -1 | 0 | 1;
 }
 
 export interface SoldierOutput {
@@ -117,6 +121,12 @@ export interface SoldierOutput {
    *  in phase 3. In the output rather than reconstructed by a consumer from a
    *  timer it does not own. */
   aimT: number;
+  attack: { phase: number; side: 'L' | 'R'; variant: import('./attack').SwingVariant } | null;
+  contact: boolean;
+  engaged: boolean;
+  committed: boolean;
+  /** Deterministic yaw error applied by the actor to actual one-hand fire. */
+  aimError: number;
 }
 
 export const SOLDIER_TUNING = {
@@ -189,6 +199,13 @@ export const SOLDIER_TUNING = {
   /** Blast hold, matching the zombie's, so a shot soldier lurches for as long
    *  as a shot zombie does (s). */
   blastHoldSec: 0.55,
+  oneHandAimScale: 1.5,
+  oneHandSpreadRad: 0.07,
+  meleeRadius: 1.25,
+  meleeEngageRange: 2.6,
+  meleeSwingSec: 0.7,
+  meleeCooldownSec: 1.1,
+  meleeContactPhase: 0.5,
 } as const;
 
 export type SoldierTuning = typeof SOLDIER_TUNING;
@@ -267,7 +284,8 @@ export function stepSoldierBrain(
     brain: { state, alert, lostFor, phaseT, cooldown, holdSecs, drift, driftT,
       burstShots, burstLeft, settleT, moveGoal, moveT },
     target: null, halt: false, fire: false, faceHeading: null,
-    weaponUp: false, aimT: 0,
+    weaponUp: false, aimT: 0, attack: null, contact: false,
+    engaged: false, committed: false, aimError: 0,
     ...over,
   });
 
@@ -291,6 +309,29 @@ export function stepSoldierBrain(
 
   /** Where he must LOOK: from himself toward the player. */
   const faceBearing = Math.atan2(dx, dz);
+  const missing = input.missing ?? { armL: false, armR: false, legL: false, legR: false };
+  if (missing.armR) {
+    const variant = missing.armL ? 'shove' as const : 'hook' as const;
+    if (!visible) return pack({ target: null, halt: true });
+    if (state === 'attack') {
+      const previous = phaseT;
+      phaseT = Math.min(1, phaseT + dt / tuning.meleeSwingSec);
+      const contact = previous < tuning.meleeContactPhase && phaseT >= tuning.meleeContactPhase
+        && dist <= tuning.meleeRadius && visible;
+      if (phaseT < 1) return pack({ target: [player.x, 0, player.z], halt: true,
+        faceHeading: faceBearing, attack: { phase: phaseT, side: 'L', variant }, contact,
+        engaged: true, committed: true });
+      state = 'meleeRecover'; phaseT = 0; cooldown = tuning.meleeCooldownSec;
+    }
+    if (state === 'meleeRecover' && cooldown > 0) return pack({ halt: true, faceHeading: faceBearing, engaged: true });
+    if (dist <= tuning.meleeRadius && input.hasToken) {
+      state = 'attack'; phaseT = 0;
+      return pack({ halt: true, faceHeading: faceBearing,
+        attack: { phase: 0, side: 'L', variant }, engaged: true, committed: true });
+    }
+    state = 'pursue';
+    return pack({ target: [player.x, 0, player.z], faceHeading: faceBearing, engaged: dist <= tuning.meleeEngageRange });
+  }
   // Hold the telegraph through small range changes, but cancel when sight
   // breaks or the player leaves effective weapon range. Facing must settle
   // before release; a completed timer alone cannot authorize the shot.
@@ -299,7 +340,8 @@ export function stepSoldierBrain(
     driftT = Math.min(driftT, 0.35);
   }
   if (state === 'aim') {
-    const aimDuration = burstShots > 0 ? tuning.followAimSec : tuning.aimSec;
+    const oneHand = missing.armL;
+    const aimDuration = (burstShots > 0 ? tuning.followAimSec : tuning.aimSec) * (oneHand ? tuning.oneHandAimScale : 1);
     phaseT = Math.min(aimDuration, phaseT + dt);
     if (phaseT < aimDuration || Math.abs(wrapPi(faceBearing - self.yaw)) > tuning.aimTolerance) {
       return pack({
@@ -315,6 +357,7 @@ export function stepSoldierBrain(
     burstLeft = (burstShots < 2 || (burstShots <= tuning.burstMax && input.roll < tuning.burstChance)) ? 1 : 0;
     return pack({
       halt: true, faceHeading: faceBearing, weaponUp: true, fire: true, aimT: 1,
+      aimError: oneHand ? (input.rollDrift * 2 - 1) * tuning.oneHandSpreadRad : 0,
     });
   }
 

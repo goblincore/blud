@@ -3,7 +3,7 @@ import { buildBody } from '../build-body';
 import { compileBlob } from '../blob-compile';
 import { parseBlob } from '../blob-parse';
 import soldierSrc from '../characters/soldier.blob?raw';
-import { severDistal } from '../sever';
+import { severDistal, severLimb } from '../sever';
 import type { BuildResult } from '../build-body';
 import { SOLDIER_PROFILE } from '../motion-profile';
 import { makeSoldierMind } from './enemy-mind';
@@ -15,7 +15,7 @@ import { resolveExplosion } from '../explosion-aoe';
 import { woundFromSlug, spawnPellets, spawnSlug, stepProjectiles } from './game-weapon';
 import { createWoundRing } from './character-view';
 
-function soldier(furniture: Aabb[] = [], releaseProp?: () => void, body?: BuildResult) {
+function soldier(furniture: Aabb[] = [], releaseProp?: () => void, body?: BuildResult, onMeleeContact?: () => void) {
   const shots: { age: number; kicks: number; origin: readonly number[]; direction: readonly number[]; expectedOrigin: readonly number[]; expectedDirection: readonly number[] }[] = [];
   const actor = createZombieActor({
     id: 1, room: 1, seed: 42, start: [0, 0, 0],
@@ -32,6 +32,7 @@ function soldier(furniture: Aabb[] = [], releaseProp?: () => void, body?: BuildR
         expectedDirection: frame.gun ? qRotate(frame.gun.quat, [0, 0, 1]) : [],
       });
     },
+    onMeleeContact,
   });
   return { actor, shots };
 }
@@ -77,6 +78,50 @@ describe('soldier actor combat wiring', () => {
     expect(shots.length).toBeGreaterThan(0);
   });
 
+  it('a concentrated pellet batch interrupts aim strongly without making one pellet a stun', () => {
+    const one = soldier().actor;
+    hitLimb(one, 'chest');
+    expect(one.debug().holdSecs).toBe(0);
+    const many = soldier().actor;
+    for (let i = 0; i < 120 && many.debug().state !== 'aim'; i++) {
+      many.setBrainInput({ x: 0, z: 2.8, room: 1 }, true);
+      many.step(1 / 60);
+    }
+    expect(many.debug().state).toBe('aim');
+    many.beginHits();
+    for (let i = 0; i < 4; i++) hitLimb(many, 'chest');
+    many.endHits();
+    many.step(1 / 60);
+    expect(many.debug().holdSecs).toBeGreaterThan(0);
+    expect(many.debug().state).toBe('stagger');
+    expect(many.motionFrame()!.collapsed).toBe(false);
+    expect(many.motionFrame()!.staggerKind).toBe('lurch');
+    for (let i = 0; i < 90; i++) { many.setBrainInput({ x: 0, z: 2.8, room: 1 }, true); many.step(1 / 60); }
+    expect(many.debug().state).not.toBe('stagger');
+  });
+
+  it('support-arm loss keeps slower, less accurate actual fire', () => {
+    const b = buildBody(compileBlob(parseBlob(soldierSrc)));
+    const cut = severDistal(b, { limb: 'armL', fromPrim: b.prims.findIndex(p => p.bone === 'forearm.l') });
+    const { actor, shots } = soldier([], undefined, cut.body);
+    for (let i = 0; i < 240; i++) { actor.setBrainInput({ x: 0, z: 2.8, room: 1 }, true); actor.step(1 / 60); }
+    expect(actor.motionFrame()!.collapsed).toBe(false);
+    expect(shots.length).toBeGreaterThan(0);
+    expect(shots.some(s => Math.abs(s.direction[0]! - s.expectedDirection[0]!) > 1e-4)).toBe(true);
+  });
+
+  it('gun-arm loss pursues and emits one melee contact without phantom fire', () => {
+    const b = severLimb(buildBody(compileBlob(parseBlob(soldierSrc))), 'armR').body;
+    const contact = vi.fn();
+    const { actor, shots } = soldier([], undefined, b, contact);
+    actor.setRingInput(true, 0);
+    for (let i = 0; i < 100; i++) { actor.setBrainInput({ x: 0, z: 1, room: 1 }, true); actor.step(1 / 60); }
+    expect(contact).toHaveBeenCalledTimes(1);
+    expect(shots).toHaveLength(0);
+    expect(actor.debug().meleeContacts).toBe(1);
+    expect(actor.motionFrame()!.collapsed).toBe(false);
+  });
+
   it('survives a full double torso volley; further damage stays cumulative after visual wound eviction', () => {
     const { actor } = soldier();
     const volley = spawnPellets([0, 0, 0], [0, 0, 1], 2, 42);
@@ -118,7 +163,8 @@ describe('soldier actor combat wiring', () => {
 
   it('a slug cannot bypass head survival through the geometric cut test', () => {
     const { actor } = soldier();
-    hitLimb(actor, 'skull', true);
+    const skull = actor.posed().prims.find(p => p.bone === 'skull')!;
+    actor.hitSlug([skull.a[0], skull.a[1], skull.a[2] + skull.radius], [0, 0, -1]);
     actor.step(1 / 60);
     expect(actor.body.clusters.find(c => c.limb === 'head')!.alive).toBe(true);
     expect(actor.motionFrame()!.collapsed).toBe(false);
