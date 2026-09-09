@@ -334,6 +334,21 @@ export interface SdfLayer {
    *  between (mode 0 = raw hold, 1 = per-pixel depth reproject). Default
    *  OFF; off is the ship behaviour and must stay bit-identical to it. */
   setHalfRate(on: boolean): void;
+  /**
+   * Whether the NEXT render() will be a hold frame. Read it BEFORE calling
+   * render(): `frameIndex` and `forceFreshFrame` are both read at the top of
+   * render and only mutated at the very end, so the answer is stable for the
+   * whole frame up to that call.
+   *
+   * WHY THIS EXISTS. Half-rate holds the MARCHED flesh, but anything that
+   * rides the same rig and draws as a POLYGON — the skeleton meshes, the kit
+   * overlay, the held prop — renders at full rate. Before the 2026-09-08 mesh
+   * migration that did not matter, because bones lived inside the marched
+   * field and held with it. Now they do not, and a hold frame draws
+   * up-to-date bones inside one-frame-stale skin: the skeleton visibly walks
+   * out of its own body. Callers use this to hold their pose in step.
+   */
+  readonly willHold: boolean;
   readonly halfRate: boolean;
   setHalfRateMode(n: number): void;
   readonly halfRateMode: number;
@@ -910,6 +925,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       // never a hold of whatever the target happened to be holding.
       forceFreshFrame = true;
     },
+    get willHold() { return isHoldFrame(frameIndex, halfRate, forceFreshFrame); },
     get halfRate() { return halfRate; },
     setHalfRateMode(n) { halfRateMode = n === 0 ? 0 : 1; },
     get halfRateMode() { return halfRateMode; },

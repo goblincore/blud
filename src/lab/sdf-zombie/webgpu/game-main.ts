@@ -775,7 +775,15 @@ async function main() {
     // skeleton=mesh: re-pose this frame's segment meshes + crater exposure.
     // Sever re-derive: the actor's posed body reference changes — rebuild
     // the sources (revision changes, the cache extracts fresh geometry).
-    if (segMeshRenderer) {
+    // HALF-RATE SYNC (2026-09-09). On a hold frame the marched flesh is the
+    // PREVIOUS frame's, reprojected. The skeleton meshes are full-rate
+    // polygons on the same rig, so re-posing them here would draw current
+    // bones inside stale skin — the owner's screenshot of a skeleton standing
+    // outside its own body. Holding their pose keeps both representations on
+    // the same instant. Before the 2026-09-08 mesh migration this could not
+    // happen: bones were rows in the marched field and held with it.
+    const meshHold = sdfLayer.willHold;
+    if (segMeshRenderer && !meshHold) {
       // Its own phase, NOT folded into an existing one: this path shipped as
       // the forward default without a controlled timing result (skeleton
       // wrap-up, 2026-09-08) and no capture could see it until now.
@@ -3679,10 +3687,16 @@ async function main() {
       //
       // A no-op for the zombie: it has neither kit nor prop, and pose() returns
       // immediately when both are absent.
-      for (const a of actors) {
-        if (!a.character) continue;
-        const p = a.pose();
-        a.character.pose(a.body, a.boundRig(), p.yaw, a.sinceFire(), a.motionFrame(), dt, a.id, a.posed());
+      // Kit armour and the held prop ride the same rig and draw as polygons,
+      // so they hold with the flesh for the same reason the skeleton meshes
+      // do (see meshHold in the draw). Motion and the rig still advance —
+      // only the VISUAL pose is held, so gameplay is untouched.
+      if (!sdfLayer.willHold) {
+        for (const a of actors) {
+          if (!a.character) continue;
+          const p = a.pose();
+          a.character.pose(a.body, a.boundRig(), p.yaw, a.sinceFire(), a.motionFrame(), dt, a.id, a.posed());
+        }
       }
       const now = performance.now() / 1000;
       for (const a of actors) {
