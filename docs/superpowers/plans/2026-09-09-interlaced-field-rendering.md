@@ -179,7 +179,7 @@ export function fieldRowSource(y: number, parity: 0 | 1): { fresh: boolean; targ
 - [ ] **Step 4: Run the test**
 
 Run: `npx vitest run src/lab/sdf-zombie/webgpu/field-render.test.ts`
-Expected: PASS, 9 tests. If any fail, fix the CODE, not the test.
+Expected: PASS, 8 tests. If any fail, fix the CODE, not the test.
 
 - [ ] **Step 5: Commit**
 
@@ -222,7 +222,7 @@ behind for it.
 
 ## Done when
 
-- `field-render.ts` and its 9 tests exist and pass.
+- `field-render.ts` and its 8 tests exist and pass.
 - `npx tsc --noEmit` is clean.
 - The full suite is green apart from the pre-existing `surface-nets` failure.
 - The report states plainly what was and was not done.
