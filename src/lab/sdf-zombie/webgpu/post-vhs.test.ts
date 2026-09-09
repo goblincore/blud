@@ -2,6 +2,24 @@ import { describe, it, expect } from 'vitest';
 import { VHS_PRESETS, effectiveSmear, POST_VHS_WGSL } from './post-vhs';
 
 describe('VHS_PRESETS', () => {
+  // The one row that is NOT club-mutant's: the owner's sweep, made in
+  // vhs-panel.ts and shipped as the default. Pinned for the same reason as
+  // the other three — it is the look the game boots at, and a silent drift
+  // changes that look with no error anywhere.
+  it('matches the owner-tuned blud preset exactly — the shipped default', () => {
+    expect(VHS_PRESETS.blud).toEqual({
+      intensity: 1, blurAmount: 1, noiseAmount: 0.005, gradeAmount: 0.38,
+      warpAmount: 0.3, warpFrequency: 1.1, warpSpeed: 0.05,
+      chromaAmount: 5.4, chromaJitter: 10, motionThreshold: 0.12,
+      chromaBurstChance: 0.61, chromaBurstStrength: 1.45, chromaBurstRate: 34.1,
+    });
+  });
+  // blud was swept FROM soft and never touched motionThreshold, which is the
+  // gate the whole chroma effect hangs off. If a future edit to soft moves it,
+  // the shipped look moves with it silently unless this catches the split.
+  it('inherits soft\'s motion gate — the sweep deliberately left it alone', () => {
+    expect(VHS_PRESETS.blud.motionThreshold).toBe(VHS_PRESETS.soft.motionThreshold);
+  });
   it('matches the club-mutant soft preset exactly — it is the source of truth', () => {
     expect(VHS_PRESETS.soft).toEqual({
       intensity: 0.7, blurAmount: 0.45, noiseAmount: 0.04, gradeAmount: 0.55,
@@ -26,13 +44,13 @@ describe('VHS_PRESETS', () => {
       chromaBurstChance: 0.38, chromaBurstStrength: 1.6, chromaBurstRate: 55,
     });
   });
-  it('orders the three presets by escalating chroma', () => {
+  it('orders the three club-mutant presets by escalating chroma', () => {
     expect(VHS_PRESETS.soft.chromaAmount).toBeLessThan(VHS_PRESETS.balanced.chromaAmount);
     expect(VHS_PRESETS.balanced.chromaAmount).toBeLessThan(VHS_PRESETS.chaotic.chromaAmount);
   });
   it('has every term defined on every preset', () => {
     const keys = Object.keys(VHS_PRESETS.soft);
-    for (const p of ['soft', 'balanced', 'chaotic'] as const) {
+    for (const p of ['blud', 'soft', 'balanced', 'chaotic'] as const) {
       expect(Object.keys(VHS_PRESETS[p]).sort()).toEqual(keys.sort());
       for (const k of keys) expect(Number.isFinite((VHS_PRESETS[p] as never as Record<string, number>)[k])).toBe(true);
     }

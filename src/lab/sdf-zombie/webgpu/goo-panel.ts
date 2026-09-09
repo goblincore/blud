@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/webgpu/goo-panel.ts
 //
 // See panel-chrome.ts for the shared shell (title bar, collapse caret, close
-// button) both tuning panels sit in.
+// button) every tuning panel sits in.
 //
 // A live tuning panel for the goo layer on the GAME page.
 //

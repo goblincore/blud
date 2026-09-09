@@ -100,6 +100,7 @@ if (!api) {
 // the swinging body, so the two arcs can be compared directly by eye.
 await evaluate('typeof __sdfGame.woundPanel === "function" ? (__sdfGame.woundPanel(false), 1) : 0');
 await evaluate('typeof __sdfGame.gooPanel === "function" ? (__sdfGame.gooPanel(false), 1) : 0');
+await evaluate('typeof __sdfGame.vhsPanel === "function" ? (__sdfGame.vhsPanel(false), 1) : 0');
 await evaluate('__sdfGame.setLoopRunning(false)');
 
 // Walk into room 4 and wake the room, so a body comes to melee range.

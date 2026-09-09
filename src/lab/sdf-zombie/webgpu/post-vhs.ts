@@ -77,9 +77,32 @@ export interface VhsTerms {
   chromaBurstChance: number; chromaBurstStrength: number; chromaBurstRate: number;
 }
 
-export type VhsPreset = 'soft' | 'balanced' | 'chaotic';
+export type VhsPreset = 'blud' | 'soft' | 'balanced' | 'chaotic';
 
 export const VHS_PRESETS: Record<VhsPreset, VhsTerms> = {
+  // BLUD — the shipped default, and the ONLY row here that is not
+  // club-mutant's. The owner tuned it on the game page with vhs-panel.ts
+  // (2026-09-09), starting from `soft`; the sweep is recorded as a preset
+  // rather than as term overrides at boot so `setVhs('blud')` restores the
+  // shipped look from anywhere, the same as the other three.
+  //
+  // What the sweep actually did, since the numbers alone do not say it: the
+  // tape ARTEFACTS went up and the tape MUSH went down. Full intensity and
+  // full blurAmount (the horizontal-only kernel, so the interlace comb
+  // survives), noise all but off at 0.005 and the green grade pulled back to
+  // 0.38 — none of the constant veil that made `balanced` read as dirt. The
+  // wobble is nearly still (warpAmount 0.3, warpSpeed 0.05) because a moving
+  // warp reads as seasickness in first person. What is left is the chroma:
+  // maximum jitter, a heavy 5.4 px split, and bursts firing on 61% of rows at
+  // 34 Hz — so the frame is clean until it tears, which is the VHS read.
+  //
+  // motionThreshold is soft's 0.12, deliberately untouched by the sweep.
+  blud: {
+    intensity: 1, blurAmount: 1, noiseAmount: 0.005, gradeAmount: 0.38,
+    warpAmount: 0.3, warpFrequency: 1.1, warpSpeed: 0.05,
+    chromaAmount: 5.4, chromaJitter: 10, motionThreshold: 0.12,
+    chromaBurstChance: 0.61, chromaBurstStrength: 1.45, chromaBurstRate: 34.1,
+  },
   soft: {
     intensity: 0.7, blurAmount: 0.45, noiseAmount: 0.04, gradeAmount: 0.55,
     warpAmount: 1.25, warpFrequency: 1.5, warpSpeed: 0.25,

@@ -136,6 +136,7 @@ console.log('arms: both present, skin emissive 0, watch present');
 // sliver in the corner, which passes every boolean and shows the owner nothing.
 await evaluate('typeof __sdfGame.woundPanel === "function" ? (__sdfGame.woundPanel(false), 1) : 0');
 await evaluate('typeof __sdfGame.gooPanel === "function" ? (__sdfGame.gooPanel(false), 1) : 0');
+await evaluate('typeof __sdfGame.vhsPanel === "function" ? (__sdfGame.vhsPanel(false), 1) : 0');
 await sleep(2000);
 await shot('fpv-rest');
 console.log(`gate: backend=${backend} anchorChildren=${gunOk.children}`);

@@ -49,6 +49,7 @@ await send('Page.navigate',{url:`http://localhost:${VITE}/sdf-game.html`});
 for(let i=0;i<600;i++){await sleep(200);if(await ev('typeof window.__sdfGame === "object"'))break;}
 if(!(await ev('typeof window.__sdfGame === "object"'))){console.error('never booted',errs);process.exit(1);}
 await ev('typeof window.__sdfGame.gooPanel === "function" && window.__sdfGame.gooPanel(false)');
+await ev('typeof window.__sdfGame.vhsPanel === "function" && window.__sdfGame.vhsPanel(false)');
 await ev('window.__sdfGame.freeze(true)');
 await ev('window.__sdfGame.setLoopRunning(false)');
 // STAGE THE SHOT FROM THE LIVE POSITIONS. The actors wander, so a fixed

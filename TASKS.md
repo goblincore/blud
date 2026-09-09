@@ -155,13 +155,30 @@ resolution: [bodies-style-handoff.md](docs/dev-notes/2026-09-09-perf-spikes/bodi
   was "very noticeable". Needs the task-3 census before any future flip.
 - [x] Marched-body visibility cull shipped (`fecbc54a`): frustum + `clearSight`
   on `setBodies`, 2 of 15 bodies marched in room 1. Win still unmeasured.
-- [x] VHS post-FX wired, default OFF. `__sdfGame.setVhs('soft'|'balanced'|'chaotic'|null)`,
+- [x] VHS post-FX wired, ships ON at the owner-tuned **`blud`** preset
+  (`VHS_PRESETS.blud`, swept in the panel below 2026-09-09: artefacts up, mush
+  down — full intensity + full horizontal blur, noise ~off at 0.005, grade
+  pulled to 0.38, the wobble nearly still, and heavy jittered chroma bursting
+  on 61% of rows at 34 Hz). `?vhs=blud|soft|balanced|chaotic|off` overrides.
+  The three club-mutant presets are untouched and still pinned.
+- [x] VHS post-FX wired, originally default OFF. `__sdfGame.setVhs('soft'|'balanced'|'chaotic'|null)`,
   `setVhsTerm(name, v)`, or boot with `?vhs=soft`. Runs after FXAA and replaces
   SMEAR while on (setting preserved). GPU-verified 2026-09-09: compiles, upright,
   off restores the clean frame, zero errors. Eight port defects fixed first
   ([plan](docs/superpowers/plans/2026-09-09-vhs-postfx-fixes.md)). Look is
   untuned — `chaotic` is very heavy; judge with fields on.
   [Spec](docs/superpowers/specs/2026-09-09-vhs-post-fx-design.md).
+- [x] VHS **tuning panel** (`vhs-panel.ts`), the third panel-chrome shell:
+  all 13 terms as sliders plus soft/balanced/chaotic/off, in the third slot
+  (right:524px), SHIPS VISIBLE BUT COLLAPSED like its siblings. Rows are
+  derived from `VHS_TERM_RANGES` and COPY emits `setVhs` + the delta from the
+  preset, so the emitted keys cannot drift from the setter. Seams:
+  `__sdfGame.vhsPanel(on)` / `vhsPanelCollapsed(on)` / `vhsTerms`; H still
+  toggles every panel. **Capture scripts must dismiss all THREE panels now.**
+  Browser-verified 2026-09-09 (sliders write + read back the clamp, COPY
+  round-trips, console `setVhs` resyncs the sliders, zero page errors).
+  It paid for itself immediately: `VHS_PRESETS.blud` above is this panel's
+  first output, swept here and pasted out of COPY.
 
 
 **[~] Hybrid deferred renderer (M2) — material repair accepted by owner manual playtest on 2026-09-07; integrated with latest main.** The merged build passes all 34 gameplay GPU checks with zero page errors and the CPU/build checks. [Integration notes](docs/dev-notes/2026-09-07-m2-main-integration/notes.md). Task 7 stopped at owner request; gamma/flashlight tuning and unfinished automated shadow/performance validation remain follow-ups. Deferred remains opt-in.

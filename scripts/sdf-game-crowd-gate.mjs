@@ -110,6 +110,7 @@ if (errs.length) fail(`console errors at boot: ${JSON.stringify(errs.slice(0, 3)
 //     clumping case in the level, and the reason this gate exists.
 await evaluate('typeof __sdfGame.woundPanel === "function" ? (__sdfGame.woundPanel(false), 1) : 0');
 await evaluate('typeof __sdfGame.gooPanel === "function" ? (__sdfGame.gooPanel(false), 1) : 0');
+await evaluate('typeof __sdfGame.vhsPanel === "function" ? (__sdfGame.vhsPanel(false), 1) : 0');
 await evaluate('__sdfGame.setLoopRunning(false)');
 
 // Stand in room 4's doorway looking in. Step once so the pose is staged.

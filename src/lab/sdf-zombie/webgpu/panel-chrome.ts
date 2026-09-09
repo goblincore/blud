@@ -1,11 +1,12 @@
 // src/lab/sdf-zombie/webgpu/panel-chrome.ts
 //
-// The shell both tuning panels sit in: fixed frame, title bar, collapse caret,
+// The shell every tuning panel sits in: fixed frame, title bar, collapse caret,
 // close button, and a body the caller fills with rows.
 //
 // It exists because goo-panel.ts and wound-panel.ts carried byte-identical CSS
 // and title-bar code, and both needed the same new collapse state. A third copy
-// is how the two drift apart.
+// is how the two drift apart. vhs-panel.ts is that third panel, and it cost no
+// chrome at all — which is the point.
 //
 // SHIPS COLLAPSED. The panels ship VISIBLE on purpose -- the owner asked twice,
 // "the sliders could not be found" and "it should be default on tbh" -- but
@@ -18,8 +19,8 @@
 // exactly the sort of per-profile variation that makes a capture reproduce
 // differently on two machines.
 
-// GOO and WOUND sit side by side (right:8px and right:266px) rather than
-// stacked on the same spot — that's what makes both title bars stay visible
+// GOO, WOUND and VHS sit side by side (right:8px, 266px and 524px) rather than
+// stacked on the same spot — that's what makes every title bar stay visible
 // and clickable at once while collapsed. `right` lets each caller keep its
 // own slot; only the offset varies, so it stays a parameter, not a second copy.
 function panelCss(right: number): string {
@@ -72,7 +73,7 @@ export function createPanelShell(
 
   const closeBtn = document.createElement('button');
   closeBtn.textContent = '✕';
-  closeBtn.title = 'hide (H toggles both panels)';
+  closeBtn.title = 'hide (H toggles every panel)';
   closeBtn.setAttribute('style',
     'background:none; border:0; color:#9a8b86; cursor:pointer; font-size:12px;'
     + ' line-height:1; padding:0 2px;');

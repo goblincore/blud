@@ -121,6 +121,7 @@ import { shouldSpill, GUT_DROPLET_SIZE, SPILL_CHANCE } from '../entrails-spawn';
 import { createBloodView } from './blood-view-gpu';
 import { createGooLayer, type GooLayer } from './goo-layer';
 import { createGooPanel, type GooPanel } from './goo-panel';
+import { createVhsPanel, type VhsPanel } from './vhs-panel';
 import {
   createWoundPanel, defaultsFrom, WOUND_KEYS,
   type WoundPanel, type WoundTuningValues,
@@ -503,15 +504,17 @@ async function main() {
   // The draw chain, exactly as the bench stands it up.
   // -----------------------------------------------------------------------
   const postAa = createPostAa(handle.renderer);
-  // VHS ships ON at 'soft' (owner, 2026-09-09), the club-mutant tuned preset.
-  // ?vhs=soft|balanced|chaotic picks another; ?vhs=off disables it, which is
+  // VHS ships ON at 'blud' (owner, 2026-09-09) — the preset the owner swept in
+  // vhs-panel.ts, replacing the club-mutant 'soft' this shipped at first.
+  // ?vhs=blud|soft|balanced|chaotic picks another; ?vhs=off disables it, which is
   // also what the parity/bench drivers should pass — the all-off path is
   // untouched only when VHS is null.
   const vhsParam = new URLSearchParams(location.search).get('vhs');
-  if (vhsParam === 'soft' || vhsParam === 'balanced' || vhsParam === 'chaotic') {
+  if (vhsParam === 'blud' || vhsParam === 'soft' || vhsParam === 'balanced'
+    || vhsParam === 'chaotic') {
     postAa.setVhs(vhsParam);
   } else if (vhsParam !== 'off' && vhsParam !== 'null') {
-    postAa.setVhs('soft');
+    postAa.setVhs('blud');
   }
   const characterEffects = createCharacterEffects(handle.renderer);
   // THE FISHEYE. The camera renders WIDER than the player sees and the blit
@@ -652,6 +655,14 @@ async function main() {
    *  across reloads — a remembered state would make a capture reproduce
    *  differently machine to machine. */
   let woundPanel: WoundPanel | null = null;
+  /** The VHS panel (vhs-panel.ts). Same contract as the other two: ships
+   *  VISIBLE but COLLAPSED, at the third slot (right:524px) so all three
+   *  title bars sit side by side. The shipped 'blud' preset IS a sweep made
+   *  in this panel — the club-mutant three are the far ends of the term space
+   *  and none of them was the look; keeping the panel is how the next one
+   *  gets found.
+   *  __sdfGame.vhsPanel(false) / vhsPanelCollapsed(false) are the seams. */
+  let vhsPanel: VhsPanel | null = null;
   let panelsHidden = false;
   // SHIPS ON (owner call, 2026-08-31: "set goo mode to default always to true
   // so i dont have to toggle it on each time"). setGoo(false) stays the kill
@@ -2007,7 +2018,7 @@ async function main() {
       else pushProbeWeight(parked);
     }
     if (e.code === 'KeyE') { slugMode = !slugMode; updateHud(); }
-    // H hides/shows BOTH tuning panels together. They cover most of the
+    // H hides/shows EVERY tuning panel together. They cover most of the
     // viewport, and until now the only way to dismiss them was to know the
     // console API -- which is no use to someone doing a look pass.
     // G toggles free aim, so the two schemes can be A/B'd back to back.
@@ -2020,6 +2031,7 @@ async function main() {
       panelsHidden = !panelsHidden;
       woundPanel?.setVisible(!panelsHidden);
       gooPanel?.setVisible(!panelsHidden);
+      vhsPanel?.setVisible(!panelsHidden);
     }
     if (e.code === 'KeyR' && shells < MAGAZINE_CAPACITY && reloadAge > RELOAD.totalSec) {
       startReload();
@@ -3230,6 +3242,18 @@ async function main() {
   // the knobs were there. `__sdfGame.woundPanel(false)` dismisses it, and
   // capture scripts already guard the seam typeof-style.
   woundPanel?.setVisible(true);
+
+  // VHS tuning panel. The rows are derived from VHS_TERM_RANGES and every
+  // emitted call is keyed by a `keyof VhsTerms`, so unlike the setBeam bug the
+  // COPY text cannot name a key the setter ignores. Ships visible+collapsed
+  // like its siblings; capture scripts dismiss it with __sdfGame.vhsPanel(false).
+  vhsPanel = createVhsPanel({
+    setVhs: (preset) => { postAa.setVhs(preset); return postAa.vhs; },
+    setVhsTerm: (name, value) => postAa.setVhsTerm(name, value),
+    get vhs() { return postAa.vhs; },
+    get vhsTerms() { return postAa.vhsTerms; },
+  });
+  vhsPanel.setVisible(true);
   // The lab's droplet renderer, game-tuned: depth-WRITING cutout droplets
   // (the SDF composite's depth test then occludes droplets both ways — see
   // BloodViewOpts.dropletDepthWrite) at sim size (the lab's 0.45 is close-
@@ -5092,12 +5116,23 @@ async function main() {
     // smear pass; `effectiveSmear` says which temporal filter is really
     // running (0 while VHS owns it). Both return the resulting state so a
     // console caller sees the clamp without a second read.
-    setVhs: (preset: VhsPreset | null) => { postAa.setVhs(preset); return postAa.vhs; },
+    setVhs: (preset: VhsPreset | null) => {
+      postAa.setVhs(preset);
+      // A console preset overwrites every term; without this the panel's
+      // sliders would keep showing the OLD look while the screen shows the new.
+      vhsPanel?.refresh();
+      return postAa.vhs;
+    },
     get vhs() { return postAa.vhs; },
     setVhsTerm: (name: keyof VhsTerms, value: number) => {
       postAa.setVhsTerm(name, value);
+      vhsPanel?.refresh();
       return postAa.vhsTerms;
     },
+    /** The live term values — the preset's, until a slider or setVhsTerm
+     *  overrides one. Symmetric with `vhs`, so a capture script can read the
+     *  whole look back without driving a setter. */
+    get vhsTerms() { return postAa.vhsTerms; },
     get effectiveSmear() { return postAa.effectiveSmear; },
     // ---------------------------------------------------------------
     // DEFERRED RENDERER SEAM (M2 task 5). Everything is null-safe: on a
@@ -5487,6 +5522,16 @@ async function main() {
     woundPanelCollapsed(on: boolean) {
       woundPanel?.setCollapsed(on);
       return woundPanel?.collapsed ?? true;
+    },
+    /** Show/hide the VHS tuning panel (vhs-panel.ts). Same shape as the two
+     *  above, so a capture script can dismiss all three the same way. */
+    vhsPanel(on: boolean) {
+      vhsPanel?.setVisible(on);
+      return vhsPanel?.visible ?? false;
+    },
+    vhsPanelCollapsed(on: boolean) {
+      vhsPanel?.setCollapsed(on);
+      return vhsPanel?.collapsed ?? true;
     },
 
     /** Wound pass r2's tuning surface (wound-panel.ts). The key names are
