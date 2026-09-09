@@ -4,6 +4,17 @@
 > Per-milestone step-by-step tasks live in `docs/superpowers/plans/`.
 > This file is **coarse-grained state only** — keep rows to ≤2 lines and link out for detail.
 
+## Raymarch — Claybook cheap wins — 2026-09-09
+
+- [x] Last-step SECANT accept in `MARCH_BODY` (Claybook GDC slide 25), behind
+  `perfCfg.w` — 0 = off, bit-identical to the old march. `?laststep=K` on the game and
+  bench pages, `__sdfGame.setLastStep(K)`. A/B (`BENCH_LEGS=baseline` + prelude):
+  room 1 11.92 → 10.17 ms; rooms 2-4 inside repeat spread. Close-up pair looked identical.
+- [x] Wound soft shadow uses iq's TRIANGULATED coverage (slide 39), same 14 samples.
+- [x] Ships ON: `GAME_LAST_STEP = 4` in `game-main.ts`; `?laststep=0` restores the old march.
+- [-] Per-frame narrow-band VOLUME bake of heavy bodies (their core trick) judged not
+  worth a spike. Notes: `Claude Notes/Research/2026-09-09-claybook-gdc-sdf-techniques.md`.
+
 ## Shot visuals — tracer rounds — 2026-09-09
 
 - [x] Projectiles no longer draw as shaded yellow balls. Each carries an additive

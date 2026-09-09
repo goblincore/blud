@@ -1042,6 +1042,18 @@ async function main() {
    *  the 0.6 zone at 6–30% of a wounded fill-screen frame. The lab keeps the
    *  sound constant — march-step-soundness.test.ts pins it below 0.6. */
   const GAME_WOUND_STEP = 1.0;
+  // Last-step secant accept (Claybook slide 25; MARCH_BODY's perfCfg.w).
+  // SHIPS AT 4 (2026-09-09): accepts the hit once the secant root through
+  // the last two samples is within 4 hit-epsilons. A/B on room 1 (8 walking
+  // bodies): 11.92 -> 10.17 ms; wound/gib-heavy rooms inside repeat spread;
+  // 1.1 m close-up pair visually identical. ?laststep=K overrides (0 = off,
+  // the pre-lever march bit for bit); __sdfGame.setLastStep() flips it live.
+  const GAME_LAST_STEP = (() => {
+    const raw = new URLSearchParams(location.search).get('laststep');
+    if (raw === null) return 4;
+    const v = Number(raw) || 0;
+    return v > 0 ? Math.min(16, v) : 0;
+  })();
 
   /** Perf round 2, task 6: the footprint-AA strength (aaCfg.y). When > 0 the
    *  march may accept a sample once the field is within the ray's projected
@@ -1570,6 +1582,7 @@ async function main() {
     view.uniforms.perfCfg.value.y = GAME_WOUND_EARLY_OUT;
     view.uniforms.marchCfg.value.y = GAME_OMEGA;
     view.uniforms.perfCfg.value.z = GAME_WOUND_STEP;
+    view.uniforms.perfCfg.value.w = GAME_LAST_STEP;
     view.uniforms.normalGradientCfg.value.set(normalGradientMode, normalGradientDebug, 0, 0);
     view.uniforms.aaCfg.value.y = GAME_AA;
     view.uniforms.aaCfg.value.x = sdfLayer.pixelConeK;
@@ -5673,6 +5686,12 @@ async function main() {
       updateHud();
     },
     get woundStep() { return actors[0]?.view.uniforms.perfCfg.value.z ?? 0; },
+    /** Last-step secant accept multiplier (perfCfg.w); 0 = off. */
+    setLastStep(v: number) {
+      const n = v <= 0 ? 0 : Math.min(16, v);
+      for (const a of actors) a.view.uniforms.perfCfg.value.w = n;
+    },
+    get lastStep() { return actors[0]?.view.uniforms.perfCfg.value.w ?? 0; },
     /** Wound union-reach cull (close-up wound-cull task, 2026-09-05) —
      *  applyWounds' one-sphere test before the wound loop. SHIPS ON; a value
      *  no-op by construction, so ON vs OFF is a pixel-parity gate, and the
