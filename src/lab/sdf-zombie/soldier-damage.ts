@@ -16,7 +16,7 @@ export interface SoldierInjury {
 /** Provisional regional injury thresholds, separate from any future HP system.
  * Pellet = 1; torso survives one scattered volley. Knee/leg failure disables
  * locomotion before the focused hits required to tear a limb away. */
-export const SOLDIER_INJURY_TUNING = { legDowned: 4, limbSever: 8, torsoFatal: 16 } as const;
+export const SOLDIER_INJURY_TUNING = { legDowned: 4, limbSever: 8, torsoFatal: 24, headFatal: 12, directHeadPellets: 4 } as const;
 
 /** Soldier injury policy. Callers keep the zombie's existing damage path. */
 export function soldierInjury(body: BuildResult, wounds: readonly Wound[]): SoldierInjury {
@@ -28,8 +28,9 @@ export function soldierInjury(body: BuildResult, wounds: readonly Wound[]): Sold
     missing[limb] = !body.clusters.find(c => c.limb === limb)?.alive
       || body.prims.some(p => p.limb === limb && p.op !== 'sub' && p.dead);
   }
+  const headShots = new Map<number, { hits: number; barrels: number }>();
   let fatal = !body.clusters.find(c => c.limb === 'head')?.alive;
-  let downed = missing.legL || missing.legR || missing.armL || missing.armR;
+  let downed = missing.legL || missing.legR;
   for (const wound of wounds) {
     if (wound.injuryIgnored) continue;
     const prim = body.prims[wound.primIdx];
@@ -37,17 +38,28 @@ export function soldierInjury(body: BuildResult, wounds: readonly Wound[]): Sold
     const limb = prim.limb;
     if (limb in wounded) wounded[limb as keyof MissingLimbs] = true;
     if (wound.type === 'burn') continue;
-    if (limb === 'head') {
+    if (limb === 'head' && wound.shot?.weapon === 'shotgun' && wound.shot.barrels === 2) {
+      const volley = headShots.get(wound.shot.shotId) ?? { hits: 0, barrels: 0 };
+      volley.hits++;
+      volley.barrels |= 1 << wound.shot.barrel;
+      headShots.set(wound.shot.shotId, volley);
+      // A direct hit requires a concentrated group from BOTH barrels, not
+      // a stray head pellet in a body volley or two unrelated trigger pulls.
+      if (volley.hits >= SOLDIER_INJURY_TUNING.directHeadPellets && volley.barrels === 3) {
+        fatal = true;
+        if (!sever.includes('head')) sever.push('head');
+      }
+    }
+    if (limb === 'head' && wound.shot?.weapon === 'explosion' && wound.type === 'blast') {
       fatal = true;
-      if (wound.type === 'blast' && wound.radius >= 0.10 && !sever.includes(limb)) sever.push(limb);
-      continue;
+      if (wound.radius >= 0.10 && !sever.includes('head')) sever.push('head');
     }
     // Eight focused pellets overcome girth even when repeated impacts cover
     // the same section. This does not enlarge the visible crater. A slug in
     // the middle of a limb hurts first; one centered on a joint can remove it.
     let injury = wound.type === 'pellet' ? 1 : Math.min(3, 3 * wound.radius / 0.13);
     const bone = prim.bone ? body.bones.get(prim.bone) : undefined;
-    if (limb !== 'torso' && bone && wound.type === 'blast' && wound.radius >= 0.10) {
+    if (limb !== 'torso' && limb !== 'head' && bone && wound.type === 'blast' && wound.radius >= 0.10) {
       const axis = sub(bone.tail, bone.head), size = len(axis);
       const along = dot(sub(woundWorldPos(body.prims, wound), bone.head), normalize(axis));
       if (Math.min(Math.abs(along), Math.abs(size - along)) <= 0.065) injury = SOLDIER_INJURY_TUNING.limbSever;
@@ -57,7 +69,7 @@ export function soldierInjury(body: BuildResult, wounds: readonly Wound[]): Sold
   for (const limb of Object.keys(intact) as (keyof MissingLimbs)[]) {
     if (!missing[limb] && points[limb] >= SOLDIER_INJURY_TUNING.limbSever) sever.push(limb);
   }
-  fatal ||= points.torso >= SOLDIER_INJURY_TUNING.torsoFatal;
+  fatal ||= points.torso >= SOLDIER_INJURY_TUNING.torsoFatal || points.head >= SOLDIER_INJURY_TUNING.headFatal;
   downed ||= points.legL >= SOLDIER_INJURY_TUNING.legDowned || points.legR >= SOLDIER_INJURY_TUNING.legDowned;
   return { sever, fatal, downed, missing, wounded, legHurt: wounded.legL || wounded.legR };
 }

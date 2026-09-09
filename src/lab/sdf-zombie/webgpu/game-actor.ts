@@ -336,7 +336,7 @@ export interface ZombieActor {
    * severs reports its stump through onSever), so callers can hang per-hit
    * effects (bleed emitters) off the exact wound without ring-index sniffing.
    */
-  hit(hitWorld: Vec3, dirWorld: Vec3): Wound | null;
+  hit(hitWorld: Vec3, dirWorld: Vec3, shot?: import('../damage').ShotProvenance): Wound | null;
   /**
    * A SLUG (one big projectile) lands at `hitWorld`: same choreography as
    * hit() but stamps the slug calibre crater. Separate method on purpose —
@@ -441,6 +441,14 @@ export function createZombieActor(opts: {
    *  One implementation, whoever owns it: the drift this refactor exists to
    *  kill came from two hand-written copies of the same sequence. */
   const woundRing = opts.character?.wounds ?? createWoundRing();
+  // Visual slots evict at MAX_WOUNDS; injury must not heal when a crater
+  // disappears. Live regional histories stop growing after severing/death.
+  const soldierWounds: Wound[] = soldierDamage ? [...woundRing.all()] : [];
+  function recordSoldierInjury(w: Wound): void {
+    if (!soldierDamage || soldierFatal || w.injuryIgnored || w.type === 'burn') return;
+    const prim = current.prims[w.primIdx];
+    if (prim && !prim.dead && current.clusters.find(c => c.limb === prim.limb)?.alive) soldierWounds.push(w);
+  }
   const torsoWounds = opts.boundedWounds ? createTorsoWounds() : null;
   if (torsoWounds) for (const w of woundRing.all()) torsoWounds.record(w, body);
   const pendingWounds: Wound[] = [];
@@ -493,7 +501,7 @@ export function createZombieActor(opts: {
   let detourSide: -1 | 0 | 1 = 0;
 
   function woundedLimbs() {
-    if (soldierDamage) return soldierInjury(current, woundRing.all()).wounded;
+    if (soldierDamage) return soldierInjury(current, soldierWounds).wounded;
     const w = { armL: false, armR: false, legL: false, legR: false };
     for (const wound of woundRing.all()) {
       const prim = current.prims[wound.primIdx];
@@ -506,7 +514,7 @@ export function createZombieActor(opts: {
   }
 
   function missingLimbs(): MissingLimbs {
-    if (soldierDamage) return soldierInjury(current, woundRing.all()).missing;
+    if (soldierDamage) return soldierInjury(current, soldierWounds).missing;
     const gone = (l: LimbId) => !(current.clusters.find(c => c.limb === l)?.alive ?? false);
     return { legL: gone('legL'), legR: gone('legR'), armL: gone('armL'), armR: gone('armR') };
   }
@@ -585,21 +593,21 @@ export function createZombieActor(opts: {
 
   function runSeverChecks() {
     const torsoC = current.clusters.find(c => c.limb === 'torso')?.center ?? [0, 1.1, 0] as Vec3;
-    const injury = soldierDamage ? soldierInjury(current, woundRing.all()) : null;
+    const injury = soldierDamage ? soldierInjury(current, soldierWounds) : null;
     if (injury) soldierFatal ||= injury.fatal;
     const cuttingWounds = soldierDamage ? woundRing.all().filter(w => !w.injuryIgnored) : [...woundRing.all()];
-    const fullCuts = [...new Set([...cutLimbs(current, cuttingWounds, torsoC), ...(injury?.sever ?? [])])];
+    const fullCuts = [...new Set([...cutLimbs(current, cuttingWounds, torsoC).filter(limb => !soldierDamage || limb !== 'head'), ...(injury?.sever ?? [])])];
     for (const limb of fullCuts) {
       detach(limb, severLimb(current, limb));
     }
     for (const cut of cutChains(current, soldierDamage ? cuttingWounds : [...woundRing.all()])) {
-      if (fullCuts.includes(cut.limb)) continue;
+      if (fullCuts.includes(cut.limb) || (soldierDamage && cut.limb === 'head')) continue;
       detach(cut.limb, severDistal(current, cut));
     }
     if (soldierDamage) {
-      const after = soldierInjury(current, woundRing.all());
+      const after = soldierInjury(current, soldierWounds);
       soldierFatal ||= after.fatal;
-      if (soldierFatal || after.downed || after.missing.armR || after.missing.armL) opts.character?.releaseProp([0, 0, 0], opts.seed);
+      if (soldierFatal || after.downed || after.missing.armR) opts.character?.releaseProp([0, 0, 0], opts.seed);
     }
   }
 
@@ -713,7 +721,7 @@ export function createZombieActor(opts: {
         signals.wounded = woundedLimbs();
       }
       if (soldierDamage) {
-        const injury = soldierInjury(current, woundRing.all());
+        const injury = soldierInjury(current, soldierWounds);
         soldierFatal ||= injury.fatal;
         signals.downed = injury.downed;
         signals.fatal = soldierFatal;
@@ -901,15 +909,19 @@ export function createZombieActor(opts: {
     state = { ...state, wander: { ...w, pos: next } };
   }
 
-  function hit(hitWorld: Vec3, dirWorld: Vec3): Wound | null {
+  function hit(hitWorld: Vec3, dirWorld: Vec3, shot?: import('../damage').ShotProvenance): Wound | null {
     // Stamped at the live yaw `posed` was built with — see refreshWounds.
     const field = posed;
-    return applyProjectileHit(woundFromPellet(field.prims, hitWorld, bodyYaw, p => sdBody(p, field)), hitWorld, dirWorld);
+    const wound = woundFromPellet(field.prims, hitWorld, bodyYaw, p => sdBody(p, field));
+    wound.shot = shot;
+    return applyProjectileHit(wound, hitWorld, dirWorld);
   }
 
   function hitSlug(hitWorld: Vec3, dirWorld: Vec3): Wound | null {
     const field = posed;
-    return applyProjectileHit(woundFromSlug(field.prims, hitWorld, p => sdBody(p, field), bodyYaw), hitWorld, dirWorld);
+    const wound = woundFromSlug(field.prims, hitWorld, p => sdBody(p, field), bodyYaw);
+    wound.shot = { weapon: 'slug' };
+    return applyProjectileHit(wound, hitWorld, dirWorld);
   }
 
   function stampBlast(blastWounds: readonly Wound[]): void {
@@ -919,6 +931,8 @@ export function createZombieActor(opts: {
     // wound in the ring — see refreshWounds. No stamp-time record: these
     // arrive already resolved against a posed body, with no single impact
     // point to anchor to.
+    if (soldierDamage) blastWounds = blastWounds.map(w => ({ ...w, shot: { weapon: 'explosion' as const } }));
+    for (const w of blastWounds) recordSoldierInjury(w);
     woundRing.stampBundle(blastWounds);
     if (torsoWounds) for (const w of blastWounds) torsoWounds.record(w, current);
     for (const w of blastWounds) pendingWounds.push(w);
@@ -956,6 +970,7 @@ export function createZombieActor(opts: {
     // stamp() records the pre-impulse position for us — BEFORE the shove
     // below and before flushHitTail re-solves the pose, so it is the
     // placement, uncontaminated by the reaction to it.
+    recordSoldierInjury(wound);
     woundRing.stamp(wound, field, bodyYaw);
     torsoWounds?.record(wound, current);
     pendingWounds.push(wound);

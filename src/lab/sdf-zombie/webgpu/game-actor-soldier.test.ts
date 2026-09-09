@@ -3,20 +3,23 @@ import { buildBody } from '../build-body';
 import { compileBlob } from '../blob-compile';
 import { parseBlob } from '../blob-parse';
 import soldierSrc from '../characters/soldier.blob?raw';
+import { severDistal } from '../sever';
+import type { BuildResult } from '../build-body';
 import { SOLDIER_PROFILE } from '../motion-profile';
 import { makeSoldierMind } from './enemy-mind';
 import { createZombieActor, segmentHitsBox, clearCombatMove } from './game-actor';
 import { gunPoint, GUN_GRIP } from '../carry';
 import { qRotate } from '../vec';
 import type { Aabb } from './game-level';
+import { spawnPellets, spawnSlug, stepProjectiles } from './game-weapon';
 import { createWoundRing } from './character-view';
 
-function soldier(furniture: Aabb[] = [], releaseProp?: () => void) {
+function soldier(furniture: Aabb[] = [], releaseProp?: () => void, body?: BuildResult) {
   const shots: { age: number; kicks: number; origin: readonly number[]; direction: readonly number[]; expectedOrigin: readonly number[]; expectedDirection: readonly number[] }[] = [];
   const actor = createZombieActor({
     id: 1, room: 1, seed: 42, start: [0, 0, 0],
     bounds: { minX: -3, maxX: 3, minZ: -3, maxZ: 3 }, furniture,
-    body: buildBody(compileBlob(parseBlob(soldierSrc))),
+    body: body ?? buildBody(compileBlob(parseBlob(soldierSrc))),
     view: { setRootShift() {}, update() {}, setHeadRotation() {}, setTime() {} } as any,
     profile: SOLDIER_PROFILE, mind: makeSoldierMind(),
     ...(releaseProp ? { character: { wounds: createWoundRing(), releaseProp } as any } : {}),
@@ -33,7 +36,7 @@ function soldier(furniture: Aabb[] = [], releaseProp?: () => void) {
 }
 
 describe('soldier actor combat wiring', () => {
-  const hitLimb = (actor: ReturnType<typeof soldier>['actor'], bone: string, slug = false) => {
+  const hitLimb = (actor: ReturnType<typeof soldier>['actor'], bone: string, slug = false, shot?: import('../damage').ShotProvenance) => {
     const candidates = actor.posed().prims.filter(p => p.bone === bone && !p.dead);
     const p = candidates.find(p => Math.hypot(...p.a.map((v, i) => v - p.b[i]!)) > 0.01) ?? candidates[0]!;
     const point: [number, number, number] = [(p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2 + p.radius];
@@ -41,7 +44,7 @@ describe('soldier actor combat wiring', () => {
       point[0] += Math.sign(point[0]) * p.radius;
       point[2] -= p.radius;
     }
-    return slug ? actor.hitSlug(point, [0, 0, -1]) : actor.hit(point, [0, 0, -1]);
+    return slug ? actor.hitSlug(point, [0, 0, -1]) : actor.hit(point, [0, 0, -1], shot);
   };
 
   it('freezes a settled corpse for baking and wakes on further damage', () => {
@@ -60,17 +63,56 @@ describe('soldier actor combat wiring', () => {
     expect(actor.boundRig().rig.headFollowsRig).toBe(true); // immediate post-sever restore, before another step
   });
 
-  it('one head pellet causes a terminal fall and prevents all subsequent shots', () => {
+  it('a head pellet survives with visible carving and continued combat', () => {
     const { actor, shots } = soldier();
     const w = hitLimb(actor, 'skull');
     expect(actor.body.prims[w!.primIdx]!.limb).toBe('head');
+    expect(actor.wounds()).toContain(w);
     for (let i = 0; i < 180; i++) {
       actor.setBrainInput({ x: 0, z: 2.8, room: 1 }, true);
       actor.step(1 / 60);
     }
+    expect(actor.motionFrame()!.collapsed).toBe(false);
+    expect(shots.length).toBeGreaterThan(0);
+  });
+
+  it('survives a full double torso volley; further damage stays cumulative after visual wound eviction', () => {
+    const { actor } = soldier();
+    const volley = spawnPellets([0, 0, 0], [0, 0, 1], 2, 42);
+    actor.beginHits();
+    for (const p of volley) hitLimb(actor, 'chest', false, p.shot);
+    actor.endHits();
+    actor.step(1 / 60);
+    expect(actor.motionFrame()!.collapsed).toBe(false);
+    for (let i = 0; i < 8; i++) hitLimb(actor, 'chest');
+    actor.step(1 / 60);
+    expect(actor.wounds().length).toBeLessThanOrEqual(16);
     expect(actor.motionFrame()!.collapsed).toBe(true);
-    expect(shots).toHaveLength(0);
-    expect(hitLimb(actor, 'chest')).not.toBeNull(); // the corpse remains shootable
+  });
+
+  it('a slug cannot bypass head survival through the geometric cut test', () => {
+    const { actor } = soldier();
+    hitLimb(actor, 'skull', true);
+    actor.step(1 / 60);
+    expect(actor.body.clusters.find(c => c.limb === 'head')!.alive).toBe(true);
+    expect(actor.motionFrame()!.collapsed).toBe(false);
+  });
+
+  it.each(['double', 'single', 'stray', 'separate'] as const)('%s shotgun volley retains provenance across frame batches', kind => {
+    const { actor } = soldier();
+    const volley = spawnPellets([0, 0, 0], [0, 0, 1], kind === 'single' ? 1 : 2, 42);
+    stepProjectiles(volley, 1 / 60);
+    const other = spawnPellets([0, 0, 0], [0, 0, 1], 2, 42);
+    const selected = kind === 'single' ? volley.slice(0, 4) : [volley[0]!, volley[1]!, volley[8]!, volley[9]!];
+    selected.forEach((p, i) => {
+      actor.beginHits();
+      const shot = kind === 'separate' && i >= 2 ? other[i - 2]!.shot : p.shot;
+      hitLimb(actor, kind === 'stray' && i > 0 ? 'chest' : 'skull', false, shot);
+      actor.endHits();
+    });
+    actor.step(1 / 60);
+    expect(actor.motionFrame()!.collapsed).toBe(kind === 'double');
+    expect(spawnSlug([0, 0, 0], [0, 0, 1]).shot?.weapon).toBe('slug');
   });
 
   it('repeated focused thigh pellets detach the leg and cause a disabling fall', () => {
@@ -81,23 +123,22 @@ describe('soldier actor combat wiring', () => {
     expect(actor.motionFrame()!.collapsed).toBe(true);
   });
 
-  it.each([['upperarm.r', 'armR'], ['upperarm.l', 'armL']])('a severed %s cannot leave a firing gun pose behind', (bone, limb) => {
+  it.each([['upperarm.r', 'armR'], ['upperarm.l', 'armL'], ['forearm.r', 'armR'], ['forearm.l', 'armL']])('a severed %s releases only the gun hand prop', (bone, limb) => {
     const release = vi.fn();
-    const { actor, shots } = soldier([], release);
-    for (let i = 0; i < 8; i++) {
-      const w = hitLimb(actor, bone!);
-      expect(actor.body.prims[w!.primIdx]!.limb).toBe(limb);
-    }
+    const { actor } = soldier([], release);
+    for (let i = 0; i < 8; i++) hitLimb(actor, bone!);
     expect(actor.body.clusters.find(c => c.limb === limb)!.alive).toBe(false);
-    for (let i = 0; i < 180; i++) {
-      actor.setBrainInput({ x: 0, z: 2.8, room: 1 }, true);
-      actor.step(1 / 60);
-    }
-    expect(actor.motionFrame()!.gun).toBeNull();
-    expect(actor.motionFrame()!.collapsed).toBe(true);
-    expect(actor.motionFrame()!.speed).toBe(0);
-    expect(shots).toHaveLength(0);
-    expect(release).toHaveBeenCalled();
+    expect(release.mock.calls.length > 0).toBe(limb === 'armR');
+  });
+
+  it.each([['forearm.l', 'armL'], ['forearm.r', 'armR']] as const)('distal %s loss releases only the gun hand prop', (bone, limb) => {
+    const b = buildBody(compileBlob(parseBlob(soldierSrc)));
+    const cut = severDistal(b, { limb, fromPrim: b.prims.findIndex(p => p.bone === bone) });
+    expect(cut.body.clusters.find(c => c.limb === limb)!.alive).toBe(true);
+    const release = vi.fn();
+    const { actor } = soldier([], release, cut.body);
+    hitLimb(actor, 'chest');
+    expect(release.mock.calls.length > 0).toBe(limb === 'armR');
   });
 
   it('a mid-thigh slug causes a strong reaction while the limb remains attached', () => {

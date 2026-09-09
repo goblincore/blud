@@ -18,11 +18,13 @@ function hit(b: ReturnType<typeof body>, bone: string, t: number, type: Wound['t
 }
 
 describe('soldier regional injury on authored anatomy', () => {
-  it('a head pellet is fatal without removing the head; a heavy head hit detaches it', () => {
+  it('a head pellet and slug survive; repeated head damage is fatal', () => {
     const b = body();
-    expect(soldierInjury(b, [hit(b, 'skull', 0.5)]).fatal).toBe(true);
+    expect(soldierInjury(b, [hit(b, 'skull', 0.5)]).fatal).toBe(false);
+    expect(soldierInjury(b, Array(8).fill(hit(b, 'skull', 0.5))).fatal).toBe(false);
+    expect(soldierInjury(b, Array(12).fill(hit(b, 'skull', 0.5))).fatal).toBe(true);
     expect(soldierInjury(b, [hit(b, 'skull', 0.5)]).sever).not.toContain('head');
-    expect(soldierInjury(b, [hit(b, 'skull', 0.5, 'blast')]).sever).toContain('head');
+    expect(soldierInjury(b, [hit(b, 'skull', 0.5, 'blast')])).toMatchObject({fatal: false, sever: []});
   });
   it('a grazed leg limps; eight focused pellets remove it despite identical carve coverage', () => {
     const b = body(), w = hit(b, 'thigh.l', 0.5);
@@ -46,14 +48,15 @@ describe('soldier regional injury on authored anatomy', () => {
       const cut = severDistal(b, { limb, fromPrim: b.prims.findIndex(p => p.bone === bone) });
       expect(cut.body.clusters.find(c => c.limb === limb)!.alive).toBe(true);
       expect(soldierInjury(cut.body, []).missing[limb]).toBe(true);
-      expect(soldierInjury(cut.body, []).downed).toBe(true);
+      expect(soldierInjury(cut.body, []).downed).toBe(limb === 'legL');
       expect(soldierInjury(cut.body, []).fatal).toBe(false);
     }
   });
   it('survives a scattered body blast but repeated focused torso damage remains fatal', () => {
     const b = body(), wound = hit(b, 'chest', .5);
     expect(soldierInjury(b, Array(8).fill(wound)).fatal).toBe(false);
-    expect(soldierInjury(b, Array(16).fill(wound)).fatal).toBe(true);
+    expect(soldierInjury(b, Array(16).fill(wound)).fatal).toBe(false);
+    expect(soldierInjury(b, Array(24).fill(wound)).fatal).toBe(true);
   });
   it('stump wounds cannot become a second injury in the remaining body', () => {
     const b = body(), cut = severLimb(b, 'armL');
@@ -61,4 +64,18 @@ describe('soldier regional injury on authored anatomy', () => {
     expect(soldierInjury(cut.body, Array(8).fill(cut.stumpWound)).sever).toEqual([]);
     expect(soldierInjury(cut.body, Array(8).fill(cut.stumpWound)).fatal).toBe(false);
   });
+});
+
+it('full loss of either or both arms leaves a Soldier standing', () => {
+  for (const limbs of [['armL'], ['armR'], ['armL', 'armR']] as const) {
+    let b = body();
+    for (const limb of limbs) b = severLimb(b, limb).body;
+    expect(soldierInjury(b, [])).toMatchObject({fatal: false, downed: false});
+  }
+});
+
+it('explicit explosion head injury retains its catastrophic outcome', () => {
+  const b = body(), w = hit(b, 'skull', 0.5, 'blast');
+  w.shot = { weapon: 'explosion' };
+  expect(soldierInjury(b, [w])).toMatchObject({fatal: true, sever: ['head']});
 });

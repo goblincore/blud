@@ -2550,6 +2550,7 @@ async function main() {
     // Gunfire in a room turns every head in it, cone or no cone. Placed after
     // the guards on purpose: a dry click or a shot during a reload must not
     // alert anything, or the flag fires on inputs that made no noise.
+    barrels = Math.min(shells, barrels) as 1 | 2;
     telemetry.event('shot', { kind: slugMode ? 'slug' : 'pellet', barrels });
     shotAlert = true;
     cooldown = GRAPESHOT.fireCooldownSec;
@@ -3909,7 +3910,7 @@ async function main() {
             }
             const stamped = p.kind === 'slug'
               ? hitActor.hitSlug(hitPoint, dirN)
-              : hitActor.hit(hitPoint, dirN);
+              : hitActor.hit(hitPoint, dirN, p.shot);
             telemetry.end('wound-hit', hitTiming);
             if (telemetry.active) telemetry.event('impact', {
               actor: hitActor.id, model: 'zombie', room: hitActor.room, kind: p.kind, stamped: !!stamped,
