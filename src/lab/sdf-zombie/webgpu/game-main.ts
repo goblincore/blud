@@ -252,6 +252,24 @@ async function main() {
   // The world: grey-box meshes from the same layout that feeds collision.
   // -----------------------------------------------------------------------
   const colliders = levelColliders();
+  // ---- ACTOR VISIBILITY CULL STATE ---------------------------------------
+  // Declared HERE, above the draw callback that closes over it, not beside
+  // updateVisibleActors further down. `function updateVisibleActors` is a
+  // hoisted declaration, but const/let are not: with the state declared later,
+  // a frame rendering during boot threw "Cannot access 'cullCounts' before
+  // initialization" and the cull silently never ran (HUD stuck at bodies
+  // 0/15). It was a RACE — more boot work tipped it — which is exactly the
+  // kind of bug that hides until something unrelated changes.
+  const frustum = new THREE.Frustum();
+  const projScreen = new THREE.Matrix4();
+  const bodySphere = new THREE.Sphere(new THREE.Vector3(), 1.1);
+  const lastSeenMs = new Map<number, number>();
+  let actorCullEnabled = true;
+  let visibleActors: ZombieActor[] = [];
+  const cullCounts = { visible: 0, total: 0 };
+  const coverage = { screenFrac: 0, nearestM: 0, biggestFrac: 0 };
+  const sightA: [number, number, number] = [0, 0, 0];
+
   const encounterNav = createEncounterNavigation(ROOMS, TUNNELS, colliders);
   const encounter = createEncounterDirector(encounterNav, colliders);
   const encounterHomes = new Map<number, Vec3>();
@@ -3372,9 +3390,6 @@ async function main() {
   const hud = { lockHint: true };
   let frameEma = 0;
   const bootTime = performance.now();
-  const frustum = new THREE.Frustum();
-  const projScreen = new THREE.Matrix4();
-  const bodySphere = new THREE.Sphere(new THREE.Vector3(), 1.1);
 
   // ---- ACTOR VISIBILITY CULL (2026-09-09) --------------------------------
   //
@@ -3406,10 +3421,6 @@ async function main() {
   /** id -> the last time this actor was seen. Keyed by id, not index: actors
    *  are spawned and gibbed, and an index would transfer one body's grace
    *  period to another. */
-  const lastSeenMs = new Map<number, number>();
-  let actorCullEnabled = true;
-  let visibleActors: ZombieActor[] = [];
-  const cullCounts = { visible: 0, total: 0 };
   /**
    * SCREEN COVERAGE ESTIMATE (2026-09-09), for telemetry only.
    *
@@ -3430,8 +3441,6 @@ async function main() {
    * monotonic proxy for "how much of the view is flesh", not a pixel count —
    * read it as a trend against frame time, never as an absolute.
    */
-  const coverage = { screenFrac: 0, nearestM: 0, biggestFrac: 0 };
-  const sightA: [number, number, number] = [0, 0, 0];
 
   /** Recompute this frame's visible set. Called once, before the draw. */
   function updateVisibleActors(): void {

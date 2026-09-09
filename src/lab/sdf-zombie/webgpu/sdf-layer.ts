@@ -300,6 +300,7 @@ const composite = wgslFn(COMPOSITE_WGSL);
 export const FIELD_INTERLEAVE_WGSL = /* wgsl */ `fn sdfFieldInterleave(
   curTex: texture_2d<f32>,
   prevTex: texture_2d<f32>,
+  curDepth: texture_depth_2d,
   texCoord: vec2<f32>,
   flipY: f32,
   parity: f32,
@@ -312,8 +313,13 @@ export const FIELD_INTERLEAVE_WGSL = /* wgsl */ `fn sdfFieldInterleave(
   let col = clamp(i32(floor(st.x * dims.x)), 0, i32(dims.x) - 1);
   let outRow = i32(floor(st.y * outHeight));
   let tRow = clamp(outRow / 2, 0, i32(dims.y) - 1);
+  // Depth always comes from THIS frame, even on a held row: it is what the
+  // goo layer occludes against, and a scanline of error there is invisible
+  // where a frame of staleness would not be. Colour is where the comb lives.
+  let d = textureLoad(curDepth, vec2<i32>(col, tRow), 0);
   if ((outRow % 2) == i32(parity)) {
-    return textureLoad(curTex, vec2<i32>(col, tRow), 0);
+    let fresh = textureLoad(curTex, vec2<i32>(col, tRow), 0);
+    return vec4<f32>(fresh.xyz, d);
   }
   // The row this frame did not draw. comb 1 = hold last frame's field
   // verbatim, which IS the interlace artifact; 0 = interpolate vertically
@@ -321,7 +327,8 @@ export const FIELD_INTERLEAVE_WGSL = /* wgsl */ `fn sdfFieldInterleave(
   let held = textureLoad(prevTex, vec2<i32>(col, tRow), 0);
   let a = textureLoad(curTex, vec2<i32>(col, tRow), 0);
   let b = textureLoad(curTex, vec2<i32>(col, clamp(tRow + 1, 0, i32(dims.y) - 1)), 0);
-  return mix((a + b) * 0.5, held, comb);
+  let woven = mix((a + b) * 0.5, held, comb);
+  return vec4<f32>(woven.xyz, d);
 }`;
 
 const fieldInterleave = wgslFn(FIELD_INTERLEAVE_WGSL);
@@ -532,6 +539,13 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
     depthBuffer: true,
   });
+  // SAMPLEABLE depth, because the interleave has to REPUBLISH it.
+  // `sdfLayer.render` has always left valid depth in the output target, and
+  // the goo layer depth-tests its blood against exactly that. Routing the
+  // frame through a half-height buffer broke that contract and blood drew
+  // over everything, viewmodel included (owner-caught). A plain depthBuffer
+  // is an attachment, not a texture; DepthTexture is what makes it readable.
+  fieldFull.depthTexture = new THREE.DepthTexture(1, 1);
   /** Last frame's half-height output, woven with this frame's. */
   const fieldPrev = new THREE.RenderTarget(1, 1, {
     type: THREE.HalfFloatType, format: THREE.RGBAFormat,
@@ -539,17 +553,22 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     depthBuffer: false,
   });
   const fieldQuadMat = new MeshBasicNodeMaterial();
-  fieldQuadMat.colorNode = fieldInterleave({
+  const woven = fieldInterleave({
     curTex: texture(fieldFull.texture),
     prevTex: texture(fieldPrev.texture),
+    curDepth: texture(fieldFull.depthTexture),
     texCoord: uv(),
     flipY: uFlipY,
     parity: uFieldParity,
     comb: uFieldComb,
     outHeight: uOutHeight,
-  }) as never;
+  }) as unknown as { xyz: unknown; w: unknown };
+  fieldQuadMat.colorNode = vec4(woven.xyz as never, 1.0);
+  // Republishes the depth the layer has always left behind, so the goo layer
+  // occludes blood exactly as it did before fields existed.
+  fieldQuadMat.depthNode = woven.w as never;
   fieldQuadMat.depthTest = false;
-  fieldQuadMat.depthWrite = false;
+  fieldQuadMat.depthWrite = true;
   const fieldQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), fieldQuadMat);
   fieldQuad.frustumCulled = false;
   const fieldScene = new THREE.Scene();
