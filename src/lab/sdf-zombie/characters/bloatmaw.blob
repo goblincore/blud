@@ -49,6 +49,26 @@
 #      declared 1.829 ball top and clear of the 0.302 hover gap, so `height`
 #      is still the top of the ball.
 #
+# r4 (this pass) — the owner corrected the FRONT, which r3 overshot:
+#   1. The LIPS were two enormous constant-radius sausage tubes framing the
+#      maw, thicker than the body and reading as a stack of rings that buried
+#      the ball. Rebuilt as a tapered RIM around the mouth's opening: each lip
+#      is two halves (left + right) that MEET at the corners and thicken at
+#      the centre (r ~0.058) and thin toward the corners (r2 ~0.022) — that
+#      taper is what makes a lip read as a lip rather than a tube. Uneven and
+#      a little sagging.
+#   2. The brow was a wide flat disc ("a visor plate on a primitive") after r3
+#      widened it into a manufactured slab. Replaced with ANATOMY: a low shelf
+#      spanning both sockets with two rounded swells, one over each eye, thick
+#      over each eye and dipping between them — a ridge of flesh, not a plate.
+#      The eyes keep their sockets (dark blood craters), stay small and uneven.
+#   3. Added small strange WINGS on the upper body: little bat-frills that are
+#      deliberately too small to lift anything this heavy. Uneven — the +x one
+#      is a torn fan, the -x one a ragged stub — rooted high on `spine` so they
+#      break the UPPER silhouette from the side and the back, clear of the
+#      arms' daylight. They live on the torso cluster (24 -> 30 prims), which
+#      stays well under the 64-prim fold ceiling.
+#
 # FLOATING. `stance` is OMITTED on purpose (see the model block): the grammar
 # knows only humanoid/digitigrade and this body has no legs at all. The maw,
 # teeth, eyes and the throat eye are GEOMETRY (prims), not a painted decal:
@@ -154,17 +174,25 @@ body
   blob head on maw at=0.94 offset=(0,-0.09,0.10) r=0.060 wide=1.00 tall=1.00 deep=0.55 blend=0.008 color=7a4814 gloss=0.80
   blob head on maw at=0.94 offset=(0,-0.10,0.13) r=0.028 wide=1.00 tall=1.00 deep=0.50 blend=0.005 color=060408 gloss=0.90
 
-  # ---- LIPS — thick soft rolls around the mouth's opening -----------------
-  # `bend=` is the one primitive that makes a curved, tapered ROLL instead of
-  # a chain of lumps (see reference.md "Curved primitives"). Each lip is a
-  # single `blob` with a `tip=` (the roll runs across the mouth) and a `bend=`
-  # (the control point bows it, so it is one curve, not straight segments).
-  # Uneven by hand: the upper lip is higher on the left and droops forward
-  # over the fangs, the lower lip is fatter and sags under its own weight.
-  # They catch the light along the top edge, which is what finally makes the
-  # maw read as a MOUTH from every angle rather than a hole with teeth in it.
-  blob head on maw at=0.82 offset=(-0.44,0.24,0.10) r=0.095 r2=0.072 tip=(0.88,-0.06,0.03) bend=(0,-0.02,0.08) blend=0.010
-  blob head on maw at=0.82 offset=(-0.44,-0.35,0.10) r=0.108 r2=0.084 tip=(0.88,0.04,0.03) bend=(0,-0.06,0.06) blend=0.010
+  # ---- LIPS — a soft rim AROUND the mouth, not two sausages across it -----
+  # Each lip is TWO tapered halves (left + right) that MEET at the mouth's
+  # corners, where the upper and lower lips close. A lip is THICK at the
+  # centre and THINS toward each corner — that taper is what makes it read as
+  # a lip rather than a constant-radius tube. Each half is a single `blob`
+  # with `r=` at the centre end, `r2=` at the corner end (so it tapers along
+  # its length), and a `bend=` that bows it to follow the mouth's opening.
+  # Deliberately uneven: the right corner sits a touch higher, the left lip
+  # rolls further forward and the lower lip sags, so the rim is asymmetry, not
+  # geometry. They hug the maw's own front (z ~0.74) so they frame the dark
+  # opening and read against the teeth as a mouth, not a hole with teeth in it.
+  # Upper-right half: thick at centre-top (r 0.058), thin at the corner (r2 0.022).
+  blob head on maw at=0.82 offset=(0.02,0.18,0.166) r=0.058 r2=0.022 tip=(0.40,-0.24,-0.01) bend=(0.06,0.05,0.00) blend=0.008
+  # Upper-left half: a touch higher and drooping forward over the fangs.
+  blob head on maw at=0.82 offset=(-0.02,0.19,0.166) r=0.056 r2=0.024 tip=(-0.40,-0.25,-0.01) bend=(-0.06,0.05,0.02) blend=0.008
+  # Lower-right half: fatter at centre-bottom, sags, thin at the same corner.
+  blob head on maw at=0.82 offset=(0.02,-0.32,0.168) r=0.060 r2=0.022 tip=(0.40,0.25,-0.012) bend=(0.05,-0.05,0.00) blend=0.008
+  # Lower-left half: the heavier, lower sagging half of the bottom lip.
+  blob head on maw at=0.82 offset=(-0.02,-0.31,0.166) r=0.058 r2=0.020 tip=(-0.40,0.24,-0.01) bend=(-0.05,-0.06,0.00) blend=0.008
 
   # ---- TEETH — irregular, none repeated -------------------------------
   # Upper row: five fangs hanging off the top lip. Bases sit on the dark
@@ -196,13 +224,18 @@ body
   # and NOT bright — one burnt ember, one dull smoke-amber, both warm and
   # desaturated so nothing reads as plastic or glass. Asymmetry stays:
   # different sizes, different heights, one half-lidded by a flesh lid.
-  # The brow is one continuous heavy RIDGE (a single mass whose own bulk does
-  # the shading) — `wide` 2.5 lets it span past both sockets, `deep` 1.10 and
-  # a forward `offset` let it OVERHANG so it shades the sockets from the top
-  # third, and it sits high enough (bottom y ~1.60) that it covers the big
-  # eye's top third while leaving both eyes findable beneath. The mass is
-  # rounded, not a thin visor slab, so it reads as a fleshy brow.
-  blob head on maw at=0.80 offset=(-0.02,0.56,0.08) r=0.170 wide=2.50 tall=0.60 deep=1.10 blend=0.010   # brow ridge, spans both sockets
+  # The brow is ANATOMY, not a plate. It is a heavy RIDGE of flesh that swells
+  # OUT of the ball and overhangs the eyes, THICKER over each eye and DIPPING
+  # between them (the r3 single constant-section slab read as a manufactured
+  # visor brim — the failure face.ts warns about). One low wide shelf spans
+  # both sockets (deep `deep` + a forward `offset` make it overhang so it
+  # shades the sockets from the top third, and it sits at y~1.64, above the
+  # eyes); two rounded swells sit on it, one over each eye, so the mass bulges
+  # over the right eye a fraction higher and over the left eye a touch lower —
+  # the dip between them is where the ridge is thinnest. Rounded, not thin.
+  blob head on maw at=0.80 offset=(0.00,0.50,0.08) r=0.140 wide=2.20 tall=1.00 deep=1.40 blend=0.012   # low shelf spanning both sockets
+  blob head on maw at=0.80 offset=(0.26,0.52,0.12) r=0.110 wide=1.30 tall=0.95 deep=1.40 blend=0.012   # swell over the right eye
+  blob head on maw at=0.80 offset=(-0.32,0.46,0.10) r=0.095 wide=1.20 tall=0.90 deep=1.40 blend=0.012  # swell over the left eye
   # Right eye (character's right, +x), the big one, set HIGH and out a touch.
   # The socket crater is DARK blood now (not flesh) so the warm ember reads as
   # an eye glowing out of a shadowed pit — that is what makes the pair findable
@@ -334,6 +367,29 @@ body
   blob torso on spine  at=0.85 offset=(-0.36,0.02,-0.08) r=0.040 r2=0 blend=0.006 chamfer tip=(-0.18,0.04,-0.20) color=6b5a44
   blob torso on spine  at=0.60 offset=(0.06,0.00,-0.30) r=0.050 r2=0 blend=0.006 chamfer tip=(0.02,0.00,-0.55) color=6b5a44
   blob head on skull at=0.55 offset=(0.24,0.02,0.06) r=0.040 r2=0 blend=0.006 chamfer tip=(0.12,0.00,-0.06) color=6b5a44
+
+  # ============================================================
+  # THE WINGS — little bat-frills up top, deliberately too small to
+  # lift anything this heavy. The absurdity is the point: this mass
+  # floats on nothing at all, so a pair of vestigial wings that could
+  # never bear its weight is exactly on-theme. Uneven and asymmetric —
+  # the +x one is a torn fan, the -x one a ragged stub (several
+  # mismatched pairs). `bend=` sweeps a curved spar out of the ball, a
+  # far radius of ZERO gives each tip a TRUE POINT so they read as a
+  # wing-finger, not a rounded nub, and `chamfer` keeps the crease. They
+  # root on `spine` high on the upper back (y ~1.35-1.5) so they break
+  # the UPPER silhouette from the side and the back, clear of the arms'
+  # daylight (shoulders seat y ~1.12). Cost is cluster budget only: a
+  # few prims, on the torso cluster (24 -> 30), which stays well under
+  # the 64-prim fold ceiling.
+  # ---- +x wing: a torn membrane fan, two fingers splayed out and back ----
+  blob torso on spine at=0.70 offset=(0.30,0.20,-0.16) r=0.048 r2=0.026 tip=(0.30,0.16,-0.30) bend=(0.10,0.04,-0.02) blend=0.006 color=4a3a2a
+  blob torso on spine at=0.70 offset=(0.30,0.20,-0.16) r=0.036 r2=0      tip=(0.28,0.20,-0.34) bend=(0.16,0.06,-0.04) blend=0.005 chamfer color=6b5a44
+  blob torso on spine at=0.70 offset=(0.30,0.20,-0.16) r=0.028 r2=0      tip=(0.20,0.24,-0.20) bend=(0.24,0.02,-0.06) blend=0.004 chamfer color=6b5a44
+  # ---- -x wing: a smaller ragged stub, angled differently (uneven) -------
+  blob torso on spine at=0.66 offset=(-0.30,0.16,-0.14) r=0.040 r2=0.020 tip=(-0.26,0.12,-0.30) bend=(-0.08,0.02,-0.02) blend=0.006 color=4a3a2a
+  blob torso on spine at=0.66 offset=(-0.30,0.16,-0.14) r=0.030 r2=0      tip=(-0.24,0.16,-0.32) bend=(-0.14,0.04,-0.04) blend=0.005 chamfer color=6b5a44
+  blob torso on spine at=0.66 offset=(-0.30,0.16,-0.14) r=0.024 r2=0      tip=(-0.16,0.20,-0.18) bend=(-0.20,0.00,-0.05) blend=0.004 chamfer color=6b5a44
 
   # ============================================================
   # THE ARMS — withered, too weak to matter, ending in little grasping
