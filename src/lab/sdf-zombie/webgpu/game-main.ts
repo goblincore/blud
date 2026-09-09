@@ -34,7 +34,7 @@ import {
   initialAdaptiveState, stepAdaptive, scaleForRung, SCALE_LADDER,
 } from '../adaptive-scale';
 import { WOUND_STEP_MUL, ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_PRIM_SHAPE, ROW_PRIM_COLOR, ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_CLUSTER_RANGE, ROW_CLUSTER_BOUNDS } from './march.wgsl';
-import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHADOW_HULL_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER, DEPTH_PREPASS_LAYER } from './sdf-layer';
+import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHADOW_HULL_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER, DEPTH_PREPASS_LAYER, FIELD_MESH_LAYER } from './sdf-layer';
 import { createFlashlight, DUNGEON_RIG, GALLERY_RIG, type AmbientRig } from './dungeon-lighting';
 import { GOBLIN_SKIN } from './goblin-skin';
 import { GOBLIN_ARM_GLB, aimArm, loadGoblinArms, type GoblinArms } from './game-arms';
@@ -1176,7 +1176,11 @@ async function main() {
     console.warn('[sdf-game] skeleton=mesh refused (deferred mode) — procedural bones');
   }
   const segMeshCache = skeletonMode === 'mesh' ? new SegmentMeshCache() : null;
-  const segMeshRenderer = segMeshCache ? createSegmentMeshRenderer(segMeshCache) : null;
+  // FIELD_MESH_LAYER, not 0: the 'bodies' field style needs to pull the
+  // skeleton out of the full-resolution polygonal pass and draw it into the
+  // half-height field instead. Every other style just enables that layer in
+  // pass 1, so this is a no-op for them.
+  const segMeshRenderer = segMeshCache ? createSegmentMeshRenderer(segMeshCache, FIELD_MESH_LAYER) : null;
   if (segMeshRenderer) scene.add(segMeshRenderer.object);
   const skeletonSources = new Map<ZombieActor, { body: BuildResult; name: string; sources: BoneFieldSource[] }>();
   const segVolumeCache = skeletonMode === 'volume' ? new SegmentVolumeCache() : null;
@@ -6883,7 +6887,7 @@ async function main() {
     /** A/B seam for the actor visibility cull (ships ON). The bench's
      *  `actor-cull-off` leg is the "before" column. */
     /** 'off' | 'sdf' (flesh only) | 'frame' (whole picture). */
-    setFieldStyle: (style: 'off' | 'sdf' | 'frame') => sdfLayer.setFieldStyle(style),
+    setFieldStyle: (style: 'off' | 'sdf' | 'bodies' | 'frame') => sdfLayer.setFieldStyle(style),
     get fieldStyle() { return sdfLayer.fieldStyle; },
     setFieldMode: (on: boolean) => sdfLayer.setFieldMode(on),
     get fieldMode() { return sdfLayer.fieldMode; },

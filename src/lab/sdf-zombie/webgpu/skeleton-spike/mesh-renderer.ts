@@ -94,7 +94,14 @@ interface ActorSlot {
   keys: string[];
 }
 
-export function createSegmentMeshRenderer(cache: SegmentMeshCache): SegmentMeshRenderer {
+/**
+ * `layer` puts every segment mesh (and its eyes) on a THREE layer other than
+ * 0. The 'bodies' field style uses this to pull the skeleton out of the
+ * full-resolution polygonal pass and render it into the half-height field
+ * buffer instead, in lockstep with the marched flesh. Default 0 = the
+ * ordinary forward pass.
+ */
+export function createSegmentMeshRenderer(cache: SegmentMeshCache, layer = 0): SegmentMeshRenderer {
   const group = new THREE.Group();
   group.name = 'skeleton-segment-meshes';
 
@@ -171,6 +178,10 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache): SegmentMeshR
     for (const [index, { center, radius }] of meshEyePlacements(meshBoneSource(source)).entries()) {
       if (absent.get(owner)?.has(index)) continue;
       const eye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+      // Layers are NOT inherited from the parent in three — a child left on
+      // layer 0 simply does not render when the camera only enables the field
+      // layer, so the skull would come through eyeless.
+      eye.layers.set(layer);
       eye.name = 'skeleton-fleshy-eye';
       eye.userData.eyeIndex = index;
       eye.position.set(...center);
@@ -226,6 +237,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache): SegmentMeshR
         lost.add(i); count++;
         const eye = eyes[i]!;
         const mesh = new THREE.Mesh(eyeGeometry, eyeMaterial);
+        mesh.layers.set(layer);
         mesh.name = 'skeleton-ejected-eye';
         mesh.position.set(...head.toWorld(eye.center));
         mesh.scale.setScalar(eye.radius);
@@ -273,7 +285,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache): SegmentMeshR
           if (!mesh) {
             mesh = new THREE.Mesh(baked.geometry, material);
             mesh.frustumCulled = true; // per-segment bounds are tight and real
-            mesh.layers.set(0);
+            mesh.layers.set(layer);
             syncEyes(mesh, s, owner);
             group.add(mesh);
             slot!.meshes[si] = mesh;

@@ -173,6 +173,19 @@ export const SHADOW_HULL_LAYER = 6;
  */
 export const DEPTH_PREPASS_LAYER = 7;
 
+/**
+ * Content that fields WITH the marched flesh in the 'bodies' style: the
+ * skeleton meshes. Pulled out of the full-resolution polygonal pass and
+ * rendered into a half-height buffer instead, so bone and flesh share one
+ * cadence while the level and viewmodel stay crisp.
+ *
+ * These meshes do NOT need to encode depth into alpha the way the march does.
+ * Their half-height pass only has to resolve mesh-against-mesh; the interleave
+ * that draws them over the frame republishes their depth and depth-TESTS, so
+ * the real buffer resolves them against the level and the flesh.
+ */
+export const FIELD_MESH_LAYER = 8;
+
 /** The depth prepass's linear downsample factor per axis. 4 → one coarse
  *  texel per 4x4 block of SDF pixels → ~1/16 of the march work. */
 export const DEPTH_PREPASS_DIV = 4;
@@ -366,7 +379,7 @@ export const FIELD_INTERLEAVE_WGSL = /* wgsl */ `fn sdfFieldInterleave(
 const fieldInterleave = wgslFn(FIELD_INTERLEAVE_WGSL);
 
 /** What gets interlaced — see `fieldStyle` in createSdfLayer. */
-export type FieldStyle = 'off' | 'sdf' | 'frame';
+export type FieldStyle = 'off' | 'sdf' | 'bodies' | 'frame';
 
 export interface SdfLayer {
   /** Draws the polygonal scene, then the SDF layer, then composites. */
@@ -620,6 +633,46 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
     depthBuffer: false,
   });
+  /** 'bodies' style: the skeleton meshes' own half-height field, and the
+   *  previous frame's. Its depth resolves mesh-against-mesh only; the
+   *  interleave below republishes depth and depth-tests for everything else. */
+  const fieldMesh = new THREE.RenderTarget(1, 1, {
+    type: THREE.FloatType, format: THREE.RGBAFormat,
+    minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
+    depthBuffer: true,
+  });
+  fieldMesh.depthTexture = new THREE.DepthTexture(1, 1);
+  const fieldMeshPrev = new THREE.RenderTarget(1, 1, {
+    type: THREE.FloatType, format: THREE.RGBAFormat,
+    minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
+    depthBuffer: false,
+  });
+  const meshWoven = fieldInterleave({
+    curTex: texture(fieldMesh.texture),
+    prevTex: texture(fieldMeshPrev.texture),
+    curDepth: texture(fieldMesh.depthTexture),
+    texCoord: uv(),
+    flipY: uFlipY,
+    parity: uFieldParity,
+    comb: uFieldComb,
+    outHeight: uOutHeight,
+  }) as unknown as { xyz: unknown; w: unknown };
+  const meshQuadMat = new MeshBasicNodeMaterial();
+  meshQuadMat.colorNode = vec4(meshWoven.xyz as never, 1.0);
+  meshQuadMat.depthNode = meshWoven.w as never;
+  // depthTest ON is the whole trick: this republishes each woven pixel's own
+  // depth and lets the hardware resolve it against the level and the flesh
+  // already in the output. Without it the skeleton would draw through walls.
+  meshQuadMat.depthTest = true;
+  meshQuadMat.depthWrite = true;
+  // The mesh field clears to alpha 0; anywhere no bone was drawn must not
+  // paint black over the frame.
+  meshQuadMat.transparent = true;
+  const meshQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), meshQuadMat);
+  meshQuad.frustumCulled = false;
+  const meshScene = new THREE.Scene();
+  meshScene.add(meshQuad);
+
   const fieldQuadMat = new MeshBasicNodeMaterial();
   const woven = fieldInterleave({
     curTex: texture(fieldFull.texture),
@@ -807,7 +860,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     // 'sdf' halves the MARCH target (the composite weaves it). 'frame' leaves
     // the march at full height and halves the whole-frame buffer instead —
     // halving both would field twice and lose half the vertical detail.
-    const h = fieldStyle === 'sdf' ? fieldTargetHeight(hFull) : hFull;
+    const h = (fieldStyle === 'sdf' || fieldStyle === 'bodies') ? fieldTargetHeight(hFull) : hFull;
     uOutHeight.value = hFull;
     // setSize reallocates the march target's backing memory — a hold frame
     // would composite garbage until the next fresh march.
@@ -823,8 +876,13 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     // fieldPrev retains whichever buffer the style actually fields: the march
     // target in 'sdf', the whole-frame buffer in 'frame'. Sizing it to the
     // wrong one silently weaves mismatched texel grids.
-    if (fieldStyle === 'sdf') fieldPrev.setSize(w, h);
+    if (fieldStyle === 'sdf' || fieldStyle === 'bodies') fieldPrev.setSize(w, h);
     else fieldPrev.setSize(fw, fh);
+    // The mesh field follows the MARCH target's grid so bone and flesh weave
+    // on identical texel rows.
+    const mh = fieldStyle === 'bodies' ? h : 1;
+    fieldMesh.setSize(fieldStyle === 'bodies' ? w : 1, mh);
+    fieldMeshPrev.setSize(fieldStyle === 'bodies' ? w : 1, mh);
     occluder.setSize(w, h);
     shellEntry.setSize(w, h);
     shellExit.setSize(w, h);
@@ -926,6 +984,11 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       // (canvas, or post-aa's capture target). This leaves the depth the
       // composite will test against.
       camera.layers.disable(SDF_LAYER);
+      // 'bodies': the skeleton leaves the full-resolution pass and is drawn
+      // into its own half-height field below, so bone and flesh share one
+      // cadence. Every other style keeps it here at full rate.
+      if (fieldStyle === 'bodies') camera.layers.disable(FIELD_MESH_LAYER);
+      else camera.layers.enable(FIELD_MESH_LAYER);
       // The depth-prepass twins must not rasterise into the polygonal pass
       // either — the disable above covers only the SDF layer itself.
       camera.layers.disable(DEPTH_PREPASS_LAYER);
@@ -1112,7 +1175,28 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       void renderer.render(quadScene, quadCam);
       renderer.autoClear = prevAutoClear;
 
-      if (fieldStyle === 'sdf') {
+      if (fieldStyle === 'bodies') {
+        // The skeleton's own half-height field, at this frame's jitter, then
+        // woven over the frame. Its depth buffer resolves bone against bone;
+        // the interleave's depth TEST resolves it against level and flesh.
+        setPassLabel('sdf:field-mesh');
+        camera.layers.set(FIELD_MESH_LAYER);
+        renderer.setRenderTarget(fieldMesh);
+        renderer.clear();
+        void renderer.render(scene, camera);
+        camera.layers.mask = restore;
+
+        setPassLabel('sdf:field-mesh-weave');
+        renderer.setRenderTarget(outputTarget);
+        const prevAuto = renderer.autoClear;
+        renderer.autoClear = false;
+        void renderer.render(meshScene, quadCam);
+        renderer.autoClear = prevAuto;
+
+        renderer.copyTextureToTexture(target.texture, fieldPrev.texture);
+        renderer.copyTextureToTexture(fieldMesh.texture, fieldMeshPrev.texture);
+        camera.clearViewOffset();
+      } else if (fieldStyle === 'sdf') {
         // Flesh-only: the composite already wove it. Retain the march target
         // so the next frame has the other field. Same true-copy rule as below.
         renderer.copyTextureToTexture(target.texture, fieldPrev.texture);
@@ -1197,7 +1281,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       fieldStyle = style;
       fieldMode = style !== 'off';
       uFieldMode.value = style === 'frame' ? 1 : 0;
-      uCompositeField.value = style === 'sdf' ? 1 : 0;
+      uCompositeField.value = (style === 'sdf' || style === 'bodies') ? 1 : 0;
       // Mutually exclusive with half-rate: both on would hold a held field.
       if (fieldMode && halfRate) { halfRate = false; uHoldMode.value = 0; }
       forceFreshFrame = true;
