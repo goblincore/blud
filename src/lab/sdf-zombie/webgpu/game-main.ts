@@ -1023,7 +1023,13 @@ async function main() {
    *  the exit bound once "won" 0.28 ms by deleting 4 of 9 bodies.
    *  `__sdfGame.setDepthPrepass()` flips it live for A/B; OFF is bit-identical
    *  to the pre-task-3 march (the fetch hands back 0 and the max() folds). */
-  const GAME_DEPTH_PREPASS = 0;
+  // FLIPPED TO 1 (2026-09-09, owner request) for a look pass. This has NOT
+  // earned the flip by the task-3 census — the bar is zero missing bodies at
+  // 0.5/3/9 m and zero missing thin geometry, and the failure mode is silent,
+  // range-dependent geometry DELETION (the exit bound once "won" 0.28 ms by
+  // deleting 4 of 9 bodies). The owner's visual pass IS the evidence being
+  // gathered here. Revert to 0 if anything vanishes at range.
+  const GAME_DEPTH_PREPASS = 1;
 
   /** Perf round 2, task 3: skip a wound's meta/cap texel loads when the
    *  sample is beyond the wound's reach (perfCfg.y). Exact-by-construction —
@@ -1275,6 +1281,12 @@ async function main() {
   const GAME_DEPTH_GATE = 0;
   sdfLayer.setDepthGate(GAME_DEPTH_GATE > 0.5);
   sdfLayer.setDepthPreEnabled(GAME_DEPTH_PREPASS > 0.5);
+  // HALF-RATE + per-pixel reprojection ON (2026-09-09, owner request). Built
+  // and parity-gated 2026-08-31 at p50 -33% / p95 -16%, then parked awaiting a
+  // LOOK verdict that was never given. Mode 1 = reproject (not raw hold). At
+  // the 30 fps cap this marches flesh at 15 Hz over a 30 Hz world: the smear
+  // IS the thing to judge. __sdfGame.setHalfRate(false) turns it off live.
+  sdfLayer.setHalfRate(true);
   // Headless A/B seams (2026-08-27 hull-holes diagnosis): ship defaults stay
   // ON/ON; the driver flips these between captures. Mirrors the lab's
   // __sdfLab.setOccluder.
@@ -3386,6 +3398,27 @@ async function main() {
   let actorCullEnabled = true;
   let visibleActors: ZombieActor[] = [];
   const cullCounts = { visible: 0, total: 0 };
+  /**
+   * SCREEN COVERAGE ESTIMATE (2026-09-09), for telemetry only.
+   *
+   * The march is fill-bound — measured 18.6 ms + 0.237 ms per 1k pixels — so
+   * its cost tracks COVERED PIXELS, not body count. Captures record
+   * `bodiesOnScreen` and `totalWounds` but nothing about area, which makes the
+   * two candidate explanations for the close-up spikes indistinguishable:
+   * "wounds are expensive" vs "a body filling the screen is expensive and you
+   * happen to shoot things that are close".
+   *
+   * This is a CPU ESTIMATE, deliberately not the GPU occupancy probe: that one
+   * is a readback, and the telemetry contract is no GPU waits or reads during
+   * live play — measuring with it would distort what it measures. Each visible
+   * body's bounding sphere is projected to screen and its disc area summed.
+   *
+   * KNOWN AND ACCEPTED IMPRECISION: overlapping bodies double-count, and no
+   * occlusion is applied, so this OVERESTIMATES when bodies stack. It is a
+   * monotonic proxy for "how much of the view is flesh", not a pixel count —
+   * read it as a trend against frame time, never as an absolute.
+   */
+  const coverage = { screenFrac: 0, nearestM: 0, biggestFrac: 0 };
   const sightA: [number, number, number] = [0, 0, 0];
 
   /** Recompute this frame's visible set. Called once, before the draw. */
@@ -3395,12 +3428,18 @@ async function main() {
     if (!actorCullEnabled) {
       visibleActors = actors;
       cullCounts.visible = actors.length;
+      coverage.screenFrac = 0; coverage.nearestM = 0; coverage.biggestFrac = 0;
       return;
     }
     projScreen.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     frustum.setFromProjectionMatrix(projScreen);
     sightA[0] = camera.position.x; sightA[1] = camera.position.y; sightA[2] = camera.position.z;
     const out: ZombieActor[] = [];
+    const tw = sdfLayer.marchTarget.width, th = sdfLayer.marchTarget.height;
+    const px = Math.max(1, tw * th);
+    const halfHpx = th / 2;
+    const tanHalfFov = Math.tan((camera.fov * Math.PI / 180) / 2);
+    let area = 0, nearest = 0, biggest = 0;
     for (const a of actors) {
       const torso = a.posed().clusters.find(c => c.limb === 'torso');
       // No torso cluster (mid-gib, exotic body): never cull what we cannot
@@ -3418,7 +3457,24 @@ async function main() {
       if (seen) lastSeenMs.set(a.id, now);
       const since = now - (lastSeenMs.get(a.id) ?? -Infinity);
       if (seen || since < CULL_DWELL_MS) out.push(a);
+
+      // Coverage estimate — only for bodies actually seen this frame, so a
+      // body coasting on its dwell grace does not inflate the area.
+      if (seen) {
+        const dx = c[0] - sightA[0], dy = c[1] - sightA[1], dz = c[2] - sightA[2];
+        const dist = Math.hypot(dx, dy, dz);
+        if (nearest === 0 || dist < nearest) nearest = dist;
+        const r = bodySphere.radius;
+        // Camera inside the bound: treat as full screen rather than dividing
+        // by a distance that is about to go through zero.
+        const frac = dist <= r ? 1 : Math.min(1, Math.PI * ((r / dist) * halfHpx / tanHalfFov) ** 2 / px);
+        area += frac;
+        if (frac > biggest) biggest = frac;
+      }
     }
+    coverage.screenFrac = Math.min(1, area);
+    coverage.nearestM = nearest;
+    coverage.biggestFrac = biggest;
     visibleActors = out;
     cullCounts.visible = out.length;
   }
@@ -4421,6 +4477,15 @@ async function main() {
       pendingBake: chunkBakeJobs.pendingId, bakeError: chunkBakeJobs.error,
       tiles: gameTiles.diagnostics(), sdfScale, adaptive: adaptiveEnabled,
       woundStep: actors[0]?.view.uniforms.perfCfg.value.z, analyticNormals: normalGradientMode,
+      // Fill-bound march: cost tracks covered pixels, so a capture without an
+      // area term cannot separate "wounds are expensive" from "close bodies
+      // are expensive". CPU estimate — see the `coverage` declaration.
+      coverageFrac: +coverage.screenFrac.toFixed(4),
+      nearestBodyM: +coverage.nearestM.toFixed(2),
+      biggestBodyFrac: +coverage.biggestFrac.toFixed(4),
+      actorCull: actorCullEnabled, visibleBodies: cullCounts.visible,
+      halfRate: sdfLayer.halfRate, halfRateMode: sdfLayer.halfRateMode,
+      depthPrepass: sdfLayer.depthPreEnabled,
     });
     firstTelemetryFrame = false; telemetryVisibilityGap = false;
     telemetryControls?.afterFrame();
@@ -4434,6 +4499,12 @@ async function main() {
     fisheye: fisheyeReport(), renderWidth: sdfLayer.marchTarget.width, renderHeight: sdfLayer.marchTarget.height,
     woundStep: actors[0]?.view.uniforms.perfCfg.value.z,
     hullExitBound: actors[0]?.view.uniforms.perfCfg.value.x,
+    halfRate: sdfLayer.halfRate, halfRateMode: sdfLayer.halfRateMode,
+    depthPrepass: sdfLayer.depthPreEnabled, actorCull: actorCullEnabled,
+    coverageMeaning: 'coverageFrac/biggestBodyFrac are a CPU bounding-sphere '
+      + 'estimate of screen area covered by VISIBLE bodies, not a GPU pixel '
+      + 'count; overlapping bodies double-count and occlusion is ignored, so '
+      + 'it OVERESTIMATES when bodies stack. Read as a trend, not an absolute.',
     gpuTiming: 'unavailable: existing multipass timestamps are not attributable to individual frames',
     intervalMeaning: 'natural drawn-frame start intervals, including frame cap/vsync and scheduling; not pure GPU time',
     cpuMeaning: 'tickCpuMs and drawCpuMs are synchronous CPU time, including submission, not GPU execution',
