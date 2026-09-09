@@ -198,8 +198,27 @@ lab_servers_up() {
       "on debug port $LAB_CDP_PORT"
     # $headless is deliberately unquoted: it must vanish entirely when empty, and
     # quoting it would pass an empty string as a real (invalid) argv entry.
+    # TWO PATHS CHROME USES THAT ARE NOT THE PROFILE, and both defeat a sandbox
+    # that only permits writes inside the worktree (measured 2026-09-09, from a
+    # dispatch run's own log):
+    #
+    #   Failed to create socket directory.
+    #   Failed to create a ProcessSingleton for your profile directory.
+    #   .../Google/Chrome/Crashpad/settings.dat: Operation not permitted
+    #
+    #   * The ProcessSingleton SOCKET lives under $TMPDIR, not --user-data-dir.
+    #     On macOS that is /var/folders/.../T/, so redirecting the profile alone
+    #     is not enough — Chrome aborts before it ever opens the debug port.
+    #   * CRASHPAD writes to the GLOBAL ~/Library/Application Support/Google/
+    #     Chrome/Crashpad, which --user-data-dir does not move either.
+    #
+    # So point TMPDIR at our own scratch and take crash reporting out of the
+    # picture. With LAB_TMP unset both land under /tmp exactly as before.
+    mkdir -p "$LAB_TMP/tmp-$LAB_CDP_PORT"
+    TMPDIR="$LAB_TMP/tmp-$LAB_CDP_PORT" \
     "$LAB_CHROME" $headless --remote-debugging-port="$LAB_CDP_PORT" --enable-unsafe-webgpu \
       --user-data-dir="$LAB_TMP/chrome-lab-$LAB_CDP_PORT" --no-first-run --no-default-browser-check \
+      --disable-crash-reporter --crash-dumps-dir="$LAB_TMP/crashpad-$LAB_CDP_PORT" \
       --window-size=1380,820 about:blank >"$LAB_TMP/lab-chrome-$LAB_CDP_PORT.log" 2>&1 &
     lab_started_chrome=$!
     lab__wait_for "http://localhost:$LAB_CDP_PORT/json/version" "chrome (debug port)" \
@@ -251,6 +270,8 @@ lab__clean_profile() {
   esac
   [ -n "$LAB_TMP" ] || return 0
   dir="$LAB_TMP/chrome-lab-$port"
+  # The singleton socket dir and the crash dir are ours too, keyed the same way.
+  rm -rf "$LAB_TMP/tmp-$port" "$LAB_TMP/crashpad-$port"
   [ -d "$dir" ] || return 0
   rm -rf "$dir"
 }
