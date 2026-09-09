@@ -1328,9 +1328,19 @@ async function main() {
   // full-rate skeleton meshes whenever the player moved — reprojected flesh
   // against exactly-rendered polygons. Fields march half the SCANLINES at the
   // CURRENT camera every frame, so that error class does not exist, and the
-  // comb IS the intended look. __sdfGame.setFieldMode(false) turns it off;
-  // setFieldComb(0..1) dials the comb from full hold to interpolated away.
-  sdfLayer.setFieldStyle('frame');
+  // comb IS the intended look.
+  //
+  // 'bodies' (owner, 2026-09-09): flesh and skeleton field TOGETHER — so the
+  // characters carry the interlace and no flesh/bone row disagreement is
+  // possible — while the level and the viewmodel stay crisp. 'frame' also
+  // removes the disagreement but combs the gun and hands with everything
+  // else; 'sdf' is cheapest but is the style that HAS the disagreement.
+  //
+  // Comb 0.6, not 1: full hold was judged too strong in play. 1 holds the
+  // stale field verbatim, 0 interpolates it away entirely.
+  // __sdfGame.setFieldStyle('off'|'sdf'|'bodies'|'frame') and setFieldComb(x).
+  sdfLayer.setFieldStyle('bodies');
+  sdfLayer.setFieldComb(0.6);
   // Headless A/B seams (2026-08-27 hull-holes diagnosis): ship defaults stay
   // ON/ON; the driver flips these between captures. Mirrors the lab's
   // __sdfLab.setOccluder.
