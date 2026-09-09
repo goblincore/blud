@@ -1,15 +1,20 @@
 import { describe, it, expect } from 'vitest';
 import {
+  DEFAULT_OCCLUDER_ALBEDO,
   DEFAULT_PROBE_OPTIONS,
+  POINT_REF_DIST,
   SH_A0,
   SH_A1,
   SH_Y00,
   SH_Y1,
   buildProbeGrid,
+  buildProbeGridRequest,
   fibonacciSphere,
+  hitAabbEntry,
   hitEnclosure,
   irradianceL1,
   packProbeTexture,
+  probeInsideOccluder,
   probePosition,
   projectL1,
   sampleProbeGrid,
@@ -20,6 +25,10 @@ import {
   type ProbeGrid,
   type ProbeLight,
 } from './probe-grid';
+// Test-only pin: the gather's point-light falloff must mirror the wall side's.
+// The source file deliberately does NOT import game-level.ts (it must stay
+// dependency-free and worker-friendly); the TEST is what keeps the twins equal.
+import { ACCENT_ALBEDO_REF_DIST } from './webgpu/game-level';
 
 /** The lab's default enclosure: 4m x 3.2m x 4m sitting on the floor plane. */
 const BOX: Box = { min: [-2, 0, -2], max: [2, 3.2, 2] };
@@ -298,5 +307,236 @@ describe('packProbeTexture', () => {
 describe('ProbeGridOptions defaults', () => {
   it('matches the spike plan', () => {
     expect(DEFAULT_PROBE_OPTIONS).toEqual({ dims: [8, 4, 8], raysPerProbe: 128, bounces: 2, inset: 0.15 });
+  });
+});
+
+describe('POINT_REF_DIST', () => {
+  it('mirrors the wall falloff reference in game-level.ts', () => {
+    // The gather must use the SAME falloff the walls already use, or bodies
+    // and walls disagree about the room. The source copy is deliberate (no
+    // import from game-level.ts); this test is the pin.
+    expect(POINT_REF_DIST).toBe(ACCENT_ALBEDO_REF_DIST);
+    expect(POINT_REF_DIST).toBe(2.2);
+  });
+});
+
+describe('point lights', () => {
+  const WHITE: [number, number, number] = [1, 1, 1];
+  const NO_KEY: ProbeLight = { ...LIGHT, keyIntensity: 0, fillIntensity: 0 };
+
+  it('falls off as 1/(1+(d/POINT_REF_DIST)^2); directly under is twice the ref distance', () => {
+    const albedo: [number, number, number] = [1, 1, 1];
+    const up: [number, number, number] = [0, 1, 0];
+    // Light straight above the hit point, normal facing it, so N.L = 1 and
+    // only the inverse-square-ish falloff is under test.
+    const at = (h: number) =>
+      wallRadiance(
+        'negY',
+        albedo,
+        up,
+        { ...NO_KEY, points: [{ pos: [0, h, 0], color: WHITE }] },
+        [0, 0, 0],
+        [0, 0, 0],
+        [],
+      );
+    const below = at(0.1); // d = 0.1 m -> f ~= 1
+    const atRef = at(POINT_REF_DIST); // d = 2.2 m -> f = 1/(1+1) = 0.5
+    expect(below[0]).toBeCloseTo(1 / (1 + (0.1 / POINT_REF_DIST) ** 2), 9);
+    expect(atRef[0]).toBeCloseTo(0.5, 9);
+    const ratio = below[0]! / atRef[0]!;
+    expect(Math.abs(ratio - 2) / 2).toBeLessThan(0.01);
+  });
+
+  it('contributes nothing to a surface facing away from the light', () => {
+    const albedo: [number, number, number] = [0.8, 0.8, 0.8];
+    const light: ProbeLight = { ...NO_KEY, points: [{ pos: [0, 2, 0], color: [1, 0, 0] }] };
+    const away: [number, number, number] = [0, -1, 0];
+    const got = wallRadiance('negY', albedo, away, light, [0, 0, 0], [0, 0, 0], []);
+    expect(got).toEqual([0, 0, 0]);
+    const facing = wallRadiance('negY', albedo, [0, 1, 0], light, [0, 0, 0], [0, 0, 0], []);
+    expect(facing[0]).toBeGreaterThan(0);
+    expect(facing[1]).toBe(0);
+    expect(facing[2]).toBe(0);
+  });
+
+  it('is ignored when no hit point is supplied (the existing 5-arg call shape)', () => {
+    const albedo: [number, number, number] = [0.5, 0.4, 0.3];
+    const light: ProbeLight = { ...LIGHT, points: [{ pos: [0, 0, 0], color: [10, 10, 10] }] };
+    const got = wallRadiance('negX', albedo, LIGHT.dir, light, [0, 0, 0]);
+    const want = wallRadiance('negX', albedo, LIGHT.dir, LIGHT, [0, 0, 0]);
+    expect(got).toEqual(want);
+  });
+});
+
+describe('hitAabbEntry', () => {
+  const CRATE: Box = { min: [-0.5, 0, -0.5], max: [0.5, 1, 0.5] };
+
+  it('returns the nearest positive entry with the outward normal facing the origin', () => {
+    const hit = hitAabbEntry([-3, 0.5, 0], [1, 0, 0], CRATE);
+    expect(hit).not.toBeNull();
+    expect(hit!.t).toBeCloseTo(2.5, 9);
+    expect(hit!.point).toEqual([-0.5, 0.5, 0]);
+    expect(hit!.normal).toEqual([-1, 0, 0]);
+  });
+
+  it('returns null from inside, from behind, and on a miss', () => {
+    expect(hitAabbEntry([0, 0.5, 0], [1, 0, 0], CRATE)).toBeNull();   // origin inside
+    expect(hitAabbEntry([-3, 0.5, 0], [-1, 0, 0], CRATE)).toBeNull(); // box behind
+    expect(hitAabbEntry([-3, 2, 0], [1, 0, 0], CRATE)).toBeNull();    // parallel miss
+  });
+});
+
+describe('buildProbeGrid \u2014 occluders', () => {
+  // The +x half of the enclosure, filled by a crate. A ray from the centre
+  // toward +x must read the crate's albedo, not the wall behind it.
+  const HALF_CRATE: Box = { min: [0.3, 0, -1.99], max: [1.99, 3.19, 1.99] };
+
+  it('a ray from the centre toward a crate hits the crate, not the wall behind it', () => {
+    const origin: [number, number, number] = [0, 1.6, 0];
+    const dir: [number, number, number] = [1, 0, 0];
+    const enc = hitEnclosure(origin, dir, BOX);
+    const occ = hitAabbEntry(origin, dir, HALF_CRATE);
+    expect(enc).not.toBeNull();
+    expect(occ).not.toBeNull();
+    expect(occ!.t).toBeCloseTo(0.3, 9);
+    expect(occ!.t).toBeLessThan(enc!.t);
+
+    const grid = buildProbeGrid(BOX, GREY, LIGHT, {
+      dims: [1, 1, 1],
+      raysPerProbe: 256,
+      bounces: 0,
+      occluders: [HALF_CRATE],
+      occluderAlbedo: [0.9, 0.05, 0.05],
+    });
+    const p: [number, number, number] = [0, 1.6, 0];
+    const towardX = sampleProbeGrid(grid, p, [1, 0, 0]);
+    const awayX = sampleProbeGrid(grid, p, [-1, 0, 0]);
+    // The crate only gets fill (its normal faces -x, away from the key), so
+    // +x reads red while -x reads the grey keyed wall.
+    expect(redness(towardX)).toBeGreaterThan(redness(awayX) * 2);
+  });
+
+  it('a crate lit from above reflects its own albedo', () => {
+    const crate: Box = { min: [0.8, 1.0, -1.5], max: [1.6, 2.2, 1.5] };
+    const hit = hitAabbEntry([1.2, 2.5, 0], [0, -1, 0], crate);
+    expect(hit).not.toBeNull();
+    expect(hit!.normal).toEqual([0, 1, 0]);
+    const got = wallRadiance('posY', DEFAULT_OCCLUDER_ALBEDO, hit!.normal, LIGHT, [0, 0, 0], hit!.point, []);
+    const ndl = Math.max(hit!.normal[1] * LIGHT.dir[1], 0);
+    for (let c = 0; c < 3; c++) {
+      expect(got[c]).toBeCloseTo(
+        DEFAULT_OCCLUDER_ALBEDO[c]! *
+          (LIGHT.keyIntensity * ndl * LIGHT.keyColor[c]! + LIGHT.fillIntensity * LIGHT.keyColor[c]!),
+        9,
+      );
+    }
+  });
+
+  it('defaults the occluder albedo to the dark crate', () => {
+    expect(DEFAULT_OCCLUDER_ALBEDO).toEqual([0.35, 0.33, 0.30]);
+  });
+});
+
+describe('point light occlusion by occluders', () => {
+  it('a crate between a wall point and the light leaves only fill + bounce', () => {
+    const albedo: [number, number, number] = [0.5, 0.5, 0.5];
+    const up: [number, number, number] = [0, 1, 0];
+    const light: ProbeLight = {
+      ...LIGHT,
+      keyIntensity: 0,
+      points: [{ pos: [0, 2, 0], color: [1, 0, 0] }],
+    };
+    const bounce: [number, number, number] = [0.01, 0.01, 0.01];
+    const crate: Box = { min: [-0.5, 0.4, -0.5], max: [0.5, 1.2, 0.5] };
+    const blocked = wallRadiance('negY', albedo, up, light, bounce, [0, 0, 0], [crate]);
+    const clear = wallRadiance('negY', albedo, up, light, bounce, [0, 0, 0], []);
+    for (let c = 0; c < 3; c++) {
+      expect(blocked[c]).toBeCloseTo(albedo[c]! * (LIGHT.fillIntensity * LIGHT.keyColor[c]! + bounce[c]!), 9);
+    }
+    expect(clear[0]).toBeGreaterThan(blocked[0]!);
+    expect(clear[1]).toBeCloseTo(blocked[1]!, 9);
+    expect(clear[2]).toBeCloseTo(blocked[2]!, 9);
+  });
+});
+
+describe('probes inside an occluder', () => {
+  it('replaces an enclosed probe with the mean of its free axis neighbours', () => {
+    const dims: [number, number, number] = [3, 1, 3];
+    // The ny = 1 probe row sits at y = 1.6; this crate covers exactly the
+    // centre probe and none of its four axis neighbours.
+    const crate: Box = { min: [-0.1, 1.5, -0.1], max: [0.1, 1.7, 0.1] };
+    const grid = buildProbeGrid(BOX, GREY, LIGHT, { dims, bounces: 1, occluders: [crate] });
+    expect(probeInsideOccluder(grid, 1, 0, 1, [crate])).toBe(true);
+    expect(probeInsideOccluder(grid, 0, 0, 1, [crate])).toBe(false);
+
+    const nx = dims[0];
+    const base = (1 + nx * (0 + dims[1] * 1)) * 12;
+    const free = [[0, 0, 1], [2, 0, 1], [1, 0, 0], [1, 0, 2]] as const;
+    for (let c = 0; c < 12; c++) {
+      let mean = 0;
+      for (const [i, j, k] of free) mean += grid.sh[(i + nx * (j + dims[1] * k)) * 12 + c]!;
+      mean /= free.length;
+      expect(grid.sh[base + c]).toBeCloseTo(mean, 6);
+    }
+  });
+
+  it('leaves a fully enclosed probe at zero', () => {
+    const dims: [number, number, number] = [1, 1, 1];
+    const crate: Box = { min: [-3, -1, -3], max: [3, 5, 3] };
+    const grid = buildProbeGrid(BOX, GREY, LIGHT, { dims, bounces: 0, occluders: [crate] });
+    for (const v of grid.sh) expect(v).toBe(0);
+  });
+});
+
+describe('buildProbeGridRequest', () => {
+  it('matches buildProbeGrid and survives structuredClone', () => {
+    const light: ProbeLight = { ...LIGHT, points: [{ pos: [-1, 2.4, -1], color: [1, 0.3, 0.2] }] };
+    const options = {
+      dims: [3, 2, 3] as [number, number, number],
+      raysPerProbe: 32,
+      bounces: 1,
+      occluders: [{ min: [-1.2, 0, -1.2], max: [-0.7, 1.1, -0.7] } as Box],
+      occluderAlbedo: [0.2, 0.18, 0.16] as [number, number, number],
+    };
+    const req = { box: BOX, walls: GREY, light, options };
+    // The REQUEST itself must be postMessage-able: no closures, no classes.
+    const clonedReq = structuredClone(req);
+    const direct = buildProbeGrid(req.box, req.walls, req.light, req.options);
+    const wrapped = buildProbeGridRequest(clonedReq);
+    expect(wrapped.dims).toEqual(direct.dims);
+    expect(wrapped.min).toEqual(direct.min);
+    expect(wrapped.max).toEqual(direct.max);
+    expect(Array.from(wrapped.sh)).toEqual(Array.from(direct.sh));
+    // And the RESULT buffer survives the worker boundary too.
+    const cloned = structuredClone(wrapped);
+    expect(Array.from(cloned.sh)).toEqual(Array.from(wrapped.sh));
+  });
+});
+
+describe('performance pin \u2014 occluders and point lights', () => {
+  it('10x4x10, 96 rays, 2 bounces, 2 occluders, 2 point lights under 1500 ms', () => {
+    const light: ProbeLight = {
+      ...LIGHT,
+      points: [
+        { pos: [-1.2, 2.6, -1.2], color: [1.0, 0.35, 0.2] },
+        { pos: [1.2, 2.6, 1.2], color: [0.2, 0.45, 1.0] },
+      ],
+    };
+    const occluders: Box[] = [
+      { min: [-1.6, 0, -1.6], max: [-0.9, 1.1, -0.9] },
+      { min: [0.9, 0, 0.9], max: [1.6, 1.1, 1.6] },
+    ];
+    const t0 = performance.now();
+    const grid = buildProbeGrid(BOX, GREY, light, {
+      dims: [10, 4, 10],
+      raysPerProbe: 96,
+      bounces: 2,
+      occluders,
+    });
+    const dt = performance.now() - t0;
+    // eslint-disable-next-line no-console
+    console.log(`probe-grid perf (10x4x10, 96 rays, 2 bounces, 2 occluders, 2 point lights): ${dt.toFixed(1)} ms`);
+    expect(grid.sh.length).toBe(10 * 4 * 10 * 12);
+    expect(dt).toBeLessThan(1500);
   });
 });
