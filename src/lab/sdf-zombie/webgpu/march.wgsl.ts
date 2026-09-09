@@ -3196,8 +3196,12 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
       let detail = detailSrc / max(faceCfg2.y, 1e-3);
       // Skip the multiply where it glows: an eye is not tinted flesh, and the
       // emissive term below supplies its colour outright.
+      // Soldier uses the otherwise unique red-only face flag. Its Replace
+      // decal must yield to the wound mask or it paints pale forehead pixels
+      // back over the tissue ramp after the crater was shaded.
+      let woundDecalFade = 1.0 - faceGlowRedOnly * smoothstep(0.02, 0.25, wm);
       albedo = mix(albedo, mix(albedo * detail, tex.rgb, decal),
-                   facing * tex.a * faceCfg.y * (1.0 - faceGlow));
+                   facing * tex.a * faceCfg.y * (1.0 - faceGlow) * woundDecalFade);
 
       // Relief. Central differences on luminance give the height gradient; the
       // projection is planar along z, so its tangent basis is just x and y and
@@ -3224,6 +3228,12 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
       }
     }
   }
+
+  // Soldier-only wet blood stain. This uses the existing character flag and
+  // the one authoritative wound mask, so it affects head and torso lips while
+  // leaving Zombie, panel overrides, carve depth and gameplay untouched.
+  let soldierWound = faceGlowRedOnly * smoothstep(0.02, 0.62, wm);
+  albedo = mix(albedo, mix(deepColor * 0.52, vec3<f32>(0.30, 0.008, 0.014), wm), soldierWound * 0.58);
 
   // PER-PRIMITIVE COLOUR. The fold already reports the nearest primitive at
   // the hit (hitBest, the noise anchor); a painted one replaces the flesh

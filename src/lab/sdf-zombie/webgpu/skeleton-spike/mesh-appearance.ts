@@ -326,7 +326,8 @@ export const MESH_BONE_SURFACE_WGSL = /* wgsl */ `fn meshBoneSurface(pWorld: vec
   // Wound exposure STAIN the attachment dark; it must not wash the crater
   // toward bright pink (that was the mesh-vs-volume brightness gap).
   let stainW = smoothstep(0.18, 0.85, expo) * (0.55 + 0.45 * grain);
-  albedo = mix(albedo, mix(deepColor * 0.45, vec3<f32>(0.28, 0.012, 0.02), grain), stainW * mix(0.55, 0.22, headFlag));
+  let stainStrength = mix(mix(0.55, 0.22, headFlag), 0.55, soldierHead);
+  albedo = mix(albedo, mix(deepColor * 0.45, vec3<f32>(0.28, 0.012, 0.02), grain), stainW * stainStrength);
   return vec4<f32>(albedo, expo);
 }`;
 

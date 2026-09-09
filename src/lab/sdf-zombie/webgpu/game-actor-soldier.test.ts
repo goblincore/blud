@@ -14,6 +14,9 @@ import type { Aabb } from './game-level';
 import { resolveExplosion } from '../explosion-aoe';
 import { woundFromSlug, spawnPellets, spawnSlug, stepProjectiles } from './game-weapon';
 import { createWoundRing } from './character-view';
+import { createSkeletonSources } from './skeleton-spike/contract';
+import { extractSegmentMesh } from './skeleton-spike/mesh';
+import { sdBody } from '../validate';
 
 function soldier(furniture: Aabb[] = [], releaseProp?: () => void, body?: BuildResult, onMeleeContact?: () => void) {
   const shots: { age: number; kicks: number; origin: readonly number[]; direction: readonly number[]; expectedOrigin: readonly number[]; expectedDirection: readonly number[] }[] = [];
@@ -262,6 +265,20 @@ describe('soldier actor combat wiring', () => {
     expect(actor.body.clusters.find(c => c.limb === 'legL')!.alive).toBe(true);
     expect(actor.motionFrame()!.collapsed).toBe(false);
     expect(actor.motionFrame()!.staggerKind).toBe('lurch');
+  });
+
+  it('keeps the authored skull behind posed flesh during a torso-hit lurch', () => {
+    const { actor } = soldier();
+    const sources=createSkeletonSources(actor.body,actor.boundRig(),{character:'soldier',rig:()=>actor.boundRig().rig,bodyYaw:()=>actor.pose().yaw});
+    const source=sources.find(s=>s.segment==='head')!,mesh=extractSegmentMesh(source),pos=mesh.geometry.getAttribute('position');
+    let worst=-Infinity;
+    hitLimb(actor,'chest',true);
+    for(let frame=0;frame<20;frame++){
+      actor.step(1/60);expect(actor.motionFrame()!.staggerKind).toBe('lurch');
+      for(let i=0;i<pos.count;i++)worst=Math.max(worst,sdBody(source.toWorld([pos.getX(i),pos.getY(i),pos.getZ(i)]),actor.posed()));
+    }
+    mesh.geometry.dispose();
+    expect(worst).toBeLessThanOrEqual(0);
   });
 
   it('the released shot, current gun pose, and recoil share the same frame', () => {

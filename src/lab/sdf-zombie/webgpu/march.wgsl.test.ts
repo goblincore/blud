@@ -771,6 +771,13 @@ describe('melt wet-red ramp (zombie melt task 6)', () => {
     expect(MARCH_BODY).toContain('if ((wm > 0.0 || meltCfg.x > 0.0) && hitBest >= 0)');
     expect(MARCH_BODY).toContain('let isBone = hitMat > 3.5 && hitMat < 4.5;');
   });
+
+  it('lets Soldier wounds override the pale Replace decal and stains torso wounds', () => {
+    expect(MARCH_BODY).toContain('faceGlowRedOnly * smoothstep(0.02, 0.25, wm)');
+    expect(MARCH_BODY).toContain('(1.0 - faceGlow) * woundDecalFade');
+    expect(MARCH_BODY).toContain('let soldierWound = faceGlowRedOnly * smoothstep(0.02, 0.62, wm)');
+    expect(MARCH_BODY).toContain('soldierWound * 0.58');
+  });
 });
 
 describe('melt face drip (zombie melt task 8)', () => {

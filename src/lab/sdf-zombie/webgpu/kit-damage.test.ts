@@ -75,6 +75,8 @@ describe('damaged kit pieces', () => {
     const wound={...worldHitToWound([b.prims[index]!],[-.14,1.38,.01],.055,'pellet'),primIdx:index,eventId:1};
     damage.update(b,[wound,{...wound,injuryIgnored:true}],0,0);
     expect(damage.debris.children).toHaveLength(0);
+    expect(damage.update(b,[{...wound,ageSec:1}],0,0)).toEqual([]);
+    expect(mesh.geometry.index!.count).toBe(12);
     const second={...wound,local:[...wound.local] as typeof wound.local,eventId:2};
     const events=damage.update(b,[wound,second],0,0);
     expect(events.filter(e=>e.kind==='armor-hit')).toHaveLength(1);
@@ -82,7 +84,7 @@ describe('damaged kit pieces', () => {
     expect(damage.debris.children).toHaveLength(1);
     expect(mesh.geometry.index!.count).toBe(6);
     expect(damage.update(b,[wound,second],0,0)).toEqual([]); // cumulative rows do not re-emit
-    expect(damage.update(b,[{...wound,ageSec:1},{...second,ageSec:1}],0,0)).toEqual([]); // actor aging clones rows
+    expect(damage.update(b,[{...wound,ageSec:2},{...second,ageSec:1}],0,0)).toEqual([]); // actor aging clones rows
     for(let i=0;i<240;i++) damage.update(b,[wound,second],0,1/60);
     const plate=damage.debris.children[0] as THREE.Mesh;
     plate.updateMatrixWorld(true);

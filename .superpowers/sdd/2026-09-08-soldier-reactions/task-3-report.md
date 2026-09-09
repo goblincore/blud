@@ -10,6 +10,8 @@
 - Changed the `hitMeshSkull` debug fixture to trace from outside the posed head through the live flesh SDF and stamp the resolved surface point.
 - Stopped the persistent Soldier injury ledger from appending hits in a limb already classified as structurally missing. Visual wound stamping remains intact.
 - Assigned stable event identities in the wound ring because normal age updates clone wound objects. Armor deduplication now survives those clones, and kit damage reconstructs contacts from the separately supplied posed body rather than rest primitives.
+- Made the Soldier's replacement face decal yield to the existing wound mask, added a localized Soldier-only deep-red wound stain for head and torso, and strengthened Soldier mesh-head exposure stain. Removed the Soldier `boneColor` override because the shared mesh renderer seeds that uniform globally and could recolor Zombie bones.
+- Verified the authored head mesh remains inside posed flesh across twenty torso-hit lurch frames; no head geometry change was justified by the screenshot suspicion.
 
 ## Focused verification
 
@@ -33,5 +35,5 @@ The focused suite covers authored containment, Soldier/Zombie sculpt gates, fron
 ## Limits for parent QA
 
 - No GPU run or full production build was performed in this task; the parent owns those checks.
-- `boneColor` is useful for Soldier procedural/reference rendering, but the default shared mesh material takes its base bone uniform from the shared renderer setup. Default mesh bloodiness therefore comes primarily from the existing exposure stain, the darker Soldier fat palette, and the new ragged silhouette; GPU QA must judge the final balance.
+- Default mesh bloodiness comes from the Soldier-gated exposure stain and ragged silhouette while the shared bone palette remains unchanged; GPU QA must judge the final balance.
 - Sparks use a bounded deterministic visual spray from the resolved plate contact. They do not add light sources or change projectile/damage rules.
