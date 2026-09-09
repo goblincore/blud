@@ -40,3 +40,11 @@ public/assets/audio-placeholder
 docs/dev-notes/refs/**/*.glb
 # Local manual gameplay captures (never assets or cross-session agent memory).
 telemetry/
+
+# Lab capture scratch: LAB_TMP (scripts/lab-servers.sh) points here when the
+# lab runs under a sandbox that only permits writes inside the worktree — it
+# holds a throwaway Chrome profile and the vite/chrome logs. Disposable, and
+# a Chrome profile is tens of MB, so it must never be committed. Dispatch
+# agents have already committed scratch to the repo root once.
+.lab-tmp/
+.tmp-chrome*/

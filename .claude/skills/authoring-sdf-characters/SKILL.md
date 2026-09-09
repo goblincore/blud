@@ -76,13 +76,30 @@ bone spine parent=pelvis dir=up pitch=6.842773 len=0.34
 
 `npm run blob:shot -- <name>` is the supported way to get frames: it is
 HEADLESS by default (`BLOB_HEADED=1` for a real window), writes
-`/tmp/blob-shot/<name>/` with an `index.html` and `frame-NN.png`s, and does not
+`$LAB_TMP/blob-shot/<name>/` with an `index.html` and `frame-NN.png`s, and does not
 set `BLOB_DIST` for you — pass it in the environment if the default framing is
 wrong for a short character. Both it and `blob:render-check` share
 `scripts/lab-servers.sh`: each starts a Vite and a WebGPU Chrome if none is
 listening, reuses (and leaves running) a lab that already is, and stops only
 what it started. `LAB_VITE_PORT` / `LAB_CDP_PORT` override the default 5233 /
 9223 so two runs can coexist.
+
+**Running under a sandbox? Set `LAB_TMP` or you get no frames at all.**
+`LAB_TMP` is the scratch root for Chrome's profile, the two server logs and the
+frames. It defaults to `/tmp`, which a dispatch agent cannot write: the
+`workspace-write` permission mode makes everything outside the worktree
+read-only, so Chrome never creates its profile and never starts, and the denial
+is final because approval prompts are off in headless dispatch. The symptom is
+not an error you will notice — it is a run that quietly produces nothing. Two
+character runs shipped unlooked-at that way, and a third gave up on Chrome and
+wrote its own CPU renderer (`scripts/gnasher-silhouette.ts`). Point it inside
+the worktree:
+
+```
+LAB_TMP=.lab-tmp npm run blob:shot -- <name>
+```
+
+`.lab-tmp/` is gitignored and everything under it is disposable.
 
 Drive it by hand only when you need to watch the lab itself, or want a port and
 a camera the wrapper does not expose:
