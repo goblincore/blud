@@ -810,7 +810,7 @@ export function createZombieActor(opts: {
       state = stepR.state;
       lastFrame = stepR.frame;
       const f = stepR.frame;
-      if (think.contact && think.attack) {
+      if (think.contact && think.attack && !f.collapsed && !signals.fatal) {
         meleeContacts++;
         opts.onMeleeContact?.({ actorId: opts.id, variant: think.attack.variant });
       }

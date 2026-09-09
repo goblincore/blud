@@ -933,6 +933,28 @@ describe('soldier injury response', () => {
     expect(len(sub(gunPoint(result.frame.gun!, GUN_GRIP.foreHand), result.frame.restPose[j.index.handL]!))).toBeGreaterThan(.04);
   });
 
+  it('reacquires the support grip continuously through lurch expiry', () => {
+    const j = soldierJoints();
+    let state = makeMotionState(5, [0, 0, 0]);
+    let points = stubPoints(j), prior = points[j.index.handL]!.pos, maxLateStep = 0;
+    for (let i = 0; i < 70; i++) {
+      const sig = { ...NO_SIGNALS(), shot: i === 0
+        ? { type: 'blast' as const, dirWorld: [0, 0, -1] as Vec3, woundWorld: [0, 1, 0] as Vec3, torso: true }
+        : null };
+      const result = stepMotion(state, j,
+        { enabled: true, wander: false, profile: SOLDIER_PROFILE, carryOverride: 'aim' },
+        sig, points, BOUNDS, makeRng(5));
+      const hand = result.frame.restPose[j.index.handL]!;
+      if (i > 48) maxLateStep = Math.max(maxLateStep, len(sub(hand, prior)));
+      prior = hand; state = result.state;
+      points = result.frame.restPose.map(p => ({ pos: [...p] as Vec3, prev: [...p] as Vec3, pinned: false }));
+    }
+    expect(maxLateStep).toBeLessThan(.04);
+    expect(len(sub(gunPoint((stepMotion(state, j,
+      { enabled: true, wander: false, profile: SOLDIER_PROFILE, carryOverride: 'aim' },
+      NO_SIGNALS(), points, BOUNDS, makeRng(5))).frame.gun!, GUN_GRIP.foreHand), prior))).toBeLessThan(.06);
+  });
+
   it('losing one leg or the head causes a structural fall, while a zombie still hops on one leg', () => {
     const leg = { ...NO_SIGNALS(), missing: { ...INTACT, legL: true } };
     for (const signals of [leg, { ...NO_SIGNALS(), headAlive: false }]) {

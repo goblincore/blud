@@ -122,6 +122,25 @@ describe('soldier actor combat wiring', () => {
     expect(actor.motionFrame()!.collapsed).toBe(false);
   });
 
+  it('does not emit melee contact on the frame lethal damage collapses the Soldier', () => {
+    const b = severLimb(buildBody(compileBlob(parseBlob(soldierSrc))), 'armR').body;
+    const contact = vi.fn();
+    const { actor } = soldier([], undefined, b, contact);
+    actor.setRingInput(true, 0);
+    for (let i = 0; i < 19; i++) {
+      actor.setBrainInput({ x: 0, z: 1, room: 1 }, true);
+      actor.step(1 / 60);
+    }
+    expect(actor.debug().swingT).toBeGreaterThan(0);
+    expect(actor.debug().swingT).toBeLessThan(.5);
+    expect(contact).not.toHaveBeenCalled();
+    for (let i = 0; i < 24; i++) hitLimb(actor, 'chest');
+    actor.setBrainInput({ x: 0, z: 1, room: 1 }, true);
+    actor.step(1 / 60);
+    expect(actor.motionFrame()!.collapsed).toBe(true);
+    expect(contact).not.toHaveBeenCalled();
+  });
+
   it('survives a full double torso volley; further damage stays cumulative after visual wound eviction', () => {
     const { actor } = soldier();
     const volley = spawnPellets([0, 0, 0], [0, 0, 1], 2, 42);

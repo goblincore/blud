@@ -811,6 +811,7 @@ export function stepMotion(
   let carryUsed: CarryName | null = null;
   const strongSoldierReaction = profile.name === 'soldier' && stagger.staggered && stagger.state.kind === 'lurch';
   const strongReactionWeight = strongSoldierReaction ? clamp(1 - stagger.state.age / 0.65, 0, 1) : 0;
+  const supportGripWeight = strongSoldierReaction ? clamp((stagger.state.age - 0.25) / 0.65, 0, 1) : 1;
   const carries = profile.carries;
   let carryPose = state.carryPose;
   if (armStyle === 'carry' && carries && !collapsed && canHold) {
@@ -853,9 +854,15 @@ export function stepMotion(
       targets[iE] = alignElbow(targets[iS]!, targets[iE]!, targets[iH]!, rotateYaw([-inward, -1, 0.3], bodyYaw));
     }
     // Left arm: FABRIK onto the fore-end, elbow poled outward.
-    if (gun && !sig.missing.armL && !strongSoldierReaction) {
+    if (gun && !sig.missing.armL && supportGripWeight > 0) {
       const iS = idx.shoulderL!, iE = idx.elbowL!, iH = idx.handL!;
-      const target = gunPoint(gun, GUN_GRIP.foreHand);
+      const grip = gunPoint(gun, GUN_GRIP.foreHand);
+      const released = targets[iH]!;
+      const target: Vec3 = [
+        released[0] + (grip[0] - released[0]) * supportGripWeight,
+        released[1] + (grip[1] - released[1]) * supportGripWeight,
+        released[2] + (grip[2] - released[2]) * supportGripWeight,
+      ];
       const chain = solveChain([targets[iS]!, targets[iE]!, targets[iH]!], joints.arm.L, target, SOLVE);
       const pole = rotateYaw(carry.leftPole, bodyYaw);
       const elbow = alignElbow(chain[0]!, chain[1]!, chain[2]!, pole);

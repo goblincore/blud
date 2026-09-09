@@ -20,3 +20,11 @@ Validation:
 - No GPU or browser work was run; parent owns visual QA.
 
 Files intentionally outside this task remain untracked and were not included: `docs/superpowers/plans/2026-09-08-soldier-reactions.md` and `docs/superpowers/specs/2026-09-08-soldier-reactions-design.md`.
+
+## Review follow-up
+
+Resolved both P2 findings from the independent review. Actor contact dispatch now requires the completed motion frame to remain standing and nonfatal, preventing a swing crossing its contact phase on the same substep as lethal collapse from producing a callback or diagnostic count. The regression advances a disarmed Soldier to late windup, applies lethal torso damage, and verifies collapse without contact.
+
+Strong-reaction support-hand recovery now begins after the initial release and progressively moves the constrained IK target from the released hand position to the gun fore-end, reaching the grip before the lurch expires. This removes the one-frame snap at the old `strongSoldierReaction` boundary while preserving arm lengths and keeping the gun attached to the right hand. The motion regression measures frame-to-frame hand continuity through lurch expiry and final fore-end proximity.
+
+Follow-up validation: 223 tests across the same 8 focused files passed; `npx tsc --noEmit` and `git diff --check` passed. No GPU or browser work was run.
