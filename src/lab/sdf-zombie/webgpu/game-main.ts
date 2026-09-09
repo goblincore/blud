@@ -84,6 +84,7 @@ import {
   type RoomDef,
 } from './game-level';
 import { stepPlayer, eyeOf, PLAYER, type PlayerState, type MoveInput } from './game-player';
+import { createRoomProbes, type ProbeWorkerLike } from './room-probes';
 import { createZombieActor, segmentHitsBox, type ZombieActor } from './game-actor';
 import { separate, minPairDistance, type CrowdAgent } from '../crowd';
 import { arbitrate, RING_TUNING, type RingClaimant } from '../melee-ring';
@@ -1576,6 +1577,27 @@ async function main() {
   /** ONE spawn — the boot-loop body, kept as THE actor path so the wound
    *  panel's bone-ratio rebuild cannot drift from boot. Pushes build errors
    *  into errs; the caller decides how to surface them. */
+  // PER-ROOM PROBE GRIDS (lighting P3 step 2). Baked in a worker at boot from
+  // each room's paint, accents and furniture; stamped onto a body at spawn
+  // below. ?probes=0 keeps every body on the P1 path (probeCfg.x = 0, which
+  // is bit-identical) for the parity and bench drivers. The gain defaults to
+  // each room's matched level — the level of today's P1 at ambientGain 4 —
+  // so only the direction and hue of the ambient change, not its brightness.
+  const probesParam = new URLSearchParams(location.search).get('probes');
+  const probesOff = probesParam === '0' || probesParam === 'off';
+  const roomProbes = createRoomProbes({
+    rooms: ROOMS, furniture: FURNITURE,
+    light: {
+      dir: LIGHT_PRESETS['practical-hard-key'].keyDir,
+      keyColor: LIGHT_PRESETS['practical-hard-key'].keyColor,
+      keyIntensity: LIGHT_PRESETS['practical-hard-key'].keyIntensity,
+      fillIntensity: LIGHT_PRESETS['practical-hard-key'].fillIntensity,
+    },
+    workerFactory: () => new Worker(new URL('../probe-grid.worker.ts', import.meta.url), { type: 'module' }) as unknown as ProbeWorkerLike,
+    onReady: (roomId) => { if (import.meta.env.DEV) console.info(`[room-probes] room ${roomId} baked`); },
+  });
+  if (probesOff) roomProbes.setProbes(0, -1);
+
   function spawnEnemy(name: string, room: RoomDef, start: Vec3, errs: string[]): ZombieActor {
     const enc = enclosureOf(room.name)!;
     const roomFurniture = FURNITURE
@@ -1728,6 +1750,7 @@ async function main() {
     view.uniforms.wallNegZ.value.setRGB(...enc.walls.negZ);
     view.uniforms.wallPosZ.value.setRGB(...enc.walls.posZ);
     view.uniforms.bounceCfg.value.set(probeWeight, 4, 1, 1);
+    roomProbes.bind(view.uniforms, room.id);
     view.object.layers.set(SDF_LAYER);
     view.coneObject.layers.set(CONE_LAYER);
     if (view.depthPreObject) {
@@ -5111,6 +5134,10 @@ async function main() {
     setFxaa: (on: boolean) => postAa.setFxaa(on),
     get fxaa() { return postAa.fxaa; },
     setSmear: (v: number) => postAa.setSmear(v),
+    /** Per-room probe grids (P3 step 2): weight 0 = bit-identical P1; gain -1
+     *  = each room's matched level, else an absolute multiplier. */
+    setProbes: (weight: number, gain = -1) => { roomProbes.setProbes(weight, gain); return { weight: roomProbes.weight, gain: roomProbes.gain }; },
+    get probes() { return { weight: roomProbes.weight, gain: roomProbes.gain, ready: roomProbes.ready, matched: ROOMS.map(r => [r.id, roomProbes.matchedGain(r.id)]) }; },
     get smear() { return postAa.smear; },
     // VHS is the fourth chain stage, default OFF. While on it replaces the
     // smear pass; `effectiveSmear` says which temporal filter is really
