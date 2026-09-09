@@ -1023,13 +1023,14 @@ async function main() {
    *  the exit bound once "won" 0.28 ms by deleting 4 of 9 bodies.
    *  `__sdfGame.setDepthPrepass()` flips it live for A/B; OFF is bit-identical
    *  to the pre-task-3 march (the fetch hands back 0 and the max() folds). */
-  // FLIPPED TO 1 (2026-09-09, owner request) for a look pass. This has NOT
-  // earned the flip by the task-3 census — the bar is zero missing bodies at
-  // 0.5/3/9 m and zero missing thin geometry, and the failure mode is silent,
-  // range-dependent geometry DELETION (the exit bound once "won" 0.28 ms by
-  // deleting 4 of 9 bodies). The owner's visual pass IS the evidence being
-  // gathered here. Revert to 0 if anything vanishes at range.
-  const GAME_DEPTH_PREPASS = 1;
+  // BACK TO 0 (2026-09-09). Flipped to 1 for one owner look pass and REVERTED
+  // the same day: the geometry deletion this comment warned about was "very
+  // noticeable" in play, exactly the failure the task-3 census exists to catch.
+  // That is now an owner-observed result, not a hypothesis — do not flip it
+  // again without first passing the census (zero missing bodies at 0.5/3/9 m,
+  // zero missing thin geometry). `__sdfGame.setDepthPrepass()` still flips it
+  // live for anyone who wants to reproduce the artifact.
+  const GAME_DEPTH_PREPASS = 0;
 
   /** Perf round 2, task 3: skip a wound's meta/cap texel loads when the
    *  sample is beyond the wound's reach (perfCfg.y). Exact-by-construction —
