@@ -205,6 +205,17 @@ describe('woundFromPellet', () => {
 });
 
 describe('spawnSlug', () => {
+  it('uses distinct shot identities across slugs and shotgun volleys', () => {
+    const first = spawnSlug([0, 0, 0], [0, 0, -1]).shot;
+    const volley = spawnPellets([0, 0, 0], [0, 0, -1], 2, 123);
+    const last = spawnSlug([0, 0, 0], [0, 0, -1]).shot;
+    expect(first).toMatchObject({ weapon: 'slug', shotId: expect.any(Number) });
+    expect(last).toMatchObject({ weapon: 'slug', shotId: expect.any(Number) });
+    const id = (shot: typeof first) => shot && 'shotId' in shot ? shot.shotId : undefined;
+    expect(new Set([id(first), id(volley[0]!.shot), id(last)]).size).toBe(3);
+    expect(new Set(volley.map(p => id(p.shot))).size).toBe(1);
+  });
+
   it('fires ONE projectile straight down the given ray', () => {
     const p = spawnSlug([1, 2, 3], [0, 0, -1]);
     expect(p.kind).toBe('slug');

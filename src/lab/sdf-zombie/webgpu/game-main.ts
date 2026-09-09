@@ -3909,7 +3909,7 @@ async function main() {
               if (sources) segMeshRenderer.impact(hitActor, sources, hitPoint, dirN, p.kind);
             }
             const stamped = p.kind === 'slug'
-              ? hitActor.hitSlug(hitPoint, dirN)
+              ? hitActor.hitSlug(hitPoint, dirN, p.shot)
               : hitActor.hit(hitPoint, dirN, p.shot);
             telemetry.end('wound-hit', hitTiming);
             if (telemetry.active) telemetry.event('impact', {

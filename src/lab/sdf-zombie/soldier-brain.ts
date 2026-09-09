@@ -25,6 +25,7 @@
 // Room-bound tactical moves use injected bounds and swept clearance. If no
 // candidate is reachable, hold position and keep looking for a firing chance.
 import type { Vec3 } from './types';
+import { SOLDIER_STAGGER } from './soldier-stagger';
 import { wrapPi, type WanderBounds } from './wander';
 
 export type SoldierState =
@@ -196,9 +197,8 @@ export const SOLDIER_TUNING = {
   refireRoll: 0.85,
   /** The decision tick (s) — see the comment on the tick itself. */
   repositionSec: 0.65,
-  /** Blast hold, matching the zombie's, so a shot soldier lurches for as long
-   *  as a shot zombie does (s). */
-  blastHoldSec: 0.55,
+  /** Finish recomposing the backward reaction before starting a fresh aim. */
+  blastHoldSec: SOLDIER_STAGGER.aimSafeSec,
   oneHandAimScale: 1.5,
   oneHandSpreadRad: 0.07,
   meleeRadius: 1.25,
@@ -240,8 +240,9 @@ export function makeSoldierBrain(): SoldierBrain {
 export function staggerSoldierNow(
   brain: SoldierBrain,
   tuning: SoldierTuning = SOLDIER_TUNING,
+  holdSec: number = tuning.blastHoldSec,
 ): SoldierBrain {
-  return { ...brain, state: 'stagger', phaseT: 0, holdSecs: tuning.blastHoldSec, moveGoal: null, moveT: 0, burstLeft: 0, burstShots: 0 };
+  return { ...brain, state: 'stagger', phaseT: 0, holdSecs: Math.max(brain.holdSecs, holdSec), moveGoal: null, moveT: 0, burstLeft: 0, burstShots: 0 };
 }
 
 function clamp(v: number, lo: number, hi: number): number {

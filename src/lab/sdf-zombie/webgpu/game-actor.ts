@@ -28,9 +28,9 @@ import {
   type Wound, type WoundType,
 } from '../damage';
 import { severLimb, severDistal, type SeverResult } from '../sever';
-import { soldierInjury } from '../soldier-damage';
+import { soldierInjury, soldierArmCutAllowed } from '../soldier-damage';
 import { posedDetachedChunk } from '../detached-pose';
-import { cutLimbs, cutChains } from '../connectivity';
+import { cutLimbs, cutChains, chainOrder, jointPoint } from '../connectivity';
 import { sdBody } from '../validate';
 import type { LimbId, Primitive, Vec3 } from '../types';
 import {
@@ -53,6 +53,7 @@ import type { ZombieGpuView } from './zombie-gpu';
 import { createWoundRing, type CharacterView } from './character-view';
 import { createTorsoWounds } from '../shared-wounds/torso';
 import { soldierVisualWounds } from '../soldier-wounds';
+import { soldierStaggerDuration } from '../soldier-stagger';
 import type { Aabb } from './game-level';
 import { GUN_GRIP, gunPoint } from '../carry';
 import { qRotate } from '../vec';
@@ -350,7 +351,7 @@ export interface ZombieActor {
    * nothing about the pellet path may drift while it is under diagnosis.
    * Returns the stamped wound — see hit().
    */
-  hitSlug(hitWorld: Vec3, dirWorld: Vec3): Wound | null;
+  hitSlug(hitWorld: Vec3, dirWorld: Vec3, shot?: import('../damage').ShotProvenance): Wound | null;
   /**
    * HIT BATCHING (2026-09-05). Between beginHits() and endHits(), hit() /
    * hitSlug() stamp the wound and apply the shove but DEFER the expensive
@@ -441,6 +442,7 @@ export function createZombieActor(opts: {
   let bodyYaw = 0;
   const soldierDamage = opts.profile?.name === 'soldier';
   let soldierFatal = false;
+  let propReleaseRequested = false;
 
   // ---- damage state -------------------------------------------------------
   /** THE shared wound ring (character-view.ts). The character's own when the
@@ -464,7 +466,13 @@ export function createZombieActor(opts: {
   const pendingWounds: Wound[] = [];
   const pendingSevered: LimbId[] = [];
   let pendingShot: MotionSignals['shot'] = null;
+  let reactionTime = 0;
+  let shotWindow: number[] = [];
+  const seenReactionShots = new Map<string, number>();
+  let diagnosticShotSerial = 0;
+  let diagnosticBatchShot = 0;
   let pendingPelletHits = 0;
+  let pendingPelletShot: MotionSignals['shot'] = null;
   let meleeContacts = 0;
 
   let lastDebug: ReturnType<ZombieActor['debug']> | null = null;
@@ -604,23 +612,47 @@ export function createZombieActor(opts: {
     }, r.stumpWound);
   }
 
+  function allowArmCut(limb: LimbId, fromPrim?: number): boolean {
+    if (!soldierDamage || soldierFatal || (limb !== 'armL' && limb !== 'armR')) return true;
+    const cluster = current.clusters.find(c => c.limb === limb)!;
+    const order = chainOrder(current, cluster);
+    if (!order.length) return false;
+    let at: Vec3;
+    if (fromPrim !== undefined) {
+      const i = order.indexOf(fromPrim);
+      if (i < 1) return false;
+      at = jointPoint(current.prims[order[i - 1]!]!, current.prims[fromPrim]!);
+    } else {
+      const first = current.prims[order[0]!]!;
+      const joint = order.length > 1 ? jointPoint(first, current.prims[order[1]!]!)
+        : current.clusters.find(c => c.limb === 'torso')!.center;
+      const distance = (p: Vec3) => Math.hypot(p[0] - joint[0], p[1] - joint[1], p[2] - joint[2]);
+      at = distance(first.a) >= distance(first.b) ? first.a : first.b;
+    }
+    return soldierArmCutAllowed(current, soldierWounds, limb, at);
+  }
+
   function runSeverChecks() {
     const torsoC = current.clusters.find(c => c.limb === 'torso')?.center ?? [0, 1.1, 0] as Vec3;
     const injury = soldierDamage ? soldierInjury(current, soldierWounds) : null;
     if (injury) soldierFatal ||= injury.fatal;
     const cuttingWounds = soldierDamage ? woundRing.all().filter(w => !w.injuryIgnored) : [...woundRing.all()];
-    const fullCuts = [...new Set([...cutLimbs(current, cuttingWounds, torsoC).filter(limb => !soldierDamage || soldierFatal || limb !== 'head'), ...(injury?.sever ?? [])])];
+    const fullCuts = [...new Set([...cutLimbs(current, cuttingWounds, torsoC).filter(limb => (!soldierDamage || soldierFatal || limb !== 'head') && allowArmCut(limb)), ...(injury?.sever ?? [])])];
     for (const limb of fullCuts) {
       detach(limb, severLimb(current, limb));
     }
     for (const cut of cutChains(current, soldierDamage ? cuttingWounds : [...woundRing.all()])) {
-      if (fullCuts.includes(cut.limb) || (soldierDamage && !soldierFatal && cut.limb === 'head')) continue;
+      if (fullCuts.includes(cut.limb) || (soldierDamage && !soldierFatal && cut.limb === 'head') || !allowArmCut(cut.limb, cut.fromPrim)) continue;
       detach(cut.limb, severDistal(current, cut));
     }
     if (soldierDamage) {
       const after = soldierInjury(current, soldierWounds);
       soldierFatal ||= after.fatal;
-      if (soldierFatal || after.downed || after.missing.armR) opts.character?.releaseProp([0, 0, 0], opts.seed);
+      if (soldierFatal || after.downed) { shotWindow = []; seenReactionShots.clear(); }
+      if (!propReleaseRequested && (soldierFatal || after.downed || after.missing.armR)) {
+        propReleaseRequested = true;
+        opts.character?.releaseProp([0, 0, 0], opts.seed);
+      }
     }
   }
 
@@ -636,6 +668,7 @@ export function createZombieActor(opts: {
   let damageRevision = 0;
   function step(dt: number) {
     if (bakePaused) return;
+    reactionTime += Math.max(0, dt);
     let firstSub = true;
     // Consume the capture pin ONCE PER FRAME, before the sub-step loop: every
     // sub-step of THIS step() carries the forced pose, and the brain's own
@@ -738,6 +771,7 @@ export function createZombieActor(opts: {
         const injury = soldierInjury(current, soldierWounds);
         soldierFatal ||= injury.fatal;
         signals.downed = injury.downed;
+        signals.mobilityInjury = injury.mobilityInjury;
         signals.fatal = soldierFatal;
         signals.forcedCollapse ||= soldierFatal;
         signals.fire &&= !soldierFatal && !signals.downed;
@@ -819,11 +853,21 @@ export function createZombieActor(opts: {
         meleeContacts++;
         opts.onMeleeContact?.({ actorId: opts.id, variant: think.attack.variant });
       }
+      // Collision resolves after motion authored world-space targets. Keep
+      // this frame's rig, held prop and future fall anchor with the root.
+      // Footwork rebases its world contacts from wander on the next step.
+      const correctFrame = (pos: Vec3) => {
+        const dx = pos[0] - state.wander.pos[0], dz = pos[2] - state.wander.pos[2];
+        const translate = (p: Vec3): Vec3 => [p[0] + dx, p[1], p[2] + dz];
+        f.rootShift = translate(f.rootShift);
+        f.restPose = f.restPose.map(translate);
+        if (f.gun) f.gun = { ...f.gun, root: translate(f.gun.root) };
+        state = { ...state, lastShift: translate(state.lastShift),
+          wander: { ...state.wander, pos } };
+      };
       if (opts.navigation && !opts.navigation.canTravel(beforeMove,state.wander.pos)) {
-        const dx=beforeMove[0]-state.wander.pos[0],dz=beforeMove[2]-state.wander.pos[2];
-        state={...state,wander:{...state.wander,pos:beforeMove,speed:0,target:null}};
-        f.rootShift=[f.rootShift[0]+dx,f.rootShift[1],f.rootShift[2]+dz];
-        f.restPose=f.restPose.map(p=>[p[0]+dx,p[1],p[2]+dz]);
+        correctFrame(beforeMove);
+        state={...state,wander:{...state.wander,speed:0,target:null}};
       }
       // Furniture rejection. A step that lands inside a fattened box is
       // pushed back out along its shallowest axis (pushOutOfFurniture), so
@@ -834,10 +878,8 @@ export function createZombieActor(opts: {
       // brain target) additionally drops its target and pauses: the next leg
       // starts somewhere else, the designed unstick.
       if (insideFurniture(state.wander.pos)) {
-        let w = {
-          ...state.wander,
-          pos: pushOutOfFurniture(state.wander.pos, opts.furniture),
-        };
+        correctFrame(pushOutOfFurniture(state.wander.pos, opts.furniture));
+        let w = state.wander;
         if (!think.target) {
           w = { ...w, target: null, idle: 0.2 };
         }
@@ -866,6 +908,18 @@ export function createZombieActor(opts: {
       for (const kick of f.kicks) {
         const i = joints.index[kick.joint];
         if (i !== undefined) bound = impulseAt(bound, bound.rig.points[i]!.pos, kick.delta);
+      }
+      if (soldierDamage && f.gun && !f.collapsed) {
+        // Motion authors the grip target before Verlet and bend constraints.
+        // Seat the prop on the solved hand without changing its authored
+        // wrist rotation (the elbow pole adjustment must not repitch it).
+        const hand = bound.rig.points[joints.index.handR]!.pos;
+        const grip = gunPoint(f.gun, GUN_GRIP.gripHand);
+        f.gun = { ...f.gun, root: [
+          f.gun.root[0] + hand[0] - grip[0],
+          f.gun.root[1] + hand[1] - grip[1],
+          f.gun.root[2] + hand[2] - grip[2],
+        ] };
       }
       if (signals.fire && f.gun && !f.collapsed) {
         opts.onFire?.({ origin: gunPoint(f.gun, GUN_GRIP.muzzle), direction: rotateYaw(qRotate(f.gun.quat, [0, 0, 1]), think.aimError) });
@@ -936,10 +990,10 @@ export function createZombieActor(opts: {
     return applyProjectileHit(wound, hitWorld, dirWorld);
   }
 
-  function hitSlug(hitWorld: Vec3, dirWorld: Vec3): Wound | null {
+  function hitSlug(hitWorld: Vec3, dirWorld: Vec3, shot?: import('../damage').ShotProvenance): Wound | null {
     const field = posed;
     const wound = woundFromSlug(field.prims, hitWorld, p => sdBody(p, field), bodyYaw);
-    wound.shot = { weapon: 'slug' };
+    wound.shot = shot?.weapon === 'slug' ? shot : { weapon: 'slug' };
     return applyProjectileHit(wound, hitWorld, dirWorld);
   }
 
@@ -968,21 +1022,53 @@ export function createZombieActor(opts: {
    *  the actor's CURRENT posed body at call time. Returns the stamped wound. */
   let hitBatching = false;
   let hitPending = false;
-  /** The expensive post-impact tail; once per pellet unbatched, once per
-   *  batch inside beginHits/endHits. */
+  /** Consecutive firearm trigger pulls, never individual pellets. Retain
+   * dedup identities beyond the 1.5s combo window and after a full reaction. */
+  function progressiveHit(wound: Wound): boolean {
+    if (!soldierDamage || wound.injuryIgnored || wound.type === 'burn' || wound.shot?.weapon === 'explosion') return false;
+    const injury = soldierInjury(current, soldierWounds);
+    if (soldierFatal || injury.fatal || injury.downed) { shotWindow = []; seenReactionShots.clear(); return false; }
+    for (const [id, at] of seenReactionShots) if (reactionTime - at > 3) seenReactionShots.delete(id);
+    shotWindow = shotWindow.filter(at => reactionTime - at <= 1.5);
+    const source = wound.shot;
+    const id = source && 'shotId' in source && source.shotId !== undefined
+      ? `shot:${source.shotId}`
+      : `diagnostic:${hitBatching ? diagnosticBatchShot : ++diagnosticShotSerial}`;
+    if (seenReactionShots.has(id)) return false;
+    seenReactionShots.set(id, reactionTime);
+    if (seenReactionShots.size > 64) seenReactionShots.delete(seenReactionShots.keys().next().value!);
+    shotWindow.push(reactionTime);
+    if (shotWindow.length < 3) return false;
+    shotWindow = [];
+    return true;
+  }
+  /** Preserve the strongest pending Soldier impact and its source. */
+  function selectPendingShot(shot: NonNullable<MotionSignals['shot']>): void {
+    const rank = (s: NonNullable<MotionSignals['shot']>) =>
+      s.fullStagger ? 3 : s.soldierLevel === 'heavy' ? 2 : s.soldierLevel === 'medium' ? 1 : 0;
+    // Keep strength and impact source together until motion consumes them.
+    // Zombies retain their existing last-impact selection.
+    if (!soldierDamage || !pendingShot || rank(shot) > rank(pendingShot)
+      || (rank(shot) === rank(pendingShot) && (shot.gain ?? 1) >= (pendingShot.gain ?? 1))) {
+      pendingShot = shot;
+    }
+  }
+  /** The expensive post-impact tail; once per unbatched hit or hit batch. */
   function flushHitTail(): void {
     if (soldierDamage && pendingPelletHits >= 4) {
-      mind.stagger();
-      if (pendingShot) pendingShot = { ...pendingShot, type: 'blast', gain: Math.min(1.25, pendingPelletHits / 8) };
+      const soldierLevel = pendingPelletShot?.fullStagger || pendingPelletHits >= 10 ? 'heavy' : 'medium';
+      mind.stagger(soldierStaggerDuration(soldierLevel));
+      if (pendingPelletShot) selectPendingShot({ ...pendingPelletShot, type: 'blast', soldierLevel, gain: Math.min(1.25, pendingPelletHits / 8) });
     }
     pendingPelletHits = 0;
+    pendingPelletShot = null;
     runSeverChecks();
     posed = applyRig(current, bound, bodyYaw);
     view.update(posed, current);
     view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
     refreshWounds();
   }
-  function beginHits(): void { hitBatching = true; hitPending = false; }
+  function beginHits(): void { hitBatching = true; hitPending = false; diagnosticBatchShot = ++diagnosticShotSerial; }
   function endHits(): void {
     hitBatching = false;
     if (hitPending) { hitPending = false; flushHitTail(); }
@@ -995,30 +1081,40 @@ export function createZombieActor(opts: {
     // stamp() records the pre-impulse position for us — BEFORE the shove
     // below and before flushHitTail re-solves the pose, so it is the
     // placement, uncontaminated by the reaction to it.
+    const hitPrim = field.prims[wound.primIdx];
+    if (soldierDamage && !soldierFatal && wound.shot?.weapon === 'slug'
+      && (hitPrim?.limb === 'armL' || hitPrim?.limb === 'armR')) {
+      // The shared .16m slug crater is wider than a forearm. Keep a wound
+      // sized to this arm while provenance retains the full slug injury.
+      const girth = Math.max(hitPrim.radius, hitPrim.radiusB ?? hitPrim.radius) * Math.min(...hitPrim.scale);
+      wound.radius = Math.min(wound.radius, .09, girth * 1.1);
+    }
     recordSoldierInjury(wound);
     woundRing.stamp(wound, field, bodyYaw);
     torsoWounds?.record(wound, current);
     pendingWounds.push(wound);
-    pendingShot = {
-      type: wound.type,
+    const fullStagger = progressiveHit(wound);
+    const shot: NonNullable<MotionSignals['shot']> = {
+      type: fullStagger ? 'blast' : wound.type,
       dirWorld: [...dirWorld] as Vec3,
       woundWorld: [...hitWorld] as Vec3,
       torso: field.prims[wound.primIdx]?.limb === 'torso',
+      ...(soldierDamage ? { soldierLevel: fullStagger ? 'heavy' as const : wound.type === 'blast' ? 'medium' as const : 'small' as const } : {}),
+      ...(fullStagger ? { fullStagger: true } : {}),
       // The slug is a hand-cannon round: its lurch + localized recoil play at
       // SLUG_GAIN (above the lab's blast amplitudes — first-person range).
       // Pellets send no gain: eight arrive together and re-flinch at 1.
       ...(wound.type === 'blast' ? { gain: SLUG_GAIN } : {}),
     };
-    if (wound.type === 'pellet') pendingPelletHits++;
+    selectPendingShot(shot);
+    if (fullStagger) mind.stagger(soldierStaggerDuration('heavy', true));
+    if (wound.type === 'pellet') { pendingPelletHits++; pendingPelletShot = shot; }
     if (wound.type === 'blast') {
-      // Heavy-hit choreography: the mind's stagger stops the walk for
-      // blastHoldSec. The ROOT knock stays here — moving the root is a
-      // different thing from gating locomotion. Lurch on the frame the slug
-      // lands, not the next one — see brain.ts's staggerNow for what the
-      // one-step deferral cost.
-      mind.stagger();
+      // Interrupt immediately. Soldier motion owns severity-scaled recovery
+      // travel; Zombies retain the existing actor-level root knock.
+      mind.stagger(soldierDamage ? soldierStaggerDuration('medium') : undefined);
       const l = Math.hypot(dirWorld[0], dirWorld[2]);
-      if (l > 1e-6) {
+      if (!soldierDamage && l > 1e-6) {
         knockV = BLAST_KNOCK_MPS;
         knockDir = [dirWorld[0] / l, 0, dirWorld[2] / l];
       }

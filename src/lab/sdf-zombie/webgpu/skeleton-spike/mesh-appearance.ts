@@ -175,6 +175,12 @@ export function soldierSteelMask(q: Vec3, soldierHead=1): number {
   return Math.max(temple,brow)*front*soldierHead;
 }
 
+/** CPU mirror of the Soldier-only exposed-skull blood and gloss gates. */
+export function soldierMeshExposure(exposure:number,soldierHead:number) {
+  const e=clamp01(exposure),gate=clamp01(soldierHead);
+  return {blood:e*gate*.55,wet:e*gate*.75};
+}
+
 /** Dry gloss floor: dry tissue keeps a barely-there sheen, never a polish. */
 export const MESH_GLOSS_DRY = 0.05;
 /** Gloss at full wetness (glossy patch). */
@@ -328,6 +334,7 @@ export const MESH_BONE_SURFACE_WGSL = /* wgsl */ `fn meshBoneSurface(pWorld: vec
   let stainW = smoothstep(0.18, 0.85, expo) * (0.55 + 0.45 * grain);
   let stainStrength = mix(mix(0.55, 0.22, headFlag), 0.55, soldierHead);
   albedo = mix(albedo, mix(deepColor * 0.45, vec3<f32>(0.28, 0.012, 0.02), grain), stainW * stainStrength);
+  albedo = mix(albedo, vec3<f32>(0.42, 0.004, 0.008), soldierHead * stainW * 0.55);
   return vec4<f32>(albedo, expo);
 }`;
 
@@ -336,7 +343,9 @@ export const MESH_BONE_WET_WGSL = /* wgsl */ `fn meshBoneWet(pLocal: vec3<f32>, 
   // Wetness is an INDEPENDENT field: it moves gloss without moving colour.
   let w1 = boneNoise(pLocal * 26.0 + vec3<f32>(3.7, 11.2, 5.9));
   let w2 = boneNoise(pLocal * 70.0 + vec3<f32>(19.3, 2.1, 27.4));
-  let wet = mix(smoothstep(0.30, 0.68, w1 * 0.62 + w2 * 0.38), 0.9, clamp(expo, 0.0, 1.0) * 0.45);
+  var wet = mix(smoothstep(0.30, 0.68, w1 * 0.62 + w2 * 0.38), 0.9, clamp(expo, 0.0, 1.0) * 0.45);
+  let soldierHead = step(1.5, feature.w);
+  wet = mix(wet, 0.98, clamp(expo, 0.0, 1.0) * soldierHead * 0.75);
   var gloss = mix(0.05, 1.0, wet);
   let headFlag = min(feature.w, 1.0);
   let cav = meshSkullCavity(feature.xyz, headFlag);

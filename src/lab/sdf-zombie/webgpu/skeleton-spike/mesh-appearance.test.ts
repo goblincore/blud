@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   meshAppearanceCoord, meshGlossMask, meshSkullCavity, meshSocketVessels, meshToothRow,
-  skullFeatureMasks, soldierSteelMask, tissuePatchClasses, MESH_BONE_SURFACE_WGSL, MESH_GLOSS_DRY,
+  skullFeatureMasks, soldierMeshExposure, soldierSteelMask, tissuePatchClasses, MESH_BONE_SURFACE_WGSL, MESH_GLOSS_DRY,
 } from './mesh-appearance';
 
 const headBounds = {
@@ -30,6 +30,11 @@ describe('soldier steel reinforcement',()=>{
   it('restores strong wound staining only for the Soldier head tag',()=>{
     expect(MESH_BONE_SURFACE_WGSL).toContain('mix(mix(0.55, 0.22, headFlag), 0.55, soldierHead)');
     expect(MESH_BONE_SURFACE_WGSL).toContain('stainW * stainStrength');
+  });
+  it('gates saturated blood and wet gloss to exposed Soldier heads',()=>{
+    expect(soldierMeshExposure(1,1)).toEqual({blood:.55,wet:.75});
+    expect(soldierMeshExposure(1,0)).toEqual({blood:0,wet:0});
+    expect(soldierMeshExposure(0,1)).toEqual({blood:0,wet:0});
   });
 });
 

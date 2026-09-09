@@ -293,7 +293,7 @@ describe.each([['soldier', soldierSrc], ['zombie', zombieSrc]])('%s distal skele
     const liveBones = cut.body.bonePrims.filter(p => p.op !== 'organ' && !p.dead);
     expect(rebuilt.reduce((n, s) => n + s.primCount, 0)).toBe(liveBones.length);
     for (const bone of posed.bonePrims.filter(p => p.limb === limb && p.dead)) {
-      const middle = bone.a.map((v, i) => (v + bone.b[i]!) / 2) as Vec3;
+      const middle: Vec3 = [(bone.a[0] + bone.b[0]) / 2, (bone.a[1] + bone.b[1]) / 2, (bone.a[2] + bone.b[2]) / 2];
       expect(composedBoneDistance(rebuilt, middle)).toBeCloseTo(referenceBoneDistance(posed, middle), 6);
     }
   });

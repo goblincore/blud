@@ -190,7 +190,7 @@ export function spawnSlug(origin: Vec3, dir: Vec3): Projectile {
     ageSec: 0,
     radius: SLUG.radius,
     kind: 'slug',
-    shot: { weapon: 'slug' },
+    shot: { weapon: 'slug', shotId: nextShotId++ },
   };
 }
 

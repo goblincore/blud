@@ -4,12 +4,14 @@ import { compileBlob } from '../blob-compile';
 import { parseBlob } from '../blob-parse';
 import soldierSrc from '../characters/soldier.blob?raw';
 import { severDistal, severLimb } from '../sever';
+import { cutLimbs, cutChains } from '../connectivity';
 import type { BuildResult } from '../build-body';
 import { SOLDIER_PROFILE } from '../motion-profile';
 import { makeSoldierMind } from './enemy-mind';
 import { createZombieActor, segmentHitsBox, clearCombatMove } from './game-actor';
 import { gunPoint, GUN_GRIP } from '../carry';
 import { qRotate } from '../vec';
+import { jointNamesForBody } from '../gait';
 import type { Aabb } from './game-level';
 import { resolveExplosion } from '../explosion-aoe';
 import { woundFromSlug, spawnPellets, spawnSlug, stepProjectiles } from './game-weapon';
@@ -17,6 +19,9 @@ import { createWoundRing } from './character-view';
 import { createSkeletonSources } from './skeleton-spike/contract';
 import { extractSegmentMesh } from './skeleton-spike/mesh';
 import { sdBody } from '../validate';
+import * as soldierStagger from '../soldier-stagger';
+import * as motion from '../motion';
+import { soldierInjury } from '../soldier-damage';
 
 function soldier(furniture: Aabb[] = [], releaseProp?: () => void, body?: BuildResult, onMeleeContact?: () => void) {
   const shots: { age: number; kicks: number; origin: readonly number[]; direction: readonly number[]; expectedOrigin: readonly number[]; expectedDirection: readonly number[] }[] = [];
@@ -54,7 +59,7 @@ describe('soldier actor combat wiring', () => {
 
   it('freezes a settled corpse for baking and wakes on further damage', () => {
     const {actor}=soldier();
-    for(let i=0;i<4;i++) hitLimb(actor,'thigh.l');
+    for(let i=0;i<6;i++) hitLimb(actor,'thigh.l');
     for(let i=0;i<240;i++) actor.step(1/60);
     expect(actor.corpseBakeEligible()).toBe(true);
     actor.pauseForBake(true);
@@ -101,6 +106,157 @@ describe('soldier actor combat wiring', () => {
     expect(many.motionFrame()!.staggerKind).toBe('lurch');
     for (let i = 0; i < 90; i++) { many.setBrainInput({ x: 0, z: 2.8, room: 1 }, true); many.step(1 / 60); }
     expect(many.debug().state).not.toBe('stagger');
+  });
+
+  it.each([['slug-first', 1], ['pellet-first', 1], ['slug-first', 10], ['pellet-first', 10]] as const)('preserves the stronger reaction and its impact source in a %s batch with %i pellets', (order, count) => {
+    const actor = soldier().actor;
+    const observe = vi.spyOn(soldierStagger, 'stepSoldierStagger');
+    try {
+      const chest = actor.posed().prims.find(p => p.bone === 'chest' && !p.dead)!;
+      const skull = actor.posed().prims.find(p => p.bone === 'skull' && !p.dead)!;
+      const slug = () => actor.hitSlug([chest.a[0], (chest.a[1] + chest.b[1]) / 2, chest.a[2] + chest.radius], [1, 0, 0]);
+      const pellet = () => {
+        for (let i = 0; i < count; i++) actor.hit([skull.a[0], skull.a[1], skull.a[2] + skull.radius], [0, 0, -1]);
+      };
+      actor.beginHits();
+      if (order === 'slug-first') { slug(); pellet(); } else { pellet(); slug(); }
+      actor.endHits();
+      expect(actor.debug().holdSecs).toBeCloseTo(count === 1 ? .78 : 1.20);
+      actor.step(1 / 60);
+      const hit = observe.mock.calls.find(call => call[1] !== null)?.[1];
+      expect(hit).toEqual(count === 1
+        ? { level: 'medium', torso: true, dirWorld: [1, 0, 0] }
+        : { level: 'heavy', torso: false, dirWorld: [0, 0, -1] });
+      expect(actor.motionFrame()!.staggerKind).toBe('lurch');
+      expect(actor.motionFrame()!.collapsed).toBe(false);
+    } finally { observe.mockRestore(); }
+  });
+
+  it('keeps the rendered grip on the solved hand through hits, rehits, recovery and firing', () => {
+    const { actor, shots } = soldier();
+    const handIndex = jointNamesForBody(actor.body).indexOf('handR');
+    for (let frame = 0; frame < 240; frame++) {
+      if (frame === 0) hitLimb(actor, 'chest', true);
+      if (frame === 8 || frame === 28) hitLimb(actor, 'skull');
+      actor.setBrainInput({ x: 0, z: 2.8, room: 1 }, true);
+      const beforeShots = shots.length;
+      actor.step(1 / 60);
+      const gun = actor.motionFrame()!.gun!;
+      expect(gun, `frame ${frame}: ${JSON.stringify(actor.debug())}`).not.toBeNull();
+      const hand = actor.boundRig().rig.points[handIndex]!.pos;
+      const grip = gunPoint(gun, GUN_GRIP.gripHand);
+      expect(Math.hypot(...grip.map((v, i) => v - hand[i]!))).toBeLessThan(1e-8);
+      if (shots.length > beforeShots) {
+        const offset = qRotate(gun.quat, GUN_GRIP.muzzle.map((v, i) =>
+          (v - GUN_GRIP.gripHand[i]!) * (gun.scale ?? 1)) as [number, number, number]);
+        const actualMuzzle = hand.map((v, i) => v + offset[i]!);
+        expect(Math.hypot(...shots.at(-1)!.origin.map((v, i) => v - actualMuzzle[i]!))).toBeLessThan(1e-8);
+      }
+    }
+    expect(shots.length).toBeGreaterThan(0);
+  });
+
+  it('counts distinct shots across frame batches and forces the third aim interruption', () => {
+    const { actor, shots } = soldier();
+    for (let i = 0; i < 120 && actor.debug().state !== 'aim'; i++) {
+      actor.setBrainInput({ x: 0, z: 2.8, room: 1 }, true);
+      actor.step(1 / 60);
+    }
+    expect(actor.debug().state).toBe('aim');
+    const observe = vi.spyOn(soldierStagger, 'stepSoldierStagger');
+    try {
+      for (const id of [901, 902, 903]) {
+        actor.beginHits();
+        hitLimb(actor, 'chest', false, { weapon: 'shotgun', shotId: id, barrels: 1, barrel: 0 });
+        actor.endHits();
+        actor.step(1 / 60);
+        const hit = observe.mock.calls.filter(call => call[1] !== null).at(-1)![1]!;
+        expect(hit.fullStagger === true).toBe(id === 903);
+        expect(actor.debug().state).toBe(id === 903 ? 'stagger' : 'aim');
+      }
+      expect(actor.debug().state).toBe('stagger');
+      expect(actor.debug().holdSecs).toBeGreaterThan(1.2);
+      expect(shots).toHaveLength(0);
+      expect(actor.motionFrame()!.staggerKind).toBe('lurch');
+    } finally { observe.mockRestore(); }
+  });
+
+  it('one volley cannot count as three shots, even split across frame batches', () => {
+    const actor = soldier().actor;
+    const observe = vi.spyOn(soldierStagger, 'stepSoldierStagger');
+    try {
+      for (let i = 0; i < 6; i++) {
+        actor.beginHits();
+        hitLimb(actor, 'chest', false, { weapon: 'shotgun', shotId: 904, barrels: 2, barrel: i % 2 as 0 | 1 });
+        actor.endHits(); actor.step(1 / 60);
+      }
+      expect(observe.mock.calls.some(call => call[1]?.fullStagger)).toBe(false);
+    } finally { observe.mockRestore(); }
+  });
+
+  it('clears a completed chain but does not recount its trailing pellets', () => {
+    const actor = soldier().actor;
+    const observe = vi.spyOn(soldierStagger, 'stepSoldierStagger');
+    try {
+      for (const id of [908, 909, 910, 910, 910, 911, 912]) {
+        hitLimb(actor, 'chest', false, { weapon: 'shotgun', shotId: id, barrels: 1, barrel: 0 });
+        actor.step(1 / 60);
+      }
+      expect(observe.mock.calls.filter(call => call[1]?.fullStagger)).toHaveLength(1);
+    } finally { observe.mockRestore(); }
+  });
+
+  it('counts a no-ID diagnostic batch once rather than counting its pellets', () => {
+    const actor = soldier().actor;
+    const observe = vi.spyOn(soldierStagger, 'stepSoldierStagger');
+    try {
+      actor.beginHits();
+      for (let i = 0; i < 6; i++) hitLimb(actor, 'chest');
+      actor.endHits(); actor.step(1 / 60);
+      expect(observe.mock.calls.some(call => call[1]?.fullStagger)).toBe(false);
+    } finally { observe.mockRestore(); }
+  });
+
+  it('keeps full escalation heavy when its triggering pellet also completes a medium batch', () => {
+    const actor = soldier().actor;
+    const observe = vi.spyOn(soldierStagger, 'stepSoldierStagger');
+    try {
+      actor.beginHits();
+      for (const id of [913, 913, 913, 913, 914, 914, 914, 915])
+        hitLimb(actor, 'chest', false, { weapon: 'shotgun', shotId: id, barrels: 1, barrel: 0 });
+      actor.endHits(); actor.step(1 / 60);
+      const hit = observe.mock.calls.find(call => call[1]?.fullStagger)?.[1];
+      expect(hit).toMatchObject({ fullStagger: true, level: 'heavy' });
+    } finally { observe.mockRestore(); }
+  });
+
+  it('expires the consecutive shot window', () => {
+    const actor = soldier().actor;
+    const observe = vi.spyOn(soldierStagger, 'stepSoldierStagger');
+    try {
+      for (const id of [905, 906]) {
+        hitLimb(actor, 'chest', false, { weapon: 'shotgun', shotId: id, barrels: 1, barrel: 0 });
+        actor.step(1 / 60);
+      }
+      for (let i = 0; i < 100; i++) actor.step(1 / 60);
+      hitLimb(actor, 'chest', false, { weapon: 'shotgun', shotId: 907, barrels: 1, barrel: 0 });
+      actor.step(1 / 60);
+      expect(observe.mock.calls.some(call => call[1]?.fullStagger)).toBe(false);
+    } finally { observe.mockRestore(); }
+  });
+
+  it('matches recovery time to medium volleys, heavy volleys and ordinary slugs', () => {
+    const medium = soldier().actor, heavy = soldier().actor, slug = soldier().actor;
+    for (const [actor, count] of [[medium, 4], [heavy, 10]] as const) {
+      actor.beginHits();
+      for (let i = 0; i < count; i++) hitLimb(actor, 'chest');
+      actor.endHits();
+    }
+    hitLimb(slug, 'chest', true);
+    expect(medium.debug().holdSecs).toBeCloseTo(.78);
+    expect(heavy.debug().holdSecs).toBeCloseTo(1.20);
+    expect(slug.debug().holdSecs).toBeCloseTo(.78);
+    expect(slug.debug().knockV).toBe(0); // motion footwork owns Soldier knockback
   });
 
   it('support-arm loss keeps slower, less accurate actual fire', () => {
@@ -239,6 +395,80 @@ describe('soldier actor combat wiring', () => {
     expect(actor.motionFrame()!.collapsed).toBe(true);
   });
 
+  it.each(['L', 'R'] as const)('a single %s elbow slug stays attached with a bounded crater; focused repeats sever', side => {
+    const release = vi.fn(), { actor } = soldier([], release);
+    const boneName = `forearm.${side.toLowerCase()}`, limb = side === 'L' ? 'armL' : 'armR';
+    const prim = actor.posed().prims.find(p => p.bone === boneName)!;
+    const at = (): [number, number, number] => {
+      const p = actor.posed().prims.find(p => p.bone === prim.bone && !p.dead)!;
+      return [p.a[0], p.a[1], p.a[2] + p.radius];
+    };
+    const wound = actor.hitSlug(at(), [0, 0, -1])!;
+    expect(actor.body.prims[wound.primIdx]!.limb).toBe(limb);
+    expect(actor.body.prims.some(p => p.limb === limb && p.dead)).toBe(false);
+    expect(release).not.toHaveBeenCalled();
+    expect(wound.radius).toBeLessThanOrEqual(.09);
+    expect(wound.severRadius).toBe(.13);
+    actor.hitSlug(at(), [0, 0, -1]);
+    actor.hitSlug(at(), [0, 0, -1]);
+    expect(soldierInjury(actor.body, []).missing[limb]).toBe(true);
+    actor.step(1 / 60);
+    expect(actor.motionFrame()!.collapsed).toBe(false);
+    const sources = createSkeletonSources(actor.body, actor.boundRig(), { character: 'soldier' });
+    expect(sources.filter(source => source.segment.startsWith(`limb:${limb}:`) && source.isLive()).reduce((n, source) => n + source.primCount, 0))
+      .toBe(actor.body.bonePrims.filter(p => p.limb === limb && !p.dead && actor.body.clusters[p.cluster]?.alive).length);
+    hitLimb(actor, 'chest');
+    expect(release).toHaveBeenCalledTimes(side === 'R' ? 1 : 0);
+  });
+
+  it('a fatal corpse retains geometric arm dismemberment without recording new injury', () => {
+    const actor = soldier().actor;
+    for (let i = 0; i < 12; i++) hitLimb(actor, 'skull');
+    const ledger = actor.injuryHistorySize();
+    const wound = hitLimb(actor, 'forearm.r', true)!;
+    expect(wound.radius).toBe(.16); // living-arm visual limit no longer applies
+    wound.severRadius = 1;
+    hitLimb(actor, 'chest');
+    expect(actor.injuryHistorySize()).toBe(ledger);
+    expect(soldierInjury(actor.body, []).missing.armR).toBe(true);
+  });
+
+  it('enlarged geometric cut calibre cannot bypass the arm injury budget', () => {
+    const actor = soldier().actor;
+    const wound = hitLimb(actor, 'forearm.r', true)!;
+    // Deliberately force both raw connectivity paths to propose an arm cut.
+    // This is a gate regression, independent of the visual crater radius.
+    wound.severRadius = 1;
+    const torso = actor.body.clusters.find(c => c.limb === 'torso')!.center;
+    expect(cutLimbs(actor.body, [wound], torso)).toContain('armR');
+    expect(cutChains(actor.body, [wound]).some(c => c.limb === 'armR')).toBe(true);
+    hitLimb(actor, 'chest'); // runs the actor's sever tail again
+    expect(soldierInjury(actor.body, []).missing.armR).toBe(false);
+  });
+
+  it('eight scattered arm pellets leave both arms attached', () => {
+    const actor = soldier().actor;
+    for (let i = 0; i < 2; i++) for (const bone of ['upperarm.l', 'forearm.l', 'upperarm.r', 'forearm.r']) hitLimb(actor, bone);
+    expect(actor.body.prims.some(p => (p.limb === 'armL' || p.limb === 'armR') && p.dead)).toBe(false);
+  });
+
+  it('a targeted two-barrel elbow group can still sever', () => {
+    const actor = soldier().actor;
+    const prim = actor.posed().prims.find(p => p.bone === 'forearm.r')!;
+    const at = (): [number, number, number] => {
+      const p = actor.posed().prims.find(p => p.bone === prim.bone && !p.dead)!;
+      return [p.a[0], p.a[1], p.a[2] + p.radius];
+    };
+    actor.beginHits();
+    for (let i = 0; i < 4; i++) actor.hit(at(), [0, 0, -1], {
+      weapon: 'shotgun', shotId: 812, barrels: 2, barrel: i < 2 ? 0 : 1,
+    });
+    actor.endHits();
+    expect(soldierInjury(actor.body, []).missing.armR).toBe(true);
+    actor.step(1 / 60);
+    expect(actor.motionFrame()!.collapsed).toBe(false);
+  });
+
   it.each([['upperarm.r', 'armR'], ['upperarm.l', 'armL'], ['forearm.r', 'armR'], ['forearm.l', 'armL']])('a severed %s releases only the gun hand prop', (bone, limb) => {
     const release = vi.fn();
     const { actor } = soldier([], release);
@@ -255,6 +485,35 @@ describe('soldier actor combat wiring', () => {
     const { actor } = soldier([], release, cut.body);
     hitLimb(actor, 'chest');
     expect(release.mock.calls.length > 0).toBe(limb === 'armR');
+  });
+
+  it.each([['pelvis', 'both'], ['thigh.l', 'L'], ['thigh.r', 'R']] as const)('keeps authored %s injury mobile and forwards it after visual wounds expire', (bone, side) => {
+    const actor = soldier().actor;
+    const observe = vi.spyOn(motion, 'stepMotion');
+    try {
+      const wound = hitLimb(actor, bone)!;
+      expect(actor.body.prims[wound.primIdx]!.bone).toBe(bone);
+      actor.step(1 / 60);
+      expect(observe.mock.calls.at(-1)![3].mobilityInjury).toEqual({ severity: 1 / 3, side });
+      // Diagnostic visual-only marks evict the original crater without adding
+      // injury; the lasting mobility state must come from the injury ledger.
+      actor.stampBlast(Array.from({ length: 20 }, () => ({ ...wound, radius: .001, type: 'burn' as const })));
+      expect(actor.wounds()).not.toContain(wound);
+      for (let frame = 0; frame < 120; frame++) actor.step(1 / 60);
+      expect(observe.mock.calls.at(-1)![3].mobilityInjury).toEqual({ severity: 1 / 3, side });
+      expect(actor.motionFrame()!.collapsed).toBe(false);
+      expect(actor.body.clusters.filter(c => c.limb === 'legL' || c.limb === 'legR').every(c => c.alive)).toBe(true);
+    } finally { observe.mockRestore(); }
+  });
+
+  it.each(['pelvis', 'thigh.l'] as const)('four %s hits remain mobile; severe repeated damage disables', bone => {
+    const actor = soldier().actor;
+    for (let i = 0; i < 4; i++) hitLimb(actor, bone);
+    actor.step(1 / 60);
+    expect(actor.motionFrame()!.collapsed).toBe(false);
+    for (let i = 0; i < 2; i++) hitLimb(actor, bone);
+    actor.step(1 / 60);
+    expect(actor.motionFrame()!.collapsed).toBe(true);
   });
 
   it('a mid-thigh slug causes a strong reaction while the limb remains attached', () => {

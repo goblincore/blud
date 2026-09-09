@@ -315,6 +315,18 @@ describe('stepSoldierBrain — the firing cycle', () => {
 });
 
 describe('staggerSoldierNow', () => {
+  it('cannot resume aiming or attack while the backward stagger is recovering', () => {
+    let b = staggerSoldierNow(alerted());
+    for (let frame = 0; frame < 71; frame++) {
+      const out = stepSoldierBrain(b, input({ roll: 0 }));
+      b = out.brain;
+      expect(out.fire).toBe(false);
+      expect(out.weaponUp).toBe(false);
+      expect(out.halt).toBe(true);
+      expect(b.state).toBe('stagger');
+    }
+  });
+
   it('forces stagger and halts, synchronously', () => {
     const b = staggerSoldierNow(alerted());
     expect(b.state).toBe('stagger');

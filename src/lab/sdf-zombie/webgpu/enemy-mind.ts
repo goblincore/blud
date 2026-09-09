@@ -112,7 +112,7 @@ export interface EnemyMind {
   readonly meleeCapable: boolean;
   step(input: MindInput): MindOutput;
   /** Force the stagger state NOW, on the frame the hit lands. */
-  stagger(): void;
+  stagger(holdSec?: number): void;
   debug(): MindDebug;
 }
 
@@ -207,7 +207,7 @@ export function makeSoldierMind(): EnemyMind {
         aimError: out.aimError,
       };
     },
-    stagger() { brain = staggerSoldierNow(brain); },
+    stagger(holdSec) { brain = staggerSoldierNow(brain, undefined, holdSec); },
     debug: () => ({
       state: brain.state,
       alert: brain.alert,

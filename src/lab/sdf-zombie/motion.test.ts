@@ -911,6 +911,208 @@ describe('soldier aimed movement', () => {
 });
 
 describe('soldier injury response', () => {
+  it('reports Soldier helper severity through the existing stagger diagnostic', () => {
+    const j = soldierJoints();
+    const frame = (level: 'small'|'medium'|'heavy') => stepMotion(makeMotionState(4, [0,0,0]), j,
+      { enabled: true, wander: false, profile: SOLDIER_PROFILE },
+      { ...NO_SIGNALS(), shot: { type: level === 'small' ? 'pellet' : 'blast', dirWorld: [0,0,-1],
+        woundWorld: [0,1,0], torso: true, soldierLevel: level } }, stubPoints(j), BOUNDS, makeRng(4)).frame;
+    expect(frame('small').staggerKind).toBe('flinch');
+    expect(frame('medium').staggerKind).toBe('lurch');
+    expect(frame('heavy').staggerKind).toBe('lurch');
+  });
+
+  it('opens smoothly from the current two-hand hold while taking grounded knockback steps', () => {
+    const j = soldierJoints();
+    let state = makeMotionState(9, [0, 0, 0]);
+    let points = stubPoints(j);
+    let readyGun = null as ReturnType<typeof stepMotion>['frame']['gun'];
+    for (let i = 0; i < 45; i++) {
+      const ready = stepMotion(state, j,
+        { enabled: true, wander: false, profile: SOLDIER_PROFILE, carryOverride: 'aim', faceHeading: 0 },
+        NO_SIGNALS(), points, BOUNDS, makeRng(9));
+      state = ready.state;
+      readyGun = ready.frame.gun;
+      points = ready.frame.restPose.map(p => ({ pos: [...p] as Vec3, prev: [...p] as Vec3, pinned: false }));
+    }
+    const before = (side: 'L'|'R') => rotateYaw(sub(points[j.index[`hand${side}`]]!.pos,
+      points[j.index[`shoulder${side}`]]!.pos), -state.bodyYaw);
+    const startL = before('L'), startR = before('R');
+    const startMuzzle = qRotate(readyGun!.quat, [0,0,1]);
+    let firstDelta = Infinity, peakL = 0, peakR = 0, minMuzzleDot = 1, minRightOutward = 0;
+    let plantedFrames = 0;
+    let stepStarts = 0, priorSwing = false;
+    for (let i = 0; i < 85; i++) {
+      const result = stepMotion(state, j,
+        { enabled: true, wander: false, profile: SOLDIER_PROFILE, carryOverride: 'aim', faceHeading: 0 },
+        { ...NO_SIGNALS(), shot: i === 0
+          ? { type: 'blast' as const, dirWorld: [0, 0, -1] as Vec3, woundWorld: [0, 1, 0] as Vec3, torso: true, soldierLevel: 'heavy' as const }
+          : null }, points, { minX: -.3, maxX: .3, minZ: -.46, maxZ: .3 }, makeRng(9));
+      const localL = rotateYaw(sub(result.frame.restPose[j.index.handL]!, result.frame.restPose[j.index.shoulderL]!), -result.frame.bodyYaw);
+      const localR = rotateYaw(sub(result.frame.restPose[j.index.handR]!, result.frame.restPose[j.index.shoulderR]!), -result.frame.bodyYaw);
+      const dL = len(sub(localL, startL)), dR = len(sub(localR, startR));
+      if (i === 0) firstDelta = Math.max(dL, dR);
+      peakL = Math.max(peakL, dL); peakR = Math.max(peakR, dR);
+      minRightOutward = Math.min(minRightOutward, localR[0] - startR[0]);
+      minMuzzleDot = Math.min(minMuzzleDot, dot(qRotate(result.frame.gun!.quat, [0,0,1]), startMuzzle));
+      if (result.state.plantL.phase === 'stance' || result.state.plantR.phase === 'stance') plantedFrames++;
+      const swinging = !!result.state.footwork?.swing;
+      if (swinging && !priorSwing) stepStarts++;
+      priorSwing = swinging;
+      expect(len(sub(gunPoint(result.frame.gun!, GUN_GRIP.gripHand), result.frame.restPose[j.index.handR]!))).toBeLessThan(1e-6);
+      state = result.state;
+      points = result.frame.restPose.map(p => ({ pos: [...p] as Vec3, prev: [...p] as Vec3, pinned: false }));
+    }
+    expect(firstDelta).toBeLessThan(.08);
+    expect(Math.max(peakL, peakR)).toBeGreaterThan(.025);
+    expect(Math.max(peakL, peakR)).toBeLessThan(.70);
+    expect(Math.abs(peakL - peakR)).toBeGreaterThan(.01);
+    expect(minRightOutward).toBeLessThan(-.005);
+    expect(minMuzzleDot).toBeGreaterThan(.55);
+    expect(state.wander.pos[2]).toBeLessThan(-.30);
+    expect(state.wander.pos[2]).toBeGreaterThanOrEqual(-.46);
+    expect(plantedFrames).toBeGreaterThan(60);
+    expect(stepStarts).toBeGreaterThanOrEqual(1);
+    expect(stepStarts).toBeLessThanOrEqual(3);
+  });
+
+  it('gives the broad medium variant a wider hand spread and diagonal barrel than the subtle variant', () => {
+    const j = soldierJoints();
+    const sample = (seed: number, fullStagger = false, carryOverride: 'aim'|'low' = 'aim') => {
+      let state = makeMotionState(seed, [0,0,0]);
+      let points = stubPoints(j);
+      for (let i = 0; i < 45; i++) {
+        const r = stepMotion(state, j, { enabled: true, wander: false, profile: SOLDIER_PROFILE,
+          carryOverride, faceHeading: 0 }, NO_SIGNALS(), points, BOUNDS, makeRng(seed));
+        state = r.state; points = r.frame.restPose.map(p => ({ pos: [...p] as Vec3, prev: [...p] as Vec3, pinned: false }));
+      }
+      const before = points.map(p => [...p.pos] as Vec3);
+      const beforeElbow = rotateYaw(sub(before[j.index.elbowR]!, before[j.index.shoulderR]!), -state.bodyYaw);
+      let first = 0, widest = 0, lateral = 0, maxBarrelAngle = 0, maxBarrelUp = 0;
+      let offhandOutside = -Infinity, elbowTravel = 0;
+      let peakElbow: Vec3 = [0,0,0], peakHand: Vec3 = [0,0,0];
+      for (let i = 0; i < 24; i++) {
+        const r = stepMotion(state, j, { enabled: true, wander: false, profile: SOLDIER_PROFILE,
+          carryOverride, faceHeading: 0 }, { ...NO_SIGNALS(), shot: i === 0 ? {
+            type: 'blast' as const, dirWorld: [0,0,-1] as Vec3, woundWorld: [0,1,0] as Vec3,
+            torso: false, soldierLevel: fullStagger ? 'heavy' as const : 'medium' as const, fullStagger } : null }, points, BOUNDS, makeRng(seed));
+        const spread = len(sub(r.frame.restPose[j.index.handL]!, r.frame.restPose[j.index.handR]!));
+        widest = Math.max(widest, spread);
+        const muzzle = rotateYaw(qRotate(r.frame.gun!.quat, [0,0,1]), -r.frame.bodyYaw);
+        lateral = Math.max(lateral, Math.abs(muzzle[0]));
+        if (muzzle[2] > 0) maxBarrelAngle = Math.max(maxBarrelAngle, Math.atan2(Math.abs(muzzle[0]), muzzle[2]));
+        maxBarrelUp = Math.max(maxBarrelUp, muzzle[1]);
+        offhandOutside = Math.max(offhandOutside, rotateYaw(sub(r.frame.restPose[j.index.handL]!,
+          r.frame.restPose[j.index.shoulderL]!), -r.frame.bodyYaw)[0]);
+        const localElbow = rotateYaw(sub(r.frame.restPose[j.index.elbowR]!, r.frame.restPose[j.index.shoulderR]!), -r.frame.bodyYaw);
+        const travel = len(sub(localElbow, beforeElbow));
+        if (travel > elbowTravel) {
+          elbowTravel = travel;
+          peakElbow = localElbow;
+          peakHand = rotateYaw(sub(r.frame.restPose[j.index.handR]!, r.frame.restPose[j.index.shoulderR]!), -r.frame.bodyYaw);
+        }
+        if (i === 0) first = Math.max(len(sub(r.frame.restPose[j.index.handL]!, before[j.index.handL]!)),
+          len(sub(r.frame.restPose[j.index.handR]!, before[j.index.handR]!)));
+        state = r.state; points = r.frame.restPose.map(p => ({ pos: [...p] as Vec3, prev: [...p] as Vec3, pinned: false }));
+      }
+      return { first, widest, lateral, maxBarrelAngle, maxBarrelUp, offhandOutside, elbowTravel, peakElbow, peakHand };
+    };
+    const broad = sample(0); // centre hit selects variant 1
+    const subtle = sample(2); // centre hit selects variant 0
+    expect(broad.first).toBeLessThan(.08);
+    expect(broad.widest).toBeGreaterThan(subtle.widest + .07);
+    expect(broad.lateral).toBeGreaterThan(subtle.lateral + .18);
+    expect(broad.lateral).toBeGreaterThan(.45);
+    expect(broad.lateral).toBeLessThan(.85);
+    expect(broad.offhandOutside).toBeGreaterThan(.02);
+    const full = sample(0, true);
+    expect(full.first).toBeLessThan(.08);
+    expect(full.elbowTravel).toBeGreaterThan(broad.elbowTravel);
+    expect(full.offhandOutside).toBeGreaterThan(broad.offhandOutside + .08);
+    expect(full.maxBarrelAngle).toBeGreaterThan(65 * Math.PI / 180);
+    expect(full.maxBarrelAngle).toBeLessThan(85 * Math.PI / 180);
+    expect(full.maxBarrelUp).toBeGreaterThan(Math.sin(15 * Math.PI / 180));
+    expect(full.maxBarrelUp).toBeLessThan(Math.sin(35 * Math.PI / 180));
+    expect(full.peakElbow[0]).toBeLessThan(-.10);
+    expect(full.peakElbow[1]).toBeLessThan(-.10);
+    expect(full.peakHand[0]).toBeLessThan(-.15);
+    expect(full.peakHand[2]).toBeGreaterThan(-.18);
+    const fullFromLow = sample(0, true, 'low');
+    expect(fullFromLow.maxBarrelAngle).toBeGreaterThan(65 * Math.PI / 180);
+    expect(fullFromLow.maxBarrelAngle).toBeLessThan(85 * Math.PI / 180);
+  });
+
+  it('escalates an active heavy reaction into full opening without a gun snap, then recovers aim', () => {
+    const j = soldierJoints();
+    let state = makeMotionState(0, [0,0,0]);
+    let points = stubPoints(j);
+    let aimMuzzle: Vec3 = [0,0,1];
+    for (let i = 0; i < 45; i++) {
+      const ready = stepMotion(state, j, { enabled: true, wander: false, profile: SOLDIER_PROFILE,
+        carryOverride: 'aim', faceHeading: 0 }, NO_SIGNALS(), points, BOUNDS, makeRng(0));
+      state = ready.state;
+      points = ready.frame.restPose.map(p => ({ pos: [...p] as Vec3, prev: [...p] as Vec3, pinned: false }));
+      aimMuzzle = qRotate(ready.frame.gun!.quat, [0,0,1]);
+    }
+    let priorMuzzle: Vec3 | null = null;
+    let escalationDot = 0;
+    for (let i = 0; i < 100; i++) {
+      const shot = i === 0
+        ? { type: 'blast' as const, dirWorld: [0,0,-1] as Vec3, woundWorld: [0,1,0] as Vec3,
+          torso: true, soldierLevel: 'heavy' as const }
+        : i === 10
+          ? { type: 'blast' as const, dirWorld: [0,0,-1] as Vec3, woundWorld: [0,1,0] as Vec3,
+            torso: true, soldierLevel: 'heavy' as const, fullStagger: true }
+          : null;
+      const r = stepMotion(state, j, { enabled: true, wander: false, profile: SOLDIER_PROFILE,
+        carryOverride: 'aim', faceHeading: 0 }, { ...NO_SIGNALS(), shot }, points, BOUNDS, makeRng(0));
+      const muzzle = qRotate(r.frame.gun!.quat, [0,0,1]);
+      if (i === 10) escalationDot = dot(priorMuzzle!, muzzle);
+      priorMuzzle = muzzle;
+      state = r.state;
+      points = r.frame.restPose.map(p => ({ pos: [...p] as Vec3, prev: [...p] as Vec3, pinned: false }));
+    }
+    expect(escalationDot).toBeGreaterThan(.98);
+    expect(dot(priorMuzzle!, aimMuzzle)).toBeGreaterThan(.98);
+  });
+
+  it('respects missing arms and cancels the rearward reaction on fatal collapse', () => {
+    const j = soldierJoints();
+    const hit = stepMotion(makeMotionState(2, [0,0,0]), j,
+      { enabled: true, wander: false, profile: SOLDIER_PROFILE, carryOverride: 'aim' },
+      { ...NO_SIGNALS(), missing: { ...INTACT, armL: true }, shot:
+        { type: 'blast', dirWorld: [0,0,-1], woundWorld: [0,1,0], torso: true } },
+      stubPoints(j), BOUNDS, makeRng(2));
+    expect(hit.frame.gun).not.toBeNull();
+    const dead = stepMotion(hit.state, j,
+      { enabled: true, wander: false, profile: SOLDIER_PROFILE, carryOverride: 'aim' },
+      { ...NO_SIGNALS(), missing: { ...INTACT, armL: true }, fatal: true, forcedCollapse: true },
+      hit.frame.restPose.map(p => ({ pos: [...p] as Vec3, prev: [...p] as Vec3, pinned: false })), BOUNDS, makeRng(2));
+    expect(dead.frame.collapsed).toBe(true);
+    expect(dead.state.soldierStagger!.active).toBe(false);
+  });
+
+  it('folds a torso-biased heavy variant forward and down before straightening', () => {
+    const j = soldierJoints();
+    const sample = (torso: boolean) => {
+      let state = makeMotionState(1, [0,0,0]);
+      let points = stubPoints(j);
+      for (let i = 0; i < 12; i++) {
+        const result = stepMotion(state, j,
+          { enabled: true, wander: false, profile: SOLDIER_PROFILE, carryOverride: 'aim' },
+          { ...NO_SIGNALS(), shot: i === 0 ? { type: 'blast' as const, dirWorld: [0,0,-1] as Vec3,
+            woundWorld: [0,1,0] as Vec3, torso, soldierLevel: 'heavy' as const } : null },
+          points, BOUNDS, makeRng(1));
+        state = result.state;
+        points = result.frame.restPose.map(p => ({ pos: [...p] as Vec3, prev: [...p] as Vec3, pinned: false }));
+      }
+      return points[j.index.chest]!.pos;
+    };
+    const torso = sample(true), limb = sample(false);
+    expect(torso[1]).toBeLessThan(limb[1] - .04);
+    expect(torso[2]).toBeGreaterThan(limb[2] + .05);
+  });
+
   it('keeps an arm-injured Soldier standing and composes a remaining-arm strike', () => {
     const j = soldierJoints();
     const sig = { ...NO_SIGNALS(), missing: { ...INTACT, armR: true } };
@@ -937,7 +1139,7 @@ describe('soldier injury response', () => {
     const j = soldierJoints();
     let state = makeMotionState(5, [0, 0, 0]);
     let points = stubPoints(j), prior = points[j.index.handL]!.pos, maxLateStep = 0;
-    for (let i = 0; i < 70; i++) {
+    for (let i = 0; i < 85; i++) {
       const sig = { ...NO_SIGNALS(), shot: i === 0
         ? { type: 'blast' as const, dirWorld: [0, 0, -1] as Vec3, woundWorld: [0, 1, 0] as Vec3, torso: true }
         : null };
@@ -945,7 +1147,7 @@ describe('soldier injury response', () => {
         { enabled: true, wander: false, profile: SOLDIER_PROFILE, carryOverride: 'aim' },
         sig, points, BOUNDS, makeRng(5));
       const hand = result.frame.restPose[j.index.handL]!;
-      if (i > 48) maxLateStep = Math.max(maxLateStep, len(sub(hand, prior)));
+      if (i > 68) maxLateStep = Math.max(maxLateStep, len(sub(hand, prior)));
       prior = hand; state = result.state;
       points = result.frame.restPose.map(p => ({ pos: [...p] as Vec3, prev: [...p] as Vec3, pinned: false }));
     }
@@ -955,7 +1157,7 @@ describe('soldier injury response', () => {
       NO_SIGNALS(), points, BOUNDS, makeRng(5))).frame.gun!, GUN_GRIP.foreHand), prior))).toBeLessThan(.06);
   });
 
-  it('recovers the strong-hit gun forward before bringing it back inboard', () => {
+  it('returns the opened hold smoothly to the requested carry', () => {
     const j = soldierJoints();
     let state = makeMotionState(5, [0, 0, 0]);
     let points = stubPoints(j);
@@ -970,18 +1172,41 @@ describe('soldier injury response', () => {
         points, BOUNDS, makeRng(5));
       state = result.state;
       points = result.frame.restPose.map(p => ({ pos: [...p] as Vec3, prev: [...p] as Vec3, pinned: false }));
-      if (Math.abs(state.stagger.age - .60) < DT / 2) atSixTenths = state.carryPose;
-      if (Math.abs(state.stagger.age - .90) < DT / 2) atNineTenths = state.carryPose;
+      if (Math.abs((state.soldierStagger?.age ?? 0) - .60) < DT / 2) atSixTenths = state.carryPose;
+      if (Math.abs((state.soldierStagger?.age ?? 0) - .75) < DT / 2) atNineTenths = state.carryPose;
       expect(len(sub(gunPoint(result.frame.gun!, GUN_GRIP.gripHand), result.frame.restPose[j.index.handR]!))).toBeLessThan(1e-6);
     }
     const aim = CARRIES.aim;
     expect(atSixTenths).toBeDefined();
-    expect(atSixTenths!.right.pitch).toBeCloseTo(aim.right.pitch, 5);
-    expect(atSixTenths!.right.fold).toBeCloseTo(aim.right.fold, 5);
-    expect(atSixTenths!.gunPitch).toBeCloseTo(aim.gunPitch, 5);
-    expect(atSixTenths!.right.yaw).toBeCloseTo(-.35, 5);
+    expect(atSixTenths!.right.pitch).toBeCloseTo(aim.right.pitch, 2);
+    expect(Math.abs(atSixTenths!.right.fold - aim.right.fold)).toBeLessThan(.03);
+    expect(Math.abs(atSixTenths!.gunPitch - aim.gunPitch)).toBeLessThan(.03);
     expect(atNineTenths).toBeDefined();
-    expect(atNineTenths!.right.yaw).toBeCloseTo(aim.right.yaw, 5);
+    expect(Math.abs(atNineTenths!.right.yaw - aim.right.yaw)).toBeLessThan(.002);
+  });
+
+  it('continues a heavy torso hunch from the current world pose through an equal rehit', () => {
+    const j = soldierJoints();
+    let state = makeMotionState(1, [0,0,0]);
+    let points = stubPoints(j);
+    let before: ReturnType<typeof stepMotion>['frame'] | null = null;
+    for (let i = 0; i < 8; i++) {
+      const result = stepMotion(state, j,
+        { enabled: true, wander: false, profile: SOLDIER_PROFILE, carryOverride: 'aim', faceHeading: 0 },
+        { ...NO_SIGNALS(), shot: i === 0 ? { type: 'blast' as const, dirWorld: [0,0,-1] as Vec3,
+          woundWorld: [0,1,0] as Vec3, torso: true, soldierLevel: 'heavy' as const } : null },
+        points, BOUNDS, makeRng(1));
+      state = result.state; before = result.frame;
+      points = result.frame.restPose.map(p => ({ pos: [...p] as Vec3, prev: [...p] as Vec3, pinned: false }));
+    }
+    const repeat = stepMotion(state, j,
+      { enabled: true, wander: false, profile: SOLDIER_PROFILE, carryOverride: 'aim', faceHeading: 0 },
+      { ...NO_SIGNALS(), shot: { type: 'blast', dirWorld: [0,0,-1], woundWorld: [0,1,0], torso: true,
+        soldierLevel: 'heavy' } }, points, BOUNDS, makeRng(1));
+    expect(len(sub(repeat.frame.rootShift, before!.rootShift))).toBeLessThan(.04);
+    expect(len(sub(repeat.frame.restPose[j.index.handR]!, before!.restPose[j.index.handR]!))).toBeLessThan(.08);
+    expect(len(sub(repeat.frame.restPose[j.index.handL]!, before!.restPose[j.index.handL]!))).toBeLessThan(.08);
+    expect(len(sub(gunPoint(repeat.frame.gun!, GUN_GRIP.gripHand), repeat.frame.restPose[j.index.handR]!))).toBeLessThan(1e-6);
   });
 
   it('smooths a low-to-aim destination change during staged recovery', () => {
@@ -992,7 +1217,7 @@ describe('soldier injury response', () => {
     let switched = false;
     let wantAim = false;
     for (let i = 0; i < 75; i++) {
-      if (state.stagger.age >= .70) wantAim = true;
+      if ((state.soldierStagger?.age ?? 0) >= .70) wantAim = true;
       const result = stepMotion(state, j,
         { enabled: true, wander: false, profile: SOLDIER_PROFILE, carryOverride: wantAim ? 'aim' : 'low' },
         { ...NO_SIGNALS(), shot: i === 0
@@ -1015,6 +1240,36 @@ describe('soldier injury response', () => {
     expect(state.carryPose!.right.pitch).toBeCloseTo(CARRIES.aim.right.pitch, 2);
     expect(state.carryPose!.right.fold).toBeCloseTo(CARRIES.aim.right.fold, 2);
     expect(state.carryPose!.gunPitch).toBeCloseTo(CARRIES.aim.gunPitch, 2);
+  });
+
+  it('smooths an aim-to-low destination through late recovery', () => {
+    const j = soldierJoints();
+    let state = makeMotionState(8, [0,0,0]);
+    let points = stubPoints(j);
+    let previous: NonNullable<MotionState['carryPose']> | undefined;
+    let maxPitch = 0, maxYaw = 0, maxFold = 0, maxGunPitch = 0;
+    for (let i = 0; i < 90; i++) {
+      const low = state.soldierStagger?.age !== undefined && state.soldierStagger.age >= .70;
+      const result = stepMotion(state, j,
+        { enabled: true, wander: false, profile: SOLDIER_PROFILE, carryOverride: low ? 'low' : 'aim' },
+        { ...NO_SIGNALS(), shot: i === 0 ? { type: 'blast' as const, dirWorld: [0,0,-1] as Vec3,
+          woundWorld: [0,1,0] as Vec3, torso: true, soldierLevel: 'heavy' as const } : null },
+        points, BOUNDS, makeRng(8));
+      const carry = result.state.carryPose!;
+      if (previous) {
+        maxPitch = Math.max(maxPitch, Math.abs(carry.right.pitch - previous.right.pitch));
+        maxYaw = Math.max(maxYaw, Math.abs(carry.right.yaw - previous.right.yaw));
+        maxFold = Math.max(maxFold, Math.abs(carry.right.fold - previous.right.fold));
+        maxGunPitch = Math.max(maxGunPitch, Math.abs(carry.gunPitch - previous.gunPitch));
+      }
+      previous = carry; state = result.state;
+      points = result.frame.restPose.map(p => ({ pos: [...p] as Vec3, prev: [...p] as Vec3, pinned: false }));
+    }
+    expect(maxPitch).toBeLessThan(.05);
+    expect(maxYaw).toBeLessThan(.05);
+    expect(maxFold).toBeLessThan(.08);
+    expect(maxGunPitch).toBeLessThan(.08);
+    expect(state.carryPose!.right.fold).toBeCloseTo(CARRIES.low.right.fold, 2);
   });
 
   it('losing one leg or the head causes a structural fall, while a zombie still hops on one leg', () => {
@@ -1043,6 +1298,46 @@ describe('soldier injury response', () => {
     expect(hurt.frame.collapsed).toBe(false);
     expect(hurt.state.wander.pos[2]).toBeLessThan(healthy.state.wander.pos[2] * 0.85);
     expect(hurt.frame.speed).toBeLessThan(healthy.frame.speed * 0.75);
+  });
+
+  it('crouches protectively after a non-leg hit, refreshes on another hit, then recovers', () => {
+    const j = soldierJoints();
+    const cfg: MotionConfig = { enabled: true, wander: false, profile: SOLDIER_PROFILE, carryOverride: 'aim' };
+    const shot = { type: 'pellet' as const, dirWorld: [0,0,-1] as Vec3, woundWorld: [0,1.3,0] as Vec3, torso: true };
+    const healthy = run(j, makeMotionState(12, [0,0,0]), cfg, 160);
+    const hurt = run(j, makeMotionState(12, [0,0,0]), cfg, 160,
+      i => ({ ...NO_SIGNALS(), shot: i === 0 || i === 80 ? shot : null }));
+    expect(hurt.frame.restPose[j.index.pelvis]![1]).toBeLessThan(healthy.frame.restPose[j.index.pelvis]![1] - .12);
+    expect(hurt.state.mobilityPosture ?? 0).toBe(0);
+    expect(hurt.frame.collapsed).toBe(false);
+    expect(len(sub(gunPoint(hurt.frame.gun!, GUN_GRIP.gripHand), hurt.frame.restPose[j.index.handR]!))).toBeLessThan(1e-6);
+    const recovered = run(j, hurt.state, cfg, 220);
+    expect(recovered.frame.restPose[j.index.pelvis]![1]).toBeCloseTo(healthy.frame.restPose[j.index.pelvis]![1], 2);
+  });
+
+  it('blends a pelvis injury into a planted crouched shuffle while keeping the gun held', () => {
+    const j = soldierJoints();
+    const start = makeMotionState(12, [0,0,0]);
+    start.wander = { ...start.wander, heading: 0, speed: SOLDIER_PROFILE.cruise, target: [0,0,3] };
+    const move: MotionConfig = { enabled: true, wander: true, profile: SOLDIER_PROFILE, faceHeading: 0,
+      carryOverride: 'aim' };
+    const healthy = run(j, start, move, 90);
+    const firstHealthy = stepMotion(start, j, move, NO_SIGNALS(), stubPoints(j), BOUNDS, makeRng(12));
+    const first = stepMotion(start, j, move,
+      { ...NO_SIGNALS(), mobilityInjury: { severity: 1, side: 'both' } }, stubPoints(j), BOUNDS, makeRng(12));
+    expect(first.state.mobilityPosture).toBeLessThan(.05);
+    expect(len(sub(first.frame.restPose[j.index.handR]!, firstHealthy.frame.restPose[j.index.handR]!))).toBeLessThan(.04);
+    const hurt = run(j, start, move, 90,
+      () => ({ ...NO_SIGNALS(), mobilityInjury: { severity: 1, side: 'both' } }));
+    const hp = hurt.frame.restPose[j.index.pelvis]!, hh = healthy.frame.restPose[j.index.pelvis]!;
+    const hc = hurt.frame.restPose[j.index.chest]!, hs = healthy.frame.restPose[j.index.chest]!;
+    expect(hp[1]).toBeLessThan(hh[1] - .12);
+    expect(hc[2] - hp[2]).toBeGreaterThan(hs[2] - hh[2] + .08);
+    expect(hurt.state.wander.pos[2]).toBeLessThan(healthy.state.wander.pos[2] * .6);
+    const feetY = [hurt.frame.restPose[j.index.footL]![1], hurt.frame.restPose[j.index.footR]![1]];
+    expect(Math.min(...feetY)).toBeCloseTo(j.groundY, 5);
+    expect(len(sub(gunPoint(hurt.frame.gun!, GUN_GRIP.gripHand), hurt.frame.restPose[j.index.handR]!))).toBeLessThan(1e-6);
+    expect(hurt.frame.collapsed).toBe(false);
   });
 });
 

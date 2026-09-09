@@ -32,7 +32,7 @@ export const WOUND_PROFILES: Record<WoundType, WoundProfile> = {
 /** Gameplay provenance is independent of visual crater calibre. */
 export type ShotProvenance =
   | { weapon: 'shotgun'; shotId: number; barrels: 1 | 2; barrel: 0 | 1 }
-  | { weapon: 'slug' }
+  | { weapon: 'slug'; shotId?: number }
   | { weapon: 'explosion' };
 
 export interface Wound {
