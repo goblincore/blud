@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   TRACER, emberPixels, faceEyeBasis, tracerBasis, tracerHeadOn, tracerLength,
-  tracerNearFade, tracerPixels, type Vec3Tuple,
+  tracerNearFade, tracerNearScale, tracerPixels, type Vec3Tuple,
 } from './tracer-sprite';
 
 const at = (px: Uint8Array, w: number, x: number, y: number, c: number) =>
@@ -250,5 +250,34 @@ describe('tracerHeadOn', () => {
 
   it('treats a degenerate direction as fully head-on rather than vanishing', () => {
     expect(tracerHeadOn([0, 0, 0], [0, 0, 1])).toBe(1);
+  });
+});
+
+describe('tracerNearScale', () => {
+  // A pellet radius of 0.05 m gives an ember disc of 0.17 m. Arriving at the
+  // eye (a soldier's shot at the player), the ember is still allowed by the
+  // near fade at 0.65 m, where 0.17 m fills ~13% of the screen width: a flat
+  // additive yellow disc over the level (owner screenshot, 2026-09-09). The
+  // near fade was tuned for a pellet LEAVING the muzzle under the flash, not
+  // one arriving with nothing to hide it.
+  it('is 1 at and beyond the reference distance — downrange sizes are untouched', () => {
+    expect(tracerNearScale(TRACER.nearRef)).toBe(1);
+    expect(tracerNearScale(TRACER.nearRef * 4)).toBe(1);
+    expect(tracerNearScale(50)).toBe(1);
+  });
+  it('shrinks the quad linearly inside it, so the ON-SCREEN size never grows past its size at the reference', () => {
+    // Screen size ∝ metres / distance. With the clamp, metres ∝ distance
+    // inside nearRef, so metres / distance is constant: the screen size at
+    // 0.65 m equals the screen size at nearRef.
+    const d = 0.05 * TRACER.emberScale;
+    const screenAtRef = d / TRACER.nearRef;
+    for (const dist of [0.3, 0.65, 0.95, 2.0]) {
+      const screen = (d * tracerNearScale(dist)) / dist;
+      expect(screen).toBeCloseTo(screenAtRef, 9);
+    }
+  });
+  it('never returns a negative or NaN scale', () => {
+    expect(tracerNearScale(0)).toBe(0);
+    expect(tracerNearScale(-1)).toBe(0);
   });
 });

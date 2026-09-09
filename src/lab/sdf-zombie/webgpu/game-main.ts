@@ -41,7 +41,7 @@ import { GOBLIN_ARM_GLB, aimArm, loadGoblinArms, type GoblinArms } from './game-
 import { flashPixels, smokePixels } from './flash-sprite';
 import {
   TRACER, emberPixels, faceEyeBasis, tracerBasis, tracerHeadOn, tracerLength,
-  tracerNearFade, tracerPixels, type TracerBasis,
+  tracerNearFade, tracerNearScale, tracerPixels, type TracerBasis,
 } from './tracer-sprite';
 import {
   BOB, FREE_AIM, approachAngle, approachBob, bobPose, moveAim, pivotOffset, turnFromAim,
@@ -2667,12 +2667,17 @@ async function main() {
   function placeTracer(v: TracerView, p: Projectile, eye: Vec3): void {
     const ex = eye[0] - p.pos[0], ey = eye[1] - p.pos[1], ez = eye[2] - p.pos[2];
     const toEye: Vec3 = [ex, ey, ez];
-    const fade = tracerNearFade(Math.hypot(ex, ey, ez));
+    const dist = Math.hypot(ex, ey, ez);
+    const fade = tracerNearFade(dist);
     const basis = tracerBasis(p.vel, toEye);
     if (!basis || fade <= 0) { hideTracer(v); return; }
 
     const len = tracerLength(Math.hypot(p.vel[0], p.vel[1], p.vel[2]));
-    const wid = p.radius * TRACER.widthScale;
+    // Near the eye the width and the ember shrink with distance so a pellet
+    // passing the camera stays a glow, never a screen-filling disc. See
+    // tracerNearScale — the fade alone does not cover an ARRIVING shot.
+    const near = tracerNearScale(dist);
+    const wid = p.radius * TRACER.widthScale * near;
     v.streak.visible = true;
     (v.streak.material as THREE.MeshBasicMaterial).opacity = fade;
     setQuadMatrix(v.streak, basis, len, wid,
@@ -2683,7 +2688,7 @@ async function main() {
     const headOn = tracerHeadOn(p.vel, toEye) * fade;
     const face = headOn > 0 ? faceEyeBasis(toEye) : null;
     if (!face) { v.ember.visible = false; return; }
-    const d = p.radius * TRACER.emberScale;
+    const d = p.radius * TRACER.emberScale * near;
     v.ember.visible = true;
     (v.ember.material as THREE.MeshBasicMaterial).opacity = headOn;
     setQuadMatrix(v.ember, face, d, d, p.pos[0], p.pos[1], p.pos[2]);

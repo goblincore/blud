@@ -69,6 +69,14 @@ export const TRACER = {
   /** |cos| at/above which the streak has collapsed and the ember carries the
    *  whole read. */
   emberTo: 0.95,
+  /** Inside this distance from the eye, m, the ember and streak WIDTH shrink
+   *  linearly with distance, so their on-screen size never exceeds what they
+   *  show at this range. The near fade covers a pellet LEAVING the muzzle,
+   *  where the flash owns the screen anyway; a pellet ARRIVING (the soldier
+   *  firing at the player) has nothing to hide behind, and at 0.65 m — well
+   *  inside the fade's visible band — a 0.17 m ember is a flat additive disc
+   *  filling an eighth of the screen (owner screenshot, 2026-09-09). */
+  nearRef: 4.0,
 } as const;
 
 /**
@@ -269,6 +277,19 @@ export function tracerLength(speed: number): number {
  * 0 inside `fadeInStart`, 1 beyond `fadeInEnd`, smoothstep between — a linear
  * ramp pops at both ends of a fade this short.
  */
+/**
+ * Size multiplier for a tracer's ember and streak width when its head is
+ * `dist` metres from the eye: 1 at and beyond `nearRef`, `dist / nearRef`
+ * inside it. Screen size is metres over distance, so inside the band the
+ * quad reads at a CONSTANT screen size — the one it has at `nearRef` —
+ * instead of ballooning as it passes the camera. Length is left alone: a
+ * streak is meant to foreshorten and stretch with perspective.
+ */
+export function tracerNearScale(dist: number): number {
+  if (!(dist > 0)) return 0;
+  return Math.min(1, dist / TRACER.nearRef);
+}
+
 export function tracerNearFade(dist: number): number {
   const t = (dist - TRACER.fadeInStart) / (TRACER.fadeInEnd - TRACER.fadeInStart);
   const c = Math.min(1, Math.max(0, t));
