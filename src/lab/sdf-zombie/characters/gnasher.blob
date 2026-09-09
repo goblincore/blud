@@ -1,0 +1,303 @@
+# GNASHER — a charging animal for the FPS roster. Not a soldier, not a demon
+# lord: a big brutish mass of meat whose whole argument is WEIGHT and a MAW.
+#
+# AUTHORED FROM PROSE. There is no reference mesh and no reference plate for
+# this character — by owner instruction, deliberately. So `blob:measure` and
+# `blob:rings` do not apply (they exit 2 without a reference), and NO number
+# below is "measured": every one is a design decision. The comment on each
+# non-obvious number says WHY it is what it is, which is the house rule for a
+# character with no mesh to fit against.
+#
+# WHO IT IS. A pack animal grown too big: it leads with its shoulders, it runs
+# on its knuckles when it wants to close, and its skull is mostly mouth. It is
+# not clever and it is not a species — it is what the arena sends when the
+# grunts are not enough. It reads at distance as a wedge of muscle moving at
+# you, and up close as a jaw with legs.
+#
+# THE FIVE BEATS, made concrete:
+#   1. MASS FIRST. The chest is the deepest mass on the body (deep 1.45) and
+#      the shoulder yoke is the widest thing on the creature (wide 1.90). The
+#      hips are deliberately narrow, so the top-heavy read survives any yaw.
+#   2. THE MAW IS THE FACE. The skull is three masses: a small cranium high and
+#      back, a wide upper jaw, and a dropped lower jaw. The gape between the
+#      jaws is ~0.10 m tall and 0.40 m wide — wider than the cranium — with
+#      interlocking teeth as GEOMETRY (they are far too big and too central to
+#      paint; the painted-face road is the documented failure, face.ts's
+#      header).
+#   3. SMALL LIT EYES. Two emissive prims (r 0.026) tucked under a heavy brow
+#      shelf. The contrast between a tiny eye and a 0.40 m maw is what makes
+#      the head read as an ANIMAL rather than a person with a big mouth.
+#   4. HORNS AND FOREARM TUSKS are the only mesh parts (gnasher-kit.wam):
+#      short horns swept BACK along the skull — NOT up and out (that is the
+#      minotaur's silhouette, and the brief forbids it) — and ivory tusks
+#      breaking out through the forearm flesh, pointing down-forward like
+#      spurs.
+#   5. ARMS THAT REACH THE GROUND. The arm chain is 1.40 m on a 1.90 m
+#      creature; the fist masses bottom out ~0.09 m above the floor. Hanging
+#      forward and low, they read as legs the animal has not committed to yet.
+#
+# STANCE. Declared `digitigrade`: the thigh is near-vertical, the shin pitches
+# forward so the knee sits BEHIND the hip-to-ankle chord, and the long foot
+# bone runs down-forward to a toe pad on the ground (the gargoyle's bird fold,
+# which checkStance verifies). Omitting `stance` would mean "not checked", not
+# "humanoid".
+#
+# NOT THE OTHER ROSTER HEAVIES. No horns that wrap up-and-out (minotaur), no
+# machinery of any kind (cyberdemon), no wings or tail (gargoyle), no bovine
+# muzzle. The skull is a mouth first and a face second.
+#
+# ROUND 2 (owner, 2026-09-08 r2) — the turntable read as a muddy grey-brown
+# thin flat slab, not the charging flesh-demon of the prose. Three corrections,
+# each below where it bites:
+#   * PINK FLESH. The palette was dark red-brown mud; it is now raw-meat pink.
+#   * THICKER. The side view was a slab; the torso masses were deepened so the
+#     barrel-chest depth, not the shoulder width, is what carries the profile.
+#   * MORE HUNCHED. Spine/chest/neck/skull pitches were increased so the
+#     shoulders ride ahead of the hips and the head sits low and thrust forward.
+# The maw was also grown (and the cranium shrunk) so the mouth finally out-masses
+# the skull, and the forearm/claw mass that pierced the floor was brought up.
+model gnasher
+  # 1.90 m of flesh, but the READ is the 0.60 m shoulder span and the 0.40 m
+  # maw, not the height. Taller than this and the top-heavy wedge stops
+  # reading as an animal; shorter and it reads as a fat humanoid.
+  height 1.90
+  stance digitigrade
+
+skeleton
+  # Hip line at 0.72 (root 0.58 + len 0.14; children attach at the TAIL).
+  # 0.38 of height — the legs are SHORT for the bulk above them, which is the
+  # brief's "barely adequate" beat. The pelvis LEN restores the crotch-to-hip
+  # segment WAM's root (a bare point) does not have; see goblin-kit.wam.
+  root pelvis at 0.58 len=0.14
+
+  # Hunched chain, ~36 deg of forward lean to the shoulders and ~62 to the
+  # skull: the head rides AHEAD of the hips and below the shoulder tops, which
+  # is the charging posture. The neck is short and thick (0.13) on purpose —
+  # a long neck would make this a quadruped that stands up; this one never
+  # fully lifts its head.
+  # ROUND 2: pushed further. spine 22->28, chest 14->20, neck 20->28 and
+  # SHORTENED to 0.10, skull 6->32 so the shoulders ride WELL ahead of the hips
+  # and the skull hangs LOW and forward — the owner read the r1 profile as
+  # standing upright. The head sinks to the shoulder line, which is the charge.
+  bone spine parent=pelvis dir=up pitch=28 len=0.42
+  bone chest parent=spine  dir=up pitch=20 len=0.40
+  bone neck  parent=chest  dir=up pitch=28 len=0.10
+  bone skull parent=neck   dir=up pitch=32 len=0.27
+
+  mirror
+    # Shoulder socket at x ~0.27, y ~1.49, just proud of the chest's ~0.23
+    # half-width. tilt=12 lifts the yoke into the neck (a brute's trap slope,
+    # not a coat hanger) and the 0.28 reach is what makes the shoulders read
+    # as ENORMOUS rather than as a wide chest.
+    bone clavicle parent=chest    dir=side tilt=12 len=0.28
+    # Arm chain 0.60 + 0.56 + 0.24 = 1.40 m. PITCH IS DELIBERATELY SMALL
+    # (8/8/16): a steeply pitched arm shortens its vertical drop, and this
+    # character's arms have to REACH THE GROUND. tilt=16 splays the upper arm
+    # out so the elbow clears the deep chest — the goblin's arm-meld lesson.
+    bone upperArm parent=clavicle dir=down pitch=8 tilt=16 len=0.60
+    bone foreArm  parent=upperArm dir=down pitch=8 tilt=6  len=0.56
+    bone hand     parent=foreArm  dir=down pitch=16         len=0.24
+    # Digitigrade, the dragon/gargoyle solution: near-vertical thigh (8),
+    # shin pitched forward (16) so the knee falls BEHIND the hip->ankle chord,
+    # then a long foot bone (64) down-forward to a toe joint at the ground.
+    # Hip (0.15, 0.72) -> knee (0.231, 0.373, +0.049) -> ankle (0.231, 0.133,
+    # +0.118) -> toe (0.231, 0.045, +0.298); knee offset -19 mm = digitigrade.
+    bone thigh    parent=pelvis dir=down pitch=8  tilt=13 side=0.15 len=0.36
+    bone shin     parent=thigh  dir=down pitch=16           len=0.25
+    bone foot     parent=shin   dir=down pitch=64           len=0.20
+  end
+
+body
+  # ============================================================
+  # TORSO — four masses. Kept NARROW in x (half-width ~0.21 at the chest) and
+  # DEEP instead: the goblin paid twice for a wide torso whose arms then read
+  # as bulges, and this character's arms are already fat. A brute's mass lives
+  # in depth anyway, and the profile is what sells the charge.
+  # ============================================================
+  # Haunch: the seat the legs root into. Narrower than the chest on purpose so
+  # the figure is top-heavy; wide 1.20 = 0.222 half-width. Deepened so the seat
+  # reads as real mass from the side too.
+  blob torso on pelvis at=0.45 r=0.185 wide=1.20 tall=1.05 deep=1.30 blend=0.018
+  # Waist: cinched to ~0.179 half-width so there is a break between haunch and
+  # chest. Without it the three masses blend into one barrel.
+  blob torso on spine at=0.30 r=0.170 wide=1.05 tall=1.05 deep=1.30 blend=0.018
+  # Chest: the biggest single mass and the deepest thing on the body. ROUND 2:
+  # wide was 1.10 (0.231 half-width); the arm cleared the torso by only 4.7 mm
+  # and the side view read as a slab. Narrowed to 0.98 (0.206 half-width) so
+  # the arms get air, and deepened 1.45->1.62 (0.340 half-depth) so the barrel
+  # chest, not the shoulder width, is what the charge reads on.
+  blob torso on chest at=0.40 r=0.210 wide=0.98 tall=1.20 deep=1.62 blend=0.018
+  # Shoulder yoke: the mass that carries the shoulders; narrow enough in x that
+  # the shoulder socket (0.274) sits just proud of it, giving the arm its air
+  # below the elbow. Deepened so the top-heavy wedge reads from the side.
+  blob torso on chest at=0.95 r=0.160 wide=1.60 tall=0.72 deep=1.30 blend=0.014
+  # Pectorals: two slabs on the chest front, moved FORWARD (deeper z) so they
+  # read as front plates and do not eat the arm's side daylight. `both` mirrors
+  # offset.x, so one line makes the pair.
+  blob torso on chest at=0.60 r=0.100 wide=1.20 deep=1.00 blend=0.010 offset=(0.080,0.015,0.170) both
+
+  # ============================================================
+  # NECK — a thick short column (r 0.105 against the zombie's 0.045). A brute
+  # has no visible neck; this is the fattest one that still fuses the skull to
+  # the yoke without the head floating.
+  # ============================================================
+  bar head on neck from=0.05 to=0.95 r=0.105 deep=0.90 blend=0.008
+
+  # ============================================================
+  # ARMS — the knuckle-dragger reach. One heavy mass per segment plus a blunt
+  # fist and a knuckle bar. `core` on the deltoid: it is the structural mass
+  # the fuse probe must use, and the fist blob below is fatter than the shaft
+  # taper (the house core rule). ROUND 2: the r1 arm read as one straight tube
+  # from the side; the shoulder mass is fatter (0.190), the shafts taper harder
+  # (upper 0.145->0.095, fore 0.112->0.085) and the fist is broader and deeper
+  # (wide 1.20) so it reads as a fist the animal leans on, not a column.
+  # ============================================================
+  blob arm on upperArm at=0.06 r=0.190 blend=0.014 mirror core
+  bar  arm on upperArm from=0.12 to=0.95 r=0.145 r2=0.095 blend=0.010 mirror
+  bar  arm on foreArm  from=0.05 to=0.92 r=0.112 r2=0.085 blend=0.009 mirror
+  # Fist: a blunt block, slightly deeper than wide (a fist is). The mass at
+  # the far end is deliberate — this is the limb the animal walks on.
+  blob arm on hand at=0.55 r=0.150 wide=1.20 tall=0.95 deep=1.20 blend=0.010 mirror
+  # Knuckle row: one bar across the front-bottom of the fist. `both` is
+  # unavailable (mirror), so the bar is centred and the fist's own width does
+  # the splay.
+  bar  arm on hand from=0.85 to=1.05 r=0.045 r2=0.030 blend=0.004 chamfer offset=(0,-0.05,0.075) mirror
+
+  # ============================================================
+  # LEGS — digitigrade: fat thigh, slim shin, swollen hock, long metatarsus,
+  # three-toed ground pad with claws. The leg is SHORT (0.72 hip line) against
+  # a 1.40 m arm: that ratio is the "runs on all fours when it wants to" read.
+  # ============================================================
+  blob leg on thigh at=0.05 r=0.155 blend=0.012 mirror core
+  bar  leg on thigh from=0.10 to=0.95 r=0.150 r2=0.100 deep=1.05 blend=0.012 mirror
+  bar  leg on shin  from=0.05 to=0.95 r=0.095 r2=0.075 blend=0.009 mirror
+  # Calf: a mass at the BACK of the shin (offset -z) — without it the shin is
+  # a cone and the leg reads as a peg.
+  blob leg on shin  at=0.30 r=0.090 wide=1.00 tall=1.10 deep=0.85 blend=0.009 offset=(0,-0.010,-0.050) mirror
+  # Hock: the swollen heel joint at the shin's tail.
+  blob leg on foot  at=0.02 r=0.100 blend=0.010 mirror
+  # Metatarsus: the long forward column down to the toe joint. ROUND 2: tall
+  # 1.10 dipped the lower end to y -0.036 (through the floor, caught by the
+  # toe-pad pin); dropped to tall 0.70 and to=0.82 so the column thins toward
+  # the ground and only the toe pad carries the contact.
+  bar  leg on foot  from=0.10 to=0.82 r=0.085 r2=0.070 tall=0.70 deep=0.95 blend=0.010 mirror
+  # Toe pad: the ground-contact fan. offset y +0.02 lifts the sole to y ~0.01
+  # (bone tail 0.045, r 0.080 x tall 0.70 = 0.056 semi-height).
+  blob leg on foot  at=1.00 offset=(0.030,0.020,0.040) r=0.080 wide=1.40 tall=0.70 deep=1.50 blend=0.008 mirror
+  # Claws: centre plus one splayed line, dark and chamfered to points. The .r
+  # foot's reflected offsets put the second at the mirrored x, so each foot
+  # shows a splayed pair around the centre claw. ROUND 2: the claw tips ran
+  # ~6 cm THROUGH the floor (to=1.10 pushed the tip past the bone tail and the
+  # negative offset/tip y drove it under the ground plane, and the toe-pad pin
+  # caught it). Shortened to=1.04 and lifted the y offsets so the tips graze
+  # the pad instead of piercing the floor.
+  bar  leg on foot  from=0.98 to=1.04 r=0.035 r2=0.006 blend=0.004 chamfer offset=(0.030,0.000,0.090) tip=(0.010,-0.005,0.055) mirror color=1a1512
+  bar  leg on foot  from=0.98 to=1.04 r=0.032 r2=0.005 blend=0.004 chamfer offset=(-0.030,0.000,0.085) tip=(-0.010,-0.005,0.050) mirror color=1a1512
+
+  # ============================================================
+  # HEAD — THE MAW IS THE FACE. All structure is PRIMS (no reference mesh, so
+  # blob:face-bake cannot run; the gargoyle road). The face block below is
+  # shrunk to a NUB so it emits nothing. Skull bone (0,1.554,0.384) ->
+  # (0,1.770,0.529) after the r2 hunch; `at=` is a fraction along it and
+  # `offset=` a world displacement from that point.
+  # Order matters: cranium and brow FIRST, then the jaw masses, then the dark
+  # maw interior, then the teeth (so the teeth read as the nearest surface
+  # inside the mouth), then the eyes last so the brow still shadows them.
+  # ============================================================
+  # Cranium: a small dome high and BACK. ROUND 2: shrunk 0.150->0.128 so it is
+  # clearly the minority mass and the maw, not the braincase, owns the head.
+  blob head on skull at=0.62 r=0.128 wide=1.05 tall=1.05 deep=1.05 blend=0.006 offset=(0,0.030,-0.070)
+  # Brow shelf: a wide flat ridge over the eyes, the heaviest brow in the cast.
+  # Semi-height 0.032 makes it a SHELF, not a lump; it overhangs the eyes so
+  # they sit in shadow.
+  blob head on skull at=0.50 r=0.075 wide=1.55 tall=0.42 deep=0.75 blend=0.004 offset=(0,0.055,0.095)
+  # Upper jaw: the dominant mass. ROUND 2: grown 0.155->0.165 / deep 1.25->1.30
+  # and dropped (offset y -0.015)->-0.050 so it is BOTH the biggest thing on
+  # the head AND the lowest — the maw, not the cranium, owns the skull. Wide
+  # (0.231 half-width) and deep (0.215), the roof of the maw and the bed of the
+  # upper teeth.
+  blob head on skull at=0.38 r=0.165 wide=1.42 tall=0.68 deep=1.30 blend=0.005 offset=(0,-0.050,0.140)
+  # Lower jaw: DROPPED and pushed forward, so the gape between the jaws is a
+  # real gap — the "huge gaping mouth" beat. Its top is the floor of the maw,
+  # its bottom the heavy under-jaw that hangs in front of the chest.
+  blob head on skull at=0.22 r=0.140 wide=1.25 tall=0.90 deep=1.20 blend=0.005 offset=(0,-0.280,0.190)
+  # Jaw hinge: a mass at the back of the lower jaw, tying it to the skull so
+  # the mandible does not read as a detached lump.
+  blob head on skull at=0.30 r=0.085 wide=1.00 tall=1.20 deep=1.10 blend=0.005 offset=(0.130,-0.090,0.050) both
+  # Maw interior: the dark cavity behind the teeth. Recessed so it reads as
+  # depth, not as a plug; dropped with the upper jaw so it sits in the mouth.
+  blob head on skull at=0.35 r=0.130 wide=1.15 tall=0.85 deep=1.15 blend=0.006 offset=(0,-0.125,0.100) color=1a0808
+  # Upper gum line: a thin dark bar along the upper jaw's lower edge. Painted
+  # near-black so the tooth roots have something to sit in.
+  bar head on skull from=0.38 to=0.38 r=0.022 wide=1.90 tall=0.35 deep=0.60 blend=0.003 offset=(0,-0.120,0.150) color=2a0d0d
+  # Lower gum line.
+  bar head on skull from=0.22 to=0.22 r=0.022 wide=1.70 tall=0.35 deep=0.60 blend=0.003 offset=(0,-0.255,0.190) color=2a0d0d
+
+  # UPPER TEETH: four pairs (offset.x mirrored by `both`), each a tapered cone
+  # rooted inside the upper jaw and reaching down toward the lower row. They
+  # interlock, so the mouth reads as a trap rather than a painted grin. Ivory,
+  # no glow. ROUND 2: dropped 0.035 with the grown upper jaw so they stay
+  # rooted in the maw.
+  bar head on skull from=0.38 to=0.38 r=0.030 r2=0.004 blend=0.003 chamfer offset=(0.040,-0.125,0.170) tip=(0,-0.100,0.010) both color=e8ddc0
+  bar head on skull from=0.38 to=0.38 r=0.034 r2=0.005 blend=0.003 chamfer offset=(0.105,-0.125,0.165) tip=(0,-0.105,0.010) both color=e8ddc0
+  bar head on skull from=0.38 to=0.38 r=0.032 r2=0.004 blend=0.003 chamfer offset=(0.160,-0.125,0.150) tip=(0,-0.095,0.005) both color=e8ddc0
+  bar head on skull from=0.38 to=0.38 r=0.026 r2=0.003 blend=0.003 chamfer offset=(0.205,-0.125,0.120) tip=(0,-0.080,0.000) both color=e8ddc0
+  # LOWER TEETH: three pairs pointing UP from the lower jaw (y 1.35 -> 1.44),
+  # plus two heavy canines at the corners of the maw.
+  bar head on skull from=0.22 to=0.22 r=0.030 r2=0.004 blend=0.003 chamfer offset=(0.040,-0.250,0.215) tip=(0,0.095,-0.005) both color=e8ddc0
+  bar head on skull from=0.22 to=0.22 r=0.032 r2=0.005 blend=0.003 chamfer offset=(0.105,-0.250,0.210) tip=(0,0.100,-0.005) both color=e8ddc0
+  bar head on skull from=0.22 to=0.22 r=0.028 r2=0.004 blend=0.003 chamfer offset=(0.165,-0.250,0.185) tip=(0,0.090,-0.010) both color=e8ddc0
+  # Canines: the heavy pair that make the maw read as a predator's, longer and
+  # set at the corners where the jaw hinge is.
+  bar head on skull from=0.22 to=0.22 r=0.040 r2=0.005 blend=0.003 chamfer offset=(0.205,-0.245,0.155) tip=(0,0.135,-0.015) both color=e8ddc0
+
+  # EYES — the lit pair, and the ONLY glow on this character (one authored
+  # line, `both` doubles it; the pack allowlist pins the count at two). r 0.026
+  # is small on purpose: against a 0.40 m maw the ratio IS the animal read.
+  # Amber, deliberately not the gargoyle's ember orange, the cyberdemon's cyan
+  # or the minotaur's red.
+  blob head on skull at=0.62 r=0.026 r2=0.012 blend=0.003 chamfer offset=(0.085,0.030,0.085) tip=(0.006,-0.008,0.022) both color=ffcc22 glow=0.9
+
+# Face block: SHRUNK TO A NUB. headRadius 0.001 kills the emitted skull
+# ellipsoid pair; browHeavy/noseLength 0 gate the emitted brow and nose off
+# (facePrims emits only while those are > 0.0005). The head is authored prims
+# above; this keeps the block present (and the lab's face panel live) without
+# imposing the house oval. Same trick as gargoyle.blob.
+face
+  headRadius 0.001
+  headWidth  1.0
+  headHeight 1.0
+  headDepth  1.0
+  jawWidth   1.0
+  jawHeight  1.0
+  jawDrop    0
+  jawJut     0
+  noseLength 0
+  noseWidth  1.0
+  noseDrop   0
+  browHeavy  0
+  browRise   0
+  headBlend  0.006
+
+# ROUND 2 (owner, 2026-09-08 r2): PINK FLESH, not mud. The r1 base was a dark
+# red-brown that rendered as grimy dirt; the owner asked for raw MEAT. So the
+# base is a warm pink — the blue channel sits ABOVE green so the hue reads pink
+# and not brick (this is the single most visible fix of the round). Kept matte
+# and rough (spec 0.50 / roughness 0.52) so it is raw flesh, not the minotaur's
+# bright WET pink or the zombie's pale latex. mottleColor goes from the r1 olive
+# (which read as dirt ON the hide) to a DARKER RED, so variation reads as
+# bruised/aged meat. Wound interior stays red.
+palette
+  baseColor     0.66 0.34 0.38
+  deepColor     0.56 0.08 0.10
+  charColor     0.14 0.05 0.06
+  specIntensity 0.50
+  specRoughness 0.52
+  fresnelBoost  0.32
+  translucency  0.18
+  wetness       0.38
+  surfaceNoiseAmp    0.07
+  silhouetteNoiseAmp 0.02
+  mottleAmp     0.60
+  mottleScale   2.4
+  mottleColor   0.30 0.11 0.13

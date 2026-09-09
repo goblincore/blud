@@ -1,0 +1,129 @@
+# Gnasher kit — the POLYGON half of the character, authored in WAM.
+#
+# WHY TWO LANGUAGES FOR ONE CHARACTER: see goblin-kit.wam's header — flesh in
+# .blob because blended SDFs are round by construction and smooth-min rounds
+# every edge a horn point or a tusk tip needs; plate in .wam because that is
+# the other half of the trade. A horn or a tusk is exactly the HARD thing
+# .blob is bad at: smooth-min smears a point into the surrounding field, while
+# a mesh keeps the tip crisp. So the horns and the forearm tusks are the only
+# parts of this character that are not flesh.
+#
+# THE SKELETON BELOW MIRRORS characters/gnasher.blob AND MUST TRACK IT. Two
+# conversions apply and neither is optional (goblin-kit.wam's header is the
+# spec):
+#
+#   * UNITS. WAM lengths are fractions of `height`; .blob's are metres. The
+#     gnasher's height is 1.90, so every number here is the .blob metre value
+#     / 1.90.
+#   * PITCH SIGN ON `down` BONES. WAM's pitch tips an `up` bone forward and a
+#     `down` bone BACKWARD; .blob's always carries toward +z. Up bones (spine,
+#     chest, neck, skull) share pitch verbatim; every down bone (upperArm,
+#     foreArm, hand, thigh, shin, foot) NEGATES it. Silent either way — this is
+#     what gave the goblin kangaroo knees. `tilt` needs no flip.
+#
+# ONLY THE SKULL AND FOREARM BONES ARE LOAD-BEARING. The kit hangs a horn off
+# the skull and a spur off the forearm, so those two must match the .blob
+# exactly; the rest of the chain is transcribed so the arm/head sit where the
+# .blob puts them (a floating horn is the failure this check exists for). The
+# .blob skeleton was hunched in round 2 (spine 22->28, chest 14->20, neck
+# 20->28 shortened to 0.10, skull 6->32) and the kit skeleton mirrors that.
+#
+# BUILD:  scripts/build-wam-kit.sh gnasher
+#   -> public/assets/lab/gnasher-kit.gltf, loaded via the character registry's
+#      `kit` URL. WAM lives outside this repo, so the compiled glTF is
+#      committed and that script records how to regenerate it.
+#
+# EXPECTED LINTS, correct to ignore (the same three as the goblin kit): this is
+# the meat-and-bone kit, not the character — the limbs and torso have no
+# geometry near them (that flesh lives in the .blob), and the lowest geometry
+# floats above the ground (there are no feet here). A warning about anything
+# else is real.
+model gnasher-kit
+  height 1.90
+  # chunky = 8-sided lofts. Faceted horn/tusk against smooth raymarched flesh
+  # is the contrast this split is for.
+  style chunky
+
+palette
+  # Keratin: dark brown-grey, matte. The horn is part of the skull, not a
+  # jewel — it should read as bone/horn in silhouette, not as a highlight.
+  horn #3c2a1c
+  # Ivory: the same pale bone as the maw's teeth (blob color e8ddc0), so the
+  # forearm spur reads as the same growth as the mouth's fangs.
+  ivory #e6d9bd
+
+skeleton
+  # .blob's `root pelvis at 0.58 len=0.14` is a BONE from crotch to hip line;
+  # WAM's root is a bare POINT, so `hips` restores the missing segment and
+  # every .blob `parent=pelvis` becomes `parent=hips`. Leaving it out is a
+  # silent 14 cm error (goblin-kit.wam).
+  root pelvis at 0.305263
+  bone hips   parent=pelvis dir=up len=0.073684
+  # up-bone pitches verbatim from the .blob (r2 hunch).
+  bone spine  parent=hips   dir=up pitch=28 len=0.221053
+  bone chest  parent=spine  dir=up pitch=20 len=0.210526
+  bone neck   parent=chest  dir=up pitch=28 len=0.052632
+  bone skull  parent=neck   dir=up pitch=32 len=0.142105
+  mirror
+    # clavicle is dir=side (pitch a no-op there; tilt swings it toward +y in
+    # both languages) and foot is dir=down pitch=64 — both hand-written to
+    # match the .blob. Down-bone pitches NEGATED: upperArm 8->-8, foreArm
+    # 8->-8, hand 16->-16, thigh 8->-8, shin 16->-16, foot 64->-64.
+    bone clavicle parent=chest    dir=side tilt=12 len=0.147368
+    bone upperArm parent=clavicle dir=down pitch=-8 tilt=16 len=0.315789
+    bone foreArm  parent=upperArm dir=down pitch=-8 tilt=6  len=0.294737
+    bone hand     parent=foreArm  dir=down pitch=-16        len=0.126316
+    bone thigh    parent=hips     dir=down pitch=-8 tilt=13 side=0.078947 len=0.189474
+    bone shin     parent=thigh    dir=down pitch=-16        len=0.131579
+    bone foot     parent=shin     dir=down pitch=-64        len=0.105263
+
+    # # HORN — short, swept BACK along the skull, NOT up and out (that is the
+    # minotaur's silhouette and the brief forbids it). Anchored at the crown
+    # crest (skull t 0.55) just proud of the shrunk cranium (cranium half-width
+    # 0.0707 model units), the first segment leaves backward and slightly up
+    # ((0.30,0.15,-0.94): -z dominates so it is a BACK sweep), the second
+    # settles down-back along the skull ((0.05,-0.20,-0.98)). `mirror` flips
+    # the resolved direction in x, so the .r horn is the mirror twin.
+    bone horn1 parent=skull at=0.55 offset=(0.055,0.010,-0.015) dir=(0.30,0.15,-0.94) len=0.060
+    bone horn2 parent=horn1 dir=(0.05,-0.20,-0.98) len=0.048
+
+    # # FOREARM TUSK — an ivory spur breaking out through the forearm flesh,
+    # pointing down-forward like a blade. Anchored on the forearm bone at t 0.5,
+    # offset to the outer-front surface (magnitude 0.036 model units, inside the
+    # forearm's ~0.059 flesh radius so the base is buried in the arm and the tip
+    # clears it), then aimed out-forward-down ((0.30,-0.60,0.74)) and eased
+    # down-back ((0.12,-0.72,0.68)) so it reads as a spur, not a straight pin.
+    bone tusk1 parent=foreArm at=0.50 offset=(0.030,0.000,0.020) dir=(0.30,-0.60,0.74) len=0.085
+    bone tusk2 parent=tusk1 dir=(0.12,-0.72,0.68) len=0.062
+  end
+
+parts
+  # ==========================================================================
+  # HORNS — a tapered spike per side. Thin from the base (the fold rule: ring
+  # radius must stay under the bend reach), tapers to a POINT so the tip reads
+  # crisp instead of smeared.
+  # ==========================================================================
+  mirror
+    loft horn bones=horn1..horn2 material=horn
+      ring 0.00 w=0.052 d=0.052
+      ring 0.30 w=0.040 d=0.040
+      ring 0.62 w=0.026 d=0.026
+      ring 0.86 w=0.014 d=0.014
+      ring 1.00 w=0.005 d=0.005
+      cap start=none end=point
+  end
+
+  # ==========================================================================
+  # FOREARM TUSKS — an ivory spur per side, breaking out of the forearm flesh
+  # and pointing down-forward. Base is buried in the arm (the loft starts on
+  # the bone axis and the first ring sits under the skin); the tip clears the
+  # flesh so the spur reads as a growth, not a painting.
+  # ==========================================================================
+  mirror
+    loft tusk bones=tusk1..tusk2 material=ivory
+      ring 0.00 w=0.038 d=0.038
+      ring 0.32 w=0.030 d=0.030
+      ring 0.64 w=0.020 d=0.020
+      ring 1.00 w=0.005 d=0.005
+      cap start=none end=point
+  end
