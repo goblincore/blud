@@ -11,7 +11,8 @@ import { createZombieActor, segmentHitsBox, clearCombatMove } from './game-actor
 import { gunPoint, GUN_GRIP } from '../carry';
 import { qRotate } from '../vec';
 import type { Aabb } from './game-level';
-import { spawnPellets, spawnSlug, stepProjectiles } from './game-weapon';
+import { resolveExplosion } from '../explosion-aoe';
+import { woundFromSlug, spawnPellets, spawnSlug, stepProjectiles } from './game-weapon';
 import { createWoundRing } from './character-view';
 
 function soldier(furniture: Aabb[] = [], releaseProp?: () => void, body?: BuildResult) {
@@ -90,6 +91,31 @@ describe('soldier actor combat wiring', () => {
     expect(actor.motionFrame()!.collapsed).toBe(true);
   });
 
+  it('diagnostic slug-like stamping reveals a head wound without lethal injury', () => {
+    const { actor } = soldier();
+    const p = actor.posed().prims.find(p => p.bone === 'skull')!;
+    const at: [number, number, number] = [p.a[0], p.a[1], p.a[2] + p.radius];
+    const w = woundFromSlug(actor.posed().prims, at, () => 0);
+    expect(actor.body.prims[w.primIdx]!.limb).toBe('head');
+    actor.stampBlast([w]);
+    actor.step(1 / 60);
+    expect(actor.motionFrame()!.collapsed).toBe(false);
+    expect(actor.wounds()).toEqual([expect.objectContaining({ primIdx: w.primIdx, radius: w.radius, type: 'blast' })]);
+    expect(actor.body.clusters.find(c => c.limb === 'head')!.alive).toBe(true);
+  });
+
+  it('the explosion resolver marks real head injury before actor stamping', () => {
+    const { actor } = soldier();
+    const p = actor.posed().prims.find(p => p.bone === 'skull')!;
+    const fx = resolveExplosion([p.a[0], p.a[1], p.a[2] + 0.3], [{ id: '1', body: actor.posed() }]);
+    const wounds = fx.perBody[0]!.wounds;
+    expect(wounds.some(w => actor.body.prims[w.primIdx]!.limb === 'head')).toBe(true);
+    expect(wounds.every(w => w.shot?.weapon === 'explosion')).toBe(true);
+    actor.stampBlast(wounds);
+    actor.step(1 / 60);
+    expect(actor.motionFrame()!.collapsed).toBe(true);
+  });
+
   it('a slug cannot bypass head survival through the geometric cut test', () => {
     const { actor } = soldier();
     hitLimb(actor, 'skull', true);
@@ -98,7 +124,7 @@ describe('soldier actor combat wiring', () => {
     expect(actor.motionFrame()!.collapsed).toBe(false);
   });
 
-  it.each(['double', 'single', 'stray', 'separate'] as const)('%s shotgun volley retains provenance across frame batches', kind => {
+  it.each(['double', 'single', 'stray', 'separate'] as const)('%s shotgun provenance manually forwarded to actor survives frame batches', kind => {
     const { actor } = soldier();
     const volley = spawnPellets([0, 0, 0], [0, 0, 1], kind === 'single' ? 1 : 2, 42);
     stepProjectiles(volley, 1 / 60);

@@ -931,8 +931,9 @@ export function createZombieActor(opts: {
     // wound in the ring — see refreshWounds. No stamp-time record: these
     // arrive already resolved against a posed body, with no single impact
     // point to anchor to.
-    if (soldierDamage) blastWounds = blastWounds.map(w => ({ ...w, shot: { weapon: 'explosion' as const } }));
-    for (const w of blastWounds) recordSoldierInjury(w);
+    // This is also the wound-only diagnostic seam. Only the explosion
+    // resolver may identify a bundle as damaging explosion provenance.
+    for (const w of blastWounds) if (w.shot?.weapon === 'explosion') recordSoldierInjury(w);
     woundRing.stampBundle(blastWounds);
     if (torsoWounds) for (const w of blastWounds) torsoWounds.record(w, current);
     for (const w of blastWounds) pendingWounds.push(w);
