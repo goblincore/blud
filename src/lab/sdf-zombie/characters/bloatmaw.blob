@@ -7,24 +7,51 @@
 # of the body's own width, a shelving brow ridge shading two MISMATCHED ember
 # eyes, ear-frills off the flanks, a ragged raked crest and a hunched back,
 # and lumpy sagging folds where the flesh gathers under its own weight. The
-# maw splits the whole front with its ring of irregular bone teeth and the
-# ember core burning in the throat. And, absurd against all that bulk, two
-# withered arms dangle off the flanks with broken shackles at the wrists. No
-# legs, no ground contact — the hover gap is the character.
+# maw splits the whole front with its ring of irregular bone teeth and a great
+# wet EYE set back in the throat, looking out between them. And, absurd against
+# all that bulk, two withered arms dangle off the flanks with broken shackles
+# at the wrists. No legs, no ground contact — the hover gap is the character.
 #
-# r2 (this pass): the owner said the body "needs to have a more complex shape,
-# would be good if it had things like ears or jaw or brow nose etc." The old
-# ball had been a clean sphere and, worse, wore two bright pale-BLUE and GREEN
-# orb eyes stuck proud of the surface like googly toys. So the eyes were
-# replaced — small dim embers (burnt crimson + smoke-amber, neither blue nor
-# green) seated IN sockets under a continuous brow ridge, so the silhouette
-# around them is flesh, not a sphere off a sphere — and the mass was rebuilt
-# with jaw, jowls, brow, nasal slits, ear-frills, a back hump and a ragged
-# crown, all deliberately uneven so no yaw reads as a plain circle.
+# r2: the owner said the body "needs to have a more complex shape, would be
+# good if it had things like ears or jaw or brow nose etc." The old ball had
+# been a clean sphere and, worse, wore two bright pale-BLUE and GREEN orb eyes
+# stuck proud of the surface like googly toys. So the eyes were replaced —
+# small dim embers (burnt crimson + smoke-amber, neither blue nor green) seated
+# IN sockets under a continuous brow ridge, so the silhouette around them is
+# flesh, not a sphere off a sphere — and the mass was rebuilt with jaw, jowls,
+# brow, nasal slits, ear-frills, a back hump and a ragged crown, all
+# deliberately uneven so no yaw reads as a plain circle.
+#
+# r3 (this pass) — make it GROTESQUE, four corrections:
+#   1. The "burning throat core" was a flat saturated red disc that read as a
+#      sticker pasted on the mouth with no depth behind it. The brief was
+#      wrong and is DISCARDED. In its place: a great wet EYE (sclera ->
+#      iris -> pupil, wet gloss, no glow) set in the throat and looking out
+#      through the teeth. Additive geometry — the maw is still NOT a carve (see
+#      below) — so the eye is a ball set into the dark maw, its front framed
+#      just behind the tooth row.
+#   2. The brow ridge was too narrow for the eyes under it to read. Widened,
+#      deepened and overhung so it is a heavy shelf; the socket craters are now
+#      dark blood so the two ember eyes read as eyes glowing out of shadowed
+#      pits at a glance.
+#   3. Thick soft LIPS around the maw's opening — `bend=` makes each one a
+#      single curved, tapered ROLL rather than a chain of lumps. The upper lip
+#      droops forward over the fangs, the lower lip sags under its own weight.
+#   4. A field of PUFFERFISH SPIKES across the back and crown, each a `blob`
+#      with `r2=0` (a far radius of ZERO is the only shape a capsule cannot
+#      make: a TRUE POINT; a rounded nub would read as a wart). Irregular —
+#      every spike a hand-placed single prim, uneven length and spacing, denser
+#      over the back and crown, sparser toward the maw. FLESH, not the kit:
+#      keratin though it is, they grow OUT of the ball and must merge with it
+#      (the kit omits the spine/neck/skull bones a spike could hang from), so
+#      they cost cluster budget — which is why they are fewer-larger, the
+#      brief's own guidance against the 64-prim cap. Spike tips stay under the
+#      declared 1.829 ball top and clear of the 0.302 hover gap, so `height`
+#      is still the top of the ball.
 #
 # FLOATING. `stance` is OMITTED on purpose (see the model block): the grammar
 # knows only humanoid/digitigrade and this body has no legs at all. The maw,
-# teeth, eyes and throat core are GEOMETRY (prims), not a painted decal:
+# teeth, eyes and the throat eye are GEOMETRY (prims), not a painted decal:
 # there is no reference mesh to bake, and the painted-face road has failed
 # this project repeatedly (face.ts's header records four rebuilds). No sheet
 # block, so the registry wears ZOMBIE_FLAT.
@@ -35,7 +62,8 @@
 # ball, so the ball always wins the pixel and a dark or glowing throat prim
 # inside the hole would render as plain flesh. So the maw is an additive dark
 # mass that owns its own surface by protruding from the ball's front, with the
-# lit core protruding further still. (Cyclops paid for the carve version: two
+# throat EYE seated into it, its front framed just behind the tooth row.
+# (Cyclops paid for the carve version: two
 # carve attempts left GPU holes the CPU field did not have, 2026-08-22.)
 model bloatmaw
   # height = the TOP OF THE BALL, not a standing crown. The whole body hovers:
@@ -114,13 +142,29 @@ body
   # blood: the deepColor of a mouth, not a paint region.
   # ============================================================
   blob head on maw at=0.92 offset=(0,-0.09,0) r=0.44 wide=1.14 tall=0.74 deep=0.22 blend=0.012 color=180406
-  # A dull ember haze in the throat, just proud of the maw so it owns a ring.
-  blob head on maw at=0.94 offset=(0,-0.09,0.05) r=0.24 wide=1.15 tall=0.85 deep=0.55 blend=0.030 color=7a1404 glow=0.35
-  # THE LIT CORE: a burning ember in the middle of the maw, protruding ~7 cm
-  # past the dark mass so it is the outermost prim there and can glow. One
-  # strong light on the character; the colour IS the emission (glow rides the
-  # prim's own colour, per the grammar).
-  blob head on maw at=0.94 offset=(0,-0.09,0.07) r=0.15 wide=1.05 tall=0.95 deep=1.00 blend=0.020 color=ff5a10 glow=0.95
+  # THE THROAT EYE — a great wet eye set back in the maw, looking out through
+  # the teeth. This REPLACES the r2 "burning throat core": that flat saturated
+  # red disc read as a sticker pasted on the mouth with no depth behind it, so
+  # the brief was discarded. Additive geometry (the maw is NOT a carve, see the
+  # header), so the eye is a real ball set into the dark maw, its front framed
+  # just behind the tooth row. Sclera -> iris -> pupil, wet gloss, and NO glow:
+  # it catches the key light instead of emitting, which is exactly what keeps
+  # it an EYE rather than a second ball in the mouth.
+  blob head on maw at=0.94 offset=(0,-0.09,0.00) r=0.140 wide=1.00 tall=1.00 deep=0.90 blend=0.012 color=8f8172 gloss=0.90
+  blob head on maw at=0.94 offset=(0,-0.09,0.10) r=0.060 wide=1.00 tall=1.00 deep=0.55 blend=0.008 color=7a4814 gloss=0.80
+  blob head on maw at=0.94 offset=(0,-0.10,0.13) r=0.028 wide=1.00 tall=1.00 deep=0.50 blend=0.005 color=060408 gloss=0.90
+
+  # ---- LIPS — thick soft rolls around the mouth's opening -----------------
+  # `bend=` is the one primitive that makes a curved, tapered ROLL instead of
+  # a chain of lumps (see reference.md "Curved primitives"). Each lip is a
+  # single `blob` with a `tip=` (the roll runs across the mouth) and a `bend=`
+  # (the control point bows it, so it is one curve, not straight segments).
+  # Uneven by hand: the upper lip is higher on the left and droops forward
+  # over the fangs, the lower lip is fatter and sags under its own weight.
+  # They catch the light along the top edge, which is what finally makes the
+  # maw read as a MOUTH from every angle rather than a hole with teeth in it.
+  blob head on maw at=0.82 offset=(-0.44,0.24,0.10) r=0.095 r2=0.072 tip=(0.88,-0.06,0.03) bend=(0,-0.02,0.08) blend=0.010
+  blob head on maw at=0.82 offset=(-0.44,-0.35,0.10) r=0.108 r2=0.084 tip=(0.88,0.04,0.03) bend=(0,-0.06,0.06) blend=0.010
 
   # ---- TEETH — irregular, none repeated -------------------------------
   # Upper row: five fangs hanging off the top lip. Bases sit on the dark
@@ -147,27 +191,31 @@ body
   # above, a jowl below, an overhanging lid — carries the SILHOUETTE, while
   # the eye only fills the gap between them. From the side the outline is
   # brow and jowl, never a clean sphere off a clean sphere.
-  # COLOUR: the throat core is a HOT orange ember, so the eyes are
-  # deliberately NOT orange and NOT bright — one burnt ember, one dull
-  # smoke-amber, both dim and desaturated so nothing reads as plastic or
-  # glass. Asymmetry stays: different sizes, different heights, one
-  # half-lidded by a flesh lid.
-  # The brow is one continuous shelf (a single mass whose own bulges do the
-  # shading) — `wide` 2.4 lets it span the whole eye line instead of sitting
-  # as a separate blob over each eye. It shelves OVER the sockets, but is
-  # raised high enough (offset y 0.50 -> y ~1.64) that it shades them from
-  # the top third rather than swallowing them; the eyes read below it.
-  blob head on maw at=0.80 offset=(-0.02,0.50,0.06) r=0.140 wide=2.20 tall=0.46 deep=0.90 blend=0.012   # brow ridge, spans both sockets
+  # COLOUR: the throat now carries a pale wet EYE (see the maw block above),
+  # so the face eyes are deliberately NOT orange (they would rhyme with it)
+  # and NOT bright — one burnt ember, one dull smoke-amber, both warm and
+  # desaturated so nothing reads as plastic or glass. Asymmetry stays:
+  # different sizes, different heights, one half-lidded by a flesh lid.
+  # The brow is one continuous heavy RIDGE (a single mass whose own bulk does
+  # the shading) — `wide` 2.5 lets it span past both sockets, `deep` 1.10 and
+  # a forward `offset` let it OVERHANG so it shades the sockets from the top
+  # third, and it sits high enough (bottom y ~1.60) that it covers the big
+  # eye's top third while leaving both eyes findable beneath. The mass is
+  # rounded, not a thin visor slab, so it reads as a fleshy brow.
+  blob head on maw at=0.80 offset=(-0.02,0.56,0.08) r=0.170 wide=2.50 tall=0.60 deep=1.10 blend=0.010   # brow ridge, spans both sockets
   # Right eye (character's right, +x), the big one, set HIGH and out a touch.
-  blob head on maw at=0.80 offset=(0.22,0.40,-0.02) r=0.080 wide=1.05 tall=1.05 deep=0.85 blend=0.008   # socket crater (flesh, sets eye in)
-  blob head on maw at=0.80 offset=(0.22,0.40,0.05) r=0.060 wide=1.00 tall=0.90 deep=0.88 blend=0.006 color=7a1c08 glow=0.70
+  # The socket crater is DARK blood now (not flesh) so the warm ember reads as
+  # an eye glowing out of a shadowed pit — that is what makes the pair findable
+  # at a glance under the heavy brow, instead of red-on-red against the flesh.
+  blob head on maw at=0.80 offset=(0.26,0.38,-0.02) r=0.092 wide=1.05 tall=1.05 deep=0.85 blend=0.008 color=1a0a06
+  blob head on maw at=0.80 offset=(0.26,0.38,0.06) r=0.082 wide=1.00 tall=0.90 deep=0.88 blend=0.006 color=7a1c08 glow=0.92
   # A lower-lid jowl under the big eye that rises over its bottom quarter.
-  blob head on maw at=0.80 offset=(0.24,0.31,0.02) r=0.072 wide=1.30 tall=0.55 deep=0.90 blend=0.008
+  blob head on maw at=0.80 offset=(0.28,0.29,0.02) r=0.078 wide=1.30 tall=0.55 deep=0.90 blend=0.008
   # Left eye (character's left, -x), smaller, LOWER and more sunken: a dimmer
   # smoke-amber, half-hidden under a heavy lid. The two never read the same.
-  blob head on maw at=0.78 offset=(-0.30,0.30,-0.03) r=0.066 wide=1.00 tall=1.00 deep=0.85 blend=0.008  # socket crater
-  blob head on maw at=0.78 offset=(-0.30,0.30,0.03) r=0.044 wide=1.00 tall=0.86 deep=0.84 blend=0.005 color=7a5c14 glow=0.48
-  blob head on maw at=0.78 offset=(-0.30,0.36,0.04) r=0.058 wide=1.25 tall=0.50 deep=0.95 blend=0.008   # heavy lid over the small eye
+  blob head on maw at=0.78 offset=(-0.32,0.30,-0.03) r=0.072 wide=1.00 tall=1.00 deep=0.85 blend=0.008 color=1a0a06
+  blob head on maw at=0.78 offset=(-0.32,0.30,0.04) r=0.066 wide=1.00 tall=0.86 deep=0.84 blend=0.005 color=7a5c14 glow=0.82
+  blob head on maw at=0.78 offset=(-0.32,0.34,0.05) r=0.058 wide=1.25 tall=0.50 deep=0.95 blend=0.008
 
   # ============================================================
   # ANATOMY — the ball stops being a sphere. All of this is the owner's
@@ -241,6 +289,51 @@ body
   # A couple of DARK boils so the lumps read against the flesh, not as shadow.
   blob torso on pelvis at=0.00 offset=(0.44,0.12,-0.02) r=0.085 wide=0.95 tall=1.05 deep=0.95 blend=0.020 color=2a0a06
   blob torso on pelvis at=0.00 offset=(-0.40,0.30,-0.10) r=0.075 wide=1.00 tall=1.00 deep=1.00 blend=0.020 color=2a0a06
+
+  # ---- PUFFERFISH SPIKES — a field of true points across the back/crown ----
+  # FELL INTO FLESH, NOT THE KIT. Keratin is arguably hard surface, but these
+  # grow OUT of the ball and must merge into the flesh with no seam; the kit
+  # (bloatmaw-kit.wam) deliberately omits the spine/neck/skull bones a spike
+  # could hang from, so putting them there means re-transcribing the skeleton
+  # (units /1.83, WAM pitch sign flip) at real drift risk. Flesh costs cluster
+  # budget instead — which is why these are FEWER, LARGER, better-placed, the
+  # brief's own guidance when the 64-prim cap is the constraint.
+  # Each spike is a `blob ... r2=0` — the FAR radius ZERO is what makes a TRUE
+  # POINT (a rounded nub would read as a wart). `chamfer` keeps the crease.
+  # Every spike is a hand-placed, single `blob` (no mirror/both) so the field
+  # is irregular: uneven length, uneven spacing, denser over the back and the
+  # crown, sparser toward the maw, and every tip raked a different way. They
+  # are all on the BACK (z<0) and CROWN, clear of the arms' daylight (the
+  # shoulders seat at x +-0.63, y ~1.12, so nothing here is under x 0.55).
+  # TIPS: crown tips stay under the declared 1.829 ball top; back tips point
+  # back/out and never dip near the 0.302 hover gap, so the ball's extents are
+  # unchanged and `height` is still the ball's top.
+  # ---- crown + upper back (head cluster) ----
+  blob head on skull at=0.62 offset=(0.13,0.07,-0.02) r=0.048 r2=0 blend=0.006 chamfer tip=(0.10,0.00,-0.20) color=6b5a44
+  blob head on skull at=0.72 offset=(-0.13,0.05,-0.06) r=0.042 r2=0 blend=0.006 chamfer tip=(-0.10,0.00,-0.22) color=6b5a44
+  blob head on skull at=0.44 offset=(0.05,0.05,0.03) r=0.040 r2=0 blend=0.006 chamfer tip=(0.03,0.00,-0.14) color=6b5a44
+  blob head on skull at=0.30 offset=(0.20,-0.04,-0.24) r=0.055 r2=0 blend=0.006 chamfer tip=(0.11,-0.02,-0.34) color=6b5a44
+  blob head on skull at=0.16 offset=(-0.22,-0.02,-0.24) r=0.050 r2=0 blend=0.006 chamfer tip=(-0.11,-0.02,-0.36) color=6b5a44
+  blob head on skull at=0.08 offset=(0.02,-0.04,-0.40) r=0.058 r2=0 blend=0.006 chamfer tip=(0.03,-0.04,-0.38) color=6b5a44
+  blob head on skull at=0.20 offset=(0.36,-0.08,-0.08) r=0.046 r2=0 blend=0.006 chamfer tip=(0.16,-0.04,-0.24) color=6b5a44
+  # ---- mid / lower back (torso cluster) ----
+  blob torso on spine  at=0.80 offset=(0.20,-0.02,-0.28) r=0.048 r2=0 blend=0.006 chamfer tip=(0.12,0.02,-0.50) color=6b5a44
+  blob torso on spine  at=0.45 offset=(-0.24,-0.04,-0.24) r=0.044 r2=0 blend=0.006 chamfer tip=(-0.11,-0.02,-0.52) color=6b5a44
+  blob torso on spine  at=0.95 offset=(0.06,-0.02,-0.28) r=0.042 r2=0 blend=0.006 chamfer tip=(0.03,-0.02,-0.46) color=6b5a44
+  blob torso on pelvis at=0.00 offset=(0.30,-0.06,-0.24) r=0.046 r2=0 blend=0.006 chamfer tip=(0.14,-0.02,-0.52) color=6b5a44
+  blob torso on pelvis at=0.00 offset=(-0.32,-0.04,-0.22) r=0.042 r2=0 blend=0.006 chamfer tip=(-0.14,-0.02,-0.50) color=6b5a44
+  blob torso on pelvis at=0.00 offset=(0.08,-0.12,-0.28) r=0.050 r2=0 blend=0.006 chamfer tip=(0.03,-0.06,-0.50) color=6b5a44
+  # ---- flank / lower-back spears that break the SIDE silhouette -----------
+  # The two above are all pointed straight back, which foreshortens to a dot
+  # from dead-behind. These splay OUT (-back) off the flanks, below and above
+  # the arms (shoulders seat y ~1.12, so these sit at y ~0.9 and y ~1.45, clear
+  # of the daylight), so the outline is broken from the back AND the sides too.
+  blob torso on pelvis at=0.00 offset=(0.30,-0.16,-0.20) r=0.044 r2=0 blend=0.006 chamfer tip=(0.16,-0.06,-0.36) color=6b5a44
+  blob torso on pelvis at=0.00 offset=(-0.32,-0.14,-0.18) r=0.040 r2=0 blend=0.006 chamfer tip=(-0.15,-0.06,-0.34) color=6b5a44
+  blob torso on spine  at=0.90 offset=(0.34,0.06,-0.10) r=0.042 r2=0 blend=0.006 chamfer tip=(0.18,0.04,-0.22) color=6b5a44
+  blob torso on spine  at=0.85 offset=(-0.36,0.02,-0.08) r=0.040 r2=0 blend=0.006 chamfer tip=(-0.18,0.04,-0.20) color=6b5a44
+  blob torso on spine  at=0.60 offset=(0.06,0.00,-0.30) r=0.050 r2=0 blend=0.006 chamfer tip=(0.02,0.00,-0.55) color=6b5a44
+  blob head on skull at=0.55 offset=(0.24,0.02,0.06) r=0.040 r2=0 blend=0.006 chamfer tip=(0.12,0.00,-0.06) color=6b5a44
 
   # ============================================================
   # THE ARMS — withered, too weak to matter, ending in little grasping

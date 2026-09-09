@@ -439,13 +439,15 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
   //   minotaur    2  task-3 acceptance (the two eyes)
   //   gargoyle    2  ember eyes under the brow ridges (2026-09-07)
   //   cyberdemon  2  cyan-white optic eyes (2026-09-08)
-  //   bloatmaw    4  two mismatched eyes + the throat core + its ember haze
-  //                  (2026-09-08) — the first character with more than two.
+  //   bloatmaw    2  two mismatched ember eyes (r3 discarded the throat core +
+  //                  its haze — a flat saturated red disc that read as a
+  //                  sticker — and replaced them with a non-glowing wet eye in
+  //                  the throat, so only the two face eyes still emit)
   const GLOW_PRIMS: Record<string, number> = {
     'minotaur.blob': 2,
     'gargoyle.blob': 2,
     'cyberdemon.blob': 2,
-    'bloatmaw.blob': 4,
+    'bloatmaw.blob': 2,
   };
 
   it('every shipped character packs primClip.w all-zero EXCEPT the named glow authors, at their exact authored count', () => {

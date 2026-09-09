@@ -20,8 +20,9 @@
 //   * the body is ANATOMY, not a ball: a jaw, jowls, brow, ear-frills, a back
 //     hump and a ragged crest make the silhouette irregular from every yaw
 //     (r2, the owner's "ears or jaw or brow nose" brief);
-//   * the throat core glows, and the glowing-prim count is exactly what
-//     pack.test.ts's allowlist expects (4).
+//   * the throat carries a wet EYE (sclera/iris/pupil), not a glowing core —
+//     the only two emissive prims are the mismatched face eyes, which is
+//     exactly the count pack.test.ts's allowlist expects (2).
 //
 // What this file CANNOT check is whether it READS as a hovering maw-demon.
 // That took the turntable frames (see the authoring skill); the GPU lab could
@@ -179,22 +180,44 @@ describe('bloatmaw.blob', () => {
     }
   });
 
-  // THE THROAT CORE. One hot ember deep in the maw, plus a duller haze ring:
-  // 4 glowing prims in total, which pack.test.ts's allowlist expects.
-  it('burns a lit core in the throat: 4 glowing prims, one of them the core', () => {
+  // THE THROAT EYE. r3 threw out the "burning throat core" — a flat saturated
+  // red disc in the middle of the maw that read as a sticker pasted on the
+  // mouth, with no depth behind it (the brief was wrong and is discarded).
+  // In its place: a great wet EYE set in the throat — sclera, iris, pupil —
+  // authored as additive geometry (the maw is deliberately NOT a carve, see the
+  // .blob header). It does NOT glow: it catches the key light instead of
+  // emitting, which is the difference between an eye and a second ball. So
+  // exactly TWO prims glow now — the two mismatched face eyes — matching
+  // pack.test.ts's allowlist.
+  it('sets a wet throat EYE instead of the glowing core: 2 glowing prims, both the face', () => {
     const b = built();
     const glowing = b.prims.filter(p => (p.glow ?? 0) > 0);
-    expect(glowing).toHaveLength(4);
-    // The core is the ONLY glowing prim on the centreline; the two eyes are
-    // off to the sides.
-    const hot = glowing.filter(p => (p.glow ?? 0) >= 0.9);
-    expect(hot).toHaveLength(1);
-    const core = hot[0]!;
-    expect(Math.abs(core.a[0])).toBeLessThan(0.05); // on the centreline
-    expect(Math.abs(core.a[0])).toBeLessThan(0.05);
-    expect(core.a[1]).toBeGreaterThan(0.9);
-    expect(core.a[1]).toBeLessThan(1.2);
-    expect(core.a[2]).toBeGreaterThan(0.5);
+    expect(glowing).toHaveLength(2);
+    // Both glow prims are the off-centre face eyes — |x| > 0.15.
+    for (const e of glowing) expect(Math.abs(e.a[0])).toBeGreaterThan(0.15);
+    // The throat eye is a pale SCLERA on the centreline, with a dark iris and
+    // a near-black pupil stacked in front of it, and it does not glow.
+    const head = limb(b, 'head');
+    const sclera = b.prims.slice(head.start, head.start + head.count)
+      .filter(p => p.color !== undefined && (p.glow ?? 0) === 0
+        && Math.abs(p.a[0]) < 0.05 && p.a[1] > 0.9 && p.a[1] < 1.25
+        && p.color[0] > 0.2 && p.color[0] < 0.5 && p.color[1] > 0.12
+        && p.color[1] < 0.35 && p.color[2] > 0.08);
+    expect(sclera, 'a pale sclera on the centreline').toHaveLength(1);
+    const eye = sclera[0]!;
+    // Front of the maw (dark prim 0) is at z ~0.74; the sclera centre sits
+    // behind the tooth tips (z ~0.82) but proud of the dark maw surface so it
+    // owns its pixels and reads through the tooth gap.
+    expect(eye.a[1]).toBeGreaterThan(0.9);   // mid-maw height
+    expect(eye.a[2]).toBeGreaterThan(0.6);
+    expect(eye.gloss ?? 0).toBeGreaterThan(0.5);  // wet
+    // An iris and a pupil sit just in front of the sclera (higher z), darker.
+    const iris = b.prims.slice(head.start, head.start + head.count)
+      .filter(p => p.color !== undefined && (p.glow ?? 0) === 0
+        && Math.abs(p.a[0]) < 0.05 && p.a[2] > eye.a[2] && p.a[2] < 0.85
+        && p.color[0] > 0.1 && p.color[0] < 0.5 && p.color[2] < 0.05);
+    expect(iris.length, 'a darker iris in front of the sclera').toBeGreaterThan(0);
+    expect(iris[0]!.radius).toBeLessThan(eye.radius);
   });
 
   // THE BODY IS ANATOMY, NOT A BALL (r2). The owner's brief: "more complex
@@ -248,6 +271,38 @@ describe('bloatmaw.blob', () => {
     // lump at a different offset the other way — not a matched `both` pair.
     const torsoOff = torso.filter(p => (p.glow ?? 0) === 0 && Math.abs(p.a[0]) > 0.28);
     expect(torsoOff.length, 'off-centre torso swell lumps').toBeGreaterThanOrEqual(2);
+  });
+
+  // PUFFERFISH SPIKES (r3). A far radius of ZERO (`r2=0`) is the one shape a
+  // capsule cannot make — a TRUE POINT, which is what separates a spike from a
+  // wart. The field is authored in FLESH (merged into the ball) as keratin
+  // horn colour, one hand-placed prim each so it is irregular. REACH is the
+  // whole game: a point that stops inside the mass reads as a bump, so enough
+  // of these must clear the main ellipsoid's surface. Also pins the budget:
+  // they cost cluster prims, so the head + torso clusters stay under the 64
+  // prim WGSL fold ceiling (validated by validateBody too).
+  it('bristles with true-point keratin spikes over the back and crown', () => {
+    const b = built();
+    const ball = b.prims.find(p => p.radius > 0.7)!;
+    const sx = ball.radius * ball.scale[0], sy = ball.radius * ball.scale[1], sz = ball.radius * ball.scale[2];
+    // Keratin horn: 6b5a44 -> linear (0.15,0.10,0.06) with r > g > b, and a
+    // REAL r2=0 (true point) — excludes the crest (r2 0.004-0.006) and the
+    // ear-frills (no r2 at all).
+    const spikes = b.prims.filter(p => p.radiusB !== undefined && p.radiusB < 0.001
+      && p.color !== undefined && p.color[0] > 0.1 && p.color[0] < 0.22
+      && p.color[1] > 0.05 && p.color[1] < 0.16 && p.color[2] < 0.12);
+    expect(spikes.length, 'a field of true-point spikes').toBeGreaterThanOrEqual(12);
+    let reach = 0;
+    for (const p of spikes) {
+      const ex = (p.b[0] / sx) ** 2 + ((p.b[1] - ball.a[1]) / sy) ** 2 + (p.b[2] / sz) ** 2;
+      if (ex > 1) reach++;
+    }
+    expect(reach, 'spike tips that clear the ball surface, not bumps inside it').toBeGreaterThanOrEqual(8);
+    // The spikes stay under the declared ball top and clear of the hover gap.
+    for (const p of spikes) {
+      expect(p.b[1] + p.radius).toBeLessThan(doc.height!); // under the top
+      expect(p.b[1] - p.radius).toBeGreaterThan(0.35);     // above the gap
+    }
   });
 
   // THE GOBLIN REGRESSION. clearOf reads centrelines; the render showed a
