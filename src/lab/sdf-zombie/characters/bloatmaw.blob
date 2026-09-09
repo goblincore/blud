@@ -1,0 +1,212 @@
+# Bloatmaw — a floating mass of flesh for the FPS roster. One great ball of a
+# body, mostly mouth, hovering above the floor on nothing at all: the first
+# legless, floorless character in the cast.
+#
+# THE READ, in silhouette order: a single huge sphere of wet meat hanging in
+# the air; its whole front split by a maw a third of the ball's own width; a
+# ring of irregular bone teeth around the opening; an ember core burning in
+# the throat; two MISMATCHED eyes set unevenly above the maw; a crown of
+# small swept-back spurs; and, absurd against all that bulk, two withered
+# arms dangling off the flanks with broken shackles at the wrists. No legs,
+# no ground contact — the hover gap is the character.
+#
+# FLOATING. `stance` is OMITTED on purpose (see the model block): the grammar
+# knows only humanoid/digitigrade and this body has no legs at all. The maw,
+# teeth, eyes and throat core are GEOMETRY (prims), not a painted decal:
+# there is no reference mesh to bake, and the painted-face road has failed
+# this project repeatedly (face.ts's header records four rebuilds). No sheet
+# block, so the registry wears ZOMBIE_FLAT.
+#
+# THE MAW IS NOT A CARVE. A carve into a body this big is painted by the BALL,
+# not by whatever sits in the cavity: the paint rule is arg-min of the
+# primitive's signed distance, and a point on a carved wall is DEEP inside the
+# ball, so the ball always wins the pixel and a dark or glowing throat prim
+# inside the hole would render as plain flesh. So the maw is an additive dark
+# mass that owns its own surface by protruding from the ball's front, with the
+# lit core protruding further still. (Cyclops paid for the carve version: two
+# carve attempts left GPU holes the CPU field did not have, 2026-08-22.)
+model bloatmaw
+  # height = the TOP OF THE BALL, not a standing crown. The whole body hovers:
+  # ball centre y = 1.08, y-semi-axis 0.749 -> top 1.829, underside 0.302.
+  # THE HOVER GAP IS 0.302 m. Move HOVER (the centre height) and re-check the
+  # top against this number if the body is ever rescaled. Nothing in the
+  # format enforces ground contact — there is no sole-at-y=0 rule in
+  # blob-checks.ts or validate.ts — which is exactly why a floating body
+  # validates cleanly at all.
+  height 1.83
+  # NO `stance` LINE. `checkStance` is the format's one intent check and it
+  # only knows humanoid/digitigrade knees; omitting the line means "not
+  # checked", which is the honest state for a body with no leg chain. A
+  # defaulted intent would be a guess.
+
+skeleton
+  # THE ROOT IS THE BALL'S CENTRE, not a pelvis. `root pelvis at 1.08` puts
+  # the root bone's HEAD at the hover centre; the 0.06 length is a stub up to
+  # 1.14 so children hang off its tail per the grammar. The name `pelvis` is
+  # inherited from the format and is a lie here — read it as "ball centre".
+  root pelvis at 1.08 len=0.06
+
+  # A vertical axis through the ball: it exists for the gait wiring (the
+  # motion profile maps spine/neck/skull by name) and to hang the crown spurs
+  # on. The flesh ignores it.
+  bone spine parent=pelvis dir=up len=0.30          # 1.14 -> 1.44
+  bone neck  parent=spine  dir=up len=0.16          # 1.44 -> 1.60
+  bone skull parent=neck   dir=up len=0.14          # 1.60 -> 1.74
+
+  # THE MAW AXIS — forward out of the ball centre to its front surface. Every
+  # mouth prim (dark maw, teeth, lit core) rides this bone with an `offset=`,
+  # so the whole face moves as one if the ball is rescaled.
+  bone maw parent=pelvis dir=fwd len=0.70           # 1.14 -> z 0.70
+
+  mirror
+    # TINY ARMS. The clavicle does NOT run sideways: it runs DOWN-OUT at 63
+    # degrees so the shoulder seats near the ball's EQUATOR, where the surface
+    # is at x 0.62 — an arm rooted higher or lower sits deep inside a sphere
+    # that has barely curved in, and gets no daylight (the goblin lesson: the
+    # lever on arm clearance is the BODY's width, not the arm's).
+    # Shoulder lands at (0.633, 1.118); the ball surface there is x 0.618, so
+    # the 0.085 shoulder ball is welded in by ~7 cm and pokes out by ~10 cm.
+    bone clavicle parent=spine    dir=down tilt=63 len=0.71
+    bone upperArm parent=clavicle dir=down tilt=60 len=0.13
+    bone foreArm  parent=upperArm dir=down tilt=50 pitch=8 len=0.11
+    bone hand     parent=foreArm  dir=down tilt=45 pitch=10 len=0.07
+  end
+
+body
+  # ============================================================
+  # THE BALL — one great hanging meat balloon. Three blended masses: the
+  # main ellipsoid carries the silhouette, the other two fatten the crown
+  # and the underside so it reads as a sagging organ rather than a pool
+  # ball. `core` marks the main mass for the fuse probe.
+  # ============================================================
+  blob torso on pelvis at=0.00 r=0.720 wide=0.86 tall=1.04 deep=1.00 blend=0.030 core
+  # Upper swell: the balloon's shoulders, x-semi 0.60 at y 1.17.
+  blob torso on spine  at=0.10 r=0.600 wide=0.86 tall=0.92 deep=0.92 blend=0.045
+  # Lower sag: the heavy underside, dropped 0.30 and squashed tall. This is
+  # what sets the 0.302 hover gap.
+  blob torso on pelvis at=0.00 offset=(0,-0.30,0) r=0.520 wide=0.86 tall=0.92 deep=0.90 blend=0.045
+  # FLESHY IRREGULARITY: three off-centre swells that poke a couple of
+  # centimetres proud of the ball, so the silhouette is a sagging organ rather
+  # than a perfect sphere (a perfect sphere reads as a prop). Blends are loose
+  # (0.04) so they merge into the mass instead of reading as separate lumps.
+  blob torso on spine  at=0.42 offset=(0.34,0.06,0.14) r=0.170 wide=1.15 tall=0.95 deep=1.15 blend=0.040
+  blob torso on pelvis at=0.00 offset=(-0.36,-0.16,0.10) r=0.160 wide=1.10 tall=1.00 deep=1.10 blend=0.040
+  blob torso on spine  at=0.15 offset=(0.05,0.10,-0.34) r=0.180 wide=1.00 tall=1.00 deep=1.00 blend=0.045
+
+  # ============================================================
+  # THE MAW — the whole front of the ball. A wide dark mass bulging ~5 cm
+  # proud of the ball's front so it OWNS its pixels (see the header: a carved
+  # cavity would belong to the ball). Footprint 1.00 m wide x 0.65 m tall on
+  # a ball 1.24 m wide — a third of the body. color 180406 is near-black
+  # blood: the deepColor of a mouth, not a paint region.
+  # ============================================================
+  blob head on maw at=0.92 offset=(0,-0.09,0) r=0.44 wide=1.14 tall=0.74 deep=0.22 blend=0.012 color=180406
+  # A dull ember haze in the throat, just proud of the maw so it owns a ring.
+  blob head on maw at=0.94 offset=(0,-0.09,0.05) r=0.24 wide=1.15 tall=0.85 deep=0.55 blend=0.030 color=7a1404 glow=0.35
+  # THE LIT CORE: a burning ember in the middle of the maw, protruding ~7 cm
+  # past the dark mass so it is the outermost prim there and can glow. One
+  # strong light on the character; the colour IS the emission (glow rides the
+  # prim's own colour, per the grammar).
+  blob head on maw at=0.94 offset=(0,-0.09,0.07) r=0.15 wide=1.05 tall=0.95 deep=1.00 blend=0.020 color=ff5a10 glow=0.95
+
+  # ---- TEETH — irregular, none repeated -------------------------------
+  # Upper row: five fangs hanging off the top lip. Bases sit on the dark
+  # maw's own rim (z 0.62 is inside the maw lens at these x/y), tips point
+  # down-forward so they cross the dark mass and read against it. Sizes and
+  # angles deliberately uneven: 0.048/0.060/0.055/0.056/0.045.
+  blob head on maw at=0.86 offset=(-0.28,0.20,0.00) r=0.048 r2=0.008 blend=0.005 tip=(0.03,-0.26,0.22) color=d8cdae gloss=0.55
+  blob head on maw at=0.86 offset=(-0.14,0.25,0.00) r=0.060 r2=0.009 blend=0.005 tip=(-0.02,-0.30,0.22) color=d8cdae gloss=0.55
+  blob head on maw at=0.86 offset=(0.00,0.27,0.00) r=0.055 r2=0.008 blend=0.005 tip=(0.00,-0.32,0.23) color=d8cdae gloss=0.55
+  blob head on maw at=0.86 offset=(0.15,0.25,0.00) r=0.056 r2=0.009 blend=0.005 tip=(0.02,-0.29,0.22) color=d8cdae gloss=0.55
+  blob head on maw at=0.86 offset=(0.29,0.19,0.00) r=0.045 r2=0.008 blend=0.005 tip=(-0.03,-0.25,0.22) color=d8cdae gloss=0.55
+  # Lower row: four chunky stubs jutting up from the bottom lip.
+  blob head on maw at=0.86 offset=(-0.26,-0.30,0.00) r=0.050 r2=0.008 blend=0.005 tip=(0.02,0.24,0.22) color=d8cdae gloss=0.55
+  blob head on maw at=0.86 offset=(-0.09,-0.34,0.00) r=0.058 r2=0.008 blend=0.005 tip=(0.00,0.27,0.22) color=d8cdae gloss=0.55
+  blob head on maw at=0.86 offset=(0.10,-0.33,0.00) r=0.048 r2=0.008 blend=0.005 tip=(0.00,0.25,0.22) color=d8cdae gloss=0.55
+  blob head on maw at=0.86 offset=(0.27,-0.29,0.00) r=0.054 r2=0.008 blend=0.005 tip=(-0.02,0.23,0.22) color=d8cdae gloss=0.55
+
+  # ---- EYES — deliberately NOT a pair --------------------------------
+  # Right eye (the character's right, +x): the big one, set HIGH, a COLD
+  # pale blue — cold on purpose, so it never blurs into the orange throat.
+  # Ball front at (0.25, 1.56) is z 0.470; the 0.105 eye sits at z 0.63, so
+  # it bulges ~0.16 m proud and owns its pixels.
+  # A dark socket ring sits BEHIND each eye so the glow reads as an eye set
+  # in flesh rather than a lamp stuck on the ball; the eye protrudes further,
+  # so it keeps the centre and the socket shows as a rim.
+  blob head on maw at=0.72 offset=(0.25,0.42,-0.04) r=0.140 wide=1.05 tall=1.05 deep=0.85 blend=0.010 color=260a06
+  blob head on maw at=0.80 offset=(0.25,0.42,0.07) r=0.105 wide=0.95 tall=0.95 deep=1.00 blend=0.006 color=bfe8ff glow=0.85
+  # Heavy brow over the big eye: a flesh shelf that shades its top third.
+  blob head on maw at=0.78 offset=(0.25,0.50,0.00) r=0.120 wide=1.15 tall=0.40 deep=0.95 blend=0.008
+  # Left eye: smaller, lower and further out, a sick green — the mismatch is
+  # the point (a neat pair on a sphere reads as a smiley face).
+  blob head on maw at=0.70 offset=(-0.32,0.36,-0.06) r=0.100 wide=1.05 tall=1.00 deep=0.85 blend=0.010 color=260a06
+  blob head on maw at=0.77 offset=(-0.32,0.36,0.05) r=0.070 wide=1.00 tall=0.90 deep=1.00 blend=0.005 color=a8c24a glow=0.75
+  # Half-lid over the small eye: a flesh mass eating its top half, so the two
+  # eyes do not even read as the same shape.
+  blob head on maw at=0.75 offset=(-0.32,0.41,0.01) r=0.085 wide=1.10 tall=0.50 deep=1.00 blend=0.006
+
+  # ---- CROWN SPURS — small, swept back, uneven ------------------------
+  # Three pairs (`both`) rooted in the ball's crown and raked back so the
+  # tips trail toward -z; none rises above the declared height (tallest tip
+  # y 1.80 against the ball's 1.829 top).
+  blob head on skull at=0.50 offset=(0.09,0.08,-0.06) r=0.038 r2=0.004 blend=0.005 chamfer tip=(0.02,0.03,-0.30) both color=6b5a44
+  blob head on skull at=0.30 offset=(0.26,0.05,-0.04) r=0.034 r2=0.004 blend=0.005 chamfer tip=(0.04,0.02,-0.28) both color=6b5a44
+  blob head on skull at=0.70 offset=(0.15,0.07,-0.10) r=0.030 r2=0.004 blend=0.005 chamfer tip=(0.03,0.02,-0.22) both color=6b5a44
+
+  # ============================================================
+  # THE ARMS — withered, too weak to matter, ending in little grasping
+  # hands. One mass per segment plus a palm and two fingers.
+  # ============================================================
+  blob arm on clavicle at=1.00 r=0.085 blend=0.014 mirror core
+  bar  arm on upperArm from=0.05 to=0.95 r=0.048 r2=0.036 blend=0.010 mirror
+  blob arm on upperArm at=1.00 r=0.044 blend=0.010 mirror
+  bar  arm on foreArm  from=0.05 to=0.95 r=0.038 r2=0.028 blend=0.008 mirror
+  # Palm: a small flat mitt, widened across x.
+  blob arm on hand at=0.55 r=0.044 wide=1.15 tall=0.85 deep=1.15 blend=0.008 mirror
+  # Two crooked fingers, splayed by their own x offsets (under mirror the .r
+  # copy reflects offset.x, so each hand gets a two-finger fan).
+  bar arm on hand from=0.80 to=1.18 r=0.015 r2=0.005 blend=0.004 chamfer offset=(0.028,0.010,0.018) tip=(0.010,-0.046,0.038) mirror
+  bar arm on hand from=0.78 to=1.10 r=0.013 r2=0.004 blend=0.004 chamfer offset=(-0.024,0.004,0.010) tip=(-0.008,-0.040,0.030) mirror
+
+# Face block: SHRUNK TO A NUB. The ball is the head, so the parameterised
+# skull ellipsoid would sit a zombie head inside it; headRadius 0.001 kills
+# it and the brow/nose gates (0) emit nothing. Same idiom as gargoyle.blob.
+# No `sheet` block: there is no reference mesh to bake and no hand-authored
+# decal is shipped, so the registry wears ZOMBIE_FLAT.
+face
+  headRadius 0.001
+  headWidth  1.0
+  headHeight 1.0
+  headDepth  1.0
+  jawWidth   1.0
+  jawHeight  1.0
+  jawDrop    0
+  jawJut     0
+  noseLength 0
+  noseWidth  1.0
+  noseDrop   0
+  browHeavy  0
+  browRise   0
+  headBlend  0.006
+  headRise   0
+  headLead   0
+
+# Diseased wet flesh: a dark raw-meat base that the shader sRGB-encodes much
+# lighter than these numbers read, a red wound interior, and a bile-yellow
+# mottle that differs in HUE from the base (a same-hue darker mottle is
+# invisible). Wetness high — this thing is slimy — with a soft sheen rather
+# than a hard specular.
+palette
+  baseColor     0.30 0.15 0.12
+  deepColor     0.55 0.09 0.07
+  charColor     0.07 0.05 0.04
+  specIntensity 0.50
+  specRoughness 0.34
+  fresnelBoost  0.35
+  translucency  0.16
+  wetness       0.60
+  surfaceNoiseAmp    0.06
+  silhouetteNoiseAmp 0.02
+  mottleAmp     0.50
+  mottleScale   2.4
+  mottleColor   0.24 0.26 0.09

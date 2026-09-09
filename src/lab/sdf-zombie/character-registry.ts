@@ -35,6 +35,7 @@ import soldierBlobSrc from './characters/soldier.blob?raw';
 import femaleBlobSrc from './characters/female.blob?raw';
 import gargoyleBlobSrc from './characters/gargoyle.blob?raw';
 import cyberdemonBlobSrc from './characters/cyberdemon.blob?raw';
+import bloatmawBlobSrc from './characters/bloatmaw.blob?raw';
 import {
   ZOMBIE_PROFILE, SOLDIER_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
@@ -238,6 +239,22 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     // profile is a rig/gameplay change, not part of this character's
     // authoring task.
     profile: motionProfileFor('cyberdemon'),
+  },
+  bloatmaw: {
+    name: 'bloatmaw', src: bloatmawBlobSrc,
+    // The chains and shackles live in characters/bloatmaw-kit.wam, compiled by
+    // scripts/build-wam-kit.sh into public/assets/lab/bloatmaw-kit.gltf.
+    kit: '/assets/lab/bloatmaw-kit.gltf',
+    // No sheet block and no decal: the maw, teeth, eyes and throat core are
+    // geometry, and there is no reference mesh to bake. ZOMBIE_FLAT, per the
+    // "never declare an image for a file that does not exist" rule.
+    face: ZOMBIE_FLAT,
+    // The zombie shamble, deliberately — motionProfileFor falls back to it.
+    // This is the first LEGLESS character in the roster, so the walk cycle is
+    // asked to drive thigh/shin/foot bones that do not exist; gait.ts's leg()
+    // returns zero offsets for a missing chain, so it degrades quietly to the
+    // root sway/bob and the arm reach. See the .blob header and the report.
+    profile: motionProfileFor('bloatmaw'),
   },
 };
 
