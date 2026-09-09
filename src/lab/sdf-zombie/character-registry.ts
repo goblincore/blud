@@ -35,6 +35,7 @@ import soldierBlobSrc from './characters/soldier.blob?raw';
 import femaleBlobSrc from './characters/female.blob?raw';
 import gargoyleBlobSrc from './characters/gargoyle.blob?raw';
 import cyberdemonBlobSrc from './characters/cyberdemon.blob?raw';
+import gnasherBlobSrc from './characters/gnasher.blob?raw';
 import {
   ZOMBIE_PROFILE, SOLDIER_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
@@ -238,6 +239,16 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     // profile is a rig/gameplay change, not part of this character's
     // authoring task.
     profile: motionProfileFor('cyberdemon'),
+  },
+  gnasher: {
+    name: 'gnasher', src: gnasherBlobSrc,
+    // Flesh in the .blob; the horns and forearm tusks are the kit, compiled
+    // from gnasher-kit.wam into a committed glTF (build-wam-kit.sh gnasher).
+    // The face stays GEOMETRY (no decal): the maw, teeth and eyes are prims,
+    // so `face` is the flat nub and no `image` is declared.
+    kit: '/assets/lab/gnasher-kit.gltf',
+    face: ZOMBIE_FLAT,
+    profile: motionProfileFor('gnasher'),
   },
 };
 

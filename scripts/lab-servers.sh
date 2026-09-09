@@ -20,6 +20,17 @@
 # Each Chrome also gets its own --user-data-dir, keyed by port; two Chromes
 # sharing a profile directory is how you get one that silently refuses to start.
 #
+# LAB_TMP is where that profile and the two server logs live. It defaults to
+# /tmp, which is right on a workstation and WRONG under a sandbox: a dispatch
+# agent runs with the `workspace-write` permission mode, where everything
+# outside its worktree is read-only, so Chrome cannot create its per-user data
+# dir and never starts. The denial is final (approval prompts are off in
+# headless dispatch), and the symptom is a run that silently produces no frames
+# — two character runs shipped unlooked-at that way, and a third gave up and
+# wrote a CPU renderer instead. Point it inside the worktree there:
+#   LAB_TMP=.lab-tmp npm run blob:shot -- gnasher
+# `.lab-tmp/` is gitignored. Anything under LAB_TMP is disposable.
+#
 # REUSE IS DELIBERATE: a server already listening is left alone and left running
 # — the owner's lab session and an agent's shot can share one. Only what WE
 # started is stopped.
@@ -28,6 +39,12 @@ LAB_VITE_PORT="${LAB_VITE_PORT:-5233}"
 LAB_CDP_PORT="${LAB_CDP_PORT:-9223}"
 export LAB_VITE_PORT LAB_CDP_PORT
 LAB_CHROME="${LAB_CHROME:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
+# Scratch root for the Chrome profile and the server logs — see the header.
+# Created on demand: under a sandbox the caller points this at a path inside the
+# worktree, which will not exist yet.
+LAB_TMP="${LAB_TMP:-/tmp}"
+export LAB_TMP
+mkdir -p "$LAB_TMP"
 
 lab_started_vite=""; lab_started_chrome=""
 
@@ -147,10 +164,10 @@ lab_servers_up() {
 
   if ! lab__is_listening "http://localhost:$LAB_VITE_PORT/"; then
     echo "lab-servers: starting vite on $LAB_VITE_PORT"
-    npx vite --port "$LAB_VITE_PORT" --strictPort >"/tmp/lab-vite-$LAB_VITE_PORT.log" 2>&1 &
+    npx vite --port "$LAB_VITE_PORT" --strictPort >"$LAB_TMP/lab-vite-$LAB_VITE_PORT.log" 2>&1 &
     lab_started_vite=$!
     lab__wait_for "http://localhost:$LAB_VITE_PORT/" "vite dev server" \
-      "/tmp/lab-vite-$LAB_VITE_PORT.log" || exit 1
+      "$LAB_TMP/lab-vite-$LAB_VITE_PORT.log" || exit 1
   else
     # Something answering on the port is not proof it is OUR dev server — any
     # other project's vite would serve `/` happily and then 404 the lab, which
@@ -182,11 +199,11 @@ lab_servers_up() {
     # $headless is deliberately unquoted: it must vanish entirely when empty, and
     # quoting it would pass an empty string as a real (invalid) argv entry.
     "$LAB_CHROME" $headless --remote-debugging-port="$LAB_CDP_PORT" --enable-unsafe-webgpu \
-      --user-data-dir="/tmp/chrome-lab-$LAB_CDP_PORT" --no-first-run --no-default-browser-check \
-      --window-size=1380,820 about:blank >"/tmp/lab-chrome-$LAB_CDP_PORT.log" 2>&1 &
+      --user-data-dir="$LAB_TMP/chrome-lab-$LAB_CDP_PORT" --no-first-run --no-default-browser-check \
+      --window-size=1380,820 about:blank >"$LAB_TMP/lab-chrome-$LAB_CDP_PORT.log" 2>&1 &
     lab_started_chrome=$!
     lab__wait_for "http://localhost:$LAB_CDP_PORT/json/version" "chrome (debug port)" \
-      "/tmp/lab-chrome-$LAB_CDP_PORT.log" || exit 1
+      "$LAB_TMP/lab-chrome-$LAB_CDP_PORT.log" || exit 1
   else
     # Listening is not the same as being a Chrome. Ask for the version endpoint
     # specifically, so a stray server on this port says so here instead of
@@ -225,13 +242,15 @@ lab_servers_up() {
 #
 # The path guard is not paranoia theatre: an empty LAB_CDP_PORT would make this
 # `rm -rf /tmp/chrome-lab-`, and a typo'd one would delete a profile that is
-# not ours. Refuse anything that is not a plain port number.
+# not ours. Refuse anything that is not a plain port number. An empty LAB_TMP
+# is refused for the same reason: it would make the path `/chrome-lab-<port>`.
 lab__clean_profile() {
   local port="$1" dir
   case "$port" in
     '' | *[!0-9]* ) return 0 ;;
   esac
-  dir="/tmp/chrome-lab-$port"
+  [ -n "$LAB_TMP" ] || return 0
+  dir="$LAB_TMP/chrome-lab-$port"
   [ -d "$dir" ] || return 0
   rm -rf "$dir"
 }

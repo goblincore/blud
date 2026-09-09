@@ -61,7 +61,11 @@ NOTHING and silently: use the sidecar `python3 scripts/vision-ask.py <image>
    in your report. If POSE MISMATCH prints, pick a `--range` and use it
    consistently.
 2. Edit ONE owning line. Re-measure. Repeat.
-3. Every ~5 edits: `npm run blob:shot -- <name>` and Read the frames.
+3. Every ~5 edits: `LAB_TMP=.lab-tmp npm run blob:shot -- <name>` and Read the
+   frames (they land in `.lab-tmp/blob-shot/<name>/`). **`LAB_TMP` is not
+   optional in a dispatch worktree**: it defaults to `/tmp`, which the
+   `workspace-write` sandbox makes read-only, so Chrome cannot create its
+   profile and never starts — silently, producing no frames at all.
 4. Any hole or artefact the measure did not predict:
    `npm run blob:render-check -- <name>` BEFORE editing further. If it fails,
    report it and stop — the fix is not in the .blob.
