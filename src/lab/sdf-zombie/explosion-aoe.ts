@@ -356,6 +356,7 @@ export function resolveExplosion(
     // prim). Limb blasts are wall-of-meat wounds; pellets never cavity at
     // all (woundFromPellet sets nothing, game-weapon.ts).
     for (const w of wounds) {
+      w.shot = { weapon: 'explosion' };
       w.cavity = body.prims[w.primIdx]!.limb === 'torso';
     }
     const meterCredit = wounds.reduce(

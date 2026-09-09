@@ -18,6 +18,18 @@ function step(state: SoldierFootwork | undefined, speed: number, dt: number) {
 }
 
 describe('Soldier floor contacts', () => {
+  it('shortens the injured-side step without moving its planted support', () => {
+    const span = (next: 0 | 1) => {
+      const previous: SoldierFootwork = { root: [0,0,0], feet: [[-.13,.13,.03],[.13,.13,.03]],
+        swing: null, next, driveSpeed: .7 };
+      const result = stepSoldierFootwork(previous, { ...geometry, stepScale: [.35, .72], dt: 1 / 60,
+        fromRoot: previous.root, desiredRoot: [0,0,.06], feet: previous.feet });
+      expect(result.swing?.side).toBe(next);
+      return Math.hypot(result.swing!.to[0] - result.swing!.from[0], result.swing!.to[2] - result.swing!.from[2]);
+    };
+    expect(span(1)).toBeGreaterThan(span(0) + .03);
+  });
+
   it.each([30, 60, 120])('keeps alternating supports fixed through movement, stop and reversal at %s Hz', hz => {
     let state: SoldierFootwork | undefined;
     let supports = 0;

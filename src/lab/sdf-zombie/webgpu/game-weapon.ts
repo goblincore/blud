@@ -115,6 +115,7 @@ export function spreadDirections(dir: Vec3, count: number, seed: number): Vec3[]
 }
 
 export interface Projectile {
+  shot?: import('../damage').ShotProvenance;
   pos: Vec3;
   vel: Vec3;
   ageSec: number;
@@ -158,6 +159,8 @@ export const SLUG = {
  * barrels 1 → one seed's pattern; barrels 2 → twice the pellets from two
  * independent patterns (never mirrored twins).
  */
+let nextShotId = 0;
+
 export function spawnPellets(
   origin: Vec3, aimDir: Vec3, barrels: 1 | 2, seed: number,
 ): Projectile[] {
@@ -165,7 +168,9 @@ export function spawnPellets(
   const dirs = barrels === 1
     ? spreadDirections(aimDir, n, seed)
     : [...spreadDirections(aimDir, n, seed), ...spreadDirections(aimDir, n, seed ^ 0x9e3779b9)];
-  return dirs.map((d) => ({
+  const shotId = nextShotId++;
+  return dirs.map((d, i) => ({
+    shot: { weapon: 'shotgun' as const, shotId, barrels, barrel: (i < n ? 0 : 1) as 0 | 1 },
     pos: [...origin] as Vec3,
     vel: [d[0] * GRAPESHOT.speed, d[1] * GRAPESHOT.speed, d[2] * GRAPESHOT.speed],
     ageSec: 0,
@@ -185,6 +190,7 @@ export function spawnSlug(origin: Vec3, dir: Vec3): Projectile {
     ageSec: 0,
     radius: SLUG.radius,
     kind: 'slug',
+    shot: { weapon: 'slug', shotId: nextShotId++ },
   };
 }
 

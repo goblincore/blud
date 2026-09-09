@@ -9,6 +9,8 @@ export interface EncounterAgent {
     home: Vec3;
     room: number;
     soldier: boolean;
+    /** Has a usable firearm; identity remains Soldier when false. */
+    ranged?: boolean;
     disabled: boolean;
 }
 export interface EncounterOrder {
@@ -124,7 +126,7 @@ export function createEncounterDirector(nav: EncounterNavigation, boxes: readonl
                     if (ally && target)
                         memory.set(a.id, { at: [...target] as Vec3, age: 0, search: 0 });
                 }
-            const candidates = agents.filter(a => a.soldier && !a.disabled && observed.get(a.id) && target && distance(a.pos, target) <= 6 && clearFireLane(a, target, agents));
+            const candidates = agents.filter(a => a.soldier && a.ranged !== false && !a.disabled && observed.get(a.id) && target && distance(a.pos, target) <= 6 && clearFireLane(a, target, agents));
             if (lease <= 0 || !candidates.some(a => a.id === owner)) {
                 owner = null;
                 lease = 0;
@@ -146,7 +148,7 @@ export function createEncounterDirector(nav: EncounterNavigation, boxes: readonl
                 }
                 if (visible && target) {
                     mode = 'combat';
-                    if (a.soldier && !fireAllowed) {
+                    if (a.soldier && a.ranged !== false && !fireAllowed) {
                         const blocked = !clearFireLane(a, target, agents), crowded = agents.some(b => b.id !== a.id && !b.disabled && distance(a.pos, b.pos) < 1.05);
                         if (blocked || crowded || distance(a.pos, target) > 4.5) {
                             const bearing = Math.atan2(a.pos[0] - target[0], a.pos[2] - target[2]);

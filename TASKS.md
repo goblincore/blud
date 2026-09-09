@@ -9,6 +9,18 @@
 - [x] Mesh actor skeletons accepted and merged into main; now the forward default, including production.
 - [-] Further aesthetic tuning paused; cavity brightness remains open. [Handoff](docs/dev-notes/2026-09-07-skeleton-comparison/wrap-up.md).
 
+## Roster — gnasher — 2026-09-09
+
+- [x] `gnasher` merged (`982024f3`, polished `dec159cb`): a hunched pink flesh
+  brute. Second character from a PROSE BRIEF only. SDF flesh + horns/tusks WAM kit.
+- [x] Round 1 was authored BLIND (deepseek-v4.1-flash) and committed three of its own
+  failing pins, skipped its kit and never rendered. Rounds 2-3 ran on `deepseek-v4-flash-vision-exp` and fixed all three by moving GEOMETRY, not thresholds.
+- [ ] Still thinner from the side than the front promises. The arm-daylight pin
+  (`> 0.038`) caps torso width, so going further is a deliberate trade, not more tuning.
+- [!] `blob:render-check` not run on it (owner accepted on manual turntable review).
+- [-] `scripts/gnasher-{silhouette,head-colour}.ts` are general CPU analysis tools
+  despite the names — rename generically when a second character wants them.
+
 ## Roster — cyberdemon — 2026-09-08
 
 - [x] `cyberdemon` merged (`bc95b19f`): the first character authored from a PROSE

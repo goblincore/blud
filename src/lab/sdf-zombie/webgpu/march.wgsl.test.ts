@@ -26,6 +26,7 @@ import {
   ROW_WOUND_CAP, APPLY_BONES, FOLD_BONE_RANGE, ROW_WOUND_FLAGS, TISSUE_RAMP, SD_ROUND_BOX, LEVEL_SHADOW,
   CALC_NORMAL,
   FACE_MELT_SAG, FACE_MELT_STRETCH, FACE_MELT_FADE_LO, DEPTH_PREPASS_MARCH, DEPTH_PRE_FETCH, WOUND_STEP_MUL,
+  soldierFaceDamageShadow,
 } from './march.wgsl';
 import { MAX_WOUNDS } from '../damage';
 import { MAX_CLUSTERS, BONE_SEG_MAX } from '../validate';
@@ -770,6 +771,23 @@ describe('melt wet-red ramp (zombie melt task 6)', () => {
     // primScale.w material read must also run when meltCfg.x > 0.
     expect(MARCH_BODY).toContain('if ((wm > 0.0 || meltCfg.x > 0.0) && hitBest >= 0)');
     expect(MARCH_BODY).toContain('let isBone = hitMat > 3.5 && hitMat < 4.5;');
+  });
+
+  it('lets Soldier wounds override the pale Replace decal and stains torso wounds', () => {
+    expect(MARCH_BODY).toContain('faceGlowRedOnly * smoothstep(0.02, 0.25, wm)');
+    expect(MARCH_BODY).toContain('(1.0 - faceGlow) * woundDecalFade');
+    expect(MARCH_BODY).toContain('let soldierWound = faceGlowRedOnly * smoothstep(0.02, 0.62, wm)');
+    expect(MARCH_BODY).toContain('soldierWound * 0.72');
+    expect(MARCH_BODY).toContain('let woundWetBoost = mix(1.6, 2.15, faceGlowRedOnly)');
+    expect(MARCH_BODY).toContain('detailAmp * mix(1.0, 1.45, soldierPit)');
+  });
+
+  it('keeps only dark face detail over Soldier wounds',()=>{
+    expect(soldierFaceDamageShadow(.1,.5,1,1)).toBeGreaterThan(.6);
+    expect(soldierFaceDamageShadow(.5,.5,1,1)).toBe(0);
+    expect(soldierFaceDamageShadow(.1,.5,1,0)).toBe(0);
+    expect(soldierFaceDamageShadow(.1,.5,0,1)).toBe(0);
+    expect(MARCH_BODY).toContain('albedo = albedo * (1.0 - faceShadow * damagedFace * 0.78)');
   });
 });
 
@@ -2076,8 +2094,9 @@ describe("gloss suppresses the flesh's own noise (hard-surface task 1)", () => {
     // gloss kill folds into the guarded amplitude itself, not into the
     // fbm result.
     expect(SHADE_BODY).toContain('let detailAmp = surfCfg2.y * (1.0 - max(gloss, metal));');
-    expect(SHADE_BODY).toMatch(
-      /if \(detailAmp > 0\.0\) \{[\s\S]{0,200}fbm\(anchor \* 22\.0\)[\s\S]{0,120}\* detailAmp\)/);
+    const detailBlock=SHADE_BODY.slice(SHADE_BODY.indexOf('if (detailAmp > 0.0)'),SHADE_BODY.indexOf('// Tissue depth'));
+    expect(detailBlock).toContain('fbm(anchor * 22.0)');
+    expect(detailBlock).toContain('detailAmp * mix(1.0, 1.45, soldierPit)');
   });
 
   it('still paints the prim albedo after the face pass; char still wins', () => {

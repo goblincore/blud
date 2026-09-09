@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   meshAppearanceCoord, meshGlossMask, meshSkullCavity, meshSocketVessels, meshToothRow,
-  skullFeatureMasks, tissuePatchClasses, MESH_GLOSS_DRY,
+  skullFeatureMasks, soldierMeshExposure, soldierSteelMask, tissuePatchClasses, MESH_BONE_SURFACE_WGSL, MESH_GLOSS_DRY,
 } from './mesh-appearance';
 
 const headBounds = {
@@ -17,6 +17,24 @@ describe('meshAppearanceCoord', () => {
     meshAppearanceCoord(headBounds, [0, 1.615, 0.115]).forEach(v => expect(v).toBeCloseTo(0, 12));
     expect(meshAppearanceCoord(headBounds, headBounds.min)).toEqual([-1, -1, -1]);
     expect(meshAppearanceCoord(headBounds, headBounds.max)).toEqual([1, 1, 1]);
+  });
+});
+
+describe('soldier steel reinforcement',()=>{
+  it('is localized to the front left temple and gated to Soldier heads',()=>{
+    expect(soldierSteelMask([-.48,.08,.9],1)).toBeGreaterThan(.8);
+    expect(soldierSteelMask([.48,.08,.9],1)).toBeLessThan(.05);
+    expect(soldierSteelMask([-.48,.08,-.9],1)).toBe(0);
+    expect(soldierSteelMask([-.48,.08,.9],0)).toBe(0);
+  });
+  it('restores strong wound staining only for the Soldier head tag',()=>{
+    expect(MESH_BONE_SURFACE_WGSL).toContain('mix(mix(0.55, 0.22, headFlag), 0.55, soldierHead)');
+    expect(MESH_BONE_SURFACE_WGSL).toContain('stainW * stainStrength');
+  });
+  it('gates saturated blood and wet gloss to exposed Soldier heads',()=>{
+    expect(soldierMeshExposure(1,1)).toEqual({blood:.55,wet:.75});
+    expect(soldierMeshExposure(1,0)).toEqual({blood:0,wet:0});
+    expect(soldierMeshExposure(0,1)).toEqual({blood:0,wet:0});
   });
 });
 

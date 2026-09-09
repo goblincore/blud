@@ -165,8 +165,10 @@ export function createSkeletonSources(
   };
 
   body.bonePrims.forEach((p, i) => {
-    // Organs are out of contract: procedural forever, never baked.
-    if (p.op === 'organ') return;
+    // Organs stay procedural. Distal severing leaves the parent cluster live
+    // but marks its removed bones dead; baking those would resurrect a moving
+    // skeleton after the flesh/weapon had already detached.
+    if (p.op === 'organ' || p.dead) return;
     const headLocal = bound.head?.bones.get(i);
     const frame = bound.boneFrames.get(i);
     if (headLocal && bound.head) {

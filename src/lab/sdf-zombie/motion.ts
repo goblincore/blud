@@ -50,7 +50,7 @@ import { stepSoldierFootwork, type SoldierFootwork } from './soldier-footwork';
 import type { BuildResult } from './build-body';
 import type { Wound, WoundType } from './damage';
 import type { LimbId, Vec3 } from './types';
-import { add, len, normalize, qFromAxisAngle, qRotate, scale, sub } from './vec';
+import { add, len, normalize, qFromAxisAngle, qMul, qRotate, scale, sub } from './vec';
 import type { RigPoint } from './rig';
 import type { GaitJointName, GaitLimbs, GaitProfile } from './gait';
 import { blendProfiles, GAIT_TUNING, jointNamesForBody, rotateYaw, stepGait, type ArmStyle } from './gait';
@@ -67,6 +67,8 @@ import {
 } from './ik';
 import type { StaggerKind, StaggerState } from './stagger';
 import { makeStaggerState, stepStagger } from './stagger';
+import { soldierStaggerDuration, stepSoldierStagger, type SoldierStaggerState } from './soldier-stagger';
+import type { SoldierStaggerLevel } from './soldier-stagger';
 import type { CollapsePhase, CollapseState, MissingLimbs, RopeLimit } from './collapse';
 import {
   COLLAPSE_TUNING, collapseRopes, makeCollapseState, stepCollapse,
@@ -291,6 +293,12 @@ export interface MotionState {
   wander: WanderState;
   gait: ReturnType<typeof stepGait>['state'];
   stagger: StaggerState;
+  soldierStagger?: SoldierStaggerState;
+  soldierStaggerCarry?: CarrySpec;
+  soldierStaggerSupport?: Vec3;
+  soldierStaggerGunYaw?: number;
+  soldierStaggerGunYawBase?: number;
+  soldierFullArmBase?: Partial<Record<'L' | 'R', { elbow: Vec3; hand: Vec3 }>>;
   collapse: CollapseState;
   fallPose?: Vec3[];
   fallFatal?: boolean;
@@ -301,6 +309,11 @@ export interface MotionState {
   stanceBlend?: number;
   footwork?: SoldierFootwork;
   walkPosture?: number;
+  /** Persistent 0..1 grounded crouch/shuffle response to pelvis/thigh injury. */
+  mobilityPosture?: number;
+  /** Short defensive duck after any surviving hit, independent of leg damage. */
+  protectiveCrouchSec?: number;
+  protectiveCrouchPosture?: number;
   aim: AimState;
   recoil: RecoilState;
   /** The body's APPLIED yaw (rad) — follows wander.heading at the damped
@@ -319,6 +332,8 @@ export interface MotionState {
   sinceFire: number;
   /** Smoothed arm rotations for the current weapon hold. */
   carryPose?: CarrySpec;
+  /** Smoothed requested hold before a Soldier reaction is composed over it. */
+  carryTargetPose?: CarrySpec;
   /** Last frame's root shift (kept so a fall can freeze it). */
   lastShift: Vec3;
   /** Root shift captured when the fall started; null while standing. */
@@ -387,7 +402,9 @@ export interface MotionSignals {
    *  gain is an optional stagger/recoil amplitude multiplier (default 1 =
    *  the lab's tuned amplitudes — the lab wiring never sets it, so its
    *  reactions are bit-identical to a build without the knob). */
-  shot: { type: WoundType; dirWorld: Vec3; woundWorld: Vec3; torso: boolean; gain?: number } | null;
+  shot: { type: WoundType; dirWorld: Vec3; woundWorld: Vec3; torso: boolean; gain?: number;
+    soldierLevel?: SoldierStaggerLevel; fullStagger?: boolean } | null;
+  mobilityInjury?: { severity: number; side: 'L' | 'R' | 'both' };
   /** The body fired its weapon this frame (drained by the wiring). */
   fire: boolean;
   /** Present-but-hurt limbs (carries ≥1 live wound) — the gait limp skew. */
@@ -483,6 +500,11 @@ function clamp(n: number, lo: number, hi: number): number {
   return n < lo ? lo : n > hi ? hi : n;
 }
 
+function smooth01(n: number): number {
+  const t = clamp(n, 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
 /** Arm style for this frame: an explicit config wins; else the blended gait
  *  profile's style; else (no profile at all) the historical default. */
 function pickArmStyle(cfg: MotionConfig, gaitProfile: GaitProfile): ArmStyle {
@@ -520,16 +542,28 @@ export function stepMotion(
     severed: profile.name === 'soldier' ? [] : sig.severed,
     missing: sig.missing,
     forced: sig.forcedCollapse || (profile.name === 'soldier'
-      && (!sig.headAlive || sig.downed || sig.missing.legL || sig.missing.legR || sig.missing.armL || sig.missing.armR)),
+      && (!sig.headAlive || sig.downed || sig.missing.legL || sig.missing.legR)),
     ropes: joints.ropes,
   }, dt);
   const collapsed = collapse.phase !== 'standing';
 
+  const soldierHit = profile.name === 'soldier' && sig.shot && !collapsed ? {
+    dirWorld: sig.shot.dirWorld,
+    level: sig.shot.soldierLevel ?? (sig.shot.type === 'pellet' ? 'small' : 'medium'),
+    torso: sig.shot.torso,
+    fullStagger: sig.shot.fullStagger,
+  } as const : null;
+  const soldierStagger = stepSoldierStagger(state.soldierStagger, soldierHit,
+    dt, state.gait.seed, collapsed || !!sig.fatal);
+  const wideSoldierReaction = soldierStagger.active && (soldierStagger.state.fullOpen
+    || (soldierStagger.variant === 1 && soldierStagger.state.level !== 'small'));
   // --- stagger: the shot's reaction (dir rotated world → body-local) ------
-  // bodyYaw (not wander.heading) is the body's actual facing — during the
-  // damped turn the two disagree, and the reaction must follow the BODY.
+  // The accepted subtle Soldier reaction retains the shared lurch. The wide
+  // opening owns its arms/torso and suppresses that extra pose layer; an
+  // already-active Soldier reaction does not restart the shared envelope.
   const stagger = stepStagger(state.stagger, {
-    hit: sig.shot && !collapsed
+    hit: sig.shot && !collapsed && (profile.name !== 'soldier'
+      || (!wideSoldierReaction && !state.soldierStagger?.active))
       ? { type: sig.shot.type, dir: rotateYaw(sig.shot.dirWorld, -state.bodyYaw), gain: sig.shot.gain }
       : null,
   }, dt);
@@ -543,10 +577,27 @@ export function stepMotion(
   // requested speed separate so every footfall does not restart acceleration.
   if (state.footwork && !collapsed)
     wander = { ...wander, speed: state.footwork.driveSpeed };
-  const travelCruise = profile.name === 'soldier' && (sig.wounded.legL || sig.wounded.legR)
-    ? profile.cruise * 0.55 : profile.cruise;
+  const mobilityTarget = profile.name === 'soldier' ? clamp(sig.mobilityInjury?.severity ?? 0, 0, 1) : 0;
+  const mobilityPosture = clamp((state.mobilityPosture ?? 0)
+    + clamp(mobilityTarget - (state.mobilityPosture ?? 0), -1.4 * dt, 2.8 * dt), 0, 1);
+  const protectiveCrouchSec = profile.name !== 'soldier' || collapsed || sig.fatal ? 0
+    : soldierHit ? 2 : Math.max(0, (state.protectiveCrouchSec ?? 0) - dt);
+  const protectiveTarget = protectiveCrouchSec > 0 ? 1 : 0;
+  const protectiveCrouchPosture = clamp((state.protectiveCrouchPosture ?? 0)
+    + clamp(protectiveTarget - (state.protectiveCrouchPosture ?? 0), -1.4 * dt, 2.8 * dt), 0, 1);
+  const crouchPosture = Math.max(mobilityPosture, protectiveCrouchPosture);
+  const travelCruise = profile.name === 'soldier'
+    ? profile.cruise * (sig.wounded.legL || sig.wounded.legR ? 0.55 : 1) * (1 - .65 * mobilityPosture)
+    : profile.cruise;
   if (!collapsed && cfg.wander) wander = stepWander(wander, rng, dt, bounds, travelCruise,
     cfg.faceHeading === undefined ? undefined : { faceHeading: cfg.faceHeading });
+  if (!collapsed && profile.name === 'soldier' && soldierStagger.active) {
+    wander = { ...wander, pos: [
+      clamp(wander.pos[0] + soldierStagger.travelDelta[0], bounds.minX, bounds.maxX),
+      wander.pos[1],
+      clamp(wander.pos[2] + soldierStagger.travelDelta[2], bounds.minZ, bounds.maxZ),
+    ] };
+  }
 
   // --- body yaw: the damped rigid turn -------------------------------------
   // The whole body (rest pose, gait/stagger offsets, aim cone, plants via
@@ -572,7 +623,7 @@ export function stepMotion(
   const groundedSoldier = profile.name === 'soldier' && (aimedSoldier || cfg.forceSpeed === undefined)
     && !collapsed && !sig.missing.legL && !sig.missing.legR;
   const stanceBlend = clamp((state.stanceBlend ?? 0) + (groundedSoldier ? 1 : -1) * SOLDIER_STANCE.blendRate * dt, 0, 1);
-  const stanceDrop = SOLDIER_STANCE.hipDrop * stanceBlend;
+  const stanceDrop = SOLDIER_STANCE.hipDrop * stanceBlend + .16 * crouchPosture;
   const walkPosture = clamp((state.walkPosture ?? 0) + (groundedSoldier && !aimedSoldier ? 1 : -1) * 3 * dt, 0, 1);
   const footwork = groundedSoldier ? stepSoldierFootwork(state.footwork, {
     fromRoot: state.wander.pos, desiredRoot: wander.pos, yaw: bodyYaw, dt,
@@ -587,7 +638,15 @@ export function stepMotion(
     }) as [Vec3, Vec3],
     reach: [joints.leg.L[0] + joints.leg.L[1] - SOLDIER_STANCE.supportReserve * stanceBlend,
       joints.leg.R[0] + joints.leg.R[1] - SOLDIER_STANCE.supportReserve * stanceBlend],
-    lift: [sig.wounded.legL ? .04 : .07, sig.wounded.legR ? .04 : .07],
+    lift: (['L', 'R'] as const).map(side => {
+      const injured = sig.mobilityInjury?.side === side || sig.mobilityInjury?.side === 'both';
+      const wounded = sig.wounded[`leg${side}`];
+      return (wounded ? .04 : .07) * (1 - mobilityPosture * (injured ? .55 : .25));
+    }) as [number, number],
+    stepScale: (['L', 'R'] as const).map(side => {
+      const injured = sig.mobilityInjury?.side === side || sig.mobilityInjury?.side === 'both';
+      return 1 - mobilityPosture * (injured ? .62 : .38);
+    }) as [number, number],
     groundY: joints.groundY,
   }) : undefined;
   if (footwork) wander = { ...wander, pos: footwork.root,
@@ -611,7 +670,7 @@ export function stepMotion(
     ? profile.gait.walk : blendProfiles(profile.gait.walk, profile.gait.run, rw);
 
   // --- fire hold ------------------------------------------------------------
-  const canHold = profile.name !== 'soldier' || (!sig.missing.armL && !sig.missing.armR);
+  const canHold = profile.name !== 'soldier' || !sig.missing.armR;
   const firedNow = !!sig.fire && !collapsed && !!profile.carries && canHold;
   const fireHold = firedNow ? FIRE.holdSec : Math.max(0, state.fireHold - dt);
   const sinceFire = firedNow ? 0 : state.sinceFire + dt;
@@ -720,7 +779,7 @@ export function stepMotion(
   // The whole upper body pitches forward about the hips joint: a ROTATION of
   // targets, so no segment length changes. Zero for the shamble — the branch
   // is skipped entirely so the zombie's arithmetic is untouched.
-  const torsoLean = gait.pose.lean * blend * (1 - walkPosture) + .24 * walkPosture;
+  const torsoLean = gait.pose.lean * blend * (1 - walkPosture) + .24 * walkPosture + .30 * crouchPosture;
   if (torsoLean !== 0 && !collapsed && idx.hips !== undefined) {
     const pivotP = targets[idx.hips]!;
     const right = rotateYaw([1, 0, 0], bodyYaw);
@@ -759,8 +818,8 @@ export function stepMotion(
   // Composition: the pivot is about the FINAL shoulder target (sway, stagger
   // and lean already ride it), and the elbow/hand's own stagger offsets
   // re-add after the rotation — reactions still move the arms.
-  if (armStyle === 'reach' && gait.pose.reach) {
-    const r = gait.pose.reach;
+  if ((armStyle === 'reach' && gait.pose.reach) || (profile.name === 'soldier' && attack)) {
+    const r = gait.pose.reach ?? { pitchL: 0, pitchR: 0, drop: 0, shift: Z };
     const right = rotateYaw([1, 0, 0], bodyYaw); // the body's right axis, world
     const applyArm = (side: 'L' | 'R') => {
       if (side === 'L' ? sig.missing.armL : sig.missing.armR) return;
@@ -807,23 +866,81 @@ export function stepMotion(
   }
 
   // --- carry-style arms: the right arm authored, the left hand IK'd --------
+  if (soldierStagger.hunchWeight > 0) {
+    const hunch = rotateYaw([0, -.10, .14], bodyYaw);
+    for (const name of ['chest', 'neck', 'head', 'shoulderL', 'shoulderR'] as const) {
+      const i = idx[name];
+      if (i !== undefined) targets[i] = add(targets[i]!, scale(hunch, soldierStagger.hunchWeight));
+    }
+  }
   let gun: GunPose | null = null;
   let carryUsed: CarryName | null = null;
   const carries = profile.carries;
+  const broadSoldierOpen = soldierStagger.active && !soldierStagger.state.fullOpen && soldierStagger.variant === 1
+    && soldierStagger.state.level !== 'small';
   let carryPose = state.carryPose;
+  let carryTargetPose = state.carryTargetPose;
+  let soldierStaggerCarry = state.soldierStaggerCarry;
+  let soldierStaggerSupport = state.soldierStaggerSupport;
+  let soldierStaggerGunYaw = state.soldierStaggerGunYaw ?? 0;
+  let soldierStaggerGunYawBase = state.soldierStaggerGunYawBase ?? 0;
+  let soldierFullArmBase = state.soldierFullArmBase;
+  if (!soldierStagger.active) {
+    soldierStaggerGunYaw = 0;
+    soldierStaggerGunYawBase = 0;
+  }
   if (armStyle === 'carry' && carries && !collapsed && canHold) {
     const carryName: CarryName = cfg.carryOverride
       ?? (fireHold > 0 ? carries.fire : (rw >= 0.5 ? carries.run : carries.walk));
     carryUsed = carryName;
     const wanted = CARRIES[carryName];
-    const previous = carryPose ?? wanted;
+    const previous = carryTargetPose ?? wanted;
     const amount = 1 - Math.exp(-9 * dt);
     const mix = (a: number, b: number) => a + (b - a) * amount;
-    const carry: CarrySpec = {
+    carryTargetPose = {
       right: { pitch: mix(previous.right.pitch, wanted.right.pitch), yaw: mix(previous.right.yaw, wanted.right.yaw), fold: mix(previous.right.fold, wanted.right.fold) },
       gunPitch: mix(previous.gunPitch, wanted.gunPitch),
       leftPole: [mix(previous.leftPole[0], wanted.leftPole[0]), mix(previous.leftPole[1], wanted.leftPole[1]), mix(previous.leftPole[2], wanted.leftPole[2])],
     };
+    if (soldierStagger.state.serial !== (state.soldierStagger?.serial ?? 0)) {
+      soldierStaggerCarry = state.carryPose ?? state.carryTargetPose ?? wanted;
+      soldierStaggerGunYawBase = soldierStaggerGunYaw;
+      soldierFullArmBase = {};
+      for (const side of ['L', 'R'] as const) {
+        if (sig.missing[`arm${side}`]) continue;
+        const shoulder = havePoints ? points[idx[`shoulder${side}`]]!.pos : targets[idx[`shoulder${side}`]]!;
+        const elbow = havePoints ? points[idx[`elbow${side}`]]!.pos : targets[idx[`elbow${side}`]]!;
+        const hand = havePoints ? points[idx[`hand${side}`]]!.pos : targets[idx[`hand${side}`]]!;
+        soldierFullArmBase[side] = { elbow: rotateYaw(sub(elbow, shoulder), -bodyYaw),
+          hand: rotateYaw(sub(hand, shoulder), -bodyYaw) };
+      }
+      if (!sig.missing.armL) {
+        const shoulder = havePoints ? points[idx.shoulderL]!.pos : targets[idx.shoulderL]!;
+        const hand = havePoints ? points[idx.handL]!.pos : targets[idx.handL]!;
+        soldierStaggerSupport = rotateYaw(sub(hand, shoulder), -bodyYaw);
+      }
+    }
+    const carry: CarrySpec = {
+      right: { ...carryTargetPose.right },
+      gunPitch: carryTargetPose.gunPitch,
+      leftPole: [...carryTargetPose.leftPole],
+    };
+    if (soldierStagger.active && soldierStaggerCarry) {
+      const w = soldierStagger.armWeight;
+      const duration = soldierStaggerDuration(soldierStagger.state.level, soldierStagger.state.fullOpen);
+      const hold = 1 - smooth01((soldierStagger.state.age - duration * .65) / (duration * .35));
+      const open = soldierStagger.state.level === 'small' ? .06
+        : soldierStagger.state.level === 'medium' ? .11 : .16;
+      const broadOpen = broadSoldierOpen;
+      const variantOpen = broadOpen ? .98 : open * ([.82, 1, 1.16][soldierStagger.variant] ?? 1);
+      carry.right.pitch = soldierStaggerCarry.right.pitch * hold + carryTargetPose.right.pitch * (1 - hold);
+      const heldYaw = soldierStaggerCarry.right.yaw * hold + carryTargetPose.right.yaw * (1 - hold);
+      carry.right.yaw = heldYaw - variantOpen * w;
+      soldierStaggerGunYaw = soldierStaggerGunYawBase * hold - (broadOpen ? variantOpen * w : 0);
+      carry.right.fold = soldierStaggerCarry.right.fold * hold + carryTargetPose.right.fold * (1 - hold)
+        - variantOpen * (broadOpen ? .2 : .45) * w;
+      carry.gunPitch = soldierStaggerCarry.gunPitch * hold + carryTargetPose.gunPitch * (1 - hold);
+    }
     carryPose = carry;
     const right = rotateYaw([1, 0, 0], bodyYaw);
     const pelvisX = joints.base[idx.pelvis!]![0];
@@ -837,7 +954,10 @@ export function stepMotion(
         carry.right, right, inward, armPresence);
       targets[iE] = add(r.elbow, rotateYaw(stagger.offsets.elbowR ?? Z, bodyYaw));
       targets[iH] = add(r.hand, rotateYaw(stagger.offsets.handR ?? Z, bodyYaw));
-      gun = gunPoseFromArm(targets[iE]!, targets[iH]!, right, carry.gunPitch, profile.prop?.scale);
+      const pitchAxis = Math.abs(soldierStaggerGunYaw) > 1e-9
+        ? qRotate(qFromAxisAngle([0,1,0], soldierStaggerGunYaw * armPresence * inward), right)
+        : right;
+      gun = gunPoseFromArm(targets[iE]!, targets[iH]!, pitchAxis, carry.gunPitch, profile.prop?.scale);
       // Keep the authored wrist/gun orientation, then swivel the elbow out
       // of the vest. The shoulder and grip do not move, nor do arm lengths.
       targets[iE] = alignElbow(targets[iS]!, targets[iE]!, targets[iH]!, rotateYaw([-inward, -1, 0.3], bodyYaw));
@@ -845,12 +965,74 @@ export function stepMotion(
     // Left arm: FABRIK onto the fore-end, elbow poled outward.
     if (gun && !sig.missing.armL) {
       const iS = idx.shoulderL!, iE = idx.elbowL!, iH = idx.handL!;
-      const target = gunPoint(gun, GUN_GRIP.foreHand);
+      const grip = gunPoint(gun, GUN_GRIP.foreHand);
+      let target = grip;
+      if (soldierStagger.active && soldierStaggerSupport) {
+        const base = add(targets[iS]!, rotateYaw(soldierStaggerSupport, bodyYaw));
+        const duration = soldierStaggerDuration(soldierStagger.state.level, soldierStagger.state.fullOpen);
+        const recover = smooth01((soldierStagger.state.age - duration * .65) / (duration * .35));
+        const lag = smooth01((soldierStagger.state.age - [.04, .08, .12][soldierStagger.variant]!) / .16);
+        const broadOpen = broadSoldierOpen;
+        const w = soldierStagger.armWeight * lag * (soldierStagger.state.level === 'small' ? .18 : broadOpen ? 1.2 : .32);
+        const opened = add(base, rotateYaw([
+          broadOpen ? .80 : [.07, .10, .13][soldierStagger.variant]!, broadOpen ? -.12 : [-.015, -.03, .005][soldierStagger.variant]!, -.025,
+        ], bodyYaw));
+        const held = [base[0] + (grip[0] - base[0]) * recover, base[1] + (grip[1] - base[1]) * recover,
+          base[2] + (grip[2] - base[2]) * recover] as Vec3;
+        target = [held[0] + (opened[0] - base[0]) * w, held[1] + (opened[1] - base[1]) * w,
+          held[2] + (opened[2] - base[2]) * w];
+        const fromGrip = sub(target, grip);
+        const maxOpen = broadOpen ? .90 : .07;
+        if (len(fromGrip) > maxOpen) target = add(grip, scale(normalize(fromGrip), maxOpen));
+      }
       const chain = solveChain([targets[iS]!, targets[iE]!, targets[iH]!], joints.arm.L, target, SOLVE);
       const pole = rotateYaw(carry.leftPole, bodyYaw);
       const elbow = alignElbow(chain[0]!, chain[1]!, chain[2]!, pole);
       targets[iE] = add(elbow, rotateYaw(stagger.offsets.elbowL ?? Z, bodyYaw));
       targets[iH] = add(chain[2]!, rotateYaw(stagger.offsets.handL ?? Z, bodyYaw));
+    }
+  }
+
+  if (!collapsed && soldierStagger.active && soldierStagger.state.fullOpen && soldierFullArmBase) {
+    const carriedGun = gun;
+    let fullGunRotation: ReturnType<typeof qFromAxisAngle> | null = null;
+    for (const side of ['L', 'R'] as const) {
+      const base = soldierFullArmBase[side];
+      if (!base || sig.missing[`arm${side}`]) continue;
+      const sign = side === 'L' ? 1 : -1;
+      const lag = side === 'L' ? smooth01((soldierStagger.state.age - .08) / .22) : 1;
+      const w = soldierStagger.armWeight * lag;
+      const qAbduct = qFromAxisAngle([0,0,1], -sign * .55 * w);
+      const qLift = qFromAxisAngle([1,0,0], side === 'R' ? -.35 * w : 0);
+      // Aim, low carry and an already-reacting pose start at different yaw.
+      // Rotate toward one body-local side target instead of adding a fixed arc,
+      // which could carry a low-held gun through and behind the shoulder.
+      const fullRaisedHand = qRotate(qFromAxisAngle([1,0,0], side === 'R' ? -.35 : 0),
+        qRotate(qFromAxisAngle([0,0,1], -sign * .55), base.hand));
+      const fromYaw = Math.atan2(fullRaisedHand[0], fullRaisedHand[2]);
+      const yawDelta = Math.atan2(Math.sin(sign * 1.30 - fromYaw), Math.cos(sign * 1.30 - fromYaw));
+      const qOut = qFromAxisAngle([0,1,0], yawDelta * w);
+      const qLocal = qMul(qOut, qMul(qLift, qAbduct));
+      const rotateFull = (v: Vec3) => qRotate(qLocal, v);
+      const iS = idx[`shoulder${side}`]!, iE = idx[`elbow${side}`]!, iH = idx[`hand${side}`]!;
+      const shoulder = targets[iS]!;
+      const fullElbow = add(shoulder, rotateYaw(rotateFull(base.elbow), bodyYaw));
+      const fullHand = add(shoulder, rotateYaw(rotateFull(base.hand), bodyYaw));
+      targets[iE] = fullElbow;
+      targets[iH] = fullHand;
+      if (side === 'R') {
+        const qBody = qFromAxisAngle([0,1,0], bodyYaw);
+        const qBodyInv = qFromAxisAngle([0,1,0], -bodyYaw);
+        fullGunRotation = qMul(qBody, qMul(qLocal, qBodyInv));
+      }
+    }
+    if (!sig.missing.armR && carryPose) {
+      if (carriedGun && fullGunRotation) {
+        gun = { ...carriedGun };
+        const grip = targets[idx.handR!]!;
+        gun.quat = qMul(fullGunRotation, carriedGun.quat);
+        gun.root = add(gun.root, sub(grip, gunPoint(gun, GUN_GRIP.gripHand)));
+      }
     }
   }
 
@@ -995,7 +1177,7 @@ export function stepMotion(
   // overrides so the plants/aim can't stomp it, and composed on top
   // of the whole-body stagger. A fresh hit re-targets the recoil.
   let recoil = state.recoil;
-  if (sig.shot && !collapsed) {
+  if (sig.shot && !collapsed && !(profile.name === 'soldier' && state.recoil.joint !== null)) {
     const at = sig.shot.woundWorld;
     let best: GaitJointName | null = null;
     let bestD = Infinity;
@@ -1040,12 +1222,20 @@ export function stepMotion(
 
   const nextState: MotionState = {
     ...(fallPose ? { fallPose, fallFatal, fallImpact, fallStrength } : {}),
-    wander, gait: gait.state, stagger: stagger.state, collapse: collapse.state,
-    plantL, plantR, aim, recoil, bodyYaw, blend, stanceBlend, footwork, walkPosture,
+    wander, gait: gait.state, stagger: stagger.state,
+    ...(profile.name === 'soldier' || state.soldierStagger ? { soldierStagger: soldierStagger.state } : {}),
+    collapse: collapse.state,
+    plantL, plantR, aim, recoil, bodyYaw, blend, stanceBlend, footwork, walkPosture, mobilityPosture,
+    protectiveCrouchSec, protectiveCrouchPosture,
     runWeight: rw,
     fireHold,
     sinceFire,
     ...(carryPose === undefined ? {} : { carryPose }),
+    ...(carryTargetPose === undefined ? {} : { carryTargetPose }),
+    ...(soldierStaggerCarry === undefined ? {} : { soldierStaggerCarry }),
+    ...(soldierStaggerSupport === undefined ? {} : { soldierStaggerSupport }),
+    soldierStaggerGunYaw, soldierStaggerGunYawBase,
+    ...(soldierFullArmBase === undefined ? {} : { soldierFullArmBase }),
     lastShift: shift,
     fallShift: collapsed ? (state.fallShift ?? shift) : null,
   };
@@ -1060,7 +1250,7 @@ export function stepMotion(
       restPose: targets,
       // Hit reactions offset joints independently. Let Verlet absorb those
       // impulses rather than hard-pinning incompatible torso/leg targets.
-      ...(footwork && !stagger.staggered && recoil.joint === null ? { posePins: (['pelvis', 'hips', 'hipL', 'hipR', 'kneeL', 'kneeR', 'footL', 'footR', 'toeL', 'toeR'] as const)
+      ...(footwork && !stagger.staggered && !soldierStagger.active && recoil.joint === null ? { posePins: (['pelvis', 'hips', 'hipL', 'hipR', 'kneeL', 'kneeR', 'footL', 'footR', 'toeL', 'toeR'] as const)
         .map(name => idx[name]).filter(i => i !== undefined) } : {}),
       restPull: structural ? 1 : collapse.restPull,
       gravity: structural ? [0, -1.5, 0] : collapsed
@@ -1072,7 +1262,9 @@ export function stepMotion(
       meter: collapse.state.meter,
       hop: collapse.hop,
       stance: collapsed ? { legL: false, legR: false } : gait.pose.stance,
-      staggerKind: collapsed ? null : stagger.state.kind,
+      staggerKind: collapsed ? null : profile.name === 'soldier' && soldierStagger.active
+        ? soldierStagger.state.level === 'small' ? 'flinch' : 'lurch'
+        : stagger.state.kind,
       speed: collapsed ? 0 : wander.speed,
       blend: collapsed ? 0 : blend,
       gaitName: gaitProfile.name,

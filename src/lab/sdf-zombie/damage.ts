@@ -29,7 +29,16 @@ export const WOUND_PROFILES: Record<WoundType, WoundProfile> = {
   burn: { radius: 0.08, rimSplayScale: 1.0, rimOffsetScale: 1.0 },
 };
 
+/** Gameplay provenance is independent of visual crater calibre. */
+export type ShotProvenance =
+  | { weapon: 'shotgun'; shotId: number; barrels: 1 | 2; barrel: 0 | 1 }
+  | { weapon: 'slug'; shotId?: number }
+  | { weapon: 'explosion' };
+
 export interface Wound {
+  /** Stable render-event identity. Wound aging replaces objects each frame. */
+  eventId?: number;
+  shot?: ShotProvenance;
   /** Exposed stump decoration, not another projectile injury. */
   injuryIgnored?: boolean;
   /** Index into the built primitive array — the primitive this wound rides. */

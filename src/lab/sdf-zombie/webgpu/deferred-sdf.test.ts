@@ -223,7 +223,7 @@ describe('legacy expansion preserved', () => {
   it('keeps the wet/glow hoist arithmetic-neutral: identical statements, ordered before the flashlight', () => {
     // The hoisted statements are verbatim — pin them in the shared section…
     expect(MARCH_BODY_SURFACE_PREP).toContain(
-      'var wet = mix(surfCfg2.x * mix(1.0, 1.6, wetWound) * (1.0 - cm) * select(1.0, 1.8, isOrgan), 1.0, gloss);',
+      'var wet = mix(surfCfg2.x * mix(1.0, woundWetBoost, wetWound) * (1.0 - cm) * select(1.0, 1.8, isOrgan), 1.0, gloss);',
     );
     expect(MARCH_BODY_SURFACE_PREP).toContain(
       'let glow = faceGlowColor * faceGlow * faceCfg2.w\n           * flicker(faceCfg3.y, faceCfg3.x) * (1.0 - cm)',

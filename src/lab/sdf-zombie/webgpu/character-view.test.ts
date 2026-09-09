@@ -10,6 +10,15 @@ import type { Wound } from '../damage';
 // the bugs have actually been.
 
 describe('buildCharacterBody', () => {
+  it('keeps wound event identities through aging and advances past imported ids', () => {
+    const ring=createWoundRing();
+    const imported:Wound={primIdx:0,local:[0,0,0],radius:.055,type:'pellet',ageSec:0,eventId:41};
+    ring.set([imported]);
+    ring.set(ring.all().map(w=>({...w,ageSec:1})));
+    const fresh=ring.stamp({primIdx:0,local:[.1,0,0],radius:.055,type:'pellet',ageSec:0},buildCharacterBody(characterEntry('soldier'),[0,0,0],[]),0);
+    expect(ring.all()[0]!.eventId).toBe(41);
+    expect(fresh.eventId).toBe(42);
+  });
   it('keeps wound ownership aligned when bounded visual rows reorder and collapse history', () => {
     const body = buildCharacterBody(characterEntry('soldier'), [0,0,0], []);
     const arm = body.prims.findIndex(p => p.bone === 'upperarm.l');

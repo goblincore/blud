@@ -2,15 +2,17 @@ import type { BoneFieldSource, Point3 } from './contract';
 
 /** Mesh art revision is independent of the shared anatomy/volume contract. */
 export const MESH_SKULL_REVISION = 'skull-sculpt-1';
+export const SOLDIER_MESH_SKULL_REVISION = 'soldier-skull-sculpt-1';
 
 /** Subtractive sculpt: every surviving point is inside the authored bone.
  * Coordinates are head-rigid AABB coordinates, +z forward. Finite-depth
  * recesses preserve a closed dark floor and the rear cranium; flat jaw planes
  * cut the round chin into a narrow mandible with distinct gonial corners.
- * Soldier has a different, sparse head field; retain it unchanged.
  * Never pass this adapter to procedural or volume renderers. */
 export function meshBoneSource(source: BoneFieldSource): BoneFieldSource {
-  if (source.character !== 'zombie' || source.segment !== 'head' || source.revision.endsWith(`:${MESH_SKULL_REVISION}`)) return source;
+  const revision = source.character === 'zombie' ? MESH_SKULL_REVISION
+    : source.character === 'soldier' ? SOLDIER_MESH_SKULL_REVISION : null;
+  if (!revision || source.segment !== 'head' || source.revision.endsWith(`:${revision}`)) return source;
   const { min, max } = source.bounds;
   const half = max.map((v, i) => (v - min[i]!) * 0.5);
   const scale = Math.min(...half);
@@ -18,7 +20,7 @@ export function meshBoneSource(source: BoneFieldSource): BoneFieldSource {
     (Math.hypot((q[0]! - x) / rx, (q[1]! - y) / ry, (q[2]! - z) / rz) - 1) * Math.min(rx, ry, rz) * scale;
   return {
     ...source,
-    revision: `${source.revision}:${MESH_SKULL_REVISION}`,
+    revision: `${source.revision}:${revision}`,
     distance(p: Point3): number {
       const q = p.map((v, i) => (v - min[i]!) / half[i]! - 1);
       const [x, y, z] = q as [number, number, number];
