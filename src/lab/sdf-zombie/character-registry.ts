@@ -35,6 +35,7 @@ import soldierBlobSrc from './characters/soldier.blob?raw';
 import femaleBlobSrc from './characters/female.blob?raw';
 import gargoyleBlobSrc from './characters/gargoyle.blob?raw';
 import cyberdemonBlobSrc from './characters/cyberdemon.blob?raw';
+import gnasherBlobSrc from './characters/gnasher.blob?raw';
 import {
   ZOMBIE_PROFILE, SOLDIER_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
@@ -238,6 +239,15 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     // profile is a rig/gameplay change, not part of this character's
     // authoring task.
     profile: motionProfileFor('cyberdemon'),
+  },
+  gnasher: {
+    name: 'gnasher', src: gnasherBlobSrc,
+    // Flesh only for now; the horns/tusks kit (gnasher-kit.gltf) and the
+    // generated mouth decal land in their own commits — this entry is flipped
+    // to name them once the files exist, never before (the minotaur lesson:
+    // the lab 404s a declared-but-absent asset silently).
+    face: ZOMBIE_FLAT,
+    profile: motionProfileFor('gnasher'),
   },
 };
 

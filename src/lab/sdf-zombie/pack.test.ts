@@ -428,15 +428,17 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
     expect(Array.from(p.primClip.slice(0, 4))).toEqual([0, 0, 0, 0]);
   });
 
-  it('every shipped character packs primClip.w all-zero EXCEPT the minotaur, gargoyle and cyberdemon, which each author exactly two glowing eyes', () => {
+  it('every shipped character packs primClip.w all-zero EXCEPT the minotaur, gargoyle, cyberdemon and gnasher, which each author exactly two glowing eyes', () => {
     // glow= is opt-in per prim: characters that do not author it must pack
-    // byte-identically to before the lane existed, and the two glow authors
+    // byte-identically to before the lane existed, and the glow authors
     // must carry EXACTLY their two authored eye prims each (one per side;
-    // mirror expansion doubles the authored line), so an accidental glow=
-    // somewhere else is caught here. minotaur: the task-3 acceptance
+    // mirror/both expansion doubles the authored line), so an accidental
+    // glow= somewhere else is caught here. minotaur: the task-3 acceptance
     // character. gargoyle: ember eyes under the brow ridges (2026-09-07).
     // cyberdemon: two cyan-white lit eyes (2026-09-08) — its own blob test
     // pins them at exactly two, so this allowlist and that test agree.
+    // gnasher: two small amber eyes under a heavy brow (2026-09-08), also
+    // pinned at exactly two in gnasher-blob.test.ts.
     for (const [name, raw] of Object.entries(CHARACTERS)) {
       const built = buildBody(compileBlob(parseBlob(raw)), DEFAULT_BUILD_OPTS);
       const packed = packBody(built);
@@ -444,7 +446,8 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
       for (let i = 0; i < built.prims.length; i++) {
         if (Math.abs(packed.primClip[i * PRIM_STRIDE + 3]!) > 0) glowing++;
       }
-      if (name === 'minotaur.blob' || name === 'gargoyle.blob' || name === 'cyberdemon.blob') {
+      if (name === 'minotaur.blob' || name === 'gargoyle.blob' || name === 'cyberdemon.blob'
+          || name === 'gnasher.blob') {
         expect(glowing).toBe(2);
       } else {
         expect(glowing).toBe(0);
