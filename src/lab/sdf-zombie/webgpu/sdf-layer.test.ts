@@ -111,6 +111,7 @@ describe("'bodies' field style — the skeleton mesh pass", () => {
     type Call = { target: THREE.RenderTarget | null; autoClear: boolean; mask: number };
     const calls: Call[] = [];
     const copies: { src: THREE.Texture; dst: THREE.Texture }[] = [];
+    const clears: { target: THREE.RenderTarget | null; alpha: number }[] = [];
     let currentTarget: THREE.RenderTarget | null = null;
     let clearAlpha = 1;
     const r = {
@@ -120,7 +121,7 @@ describe("'bodies' field style — the skeleton mesh pass", () => {
       render: (_scene: THREE.Scene, camera: THREE.Camera) => {
         calls.push({ target: currentTarget, autoClear: r.autoClear, mask: camera.layers.mask });
       },
-      clear: vi.fn(),
+      clear: () => { clears.push({ target: currentTarget, alpha: clearAlpha }); },
       getClearAlpha: () => clearAlpha,
       setClearAlpha: (a: number) => { clearAlpha = a; },
       getClearColor: (c: THREE.Color) => c,
@@ -130,7 +131,7 @@ describe("'bodies' field style — the skeleton mesh pass", () => {
       copyTextureToTexture: (src: THREE.Texture, dst: THREE.Texture) => { copies.push({ src, dst }); },
       compileAsync: vi.fn(async () => {}),
     };
-    return { renderer: r as unknown as THREE.WebGPURenderer, calls, copies };
+    return { renderer: r as unknown as THREE.WebGPURenderer, calls, copies, clears };
   }
 
   it('draws the mesh field with autoClear OFF, so its alpha-0 coverage clear survives', () => {
@@ -166,6 +167,18 @@ describe("'bodies' field style — the skeleton mesh pass", () => {
       const owner = [...rendered].find(t => t?.depthTexture === dst);
       expect(owner, 'depth copy destination was never rendered to').toBeDefined();
     }
+    layer.dispose();
+  });
+
+  it('seeds the retained mesh field at alpha 0, so the first held rows read "no bone" rather than "bone everywhere"', () => {
+    const { renderer, calls, copies, clears } = fakeRenderer();
+    const layer = createSdfLayer(renderer);
+    layer.setSize(64, 48);
+    layer.setFieldStyle('bodies');
+    layer.render(new THREE.Scene(), new THREE.PerspectiveCamera());
+    const depthCopy = copies.find(c => (c.src as THREE.DepthTexture).isDepthTexture)!;
+    const retained = [...new Set(calls.map(c => c.target))].find(t => t?.depthTexture === depthCopy.dst)!;
+    expect(clears.some(c => c.target === retained && c.alpha === 0)).toBe(true);
     layer.dispose();
   });
 });

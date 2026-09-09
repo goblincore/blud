@@ -1035,6 +1035,16 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
           renderer.setRenderTarget(t);
           void renderer.render(emptyScene, camera);
         }
+        // fieldMeshPrev's coverage sentinel is alpha 0 ("no bone here"), the
+        // opposite of every other target's. The render above cleared it with
+        // the renderer's alpha (1), so on the first 'bodies' frame every held
+        // row would pass the weave's gate and paint the clear colour wherever
+        // the output depth was still far. Clear it again at alpha 0.
+        renderer.setRenderTarget(fieldMeshPrev);
+        const initAlpha = renderer.getClearAlpha();
+        renderer.setClearAlpha(0);
+        renderer.clear();
+        renderer.setClearAlpha(initAlpha);
       }
 
       // Pass 1 — the polygonal scene, at full resolution, to the output
@@ -1399,6 +1409,19 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       coneCoarse.dispose();
       coneFine.dispose();
       depthPre.dispose();
+      occluder.dispose();
+      shellEntry.dispose();
+      shellExit.dispose();
+      // The field buffers and their weave quads (RenderTarget.dispose also
+      // releases the attached DepthTexture through the backend's listener).
+      fieldFull.dispose();
+      fieldPrev.dispose();
+      fieldMesh.dispose();
+      fieldMeshPrev.dispose();
+      fieldQuad.geometry.dispose();
+      fieldQuadMat.dispose();
+      meshQuad.geometry.dispose();
+      meshQuadMat.dispose();
       quad.geometry.dispose();
       quadMat.dispose();
       blitQuad.geometry.dispose();
