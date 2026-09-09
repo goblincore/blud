@@ -142,12 +142,16 @@ export const ROOMS: RoomDef[] = [
   { id: 1, name: 'room1', minX: -O, maxX: -B, minZ: -O, maxZ: -B, height: WALL_H,
     wallColor: GALLERY_WALL, floorColor: GALLERY_FLOOR, ceilColor: GALLERY_CEIL,
     // FIRE brazier low on the west side, over the low furniture.
-    accents: [{ pos: [-7.5, 1.15, -2.8], color: [1.0, 0.46, 0.13], power: 9 }],
+    // RED. Owner call 2026-09-09: the rooms all read the same orange, which
+    // hid what the per-room probe grids do. One red room and one green room
+    // make the bounce on a body say which room it is in.
+    accents: [{ pos: [-7.5, 1.15, -2.8], color: [1.0, 0.12, 0.08], power: 9 }],
     zombies: 1, soldiers: 1 },
   { id: 2, name: 'room2', minX: B, maxX: O, minZ: -O, maxZ: -B, height: WALL_H,
     wallColor: GALLERY_WALL, floorColor: GALLERY_FLOOR, ceilColor: GALLERY_CEIL,
     // FIRE brazier on the east wall by the tall crate.
-    accents: [{ pos: [7.6, 1.15, -6.3], color: [1.0, 0.42, 0.11], power: 9 }],
+    // GREEN — see room 1.
+    accents: [{ pos: [7.6, 1.15, -6.3], color: [0.18, 1.0, 0.22], power: 9 }],
     zombies: 2 },
   { id: 3, name: 'room3', minX: B, maxX: O, minZ: B, maxZ: O, height: WALL_H,
     wallColor: GALLERY_WALL, floorColor: GALLERY_FLOOR, ceilColor: GALLERY_CEIL,

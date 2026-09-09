@@ -28,8 +28,19 @@ describe('dungeon palette', () => {
   });
 
   describe('braziers', () => {
-    it('every accent is FIRE — warm, never the gallery art-wash', () => {
+    it('room 1 is RED and room 2 is GREEN; every other accent is FIRE (owner, 2026-09-09)', () => {
+      // The all-fire palette (L2, 2026-09-01) hid what the per-room probe
+      // grids do — the bounce on a body could not say which room it was in.
+      // Two saturated rooms make it legible; the rest stay braziers.
+      const room = (id: number) => ROOMS.find(r => r.id === id)!;
+      const red = room(1).accents[0]!.color;
+      expect(red[0]).toBeGreaterThan(red[1]! + 0.6);
+      expect(red[0]).toBeGreaterThan(red[2]! + 0.6);
+      const green = room(2).accents[0]!.color;
+      expect(green[1]).toBeGreaterThan(green[0]! + 0.6);
+      expect(green[1]).toBeGreaterThan(green[2]! + 0.6);
       for (const r of ROOMS) {
+        if (r.id === 1 || r.id === 2) continue;
         for (const a of r.accents) {
           expect(a.color[0]!, r.name).toBeGreaterThan(a.color[2]! + 0.35);
           expect(a.color[1]!, r.name).toBeGreaterThan(a.color[2]!);

@@ -51,13 +51,12 @@ describe('ring layout', () => {
     expect(ROOMS.filter(r => r.id <= 4).reduce((n, r) => n + r.zombies, 0)).toBe(10);
   });
 
-  it('accents are FIRE braziers — warm in every room (SUPERSEDES hue distinctness)', () => {
-    // The gallery told rooms apart by accent HUE. The dungeon unifies them:
-    // every practical is flame, and rooms are told apart by geometry. The
-    // braziers still vary in coolness/depth (room3's pair), so assert the
-    // fire band rather than pairwise distinctness. L2, 2026-09-01.
-    const ring = [1, 2, 3, 4, 1];
-    for (const id of ring) {
+  it('rooms 3 and 4 are FIRE braziers; rooms 1 and 2 are the red and green rooms (owner, 2026-09-09)', () => {
+    // L2 (2026-09-01) unified every practical as flame. The per-room probe
+    // grids (P3 step 2) made hue useful again: the owner asked for one red
+    // and one green room so a body's bounce says where it stands. Rooms 3
+    // and 4 keep the fire band; dungeon-palette.test.ts pins 1 and 2.
+    for (const id of [3, 4]) {
       const c = ROOMS.find(r => r.id === id)!.accents[0]!.color;
       expect(c[0]).toBeGreaterThan(c[2]! + 0.35); // red dominates blue
       expect(c[1]).toBeGreaterThan(c[2]!);        // green over blue
