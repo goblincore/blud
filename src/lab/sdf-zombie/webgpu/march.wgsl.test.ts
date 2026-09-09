@@ -654,7 +654,11 @@ describe('wound soft shadow (iq rsmshadows, wound-zone gated)', () => {
     // fully shadowed.
     expect(WOUND_SHADOW).toContain('var t = 0.02;');
     expect(WOUND_SHADOW).toContain('for (var i = 0; i < 14; i = i + 1) {');
-    expect(WOUND_SHADOW).toContain('res = min(res, k * h / t);');
+    // Triangulated coverage (iq's improved estimator, Claybook slide 39):
+    // the closest point between the last two samples, not the sample itself.
+    // Same budget — the estimator changes the per-sample maths, not the count.
+    expect(WOUND_SHADOW).toContain('let y = h * h / (2.0 * ph);');
+    expect(WOUND_SHADOW).toContain('res = min(res, k * dd / max(t - y, 1e-4));');
     expect(WOUND_SHADOW).toContain('if (res < 0.02 || t > 0.4) { break; }');
     expect(WOUND_SHADOW).toContain('t = t + clamp(h, 0.01, 0.06);');
     // Smooth field: no fbm in the shadow march (noiseAmp 0, like the cone).

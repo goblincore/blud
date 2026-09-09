@@ -4,10 +4,62 @@
 > Per-milestone step-by-step tasks live in `docs/superpowers/plans/`.
 > This file is **coarse-grained state only** — keep rows to ≤2 lines and link out for detail.
 
+## Raymarch — Claybook cheap wins — 2026-09-09
+
+- [x] Last-step SECANT accept in `MARCH_BODY` (Claybook GDC slide 25), behind
+  `perfCfg.w` — 0 = off, bit-identical to the old march. `?laststep=K` on the game and
+  bench pages, `__sdfGame.setLastStep(K)`. A/B (`BENCH_LEGS=baseline` + prelude):
+  room 1 11.92 → 10.17 ms; rooms 2-4 inside repeat spread. Close-up pair looked identical.
+- [x] Wound soft shadow uses iq's TRIANGULATED coverage (slide 39), same 14 samples.
+- [x] Ships ON: `GAME_LAST_STEP = 4` in `game-main.ts`; `?laststep=0` restores the old march.
+- [-] Per-frame narrow-band VOLUME bake of heavy bodies (their core trick) judged not
+  worth a spike. Notes: `Claude Notes/Research/2026-09-09-claybook-gdc-sdf-techniques.md`.
+
+## Bench harness — no more silent hangs — 2026-09-09
+
+- [x] `scripts/sdf-game-bench.mjs` can no longer hang forever. `send()` had no
+  timeout and no reject path and nothing rejected `pending` on socket death, so a
+  lost CDP response wedged the run (observed: 141/204 legs, then 19+ min of silence).
+  Every wait is now bounded and every failure names the leg/room/rep, phase, CDP
+  method and console tail.
+- [x] One wedged leg no longer kills the matrix: a per-leg watchdog abandons it and
+  the run continues; `BENCH_MAX_CONSEC_FAILS` (3) stops a dead browser. Reports gain
+  an INCOMPLETE banner and the exit code is non-zero on any partial run.
+- [x] Completed legs land in `$BENCH_OUT/bench-progress.jsonl` as they finish, so an
+  aborted run keeps what it measured — `bench.json`/`bench.md`/`passes.md` are still
+  end-of-run only. Knobs: `BENCH_SEND_TIMEOUT_MS`, `BENCH_LEG_TIMEOUT_MS`.
+
+## Shot visuals — tracer rounds — 2026-09-09
+
+- [x] Projectiles no longer draw as shaded yellow balls. Each carries an additive
+  velocity-aligned STREAK plus a view-facing EMBER (`webgpu/tracer-sprite.ts`), with a
+  0.30-0.95 m near-fade so nothing blobs at the muzzle. Player and soldier pellets share it.
+- [!] A velocity-aligned streak FORESHORTENS to a sliver on your own forward shots —
+  measured, and why the ember exists. Owner may still want the player's streak dropped
+  (one branch in `placeTracer`); enemy fire is the case the streak actually pays off in.
+- [-] `scripts/sdf-game-tracer-look.sh` is a LOOK capture, not a gate. Its header carries
+  the three rigging traps (LAB_TMP outside the vite root, `?frozen`, room1's only clear lane).
+
 ## Skeleton migration wrap-up — 2026-09-08
 
 - [x] Mesh actor skeletons accepted and merged into main; now the forward default, including production.
 - [-] Further aesthetic tuning paused; cavity brightness remains open. [Handoff](docs/dev-notes/2026-09-07-skeleton-comparison/wrap-up.md).
+
+## Roster — bloatmaw — 2026-09-09
+
+- [x] `bloatmaw` merged (`5aae04b0`): a floating flesh ball, mostly mouth, with
+  tiny shackled arms. Third prose-brief character; the roster's FIRST legless one.
+- [x] Floating solved deliberately: `stance` OMITTED (grammar knows only
+  humanoid/digitigrade) so `checkStance` is off by choice; hover gap 0.302 m named;
+  a vestigial spine chain keeps the gait wiring happy — `gait.ts` `leg()` returns
+  zero offsets for a missing chain, so the shamble degrades to root sway.
+- [ ] Brow still reads as a flattish lid, not a fleshy ridge with sockets; the
+  little wings are barely visible. Both are "does it read?" calls.
+- [!] ALL FOUR ROUNDS WERE AUTHORED BLIND — the Chrome sandbox fix
+  (`70147f98` + `7c20c17a`) landed only after r4. The next pass is the first that
+  can see its own frames.
+- [-] Ships `blob:silview` / `blob:inspect` — CPU renderers the blind runs wrote
+  for themselves. Useful; keep.
 
 ## Roster — gnasher — 2026-09-09
 

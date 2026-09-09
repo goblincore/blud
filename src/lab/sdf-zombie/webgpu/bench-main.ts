@@ -270,6 +270,9 @@ async function main() {
   // (0 = off, the ship default). x is stamped per frame from the SDF pass
   // height below, so it tracks the adaptive ladder like the lab's does.
   const aaStrength = Number(params.get('aa') ?? 0) || 0;
+  // ?laststep=K enables MARCH_BODY's last-step secant accept (perfCfg.w);
+  // 0 = off, the ship default.
+  const lastStep = Math.max(0, Math.min(16, Number(params.get('laststep') ?? 0) || 0));
 
   const mount = document.getElementById('app');
   if (!mount) throw new Error('#app not found');
@@ -386,6 +389,7 @@ async function main() {
       v.uniforms.faceCfg.value.y = 1.0;
       v.uniforms.faceProj.value.set(...setup.faceProj);
       if (debugMode > 0) v.uniforms.debugCfg.value.x = debugMode;
+      v.uniforms.perfCfg.value.w = lastStep;
       const skull = headShape(placed);
       if (skull) v.setHeadShape(skull.centre, skull.axes);
       v.object.layers.set(SDF_LAYER);

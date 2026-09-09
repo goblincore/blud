@@ -2717,6 +2717,30 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
       omega = 1.0;
     } else {
       let hitEps = max(hitEpsBase, t * aaK / distort);
+      // LAST-STEP SECANT ACCEPT (Claybook, Aaltonen GDC 2018 slide 25; off at
+      // perfCfg.w == 0, bit-identical). A sphere trace converges on a
+      // geometric series: at a fixed grazing angle each step shrinks d by the
+      // same ratio, and the tail from d down to hitEps costs log(d/hitEps)
+      // steps that all land on the same planar patch. Assume the surface IS
+      // that plane through the last two samples (trilinear/analytic fields
+      // are locally linear along the ray) and the remaining distance is the
+      // secant root d * stepLen / (dPrev - d). When that root is within
+      // perfCfg.w hit-epsilons, jump onto it and accept. The jump is NOT a
+      // distance bound, so it fires only where the field is one: never on a
+      // displaced (shell) or near-wound sample, only while approaching
+      // (dPrev > d, so the ratio is < 1 and the series converges), and only
+      // after a forward step (stepLen > 0 — a retraction's previous sample
+      // was inside the solid). hitField/hitBest still describe the sample the
+      // jump left, which is at most perfCfg.w * hitEps behind the accepted t
+      // — the same tolerance the plain accept already grants.
+      if (perfCfg.w > 0.0 && !conservative && !nearWound && stepLen > 0.0 && prevRadius > radius) {
+        let root = radius * stepLen / (prevRadius - radius);
+        if (root < hitEps * perfCfg.w) {
+          t = t + root;
+          hit = true;
+          break;
+        }
+      }
       if (d < hitEps) {
         // wound-halo r2: an over-relaxed step can cross the skin with
         // radius + prevRadius == stepLen EXACTLY — a perpendicular approach
@@ -3713,9 +3737,22 @@ export const WOUND_SHADOW = /* wgsl */ `fn woundShadow(
 ) -> f32 {
   var res = 1.0;
   var t = 0.02;
+  // TRIANGULATED coverage (iq's improved estimator, the same article; the
+  // Claybook talk's slide 39 reports it as their fix for banding). The
+  // single-sample min sees the occluder only where a sample happens to land
+  // nearest it, so the penumbra bands at the step spacing. Two consecutive
+  // samples h (now) and ph (previous), stepped apart, bound a closest point
+  // BETWEEN them: y is that point's offset back along the ray and d its
+  // distance off the ray, and k * d / (t - y) is the cone coverage there.
+  // Same 14 samples, same field, two extra multiplies; ph starts at 1e10
+  // so the first sample degrades to the plain estimator (y -> 0, d -> h).
+  var ph = 1e10;
   for (var i = 0; i < 14; i = i + 1) {
     let h = mapBody(p + L * t, data, counts, counts2, vec4<f32>(0.0), woundCfg, woundCfg2, vec3<f32>(0.0, 0.0, 0.0), volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound).x;
-    res = min(res, k * h / t);
+    let y = h * h / (2.0 * ph);
+    let dd = sqrt(max(h * h - y * y, 0.0));
+    res = min(res, k * dd / max(t - y, 1e-4));
+    ph = h;
     if (res < 0.02 || t > 0.4) { break; }
     t = t + clamp(h, 0.01, 0.06);
   }

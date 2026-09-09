@@ -1,0 +1,95 @@
+# Bloatmaw kit — the HARD half of the character: the shackles and their
+# snapped chain. Authored in WAM; the flesh is characters/bloatmaw.blob.
+#
+# WHY MESH AND NOT SDF. Two concrete reasons, both the format's own:
+#   1. `clearOf` samples a primitive's shaft spaced to its own effective
+#      radius and warns above length/effRadius 32 that a real crossing can be
+#      stepped over and reported as a false "clear". A chain link is exactly
+#      that slender shape.
+#   2. One cluster may not exceed 64 primitives (MAX_CLUSTER_PRIMS). A chain
+#      eats that budget fast and the constant must not be raised.
+# So the flesh owns the ball, maw, teeth, eyes and arms; the kit owns only the
+# iron around the wrists.
+#
+# THE SKELETON BELOW IS A HAND TRANSCRIPTION OF bloatmaw.blob AND NOTHING
+# CHECKS THAT THEY STAY IN STEP. Two conversions apply, neither optional:
+#   * UNITS. WAM lengths are fractions of `height`; .blob's are metres. Every
+#     number here is the .blob metre value / 1.83.
+#   * PITCH SIGN ON `down` BONES. WAM's pitch tips an `up` bone forward and a
+#     `down` bone BACKWARD; .blob's always carries toward +z. So `up` bones
+#     share their pitch verbatim and every `down` bone NEGATES it. This kit
+#     only needs the forearm/wrist chain right, since that is all it hangs
+#     from — but the whole arm chain is transcribed because a missing link in
+#     the chain would put the cuff on the wrong side of the wrist.
+# The .blob root is a BONE with a length (`root pelvis at 1.08 len=0.06`), and
+# children attach at its TAIL; WAM's root is a bare point, so `hips` carries
+# that missing 0.06 m and every .blob `parent=pelvis` becomes `parent=hips`.
+#
+# BUILD:  scripts/build-wam-kit.sh bloatmaw
+#   -> public/assets/lab/bloatmaw-kit.gltf
+model bloatmaw-kit
+  height 1.83
+  style chunky
+
+palette
+  iron #4d5157
+  brass #8a6a34
+
+skeleton
+  root pelvis at 0.590164
+  # The .blob root bone's own length (0.06 m), restored as a real segment.
+  bone hips   parent=pelvis dir=up len=0.032787
+  # Only the chain that leads to the wrist is needed; the .blob spine, neck,
+  # skull and maw carry no kit geometry and are omitted deliberately.
+  bone spine  parent=hips dir=up len=0.163934
+  mirror
+    # .blob: dir=down tilt=63, no pitch -> WAM pitch 0, tilt verbatim.
+    bone clavicle parent=spine dir=down tilt=63 len=0.387978
+    bone upperArm parent=clavicle dir=down tilt=60 len=0.071038
+    # .blob pitch +8 -> WAM -8 (see the header).
+    bone foreArm  parent=upperArm dir=down tilt=50 pitch=-8 len=0.060109
+    # .blob pitch +10 -> WAM -10.
+    bone hand     parent=foreArm dir=down tilt=45 pitch=-10 len=0.038251
+  end
+
+parts
+  mirror
+    # SHACKLE — a riveted iron cuff around the wrist. Three rings sized off
+    # the flesh it wraps: the .blob forearm tapers to r2=0.028 at the wrist
+    # and the palm blob (r 0.044 x wide 1.15 = 0.051 in x) is just past it,
+    # so a 0.062 half-width sits ~1 cm proud of the cuff's own section without
+    # swallowing the hand. Open at both ends (`cap none`): a flat cap would
+    # put a disc through the wrist, which is the goblin's greave lesson.
+    loft shackle bones=hand..hand material=iron
+      ring 0.02 w=0.056 d=0.056
+      ring 0.16 w=0.064 d=0.064
+      ring 0.30 w=0.058 d=0.058
+      cap start=none end=none
+
+    # SNAPPED CHAIN — three links hanging free and short. The brief is
+    # explicit that the chain does NOT loop, coil, or connect to anything, so
+    # this is a straight three-link dangle: no last link reaching back to the
+    # cuff, no second strand. Each link is a short flattened tube and the
+    # `roll=90` alternation on every other link is what makes a row of tubes
+    # read as CHAIN rather than as a rod — the flat faces turn a quarter turn
+    # at each joint, exactly as real links do.
+    loft chain1 bone=hand at=0.30 offset=(0.040,-0.035,0) dir=down len=0.028 material=iron
+      ring 0.06 w=0.020 d=0.007
+      ring 0.94 w=0.020 d=0.007
+      cap start=none end=none
+    loft chain2 bone=hand at=0.30 offset=(0.040,-0.065,0) dir=down len=0.028 material=iron
+      ring 0.06 w=0.020 d=0.007 roll=90
+      ring 0.94 w=0.020 d=0.007 roll=90
+      cap start=none end=none
+    loft chain3 bone=hand at=0.30 offset=(0.040,-0.095,0) dir=down len=0.028 material=iron
+      ring 0.06 w=0.020 d=0.007
+      ring 0.94 w=0.020 d=0.007
+      cap start=none end=none
+
+    # The snapped end: a torn stub link half the length of the others, so the
+    # chain reads as BROKEN rather than merely short.
+    loft chain4 bone=hand at=0.30 offset=(0.040,-0.124,0) dir=down len=0.014 material=brass
+      ring 0.10 w=0.018 d=0.006 roll=90
+      ring 0.90 w=0.014 d=0.005 roll=90
+      cap start=none end=none
+  end
