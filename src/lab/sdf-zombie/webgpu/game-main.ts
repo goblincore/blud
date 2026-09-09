@@ -782,7 +782,8 @@ async function main() {
     // outside its own body. Holding their pose keeps both representations on
     // the same instant. Before the 2026-09-08 mesh migration this could not
     // happen: bones were rows in the marched field and held with it.
-    const meshHold = sdfLayer.willHold;
+    // Fields never hold: every frame marches at the current camera and pose.
+    const meshHold = sdfLayer.halfRate && sdfLayer.willHold;
     if (segMeshRenderer && !meshHold) {
       // Its own phase, NOT folded into an existing one: this path shipped as
       // the forward default without a controlled timing result (skeleton
@@ -1290,12 +1291,14 @@ async function main() {
   const GAME_DEPTH_GATE = 0;
   sdfLayer.setDepthGate(GAME_DEPTH_GATE > 0.5);
   sdfLayer.setDepthPreEnabled(GAME_DEPTH_PREPASS > 0.5);
-  // HALF-RATE + per-pixel reprojection ON (2026-09-09, owner request). Built
-  // and parity-gated 2026-08-31 at p50 -33% / p95 -16%, then parked awaiting a
-  // LOOK verdict that was never given. Mode 1 = reproject (not raw hold). At
-  // the 30 fps cap this marches flesh at 15 Hz over a 30 Hz world: the smear
-  // IS the thing to judge. __sdfGame.setHalfRate(false) turns it off live.
-  sdfLayer.setHalfRate(true);
+  // INTERLACED FIELDS ON (2026-09-09), replacing half-rate. Half-rate held
+  // and reprojected the whole marched frame, which desynced from the
+  // full-rate skeleton meshes whenever the player moved — reprojected flesh
+  // against exactly-rendered polygons. Fields march half the SCANLINES at the
+  // CURRENT camera every frame, so that error class does not exist, and the
+  // comb IS the intended look. __sdfGame.setFieldMode(false) turns it off;
+  // setFieldComb(0..1) dials the comb from full hold to interpolated away.
+  sdfLayer.setFieldMode(true);
   // Headless A/B seams (2026-08-27 hull-holes diagnosis): ship defaults stay
   // ON/ON; the driver flips these between captures. Mirrors the lab's
   // __sdfLab.setOccluder.
@@ -3691,7 +3694,7 @@ async function main() {
       // so they hold with the flesh for the same reason the skeleton meshes
       // do (see meshHold in the draw). Motion and the rig still advance —
       // only the VISUAL pose is held, so gameplay is untouched.
-      if (!sdfLayer.willHold) {
+      if (!(sdfLayer.halfRate && sdfLayer.willHold)) {
         for (const a of actors) {
           if (!a.character) continue;
           const p = a.pose();
@@ -4501,6 +4504,7 @@ async function main() {
       actorCull: actorCullEnabled, visibleBodies: cullCounts.visible,
       halfRate: sdfLayer.halfRate, halfRateMode: sdfLayer.halfRateMode,
       depthPrepass: sdfLayer.depthPreEnabled,
+      fieldMode: sdfLayer.fieldMode, fieldComb: sdfLayer.fieldComb,
     });
     firstTelemetryFrame = false; telemetryVisibilityGap = false;
     telemetryControls?.afterFrame();
@@ -4516,6 +4520,7 @@ async function main() {
     hullExitBound: actors[0]?.view.uniforms.perfCfg.value.x,
     halfRate: sdfLayer.halfRate, halfRateMode: sdfLayer.halfRateMode,
     depthPrepass: sdfLayer.depthPreEnabled, actorCull: actorCullEnabled,
+    fieldMode: sdfLayer.fieldMode, fieldComb: sdfLayer.fieldComb,
     coverageMeaning: 'coverageFrac/biggestBodyFrac are a CPU bounding-sphere '
       + 'estimate of screen area covered by VISIBLE bodies, not a GPU pixel '
       + 'count; overlapping bodies double-count and occlusion is ignored, so '
@@ -6868,6 +6873,10 @@ async function main() {
     /** Adaptive resolution ladder — default OFF so the chosen rung ships. */
     /** A/B seam for the actor visibility cull (ships ON). The bench's
      *  `actor-cull-off` leg is the "before" column. */
+    setFieldMode: (on: boolean) => sdfLayer.setFieldMode(on),
+    get fieldMode() { return sdfLayer.fieldMode; },
+    setFieldComb: (v: number) => sdfLayer.setFieldComb(v),
+    get fieldComb() { return sdfLayer.fieldComb; },
     setActorCull(on: boolean) { actorCullEnabled = on; if (!on) lastSeenMs.clear(); },
     actorCull: () => ({ enabled: actorCullEnabled, ...cullCounts }),
     setAdaptive(on: boolean, budgetMs?: number) {

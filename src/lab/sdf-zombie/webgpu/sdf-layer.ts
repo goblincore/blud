@@ -34,6 +34,7 @@
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { wgslFn, texture, uv, vec4, uniform } from 'three/tsl';
+import { fieldParity, fieldTargetHeight, fieldJitterNdcY } from './field-render';
 import { createConeUniforms, createDepthPreUniforms, type ConeSource, type DepthPreSource, type OccluderSource, type PrevSource } from './zombie-gpu';
 import { setPassLabel } from './gpu-pass-timing';
 
@@ -241,15 +242,46 @@ export const CONE_TILE_FINE = 0;
  */
 export const COMPOSITE_WGSL = /* wgsl */ `fn sdfComposite(
   layerTex: texture_2d<f32>,
+  prevFieldTex: texture_2d<f32>,
   texCoord: vec2<f32>,
   flipY: f32,
   holdMode: f32,
   heldInv: mat4x4<f32>,
-  curVp: mat4x4<f32>
+  curVp: mat4x4<f32>,
+  fieldMode: f32,
+  fieldParityF: f32,
+  fieldComb: f32,
+  outHeight: f32
 ) -> vec4<f32> {
   let dims = vec2<f32>(textureDimensions(layerTex, 0));
   var st = texCoord;
   if (flipY > 0.5) { st.y = 1.0 - st.y; }
+  // ---- INTERLACED FIELDS -------------------------------------------------
+  // The layer rendered at HALF HEIGHT this frame, covering the scanlines of
+  // one field; prevFieldTex holds the other from last frame. Interleave them
+  // back to full height here. This branch is entered only when fieldMode is
+  // on, so every other path below stays bit-identical (the all-off parity
+  // gate depends on sameness, not equivalence).
+  if (fieldMode > 0.5) {
+    let col = clamp(i32(floor(st.x * dims.x)), 0, i32(dims.x) - 1);
+    let outRow = i32(floor(st.y * outHeight));
+    let tRow = clamp(outRow / 2, 0, i32(dims.y) - 1);
+    var fieldTexel: vec4<f32>;
+    if ((outRow % 2) == i32(fieldParityF)) {
+      fieldTexel = textureLoad(layerTex, vec2<i32>(col, tRow), 0);
+    } else {
+      // The row this frame did not march. fieldComb 1 = hold last frame's
+      // field verbatim, which IS the comb artifact and the point of the
+      // feature; 0 = interpolate vertically from THIS frame's field instead,
+      // trading vertical detail for no comb.
+      let held = textureLoad(prevFieldTex, vec2<i32>(col, tRow), 0);
+      let a = textureLoad(layerTex, vec2<i32>(col, tRow), 0);
+      let b = textureLoad(layerTex, vec2<i32>(col, clamp(tRow + 1, 0, i32(dims.y) - 1)), 0);
+      fieldTexel = mix((a + b) * 0.5, held, fieldComb);
+    }
+    if (fieldTexel.w >= 1.0) { discard; }
+    return fieldTexel;
+  }
   // holdMode: 0 = fresh/classic, 1 = raw hold, 2 = per-pixel reprojection.
   // The classic path below is deliberately UNCHANGED when holdMode < 1.5 —
   // the toggle-OFF frame must stay bit-identical.
@@ -348,6 +380,12 @@ export interface SdfLayer {
    * up-to-date bones inside one-frame-stale skin: the skeleton visibly walks
    * out of its own body. Callers use this to hold their pose in step.
    */
+  /** Interlaced scanline fields. Mutually exclusive with half-rate. */
+  setFieldMode(on: boolean): void;
+  readonly fieldMode: boolean;
+  /** 1 = hold the stale field (full comb); 0 = interpolate it away. */
+  setFieldComb(v: number): void;
+  readonly fieldComb: number;
   readonly willHold: boolean;
   readonly halfRate: boolean;
   setHalfRateMode(n: number): void;
@@ -422,6 +460,24 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   let fullW = 1;
   let fullH = 1;
 
+  // ---- interlaced field state ---------------------------------------------
+  //
+  // Alternative to half-rate, not additive: half-rate holds the whole marched
+  // frame and reprojects it, which desyncs from the full-rate skeleton meshes
+  // under camera motion. Fields march half the SCANLINES every frame at the
+  // CURRENT camera, so that error class does not exist.
+  //
+  // THE SAVING IS THE HALF-HEIGHT TARGET, NOT A DISCARD. GPUs shade in 2x2
+  // quads, so discarding alternate rows in a full-res pass still executes
+  // every quad. resize() halves EVERY screen-space target in the layer (march,
+  // shell, cone, occluder, depth-pre) so the pre-passes stay aligned with the
+  // march; only the composite interleaves back to full height.
+  let fieldMode = false;
+  const uFieldMode = uniform(0);
+  const uFieldParity = uniform(0);
+  const uFieldComb = uniform(1);
+  const uOutHeight = uniform(1);
+
   // ---- half-rate state (C2) ------------------------------------------------
   let halfRate = false;
   let halfRateMode = 1;
@@ -452,6 +508,12 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   // pass cannot read the target it writes, so each body reads a blit of
   // the previous state. Same format as `target`; its alpha is the clip depth
   // the composite already consumes (1.0 = "nothing recorded here").
+  /** Last frame's field, interleaved with this frame's by the composite. */
+  const fieldPrev = new THREE.RenderTarget(1, 1, {
+    type: THREE.FloatType, format: THREE.RGBAFormat,
+    minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
+    depthBuffer: false,
+  });
   const prev = new THREE.RenderTarget(1, 1, {
     depthBuffer: false,
     type: THREE.FloatType,
@@ -571,11 +633,16 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
 
   const sampled = composite({
     layerTex: texture(target.texture),
+    prevFieldTex: texture(fieldPrev.texture),
     texCoord: uv(),
     flipY: uFlipY,
     holdMode: uHoldMode,
     heldInv: uHeldInv,
     curVp: uCurVp,
+    fieldMode: uFieldMode,
+    fieldParityF: uFieldParity,
+    fieldComb: uFieldComb,
+    outHeight: uOutHeight,
   }) as unknown as { xyz: unknown; w: unknown };
 
   const quadMat = new MeshBasicNodeMaterial();
@@ -605,11 +672,17 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
 
   function resize() {
     const w = Math.max(1, Math.round(fullW * scale));
-    const h = Math.max(1, Math.round(fullH * scale));
+    const hFull = Math.max(1, Math.round(fullH * scale));
+    // In field mode EVERY screen-space target halves together, so the shell,
+    // cone, occluder and depth pre-passes keep addressing the same pixels the
+    // march does. Only the composite knows about full height.
+    const h = fieldMode ? fieldTargetHeight(hFull) : hFull;
+    uOutHeight.value = hFull;
     // setSize reallocates the march target's backing memory — a hold frame
     // would composite garbage until the next fresh march.
     forceFreshFrame = true;
     target.setSize(w, h);
+    fieldPrev.setSize(w, h);
     prev.setSize(w, h);
     occluder.setSize(w, h);
     shellEntry.setSize(w, h);
@@ -659,6 +732,23 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       _view.copy(camera.matrixWorld).invert();
       _curVp.multiplyMatrices(camera.projectionMatrix, _view);
       uCurVp.value.copy(_curVp);
+      // FIELD JITTER. With an unchanged projection a half-height target would
+      // sample the SAME scanlines both frames — half the resolution, none of
+      // the interlace. setViewOffset shifts the view by (parity - 0.5) of a
+      // FULL-RES row, so the two fields land exactly one full-res row apart
+      // (fieldJitterNdcY documents the same +/- 1/H in NDC terms) and neither
+      // is the biased one. Applied around the WHOLE layer render so every
+      // pre-pass shares the march's sampling grid; cleared at the end.
+      const parity = fieldMode ? fieldParity(frameIndex) : 0;
+      if (fieldMode) {
+        uFieldParity.value = parity;
+        const hFull = Math.max(1, Math.round(fullH * scale));
+        camera.setViewOffset(
+          Math.max(1, Math.round(fullW * scale)), hFull,
+          0, parity - 0.5,
+          Math.max(1, Math.round(fullW * scale)), hFull,
+        );
+      }
       const hold = isHoldFrame(frameIndex, halfRate, forceFreshFrame);
       uHoldMode.value = hold ? (halfRateMode === 1 ? 2 : 1) : 0;
       if (!hold) {
@@ -678,7 +768,14 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
         // (the enable uniform gates the fetch, not the binding), and an
         // uninitialised prev would hit the same lazy-init submit conflict
         // the comment above describes.
-        for (const t of [coneCoarse, coneFine, occluder, shellEntry, shellExit, prev, depthPre]) {
+        // fieldPrev MUST be in this list. Uninitialised it reads as zeros,
+        // and alpha 0 is not the "nothing here" sentinel — the composite
+        // treats it as a valid surface at depth 0, i.e. nearer than
+        // everything, and paints black over the whole polygonal scene on
+        // every held scanline. Cleared here it reads alpha 1 and discards,
+        // so the first field frame shows the polys through the held rows
+        // until the retain blit fills it one frame later.
+        for (const t of [coneCoarse, coneFine, occluder, shellEntry, shellExit, prev, depthPre, fieldPrev]) {
           renderer.setRenderTarget(t);
           void renderer.render(emptyScene, camera);
         }
@@ -870,6 +967,24 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       void renderer.render(quadScene, quadCam);
       renderer.autoClear = prevAutoClear;
 
+      // Retain this frame's field for the next frame's interleave. Must run
+      // AFTER the composite, which reads the OLD contents of fieldPrev.
+      //
+      // A TRUE TEXTURE COPY, NOT A QUAD BLIT. `target` is written by the
+      // RASTERISER; a fullscreen quad sampling uv() writes with the opposite
+      // Y origin, so blitting produced a vertically MIRRORED retained field —
+      // on screen, an upside-down ghost of the body interleaved with the
+      // right-way-up one (owner-caught). copyTextureToTexture is a GPU copy
+      // with no orientation conversion, so the two fields cannot disagree.
+      // Do not "fix" a future flip by mirroring the row index in the
+      // composite: that hard-codes one platform's convention, which is how
+      // this bug class keeps coming back (see the odd/even pass-count Y-flip
+      // trap in the half-rate notes).
+      if (fieldMode) {
+        renderer.copyTextureToTexture(target.texture, fieldPrev.texture);
+        camera.clearViewOffset();
+      }
+
       frameIndex++;
       if (!hold) forceFreshFrame = false;
     },
@@ -920,11 +1035,25 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     get depthGate() { return prevUniforms.enabled.value > 0.5; },
     setHalfRate(on) {
       if (on === halfRate) return;
+      // Same exclusion from the other side.
+      if (on && fieldMode) { fieldMode = false; uFieldMode.value = 0; resize(); }
       halfRate = on;
       // Seed immediately: the first frame after enabling is a fresh march,
       // never a hold of whatever the target happened to be holding.
       forceFreshFrame = true;
     },
+    setFieldMode(on) {
+      if (on === fieldMode) return;
+      fieldMode = on;
+      uFieldMode.value = on ? 1 : 0;
+      // Mutually exclusive with half-rate: both on would hold a held field.
+      if (on && halfRate) { halfRate = false; uHoldMode.value = 0; }
+      forceFreshFrame = true;
+      resize();          // the target height changes with the mode
+    },
+    get fieldMode() { return fieldMode; },
+    setFieldComb(v) { uFieldComb.value = Math.max(0, Math.min(1, v)); },
+    get fieldComb() { return uFieldComb.value; },
     get willHold() { return isHoldFrame(frameIndex, halfRate, forceFreshFrame); },
     get halfRate() { return halfRate; },
     setHalfRateMode(n) { halfRateMode = n === 0 ? 0 : 1; },
