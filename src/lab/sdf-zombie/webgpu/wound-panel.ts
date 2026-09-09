@@ -1,7 +1,7 @@
 // src/lab/sdf-zombie/webgpu/wound-panel.ts
 //
 // See panel-chrome.ts for the shared shell (title bar, collapse caret, close
-// button) both tuning panels sit in.
+// button) every tuning panel sits in.
 //
 // ONE key table drives the sliders, the setter and the COPY text. That is not
 // tidiness: a panel emitting keys the setter ignores has shipped twice in this

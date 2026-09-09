@@ -497,12 +497,12 @@ describe('post-aa VHS stage (default OFF)', () => {
     expect(post.vhsTerms.chromaBurstRate).toBe(60);
   });
 
-  it('every term has a range that contains all three presets', () => {
+  it('every term has a range that contains every preset', () => {
     const keys = Object.keys(VHS_PRESETS.soft) as (keyof typeof VHS_PRESETS.soft)[];
     for (const k of keys) {
       const [lo, hi] = VHS_TERM_RANGES[k];
       expect(lo).toBeLessThanOrEqual(hi);
-      for (const p of ['soft', 'balanced', 'chaotic'] as const) {
+      for (const p of ['blud', 'soft', 'balanced', 'chaotic'] as const) {
         expect(VHS_PRESETS[p][k]).toBeGreaterThanOrEqual(lo);
         expect(VHS_PRESETS[p][k]).toBeLessThanOrEqual(hi);
       }

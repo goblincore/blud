@@ -109,6 +109,7 @@ for (let i = 0; i < 240; i++) { await sleep(500); if (await evaluate('typeof win
 if (!(await evaluate('typeof window.__sdfGame === "object"'))) { console.error('never booted', errors.slice(-5)); process.exit(1); }
 
 await evaluate('typeof window.__sdfGame.gooPanel === "function" && window.__sdfGame.gooPanel(false)');
+await evaluate('typeof window.__sdfGame.vhsPanel === "function" && window.__sdfGame.vhsPanel(false)');
 await evaluate('window.__sdfGame.freeze(true)');
 await evaluate('window.__sdfGame.setLoopRunning(false)');
 await evaluate(`window.__sdfGame.setPose(${POSE[0]}, ${POSE[1]}, ${POSE[2]}, ${POSE[3]})`);

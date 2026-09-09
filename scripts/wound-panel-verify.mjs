@@ -45,6 +45,7 @@ await send('Page.navigate',{url:`http://localhost:${VITE}/sdf-game.html`});
 for(let i=0;i<600;i++){await sleep(200);if(await ev('typeof window.__sdfGame === "object"'))break;}
 if(!(await ev('typeof window.__sdfGame === "object"'))){console.error('never booted',errs);process.exit(1);}
 await ev('typeof window.__sdfGame.gooPanel === "function" && window.__sdfGame.gooPanel(false)');
+await ev('typeof window.__sdfGame.vhsPanel === "function" && window.__sdfGame.vhsPanel(false)');
 
 // ---- 1. The panel exists in the DOM: 5 sliders, preset + copy buttons ----
 // Panels ship VISIBLE but COLLAPSED (panel-chrome.ts) — only the title bar

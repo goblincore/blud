@@ -128,6 +128,7 @@ if (!(await ev('typeof window.__sdfGame === "object"'))) { console.error('never 
 
 // EXACTLY the capture path under test — gallery-look.mjs, line for line.
 await ev('typeof window.__sdfGame.gooPanel === "function" && window.__sdfGame.gooPanel(false)');
+await ev('typeof window.__sdfGame.vhsPanel === "function" && window.__sdfGame.vhsPanel(false)');
 await ev('window.__sdfGame.freeze(true)');
 await ev('window.__sdfGame.setLoopRunning(false)');
 await ev(`window.__sdfGame.setPose(${POSE[0]}, ${POSE[1]}, ${POSE[2]}, ${POSE[3]})`);
