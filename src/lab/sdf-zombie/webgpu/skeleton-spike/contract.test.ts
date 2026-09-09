@@ -14,6 +14,10 @@ import { stepRig } from '../../rig';
 import { sdBody, sdPrimitive, smax } from '../../validate';
 import type { Vec3 } from '../../types';
 import { add, len, sub } from '../../vec';
+import { severDistal } from '../../sever';
+import { SegmentMeshCache, MESH_CELL } from './mesh';
+import * as THREE from 'three/webgpu';
+import { createSegmentMeshRenderer } from './mesh-renderer';
 import zombieSrc from '../../characters/zombie.blob?raw';
 import soldierSrc from '../../characters/soldier.blob?raw';
 import {
@@ -273,5 +277,52 @@ describe('soldier limb mesh pose', () => {
     // rewritten motion target must not bake the raised weapon pose into it.
     expect(delayed.map(s => s.revision)).toEqual(pristine.map(s => s.revision));
     expect(Math.max(...delayed.map(s => s.poseEndpointError()))).toBeLessThan(1e-9);
+  });
+});
+
+
+describe.each([['soldier', soldierSrc], ['zombie', zombieSrc]])('%s distal skeleton sever', (character, blob) => {
+  it.each(['L', 'R'] as const)('removes dead %s forearm bones while retaining the live upper arm', side => {
+    const intact = buildBody(compileBlob(parseBlob(blob)));
+    const limb = side === 'L' ? 'armL' : 'armR';
+    const cut = severDistal(intact, { limb, fromPrim: intact.prims.findIndex(p => p.bone?.toLowerCase() === `forearm.${side.toLowerCase()}`) });
+    expect(cut.body.clusters.find(c => c.limb === limb)!.alive).toBe(true);
+    expect(cut.body.bonePrims.some(p => p.limb === limb && p.dead)).toBe(true);
+    const rig = bindRig(cut.body), posed = applyRig(cut.body, rig);
+    const rebuilt = createSkeletonSources(cut.body, rig, { character });
+    const liveBones = cut.body.bonePrims.filter(p => p.op !== 'organ' && !p.dead);
+    expect(rebuilt.reduce((n, s) => n + s.primCount, 0)).toBe(liveBones.length);
+    for (const bone of posed.bonePrims.filter(p => p.limb === limb && p.dead)) {
+      const middle = bone.a.map((v, i) => (v + bone.b[i]!) / 2) as Vec3;
+      expect(composedBoneDistance(rebuilt, middle)).toBeCloseTo(referenceBoneDistance(posed, middle), 6);
+    }
+  });
+
+  it('replaces cached intact-arm meshes on the first post-sever renderer update', () => {
+    const intact = buildBody(compileBlob(parseBlob(blob)));
+    const sources = createSkeletonSources(intact, bindRig(intact), { character }).filter(s => s.segment.startsWith('limb:armR:'));
+    const cache = new SegmentMeshCache(), renderer = createSegmentMeshRenderer(cache), owner = {};
+    renderer.update([sources], [owner]);
+    const originalCount = renderer.object.children.length;
+    const cut = severDistal(intact, { limb: 'armR', fromPrim: intact.prims.findIndex(p => p.bone?.toLowerCase() === 'forearm.r') });
+    const rebuilt = createSkeletonSources(cut.body, bindRig(cut.body), { character }).filter(s => s.segment.startsWith('limb:armR:'));
+    renderer.update([rebuilt], [owner]);
+    expect(renderer.object.children.length).toBeLessThan(originalCount);
+    expect(renderer.object.children.length).toBe(rebuilt.length);
+    expect(rebuilt.reduce((n, s) => n + s.primCount, 0)).toBe(cut.body.bonePrims.filter(p => p.limb === 'armR' && !p.dead && p.op !== 'organ').length);
+    const posed = applyRig(cut.body, bindRig(cut.body));
+    let vertices = 0;
+    for (const object of renderer.object.children) {
+      const mesh = object as THREE.Mesh;
+      mesh.updateMatrixWorld(true);
+      const pos = mesh.geometry.getAttribute('position');
+      for (let i = 0; i < pos.count; i++) {
+        const world = new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld);
+        expect(referenceBoneDistance(posed, world.toArray() as Vec3)).toBeLessThanOrEqual(MESH_CELL);
+        vertices++;
+      }
+    }
+    expect(vertices).toBeGreaterThan(0);
+    renderer.dispose(); cache.dispose();
   });
 });

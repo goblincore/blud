@@ -267,6 +267,23 @@ describe('soldier actor combat wiring', () => {
     expect(actor.motionFrame()!.staggerKind).toBe('lurch');
   });
 
+  it.each(['L', 'R'] as const)('keeps distal %s arm loss standing with only surviving skeleton sources', side => {
+    const b = buildBody(compileBlob(parseBlob(soldierSrc)));
+    const limb = side === 'L' ? 'armL' : 'armR';
+    const cut = severDistal(b, { limb, fromPrim: b.prims.findIndex(p => p.bone === `forearm.${side.toLowerCase()}`) });
+    const release = vi.fn();
+    const { actor, shots } = soldier([], release, cut.body);
+    hitLimb(actor, 'chest'); // Resolve damage/prop eligibility before the next draw.
+    const sources = createSkeletonSources(actor.body, actor.boundRig(), { character: 'soldier' });
+    expect(sources.filter(s => s.segment.startsWith(`limb:${limb}:`)).reduce((n, s) => n + s.primCount, 0))
+      .toBe(actor.body.bonePrims.filter(p => p.limb === limb && !p.dead).length);
+    expect(release.mock.calls.length > 0).toBe(side === 'R');
+    for (let i = 0; i < 180; i++) { actor.setBrainInput({ x: 0, z: 2.8, room: 1 }, true); actor.step(1 / 60); }
+    expect(actor.motionFrame()!.collapsed).toBe(false);
+    expect(shots.length > 0).toBe(side === 'L');
+    expect(actor.motionFrame()!.gun === null).toBe(side === 'R');
+  });
+
   it('keeps the authored skull behind posed flesh during a torso-hit lurch', () => {
     const { actor } = soldier();
     const sources=createSkeletonSources(actor.body,actor.boundRig(),{character:'soldier',rig:()=>actor.boundRig().rig,bodyYaw:()=>actor.pose().yaw});
