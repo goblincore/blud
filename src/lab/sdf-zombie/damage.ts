@@ -36,6 +36,8 @@ export type ShotProvenance =
   | { weapon: 'explosion' };
 
 export interface Wound {
+  /** Stable render-event identity. Wound aging replaces objects each frame. */
+  eventId?: number;
   shot?: ShotProvenance;
   /** Exposed stump decoration, not another projectile injury. */
   injuryIgnored?: boolean;

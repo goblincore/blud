@@ -9,7 +9,7 @@ describe('soldier cosmetic wounds', () => {
     const input=[wound(1),wound(2)], before=JSON.stringify(input);
     const a=soldierVisualWounds(input), b=soldierVisualWounds(input);
     expect(a).toEqual(b); expect(JSON.stringify(input)).toBe(before);
-    expect(a.slice(0,2)).toEqual(input); expect(a).toHaveLength(4);
+    expect(a.slice(0,2)).toEqual(input); expect(a).toHaveLength(8);
     expect(a[2]!.injuryIgnored).toBe(true); expect(a[2]!.primIdx).toBe(input[0]!.primIdx);
     expect(a[2]!.carveDepth).toBe(input[0]!.carveDepth);
     const d=Math.hypot(a[2]!.local[0]-input[0]!.local[0],a[2]!.local[1]-input[0]!.local[1]);

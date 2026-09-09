@@ -72,16 +72,18 @@ describe('damaged kit pieces', () => {
     const {mesh,damage}=fixture();
     const b=body();
     const index=b.prims.findIndex(p=>p.limb==='armL' && p.op!=='sub');
-    const wound={...worldHitToWound([b.prims[index]!],[-.14,1.38,.01],.055,'pellet'),primIdx:index};
+    const wound={...worldHitToWound([b.prims[index]!],[-.14,1.38,.01],.055,'pellet'),primIdx:index,eventId:1};
     damage.update(b,[wound,{...wound,injuryIgnored:true}],0,0);
     expect(damage.debris.children).toHaveLength(0);
-    const events=damage.update(b,[wound,{...wound,local:[...wound.local]}],0,0);
+    const second={...wound,local:[...wound.local] as typeof wound.local,eventId:2};
+    const events=damage.update(b,[wound,second],0,0);
     expect(events.filter(e=>e.kind==='armor-hit')).toHaveLength(1);
     expect(events.some(e=>e.kind==='armor-shed')).toBe(true);
     expect(damage.debris.children).toHaveLength(1);
     expect(mesh.geometry.index!.count).toBe(6);
-    expect(damage.update(b,[wound],0,0)).toEqual([]); // cumulative rows do not re-emit
-    for(let i=0;i<240;i++) damage.update(b,[wound],0,1/60);
+    expect(damage.update(b,[wound,second],0,0)).toEqual([]); // cumulative rows do not re-emit
+    expect(damage.update(b,[{...wound,ageSec:1},{...second,ageSec:1}],0,0)).toEqual([]); // actor aging clones rows
+    for(let i=0;i<240;i++) damage.update(b,[wound,second],0,1/60);
     const plate=damage.debris.children[0] as THREE.Mesh;
     plate.updateMatrixWorld(true);
     const bounds=plate.geometry.boundingBox!.clone().applyMatrix4(plate.matrixWorld);
@@ -101,7 +103,17 @@ describe('damaged kit pieces', () => {
     const local=new THREE.Vector3().fromBufferAttribute(mesh.geometry.getAttribute('position'),0);
     mesh.applyBoneTransform(0,local);local.applyMatrix4(mesh.matrixWorld);
     const index=posed.prims.findIndex(p=>p.limb==='armL'&&p.op!=='sub');
-    const w={...worldHitToWound([posed.prims[index]!],local.toArray() as any,.055,'pellet',yaw),primIdx:index};
+    const w={...worldHitToWound([posed.prims[index]!],local.toArray() as any,.055,'pellet',yaw),primIdx:index,eventId:2};
+    expect(damage.update(body(),[w],yaw,0)).toEqual([]); // rest prims cannot meet a posed plate
+    damage.reset();
     expect(damage.update(posed,[w],yaw,0).some(e=>e.kind==='armor-hit')).toBe(true);
+  });
+  it('forgets event ids once their wound rows leave the bounded ring',()=>{
+    const {damage}=fixture(),b=body(),index=b.prims.findIndex(p=>p.limb==='armL'&&p.op!=='sub');
+    const w={...worldHitToWound([b.prims[index]!],[-.14,1.38,.01],.055,'pellet'),primIdx:index,eventId:7};
+    expect(damage.update(b,[w],0,0).filter(e=>e.kind==='armor-hit')).toHaveLength(1);
+    damage.update(b,[],0,0);
+    expect(damage.update(b,[{...w,ageSec:2}],0,0).filter(e=>e.kind==='armor-hit')).toHaveLength(1);
+    damage.dispose();
   });
 });

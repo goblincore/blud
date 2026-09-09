@@ -110,6 +110,16 @@ describe('soldier actor combat wiring', () => {
     expect(shots.some(s => Math.abs(s.direction[0]! - s.expectedDirection[0]!) > 1e-4)).toBe(true);
   });
 
+  it('does not grow persistent injury history after distal arm loss', () => {
+    const b = buildBody(compileBlob(parseBlob(soldierSrc)));
+    const cut = severDistal(b, { limb: 'armL', fromPrim: b.prims.findIndex(p => p.bone === 'forearm.l') });
+    const { actor } = soldier([], undefined, cut.body);
+    const before = actor.injuryHistorySize();
+    for (let i = 0; i < 24; i++) hitLimb(actor, 'upperarm.l');
+    expect(actor.injuryHistorySize()).toBe(before);
+    expect(actor.wounds().length).toBeGreaterThan(0); // cosmetic geometry remains
+  });
+
   it('gun-arm loss pursues and emits one melee contact without phantom fire', () => {
     const b = severLimb(buildBody(compileBlob(parseBlob(soldierSrc))), 'armR').body;
     const contact = vi.fn();

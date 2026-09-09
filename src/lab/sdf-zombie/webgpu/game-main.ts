@@ -3454,7 +3454,7 @@ async function main() {
       for (const a of actors) {
         if (!a.character) continue;
         const p = a.pose();
-        a.character.pose(a.body, a.boundRig(), p.yaw, a.sinceFire(), a.motionFrame(), dt, a.id);
+        a.character.pose(a.body, a.boundRig(), p.yaw, a.sinceFire(), a.motionFrame(), dt, a.id, a.posed());
       }
       const now = performance.now() / 1000;
       for (const a of actors) {

@@ -86,11 +86,11 @@ export function createKitDamage(object:THREE.Object3D) {
   });
   const debris=new THREE.Group(); debris.name='DetachedArmor';
   const drops:Debris[]=[];
-  let seen=new WeakSet<Wound>();
+  let seen=new Set<number>();
   const clear=()=>{ for(const d of drops) d.mesh.geometry.dispose(); drops.length=0; debris.clear(); };
   const reset=()=>{
     clear();
-    seen=new WeakSet();
+    seen=new Set();
     for(const p of pieces) { p.released=false; p.damage=0; }
     for(const [mesh,index] of originals) { mesh.geometry.setIndex(index); mesh.visible=true; }
   };
@@ -138,8 +138,10 @@ export function createKitDamage(object:THREE.Object3D) {
       // Gibs clear their wound list before a healthy body is respawned.
       // Equipment loss, not the previous wound count, records that reset.
       if(pieces.some(p=>p.released) && wounds.length===0 && body.clusters.every(c=>c.alive) && body.prims.every(p=>!p.dead)) reset();
-      const impacts=wounds.filter(w=>!seen.has(w)&&!w.injuryIgnored&&w.type!=='burn').map(w=>{
-        seen.add(w); return {limb:body.prims[w.primIdx]?.limb,point:woundWorldPos(body.prims,w,bodyYaw),weight:w.type==='blast'?3:1};
+      const retained=new Set(wounds.flatMap(w=>w.eventId===undefined?[]:[w.eventId]));
+      seen=new Set([...seen].filter(id=>retained.has(id)));
+      const impacts=wounds.filter(w=>w.eventId!==undefined&&!seen.has(w.eventId)&&!w.injuryIgnored&&w.type!=='burn').map(w=>{
+        seen.add(w.eventId!); return {limb:body.prims[w.primIdx]?.limb,point:woundWorldPos(body.prims,w,bodyYaw),weight:w.type==='blast'?3:1};
       });
       const changed=new Set<THREE.SkinnedMesh>();
       for(const piece of pieces) {

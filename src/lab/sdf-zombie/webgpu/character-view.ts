@@ -314,19 +314,25 @@ export interface WoundRing {
 
 export function createWoundRing(): WoundRing {
   let wounds: Wound[] = [];
+  let nextEventId = 1;
   const stampWorld = new WeakMap<Wound, Vec3>();
+  const identify = (w: Wound) => {
+    if (w.eventId === undefined) w.eventId = nextEventId++;
+    else nextEventId = Math.max(nextEventId, w.eventId + 1);
+    return w;
+  };
   return {
     all: () => wounds,
     stamp(wound, posed, bodyYaw) {
-      wounds = pushWound(wounds, wound, MAX_WOUNDS);
+      identify(wound); wounds = pushWound(wounds, wound, MAX_WOUNDS);
       stampWorld.set(wound, woundWorldPos(posed.prims, wound, bodyYaw));
       return wound;
     },
     stampBundle(ws) {
-      for (const w of ws) wounds = pushWound(wounds, w, MAX_WOUNDS);
+      for (const w of ws) wounds = pushWound(wounds, identify(w), MAX_WOUNDS);
     },
     stampWorldOf: (w) => stampWorld.get(w) ?? null,
-    set(next) { wounds = next; },
+    set(next) { wounds = next.map(identify); },
     refresh(gpu, posed, bodyYaw, visual) {
       const rows = visual ?? wounds;
       if ((!visual && wounds.length === 0) || typeof gpu.setWounds !== 'function') return;
@@ -392,6 +398,7 @@ export interface CharacterView {
     frame: MotionFrame | null,
     dt: number,
     releaseSeed: number,
+    damageBody?: BuildResult,
   ): void;
   /** World muzzle of the held prop, or null when this character carries
    *  nothing or the glTF has not loaded yet. The soldier's shot reads it. */
@@ -504,7 +511,7 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
     get palette() { return out.palette; },
     get kit() { return kit; },
     get prop() { return heldProp; },
-    pose(body, bound, bodyYaw, sinceFire, frame, dt, releaseSeed) {
+    pose(body, bound, bodyYaw, sinceFire, frame, dt, releaseSeed, damageBody) {
       // Polygon halves ride the rig: the kit from per-bone frames, the gun from
       // the motion frame's gun pose (right forearm). Collapse and gib release
       // the gun; the kit simply keeps following the (fallen) rig.
@@ -514,7 +521,7 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
         return;
       }
       const frames = boneFrames(body, bound, bodyYaw);
-      const events=kit?.pose(frames, { body, wounds: wounds.all(), bodyYaw, dt }) ?? [];
+      const events=kit?.pose(frames, { body: damageBody ?? body, wounds: wounds.all(), bodyYaw, dt }) ?? [];
       for(const e of events) armorSparks?.burst(e.point,e.kind==='armor-shed'?10:5);
       armorSparks?.step(dt);
       if (heldProp) {

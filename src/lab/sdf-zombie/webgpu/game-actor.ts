@@ -252,6 +252,8 @@ export interface ZombieActor {
   readonly id: number;
   corpseBakeEligible(): boolean;
   damageRevision(): number;
+  /** Diagnostic size of the persistent Soldier injury ledger. */
+  injuryHistorySize(): number;
   pauseForBake(paused: boolean): void;
   readonly room: number;
   /** The LIVE body — severing replaces it (alive flags move). */
@@ -1072,6 +1074,7 @@ export function createZombieActor(opts: {
     step,
     corpseBakeEligible: () => soldierDamage && state.collapse.phase === 'settled',
     damageRevision: () => damageRevision,
+    injuryHistorySize: () => soldierWounds.length,
     pauseForBake: (paused: boolean) => { bakePaused = paused; },
     wounds: () => woundRing.all(),
     visualWounds: () => torsoWounds?.visual(posed) ?? (soldierDamage ? soldierVisualWounds(woundRing.all()) : woundRing.all()),
