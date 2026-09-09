@@ -288,9 +288,19 @@ export const COMPOSITE_WGSL = /* wgsl */ `fn sdfComposite(
       // feature; 0 = interpolate vertically from THIS frame's field instead,
       // trading vertical detail for no comb.
       let held = textureLoad(prevFieldTex, vec2<i32>(col, tRow), 0);
-      let a = textureLoad(layerTex, vec2<i32>(col, tRow), 0);
-      let b = textureLoad(layerTex, vec2<i32>(col, clamp(tRow + 1, 0, i32(dims.y) - 1)), 0);
-      fieldTexel = mix((a + b) * 0.5, held, fieldComb);
+      // The two FRESH rows bracketing this held row. Half-target row r is
+      // output row 2r+parity, so held row 2r+1 (parity 0) sits between r
+      // and r+1, but held row 2r (parity 1) sits between r-1 and r.
+      let base = tRow - i32(fieldParityF);
+      let a = textureLoad(layerTex, vec2<i32>(col, clamp(base, 0, i32(dims.y) - 1)), 0);
+      let b = textureLoad(layerTex, vec2<i32>(col, clamp(base + 1, 0, i32(dims.y) - 1)), 0);
+      // DEPTH IS NEVER INTERPOLATED (same rule as sdfFieldInterleave): the
+      // alpha channel IS the depth this quad republishes, and a mix of two
+      // depths describes no surface. A held row carries the held depth and
+      // the sentinel test runs on the held field, not on a blend that can
+      // pass while both inputs disagree about whether anything is there.
+      if (held.w >= 1.0) { discard; }
+      fieldTexel = vec4<f32>(mix((a.xyz + b.xyz) * 0.5, held.xyz, fieldComb), held.w);
     }
     if (fieldTexel.w >= 1.0) { discard; }
     return fieldTexel;
@@ -382,8 +392,13 @@ export const FIELD_INTERLEAVE_WGSL = /* wgsl */ `fn sdfFieldInterleave(
   // verbatim, which IS the interlace artifact; 0 = interpolate vertically
   // from THIS frame's field, trading vertical detail for no comb.
   let held = textureLoad(prevTex, vec2<i32>(col, tRow), 0);
-  let a = textureLoad(curTex, vec2<i32>(col, tRow), 0);
-  let b = textureLoad(curTex, vec2<i32>(col, clamp(tRow + 1, 0, i32(dims.y) - 1)), 0);
+  // The two FRESH rows bracketing this held row (see fieldHeldNeighbours):
+  // held row 2r+1 (parity 0) lies between r and r+1; held row 2r (parity 1)
+  // between r-1 and r. Using r, r+1 for both bobbed the interpolated share
+  // one row at field rate.
+  let base = tRow - i32(parity);
+  let a = textureLoad(curTex, vec2<i32>(col, clamp(base, 0, i32(dims.y) - 1)), 0);
+  let b = textureLoad(curTex, vec2<i32>(col, clamp(base + 1, 0, i32(dims.y) - 1)), 0);
   let woven = mix((a + b) * 0.5, held, comb);
   // DEPTH IS NEVER INTERPOLATED. mix()ing two depths yields a value that
   // describes no actual surface, and at comb 0.6 those invented depths fought

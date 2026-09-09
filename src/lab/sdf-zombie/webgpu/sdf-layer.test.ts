@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { createSdfLayer, isHoldFrame, sortFrontToBack, SDF_LAYER, FIELD_MESH_LAYER, DEPTH_PREPASS_BLOCK_PX, DEPTH_PREPASS_DIV, depthPrepassSize } from './sdf-layer';
+import { createSdfLayer, isHoldFrame, sortFrontToBack, SDF_LAYER, FIELD_MESH_LAYER, COMPOSITE_WGSL, FIELD_INTERLEAVE_WGSL, DEPTH_PREPASS_BLOCK_PX, DEPTH_PREPASS_DIV, depthPrepassSize } from './sdf-layer';
 
 describe('depth prepass sizing (close-up task 3)', () => {
   it('the block footprint constant stays in step with the downsample factor', () => {
@@ -167,5 +167,24 @@ describe("'bodies' field style — the skeleton mesh pass", () => {
       expect(owner, 'depth copy destination was never rendered to').toBeDefined();
     }
     layer.dispose();
+  });
+});
+
+describe('field weave shaders — depth is never interpolated', () => {
+  // Both weaves republish their .w as depth. A mix() of two depths is a
+  // surface that exists nowhere; the composite's field branch regressed on
+  // this after the interleave was fixed (7bfd3b29), so pin BOTH sources.
+  it('the composite field branch returns the held depth verbatim on a held row', () => {
+    const branch = COMPOSITE_WGSL.slice(COMPOSITE_WGSL.indexOf('if (fieldMode > 0.5)'), COMPOSITE_WGSL.indexOf('// holdMode:'));
+    expect(branch).toContain('held.w)');
+    expect(branch).not.toMatch(/mix\(\(a \+ b\)/);
+    expect(branch).toContain('if (held.w >= 1.0) { discard; }');
+  });
+  it('the interleave returns the held depth verbatim on a held row', () => {
+    expect(FIELD_INTERLEAVE_WGSL).toContain('return vec4<f32>(woven.xyz, dHeld);');
+  });
+  it('both weaves bracket a held row with the parity-corrected fresh rows', () => {
+    expect(COMPOSITE_WGSL).toContain('let base = tRow - i32(fieldParityF);');
+    expect(FIELD_INTERLEAVE_WGSL).toContain('let base = tRow - i32(parity);');
   });
 });

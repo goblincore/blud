@@ -48,3 +48,14 @@ export function fieldJitterNdcY(parity: 0 | 1, fullHeight: number): number {
 export function fieldRowSource(y: number, parity: 0 | 1): { fresh: boolean; targetRow: number } {
   return { fresh: (y % 2) === parity, targetRow: Math.floor(y / 2) };
 }
+
+/**
+ * The two half-target rows whose FRESH samples bracket held output row `y`
+ * (a row `fieldRowSource` says is not fresh this frame). Fresh row r is
+ * output row 2r+parity, so the held row is between r and r+1 for parity 0
+ * and between r-1 and r for parity 1. Callers clamp to the target.
+ */
+export function fieldHeldNeighbours(y: number, parity: 0 | 1): { above: number; below: number } {
+  const base = Math.floor(y / 2) - parity;
+  return { above: base, below: base + 1 };
+}

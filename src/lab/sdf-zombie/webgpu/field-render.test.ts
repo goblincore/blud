@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { fieldParity, fieldTargetHeight, fieldJitterNdcY, fieldRowSource } from './field-render';
+import { fieldParity, fieldTargetHeight, fieldJitterNdcY, fieldRowSource, fieldHeldNeighbours } from './field-render';
 
 describe('fieldParity', () => {
   it('alternates every frame', () => {
@@ -53,5 +53,24 @@ describe('fieldRowSource — the coverage guarantee', () => {
     expect(fieldRowSource(2, 0)).toEqual({ fresh: true, targetRow: 1 });
     expect(fieldRowSource(1, 1)).toEqual({ fresh: true, targetRow: 0 });
     expect(fieldRowSource(1, 0).fresh).toBe(false);
+  });
+});
+
+describe('fieldHeldNeighbours', () => {
+  it('brackets the held row with the two fresh rows on either side of it, for both parities', () => {
+    // parity 0: fresh rows are even (2r). Held row 5 is between fresh 4 (r=2) and 6 (r=3).
+    expect(fieldHeldNeighbours(5, 0)).toEqual({ above: 2, below: 3 });
+    // parity 1: fresh rows are odd (2r+1). Held row 4 is between fresh 3 (r=1) and 5 (r=2).
+    expect(fieldHeldNeighbours(4, 1)).toEqual({ above: 1, below: 2 });
+  });
+  it('the fresh rows it names really are fresh, and really are one output row either side', () => {
+    for (const parity of [0, 1] as const) {
+      for (let y = 1; y < 40; y++) {
+        if (fieldRowSource(y, parity).fresh) continue;
+        const { above, below } = fieldHeldNeighbours(y, parity);
+        expect(2 * above + parity).toBe(y - 1);
+        expect(2 * below + parity).toBe(y + 1);
+      }
+    }
   });
 });
