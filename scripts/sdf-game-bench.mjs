@@ -26,7 +26,10 @@ const OUT = process.env.BENCH_OUT ?? '/tmp/sdf-game-bench';
 const W = Number(process.env.GAME_W ?? 1280);
 const H = Number(process.env.GAME_H ?? 800);
 const REPEATS = Number(process.env.BENCH_REPEATS ?? 3);
-const ROOM_IDS = (process.env.BENCH_ROOMS ?? '1,2,3,4').split(',').map(Number);
+// Room 5 (3 soldiers + 2 zombies) joins the default matrix 2026-09-09: it is
+// the only room with soldiers and it had NEVER been benched, so every recorded
+// figure predates the character whose cost the owner is asking about.
+const ROOM_IDS = (process.env.BENCH_ROOMS ?? '1,2,3,4,5').split(',').map(Number);
 // BENCH_PRELUDE — an optional JS expression evaluated in the page AFTER the
 // leg's ship-defaults + overrides, right before any timing, so it always
 // wins. One prelude per invocation; pair it with BENCH_LEGS to A/B a lever
