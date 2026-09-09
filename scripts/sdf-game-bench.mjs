@@ -14,11 +14,19 @@
 //      swapchain texture, so the passes do nothing and the fence resolves to
 //      ~0.065 ms — which reads as a 70x speedup. The harness counts hidden
 //      frames; this script fails the run on any of them.
+//   4. A RUN THAT STOPS MUST SAY SO. Nothing here waits forever: every CDP
+//      round trip is bounded, a dead socket fails every outstanding wait, and
+//      a wedged leg is abandoned so the rest of the matrix still runs. Every
+//      completed leg is appended to bench-progress.jsonl as it lands, so an
+//      aborted run keeps the legs it already measured. See FAILURE BUDGETS.
 //
 // Usage: LAB_VITE_PORT=5277 LAB_CDP_PORT=9277 node scripts/sdf-game-bench.mjs
 // (or scripts/sdf-game-bench.sh, which owns the vite + Chrome lifecycle)
+//
+// Exit code is non-zero if ANY leg-run failed, even though the reports are
+// still written — a partial matrix must never be mistaken for a clean one.
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 
 const VITE = Number(process.argv[2] ?? 5277);
 const CDP = Number(process.argv[3] ?? 9277);
@@ -45,6 +53,33 @@ const PASSES = process.env.BENCH_PASSES === '1';
 // BENCH_QUERY — extra URL query appended to sdf-game.html, for levers gated
 // on a page flag (the tile-culling playtest needs `tiles-playtest`).
 const QUERY = process.env.BENCH_QUERY ?? '';
+// ---------------------------------------------------------------------------
+// FAILURE BUDGETS. Every wait in this script is bounded, because none of them
+// used to be: send() had no timeout and no reject path, and nothing rejected
+// the outstanding requests when the socket died. A CDP response that never
+// arrived therefore wedged the harness forever with no diagnostic — observed
+// 2026-09-09, 141 of 204 leg-runs done, then 19+ minutes of silence with
+// Chrome alive at 1.3% CPU, CDP responsive and the page loaded. It never
+// recovered and the whole run was lost.
+//
+//   SEND   one CDP request/response round trip. Generous by default, because
+//          a bench evaluate legitimately blocks the page for a long time;
+//          evaluate() raises it to the IN-PAGE timeout plus a grace margin so
+//          the transport window always outlives the evaluation it carries.
+//          (Runtime.evaluate's own `timeout` bounds evaluation inside the
+//          page. It says nothing about delivery of the response, which is
+//          exactly the wait that hung.)
+//   LEG    one whole leg-run: boot + apply + bench + collect. Past this the
+//          leg is abandoned and THE MATRIX CONTINUES — losing 1 leg beats
+//          losing 203.
+//   FAILS  consecutive leg failures tolerated. A wedged browser fails every
+//          remaining leg and each failure costs a full LEG timeout, so past
+//          this many in a row the run is over: write what completed and get
+//          out rather than burning a CI budget on 60 more doomed legs.
+const SEND_TIMEOUT_MS = Number(process.env.BENCH_SEND_TIMEOUT_MS ?? 120_000);
+const SEND_GRACE_MS = Number(process.env.BENCH_SEND_GRACE_MS ?? 30_000);
+const LEG_TIMEOUT_MS = Number(process.env.BENCH_LEG_TIMEOUT_MS ?? 420_000);
+const MAX_CONSEC_FAILS = Number(process.env.BENCH_MAX_CONSEC_FAILS ?? 3);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const fail = (msg) => { console.error(`FAIL: ${msg}`); process.exit(1); };
@@ -64,9 +99,37 @@ await new Promise((ok, err) => { ws.onopen = ok; ws.onerror = err; });
 let seq = 0;
 const pending = new Map();
 const consoleEvents = [];
+// WHERE THE HARNESS IS RIGHT NOW. A timeout is only useful if it can name the
+// leg/room/rep and phase that wedged; "it stopped" is what we had.
+const progress = { rep: 0, leg: '-', room: '-', mode: '-', phase: 'startup' };
+const where = () => `rep${progress.rep} ${progress.leg}/room${progress.room}/${progress.mode} [${progress.phase}]`;
+const consoleTail = (n = 8) => (consoleEvents.slice(-n)
+  .map((e) => `       [${e.type}] ${String(e.text).replace(/\s+/g, ' ').slice(0, 300)}`)
+  .join('\n') || '       (no console output captured)');
+/**
+ * Print everything known about a stall or a failed leg, then let the caller
+ * decide whether it is fatal. bootPage's failure path already printed the
+ * console tail on a boot timeout; this is that idea applied to every wait.
+ */
+function diagnose(err) {
+  console.error(`\n  !! ${err?.message ?? err}`);
+  console.error(`     in flight: ${where()}`);
+  console.error('     console tail:');
+  console.error(consoleTail());
+}
+// Safety net: an unawaited rejection should print the same diagnostic rather
+// than a bare stack trace with no idea which leg was running.
+process.on('unhandledRejection', (e) => { diagnose(e); process.exit(1); });
+
 ws.onmessage = (ev) => {
   const m = JSON.parse(ev.data);
-  if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); return; }
+  if (m.id && pending.has(m.id)) {
+    const p = pending.get(m.id);
+    pending.delete(m.id);
+    clearTimeout(p.timer);
+    p.resolve(m);
+    return;
+  }
   if (m.method === 'Runtime.consoleAPICalled') {
     consoleEvents.push({
       type: m.params.type,
@@ -76,16 +139,69 @@ ws.onmessage = (ev) => {
   if (m.method === 'Runtime.exceptionThrown') {
     consoleEvents.push({ type: 'exception', text: JSON.stringify(m.params.exceptionDetails).slice(0, 500) });
   }
+  // Ring buffer: only the tail is ever read, and a 200-leg run with a chatty
+  // page would otherwise hold every line it ever printed.
+  if (consoleEvents.length > 500) consoleEvents.splice(0, consoleEvents.length - 500);
 };
-const send = (method, params = {}) => new Promise((resolve) => {
-  const id = ++seq; pending.set(id, resolve); ws.send(JSON.stringify({ id, method, params }));
+// A DEAD SOCKET MUST FAIL EVERY OUTSTANDING WAIT, immediately. Without this,
+// a dropped connection or a crashed renderer leaves every pending promise
+// unsettled and the harness blocks until the heat death of the CI job.
+// (Node's global WebSocket is an EventTarget, so these are addEventListener
+// handlers, not the `ws.on(...)` of the npm `ws` package.)
+let socketDead = null;
+const killPending = (reason) => {
+  socketDead ??= reason;
+  const outstanding = [...pending.entries()];
+  pending.clear();
+  for (const [id, p] of outstanding) {
+    clearTimeout(p.timer);
+    p.reject(new Error(`${reason} while awaiting CDP ${p.method} (id ${id}) — ${where()}`));
+  }
+};
+ws.addEventListener('close', (ev) => killPending(`CDP socket closed (code ${ev?.code ?? '?'})`));
+ws.addEventListener('error', () => killPending('CDP socket error'));
+
+/**
+ * One CDP round trip, BOUNDED. Rejects with the method, the params and the
+ * leg that was in flight, and clears its own `pending` entry so a late reply
+ * cannot resolve a promise nobody is holding.
+ */
+const send = (method, params = {}, timeoutMs = SEND_TIMEOUT_MS) => new Promise((resolve, reject) => {
+  if (socketDead) {
+    reject(new Error(`${socketDead} — refusing to send CDP ${method} (${where()})`));
+    return;
+  }
+  const id = ++seq;
+  const timer = setTimeout(() => {
+    pending.delete(id);
+    reject(new Error(
+      `CDP ${method} (id ${id}) never answered in ${(timeoutMs / 1000).toFixed(0)}s — ${where()}\n`
+      + `     params: ${JSON.stringify(params).slice(0, 300)}`,
+    ));
+  }, timeoutMs);
+  pending.set(id, { resolve, reject, timer, method, params });
+  try {
+    ws.send(JSON.stringify({ id, method, params }));
+  } catch (e) {
+    clearTimeout(timer);
+    pending.delete(id);
+    reject(new Error(`CDP ${method} could not be sent: ${e?.message ?? e} — ${where()}`));
+  }
 });
 const evaluate = async (expression, timeoutMs = 300_000) => {
+  // Transport window = in-page window + grace. The in-page `timeout` below
+  // bounds evaluation; only the send() timeout bounds DELIVERY of the answer.
   const r = await send('Runtime.evaluate', {
     expression, awaitPromise: true, returnByValue: true, timeout: timeoutMs,
-  });
+  }, timeoutMs + SEND_GRACE_MS);
   if (r.result?.exceptionDetails) {
-    fail(`page threw: ${JSON.stringify(r.result.exceptionDetails).slice(0, 400)}`);
+    // THROW, don't exit. A page exception is nearly always THIS leg's own
+    // override (a renamed seam, a bad argument), and the other 203 legs are
+    // still worth measuring — runLegGuarded records it as a leg failure and
+    // the run continues. Global invariants (wrong backend, hidden frames)
+    // still call fail() and take the whole run down, as they should.
+    throw new Error(`page threw evaluating \`${expression.replace(/\s+/g, ' ').slice(0, 120)}\`: `
+      + JSON.stringify(r.result.exceptionDetails).slice(0, 400));
   }
   return r.result?.result?.value;
 };
@@ -116,9 +232,11 @@ console.log(`bench ${url}  (${W}x${H}, repeats=${REPEATS}, rooms=${ROOM_IDS.join
  * measurement.
  */
 async function bootPage(settleMs = 5000) {
+  progress.phase = 'boot:navigate';
   await send('Page.navigate', { url: 'about:blank' });
   await sleep(200);
   await send('Page.navigate', { url });
+  progress.phase = 'boot:wait-for-__sdfGame';
   let backend = null;
   for (let i = 0; i < 240; i++) {
     await sleep(500);
@@ -126,17 +244,26 @@ async function bootPage(settleMs = 5000) {
     if (backend) break;
   }
   if (!backend) {
-    console.error('console tail:', consoleEvents.slice(-8));
-    fail('game page never booted (__sdfGame absent)');
+    // Leg-scoped for the same reason as the evaluate path above: the next leg
+    // reloads from scratch and may well boot. MAX_CONSEC_FAILS stops the run
+    // if it is really the browser that is gone.
+    throw new Error('game page never booted (__sdfGame absent after 120s)');
   }
   if (backend !== 'webgpu') fail(`backend is ${backend}, not webgpu — a WebGL fallback bench means nothing here`);
   // Settle: let the boot loop render and the shaders finish compiling before
   // anything is timed. First-use pipeline stalls are real.
+  progress.phase = 'boot:settle';
   await sleep(settleMs);
   return backend;
 }
 
-const backend = await bootPage();
+let backend;
+try {
+  backend = await bootPage();
+} catch (e) {
+  diagnose(e);
+  fail('initial page boot failed — nothing can be benched');
+}
 console.log('backend: webgpu');
 
 // ---------------------------------------------------------------------------
@@ -233,6 +360,7 @@ const LEGS = process.env.BENCH_LEGS
   : ALL_LEGS;
 
 async function applyLeg(name) {
+  progress.phase = 'apply-leg';
   // Fall back to ALL_LEGS: the spike pass always runs 'baseline', which a
   // BENCH_LEGS filter may have excluded from the throughput matrix.
   const overrides = LEGS[name] ?? ALL_LEGS[name] ?? {};
@@ -291,16 +419,19 @@ const WARMUP = Number(process.env.BENCH_WARMUP ?? 120);
 const CHUNK = Number(process.env.BENCH_CHUNK ?? 10);
 
 async function runLeg(name, room, mode) {
+  progress.leg = name; progress.room = room; progress.mode = mode;
   // Fresh page per run — see bootPage. Damage does not survive a reload,
   // which is the entire point.
   await bootPage(2500);
   await applyLeg(name);
-  if (PRELUDE) await evaluate(PRELUDE);
+  if (PRELUDE) { progress.phase = 'prelude'; await evaluate(PRELUDE); }
   const label = `${name}/room${room}/${mode}`;
   const opts = mode === 'spike'
     ? `{ room: ${room}, mode: "spike", warmup: ${WARMUP}, label: ${JSON.stringify(label)} }`
     : `{ room: ${room}, mode: ${JSON.stringify(mode)}, warmup: ${WARMUP}, chunkFrames: ${CHUNK}, label: ${JSON.stringify(label)} }`;
+  progress.phase = 'bench';
   await evaluate(`__sdfGame.bench(${opts})`);
+  progress.phase = 'collect';
   const raw = await evaluate('JSON.stringify(window.__gameBench)');
   const r = JSON.parse(raw);
   if (!r.valid) fail(`${label}: ${r.hiddenSteps} hidden frames — INVALID (a hidden page renders nothing)`);
@@ -315,11 +446,87 @@ async function runLeg(name, room, mode) {
 // 1. THROUGHPUT MATRIX — the comparison numbers.
 // ---------------------------------------------------------------------------
 const results = [];
+const failures = [];
+// Set when the matrix stops before it has attempted every leg — the report has
+// to distinguish "attempted and failed" from "never attempted at all".
+let abandoned = null;
+
+// INCREMENTAL RESULTS. bench.json / bench.md / passes.md are only written once
+// the WHOLE matrix finishes, so before this file existed the 2026-09-09 stall
+// at leg 141 of 204 threw away 140 perfectly good runs along with the bad one.
+// Every completed leg is appended here the moment it lands. One small append
+// per ~30 s leg is nothing next to the work being timed, and it makes any
+// interrupted run recoverable:
+//   jq -s '{ results: . }' /tmp/sdf-game-bench/bench-progress.jsonl
+// The full result objects are identical to bench.json's `results` entries.
+const PROGRESS_JSONL = `${OUT}/bench-progress.jsonl`;
+writeFileSync(PROGRESS_JSONL, '');
+const record = (row) => {
+  results.push(row);
+  try {
+    appendFileSync(PROGRESS_JSONL, `${JSON.stringify(row)}\n`);
+  } catch (e) {
+    console.warn(`  WARN could not append ${PROGRESS_JSONL}: ${e?.message ?? e}`);
+  }
+};
+
+/**
+ * One leg-run, BOUNDED. A leg that makes no progress inside LEG_TIMEOUT_MS is
+ * abandoned so the matrix can carry on without it.
+ *
+ * The abandoned promise gets its own catch: nothing awaits it any more, and
+ * its eventual rejection (the send() behind it timing out, or the socket
+ * dying) would otherwise take the process down through unhandledRejection.
+ */
+async function runLegGuarded(leg, room, mode) {
+  const p = runLeg(leg, room, mode);
+  p.catch(() => {});
+  let timer;
+  try {
+    return await Promise.race([p, new Promise((_, rej) => {
+      timer = setTimeout(() => rej(new Error(
+        `leg watchdog: ${leg}/room${room}/${mode} made no progress in `
+        + `${(LEG_TIMEOUT_MS / 1000).toFixed(0)}s (raise BENCH_LEG_TIMEOUT_MS if legitimate)`,
+      )), LEG_TIMEOUT_MS);
+    })]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const MODE = PASSES ? 'passes' : 'throughput';
+let consecFails = 0;
+matrix:
 for (let rep = 0; rep < REPEATS; rep++) {
+  progress.rep = rep;
   for (const leg of Object.keys(LEGS)) {
     for (const room of ROOM_IDS) {
-      const r = await runLeg(leg, room, PASSES ? 'passes' : 'throughput');
-      results.push({ rep, leg, room, prelude: PRELUDE, ...r });
+      let r;
+      try {
+        r = await runLegGuarded(leg, room, MODE);
+      } catch (e) {
+        // ONE WEDGED LEG IS NOT A DEAD RUN. Report it loudly, drop it from the
+        // tables, keep going — the remaining legs are still worth measuring.
+        diagnose(e);
+        failures.push({
+          rep, leg, room, mode: MODE, phase: progress.phase, error: String(e?.message ?? e),
+          consoleTail: consoleEvents.slice(-8),
+        });
+        consecFails += 1;
+        if (socketDead) {
+          abandoned = `${socketDead} — no browser left to bench`;
+          console.error(`  !! ${abandoned}. Writing what completed.`);
+          break matrix;
+        }
+        if (consecFails >= MAX_CONSEC_FAILS) {
+          abandoned = `${consecFails} legs failed in a row (BENCH_MAX_CONSEC_FAILS=${MAX_CONSEC_FAILS})`;
+          console.error(`  !! ${abandoned} — the browser is not coming back. Writing what completed.`);
+          break matrix;
+        }
+        continue;
+      }
+      consecFails = 0;
+      record({ rep, leg, room, prelude: PRELUDE, ...r });
       process.stdout.write(`  rep${rep} ${leg} room${room}: median ${r.overall.p50.toFixed(2)} ms (max chunk ${r.overall.max.toFixed(2)})\n`);
       if (PASSES && r.passes) {
         if (!r.passes.available) console.warn(`  WARN ${leg}/room${room}: no pass samples — timestamp tracking absent?`);
@@ -328,6 +535,11 @@ for (let rep = 0; rep < REPEATS; rep++) {
       }
     }
   }
+}
+progress.phase = 'matrix-done';
+if (!results.length) {
+  console.error(`\nFAIL: no leg-run completed — nothing to report. ${failures.length} failure(s) above.`);
+  process.exit(1);
 }
 
 // Median across repeats, not mean: one thermal outlier should not move the
@@ -360,18 +572,65 @@ for (const leg of Object.keys(LEGS)) {
 const spikes = [];
 if (PASSES) writePassReport();
 for (const room of PASSES ? [] : ROOM_IDS) {
-  const r = await runLeg('baseline', room, 'spike');
+  if (socketDead) {
+    abandoned ??= `${socketDead} — no browser left for the spike pass`;
+    break;
+  }
+  let r;
+  try {
+    r = await runLegGuarded('baseline', room, 'spike');
+  } catch (e) {
+    // Same rule as the matrix: a wedged spike room costs that room, not the
+    // throughput tables that are already in hand.
+    diagnose(e);
+    failures.push({
+      rep: 0, leg: 'baseline', room, mode: 'spike', phase: progress.phase,
+      error: String(e?.message ?? e), consoleTail: consoleEvents.slice(-8),
+    });
+    continue;
+  }
   spikes.push({ room, prelude: PRELUDE, ...r });
   process.stdout.write(`  spike room${room}: p50 ${r.overall.p50.toFixed(2)} max ${r.overall.max.toFixed(2)} ms\n`);
 }
 
 writeFileSync(`${OUT}/bench.json`, JSON.stringify({
-  meta: { url, W, H, repeats: REPEATS, rooms: ROOM_IDS, backend, prelude: PRELUDE, when: new Date().toISOString() },
+  meta: {
+    url, W, H, repeats: REPEATS, rooms: ROOM_IDS, backend, prelude: PRELUDE,
+    when: new Date().toISOString(),
+    // `complete: false` means legs are MISSING from every table below. Never
+    // read a delta out of a partial matrix without checking this first.
+    complete: failures.length === 0 && !abandoned,
+    runsCompleted: results.length,
+    abandoned,
+    failures,
+  },
   results, table, spikes,
 }, null, 2));
 
 const lines = [];
 lines.push('');
+if (failures.length || abandoned) {
+  // Loudest thing in the report, first. A partial matrix that looks complete
+  // is worse than no matrix at all.
+  lines.push(`## INCOMPLETE RUN — ${failures.length} leg-run(s) failed, ${results.length} completed`);
+  lines.push('');
+  if (abandoned) {
+    lines.push(`**The matrix was ABANDONED early: ${abandoned}.** Legs after the last`);
+    lines.push('failure below were never attempted at all, so their absence is not a');
+    lines.push('measurement — it is a gap.');
+    lines.push('');
+  }
+  lines.push('Failed runs are ABSENT from every table below, so a leg may have fewer');
+  lines.push('repeats than the header claims, or be missing entirely. Do not read a');
+  lines.push('delta across a leg listed here without re-running it.');
+  lines.push('');
+  lines.push('| rep | leg | room | mode | phase | error |');
+  lines.push('| ---: | --- | ---: | --- | --- | --- |');
+  for (const f of failures) {
+    lines.push(`| ${f.rep} | ${f.leg} | ${f.room} | ${f.mode} | ${f.phase} | ${f.error.replace(/\s+/g, ' ').slice(0, 200)} |`);
+  }
+  lines.push('');
+}
 lines.push('## Throughput (chunked + fenced) — median chunk-mean ms, median of repeats');
 lines.push('');
 lines.push('| leg | room | spawned | overall | walk | fire | gib | worst chunk |');
@@ -442,6 +701,12 @@ const report = lines.join('\n');
 console.log(report);
 writeFileSync(`${OUT}/bench.md`, report);
 console.log(`wrote ${OUT}/bench.json and ${OUT}/bench.md`);
+if (failures.length || abandoned) {
+  console.error(`\nFAIL: ${failures.length} run(s) failed, ${results.length} completed — the tables above are PARTIAL.`);
+  if (abandoned) console.error(`      Matrix abandoned early: ${abandoned}. Remaining legs were never attempted.`);
+  console.error(`      Completed runs are also in ${PROGRESS_JSONL} (one JSON object per line).`);
+  process.exit(1);
+}
 process.exit(0);
 
 // ---------------------------------------------------------------------------
@@ -458,6 +723,12 @@ function writePassReport() {
   out.push('');
   out.push(`${W}x${H}, repeats=${REPEATS}, rooms=${ROOM_IDS.join(',')}${PRELUDE ? `, prelude: ${PRELUDE}` : ''}${QUERY ? `, query: ${QUERY}` : ''}`);
   out.push('');
+  if (failures.length || abandoned) {
+    if (abandoned) out.push(`**MATRIX ABANDONED EARLY: ${abandoned} — later legs were never attempted.**`);
+    out.push(`**INCOMPLETE — ${failures.length} leg-run(s) failed and are absent below:** `
+      + failures.map((f) => `rep${f.rep} ${f.leg}/room${f.room} (${f.phase})`).join(', '));
+    out.push('');
+  }
   out.push('Pass ms = median over repeats of the per-frame GPU pass time p50 (overall,');
   out.push('all segments). Share = of the labelled total. Gap = fenced frame p50 minus');
   out.push('the labelled total: CPU submit, inter-pass bubbles, unlabelled work.');
