@@ -63,9 +63,72 @@ Both were caught against the live page during wiring:
    index in the composite** — that hard-codes one platform's convention, which
    is how this bug class recurs.
 
+## Field styles
+
+`__sdfGame.setFieldStyle(style)` — **ships `'bodies'` at `setFieldComb(0.6)`**.
+
+| style | interlaced | crisp |
+| --- | --- | --- |
+| `off` | — | everything |
+| `sdf` | marched flesh only | bones, kit, level, viewmodel — the style that HAS the flesh/bone disagreement |
+| **`bodies`** | flesh **+ skeleton** | level, viewmodel |
+| `frame` | the whole picture | — |
+
+`'bodies'` did NOT need the skeleton meshes to encode depth into alpha, which
+was the earlier estimate. The mesh interleave republishes each woven pixel's
+depth with `depthTest` on, so the real depth buffer resolves the skeleton
+against level and flesh; the half-height mesh pass only resolves bone against
+bone. That turned a material rewrite into a layer split (`FIELD_MESH_LAYER`).
+
+**Trap:** three does NOT inherit layers to children. The eyes are children of
+each segment mesh, so without setting their layer too the skulls render
+eyeless — in `'bodies'` only.
+
+## Held rows must carry their OWN frame's depth
+
+The first `'bodies'` cut still showed the skeleton through the body **while
+moving** (owner-caught). Cause: the flesh weave writes last frame's depth on a
+held row (it rides the retained field's alpha), but the mesh weave was writing
+THIS frame's depth — I had taken depth from the current frame deliberately,
+reasoning a scanline of error was invisible. It desynced colour from depth, so
+moving bone beat stale flesh and won the depth test. Standing still the two
+agreed, which is why it only appeared in motion.
+
+Both weaves now retain depth alongside colour, so a held row is a snapshot of
+one instant. `comb` blends the two depths to match how it blends colour.
+
+## Bugs found during this work — all of them rendered convincingly
+
+A pattern worth carrying: every one of these looked correct on screen.
+
+1. `fieldPrev` missing from the lazy-init clear — alpha 0 is not the "nothing
+   here" sentinel, so held rows painted black over the whole scene.
+2. The retain was a quad blit — the rasteriser and a `uv()` quad disagree on
+   the Y origin, so the retained field came back MIRRORED (upside-down ghost).
+   Now `copyTextureToTexture`. **Never** fix a flip by mirroring the row index;
+   that hard-codes one platform's convention.
+3. Depth stopped being republished when the frame moved to a half-height
+   buffer, so the goo layer drew blood over everything including the viewmodel.
+4. `RGBA32Float` vs `RGBA16Float` — `copyTextureToTexture` demands identical
+   formats, so the `'sdf'` retain failed EVERY frame while the picture still
+   looked plausible.
+5. Two temporal-dead-zone faults: the cull's state, then `CULL_DWELL_MS` and
+   `actors`, declared below the draw callback that closes over them. The cull
+   threw on every frame and the HUD sat at `bodies 0/15`. Fixing one binding at
+   a time is what let it recur; it is now verified exhaustively by parsing the
+   function body.
+
+Screenshots caught none of these. A genuinely fresh console (not one carrying
+HMR history) and mechanical checks caught all of them.
+
 ## Open: flesh/bone row disagreement
 
-Skeleton meshes render full-res every frame while the flesh is fielded, so on
-held rows one-frame-stale flesh sits against current bone. The owner sees it
-"sometimes", reads it as a rendering artifact, and does not consider it
-blocking. Options are recorded in the spec; none is chosen yet.
+RESOLVED. `'sdf'` still has it by construction — that style fields only the
+flesh. `'bodies'` and `'frame'` both remove it by putting bone and flesh on one
+cadence, and `'bodies'` ships.
+
+**Still unverified by anyone:** `'bodies'` with wounds actually exposing bone,
+which is the case the style exists for. And the timings above predate
+whole-frame fielding AND were taken while the cull was silently throwing every
+frame, so they should be re-established from the shipped build rather than
+carried forward.

@@ -124,14 +124,24 @@ marching half the scanlines each frame halves it; the comb is the intended
 old-video look, not a cost.
 [Result](docs/dev-notes/2026-09-09-perf-spikes/field-rendering-result.md) ·
 [spec](docs/superpowers/specs/2026-09-09-interlaced-field-rendering-design.md).
-Seams `__sdfGame.setFieldMode(on)` / `setFieldComb(x)` (one number, 0–1).
+**Ships `'bodies'` at comb 0.6.** `__sdfGame.setFieldStyle('off'|'sdf'|'bodies'|'frame')`
+and `setFieldComb(x)` (one number, 0–1).
 
-- [ ] **No comb A/B run yet.** Both "different comb" captures were `fieldComb:
-  1` on every frame — a reload restores the shipped default. Set it after load,
-  before F8, confirm with `__sdfGame.fieldComb`.
-- [ ] **Flesh/bone row disagreement.** Skeleton meshes render full-res while
-  the flesh is fielded, so held rows show stale flesh against current bone.
-  Owner notices it occasionally; not blocking. No fix chosen.
+| style | interlaced | crisp |
+| --- | --- | --- |
+| `sdf` | flesh only | has the flesh/bone disagreement |
+| **`bodies`** | flesh + skeleton | level, viewmodel |
+| `frame` | everything | — |
+
+- [x] **Flesh/bone row disagreement resolved.** `'bodies'` puts bone and flesh
+  on one cadence. A first cut still showed it in MOTION — held rows carried
+  this frame's depth against last frame's colour, so moving bone beat stale
+  flesh; both weaves now retain depth with colour.
+- [ ] **`'bodies'` unverified with wounds exposing bone** — the case it exists
+  for. Renders, cycles and occludes structurally; nobody has shot anything yet.
+- [ ] **Timings are stale.** They predate whole-frame fielding AND were taken
+  while the cull was silently throwing every frame. Re-establish from the
+  shipped build.
 - [x] Half-rate (C2) **retired** by this — it moved only the extreme tail and
   its hold-and-reproject desynced from full-rate polygons under camera motion.
   Mutually exclusive with fields; still available behind `setHalfRate`.

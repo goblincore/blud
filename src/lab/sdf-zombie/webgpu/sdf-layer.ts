@@ -346,6 +346,7 @@ export const FIELD_INTERLEAVE_WGSL = /* wgsl */ `fn sdfFieldInterleave(
   curTex: texture_2d<f32>,
   prevTex: texture_2d<f32>,
   curDepth: texture_depth_2d,
+  prevDepth: texture_depth_2d,
   texCoord: vec2<f32>,
   flipY: f32,
   parity: f32,
@@ -358,14 +359,19 @@ export const FIELD_INTERLEAVE_WGSL = /* wgsl */ `fn sdfFieldInterleave(
   let col = clamp(i32(floor(st.x * dims.x)), 0, i32(dims.x) - 1);
   let outRow = i32(floor(st.y * outHeight));
   let tRow = clamp(outRow / 2, 0, i32(dims.y) - 1);
-  // Depth always comes from THIS frame, even on a held row: it is what the
-  // goo layer occludes against, and a scanline of error there is invisible
-  // where a frame of staleness would not be. Colour is where the comb lives.
-  let d = textureLoad(curDepth, vec2<i32>(col, tRow), 0);
   if ((outRow % 2) == i32(parity)) {
     let fresh = textureLoad(curTex, vec2<i32>(col, tRow), 0);
-    return vec4<f32>(fresh.xyz, d);
+    return vec4<f32>(fresh.xyz, textureLoad(curDepth, vec2<i32>(col, tRow), 0));
   }
+  // A HELD ROW MUST CARRY ITS OWN FRAME'S DEPTH, not this one's.
+  //
+  // Taking depth from the current frame here looked harmless — a scanline of
+  // error — but it desynced colour from depth: the flesh weave writes last
+  // frame's depth on a held row (it rides the retained field's alpha), so a
+  // mesh weave writing CURRENT depth let moving bone beat stale flesh and the
+  // skeleton showed through the body. Only while moving, because standing
+  // still the two depths agree (owner-caught).
+  let dHeld = textureLoad(prevDepth, vec2<i32>(col, tRow), 0);
   // The row this frame did not draw. comb 1 = hold last frame's field
   // verbatim, which IS the interlace artifact; 0 = interpolate vertically
   // from THIS frame's field, trading vertical detail for no comb.
@@ -373,7 +379,10 @@ export const FIELD_INTERLEAVE_WGSL = /* wgsl */ `fn sdfFieldInterleave(
   let a = textureLoad(curTex, vec2<i32>(col, tRow), 0);
   let b = textureLoad(curTex, vec2<i32>(col, clamp(tRow + 1, 0, i32(dims.y) - 1)), 0);
   let woven = mix((a + b) * 0.5, held, comb);
-  return vec4<f32>(woven.xyz, d);
+  // comb 0 leans on this frame's interpolated colour, so pair it with this
+  // frame's depth; comb 1 is purely held, so pair it with the held depth.
+  let dNow = textureLoad(curDepth, vec2<i32>(col, tRow), 0);
+  return vec4<f32>(woven.xyz, mix(dNow, dHeld, comb));
 }`;
 
 const fieldInterleave = wgslFn(FIELD_INTERLEAVE_WGSL);
@@ -631,8 +640,9 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   const fieldPrev = new THREE.RenderTarget(1, 1, {
     type: THREE.FloatType, format: THREE.RGBAFormat,
     minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
-    depthBuffer: false,
+    depthBuffer: true,
   });
+  fieldPrev.depthTexture = new THREE.DepthTexture(1, 1);
   /** 'bodies' style: the skeleton meshes' own half-height field, and the
    *  previous frame's. Its depth resolves mesh-against-mesh only; the
    *  interleave below republishes depth and depth-tests for everything else. */
@@ -645,12 +655,14 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   const fieldMeshPrev = new THREE.RenderTarget(1, 1, {
     type: THREE.FloatType, format: THREE.RGBAFormat,
     minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
-    depthBuffer: false,
+    depthBuffer: true,
   });
+  fieldMeshPrev.depthTexture = new THREE.DepthTexture(1, 1);
   const meshWoven = fieldInterleave({
     curTex: texture(fieldMesh.texture),
     prevTex: texture(fieldMeshPrev.texture),
     curDepth: texture(fieldMesh.depthTexture),
+    prevDepth: texture(fieldMeshPrev.depthTexture),
     texCoord: uv(),
     flipY: uFlipY,
     parity: uFieldParity,
@@ -678,6 +690,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     curTex: texture(fieldFull.texture),
     prevTex: texture(fieldPrev.texture),
     curDepth: texture(fieldFull.depthTexture),
+    prevDepth: texture(fieldPrev.depthTexture),
     texCoord: uv(),
     flipY: uFlipY,
     parity: uFieldParity,
@@ -1194,7 +1207,10 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
         renderer.autoClear = prevAuto;
 
         renderer.copyTextureToTexture(target.texture, fieldPrev.texture);
+        // Depth is retained WITH colour: a held row is a snapshot of one
+        // instant, not last frame's pixels at this frame's depth.
         renderer.copyTextureToTexture(fieldMesh.texture, fieldMeshPrev.texture);
+        renderer.copyTextureToTexture(fieldMesh.depthTexture!, fieldMeshPrev.depthTexture!);
         camera.clearViewOffset();
       } else if (fieldStyle === 'sdf') {
         // Flesh-only: the composite already wove it. Retain the march target
@@ -1216,6 +1232,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
         // index in the shader: that hard-codes one platform's convention,
         // which is how this bug class keeps coming back.
         renderer.copyTextureToTexture(fieldFull.texture, fieldPrev.texture);
+        renderer.copyTextureToTexture(fieldFull.depthTexture!, fieldPrev.depthTexture!);
         camera.clearViewOffset();
       }
 
