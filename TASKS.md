@@ -20,6 +20,22 @@
 - [x] Mesh actor skeletons accepted and merged into main; now the forward default, including production.
 - [-] Further aesthetic tuning paused; cavity brightness remains open. [Handoff](docs/dev-notes/2026-09-07-skeleton-comparison/wrap-up.md).
 
+## Roster — bloatmaw — 2026-09-09
+
+- [x] `bloatmaw` merged (`5aae04b0`): a floating flesh ball, mostly mouth, with
+  tiny shackled arms. Third prose-brief character; the roster's FIRST legless one.
+- [x] Floating solved deliberately: `stance` OMITTED (grammar knows only
+  humanoid/digitigrade) so `checkStance` is off by choice; hover gap 0.302 m named;
+  a vestigial spine chain keeps the gait wiring happy — `gait.ts` `leg()` returns
+  zero offsets for a missing chain, so the shamble degrades to root sway.
+- [ ] Brow still reads as a flattish lid, not a fleshy ridge with sockets; the
+  little wings are barely visible. Both are "does it read?" calls.
+- [!] ALL FOUR ROUNDS WERE AUTHORED BLIND — the Chrome sandbox fix
+  (`70147f98` + `7c20c17a`) landed only after r4. The next pass is the first that
+  can see its own frames.
+- [-] Ships `blob:silview` / `blob:inspect` — CPU renderers the blind runs wrote
+  for themselves. Useful; keep.
+
 ## Roster — gnasher — 2026-09-09
 
 - [x] `gnasher` merged (`982024f3`, polished `dec159cb`): a hunched pink flesh

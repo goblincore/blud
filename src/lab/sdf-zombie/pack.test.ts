@@ -428,7 +428,32 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
     expect(Array.from(p.primClip.slice(0, 4))).toEqual([0, 0, 0, 0]);
   });
 
-  it('every shipped character packs primClip.w all-zero EXCEPT the minotaur, gargoyle, cyberdemon and gnasher, which each author exactly two glowing eyes', () => {
+  // THE GLOW ALLOWLIST IS EXACT PER CHARACTER, NOT A BLANKET SKIP.
+  //
+  // glow= is opt-in per prim: a character that does not author it must pack
+  // byte-identically to before the lane existed, and every author that does
+  // must carry EXACTLY the count below — so an accidental glow= somewhere
+  // else on that character is still caught. Counts are the number of PACKED
+  // rows (mirror/both expansion doubles an authored line), and each is
+  // cross-pinned by the character's own *-blob.test.ts:
+  //   minotaur    2  task-3 acceptance (the two eyes)
+  //   gargoyle    2  ember eyes under the brow ridges (2026-09-07)
+  //   cyberdemon  2  cyan-white optic eyes (2026-09-08)
+  //   gnasher     2  small amber eyes under a heavy brow (2026-09-08), also
+  //                  pinned at exactly two in gnasher-blob.test.ts
+  //   bloatmaw    2  two mismatched ember eyes (r3 discarded the throat core +
+  //                  its haze — a flat saturated red disc that read as a
+  //                  sticker — and replaced them with a non-glowing wet eye in
+  //                  the throat, so only the two face eyes still emit)
+  const GLOW_PRIMS: Record<string, number> = {
+    'minotaur.blob': 2,
+    'gargoyle.blob': 2,
+    'cyberdemon.blob': 2,
+    'gnasher.blob': 2,
+    'bloatmaw.blob': 2,
+  };
+
+  it('every shipped character packs primClip.w all-zero EXCEPT the named glow authors, at their exact authored count', () => {
     // glow= is opt-in per prim: characters that do not author it must pack
     // byte-identically to before the lane existed, and the glow authors
     // must carry EXACTLY their two authored eye prims each (one per side;
@@ -446,12 +471,7 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
       for (let i = 0; i < built.prims.length; i++) {
         if (Math.abs(packed.primClip[i * PRIM_STRIDE + 3]!) > 0) glowing++;
       }
-      if (name === 'minotaur.blob' || name === 'gargoyle.blob' || name === 'cyberdemon.blob'
-          || name === 'gnasher.blob') {
-        expect(glowing).toBe(2);
-      } else {
-        expect(glowing).toBe(0);
-      }
+      expect(glowing, `${name} glow count`).toBe(GLOW_PRIMS[name] ?? 0);
     }
   });
 });
