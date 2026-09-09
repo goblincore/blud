@@ -15,6 +15,20 @@
 - [-] Per-frame narrow-band VOLUME bake of heavy bodies (their core trick) judged not
   worth a spike. Notes: `Claude Notes/Research/2026-09-09-claybook-gdc-sdf-techniques.md`.
 
+## Bench harness — no more silent hangs — 2026-09-09
+
+- [x] `scripts/sdf-game-bench.mjs` can no longer hang forever. `send()` had no
+  timeout and no reject path and nothing rejected `pending` on socket death, so a
+  lost CDP response wedged the run (observed: 141/204 legs, then 19+ min of silence).
+  Every wait is now bounded and every failure names the leg/room/rep, phase, CDP
+  method and console tail.
+- [x] One wedged leg no longer kills the matrix: a per-leg watchdog abandons it and
+  the run continues; `BENCH_MAX_CONSEC_FAILS` (3) stops a dead browser. Reports gain
+  an INCOMPLETE banner and the exit code is non-zero on any partial run.
+- [x] Completed legs land in `$BENCH_OUT/bench-progress.jsonl` as they finish, so an
+  aborted run keeps what it measured — `bench.json`/`bench.md`/`passes.md` are still
+  end-of-run only. Knobs: `BENCH_SEND_TIMEOUT_MS`, `BENCH_LEG_TIMEOUT_MS`.
+
 ## Shot visuals — tracer rounds — 2026-09-09
 
 - [x] Projectiles no longer draw as shaded yellow balls. Each carries an additive
