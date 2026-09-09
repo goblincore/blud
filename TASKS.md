@@ -124,8 +124,13 @@ marching half the scanlines each frame halves it; the comb is the intended
 old-video look, not a cost.
 [Result](docs/dev-notes/2026-09-09-perf-spikes/field-rendering-result.md) ·
 [spec](docs/superpowers/specs/2026-09-09-interlaced-field-rendering-design.md).
-**Ships `'bodies'` at comb 0.6.** `__sdfGame.setFieldStyle('off'|'sdf'|'bodies'|'frame')`
-and `setFieldComb(x)` (one number, 0–1).
+**Ships `'frame'` at comb 0.6; `'bodies'` is FIXED (`9f205aaa`) and is the
+owner's call to flip.** `__sdfGame.setFieldStyle('off'|'sdf'|'bodies'|'frame')`
+and `setFieldComb(x)` (one number, 0–1). 2026-09-09 review fixes on top:
+composite held rows carry the held depth (`b67999c8`), held rows bracketed by
+parity, polys unjittered in `'sdf'`/`'bodies'`, `'frame'` weaves on the output
+grid so sdfScale ≠ 1 works (`6031389e`), field targets disposed. Handoff +
+resolution: [bodies-style-handoff.md](docs/dev-notes/2026-09-09-perf-spikes/bodies-style-handoff.md).
 
 | style | interlaced | crisp |
 | --- | --- | --- |
@@ -150,8 +155,12 @@ and `setFieldComb(x)` (one number, 0–1).
   was "very noticeable". Needs the task-3 census before any future flip.
 - [x] Marched-body visibility cull shipped (`fecbc54a`): frustum + `clearSight`
   on `setBodies`, 2 of 15 bodies marched in room 1. Win still unmeasured.
-- [-] VHS post-FX: pure half done (`post-vhs.ts`, presets + WGSL port); chain
-  wiring not started. Judge the look only with fields on.
+- [x] VHS post-FX wired, default OFF. `__sdfGame.setVhs('soft'|'balanced'|'chaotic'|null)`,
+  `setVhsTerm(name, v)`, or boot with `?vhs=soft`. Runs after FXAA and replaces
+  SMEAR while on (setting preserved). GPU-verified 2026-09-09: compiles, upright,
+  off restores the clean frame, zero errors. Eight port defects fixed first
+  ([plan](docs/superpowers/plans/2026-09-09-vhs-postfx-fixes.md)). Look is
+  untuned — `chaotic` is very heavy; judge with fields on.
   [Spec](docs/superpowers/specs/2026-09-09-vhs-post-fx-design.md).
 
 
