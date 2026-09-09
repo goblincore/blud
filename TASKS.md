@@ -116,6 +116,35 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+**[x] FRAME SPIKES SOLVED — interlaced scanline fields (`86185b01`).** Owner
+captures: worst frame **125 → 38 ms**, p99 **63 → 34.3**, over-budget frames
+**6.3% → 0.0%**, longest stall run **12 frames → 1**, avg fps pinned at the 30
+cap. The march is 75–83% of the GPU frame and its cost is covered pixels, so
+marching half the scanlines each frame halves it; the comb is the intended
+old-video look, not a cost.
+[Result](docs/dev-notes/2026-09-09-perf-spikes/field-rendering-result.md) ·
+[spec](docs/superpowers/specs/2026-09-09-interlaced-field-rendering-design.md).
+Seams `__sdfGame.setFieldMode(on)` / `setFieldComb(x)` (one number, 0–1).
+
+- [ ] **No comb A/B run yet.** Both "different comb" captures were `fieldComb:
+  1` on every frame — a reload restores the shipped default. Set it after load,
+  before F8, confirm with `__sdfGame.fieldComb`.
+- [ ] **Flesh/bone row disagreement.** Skeleton meshes render full-res while
+  the flesh is fielded, so held rows show stale flesh against current bone.
+  Owner notices it occasionally; not blocking. No fix chosen.
+- [x] Half-rate (C2) **retired** by this — it moved only the extreme tail and
+  its hold-and-reproject desynced from full-rate polygons under camera motion.
+  Mutually exclusive with fields; still available behind `setHalfRate`.
+- [!] Depth prepass stays **OFF**: flipped on for one look pass 2026-09-09 and
+  reverted — the silent range-dependent geometry deletion its comment warns of
+  was "very noticeable". Needs the task-3 census before any future flip.
+- [x] Marched-body visibility cull shipped (`fecbc54a`): frustum + `clearSight`
+  on `setBodies`, 2 of 15 bodies marched in room 1. Win still unmeasured.
+- [-] VHS post-FX: pure half done (`post-vhs.ts`, presets + WGSL port); chain
+  wiring not started. Judge the look only with fields on.
+  [Spec](docs/superpowers/specs/2026-09-09-vhs-post-fx-design.md).
+
+
 **[~] Hybrid deferred renderer (M2) — material repair accepted by owner manual playtest on 2026-09-07; integrated with latest main.** The merged build passes all 34 gameplay GPU checks with zero page errors and the CPU/build checks. [Integration notes](docs/dev-notes/2026-09-07-m2-main-integration/notes.md). Task 7 stopped at owner request; gamma/flashlight tuning and unfinished automated shadow/performance validation remain follow-ups. Deferred remains opt-in.
 
 **[x] Soldier combat/animation polish — owner approved; merged to main (909b6a87).** Fixed movement, aim, recoil, gait and lab controls. [First pass](docs/dev-notes/2026-09-06-soldier-polish/notes.md).
