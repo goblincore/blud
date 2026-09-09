@@ -319,6 +319,8 @@ export interface MotionState {
   sinceFire: number;
   /** Smoothed arm rotations for the current weapon hold. */
   carryPose?: CarrySpec;
+  /** Smoothed requested hold before a Soldier reaction is composed over it. */
+  carryTargetPose?: CarrySpec;
   /** Last frame's root shift (kept so a fall can freeze it). */
   lastShift: Vec3;
   /** Root shift captured when the fall started; null while standing. */
@@ -818,18 +820,24 @@ export function stepMotion(
   const supportGripWeight = strongSoldierReaction ? clamp((stagger.state.age - 0.25) / 0.65, 0, 1) : 1;
   const carries = profile.carries;
   let carryPose = state.carryPose;
+  let carryTargetPose = state.carryTargetPose;
   if (armStyle === 'carry' && carries && !collapsed && canHold) {
     const carryName: CarryName = cfg.carryOverride
       ?? (fireHold > 0 ? carries.fire : (rw >= 0.5 ? carries.run : carries.walk));
     carryUsed = carryName;
     const wanted = CARRIES[carryName];
-    const previous = carryPose ?? wanted;
+    const previous = carryTargetPose ?? wanted;
     const amount = 1 - Math.exp(-9 * dt);
     const mix = (a: number, b: number) => a + (b - a) * amount;
-    const carry: CarrySpec = {
+    carryTargetPose = {
       right: { pitch: mix(previous.right.pitch, wanted.right.pitch), yaw: mix(previous.right.yaw, wanted.right.yaw), fold: mix(previous.right.fold, wanted.right.fold) },
       gunPitch: mix(previous.gunPitch, wanted.gunPitch),
       leftPole: [mix(previous.leftPole[0], wanted.leftPole[0]), mix(previous.leftPole[1], wanted.leftPole[1]), mix(previous.leftPole[2], wanted.leftPole[2])],
+    };
+    const carry: CarrySpec = {
+      right: { ...carryTargetPose.right },
+      gunPitch: carryTargetPose.gunPitch,
+      leftPole: [...carryTargetPose.leftPole],
     };
     if (strongSoldierReaction) {
       // Recover the barrel's forward orientation while the arm remains
@@ -837,10 +845,10 @@ export function stepMotion(
       // together sweeps the barrel vertically across the face at mid-lurch.
       const forwardRecovery = smooth01((stagger.state.age - 0.18) / 0.42);
       const inwardRecovery = smooth01((stagger.state.age - 0.62) / 0.28);
-      carry.right.pitch = -0.55 + (wanted.right.pitch - -0.55) * forwardRecovery;
-      carry.right.fold = 0.55 + (wanted.right.fold - 0.55) * forwardRecovery;
-      carry.gunPitch = -0.15 + (wanted.gunPitch - -0.15) * forwardRecovery;
-      carry.right.yaw = -0.35 + (wanted.right.yaw - -0.35) * inwardRecovery;
+      carry.right.pitch = -0.55 + (carryTargetPose.right.pitch - -0.55) * forwardRecovery;
+      carry.right.fold = 0.55 + (carryTargetPose.right.fold - 0.55) * forwardRecovery;
+      carry.gunPitch = -0.15 + (carryTargetPose.gunPitch - -0.15) * forwardRecovery;
+      carry.right.yaw = -0.35 + (carryTargetPose.right.yaw - -0.35) * inwardRecovery;
     }
     carryPose = carry;
     const right = rotateYaw([1, 0, 0], bodyYaw);
@@ -1070,6 +1078,7 @@ export function stepMotion(
     fireHold,
     sinceFire,
     ...(carryPose === undefined ? {} : { carryPose }),
+    ...(carryTargetPose === undefined ? {} : { carryTargetPose }),
     lastShift: shift,
     fallShift: collapsed ? (state.fallShift ?? shift) : null,
   };

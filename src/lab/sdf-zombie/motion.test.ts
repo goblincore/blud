@@ -984,6 +984,39 @@ describe('soldier injury response', () => {
     expect(atNineTenths!.right.yaw).toBeCloseTo(aim.right.yaw, 5);
   });
 
+  it('smooths a low-to-aim destination change during staged recovery', () => {
+    const j = soldierJoints();
+    let state = makeMotionState(5, [0, 0, 0]);
+    let points = stubPoints(j);
+    let previous: NonNullable<MotionState['carryPose']> | undefined;
+    let switched = false;
+    let wantAim = false;
+    for (let i = 0; i < 75; i++) {
+      if (state.stagger.age >= .70) wantAim = true;
+      const result = stepMotion(state, j,
+        { enabled: true, wander: false, profile: SOLDIER_PROFILE, carryOverride: wantAim ? 'aim' : 'low' },
+        { ...NO_SIGNALS(), shot: i === 0
+          ? { type: 'blast' as const, dirWorld: [0, 0, -1] as Vec3, woundWorld: [0, 1, 0] as Vec3, torso: true }
+          : null },
+        points, BOUNDS, makeRng(5));
+      const carry = result.state.carryPose!;
+      if (wantAim && !switched) {
+        expect(Math.abs(carry.right.pitch - previous!.right.pitch)).toBeLessThan(.05);
+        expect(Math.abs(carry.right.fold - previous!.right.fold)).toBeLessThan(.15);
+        expect(Math.abs(carry.gunPitch - previous!.gunPitch)).toBeLessThan(.10);
+        switched = true;
+      }
+      expect(len(sub(gunPoint(result.frame.gun!, GUN_GRIP.gripHand), result.frame.restPose[j.index.handR]!))).toBeLessThan(1e-6);
+      previous = carry;
+      state = result.state;
+      points = result.frame.restPose.map(p => ({ pos: [...p] as Vec3, prev: [...p] as Vec3, pinned: false }));
+    }
+    expect(switched).toBe(true);
+    expect(state.carryPose!.right.pitch).toBeCloseTo(CARRIES.aim.right.pitch, 2);
+    expect(state.carryPose!.right.fold).toBeCloseTo(CARRIES.aim.right.fold, 2);
+    expect(state.carryPose!.gunPitch).toBeCloseTo(CARRIES.aim.gunPitch, 2);
+  });
+
   it('losing one leg or the head causes a structural fall, while a zombie still hops on one leg', () => {
     const leg = { ...NO_SIGNALS(), missing: { ...INTACT, legL: true } };
     for (const signals of [leg, { ...NO_SIGNALS(), headAlive: false }]) {
