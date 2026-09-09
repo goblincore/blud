@@ -541,6 +541,19 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      *  the ceiling — past it the shadow visibly slides off the body. */
     levelShadowMatrix: uniform(new THREE.Matrix4()),
     levelShadowCfg: uniform(new THREE.Vector4(0, 0.02, 0.0005, 0)),
+    /** STATIC PROBE GRID (lighting P3 step 1, lab spike). probeTex is the
+     *  packed L1-SH probe texture (3 RGBA32F texels per probe, see
+     *  probe-grid.ts packProbeTexture); a TextureNode so the lab can swap
+     *  `.value` after a rebuild without recompiling. probeCfg.x is the
+     *  weight toward the probe irradiance (0 = bit-identical to the
+     *  ambientAt result, which is what every non-lab view rides), .y the
+     *  gain applied to the probe irradiance. The 1x1 fallback plus x = 0
+     *  keeps the fetch out of every view that never opts in. */
+    probeTex: texture(fallbackProbeTexture()),
+    probeMin: uniform(new THREE.Vector3(0, 0, 0)),
+    probeInvExtent: uniform(new THREE.Vector3(0, 0, 0)),
+    probeDims: uniform(new THREE.Vector4(1, 1, 1, 0)),
+    probeCfg: uniform(new THREE.Vector4(0, 0.25, 0, 0)),
   };
 }
 
@@ -859,6 +872,17 @@ export interface DepthPreSource {
  */
 let fallbackDepthPre: THREE.DataTexture | null = null;
 let fallbackDepthPreCfg: { value: THREE.Vector4 } | null = null;
+let fallbackProbe: THREE.DataTexture | null = null;
+/** One zero probe (3 RGBA texels) so views that never build a grid still
+ *  bind a well-formed texture; probeCfg.x = 0 means it is never read. */
+function fallbackProbeTexture() {
+  if (!fallbackProbe) {
+    const t = new THREE.DataTexture(new Float32Array(12), 3, 1, THREE.RGBAFormat, THREE.FloatType);
+    t.needsUpdate = true;
+    fallbackProbe = t;
+  }
+  return fallbackProbe;
+}
 function fallbackDepthPreTexture() {
   if (!fallbackDepthPre) {
     const t = new THREE.DataTexture(new Float32Array([0]), 1, 1, THREE.RedFormat, THREE.FloatType);
@@ -1113,6 +1137,15 @@ export function createMarchMaterial(
     depthPreTex: texture(depthPre ? depthPre.texture : fallbackDepthPreTexture()),
     depthPreCfg: (depthPre ? depthPre.uniforms.cfg : fallbackDepthPreUniform()) as never,
     normalGradientCfg: u.normalGradientCfg,
+    // Static probe grid (lighting P3 step 1) — POSITIONALLY LAST, five
+    // slots after normalGradientCfg, bound in the same commit as the WGSL
+    // inputs (the meltCfg rule). probeCfg.x = 0 keeps every view that does
+    // not build a grid bit-identical.
+    probeTex: u.probeTex,
+    probeMin: u.probeMin,
+    probeInvExtent: u.probeInvExtent,
+    probeDims: u.probeDims,
+    probeCfg: u.probeCfg,
   }) as unknown as Swizzled;
 
   const material = new MeshBasicNodeMaterial();

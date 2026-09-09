@@ -142,6 +142,7 @@ import {
   loadOverride, saveOverride, serializeOverride, MATERIAL_SLIDERS, FACE_SLIDERS,
 } from '../panel';
 import { createEnclosure, type WallKey } from './enclosure';
+import { buildProbeGrid, packProbeTexture } from '../probe-grid';
 
 
 /** Chunk mesh/render-object slots are recycled oldest-first at this cap.
@@ -2944,6 +2945,8 @@ async function main() {
   addSelect(presetBox, 'light', Object.keys(LIGHT_PRESETS), light, (v) => {
     light = v as LightPresetName;
     reapply();
+    // The probe grid bakes the key/fill in; a new light preset means a new grid.
+    rebuildProbes();
     // reapply() runs applyMaterial, which writes probeWeight/ambientGain from
     // the new preset — and every preset ships probeWeight 0, so switching the
     // light would silently switch bounce OFF while the box is still standing.
@@ -3038,6 +3041,7 @@ async function main() {
     u.bounceCfg.value.z = on ? 1 : 0;
     enclosure.setCeiling(on);
     ceilBtn.textContent = `ceiling: ${on ? 'on' : 'off'}`;
+    rebuildProbes();
   });
 
   // One-click A/B. Parks probeWeight at 1 or 0 and remembers where the
@@ -3055,6 +3059,54 @@ async function main() {
     }
   });
 
+  // STATIC PROBE GRID (lighting P3 step 1). Gathered on the CPU against the
+  // enclosure's six walls and the current key/fill, packed into a RGBA32F
+  // texture and swapped into the march's probeTex node — no recompile. Built
+  // at boot, on every wall/light change, and on demand. A ceiling that is
+  // toggled off is gathered as black so the grid agrees with what the eye
+  // sees, the same rule the wall pickers follow.
+  let probeTexture: THREE.DataTexture | null = null;
+  function rebuildProbes() {
+    const t0 = performance.now();
+    const d = u.lightDir.value.clone().normalize();
+    const walls = { ...enclosure.walls, posY: (u.bounceCfg.value.z < 0.5 ? [0, 0, 0] : enclosure.walls.posY) as Vec3 };
+    const grid = buildProbeGrid(
+      { min: u.boxMin.value.toArray() as unknown as Vec3, max: u.boxMax.value.toArray() as unknown as Vec3 },
+      walls,
+      {
+        dir: [d.x, d.y, d.z], keyColor: [u.keyColor.value.r, u.keyColor.value.g, u.keyColor.value.b],
+        keyIntensity: u.lightCfg.value.x, fillIntensity: u.lightCfg.value.y,
+      },
+    );
+    const packed = packProbeTexture(grid);
+    const tex = new THREE.DataTexture(packed.data, packed.width, packed.height, THREE.RGBAFormat, THREE.FloatType);
+    tex.needsUpdate = true;
+    probeTexture?.dispose();
+    probeTexture = tex;
+    u.probeTex.value = tex;
+    u.probeMin.value.set(grid.min[0], grid.min[1], grid.min[2]);
+    u.probeInvExtent.value.set(
+      1 / Math.max(1e-6, grid.max[0] - grid.min[0]),
+      1 / Math.max(1e-6, grid.max[1] - grid.min[1]),
+      1 / Math.max(1e-6, grid.max[2] - grid.min[2]),
+    );
+    u.probeDims.value.set(grid.dims[0], grid.dims[1], grid.dims[2], 0);
+    console.info(`[lab] probe grid ${grid.dims.join('x')} rebuilt in ${(performance.now() - t0).toFixed(1)} ms`);
+  }
+  rebuildProbes();
+  const probeBox = addSection(panelEl, 'probe grid (P3 spike)');
+  const probeOnBtn = addButton(probeBox, 'probes: off', () => {
+    const on = u.probeCfg.value.x <= 0;
+    u.probeCfg.value.x = on ? 1 : 0;
+    probeOnBtn.textContent = `probes: ${on ? 'on' : 'off'}`;
+  });
+  addSlider(probeBox, {
+    label: 'probeGain', min: 0, max: 1, step: 0.01,
+    get: () => u.probeCfg.value.y,
+    set: (v) => { u.probeCfg.value.y = v; },
+  });
+  addButton(probeBox, 'rebuild probes', () => rebuildProbes());
+
   // Per-wall colour pickers. Each writes BOTH the mesh and the uniform, so
   // what the eye sees on the wall and what the shader bounces off it cannot
   // disagree — a mismatch there would invalidate the whole judgement.
@@ -3071,6 +3123,7 @@ async function main() {
       const col = new THREE.Color(input.value);
       enclosure.setWall(key, [col.r, col.g, col.b]);
       WALL_UNIFORMS[key].value.setRGB(col.r, col.g, col.b);
+      rebuildProbes();
     });
     const row = document.createElement('label');
     row.textContent = key;

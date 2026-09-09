@@ -1,4 +1,5 @@
 import { AMBIENT_AT, WALL_CONTRIBUTION } from './ambient.wgsl';
+import { PROBE_GRID_WGSL } from './probe-grid.wgsl';
 import { SEG_VOLUME_WGSL } from './skeleton-spike/volume.wgsl';
 import { TILE_MAX_ENTRIES } from './tile-cull';
 import { MAX_PRIMS, MAX_CLUSTERS, BONE_SEG_MAX } from '../validate';
@@ -2253,7 +2254,15 @@ export const MARCH_BODY_PARAMS = /* wgsl */ `(
   // by one slot. NO PARENS and NO COLONS in any comment in this list. Ever.
   depthPreTex: texture_2d<f32>,
   depthPreCfg: vec4<f32>,
-  normalGradientCfg: vec4<f32>
+  normalGradientCfg: vec4<f32>,
+  // Static probe grid - lighting P3 step 1 - bound POSITIONALLY LAST. Five
+  // slots. probeCfg x is the weight and 0 keeps the compose bit-identical.
+  // NO PARENS and NO COLONS in this comment either.
+  probeTex: texture_2d<f32>,
+  probeMin: vec3<f32>,
+  probeInvExtent: vec3<f32>,
+  probeDims: vec4<f32>,
+  probeCfg: vec4<f32>
 ) -> vec4<f32> {
 `;
 
@@ -3541,7 +3550,16 @@ export const MARCH_BODY_LIGHT = /* wgsl */ `  // ---- ANALYTIC FLASHLIGHT ------
   // ZERO extra mapBody evaluations: ambientAt is dot products and distance
   // falloff, gated by a test that greps its source for field calls. The
   // post-hit eval budget is unchanged.
-  let amb = ambientAt(p, n, boxMin, boxMax, wallNegX, wallPosX, wallNegY, wallPosY, wallNegZ, wallPosZ, bounceCfg, lightCfg.y, keyColor);
+  var amb = ambientAt(p, n, boxMin, boxMax, wallNegX, wallPosX, wallNegY, wallPosY, wallNegZ, wallPosZ, bounceCfg, lightCfg.y, keyColor);
+  // STATIC PROBE GRID (lighting P3 step 1, lab spike). Replaces the analytic
+  // six-wall ambient with irradiance read from a probe grid gathered once on
+  // the CPU against the same enclosure — directional, with real level
+  // instead of the hue-only P1 tint. probeCfg.x = 0 skips the branch and
+  // leaves amb exactly what ambientAt returned - the parity guarantee. Zero
+  // field evaluations: three textureLoads per probe, eight probes.
+  if (probeCfg.x > 0.0) {
+    amb = mix(amb, probeIrradiance(p, n, probeTex, probeMin, probeInvExtent, probeDims) * probeCfg.y, probeCfg.x);
+  }
   // HIGHLIGHT SHOULDER (spotCfg2.y). A body standing in the beam used to run
   // past 1.0 on every channel and hard-clip, which does not just look blown —
   // it DELETES the wounds: crater, lip, char and clean skin all clamp to the
@@ -3831,7 +3849,7 @@ export const HELPERS = [
   Q_ROT, Q_MUL, Q_FROM_TO, REST_POINT,
   APPLY_CARVES, APPLY_WOUNDS, WOUND_MASK, TISSUE_RAMP, CHAR_MASK, SAMPLE_VOLUME,
   FOLD_GROUP, FOLD_BONE_RANGE, SEG_VOLUME_WGSL, APPLY_BONES, MAP_BODY, CALC_NORMAL, WOUND_SHADOW, TEXEL, FLICKER, SOFT_SHOULDER,
-  WALL_CONTRIBUTION, AMBIENT_AT, LEVEL_SHADOW,
+  WALL_CONTRIBUTION, AMBIENT_AT, PROBE_GRID_WGSL, LEVEL_SHADOW,
   // Quarter-res depth prepass fetch (close-up task 3). No field deps — it is
   // a textureLoad — so it rides last, ahead of MARCH_BODY which calls it.
   DEPTH_PRE_FETCH,
