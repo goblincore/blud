@@ -503,11 +503,15 @@ async function main() {
   // The draw chain, exactly as the bench stands it up.
   // -----------------------------------------------------------------------
   const postAa = createPostAa(handle.renderer);
-  // Boot-time VHS enable, default OFF: ?vhs=soft|balanced|chaotic. The default
-  // stays null, so the all-off parity path is untouched unless asked for.
+  // VHS ships ON at 'soft' (owner, 2026-09-09), the club-mutant tuned preset.
+  // ?vhs=soft|balanced|chaotic picks another; ?vhs=off disables it, which is
+  // also what the parity/bench drivers should pass — the all-off path is
+  // untouched only when VHS is null.
   const vhsParam = new URLSearchParams(location.search).get('vhs');
   if (vhsParam === 'soft' || vhsParam === 'balanced' || vhsParam === 'chaotic') {
     postAa.setVhs(vhsParam);
+  } else if (vhsParam !== 'off' && vhsParam !== 'null') {
+    postAa.setVhs('soft');
   }
   const characterEffects = createCharacterEffects(handle.renderer);
   // THE FISHEYE. The camera renders WIDER than the player sees and the blit
@@ -1346,13 +1350,13 @@ async function main() {
   // Comb 0.6, not 1: full hold was judged too strong in play. 1 holds the
   // stale field verbatim, 0 interpolates it away entirely.
   // __sdfGame.setFieldStyle('off'|'sdf'|'bodies'|'frame') and setFieldComb(x).
-  // DEFAULT IS 'frame', NOT 'bodies' (2026-09-09). 'bodies' was made default
-  // at the owner's request and then reverted the same day: it renders bodies
-  // semi-transparent with black speckle, and two rounds of fixes from me did
-  // not clear it. 'frame' is verified working and removes the same flesh/bone
-  // disagreement, so it ships while 'bodies' is diagnosed.
-  // Handoff: docs/dev-notes/2026-09-09-perf-spikes/bodies-style-handoff.md
-  sdfLayer.setFieldStyle('frame');
+  // DEFAULT IS 'bodies' (owner, 2026-09-09). It was reverted to 'frame' for
+  // a day while its see-through rendering was diagnosed: two mechanical
+  // defects in the mesh pass (autoClear undoing the coverage clear, and a
+  // 1x1 depth allocation on the retained mesh field), both fixed in 9f205aaa
+  // and pinned by tests. Resolution and history:
+  // docs/dev-notes/2026-09-09-perf-spikes/bodies-style-handoff.md
+  sdfLayer.setFieldStyle('bodies');
   sdfLayer.setFieldComb(0.6);
   // Headless A/B seams (2026-08-27 hull-holes diagnosis): ship defaults stay
   // ON/ON; the driver flips these between captures. Mirrors the lab's
