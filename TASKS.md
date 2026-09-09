@@ -155,6 +155,14 @@ resolution: [bodies-style-handoff.md](docs/dev-notes/2026-09-09-perf-spikes/bodi
   was "very noticeable". Needs the task-3 census before any future flip.
 - [x] Marched-body visibility cull shipped (`fecbc54a`): frustum + `clearSight`
   on `setBodies`, 2 of 15 bodies marched in room 1. Win still unmeasured.
+- [x] Static probe grid spike (lighting P3 step 1) in the WebGPU lab
+  (`sdf-lab-webgpu.html`, panel `probe grid (P3 spike)`; `probeCfg.x = 0` is
+  bit-identical everywhere else). CPU L1-SH gather against the enclosure,
+  two bounces, ~60–400 ms bake. GPU A/B: directional ambient reads; at a few
+  times the fill it is the radiosity lift P1 asked to measure.
+  [Result](docs/dev-notes/2026-09-09-probe-grid-spike/result.md) ·
+  [plan](docs/superpowers/plans/2026-09-09-static-probe-grid-spike.md).
+  Next: body occlusion of probes, flashlight injection, per-room grids in game.
 - [x] VHS post-FX wired, default OFF. `__sdfGame.setVhs('soft'|'balanced'|'chaotic'|null)`,
   `setVhsTerm(name, v)`, or boot with `?vhs=soft`. Runs after FXAA and replaces
   SMEAR while on (setting preserved). GPU-verified 2026-09-09: compiles, upright,
