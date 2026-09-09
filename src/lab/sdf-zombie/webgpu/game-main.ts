@@ -1316,7 +1316,7 @@ async function main() {
   // CURRENT camera every frame, so that error class does not exist, and the
   // comb IS the intended look. __sdfGame.setFieldMode(false) turns it off;
   // setFieldComb(0..1) dials the comb from full hold to interpolated away.
-  sdfLayer.setFieldMode(true);
+  sdfLayer.setFieldStyle('frame');
   // Headless A/B seams (2026-08-27 hull-holes diagnosis): ship defaults stay
   // ON/ON; the driver flips these between captures. Mirrors the lab's
   // __sdfLab.setOccluder.
@@ -4513,7 +4513,7 @@ async function main() {
       actorCull: actorCullEnabled, visibleBodies: cullCounts.visible,
       halfRate: sdfLayer.halfRate, halfRateMode: sdfLayer.halfRateMode,
       depthPrepass: sdfLayer.depthPreEnabled,
-      fieldMode: sdfLayer.fieldMode, fieldComb: sdfLayer.fieldComb,
+      fieldMode: sdfLayer.fieldMode, fieldStyle: sdfLayer.fieldStyle, fieldComb: sdfLayer.fieldComb,
     });
     firstTelemetryFrame = false; telemetryVisibilityGap = false;
     telemetryControls?.afterFrame();
@@ -4529,7 +4529,7 @@ async function main() {
     hullExitBound: actors[0]?.view.uniforms.perfCfg.value.x,
     halfRate: sdfLayer.halfRate, halfRateMode: sdfLayer.halfRateMode,
     depthPrepass: sdfLayer.depthPreEnabled, actorCull: actorCullEnabled,
-    fieldMode: sdfLayer.fieldMode, fieldComb: sdfLayer.fieldComb,
+    fieldMode: sdfLayer.fieldMode, fieldStyle: sdfLayer.fieldStyle, fieldComb: sdfLayer.fieldComb,
     coverageMeaning: 'coverageFrac/biggestBodyFrac are a CPU bounding-sphere '
       + 'estimate of screen area covered by VISIBLE bodies, not a GPU pixel '
       + 'count; overlapping bodies double-count and occlusion is ignored, so '
@@ -6882,6 +6882,9 @@ async function main() {
     /** Adaptive resolution ladder — default OFF so the chosen rung ships. */
     /** A/B seam for the actor visibility cull (ships ON). The bench's
      *  `actor-cull-off` leg is the "before" column. */
+    /** 'off' | 'sdf' (flesh only) | 'frame' (whole picture). */
+    setFieldStyle: (style: 'off' | 'sdf' | 'frame') => sdfLayer.setFieldStyle(style),
+    get fieldStyle() { return sdfLayer.fieldStyle; },
     setFieldMode: (on: boolean) => sdfLayer.setFieldMode(on),
     get fieldMode() { return sdfLayer.fieldMode; },
     setFieldComb: (v: number) => sdfLayer.setFieldComb(v),

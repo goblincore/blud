@@ -242,15 +242,47 @@ export const CONE_TILE_FINE = 0;
  */
 export const COMPOSITE_WGSL = /* wgsl */ `fn sdfComposite(
   layerTex: texture_2d<f32>,
+  prevFieldTex: texture_2d<f32>,
   texCoord: vec2<f32>,
   flipY: f32,
   holdMode: f32,
   heldInv: mat4x4<f32>,
-  curVp: mat4x4<f32>
+  curVp: mat4x4<f32>,
+  fieldMode: f32,
+  fieldParityF: f32,
+  fieldComb: f32,
+  outHeight: f32
 ) -> vec4<f32> {
   let dims = vec2<f32>(textureDimensions(layerTex, 0));
   var st = texCoord;
   if (flipY > 0.5) { st.y = 1.0 - st.y; }
+  // ---- INTERLACED FIELDS -------------------------------------------------
+  // The layer rendered at HALF HEIGHT this frame, covering the scanlines of
+  // one field; prevFieldTex holds the other from last frame. Interleave them
+  // back to full height here. This branch is entered only when fieldMode is
+  // on, so every other path below stays bit-identical (the all-off parity
+  // gate depends on sameness, not equivalence).
+  if (fieldMode > 0.5) {
+    let col = clamp(i32(floor(st.x * dims.x)), 0, i32(dims.x) - 1);
+    let outRow = i32(floor(st.y * outHeight));
+    let tRow = clamp(outRow / 2, 0, i32(dims.y) - 1);
+    var fieldTexel: vec4<f32>;
+    if ((outRow % 2) == i32(fieldParityF)) {
+      fieldTexel = textureLoad(layerTex, vec2<i32>(col, tRow), 0);
+    } else {
+      // The row this frame did not march. fieldComb 1 = hold last frame's
+      // field verbatim, which IS the comb artifact and the point of the
+      // feature; 0 = interpolate vertically from THIS frame's field instead,
+      // trading vertical detail for no comb.
+      let held = textureLoad(prevFieldTex, vec2<i32>(col, tRow), 0);
+      let a = textureLoad(layerTex, vec2<i32>(col, tRow), 0);
+      let b = textureLoad(layerTex, vec2<i32>(col, clamp(tRow + 1, 0, i32(dims.y) - 1)), 0);
+      fieldTexel = mix((a + b) * 0.5, held, fieldComb);
+    }
+    if (fieldTexel.w >= 1.0) { discard; }
+    return fieldTexel;
+  }
+
   // holdMode: 0 = fresh/classic, 1 = raw hold, 2 = per-pixel reprojection.
   // The classic path below is deliberately UNCHANGED when holdMode < 1.5 —
   // the toggle-OFF frame must stay bit-identical.
@@ -333,6 +365,9 @@ export const FIELD_INTERLEAVE_WGSL = /* wgsl */ `fn sdfFieldInterleave(
 
 const fieldInterleave = wgslFn(FIELD_INTERLEAVE_WGSL);
 
+/** What gets interlaced — see `fieldStyle` in createSdfLayer. */
+export type FieldStyle = 'off' | 'sdf' | 'frame';
+
 export interface SdfLayer {
   /** Draws the polygonal scene, then the SDF layer, then composites. */
   render(scene: THREE.Scene, camera: THREE.PerspectiveCamera): void;
@@ -400,6 +435,9 @@ export interface SdfLayer {
    * out of its own body. Callers use this to hold their pose in step.
    */
   /** Interlaced scanline fields. Mutually exclusive with half-rate. */
+  setFieldStyle(style: FieldStyle): void;
+  readonly fieldStyle: FieldStyle;
+  /** Back-compat boolean: true selects 'frame'. */
   setFieldMode(on: boolean): void;
   readonly fieldMode: boolean;
   /** 1 = hold the stale field (full comb); 0 = interpolate it away. */
@@ -491,8 +529,32 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   // every quad. resize() halves EVERY screen-space target in the layer (march,
   // shell, cone, occluder, depth-pre) so the pre-passes stay aligned with the
   // march; only the composite interleaves back to full height.
-  let fieldMode = false;
-  const uFieldMode = uniform(0);
+  /**
+   * WHAT gets interlaced.
+   *
+   *   'off'   — no fielding.
+   *   'sdf'   — the MARCHED FLESH only. Half-height march target, woven in the
+   *             composite. Cheapest and the original cut, but the skeleton
+   *             meshes, kit, prop and viewmodel stay full-rate, so held rows
+   *             show one-frame-stale flesh against current bone — the owner's
+   *             "weird rendering artifact".
+   *   'frame' — the WHOLE assembled picture. Polys, march and composite all
+   *             land in a half-height buffer and one pass weaves the result.
+   *             Nothing on screen is at a different cadence from anything
+   *             else, so that artifact cannot occur; the cost is that the
+   *             viewmodel combs too.
+   *
+   * A third option — flesh AND the skeleton meshes, leaving the level and
+   * viewmodel full-rate — is deliberately NOT here. It needs those meshes to
+   * render into the SDF layer's buffer, whose ALPHA IS the depth encoding the
+   * composite reads (alpha >= 1 means discarded, and alpha feeds depthNode).
+   * Ordinary mesh materials do not write that, so it is a second material
+   * path, not a flag.
+   */
+  let fieldStyle: FieldStyle = 'off';
+  let fieldMode = false;              // fieldStyle !== 'off'
+  const uFieldMode = uniform(0);      // 'frame': the whole-picture interleave
+  const uCompositeField = uniform(0); // 'sdf': the flesh-only weave
   const uFieldParity = uniform(0);
   const uFieldComb = uniform(1);
   const uOutHeight = uniform(1);
@@ -534,8 +596,14 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
    *  composite all land here, so nothing on screen is at a different cadence
    *  from anything else. Needs its own depth: the composite depth-tests the
    *  flesh against the polygonal pass exactly as it does at full height. */
+  // FloatType, NOT HalfFloat: fieldPrev retains EITHER this or the march
+  // target depending on fieldStyle, and copyTextureToTexture demands identical
+  // formats. `target` is RGBA32Float (the march needs float depth in alpha),
+  // so everything the retain can touch must be too — a HalfFloat fieldPrev
+  // made the 'sdf' retain fail every frame with a copy-compatibility error
+  // while the picture still looked plausible.
   const fieldFull = new THREE.RenderTarget(1, 1, {
-    type: THREE.HalfFloatType, format: THREE.RGBAFormat,
+    type: THREE.FloatType, format: THREE.RGBAFormat,
     minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
     depthBuffer: true,
   });
@@ -548,7 +616,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   fieldFull.depthTexture = new THREE.DepthTexture(1, 1);
   /** Last frame's half-height output, woven with this frame's. */
   const fieldPrev = new THREE.RenderTarget(1, 1, {
-    type: THREE.HalfFloatType, format: THREE.RGBAFormat,
+    type: THREE.FloatType, format: THREE.RGBAFormat,
     minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
     depthBuffer: false,
   });
@@ -691,11 +759,18 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
 
   const sampled = composite({
     layerTex: texture(target.texture),
+    prevFieldTex: texture(fieldPrev.texture),
     texCoord: uv(),
     flipY: uFlipY,
     holdMode: uHoldMode,
     heldInv: uHeldInv,
     curVp: uCurVp,
+    // 'sdf' mode only: 'frame' mode leaves this 0 and interleaves later,
+    // over the whole assembled picture instead of just the flesh.
+    fieldMode: uCompositeField,
+    fieldParityF: uFieldParity,
+    fieldComb: uFieldComb,
+    outHeight: uOutHeight,
   }) as unknown as { xyz: unknown; w: unknown };
 
   const quadMat = new MeshBasicNodeMaterial();
@@ -729,7 +804,10 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     // In field mode EVERY screen-space target halves together, so the shell,
     // cone, occluder and depth pre-passes keep addressing the same pixels the
     // march does. Only the composite knows about full height.
-    const h = fieldMode ? fieldTargetHeight(hFull) : hFull;
+    // 'sdf' halves the MARCH target (the composite weaves it). 'frame' leaves
+    // the march at full height and halves the whole-frame buffer instead —
+    // halving both would field twice and lose half the vertical detail.
+    const h = fieldStyle === 'sdf' ? fieldTargetHeight(hFull) : hFull;
     uOutHeight.value = hFull;
     // setSize reallocates the march target's backing memory — a hold frame
     // would composite garbage until the next fresh march.
@@ -740,9 +818,13 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     // polygonal pass has always rendered at full content resolution and must
     // keep doing so, halved only in the field axis.
     const fw = Math.max(1, fullW);
-    const fh = fieldMode ? fieldTargetHeight(fullH) : 1;
+    const fh = fieldStyle === 'frame' ? fieldTargetHeight(fullH) : 1;
     fieldFull.setSize(fw, fh);
-    fieldPrev.setSize(fw, fh);
+    // fieldPrev retains whichever buffer the style actually fields: the march
+    // target in 'sdf', the whole-frame buffer in 'frame'. Sizing it to the
+    // wrong one silently weaves mismatched texel grids.
+    if (fieldStyle === 'sdf') fieldPrev.setSize(w, h);
+    else fieldPrev.setSize(fw, fh);
     occluder.setSize(w, h);
     shellEntry.setSize(w, h);
     shellExit.setSize(w, h);
@@ -855,7 +937,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       // polygons (skeleton meshes, kit, prop, viewmodel) share the flesh's
       // sampling grid and instant. Fielding only the SDF layer is what left
       // stale flesh against current bone on held rows.
-      renderer.setRenderTarget(fieldMode ? fieldFull : outputTarget);
+      renderer.setRenderTarget(fieldStyle === 'frame' ? fieldFull : outputTarget);
       void renderer.render(scene, camera);
 
       // Passes 1b/1c/1d + 2 — pre-passes and march. SKIPPED ENTIRELY on a
@@ -1024,13 +1106,18 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       // Pass 3 — composite up. autoClear off, or this wipes pass 1.
       setPassLabel('sdf:composite');
       camera.layers.mask = restore;
-      renderer.setRenderTarget(fieldMode ? fieldFull : outputTarget);
+      renderer.setRenderTarget(fieldStyle === 'frame' ? fieldFull : outputTarget);
       const prevAutoClear = renderer.autoClear;
       renderer.autoClear = false;
       void renderer.render(quadScene, quadCam);
       renderer.autoClear = prevAutoClear;
 
-      if (fieldMode) {
+      if (fieldStyle === 'sdf') {
+        // Flesh-only: the composite already wove it. Retain the march target
+        // so the next frame has the other field. Same true-copy rule as below.
+        renderer.copyTextureToTexture(target.texture, fieldPrev.texture);
+        camera.clearViewOffset();
+      } else if (fieldStyle === 'frame') {
         // Weave this half-height frame with the last one, into the real
         // full-height output. post-aa downstream sees exactly what it always
         // has, which is why its byte-identical all-off path is untouched.
@@ -1099,21 +1186,26 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     setHalfRate(on) {
       if (on === halfRate) return;
       // Same exclusion from the other side.
-      if (on && fieldMode) { fieldMode = false; uFieldMode.value = 0; resize(); }
+      if (on && fieldMode) { fieldStyle = 'off'; fieldMode = false; uFieldMode.value = 0; uCompositeField.value = 0; resize(); }
       halfRate = on;
       // Seed immediately: the first frame after enabling is a fresh march,
       // never a hold of whatever the target happened to be holding.
       forceFreshFrame = true;
     },
-    setFieldMode(on) {
-      if (on === fieldMode) return;
-      fieldMode = on;
-      uFieldMode.value = on ? 1 : 0;
+    setFieldStyle(style) {
+      if (style === fieldStyle) return;
+      fieldStyle = style;
+      fieldMode = style !== 'off';
+      uFieldMode.value = style === 'frame' ? 1 : 0;
+      uCompositeField.value = style === 'sdf' ? 1 : 0;
       // Mutually exclusive with half-rate: both on would hold a held field.
-      if (on && halfRate) { halfRate = false; uHoldMode.value = 0; }
+      if (fieldMode && halfRate) { halfRate = false; uHoldMode.value = 0; }
       forceFreshFrame = true;
-      resize();          // the target height changes with the mode
+      resize();          // which target is halved changes with the style
     },
+    get fieldStyle() { return fieldStyle; },
+    /** Back-compat boolean: true selects the whole-frame style. */
+    setFieldMode(on) { this.setFieldStyle(on ? 'frame' : 'off'); },
     get fieldMode() { return fieldMode; },
     setFieldComb(v) { uFieldComb.value = Math.max(0, Math.min(1, v)); },
     get fieldComb() { return uFieldComb.value; },
