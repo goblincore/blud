@@ -1,0 +1,333 @@
+diff --git a/src/lab/sdf-zombie/characters/bloatmaw-blob.test.ts b/src/lab/sdf-zombie/characters/bloatmaw-blob.test.ts
+index c4d9f24b..83a46b3f 100644
+--- a/src/lab/sdf-zombie/characters/bloatmaw-blob.test.ts
++++ b/src/lab/sdf-zombie/characters/bloatmaw-blob.test.ts
+@@ -14,8 +14,12 @@
+ //     decal;
+ //   * the arms have real daylight (the check that cost the goblin two owner
+ //     rejections) and fuse to the ball;
+-//   * the eyes are EMISSIVE PRIMS and deliberately UNEVEN — a neat pair on a
+-//     sphere reads as a smiley face;
++//   * the eyes are EMISSIVE PRIMS, deliberately UNEVEN, and SEATED IN FLESH
++//     sockets — no bright blue or green orb (r2 replaced the old googly eyes
++//     with small dim embers under a brow ridge);
++//   * the body is ANATOMY, not a ball: a jaw, jowls, brow, ear-frills, a back
++//     hump and a ragged crest make the silhouette irregular from every yaw
++//     (r2, the owner's "ears or jaw or brow nose" brief);
+ //   * the throat core glows, and the glowing-prim count is exactly what
+ //     pack.test.ts's allowlist expects (4).
+ //
+@@ -30,6 +34,7 @@ import { compileBlob, compileFace, compilePalette, compileSheet } from '../blob-
+ import { buildBody } from '../build-body';
+ import { checkStance, clearOf, daylightOf, fusedOf, strandedOf } from '../blob-checks';
+ import { characterEntry, FACE_TEXTURES } from '../character-registry';
++import type { Primitive } from '../types';
+ 
+ const doc = parseBlob(src);
+ const built = () => buildBody(compileBlob(doc, compileFace(doc)));
+@@ -130,26 +135,48 @@ describe('bloatmaw.blob', () => {
+     expect(sig.size).toBeGreaterThanOrEqual(6);
+   });
+ 
+-  // THE EYES ARE UNEVEN. Two emissive prims, different sizes AND different
+-  // heights — the asymmetry is what stops a sphere reading as a smiley.
+-  it('sets two mismatched emissive eyes, not a pair', () => {
++  // THE EYES ARE SEATED EMBERS, NOT GOOGLY ORBS. r2 threw out the two bright
++  // pale-BLUE and GREEN spheres that sat proud of the ball like toy eyes.
++  // Two emissive prims remain, deliberately uneven (different sizes AND
++  // heights), but they are small dim embers tucked INTO flesh sockets under
++  // the brow — the asymmetry is what keeps the mass from reading as a
++  // smiley, and the seated-into-flesh read is what r2 was ordered to fix.
++  it('sets two mismatched ember eyes seated in flesh sockets, not a pair of bright orbs', () => {
+     const b = built();
+     const head = limb(b, 'head');
+     // Off-centre glowing prims: the two eyes. The core and its haze both sit
+     // on the centreline (|x| < 0.05), so this excludes them structurally
+-    // rather than by colour — the eyes are deliberately cold/pale against the
+-    // orange throat, and a colour filter would go stale the moment they are
+-    // retinted.
++    // rather than by colour.
+     const eyes = b.prims.slice(head.start, head.start + head.count)
+       .filter(p => (p.glow ?? 0) > 0 && Math.abs(p.a[0]) > 0.15);
+     expect(eyes).toHaveLength(2);
+     const [a, c] = eyes as [typeof eyes[0], typeof eyes[0]];
+     expect(a!.radius).not.toBeCloseTo(c!.radius, 2); // different sizes
+     expect(Math.abs(a!.a[1] - c!.a[1])).toBeGreaterThan(0.03); // different heights
+-    expect(a!.color).not.toEqual(c!.color);        // pale blue vs sick green
++    expect(a!.color).not.toEqual(c!.color);        // burnt crimson vs smoke-amber
+     // Neither is a mirrored `both` copy — the pair is hand-placed.
+     expect(a!.mirrored).toBeUndefined();
+     expect(c!.mirrored).toBeUndefined();
++    // NOT bright blue or green. The r2 order was explicit: no saturated hue
++    // that reads as plastic or glass. Assert red dominates blue (so not a blue
++    // eye) and green does not dominate (so not a green eye), and that the
++    // glow is warm-ember (red channel highest of the three).
++    for (const e of [a!, c!]) {
++      const [r, g, bl] = e.color!;
++      expect(r).toBeGreaterThan(bl);              // not blue-dominant
++      expect(r - g).toBeGreaterThan(0.02);        // not green-dominant; reds ahead
++    }
++    // SEATED IN FLESH, not stuck on: each eye is set into a flesh crater —
++    // a wider non-glowing socket prim at the same x, its surface BEHIND the
++    // eye (lower z). That is what makes the outline flesh rather than a
++    // sphere off a sphere.
++    for (const e of [a!, c!]) {
++      const socket = b.prims.slice(head.start, head.start + head.count)
++        .filter(p => (p.glow ?? 0) === 0
++          && Math.abs(p.a[0] - e.a[0]) < 0.05
++          && p.a[2] < e.a[2] && p.radius > e.radius);
++      expect(socket.length, `eye at x ${e.a[0]} has a flesh socket behind it`).toBeGreaterThan(0);
++    }
+   });
+ 
+   // THE THROAT CORE. One hot ember deep in the maw, plus a duller haze ring:
+@@ -170,6 +197,59 @@ describe('bloatmaw.blob', () => {
+     expect(core.a[2]).toBeGreaterThan(0.5);
+   });
+ 
++  // THE BODY IS ANATOMY, NOT A BALL (r2). The owner's brief: "more complex
++  // shape... things like ears or jaw or brow nose." The silhouette test is
++  // "irregular from every yaw", which a structural pin can only APPROACH:
++  // it asserts the mass carries features on each axis rather than a single
++  // smooth ellipsoid — a jutting jaw + jowls under the maw, ear-frills and a
++  // back hump off the flanks/back, a brow ridge over the maw. If any pass
++  // re-spheres the body these fail.
++  it('is built up into anatomy, not a smooth ball, on every axis', () => {
++    const b = built();
++    const torso = b.prims.slice(limb(b, 'torso').start, limb(b, 'torso').start + limb(b, 'torso').count);
++    const headP = b.prims.slice(limb(b, 'head').start, limb(b, 'head').start + limb(b, 'head').count);
++
++    // JAW + JOWLS: a broad mass under the maw line (maw centre y ~1.05). The
++    // heaviest off-centre head prim below it is the jaw; it must reach both
++    // down (y < 0.95) and toward the front (z > 0.3) so it juts past the ball
++    // arc rather than being a hole in it.
++    const jaw = headP.filter(p => p.a[1] < 0.95 && p.a[2] > 0.3 && p.radius > 0.12)
++      .sort((x, y) => y.radius - x.radius)[0];
++    expect(jaw, 'a mandible mass under the maw').toBeDefined();
++
++    // EAR-FRILLS + BACK HUM: masses off the crown that reach BACK (z < -0.05)
++    // and OUT (|x| > 0.3), on the skull bone — these are what take the side
++    // and back views off the plain-circle path.
++    const frills = headP.filter(p => p.bone === 'skull' && p.a[2] < -0.05
++      && Math.abs(p.a[0]) > 0.3 && p.radius > 0.05);
++    expect(frills.length, 'ear-frills / back hump off the crown').toBeGreaterThanOrEqual(2);
++    const hump = headP.filter(p => p.bone === 'skull' && p.a[2] < -0.4 && p.radius > 0.12);
++    expect(hump.length, 'a heavy back hump').toBeGreaterThanOrEqual(1);
++
++    // BROW RIDGE: a wide flat prim over the eyes. `wide` scales the x
++    // semi-axis; a ridge > 0.5 m of half-width (radius * scale.x) is wide
++    // enough to span both sockets, and it sits above them (y > 1.55).
++    const brow = headP.filter(p => p.a[1] > 1.55 && p.radius * p.scale[0] > 0.25);
++    expect(brow.length, 'a shelving brow ridge over the sockets').toBeGreaterThanOrEqual(1);
++
++    // The silhouette is no longer one circle: out-of-plane (|z|) extent and
++    // lateral (|x|) extent both come from the flesh masses, so the profile
++    // is wider front-to-back than a pure sphere of the ball's radius.
++    // Measure the true outline (both endpoints + the radius that stands proud).
++    const extent = (p: Primitive, ax: 0 | 2) =>
++      Math.max(Math.abs(p.a[ax]), Math.abs(p.b[ax])) + p.radius * p.scale[ax];
++    const xs = headP.map(p => extent(p, 0));
++    const zs = headP.map(p => extent(p, 2));
++    expect(Math.max(...xs)).toBeGreaterThan(0.55);   // ears poke past the equator
++    expect(Math.max(...zs)).toBeGreaterThan(0.55);   // back hump / jaw reach back and front
++
++    // ASYMMETRY: the body masses are not bilaterally symmetric. There must be
++    // a torso lump whose centre sits clearly off-axis one way, and a paired
++    // lump at a different offset the other way — not a matched `both` pair.
++    const torsoOff = torso.filter(p => (p.glow ?? 0) === 0 && Math.abs(p.a[0]) > 0.28);
++    expect(torsoOff.length, 'off-centre torso swell lumps').toBeGreaterThanOrEqual(2);
++  });
++
+   // THE GOBLIN REGRESSION. clearOf reads centrelines; the render showed a
+   // torso with arm-shaped bulges. daylightOf measures the air between
+   // surfaces, ignoring the region where the limb legitimately merges into the
+diff --git a/src/lab/sdf-zombie/characters/bloatmaw.blob b/src/lab/sdf-zombie/characters/bloatmaw.blob
+index 40b4861b..82770e33 100644
+--- a/src/lab/sdf-zombie/characters/bloatmaw.blob
++++ b/src/lab/sdf-zombie/characters/bloatmaw.blob
+@@ -2,13 +2,25 @@
+ # body, mostly mouth, hovering above the floor on nothing at all: the first
+ # legless, floorless character in the cast.
+ #
+-# THE READ, in silhouette order: a single huge sphere of wet meat hanging in
+-# the air; its whole front split by a maw a third of the ball's own width; a
+-# ring of irregular bone teeth around the opening; an ember core burning in
+-# the throat; two MISMATCHED eyes set unevenly above the maw; a crown of
+-# small swept-back spurs; and, absurd against all that bulk, two withered
+-# arms dangling off the flanks with broken shackles at the wrists. No legs,
+-# no ground contact — the hover gap is the character.
++# THE READ, in silhouette order: a hunched sprawling mass of wet meat that is
++# no longer a sphere from any angle — a heavy jutting jaw under a maw a third
++# of the body's own width, a shelving brow ridge shading two MISMATCHED ember
++# eyes, ear-frills off the flanks, a ragged raked crest and a hunched back,
++# and lumpy sagging folds where the flesh gathers under its own weight. The
++# maw splits the whole front with its ring of irregular bone teeth and the
++# ember core burning in the throat. And, absurd against all that bulk, two
++# withered arms dangle off the flanks with broken shackles at the wrists. No
++# legs, no ground contact — the hover gap is the character.
++#
++# r2 (this pass): the owner said the body "needs to have a more complex shape,
++# would be good if it had things like ears or jaw or brow nose etc." The old
++# ball had been a clean sphere and, worse, wore two bright pale-BLUE and GREEN
++# orb eyes stuck proud of the surface like googly toys. So the eyes were
++# replaced — small dim embers (burnt crimson + smoke-amber, neither blue nor
++# green) seated IN sockets under a continuous brow ridge, so the silhouette
++# around them is flesh, not a sphere off a sphere — and the mass was rebuilt
++# with jaw, jowls, brow, nasal slits, ear-frills, a back hump and a ragged
++# crown, all deliberately uneven so no yaw reads as a plain circle.
+ #
+ # FLOATING. `stance` is OMITTED on purpose (see the model block): the grammar
+ # knows only humanoid/digitigrade and this body has no legs at all. The maw,
+@@ -29,10 +41,11 @@ model bloatmaw
+   # height = the TOP OF THE BALL, not a standing crown. The whole body hovers:
+   # ball centre y = 1.08, y-semi-axis 0.749 -> top 1.829, underside 0.302.
+   # THE HOVER GAP IS 0.302 m. Move HOVER (the centre height) and re-check the
+-  # top against this number if the body is ever rescaled. Nothing in the
+-  # format enforces ground contact — there is no sole-at-y=0 rule in
+-  # blob-checks.ts or validate.ts — which is exactly why a floating body
+-  # validates cleanly at all.
++  # top against this number if the body is ever rescaled. The r2 crest/ears
++  # all sit under the ball's own top (tallest crest tip y 1.81), so height is
++  # still the ball's. Nothing in the format enforces ground contact — there is
++  # no sole-at-y=0 rule in blob-checks.ts or validate.ts — which is exactly
++  # why a floating body validates cleanly at all.
+   height 1.83
+   # NO `stance` LINE. `checkStance` is the format's one intent check and it
+   # only knows humanoid/digitigrade knees; omitting the line means "not
+@@ -125,33 +138,109 @@ body
+   blob head on maw at=0.86 offset=(0.10,-0.33,0.00) r=0.048 r2=0.008 blend=0.005 tip=(0.00,0.25,0.22) color=d8cdae gloss=0.55
+   blob head on maw at=0.86 offset=(0.27,-0.29,0.00) r=0.054 r2=0.008 blend=0.005 tip=(-0.02,0.23,0.22) color=d8cdae gloss=0.55
+ 
+-  # ---- EYES — deliberately NOT a pair --------------------------------
+-  # Right eye (the character's right, +x): the big one, set HIGH, a COLD
+-  # pale blue — cold on purpose, so it never blurs into the orange throat.
+-  # Ball front at (0.25, 1.56) is z 0.470; the 0.105 eye sits at z 0.63, so
+-  # it bulges ~0.16 m proud and owns its pixels.
+-  # A dark socket ring sits BEHIND each eye so the glow reads as an eye set
+-  # in flesh rather than a lamp stuck on the ball; the eye protrudes further,
+-  # so it keeps the centre and the socket shows as a rim.
+-  blob head on maw at=0.72 offset=(0.25,0.42,-0.04) r=0.140 wide=1.05 tall=1.05 deep=0.85 blend=0.010 color=260a06
+-  blob head on maw at=0.80 offset=(0.25,0.42,0.07) r=0.105 wide=0.95 tall=0.95 deep=1.00 blend=0.006 color=bfe8ff glow=0.85
+-  # Heavy brow over the big eye: a flesh shelf that shades its top third.
+-  blob head on maw at=0.78 offset=(0.25,0.50,0.00) r=0.120 wide=1.15 tall=0.40 deep=0.95 blend=0.008
+-  # Left eye: smaller, lower and further out, a sick green — the mismatch is
+-  # the point (a neat pair on a sphere reads as a smiley face).
+-  blob head on maw at=0.70 offset=(-0.32,0.36,-0.06) r=0.100 wide=1.05 tall=1.00 deep=0.85 blend=0.010 color=260a06
+-  blob head on maw at=0.77 offset=(-0.32,0.36,0.05) r=0.070 wide=1.00 tall=0.90 deep=1.00 blend=0.005 color=a8c24a glow=0.75
+-  # Half-lid over the small eye: a flesh mass eating its top half, so the two
+-  # eyes do not even read as the same shape.
+-  blob head on maw at=0.75 offset=(-0.32,0.41,0.01) r=0.085 wide=1.10 tall=0.50 deep=1.00 blend=0.006
+-
+-  # ---- CROWN SPURS — small, swept back, uneven ------------------------
+-  # Three pairs (`both`) rooted in the ball's crown and raked back so the
+-  # tips trail toward -z; none rises above the declared height (tallest tip
+-  # y 1.80 against the ball's 1.829 top).
+-  blob head on skull at=0.50 offset=(0.09,0.08,-0.06) r=0.038 r2=0.004 blend=0.005 chamfer tip=(0.02,0.03,-0.30) both color=6b5a44
+-  blob head on skull at=0.30 offset=(0.26,0.05,-0.04) r=0.034 r2=0.004 blend=0.005 chamfer tip=(0.04,0.02,-0.28) both color=6b5a44
+-  blob head on skull at=0.70 offset=(0.15,0.07,-0.10) r=0.030 r2=0.004 blend=0.005 chamfer tip=(0.03,0.02,-0.22) both color=6b5a44
++  # ---- EYES — SEATED IN THE FLESH, NOT STUCK ON -----------------------
++  # Two VERY uneven eyes, and this time they sit IN the ball. The old ones
++  # were bright saturated spheres (pale BLUE and sick GREEN) pinned proud of
++  # a smooth sphere and bulging ~0.16 m off it — googly toy eyes on a toy
++  # ball, the worst thing in the frame. These are small dim embers tucked
++  # into sockets under a heavy brow: the ball's OWN flesh — a shelving brow
++  # above, a jowl below, an overhanging lid — carries the SILHOUETTE, while
++  # the eye only fills the gap between them. From the side the outline is
++  # brow and jowl, never a clean sphere off a clean sphere.
++  # COLOUR: the throat core is a HOT orange ember, so the eyes are
++  # deliberately NOT orange and NOT bright — one burnt ember, one dull
++  # smoke-amber, both dim and desaturated so nothing reads as plastic or
++  # glass. Asymmetry stays: different sizes, different heights, one
++  # half-lidded by a flesh lid.
++  # The brow is one continuous shelf (a single mass whose own bulges do the
++  # shading) — `wide` 2.4 lets it span the whole eye line instead of sitting
++  # as a separate blob over each eye. It shelves OVER the sockets, but is
++  # raised high enough (offset y 0.50 -> y ~1.64) that it shades them from
++  # the top third rather than swallowing them; the eyes read below it.
++  blob head on maw at=0.80 offset=(-0.02,0.50,0.06) r=0.140 wide=2.20 tall=0.46 deep=0.90 blend=0.012   # brow ridge, spans both sockets
++  # Right eye (character's right, +x), the big one, set HIGH and out a touch.
++  blob head on maw at=0.80 offset=(0.22,0.40,-0.02) r=0.080 wide=1.05 tall=1.05 deep=0.85 blend=0.008   # socket crater (flesh, sets eye in)
++  blob head on maw at=0.80 offset=(0.22,0.40,0.05) r=0.060 wide=1.00 tall=0.90 deep=0.88 blend=0.006 color=7a1c08 glow=0.70
++  # A lower-lid jowl under the big eye that rises over its bottom quarter.
++  blob head on maw at=0.80 offset=(0.24,0.31,0.02) r=0.072 wide=1.30 tall=0.55 deep=0.90 blend=0.008
++  # Left eye (character's left, -x), smaller, LOWER and more sunken: a dimmer
++  # smoke-amber, half-hidden under a heavy lid. The two never read the same.
++  blob head on maw at=0.78 offset=(-0.30,0.30,-0.03) r=0.066 wide=1.00 tall=1.00 deep=0.85 blend=0.008  # socket crater
++  blob head on maw at=0.78 offset=(-0.30,0.30,0.03) r=0.044 wide=1.00 tall=0.86 deep=0.84 blend=0.005 color=7a5c14 glow=0.48
++  blob head on maw at=0.78 offset=(-0.30,0.36,0.04) r=0.058 wide=1.25 tall=0.50 deep=0.95 blend=0.008   # heavy lid over the small eye
++
++  # ============================================================
++  # ANATOMY — the ball stops being a sphere. All of this is the owner's
++  # "ears or jaw or brow nose" brief: the mass is broken up into features
++  # with their OWN outline, so no yaw reads as a plain circle. Every piece
++  # is deliberately OFF-CENTRE and uneven — the asymmetry is the point, and
++  # a few of them are painted so the eye can find them against the flesh.
++  # ============================================================
++
++  # ---- JAW — a real mandible under the maw, not a hole cut in the ball --
++  # The maw already carries the mouth. Under it sits a heavy jutting jaw: a
++  # broad flat-scaled mass that drops below the mouth line and thrusts
++  # forward, so from the side the lower face is a jaw, not the ball's arc.
++  # It leans a touch to +x so the whole face is not bilaterally symmetric.
++  blob head on maw at=0.34 offset=(0.06,-0.30,0.16) r=0.230 wide=1.25 tall=0.78 deep=0.95 blend=0.022
++  # Jowl slabs hanging off each cheek, uneven (the +x one is heavier and
++  # lower), so the front silhouette has sagging cheeks either side of the jaw.
++  blob head on maw at=0.40 offset=(0.40,-0.26,0.10) r=0.130 wide=1.15 tall=0.95 deep=0.95 blend=0.030
++  blob head on maw at=0.36 offset=(-0.34,-0.22,0.12) r=0.105 wide=1.05 tall=0.90 deep=0.90 blend=0.030
++  # A second heavy jowl lower on the +x cheek so the sag is not one smooth arc.
++  blob head on maw at=0.30 offset=(0.30,-0.40,0.06) r=0.085 wide=1.10 tall=0.80 deep=0.85 blend=0.030
++
++  # ---- NOSE / NASAL SLITS — above the maw, between the sockets ---------
++  # A broad flat nose-bridge mass sitting over the maw's top lip, with two
++  # dark naris slits. It breaks the smooth front between brow and maw.
++  blob head on maw at=0.80 offset=(0.02,0.05,0.10) r=0.090 wide=1.30 tall=0.70 deep=0.60 blend=0.012
++  blob head on maw at=0.80 offset=(0.06,0.05,0.10) r=0.050 wide=0.60 tall=0.85 deep=0.60 blend=0.008 color=12030a
++  blob head on maw at=0.80 offset=(-0.03,0.05,0.10) r=0.045 wide=0.60 tall=0.85 deep=0.60 blend=0.008 color=12030a
++
++  # ---- EARS / EAR-FRILLS — off the flanks, raked back, uneven ----------
++  # Fat fleshy flaps on the upper flanks. One is a broad rounded lobe, the
++  # other a thinner pointed frill — never a matching pair. They poke the
++  # silhouette outward at the sides AND (raked back) backward, which is what
++  # takes the side and back views off the plain-circle path. Color 6b5a44 is
++  # the same horn-flesh as the crown spurs.
++  blob head on skull at=0.30 offset=(0.40,-0.06,-0.12) r=0.110 wide=0.85 tall=1.10 deep=0.90 blend=0.030 chamfer tip=(0.10,-0.02,-0.24) color=6b5a44
++  blob head on skull at=0.28 offset=(-0.38,-0.08,-0.16) r=0.070 wide=0.70 tall=1.05 deep=0.85 blend=0.028 chamfer tip=(-0.06,-0.01,-0.30) color=6b5a44
++  # A small secondary nub on the +x ear so it is not one clean disc either.
++  blob head on skull at=0.36 offset=(0.40,-0.10,-0.20) r=0.044 wide=0.75 tall=1.00 deep=0.80 blend=0.026 chamfer tip=(0.09,-0.05,-0.18) color=6b5a44
++
++  # ---- BACK HANG — the rear is not smooth ------------------------------
++  # A heavy hunched mass on the back, pushed to -z and off to +x, so from
++  # the side the back is a hunched shoulder and from the back the outline is
++  # lopsided. Then small ragged crest-frills tumbling down the spine line.
++  blob head on skull at=0.20 offset=(0.18,-0.02,-0.42) r=0.200 wide=1.00 tall=1.00 deep=1.05 blend=0.030
++  blob head on skull at=0.34 offset=(0.10,-0.08,-0.30) r=0.120 wide=1.00 tall=0.95 deep=1.00 blend=0.030
++  blob head on skull at=0.06 offset=(-0.14,-0.06,-0.44) r=0.140 wide=1.00 tall=0.95 deep=1.00 blend=0.030
++
++  # ---- CROWN CREST — a bigger, uneven raked crest in place of tiny SPURS
++  # The old three-pair spurs were barely a bump. This is a handful of large
++  # pointed spikes raked back and to one side, each a different size, so the
++  # top of the ball is a ragged crown rather than a smooth dome. Tallest tip
++  # stays under the declared 1.829 ball top (the base is the skull bone at
++  # y 1.60; offsets keep every tip below ~1.80). Chamfer tips make them read
++  # as points, not little lollipops.
++  blob head on skull at=0.50 offset=(0.10,-0.02,-0.06) r=0.045 r2=0.005 blend=0.006 chamfer tip=(0.06,-0.02,-0.34) both color=6b5a44
++  blob head on skull at=0.30 offset=(0.28,-0.06,-0.02) r=0.058 r2=0.006 blend=0.006 chamfer tip=(0.14,-0.04,-0.30) both color=6b5a44
++  blob head on skull at=0.70 offset=(0.16,-0.04,-0.10) r=0.036 r2=0.004 blend=0.006 chamfer tip=(0.07,-0.04,-0.24) both color=6b5a44
++  blob head on skull at=0.20 offset=(-0.20,-0.06,-0.02) r=0.055 r2=0.005 blend=0.006 chamfer tip=(-0.12,-0.04,-0.30) both color=6b5a44
++  blob head on skull at=0.62 offset=(0.36,-0.08,0.04) r=0.050 r2=0.005 blend=0.006 chamfer tip=(0.15,-0.06,-0.14) both color=6b5a44
++
++  # ---- LUMPS / SAGS — the flesh gathers under its own weight ------------
++  # Asymmetric boils and folds on the flanks and underbelly, each a slightly
++  # different scale and pushed a little sideways, so the mid-body is never a
++  # cylinder. One sits proud enough to break the outline on the heavy side.
++  blob torso on pelvis at=0.00 offset=(0.40,-0.06,0.24) r=0.170 wide=1.00 tall=1.10 deep=1.05 blend=0.035
++  blob torso on pelvis at=0.00 offset=(-0.40,-0.02,0.08) r=0.145 wide=1.00 tall=1.05 deep=1.00 blend=0.035
++  blob torso on pelvis at=0.00 offset=(0.28,-0.42,0.02) r=0.140 wide=1.00 tall=0.90 deep=1.00 blend=0.035   # heavy-side underbelly fold
++  blob torso on pelvis at=0.00 offset=(-0.34,-0.34,-0.06) r=0.120 wide=1.00 tall=0.92 deep=1.00 blend=0.035
++  blob torso on pelvis at=0.00 offset=(0.06,-0.50,-0.02) r=0.110 wide=1.00 tall=0.85 deep=1.00 blend=0.035
++  # A couple of DARK boils so the lumps read against the flesh, not as shadow.
++  blob torso on pelvis at=0.00 offset=(0.44,0.12,-0.02) r=0.085 wide=0.95 tall=1.05 deep=0.95 blend=0.020 color=2a0a06
++  blob torso on pelvis at=0.00 offset=(-0.40,0.30,-0.10) r=0.075 wide=1.00 tall=1.00 deep=1.00 blend=0.020 color=2a0a06
+ 
+   # ============================================================
+   # THE ARMS — withered, too weak to matter, ending in little grasping

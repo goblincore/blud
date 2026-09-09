@@ -14,8 +14,12 @@
 //     decal;
 //   * the arms have real daylight (the check that cost the goblin two owner
 //     rejections) and fuse to the ball;
-//   * the eyes are EMISSIVE PRIMS and deliberately UNEVEN — a neat pair on a
-//     sphere reads as a smiley face;
+//   * the eyes are EMISSIVE PRIMS, deliberately UNEVEN, and SEATED IN FLESH
+//     sockets — no bright blue or green orb (r2 replaced the old googly eyes
+//     with small dim embers under a brow ridge);
+//   * the body is ANATOMY, not a ball: a jaw, jowls, brow, ear-frills, a back
+//     hump and a ragged crest make the silhouette irregular from every yaw
+//     (r2, the owner's "ears or jaw or brow nose" brief);
 //   * the throat core glows, and the glowing-prim count is exactly what
 //     pack.test.ts's allowlist expects (4).
 //
@@ -30,6 +34,7 @@ import { compileBlob, compileFace, compilePalette, compileSheet } from '../blob-
 import { buildBody } from '../build-body';
 import { checkStance, clearOf, daylightOf, fusedOf, strandedOf } from '../blob-checks';
 import { characterEntry, FACE_TEXTURES } from '../character-registry';
+import type { Primitive } from '../types';
 
 const doc = parseBlob(src);
 const built = () => buildBody(compileBlob(doc, compileFace(doc)));
@@ -130,26 +135,48 @@ describe('bloatmaw.blob', () => {
     expect(sig.size).toBeGreaterThanOrEqual(6);
   });
 
-  // THE EYES ARE UNEVEN. Two emissive prims, different sizes AND different
-  // heights — the asymmetry is what stops a sphere reading as a smiley.
-  it('sets two mismatched emissive eyes, not a pair', () => {
+  // THE EYES ARE SEATED EMBERS, NOT GOOGLY ORBS. r2 threw out the two bright
+  // pale-BLUE and GREEN spheres that sat proud of the ball like toy eyes.
+  // Two emissive prims remain, deliberately uneven (different sizes AND
+  // heights), but they are small dim embers tucked INTO flesh sockets under
+  // the brow — the asymmetry is what keeps the mass from reading as a
+  // smiley, and the seated-into-flesh read is what r2 was ordered to fix.
+  it('sets two mismatched ember eyes seated in flesh sockets, not a pair of bright orbs', () => {
     const b = built();
     const head = limb(b, 'head');
     // Off-centre glowing prims: the two eyes. The core and its haze both sit
     // on the centreline (|x| < 0.05), so this excludes them structurally
-    // rather than by colour — the eyes are deliberately cold/pale against the
-    // orange throat, and a colour filter would go stale the moment they are
-    // retinted.
+    // rather than by colour.
     const eyes = b.prims.slice(head.start, head.start + head.count)
       .filter(p => (p.glow ?? 0) > 0 && Math.abs(p.a[0]) > 0.15);
     expect(eyes).toHaveLength(2);
     const [a, c] = eyes as [typeof eyes[0], typeof eyes[0]];
     expect(a!.radius).not.toBeCloseTo(c!.radius, 2); // different sizes
     expect(Math.abs(a!.a[1] - c!.a[1])).toBeGreaterThan(0.03); // different heights
-    expect(a!.color).not.toEqual(c!.color);        // pale blue vs sick green
+    expect(a!.color).not.toEqual(c!.color);        // burnt crimson vs smoke-amber
     // Neither is a mirrored `both` copy — the pair is hand-placed.
     expect(a!.mirrored).toBeUndefined();
     expect(c!.mirrored).toBeUndefined();
+    // NOT bright blue or green. The r2 order was explicit: no saturated hue
+    // that reads as plastic or glass. Assert red dominates blue (so not a blue
+    // eye) and green does not dominate (so not a green eye), and that the
+    // glow is warm-ember (red channel highest of the three).
+    for (const e of [a!, c!]) {
+      const [r, g, bl] = e.color!;
+      expect(r).toBeGreaterThan(bl);              // not blue-dominant
+      expect(r - g).toBeGreaterThan(0.02);        // not green-dominant; reds ahead
+    }
+    // SEATED IN FLESH, not stuck on: each eye is set into a flesh crater —
+    // a wider non-glowing socket prim at the same x, its surface BEHIND the
+    // eye (lower z). That is what makes the outline flesh rather than a
+    // sphere off a sphere.
+    for (const e of [a!, c!]) {
+      const socket = b.prims.slice(head.start, head.start + head.count)
+        .filter(p => (p.glow ?? 0) === 0
+          && Math.abs(p.a[0] - e.a[0]) < 0.05
+          && p.a[2] < e.a[2] && p.radius > e.radius);
+      expect(socket.length, `eye at x ${e.a[0]} has a flesh socket behind it`).toBeGreaterThan(0);
+    }
   });
 
   // THE THROAT CORE. One hot ember deep in the maw, plus a duller haze ring:
@@ -168,6 +195,59 @@ describe('bloatmaw.blob', () => {
     expect(core.a[1]).toBeGreaterThan(0.9);
     expect(core.a[1]).toBeLessThan(1.2);
     expect(core.a[2]).toBeGreaterThan(0.5);
+  });
+
+  // THE BODY IS ANATOMY, NOT A BALL (r2). The owner's brief: "more complex
+  // shape... things like ears or jaw or brow nose." The silhouette test is
+  // "irregular from every yaw", which a structural pin can only APPROACH:
+  // it asserts the mass carries features on each axis rather than a single
+  // smooth ellipsoid — a jutting jaw + jowls under the maw, ear-frills and a
+  // back hump off the flanks/back, a brow ridge over the maw. If any pass
+  // re-spheres the body these fail.
+  it('is built up into anatomy, not a smooth ball, on every axis', () => {
+    const b = built();
+    const torso = b.prims.slice(limb(b, 'torso').start, limb(b, 'torso').start + limb(b, 'torso').count);
+    const headP = b.prims.slice(limb(b, 'head').start, limb(b, 'head').start + limb(b, 'head').count);
+
+    // JAW + JOWLS: a broad mass under the maw line (maw centre y ~1.05). The
+    // heaviest off-centre head prim below it is the jaw; it must reach both
+    // down (y < 0.95) and toward the front (z > 0.3) so it juts past the ball
+    // arc rather than being a hole in it.
+    const jaw = headP.filter(p => p.a[1] < 0.95 && p.a[2] > 0.3 && p.radius > 0.12)
+      .sort((x, y) => y.radius - x.radius)[0];
+    expect(jaw, 'a mandible mass under the maw').toBeDefined();
+
+    // EAR-FRILLS + BACK HUM: masses off the crown that reach BACK (z < -0.05)
+    // and OUT (|x| > 0.3), on the skull bone — these are what take the side
+    // and back views off the plain-circle path.
+    const frills = headP.filter(p => p.bone === 'skull' && p.a[2] < -0.05
+      && Math.abs(p.a[0]) > 0.3 && p.radius > 0.05);
+    expect(frills.length, 'ear-frills / back hump off the crown').toBeGreaterThanOrEqual(2);
+    const hump = headP.filter(p => p.bone === 'skull' && p.a[2] < -0.4 && p.radius > 0.12);
+    expect(hump.length, 'a heavy back hump').toBeGreaterThanOrEqual(1);
+
+    // BROW RIDGE: a wide flat prim over the eyes. `wide` scales the x
+    // semi-axis; a ridge > 0.5 m of half-width (radius * scale.x) is wide
+    // enough to span both sockets, and it sits above them (y > 1.55).
+    const brow = headP.filter(p => p.a[1] > 1.55 && p.radius * p.scale[0] > 0.25);
+    expect(brow.length, 'a shelving brow ridge over the sockets').toBeGreaterThanOrEqual(1);
+
+    // The silhouette is no longer one circle: out-of-plane (|z|) extent and
+    // lateral (|x|) extent both come from the flesh masses, so the profile
+    // is wider front-to-back than a pure sphere of the ball's radius.
+    // Measure the true outline (both endpoints + the radius that stands proud).
+    const extent = (p: Primitive, ax: 0 | 2) =>
+      Math.max(Math.abs(p.a[ax]), Math.abs(p.b[ax])) + p.radius * p.scale[ax];
+    const xs = headP.map(p => extent(p, 0));
+    const zs = headP.map(p => extent(p, 2));
+    expect(Math.max(...xs)).toBeGreaterThan(0.55);   // ears poke past the equator
+    expect(Math.max(...zs)).toBeGreaterThan(0.55);   // back hump / jaw reach back and front
+
+    // ASYMMETRY: the body masses are not bilaterally symmetric. There must be
+    // a torso lump whose centre sits clearly off-axis one way, and a paired
+    // lump at a different offset the other way — not a matched `both` pair.
+    const torsoOff = torso.filter(p => (p.glow ?? 0) === 0 && Math.abs(p.a[0]) > 0.28);
+    expect(torsoOff.length, 'off-centre torso swell lumps').toBeGreaterThanOrEqual(2);
   });
 
   // THE GOBLIN REGRESSION. clearOf reads centrelines; the render showed a
