@@ -998,7 +998,15 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
         // every held scanline. Cleared here it reads alpha 1 and discards,
         // so the first field frame shows the polys through the held rows
         // until the retain blit fills it one frame later.
-        for (const t of [coneCoarse, coneFine, occluder, shellEntry, shellExit, prev, depthPre, fieldPrev]) {
+        // fieldMeshPrev too, and NOT only for the sentinel: RenderTarget.setSize
+        // resizes the colour textures but leaves a DepthTexture's image at
+        // its construction size, and the backend allocates a depth texture
+        // from that image unless the target is RENDERED to (which sizes it
+        // from the target). fieldMeshPrev is only ever a copy destination, so
+        // without this clear its depth stayed 1x1 and the 'bodies' depth
+        // retain failed validation every frame — held rows then wove bone at
+        // garbage depth. fieldPrev only escaped because it was already here.
+        for (const t of [coneCoarse, coneFine, occluder, shellEntry, shellExit, prev, depthPre, fieldPrev, fieldMeshPrev]) {
           renderer.setRenderTarget(t);
           void renderer.render(emptyScene, camera);
         }
@@ -1213,7 +1221,16 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
         renderer.setClearAlpha(0);
         renderer.clear();
         renderer.setClearAlpha(prevAlpha);
+        // autoClear OFF for the draw, exactly as the march does after its own
+        // clear(): with it on, render() clears AGAIN with the renderer's clear
+        // alpha (1) and the alpha-0 clear above is undone before a single
+        // bone is drawn. Every empty texel then passes the coverage gate and
+        // the weave paints the clear colour over every held scanline of the
+        // whole frame — the see-through, striped bodies.
+        const prevMeshAuto = renderer.autoClear;
+        renderer.autoClear = false;
         void renderer.render(scene, camera);
+        renderer.autoClear = prevMeshAuto;
         camera.layers.mask = restore;
 
         setPassLabel('sdf:field-mesh-weave');

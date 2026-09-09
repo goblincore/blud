@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { createSdfLayer, isHoldFrame, sortFrontToBack, SDF_LAYER, DEPTH_PREPASS_BLOCK_PX, DEPTH_PREPASS_DIV, depthPrepassSize } from './sdf-layer';
+import { createSdfLayer, isHoldFrame, sortFrontToBack, SDF_LAYER, FIELD_MESH_LAYER, DEPTH_PREPASS_BLOCK_PX, DEPTH_PREPASS_DIV, depthPrepassSize } from './sdf-layer';
 
 describe('depth prepass sizing (close-up task 3)', () => {
   it('the block footprint constant stays in step with the downsample factor', () => {
@@ -100,5 +100,72 @@ describe('half-rate hold decision (C2)', () => {
     expect(isHoldFrame(idxAfterForceOdd, true, true)).toBe(false);
     expect(isHoldFrame(idxAfterForceOdd + 1, true, false)).toBe(false);
     expect(isHoldFrame(idxAfterForceOdd + 2, true, false)).toBe(true);
+  });
+});
+
+describe("'bodies' field style — the skeleton mesh pass", () => {
+  /** A renderer fake that records, for every render() call, the state the
+   *  pass actually ran under. Everything the field paths touch is stubbed;
+   *  nothing here goes near a GPU. */
+  function fakeRenderer() {
+    type Call = { target: THREE.RenderTarget | null; autoClear: boolean; mask: number };
+    const calls: Call[] = [];
+    const copies: { src: THREE.Texture; dst: THREE.Texture }[] = [];
+    let currentTarget: THREE.RenderTarget | null = null;
+    let clearAlpha = 1;
+    const r = {
+      autoClear: true,
+      getRenderTarget: () => currentTarget,
+      setRenderTarget: (t: THREE.RenderTarget | null) => { currentTarget = t; },
+      render: (_scene: THREE.Scene, camera: THREE.Camera) => {
+        calls.push({ target: currentTarget, autoClear: r.autoClear, mask: camera.layers.mask });
+      },
+      clear: vi.fn(),
+      getClearAlpha: () => clearAlpha,
+      setClearAlpha: (a: number) => { clearAlpha = a; },
+      getClearColor: (c: THREE.Color) => c,
+      setClearColor: vi.fn(),
+      getClearDepth: () => 1,
+      setClearDepth: vi.fn(),
+      copyTextureToTexture: (src: THREE.Texture, dst: THREE.Texture) => { copies.push({ src, dst }); },
+      compileAsync: vi.fn(async () => {}),
+    };
+    return { renderer: r as unknown as THREE.WebGPURenderer, calls, copies };
+  }
+
+  it('draws the mesh field with autoClear OFF, so its alpha-0 coverage clear survives', () => {
+    const { renderer, calls } = fakeRenderer();
+    const layer = createSdfLayer(renderer);
+    layer.setSize(64, 48);
+    layer.setFieldStyle('bodies');
+    layer.render(new THREE.Scene(), new THREE.PerspectiveCamera());
+    const meshPass = calls.filter(c => c.mask === (1 << FIELD_MESH_LAYER));
+    expect(meshPass).toHaveLength(1);
+    // autoClear ON re-clears with the renderer's own clear alpha (1) at the
+    // top of render(), which silently undoes the alpha-0 clear the weave's
+    // coverage gate depends on: every empty texel then claims to be bone.
+    expect(meshPass[0]!.autoClear).toBe(false);
+    layer.dispose();
+  });
+
+  it('renders to every depth-copy destination before copying into it', () => {
+    const { renderer, calls, copies } = fakeRenderer();
+    const layer = createSdfLayer(renderer);
+    layer.setSize(64, 48);
+    layer.setFieldStyle('bodies');
+    layer.render(new THREE.Scene(), new THREE.PerspectiveCamera());
+    // RenderTarget.setSize resizes the colour textures only; a DepthTexture
+    // keeps its 1x1 image until the target is actually rendered to, and a
+    // copyTextureToTexture into a 1x1 depth texture is a WebGPU validation
+    // error (depth copies must cover the whole subresource). So a target that
+    // is only ever a copy destination must still be rendered to once.
+    const rendered = new Set(calls.map(c => c.target));
+    const depthCopies = copies.filter(c => (c.src as THREE.DepthTexture).isDepthTexture);
+    expect(depthCopies.length).toBeGreaterThan(0);
+    for (const { dst } of depthCopies) {
+      const owner = [...rendered].find(t => t?.depthTexture === dst);
+      expect(owner, 'depth copy destination was never rendered to').toBeDefined();
+    }
+    layer.dispose();
   });
 });
