@@ -253,6 +253,16 @@ async function main() {
   // -----------------------------------------------------------------------
   const colliders = levelColliders();
   // ---- ACTOR VISIBILITY CULL STATE ---------------------------------------
+  //
+  // EVERY binding updateVisibleActors closes over lives here, above the draw
+  // callback that calls it. The function itself is a hoisted declaration;
+  // const/let are not. Getting this partly right is worse than not at all: a
+  // first pass moved the state but left CULL_DWELL_MS behind, and boot
+  // happened to reach `actors` but not the constant before the first frame,
+  // so the cull threw on every frame while the picture still looked fine.
+  // If you add a binding this function reads, add it HERE.
+  const actors: ZombieActor[] = [];
+  const CULL_DWELL_MS = 250;
   // Declared HERE, above the draw callback that closes over it, not beside
   // updateVisibleActors further down. `function updateVisibleActors` is a
   // hoisted declaration, but const/let are not: with the state declared later,
@@ -1381,7 +1391,6 @@ async function main() {
    *  the grapeshot wiring below assigns this once the chunk spawner exists. */
   let onSeverDispatch: ((a: ZombieActor, piece: { limb: string; origin: Vec3; prims: Primitive[]; tornAt: Vec3[]; bones: Primitive[] }, stumpWound: Wound | null) => void) | null = null;
 
-  const actors: ZombieActor[] = [];
   const tilesPlaytest = import.meta.env.DEV && new URLSearchParams(location.search).has('tiles-playtest');
   const gameTiles = createGameTilePlaytest({
     allowed: tilesPlaytest,
@@ -3421,7 +3430,6 @@ async function main() {
   // from cover shows its head first), and becoming visible is INSTANT while
   // going invisible must persist for CULL_DWELL_MS. Both biases point at
   // drawing too much, never too little.
-  const CULL_DWELL_MS = 250;
   /** id -> the last time this actor was seen. Keyed by id, not index: actors
    *  are spawned and gibbed, and an index would transfer one body's grace
    *  period to another. */
