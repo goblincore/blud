@@ -772,6 +772,10 @@ async function main() {
     // Sever re-derive: the actor's posed body reference changes — rebuild
     // the sources (revision changes, the cache extracts fresh geometry).
     if (segMeshRenderer) {
+      // Its own phase, NOT folded into an existing one: this path shipped as
+      // the forward default without a controlled timing result (skeleton
+      // wrap-up, 2026-09-08) and no capture could see it until now.
+      const meshTiming = telemetry.begin();
       const craters: { pos: Vec3; radius: number }[] = [];
       for (const a of actors) {
         const prims = a.posed().prims;
@@ -784,6 +788,7 @@ async function main() {
         else if (e.body !== a.body) { e = buildSkeletonSources(a, e.name); skeletonSources.set(a, e); }
         return e.sources;
       }), actors);
+      telemetry.end('skeleton-mesh', meshTiming);
     }
     // skeleton=volume: only the tiny pose/meta texture changes per frame.
     // A body-reference change means sever/rebuild and therefore a new
