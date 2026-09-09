@@ -483,6 +483,11 @@ function clamp(n: number, lo: number, hi: number): number {
   return n < lo ? lo : n > hi ? hi : n;
 }
 
+function smooth01(n: number): number {
+  const t = clamp(n, 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
 /** Arm style for this frame: an explicit config wins; else the blended gait
  *  profile's style; else (no profile at all) the historical default. */
 function pickArmStyle(cfg: MotionConfig, gaitProfile: GaitProfile): ArmStyle {
@@ -810,7 +815,6 @@ export function stepMotion(
   let gun: GunPose | null = null;
   let carryUsed: CarryName | null = null;
   const strongSoldierReaction = profile.name === 'soldier' && stagger.staggered && stagger.state.kind === 'lurch';
-  const strongReactionWeight = strongSoldierReaction ? clamp(1 - stagger.state.age / 0.65, 0, 1) : 0;
   const supportGripWeight = strongSoldierReaction ? clamp((stagger.state.age - 0.25) / 0.65, 0, 1) : 1;
   const carries = profile.carries;
   let carryPose = state.carryPose;
@@ -827,13 +831,16 @@ export function stepMotion(
       gunPitch: mix(previous.gunPitch, wanted.gunPitch),
       leftPole: [mix(previous.leftPole[0], wanted.leftPole[0]), mix(previous.leftPole[1], wanted.leftPole[1]), mix(previous.leftPole[2], wanted.leftPole[2])],
     };
-    if (strongReactionWeight > 0) {
-      // Keep the prop bound to the gun hand while the arm is knocked rearward;
-      // the support hand releases and naturally recomposes when this fades.
-      carry.right.pitch += (-0.55 - carry.right.pitch) * strongReactionWeight;
-      carry.right.yaw += (-0.35 - carry.right.yaw) * strongReactionWeight;
-      carry.right.fold += (0.55 - carry.right.fold) * strongReactionWeight;
-      carry.gunPitch += (-0.15 - carry.gunPitch) * strongReactionWeight;
+    if (strongSoldierReaction) {
+      // Recover the barrel's forward orientation while the arm remains
+      // outboard, then bring the composed carry inward. Moving all four axes
+      // together sweeps the barrel vertically across the face at mid-lurch.
+      const forwardRecovery = smooth01((stagger.state.age - 0.18) / 0.42);
+      const inwardRecovery = smooth01((stagger.state.age - 0.62) / 0.28);
+      carry.right.pitch = -0.55 + (wanted.right.pitch - -0.55) * forwardRecovery;
+      carry.right.fold = 0.55 + (wanted.right.fold - 0.55) * forwardRecovery;
+      carry.gunPitch = -0.15 + (wanted.gunPitch - -0.15) * forwardRecovery;
+      carry.right.yaw = -0.35 + (wanted.right.yaw - -0.35) * inwardRecovery;
     }
     carryPose = carry;
     const right = rotateYaw([1, 0, 0], bodyYaw);

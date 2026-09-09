@@ -955,6 +955,35 @@ describe('soldier injury response', () => {
       NO_SIGNALS(), points, BOUNDS, makeRng(5))).frame.gun!, GUN_GRIP.foreHand), prior))).toBeLessThan(.06);
   });
 
+  it('recovers the strong-hit gun forward before bringing it back inboard', () => {
+    const j = soldierJoints();
+    let state = makeMotionState(5, [0, 0, 0]);
+    let points = stubPoints(j);
+    let atSixTenths: MotionState['carryPose'];
+    let atNineTenths: MotionState['carryPose'];
+    for (let i = 0; i < 65; i++) {
+      const result = stepMotion(state, j,
+        { enabled: true, wander: false, profile: SOLDIER_PROFILE, carryOverride: 'aim' },
+        { ...NO_SIGNALS(), shot: i === 0
+          ? { type: 'blast' as const, dirWorld: [0, 0, -1] as Vec3, woundWorld: [0, 1, 0] as Vec3, torso: true }
+          : null },
+        points, BOUNDS, makeRng(5));
+      state = result.state;
+      points = result.frame.restPose.map(p => ({ pos: [...p] as Vec3, prev: [...p] as Vec3, pinned: false }));
+      if (Math.abs(state.stagger.age - .60) < DT / 2) atSixTenths = state.carryPose;
+      if (Math.abs(state.stagger.age - .90) < DT / 2) atNineTenths = state.carryPose;
+      expect(len(sub(gunPoint(result.frame.gun!, GUN_GRIP.gripHand), result.frame.restPose[j.index.handR]!))).toBeLessThan(1e-6);
+    }
+    const aim = CARRIES.aim;
+    expect(atSixTenths).toBeDefined();
+    expect(atSixTenths!.right.pitch).toBeCloseTo(aim.right.pitch, 5);
+    expect(atSixTenths!.right.fold).toBeCloseTo(aim.right.fold, 5);
+    expect(atSixTenths!.gunPitch).toBeCloseTo(aim.gunPitch, 5);
+    expect(atSixTenths!.right.yaw).toBeCloseTo(-.35, 5);
+    expect(atNineTenths).toBeDefined();
+    expect(atNineTenths!.right.yaw).toBeCloseTo(aim.right.yaw, 5);
+  });
+
   it('losing one leg or the head causes a structural fall, while a zombie still hops on one leg', () => {
     const leg = { ...NO_SIGNALS(), missing: { ...INTACT, legL: true } };
     for (const signals of [leg, { ...NO_SIGNALS(), headAlive: false }]) {

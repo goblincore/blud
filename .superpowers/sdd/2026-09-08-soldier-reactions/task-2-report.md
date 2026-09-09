@@ -30,3 +30,32 @@ Strong-reaction support-hand recovery now begins after the initial release and p
 Follow-up validation: 223 tests across the same 8 focused files passed; `npx tsc --noEmit` and `git diff --check` passed. No GPU or browser work was run.
 
 The fatal-contact regression was subsequently tightened to use matched live and killed actors poised immediately below the 0.5 contact boundary. The surviving control emits exactly once on the next step; the actor receiving explicit lethal explosion provenance collapses on that same step and emits zero contacts. Mutation verification temporarily removed the final-frame gate: the test failed because the killed actor emitted once, then passed after restoring the gate.
+
+## Staged gun recovery follow-up
+
+The parent capture at `/tmp/soldier-reactions-qa/flinch-regrip.png` shows the shotgun nearly vertical over the torso at about 0.67 seconds. The muzzle remains below the head in that projection, so this is a silhouette/path issue rather than confirmed 3D head intersection. The cause is `motion.ts` recovering right-arm pitch, yaw, fold, and `gunPitch` together from the reaction pose `(-0.55, -0.35, 0.55, -0.15)` toward the requested carry. With aim carry, the destination is `(0.15, 0.38, 2.51, -1.2275)`. The direct four-axis interpolation passes through an extended forearm with a near-vertical barrel.
+
+Implemented a minimal change that derives two smooth recovery weights from `stagger.state.age` rather than applying the same `strongReactionWeight` to every axis:
+
+```ts
+const smooth01 = (x: number) => { const t = clamp(x, 0, 1); return t * t * (3 - 2 * t); };
+const forwardRecovery = smooth01((age - 0.18) / 0.42); // complete at 0.60 s
+const inwardRecovery = smooth01((age - 0.62) / 0.28); // complete at 0.90 s
+
+carry.right.pitch = lerp(-0.55, wanted.right.pitch, forwardRecovery);
+carry.right.fold = lerp(0.55, wanted.right.fold, forwardRecovery);
+carry.gunPitch = lerp(-0.15, wanted.gunPitch, forwardRecovery);
+carry.right.yaw = lerp(-0.35, wanted.right.yaw, inwardRecovery);
+```
+
+This restores the forearm/barrel orientation first while holding the gun outboard, then brings the arm inward after the barrel is forward. Continue storing the resulting `carry` in `carryPose`, keep deriving `gun` from the right elbow/hand every frame, and retain the existing support-hand target blend from 0.25 to 0.90 seconds. At lurch expiry all four axes and support grip already equal the requested carry, so the non-lurch frame has no mode-edge snap.
+
+The schedule does not delay a valid shot. Strong pellet/slug reaction puts the Soldier brain in `stagger` for 0.55 seconds and cancels its prior burst. A new burst must then complete the normal 0.50-second aim, so its earliest shot is about 1.05 seconds after impact; full orientation and support grip finish by 0.90 seconds. One-handed aim takes longer (0.75 seconds). No extra fire gate or projectile-direction adjustment is needed.
+
+Focused CPU coverage:
+
+- Sample a strong-reaction aim carry for at least 1.1 seconds at 60 Hz. On every frame assert `distance(gunPoint(frame.gun, GUN_GRIP.gripHand), frame.restPose[handR]) < 1e-6`.
+- Retain the current support-hand continuity assertions: maximum late-frame hand displacement below 0.04 m, final fore-end error below 0.06 m, and arm segment lengths within the existing solver tolerance.
+- The new regression samples the full strong-reaction aim carry, asserts the gun grip stays on the right hand every frame, pins forward pitch/fold/gun pitch completion with yaw still outboard at 0.60 seconds, and pins final aim yaw at 0.90 seconds.
+
+The targeted motion suite passes 76 tests. `npx tsc --noEmit` and `git diff --check` also pass. No GPU or browser work was run for this follow-up; parent owns visual confirmation of the revised path.
