@@ -3388,11 +3388,15 @@ async function main() {
       const pInfo = pRoom > 0
         ? { x: player.pos[0], z: player.pos[2], room: pRoom }
         : null;
+      // The snapshot build is INSIDE the phase on purpose: it calls pose()
+      // per actor and is part of what the director costs per frame.
+      const encounterTiming = telemetry.begin();
       const snapshots: EncounterAgent[] = actors.map(a=>({id:a.id,pos:a.pose().pos,yaw:a.pose().yaw,room:a.room,
         home:encounterHomes.get(a.id)??a.pose().pos,soldier:a.kind==='soldier',ranged:a.kind==='soldier'&& !a.meleeCapable(),disabled:!!a.motionFrame()?.collapsed}));
       const orders=encounter.update(snapshots,pInfo,shotAlert,dt);
       shotAlert = false;
       for (const a of actors) a.setEncounterOrder(orders.get(a.id)!);
+      telemetry.end('encounter', encounterTiming);
 
       // --- melee ring: who may swing this frame ---------------------------
       // Claimants are the alert bodies that are actually in the encounter; an
