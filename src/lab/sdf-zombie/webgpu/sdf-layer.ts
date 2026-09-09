@@ -351,6 +351,7 @@ export const FIELD_INTERLEAVE_WGSL = /* wgsl */ `fn sdfFieldInterleave(
   flipY: f32,
   parity: f32,
   comb: f32,
+  gateAlpha: f32,
   outHeight: f32
 ) -> vec4<f32> {
   var st = texCoord;
@@ -361,6 +362,10 @@ export const FIELD_INTERLEAVE_WGSL = /* wgsl */ `fn sdfFieldInterleave(
   let tRow = clamp(outRow / 2, 0, i32(dims.y) - 1);
   if ((outRow % 2) == i32(parity)) {
     let fresh = textureLoad(curTex, vec2<i32>(col, tRow), 0);
+    // Coverage lives in the SOURCE alpha. The mesh field is cleared to alpha
+    // 0 where no bone was drawn; without this the weave paints opaque black
+    // over the scene wherever its depth happens to pass.
+    if (gateAlpha > 0.5 && fresh.w < 0.5) { discard; }
     return vec4<f32>(fresh.xyz, textureLoad(curDepth, vec2<i32>(col, tRow), 0));
   }
   // A HELD ROW MUST CARRY ITS OWN FRAME'S DEPTH, not this one's.
@@ -372,6 +377,7 @@ export const FIELD_INTERLEAVE_WGSL = /* wgsl */ `fn sdfFieldInterleave(
   // skeleton showed through the body. Only while moving, because standing
   // still the two depths agree (owner-caught).
   let dHeld = textureLoad(prevDepth, vec2<i32>(col, tRow), 0);
+  if (gateAlpha > 0.5 && textureLoad(prevTex, vec2<i32>(col, tRow), 0).w < 0.5) { discard; }
   // The row this frame did not draw. comb 1 = hold last frame's field
   // verbatim, which IS the interlace artifact; 0 = interpolate vertically
   // from THIS frame's field, trading vertical detail for no comb.
@@ -379,10 +385,12 @@ export const FIELD_INTERLEAVE_WGSL = /* wgsl */ `fn sdfFieldInterleave(
   let a = textureLoad(curTex, vec2<i32>(col, tRow), 0);
   let b = textureLoad(curTex, vec2<i32>(col, clamp(tRow + 1, 0, i32(dims.y) - 1)), 0);
   let woven = mix((a + b) * 0.5, held, comb);
-  // comb 0 leans on this frame's interpolated colour, so pair it with this
-  // frame's depth; comb 1 is purely held, so pair it with the held depth.
-  let dNow = textureLoad(curDepth, vec2<i32>(col, tRow), 0);
-  return vec4<f32>(woven.xyz, mix(dNow, dHeld, comb));
+  // DEPTH IS NEVER INTERPOLATED. mix()ing two depths yields a value that
+  // describes no actual surface, and at comb 0.6 those invented depths fought
+  // the scene — see-through bodies and black scanlines (owner-caught). A held
+  // row takes the HELD depth verbatim, which is what the flesh weave does
+  // (it rides the retained field's alpha), so the two agree.
+  return vec4<f32>(woven.xyz, dHeld);
 }`;
 
 const fieldInterleave = wgslFn(FIELD_INTERLEAVE_WGSL);
@@ -667,6 +675,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     flipY: uFlipY,
     parity: uFieldParity,
     comb: uFieldComb,
+    gateAlpha: uniform(1),
     outHeight: uOutHeight,
   }) as unknown as { xyz: unknown; w: unknown };
   const meshQuadMat = new MeshBasicNodeMaterial();
@@ -677,9 +686,10 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   // already in the output. Without it the skeleton would draw through walls.
   meshQuadMat.depthTest = true;
   meshQuadMat.depthWrite = true;
-  // The mesh field clears to alpha 0; anywhere no bone was drawn must not
-  // paint black over the frame.
-  meshQuadMat.transparent = true;
+  // NOT transparent: coverage is resolved by discard, not by blending. A
+  // transparent material that also writes depth is what let this paint over
+  // the scene in black scanlines.
+  meshQuadMat.transparent = false;
   const meshQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), meshQuadMat);
   meshQuad.frustumCulled = false;
   const meshScene = new THREE.Scene();
@@ -695,6 +705,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     flipY: uFlipY,
     parity: uFieldParity,
     comb: uFieldComb,
+    gateAlpha: uniform(0),
     outHeight: uOutHeight,
   }) as unknown as { xyz: unknown; w: unknown };
   fieldQuadMat.colorNode = vec4(woven.xyz as never, 1.0);
@@ -1195,7 +1206,13 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
         setPassLabel('sdf:field-mesh');
         camera.layers.set(FIELD_MESH_LAYER);
         renderer.setRenderTarget(fieldMesh);
+        // ALPHA 0, not the renderer's default 1: the weave's coverage test is
+        // "did anything draw here", and a clear alpha of 1 would claim every
+        // empty pixel is bone.
+        const prevAlpha = renderer.getClearAlpha();
+        renderer.setClearAlpha(0);
         renderer.clear();
+        renderer.setClearAlpha(prevAlpha);
         void renderer.render(scene, camera);
         camera.layers.mask = restore;
 

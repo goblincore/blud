@@ -1339,7 +1339,13 @@ async function main() {
   // Comb 0.6, not 1: full hold was judged too strong in play. 1 holds the
   // stale field verbatim, 0 interpolates it away entirely.
   // __sdfGame.setFieldStyle('off'|'sdf'|'bodies'|'frame') and setFieldComb(x).
-  sdfLayer.setFieldStyle('bodies');
+  // DEFAULT IS 'frame', NOT 'bodies' (2026-09-09). 'bodies' was made default
+  // at the owner's request and then reverted the same day: it renders bodies
+  // semi-transparent with black speckle, and two rounds of fixes from me did
+  // not clear it. 'frame' is verified working and removes the same flesh/bone
+  // disagreement, so it ships while 'bodies' is diagnosed.
+  // Handoff: docs/dev-notes/2026-09-09-perf-spikes/bodies-style-handoff.md
+  sdfLayer.setFieldStyle('frame');
   sdfLayer.setFieldComb(0.6);
   // Headless A/B seams (2026-08-27 hull-holes diagnosis): ship defaults stay
   // ON/ON; the driver flips these between captures. Mirrors the lab's
