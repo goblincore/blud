@@ -4,6 +4,17 @@
 > Per-milestone step-by-step tasks live in `docs/superpowers/plans/`.
 > This file is **coarse-grained state only** — keep rows to ≤2 lines and link out for detail.
 
+## Shot visuals — tracer rounds — 2026-09-09
+
+- [x] Projectiles no longer draw as shaded yellow balls. Each carries an additive
+  velocity-aligned STREAK plus a view-facing EMBER (`webgpu/tracer-sprite.ts`), with a
+  0.30-0.95 m near-fade so nothing blobs at the muzzle. Player and soldier pellets share it.
+- [!] A velocity-aligned streak FORESHORTENS to a sliver on your own forward shots —
+  measured, and why the ember exists. Owner may still want the player's streak dropped
+  (one branch in `placeTracer`); enemy fire is the case the streak actually pays off in.
+- [-] `scripts/sdf-game-tracer-look.sh` is a LOOK capture, not a gate. Its header carries
+  the three rigging traps (LAB_TMP outside the vite root, `?frozen`, room1's only clear lane).
+
 ## Skeleton migration wrap-up — 2026-09-08
 
 - [x] Mesh actor skeletons accepted and merged into main; now the forward default, including production.

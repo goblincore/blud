@@ -40,6 +40,10 @@ import { GOBLIN_SKIN } from './goblin-skin';
 import { GOBLIN_ARM_GLB, aimArm, loadGoblinArms, type GoblinArms } from './game-arms';
 import { flashPixels, smokePixels } from './flash-sprite';
 import {
+  TRACER, emberPixels, faceEyeBasis, tracerBasis, tracerHeadOn, tracerLength,
+  tracerNearFade, tracerPixels, type TracerBasis,
+} from './tracer-sprite';
+import {
   BOB, FREE_AIM, approachAngle, approachBob, bobPose, moveAim, pivotOffset, turnFromAim,
   weaponAngles, weaponSlide, type AimPoint, type Frustum,
 } from './free-aim';
@@ -2511,10 +2515,94 @@ async function main() {
    *  There is no player health in the SDF game, so these hit nothing at all.
    *  They stop at solid level geometry and expire; actor damage remains a later phase. */
   const soldierPellets: Projectile[] = [];
-  const soldierPelletViews: THREE.Mesh[] = [];
-  const pelletGeo = new THREE.SphereGeometry(GRAPESHOT.radius, 10, 8);
-  const pelletMat = new THREE.MeshBasicMaterial({ color: 0xffcf7a });
-  const pelletViews: THREE.Mesh[] = [];
+  const soldierPelletViews: TracerView[] = [];
+
+  // TRACERS. A shot in flight is drawn as a stretched, additively-blended
+  // light streak (tracer-sprite.ts), not as the shaded ball this used to be:
+  // a 10 cm sphere is a yellow dot downrange and a screen-filling yellow blob
+  // in its first frames at the muzzle. See that file's header for the shape /
+  // aim / fade split.
+  //
+  // ONE quad per shot — the sprite carries its own halo, so there is no second
+  // glow card and no blur pass. The geometry is a unit plane; the per-frame
+  // basis matrix carries length, width AND orientation together, which is why
+  // these views run matrixAutoUpdate off.
+  const tracerTex = new THREE.DataTexture(tracerPixels(256, 64), 256, 64, THREE.RGBAFormat);
+  tracerTex.needsUpdate = true;
+  const emberTex = new THREE.DataTexture(emberPixels(128), 128, 128, THREE.RGBAFormat);
+  emberTex.needsUpdate = true;
+  const pelletGeo = new THREE.PlaneGeometry(1, 1);
+  /** The streak and the head-on ember for ONE projectile. Two quads because
+   *  they are oriented differently — the streak rolls about the trajectory,
+   *  the ember faces the eye outright — and because their weights are
+   *  complementary: see tracerHeadOn. Both carry their own material, since
+   *  each fades independently by distance and angle, the same way the smoke
+   *  puffs above each own their opacity. */
+  interface TracerView { streak: THREE.Mesh; ember: THREE.Mesh }
+  function newTracerQuad(map: THREE.Texture): THREE.Mesh {
+    const mesh = new THREE.Mesh(pelletGeo, new THREE.MeshBasicMaterial({
+      map, transparent: true, opacity: 1, blending: THREE.AdditiveBlending,
+      depthWrite: false, side: THREE.DoubleSide,
+    }));
+    mesh.frustumCulled = false;
+    mesh.matrixAutoUpdate = false;
+    return mesh;
+  }
+  function newTracerView(): TracerView {
+    const view = { streak: newTracerQuad(tracerTex), ember: newTracerQuad(emberTex) };
+    scene.add(view.streak);
+    scene.add(view.ember);
+    return view;
+  }
+  /** Compose one quad's world matrix from a basis, two axis scales and a centre. */
+  function setQuadMatrix(
+    m: THREE.Mesh, b: TracerBasis, sx: number, sy: number, cx: number, cy: number, cz: number,
+  ): void {
+    const { x, y, z } = b;
+    // Row-major to Matrix4.set: the COLUMNS are (x*sx, y*sy, z, centre).
+    m.matrix.set(
+      x[0] * sx, y[0] * sy, z[0], cx,
+      x[1] * sx, y[1] * sy, z[1], cy,
+      x[2] * sx, y[2] * sy, z[2], cz,
+      0, 0, 0, 1,
+    );
+    m.matrixWorldNeedsUpdate = true;
+  }
+  /**
+   * Point one pooled view at one live projectile, from an eye at `eye`.
+   * The streak's HEAD sits on the projectile and the smear trails behind it,
+   * so the thing that collides and the thing that glows are the same point;
+   * the ember sits ON the projectile and takes over as the streak collapses.
+   */
+  function placeTracer(v: TracerView, p: Projectile, eye: Vec3): void {
+    const ex = eye[0] - p.pos[0], ey = eye[1] - p.pos[1], ez = eye[2] - p.pos[2];
+    const toEye: Vec3 = [ex, ey, ez];
+    const fade = tracerNearFade(Math.hypot(ex, ey, ez));
+    const basis = tracerBasis(p.vel, toEye);
+    if (!basis || fade <= 0) { hideTracer(v); return; }
+
+    const len = tracerLength(Math.hypot(p.vel[0], p.vel[1], p.vel[2]));
+    const wid = p.radius * TRACER.widthScale;
+    v.streak.visible = true;
+    (v.streak.material as THREE.MeshBasicMaterial).opacity = fade;
+    setQuadMatrix(v.streak, basis, len, wid,
+      p.pos[0] - basis.x[0] * len * 0.5,
+      p.pos[1] - basis.x[1] * len * 0.5,
+      p.pos[2] - basis.x[2] * len * 0.5);
+
+    const headOn = tracerHeadOn(p.vel, toEye) * fade;
+    const face = headOn > 0 ? faceEyeBasis(toEye) : null;
+    if (!face) { v.ember.visible = false; return; }
+    const d = p.radius * TRACER.emberScale;
+    v.ember.visible = true;
+    (v.ember.material as THREE.MeshBasicMaterial).opacity = headOn;
+    setQuadMatrix(v.ember, face, d, d, p.pos[0], p.pos[1], p.pos[2]);
+  }
+  function hideTracer(v: TracerView): void {
+    v.streak.visible = false;
+    v.ember.visible = false;
+  }
+  const pelletViews: TracerView[] = [];
 
   let nextSeed = 0x5df1;
   let cooldown = 0;
@@ -3946,43 +4034,32 @@ async function main() {
         if (expired(soldierPellets[i]!) || colliders.some(box =>
           segmentHitsBox(soldierFrom[i]!, soldierPellets[i]!.pos, box))) soldierPellets.splice(i, 1);
       }
+      // The eye every tracer billboards around this frame. Declared here (not
+      // reused from the block below) because that one is scoped to the hit
+      // pass; the streaks need it whether or not anything was hit.
+      const tracerEye = eyeOf(player);
       while (soldierPelletViews.length < soldierPellets.length) {
-        const mesh = new THREE.Mesh(pelletGeo, pelletMat);
-        mesh.frustumCulled = false;
-        scene.add(mesh);
-        soldierPelletViews.push(mesh);
+        soldierPelletViews.push(newTracerView());
       }
       for (let k = 0; k < soldierPelletViews.length; k++) {
         const v = soldierPelletViews[k]!;
         const p = soldierPellets[k];
-        if (p) {
-          v.visible = true;
-          v.position.set(p.pos[0], p.pos[1], p.pos[2]);
-          v.scale.setScalar(p.radius / GRAPESHOT.radius);
-        } else {
-          v.visible = false;
-        }
+        if (p) placeTracer(v, p, tracerEye);
+        else hideTracer(v);
       }
       // Sync the mesh pool to the sim list — growing it on demand (the
       // pool is ONLY grown here; fire() must not touch meshes because it
       // runs from an evaluate() with no frame in between).
       while (pelletViews.length < pellets.length) {
-        const mesh = new THREE.Mesh(pelletGeo, pelletMat);
-        mesh.frustumCulled = false;
-        scene.add(mesh);
-        pelletViews.push(mesh);
+        pelletViews.push(newTracerView());
       }
       for (let k = 0; k < pelletViews.length; k++) {
         const v = pelletViews[k]!;
-        if (k < pellets.length) {
-          v.visible = true;
-          v.position.set(pellets[k]!.pos[0], pellets[k]!.pos[1], pellets[k]!.pos[2]);
-          // Slug balls are drawn at their own (larger) calibre.
-          const s = pellets[k]!.radius / GRAPESHOT.radius;
-          v.scale.setScalar(s);
-        } else {
-          v.visible = false;
-        }
+        const p = pellets[k];
+        // A slug is drawn at its own (larger) calibre — placeTracer reads the
+        // projectile's radius, so no branch is needed here.
+        if (p) placeTracer(v, p, tracerEye);
+        else hideTracer(v);
       }
       // Chunks: ballistic step + world-space field repack, lab contract.
       // With the bake seam on, a chunk that has come to rest is retired
