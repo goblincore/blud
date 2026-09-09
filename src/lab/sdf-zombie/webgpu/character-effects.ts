@@ -32,15 +32,21 @@ export function createMuzzleFlash() {
     t.needsUpdate = true;
     return t;
   });
+  // depthTest OFF: the flash always sits above the shooter (owner call,
+  // 2026-09-09). With it on, the hand and forearm flesh holding the gun sit
+  // nearer than the muzzle point along those rays and clip the billboard —
+  // it read as the flash being "behind" the soldier's own arms. The cost is
+  // that a shooter firing from behind a wall shows his flash through it,
+  // which is the Doom-era read and accepted.
   const core = new THREE.Sprite(new THREE.SpriteMaterial({
     map: textures[0], color: new THREE.Color(6, 4.3, 2.2),
     transparent: true, blending: THREE.AdditiveBlending,
-    depthTest: true, depthWrite: false, toneMapped: false,
+    depthTest: false, depthWrite: false, toneMapped: false,
   }));
   const halo = new THREE.Sprite(new THREE.SpriteMaterial({
     map: textures[0], color: new THREE.Color(1.8, 0.55, 0.12),
     transparent: true, blending: THREE.AdditiveBlending,
-    depthTest: true, depthWrite: false, toneMapped: false,
+    depthTest: false, depthWrite: false, toneMapped: false,
   }));
   object.add(core, halo);
   let previousAge = Infinity;

@@ -2640,8 +2640,14 @@ async function main() {
   }
   function newTracerView(): TracerView {
     const view = { streak: newTracerQuad(tracerTex), ember: newTracerQuad(emberTex) };
-    scene.add(view.streak);
-    scene.add(view.ember);
+    // The EFFECTS overlay, not the main scene: the overlay draws after the
+    // SDF composite against the completed depth buffer, so a streak crossing
+    // in front of a body stays visible and one behind it is occluded. In the
+    // main pass the streak writes no depth, and the flesh composite — depth-
+    // testing only against the wall behind — painted straight over it
+    // (owner-caught: tracers clipped by the soldier's body).
+    characterEffects.scene.add(view.streak);
+    characterEffects.scene.add(view.ember);
     return view;
   }
   /** Compose one quad's world matrix from a basis, two axis scales and a centre. */

@@ -27,11 +27,14 @@ describe('character muzzle flash', () => {
     flash.dispose();
   });
 
-  it('tests against completed scene depth without covering it with transparent depth', () => {
+  it('always sits above the shooter: no depth test, and never writes depth', () => {
+    // Owner call 2026-09-09: with depthTest on, the shooter's own hand and
+    // forearm flesh clipped the flash. It is drawn after the SDF composite in
+    // the effects overlay, so "no depth test" means "on top of everything".
     const flash = createMuzzleFlash();
     for (const child of flash.object.children) {
       const material = (child as THREE.Sprite).material;
-      expect(material.depthTest).toBe(true);
+      expect(material.depthTest).toBe(false);
       expect(material.depthWrite).toBe(false);
     }
     const parent = new THREE.Scene();
