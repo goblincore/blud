@@ -188,3 +188,62 @@ describe('field weave shaders — depth is never interpolated', () => {
     expect(FIELD_INTERLEAVE_WGSL).toContain('let base = tRow - i32(parity);');
   });
 });
+
+describe('field jitter placement', () => {
+  type ViewRec = { mask: number; viewOn: boolean; fullHeight: number; offsetY: number };
+  function rendererRecordingView() {
+    const calls: ViewRec[] = [];
+    let currentTarget: THREE.RenderTarget | null = null;
+    const r = {
+      autoClear: true,
+      getRenderTarget: () => currentTarget,
+      setRenderTarget: (t: THREE.RenderTarget | null) => { currentTarget = t; },
+      render: (_scene: THREE.Scene, camera: THREE.Camera) => {
+        const v = (camera as THREE.PerspectiveCamera).view;
+        calls.push({ mask: camera.layers.mask, viewOn: !!v?.enabled, fullHeight: v?.fullHeight ?? -1, offsetY: v?.offsetY ?? 0 });
+      },
+      clear: vi.fn(), getClearAlpha: () => 1, setClearAlpha: vi.fn(),
+      getClearColor: (c: THREE.Color) => c, setClearColor: vi.fn(),
+      getClearDepth: () => 1, setClearDepth: vi.fn(),
+      copyTextureToTexture: vi.fn(), compileAsync: vi.fn(async () => {}),
+    };
+    return { renderer: r as unknown as THREE.WebGPURenderer, calls };
+  }
+  const polyPassOf = (calls: ViewRec[]) => calls.find(c => c.mask !== 0 && (c.mask & (1 << SDF_LAYER)) === 0 && c.mask !== (1 << FIELD_MESH_LAYER));
+
+  it("'sdf' and 'bodies' draw the full-res polygonal pass UNJITTERED, and jitter the half-height passes", () => {
+    for (const style of ['sdf', 'bodies'] as const) {
+      const { renderer, calls } = rendererRecordingView();
+      const layer = createSdfLayer(renderer);
+      layer.setSize(64, 48);
+      layer.setFieldStyle(style);
+      layer.render(new THREE.Scene(), new THREE.PerspectiveCamera());
+      const poly = polyPassOf(calls);
+      expect(poly, style).toBeDefined();
+      // The jitter exists so half-target row r lands on output row 2r+parity.
+      // An unjittered poly pass already lines up with that; a jittered one is
+      // half a row off and makes the whole level crawl at field rate.
+      expect(poly!.viewOn, `${style}: poly pass jittered`).toBe(false);
+      const jittered = calls.filter(c => c.viewOn);
+      expect(jittered.length, `${style}: no jittered pass`).toBeGreaterThan(0);
+      layer.dispose();
+    }
+  });
+
+  it("'frame' jitters everything on the OUTPUT grid, not the sdfScale'd one", () => {
+    const { renderer, calls } = rendererRecordingView();
+    const layer = createSdfLayer(renderer);
+    layer.setSize(64, 48);
+    layer.setScale(0.5);
+    layer.setFieldStyle('frame');
+    layer.render(new THREE.Scene(), new THREE.PerspectiveCamera());
+    const poly = polyPassOf(calls);
+    expect(poly).toBeDefined();
+    expect(poly!.viewOn).toBe(true);
+    // fieldFull is (fullW, ceil(fullH/2)) — output resolution. A jitter (and
+    // an outHeight) in scaled rows weaves the wrong grid: at scale 0.7 the
+    // frame stretches 1/0.7 vertically and the fields land 1/0.7 rows apart.
+    expect(poly!.fullHeight).toBe(48);
+    layer.dispose();
+  });
+});

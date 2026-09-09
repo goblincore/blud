@@ -900,7 +900,11 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     // the march at full height and halves the whole-frame buffer instead —
     // halving both would field twice and lose half the vertical detail.
     const h = (fieldStyle === 'sdf' || fieldStyle === 'bodies') ? fieldTargetHeight(hFull) : hFull;
-    uOutHeight.value = hFull;
+    // The row count the weave interlaces on. 'sdf'/'bodies' weave the MARCH
+    // target, whose grid is sdfScale'd; 'frame' weaves fieldFull, which is
+    // output-sized. Using the scaled count for 'frame' at any scale but 1
+    // reads only the top `scale` of the field and stretches it to fill.
+    uOutHeight.value = fieldStyle === 'frame' ? Math.max(1, fullH) : hFull;
     // setSize reallocates the march target's backing memory — a hold frame
     // would composite garbage until the next fresh march.
     forceFreshFrame = true;
@@ -978,15 +982,21 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       // is the biased one. Applied around the WHOLE layer render so every
       // pre-pass shares the march's sampling grid; cleared at the end.
       const parity = fieldMode ? fieldParity(frameIndex) : 0;
-      if (fieldMode) {
-        uFieldParity.value = parity;
-        const hFull = Math.max(1, Math.round(fullH * scale));
-        camera.setViewOffset(
-          Math.max(1, Math.round(fullW * scale)), hFull,
-          0, parity - 0.5,
-          Math.max(1, Math.round(fullW * scale)), hFull,
-        );
-      }
+      if (fieldMode) uFieldParity.value = parity;
+      // The jitter is in rows of the grid being FIELDED: the output grid for
+      // 'frame' (fieldFull is output-sized), the sdfScale'd grid otherwise.
+      const applyFieldJitter = () => {
+        const jw = fieldStyle === 'frame' ? Math.max(1, fullW) : Math.max(1, Math.round(fullW * scale));
+        const jh = fieldStyle === 'frame' ? Math.max(1, fullH) : Math.max(1, Math.round(fullH * scale));
+        camera.setViewOffset(jw, jh, 0, parity - 0.5, jw, jh);
+      };
+      // 'frame' fields the polygonal pass too, so it is jittered with the
+      // rest. 'sdf'/'bodies' draw the polys at FULL height, unfielded, and
+      // the jitter is applied only from the half-height passes on: half-target
+      // row r lands on output row 2r+parity by construction, so an unjittered
+      // poly pass already lines up with the woven flesh — a jittered one is
+      // half a row off and the whole level crawls at field rate.
+      if (fieldStyle === 'frame') applyFieldJitter();
       const hold = isHoldFrame(frameIndex, halfRate, forceFreshFrame);
       uHoldMode.value = hold ? (halfRateMode === 1 ? 2 : 1) : 0;
       if (!hold) {
@@ -1049,6 +1059,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       // stale flesh against current bone on held rows.
       renderer.setRenderTarget(fieldStyle === 'frame' ? fieldFull : outputTarget);
       void renderer.render(scene, camera);
+      if (fieldStyle === 'sdf' || fieldStyle === 'bodies') applyFieldJitter();
 
       // Passes 1b/1c/1d + 2 — pre-passes and march. SKIPPED ENTIRELY on a
       // hold frame: they exist only to feed the march, and the march target
