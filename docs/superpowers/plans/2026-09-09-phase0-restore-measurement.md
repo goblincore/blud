@@ -218,11 +218,23 @@ that you could not get a clean one — do not publish numbers from a busy box.
 
 Run:
 ```bash
-BENCH_PASSES=1 BENCH_ROOMS=3,4,5 BENCH_REPEATS=2 \
+BENCH_LEGS=baseline BENCH_PASSES=1 BENCH_ROOMS=3,4,5 BENCH_REPEATS=2 \
   LAB_VITE_PORT=5299 LAB_CDP_PORT=9299 scripts/sdf-game-bench.sh
 ```
 
+**`BENCH_LEGS=baseline` is load-bearing.** Without it the harness runs its whole
+~18-leg ablation matrix across every room and repeat — well over an hour — when
+all this task needs is where the frame goes at ship defaults. (Omitted by
+mistake on the first run of this plan, 2026-09-09.)
+
+Drop `BENCH_LEGS` only when you deliberately want the full ablation matrix, and
+budget the time for it.
+
 Expected: completes with exit 0 and writes `/tmp/sdf-game-bench/passes.md`.
+
+**Note:** `passes.md` is written only after the ENTIRE throughput matrix
+finishes. Killing the run partway leaves no report at all — decide before you
+start, not halfway through.
 
 - [ ] **Step 3: Confirm both new phases are present**
 
