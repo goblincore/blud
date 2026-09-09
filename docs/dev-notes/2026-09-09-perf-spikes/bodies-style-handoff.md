@@ -1,7 +1,36 @@
-# `'bodies'` field style — broken, handoff for fresh eyes (2026-09-09)
+# `'bodies'` field style — handoff (2026-09-09)
 
-**Status:** implemented, NOT working. Default reverted to `'frame'`, which is
-verified. `'bodies'` remains reachable via `__sdfGame.setFieldStyle('bodies')`.
+**Status: FIXED in 9f205aaa** (same day). The rest of this document is the
+handoff as written before the diagnosis; it is kept because the six earlier
+fixes and the reproduction commands are still accurate.
+
+## Resolution
+
+Two mechanical defects in the mesh pass, neither in the four hypotheses below:
+
+1. **The alpha-0 coverage clear was undone.** `renderer.clear()` with clear
+   alpha 0 was followed by `renderer.render()` with `autoClear` still on,
+   which re-clears with the renderer's clear alpha (1) before drawing a bone.
+   Every empty texel then passed the weave's coverage gate and the weave
+   painted the clear colour over every held scanline of the whole frame —
+   the see-through, striped bodies. The march's own `clear()` already turns
+   `autoClear` off for its draw; the mesh pass now does the same.
+2. **`fieldMeshPrev`'s depth was 1x1.** `RenderTarget.setSize` resizes only
+   the colour textures; a `DepthTexture` keeps its construction-size image
+   until the target is actually rendered to. `fieldMeshPrev` was only ever a
+   copy destination, so its depth was allocated 1x1 and the depth retain
+   failed WebGPU validation every frame (a depth copy must cover the whole
+   subresource). Held rows then wove bone at garbage depth. It joins the
+   init-clear list, which is why `fieldPrev` never had the problem.
+
+Both are pinned by tests against a fake renderer in `sdf-layer.test.ts`.
+What discriminated: `'sdf'` at comb 0.6 was clean on a fresh tab while
+`'bodies'` was striped at comb 0, 0.6 and 1 — hypothesis A's own test — and
+the fresh-tab console showed ~236 `copyTextureToTexture` validation errors
+naming a 1x1 `Depth24Plus` destination.
+
+`'bodies'` remains reachable via `__sdfGame.setFieldStyle('bodies')`; the
+default is still `'frame'` — whether to flip it is the owner's call.
 
 **Symptom (owner, in play):** bodies render **semi-transparent** — you see the
 wall through them — with **black speckle** over the flesh. Present in motion
