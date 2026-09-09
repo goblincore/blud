@@ -90,6 +90,33 @@ describe('stepSoldierBrain — perception', () => {
   });
 });
 
+describe('stepSoldierBrain — disarmed combat', () => {
+  it('keeps support-arm loss ranged but slows the aim', () => {
+    const base = { ...alerted(), state: 'aim' as const, phaseT: SOLDIER_TUNING.aimSec };
+    expect(stepSoldierBrain(base, input({ missing: { armL: true, armR: false, legL: false, legR: false } })).fire).toBe(false);
+    expect(stepSoldierBrain(base, input({ missing: { armL: false, armR: false, legL: false, legR: false } })).fire).toBe(true);
+  });
+
+  it('pursues and emits one gated contact when the gun arm is gone', () => {
+    let b = alerted(); let contacts = 0; let attacks = 0;
+    const missing = { armL: false, armR: true, legL: false, legR: false };
+    for (let i = 0; i < 100; i++) {
+      const out = stepSoldierBrain(b, input({ player: { x: 0, z: 1, room: 3 }, missing, hasToken: true, lineOfSight: true }));
+      b = out.brain; contacts += Number(out.contact); attacks += Number(!!out.attack);
+    }
+    expect(attacks).toBeGreaterThan(1);
+    expect(contacts).toBe(1);
+    expect(stepSoldierBrain(b, input({ player: { x: 0, z: 5, room: 3 }, missing, hasToken: true })).contact).toBe(false);
+  });
+
+  it('uses a body shove when both arms are missing', () => {
+    const missing = { armL: true, armR: true, legL: false, legR: false };
+    let b = alerted(), variant = '';
+    for (let i = 0; i < 30 && !variant; i++) { const o = stepSoldierBrain(b, input({ player: { x: 0, z: 1, room: 3 }, missing, hasToken: true })); b = o.brain; variant = o.attack?.variant ?? ''; }
+    expect(variant).toBe('shove');
+  });
+});
+
 describe('stepSoldierBrain — movement is a preference, never a gate', () => {
   it('closes when well outside the range he likes', () => {
     const out = stepSoldierBrain(alerted(), input({
@@ -288,6 +315,18 @@ describe('stepSoldierBrain — the firing cycle', () => {
 });
 
 describe('staggerSoldierNow', () => {
+  it('cannot resume aiming or attack while the backward stagger is recovering', () => {
+    let b = staggerSoldierNow(alerted());
+    for (let frame = 0; frame < 71; frame++) {
+      const out = stepSoldierBrain(b, input({ roll: 0 }));
+      b = out.brain;
+      expect(out.fire).toBe(false);
+      expect(out.weaponUp).toBe(false);
+      expect(out.halt).toBe(true);
+      expect(b.state).toBe('stagger');
+    }
+  });
+
   it('forces stagger and halts, synchronously', () => {
     const b = staggerSoldierNow(alerted());
     expect(b.state).toBe('stagger');

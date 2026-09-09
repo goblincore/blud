@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three/webgpu';
-import { createMuzzleFlash } from './character-effects';
+import { createArmorSparks, createMuzzleFlash } from './character-effects';
 
 describe('character muzzle flash', () => {
   it('is bright for the firing instant, fades out, and resets for another shot', () => {
@@ -38,5 +38,18 @@ describe('character muzzle flash', () => {
     parent.add(flash.object);
     flash.dispose();
     expect(parent.children).toHaveLength(0);
+  });
+});
+
+describe('armor sparks',()=>{
+  it('stays bounded, expires, resets and disposes',()=>{
+    const s=createArmorSparks(8);const scene=new THREE.Scene();scene.add(s.object);
+    expect(s.object.visible).toBe(false);
+    s.burst([1,2,3],40);expect(s.active).toBe(8);expect(s.object.children).toHaveLength(8);
+    expect(s.object.visible).toBe(true);expect((s.object.children[0] as THREE.Sprite).isSprite).toBe(true);
+    const m=(s.object.children[0] as THREE.Sprite).material as THREE.SpriteMaterial;
+    expect(m.blending).toBe(THREE.AdditiveBlending);expect(m.depthWrite).toBe(false);
+    s.step(1);expect(s.active).toBe(0);expect(s.object.visible).toBe(false);s.burst([0,0,0]);s.reset();expect(s.active).toBe(0);expect(s.object.visible).toBe(false);
+    s.dispose();expect(scene.children).toHaveLength(0);
   });
 });

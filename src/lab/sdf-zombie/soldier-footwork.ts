@@ -23,6 +23,8 @@ interface FootworkInput {
   homes: [Vec3, Vec3];
   reach: [number, number];
   lift: [number, number];
+  /** Per-side stride reach, used by persistent injury shuffles. */
+  stepScale?: [number, number];
   groundY: number;
   dt: number;
 }
@@ -66,7 +68,8 @@ export function stepSoldierFootwork(previous: SoldierFootwork | undefined, input
     const error = (side: Side) => len(sub(feet[side], add(homes[side]!, [ahead[0] * .5, 0, ahead[2] * .5])));
     if (speed < .04 && error(next) < STEP.trigger) next = next === 0 ? 1 : 0;
     if (error(next) > STEP.trigger) {
-      let target = add(homes[next]!, ahead);
+      const stepScale = input.stepScale?.[next] ?? 1;
+      let target = add(homes[next]!, [ahead[0] * stepScale, 0, ahead[2] * stepScale]);
       const support = feet[next === 0 ? 1 : 0];
       const across = rotateYaw(sub(target, support), -yaw);
       const sign = Math.sign(input.homes[next][0]);

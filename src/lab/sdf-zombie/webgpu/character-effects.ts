@@ -73,3 +73,19 @@ export function createMuzzleFlash() {
     },
   };
 }
+
+/** Fixed-pool additive armor sparks; no per-impact GPU allocations. */
+export function createArmorSparks(capacity=32) {
+  const object=new THREE.Group(); object.name='ArmorSparks'; object.visible=false;
+  const materials:THREE.SpriteMaterial[]=[];
+  const slots=Array.from({length:capacity},()=>{const material=new THREE.SpriteMaterial({color:0xffd070,transparent:true,blending:THREE.AdditiveBlending,depthTest:true,depthWrite:false,toneMapped:false});materials.push(material);return {mesh:new THREE.Sprite(material),vel:new THREE.Vector3(),age:Infinity,life:.14};});
+  for(const s of slots){s.mesh.visible=false;object.add(s.mesh);}
+  let cursor=0,seed=1;
+  return {object,burst(point:Vec3,count=6){for(let i=0;i<Math.min(count,capacity);i++){
+    const s=slots[cursor++%capacity]!; seed=(seed*1664525+1013904223)>>>0;
+    const a=(seed/4294967296)*Math.PI*2, speed=1.4+((seed>>>8)&255)/255*2;
+    s.mesh.position.fromArray(point);s.mesh.material.rotation=a;s.mesh.scale.set(.045,.008,1);s.vel.set(Math.cos(a)*speed,.8+speed*.45,Math.sin(a)*speed);s.age=0;s.life=.10+((seed>>>16)&31)/400;s.mesh.visible=true;
+  } object.visible=true;},step(dt:number){for(const s of slots){if(!s.mesh.visible)continue;s.age+=Math.max(0,dt);if(s.age>=s.life){s.mesh.visible=false;continue;}s.vel.y-=8*dt;s.mesh.position.addScaledVector(s.vel,dt);}object.visible=slots.some(s=>s.mesh.visible);},
+    reset(){for(const s of slots){s.age=Infinity;s.mesh.visible=false;}object.visible=false;},get active(){return slots.filter(s=>s.mesh.visible).length;},get capacity(){return capacity;},
+    dispose(){object.removeFromParent();object.clear();for(const material of materials)material.dispose();}};
+}

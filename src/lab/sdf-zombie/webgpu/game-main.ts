@@ -2550,6 +2550,7 @@ async function main() {
     // Gunfire in a room turns every head in it, cone or no cone. Placed after
     // the guards on purpose: a dry click or a shot during a reload must not
     // alert anything, or the flag fires on inputs that made no noise.
+    barrels = Math.min(shells, barrels) as 1 | 2;
     telemetry.event('shot', { kind: slugMode ? 'slug' : 'pellet', barrels });
     shotAlert = true;
     cooldown = GRAPESHOT.fireCooldownSec;
@@ -3383,7 +3384,7 @@ async function main() {
         ? { x: player.pos[0], z: player.pos[2], room: pRoom }
         : null;
       const snapshots: EncounterAgent[] = actors.map(a=>({id:a.id,pos:a.pose().pos,yaw:a.pose().yaw,room:a.room,
-        home:encounterHomes.get(a.id)??a.pose().pos,soldier:!a.mind().meleeCapable,disabled:!!a.motionFrame()?.collapsed}));
+        home:encounterHomes.get(a.id)??a.pose().pos,soldier:a.kind==='soldier',ranged:a.kind==='soldier'&& !a.meleeCapable(),disabled:!!a.motionFrame()?.collapsed}));
       const orders=encounter.update(snapshots,pInfo,shotAlert,dt);
       shotAlert = false;
       for (const a of actors) a.setEncounterOrder(orders.get(a.id)!);
@@ -3400,7 +3401,7 @@ async function main() {
           // while having no swing to throw. Submitting him would make him
           // compete for a token AND be spaced at melee radius against the
           // zombies, distorting their positioning.
-          .filter(a => a.mind().meleeCapable && orders.get(a.id)?.visible && !a.motionFrame()?.collapsed
+          .filter(a => a.meleeCapable() && orders.get(a.id)?.visible && !a.motionFrame()?.collapsed
             && a.mind().debug().alert && a.mind().debug().state !== 'idle')
           .map(a => {
             const p = a.pose().pos;
@@ -3453,7 +3454,7 @@ async function main() {
       for (const a of actors) {
         if (!a.character) continue;
         const p = a.pose();
-        a.character.pose(a.body, a.boundRig(), p.yaw, a.sinceFire(), a.motionFrame(), dt, a.id);
+        a.character.pose(a.body, a.boundRig(), p.yaw, a.sinceFire(), a.motionFrame(), dt, a.id, a.posed());
       }
       const now = performance.now() / 1000;
       for (const a of actors) {
@@ -3908,8 +3909,8 @@ async function main() {
               if (sources) segMeshRenderer.impact(hitActor, sources, hitPoint, dirN, p.kind);
             }
             const stamped = p.kind === 'slug'
-              ? hitActor.hitSlug(hitPoint, dirN)
-              : hitActor.hit(hitPoint, dirN);
+              ? hitActor.hitSlug(hitPoint, dirN, p.shot)
+              : hitActor.hit(hitPoint, dirN, p.shot);
             telemetry.end('wound-hit', hitTiming);
             if (telemetry.active) telemetry.event('impact', {
               actor: hitActor.id, model: 'zombie', room: hitActor.room, kind: p.kind, stamped: !!stamped,
@@ -4416,10 +4417,11 @@ async function main() {
       const b = a.mind().debug();
       const p = a.pose().pos;
       return {
-        id: a.id, room: a.room, kind: a.mind().meleeCapable ? 'zombie' : 'soldier', phase:a.debug().phase, state: b.state, alert: b.alert,
+        id: a.id, room: a.room, kind: a.kind, phase:a.debug().phase, state: b.state, alert: b.alert,
         swingT: b.swingT, side: b.side, variant: b.variant,
         hasToken: a.debug().hasToken,
         aimT: b.aimT, cooldown: b.cooldown, sinceFire: a.sinceFire(),
+        meleeContacts: a.debug().meleeContacts,
         speed: a.debug().speed, target: a.debug().target,
         dist: Math.hypot(p[0] - player.pos[0], p[2] - player.pos[2]),
         bearing: Math.atan2(p[0] - player.pos[0], p[2] - player.pos[2]),
@@ -5207,11 +5209,14 @@ async function main() {
       const sources = skeletonSources.get(a)?.sources;
       const head = sources?.find(s => s.segment === 'head' && s.isLive());
       if (!sources || !head) return null;
-      const b = head.bounds;
-      const point = head.toWorld([(b.min[0] + b.max[0]) / 2, b.min[1] + (b.max[1] - b.min[1]) * 0.61, b.max[2]]);
-      const origin = head.toWorld([0, 0, 0]);
-      const front = head.toWorld([0, 0, 1]);
-      const direction: Vec3 = [origin[0] - front[0], origin[1] - front[1], origin[2] - front[2]];
+      const b = head.bounds, x=(b.min[0]+b.max[0])/2, y=b.min[1]+(b.max[1]-b.min[1])*.61;
+      // Resolve the posed FLESH surface, not the buried bone bound. Wound depth
+      // probing assumes its anchor starts on skin.
+      const start=head.toWorld([x,y,b.max[2]+.20]), end=head.toWorld([x,y,b.min[2]]);
+      const point=traceProjectile(start,end,p=>sdBody(p,a.posed()));
+      if(!point)return null;
+      const dl=Math.hypot(end[0]-start[0],end[1]-start[1],end[2]-start[2])||1;
+      const direction:Vec3=[(end[0]-start[0])/dl,(end[1]-start[1])/dl,(end[2]-start[2])/dl];
       const ejected = segMeshRenderer.impact(a, sources, point, direction, 'slug');
       a.beginHits(); const wound = a.hitSlug(point, direction); a.endHits();
       return { actor: a.id, point, ejected, stamped: !!wound };

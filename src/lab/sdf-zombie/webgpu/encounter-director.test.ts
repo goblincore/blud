@@ -4,7 +4,7 @@ import { createEncounterNavigation } from './encounter-navigation';
 import { ROOMS, TUNNELS, levelColliders } from './game-level';
 import { makeSoldierBrain, stepSoldierBrain } from '../soldier-brain';
 const nav = createEncounterNavigation(ROOMS, TUNNELS, levelColliders());
-const a = (id: number, x: number, z: number): EncounterAgent => ({ id, pos: [x, 0, z], home: [x, 0, z], yaw: Math.PI, room: 1, soldier: true, disabled: false });
+const a = (id: number, x: number, z: number): EncounterAgent => ({ id, pos: [x, 0, z], home: [x, 0, z], yaw: Math.PI, room: 1, soldier: true, ranged: true, disabled: false });
 describe('mixed encounter coordination', () => {
     it('lets real soldier brains finish three-shot bursts before another soldier takes the lane', () => {
         const d = createEncounterDirector(nav, []), agents = [a(1, -2, 2), a(2, 2, 2)];
@@ -46,6 +46,12 @@ describe('mixed encounter coordination', () => {
         const shooter = a(1, 0, 3), zombie = { ...a(2, 0, 1.5), soldier: false };
         expect(clearFireLane(shooter, [0, 0, 0], [shooter, zombie])).toBe(false);
         expect(clearFireLane(shooter, [0, 0, 0], [shooter, { ...zombie, disabled: true }])).toBe(true);
+    });
+    it('does not assign a firing lane to a disarmed soldier', () => {
+        const d = createEncounterDirector(nav, []), soldier = { ...a(1, 0, 3), ranged: false };
+        const order = d.update([soldier], { x: 0, z: 0, room: 1 }, false, .1).get(1)!;
+        expect(order.fireAllowed).toBe(false);
+        expect(order.moveTarget).toBeNull();
     });
     it('pursues only last observed coordinates then forgets, never the hidden live player', () => {
         const d = createEncounterDirector(nav, [{ min: [-3, 0, -.5], max: [3, 3, .5] }]);

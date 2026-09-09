@@ -188,7 +188,7 @@ export function createSegmentMeshRenderer(cache: SegmentMeshCache): SegmentMeshR
     if (preparedGeometry.has(geometry)) return;
     const pos = geometry.getAttribute('position');
     const feature = new Float32Array(pos.count * 4);
-    const isHead = source.segment === 'head' ? 1 : 0;
+    const isHead = source.segment === 'head' ? (source.character === 'soldier' ? 2 : 1) : 0;
     for (let i = 0; i < pos.count; i++) {
       const q = meshAppearanceCoord(source.bounds, [pos.getX(i), pos.getY(i), pos.getZ(i)]);
       feature.set([q[0], q[1], q[2], isHead], i * 4);

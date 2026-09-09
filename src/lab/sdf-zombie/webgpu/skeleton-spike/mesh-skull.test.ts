@@ -25,10 +25,8 @@ describe.each([['zombie', zombie], ['soldier', soldier]])('%s mesh skull sculpt'
   const skull = meshBoneSource(original);
 
   it('leaves the shared field and non-head sources unchanged', () => {
-    if (character === 'zombie') {
-      expect(skull).not.toBe(original);
-      expect(skull.revision).not.toBe(original.revision);
-    } else expect(skull).toBe(original);
+    expect(skull).not.toBe(original);
+    expect(skull.revision).not.toBe(original.revision);
     expect(meshBoneSource(skull)).toBe(skull);
     expect(meshBoneSource(sources.find(s => s.segment !== 'head')!)).toBe(sources.find(s => s.segment !== 'head'));
     for (let x = -1; x <= 1; x += 0.1) for (let y = -1; y <= 1; y += 0.1) for (let z = -1; z <= 1; z += 0.1) {
@@ -38,7 +36,6 @@ describe.each([['zombie', zombie], ['soldier', soldier]])('%s mesh skull sculpt'
   });
 
   it('cuts deep nasal, orbital, cheek and bite recesses with retained dental ledges', () => {
-    if (character !== 'zombie') return; // Sparse soldier head is deliberately unsculpted.
     for (const [x, y] of [[0, -0.06], [0.36, 0.22], [0.55, -0.19], [0, -0.38]]) {
       expect(front(original, x!, y!) - front(skull, x!, y!), `${x},${y}`).toBeGreaterThan(0.12);
     }

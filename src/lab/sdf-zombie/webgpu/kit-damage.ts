@@ -20,8 +20,10 @@ interface Piece {
   radius: number;
   armor: boolean;
   released: boolean;
+  damage: number;
 }
 interface Debris { mesh: THREE.Mesh; velocity: THREE.Vector3; spin: THREE.Vector3; resting: boolean }
+export interface KitDamageEvent { kind:'armor-hit'|'armor-shed'; point:Vec3; limb:LimbId }
 
 /** WAM keeps part shapes disconnected but merges them per material. Join
  * UV-seam duplicates by position, then collect triangle islands once at load.
@@ -57,7 +59,7 @@ function piecesOf(mesh: THREE.SkinnedMesh): Piece[] {
     const bone=mesh.skeleton.bones[joint]?.name??'pelvis';
     const centre=bounds.getCenter(new THREE.Vector3());
     return {source:mesh,indices:list,bone,limb:boneLimb(bone),centre,radius:bounds.getSize(point).length()*.5,
-      armor:material?.name==='plate',released:false};
+      armor:material?.name==='plate',released:false,damage:0};
   });
 }
 
@@ -84,10 +86,12 @@ export function createKitDamage(object:THREE.Object3D) {
   });
   const debris=new THREE.Group(); debris.name='DetachedArmor';
   const drops:Debris[]=[];
+  let seen=new Set<number>();
   const clear=()=>{ for(const d of drops) d.mesh.geometry.dispose(); drops.length=0; debris.clear(); };
   const reset=()=>{
     clear();
-    for(const p of pieces) p.released=false;
+    seen=new Set();
+    for(const p of pieces) { p.released=false; p.damage=0; }
     for(const [mesh,index] of originals) { mesh.geometry.setIndex(index); mesh.visible=true; }
   };
   const bake=(piece:Piece)=>{
@@ -118,28 +122,40 @@ export function createKitDamage(object:THREE.Object3D) {
     const side=piece.limb.endsWith('L')?1:-1;
     drops.push({mesh,velocity:new THREE.Vector3(side*.7,1.7,1.3),spin:new THREE.Vector3(4,side*3,2),resting:false});
     piece.released=true;
+    return centre.toArray() as Vec3;
+  };
+  const worldBounds=(piece:Piece)=>{
+    const g=piece.source.geometry,pos=g.getAttribute('position'),box=new THREE.Box3(),p=new THREE.Vector3();
+    piece.source.updateWorldMatrix(true,false);
+    for(const i of new Set(piece.indices)) { p.fromBufferAttribute(pos,i); piece.source.applyBoneTransform(i,p); p.applyMatrix4(piece.source.matrixWorld); box.expandByPoint(p); }
+    return box;
   };
   return {
     debris,
     reset,
-    update(body:BuildResult,wounds:readonly Wound[],dt:number) {
+    update(body:BuildResult,wounds:readonly Wound[],bodyYaw:number,dt:number):KitDamageEvent[] {
+      const events:KitDamageEvent[]=[];
       // Gibs clear their wound list before a healthy body is respawned.
       // Equipment loss, not the previous wound count, records that reset.
       if(pieces.some(p=>p.released) && wounds.length===0 && body.clusters.every(c=>c.alive) && body.prims.every(p=>!p.dead)) reset();
-      const base=body.bones.get('pelvis')?.head??[0,0,0];
-      const impacts=wounds.filter(w=>!w.injuryIgnored && w.type!=='burn').map(w=>({
-        limb:body.prims[w.primIdx]?.limb,point:woundWorldPos(body.prims,w,0),weight:w.type==='blast'?3:1,
-      }));
+      const retained=new Set(wounds.flatMap(w=>w.eventId===undefined?[]:[w.eventId]));
+      seen=new Set([...seen].filter(id=>retained.has(id)));
+      const impacts=wounds.filter(w=>w.eventId!==undefined&&!seen.has(w.eventId)&&!w.injuryIgnored&&w.type!=='burn').map(w=>{
+        seen.add(w.eventId!); return {limb:body.prims[w.primIdx]?.limb,point:woundWorldPos(body.prims,w,bodyYaw),weight:w.type==='blast'?3:1};
+      });
       const changed=new Set<THREE.SkinnedMesh>();
       for(const piece of pieces) {
         if(piece.released) continue;
-        let damage=0;
         if(piece.armor) for(const hit of impacts) {
           if(hit.limb!==piece.limb) continue;
-          const p:Vec3=[hit.point[0]-base[0],hit.point[1],hit.point[2]-base[2]];
-          if(piece.centre.distanceTo(new THREE.Vector3(...p))<=piece.radius+.07) damage+=hit.weight;
+          if(worldBounds(piece).distanceToPoint(new THREE.Vector3(...hit.point))<=.07) {
+            piece.damage+=hit.weight; events.push({kind:'armor-hit',point:hit.point,limb:piece.limb});
+          }
         }
-        if(!attached(piece,body) || damage>=(piece.limb==='torso'?3:2)) { bake(piece); changed.add(piece.source); }
+        if(!attached(piece,body) || piece.damage>=(piece.limb==='torso'?3:2)) {
+          const point=bake(piece); changed.add(piece.source);
+          if(piece.armor) events.push({kind:'armor-shed',point,limb:piece.limb});
+        }
       }
       for(const mesh of changed) {
         const index=pieces.filter(p=>p.source===mesh && !p.released).flatMap(p=>p.indices);
@@ -158,6 +174,7 @@ export function createKitDamage(object:THREE.Object3D) {
           if(d.velocity.y<.3) { d.resting=true; d.velocity.set(0,0,0); }
         }
       }
+      return events;
     },
     dispose(){ clear(); debris.removeFromParent(); },
   };

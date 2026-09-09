@@ -115,6 +115,13 @@ export const ROW_WOUND_CAP = 18;
  *  (`isBurn = wMeta.x > 1.5`) that a fourth code would silently break. One
  *  row costs MAX_PRIMS * 16 bytes = 2 KiB per body. */
 export const ROW_WOUND_FLAGS = 19;
+
+/** CPU mirror for the damaged Soldier decal's luminance-only shadow mask. */
+export function soldierFaceDamageShadow(luma:number,mean:number,woundMask:number,soldier:number):number {
+  const clamp=(v:number)=>Math.max(0,Math.min(1,v));
+  const t=clamp((woundMask-.02)/.60),w=t*t*(3-2*t);
+  return clamp(1-luma/Math.max(mean,1e-3))*w*clamp(soldier);
+}
 export const ROW_PRIM_QUAT = 7;
 export const ROW_REST_A = 8;
 export const ROW_REST_B = 9;
@@ -2943,18 +2950,21 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
     return vec4<f32>(f32(ngReason + 1), select(0.0, ngScalar - hitField.x, ngValid), f32(hitBest), t);
   }
   if (normalGradientCfg.y > 0.5) { return vec4<f32>(n * 0.5 + 0.5, t); }
-  let detailAmp = surfCfg2.y * (1.0 - max(gloss, metal));
-  if (detailAmp > 0.0) {
-    n = normalize(n + vec3<f32>(
-      fbm(anchor * 22.0), fbm(anchor * 22.0 + 5.0), fbm(anchor * 22.0 + 11.0)) * detailAmp);
-  }
-
   gWoundShadePrim = select(-1.0, f32(hitBest), hitBest >= 0 && hitBest < i32(counts.x));
   let wmBoth = woundMask(p, n, data, woundCfg, woundCfg2);
   let wm = wmBoth.x;      // colouring / wet / cavity shading
   let wmRim = wmBoth.y;   // fresnel fade, covers the lip
   let wmCav = wmBoth.z;   // cavity-ness: only wounds whose flags row opened one
   let cm = charMask(p, data, woundCfg);
+  let detailAmp = surfCfg2.y * (1.0 - max(gloss, metal));
+  if (detailAmp > 0.0) {
+    let detailNoise = vec3<f32>(
+      fbm(anchor * 22.0), fbm(anchor * 22.0 + 5.0), fbm(anchor * 22.0 + 11.0));
+    // Reuse the existing samples: Soldier wounds amplify their response into
+    // shallow pits without another noise call or global change.
+    let soldierPit = faceGlowRedOnly * smoothstep(0.08, 0.72, wm);
+    n = normalize(n + detailNoise * detailAmp * mix(1.0, 1.45, soldierPit));
+  }
   // Tissue depth rides mapBody's .w (the PRE-wound field). The ramp chooses
   // WHICH colour the wounded end of the lerp reaches for; wm remains the
   // sole authority on WHETHER this pixel is wounded. That composition is what
@@ -3196,8 +3206,18 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
       let detail = detailSrc / max(faceCfg2.y, 1e-3);
       // Skip the multiply where it glows: an eye is not tinted flesh, and the
       // emissive term below supplies its colour outright.
+      // Soldier uses the otherwise unique red-only face flag. Its Replace
+      // decal must yield to the wound mask or it paints pale forehead pixels
+      // back over the tissue ramp after the crater was shaded.
+      let woundDecalFade = 1.0 - faceGlowRedOnly * smoothstep(0.02, 0.25, wm);
       albedo = mix(albedo, mix(albedo * detail, tex.rgb, decal),
-                   facing * tex.a * faceCfg.y * (1.0 - faceGlow));
+                   facing * tex.a * faceCfg.y * (1.0 - faceGlow) * woundDecalFade);
+      // Keep only the decal's dark facial structure over damaged Soldier
+      // tissue. This restores sockets/nose/mouth contrast without pasting its
+      // intact skin colour back onto the red wound.
+      let damagedFace = faceGlowRedOnly * smoothstep(0.02, 0.62, wm) * facing * tex.a;
+      let faceShadow = clamp(1.0 - dot(tex.rgb, W) / max(faceCfg2.y, 1e-3), 0.0, 1.0);
+      albedo = albedo * (1.0 - faceShadow * damagedFace * 0.78);
 
       // Relief. Central differences on luminance give the height gradient; the
       // projection is planar along z, so its tangent basis is just x and y and
@@ -3224,6 +3244,13 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
       }
     }
   }
+
+  // Soldier-only wet blood stain. This uses the existing character flag and
+  // the one authoritative wound mask, so it affects head and torso lips while
+  // leaving Zombie, panel overrides, carve depth and gameplay untouched.
+  let soldierWound = faceGlowRedOnly * smoothstep(0.02, 0.62, wm);
+  let gooRed = mix(vec3<f32>(0.52, 0.006, 0.009), vec3<f32>(0.16, 0.001, 0.003), smoothstep(surfCfg3.y, surfCfg3.z * 2.2, tissueDepth));
+  albedo = mix(albedo, gooRed, soldierWound * 0.72);
 
   // PER-PRIMITIVE COLOUR. The fold already reports the nearest primitive at
   // the hit (hitBest, the noise anchor); a painted one replaces the flesh
@@ -3314,7 +3341,8 @@ export const MARCH_BODY_SURFACE_PREP = /* wgsl */ `
   // polished.
   let lip = 1.0 - smoothstep(surfCfg3.z, surfCfg3.z * 3.0, tissueDepth);
   let wetWound = max(wm * lip, gore);
-  var wet = mix(surfCfg2.x * mix(1.0, 1.6, wetWound) * (1.0 - cm) * select(1.0, 1.8, isOrgan), 1.0, gloss);
+  let woundWetBoost = mix(1.6, 2.15, faceGlowRedOnly);
+  var wet = mix(surfCfg2.x * mix(1.0, woundWetBoost, wetWound) * (1.0 - cm) * select(1.0, 1.8, isOrgan), 1.0, gloss);
   // Melt wetness (task 6): liquefying flesh goes FULLY wet — the puddle
   // glistens. FLESH ONLY: bone stays matte (the anchor comment above — wet
   // skin reflects, wet bone just looks polished), and that matte-vs-wet
