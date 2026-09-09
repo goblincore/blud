@@ -142,7 +142,8 @@ import {
   loadOverride, saveOverride, serializeOverride, MATERIAL_SLIDERS, FACE_SLIDERS,
 } from '../panel';
 import { createEnclosure, type WallKey } from './enclosure';
-import { buildProbeGrid, packProbeTexture } from '../probe-grid';
+import { buildProbeGrid, packProbeTexture, sampleProbeGrid, type ProbeGrid } from '../probe-grid';
+import { luminance } from '../ambient';
 
 
 /** Chunk mesh/render-object slots are recycled oldest-first at this cap.
@@ -3066,6 +3067,7 @@ async function main() {
   // toggled off is gathered as black so the grid agrees with what the eye
   // sees, the same rule the wall pickers follow.
   let probeTexture: THREE.DataTexture | null = null;
+  let probeGrid: ProbeGrid | null = null;
   function rebuildProbes() {
     const t0 = performance.now();
     const d = u.lightDir.value.clone().normalize();
@@ -3078,6 +3080,7 @@ async function main() {
         keyIntensity: u.lightCfg.value.x, fillIntensity: u.lightCfg.value.y,
       },
     );
+    probeGrid = grid;
     const packed = packProbeTexture(grid);
     const tex = new THREE.DataTexture(packed.data, packed.width, packed.height, THREE.RGBAFormat, THREE.FloatType);
     tex.needsUpdate = true;
@@ -3100,12 +3103,34 @@ async function main() {
     u.probeCfg.value.x = on ? 1 : 0;
     probeOnBtn.textContent = `probes: ${on ? 'on' : 'off'}`;
   });
-  addSlider(probeBox, {
-    label: 'probeGain', min: 0, max: 1, step: 0.01,
+  const probeGainSlider = addSlider(probeBox, {
+    label: 'probeGain', min: 0, max: 1, step: 0.001,
     get: () => u.probeCfg.value.y,
     set: (v) => { u.probeCfg.value.y = v; },
   });
   addButton(probeBox, 'rebuild probes', () => rebuildProbes());
+  // LEVEL MATCH. Probe irradiance is absolute (walls lit by a 2.4 key bounce
+  // back ~1+), while the flat fill it replaces is 0.06 of the key colour.
+  // Judging "directional vs flat" needs both at the same level, so this
+  // sets the gain such that the probe irradiance averaged over the six axis
+  // normals at the room centre has exactly the flat fill's luminance. Above
+  // that, the slider is the radiosity-lift experiment the P1 spec asked for.
+  const matchBtn = addButton(probeBox, 'match fill level', () => {
+    if (!probeGrid) return;
+    const c: Vec3 = [
+      (probeGrid.min[0] + probeGrid.max[0]) / 2, (probeGrid.min[1] + probeGrid.max[1]) / 2, (probeGrid.min[2] + probeGrid.max[2]) / 2,
+    ];
+    const axes: Vec3[] = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+    let lum = 0;
+    for (const n of axes) lum += luminance(sampleProbeGrid(probeGrid, c, n));
+    lum /= axes.length;
+    const fillLum = u.lightCfg.value.y * luminance([u.keyColor.value.r, u.keyColor.value.g, u.keyColor.value.b]);
+    const gain = lum > 1e-6 ? fillLum / lum : 0;
+    u.probeCfg.value.y = gain;
+    probeGainSlider.value = String(gain);
+    probeGainSlider.dispatchEvent(new Event('input'));
+    matchBtn.textContent = `match fill level (gain ${gain.toFixed(3)})`;
+  });
 
   // Per-wall colour pickers. Each writes BOTH the mesh and the uniform, so
   // what the eye sees on the wall and what the shader bounces off it cannot
