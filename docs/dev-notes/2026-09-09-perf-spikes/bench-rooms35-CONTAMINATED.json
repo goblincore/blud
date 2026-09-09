@@ -1,0 +1,667 @@
+{
+  "meta": {
+    "url": "http://localhost:5299/sdf-game.html",
+    "W": 1280,
+    "H": 800,
+    "repeats": 2,
+    "rooms": [
+      3,
+      5
+    ],
+    "backend": "webgpu",
+    "prelude": "",
+    "when": "2026-09-09T08:33:32.696Z"
+  },
+  "results": [
+    {
+      "rep": 0,
+      "leg": "baseline",
+      "room": 3,
+      "prelude": "",
+      "mode": "throughput",
+      "label": "baseline/room3/throughput",
+      "valid": true,
+      "hiddenSteps": 0,
+      "frames": 360,
+      "chunkFrames": 10,
+      "overall": {
+        "name": "overall",
+        "n": 36,
+        "p50": 45.25999999940395,
+        "p95": 67.92999999970198,
+        "p99": 71.21000000089407,
+        "max": 71.21000000089407,
+        "mean": 44.54638888889717
+      },
+      "segments": [
+        {
+          "name": "walk",
+          "n": 12,
+          "p50": 33.00999999940395,
+          "p95": 44.66999999880791,
+          "p99": 44.66999999880791,
+          "max": 44.66999999880791,
+          "mean": 33.65166666656733,
+          "census": {
+            "first": {
+              "bodies": 8,
+              "wounds": 0,
+              "chunks": 0,
+              "droplets": 0,
+              "splats": 0,
+              "gooQuads": 0
+            },
+            "last": {
+              "bodies": 8,
+              "wounds": 0,
+              "chunks": 0,
+              "droplets": 0,
+              "splats": 0,
+              "gooQuads": 0
+            }
+          }
+        },
+        {
+          "name": "fire",
+          "n": 12,
+          "p50": 46.020000000298026,
+          "p95": 67.92999999970198,
+          "p99": 67.92999999970198,
+          "max": 67.92999999970198,
+          "mean": 48.86333333340784,
+          "census": {
+            "first": {
+              "bodies": 8,
+              "wounds": 0,
+              "chunks": 0,
+              "droplets": 0,
+              "splats": 0,
+              "gooQuads": 0
+            },
+            "last": {
+              "bodies": 10,
+              "wounds": 16,
+              "chunks": 0,
+              "droplets": 66,
+              "splats": 256,
+              "gooQuads": 289
+            }
+          }
+        },
+        {
+          "name": "gib",
+          "n": 12,
+          "p50": 49.690000000596044,
+          "p95": 71.21000000089407,
+          "p99": 71.21000000089407,
+          "max": 71.21000000089407,
+          "mean": 51.12416666671634,
+          "census": {
+            "first": {
+              "bodies": 10,
+              "wounds": 16,
+              "chunks": 0,
+              "droplets": 66,
+              "splats": 256,
+              "gooQuads": 289
+            },
+            "last": {
+              "bodies": 10,
+              "wounds": 16,
+              "chunks": 0,
+              "droplets": 0,
+              "splats": 256,
+              "gooQuads": 256
+            }
+          }
+        }
+      ],
+      "bodiesSeen": 10
+    },
+    {
+      "rep": 0,
+      "leg": "baseline",
+      "room": 5,
+      "prelude": "",
+      "mode": "throughput",
+      "label": "baseline/room5/throughput",
+      "valid": true,
+      "hiddenSteps": 0,
+      "frames": 360,
+      "chunkFrames": 10,
+      "overall": {
+        "name": "overall",
+        "n": 36,
+        "p50": 42.790000000596045,
+        "p95": 79.83000000119209,
+        "p99": 90.37999999970198,
+        "max": 90.37999999970198,
+        "mean": 44.79027777773639
+      },
+      "segments": [
+        {
+          "name": "walk",
+          "n": 12,
+          "p50": 45.520000000298026,
+          "p95": 79.83000000119209,
+          "p99": 79.83000000119209,
+          "max": 79.83000000119209,
+          "mean": 46.04749999990065,
+          "census": {
+            "first": {
+              "bodies": 8,
+              "wounds": 0,
+              "chunks": 0,
+              "droplets": 0,
+              "splats": 0,
+              "gooQuads": 0
+            },
+            "last": {
+              "bodies": 8,
+              "wounds": 0,
+              "chunks": 0,
+              "droplets": 0,
+              "splats": 0,
+              "gooQuads": 0
+            }
+          }
+        },
+        {
+          "name": "fire",
+          "n": 12,
+          "p50": 36.42999999970198,
+          "p95": 90.37999999970198,
+          "p99": 90.37999999970198,
+          "max": 90.37999999970198,
+          "mean": 43.10583333335817,
+          "census": {
+            "first": {
+              "bodies": 8,
+              "wounds": 0,
+              "chunks": 0,
+              "droplets": 0,
+              "splats": 0,
+              "gooQuads": 0
+            },
+            "last": {
+              "bodies": 4,
+              "wounds": 16,
+              "chunks": 0,
+              "droplets": 198,
+              "splats": 256,
+              "gooQuads": 382
+            }
+          }
+        },
+        {
+          "name": "gib",
+          "n": 12,
+          "p50": 42.99000000059605,
+          "p95": 74.34000000059605,
+          "p99": 74.34000000059605,
+          "max": 74.34000000059605,
+          "mean": 45.21749999995033,
+          "census": {
+            "first": {
+              "bodies": 4,
+              "wounds": 16,
+              "chunks": 0,
+              "droplets": 198,
+              "splats": 256,
+              "gooQuads": 382
+            },
+            "last": {
+              "bodies": 8,
+              "wounds": 18,
+              "chunks": 1,
+              "droplets": 134,
+              "splats": 256,
+              "gooQuads": 312
+            }
+          }
+        }
+      ],
+      "bodiesSeen": 8
+    },
+    {
+      "rep": 1,
+      "leg": "baseline",
+      "room": 3,
+      "prelude": "",
+      "mode": "throughput",
+      "label": "baseline/room3/throughput",
+      "valid": true,
+      "hiddenSteps": 0,
+      "frames": 360,
+      "chunkFrames": 10,
+      "overall": {
+        "name": "overall",
+        "n": 36,
+        "p50": 40.96000000089407,
+        "p95": 67.75,
+        "p99": 69.47999999970197,
+        "max": 69.47999999970197,
+        "mean": 42.188888888847494
+      },
+      "segments": [
+        {
+          "name": "walk",
+          "n": 12,
+          "p50": 33.87999999970198,
+          "p95": 43.77999999970198,
+          "p99": 43.77999999970198,
+          "max": 43.77999999970198,
+          "mean": 31.75999999990066,
+          "census": {
+            "first": {
+              "bodies": 8,
+              "wounds": 0,
+              "chunks": 0,
+              "droplets": 0,
+              "splats": 0,
+              "gooQuads": 0
+            },
+            "last": {
+              "bodies": 8,
+              "wounds": 0,
+              "chunks": 0,
+              "droplets": 0,
+              "splats": 0,
+              "gooQuads": 0
+            }
+          }
+        },
+        {
+          "name": "fire",
+          "n": 12,
+          "p50": 40.12999999970198,
+          "p95": 69.47999999970197,
+          "p99": 69.47999999970197,
+          "max": 69.47999999970197,
+          "mean": 45.55583333335817,
+          "census": {
+            "first": {
+              "bodies": 8,
+              "wounds": 0,
+              "chunks": 0,
+              "droplets": 0,
+              "splats": 0,
+              "gooQuads": 0
+            },
+            "last": {
+              "bodies": 10,
+              "wounds": 16,
+              "chunks": 0,
+              "droplets": 63,
+              "splats": 256,
+              "gooQuads": 287
+            }
+          }
+        },
+        {
+          "name": "gib",
+          "n": 12,
+          "p50": 48.869999998807906,
+          "p95": 67.75,
+          "p99": 67.75,
+          "max": 67.75,
+          "mean": 49.25083333328366,
+          "census": {
+            "first": {
+              "bodies": 10,
+              "wounds": 16,
+              "chunks": 0,
+              "droplets": 63,
+              "splats": 256,
+              "gooQuads": 287
+            },
+            "last": {
+              "bodies": 10,
+              "wounds": 16,
+              "chunks": 0,
+              "droplets": 7,
+              "splats": 256,
+              "gooQuads": 259
+            }
+          }
+        }
+      ],
+      "bodiesSeen": 10
+    },
+    {
+      "rep": 1,
+      "leg": "baseline",
+      "room": 5,
+      "prelude": "",
+      "mode": "throughput",
+      "label": "baseline/room5/throughput",
+      "valid": true,
+      "hiddenSteps": 0,
+      "frames": 360,
+      "chunkFrames": 10,
+      "overall": {
+        "name": "overall",
+        "n": 36,
+        "p50": 59.56000000089407,
+        "p95": 90.15,
+        "p99": 120.02000000029803,
+        "max": 120.02000000029803,
+        "mean": 61.915277777901956
+      },
+      "segments": [
+        {
+          "name": "walk",
+          "n": 12,
+          "p50": 60.1,
+          "p95": 89.08000000119209,
+          "p99": 89.08000000119209,
+          "max": 89.08000000119209,
+          "mean": 63.88250000017384,
+          "census": {
+            "first": {
+              "bodies": 8,
+              "wounds": 0,
+              "chunks": 0,
+              "droplets": 0,
+              "splats": 0,
+              "gooQuads": 0
+            },
+            "last": {
+              "bodies": 8,
+              "wounds": 0,
+              "chunks": 0,
+              "droplets": 0,
+              "splats": 0,
+              "gooQuads": 0
+            }
+          }
+        },
+        {
+          "name": "fire",
+          "n": 12,
+          "p50": 64.14000000059605,
+          "p95": 120.02000000029803,
+          "p99": 120.02000000029803,
+          "max": 120.02000000029803,
+          "mean": 69.58833333340785,
+          "census": {
+            "first": {
+              "bodies": 8,
+              "wounds": 0,
+              "chunks": 0,
+              "droplets": 0,
+              "splats": 0,
+              "gooQuads": 0
+            },
+            "last": {
+              "bodies": 5,
+              "wounds": 16,
+              "chunks": 0,
+              "droplets": 101,
+              "splats": 256,
+              "gooQuads": 321
+            }
+          }
+        },
+        {
+          "name": "gib",
+          "n": 12,
+          "p50": 51.459999999403955,
+          "p95": 86.39000000059605,
+          "p99": 86.39000000059605,
+          "max": 86.39000000059605,
+          "mean": 52.27500000012418,
+          "census": {
+            "first": {
+              "bodies": 5,
+              "wounds": 16,
+              "chunks": 0,
+              "droplets": 101,
+              "splats": 256,
+              "gooQuads": 321
+            },
+            "last": {
+              "bodies": 5,
+              "wounds": 16,
+              "chunks": 0,
+              "droplets": 9,
+              "splats": 256,
+              "gooQuads": 259
+            }
+          }
+        }
+      ],
+      "bodiesSeen": 8
+    }
+  ],
+  "table": [
+    {
+      "leg": "baseline",
+      "room": 3,
+      "bodies": 3,
+      "overallP50": 45.25999999940395,
+      "overallMax": 71.21000000089407,
+      "walkP50": 33.87999999970198,
+      "fireP50": 46.020000000298026,
+      "gibP50": 49.690000000596044
+    },
+    {
+      "leg": "baseline",
+      "room": 5,
+      "bodies": 5,
+      "overallP50": 59.56000000089407,
+      "overallMax": 120.02000000029803,
+      "walkP50": 60.1,
+      "fireP50": 64.14000000059605,
+      "gibP50": 51.459999999403955
+    }
+  ],
+  "spikes": [
+    {
+      "room": 3,
+      "prelude": "",
+      "mode": "spike",
+      "label": "baseline/room3/spike",
+      "valid": true,
+      "hiddenSteps": 0,
+      "frames": 360,
+      "chunkFrames": 1,
+      "overall": {
+        "name": "overall",
+        "n": 360,
+        "p50": 120.59999999403954,
+        "p95": 184.5,
+        "p99": 377.40000000596046,
+        "max": 492.09999999403954,
+        "mean": 126.48861111112767
+      },
+      "segments": [
+        {
+          "name": "walk",
+          "n": 120,
+          "p50": 103.40000000596046,
+          "p95": 141.79999999701977,
+          "p99": 158.90000000596046,
+          "max": 170.90000000596046,
+          "mean": 103.34833333355685,
+          "census": {
+            "first": {
+              "bodies": 8,
+              "wounds": 0,
+              "chunks": 0,
+              "droplets": 0,
+              "splats": 0,
+              "gooQuads": 0
+            },
+            "last": {
+              "bodies": 8,
+              "wounds": 0,
+              "chunks": 0,
+              "droplets": 0,
+              "splats": 0,
+              "gooQuads": 0
+            }
+          }
+        },
+        {
+          "name": "fire",
+          "n": 120,
+          "p50": 121,
+          "p95": 217.29999999701977,
+          "p99": 400.8999999910593,
+          "max": 492.09999999403954,
+          "mean": 132.64249999982616,
+          "census": {
+            "first": {
+              "bodies": 8,
+              "wounds": 0,
+              "chunks": 0,
+              "droplets": 0,
+              "splats": 0,
+              "gooQuads": 0
+            },
+            "last": {
+              "bodies": 8,
+              "wounds": 16,
+              "chunks": 0,
+              "droplets": 69,
+              "splats": 256,
+              "gooQuads": 291
+            }
+          }
+        },
+        {
+          "name": "gib",
+          "n": 120,
+          "p50": 134.1000000089407,
+          "p95": 201.79999999701977,
+          "p99": 292.5,
+          "max": 406.59999999403954,
+          "mean": 143.475,
+          "census": {
+            "first": {
+              "bodies": 8,
+              "wounds": 16,
+              "chunks": 0,
+              "droplets": 69,
+              "splats": 256,
+              "gooQuads": 291
+            },
+            "last": {
+              "bodies": 10,
+              "wounds": 17,
+              "chunks": 0,
+              "droplets": 8,
+              "splats": 256,
+              "gooQuads": 260
+            }
+          }
+        }
+      ],
+      "bodiesSeen": 10
+    },
+    {
+      "room": 5,
+      "prelude": "",
+      "mode": "spike",
+      "label": "baseline/room5/spike",
+      "valid": true,
+      "hiddenSteps": 0,
+      "frames": 360,
+      "chunkFrames": 1,
+      "overall": {
+        "name": "overall",
+        "n": 360,
+        "p50": 63.70000000298023,
+        "p95": 95.09999999403954,
+        "p99": 168.20000000298023,
+        "max": 335.40000000596046,
+        "mean": 66.9447222220815
+      },
+      "segments": [
+        {
+          "name": "walk",
+          "n": 120,
+          "p50": 57.1000000089407,
+          "p95": 69.8999999910593,
+          "p99": 73.29999999701977,
+          "max": 76,
+          "mean": 57.619999999180436,
+          "census": {
+            "first": {
+              "bodies": 8,
+              "wounds": 0,
+              "chunks": 0,
+              "droplets": 0,
+              "splats": 0,
+              "gooQuads": 0
+            },
+            "last": {
+              "bodies": 12,
+              "wounds": 0,
+              "chunks": 0,
+              "droplets": 0,
+              "splats": 0,
+              "gooQuads": 0
+            }
+          }
+        },
+        {
+          "name": "fire",
+          "n": 120,
+          "p50": 60.79999999701977,
+          "p95": 83.5,
+          "p99": 199.90000000596046,
+          "max": 335.40000000596046,
+          "mean": 64.07250000039737,
+          "census": {
+            "first": {
+              "bodies": 12,
+              "wounds": 0,
+              "chunks": 0,
+              "droplets": 0,
+              "splats": 0,
+              "gooQuads": 0
+            },
+            "last": {
+              "bodies": 7,
+              "wounds": 16,
+              "chunks": 0,
+              "droplets": 103,
+              "splats": 256,
+              "gooQuads": 323
+            }
+          }
+        },
+        {
+          "name": "gib",
+          "n": 120,
+          "p50": 76.8999999910593,
+          "p95": 107.29999999701977,
+          "p99": 121.79999999701977,
+          "max": 177.90000000596046,
+          "mean": 79.14166666666667,
+          "census": {
+            "first": {
+              "bodies": 7,
+              "wounds": 16,
+              "chunks": 0,
+              "droplets": 103,
+              "splats": 256,
+              "gooQuads": 323
+            },
+            "last": {
+              "bodies": 7,
+              "wounds": 16,
+              "chunks": 0,
+              "droplets": 10,
+              "splats": 256,
+              "gooQuads": 260
+            }
+          }
+        }
+      ],
+      "bodiesSeen": 12
+    }
+  ]
+}
