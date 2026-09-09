@@ -81,10 +81,25 @@ export function effectiveSmear(userSmear: number, vhsOn: boolean): number {
 /**
  * The club-mutant soft post-FX fragment shader, ported to WGSL.
  *
- * The main fn is first (three's wgslFn parse anchor); `hash21`, the colour
+ * The main fn is first (three's wgslFn parse anchor); `postVhsHash21`, the colour
  * grade, the row noise and the 9-tap blur follow it as forward-referenced
  * helpers. The uniforms of the GLSL source are all parameters now:
  * resolution, time, hasPrev and the twelve VhsTerms.
+ */
+/**
+ * RETURN TYPE IS vec4, NOT vec3 — a deliberate deviation from the sibling
+ * `postAa*` stages, which all return vec3<f32>.
+ *
+ * The porting brief sketched vec3; the source GLSL ends
+ * `gl_FragColor = vec4(color, baseTexCenter.a)`, and the port preserves that
+ * alpha. Keeping it is the lower-risk choice: this pass is not wired into the
+ * chain yet, and a caller that does not want alpha can ignore `.w`, whereas a
+ * caller that needs it cannot recover what was thrown away. Revisit when the
+ * chain wiring lands and the capture target's alpha semantics are known.
+ *
+ * Helpers are prefixed `postVhs*` per the house convention (boneHash,
+ * meshBoneSurface, postAaOetf). Unprefixed names like `hash21` would collide
+ * the first time this shader shares a material with another that defines one.
  */
 export const POST_VHS_WGSL = /* wgsl */ `fn postVhs(
   tex: texture_2d<f32>,
@@ -123,13 +138,13 @@ export const POST_VHS_WGSL = /* wgsl */ `fn postVhs(
 
   let row = floor(uv.y * resolution.y);
   let burstPhase = floor(time * chromaBurstRate);
-  let burst = step(1.0 - chromaBurstChance, hash21(vec2<f32>(row + 13.0, burstPhase)));
+  let burst = step(1.0 - chromaBurstChance, postVhsHash21(vec2<f32>(row + 13.0, burstPhase)));
   let burstMask = burst * chromaBurstStrength;
 
   let effectMask = max(motionMask, burstMask);
 
-  let jx = hash21(vec2<f32>(floor(time * 24.0), uv.y * 512.0));
-  let jy = hash21(vec2<f32>(uv.y * 512.0 + 19.0, floor(time * 24.0)));
+  let jx = postVhsHash21(vec2<f32>(floor(time * 24.0), uv.y * 512.0));
+  let jy = postVhsHash21(vec2<f32>(uv.y * 512.0 + 19.0, floor(time * 24.0)));
 
   let jitter = vec2<f32>((jx - 0.5) * 2.0, (jy - 0.5) * 2.0);
 
@@ -142,11 +157,11 @@ export const POST_VHS_WGSL = /* wgsl */ `fn postVhs(
 
   let base = vec3<f32>(chromaR.r, chromaG.g, chromaB.b);
 
-  var color = blur9(tex, samp, warpedUv, texel, blurAmount);
+  var color = postVhsBlur9(tex, samp, warpedUv, texel, blurAmount);
 
-  color = applyColorGrade(color, gradeAmount);
+  color = postVhsColorGrade(color, gradeAmount);
 
-  color = applyNoise(color, uv, resolution, time, noiseAmount);
+  color = postVhsNoise(color, uv, resolution, time, noiseAmount);
 
   color = clamp(color, vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(1.0, 1.0, 1.0));
 
@@ -158,14 +173,14 @@ export const POST_VHS_WGSL = /* wgsl */ `fn postVhs(
 // Helpers follow the main fn — WGSL resolves these forward references at
 // module scope, and three's wgslFn parse anchor needs the main fn first.
 
-fn hash21(p0: vec2<f32>) -> f32 {
+fn postVhsHash21(p0: vec2<f32>) -> f32 {
   var p = fract(p0 * vec2<f32>(123.34, 345.45));
   let d = dot(p, p + vec2<f32>(34.345, 34.345));
   p = p + vec2<f32>(d, d);
   return fract(p.x * p.y);
 }
 
-fn applyColorGrade(color: vec3<f32>, amount: f32) -> vec3<f32> {
+fn postVhsColorGrade(color: vec3<f32>, amount: f32) -> vec3<f32> {
   var graded = color;
 
   graded = graded * vec3<f32>(0.95, 1.05, 0.95);
@@ -177,7 +192,7 @@ fn applyColorGrade(color: vec3<f32>, amount: f32) -> vec3<f32> {
   return mix(color, graded, vec3<f32>(amount, amount, amount));
 }
 
-fn applyNoise(
+fn postVhsNoise(
   color: vec3<f32>,
   uv: vec2<f32>,
   resolution: vec2<f32>,
@@ -185,13 +200,13 @@ fn applyNoise(
   amount: f32
 ) -> vec3<f32> {
   let row = floor(uv.y * resolution.y);
-  let n = hash21(vec2<f32>(row, floor(time * 60.0)));
+  let n = postVhsHash21(vec2<f32>(row, floor(time * 60.0)));
   let centered = (n - 0.5) * 2.0;
 
   return color + vec3<f32>(centered * amount, centered * amount, centered * amount);
 }
 
-fn blur9(
+fn postVhsBlur9(
   tex: texture_2d<f32>,
   samp: sampler,
   uv: vec2<f32>,

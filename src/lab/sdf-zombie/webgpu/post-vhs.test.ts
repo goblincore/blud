@@ -54,6 +54,13 @@ describe('POST_VHS_WGSL', () => {
     expect(POST_VHS_WGSL).not.toMatch(/\bvarying\b/);
     expect(POST_VHS_WGSL).not.toMatch(/\bvec3 [a-zA-Z]/);
   });
+  it('prefixes every helper per the house convention (boneHash, postAaOetf)', () => {
+    // An unprefixed helper collides the first time this shader shares a
+    // material with another that defines the same name.
+    const fns = [...POST_VHS_WGSL.matchAll(/\bfn\s+([A-Za-z0-9_]+)\s*\(/g)].map(m => m[1]!);
+    expect(fns.length).toBeGreaterThan(1);
+    for (const f of fns) expect(f.startsWith('postVhs')).toBe(true);
+  });
   it('has balanced braces', () => {
     const open = (POST_VHS_WGSL.match(/\{/g) ?? []).length;
     const close = (POST_VHS_WGSL.match(/\}/g) ?? []).length;
