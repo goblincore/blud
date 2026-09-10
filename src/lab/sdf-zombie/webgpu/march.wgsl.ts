@@ -2934,15 +2934,19 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
     if (t > tMax) {
       // GRAZE ACCEPT (temporal start, 2026-09-10 night). The temporal start
       // re-phases the walk; at silhouette/graze pixels the acceptance window
-      // before the exit is razor-thin, and the re-phased crawl (20+ sub-mm
-      // steps) crossed the exit with its last sample 2-5 mm OFF the surface
-      // — 4x eps — and discarded: the stacked-corridor holes. radius here is
-      // the LAST SAMPLE's field value; within 4x eps of the surface the
-      // shading error is sub-pixel, so accept at the crossing instead of
-      // discarding a nearly-converged ray. Scoped to the temporal start so
-      // ?tstart=0 stays bit-identical. temporalDiag: broke 64 -> single
-      // digits on the repro scene.
-      if (temporalCfg.x > 0.5 && radius < max(hitEpsBase, t * aaK / distort) * 8.0) {
+      // before the exit is razor-thin, and the re-phased crawl (15-30 sub-mm
+      // steps) crossed the exit with its last sample a few mm OFF the
+      // surface and discarded: the stacked-corridor holes. radius here is
+      // the LAST SAMPLE's field value; accept at the crossing when that is
+      // within a HARD 1 cm — absolute, deliberately NOT scaled by the AA
+      // epsilon (t * aaCfg.x = 2% of distance): the first version multiplied
+      // the distance-scaled epsilon by 8 and the band grew to ~1.9 m at
+      // 12 m, accepting hits in the air beside distant limbs — white
+      // fresnel/spec lint over the whole body (owner report + screenshots,
+      // 2026-09-10). 1 cm is sub-visible at every range and still covers
+      // the 2-5 mm graze crawls. Scoped to the temporal start so
+      // ?tstart=0 stays bit-identical.
+      if (temporalCfg.x > 0.5 && radius < 0.01) {
         t = t - stepLen;
         hit = true;
         break;
