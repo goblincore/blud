@@ -197,7 +197,7 @@ const WOUND_CLEARANCE = 0.05;
  */
 export function buildHullInstances(
   bodies: BuiltBody[], shrink = HULL_SHRINK, wounds: WoundSphere[] = [],
-  shellAmp = 0, span = false,
+  shellAmp = 0, span = false, bridges = false,
 ): HullInstance[] {
   const out: HullInstance[] = [];
   const clearOfWounds = (c: Vec3, r: number): boolean => {
@@ -209,6 +209,7 @@ export function buildHullInstances(
     return true;
   };
   for (const body of bodies) {
+    const bodyStart = out.length;
     const live = new Set<number>();
     for (const c of body.clusters) if (c.alive) live.add(c.id);
 
@@ -293,8 +294,88 @@ export function buildHullInstances(
         out.push({ centre: p.b, radius: rB });
       }
     }
+    // Junction bridges, shadow hull only (span && bridges). See
+    // bridgeJunctions — this is what keeps the shoulder/hip/neck pinch from
+    // rasterising apart at grazing angles.
+    if (span && bridges) bridgeJunctions(out, bodyStart, clearOfWounds);
   }
   return out;
+}
+
+/**
+ * Bridges the near-tangent JUNCTIONS between primitives of one body.
+ *
+ * Spanning guarantees overlap ALONG each primitive, but where two primitives
+ * MEET the two end spheres can fuse only in a thin lens — on the zombie the
+ * arm's shoulder sphere overlaps the torso chain's chest sphere by ~2 cm —
+ * and a pinch rasterises to nothing at grazing angles: the figure's shadow
+ * separates at the shoulder (owner capture, 2026-09-09), the same class the
+ * SHADOW_SPAN_STEP doc describes along a prim. For every pair of spheres
+ * whose surfaces meet in a thin lens or a near-miss, emit one sphere at the
+ * pair's midpoint sized to overlap BOTH ends by a quarter of the thinner
+ * radius — the across-prims version of the 0.75 span step.
+ *
+ * Skipped pairs: one sphere inside the other (no exposed pinch), a deep lens
+ * (already solidly fused), and anything not touching or near-touching — so
+ * this fires only at junctions, a handful of spheres per figure. Runs over
+ * the body's spheres AFTER the wound filter and each bridge passes the same
+ * predicate, so a wound still carves the bridge. Deterministic pair order
+ * (i<j over the emitted list, frozen before pushing) keeps the hull stable
+ * frame to frame. Span+bridges only: the occlusion hull is pinned
+ * bit-for-bit by the shell tests.
+ */
+function bridgeJunctions(
+  out: HullInstance[], start: number,
+  clearOfWounds: (c: Vec3, r: number) => boolean,
+): void {
+  const end = out.length;
+  for (let i = start; i < end; i++) {
+    const a = out[i]!;
+    for (let j = i + 1; j < end; j++) {
+      const b = out[j]!;
+      const dx = b.centre[0] - a.centre[0], dy = b.centre[1] - a.centre[1], dz = b.centre[2] - a.centre[2];
+      const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      const rMin = Math.min(a.radius, b.radius);
+      const rMax = Math.max(a.radius, b.radius);
+      // One sphere contained in the other: the union's silhouette has no
+      // exposed waist between them.
+      if (d < rMax - rMin) continue;
+      const lens = a.radius + b.radius - d;
+      // Deeply fused (a fat lens reads as one blob), or not touching and
+      // not near-touching (a bridge there would invent geometry): skip.
+      // The lens must also be thin RELATIVE to the span: along a tapered
+      // prim the skip-one neighbours show a small lens over a long span.
+      if (lens >= 0.5 * rMin || lens >= 0.25 * d) continue;
+      if (d >= a.radius + b.radius + 0.35 * rMin) continue;
+      // And nothing may already cover the waist between them: a sphere
+      // hanging near the segment's middle (an intermediate span step along
+      // the same prim) IS the coverage, and bridging under it would only
+      // fatten the hull. This is what separates a JUNCTION pair — arm root
+      // to torso, where nothing lies between — from an along-prim pair.
+      // Runs only for pairs that passed every filter above, so the extra
+      // scan is a handful of executions per figure.
+      const invD2 = 1 / (d * d);
+      let covered = false;
+      for (let k = start; k < end && !covered; k++) {
+        if (k === i || k === j) continue;
+        const c = out[k]!;
+        const wx = c.centre[0] - a.centre[0], wy = c.centre[1] - a.centre[1], wz = c.centre[2] - a.centre[2];
+        const t = (wx * dx + wy * dy + wz * dz) * invD2;
+        if (t <= 0.2 || t >= 0.8) continue;
+        const px = wx - t * dx, py = wy - t * dy, pz = wz - t * dz;
+        if (Math.sqrt(px * px + py * py + pz * pz) < c.radius + 0.25 * rMin) covered = true;
+      }
+      if (covered) continue;
+      const radius = d / 2 + 0.25 * rMin;
+      if (radius < MIN_HULL_RADIUS) continue;
+      const centre: Vec3 = [
+        (a.centre[0] + b.centre[0]) / 2,
+        (a.centre[1] + b.centre[1]) / 2,
+        (a.centre[2] + b.centre[2]) / 2,
+      ];
+      if (clearOfWounds(centre, radius)) out.push({ centre, radius });
+    }
+  }
 }
 
 export interface OccluderHull {
@@ -311,9 +392,11 @@ export interface OccluderHull {
    *  dissolve the march. */
   shadowObject: THREE.Mesh;
   /** `occluder: false` skips the inner-hull rebuild (the pre-pass consumes
-   *  it, and the pre-pass is off on the game page); the shadow twin is
-   *  always rebuilt because the shadow map is always live. */
-  update(bodies: BuiltBody[], wounds?: WoundSphere[], opts?: { occluder?: boolean }): void;
+   *  it, and the pre-pass is off on the game page). `shadow: false` HOLDS the
+   *  shadow twin at its previous instances — the game's half-rate hold frame,
+   *  where the flesh on screen is the previous pose reprojected and a
+   *  current-pose shadow would lead the body. Both default to rebuild. */
+  update(bodies: BuiltBody[], wounds?: WoundSphere[], opts?: { occluder?: boolean; shadow?: boolean }): void;
   /** Diagnostic: rasterise an explicit sphere list, bypassing the builder. */
   setSpheres(list: HullInstance[]): void;
   /**
@@ -332,6 +415,13 @@ export interface OccluderHull {
    * both. Omit it to use the shipped value.
    */
   setShadowSpan(on: boolean, inflate?: number): void;
+  /**
+   * A/B SEAM FOR THE JUNCTION BRIDGES — rebuild with the near-tangent
+   * pair-bridging (bridgeJunctions) off. Same one-load capture logic as
+   * setShadowSpan: the actors wander across a reload, so toggle here and
+   * call the owner's refreshHull() instead.
+   */
+  setShadowBridges(on: boolean): void;
   readonly instanceCount: number;
   /** DIAGNOSTIC (2026-09-04): the uDebugWorld uniform node — set .value 1
    *  to make the hull write its world position instead of the camera
@@ -409,6 +499,7 @@ export function createOccluderHull(maxInstances = 1024): OccluderHull {
   let count = 0;
   let shadowSpan = true;
   let shadowInflate = SHADOW_HULL_INFLATE;
+  let shadowBridges = true;
 
   function fillInstances(target: THREE.InstancedMesh, inst: HullInstance[]): number {
     // The mesh's OWN capacity, not maxInstances — the shadow twin is allocated
@@ -426,13 +517,33 @@ export function createOccluderHull(maxInstances = 1024): OccluderHull {
     return n;
   }
 
-  function update(bodies: BuiltBody[], wounds: WoundSphere[] = [], opts: { occluder?: boolean } = {}) {
+  function update(
+    bodies: BuiltBody[],
+    wounds: WoundSphere[] = [],
+    opts: { occluder?: boolean; shadow?: boolean } = {},
+  ) {
     if (opts.occluder !== false) {
       count = fillInstances(mesh, buildHullInstances(bodies, HULL_SHRINK, wounds));
     }
     // SPANNED (last arg): the shadow needs the capsule, not its two ends. See
     // SHADOW_HULL_INFLATE for why inflation alone could never do this.
-    fillInstances(shadowMesh, buildHullInstances(bodies, shadowInflate, wounds, 0, shadowSpan));
+    //
+    // NO WOUND EXCLUSION on this hull, even when the caller passes wounds:
+    // the exclusion exists so the march-bound hull never sits inside a carve
+    // cavity, where cutting rays would paint holes in the render. A shadow
+    // map only reads depth coverage — a sphere leaning into a crater is
+    // harmless there, and dropping it bites a hole out of the figure's
+    // silhouette exactly where the body is wounded. A hole reads as broken
+    // (the doctrine under SHADOW_HULL_INFLATE); a slightly fat shadow reads
+    // as a soft edge.
+    //
+    // `shadow: false` HOLDS the twin at its previous instances for the game's
+    // half-rate hold frame: the flesh on screen is the previous pose
+    // reprojected, so the shadow map must render that same pose rather than
+    // lead it by one sub-frame (2026-09-09 shadow-continuity fix).
+    if (opts.shadow !== false) {
+      fillInstances(shadowMesh, buildHullInstances(bodies, shadowInflate, [], 0, shadowSpan, shadowBridges));
+    }
   }
 
   update([]);
@@ -457,6 +568,9 @@ export function createOccluderHull(maxInstances = 1024): OccluderHull {
     setShadowSpan(on: boolean, inflate = SHADOW_HULL_INFLATE) {
       shadowSpan = on;
       shadowInflate = inflate;
+    },
+    setShadowBridges(on: boolean) {
+      shadowBridges = on;
     },
     get instanceCount() { return count; },
     dispose() {

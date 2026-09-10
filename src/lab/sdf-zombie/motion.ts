@@ -108,6 +108,16 @@ export const MOTION_TUNING = {
   /** Reach-style arms stay this raised at idle (gait blend floor) — a
    *  standing zombie keeps its mummy arms up instead of dropping them. */
   reachMinPresence: 0.85,
+  /** Shoulder socket cap (m) — how far a shoulder rig point may sit from its
+   *  AUTHORED offset from the chest anchor before the compose pulls it back.
+   *  Sway counter-phase, stagger and the attack's shoulder drive all translate
+   *  the shoulder against the chest, and the torso silhouette only just
+   *  contains the shoulder ball at rest, so the big layers pop the ball out
+   *  of the body — in the mesh and in the shadow hull built from the same
+   *  points. Measured on the compose: the attack strike drives the off
+   *  shoulder ~0.16 from the chest, sway peaks ~0.06. 0.05 keeps the sway
+   *  and trims the strike's worst drive. ≤ 0 disables the clamp. */
+  shoulderSocket: 0.05,
   /** Localized hit recoil: the rig point nearest the hit is shoved along the
    *  shot direction with this peak offset (m) per profile, attack-decaying
    *  back over ~5×decay seconds. Composes with the whole-body stagger and
@@ -793,6 +803,38 @@ export function stepMotion(
       if (joints.base[i]![1] <= hipsY) return; // legs stay under the body
       targets[i] = add(pivotP, qRotate(qLean, sub(targets[i]!, pivotP)));
     });
+  }
+
+  // --- shoulder socket clamp (2026-09-09 shadow continuity) ----------------
+  // Sway counter-phase, stagger and the attack's shoulder drive all
+  // TRANSLATE the shoulder rig points against the chest anchor, and the
+  // torso silhouette only just contains the shoulder ball at rest — so the
+  // big layers pop the ball out of the body, in the mesh and in the shadow
+  // hull that is built from the same posed points. Cap the shoulder's
+  // displacement RELATIVE TO its authored offset from the chest, after every
+  // layer that moves the shoulder and before the reach/carry pivots, so the
+  // arms stay rigid about a socketed ball. Below the cap this is an exact
+  // no-op. Recoil lands after this on purpose: a shot impulse may briefly
+  // stretch the socket and the verlet pass reads that as impact.
+  if (!collapsed && idx.chest !== undefined && MOTION_TUNING.shoulderSocket > 0) {
+    const cap = MOTION_TUNING.shoulderSocket;
+    // The lean block's own rotation, recomputed so the authored relative
+    // vector follows it: a pivot rotation maps a relative vector by the
+    // rotation alone, and both anchor points sit above the hips pivot.
+    const leanRan = torsoLean !== 0 && idx.hips !== undefined;
+    const qLean = qFromAxisAngle(rotateYaw([1, 0, 0], bodyYaw), torsoLean);
+    for (const side of ['L', 'R'] as const) {
+      const iS = idx[`shoulder${side}`]!;
+      const relLocal = sub(joints.base[iS]!, joints.base[idx.chest]!);
+      const rel = leanRan
+        ? qRotate(qLean, rotateYaw(relLocal, bodyYaw))
+        : rotateYaw(relLocal, bodyYaw);
+      const excess = sub(sub(targets[iS]!, targets[idx.chest]!), rel);
+      const d = len(excess);
+      if (d > cap) {
+        targets[iS] = add(targets[iS]!, scale(excess, (cap - d) / d));
+      }
+    }
   }
 
   // Pre-override hand/foot targets — the tip/toe follow pass below moves each

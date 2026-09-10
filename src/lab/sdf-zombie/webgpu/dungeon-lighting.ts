@@ -73,6 +73,19 @@ export const DUNGEON_RIG: AmbientRig = {
  *  offset is what makes shadows emerge, and it is the entire Doom 3 read. */
 export const FLASHLIGHT_OFFSET: Vec3 = [0.25, -0.15, 0.1];
 
+/**
+ * Shadow edge softness for the flashlight's shadow map, in shadow-map
+ * texels — the `shadow.radius` of the PCF filter. Requires the renderer's
+ * shadowMap.type to be PCFShadowMap (game-main): PCFSoftShadowMap runs a
+ * fixed kernel that ignores radius entirely. On the WebGPU node path the
+ * PCF filter is a 5-tap IGN-rotated Vogel disk whose `radius` is a live
+ * reference uniform (ShadowFilterNode), so this is runtime-tunable with no
+ * recompile — `__sdfGame.setShadowRadius(v)`, 0 = crisp edge. The
+ * levelShadow twin does not read this: its map is consumed by the march's
+ * own 2×2 LEVEL_SHADOW PCF (march.wgsl), not by the material filter.
+ */
+export const SHADOW_RADIUS = 2;
+
 export interface Flashlight {
   spot: THREE.SpotLight;
   /** Shadow-only twin of the spot: same pose, layer-0 casters only.
@@ -101,6 +114,7 @@ export function createFlashlight(rig: AmbientRig = DUNGEON_RIG): Flashlight {
   spot.shadow.camera.near = 0.2;
   spot.shadow.camera.far = 18;
   spot.shadow.bias = -0.002;
+  spot.shadow.radius = SHADOW_RADIUS;
 
   // THE FIX — see the test above and the spec's spike section. Setting any bit
   // above bit 0 stops three inheriting the main camera's (mid-frame, wrong)
