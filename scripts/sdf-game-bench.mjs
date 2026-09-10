@@ -27,6 +27,7 @@
 // still written — a partial matrix must never be mistaken for a clean one.
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { reportCensusDrift } from './census-diff.mjs';
 
 const VITE = Number(process.argv[2] ?? 5277);
 const CDP = Number(process.argv[3] ?? 9277);
@@ -746,13 +747,37 @@ const report = lines.join('\n');
 console.log(report);
 writeFileSync(`${OUT}/bench.md`, report);
 console.log(`wrote ${OUT}/bench.json and ${OUT}/bench.md`);
+// THE WORKLOAD HALF OF REPEATABILITY (2026-09-10). The Repeatability section
+// above covers machine noise; this covers the SCENARIO. If the same scripted leg
+// drew a different number of bodies, or a different number of droplets were in
+// flight, then the legs were not doing the same work and any delta between them
+// is measuring the scenario rather than the change.
+//
+// It is not hypothetical: on the two runs committed in
+// docs/dev-notes/2026-09-10-probe-gather-cost/ this reports 12 drifted fields,
+// including room 4 `fire` ending with 2/4/3 bodies and 222/74/53 droplets across
+// three repeats of the SAME leg. Run on the in-memory results rather than the
+// written file so it covers both the passes mode (passes.json) and throughput
+// mode (bench.json) with one path.
+const censusDrift = reportCensusDrift('(this run, in-memory results)', { results });
+if (censusDrift > 0) {
+  console.error(`\n⚠ CENSUS DRIFT: ${censusDrift} field(s) differed between repeats of the same leg.`);
+  console.error('  The workload was NOT identical, so cross-leg deltas from this run are suspect.');
+  console.error('  Judge each delta against its own legs\' spread, and read the drift list above.');
+  console.error('  This is the failure determinism stage 1 fixes — see');
+  console.error('  docs/superpowers/plans/2026-09-10-deterministic-demo-recordings.md.');
+}
+
 if (failures.length || abandoned) {
   console.error(`\nFAIL: ${failures.length} run(s) failed, ${results.length} completed — the tables above are PARTIAL.`);
   if (abandoned) console.error(`      Matrix abandoned early: ${abandoned}. Remaining legs were never attempted.`);
   console.error(`      Completed runs are also in ${PROGRESS_JSONL} (one JSON object per line).`);
   process.exit(1);
 }
-process.exit(0);
+// Drift does NOT fail the run by itself: it is a property of the SCENARIO, and a
+// leg matrix is still worth reading for within-leg pass rows. It is reported
+// loudly and it does change the exit code, so a scripted/CI caller notices.
+process.exit(censusDrift > 0 ? 1 : 0);
 
 // ---------------------------------------------------------------------------
 // PASS ATTRIBUTION REPORT (BENCH_PASSES=1). Per leg: one table, rows = pass
