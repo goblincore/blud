@@ -156,3 +156,10 @@ describe('K_PROBE_GATHER buffer indexing (vec4 units, count at element 0)', () =
     expect(K_PROBE_GATHER).not.toMatch(/= 4u \+ [lbc] \* [23]u;/);
   });
 });
+
+describe('K_PROBE_GATHER afterglow', () => {
+  it('radiance rises at cfg.w and falls at gridMin.w; visibility keeps cfg.w', () => {
+    expect(K_PROBE_GATHER).toContain('let rate = select(gridMin.w, cfg.w, lumNew > lumPrev);');
+    expect(K_PROBE_GATHER).toContain('(*probeDyn)[base + 3u] = mix((*probeDyn)[base + 3u], new3, cfg.w);');
+  });
+});

@@ -119,3 +119,15 @@ now that the beam itself is gathered (`?bouncespot=1` restores it).
 GPU-verified via `__sdfGame.step`: one light packed per frame without a
 shot, 81 total radiance / max 3.5 per probe from the beam alone, visibility
 min 2.66 with one body; zero errors.
+
+## Update 2026-09-09 (owner: "I don't notice the room lighting up")
+
+Two clarifications and two changes. The dynamic layer lights the MARCHED
+BODIES only; walls and floor are polygons lit by three's lights, so the room
+brightening on a shot is the flash PointLight's job and unchanged here. And
+a 0.14 s flash blended symmetrically at one frame of lag was a two-frame
+flicker on a body. Changes: (1) AFTERGLOW — radiance rises at cfg.w (0.6)
+and falls at gridMin.w (0.12), decided on L00 luminance; measured tail on
+a slug: max probe 5.5 → 4.8 → 4.1 → 3.7 → 3.5 over 44 frames on a 3.5 beam
+floor. (2) Flash sources get `probeFlashBoost` (4×; `setProbeDynamic(r, v, boost)`);
+default radiance gain 0.05 → 0.15. The beam stays physical.

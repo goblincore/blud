@@ -19,6 +19,7 @@ import {
   packBoxes,
   packCapsulesFromBoneInstances,
   packLights,
+  blendDynamicAfterglow,
   type DynLightInput,
   sampleProbeDynamic,
   type DynGrid,
@@ -510,5 +511,20 @@ describe('sampleProbeDynamic', () => {
     expect(s.radiance[1]).toBeCloseTo(expected[1], 6);
     expect(s.radiance[2]).toBeCloseTo(expected[2], 6);
     expect(s.visibility).toBeCloseTo(visAt(g.visibility, n), 6);
+  });
+});
+
+describe('blendDynamicAfterglow', () => {
+  it('a flash rises in one step and decays over many; visibility blends symmetrically', () => {
+    const dark = new Float32Array(16);
+    const lit = new Float32Array(16); lit[0] = 10; lit[1] = 10; lit[2] = 10; lit[12] = 3.5;
+    const out = new Float32Array(16);
+    blendDynamicAfterglow(dark, lit, 1, 0.12, out);
+    expect(out[0]).toBeCloseTo(10, 9);          // rose fully in one step
+    expect(out[12]).toBeCloseTo(3.5, 9);        // visibility took the rise rate too
+    const after = new Float32Array(16);
+    blendDynamicAfterglow(out, dark, 1, 0.12, after);
+    expect(after[0]).toBeCloseTo(10 * 0.88, 5); // decays at the fall rate
+    expect(after[12]).toBeCloseTo(0, 9);        // visibility does not linger
   });
 });

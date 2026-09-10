@@ -39,8 +39,10 @@ export interface ProbeGatherFrame {
   lights: DynLightInput[];
   /** 0..1, rotates the ray set so the estimate does not strobe. */
   frameSeed: number;
-  /** 0..1, weight of the NEW estimate against last frame's. */
+  /** 0..1, weight of the NEW estimate against last frame's (the RISE rate). */
   blend: number;
+  /** 0..1, the radiance FALL rate — the afterglow tail (0.12 ≈ 0.3 s at 60 Hz). */
+  fall: number;
   raysPerProbe: number;
 }
 
@@ -102,7 +104,8 @@ export function createProbeGatherBinding(renderer: THREE.WebGPURenderer, caps: P
       lightsAttr.needsUpdate = true;
 
       (uCfg.value as THREE.Vector4).set(probes, Math.min(64, f.raysPerProbe), f.frameSeed, f.blend);
-      (uGridMin.value as THREE.Vector4).set(f.grid.min[0], f.grid.min[1], f.grid.min[2], 0);
+      // gridMin.w carries the afterglow fall rate (the kernel's spare slot).
+      (uGridMin.value as THREE.Vector4).set(f.grid.min[0], f.grid.min[1], f.grid.min[2], f.fall);
       (uGridInv.value as THREE.Vector4).set(
         1 / Math.max(1e-6, f.grid.max[0] - f.grid.min[0]),
         1 / Math.max(1e-6, f.grid.max[1] - f.grid.min[1]),

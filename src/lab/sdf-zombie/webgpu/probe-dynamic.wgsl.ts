@@ -152,9 +152,18 @@ export const K_PROBE_GATHER = /* wgsl */ `fn kProbeGather(
   let new3 = vec4<f32>(v00, v1m1, v10, v11) * w;
 
   let base = gi * 4u;
-  (*probeDyn)[base + 0u] = mix((*probeDyn)[base + 0u], new0, cfg.w);
-  (*probeDyn)[base + 1u] = mix((*probeDyn)[base + 1u], new1, cfg.w);
-  (*probeDyn)[base + 2u] = mix((*probeDyn)[base + 2u], new2, cfg.w);
+  // AFTERGLOW. Radiance rises at cfg.w and FALLS at gridMin.w (a spare slot;
+  // the fall rate, e.g. 0.12 = a ~0.3 s tail at 60 Hz). A muzzle flash lives
+  // 0.14 s; blended symmetrically it was a two-frame flicker on a body. Rise
+  // or fall is decided on the L00 luminance, and the whole radiance record
+  // takes one rate so the lobes stay coherent. Visibility keeps cfg.w.
+  let prev0 = (*probeDyn)[base + 0u];
+  let lumNew = dot(new0.xyz, vec3<f32>(0.2126, 0.7152, 0.0722));
+  let lumPrev = dot(prev0.xyz, vec3<f32>(0.2126, 0.7152, 0.0722));
+  let rate = select(gridMin.w, cfg.w, lumNew > lumPrev);
+  (*probeDyn)[base + 0u] = mix(prev0, new0, rate);
+  (*probeDyn)[base + 1u] = mix((*probeDyn)[base + 1u], new1, rate);
+  (*probeDyn)[base + 2u] = mix((*probeDyn)[base + 2u], new2, rate);
   (*probeDyn)[base + 3u] = mix((*probeDyn)[base + 3u], new3, cfg.w);
 }
 

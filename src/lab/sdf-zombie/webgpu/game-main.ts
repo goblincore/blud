@@ -527,8 +527,13 @@ async function main() {
   // gains — the storage read is skipped and the march is bit-identical.
   let probeGather: ProbeGatherBinding | null = null;
   const probeDynParam = new URLSearchParams(location.search).get('probedyn');
-  let probeDynGain = probeDynParam === '0' || probeDynParam === 'off' ? 0 : 0.05;
+  let probeDynGain = probeDynParam === '0' || probeDynParam === 'off' ? 0 : 0.15;
   let probeVisStrength = probeDynParam === '0' || probeDynParam === 'off' ? 0 : 1;
+  // FLASH BOOST. The muzzle light's envelope has already fallen to ~a third
+  // of peak by the frame the gather packs it (one frame of lag), and it
+  // lives 0.14 s; at 1x the bounce was a quarter of the key on a body next
+  // to the muzzle. Flash sources only — the beam stays physical.
+  let probeFlashBoost = 4;
   const _flashWorld = new THREE.Vector3();
   let probeFrame = 0;
   let probeGatherErrors = 0;
@@ -1024,7 +1029,7 @@ async function main() {
         const fI = flashLight ? flashLight.intensity : 0;
         if (flashLight && fI > 0) {
           flashLight.getWorldPosition(_flashWorld);
-          gatherLights.push({ pos: [_flashWorld.x, _flashWorld.y, _flashWorld.z], color: [1.0, 0.81, 0.58], intensity: fI });
+          gatherLights.push({ pos: [_flashWorld.x, _flashWorld.y, _flashWorld.z], color: [1.0, 0.81, 0.58], intensity: fI * probeFlashBoost });
         }
         for (const a of actors) {
           if (a.room !== dynRoom.id || !a.character) continue;
@@ -1033,7 +1038,7 @@ async function main() {
           const m = a.character.muzzle();
           if (!m) continue;
           const k = 1 - age / 0.14;
-          gatherLights.push({ pos: [m[0], m[1], m[2]], color: [1.0, 0.72, 0.45], intensity: 35 * k * k });
+          gatherLights.push({ pos: [m[0], m[1], m[2]], color: [1.0, 0.72, 0.45], intensity: 35 * k * k * probeFlashBoost });
         }
         if (spotOn > 0 && flashlight.spot.intensity > 0) {
           const sp = flashlight.spot.position, sc = flashlight.spot.color;
@@ -1055,7 +1060,8 @@ async function main() {
           capsuleMargin: 0.06,
           lights: gatherLights,
           frameSeed: (probeFrame % 64) / 64,
-          blend: 0.5,
+          blend: 0.6,
+          fall: 0.12,
           raysPerProbe: 32,
         };
       }
@@ -5289,9 +5295,10 @@ async function main() {
     setBounceSpot: (gain: number) => { bounceSpotGain = Math.max(0, gain); return bounceSpotGain; },
     /** GPU probe gather dynamic layer: radiance gain (flash bounce) and
      *  visibility strength (bodies darken their surroundings). 0/0 = off. */
-    setProbeDynamic: (radianceGain: number, visStrength: number) => {
+    setProbeDynamic: (radianceGain: number, visStrength: number, flashBoost?: number) => {
       probeDynGain = Math.max(0, radianceGain); probeVisStrength = Math.max(0, Math.min(1, visStrength));
-      return { radianceGain: probeDynGain, visStrength: probeVisStrength };
+      if (flashBoost !== undefined) probeFlashBoost = Math.max(0, flashBoost);
+      return { radianceGain: probeDynGain, visStrength: probeVisStrength, flashBoost: probeFlashBoost };
     },
     get probeDynamic() { return { radianceGain: probeDynGain, visStrength: probeVisStrength, frames: probeFrame, errors: probeGatherErrors, bound: probeGather !== null, reached: probeGateLogs, gates: probeLastGates }; },
     probeDynReadback: () => probeGather?.readback() ?? Promise.resolve(new Float32Array(0)),

@@ -285,6 +285,26 @@ export function blendDynamic(prev: Float32Array, next: Float32Array, blend: numb
   for (let i = 0; i < n; i++) out[i] = prev[i]! * (1 - blend) + next[i]! * blend;
 }
 
+/**
+ * The kernel's AFTERGLOW blend, per probe (16 floats): the radiance record
+ * (floats 0-11) rises at `rise` when its L00 luminance increases and falls at
+ * `fall` otherwise; visibility (12-15) always blends at `rise`. A 0.14 s
+ * muzzle flash blended symmetrically was a two-frame flicker on a body.
+ */
+export function blendDynamicAfterglow(
+  prev: Float32Array, next: Float32Array, rise: number, fall: number, out: Float32Array,
+): void {
+  const probes = Math.floor(Math.min(prev.length, next.length, out.length) / 16);
+  for (let p = 0; p < probes; p++) {
+    const o = p * 16;
+    const lumNew = 0.2126 * next[o]! + 0.7152 * next[o + 1]! + 0.0722 * next[o + 2]!;
+    const lumPrev = 0.2126 * prev[o]! + 0.7152 * prev[o + 1]! + 0.0722 * prev[o + 2]!;
+    const rate = lumNew > lumPrev ? rise : fall;
+    for (let i = 0; i < 12; i++) out[o + i] = prev[o + i]! * (1 - rate) + next[o + i]! * rate;
+    for (let i = 12; i < 16; i++) out[o + i] = prev[o + i]! * (1 - rise) + next[o + i]! * rise;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Gather
 // ---------------------------------------------------------------------------
