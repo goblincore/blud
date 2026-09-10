@@ -110,6 +110,40 @@ in this branch's three shader commits. And it belongs in CI as a regression gate
   small; it requires Stage 1 to be complete, because any wall-clock read or
   unseeded RNG diverges instead of erroring.
 
+## The gate has a tool now, and it already fails
+
+`scripts/census-diff.mjs` reads stored `bench.json` / `passes.json` files, groups
+the repeats of each (leg, room), and reports every census field whose value is
+not the same in every repeat. It compares EVERY field present rather than a
+hardcoded list, so a field added to the bench later is covered automatically.
+Exit code 1 on any drift, so it can gate a script.
+
+```
+node scripts/census-diff.mjs <bench.json> [more.json ...]
+```
+
+Run against the two runs already committed in
+`docs/dev-notes/2026-09-10-probe-gather-cost/` — both taken on reasonably quiet
+machines, both with the scenario scripted — it reports **12 drifted fields**.
+These are WITHIN a single run, across repeats of the same scripted leg, so they
+are NOT machine noise. The workload genuinely differed:
+
+| leg/room | field | rep0 | rep1 | rep2 |
+| --- | --- | ---: | ---: | ---: |
+| room 4 `fire` | `bodies` (last) | 2 | 4 | 3 |
+| room 4 `fire` | `droplets` (last) | **222** | 74 | 53 |
+| room 4 `fire` | `gooQuads` (last) | 406 | 296 | 282 |
+| room 3 `fire` | `droplets` (last) | 30 | 67 | 65 |
+
+So the same "identical" leg ran with a **4x spread in droplets** and a different
+number of bodies on screen. Any millisecond delta measured against those is
+measuring the scenario. **This is the concrete justification for stage 1**, and
+it is a cheaper, harder piece of evidence than the repeat-spread percentages,
+because it isolates the workload from the machine.
+
+Once stage 1 lands, this tool is the gate: the census must be IDENTICAL across
+repeats, and `census-diff.mjs` exits non-zero until it is.
+
 ## Payoff, stated honestly
 
 **What it fixes:** workload repeatability (the census drift), and verification of
