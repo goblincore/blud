@@ -201,8 +201,13 @@ and the readback (bit-stable). What is left is state these layers do not cover:
 the gather's own GPU-side accumulation, the **room probe grid baked in a WORKER
 at boot** (async, lands whenever it finishes — best next candidate), or the
 march's own per-frame state. Separately, a gather-independent period-2 mechanism
-remains (field jitter phase is the candidate). Full evidence: handoff, "IT IS
-BUILT".
+remains (field jitter phase is the candidate). **Dispatch count is excluded too**
+(rate 4 → 18 dispatches: `instances` still identical, `probeDyn` still 0 shared,
+march still a two-value alternation; one run went fully stable on `probeDyn` while
+its march kept alternating, so the two layers vary independently). **Cheapest next
+pin: the room-probe grid's WORKER bake completion frame** — async, lands whenever
+it finishes, and nothing in a recording pins WHEN (the same fix the plan already
+wants for the chunk-bake worker). Full evidence: handoff, "IT IS BUILT".
 **[x] AND IT ALREADY FIRES ON THE BENCH.** `endHash` is wired into the page's
 bench, so the harness reports frame-level drift beside census drift. A
 `baseline,occluder-off` × 3 × 2 run reports **all four leg-runs drifting on BOTH

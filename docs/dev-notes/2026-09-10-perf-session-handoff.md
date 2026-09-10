@@ -179,6 +179,23 @@ state other than the four things already pinned. **The room-probe worker bake is
 the best next candidate** — it is async, it lands whenever it finishes, and
 nothing in a recording pins WHEN.
 
+**AND THE DISPATCH COUNT IS NOT IT EITHER** (`sdf-demo-hash-rate4`, rate 4 → 18
+dispatches vs 36): the march still alternates between exactly TWO digests at held
+parity, `instances` is STILL byte-identical across boots, and `probeDyn` still
+shares ZERO digests. One run went fully STABLE on `probeDyn` (three samples, one
+digest) while its march kept alternating — so the two layers vary independently,
+and neither tracks the dispatch count.
+
+**What that leaves, stated as a shape rather than a guess.** Inputs identical,
+scene locked, seed pinned, schedule identical, readback proven stable, and the
+output still differs between boots. So the difference enters somewhere none of
+those layers observe — the strongest remaining candidate is the GPU-side state the
+gather accumulates across dispatches, or the async room-probe grid baked in a
+WORKER at boot, whose completion frame nothing pins. **The worker bake is the
+cheapest thing to pin next**: pin its completion to a recorded frame index (the
+same fix the plan already calls for on the chunk-bake worker, and for the same
+reason — it lands whenever it finishes).
+
 **Method note, because it already bit twice:** the four `hashFrame` call sites had
 drifted apart — two grew `readInstances` and two did not — so a whole layer
 silently vanished from a run with no error, and the first "instances test" proved
