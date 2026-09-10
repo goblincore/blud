@@ -478,7 +478,7 @@ Party, endless rails of coats that may be skins, a counter, a bell nobody
 answers. Dungeon synth plays here.
 
 - **Levels branch off it** through service lifts, stairwells and laundry chutes,
-  grouped into **floors** of the building. Clearing a floor opens the way *up*.
+  each door a different world (§12.5). Clearing a level opens the next door, and the way *up*.
 - **Claim tickets** are the light adventure layer: found in levels, redeemed at
   the counter for a weapon, a key, a mask, something alive. **Some tickets
   can't be redeemed in the game;** they work on the desktop or in the room.
@@ -492,15 +492,64 @@ That's the size of the classic first episodes (Wolfenstein 3D's was 10 levels;
 Doom's and Quake's were around 8–9 including a secret), and it's a size one
 person can actually make well.
 
-| # | Level | Floor | Frame phase | Music bias |
-| --- | --- | --- | --- | --- |
-| 0 | *The demo level* (cold open, §4.1) | B — Service | Cold open | Noise |
-| 1–2 | e.g. *The Larder*, *Hot Water* | B — Service | Gentle | Noise, dungeon synth |
-| 3–4 | e.g. *The Queue*, *Guest List* | G — The Queue | Strange | Trap, slow and heavy |
-| 5–6 | e.g. *Floorfiller*, *4AM* | 1 — The Floor | Strange → sinister | Hard gabber |
-| 7 | *Lights Up* | ∞ — Upstairs | Sinister | All of it, then silence |
-| S | A secret level | Anywhere | — | A track you can only get here |
-| F | **Your flat** (ending 1, §9.5) | The room | Finale | Your CD shelf |
+**The episode is a tour of classic FPS locations (decided 2026-09-10).** As if
+the fictional 90s developer loved Doom, Quake and Blood too and put in every
+kind of level they remembered. The variety *is* the theme. The Cloakroom's
+doors each open onto a different world.
+
+**Reference the type of level, never a specific map.** "The tech base", "the
+hell level", "the circus level": not their layouts, names or iconography. Every
+world still obeys the same rules (§12.6): a place from games, not real life;
+something that doesn't work; a party somewhere overhead; one enemy whose
+deformation is the level's centrepiece; one CD.
+
+**Draft level list.** Names are working names; enemies and music are first
+guesses.
+
+| # | Level | Classic type | What doesn't work | SDF showcase | Enemy spotlight | Music | Phase |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 0 | ***The Wake*** (demo, §4.1) | Cemetery / crypt | A wake still going with nobody left to mourn. Last pickup: a CD in an open coffin | First bodies, first gore | Zombies | Noise, a funeral organ | Cold open |
+| 1 | ***The Keep*** | Gothic castle | A banquet laid for guests who never come | Stone that goes soft when shot | Gargoyles | Dungeon synth | Gentle |
+| 2 | ***Cold Storage*** | Research lab | Storage that keeps nothing; specimens keep themselves | Glass tanks, things floating in them | Soldiers, a bloatmaw in a tank | Drones, noise | Gentle |
+| 3 | ***The Big Top*** | Circus | A show performing for empty seats | Rubbery, inflatable, pops | Clowns | Wonky trap | Strange |
+| 4 | ***Night Train*** | Train | A party carriage on a line with no stations | Motion: a moving level | Mixed passengers | Rhythmic noise | Strange |
+| 5 | ***The Ship*** | Alien sci-fi | A vessel arranged for a crew that isn't shaped like anyone | Impossible smooth geometry, low gravity | Cyclops | Cold synth | Strange |
+| 6 | ***The Works*** | Factory (the Quake II processing-plant type) | Assembly lines making **soft flesh dolls** for no buyer | Bodies assembled in stages, half-finished | Gnashers; the dolls themselves | Industrial trap | Sinister |
+| 7 | ***Floorfiller*** | The club | A dance floor that swells on the kick | Architecture that pulses to the beat | The crowd | Hard gabber | Sinister |
+| 8 | ***Hell*** | The hell level | *Hell is upstairs*: the top floor of the Party is a **tumour** | **The whole level is a monstrous fleshy growth** | The headliner (rename) | All of it, then silence | Sinister |
+| S | ***Dollhouse*** (secret) | — | The goblin's own flat at giant scale; you are the doll | The room's furniture, huge | The mouse | A music box | — |
+| F | **Your flat** (§9.5, ending 1) | — | The room you decorated | Gore enters the flat, once | The Party | Your CD shelf | Finale |
+
+**Hell is a tumour (decided 2026-09-10).** No lava, no pentagrams. Hell is a
+vast, monstrous fleshy growth that has swallowed the top of the building:
+- **Architecture as growth.** Corridors are ducts through tissue; rooms are
+  cavities; doors are sphincters that open when shot. Everything is soft SDF
+  and everything reacts.
+- **It grew from the Party.** Pieces of every earlier world are caught in it,
+  half-digested: a castle arch, a lab tank, a circus pole, a train carriage.
+  That makes it cheap to dress with existing assets, and it absorbs the old
+  *Lights Up* idea (every world stacked together) into Hell itself.
+- **It pulses to the music.** The kick from Floorfiller carries on up here as
+  a heartbeat. At the heart of it, the music stops.
+- **World law 2 arrives.** Earlier levels have soft *things*; Hell is the one
+  place where the architecture itself is flesh.
+
+**Night Train is cheap, not expensive.** A train is linear by nature: a
+string of carriages. The carriages stay still in world space and the scenery
+outside moves past, with sway and track noise selling the motion. Roof
+sections and gaps between carriages give it variety.
+
+**Threads between levels:**
+- **The Works → Dollhouse.** The secret exit is in the doll factory: you go
+  from making dolls to being one. A soft doll from The Works is a natural
+  object to come through the screen into the room.
+- **The Wake → the flat.** The first level is a party for the dead; the last is
+  a party that comes to you.
+- **The tumour → the flat.** The goblin's own room goes soft in the sinister
+  phase on the same schedule. Hell and home start to look alike.
+
+**Still open:** whether lab and alien ship feel too close; roughly 9 main
+levels plus secret and finale may still be one or two too many for one person.
 
 **Why this works beyond scope:**
 - **The finale reuses the room.** Level F needs no new architecture; the player
@@ -521,8 +570,9 @@ person can actually make well.
 
 ### 12.6 Level grammar (rules for non-places)
 
-1. **Start from a function** (queueing, storing, serving, dancing), never from a
-   real location.
+1. **Places from games, not places from life.** A castle the way 90s games
+   imagined castles, never a historical one. Start from the genre location and
+   a function (feasting, storing, performing, assembling).
 2. **Break its purpose.** The queue loops. The cloakroom has no exit. The buffet
    serves guests.
 3. **Arrange for someone absent.** Rows of chairs, laid tables, hooks.
