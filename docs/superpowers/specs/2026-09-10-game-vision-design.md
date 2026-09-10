@@ -400,7 +400,8 @@ you answered the knock across the game.
 
 ## 10. The Never list (what is never shown or explained)
 
-- Who throws the Party, or whether there is a host at all.
+- What the Host is, whether it was ever a person, or why it throws the Party.
+- **Whether the heartbeat and the knock are the same thing.**
 - **Whether the Party in the FPS and the party upstairs are the same party.**
 - **Who sends the mail, or how they know.**
 - **Why the goblin can't leave the flat.** Locked, afraid, forbidden, or
@@ -582,6 +583,38 @@ levels plus secret and finale may still be one or two too many for one person.
 6. **Club levels move.** SDF geometry that swells and pulses on the kick.
 7. **Late levels borrow from the room.** A pipe, a bucket, the rug. Small at
    first.
+
+### 12.7 Bosses (decided 2026-09-10)
+
+Most FPS bosses aren't fun: damage sponges circle-strafed in empty arenas, with
+invulnerable phases and a health bar. The deformation tech is our way out.
+
+**Rules:**
+1. **The body is the health bar.** No bar on screen. The boss loses chunks,
+   sags, splits and shows bone. Progress is something you *see*.
+2. **No invulnerable phases, no damage sponges.** Every shot visibly does
+   something. A fight lasts a few minutes, not ten.
+3. **Bosses move to the music.** Attacks land on the beat; the breakdown is the
+   opening. Phases follow the track's structure.
+4. **The arena reacts.** Cover goes soft, the floor gives, pieces blown off the
+   boss become obstacles.
+5. **Only two.** One mid-episode, one final. Not a boss per level.
+
+**1. The Headliner — *Floorfiller* (level 7).** The renamed cyberdemon, on
+stage. The fight follows the set: build-up, drop, breakdown. Its body comes
+apart in time with the track. When it dies, the club's music cuts out for the
+first time in the game.
+
+**2. The Host — the heart of *Hell* (level 8).** The one who throws the
+Party, never seen. **The final boss is the level itself:** Hell is the Host's
+body. At its centre is a heart pulsing to the Party's kick. You carve through
+it layer by layer while the tumour fights back: closing corridors, growing
+over cover, birthing guests. It never has a face, and the game never confirms
+it was ever a person.
+
+**Frame rhyme:** the heart's rhythm is **the same pattern as the knock on the
+goblin's door** (§9.4). Never stated. Players who notice will feel it, just
+before the Party comes down to the flat (§9.5, ending 1).
 
 ---
 
