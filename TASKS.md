@@ -191,15 +191,31 @@ resolution: [bodies-style-handoff.md](docs/dev-notes/2026-09-09-perf-spikes/bodi
   margin, gated to the body being marched. March pass p50 14.9 → 11.3 ms on
   the room-4 bench; no visible artefacts after the own-body gate.
   [plan + result](docs/superpowers/plans/2026-09-10-temporal-march-start.md).
-  Follow-up (same day, unpushed): `bodyEntry` folded into the start max,
+  Follow-up (same day, pushed): `bodyEntry` folded into the start max,
   recovery probes rewind instead of dropping the bound, wound-zone gate on
   the accepted start, adaptive motion-scaled margin — floor PARKED at 0.25
   after the owner playtest found glitches at 0.15 in real play (the frozen
-  closeup bisect missed them: static camera, VHS/weave off). Room-4 A/B at
-  the shipped margin: gib −8%, fire −5%, walk ~0, no regression; the 0.15
-  floor's gib −17% is forfeited until the accept/ramp fragility inside the
-  hull face is fixed. Instruments:
-  `scripts/tmp/tstart-ab.mjs` + `tstart-artifact-check.mjs`.
+  closeup bisect missed them: static camera, VHS/weave off).
+  Owner-confirmed fixes from the same night: fresnel lint at range (graze
+  accept capped at a hard 1 cm — its first version scaled with the AA
+  epsilon, 2% of distance, a ~1.9 m band at 12 m), stacked-body
+  see-through holes (~90%: window-width refusal on the body's OWN box
+  chord + graze accept + per-body hull cap; an adversarial-review pass
+  caught the first version capping against the SHARED shellIn, which
+  silently disabled the start for non-frontmost bodies), graze-crawl cost
+  bounded by a 2 mm step floor (gib p50 15.2 -> 7.0), probe gather
+  amortized to half rate + tracer slots capped at 2 (the fire-segment
+  gather spike was TRACERS filling the slots), SSCS ships OFF (the FPV
+  weapon is inside its march volume — painted a moving weapon-silhouette
+  rectangle on melee targets), pipeline warm-up + loading screen at boot.
+  Adversarial deepseek-v4-flash review dispatched and reconciled
+  (20e7e898). Instruments: `scripts/tmp/tstart-ab.mjs`,
+  `tstart-artifact-check.mjs`, `__sdfGame.temporalDiag()` (frozen-frame
+  per-pixel ON/OFF). KNOWN-RARE: a one-frame distorted halo around wounds
+  (owner sighting 2026-09-10, once, non-reproducible) = the documented
+  wound-halo class at relax 1.0 (postmortem below / Obsidian
+  2026-08-24-wound-halo-postmortem); watch on F9 marks, fix direction is
+  the perf spec's retract-reconvergence lever.
 - [ ] **NEXT: render optimization pass, round 2** — backlog with owner notes in
   Obsidian `Claude Notes/Planning/2026-09-09-blud-render-optimization-backlog.md`.
   Done in round 1 (2026-09-10): pass timings via `__sdfGame.bench({mode:'passes'})`,
