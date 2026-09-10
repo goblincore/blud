@@ -2982,6 +2982,36 @@ async function main() {
     console.error('[sdf-game] gun model failed to load — firing still works', err);
   }
 
+  // PIPELINE WARM-UP (spike program, 2026-09-10). three's WebGPU backend
+  // compiles a pipeline the first time a material+geometry pair renders —
+  // MID-FRAME, which the owner has felt as a freeze on the first shot or
+  // first gout of a session (cpu:draw spikes to 26-38 ms in the bench).
+  // compileAsync walks the same visibility-respecting traversal as render,
+  // so hidden-at-boot effects (smoke puffs, the flash group, tracer
+  // ember/streak) are flipped visible for the compile and restored after —
+  // no frame runs in between, so nothing renders warm. Fire-and-forget:
+  // compileAsync yields per pipeline, the loop keeps drawing while it runs.
+  const warmPipelines = async () => {
+    const t0 = performance.now();
+    const flipped: THREE.Object3D[] = [];
+    scene.traverse((o) => {
+      if (!o.visible && (o as THREE.Mesh).isMesh) { flipped.push(o); o.visible = true; }
+    });
+    try {
+      await handle.renderer.compileAsync(scene, camera);
+      if (gooLayer) await gooLayer.precompile(camera);
+      const done = { ms: Math.round(performance.now() - t0), flipped: flipped.length };
+      (window as unknown as Record<string, unknown>).__warmDone = done;
+      console.log(`[warm] pipelines compiled in ${done.ms} ms (${done.flipped} hidden meshes included)`);
+    } catch (err) {
+      console.error('[warm] pipeline warm-up failed', err);
+    } finally {
+      for (const o of flipped) o.visible = false;
+    }
+  };
+  // ?warm=0 skips the warm-up (A/B: the first-shot freeze it removes).
+  if (new URLSearchParams(location.search).get('warm') !== '0') void warmPipelines();
+
   /** Scratch, so the per-shot path allocates nothing. */
   const _muzA = new THREE.Vector3(), _muzB = new THREE.Vector3();
   /**

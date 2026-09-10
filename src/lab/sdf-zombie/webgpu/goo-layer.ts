@@ -577,6 +577,11 @@ export interface GooLayer {
    */
   render(camera: THREE.PerspectiveCamera, between: () => void): void;
   /**
+   * PIPELINE WARM-UP: compileAsync every goo scene graph once at boot so the
+   * first gout does not compile pipelines mid-firefight. Await-and-forget.
+   */
+  precompile(camera: THREE.PerspectiveCamera): Promise<void>;
+  /**
    * Redirects the surface composite (normally canvas-bound) into this
    * target; null restores the canvas. post-aa captures the frame this way.
    * The target MUST carry a depth buffer — the surface depth-tests against
@@ -1089,6 +1094,20 @@ export function createGooLayer(
   const vCam = new THREE.Vector3();
 
   return {
+    /** PIPELINE WARM-UP (spike program): the goo materials otherwise compile
+     *  on the first gout — mid-firefight. compileAsync on each scene graph
+     *  the render path uses; the density pass is gated per frame so its
+     *  materials compile here instead. */
+    async precompile(camera: THREE.PerspectiveCamera) {
+      try {
+        await renderer.compileAsync(gooScene, camera);
+        await renderer.compileAsync(quadScene, quadCam);
+        await renderer.compileAsync(blurH.scene, quadCam);
+        await renderer.compileAsync(blurV.scene, quadCam);
+      } catch (err) {
+        console.error('[goo] precompile failed', err);
+      }
+    },
     render(camera, between) {
       // The scene camera's lens and pose, as uniforms — the surface pass
       // rebuilds its pixel rays from these (see GOO_SURFACE_WGSL).
