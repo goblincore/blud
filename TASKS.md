@@ -191,15 +191,20 @@ resolution: [bodies-style-handoff.md](docs/dev-notes/2026-09-09-perf-spikes/bodi
   margin, gated to the body being marched. March pass p50 14.9 → 11.3 ms on
   the room-4 bench; no visible artefacts after the own-body gate.
   [plan + result](docs/superpowers/plans/2026-09-10-temporal-march-start.md).
-- [ ] **NEXT: render optimization pass** — backlog with owner notes in Obsidian
-  `Claude Notes/Planning/2026-09-09-blud-render-optimization-backlog.md`.
-  Order: (1) get `passTimings()` samples back (or an owner recording),
-  (2) shadow maps 1024² → 512 (both), (3) skip rooms out of view,
-  (4) half-res march + non-neural reconstruction (neural upscale failed),
-  (5) far-body LOD (fewer steps, coarser wounds), (6) static probe term per
-  vertex on walls, (7) gather the most active room, (8) accents out of the
-  direct light list. Tracer gather lights dispatched separately
-  ([plan](docs/superpowers/plans/2026-09-09-tracer-gather-lights.md)).
+- [ ] **NEXT: render optimization pass, round 2** — backlog with owner notes in
+  Obsidian `Claude Notes/Planning/2026-09-09-blud-render-optimization-backlog.md`.
+  Done in round 1 (2026-09-10): pass timings via `__sdfGame.bench({mode:'passes'})`,
+  shadow maps 512, per-room accent light lists, temporal reprojection start
+  (shipped ON). Rejected: reduced-scale flesh (interlace grows; owner) and
+  neural upscale. Order now: (1) gather the MOST ACTIVE room — soldiers
+  firing in room 5 do not light it while the player is elsewhere (one room
+  per frame); serve the room with the most light sources, later all rooms
+  in one buffer; (2) far-body LOD — fewer march steps, coarser/no wounds
+  for small-screen-fraction bodies; (3) blood simulation — owner recordings
+  put ~50% more droplets in flight on late frames; (4) static probe term
+  per vertex on walls (24 tex + 32 buffer loads per level pixel);
+  (5) accent point lights out of the direct list once the probe look is
+  accepted. Measure with the bench, not recordings (30 fps cap).
 - [x] **Level surfaces reading the probes, FORWARD path — built + GPU-verified
   2026-09-09** on `claude/level-probe-lighting` (not merged; owner playtest
   next). `ProbeLightingNode` (`webgpu/probe-lighting-node.ts`) adds each
