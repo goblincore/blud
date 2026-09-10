@@ -132,6 +132,37 @@ export function fieldHeldNeighbours(
 }
 
 /**
+ * The INTEGER form of `fieldHeldNeighbours`, written the way the composite
+ * shader must evaluate it.
+ *
+ * This exists because the shader cannot use `Math.ceil` and cannot rely on
+ * floor division: WGSL's `/` and `%` on integers TRUNCATE TOWARD ZERO, so the
+ * `ceil((y - field) / fields)` form is wrong for the rows where `y < field`.
+ * The derivation below avoids division of a possibly-negative quantity
+ * entirely — `outRow` is non-negative, so `tRow = outRow / fields` is a true
+ * floor — and then classifies by where this field's own row for `tRow` falls:
+ *
+ *     own = tRow * fields + field
+ *     own <= outRow  ->  this field's row tRow is AT or ABOVE, so the bracketing
+ *                        fresh rows are tRow (above) and tRow + 1 (below)
+ *     own >  outRow  ->  row tRow is BELOW, so the bracketing pair is
+ *                        tRow - 1 (above) and tRow (below)
+ *
+ * HELD ROWS ONLY, same domain rule as `fieldHeldNeighbours`. Verified equal to
+ * the float form for every held row at fields 2, 3 and 4 in the tests, which is
+ * what makes the shader edit mechanical rather than a fresh derivation.
+ */
+export function fieldHeldNeighboursInteger(
+  outRow: number,
+  field: number,
+  fields: number = FIELD_COUNT,
+): { above: number; below: number } {
+  const tRow = Math.floor(outRow / fields);
+  const own = tRow * fields + field;
+  return own <= outRow ? { above: tRow, below: tRow + 1 } : { above: tRow - 1, below: tRow };
+}
+
+/**
  * How many PREVIOUS field buffers must be retained to reconstruct a held row
  * from real samples rather than by interpolation.
  *

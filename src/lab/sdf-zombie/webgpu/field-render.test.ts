@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   fieldParity, fieldTargetHeight, fieldJitterNdcY, fieldRowSource, fieldHeldNeighbours,
-  fieldRingDepth, fieldPixelFraction, fieldHistorySlot, fieldHistoryRead, FIELD_COUNT,
+  fieldRingDepth, fieldPixelFraction, fieldHistorySlot, fieldHistoryRead,
+  fieldHeldNeighboursInteger, FIELD_COUNT,
 } from './field-render';
 
 describe('fieldParity', () => {
@@ -385,6 +386,59 @@ describe('fieldHistoryRead — where in the retained buffer to read', () => {
           const r = fieldHistoryRead(y, field, 600, fields);
           if (r === null) continue;
           expect(r.row).toBe(Math.floor(y / fields));
+        }
+      }
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE SHADER'S INTEGER FORM. The composite cannot use Math.ceil and cannot
+// rely on floor division — WGSL's `/` and `%` truncate toward zero, so the
+// `ceil((y - field) / fields)` derivation is wrong wherever `y < field`. These
+// pin the division-free formulation the shader will actually evaluate, so that
+// generalising COMPOSITE_WGSL is a mechanical transcription rather than a fresh
+// derivation done blind in a template literal.
+// ---------------------------------------------------------------------------
+
+describe('fieldHeldNeighboursInteger — the form the composite shader can evaluate', () => {
+  it('agrees with the float form on EVERY held row, at fields 2, 3 and 4', () => {
+    for (const fields of FIELD_COUNTS) {
+      for (let frame = 0; frame < fields; frame++) {
+        const field = fieldParity(frame, fields);
+        for (let y = 0; y < 120; y++) {
+          if (fieldRowSource(y, field, fields).fresh) continue;
+          expect(
+            fieldHeldNeighboursInteger(y, field, fields),
+            `fields=${fields} field=${field} y=${y}`,
+          ).toEqual(fieldHeldNeighbours(y, field, fields));
+        }
+      }
+    }
+  });
+
+  it('reproduces the shipped two-field form exactly, including its negative edge', () => {
+    // The shipped shader computes `tRow - i32(parity)`, which goes to -1 at the
+    // top held row for parity 1. The integer form must reproduce that, because
+    // callers clamp base and base+1 and a different -1-vs-0 would shift a row.
+    for (let frame = 0; frame < 2; frame++) {
+      const field = fieldParity(frame, 2);
+      for (let y = 0; y < 60; y++) {
+        if (fieldRowSource(y, field, 2).fresh) continue;
+        const base = Math.floor(y / 2) - field;
+        expect(fieldHeldNeighboursInteger(y, field, 2)).toEqual({ above: base, below: base + 1 });
+      }
+    }
+  });
+
+  it('never returns a non-integer, for any divisor', () => {
+    for (const fields of FIELD_COUNTS) {
+      for (let y = 0; y < 60; y++) {
+        for (let field = 0; field < fields; field++) {
+          const n = fieldHeldNeighboursInteger(y, field, fields);
+          expect(Number.isInteger(n.above)).toBe(true);
+          expect(Number.isInteger(n.below)).toBe(true);
+          expect(n.below - n.above).toBe(1);
         }
       }
     }
