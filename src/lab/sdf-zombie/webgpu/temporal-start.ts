@@ -28,18 +28,16 @@ export interface TemporalCfg {
 export const TEMPORAL_START_DEFAULTS: TemporalCfg = { enabled: 1, margin: 0.25, slope: 0.02, maxStart: 50 };
 
 /**
- * Floor for the ADAPTIVE margin, metres. Two floors compete: motion wants a
- * small pad, the march wants the start to stay at or behind the outer hull
- * face — the frozen-scene pixel bisect (2026-09-10, wounded closeup, VHS
- * off, field off) put the line between 0.15 (pixel-identical to tstart off)
- * and 0.10 (3.8k px of banded deep-tissue shading on convex skin): once the
- * start beats the hull face, the accept tolerance lands samples alternately
- * inside/outside the skin and the tissue ramp paints them. The shipped
- * 0.25 was never exposed (it never beats the hull face at close range), so
- * 0.15 is the tightest PROVEN-safe pad, and the adaptive margin only bites
- * above it when bodies actually move.
+ * Floor for the ADAPTIVE margin, metres — parked at the shipped constant
+ * after the owner playtest (2026-09-10): 0.15 was pixel-clean on the frozen
+ * closeup bisect but showed glitches in real play (motion, grazing
+ * silhouettes, the field weave — none of which that static scene covers),
+ * while the shipped 0.25 read clean. Floor == cap means the margin rides at
+ * 0.25 and the measurement machinery is parked, live for a future attempt
+ * with better scene coverage. Floor == cap also means the function below
+ * returns the constant for every input; the tests pin exactly that.
  */
-export const TEMPORAL_MARGIN_FLOOR = 0.15;
+export const TEMPORAL_MARGIN_FLOOR = 0.25;
 
 /**
  * The adaptive start margin for a measured worst-body translation of

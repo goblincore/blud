@@ -96,25 +96,21 @@ describe('TEMPORAL_START_WGSL — parse and shape contract', () => {
 });
 
 describe('temporalMarginForMotion — the adaptive start margin', () => {
-  it('scales measured motion by 1.5 for inter-interval acceleration', () => {
-    // 0.14 m of motion wants 0.21: above the 0.15 floor, below the 0.25 cap.
-    expect(temporalMarginForMotion(0.14)).toBeCloseTo(0.21, 10);
-    expect(temporalMarginForMotion(0.12)).toBeCloseTo(0.18, 10);
-  });
-
-  it('never drops below TEMPORAL_MARGIN_FLOOR: tighter starts beat the hull face and band the tissue ramp (2026-09-10 bisect: 0.15 clean, 0.10 banded)', () => {
-    expect(temporalMarginForMotion(0)).toBe(TEMPORAL_MARGIN_FLOOR);
-    expect(temporalMarginForMotion(0.05)).toBe(TEMPORAL_MARGIN_FLOOR);
-    expect(TEMPORAL_MARGIN_FLOOR).toBe(0.15);
-  });
-
-  it('never exceeds the shipped constant: unknown motion is covered, not assumed away', () => {
-    expect(temporalMarginForMotion(0.5)).toBe(TEMPORAL_START_DEFAULTS.margin);
-    expect(temporalMarginForMotion(50)).toBe(TEMPORAL_START_DEFAULTS.margin);
-    expect(TEMPORAL_START_DEFAULTS.margin).toBe(0.25);
+  // PARKED at the shipped constant (floor == cap == 0.25): the owner
+  // playtest found glitches at the 0.15 floor in real play that the frozen
+  // closeup bisect missed. The measurement machinery stays wired; the
+  // clamp pins the margin to the shipped figure for every input.
+  it('is the shipped constant for every input — still scene, motion, teleports', () => {
+    expect(temporalMarginForMotion(0)).toBe(0.25);
+    expect(temporalMarginForMotion(0.05)).toBe(0.25);
+    expect(temporalMarginForMotion(0.14)).toBe(0.25);
+    expect(temporalMarginForMotion(0.2)).toBe(0.25);
+    expect(temporalMarginForMotion(10)).toBe(0.25);
+    expect(TEMPORAL_MARGIN_FLOOR).toBe(0.25);
   });
 
   it('respects an explicit cap (the layer passes none; A/Bs may)', () => {
     expect(temporalMarginForMotion(10, 0.4)).toBe(0.4);
+    expect(temporalMarginForMotion(0.1, 0.2)).toBe(0.2);
   });
 });
