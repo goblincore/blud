@@ -208,17 +208,24 @@ async function runOnce(conn, spec, label) {
       ? ` · probeDyn nonZero ${record.hashes[0].layers.probeDyn.stats.nonZero}`
       : ' · probeDyn ABSENT (gather not bound)'),
   );
-  return { label, spec, record, fingerprint: fingerprint(spec, march) };
+  return { label, spec, record, fingerprint: fingerprint(spec, march, record) };
 }
 
 /** What a stored recording must match to be comparable at all: the instrument
  *  shape, the layer geometry, and the spec. A hash compared against a
  *  differently shaped instrument is a phantom divergence. */
-function fingerprint(spec, march) {
+function fingerprint(spec, march, record) {
   return {
     version: march ? 1 : 0,
     marchWidth: march?.width ?? 0,
     marchHeight: march?.height ?? 0,
+    /** THE GATHER'S DISPATCH PHASE. The seed rotates per DISPATCH, so a
+     *  recording is only comparable to another that started on the same one.
+     *  Measured 2026-09-10: two boots whose pre-demo dispatch counts differed by
+     *  1 produced march digests that matched exactly once shifted by a single
+     *  frame — the phase, not the renderer, was the difference. A mismatch here
+     *  is refused rather than reported as a phantom divergence. */
+    seedIdle: record?.seedIdle ?? 0,
     kind: spec.kind, room: spec.room, frames: spec.frames, every: spec.every,
     warmup: spec.warmup, pose: spec.pose, prelude: spec.prelude, sim: spec.sim === true,
   };

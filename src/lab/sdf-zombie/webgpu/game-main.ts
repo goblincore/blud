@@ -5532,6 +5532,23 @@ function performBenchAction(a: BenchAction): void {
     setDemoHold: (on: boolean) => {
       demoHold = on;
       demoSeedBase = probeFrame;
+      // ANCHOR THE PHASE (measured 2026-09-10). The gather's `frameSeed` is
+      // `(probeFrame % 64) / 64` and `probeFrame` counts DISPATCHES, so it also
+      // advances every OTHER frame at the shipped rate of 2. Two boots that
+      // reach this point having dispatched a different number of times therefore
+      // start on a different seed — and since the gather's estimate is an EMA
+      // toward whatever the current ray set reports, every later frame inherits
+      // that phase. MEASURED: two boots' march digests matched EXACTLY over all
+      // 23 overlapping frames once one was shifted by a single position, and
+      // their pre-demo dispatch counts differed by exactly 1 (84 vs 83). So the
+      // renderer is deterministic; only the phase drifted.
+      //
+      // Resetting the counter on the demo seam re-anchors it, which is why this
+      // is a fix rather than a fudge: the value means "dispatches since the
+      // recording started", and that is only true if it starts at zero.
+      // `probeFrame` feeds nothing but the seed and the `probeDynamic.frames`
+      // diagnostic, so this cannot change what the game does.
+      if (on) probeFrame = 0;
       return demoHold;
     },
     get demoHold() { return demoHold; },

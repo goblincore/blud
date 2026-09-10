@@ -177,20 +177,26 @@ construction. Only `sdf:march` (6.7–9.7 ms, no cadence) is a true per-frame ro
   instance.** All three wrong-default bugs this session had the same signature —
   a wrong value that reads as a design choice rather than as an error.
 
-**[~] FRAME HASH — BUILT AND HONESTLY FAILING (2026-09-10).** `frame-hash.ts`
-(pure, 22 tests) + `demo-hash.ts` (in-page, 13 tests) + `__sdfGame.frameHash()` /
-`setDemoHold()` / `demoScenario()` + `scripts/sdf-demo-hash.sh` (`ab` | `record`
-| `verify` | `negative`), and the bench reports frame-hash drift beside census
-drift. **It hashes `marchTarget` + the gather's dynamic layer (target-level), not
-the composited screen.** Controls that PASS: the readback is bit-stable across
-reads with no step between (so a mismatch is never an artefact), and mixed-parity
-recordings are REFUSED rather than reported as divergence. **The blocker, named:**
-`frameSeed` advances per DISPATCH, so on a locked page the march output is a
-function of the dispatch sequence, not of the frame's inputs — `demoHold` pins the
-seed's origin but not its per-frame step. Hold parity (2 steps between samples)
-and the march still varies on every sample with the gather ON; with it OFF
-(`setProbeDynamic(0,0)`) the ONLY variation is the interlaced field's two-value
-alternation. **Next: pin the gather's sequence position as a recording input.**
+**[~] FRAME HASH — BUILT, AND IT ALREADY FAILS USEFULLY (`0ca65f62`).**
+`frame-hash.ts` (pure, 22 tests) + `demo-hash.ts` (in-page, 13 tests) +
+`frameHash()` / `setDemoHold()` / `demoScenario()` + `scripts/sdf-demo-hash.sh`
+(`ab` | `record` | `verify` | `negative`); the bench reports frame-hash drift
+beside census drift. Hashes `marchTarget` + the gather's dynamic layer
+(target-level), NOT the composited screen.
+**Proven:** the readback is bit-stable across no-step re-reads (a mismatch is
+never an artefact); **the render sequence IS deterministic** — 24 consecutive
+positions aligned across two boots match **23/23 at a one-position offset**, all
+digests distinct; the interlaced field's two-value parity alternation is real, so
+mixed-parity recordings are REFUSED; the dispatch phase is anchored at
+`setDemoHold(true)` and a recording's `seedIdle` is part of the fingerprint
+(pre-demo dispatches went 84/83 → 9/5). **Still failing:** the gather's EMA +
+per-dispatch `frameSeed` make a frame a function of the DISPATCH SEQUENCE, so
+anchoring removes the offset but not the history dependence (re-probe: no shift
+aligns). With the gather zeroed a SECOND period-2 mechanism remains, the two
+boots sharing both digests — jitter phase is the candidate.
+**Next: (a) decide whether a frame's identity includes its dispatch history —
+settle the gather, pin the seed, or record the sequence position; (b) then the
+gather-independent period-2 mechanism; (c) then `.dem`.**
 
 **NEXT, in order:** (1) the deeper-interlace `COMPOSITE_WGSL` generalisation —
 plan at `docs/superpowers/plans/2026-09-10-deeper-interlace-fields.md`, pure math
