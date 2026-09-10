@@ -99,10 +99,42 @@ export interface CapsuleHit {
  * returns null: an occluder you are inside blocks nothing, so a body wrapping
  * a probe must not darken it from within.
  */
-export function hitCapsule(origin: Vec3, dir: Vec3, a: Vec3, b: Vec3, r: number): CapsuleHit | null {
+export function hitCapsule(
+  origin: Vec3,
+  dir: Vec3,
+  a: Vec3,
+  b: Vec3,
+  r: number,
+  tMax = Infinity,
+): CapsuleHit | null {
   const ba: Mut3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
   const pa: Mut3 = [origin[0] - a[0], origin[1] - a[1], origin[2] - a[2]];
   const baba = dot(ba, ba);
+
+  // BOUNDING-SPHERE REJECT FIRST (2026-09-10). The capsule is contained in the
+  // sphere centred on the segment midpoint with radius |ba|/2 + r, so a ray
+  // that misses that sphere CANNOT hit the capsule, and one whose sphere exit
+  // is behind the origin cannot have a positive entry either. Both are exact
+  // miss conditions, and they cost one dot, one dot and at most one sqrt —
+  // against the ~15 operations plus three sqrts the full quadratic below pays.
+  //
+  // This is where the sweep's cost actually goes: the gather walks up to 1024
+  // capsules per shadow ray and most of them are nowhere near the ray, so the
+  // reject fires on the large majority and the exact maths is never reached.
+  // `tMax` additionally lets a caller with a running best (or a light
+  // distance) retire a capsule it could not beat.
+  {
+    const mx = a[0] + ba[0] * 0.5, my = a[1] + ba[1] * 0.5, mz = a[2] + ba[2] * 0.5;
+    const R = 0.5 * Math.sqrt(baba) + r;
+    const ocx = origin[0] - mx, ocy = origin[1] - my, ocz = origin[2] - mz;
+    const bq = ocx * dir[0] + ocy * dir[1] + ocz * dir[2];
+    const cq = ocx * ocx + ocy * ocy + ocz * ocz - R * R;
+    const disc = bq * bq - cq;
+    if (disc < 0) return null;
+    const sq = Math.sqrt(disc);
+    if (sq - bq < 0) return null;          // the whole sphere is behind the origin
+    if (-bq - sq > tMax) return null;      // entered only beyond the caller's bound
+  }
 
   // Inside/on test: distance from the origin to the segment a-b.
   const s = baba > 1e-18 ? clamp(dot(pa, ba) / baba, 0, 1) : 0;
@@ -128,7 +160,7 @@ export function hitCapsule(origin: Vec3, dir: Vec3, a: Vec3, b: Vec3, r: number)
       if (h >= 0) {
         const t = (-qb - Math.sqrt(h)) / qa;
         const y = baoa + t * bard;
-        if (t > 0 && y >= 0 && y <= baba) {
+        if (t > 0 && t < tMax && y >= 0 && y <= baba) {
           const p: Mut3 = [origin[0] + dir[0] * t, origin[1] + dir[1] * t, origin[2] + dir[2] * t];
           const sa = y / baba;
           const n = normalize3([
@@ -150,7 +182,7 @@ export function hitCapsule(origin: Vec3, dir: Vec3, a: Vec3, b: Vec3, r: number)
     const disc = bq * bq - cq;
     if (disc < 0) continue;
     const t = -bq - Math.sqrt(disc);
-    if (t <= 0 || t >= bestT) continue;
+    if (t <= 0 || t >= bestT || t >= tMax) continue;
     const p: Mut3 = [origin[0] + dir[0] * t, origin[1] + dir[1] * t, origin[2] + dir[2] * t];
     bestT = t;
     bestPoint = p;
@@ -159,6 +191,81 @@ export function hitCapsule(origin: Vec3, dir: Vec3, a: Vec3, b: Vec3, r: number)
 
   if (bestPoint === null || bestNormal === null) return null;
   return { t: bestT, point: bestPoint, normal: bestNormal };
+}
+
+/**
+ * ANY-HIT within `dist` — the shadow-ray question, and all it is.
+ *
+ * `hitCapsule` answers "where is the nearest entry", so it must scan every
+ * capsule to prove none is nearer. A shadow ray does not care where: it cares
+ * only whether SOMETHING blocks before the light, so it can return on the first
+ * blocker and retire every capsule it passes. `dist` doubles as the bound, so
+ * capsules whose entry lies beyond the light are rejected without the
+ * quadratic — the same `tMax` reject `hitCapsule` now applies.
+ *
+ * Same entry semantics as `hitCapsule` (a ray starting inside a capsule is not
+ * blocked by it), so the answer is identical; only the work differs.
+ */
+export function capsuleBlocks(
+  origin: Vec3,
+  dir: Vec3,
+  a: Vec3,
+  b: Vec3,
+  r: number,
+  dist: number,
+): boolean {
+  const ba: Mut3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+  const pa: Mut3 = [origin[0] - a[0], origin[1] - a[1], origin[2] - a[2]];
+  const baba = dot(ba, ba);
+
+  // Bounding-sphere reject, bounded by the light distance — see hitCapsule.
+  {
+    const mx = a[0] + ba[0] * 0.5, my = a[1] + ba[1] * 0.5, mz = a[2] + ba[2] * 0.5;
+    const R = 0.5 * Math.sqrt(baba) + r;
+    const ocx = origin[0] - mx, ocy = origin[1] - my, ocz = origin[2] - mz;
+    const bq = ocx * dir[0] + ocy * dir[1] + ocz * dir[2];
+    const cq = ocx * ocx + ocy * ocy + ocz * ocz - R * R;
+    const disc = bq * bq - cq;
+    if (disc < 0) return false;
+    const sq = Math.sqrt(disc);
+    if (sq - bq < 0) return false;
+    if (-bq - sq > dist) return false;
+  }
+
+  const s = baba > 1e-18 ? clamp(dot(pa, ba) / baba, 0, 1) : 0;
+  const cx = origin[0] - (a[0] + ba[0] * s);
+  const cy = origin[1] - (a[1] + ba[1] * s);
+  const cz = origin[2] - (a[2] + ba[2] * s);
+  if (cx * cx + cy * cy + cz * cz < r * r) return false;
+
+  if (baba > 1e-18) {
+    const bard = dot(ba, dir);
+    const baoa = dot(ba, pa);
+    const rdoa = dot(dir, pa);
+    const oaoa = dot(pa, pa);
+    const qa = baba - bard * bard;
+    const qb = baba * rdoa - baoa * bard;
+    const qc = baba * oaoa - baoa * baoa - r * r * baba;
+    if (qa > 1e-18) {
+      const h = qb * qb - qa * qc;
+      if (h >= 0) {
+        const t = (-qb - Math.sqrt(h)) / qa;
+        const y = baoa + t * bard;
+        if (t > 0 && t < dist && y >= 0 && y <= baba) return true;
+      }
+    }
+  }
+
+  for (const c of [a, b]) {
+    const oc: Mut3 = [origin[0] - c[0], origin[1] - c[1], origin[2] - c[2]];
+    const bq = dot(oc, dir);
+    const cq = dot(oc, oc) - r * r;
+    const disc = bq * bq - cq;
+    if (disc < 0) continue;
+    const t = -bq - Math.sqrt(disc);
+    if (t > 0 && t < dist) return true;
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -409,14 +516,10 @@ function dynShadowed(
   boxes: Float32Array,
   nBoxes: number,
 ): boolean {
-  for (let c = 0; c < nCaps; c++) {
-    const base = 4 + c * 8;
-    const a: Vec3 = [capsules[base + 0]!, capsules[base + 1]!, capsules[base + 2]!];
-    const r = capsules[base + 3]!;
-    const b: Vec3 = [capsules[base + 4]!, capsules[base + 5]!, capsules[base + 6]!];
-    const h = hitCapsule(origin, dir, a, b, r);
-    if (h !== null && h.t < dist) return true;
-  }
+  // BOXES FIRST (2026-09-10) — same reasoning as the kernel's kdShadowed: the
+  // result is an OR, so order cannot change it, and testing at most 16 boxes
+  // before ~200 capsules short-circuits the capsule sweep whenever a wall or a
+  // piece of furniture is in the way.
   for (let b = 0; b < nBoxes; b++) {
     const base = 4 + b * 12;
     if (boxes[base + 3]! < 0.5) continue; // the enclosure is the light's own room
@@ -426,6 +529,18 @@ function dynShadowed(
     };
     const h = hitAabbEntry(origin, dir, box);
     if (h !== null && h.t < dist) return true;
+  }
+  for (let c = 0; c < nCaps; c++) {
+    const base = 4 + c * 8;
+    const a: Vec3 = [capsules[base + 0]!, capsules[base + 1]!, capsules[base + 2]!];
+    const r = capsules[base + 3]!;
+    const b2: Vec3 = [capsules[base + 4]!, capsules[base + 5]!, capsules[base + 6]!];
+    // ANY-HIT, bounded by the light distance (2026-09-10) — not a nearest
+    // search. Returning on the first blocker retires the rest of the list, and
+    // the bound rejects capsules entered beyond the light without the
+    // quadratic. The answer is identical to `hitCapsule(...) !== null &&
+    // h.t < dist`; only the work differs.
+    if (capsuleBlocks(origin, dir, a, b2, r, dist)) return true;
   }
   return false;
 }

@@ -55,7 +55,8 @@ Four mechanisms produced "disconnected":
   Marched flesh is excluded via `sdfLayer.marchTarget` alpha (< 1 = body
   pixel). Runs BEFORE FXAA (pre-lens, pre-encode), VHS-safe, all-off parity
   untouched (post-aa itself stays neutral; the game page enables it).
-  Default ON; `?sscs=off` disables. Legacy path only (the flesh mask is the
+  Default OFF; `?sscs=on` opts in — the FPV weapon sits inside its march
+  volume. Legacy path only (the flesh mask is the
   march target's depth-in-alpha; deferred has its own G-buffer, field modes
   repurpose it at half height).
 

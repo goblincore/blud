@@ -27,6 +27,7 @@
 // still written — a partial matrix must never be mistaken for a clean one.
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { reportCensusDrift } from './census-diff.mjs';
 
 const VITE = Number(process.argv[2] ?? 5277);
 const CDP = Number(process.argv[3] ?? 9277);
@@ -321,6 +322,26 @@ const ALL_LEGS = {
   'goo-cap-150': { setGooPerf: { particleCap: 150, areaPriority: true } },
   'goo-mintexel-1': { setGooPerf: { minTexelRadius: 1 } },
   'goo-density-off': { setGooPerf: { passGate: { density: false } } },
+  // PROBE GATHER CADENCE (2026-09-10). `probeGatherRate` SHIPS at 2 (every
+  // other frame) and setProbeGatherRate clamps to 1..4, so this is a pure
+  // cadence trade on what is now the #2 GPU pass (4-5 ms). READ IT CAREFULLY:
+  // the pass-attribution row measures the cost of ONE gather, so it does NOT
+  // move when only the frequency changes — the amortised saving only appears in
+  // the FENCED FRAME p50, which needs a quiet machine to mean anything. These
+  // legs exist so that trade can be priced with an alternated in-run A/B
+  // instead of a cross-run guess. Baseline IS rate 2; 'probe-rate1' is the
+  // every-frame diagnostic ceiling (the costliest cadence, not a lever).
+  'probe-rate3': { setProbeGatherRate: 3 },
+  'probe-rate4': { setProbeGatherRate: 4 },
+  // PROBE GATHER COST SPLIT (2026-09-10). Both legs are WRONG FRAMES ON
+  // PURPOSE — a diagnostic ceiling, like 'chunks-skip', not a lever. The split
+  // they produce is the measurement that decides whether widening the gather's
+  // dispatch (7 workgroups / 448 threads) or deleting its per-light shadow
+  // sweep pays more. Before these the shadow share was an op-count MODEL.
+  //   primary = probe-nolights - probe-norays
+  //   shadow  = baseline       - probe-nolights
+  'probe-norays': { setProbeRays: 0 },
+  'probe-nolights': { setProbeLights: 0 },
   // MARCH ATTRIBUTION LEGS (2026-09-07: the march is the whole GPU frame and
   // grows 8 -> 19 -> 31 ms walk/fire/gib). Each prices one wound/chunk
   // mechanism against the shipped state. 'chunks-skip' is a diagnostic
@@ -368,7 +389,29 @@ async function applyLeg(name) {
   // BENCH_LEGS filter may have excluded from the throughput matrix.
   const overrides = LEGS[name] ?? ALL_LEGS[name] ?? {};
   // Ship defaults first, so legs cannot contaminate each other.
+  //
+  // ⚠ TWO PINS BELOW ARE NOT SHIP TRUTH (audited 2026-09-10).
+  // `setOccluder(true)` and `setHullExitBound(false)` are the OPPOSITE of what
+  // the game runs — `setOccluderEnabled(false)` and `GAME_HULL_EXIT_BOUND = 1`
+  // (game-main.ts). So every delta this harness produces is taken with one
+  // extra pass the game does not run, and with a march bound the game DOES
+  // have switched off. The hull-exit pin's stated reason below ("= 1 FAILS
+  // render parity") was root-caused as scene fog on 2026-09-04 and the bound
+  // then shipped 1 with a bit-identical re-census on hits/rasterised/
+  // meanStepsHit, so that justification is stale.
+  // Until an owner decision re-syncs these pins, measure ship truth explicitly:
+  //   BENCH_PRELUDE='__sdfGame.setOccluder(false);__sdfGame.setHullExitBound(true)'
   await evaluate(`(() => {
+    // ANY NEW SEAM A LEG CAN SET MUST BE RESET HERE. The 2026-09-10 probe-gather
+    // legs were added WITHOUT this, and the omission silently corrupted two
+    // runs: 'probe-norays' (last in the order) left rays=0 for the NEXT rep's
+    // baseline, so the pass-attribution median landed on 0.01 ms for every leg
+    // including baseline — which reads as "the gather is free" rather than as
+    // "the harness is lying". Same class as the pin bug above. If a leg sets it,
+    // pin it.
+    __sdfGame.setProbeGatherRate(2);
+    __sdfGame.setProbeRays(null);
+    __sdfGame.setProbeLights(null);
     __sdfGame.setOccluder(true);
     __sdfGame.setCone(false);
     __sdfGame.setFxaa(true);
@@ -704,13 +747,37 @@ const report = lines.join('\n');
 console.log(report);
 writeFileSync(`${OUT}/bench.md`, report);
 console.log(`wrote ${OUT}/bench.json and ${OUT}/bench.md`);
+// THE WORKLOAD HALF OF REPEATABILITY (2026-09-10). The Repeatability section
+// above covers machine noise; this covers the SCENARIO. If the same scripted leg
+// drew a different number of bodies, or a different number of droplets were in
+// flight, then the legs were not doing the same work and any delta between them
+// is measuring the scenario rather than the change.
+//
+// It is not hypothetical: on the two runs committed in
+// docs/dev-notes/2026-09-10-probe-gather-cost/ this reports 12 drifted fields,
+// including room 4 `fire` ending with 2/4/3 bodies and 222/74/53 droplets across
+// three repeats of the SAME leg. Run on the in-memory results rather than the
+// written file so it covers both the passes mode (passes.json) and throughput
+// mode (bench.json) with one path.
+const censusDrift = reportCensusDrift('(this run, in-memory results)', { results });
+if (censusDrift > 0) {
+  console.error(`\n⚠ CENSUS DRIFT: ${censusDrift} field(s) differed between repeats of the same leg.`);
+  console.error('  The workload was NOT identical, so cross-leg deltas from this run are suspect.');
+  console.error('  Judge each delta against its own legs\' spread, and read the drift list above.');
+  console.error('  This is the failure determinism stage 1 fixes — see');
+  console.error('  docs/superpowers/plans/2026-09-10-deterministic-demo-recordings.md.');
+}
+
 if (failures.length || abandoned) {
   console.error(`\nFAIL: ${failures.length} run(s) failed, ${results.length} completed — the tables above are PARTIAL.`);
   if (abandoned) console.error(`      Matrix abandoned early: ${abandoned}. Remaining legs were never attempted.`);
   console.error(`      Completed runs are also in ${PROGRESS_JSONL} (one JSON object per line).`);
   process.exit(1);
 }
-process.exit(0);
+// Drift does NOT fail the run by itself: it is a property of the SCENARIO, and a
+// leg matrix is still worth reading for within-leg pass rows. It is reported
+// loudly and it does change the exit code, so a scripted/CI caller notices.
+process.exit(censusDrift > 0 ? 1 : 0);
 
 // ---------------------------------------------------------------------------
 // PASS ATTRIBUTION REPORT (BENCH_PASSES=1). Per leg: one table, rows = pass

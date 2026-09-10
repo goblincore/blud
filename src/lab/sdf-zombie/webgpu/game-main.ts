@@ -90,6 +90,7 @@ import { stepPlayer, eyeOf, PLAYER, type PlayerState, type MoveInput } from './g
 import { createRoomProbes, type ProbeWorkerLike } from './room-probes';
 import { computeBounceSpot } from '../flashlight-bounce';
 import { createProbeGatherBinding, type ProbeGatherBinding } from './probe-gather-compute';
+import { parseIntParam } from './boot-params';
 import { tracerGatherLights } from '../tracer-lights';
 import { boneInstanceArrays, packBoneInstances, INSTANCE_FLOATS } from './bone-instancer';
 import { createZombieActor, segmentHitsBox, type ZombieActor } from './game-actor';
@@ -599,10 +600,30 @@ async function main() {
   let probeDynGain = probeDynParam === '0' || probeDynParam === 'off' ? 0 : 0.15;
   let probeVisStrength = probeDynParam === '0' || probeDynParam === 'off' ? 0 : 1;
   // ?proberate=1 restores every-frame gathers (see probeGatherRate above).
-  const probeRateParam = Number(new URLSearchParams(location.search).get('proberate'));
-  let probeGatherRateBoot = Number.isFinite(probeRateParam) && probeRateParam >= 1
-    ? Math.min(4, Math.floor(probeRateParam))
-    : null;
+  // ALL THREE of these go through parseIntParam now: it reads the RAW string, so
+  // an absent parameter yields null (the shipped default) rather than 0. Doing
+  // it by hand is what shipped the zeroed-dynamic-layer regression — see
+  // boot-params.ts for the whole story and boot-params.test.ts for the gate.
+  const bootSearch = new URLSearchParams(location.search);
+  let probeGatherRateBoot = parseIntParam(bootSearch.get('proberate'), { min: 1, max: 4 });
+  // PROBE-GATHER COST SPLIT (2026-09-10). Two diagnostic seams that divide the
+  // gather's cost into its primary-ray part and its per-light shadow part,
+  // which is the split that decides whether widening the dispatch or replacing
+  // the per-light sweep pays more. Both are WRONG FRAMES ON PURPOSE:
+  //
+  //   ?dynrays=0  -> nRays 0, so no ray work at all. What is left is the
+  //                  dispatch, the per-probe setup and the blend.
+  //   ?dynlights=0 -> the light list is empty, so the per-light loop never
+  //                  runs and kdShadowed is never called. Primary rays only.
+  //
+  //   primary = lights0 - rays0        shadow = shipped - lights0
+  //
+  // Before these, the "shadow is ~50-70% of the work" figure was an op-count
+  // MODEL, not a measurement (see the probe-gather-cost note).
+  // min 0 is correct here and is exactly what made the old hand-rolled guard
+  // unsafe: 0 is a real mode, so ABSENT must be detected before coercion.
+  let probeRaysBoot = parseIntParam(bootSearch.get('dynrays'), { min: 0, max: 64 });
+  let probeLightsBoot = parseIntParam(bootSearch.get('dynlights'), { min: 0, max: 1024 });
   // FLASH BOOST. The muzzle light's envelope has already fallen to ~a third
   // of peak by the frame the gather packs it (one frame of lag), and it
   // lives 0.14 s; at 1x the bounce was a quarter of the key on a body next
@@ -617,10 +638,15 @@ async function main() {
   // count, and 8 tracers quadrupled it during firefights (p95 6 -> 27 ms).
   // 2 bounds the worst case near the flashes alone; ?tracerlightslots and
   // __sdfGame.setTracerLightSlots(n) restore more if the look wants them.
-  const tracerSlotsParam = Number(new URLSearchParams(location.search).get('tracerlightslots'));
-  let tracerLightSlots = Number.isFinite(tracerSlotsParam) && tracerSlotsParam >= 0
-    ? Math.min(8, Math.floor(tracerSlotsParam))
-    : 2;
+  // PRE-EXISTING BUG, fixed 2026-09-10 while auditing the ?dynrays class: this
+  // was `Number.isFinite(Number(null)) && Number(null) >= 0` — and an absent
+  // param gives Number(null) === 0, which passes, so the default was 0 and
+  // tracer lights NEVER fed the gather's dynamic light list on a bare page. The
+  // intended default is 2 (the comment above the tracer slot cap says so, and
+  // ?tracerlightslots=0 remains the way to switch them off explicitly).
+  let tracerLightSlots = parseIntParam(
+    new URLSearchParams(location.search).get('tracerlightslots'), { min: 0, max: 8 },
+  ) ?? 2;
   // DIRECT flash on bodies (march slot bodyFlash): intensity multiplier on
   // the flash lights before the shader's I*cos/d^2. 0 = off, bit-identical.
   let bodyFlashGain = 0.06;
@@ -1234,11 +1260,13 @@ async function main() {
           })),
           instances: probeCapsuleArrays.ab, instanceCount: probeCapsuleCount,
           capsuleMargin: 0.06,
-          lights: gatherLights,
+          // Diagnostic seams (see ?dynrays / ?dynlights above); both default to
+          // the shipped values, so an unset URL is bit-identical to before.
+          lights: probeLightsBoot === null ? gatherLights : gatherLights.slice(0, probeLightsBoot),
           frameSeed: (probeFrame % 64) / 64,
           blend: 0.6,
           fall: 0.12,
-          raysPerProbe: 32,
+          raysPerProbe: probeRaysBoot === null ? 32 : probeRaysBoot,
         };
       }
       // DIRECT FLASH SOURCES for the bodyFlash slot: every burning muzzle in
@@ -4078,8 +4106,15 @@ async function main() {
   /**
    * SCREEN COVERAGE ESTIMATE (2026-09-09), for telemetry only.
    *
-   * The march is fill-bound — measured 18.6 ms + 0.237 ms per 1k pixels — so
-   * its cost tracks COVERED PIXELS, not body count. Captures record
+   * The march is the dominant pass, and the one lever with a measured large
+   * number is PIXEL COUNT (quartering the pixels bought -54%), so its cost
+   * tracks COVERED PIXELS, not body count. NOTE the model once quoted here
+   * (18.6 ms + 0.237 ms per 1k px, X1.4) predates the `'bodies'` interlace
+   * halving the march target, and a 6x cut in the step budget bought only
+   * -6..-31% (mostly single-digit) — the cost is per-PIXEL, not per-step. See
+   * docs/dev-notes/2026-08-31-game-perf-baseline/notes.md:204-238.
+   *
+   * Captures record
    * `bodiesOnScreen` and `totalWounds` but nothing about area, which makes the
    * two candidate explanations for the close-up spikes indistinguishable:
    * "wounds are expensive" vs "a body filling the screen is expensive and you
@@ -5715,6 +5750,22 @@ async function main() {
     setProbeGatherRate(framesPerGather: number) {
       probeGatherRate = Math.max(1, Math.min(4, Math.floor(framesPerGather)));
       return probeGatherRate;
+    },
+    /** Diagnostic cost-split seams (see ?dynrays / ?dynlights). BOTH PRODUCE
+     *  WRONG FRAMES ON PURPOSE — they exist to divide the gather's cost into
+     *  primary-ray and per-light-shadow parts, which is the measurement that
+     *  decides whether widening the dispatch or replacing the per-light sweep
+     *  pays more. null restores the shipped value (32 rays, every light). */
+    setProbeRays(n: number | null) {
+      probeRaysBoot = n === null ? null : Math.max(0, Math.min(64, Math.floor(n)));
+      return probeRaysBoot;
+    },
+    setProbeLights(n: number | null) {
+      probeLightsBoot = n === null ? null : Math.max(0, Math.floor(n));
+      return probeLightsBoot;
+    },
+    get probeCostSplit() {
+      return { rays: probeRaysBoot, lights: probeLightsBoot };
     },
     // DRAW CENSUS (spike program): per-frame draw/compute totals from the
     // renderer's info. This frame is MANY render() calls (one per pass), and

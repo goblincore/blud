@@ -80,7 +80,11 @@ export const K_PROBE_GATHER = /* wgsl */ `fn kProbeGather(
   for (var i = 0u; i < nRays; i = i + 1u) {
     let dir = kdFibonacci(i, nRays, cfg.z);
     let bh = kdHitBox(origin, dir, boxes, false);
-    let ch = kdHitCapsule(origin, dir, capsules);
+    // Bound the capsule sweep by the box hit already in hand: a capsule entered
+    // beyond the box surface can never win the comparison below, so it is
+    // retired on its bounding sphere (2026-09-10). Exact, and it is the common
+    // case — the room enclosure usually ends the ray before any body does.
+    let ch = kdHitCapsule(origin, dir, capsules, select(1e30, bh.t, bh.hit));
 
     var radiance = vec3<f32>(0.0, 0.0, 0.0);
     var vis = 0.0;
@@ -301,7 +305,8 @@ fn kdHitBox(
 fn kdHitCapsule(
   origin: vec3<f32>,
   dir: vec3<f32>,
-  capsules: ptr<storage, array<vec4<f32>>, read>
+  capsules: ptr<storage, array<vec4<f32>>, read>,
+  tMax: f32
 ) -> KdCapsuleHit {
   var best = KdCapsuleHit(false, 1e30, vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(0.0, 0.0, 0.0));
   let n = u32((*capsules)[0].x);
@@ -313,6 +318,24 @@ fn kdHitCapsule(
     let ba = b - a;
     let pa = origin - a;
     let baba = dot(ba, ba);
+    // BOUNDING-SPHERE REJECT FIRST (2026-09-10). The capsule is contained in
+    // the sphere centred on the segment midpoint with radius |ba|/2 + r, so a
+    // ray that misses that sphere CANNOT hit the capsule, and one whose sphere
+    // exit is behind the origin cannot have a positive entry either. Both are
+    // exact miss conditions for two dots and at most one sqrt, against the
+    // full quadratic's three sqrts below. Rejecting on the sphere is sound
+    // because t_capsule_entry >= t_sphere_entry, so tMax (a caller's running
+    // best, or a light distance) retires any capsule it cannot beat.
+    let mid = a + ba * 0.5;
+    let radius = 0.5 * sqrt(baba) + r;
+    let oc0 = origin - mid;
+    let bq0 = dot(oc0, dir);
+    let cq0 = dot(oc0, oc0) - radius * radius;
+    let disc0 = bq0 * bq0 - cq0;
+    if (disc0 < 0.0) { continue; }
+    let sq0 = sqrt(disc0);
+    if (sq0 - bq0 < 0.0) { continue; }        // whole sphere behind the origin
+    if (-bq0 - sq0 > tMax) { continue; }      // entered only beyond the bound
     var s = 0.0;
     if (baba > 1e-18) { s = clamp(dot(pa, ba) / baba, 0.0, 1.0); }
     let closest = a + ba * s;
@@ -336,7 +359,7 @@ fn kdHitCapsule(
         if (h >= 0.0) {
           let t = (-qb - sqrt(h)) / qa;
           let y = baoa + t * bard;
-          if (t > 0.0 && y >= 0.0 && y <= baba) {
+          if (t > 0.0 && t < tMax && y >= 0.0 && y <= baba) {
             let p = origin + dir * t;
             let sa = y / baba;
             bestT = t; bestPoint = p; bestNormal = normalize(p - (a + ba * sa)); found = true;
@@ -352,7 +375,7 @@ fn kdHitCapsule(
       let disc = bq * bq - cq;
       if (disc >= 0.0) {
         let t = -bq - sqrt(disc);
-        if (t > 0.0 && t < bestT) {
+        if (t > 0.0 && t < bestT && t < tMax) {
           let p = origin + dir * t;
           bestT = t; bestPoint = p; bestNormal = normalize(p - a); found = true;
         }
@@ -365,7 +388,7 @@ fn kdHitCapsule(
       let disc = bq * bq - cq;
       if (disc >= 0.0) {
         let t = -bq - sqrt(disc);
-        if (t > 0.0 && t < bestT) {
+        if (t > 0.0 && t < bestT && t < tMax) {
           let p = origin + dir * t;
           bestT = t; bestPoint = p; bestNormal = normalize(p - b); found = true;
         }
@@ -379,6 +402,93 @@ fn kdHitCapsule(
   return best;
 }
 
+/**
+ * ANY-HIT within dist — the shadow-ray question, and all it is (2026-09-10).
+ *
+ * kdHitCapsule answers "where is the nearest entry", so it must sweep every
+ * capsule to prove none is nearer. A shadow ray does not care where: only
+ * whether SOMETHING blocks before the light, so it returns on the first
+ * blocker and retires the rest of the list. dist doubles as the bound, so
+ * capsules entered beyond the light are rejected on the bounding sphere
+ * without ever reaching the quadratic. Same entry semantics as kdHitCapsule
+ * (a ray starting inside a capsule is not blocked by it), so the answer is
+ * identical; only the work differs.
+ *
+ * THIS IS THE GATHER'S HOTTEST PATH: kdShadowed calls it once per light per
+ * ray, so up to 8 times per ray.
+ */
+fn kdCapsuleBlocks(
+  origin: vec3<f32>,
+  dir: vec3<f32>,
+  capsules: ptr<storage, array<vec4<f32>>, read>,
+  dist: f32
+) -> bool {
+  let n = u32((*capsules)[0].x);
+  for (var c = 0u; c < n; c = c + 1u) {
+    let cb = 1u + c * 2u;
+    let a = (*capsules)[cb].xyz;
+    let r = (*capsules)[cb].w;
+    let b = (*capsules)[cb + 1u].xyz;
+    let ba = b - a;
+    let pa = origin - a;
+    let baba = dot(ba, ba);
+    // Bounding-sphere reject, bounded by the light distance — see kdHitCapsule.
+    let mid = a + ba * 0.5;
+    let radius = 0.5 * sqrt(baba) + r;
+    let oc0 = origin - mid;
+    let bq0 = dot(oc0, dir);
+    let cq0 = dot(oc0, oc0) - radius * radius;
+    let disc0 = bq0 * bq0 - cq0;
+    if (disc0 < 0.0) { continue; }
+    let sq0 = sqrt(disc0);
+    if (sq0 - bq0 < 0.0) { continue; }
+    if (-bq0 - sq0 > dist) { continue; }
+    var s = 0.0;
+    if (baba > 1e-18) { s = clamp(dot(pa, ba) / baba, 0.0, 1.0); }
+    let closest = a + ba * s;
+    if (dot(origin - closest, origin - closest) < r * r) { continue; }
+
+    if (baba > 1e-18) {
+      let bard = dot(ba, dir);
+      let baoa = dot(ba, pa);
+      let rdoa = dot(dir, pa);
+      let oaoa = dot(pa, pa);
+      let qa = baba - bard * bard;
+      let qb = baba * rdoa - baoa * bard;
+      let qc = baba * oaoa - baoa * baoa - r * r * baba;
+      if (qa > 1e-18) {
+        let h = qb * qb - qa * qc;
+        if (h >= 0.0) {
+          let t = (-qb - sqrt(h)) / qa;
+          let y = baoa + t * bard;
+          if (t > 0.0 && t < dist && y >= 0.0 && y <= baba) { return true; }
+        }
+      }
+    }
+    {
+      let oc = origin - a;
+      let bq = dot(oc, dir);
+      let cq = dot(oc, oc) - r * r;
+      let disc = bq * bq - cq;
+      if (disc >= 0.0) {
+        let t = -bq - sqrt(disc);
+        if (t > 0.0 && t < dist) { return true; }
+      }
+    }
+    {
+      let oc = origin - b;
+      let bq = dot(oc, dir);
+      let cq = dot(oc, oc) - r * r;
+      let disc = bq * bq - cq;
+      if (disc >= 0.0) {
+        let t = -bq - sqrt(disc);
+        if (t > 0.0 && t < dist) { return true; }
+      }
+    }
+  }
+  return false;
+}
+
 /** True when a body capsule or a furniture box blocks the segment to a light. */
 fn kdShadowed(
   origin: vec3<f32>,
@@ -387,10 +497,15 @@ fn kdShadowed(
   capsules: ptr<storage, array<vec4<f32>>, read>,
   boxes: ptr<storage, array<vec4<f32>>, read>
 ) -> bool {
-  let ch = kdHitCapsule(origin, dir, capsules);
-  if (ch.hit && ch.t < dist) { return true; }
+  // BOXES FIRST (2026-09-10). The result is a boolean OR of two independent
+  // tests, so the order cannot change the answer — but the box list is at most
+  // 16 entries against ~200 capsules (measured: ~45 capsules per body), so
+  // testing the cheap list first and short-circuiting skips the capsule sweep
+  // outright whenever a wall or a piece of furniture is in the way. In a
+  // dungeon that is the common case, and this runs once per LIGHT per ray.
   let bh = kdHitBox(origin, dir, boxes, true);
   if (bh.hit && bh.t < dist) { return true; }
+  if (kdCapsuleBlocks(origin, dir, capsules, dist)) { return true; }
   return false;
 }`;
 

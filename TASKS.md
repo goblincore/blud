@@ -116,16 +116,94 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+### 2026-09-10 — perf session: gather −33%, a measured split, two levers closed
+
+Branch **`claude/sdf-march-perf-518bcc`** (17 commits off `main`). Companion
+branch **`claude/determinism-stage1`** for demo determinism.
+
+**SHIPPED AND MEASURED — probe gather −33%.** `compute:probe-gather` went
+**7.19 → 4.85 ms** (room 3) and **6.02 → 3.99** (room 4), with non-overlapping
+per-leg ranges and 19%/23% repeat spread. Three exact optimisations: a
+bounding-sphere cull with a `tMax` bound in `kdHitCapsule`, an any-hit
+`kdCapsuleBlocks` bounded by the light distance replacing the full nearest search
+the shadow path ran per light per ray, and testing the ≤16 boxes before the ~200
+capsules in `kdShadowed`. Equivalence is PROVEN against an independent reference
+in `probe-dynamic-cull.test.ts`, not asserted.
+
+**MEASURED — the gather's cost split, which was previously a model.** With
+diagnostic seams (`?dynrays=0` = no ray work, `?dynlights=0` = primary rays
+only): primary **2.15 / 1.82 ms**, per-light shadow **2.84 / 2.26 ms** =
+**57% / 55%**. So the shadow share is real, and R2 (sample the shadow map the
+frame already rasterises instead of sweeping analytically) targets ~56% of it.
+
+**READ THIS BEFORE QUOTING THE GATHER.** It runs every OTHER frame
+(`probeGatherRate = 2`), so its amortised cost is **~2 ms/frame**, not the 4–5 ms
+the pass row shows. The pass row prices ONE gather and is invariant to cadence by
+construction. Only `sdf:march` (6.7–9.7 ms, no cadence) is a true per-frame row.
+
+**CLOSED — do not re-open:**
+- **Cone pre-pass: DO NOT SHIP.** The documented −22% does not reproduce
+  (`sdf:march` is *higher* with it on); `TASKS.md` X1.14 already measured 0.4%
+  and X1.15 says the occluder hull supersedes it. Enabling it also reproduces a
+  CPU submission stall (`gpu:idle` 15–20 ms, negative harness gap) in two
+  independent runs.
+- **Step budget / miss-pixel 96-step tail: DEAD.** A 6× cut produces NO
+  monotonic trend in `sdf:march`, reproducing the 2026-08-31 finding on the
+  interlace config. Per-step is not the axis.
+- **The cone's −22% in `sdf-layer.ts:220-238` is stale doc-rot** (predates the
+  occluder hull).
+
+**FIXED + GATED (both were MY bugs, both owner-visible):**
+- Harness legs reset: new probe seams were not pinned in the ship-defaults
+  block, so a leg leaked into the next rep's baseline. Rule: **any new seam a leg
+  can set MUST be pinned in the reset block.**
+- `?dynrays` / `?dynlights` booted every unparameterised page with ZERO rays and
+  an empty light list (`Number(null) === 0` passed a `>= 0` guard), zeroing the
+  dynamic probe layer — characters in the player's room rendered as black
+  silhouettes. Fixed and made structural in `webgpu/boot-params.ts`
+  (`parseIntParam` reads the RAW string) with `boot-params.test.ts` as the gate.
+- **`?tracerlightslots` defaulted to 0, not 2** — the same `Number(null)` class,
+  PRE-EXISTING (not from this session), found by auditing all 18 `URLSearchParams`
+  reads after the regression rather than by another playtest. Tracer /
+  muzzle-streak lights therefore never fed the gather's dynamic light list on a
+  bare page, so gunfire contributed no indirect light. The other numeric params
+  are safe and were checked individually: `?shadowmap` uses `> 0`, and
+  `?laststep` checks `raw === null` — which is the correct pattern, and the one
+  `boot-params.ts` generalises. **Lesson: audit the bug CLASS, not the
+  instance.** All three wrong-default bugs this session had the same signature —
+  a wrong value that reads as a design choice rather than as an error.
+
+**NEXT, in order:** (1) the deeper-interlace `COMPOSITE_WGSL` generalisation —
+plan at `docs/superpowers/plans/2026-09-10-deeper-interlace-fields.md`, pure math
+already done and tested, **needs a GPU round trip** because a bad binding there
+is division by zero in the composite; (2) the census-diff demo repeatability
+gate (`docs/superpowers/plans/2026-09-10-deterministic-demo-recordings.md`) —
+three of six bench windows this session were unusable; (3) R1, widening the
+gather's 7-workgroup dispatch, now backed by the measured split; (4) far-body
+LOD, **re-aimed** — the step axis is dead, use per-pixel work.
+
+**Bench discipline, reconfirmed twice:** read the Repeatability section FIRST and
+judge each delta against its own legs' spread. Only a within-leg pass row
+survives a busy machine. Tag ship-truth runs with
+`BENCH_PRELUDE='__sdfGame.setOccluder(false);__sdfGame.setHullExitBound(true)'`
+— the harness still pins the opposite of both.
+
 **[x] FRAME SPIKES SOLVED — interlaced scanline fields (`86185b01`).** Owner
 captures: worst frame **125 → 38 ms**, p99 **63 → 34.3**, over-budget frames
 **6.3% → 0.0%**, longest stall run **12 frames → 1**, avg fps pinned at the 30
-cap. The march is 75–83% of the GPU frame and its cost is covered pixels, so
+cap. The march is the dominant pass — **75–83% of the GPU frame in the
+PRE-interlace 2026-09-09 phase-0 run** — and its cost tracks covered pixels, so
 marching half the scanlines each frame halves it; the comb is the intended
-old-video look, not a cost.
+old-video look, not a cost. The shipped `'bodies'` field marches **800×300**
+(800×600 content, height halved), so those percentages are not the current
+shape of the frame; see the "Timings are stale" bullet below.
 [Result](docs/dev-notes/2026-09-09-perf-spikes/field-rendering-result.md) ·
 [spec](docs/superpowers/specs/2026-09-09-interlaced-field-rendering-design.md).
-**Ships `'frame'` at comb 0.6; `'bodies'` is FIXED (`9f205aaa`) and is the
-owner's call to flip.** `__sdfGame.setFieldStyle('off'|'sdf'|'bodies'|'frame')`
+**Ships `'bodies'` at `setFieldComb(0.6)`** — the flip landed 2026-09-09
+(`game-main.ts` calls `setFieldStyle('bodies')`; it was reverted to `'frame'`
+for a day while two mesh-pass defects were diagnosed, both fixed in
+`9f205aaa`). `'frame'` remains available via
+`__sdfGame.setFieldStyle('off'|'sdf'|'bodies'|'frame')`
 and `setFieldComb(x)` (one number, 0–1). 2026-09-09 review fixes on top:
 composite held rows carry the held depth (`b67999c8`), held rows bracketed by
 parity, polys unjittered in `'sdf'`/`'bodies'`, `'frame'` weaves on the output
@@ -2821,8 +2899,12 @@ Key reference docs (open these before touching their area):
   wounds exposed hull spheres inside craters (fixed by wound exclusion in
   `buildHullInstances`). Residual: stacked-vs-solo still ~4.8x — hidden bodies
   march to the clamp through interpenetrating fields; fold into `X1.10`.
-- `X1.29` [x] **Near-wound step multiplier — MEASURED, DELIBERATELY LEFT AT
-  0.6.** Owner A/B'd 0.6 against the sound 0.4 on screen (`setWoundStep`) and
+- `X1.29` [x] **Near-wound step multiplier — SUPERSEDED (2026-09-05): the GAME
+  ships 1.0.** `GAME_WOUND_STEP` is 1.0 (`perfCfg.z`, `game-main.ts:1472`) on
+  the owner's look verdict; the 0.6 discussed below is now only the shader's
+  compiled `WOUND_STEP_MUL` fallback, which the lab still uses. **Read the rest
+  as the derivation behind the sound 0.4/0.48 numbers, not as ship state.**
+  Original: owner A/B'd 0.6 against the sound 0.4 on screen (`setWoundStep`) and
   could not tell them apart, so the frame budget won. Everything below is why
   it is a decision now rather than an oversight, so it can be re-taken without
   re-deriving. The wounded field is not a distance bound and nobody had
