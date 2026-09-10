@@ -559,3 +559,166 @@ describe('the pre-pass ships DISABLED (2026-09-01 holes-at-range)', () => {
     expect(hull.instanceCount).toBe(before);   // occluder untouched
   });
 });
+
+describe('shadow continuity (2026-09-09)', () => {
+  // The owner's shadow-disconnect report, decomposed: two of the mechanisms
+  // live in update(), not in buildHullInstances, so they are pinned here
+  // rather than beside the sphere filters above.
+
+  it('the shadow twin keeps spheres a wound drops from the occluder', () => {
+    // The wound exclusion exists for the MARCH-BOUND hull: a sphere inside a
+    // carve cavity cuts rays and paints holes in the render. In a shadow map
+    // the sphere is pure depth coverage, so dropping it there is a hole in
+    // the figure's silhouette right where the body is wounded. update()
+    // builds the twin wound-free even when the caller passes exclusions.
+    const base = buildHullInstances([body]);
+    const target = base[Math.floor(base.length / 2)]!;
+    const wound: WoundSphere = { centre: target.centre, radius: 0.08 };
+    const hull = createOccluderHull(256);
+    hull.update([body]);
+    const shadowClean = (hull.shadowObject as THREE.InstancedMesh).count;
+    const occluderClean = hull.instanceCount;
+    hull.update([body], [wound]);
+    expect(hull.instanceCount).toBeLessThan(occluderClean);
+    expect((hull.shadowObject as THREE.InstancedMesh).count).toBe(shadowClean);
+    hull.dispose();
+  });
+
+  it('update({ shadow: false }) holds the twin while the occluder rebuilds', () => {
+    // The half-rate hold contract: the flesh on screen is the previous pose
+    // reprojected, so the shadow map must render the previous hull too. The
+    // game passes shadow:false on hold frames; a rebuild that would move or
+    // empty the twin must leave the previous instances in place instead.
+    const hull = createOccluderHull(64);
+    hull.update([body]);
+    const shadowBefore = (hull.shadowObject as THREE.InstancedMesh).count;
+    expect(shadowBefore).toBeGreaterThan(0);
+    hull.update([], [], { shadow: false });
+    expect((hull.shadowObject as THREE.InstancedMesh).count).toBe(shadowBefore);
+    expect(hull.instanceCount).toBe(0); // the occluder half did rebuild
+    hull.dispose();
+  });
+});
+
+describe('junction bridges (2026-09-09 shoulder-shadow report)', () => {
+  // Spanning guarantees overlap ALONG a prim, but where two prims MEET the
+  // end spheres can fuse in a thin ~2 cm lens (the zombie's arm shoulder
+  // sphere vs the torso chain's chest sphere) — a pinch a 1024^2 shadow map
+  // rasterises away at grazing angles, and the shadow separates at the
+  // shoulder. The bridge pass emits one sphere per thin-lens/near-miss pair,
+  // overlapping both ends by a quarter of the thinner radius.
+
+  /** A torso chunk and a limb root whose inflated end spheres fuse in a
+   *  thin lens: inflated radii 0.115/0.0805 at d 0.19 → lens 0.0055, far
+   *  under the 0.5·rMin threshold, while every other pair in the fixture
+   *  stays deeply-fused or far apart. */
+  function junctionBody() {
+    return {
+      clusters: [{ id: 0, limb: 'armL' as const, start: 0, count: 2, center: [0, 0, 0] as const, radius: 1, alive: true }],
+      prims: [
+        { a: [0, 1.3, 0], b: [0, 1.6, 0], radius: 0.10, scale: [1, 1, 1], blendK: 0.05, limb: 'armL' as const, cluster: 0 },
+        { a: [0.19, 1.6, 0], b: [0.49, 1.6, 0], radius: 0.07, scale: [1, 1, 1], blendK: 0.05, limb: 'armL' as const, cluster: 0 },
+      ],
+    } as never;
+  }
+
+  it('bridges a thin-lens junction; span alone leaves the pinch', () => {
+    const jb = junctionBody();
+    const spanOnly = buildHullInstances([jb], SHADOW_HULL_INFLATE, [], 0, true, false);
+    const bridged = buildHullInstances([jb], SHADOW_HULL_INFLATE, [], 0, true, true);
+    // Exactly one pair fires: +1 sphere at the pair midpoint.
+    expect(bridged.length).toBe(spanOnly.length + 1);
+    const bridge = bridged[bridged.length - 1]!;
+    expect(bridge.centre[0]).toBeCloseTo(0.095, 6);
+    expect(bridge.centre[1]).toBeCloseTo(1.6, 6);
+    // Sized to overlap both ends by a quarter of the thin radius:
+    // d/2 + 0.25·rMin with rMin = 0.07 · SHADOW_HULL_INFLATE.
+    const rMin = 0.07 * SHADOW_HULL_INFLATE;
+    expect(bridge.radius).toBeCloseTo(0.095 + 0.25 * rMin, 6);
+    // And the bridge genuinely overlaps the two END spheres it bridges (the
+    // pinch is closed). Other spheres were never its job.
+    for (const end of [[0, 1.6, 0], [0.19, 1.6, 0]] as const) {
+      const d = Math.hypot(bridge.centre[0] - end[0], bridge.centre[1] - end[1], bridge.centre[2] - end[2]);
+      expect(bridge.radius + 0.07 * SHADOW_HULL_INFLATE - d).toBeGreaterThan(0);
+    }
+  });
+
+  it('well-spanned chains and contained pairs fire nothing', () => {
+    // A single cone: adjacent span spheres overlap in a fat lens (0.875·r),
+    // far pairs do not touch — no bridge either way.
+    const cone = {
+      clusters: [{ id: 0, limb: 'armL' as const, start: 0, count: 1, center: [0, 0, 0] as const, radius: 1, alive: true }],
+      prims: [
+        { a: [0, 0, 0], b: [0, 0, 1.0], radius: 0.20, radiusB: 0.05, scale: [1, 1, 1], blendK: 0, limb: 'armL' as const, cluster: 0 },
+      ],
+    } as never;
+    const spanOnly = buildHullInstances([cone], SHADOW_HULL_INFLATE, [], 0, true, false);
+    const bridged = buildHullInstances([cone], SHADOW_HULL_INFLATE, [], 0, true, true);
+    expect(bridged.length).toBe(spanOnly.length);
+    // Coincident end spheres (a joint both prims share): containment or a
+    // fat lens — also nothing. Two prims sharing BOTH endpoints, r equal.
+    const doubled = {
+      clusters: [{ id: 0, limb: 'armL' as const, start: 0, count: 2, center: [0, 0, 0] as const, radius: 1, alive: true }],
+      prims: [
+        { a: [0, 0, 0], b: [0, 1, 0], radius: 0.10, scale: [1, 1, 1], blendK: 0.05, limb: 'armL' as const, cluster: 0 },
+        { a: [0, 0, 0], b: [0, 1, 0], radius: 0.10, scale: [1, 1, 1], blendK: 0.05, limb: 'armL' as const, cluster: 0 },
+      ],
+    } as never;
+    expect(buildHullInstances([doubled], SHADOW_HULL_INFLATE, [], 0, true, true).length)
+      .toBe(buildHullInstances([doubled], SHADOW_HULL_INFLATE, [], 0, true, false).length);
+  });
+
+  it('bridges respect the wound filter, like every other sphere', () => {
+    // buildHullInstances' contract: every emitted sphere clears the wounds.
+    // The shadow twin passes no wounds in production, but the parameter must
+    // not silently leak bridge spheres into carve zones for direct callers.
+    // A wound on the midpoint kills the bridge (and, sitting between the two
+    // end spheres, the ends themselves); every survivor must clear it.
+    const jb = junctionBody();
+    const bridged = buildHullInstances([jb], SHADOW_HULL_INFLATE, [], 0, true, true);
+    const wound: WoundSphere = { centre: [0.095, 1.6, 0], radius: 0.02 };
+    const carved = buildHullInstances([jb], SHADOW_HULL_INFLATE, [wound], 0, true, true);
+    expect(carved.length).toBeLessThan(bridged.length);
+    for (const s of carved) {
+      const d = Math.hypot(
+        s.centre[0] - wound.centre[0], s.centre[1] - wound.centre[1], s.centre[2] - wound.centre[2],
+      );
+      expect(d).toBeGreaterThan(wound.radius + s.radius);
+    }
+  });
+
+  it('the shipped zombie stays ONE component and the budget stays sane with bridges', () => {
+    const base = buildHullInstances([body], SHADOW_HULL_INFLATE, [], 0, true, false);
+    const bridged = buildHullInstances([body], SHADOW_HULL_INFLATE, [], 0, true, true);
+    expect(bridged.length).toBeGreaterThan(base.length);
+    expect(bridged.length).toBeLessThan(base.length * 1.5);
+    // The union-find from the spanning tests: bridging must never split.
+    const parent = bridged.map((_, i) => i);
+    const find = (x: number): number => (parent[x] === x ? x : (parent[x] = find(parent[x]!)));
+    for (let i = 0; i < bridged.length; i++) {
+      for (let j = i + 1; j < bridged.length; j++) {
+        const a = bridged[i]!, b = bridged[j]!;
+        const d = Math.hypot(a.centre[0] - b.centre[0], a.centre[1] - b.centre[1], a.centre[2] - b.centre[2]);
+        if (d > a.radius + b.radius) continue;
+        const ra = find(i), rb = find(j);
+        if (ra !== rb) parent[ra] = rb;
+      }
+    }
+    expect(new Set(bridged.map((_, i) => find(i))).size).toBe(1);
+  });
+
+  it('setShadowBridges is a live one-load A/B seam like setShadowSpan', () => {
+    const hull = createOccluderHull(256);
+    hull.update([body]);
+    const withBridges = (hull.shadowObject as THREE.InstancedMesh).count;
+    hull.setShadowBridges(false);
+    hull.update([body]);
+    const without = (hull.shadowObject as THREE.InstancedMesh).count;
+    expect(without).toBeLessThan(withBridges);
+    expect(without).toBe(buildHullInstances([body], SHADOW_HULL_INFLATE, [], 0, true).length);
+    hull.setShadowBridges(true);
+    hull.update([body]);
+    expect((hull.shadowObject as THREE.InstancedMesh).count).toBe(withBridges);
+    hull.dispose();
+  });
+});

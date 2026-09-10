@@ -861,6 +861,145 @@ describe('stepMotion — the attack seam', () => {
   });
 });
 
+describe('shoulder socket clamp (2026-09-09 shadow continuity)', () => {
+  // Sway counter-phase, stagger and the attack's shoulder drive translate the
+  // shoulder rig points AGAINST the chest anchor, and the torso silhouette
+  // only just contains the shoulder ball at rest — the pop reads as a
+  // dislocated joint in the mesh and as a detached blob in the shadow hull
+  // built from the same posed points. The compose caps each shoulder's
+  // displacement RELATIVE to its authored offset from the chest anchor; below
+  // the cap it must be an exact no-op.
+  const CAP = MOTION_TUNING.shoulderSocket;
+
+  function socketJoints() {
+    const body = buildBody(makeZombie());
+    const bound = bindRig(body);
+    const joints = makeMotionJoints(body, bound.rig.restPose)!;
+    return { bound, joints };
+  }
+
+  /** Steps a fixed seed `frames` times; the last frame's pose + yaw. */
+  function step(cfg: MotionConfig, frames = 1) {
+    const { bound, joints } = socketJoints();
+    let state = makeMotionState(4242, [0, 0, 0]);
+    const rng = makeRng(4242);
+    const bounds = { minX: -4, maxX: 4, minZ: -4, maxZ: 4 };
+    let r = stepMotion(state, joints, cfg, CALM_SIGNALS, bound.rig.points, bounds, rng);
+    state = r.state;
+    for (let i = 1; i < frames; i++) {
+      r = stepMotion(state, joints, cfg, CALM_SIGNALS, bound.rig.points, bounds, rng);
+      state = r.state;
+    }
+    return { joints, yaw: r.frame.bodyYaw, pose: r.frame.restPose };
+  }
+
+  function stepAll(cfg: MotionConfig, frames: number) {
+    const { bound, joints } = socketJoints();
+    let state = makeMotionState(4242, [0, 0, 0]);
+    const rng = makeRng(4242);
+    const bounds = { minX: -4, maxX: 4, minZ: -4, maxZ: 4 };
+    const out: { yaw: number; pose: Vec3[] }[] = [];
+    for (let i = 0; i < frames; i++) {
+      const r = stepMotion(state, joints, cfg, CALM_SIGNALS, bound.rig.points, bounds, rng);
+      state = r.state;
+      out.push({ yaw: r.frame.bodyYaw, pose: r.frame.restPose.map(p => [...p] as Vec3) });
+    }
+    return out;
+  }
+
+  /** The socket excess: |targets[shoulder] − targets[chest] − authored,
+   *  yaw-rotated| per side. The shamble never runs the torso-lean block, so
+   *  no lean term (the lean recomputes its own rotation in the clamp). */
+  function excess(joints: MotionJoints, yaw: number, pose: Vec3[]): [number, number] {
+    const idx = joints.index;
+    return (['L', 'R'] as const).map(side => {
+      const rel = rotateYaw(sub(joints.base[idx[`shoulder${side}`]!]!, joints.base[idx.chest!]!), yaw);
+      return len(sub(sub(pose[idx[`shoulder${side}`]!]!, pose[idx.chest!]!), rel));
+    }) as [number, number];
+  }
+
+  it('holds the socket excess at the cap through the extreme layers', () => {
+    // Idle, cruise and every swing variant at wind-up/strike/hold — whatever
+    // the layers do, a standing body's shoulders stay within CAP of their
+    // authored chest-relative position.
+    const variants = ['hook', 'overhead', 'shove'] as const;
+    const scenarios: MotionConfig[] = [
+      { enabled: true, wander: true },
+      { enabled: true, wander: false },
+      ...variants.flatMap(variant =>
+        ([0.25, 0.5, 0.75] as const).flatMap(phase =>
+          (['L', 'R'] as const).map(side =>
+            ({ enabled: true, wander: false, attack: { phase, side, variant } })))),
+    ];
+    for (const cfg of scenarios) {
+      const { joints, yaw, pose } = step(cfg);
+      const [eL, eR] = excess(joints, yaw, pose);
+      expect(eL, `${JSON.stringify(cfg)} L`).toBeLessThanOrEqual(CAP + 1e-9);
+      expect(eR, `${JSON.stringify(cfg)} R`).toBeLessThanOrEqual(CAP + 1e-9);
+    }
+  });
+
+  it('binds at the strike: the OFF shoulder pops 0.16 and the clamp pulls it onto the cap', () => {
+    // Measured on the compose: every variant at strike phase drives the
+    // shoulder OPPOSITE the swing ~0.162 from its authored chest-relative
+    // position (the chest counter-offset +0.10 rides one way, the off
+    // shoulder −0.06 the other) — the dislocated-shoulder frame the owner
+    // flagged. The swing-side shoulder stays near its socket.
+    const strike: MotionConfig = { enabled: true, wander: false, attack: { phase: 0.5, side: 'L', variant: 'hook' } };
+    const tune = MOTION_TUNING as { shoulderSocket: number };
+    const saved = tune.shoulderSocket;
+    try {
+      tune.shoulderSocket = 1; // effectively off
+      const off = step(strike);
+      tune.shoulderSocket = CAP;
+      const on = step(strike);
+      const [, uoR] = excess(off.joints, off.yaw, off.pose);
+      const [, coR] = excess(on.joints, on.yaw, on.pose);
+      // The scenario genuinely pops without the clamp…
+      expect(uoR).toBeGreaterThan(0.15);
+      // …and the clamp pulls the ball all the way back onto the cap.
+      expect(coR).toBeLessThanOrEqual(CAP + 1e-9);
+      expect(coR).toBeCloseTo(CAP, 6);
+      // The swing-side shoulder was never the problem: untouched both ways.
+      const [uoL] = excess(off.joints, off.yaw, off.pose);
+      const [coL] = excess(on.joints, on.yaw, on.pose);
+      expect(uoL).toBeLessThanOrEqual(CAP);
+      expect(coL).toBe(uoL);
+    } finally {
+      tune.shoulderSocket = saved;
+    }
+  });
+
+  it('is an exact no-op on every frame the layers stay under the cap — and idle sway exceeds it', () => {
+    // The standing shamble's counter-sway peaks past the cap (the "shoulders
+    // separate in some animations" report includes plain walking), so the
+    // clamp does real work at idle, not only at the strike. The contract
+    // pinned here: a frame is touched IF AND ONLY IF its uncapped excess
+    // exceeds the cap.
+    const { joints } = socketJoints();
+    const tune = MOTION_TUNING as { shoulderSocket: number };
+    const saved = tune.shoulderSocket;
+    try {
+      tune.shoulderSocket = 1;
+      const off = stepAll({ enabled: true, wander: true }, 30);
+      const offExcess = off.map(f => excess(joints, f.yaw, f.pose));
+      tune.shoulderSocket = CAP;
+      const on = stepAll({ enabled: true, wander: true }, 30);
+      let popped = 0;
+      for (let i = 0; i < 30; i++) {
+        const under = Math.max(...offExcess[i]!) <= CAP;
+        if (!under) popped++;
+        if (under) expect(on[i]!.pose, `frame ${i} under the cap must be untouched`).toEqual(off[i]!.pose);
+        else expect(on[i]!.pose, `frame ${i} over the cap must be trimmed`).not.toEqual(off[i]!.pose);
+      }
+      // The idle walk genuinely crosses the cap — the clamp is not dead code.
+      expect(popped).toBeGreaterThan(0);
+    } finally {
+      tune.shoulderSocket = saved;
+    }
+  });
+});
+
 
 describe('soldier aimed movement', () => {
   const cfg: MotionConfig = { enabled: true, wander: false, profile: SOLDIER_PROFILE, forceSpeed: 0 };

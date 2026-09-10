@@ -53,14 +53,25 @@ describe('projectile elbow upload', () => {
         const restUpper = normalize(sub(body.prims[upper]!.b, body.prims[upper]!.a));
         const swing = qFromTo(rotateYaw(restUpper, yaw), normalize(sub(a.b, a.a)));
         const movingNormal = qRotate(swing, rotateYaw(normal, yaw));
-        expect(dot(cross(sub(a.b, a.a), sub(b.b, b.a)), movingNormal)).toBeGreaterThanOrEqual(-1e-6);
+        // ~3° of slack since the 2026-09-09 shoulder socket clamp: the clamp
+        // deliberately trims shoulder targets past 0.05 m, and the verlet
+        // solve now settles up to ~1.2° past straight at the elbow (measured
+        // −0.021 dot). The regression this pins is a construction bug that
+        // ignored the moving frame — that read ~−1, whole-plane flipped.
+        expect(dot(cross(sub(a.b, a.a), sub(b.b, b.a)), movingNormal))
+          .toBeGreaterThanOrEqual(-0.05);
       };
       for (let f = 0; f < c.warm; f++) actor.step(1 / 60);
       const wound = c.kind === 'slug' ? actor.hitSlug(c.hit, c.dir) : actor.hit(c.hit, c.dir);
       expect(body.prims[wound!.primIdx]!.limb).toBe(c.side === 'l' ? 'armL' : 'armR');
       check();
       for (let f = 0; f < 12; f++) { actor.step(dt); check(); }
-      expect(severs).toBe(0);
+      // The stored surface hits were captured pre-clamp; the clamp shifts the
+      // arm a few centimetres, so the borderline slug-l hit now lands in a
+      // sever zone and may legitimately detach during the post-hit steps.
+      // The guard here is hit ROUTING (the limb assertion above) and frame
+      // tracking (check), not sever suppression.
+      expect(severs).toBeLessThanOrEqual(1);
     });
   }
 });

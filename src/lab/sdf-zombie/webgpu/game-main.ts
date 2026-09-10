@@ -66,10 +66,12 @@ import { SegmentVolumeCache, buildSegmentAtlas, boneSegmentKeyMap } from './skel
 import { SegmentVolumeBinding, createSegmentAtlasTexture } from './skeleton-spike/volume-gpu';
 import { createPostAa } from './post-aa';
 import { type VhsPreset, type VhsTerms } from './post-vhs';
+import { type SscsTerms } from './post-sscs';
 import { type ZombieGpuView } from './zombie-gpu';
 import { createOccluderHull, buildHullInstances, HULL_SHRINK, type HullInstance } from './occluder-hull';
 import { type BuildResult } from '../build-body';
 import { parseBlob } from '../blob-parse';
+import { MOTION_TUNING } from '../motion';
 import { createCharacterView, compileCharacterSheet } from './character-view';
 import { createCharacterEffects } from './character-effects';
 import { characterEntry, characterNames } from '../character-registry';
@@ -468,7 +470,14 @@ async function main() {
   // crashes when castShadow is toggled after maps were built, so this ships
   // as a boot property like the legacy ?spotshadow=0 ablation above.
   handle.renderer.shadowMap.enabled = !deferredMode;
-  handle.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // PCF, not PCFSoft: the soft variant's kernel is FIXED and ignores
+  // shadow.radius, which is the only edge-hardness knob the shadow map has
+  // (owner ask, 2026-09-09). The WebGPU PCF filter is a 5-tap IGN-rotated
+  // Vogel disk whose radius is a live reference uniform — tune at runtime
+  // via __sdfGame.setShadowRadius (default SHADOW_RADIUS in
+  // dungeon-lighting.ts). Changing the type needs a reload (shader
+  // recompile); changing the radius after that does not.
+  handle.renderer.shadowMap.type = THREE.PCFShadowMap;
   levelGroup.traverse((o) => {
     if (o instanceof THREE.Mesh) { o.castShadow = true; o.receiveShadow = true; }
   });
@@ -616,6 +625,20 @@ async function main() {
   }
   const sdfLayer = createSdfLayer(handle.renderer);
   postAa.addSink(sdfLayer);
+
+  // SSCS — screen-space contact shadows (post-sscs.ts, 2026-09-09 shadow
+  // continuity). Default ON here (the post-aa factory stays neutral);
+  // ?sscs=off is the escape hatch, and the parity/bench drivers should pass
+  // it — with the stage on, the all-off parity path is not what runs.
+  // LEGACY PATH ONLY: the flesh mask is the march target's depth-in-alpha,
+  // which field modes repurpose at half height and deferred mode replaces
+  // with its own G-buffer (?skeleton=volume players: add &sscs=off).
+  const sscsParam = new URLSearchParams(location.search).get('sscs');
+  const sscsEnabled = sscsParam !== 'off' && !deferredMode;
+  if (sscsEnabled) {
+    postAa.setSscsFleshTex(sdfLayer.marchTarget.texture);
+    postAa.setSscs(true);
+  }
 
   // -----------------------------------------------------------------------
   // THE DEFERRED COORDINATOR (?renderer=deferred only — M2 task 5). Owns the
@@ -863,6 +886,10 @@ async function main() {
     // — a non-zero row there means an unlabelled pass exists.
     setPassLabel('frame:other');
     flashlight.update(camera);
+    // SSCS feed: the flashlight pose and this frame's camera matrices. The
+    // camera's matrixWorld is current — flashlight.update just re-ran
+    // updateMatrixWorld on it; setSscsFrame rebuilds the view matrix itself.
+    if (postAa.sscs) postAa.setSscsFrame(camera, flashlight.spot.position);
 
     // ---- COMMON per-frame updates (both render modes) ---------------------
     // Fire flicker. Cheap and deliberately not random per frame — a smooth
@@ -4181,9 +4208,14 @@ async function main() {
           : [],
         // The pre-pass ships disabled and nothing consumes the occluder
         // instances; skip their rebuild while it is off (perf r2 task 4).
-        // The shadow twin above always rebuilds. setOccluder(true) resumes
-        // the rebuild on the next frame, so the A/B seam still works.
-        { occluder: sdfLayer.occluderEnabled },
+        // setOccluder(true) resumes the rebuild on the next frame, so the
+        // A/B seam still works.
+        //
+        // The shadow twin holds on a half-rate hold frame — the same condition
+        // as the visual-pose hold above: the flesh on screen is the PREVIOUS
+        // pose reprojected, so a current-pose shadow hull would lead the body
+        // by one sub-frame (the shadow-detaches-during-animation report).
+        { occluder: sdfLayer.occluderEnabled, shadow: !(sdfLayer.halfRate && sdfLayer.willHold) },
       );
     } else if (!frozenHullBuilt) {
       // FROZEN-FROM-BOOT HULL BUILD (closeup task 1, 2026-09-04). A body
@@ -7286,6 +7318,44 @@ async function main() {
      *  bead-chain) or on. Pair it with refreshHull() — and use it INSTEAD of
      *  a two-build cross-load A/B, which the wander makes untrustworthy. */
     setShadowSpan: (on: boolean, inflate?: number) => occluderHull.setShadowSpan(on, inflate),
+    /** A/B seam for the shadow hull's junction bridges (the shoulder-shadow
+     *  pinch fix). Pair with refreshHull() — and use it INSTEAD of a
+     *  cross-load A/B, which the wander makes untrustworthy. */
+    setShadowBridges: (on: boolean) => occluderHull.setShadowBridges(on),
+    /** A/B seam for the shoulder socket clamp (motion.ts
+     *  MOTION_TUNING.shoulderSocket). 0.05 is the shipped cap; 0 disables the
+     *  clamp entirely. Live — the next stepMotion reads it — and pairable
+     *  with refreshHull() / ?frozen=1 for single-variable captures. */
+    setShoulderSocket: (cap: number) => {
+      (MOTION_TUNING as { shoulderSocket: number }).shoulderSocket = cap;
+    },
+    /** SSCS seam: flip the contact-shadow stage live (it re-binds the flesh
+     *  mask, so enabling from the console in deferred mode is refused — the
+     *  march target is not the flesh mask there). */
+    setSscs: (on: boolean) => {
+      if (on && deferredMode) return 'refused: sscs is legacy-path-only';
+      if (on) postAa.setSscsFleshTex(sdfLayer.marchTarget.texture);
+      postAa.setSscs(on);
+      return postAa.sscs;
+    },
+    /** SSCS live tuning: setSscsTerm('strength', 0.5) etc. Clamped to
+     *  SSCS_TERM_RANGES. Pair with ?frozen=1 for single-variable captures. */
+    setSscsTerm: (name: keyof SscsTerms, value: number) => {
+      postAa.setSscsTerm(name, value);
+      return postAa.sscsTerms;
+    },
+    get sscsTerms() { return postAa.sscsTerms; },
+    /** Shadow-map edge hardness (the A/B seam for SHADOW_RADIUS): radius in
+     *  shadow-map texels, 0 = crisp edge, ~2 the shipped default, 6+ very
+     *  soft. Live on the WebGPU PCF filter (a reference uniform) — no
+     *  recompile. Shapes the shadow MAP only: shadows on flesh go through
+     *  the march's own LEVEL_SHADOW PCF, and the contact term's softness is
+     *  setSscsTerm's to tune. */
+    setShadowRadius: (r: number) => {
+      flashlight.spot.shadow.radius = Math.max(0, Math.min(8, r));
+      return flashlight.spot.shadow.radius;
+    },
+    get shadowRadius() { return flashlight.spot.shadow.radius; },
     hullDebug: () => ({
       occluder: sdfLayer.occluderEnabled,
       exclusions: hullExclusionsEnabled,

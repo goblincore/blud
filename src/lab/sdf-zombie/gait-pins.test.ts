@@ -5,6 +5,13 @@
 // later change must leave the zombie's numbers untouched: the shamble was
 // approved by eye and nothing in this plan is allowed to move it. If a pin
 // fails, the refactor changed arithmetic — fix the refactor, never the pin.
+//
+// ONE DELIBERATE EXCEPTION (2026-09-09, owner-requested shadow/joint
+// continuity): the shoulder socket clamp (MOTION_TUNING.shoulderSocket) trims
+// shoulder displacement past 0.05 m from its authored chest-relative
+// position — the dislocated-shoulder pop the owner flagged. The stepMotion
+// checksum below was re-recorded with the clamp active; stepGait's own
+// arithmetic is untouched and its pin still holds.
 import { describe, it, expect } from 'vitest';
 import { makeGaitState, stepGait, type GaitSkew } from './gait';
 import {
@@ -82,6 +89,8 @@ describe('zombie output pins (pre-refactor)', () => {
       for (const p of step.frame.restPose) out.push(...p);
       out.push(step.frame.bodyYaw, step.frame.blend);
     }
-    expect(checksum(out)).toBe('372385.134607288|444610.404551562');
+    // Re-recorded 2026-09-09 for the shoulder socket clamp — see the header.
+    // The pre-clamp pin was '372385.134607288|444610.404551562'.
+    expect(checksum(out)).toBe('372401.420656677|444572.567802363');
   });
 });
