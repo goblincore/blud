@@ -567,6 +567,10 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      *  storage node passed at material creation (probeDyn option), like the
      *  tile binding; the 4-vec4 fallback rides views without a gather. */
     probeDynCfg: uniform(new THREE.Vector4(0, 0, 0, 0)),
+    /** DIRECT MUZZLE FLASH on this body: xyz the nearest burning muzzle in
+     *  world space, w its intensity (0 = none, bit-identical). Stamped per
+     *  frame by the game from the player's and the soldiers' flashes. */
+    bodyFlash: uniform(new THREE.Vector4(0, 0, 0, 0)),
   };
 }
 
@@ -1182,6 +1186,8 @@ export function createMarchMaterial(
     // bounceSpotCfg, bound in the same commit as the WGSL inputs.
     probeDyn: (probeDyn ?? fallbackProbeDyn()) as never,
     probeDynCfg: u.probeDynCfg,
+    // Direct muzzle flash — POSITIONALLY LAST after probeDynCfg.
+    bodyFlash: u.bodyFlash,
   }) as unknown as Swizzled;
 
   const material = new MeshBasicNodeMaterial();

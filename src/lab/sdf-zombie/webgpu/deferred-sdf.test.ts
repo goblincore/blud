@@ -66,15 +66,15 @@ describe('surface-entry wgslFn parse contract', () => {
     }
   });
 
-  it('the real parser sees EXACTLY marchBody’s 95 inputs, in the same order — one binding block serves both', () => {
+  it('the real parser sees EXACTLY marchBody’s 96 inputs, in the same order — one binding block serves both', () => {
     // marchSurface shares MARCH_BODY_PARAMS textually, so createMarchMaterial's
     // positional binding cannot drift between the modes. Running the REAL
     // parser (not a grep) also proves no comment phantom crept into the shared
     // signature — the 2026-09-05 paren/colon failure class.
     const legacy = new WGSLNodeFunction(MARCH_BODY).inputs.map((i: { name: string }) => i.name);
     const surface = new WGSLNodeFunction(MARCH_SURFACE).inputs.map((i: { name: string }) => i.name);
-    // 84 + 5 probe grid + 4 bounce spot + 2 dynamic probe layer slots, positionally last.
-    expect(legacy.length).toBe(95); // plus sampled-skeleton atlas and metadata textures
+    // 84 + 5 probe grid + 4 bounce spot + 2 dynamic probe layer + 1 bodyFlash, positionally last.
+    expect(legacy.length).toBe(96); // plus sampled-skeleton atlas and metadata textures
     expect(legacy).toContain('faceGlowRedOnly');
     expect(surface).toEqual(legacy);
   });

@@ -2276,7 +2276,11 @@ export const MARCH_BODY_PARAMS = /* wgsl */ `(
   // Two slots. probeDynCfg x radiance gain, y visibility strength, both 0 keeps
   // the compose bit-identical. NO PARENS and NO COLONS in this comment either.
   probeDyn: ptr<storage, array<vec4<f32>>, read>,
-  probeDynCfg: vec4<f32>
+  probeDynCfg: vec4<f32>,
+  // Direct muzzle flash on this body - owner 2026-09-09 - bound POSITIONALLY LAST.
+  // xyz the burning muzzle in world space, w its intensity and 0 skips the term.
+  // NO PARENS and NO COLONS in this comment either.
+  bodyFlash: vec4<f32>
 ) -> vec4<f32> {
 `;
 
@@ -3643,7 +3647,19 @@ export const MARCH_BODY_LIGHT = /* wgsl */ `  // ---- ANALYTIC FLASHLIGHT ------
   // coloured chrome), which 'metal' - not 'painted' - is exactly the flag for.
   let metalTintLum = max(dot(primAlbedo, vec3<f32>(0.2126, 0.7152, 0.0722)), 1e-3);
   let metalTint = mix(vec3<f32>(1.0), min(primAlbedo * (0.56 / metalTintLum), vec3<f32>(1.5)), metal);
-  var fleshLit = albedo * (amb + diff * wShadow * lvl * keyI * keyC) * ao * mix(1.0, 0.45, metal)
+  // DIRECT MUZZLE FLASH (owner, 2026-09-09: "the soldier's flash should light
+  // them up briefly"). The nearest burning muzzle — this body's own or a
+  // neighbour's, the game picks the strongest by I/d² — as a warm point
+  // light with a 0.2 m floor on the distance so a muzzle against the flesh
+  // does not blow it out. bodyFlash.w = 0 skips it: bit-identical.
+  var flashDirect = vec3<f32>(0.0, 0.0, 0.0);
+  if (bodyFlash.w > 0.0) {
+    let fv = bodyFlash.xyz - p;
+    let fd2 = max(dot(fv, fv), 0.04);
+    let fl = fv * inverseSqrt(fd2);
+    flashDirect = vec3<f32>(1.0, 0.72, 0.45) * (bodyFlash.w * max(dot(n, fl), 0.0) / fd2);
+  }
+  var fleshLit = albedo * (amb + flashDirect + diff * wShadow * lvl * keyI * keyC) * ao * mix(1.0, 0.45, metal)
                + metalTint * keyC * (shine * wShadow * lvl * mix(surfCfg.x, 1.5, gloss) + fres * mix(1.0, 2.5, gloss)) * wet
                + scatter;
   // FLAT-LIT decal: where the baked face covers the surface, relight it with

@@ -534,6 +534,17 @@ async function main() {
   // lives 0.14 s; at 1x the bounce was a quarter of the key on a body next
   // to the muzzle. Flash sources only — the beam stays physical.
   let probeFlashBoost = 4;
+  // DIRECT flash on bodies (march slot bodyFlash): intensity multiplier on
+  // the flash lights before the shader's I*cos/d^2. 0 = off, bit-identical.
+  let bodyFlashGain = 0.06;
+  /** An actor counts as in a room when its CURRENT position is inside the
+   *  room's ground rect grown by `margin` — a body that wandered from the
+   *  next room into this one, or stands in the tunnel mouth, is lit by this
+   *  room's probes (which clamp to the grid edge). Spawn room is not it. */
+  const nearRoom = (a: { pose(): { pos: Vec3 } }, r: RoomDef, margin = 1.5) => {
+    const q = a.pose().pos;
+    return q[0] >= r.minX - margin && q[0] <= r.maxX + margin && q[2] >= r.minZ - margin && q[2] <= r.maxZ + margin;
+  };
   const _flashWorld = new THREE.Vector3();
   let probeFrame = 0;
   let probeGatherErrors = 0;
@@ -1003,8 +1014,20 @@ async function main() {
       // player's room: its box + furniture as boxes, every posed bone as a
       // capsule, the muzzle flash as the light. Bodies in that room read the
       // layer; everyone else keeps both gains at 0.
+      // The room the gather serves: the player's, or — from a tunnel or a
+      // doorway — the NEAREST room by centre, so stepping back to watch a
+      // firefight through the arch does not switch the layer off (owner:
+      // "close it works, medium or far it doesn't").
       const dynKey = enclosureKeyAt(player.pos[0], player.pos[2]);
-      const dynRoom = ROOMS.find(r => r.name === dynKey) ?? null;
+      let dynRoom: RoomDef | null = ROOMS.find(r => r.name === dynKey) ?? null;
+      if (!dynRoom) {
+        let bestD = Infinity;
+        for (const r of ROOMS) {
+          const cx = (r.minX + r.maxX) / 2, cz = (r.minZ + r.maxZ) / 2;
+          const d = (cx - player.pos[0]) ** 2 + (cz - player.pos[2]) ** 2;
+          if (d < bestD) { bestD = d; dynRoom = r; }
+        }
+      }
       const dynGrid = dynRoom ? roomProbes.gridOf(dynRoom.id) : null;
       const dynOn = probeGather !== null && dynRoom !== null && dynGrid !== null
         && (probeDynGain > 0 || probeVisStrength > 0);
@@ -1013,7 +1036,7 @@ async function main() {
       let probeCapsuleCount = 0;
       if (dynOn && probeGather && dynRoom && dynGrid) {
         for (const a of actors) {
-          if (a.room !== dynRoom.id || probeCapsuleCount >= 1024) continue;
+          if (!nearRoom(a, dynRoom) || probeCapsuleCount >= 1024) continue;
           const posed = a.posed();
           const sub = { ab: probeCapsuleArrays.ab.subarray(probeCapsuleCount * INSTANCE_FLOATS), overflowed: false };
           probeCapsuleCount += packBoneInstances(posed.bonePrims ?? [], posed.clusters.map(c => c.alive), sub, 1024 - probeCapsuleCount);
@@ -1032,7 +1055,7 @@ async function main() {
           gatherLights.push({ pos: [_flashWorld.x, _flashWorld.y, _flashWorld.z], color: [1.0, 0.81, 0.58], intensity: fI * probeFlashBoost });
         }
         for (const a of actors) {
-          if (a.room !== dynRoom.id || !a.character) continue;
+          if (!nearRoom(a, dynRoom) || !a.character) continue;
           const age = a.sinceFire();
           if (!(age >= 0 && age < 0.14)) continue;
           const m = a.character.muzzle();
@@ -1065,9 +1088,37 @@ async function main() {
           raysPerProbe: 32,
         };
       }
+      // DIRECT FLASH SOURCES for the bodyFlash slot: every burning muzzle in
+      // play (the player's and the soldiers'), unboosted; each body takes the
+      // strongest by I/d^2 from its own position.
+      const directFlashes: { pos: Vec3; intensity: number }[] = [];
+      if (flashLight && flashLight.intensity > 0) {
+        flashLight.getWorldPosition(_flashWorld);
+        directFlashes.push({ pos: [_flashWorld.x, _flashWorld.y, _flashWorld.z], intensity: flashLight.intensity });
+      }
       for (const a of actors) {
-        const inDyn = dynOn && dynRoom !== null && a.room === dynRoom.id;
+        if (!a.character) continue;
+        const age = a.sinceFire();
+        if (!(age >= 0 && age < 0.14)) continue;
+        const m = a.character.muzzle();
+        if (!m) continue;
+        const k = 1 - age / 0.14;
+        directFlashes.push({ pos: [m[0], m[1], m[2]], intensity: 35 * k * k });
+      }
+      for (const a of actors) {
+        const inDyn = dynOn && dynRoom !== null && nearRoom(a, dynRoom);
         a.view.uniforms.probeDynCfg.value.set(inDyn ? probeDynGain : 0, inDyn ? probeVisStrength : 0, 0, 0);
+        let best: { pos: Vec3; intensity: number } | null = null, bestScore = 0;
+        if (bodyFlashGain > 0 && directFlashes.length > 0) {
+          const q = a.pose().pos;
+          for (const f of directFlashes) {
+            const dx = f.pos[0] - q[0], dy = f.pos[1] - (q[1] + 1.0), dz = f.pos[2] - q[2];
+            const score = f.intensity / Math.max(0.25, dx * dx + dy * dy + dz * dz);
+            if (score > bestScore) { bestScore = score; best = f; }
+          }
+        }
+        if (best) a.view.uniforms.bodyFlash.value.set(best.pos[0], best.pos[1], best.pos[2], best.intensity * bodyFlashGain);
+        else a.view.uniforms.bodyFlash.value.w = 0;
         a.view.uniforms.spotPos.value.copy(flashlight.spot.position);
         a.view.uniforms.spotAxis.value.copy(sAxis);
         a.view.uniforms.spotCfg.value.set(flashGate, flashInner, flashOuter, flashlight.spot.distance);
@@ -5295,6 +5346,9 @@ async function main() {
     setBounceSpot: (gain: number) => { bounceSpotGain = Math.max(0, gain); return bounceSpotGain; },
     /** GPU probe gather dynamic layer: radiance gain (flash bounce) and
      *  visibility strength (bodies darken their surroundings). 0/0 = off. */
+    /** Direct muzzle-flash light on bodies (bodyFlash slot). 0 = off. */
+    setBodyFlash: (gain: number) => { bodyFlashGain = Math.max(0, gain); return bodyFlashGain; },
+    get bodyFlash() { return bodyFlashGain; },
     setProbeDynamic: (radianceGain: number, visStrength: number, flashBoost?: number) => {
       probeDynGain = Math.max(0, radianceGain); probeVisStrength = Math.max(0, Math.min(1, visStrength));
       if (flashBoost !== undefined) probeFlashBoost = Math.max(0, flashBoost);

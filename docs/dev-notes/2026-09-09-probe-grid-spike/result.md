@@ -131,3 +131,16 @@ and falls at gridMin.w (0.12), decided on L00 luminance; measured tail on
 a slug: max probe 5.5 → 4.8 → 4.1 → 3.7 → 3.5 over 44 frames on a 3.5 beam
 floor. (2) Flash sources get `probeFlashBoost` (4×; `setProbeDynamic(r, v, boost)`);
 default radiance gain 0.05 → 0.15. The beam stays physical.
+
+## Update 2026-09-09 (owner: "I see it close, not at medium/far"; "soldier flash should light them up")
+
+Three things. (1) Room membership was by SPAWN room — a zombie that wandered
+in from room 2 got no layer; it is now by current position with a 1.5 m
+margin (capsules in room 1 went 35 → 215). (2) From a tunnel or doorway the
+player had no room, so the layer switched off exactly when watching a
+firefight through the arch; the gather now serves the NEAREST room. (3) A
+new march slot `bodyFlash` (pins 96): the strongest burning muzzle by I/d²
+— the body's own or a neighbour's — as a direct warm point light, 0.2 m
+distance floor, `__sdfGame.setBodyFlash(g)` (default 0.06, 0 = off).
+Chrome A/B on one pose: the close body goes dark-red → lit on the shot; the
+zombie 4 m down the tunnel takes a warm cast.

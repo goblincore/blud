@@ -670,7 +670,7 @@ describe('wound soft shadow (iq rsmshadows, wound-zone gated)', () => {
     // (keyI/keyC are the analytic-flashlight blend; with the beam off they
     // reduce to lightCfg.x/keyColor exactly — see the task-7 block below.)
     expect(MARCH_BODY).toContain(
-      'albedo * (amb + diff * wShadow * lvl * keyI * keyC) * ao');
+      'albedo * (amb + flashDirect + diff * wShadow * lvl * keyI * keyC) * ao');
     expect(MARCH_BODY).toContain('shine * wShadow * lvl * mix(surfCfg.x, 1.5, gloss)');
     // The fill term must NOT carry the shadow...
     expect(MARCH_BODY).not.toContain('lightCfg.y * wShadow');
@@ -734,13 +734,14 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     // +4 flashlight bounce spot (bounceSpotPos, bounceSpotNormal,
     // bounceSpotRadiance, bounceSpotCfg) after probeCfg — lighting P4 step 1.
     // +2 GPU probe gather dynamic layer (probeDyn storage, probeDynCfg).
-    expect(names.length).toBe(95);
+    // +1 direct muzzle flash (bodyFlash).
+    expect(names.length).toBe(96);
     expect(names).toContain('faceGlowRedOnly');
-    expect(names.slice(-17)).toEqual([
+    expect(names.slice(-18)).toEqual([
       'windDrift', 'bodyAnchor', 'woundBound', 'depthPreTex', 'depthPreCfg', 'normalGradientCfg',
       'probeTex', 'probeMin', 'probeInvExtent', 'probeDims', 'probeCfg',
       'bounceSpotPos', 'bounceSpotNormal', 'bounceSpotRadiance', 'bounceSpotCfg',
-      'probeDyn', 'probeDynCfg',
+      'probeDyn', 'probeDynCfg', 'bodyFlash',
     ]);
     // meltCfg sits between bodyHalf and the level-shadow tail, matching the
     // JS binding object in createMarchMaterial (positional — a swap silently
@@ -1667,7 +1668,7 @@ describe('wound halo — ONE unified wound mask, no split shading overlays', () 
     expect(MARCH_BODY).not.toContain('keyGate');
     expect(MARCH_BODY).not.toContain('shineOcc');
     expect(MARCH_BODY).not.toContain('ao * (1.0 - 0.55 * smoothstep(0.35, 1.0, wm))');
-    expect(MARCH_BODY).toContain('albedo * (amb + diff * wShadow * lvl * keyI * keyC) * ao');
+    expect(MARCH_BODY).toContain('albedo * (amb + flashDirect + diff * wShadow * lvl * keyI * keyC) * ao');
   });
 
   it('routes ambient through ambientAt, and pays for it once', () => {
@@ -1779,7 +1780,7 @@ describe('analytic flashlight (dungeon relighting task 7)', () => {
   it('feeds the blended key into the lit expressions, ambient hue untouched', () => {
     expect(start()).toBeGreaterThan(-1);
     // The two fleshLit sites ride the blended key...
-    expect(MARCH_BODY).toContain('albedo * (amb + diff * wShadow * lvl * keyI * keyC) * ao');
+    expect(MARCH_BODY).toContain('albedo * (amb + flashDirect + diff * wShadow * lvl * keyI * keyC) * ao');
     // ...while ambientAt keeps the ORIGINAL keyColor as its hue basis.
     expect(MARCH_BODY).toContain(
       'bounceCfg, lightCfg.y, keyColor);');
@@ -2169,7 +2170,7 @@ describe('metal modifier (hard-surface task 2)', () => {
     // 0.45 ships. Multiplying the whole `albedo * (amb + diff...)` family —
     // ambient bounce included — because bounce IS diffuse.
     expect(SHADE_BODY).toContain(
-      'albedo * (amb + diff * wShadow * lvl * keyI * keyC) * ao * mix(1.0, 0.45, metal)');
+      'albedo * (amb + flashDirect + diff * wShadow * lvl * keyI * keyC) * ao * mix(1.0, 0.45, metal)');
   });
 
   it('tints the specular AND the fresnel rim by the prim albedo, at steel F0', () => {
