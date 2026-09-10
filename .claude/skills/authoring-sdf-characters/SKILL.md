@@ -70,7 +70,13 @@ bone spine parent=pelvis dir=up pitch=6.842773 len=0.34
 6. Tests: `npx vitest run src/lab/sdf-zombie/`. The character's own
    `*-blob.test.ts` pins measured properties; update the numbers it pins when
    you change them on purpose, with a comment saying why. Iterate on the
-   `.blob` text, never on compiled output.
+   `.blob` text, never on compiled output. **Run the WHOLE directory, not
+   just your character's file** — the shipped-character sweeps live in the
+   shared suites and only fire there: `strandedOf` walks every registered
+   .blob for primitives floating clear of the body (a 17 mm floating hand
+   passed every render and every per-character check on the cyberbride), and
+   `pack.test.ts`'s `GLOW_PRIMS` allowlist requires a row the moment a
+   character authors `glow=`.
 
 ### Frames: `blob:shot`, and driving the turntable by hand
 
@@ -225,6 +231,9 @@ before you change a number. Paths are relative to `src/lab/sdf-zombie/`.
 | head reads right but sits 60 mm off in profile vs the mesh | the mesh is not at the same z — frame-align on the torso | `scripts/head-profile.ts` prints the shift |
 | every band within tolerance but it looks like stacked discs / rings | per-band width cannot see row-to-row jumps; the measure prints STACKED and the row jerk (read `--side` for the torso) | bigger `blend=`, fewer rings, one tapered prim (`r2=`) where there are three |
 | the whole-figure score is stuck while the sculpt is right | the reference's POSE (arms out vs down) dominates IoU | `blob:measure --range` over a window where poses agree |
+| an arm "collides" with a skirted torso but nothing reads wrong | the daylight probe measured a cloth SHELL as flesh — cloth may brush, flesh may not | filter shell prims out of the `against` field (cyberbride-blob.test.ts) |
+| a prim passes every check and renders fine but is OFF the body | a prim slid along its bone past its neighbour's end (the cyberbride's hand mitt, 17 mm of air) — only the shipped-character sweep sees it | `strandedOf` in `blob-checks.test.ts` |
+| a kit part reads as bare metal ON the character | it is outside the flesh silhouette (or the flesh isn't translucent yet — registry `fleshAlpha`) | the opaque A/B: `__sdfLab.setGhostAlpha(1)` |
 
 The general rule the mouse paid for: **if a hole is round and the CPU field
 (`sdBody`) is solid there, suspect the renderer, not the `.blob`.**
@@ -258,6 +267,13 @@ sets the length of. On the goblin, no shoulder reach both attached and
 cleared. Narrowing the torso in x and taking the mass back as `deep` freed the
 whole budget at once, and made the profile better besides.
 
+**Measure flesh clearance with the CLOTH excluded.** If the `against` cluster
+carries a `shell` (a skirt, a dress), filter it out of the field before
+`daylightOf` — cloth brushing the resting forearm is what cloth does, and on
+the cyberbride the shell's hem, not the hips, was every "arm collision" the
+probe reported. The flesh prims are what must never swallow the limb; the
+cyberbride-blob test shows the filter.
+
 ## Look at the render. The checks are not enough.
 
 `validateBody` and the `fused`/`clear` checks in `blob-checks.ts` prove a body
@@ -267,6 +283,29 @@ gate — zero boundary edges, one connected component, sub-millimetre contact
 error — and still failed owner review because the wrist did not merge in an
 anatomically convincing way. Closed is not the same as convincing: open the
 frames before calling a character done.
+
+## Kits and translucent flesh (the cyberbride lessons)
+
+Flesh is .blob; anything hard is a WAM kit (`kit:` in character-registry.ts,
+built by `scripts/build-wam-kit.sh`; the soldier/goblin kit headers carry
+the units and pitch-sign spec).
+
+- **EVERY number in a kit is a height fraction** — the skeleton's lengths
+  AND the parts' `w=`/`h=`/`d=`/`size=`/`offset=`. The first cyberbride kit
+  converted the skeleton and then pasted metre values into the attach
+  boxes; the chrome cranium rendered as a helmet 1.72x too big. Audit
+  every number, not just the bones.
+- **The opaque A/B finds kits that stick out.** A kit piece outside the
+  flesh silhouette reads as an artifact, not armour — and on a NUDE
+  character there is often no flesh where armour would hide (the
+  cyberbride's clavicle bars had nothing to hide in and died to this
+  check). Shoot the character with translucency OFF and everything not
+  under flesh is nakedly visible.
+- Translucent flesh itself is registry data: `fleshAlpha: 0.78` on the
+  entry, rendered by sdf-layer's ghost pass (`setGhostBodies`; honoured in
+  the 'off'/'bodies' field styles, not the deferred renderer). The lab's
+  "body → flesh alpha (see-through)" slider is the live knob; 1 is
+  bit-identical to the historical composite.
 
 ## Comment every non-obvious number
 

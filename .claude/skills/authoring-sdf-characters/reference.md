@@ -177,6 +177,49 @@ still no roughness, so one plate cannot be brushed and another polished. Both
 are deliberate gaps left for evidence from a real character; raise them rather
 than routing around them.
 
+## Cloth: `shell` + `warp=` (added 2026-09-05)
+
+`shell <limb> on <bone> ... thick=0.006` turns the primitive into a thin
+sheet — `abs(d) - thickness` of the closed base surface, cut by a clip
+plane with a rounded `rim=` at the edge. Cloth, not mass: `r=` sizes the
+BASE surface and the sheet rides `thick=` (a HALF-thickness) off it.
+`warp=0.016 warpFreq=(20,0,20)` undulates the base so the sheet reads as
+fabric with folds (the schoolgirl-described skirt is the worked example),
+and the folds ripple in the same wind the strands do — one uniform, the
+lab's `setWind`; wind 0 is the bit-exact authored field. A zero component
+in `warpFreq` freezes that axis's sine (that is how folds are made to run
+vertically).
+
+- **THE CLIP IS WORLD COORDINATES.** The cut is
+  `dot(clipNormal, p) - clipOffset`, so with the usual downward
+  `clip=(0,-1,0)` the hem sits at `y = -clipd`. Put it a few mm ABOVE the
+  primitive's far end: the cut is what rounds the hem AND what stops the
+  mirror lobe a shell grows below its own end (`abs(d)` keeps sheeting
+  inside-out past the tip). The cyberbride's first skirt copied a
+  schoolgirl `clipd` without doing this arithmetic and hung 20 cm of
+  phantom cloth under the hem — the arm daylight probe caught the forearm
+  wearing it.
+- `box` on a `shell` is rejected; `strand=` on a `shell` is rejected
+  (hair is not cloth).
+
+## Hair: `strand=` bundles (added 2026-09-05, the "hairlock")
+
+`strand=12 wave=0.13 cycles=2 fat=0.80` on a two-ended prim (a `bar`, or a
+`blob` with `tip=`) renders 12 wavy strands across the prim's diameter
+instead of one solid sweep. Limits, all compile-checked: `strand` integer
+1..16, `wave` 0..0.27, `cycles` 0.25..12, `fat` 0.05..1; writing
+`wave=`/`cycles=`/`fat=` without `strand=` is an error; rejected on
+`carve`/`groove`/`shell`/`box`; rejected inside the `bones` block (hair is
+flesh, not bone — the GPU bone fold never reads strand rows).
+
+The house shape (schoolgirl-described is the worked example): the crown
+stays a MASS — a bob's silhouette is a bell and a bell is a volume, which
+strands cannot make — and every hanging EDGE is strands (fringe, side
+curtains, nape), because an ellipsoid ends in an ellipsoid while strands
+end in separate points and the silhouette breaks. Real hair adds 20-30 mm
+past the skull, not 90; if the height pin can only be met by hair, meet it
+and note that she reads a few percent under.
+
 ## Colour is the biggest lever you have
 
 Before the `palette` block existed, every `.blob` character wore one global
