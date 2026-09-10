@@ -310,6 +310,22 @@ async function main() {
   const projScreen = new THREE.Matrix4();
   const bodySphere = new THREE.Sphere(new THREE.Vector3(), 1.1);
   const lastSeenMs = new Map<number, number>();
+  /** SIM CLOCK (2026-09-10, demo determinism stage 1). Millisecond accumulator
+   *  advanced only by `tick(dt)` — NEVER wall time, exactly like `bleedClock`
+   *  further down, and for the same reason: hand-stepped captures and replays
+   *  must be reproducible.
+   *
+   *  The cull dwell below used to read `performance.now()`, which made it a
+   *  WALL-CLOCK decision about which bodies get DRAWN. That is the most likely
+   *  source of the workload drift the bench census shows across otherwise
+   *  identical legs (room 4 fire: bodies 4->4 in one run, 4->2 in another), so
+   *  it is the first consumer moved onto this clock.
+   *
+   *  Declared HERE, with the rest of the cull state, for the hoisting reason
+   *  spelled out above: a `let` read by a hoisted function from a later
+   *  declaration threw "Cannot access ... before initialization" during boot
+   *  and silently disabled the whole cull. */
+  let simClockMs = 0;
   let actorCullEnabled = true;
   let visibleActors: ZombieActor[] = [];
   const cullCounts = { visible: 0, total: 0 };
@@ -4127,9 +4143,18 @@ async function main() {
    * read it as a trend against frame time, never as an absolute.
    */
 
-  /** Recompute this frame's visible set. Called once, before the draw. */
+  /** Recompute this frame's visible set. Called once, before the draw.
+   *
+   *  Dwell is measured on SIM time, not wall time (2026-09-10). In live play
+   *  `tick` is called once per frame with the real frame delta, so simClockMs
+   *  tracks elapsed wall time almost exactly and the 250 ms grace behaves as it
+   *  always has. Under a fixed-step replay or a hand-stepped capture it becomes
+   *  EXACT instead of approximate, which is the entire point. The one visible
+   *  consequence: while the render lock is engaged `tick` does not run, so the
+   *  clock does not advance and nothing expires out of the dwell — a frozen
+   *  scene stays frozen, which is what the lock means. */
   function updateVisibleActors(): void {
-    const now = performance.now();
+    const now = simClockMs;
     cullCounts.total = actors.length;
     if (!actorCullEnabled) {
       visibleActors = actors;
@@ -4246,6 +4271,11 @@ async function main() {
 
   function tick(dt: number) {
     if (simLocked) return; // render-lock: drawFn still runs; nothing mutates.
+    // The sim clock advances ONLY here, from the step's own dt — never from
+    // wall time. This is the single source of "how much simulated time has
+    // passed", so every dwell/timer that reads it is reproducible under a
+    // replay. See the declaration next to lastSeenMs for the why.
+    simClockMs += dt * 1000;
     segMeshRenderer?.stepDebris(dt);
     let input: MoveInput = {
       x: (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0),
