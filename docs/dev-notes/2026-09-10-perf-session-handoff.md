@@ -4,6 +4,23 @@
 top. This file is the longer version: what was measured, what is CLOSED, the two
 bugs and the rules they produced, and exactly where to pick up.
 
+## Merging these branches
+
+`main` advanced by exactly ONE commit while this work was in flight —
+`ded97034 docs(tasks): wrap-up notes for the temporal-start follow-up night`, a
+docs-only commit. Merge base is `5bea5c54`.
+
+**Expect a conflict in `TASKS.md`**: `ded97034` edited it and so did this session
+(current-focus section + the stale-claim corrections). It should be a trivial
+textual conflict in the Current focus region — keep BOTH sets of notes, this
+session's block on top. Nothing else should conflict: everything else this
+session touched is new files or files `ded97034` did not.
+
+`claude/determinism-stage1` was branched from this branch's `b4cd8776` and has the
+`e4eba930` boot fix cherry-picked, but NOT the later structural `f3541064`
+(`boot-params.ts` extraction) or the census gate. When it merges, prefer this
+branch's `boot-params.ts` and delete its duplicated inline parsing.
+
 ## Branches
 
 | branch | tip | what it is |
