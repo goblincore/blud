@@ -91,13 +91,15 @@ import { createRoomProbes, type ProbeWorkerLike } from './room-probes';
 import { computeBounceSpot } from '../flashlight-bounce';
 import { createProbeGatherBinding, type ProbeGatherBinding } from './probe-gather-compute';
 import { parseIntParam } from './boot-params';
+import { hashFrame, DEFAULT_TILES_X, DEFAULT_TILES_Y } from './demo-hash';
+import { paddedRowStrideFloats } from './frame-hash';
 import { tracerGatherLights } from '../tracer-lights';
 import { boneInstanceArrays, packBoneInstances, INSTANCE_FLOATS } from './bone-instancer';
 import { createZombieActor, segmentHitsBox, type ZombieActor } from './game-actor';
 import { separate, minPairDistance, type CrowdAgent } from '../crowd';
 import { arbitrate, RING_TUNING, type RingClaimant } from '../melee-ring';
 import { ATTACK_TUNING, type SwingVariant } from '../attack';
-import { buildFirefight, buildCloseup, validateScenario } from './game-bench-scenario';
+import { buildFirefight, buildCloseup, validateScenario, actionsAt, type BenchAction, type Scenario } from './game-bench-scenario';
 // TSL nodes for the texRoundTrip diagnostic (close-up task 1, question B).
 // Named with a Tsl suffix where the name collides with anything in this file.
 import {
@@ -327,6 +329,26 @@ async function main() {
    *  declaration threw "Cannot access ... before initialization" during boot
    *  and silently disabled the whole cull. */
   let simClockMs = 0;
+  /** DEMO HOLD (2026-09-10, deterministic demo recordings stage 2). While ON,
+   *  the render-side subsampling that is intentionally wall-clock or
+   *  frame-counter driven is pinned to a value derived from the DEMO CLOCK, so
+   *  two runs of one recording hash identically:
+   *
+   *    - the actor visual animation phase (`view.setTime`) comes off
+   *      `simClockMs` instead of `performance.now() / 1000`;
+   *    - the gather's `frameSeed` is measured from the frame the demo started,
+   *      not from the absolute dispatch counter.
+   *
+   *  Both are PIXEL-ONLY: neither feeds sim state, so holding them cannot
+   *  change what the simulation does — which is exactly why they are a
+   *  recording seam and not a gameplay flag. OFF by default and OFF in
+   *  normal play, so the shipped defaults are untouched; it is inert unless a
+   *  demo is being recorded or replayed (see the frame hash:
+   *  webgpu/demo-hash.ts). */
+  let demoHold = false;
+  /** The gather dispatch counter at demo entry, so the seed is a function of
+   *  frames-since-entry rather than of how long the page happened to boot. */
+  let demoSeedBase = 0;
   let actorCullEnabled = true;
   let visibleActors: ZombieActor[] = [];
   const cullCounts = { visible: 0, total: 0 };
@@ -1279,7 +1301,7 @@ async function main() {
           // Diagnostic seams (see ?dynrays / ?dynlights above); both default to
           // the shipped values, so an unset URL is bit-identical to before.
           lights: probeLightsBoot === null ? gatherLights : gatherLights.slice(0, probeLightsBoot),
-          frameSeed: (probeFrame % 64) / 64,
+          frameSeed: demoHold ? ((probeFrame - demoSeedBase) % 64) / 64 : (probeFrame % 64) / 64,
           blend: 0.6,
           fall: 0.12,
           raysPerProbe: probeRaysBoot === null ? 32 : probeRaysBoot,
@@ -4446,7 +4468,13 @@ async function main() {
           a.character.pose(a.body, a.boundRig(), p.yaw, a.sinceFire(), a.motionFrame(), dt, a.id, a.posed());
         }
       }
-      const now = performance.now() / 1000;
+      // The actor animation phase: wall-clock in play, the SIM CLOCK while a
+      // demo is held. `simClockMs` is milliseconds, so the expression below is
+      // the same NUMBER normal play computes — the hold changes the SOURCE,
+      // not the scale, and is therefore invisible when it is off. Without this
+      // the rig jiggle would differ between two runs of one recording and the
+      // frame hash could never match. Pixel-only: nothing here feeds the sim.
+      const now = demoHold ? simClockMs / 1000 : performance.now() / 1000;
       for (const a of actors) {
         a.view.setTime(now);
         // Face projection tracks the posed skull through the gait jiggle.
@@ -5319,6 +5347,93 @@ async function main() {
     return n - 1;
   };
 
+  // --- DEMO HASH READBACK (deterministic demo recordings stage 2, 2026-09-10).
+  // The two GPU layers the frame hash digests, read back WITH the caller's
+  // padding intact: demo-hash.ts owns de-padding, because doing it in two
+  // places is how a stride gets miscounted twice. See webgpu/demo-hash.ts for
+  // why these two layers and not the composited frame.
+  const readMarchTargetForHash = async (): Promise<{
+    width: number; height: number; floatsPerTexel: number; data: ArrayLike<number>;
+  }> => {
+    const t = sdfLayer.marchTarget;
+    const w = t.width, h = t.height;
+    // 4 floats per texel is the march target's contract (rgba32f). Asserted
+    // rather than assumed: a format change would otherwise be hashed as
+    // garbage that still looks like a number.
+    const floatsPerTexel = 4;
+    if (!w || !h) throw new Error(`frameHash: marchTarget is ${w}x${h}`);
+    const data = await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h);
+    return { width: w, height: h, floatsPerTexel, data: data as ArrayLike<number> };
+  };
+  /** The gather's dynamic probe layer, or null when the gather is not bound
+   *  (a legitimate boot: `?probedyn=0` and the lab pages have none). */
+  const readProbeDynForHash = async (): Promise<Float32Array | null> =>
+    probeGather ? await probeGather.readback() : null;
+
+/** ONE SCENARIO ACTION, applied to the live page — the seam the perf
+ *  bench and the frame-hash recorder BOTH drive (deterministic demo
+ *  recordings stage 2, 2026-09-10). Extracted verbatim from the bench's
+ *  inline `perform`: the teleport heuristics inside were tuned against the
+ *  bench census (2026-08-31 — the room centre missed every shot and an
+ *  outer corner aimed at a wall), so if this drifts, a recorded demo stops
+ *  replaying the scenario the bench measured. One implementation, not two.
+ */
+function performBenchAction(a: BenchAction): void {
+  switch (a.kind) {
+    case 'teleport': {
+      const r = ROOMS.find(x => x.id === a.room);
+      if (r) {
+        // Stand back from where the BODIES actually are, facing
+        // them. Two heuristics were tried and both failed against
+        // the census (2026-08-31): the room centre put a zombie
+        // 0.97 m away so every shot pitched down into it and
+        // missed, and an outer corner pointed the camera at a wall
+        // with bodies 1 -> 0 on screen. The room's own actors are
+        // the only thing that reliably says where to look.
+        const mine = actors.filter(x => x.room === a.room);
+        const cx = (r.minX + r.maxX) / 2;
+        const cz = (r.minZ + r.maxZ) / 2;
+        let tx = cx;
+        let tz = cz;
+        if (mine.length) {
+          tx = mine.reduce((n, x) => n + x.pose().pos[0], 0) / mine.length;
+          tz = mine.reduce((n, x) => n + x.pose().pos[2], 0) / mine.length;
+        }
+        // Back off along the direction from the room centre toward
+        // the outer wall, so the whole group stays in front.
+        const away = Math.hypot(tx - cx, tz - cz);
+        let ax = away > 0.2 ? (cx - tx) / away : 0;
+        let az = away > 0.2 ? (cz - tz) / away : 1;
+        // Degenerate group (all at the centre): back off along -z.
+        if (!Number.isFinite(ax) || (ax === 0 && az === 0)) { ax = 0; az = 1; }
+        const STANDOFF = 4.0;
+        const inset = 0.6;
+        const px = Math.min(r.maxX - inset, Math.max(r.minX + inset, tx + ax * STANDOFF));
+        const pz = Math.min(r.maxZ - inset, Math.max(r.minZ + inset, tz + az * STANDOFF));
+        player.pos = [px, 0, pz];
+        player.vel = [0, 0, 0];
+        // atan2(dx, −dz): the page's forward is (sin yaw, −cos
+        // yaw) — see aimAtNearestSurface. Was atan2(dx, +dz)
+        // (z-mirrored) since cdba91f.
+        player.yaw = Math.atan2(tx - px, -(tz - pz));
+        player.pitch = 0;
+        player.grounded = true;
+      }
+      break;
+    }
+    case 'freeze': wanderFrozen = a.on; break;
+    case 'look': player.yaw = a.yaw; player.pitch = a.pitch; break;
+    case 'aimSurface': aimAtNearestSurface(); break;
+    case 'fire': fire(a.barrels); break;
+    case 'fireSlug': {
+      const keep = slugMode;
+      slugMode = true;
+      try { fire(1); } finally { slugMode = keep; }
+      break;
+    }
+  }
+}
+
   (window as unknown as { __sdfGame: unknown }).__sdfGame = {
     telemetry: telemetryControls ? {
       start: () => telemetryControls.start(), stop: () => telemetryControls.stop(), mark: () => telemetryControls.mark(),
@@ -5388,6 +5503,212 @@ async function main() {
       }
     },
     setLoopRunning: (on: boolean) => handle.setLoopRunning(on),
+    /** THE FRAME HASH (deterministic demo recordings stage 2, 2026-09-10).
+     *  Hashes the CURRENT rendered state — it does NOT step or mutate
+     *  anything, which is what makes a recorded frame reproducible: the
+     *  caller owns freeze/step ordering, this only measures.
+     *
+     *  `frame` is the caller's recording frame index, echoed back so a
+     *  recording is self-describing.
+     *
+     *  Reads the march target and the gather's dynamic layer. The dynamic
+     *  layer is when the gather is bound, which is the shipped configuration,
+     *  so a missing layer means the gather is off rather than that the hash
+     *  is broken — but an unreadable MARCH TARGET throws, because a hash
+     *  seam that silently hashes nothing reports "identical" forever and
+     *  gets trusted.
+     *
+     *  Usage (see scripts/sdf-demo-hash.mjs for the whole recipe):
+     *    __sdfGame.setDemoHold(true);          // pin the render-side clocks
+     *    __sdfGame.setLightClockFrozen(true);  // pin the flicker clock
+     *    __sdfGame.step(90); __sdfGame.step(2);
+     *    await __sdfGame.frameHash(0);         // step first, hash second
+     */
+    frameHash: async (frame = 0) =>
+      hashFrame({ readMarchTarget: readMarchTargetForHash, readProbeDyn: readProbeDynForHash }, frame),
+    /** Pin the render-side subsampling clocks the frame hash needs constant
+     *  (actor animation phase, gather frameSeed). See the demoHold declaration.
+     *  OFF by default and inert in normal play. */
+    setDemoHold: (on: boolean) => {
+      demoHold = on;
+      demoSeedBase = probeFrame;
+      return demoHold;
+    },
+    get demoHold() { return demoHold; },
+    /** Record (or replay) a scenario as a stream of frame hashes. The driver:
+     *
+     *    __sdfGame.setDemoHold(true);
+     *    __sdfGame.setLightClockFrozen(true);
+     *    __sdfGame.step(90);                       // settle transients
+     *    const rec = await __sdfGame.demoScenario({ kind: 'firefight', room: 4, frames: 120, every: 4 });
+     *
+     *  Preconditions are the CALLER's, deliberately: settling and freezing are
+     *  the same recipe every capture script in this repo already uses, and
+     *  hiding it here would make a recording that looks reproducible while its
+     *  pre-roll differed. See scripts/sdf-demo-hash.mjs.
+     *
+     *  The scenario is DATA (game-bench-scenario.ts) and actions are applied
+     *  through the SAME handler the perf bench drives, so a replay runs the
+     *  scenario the bench measured rather than a lookalike. Frames are stepped
+     *  one at a time and the render lock is OFF, because scenario actions
+     *  mutate and a locked tick would silently swallow them.
+     *
+     *  Returns per-frame hashes with the scenario's own metadata, so a stored
+     *  recording says which scenario, which room and how many frames produced
+     *  it — a hash without those is not evidence of anything. */
+    demoScenario: async (o: {
+      kind?: 'firefight' | 'closeup';
+      room?: number;
+      /** Total frames to drive. Defaults to the scenario's own length. */
+      frames?: number;
+      /** Hash every Nth frame. 1 hashes all of them (slow: each hash is a
+       *  ~1M-float readback). Default 4. */
+      every?: number;
+      /** Closeup frames, when kind === 'closeup'. */
+      closeupFrames?: number;
+      walkFrames?: number; fireFrames?: number; gibFrames?: number;
+      /** Freeze the gather + animation clocks for the run. Default true:
+       *  a recording whose frameSeed drifts cannot replay. */
+      hold?: boolean;
+      /** Hash the final frame position this many EXTRA times (each after its
+       *  own step) to measure per-frame randomness with the boot state fixed.
+       *  Default 0. See the `repeated` field of the result. */
+      repeat?: number;
+      /** Re-hash the SAME frame position this many times with NO step in
+       *  between. The decisive control: if these differ, the nondeterminism is
+       *  in the READBACK or in unwritten texels of the target — not in anything
+       *  the scene did between frames. Default 0. */
+      resample?: number;
+      /** Run with the SIMULATION LIVE (scenario actions really apply) instead
+       *  of the RENDER LOCK. Default FALSE, and that default is the point:
+       *
+       *  Locked (default) records pure re-renders of one settled instant, which
+       *  tests what this tool exists to test — that the renderer is a
+       *  deterministic function of its inputs — with no dependence on sim
+       *  determinism at all. That is the mode the black-silhouette bug and a
+       *  mistranscribed gather kernel both show up in.
+       *
+       *  `sim: true` steps a live simulation, which additionally requires every
+       *  sim input to be reproducible. It is NOT yet: two runs of one spec
+       *  diverge at frame 0 on this branch (measured 2026-09-10, the first
+       *  honest run of this seam — the march target's extents and the dynamic
+       *  layer's per-probe values differ while their activity counts match, i.e.
+       *  the SAME game in a slightly different state). Use it to hunt that bug,
+       *  not to gate a change. */
+      sim?: boolean;
+    } = {}) => {
+      const scenario: Scenario = o.kind === 'closeup'
+        ? buildCloseup({ frames: o.closeupFrames })
+        : buildFirefight({
+          room: o.room ?? 4,
+          walkFrames: o.walkFrames,
+          fireFrames: o.fireFrames,
+          gibFrames: o.gibFrames,
+        });
+      const problems = validateScenario(scenario);
+      if (problems.length) throw new Error(`bad scenario: ${problems.join('; ')}`);
+      const total = o.frames ?? scenario.frames;
+      const every = Math.max(1, Math.floor(o.every ?? 4));
+      if (o.hold !== false) demoHold = true;
+
+      // Frames must be driven by hand: the rAF loop would race the recorder
+      // and a hidden/visible page would change which frames exist at all.
+      handle.setLoopRunning(false);
+      const hadAdaptive = adaptiveEnabled;
+      adaptiveEnabled = false;
+
+      // Named `hashes`, NOT `hashFrame`: the latter is the imported digester,
+      // and shadowing it inside this scope is a real failure mode.
+      // PARITY IS PART OF THE SIGNATURE. The shipped 'bodies' style marches
+      // alternate scanlines, so consecutive frames are DIFFERENT BY DESIGN —
+      // measured 2026-09-10: the march digest alternates between exactly two
+      // values on a locked, unchanging scene. A recording must therefore sample
+      // the same field parity every time, or every comparison between two
+      // correct frames reports a divergence. `parityOf` is the running field
+      // phase, and the recorder asserts the sampled parities agree.
+      let stepsTaken = 0;
+      const parityOf = (): number => stepsTaken % 2;
+      const hashes: import('./frame-hash').FrameHash[] = [];
+      const parity: number[] = [];
+      const repeated: import('./frame-hash').FrameHash[] = [];
+      const repeatedParity: number[] = [];
+      const resampled: import('./frame-hash').FrameHash[] = [];
+      const started = performance.now();
+      const liveSim = o.sim === true;
+      const hadLock = simLocked;
+      // LOCK for the recording. tick() then mutates nothing, so each stepped
+      // frame is a pure re-render of one settled instant (the same discipline
+      // the close-up gates use) and the hash compares RENDERER state rather
+      // than sim state.
+      if (!liveSim) simLocked = true;
+      try {
+        for (let frame = 0; frame < total; frame++) {
+          for (const a of actionsAt(scenario, frame)) performBenchAction(a);
+          // 1/60 is the bench's fixed step and the only dt this format means.
+          handle.step(1 / 60);
+          stepsTaken++;
+          // The final frame is sampled only when the regular cadence would MISS
+          // it: `frame % every === 0 || frame === total - 1` could sample one
+          // frame twice with an odd gap between, which flips the field parity
+          // mid-recording and makes the whole run incomparable.
+          if (frame % every === 0 || (frame === total - 1 && (total - 1) % every !== 0)) {
+            await handle.resolveGpu();
+            hashes.push(await hashFrame({ readMarchTarget: readMarchTargetForHash, readProbeDyn: readProbeDynForHash }, frame));
+            parity.push(parityOf());
+          }
+        }
+        // READBACK CONTROL: the SAME position, no step, nothing between the
+        // hashes. Separates "the frame changed" from "the readback is not a
+        // function of the frame".
+        for (let i = 0; i < Math.max(0, Math.floor(o.resample ?? 0)); i++) {
+          resampled.push(await hashFrame({ readMarchTarget: readMarchTargetForHash, readProbeDyn: readProbeDynForHash }, total));
+        }
+        // SAME-SESSION CONTROL: hash the SAME frame position again, after a
+        // further step. Locked, that step mutates nothing, so this measures
+        // per-frame randomness alone, with the boot state held fixed.
+        for (let i = 0; i < Math.max(0, Math.floor(o.repeat ?? 0)); i++) {
+          // TWO steps, not one: one step returns the SAME frame at the OTHER
+          // field parity, which is a different frame by design. Stepping a pair
+          // keeps parity fixed, so this control measures frame determinism
+          // instead of measuring the interlace.
+          handle.step(2 / 60);
+          stepsTaken += 2;
+          await handle.resolveGpu();
+          repeated.push(await hashFrame({ readMarchTarget: readMarchTargetForHash, readProbeDyn: readProbeDynForHash }, total));
+          repeatedParity.push(parityOf());
+        }
+      } finally {
+        adaptiveEnabled = hadAdaptive;
+        simLocked = hadLock;
+        // The loop stays OFF on purpose: a caller that wants live play back
+        // says so explicitly, and one that forgets gets a still page rather
+        // than a recording that quietly continued while it was being read.
+      }
+      return {
+        scenario: o.kind === 'closeup' ? 'closeup' : `firefight-room${o.room ?? 4}`,
+        room: o.room ?? 4,
+        frames: total,
+        every,
+        tilesX: DEFAULT_TILES_X,
+        tilesY: DEFAULT_TILES_Y,
+        sim: liveSim,
+        /** The SAME final frame hashed `repeat` times, each after its own step.
+         *  The control that separates "this renderer is nondeterministic" from
+         *  "these two boots did not start from the same state": if these agree
+         *  within one session, a cross-boot mismatch is a BOOT-STATE difference,
+         *  not per-frame randomness. */
+        repeated: repeated.map((r) => r.layers),
+        resampled: resampled.map((r) => r.layers),
+        /** Field parity of each sampled hash. MUST be constant across a
+         *  recording: the interlaced field makes alternate frames differ by
+         *  design, so a set of mixed parities cannot be compared to anything. */
+        parity,
+        repeatedParity,
+        seedIdle: probeFrame - demoSeedBase,
+        ms: Math.round(performance.now() - started),
+        hashes,
+      };
+    },
     /** Freeze/unfreeze the wanderers (pose, rig and shader clock all pin). */
     freeze: (on: boolean) => { wanderFrozen = on; },
     get frozen() { return wanderFrozen; },
@@ -7132,61 +7453,7 @@ async function main() {
             splats: bloodSim.splats.length,
             gooQuads: gooLayer?.liveCount ?? 0,
           }),
-          perform: (a) => {
-            switch (a.kind) {
-              case 'teleport': {
-                const r = ROOMS.find(x => x.id === a.room);
-                if (r) {
-                  // Stand back from where the BODIES actually are, facing
-                  // them. Two heuristics were tried and both failed against
-                  // the census (2026-08-31): the room centre put a zombie
-                  // 0.97 m away so every shot pitched down into it and
-                  // missed, and an outer corner pointed the camera at a wall
-                  // with bodies 1 -> 0 on screen. The room's own actors are
-                  // the only thing that reliably says where to look.
-                  const mine = actors.filter(x => x.room === a.room);
-                  const cx = (r.minX + r.maxX) / 2;
-                  const cz = (r.minZ + r.maxZ) / 2;
-                  let tx = cx;
-                  let tz = cz;
-                  if (mine.length) {
-                    tx = mine.reduce((n, x) => n + x.pose().pos[0], 0) / mine.length;
-                    tz = mine.reduce((n, x) => n + x.pose().pos[2], 0) / mine.length;
-                  }
-                  // Back off along the direction from the room centre toward
-                  // the outer wall, so the whole group stays in front.
-                  const away = Math.hypot(tx - cx, tz - cz);
-                  let ax = away > 0.2 ? (cx - tx) / away : 0;
-                  let az = away > 0.2 ? (cz - tz) / away : 1;
-                  // Degenerate group (all at the centre): back off along -z.
-                  if (!Number.isFinite(ax) || (ax === 0 && az === 0)) { ax = 0; az = 1; }
-                  const STANDOFF = 4.0;
-                  const inset = 0.6;
-                  const px = Math.min(r.maxX - inset, Math.max(r.minX + inset, tx + ax * STANDOFF));
-                  const pz = Math.min(r.maxZ - inset, Math.max(r.minZ + inset, tz + az * STANDOFF));
-                  player.pos = [px, 0, pz];
-                  player.vel = [0, 0, 0];
-                  // atan2(dx, −dz): the page's forward is (sin yaw, −cos
-                  // yaw) — see aimAtNearestSurface. Was atan2(dx, +dz)
-                  // (z-mirrored) since cdba91f.
-                  player.yaw = Math.atan2(tx - px, -(tz - pz));
-                  player.pitch = 0;
-                  player.grounded = true;
-                }
-                break;
-              }
-              case 'freeze': wanderFrozen = a.on; break;
-              case 'look': player.yaw = a.yaw; player.pitch = a.pitch; break;
-              case 'aimSurface': aimAtNearestSurface(); break;
-              case 'fire': fire(a.barrels); break;
-              case 'fireSlug': {
-                const keep = slugMode;
-                slugMode = true;
-                try { fire(1); } finally { slugMode = keep; }
-                break;
-              }
-            }
-          },
+          perform: performBenchAction,
         };
         const result = await runBench(deps, scenario, {
           mode: o.mode ?? 'throughput',

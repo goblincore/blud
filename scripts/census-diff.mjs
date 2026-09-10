@@ -101,6 +101,88 @@ export function diffCensus(doc) {
 
 const same = (a, b) => (Number.isNaN(a) && Number.isNaN(b)) || a === b;
 
+/**
+ * FRAME-HASH DRIFT — the frame-level companion to the census gate
+ * (deterministic demo recordings stage 2, 2026-09-10).
+ *
+ * The census counts what the page CONTAINS; the frame hash digests what it
+ * RENDERS. They fail differently on purpose:
+ *   - the census cannot see a zeroed probe layer or a mistranscribed shader,
+ *     both of which shipped on 2026-09-10 and were caught by playtesting;
+ *   - the hash cannot see a droplet count that changed without changing a pixel.
+ * Two repeats of one leg that render differently were never measuring one
+ * workload, whatever the census says — so this reports the same class of defect
+ * from the other side.
+ *
+ * Skips legs whose page supplied no hash (an older page, or a leg that ran
+ * before the seam existed) rather than treating absence as drift.
+ *
+ * @returns {Array<{leg, room, layer, reps, hashes, stats}>} one entry per
+ *   (leg, room, layer) whose digest is not the same in every repeat.
+ */
+export function diffFrameHash(doc) {
+  const results = Array.isArray(doc?.results) ? doc.results : [];
+  const groups = new Map();
+  for (const r of results) {
+    if (!r?.endHash?.layers) continue;
+    const gk = `${r.leg}/room${r.room}`;
+    if (!groups.has(gk)) groups.set(gk, []);
+    groups.get(gk).push({ rep: r.rep, layers: r.endHash.layers, tiles: r.endHash.tiles });
+  }
+
+  const drift = [];
+  for (const [gk, entries] of groups) {
+    if (entries.length < 2) continue;
+    entries.sort((a, b) => a.rep - b.rep);
+    const leg = gk.slice(0, gk.lastIndexOf('/room'));
+    const room = Number(gk.slice(gk.lastIndexOf('/room') + 5));
+    const layers = new Set(entries.flatMap((e) => Object.keys(e.layers)));
+    for (const layer of layers) {
+      const present = entries.filter((e) => e.layers[layer]);
+      if (present.length < 2) continue;
+      const hashes = present.map((e) => e.layers[layer].hash);
+      const floats = present.map((e) => e.layers[layer].floats);
+      if (hashes.every((h) => same(h, hashes[0])) && floats.every((f) => same(f, floats[0]))) continue;
+      // Report the ACTIVITY STATS alongside, because those are what name the
+      // cause: the black-silhouette regression read as "nonzero 190 → 0", not
+      // as "the hash changed".
+      const statKeys = new Set(present.flatMap((e) => Object.keys(e.layers[layer].stats ?? {})));
+      const stats = {};
+      for (const k of statKeys) {
+        const vals = present.map((e) => e.layers[layer].stats?.[k]);
+        if (!vals.every((v) => same(v, vals[0]))) stats[k] = vals;
+      }
+      drift.push({ leg, room, layer, reps: present.map((e) => e.rep), hashes, stats });
+    }
+  }
+  return drift;
+}
+
+/** Human-readable frame-hash report. Returns the number of drifted entries. */
+export function reportFrameHashDrift(path, doc, log = console.log) {
+  const drift = diffFrameHash(doc);
+  const withHash = (Array.isArray(doc?.results) ? doc.results : []).filter((r) => r?.endHash?.layers).length;
+  log(`\n=== ${path} — frame hash`);
+  if (withHash === 0) {
+    log('    no leg reported an end-of-leg frame hash (older page, or the seam is off).');
+    return 0;
+  }
+  log(`    ${withHash} leg-run(s) hashed`);
+  if (drift.length === 0) {
+    log('    FRAME HASH IDENTICAL across repeats — the same leg rendered the same frame.');
+    return 0;
+  }
+  log(`    FRAME HASH DRIFTED in ${drift.length} layer(s) — the same leg rendered DIFFERENT frames:`);
+  for (const d of drift) {
+    log(`      ${d.leg}/room${d.room} ${d.layer}`);
+    log(`        hash: ${d.hashes.map((h, i) => `rep${d.reps[i]}=${h}`).join('  ')}`);
+    for (const [k, vals] of Object.entries(d.stats)) {
+      log(`        ${k}: ${vals.map((v, i) => `rep${d.reps[i]}=${v}`).join('  ')}`);
+    }
+  }
+  return drift.length;
+}
+
 /** Human-readable report. Returns the number of drifted fields. */
 export function reportCensusDrift(path, doc, log = console.log) {
   const drift = diffCensus(doc);
@@ -132,7 +214,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   let total = 0;
   for (const f of files) {
     try {
-      total += reportCensusDrift(f, JSON.parse(readFileSync(f, 'utf8')));
+      const doc = JSON.parse(readFileSync(f, 'utf8'));
+      total += reportCensusDrift(f, doc);
+      total += reportFrameHashDrift(f, doc);
     } catch (e) {
       console.error(`could not read ${f}: ${e.message}`);
       total += 1;

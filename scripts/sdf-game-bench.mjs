@@ -27,7 +27,7 @@
 // still written — a partial matrix must never be mistaken for a clean one.
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
-import { reportCensusDrift } from './census-diff.mjs';
+import { reportCensusDrift, reportFrameHashDrift } from './census-diff.mjs';
 
 const VITE = Number(process.argv[2] ?? 5277);
 const CDP = Number(process.argv[3] ?? 9277);
@@ -768,6 +768,21 @@ if (censusDrift > 0) {
   console.error('  docs/superpowers/plans/2026-09-10-deterministic-demo-recordings.md.');
 }
 
+// THE FRAME-LEVEL COMPANION (deterministic demo recordings stage 2). The census
+// counts what the page CONTAINS; this digests what it RENDERS, and it catches
+// the half the census is blind to — a zeroed probe layer or a mistranscribed
+// shader changes no count. Both shipped on 2026-09-10 and were caught by the
+// owner PLAYTESTING, which is the failure this report exists to end.
+//
+// It reports only when a leg actually hashed (the page supplies endHash); a
+// silent absence is not a pass, and reportFrameHashDrift says so in words.
+const frameHashDrift = reportFrameHashDrift('(this run, in-memory results)', { results });
+if (frameHashDrift > 0) {
+  console.error(`\n⚠ FRAME HASH DRIFT: ${frameHashDrift} layer(s) differed between repeats of the same leg.`);
+  console.error('  The same leg RENDERED different frames, so no delta between those repeats is attributable.');
+  console.error('  Read the activity stats above first — a layer that went to zero names its own cause.');
+}
+
 if (failures.length || abandoned) {
   console.error(`\nFAIL: ${failures.length} run(s) failed, ${results.length} completed — the tables above are PARTIAL.`);
   if (abandoned) console.error(`      Matrix abandoned early: ${abandoned}. Remaining legs were never attempted.`);
@@ -777,7 +792,7 @@ if (failures.length || abandoned) {
 // Drift does NOT fail the run by itself: it is a property of the SCENARIO, and a
 // leg matrix is still worth reading for within-leg pass rows. It is reported
 // loudly and it does change the exit code, so a scripted/CI caller notices.
-process.exit(censusDrift > 0 ? 1 : 0);
+process.exit(censusDrift > 0 || frameHashDrift > 0 ? 1 : 0);
 
 // ---------------------------------------------------------------------------
 // PASS ATTRIBUTION REPORT (BENCH_PASSES=1). Per leg: one table, rows = pass

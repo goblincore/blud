@@ -12,7 +12,7 @@
 // file stays independent of large committed artifacts.
 
 import { describe, it, expect } from 'vitest';
-import { collectCensus, diffCensus, reportCensusDrift } from './census-diff.mjs';
+import { collectCensus, diffCensus, reportCensusDrift, diffFrameHash, reportFrameHashDrift } from './census-diff.mjs';
 
 /** One leg-run, with a census per segment. */
 function run(leg, room, rep, segments) {
@@ -148,5 +148,105 @@ describe('reportCensusDrift — the human-facing verdict', () => {
     expect(text).toContain('baseline/room4 fire.droplets');
     expect(text).toContain('rep0=222');
     expect(text).toContain('rep1=74');
+  });
+});
+
+// --- FRAME-HASH DRIFT (deterministic demo recordings stage 2, 2026-09-10) ----
+//
+// The census gate and the frame-hash gate fail differently on purpose, and the
+// failure mode to guard here is the same one: a false NEGATIVE that reports
+// "identical" for a run whose frames actually differed. The regression this
+// exists for is the zeroed dynamic probe layer that rendered characters as
+// black silhouettes — two repeats of one leg whose probeDyn digests differ.
+
+/** One leg-run carrying an end-of-leg frame hash. */
+function hashedRun(leg, room, rep, layers) {
+  const tiles = {};
+  for (const key of Object.keys(layers)) tiles[key] = [1, 2, 3, 4];
+  return { leg, room, rep, segments: [], endHash: { version: 1, frame: 42, tilesX: 2, tilesY: 2, layers, tiles } };
+}
+
+const layer = (hash, nonZero) => ({ hash, width: 4, height: 4, floats: 64, stats: { nonZero } });
+
+describe('diffFrameHash', () => {
+  it('reports nothing when every repeat of a leg hashed the same', () => {
+    const doc = { results: [
+      hashedRun('baseline', 4, 0, { marchTarget: layer(111, 10), probeDyn: layer(222, 32) }),
+      hashedRun('baseline', 4, 1, { marchTarget: layer(111, 10), probeDyn: layer(222, 32) }),
+    ] };
+    expect(diffFrameHash(doc)).toEqual([]);
+  });
+
+  it('catches a ZEROED DYNAMIC PROBE LAYER and reports the stat that names it', () => {
+    // The shipped bug, as a fixture: same census, same bodies, same droplets —
+    // only the rendered frame differs, which is exactly why the census missed it.
+    const doc = { results: [
+      hashedRun('baseline', 4, 0, { marchTarget: layer(111, 10), probeDyn: layer(222, 6376) }),
+      hashedRun('baseline', 4, 1, { marchTarget: layer(111, 10), probeDyn: layer(999, 0) }),
+    ] };
+    const drift = diffFrameHash(doc);
+    expect(drift).toHaveLength(1);
+    expect(drift[0]).toMatchObject({ leg: 'baseline', room: 4, layer: 'probeDyn' });
+    // The march target is UNCHANGED here, so it must not be blamed.
+    expect(drift[0].stats).toEqual({ nonZero: [6376, 0] });
+  });
+
+  it('treats a size change as drift even when the hash collides', () => {
+    const doc = { results: [
+      hashedRun('baseline', 4, 0, { marchTarget: layer(111, 10) }),
+      hashedRun('baseline', 4, 1, { marchTarget: { ...layer(111, 10), floats: 128 } }),
+    ] };
+    expect(diffFrameHash(doc)).toHaveLength(1);
+  });
+
+  it('ignores legs with no hash rather than calling absence drift', () => {
+    const doc = { results: [
+      { leg: 'baseline', room: 4, rep: 0, segments: [] },
+      hashedRun('baseline', 4, 1, { marchTarget: layer(111, 10) }),
+    ] };
+    expect(diffFrameHash(doc)).toEqual([]);
+  });
+
+  it('needs at least two hashed repeats before it can say anything', () => {
+    const doc = { results: [hashedRun('baseline', 4, 0, { marchTarget: layer(111, 10) })] };
+    expect(diffFrameHash(doc)).toEqual([]);
+  });
+});
+
+describe('reportFrameHashDrift', () => {
+  const lines = (doc) => {
+    const out = [];
+    const n = reportFrameHashDrift('t.json', doc, (...a) => out.push(a.join(' ')));
+    return { n, text: out.join('\n') };
+  };
+
+  it('says so explicitly when no leg hashed, so silence is not read as a pass', () => {
+    const { n, text } = lines({ results: [{ leg: 'baseline', room: 4, rep: 0, segments: [] }] });
+    expect(n).toBe(0);
+    expect(text).toContain('no leg reported an end-of-leg frame hash');
+  });
+
+  it('reports FAIL with every repeat value and the naming stat', () => {
+    const doc = { results: [
+      hashedRun('baseline', 4, 0, { probeDyn: layer(222, 6376) }),
+      hashedRun('baseline', 4, 1, { probeDyn: layer(999, 0) }),
+    ] };
+    const { n, text } = lines(doc);
+    expect(n).toBe(1);
+    expect(text).toContain('FRAME HASH DRIFTED');
+    expect(text).toContain('baseline/room4 probeDyn');
+    expect(text).toContain('rep0=222');
+    expect(text).toContain('rep1=999');
+    expect(text).toContain('nonZero: rep0=6376  rep1=0');
+  });
+
+  it('passes with an explicit identical message', () => {
+    const doc = { results: [
+      hashedRun('baseline', 4, 0, { marchTarget: layer(111, 10) }),
+      hashedRun('baseline', 4, 1, { marchTarget: layer(111, 10) }),
+    ] };
+    const { n, text } = lines(doc);
+    expect(n).toBe(0);
+    expect(text).toContain('FRAME HASH IDENTICAL');
   });
 });

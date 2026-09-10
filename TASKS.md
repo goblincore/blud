@@ -118,8 +118,12 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ### 2026-09-10 — perf session: gather −33%, a measured split, two levers closed
 
-Branch **`claude/sdf-march-perf-518bcc`** (17 commits off `main`). Companion
-branch **`claude/determinism-stage1`** for demo determinism.
+**BOTH BRANCHES ARE MERGED INTO `main`** — `claude/sdf-march-perf-518bcc`
+(`a76978fa`) and `claude/determinism-stage1` (`d3a8cdb7`). Nothing is left to
+merge; continue on `main` rather than resurrecting a branch. Working tree clean.
+Cadence follow-up `f845c71b`: `probeGatherRate` 2→4 is worth **~5% (room 3)**,
+superseding the handoff's "VOID, needs one re-run". Handoff:
+[docs/dev-notes/2026-09-10-perf-session-handoff.md](docs/dev-notes/2026-09-10-perf-session-handoff.md).
 
 **SHIPPED AND MEASURED — probe gather −33%.** `compute:probe-gather` went
 **7.19 → 4.85 ms** (room 3) and **6.02 → 3.99** (room 4), with non-overlapping
@@ -172,6 +176,21 @@ construction. Only `sdf:march` (6.7–9.7 ms, no cadence) is a true per-frame ro
   `boot-params.ts` generalises. **Lesson: audit the bug CLASS, not the
   instance.** All three wrong-default bugs this session had the same signature —
   a wrong value that reads as a design choice rather than as an error.
+
+**[~] FRAME HASH — BUILT AND HONESTLY FAILING (2026-09-10).** `frame-hash.ts`
+(pure, 22 tests) + `demo-hash.ts` (in-page, 13 tests) + `__sdfGame.frameHash()` /
+`setDemoHold()` / `demoScenario()` + `scripts/sdf-demo-hash.sh` (`ab` | `record`
+| `verify` | `negative`), and the bench reports frame-hash drift beside census
+drift. **It hashes `marchTarget` + the gather's dynamic layer (target-level), not
+the composited screen.** Controls that PASS: the readback is bit-stable across
+reads with no step between (so a mismatch is never an artefact), and mixed-parity
+recordings are REFUSED rather than reported as divergence. **The blocker, named:**
+`frameSeed` advances per DISPATCH, so on a locked page the march output is a
+function of the dispatch sequence, not of the frame's inputs — `demoHold` pins the
+seed's origin but not its per-frame step. Hold parity (2 steps between samples)
+and the march still varies on every sample with the gather ON; with it OFF
+(`setProbeDynamic(0,0)`) the ONLY variation is the interlaced field's two-value
+alternation. **Next: pin the gather's sequence position as a recording input.**
 
 **NEXT, in order:** (1) the deeper-interlace `COMPOSITE_WGSL` generalisation —
 plan at `docs/superpowers/plans/2026-09-10-deeper-interlace-fields.md`, pure math

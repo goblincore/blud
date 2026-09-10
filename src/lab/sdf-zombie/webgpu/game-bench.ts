@@ -65,6 +65,22 @@ export interface BenchDeps {
    * tables as the GPU passes so CPU and GPU can be read side by side.
    */
   stepTimed?(dtSec: number): Record<string, number>;
+  /**
+   * THE FRAME HASH AT THE END OF THE LEG (deterministic demo recordings stage
+   * 2, 2026-09-10). Optional, and called ONCE per leg AFTER the timed loop, so
+   * it cannot contaminate a timing sample: a hash is a ~1M-float readback plus
+   * a digest — tens of milliseconds of work that would be visible inside a
+   * 17 ms frame.
+   *
+   * It is the frame-level companion to `census`. The census counts what the page
+   * CONTAINS (bodies, droplets, goo quads); this digests what the page RENDERS.
+   * The census cannot see a zeroed probe layer or a mistranscribed shader — both
+   * shipped on 2026-09-10 and were caught by playtesting, not by a gate — and
+   * the hash cannot see a droplet count that changed without changing a pixel.
+   * Two repeats of one leg that hash differently were never measuring one
+   * workload, whatever the census says.
+   */
+  endHash?(): Promise<import('./frame-hash').FrameHash>;
 }
 
 /** A cheap count of what the frame contained. */
@@ -137,6 +153,11 @@ export interface PassReport {
 export interface BenchResult {
   mode: BenchMode;
   label: string;
+  /** Frame hash of the leg's ENDING state, when the page supplies one. Compare
+   *  ACROSS REPEATS of the same leg: two repeats that hash differently were not
+   *  running the same frame, so no delta between them is attributable. See
+   *  BenchDeps.endHash. */
+  endHash?: import('./frame-hash').FrameHash;
   /** False when any frame was stepped while the page was hidden. */
   valid: boolean;
   hiddenSteps: number;
@@ -315,10 +336,15 @@ export async function runBench(
     })),
   } : undefined;
 
+  // AFTER every timing sample. `endHash` is deliberately the last thing this
+  // function does, so its readback cost cannot land inside a measured frame.
+  const endHash = deps.endHash ? await deps.endHash() : undefined;
+
   return {
     mode: opts.mode,
     label: opts.label ?? '',
     ...(passes ? { passes } : {}),
+    ...(endHash ? { endHash } : {}),
     valid: hiddenSteps === 0,
     hiddenSteps,
     frames: scenario.frames,
