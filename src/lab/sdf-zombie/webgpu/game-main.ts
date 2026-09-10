@@ -404,6 +404,9 @@ async function main() {
       const pl = new THREE.PointLight(
         new THREE.Color(a.color[0], a.color[1], a.color[2]), a.power);
       pl.position.set(a.pos[0], a.pos[1], a.pos[2]);
+      // Tagged with its room so the level's per-room light lists can drop
+      // the OTHER rooms' accents (see levelSceneLights below).
+      pl.userData.accentRoom = r.id;
       accentGroup.add(pl);
       flickerLights.push({ light: pl, base: a.power, phase: a.pos[0] * 3.1 + a.pos[2] * 1.7 });
 
@@ -443,7 +446,10 @@ async function main() {
   // when not lit" — which is the point of a carried lamp. What you can see is
   // what you are pointing at.
   const beamTuning = { gain: 4, shoulder: 0.35, keyFloor: 0 };
-  const flashlight = createFlashlight();
+  // ?shadowmap=1024 for the old maps; 512 ships (SHADOW_MAP_SIZE). Both
+  // maps ride it: the twin only feeds the march's soft level shadow.
+  const shadowMapParam = Number(new URLSearchParams(location.search).get('shadowmap'));
+  const flashlight = createFlashlight(DUNGEON_RIG, shadowMapParam > 0 ? { shadowMapSize: shadowMapParam } : {});
   // BOOT-TIME shadow ablation (?spotshadow=0), for the dungeon bench legs.
   // castShadow has to be decided BEFORE the first frame: toggling it live
   // crashes three r185 WebGPU (ShadowNode.updateShadow dereferences the
@@ -1897,9 +1903,29 @@ async function main() {
     }
     return best.id;
   };
-  const levelSceneLights = (): THREE.Light[] => {
+  /** The rooms whose accents a room's walls shade: itself plus every room
+   *  it shares a tunnel with (the tunnel's surfaces belong to the nearer
+   *  room, and a doorway wall sees the light across the arch). */
+  const accentRoomsFor = (roomId: number): Set<number> => {
+    const set = new Set<number>([roomId]);
+    for (const t of TUNNELS) { if (t.a === roomId) set.add(t.b); if (t.b === roomId) set.add(t.a); }
+    return set;
+  };
+  /** Every scene light except OTHER rooms' accent PointLights. An accent
+   *  has no range (distance 0 = infinite), so before this every wall pixel
+   *  in the level shaded all seven; a room's walls now shade its own and
+   *  its neighbours' — the rest of the level is skipped per pixel. The
+   *  probe grid still carries every accent's bounce inside its own room. */
+  const levelSceneLights = (roomId: number): THREE.Light[] => {
+    const allowed = accentRoomsFor(roomId);
     const ls: THREE.Light[] = [];
-    scene.traverse(o => { if ((o as THREE.Light).isLight) ls.push(o as THREE.Light); });
+    scene.traverse(o => {
+      const l = o as THREE.Light;
+      if (!l.isLight) return;
+      const accentRoom = l.userData.accentRoom as number | undefined;
+      if (accentRoom !== undefined && !allowed.has(accentRoom)) return;
+      ls.push(l);
+    });
     return ls;
   };
   if (!deferredMode) {
@@ -1917,8 +1943,7 @@ async function main() {
       }, r.id);
       stampLevelProbeRoom(r.id);
     }
-    const sceneLights = levelSceneLights();
-    for (const [roomId, node] of levelProbeNodes) levelLightLists.set(roomId, levelLightsNode(sceneLights, node));
+    for (const [roomId, node] of levelProbeNodes) levelLightLists.set(roomId, levelLightsNode(levelSceneLights(roomId), node));
     // fromMaterial is three's own classic-to-node conversion (NodeLibrary.js);
     // it is what the builder calls per pipeline, just not in the typings.
     const library = handle.renderer.library as unknown as { fromMaterial(m: THREE.Material): THREE.NodeMaterial | null };
@@ -1956,9 +1981,8 @@ async function main() {
    *  muzzle flash with the gun) and force the level pipelines to rebuild. */
   function refreshLevelLights() {
     if (levelLightLists.size === 0) return;
-    const sceneLights = levelSceneLights();
     for (const [roomId, node] of levelProbeNodes) {
-      levelLightLists.get(roomId)?.setLights([...sceneLights, node as unknown as THREE.Light]);
+      levelLightLists.get(roomId)?.setLights([...levelSceneLights(roomId), node as unknown as THREE.Light]);
     }
     for (const nm of levelNodeMaterials) nm.needsUpdate = true;
   }
@@ -5540,7 +5564,7 @@ async function main() {
       return {
         weight: levelProbeWeight, gain: levelProbeGain, hemi: hemi.intensity, hemiBase,
         wired: levelProbeNodes.size, materials: levelNodeMaterials.length,
-        lights: [...levelLightLists.values()][0]?.getLights().length ?? 0,
+        lights: [...levelLightLists].map(([id, l]) => [id, l.getLights().length]),
         rooms: [...levelProbeNodes].map(([id, n]) => [id, n.slots.probeCfg.value.x, n.slots.probeCfg.value.y, n.slots.probeDynCfg.value.x, n.slots.probeDynCfg.value.y]),
       };
     },

@@ -95,7 +95,14 @@ export interface Flashlight {
   update(camera: THREE.PerspectiveCamera): void;
 }
 
-export function createFlashlight(rig: AmbientRig = DUNGEON_RIG): Flashlight {
+/** Shadow map edge for BOTH the flashlight's map and the level twin.
+ *  512 ships (2026-09-10 owner call: "fine with both at 512 or lower");
+ *  ?shadowmap=1024 restores the old maps for a look A/B. Boot-time: three
+ *  r185 WebGPU cannot resize a live shadow map. */
+export const SHADOW_MAP_SIZE = 512;
+
+export function createFlashlight(rig: AmbientRig = DUNGEON_RIG, opts: { shadowMapSize?: number } = {}): Flashlight {
+  const mapSize = Math.max(64, Math.floor(opts.shadowMapSize ?? SHADOW_MAP_SIZE));
   const c = rig.flashlightColor;
   const spot = new THREE.SpotLight(
     new THREE.Color(c[0], c[1], c[2]),
@@ -110,7 +117,7 @@ export function createFlashlight(rig: AmbientRig = DUNGEON_RIG): Flashlight {
     1.6,              // decay
   );
   spot.castShadow = true;
-  spot.shadow.mapSize.set(1024, 1024);
+  spot.shadow.mapSize.set(mapSize, mapSize);
   spot.shadow.camera.near = 0.2;
   spot.shadow.camera.far = 18;
   spot.shadow.bias = -0.002;
@@ -143,7 +150,7 @@ export function createFlashlight(rig: AmbientRig = DUNGEON_RIG): Flashlight {
    */
   const levelShadowLight = new THREE.SpotLight(0xffffff, 0);
   levelShadowLight.castShadow = true;
-  levelShadowLight.shadow.mapSize.set(1024, 1024);
+  levelShadowLight.shadow.mapSize.set(mapSize, mapSize);
   levelShadowLight.shadow.camera.layers.set(0);
   levelShadowLight.angle = spot.angle;
   levelShadowLight.penumbra = spot.penumbra;
