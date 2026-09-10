@@ -192,6 +192,18 @@ gathers**, so the schedule is not the problem.
 **Falsified, do not retry:** pinning `frameSeed` during recordings, and anchoring
 the dispatch phase (that reset also corrupted the `seedIdle` diagnostic into
 negative values — both the reset and the diagnostic are gone).
+**[!] LOCALISED: THE ENGINE BOOTS INTO ONE OF TWO STATES.** Per-tile digests over
+the 800×300 march target: tiles 0-3, 8, 11 are **BIT-IDENTICAL in every run and
+boot** (`1109108741`); only 4,5,6,7,9,10 — the central band where the BODIES are —
+vary. The LEVEL renders identically every time. The max stat takes one of exactly
+two values (13.3995 or 0.981266, a 13.7× difference: a body lit or not). Two boots
+in ONE stored run reuse digests from EARLIER runs, so this is a discrete branch
+chosen at boot, not noise — find the BRANCH, not another clock to freeze.
+**Excluded, each by measurement:** readback, sim state, field parity, gather seed,
+dispatch schedule (36/35/18), gather inputs (byte-identical), camera (identical to
+6 dp), VHS, and the room-probe worker bake (now gated by a new `roomProbesReady`
+seam — still diverges).
+
 **Open — and the obvious hypothesis is FALSIFIED.** A third layer now hashes the
 gather's INPUTS (packed bone capsule instances). Result: **`instances` IDENTICAL
 across two boots** (hash `3080687726`, count 35, every sample) while `probeDyn`

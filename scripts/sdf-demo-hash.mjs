@@ -131,6 +131,22 @@ async function runOnce(conn, spec, label) {
   // 2.5 s apart, at d>0). setLightClockFrozen handles the lighting path; this
   // handles anything else still reading the clock.
   await evaluate('(() => { performance.now = () => 100000; return 1; })()');
+  // WAIT FOR THE STATIC PROBE GRID BAKE. The room grids are gathered in a
+  // module worker at boot and the reply lands on whichever frame it finishes, so
+  // nothing else in this recipe pins WHEN it lands. Recording before it does
+  // captures a different lighting state than recording after — an async race, not
+  // a renderer fault, and one this recorder must not silently include.
+  let baked = false;
+  for (let i = 0; i < 240; i++) {
+    baked = await evaluate('(() => __sdfGame.roomProbesReady())()') === true;
+    if (baked) break;
+    await sleep(500);
+  }
+  if (!baked) {
+    // Refuse rather than record a lie: a probe grid that never lands means the
+    // capture's lighting is the 1x1 fallback, which is a different scene.
+    fail(`${label}: the static probe grid never finished baking (roomProbesReady stayed false for 2 min) — refusing to record a scene whose lighting is still settling`);
+  }
   await evaluate('(() => { __sdfGame.setDemoHold(true); return __sdfGame.demoHold; })()');
   if (spec.pose) {
     const p = spec.pose;
@@ -201,6 +217,13 @@ async function runOnce(conn, spec, label) {
       `${same(dyn) ? 'STABLE' : 'VARIES'} (${dyn.join(', ')})`,
     );
   }
+  // THE CAMERA IS PART OF THE FRAME'S IDENTITY. The march's body pixels are
+  // cull-dependent (`updateVisibleActors` frustum + clearSight), so a camera
+  // that settled even a hair differently between boots changes WHICH bodies are
+  // marched — and the localisation below shows exactly the body region varying
+  // while the level stays bit-identical. Logged, not hashed: a diagnostic.
+  const cam = await evaluate('(() => { const c = __sdfGame.cameraWorld(); return c.map(v => +v.toFixed(6)); })()');
+  console.log(`  ${label}: camera ${JSON.stringify(cam)}`);
   console.log(`  ${label}: gather dispatches over the run: ${record.dispatches}`);
   console.log(
     `  ${label}: ${record.hashes.length} hashes over ${record.frames} frames ` +

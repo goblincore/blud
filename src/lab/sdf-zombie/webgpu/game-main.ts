@@ -5536,6 +5536,18 @@ function performBenchAction(a: BenchAction): void {
       }
     },
     setLoopRunning: (on: boolean) => handle.setLoopRunning(on),
+    /** IS THE STATIC PROBE GRID BAKED YET?
+     *
+     *  The per-room grids are gathered ONCE at boot in a module WORKER, and the
+     *  reply lands on whichever frame it finishes. Nothing in a recording pinned
+     *  WHEN, so a capture started before the bake completed would differ from one
+     *  started after it — the same async-landing problem the plan already calls
+     *  out for the chunk-bake worker. `ready` is false until every queued room
+     *  has replied, so a recorder can WAIT rather than assume.
+     *
+     *  This is a precondition seam, not a gate: it reports, it does not block.
+     *  See scripts/sdf-demo-hash.mjs, which refuses to record until it is true. */
+    roomProbesReady: () => roomProbes.ready,
     /** THE FRAME HASH (deterministic demo recordings stage 2, 2026-09-10).
      *  Hashes the CURRENT rendered state — it does NOT step or mutate
      *  anything, which is what makes a recorded frame reproducible: the

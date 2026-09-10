@@ -186,6 +186,43 @@ shares ZERO digests. One run went fully STABLE on `probeDyn` (three samples, one
 digest) while its march kept alternating — so the two layers vary independently,
 and neither tracks the dispatch count.
 
+**THE DIVERGENCE IS LOCALISED, AND IT IS A TWO-STATE ENGINE.** Per-tile digests
+settle what a whole-frame number cannot. Across every boot recorded
+(`sdf-demo-hash-novhs`, `-bake`, `-rate4`, `-inst2`):
+
+| tiles | behaviour |
+| --- | --- |
+| 0,1,2,3,8,11 | **BIT-IDENTICAL in every run and every boot** (`1109108741`) |
+| 4,5,6,7,9,10 | vary — and only here |
+
+Tiles are 4×3 over the 800×300 march target, so the stable tiles are the outside
+columns and the bottom row, and the varying ones are the central band where the
+BODIES are. The LEVEL renders bit-identically every time; the divergence is
+entirely in body pixels. The `max` stat takes one of exactly two values across all
+these runs (13.3995 or 0.981266) — a **13.7x** difference, i.e. a body is either
+lit or not, not a rounding wobble.
+
+**The engine boots into one of TWO states, and everything downstream follows.**
+Two different boots in the SAME stored run reuse digests seen in earlier runs
+(`1193645989`, `562205572`, `2732454371` recur across separate invocations), and
+within one boot the values are stable. So this is a discrete branch chosen at
+boot, not continuous noise — which is why every "pin one more clock" attempt
+failed and why the right move is to find the BRANCH, not to keep freezing time.
+
+**Everything now excluded, each by a measurement rather than an argument:**
+
+| candidate | how it was excluded |
+| --- | --- |
+| readback / digest | bit-stable across no-step re-reads |
+| sim state | render-locked (`setRenderLock`) |
+| field parity | recorded per sample and held constant |
+| gather seed | pinned to 0 while a demo is held |
+| dispatch schedule | 36 vs 35 vs 18 dispatches → same divergence |
+| gather inputs (bone capsules) | `instances` BYTE-IDENTICAL across boots, count 35 |
+| camera | logged: `[-7.4, 1.62, -7.4]` in both boots, to 6 dp |
+| post-fx (VHS) | `setVhs(null)` changes nothing |
+| room-probe worker bake | gated with `roomProbesReady` (new seam) — still diverges |
+
 **What that leaves, stated as a shape rather than a guess.** Inputs identical,
 scene locked, seed pinned, schedule identical, readback proven stable, and the
 output still differs between boots. So the difference enters somewhere none of
