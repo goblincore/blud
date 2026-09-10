@@ -619,7 +619,9 @@ describe('ported features reach the entry point', () => {
     // was inert: min <= shellIn <= prevT almost everywhere (task 5 finding).
     expect(MARCH_BODY).toContain('if (max(shellIn, bodyEntry) > prevT) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }');
     expect(MARCH_BODY).toContain('let bodyEntry = max(max(min(bLo.x, bHi.x), min(bLo.y, bHi.y)), max(min(bLo.z, bHi.z), 0.0));');
-    expect(MARCH_BODY).toContain('let tMax = min(tMaxSel, prevT);');
+    expect(MARCH_BODY).toContain('let tMax = min(tMaxSel, prevT)');
+    // + the temporal-start graze slack (5 cm past the exit; see the holes fix).
+    expect(MARCH_BODY).toContain('+ select(0.0, 0.05, temporalCfg.x > 0.5);');
   });
 
   it('stops the cone one shell amp early (X1.21.2 pale tile wedges)', () => {
@@ -765,7 +767,12 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     expect(MARCH_BODY).toContain('var s = temp.x - woundCfg2.z;');
     expect(MARCH_BODY).toContain('if (dres0.x > 0.0 && dres0.z < 0.5) { break; }');
     expect(MARCH_BODY).toContain('let back = select(s + 2.0 * dres0.x, s - 0.15, dres0.z >= 0.5);');
-    expect(MARCH_BODY).toContain('if (dres0.x > 0.0 && dres0.z < 0.5) { tempStart = s; }');
+    expect(MARCH_BODY).toContain('if (dres0.x > 0.0 && dres0.z < 0.5) {');
+    // HULL-RELATIVE CAP: the accepted start tightens at most 6 cm past the
+    // current frame's hull face — stale history cannot move the start deeper
+    // than that, which is what bounds the swing-tip see-through holes.
+    expect(MARCH_BODY).toContain('s = min(s, shellIn + 0.06);');
+    expect(MARCH_BODY).toContain('tempStart = s;');
     // meltCfg sits between bodyHalf and the level-shadow tail, matching the
     // JS binding object in createMarchMaterial (positional — a swap silently
     // hands the shader the wrong uniform).

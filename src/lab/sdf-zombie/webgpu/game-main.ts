@@ -6553,6 +6553,8 @@ async function main() {
           meanStepsOnBroken: mean(broken.map((b) => b.stepsOn)),
           meanStepsOffBroken: mean(broken.map((b) => b.stepsOff)),
           meanTOnBroken: mean(broken.map((b) => b.tOn)),
+          maxTOnBroken: broken.reduce((m, b) => Math.max(m, b.tOn), 0),
+          maxTOffBroken: broken.reduce((m, b) => Math.max(m, b.tOff), 0),
           meanTOffBroken: mean(broken.map((b) => b.tOff)),
           brokenSample: broken,
         };

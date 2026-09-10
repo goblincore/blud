@@ -2705,7 +2705,20 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
   // recovery probes below rewind to the surface instead of dropping the
   // whole bound.
   var tempStart = 0.0;
-  if (temp.y > 0.0 && temp.y >= bodyEntry - temporalCfg.y && temp.y <= tMax + temporalCfg.y) {
+  // WINDOW-WIDTH REFUSAL (the holes fix, 2026-09-10 night). On a ray that
+  // GRAZES the body, the entry/exit window is razor-thin and the field's
+  // convergence dip is narrower than the walk's sampling stride: a temporal
+  // start landing at/past the dip can never accept (per-pixel temporalDiag:
+  // ~460 broken px at ANY margin; 0.25 -> 607, 1.0 -> 231, cap+slack ->
+  // 64-118), and the exit-side accepts cannot recover a walk that skipped
+  // its only convergent region. So the temporal start fires only where the
+  // window is at least margin + cap + headroom wide — face-on pixels, where
+  // the approach-skipping win lives; thin-window silhouette pixels fall
+  // back to the safe shellIn walk, which is current-frame and tracks
+  // swung limbs.
+  if (temp.y > 0.0
+      && tMax - shellIn >= temporalCfg.y + 0.18
+      && temp.y >= bodyEntry - temporalCfg.y && temp.y <= tMax + temporalCfg.y) {
     // shellAmp backoff: with shell displacement live, the displaced
     // silhouette sticks out up to shellAmp beyond the smooth field the probe
     // below samples — the same slack preStart carries. woundCfg2.z is 0 at
@@ -2739,7 +2752,22 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
         s = back;
         dres0 = mapBody(camPos + rd * s, data, counts, counts2, vec4<f32>(0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound);
       }
-      if (dres0.x > 0.0 && dres0.z < 0.5) { tempStart = s; }
+      if (dres0.x > 0.0 && dres0.z < 0.5) {
+        // HULL-RELATIVE CAP (the holes fix, 2026-09-10 night). The accepted
+        // start may tighten at most 6 cm past the CURRENT frame's hull face:
+        // shellIn is rebuilt every frame and tracks swung limbs perfectly,
+        // while the temporal history is one frame stale — at melee swing
+        // tips the surface moves 0.3-0.5 m per frame, and a stale start past
+        // the moved surface re-phases the walk into the razor-thin graze
+        // window where acceptance falls off its edge (the stacked-corridor
+        // holes: ~460-620 broken px at ANY fixed margin; margin sweep 0.25
+        // -> 607, 0.6 -> 622, 1.0 -> 231, meanTOn pinned at the box exit).
+        // The 6 cm budget is what the temporal start is FOR — tightening
+        // the last stretch where the hull is loose — and it bounds the
+        // stale-history damage to less than the hull's own inflation.
+        s = min(s, shellIn + 0.06);
+        tempStart = s;
+      }
     }
   }
   // bodyEntry joins the fold as the FIFTH term (startT, shellIn, preStart,
@@ -2904,6 +2932,21 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
     prevRadius = radius;
     t = t + stepLen;
     if (t > tMax) {
+      // GRAZE ACCEPT (temporal start, 2026-09-10 night). The temporal start
+      // re-phases the walk; at silhouette/graze pixels the acceptance window
+      // before the exit is razor-thin, and the re-phased crawl (20+ sub-mm
+      // steps) crossed the exit with its last sample 2-5 mm OFF the surface
+      // — 4x eps — and discarded: the stacked-corridor holes. radius here is
+      // the LAST SAMPLE's field value; within 4x eps of the surface the
+      // shading error is sub-pixel, so accept at the crossing instead of
+      // discarding a nearly-converged ray. Scoped to the temporal start so
+      // ?tstart=0 stays bit-identical. temporalDiag: broke 64 -> single
+      // digits on the repro scene.
+      if (temporalCfg.x > 0.5 && radius < max(hitEpsBase, t * aaK / distort) * 8.0) {
+        t = t - stepLen;
+        hit = true;
+        break;
+      }
       // Do NOT break outright on the relaxed path. An over-relaxed step can
       // cross the surface AND tMax together, and the overshoot test cannot
       // fire until the NEXT sample — so breaking here discards a hit the
