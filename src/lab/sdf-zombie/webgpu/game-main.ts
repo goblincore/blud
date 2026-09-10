@@ -5566,6 +5566,7 @@ async function main() {
      *  (gpu-pass-timing.ts). Ad-hoc probe; the bench's 'passes' mode is the
      *  measured form. `installed` false = no timestamp tracking on this page. */
     passTimings: async () => ({ installed: passTiming.installed, samples: await passTiming.collect() }),
+    passCounts: () => passTiming.countsSinceLast(),
     // setAdaptive / setSdfScale already exist further down this object and
     // are better than the versions this block first added (they also clear
     // the adaptive sample window and report the whole ladder). Not
@@ -5606,6 +5607,43 @@ async function main() {
     setProbeGatherRate(framesPerGather: number) {
       probeGatherRate = Math.max(1, Math.min(4, Math.floor(framesPerGather)));
       return probeGatherRate;
+    },
+    // DRAW CENSUS (spike program): per-frame draw/compute totals from the
+    // renderer's info. This frame is MANY render() calls (one per pass), and
+    // info auto-resets per call by default, so the seam flips autoReset off
+    // and the caller samples then resets — one drawStats(true) per frame is
+    // the per-frame total.
+    drawStats(reset = false) {
+      const info = handle.renderer.info;
+      info.autoReset = false;
+      const out = {
+        drawCalls: info.render.drawCalls,
+        triangles: info.render.triangles,
+        computeCalls: (info as unknown as { compute?: { drawCalls?: number } }).compute?.drawCalls ?? null,
+      };
+      if (reset) info.reset();
+      return out;
+    },
+    // SCENE CENSUS (spike program): visible meshes by name, to attribute the
+    // fire-frame draw volume (drawStats) to actual scene objects. Passes
+    // multiply draws (objects x passes = drawCalls), so pair this with
+    // drawStats when quoting.
+    sceneCensus() {
+      let meshes = 0, visible = 0, instanced = 0;
+      const byName = new Map<string, number>();
+      scene.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!(m as unknown as { isMesh?: boolean }).isMesh) return;
+        meshes++;
+        if (!o.visible) return;
+        visible++;
+        const isInst = (m as unknown as { isInstancedMesh?: boolean }).isInstancedMesh === true;
+        if (isInst) instanced++;
+        const name = m.name || m.parent?.name || m.type;
+        const key = `${name}${isInst ? ' [inst]' : ''}`;
+        byName.set(key, (byName.get(key) ?? 0) + 1);
+      });
+      return { meshes, visible, instanced, top: [...byName].sort((a, b) => b[1] - a[1]).slice(0, 24) };
     },
     get probeDynamic() { return { radianceGain: probeDynGain, visStrength: probeVisStrength, frames: probeFrame, errors: probeGatherErrors, bound: probeGather !== null, reached: probeGateLogs, gates: probeLastGates, rate: probeGatherRate }; },
     /** TRACERS as gathered lights. Raw intensity per pellet; 0 = off (no
