@@ -30,6 +30,15 @@
 //   and three emits no sampler for a nearest/nearest target; the smear pair
 //   stays NearestFilter and is not reused.
 //
+//   SSCS — screen-space contact shadows (post-sscs.ts), default OFF at the
+//   factory and default ON on the game page (?sscs=off). Runs BEFORE FXAA on
+//   the raw capture: each level pixel marches a short ray toward the
+//   flashlight through the capture's DepthTexture (sceneTarget gained a
+//   sampleable one — the fieldFull precedent) and darkens where the ray is
+//   blocked, so the contact shadow matches the rendered silhouette exactly.
+//   Marched flesh is excluded via the march target's depth-in-alpha, fed by
+//   the host (setSscsFleshTex + setSscsFrame). Legacy path only.
+//
 //   BLIT — the final copy to the canvas. Sharp-upscale OFF: a straight copy
 //   (canvas == content size; CSS does the nearest upscale as today). Sharp
 //   upscale ON: the canvas backing grows to the window and the blit does a
@@ -85,6 +94,12 @@ import {
   type VhsPreset,
   type VhsTerms,
 } from './post-vhs';
+import {
+  POST_SSCS_WGSL,
+  SSCS_DEFAULTS,
+  SSCS_TERM_RANGES,
+  type SscsTerms,
+} from './post-sscs';
 
 /** The owner-approved defaults: FXAA on, modest smear, nearest upscale. */
 export const POST_AA_DEFAULTS = {
@@ -397,6 +412,24 @@ export interface PostAa {
   /** A live term override, clamped to VHS_TERM_RANGES. */
   setVhsTerm(name: keyof VhsTerms, value: number): void;
   /**
+   * The SSCS stage (post-sscs.ts) — screen-space contact shadows occluded
+   * against the capture's own depth. Default OFF here; the game page owns
+   * the default-on decision because the stage is legacy-path-only (its flesh
+   * mask is the legacy march target). Runs before FXAA; the all-off parity
+   * path never binds it.
+   */
+  setSscs(on: boolean): void;
+  /** Points the flesh mask at a texture (the legacy march target). */
+  setSscsFleshTex(t: THREE.Texture): void;
+  /** Per-frame matrices + flashlight feed — see the implementation note. */
+  setSscsFrame(camera: THREE.PerspectiveCamera, lightPos: THREE.Vector3): void;
+  /** A live term override, clamped to SSCS_TERM_RANGES. */
+  setSscsTerm(name: keyof SscsTerms, value: number): void;
+  /** Whether the SSCS stage runs. */
+  readonly sscs: boolean;
+  /** The live SSCS terms (the defaults, until setSscsTerm overrides one). */
+  readonly sscsTerms: SscsTerms;
+  /**
    * Sharp-bilinear final upscale. Grows the canvas backing to the window and
    * filters texel borders in the blit; off restores the capped canvas and
    * the CSS nearest stretch (today's look).
@@ -453,6 +486,11 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     minFilter: THREE.NearestFilter,
     magFilter: THREE.NearestFilter,
   });
+  // SAMPLEABLE scene depth for the SSCS stage — a plain depthBuffer is an
+  // attachment, not a texture (the fieldFull precedent in sdf-layer.ts, which
+  // documents exactly this). Textures.updateRenderTarget resizes a user
+  // DepthTexture alongside the target, so refit() needs no extra handling.
+  sceneTarget.depthTexture = new THREE.DepthTexture(1, 1);
   const passOpts = {
     depthBuffer: false,
     type: THREE.HalfFloatType,
@@ -487,6 +525,9 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   const vhsInA = new THREE.RenderTarget(1, 1, vhsPairOpts);
   const vhsInB = new THREE.RenderTarget(1, 1, vhsPairOpts);
   const vhsTarget = new THREE.RenderTarget(1, 1, passOpts);
+  // SSCS output. Colour-only like the VHS target: the pass reads scene
+  // depth, it does not write any.
+  const sscsTarget = new THREE.RenderTarget(1, 1, passOpts);
 
   // The single canvas-boundary flip. Stays a uniform as a console escape
   // hatch (setBlitFlipY) — the intermediate passes flip their own sampling
@@ -545,6 +586,26 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     chromaBurstRate: uniform(0),
   };
 
+  // --- SSCS state (post-sscs.ts). Inert while `sscsOn` is false — the
+  // factory default — so this module stays neutral and the game page owns
+  // the product decision (?sscs=, legacy path only). -------------------------
+  let sscsOn = false;
+  const sscsTerms: SscsTerms = { ...SSCS_DEFAULTS };
+  // Per-frame matrices + light, fed by setSscsFrame. Zero matrices would
+  // collapse every ray to a point; the pass additionally guards on that, but
+  // a host that enables the stage without feeding it gets nothing by design.
+  const uSscsVp = uniform(new THREE.Matrix4());
+  const uSscsInvVp = uniform(new THREE.Matrix4());
+  // xyz = flashlight position, w = strength (kept beside it so the per-frame
+  // feed is one uniform write).
+  const uSscsLight = uniform(new THREE.Vector4(0, 0, 0, 0));
+  // x = camera near, y = camera far, z = maxDist, w = bias.
+  const uSscsCfg = uniform(new THREE.Vector4(
+    0.05, 50, SSCS_DEFAULTS.maxDist, SSCS_DEFAULTS.bias,
+  ));
+  const _sscsView = new THREE.Matrix4();
+  const _sscsVp = new THREE.Matrix4();
+
   // One quad scene per pass, the sdf-layer shape: ortho camera at z = 1 so
   // the plane at z = 0 sits inside [0, 1] rather than on the near plane.
   const quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 2);
@@ -566,8 +627,13 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   const blendHistTex = texture(histA.texture);
   const blitSrcTex = texture(sceneTarget.texture);
 
+  // The FXAA input is a NAMED node (not an inline texture()) because the
+  // SSCS stage can sit in front of it: when it runs, FXAA must read
+  // sscsTarget's output, so render() swaps .value exactly like blendCurTex.
+  // With SSCS off the value is sceneTarget.texture itself — bit-identical.
+  const fxaaSrcTex = texture(sceneTarget.texture);
   const fxaaOut = wgslFn(POST_AA_FXAA_WGSL)({
-    srcTex: texture(sceneTarget.texture),
+    srcTex: fxaaSrcTex,
     texCoord: uv(),
   }) as unknown as Swizzled;
   const fxaaMat = new MeshBasicNodeMaterial();
@@ -643,6 +709,41 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   vhsMat.depthTest = false;
   vhsMat.fog = false;
   const vhsScene = quadScene(vhsMat);
+
+  // The SSCS pass. Three DISTINCT textures in three slots — the capture
+  // colour, its DepthTexture, and the march target's flesh mask — so the TSL
+  // uniform-hash dedup cannot merge any two. The flesh slot starts on an
+  // OWNED 1×1 fallback (alpha 1 = "no flesh") rather than a second
+  // texture() over sceneTarget.texture: two nodes built over one texture
+  // collapse into one binding for the pipeline's life, and a later per-slot
+  // .value write cannot split them (the trap that bit the deferred shadow
+  // slots). setSscsFleshTex repoints it, exactly once, at host boot.
+  const sscsFleshFallback = new THREE.DataTexture(
+    new Float32Array([0, 0, 0, 1]), 1, 1, THREE.RGBAFormat, THREE.FloatType,
+  );
+  sscsFleshFallback.needsUpdate = true;
+  const sscsFleshTex = texture(sscsFleshFallback);
+  // SSCS always reads the RAW capture — its own dedicated, never-swapped
+  // node (fxaaSrcTex above is swapped to sscsTarget by the FXAA branch, and
+  // sharing it here would have SSCS drinking its own output a frame late).
+  const sscsColorTex = texture(sceneTarget.texture);
+  const sscsOut = wgslFn(POST_SSCS_WGSL)({
+    tex: sscsColorTex,
+    depthTex: texture(sceneTarget.depthTexture!),
+    fleshTex: sscsFleshTex,
+    uv: uv(),
+    vp: uSscsVp,
+    invVp: uSscsInvVp,
+    light: uSscsLight,
+    cfg: uSscsCfg,
+  }) as unknown as Swizzled;
+  const sscsMat = new MeshBasicNodeMaterial();
+  sscsMat.name = 'post:sscs';
+  sscsMat.colorNode = vec4(sscsOut.xyz as never, 1.0);
+  sscsMat.depthWrite = false;
+  sscsMat.depthTest = false;
+  sscsMat.fog = false;
+  const sscsScene = quadScene(sscsMat);
 
   const blitOut = wgslFn(POST_AA_BLIT_WGSL)({
     srcTex: blitSrcTex,
@@ -725,6 +826,7 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     vhsInA.setSize(content.width, content.height);
     vhsInB.setSize(content.width, content.height);
     vhsTarget.setSize(content.width, content.height);
+    sscsTarget.setSize(content.width, content.height);
     // setSize reallocates the backing textures: uninitialised again, and the
     // old history is the wrong size besides.
     targetsNeedInit = true;
@@ -744,7 +846,7 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       // A narrowing lens is an effect like any other: it needs the capture
       // redirect, because the blit has to sample a texture rather than be one.
       // VHS is a stage too, so it forces the redirected chain even alone.
-      const active = fxaaOn || smear > 0 || sharpOn || lens.k > 0 || vhsOn;
+      const active = fxaaOn || smear > 0 || sharpOn || lens.k > 0 || vhsOn || sscsOn;
       if (!active) {
         // The parity path: hand the canvas straight back to the chain.
         if (redirected) {
@@ -762,7 +864,7 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       if (targetsNeedInit) {
         targetsNeedInit = false;
         setPassLabel('init');
-        for (const t of [sceneTarget, fxaaTarget, histA, histB, vhsInA, vhsInB, vhsTarget]) {
+        for (const t of [sceneTarget, fxaaTarget, histA, histB, vhsInA, vhsInB, vhsTarget, sscsTarget]) {
           renderer.setRenderTarget(t);
           void renderer.render(emptyScene, quadCam);
         }
@@ -771,10 +873,22 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       // The whole polygon/sdf/cone/occluder/composite/goo flow, captured.
       chain();
 
-      // FXAA: capture (working space) -> fxaaTarget (display space).
+      // SSCS: contact shadows from the capture's own depth, run BEFORE FXAA
+      // so the darkened silhouette edges are antialiased with everything
+      // else. Matrices and the light position are fed per frame by the host
+      // (setSscsFrame); while off this stage never renders.
       let src = sceneTarget;
       let srcIsDisplay = false;
+      if (sscsOn) {
+        setPassLabel('post:sscs');
+        renderer.setRenderTarget(sscsTarget);
+        void renderer.render(sscsScene, quadCam);
+        src = sscsTarget;
+      }
+
+      // FXAA: capture (working space) -> fxaaTarget (display space).
       if (fxaaOn) {
+        fxaaSrcTex.value = src.texture;
         setPassLabel('post:fxaa');
         renderer.setRenderTarget(fxaaTarget);
         void renderer.render(fxaaScene, quadCam);
@@ -896,6 +1010,31 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       vhsTermUniforms[name].value = Math.max(lo, Math.min(hi, value));
     },
     get vhs() { return vhsPreset; },
+    // --- SSCS (post-sscs.ts), default OFF here; the game page owns the
+    // default-on decision (?sscs=) because the stage is legacy-path-only. --
+    setSscs(on: boolean) { sscsOn = on; },
+    /** Points the flesh-mask slot at the legacy march target. Call BEFORE
+     *  setSscs(true); until then the owned 1×1 fallback (alpha 1) reads as
+     *  "no flesh anywhere" and every level pixel is eligible. */
+    setSscsFleshTex(t: THREE.Texture) { sscsFleshTex.value = t; },
+    /** Per-frame feed. camera.matrixWorld must be CURRENT (game-main calls
+     *  this right after flashlight.update, which re-runs updateMatrixWorld);
+     *  matrixWorldInverse itself is last render's, so it is rebuilt here. */
+    setSscsFrame(camera: THREE.PerspectiveCamera, lightPos: THREE.Vector3) {
+      _sscsView.copy(camera.matrixWorld).invert();
+      _sscsVp.multiplyMatrices(camera.projectionMatrix, _sscsView);
+      uSscsVp.value.copy(_sscsVp);
+      uSscsInvVp.value.copy(_sscsVp).invert();
+      uSscsLight.value.set(lightPos.x, lightPos.y, lightPos.z, sscsTerms.strength);
+      uSscsCfg.value.set(camera.near, camera.far, sscsTerms.maxDist, sscsTerms.bias);
+    },
+    /** A live term override, clamped to SSCS_TERM_RANGES. */
+    setSscsTerm(name: keyof SscsTerms, value: number) {
+      const [lo, hi] = SSCS_TERM_RANGES[name];
+      sscsTerms[name] = Math.max(lo, Math.min(hi, value));
+    },
+    get sscs() { return sscsOn; },
+    get sscsTerms(): SscsTerms { return { ...sscsTerms }; },
     get vhsTerms() {
       const out = {} as VhsTerms;
       for (const k of Object.keys(vhsTermUniforms) as (keyof VhsTerms)[]) {
@@ -911,16 +1050,19 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     get contentSize() {
       return computeRenderSize(window.innerWidth, window.innerHeight);
     },
-    dispose() {
-      window.removeEventListener('resize', refit);
-      sceneTarget.dispose();
-      fxaaTarget.dispose();
-      histA.dispose();
-      histB.dispose();
-      vhsInA.dispose();
-      vhsInB.dispose();
-      vhsTarget.dispose();
-      fxaaMat.dispose();
+  dispose() {
+    window.removeEventListener('resize', refit);
+    sceneTarget.dispose();
+    fxaaTarget.dispose();
+    histA.dispose();
+    histB.dispose();
+    vhsInA.dispose();
+    vhsInB.dispose();
+    vhsTarget.dispose();
+    sscsTarget.dispose();
+    sscsFleshFallback.dispose();
+    sscsMat.dispose();
+    fxaaMat.dispose();
       blendMat.dispose();
       vhsCopyMat.dispose();
       vhsMat.dispose();

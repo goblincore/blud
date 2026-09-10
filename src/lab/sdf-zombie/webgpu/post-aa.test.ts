@@ -175,7 +175,7 @@ describe('post-aa module wiring', () => {
 
   it('every target gets the explicit first clear after (re)allocation', () => {
     expect(src).toContain(
-      'for (const t of [sceneTarget, fxaaTarget, histA, histB, vhsInA, vhsInB, vhsTarget])',
+      'for (const t of [sceneTarget, fxaaTarget, histA, histB, vhsInA, vhsInB, vhsTarget, sscsTarget])',
     );
     expect(src).toContain('targetsNeedInit = true;');
   });
