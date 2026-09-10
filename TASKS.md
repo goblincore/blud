@@ -192,13 +192,17 @@ gathers**, so the schedule is not the problem.
 **Falsified, do not retry:** pinning `frameSeed` during recordings, and anchoring
 the dispatch phase (that reset also corrupted the `seedIdle` diagnostic into
 negative values — both the reset and the diagnostic are gone).
-**Open:** with parity held, the seed pinned and dispatch counts identical, the
-dynamic layer STILL differs between boots — so the divergence enters through the
-gather's INPUTS (packed bone capsule instances, the gathered light list, or the
-enclosure packing). **Next: hash the packed capsule array as a third layer** —
-a small Float32Array that says immediately whether that is where it enters.
-Separately, a gather-independent period-2 mechanism remains (field jitter phase
-is the candidate). Full evidence: handoff, "IT IS BUILT".
+**Open — and the obvious hypothesis is FALSIFIED.** A third layer now hashes the
+gather's INPUTS (packed bone capsule instances). Result: **`instances` IDENTICAL
+across two boots** (hash `3080687726`, count 35, every sample) while `probeDyn`
+and `marchTarget` still differ. So the inputs are excluded, as are the seed
+(pinned), the schedule (36 dispatches both boots), the sim state (render-locked)
+and the readback (bit-stable). What is left is state these layers do not cover:
+the gather's own GPU-side accumulation, the **room probe grid baked in a WORKER
+at boot** (async, lands whenever it finishes — best next candidate), or the
+march's own per-frame state. Separately, a gather-independent period-2 mechanism
+remains (field jitter phase is the candidate). Full evidence: handoff, "IT IS
+BUILT".
 **[x] AND IT ALREADY FIRES ON THE BENCH.** `endHash` is wired into the page's
 bench, so the harness reports frame-level drift beside census drift. A
 `baseline,occluder-off` × 3 × 2 run reports **all four leg-runs drifting on BOTH

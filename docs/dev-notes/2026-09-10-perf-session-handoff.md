@@ -156,15 +156,34 @@ named where it matters.
   A diagnostic that can read as nonsense is worse than none. Do not reset a
   running counter to fix a phase problem.
 
-**THE BLOCKER, stated exactly.** With parity held, the seed pinned, the sim
-render-locked and the dispatch count identical, the gather's dynamic layer STILL
-differs between two boots. So the variation is in the gather's INPUTS, not its
-schedule and not its seed. Untested next candidates, in order: the packed bone
-capsule instances (`boneInstanceArrays` / `packCapsulesFromBoneInstances`), the
-gathered light list, or the enclosure/furniture packing — all repacked every
-frame from CPU state. **A cheap decisive test: hash the packed capsule array
-itself** (it is a small Float32Array) as a third layer in `demoScenario`, which
-says immediately whether the divergence enters through the gather's inputs.
+**THE BLOCKER — AND ITS FIRST HYPOTHESIS IS NOW FALSIFIED TOO.** With parity
+held, the seed pinned, the sim render-locked and the dispatch count identical, the
+gather's dynamic layer still differs between two boots. The obvious read was "so
+it must be the gather's INPUTS", and a third layer now tests that directly by
+hashing the packed bone capsule instances (`readInstances`). Result (run dir
+`sdf-demo-hash-inst2`):
+
+| layer | across two boots |
+| --- | --- |
+| `instances` | **IDENTICAL — same hash `3080687726`, count 35, on ALL samples** |
+| `probeDyn` | 0 shared digests, 3 distinct per boot |
+| `marchTarget` | differs on every sample |
+
+**So the inputs are identical and the gather still diverges.** The inputs are
+excluded; so are the seed (pinned), the schedule (36 dispatches both boots), the
+sim state (render-locked) and the readback (bit-stable). What remains is state
+INSIDE the gather or its neighbours that these layers do not cover: the gather's
+own GPU-side accumulation across dispatches, the room probe grid baked in a
+WORKER at boot, `frameSeed`'s consumer in the kernel, or the march's own per-frame
+state other than the four things already pinned. **The room-probe worker bake is
+the best next candidate** — it is async, it lands whenever it finishes, and
+nothing in a recording pins WHEN.
+
+**Method note, because it already bit twice:** the four `hashFrame` call sites had
+drifted apart — two grew `readInstances` and two did not — so a whole layer
+silently vanished from a run with no error, and the first "instances test" proved
+nothing. They now share ONE `frameHashDeps` object. A hash whose layer set depends
+on which call site asked is not a hash.
 
 **Also unexplained, and INDEPENDENT of the gather:** with `setProbeDynamic(0,0)`
 the march still varies between exactly two digests (`nogather`), and the two

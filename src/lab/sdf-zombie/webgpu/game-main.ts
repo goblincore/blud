@@ -5382,6 +5382,26 @@ async function main() {
    *  (a legitimate boot: `?probedyn=0` and the lab pages have none). */
   const readProbeDynForHash = async (): Promise<Float32Array | null> =>
     probeGather ? await probeGather.readback() : null;
+  /** THE GATHER'S PACKED INPUTS — the bone capsules it gathers against, and the
+   *  live count. Hashing these separates "two boots posed the bodies
+   *  differently" from "the gather diverged on identical inputs", which is the
+   *  open question from the 2026-09-10 frame-hash runs. See DemoHashDeps. */
+  const readInstancesForHash = async (): Promise<{ data: ArrayLike<number>; count: number; floatsPerInstance: number } | null> =>
+    // `probeLastCapsules` is the module-scope mirror of the draw callback's own
+    // `probeCapsuleCount` (the count is written there and published here), which
+    // is the only one this scope can see.
+    ({ data: probeCapsuleArrays.ab, count: probeLastCapsules, floatsPerInstance: INSTANCE_FLOATS });
+
+  /** THE ONE frame-hash dependency set. Kept as a single object on purpose:
+   *  this was four inline object literals, and they SILENTLY DRIFTED — two grew
+   *  `readInstances` and two did not, so the instances layer vanished from a
+   *  run with no error. A hash whose layer set depends on which call site asked
+   *  is not a hash. */
+  const frameHashDeps = {
+    readMarchTarget: readMarchTargetForHash,
+    readProbeDyn: readProbeDynForHash,
+    readInstances: readInstancesForHash,
+  };
 
 /** ONE SCENARIO ACTION, applied to the live page — the seam the perf
  *  bench and the frame-hash recorder BOTH drive (deterministic demo
@@ -5538,7 +5558,7 @@ function performBenchAction(a: BenchAction): void {
      *    await __sdfGame.frameHash(0);         // step first, hash second
      */
     frameHash: async (frame = 0) =>
-      hashFrame({ readMarchTarget: readMarchTargetForHash, readProbeDyn: readProbeDynForHash }, frame),
+      hashFrame(frameHashDeps, frame),
     /** Pin the render-side subsampling clocks the frame hash needs constant
      *  (actor animation phase, gather frameSeed). See the demoHold declaration.
      *  OFF by default and inert in normal play. */
@@ -5675,7 +5695,7 @@ function performBenchAction(a: BenchAction): void {
           // mid-recording and makes the whole run incomparable.
           if (frame % every === 0 || (frame === total - 1 && (total - 1) % every !== 0)) {
             await handle.resolveGpu();
-            hashes.push(await hashFrame({ readMarchTarget: readMarchTargetForHash, readProbeDyn: readProbeDynForHash }, frame));
+            hashes.push(await hashFrame(frameHashDeps, frame));
             parity.push(parityOf());
           }
         }
@@ -5683,7 +5703,7 @@ function performBenchAction(a: BenchAction): void {
         // hashes. Separates "the frame changed" from "the readback is not a
         // function of the frame".
         for (let i = 0; i < Math.max(0, Math.floor(o.resample ?? 0)); i++) {
-          resampled.push(await hashFrame({ readMarchTarget: readMarchTargetForHash, readProbeDyn: readProbeDynForHash }, total));
+          resampled.push(await hashFrame(frameHashDeps, total));
         }
         // SAME-SESSION CONTROL: hash the SAME frame position again, after a
         // further step. Locked, that step mutates nothing, so this measures
@@ -5696,7 +5716,7 @@ function performBenchAction(a: BenchAction): void {
           handle.step(2 / 60);
           stepsTaken += 2;
           await handle.resolveGpu();
-          repeated.push(await hashFrame({ readMarchTarget: readMarchTargetForHash, readProbeDyn: readProbeDynForHash }, total));
+          repeated.push(await hashFrame(frameHashDeps, total));
           repeatedParity.push(parityOf());
         }
       } finally {
@@ -7471,7 +7491,7 @@ function performBenchAction(a: BenchAction): void {
           // is blind to, and the half that shipped two playtest-caught bugs on
           // 2026-09-10 (the zeroed dynamic probe layer, and tracer light slots
           // defaulting to 0).
-          endHash: () => hashFrame({ readMarchTarget: readMarchTargetForHash, readProbeDyn: readProbeDynForHash }, frameCount),
+          endHash: () => hashFrame(frameHashDeps, frameCount),
           now: () => performance.now(),
           hidden: () => document.hidden,
           census: () => ({

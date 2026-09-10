@@ -143,3 +143,57 @@ describe('hashFrame — what gets hashed, and how it fails', () => {
     expect(f.frame).toBe(3);
   });
 });
+
+describe('the gather-inputs layer — separating input drift from gather drift', () => {
+  // WHY THIS LAYER EXISTS (2026-09-10). With parity held, the seed pinned and the
+  // dispatch count identical, two boots still produced different dynamic layers,
+  // so the divergence had to enter through the gather's INPUTS. Hashing the
+  // packed bone capsules answers "did the two boots pose the bodies differently"
+  // directly — and if they match while probeDyn differs, the fault is in the
+  // gather itself. Either answer is decisive, which is why it is worth a layer.
+  const withInstances = (data: number[], count: number) => deps({
+    readInstances: async () => ({ data, count, floatsPerInstance: 18 }),
+  });
+
+  it('adds an instances layer keyed by instance count, not by allocation size', async () => {
+    // The allocation is a fixed 1024 slots and its tail is uninitialised.
+    // Hashing the whole buffer would fold that tail in and report divergence on
+    // bytes no body owns — the same fail-open shape the de-padding guards.
+    const g = new Array(1024 * 18).fill(0);
+    for (let i = 0; i < 3 * 18; i++) g[i] = (i % 7) + 1;
+    g[3 * 18 + 5] = 999; // used-slot sentinel at the boundary
+    const f = await hashFrame(withInstances(g, 4), 0);
+    expect(f.layers.instances).toBeDefined();
+    expect(f.layers.instances?.floats).toBe(4 * 18);
+    expect(f.layers.instances?.stats.count).toBe(4);
+  });
+
+  it('is sensitive to ONE changed capsule — a posed body that moved', async () => {
+    const g = new Array(4 * 18).fill(1);
+    const h = [...g];
+    h[2 * 18 + 3] = 1.0001; // one coordinate of one instance
+    const a = await hashFrame(withInstances(g, 4), 0);
+    const b = await hashFrame(withInstances(h, 4), 0);
+    expect(a.layers.instances?.hash).not.toBe(b.layers.instances?.hash);
+    // And the tile map localises it to that instance's tile.
+    const ta = new Set(a.tiles.instances);
+    const tb = new Set(b.tiles.instances);
+    expect([...tb].filter((t) => !ta.has(t))).toHaveLength(1);
+  });
+
+  it('reports a changed instance COUNT as drift even when the hash matches', async () => {
+    // One body fewer is a different frame, whatever the bytes happen to be.
+    const g = new Array(18 * 4).fill(2);
+    const a = await hashFrame(withInstances(g, 4), 0);
+    const b = await hashFrame(withInstances(g, 3), 0);
+    expect(a.layers.instances?.hash).not.toBe(b.layers.instances?.hash);
+    expect(a.layers.instances?.stats.count).toBe(4);
+    expect(b.layers.instances?.stats.count).toBe(3);
+  });
+
+  it('is skipped entirely when the page supplies no instances, rather than hashing nothing', async () => {
+    const f = await hashFrame(deps(), 0);
+    expect(f.layers.instances).toBeUndefined();
+    expect(Object.keys(f.layers).sort()).toEqual(['marchTarget', 'probeDyn']);
+  });
+});

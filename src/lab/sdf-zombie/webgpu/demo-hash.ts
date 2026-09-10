@@ -148,6 +148,19 @@ export interface DemoHashDeps {
    *  A missing layer is a legitimate boot (no gather on this page), which is
    *  why it is optional rather than an error. */
   readProbeDyn(): Promise<ArrayLike<number> | null>;
+  /** THE GATHER'S PACKED INPUTS: the bone capsule instances it is about to
+   *  gather against, as the gather's own `INSTANCE_FLOATS`-strided array plus
+   *  the live count. Optional.
+   *
+   *  WHY A THIRD LAYER (2026-09-10). With parity held, the seed pinned and the
+   *  dispatch count identical, two boots still produced different dynamic
+   *  layers — so the divergence enters through the gather's INPUTS, not its
+   *  history. This layer is the first place to look: if the capsules differ
+   *  between boots, the divergence is upstream in posing/instancing; if they
+   *  match while `probeDyn` differs, the inputs were identical and the fault is
+   *  in the gather itself. Either answer is decisive, which is why it is worth
+   *  18 KB of readback. */
+  readInstances?(): Promise<{ data: ArrayLike<number>; count: number; floatsPerInstance: number } | null>;
 }
 
 /** Hash one frame's render output. The caller owns freeze/step ordering: this
@@ -195,6 +208,25 @@ export async function hashFrame(deps: DemoHashDeps, frame: number, tiles?: { x: 
       height: 1,
       floatsPerTexel: 16,
       stats: digestStats(dyn, { channels: 1 }),
+    });
+  }
+
+  const inst = (await deps.readInstances?.()) ?? null;
+  if (inst && inst.count > 0 && inst.data.length) {
+    // BONE INSTANCES: one row per instance, `floatsPerInstance` floats wide, so
+    // the tile map splits them by instance index and a subset that changed
+    // localises to the bodies that caused it. Trimmed to the LIVE count — the
+    // allocation is a fixed 1024 slots, and hashing unused tail slots would fold
+    // uninitialised memory into the digest, which is exactly the failure mode
+    // the de-padding note above exists to prevent.
+    const used = Math.min(inst.count * inst.floatsPerInstance, inst.data.length);
+    inputs.push({
+      key: 'instances',
+      texels: Array.from({ length: used }, (_, i) => inst.data[i] ?? 0),
+      width: inst.count,
+      height: 1,
+      floatsPerTexel: inst.floatsPerInstance,
+      stats: { ...digestStats(inst.data, { channels: inst.floatsPerInstance, channel: 0 }), count: inst.count },
     });
   }
 
