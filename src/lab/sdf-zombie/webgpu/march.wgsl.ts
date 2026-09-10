@@ -1,6 +1,7 @@
 import { AMBIENT_AT, WALL_CONTRIBUTION } from './ambient.wgsl';
 import { PROBE_GRID_WGSL } from './probe-grid.wgsl';
 import { FLASHLIGHT_BOUNCE_WGSL } from './flashlight-bounce.wgsl';
+import { PROBE_DYNAMIC_WGSL } from './probe-dynamic.wgsl';
 import { SEG_VOLUME_WGSL } from './skeleton-spike/volume.wgsl';
 import { TILE_MAX_ENTRIES } from './tile-cull';
 import { MAX_PRIMS, MAX_CLUSTERS, BONE_SEG_MAX } from '../validate';
@@ -2270,7 +2271,12 @@ export const MARCH_BODY_PARAMS = /* wgsl */ `(
   bounceSpotPos: vec3<f32>,
   bounceSpotNormal: vec3<f32>,
   bounceSpotRadiance: vec3<f32>,
-  bounceSpotCfg: vec4<f32>
+  bounceSpotCfg: vec4<f32>,
+  // GPU probe gather dynamic layer - lighting P3 and P4 - bound POSITIONALLY LAST.
+  // Two slots. probeDynCfg x radiance gain, y visibility strength, both 0 keeps
+  // the compose bit-identical. NO PARENS and NO COLONS in this comment either.
+  probeDyn: ptr<storage, array<vec4<f32>>, read>,
+  probeDynCfg: vec4<f32>
 ) -> vec4<f32> {
 `;
 
@@ -3574,6 +3580,14 @@ export const MARCH_BODY_LIGHT = /* wgsl */ `  // ---- ANALYTIC FLASHLIGHT ------
   // The gain gate lives inside the function - at bounceSpotCfg.x = 0 it
   // returns zero and amb is untouched. No field evaluations.
   amb = amb + bounceSpotIrradiance(p, n, bounceSpotPos, bounceSpotNormal, bounceSpotRadiance, bounceSpotCfg);
+  // GPU PROBE GATHER dynamic layer. Body VISIBILITY darkens the ambient a
+  // body sits in (and its own underside), dynamic RADIANCE adds the level
+  // lit by the muzzle flash. Both gains 0 skip the storage read entirely -
+  // the parity path. See probe-gather-compute.ts for the writer.
+  if (probeDynCfg.x > 0.0 || probeDynCfg.y > 0.0) {
+    let dyn = probeDynamic(p, n, probeDyn, probeMin, probeInvExtent, probeDims);
+    amb = amb * mix(1.0, dyn.w, probeDynCfg.y) + dyn.xyz * probeDynCfg.x;
+  }
   // HIGHLIGHT SHOULDER (spotCfg2.y). A body standing in the beam used to run
   // past 1.0 on every channel and hard-clip, which does not just look blown —
   // it DELETES the wounds: crater, lip, char and clean skin all clamp to the
@@ -3863,7 +3877,7 @@ export const HELPERS = [
   Q_ROT, Q_MUL, Q_FROM_TO, REST_POINT,
   APPLY_CARVES, APPLY_WOUNDS, WOUND_MASK, TISSUE_RAMP, CHAR_MASK, SAMPLE_VOLUME,
   FOLD_GROUP, FOLD_BONE_RANGE, SEG_VOLUME_WGSL, APPLY_BONES, MAP_BODY, CALC_NORMAL, WOUND_SHADOW, TEXEL, FLICKER, SOFT_SHOULDER,
-  WALL_CONTRIBUTION, AMBIENT_AT, PROBE_GRID_WGSL, FLASHLIGHT_BOUNCE_WGSL, LEVEL_SHADOW,
+  WALL_CONTRIBUTION, AMBIENT_AT, PROBE_GRID_WGSL, PROBE_DYNAMIC_WGSL, FLASHLIGHT_BOUNCE_WGSL, LEVEL_SHADOW,
   // Quarter-res depth prepass fetch (close-up task 3). No field deps — it is
   // a textureLoad — so it rides last, ahead of MARCH_BODY which calls it.
   DEPTH_PRE_FETCH,

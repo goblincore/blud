@@ -216,6 +216,10 @@ export interface BoneInstancer {
   setWounds(wounds: ReadonlyArray<{ pos: readonly [number, number, number]; radius: number }>): void;
   readonly count: number;
   readonly overflowed: boolean;
+  /** The packed instance array (INSTANCE_FLOATS per row, `count` rows live)
+   *  — read by the probe gather to build body occluder capsules. Do not
+   *  write to it. */
+  readonly instances: Float32Array;
   dispose(): void;
 }
 
@@ -380,6 +384,7 @@ export function createBoneInstancer(max = 256, options?: SurfaceOutputOptions): 
     },
     get count() { return count; },
     get overflowed() { return arrays.overflowed; },
+    get instances() { return arrays.ab; },
     dispose() { geo.dispose(); base.dispose(); material.dispose(); woundTex.dispose(); },
   };
 }

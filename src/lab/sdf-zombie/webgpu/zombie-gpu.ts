@@ -562,6 +562,11 @@ export function defaultUniforms(faceTex: THREE.Texture) {
     bounceSpotNormal: uniform(new THREE.Vector3(0, 1, 0)),
     bounceSpotRadiance: uniform(new THREE.Vector3(0, 0, 0)),
     bounceSpotCfg: uniform(new THREE.Vector4(0, 0.5, 0, 0)),
+    /** GPU PROBE GATHER dynamic layer: x radiance gain, y visibility strength.
+     *  Both 0 skips the storage read — bit-identical. The buffer itself is a
+     *  storage node passed at material creation (probeDyn option), like the
+     *  tile binding; the 4-vec4 fallback rides views without a gather. */
+    probeDynCfg: uniform(new THREE.Vector4(0, 0, 0, 0)),
   };
 }
 
@@ -573,6 +578,16 @@ export function defaultUniforms(faceTex: THREE.Texture) {
  * too (WebGPU will not bind a texture to a storage signature).
  */
 let fallbackTileNodes: { header: unknown; entries: unknown } | null = null;
+let fallbackProbeDynNode: unknown;
+/** One zero probe (4 vec4) so views without a gather bind a well-formed
+ *  storage buffer; probeDynCfg = 0 means it is never read. */
+function fallbackProbeDyn() {
+  if (!fallbackProbeDynNode) {
+    const a = new THREE.StorageBufferAttribute(4, 4);
+    fallbackProbeDynNode = storage(a, 'vec4', 4).toReadOnly();
+  }
+  return fallbackProbeDynNode;
+}
 function fallbackTileBindings() {
   if (!fallbackTileNodes) {
     const h = new THREE.StorageBufferAttribute(1, 2);
@@ -952,6 +967,9 @@ export function createMarchMaterial(
   // via encodeSurfaceClass. Ignored in lit mode. Default 'full' keeps the M1
   // encoding (class 2, no bit) exact.
   shadowReceiver?: ShadowReceiver,
+  // GPU probe gather dynamic layer (P3/P4), POSITIONALLY LAST: the read-only
+  // storage node of the dynamic probe buffer, or the 4-vec4 fallback.
+  probeDyn?: unknown,
 ) {
   const dataNode = dataTex instanceof THREE.Texture
     ? texture(dataTex)
@@ -1160,6 +1178,10 @@ export function createMarchMaterial(
     bounceSpotNormal: u.bounceSpotNormal,
     bounceSpotRadiance: u.bounceSpotRadiance,
     bounceSpotCfg: u.bounceSpotCfg,
+    // GPU probe gather dynamic layer — POSITIONALLY LAST, two slots after
+    // bounceSpotCfg, bound in the same commit as the WGSL inputs.
+    probeDyn: (probeDyn ?? fallbackProbeDyn()) as never,
+    probeDynCfg: u.probeDynCfg,
   }) as unknown as Swizzled;
 
   const material = new MeshBasicNodeMaterial();
@@ -1526,6 +1548,9 @@ export interface GpuViewOpts {
    * facade through .tiles.
    */
   tiles?: ComputeTileBinding;
+  /** GPU probe gather (P3/P4 dynamic layer): the read-only storage node of
+   *  the dynamic probe buffer this view's march reads. Undefined = fallback. */
+  probeDyn?: { node: unknown };
   /**
    * Pack bone rows (op 'bone') into the inside-flesh array. Default TRUE —
    * the shipped layout. The bone-tubes renderer sets it FALSE via
@@ -1706,6 +1731,7 @@ export function createZombieGpuView(
     marchBody,
     opts.cone, opts.occluder, tileNodes, opts.shell, opts.prev, opts.levelShadow,
     undefined, opts.depthPre, opts.output, opts.shadowReceiver,
+    opts.probeDyn?.node,
   );
 
   // The coarse twin: same field, same proxy box, no shading, its own mesh on

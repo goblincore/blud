@@ -86,6 +86,7 @@ import {
 import { stepPlayer, eyeOf, PLAYER, type PlayerState, type MoveInput } from './game-player';
 import { createRoomProbes, type ProbeWorkerLike } from './room-probes';
 import { computeBounceSpot } from '../flashlight-bounce';
+import { createProbeGatherBinding, type ProbeGatherBinding } from './probe-gather-compute';
 import { createZombieActor, segmentHitsBox, type ZombieActor } from './game-actor';
 import { separate, minPairDistance, type CrowdAgent } from '../crowd';
 import { arbitrate, RING_TUNING, type RingClaimant } from '../melee-ring';
@@ -519,6 +520,16 @@ async function main() {
     postAa.setVhs('blud');
   }
   const characterEffects = createCharacterEffects(handle.renderer);
+  // GPU PROBE GATHER (P3/P4 dynamic layer). Declared here, ahead of the draw
+  // callback, so the frame can test it without a temporal dead zone; created
+  // next to the room probes once the level exists. ?probedyn=0 zeroes both
+  // gains — the storage read is skipped and the march is bit-identical.
+  let probeGather: ProbeGatherBinding | null = null;
+  const probeDynParam = new URLSearchParams(location.search).get('probedyn');
+  let probeDynGain = probeDynParam === '0' || probeDynParam === 'off' ? 0 : 0.05;
+  let probeVisStrength = probeDynParam === '0' || probeDynParam === 'off' ? 0 : 1;
+  const _flashWorld = new THREE.Vector3();
+  let probeFrame = 0;
   // THE FISHEYE. The camera renders WIDER than the player sees and the blit
   // squeezes it back, which is what buys the bulge without losing the frame
   // to a warp that reaches off the buffer. `centerFovDeg` is the look knob;
@@ -959,7 +970,40 @@ async function main() {
           }, enc.box, walls, occ);
         }
       }
+      // GPU PROBE GATHER (P3/P4 dynamic layer). Once per frame for the
+      // player's room: its box + furniture as boxes, every posed bone as a
+      // capsule, the muzzle flash as the light. Bodies in that room read the
+      // layer; everyone else keeps both gains at 0.
+      const dynKey = enclosureKeyAt(player.pos[0], player.pos[2]);
+      const dynRoom = ROOMS.find(r => r.name === dynKey) ?? null;
+      const dynGrid = dynRoom ? roomProbes.gridOf(dynRoom.id) : null;
+      const dynOn = probeGather !== null && dynRoom !== null && dynGrid !== null
+        && (probeDynGain > 0 || probeVisStrength > 0);
+      if (dynOn && probeGather && dynRoom && dynGrid) {
+        probeFrame++;
+        const fI = flashLight ? flashLight.intensity : 0;
+        if (flashLight && fI > 0) flashLight.getWorldPosition(_flashWorld);
+        probeGather.update({
+          grid: dynGrid,
+          enclosure: { min: [dynRoom.minX, 0, dynRoom.minZ], max: [dynRoom.maxX, dynRoom.height, dynRoom.maxZ] },
+          wallAlbedo: dynRoom.wallColor,
+          occluders: FURNITURE.filter(f => f.room === dynRoom.id).map(f => ({
+            box: { min: [f.minX, 0, f.minZ] as Vec3, max: [f.maxX, f.height, f.maxZ] as Vec3 },
+            albedo: [0.35, 0.33, 0.30] as Vec3,
+          })),
+          instances: boneInstancer.instances, instanceCount: boneInstancer.count,
+          capsuleMargin: 0.06,
+          lights: flashLight && fI > 0
+            ? [{ pos: [_flashWorld.x, _flashWorld.y, _flashWorld.z] as Vec3, color: [1.0, 0.81, 0.58] as Vec3, intensity: fI }]
+            : [],
+          frameSeed: (probeFrame % 64) / 64,
+          blend: 0.5,
+          raysPerProbe: 32,
+        });
+      }
       for (const a of actors) {
+        const inDyn = dynOn && dynRoom !== null && a.room === dynRoom.id;
+        a.view.uniforms.probeDynCfg.value.set(inDyn ? probeDynGain : 0, inDyn ? probeVisStrength : 0, 0, 0);
         a.view.uniforms.spotPos.value.copy(flashlight.spot.position);
         a.view.uniforms.spotAxis.value.copy(sAxis);
         a.view.uniforms.spotCfg.value.set(flashGate, flashInner, flashOuter, flashlight.spot.distance);
@@ -1635,6 +1679,9 @@ async function main() {
     onReady: (roomId) => { if (import.meta.env.DEV) console.info(`[room-probes] room ${roomId} baked`); },
   });
   if (probesOff) roomProbes.setProbes(0, -1);
+  probeGather = createProbeGatherBinding(handle.renderer, {
+    maxProbes: 10 * 4 * 10, maxBoxes: 16, maxCapsules: 1024, maxLights: 4,
+  });
 
   function spawnEnemy(name: string, room: RoomDef, start: Vec3, errs: string[]): ZombieActor {
     const enc = enclosureOf(room.name)!;
@@ -1665,6 +1712,9 @@ async function main() {
     // inflated hull casts onto the ROOM (the full map) but must not swallow
     // its own illumination (the level-only map).
     const viewGpuOpts: GpuViewOpts = {
+      // The dynamic probe layer's storage node (P3/P4). Bound at material
+      // creation like the tile binding — a storage node cannot be rebound.
+      ...(probeGather ? { probeDyn: { node: probeGather.probeDynNode } } : {}),
       // DEFERRED MODE: no cone twin binding. sdf-layer.render never runs in
       // this mode, so the cone target would stay uninitialised — a WebGPU
       // lazy-init submit conflict that rejects the WHOLE producer pass
@@ -5176,6 +5226,14 @@ async function main() {
      *  = each room's matched level, else an absolute multiplier. */
     /** Flashlight bounce spot (P4 step 1): 0 = off and bit-identical. */
     setBounceSpot: (gain: number) => { bounceSpotGain = Math.max(0, gain); return bounceSpotGain; },
+    /** GPU probe gather dynamic layer: radiance gain (flash bounce) and
+     *  visibility strength (bodies darken their surroundings). 0/0 = off. */
+    setProbeDynamic: (radianceGain: number, visStrength: number) => {
+      probeDynGain = Math.max(0, radianceGain); probeVisStrength = Math.max(0, Math.min(1, visStrength));
+      return { radianceGain: probeDynGain, visStrength: probeVisStrength };
+    },
+    get probeDynamic() { return { radianceGain: probeDynGain, visStrength: probeVisStrength }; },
+    probeDynReadback: () => probeGather?.readback() ?? Promise.resolve(new Float32Array(0)),
     get bounceSpot() { return bounceSpotGain; },
     setProbes: (weight: number, gain = -1) => { roomProbes.setProbes(weight, gain); return { weight: roomProbes.weight, gain: roomProbes.gain }; },
     get probes() { return { weight: roomProbes.weight, gain: roomProbes.gain, ready: roomProbes.ready, matched: ROOMS.map(r => [r.id, roomProbes.matchedGain(r.id)]) }; },

@@ -102,6 +102,8 @@ export interface RoomProbes {
   readonly gain: number;
   /** Per-room matched gain, once baked; -1 before. */
   matchedGain(roomId: number): number;
+  /** The baked grid, for the dynamic gather's probe positions; null before. */
+  gridOf(roomId: number): ProbeGrid | null;
   readonly ready: boolean;
   dispose(): void;
 }
@@ -181,6 +183,7 @@ export function createRoomProbes(o: RoomProbesOptions): RoomProbes {
     get weight() { return weight; },
     get gain() { return gain; },
     matchedGain(roomId) { return baked.get(roomId)?.gain ?? -1; },
+    gridOf(roomId) { return baked.get(roomId)?.grid ?? null; },
     get ready() { return queue.length === 0 && inFlight === null; },
     dispose() {
       disposed = true;
