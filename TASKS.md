@@ -162,6 +162,16 @@ construction. Only `sdf:march` (6.7–9.7 ms, no cadence) is a true per-frame ro
   dynamic probe layer — characters in the player's room rendered as black
   silhouettes. Fixed and made structural in `webgpu/boot-params.ts`
   (`parseIntParam` reads the RAW string) with `boot-params.test.ts` as the gate.
+- **`?tracerlightslots` defaulted to 0, not 2** — the same `Number(null)` class,
+  PRE-EXISTING (not from this session), found by auditing all 18 `URLSearchParams`
+  reads after the regression rather than by another playtest. Tracer /
+  muzzle-streak lights therefore never fed the gather's dynamic light list on a
+  bare page, so gunfire contributed no indirect light. The other numeric params
+  are safe and were checked individually: `?shadowmap` uses `> 0`, and
+  `?laststep` checks `raw === null` — which is the correct pattern, and the one
+  `boot-params.ts` generalises. **Lesson: audit the bug CLASS, not the
+  instance.** All three wrong-default bugs this session had the same signature —
+  a wrong value that reads as a design choice rather than as an error.
 
 **NEXT, in order:** (1) the deeper-interlace `COMPOSITE_WGSL` generalisation —
 plan at `docs/superpowers/plans/2026-09-10-deeper-interlace-fields.md`, pure math
