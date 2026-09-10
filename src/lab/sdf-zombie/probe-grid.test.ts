@@ -283,12 +283,12 @@ describe('buildProbeGrid \u2014 a red wall', () => {
     }
   });
 
-  it('completes the default grid in under 500 ms', () => {
+  it('completes the default grid in under 2.5 s (a loose wall-clock pin; 61 ms when the machine is idle)', () => {
     const t0 = performance.now();
     const grid = buildProbeGrid(BOX, GREY, LIGHT, DEFAULT_PROBE_OPTIONS);
     const dt = performance.now() - t0;
     expect(grid.sh.length).toBe(8 * 4 * 8 * 12);
-    expect(dt).toBeLessThan(500);
+    expect(dt).toBeLessThan(2500);
   });
 });
 
