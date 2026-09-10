@@ -16,10 +16,15 @@ textual conflict in the Current focus region — keep BOTH sets of notes, this
 session's block on top. Nothing else should conflict: everything else this
 session touched is new files or files `ded97034` did not.
 
-`claude/determinism-stage1` was branched from this branch's `b4cd8776` and has the
-`e4eba930` boot fix cherry-picked, but NOT the later structural `f3541064`
-(`boot-params.ts` extraction) or the census gate. When it merges, prefer this
-branch's `boot-params.ts` and delete its duplicated inline parsing.
+`claude/determinism-stage1` was branched from this branch's `b4cd8776`. The boot
+fix landed there twice and is now CONSISTENT with this branch: `e4eba930` was
+cherry-picked, then `f3541064` (the structural `boot-params.ts` extraction and
+its 8-test gate) was cherry-picked on top as `ebb78150`, cleanly, with `tsc`
+clean. So both branches carry the same `boot-params.ts` and the same tested
+parser — no duplicated inline parsing left to reconcile on merge.
+
+`claude/determinism-stage1` does NOT have this branch's later work (the
+`?tracerlightslots` fix, the census gate, the bench wiring, this handoff).
 
 ## Branches
 
