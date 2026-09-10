@@ -118,6 +118,47 @@ Two different kinds of flesh, kept apart on purpose.
 a natural home for the existing CRT / VHS / interlaced post-fx. The room is a
 real SDF scene, so it's fair game for deformation later (§6).
 
+### 4.1 Pacing: the cold open (decided 2026-09-10)
+
+**The game starts inside the FPS, in media res.** No title screen, no bezel,
+no room. The player assumes this is a straight retro shooter.
+
+1. **The opening level.** Short (roughly 5–8 minutes), tight, teaches the
+   shooting feel and one body. In-fiction it's the *demo level*: the playable
+   demo from a magazine cover disc.
+2. **The last pickup is a CD.** Picking it up ends the level.
+3. **The pull-back.** One continuous camera move, no cut: out of the game view,
+   the bezel appears for the first time, then the desk, the room.
+4. **The screen gives.** The glass bulges and the disc pushes out, **gooey and
+   wet**, and drops onto the desk. (This is the first push-through, §9.1.)
+5. **Free roam.** Nothing prompts you. The room is there to look at, the wet
+   disc is on the desk, and the monitor now shows the FPS waiting. Picking up
+   the disc and playing it on the stereo teaches the music loop; going back to
+   the computer starts the full game.
+
+**Consequence for the escalation:** the biggest body-horror image happens
+first, then the game goes *quiet*. Like a horror film's cold open, the gentle
+phase is spent doubting it happened, with the stain on the bezel as the only
+proof. The screen doesn't give again until the strange phase.
+
+**Nice rhymes:** the magazine with that cover disc can be lying on the floor.
+The demo level can return later in the full game, subtly wrong.
+
+**Every launch after the first boots into the Desktop.** The cold open only
+happens once per save. After that, the computer's startup *is* the title
+screen: the CRT warming up, a memory count, a startup chime, then the desktop,
+with the camera already leaning into the monitor. Escape pulls back to the
+room as usual.
+
+- **Continue and settings live on the desktop,** as icons and a control panel,
+  so there's no separate menu to break the frame.
+- **The boot sequence changes with the tone phases:** a friendly tip of the day
+  (gentle); a memory count that's slightly wrong, a new-mail chime before the
+  desktop has loaded (strange); a boot that takes too long while something
+  breathes in the speaker (sinister).
+- **New game** is the one place a plain, out-of-fiction menu is acceptable, and
+  it leads back to the cold open.
+
 ---
 
 ## 5. World laws (what is true)
@@ -239,7 +280,13 @@ way they arrive escalates with the tone phases, so the portal tells the story.
 | **Strange** | **Mail slot; things come out warm** | Claim tickets from the Cloakroom get redeemed *outside the flat*: parcels come through the slot of the door you can't use. Tray items come out warm and faintly damp. Once, the screen bulges and settles back, and nothing else happens |
 | **Sinister** | **The screen gives** | The CRT glass goes soft, an SDF membrane. It bulges, stretches, and an object pushes through and drops onto the desk **still wet**, with strings of something between it and the glass. No machine in between any more |
 
-**The signature moment is the first full push-through.** Build it with the care
+**The cold open breaks the escalation once, on purpose (§4.1).** The very
+first thing out of the screen is a wet CD at the end of the opening level.
+After that the portal drops back to the table above: dry tray, printer, mail
+slot, until the screen gives again in the strange phase and becomes routine in
+the sinister phase.
+
+**The signature moment is that first push-through.** Build it with the care
 of the best gib in the FPS:
 - **Sound:** glass creaking in a way glass can't, a wet stretch, a slap on the desk.
 - **Motion:** the membrane recovers slowly and wobbles; the reflection of the
