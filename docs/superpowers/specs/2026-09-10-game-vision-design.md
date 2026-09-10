@@ -39,6 +39,8 @@ exactly why it's funny.
 | ***L.O.L. Lack of Love*** (Love-de-Lic, 2000) | Wordless meaning, behaviour as language | — |
 | **Artdink** | Strange, tactile simulation; a whole odd machine built for you | Slowness in the shooter |
 | ***Realms of the Haunting*** (Gremlin, 1997) | FPS mixed with adventure objects | FMV, heavy puzzles |
+| ***Videodrome*** (Cronenberg, 1983) | The screen that breathes and bulges; the machine as a body | Its satire, its sexual politics. Our soft screen is an open nod, not a copy (§15) |
+| ***eXistenZ*** (Cronenberg, 1999) | The game machine as organic, warm, wet | Bio-ports, the thriller plot |
 | **Prerendered CG in 90s magazines** | The visual target (§14) | — |
 
 ---
@@ -87,6 +89,14 @@ The camp comes from **sincerity**, not jokes.
 - **Anti-goal:** an inner game that's a prop (the trap in most "game inside a
   computer" games), or a frame that mocks the shooting and makes it feel pointless.
 
+### P7 — Gore inside, body horror outside
+Two different kinds of flesh, kept apart on purpose.
+- **Therefore:** the FPS has **gore**: violence, gibs, wounds, bone. The frame
+  has **body horror**: *transformation*. Soft glass, warm plastic, objects that
+  arrive wet, a door that gives. Slow, intimate, domestic, a little funny.
+- **Anti-goal:** blood sprays and gibs in the flat (until the one moment that
+  earns it, §9.5), or FPS gore that turns slow and transformative.
+
 ---
 
 ## 4. The three layers
@@ -115,7 +125,8 @@ real SDF scene, so it's fair game for deformation later (§6).
 1. **There is always a party upstairs.** In the building *and* in the FPS. Its
    music never stops. Height means closeness to the Party.
 2. **Everything is flesh eventually.** Stone, machines and guests can all turn
-   soft under enough violence. Late in the game, the room isn't exempt.
+   soft under enough violence. Outside the game, it takes no violence at all,
+   just time: the beige computer, the screen, the door (§9.2).
 3. **Nobody speaks.** Text exists only on screens and paper: signs, labels,
    level names, intermission cards, mail, notes under the door.
 4. **Spaces in the FPS are arranged, not built.** Everything looks *set out*
@@ -124,7 +135,7 @@ real SDF scene, so it's fair game for deformation later (§6).
    tables at head height, guests who loom. The basement is the one room that
    fits.
 6. **What you carry out, stays.** Things taken from the FPS end up on the
-   desktop as files, and some end up in the room as objects.
+   desktop as files, and some come through into the room as objects (§9.1).
 7. **The layers leak, and leaking increases with progress.** Early on the
    layers are separate. By the end, they aren't.
 
@@ -145,7 +156,7 @@ is design space, and it should shift with the tone phases (§8):
   room again from the other side, or a second door right behind it.
 - **Sinister:** the door is soft. It gives under the hand, like the guests do.
 
-Notes under the door, catalogues and parcels still arrive. Things come in;
+Notes, parcels and knocks still arrive at the door (§9.4). Things come in;
 the goblin doesn't go out. The high window shows only feet passing and light
 from upstairs. So the one thing the ending has to deliver is **leaving**
 (§9).
@@ -154,17 +165,16 @@ from upstairs. So the one thing the ending has to deliver is **leaving**
 a mattress, the front door, the high basement window, pipes that carry the
 music, a bucket under a leak.
 
-**Decorating (the fun part):**
-- **Trophies come through the monitor.** Beat a floor, find a secret, and an
-  object turns up in the room: a guest's shoe on the shelf, a claim ticket
-  pinned to the wall, a jar with something in it.
-- **Mail-order.** Catalogues arrive under the door; ordering uses in-game
-  currency found in the FPS (loose change from guests). Posters, lamps, a rug,
-  a fish tank with something wrong with the fish.
+**Decorating (the fun part). No currency, no shop:**
+- **Everything arrives as a consequence of play,** through the portal (§9.1):
+  a guest's shoe, a claim ticket, a poster of a level, a jar with something in
+  it, a fish tank with something wrong with the fish.
+- **The CD shelf** is the spine of the room: the music collection (§9.3) is
+  literally the decoration that grows most.
 - **Placement is free.** Objects can be put anywhere, like a doll's house. No
   grid, no score, just the goblin's taste.
-- **The room remembers.** Decorations are part of the save and appear in the
-  ending (§9).
+- **The room remembers.** Decorations are part of the save and matter in the
+  ending (§9.5).
 
 **Routines (UFO influence):** the building has a schedule, heard more than seen.
 Footsteps at certain times, the pipes knocking, someone who takes the rubbish
@@ -185,7 +195,8 @@ look, its own click sounds, its own bugs.
 | **The FPS** | The icon for the game. Its box art is on the desk next to the monitor |
 | **Mail** | Messages from nobody. Gentle, then strange, then sinister |
 | **Files** | Where things carried out of the FPS land: `.BMP`s, saves, maps, sounds |
-| **Tracker** | A music tracker with the soundtrack's patterns. Unlocked songs play in the room |
+| **Player** | Plays MP3s (our own design, not Winamp). Burns mix CDs (§9.3) |
+| **Tracker** *(later)* | The soundtrack's patterns, open for poking at |
 | **Screensaver** | Runs when idle. It changes. It shouldn't |
 | **Later/optional** | A BBS over the modem, a paint program, a disk-space warning that grows |
 
@@ -200,49 +211,143 @@ time spent in the room). It never becomes jump-scare horror; the dread is
 
 | Phase | Floors | Room | Desktop | Party upstairs |
 | --- | --- | --- | --- | --- |
-| **Gentle** | B | Cosy clutter, warm lamp, catalogue arrives | Friendly spam, a chain letter, a helpful tip | Muffled, cheerful |
+| **Gentle** | B | Cosy clutter, warm lamp, the first disc in the CD tray | Friendly spam, a chain letter, a helpful tip | Muffled, cheerful |
 | **Strange** | G–1 | Objects move slightly; routines change; a knock | Mail mentions what you did in the last level. Files you didn't create | The track is one from *inside the FPS* |
 | **Sinister** | ∞ | Pipes breathe; the ceiling bulges softly; the mirror | Mail mentions things you *haven't done yet*. The FPS icon won't close | Silence, or a single slow kick |
 
-**Rule for the sinister phase:** the room gets strange, never gory. The gore
-lives in the FPS. When the frame finally turns fleshy (law 2), it should be
-the most shocking moment in the game precisely because it's been withheld.
+**Rule (P7):** the flat gets *body horror*, never gore. Soft, warm, wet,
+transforming, but no blood sprays and no gibs. The gore lives in the FPS. If
+gore ever enters the flat (§9.5, ending 1), it should be the most shocking
+moment in the game precisely because it's been withheld.
 
 ---
 
-## 9. Endings (layers connected)
+## 9. What crosses over
 
-The outer ending hasn't been decided. These are candidates, all connected to the
-Party and the inner game's top floor, *Upstairs*.
+Four systems connect the layers. Together they form one loop:
+**find it in the FPS → it comes through → it goes on the shelf → you use it to
+answer the knock → it shapes the ending.**
 
-### A — Going upstairs
-The FPS's last floor is the building itself: the same stairwell, the same door,
-rendered as a level. Clearing it, the music in the room stops too. The goblin
-stands up from the chair, and the camera, for the first time, follows it to the
-room's door. It opens onto the stairs. Cut.
-*Never explained:* whether the goblin went, or whether it ever came back down.
+### 9.1 The portal (screen → room)
 
-### B — The invitation
-After the last floor, an envelope comes under the door: an invitation. The
-room is quiet. The player chooses: go upstairs (and the game ends), or stay
-and decorate forever (and the party carries on, forever). *Moon*-like: the
-choice is framed as whether to stop playing.
+No currency, no shop. Things arrive in the flat as *consequences* of play. The
+way they arrive escalates with the tone phases, so the portal tells the story.
 
-### C — Lights up
-The only way to end the game is to switch off the CRT. The screen collapses to
-a dot. In the silence, you realise the ceiling isn't thumping, and maybe never
-was. The room remains; the decorations remain. A last note under the door.
+| Phase | Route | What it's like |
+| --- | --- | --- |
+| **Gentle** | **CD tray, printer** | The drive whirs and the tray slides out with a disc on it, or a tooth. The dot-matrix printer chatters out a map, a level poster, a photo of a guest you killed. Dry, mechanical, funny. You could almost explain it |
+| **Strange** | **Mail slot; things come out warm** | Claim tickets from the Cloakroom get redeemed *outside the flat*: parcels come through the slot of the door you can't use. Tray items come out warm and faintly damp. Once, the screen bulges and settles back, and nothing else happens |
+| **Sinister** | **The screen gives** | The CRT glass goes soft, an SDF membrane. It bulges, stretches, and an object pushes through and drops onto the desk **still wet**, with strings of something between it and the glass. No machine in between any more |
 
-### D — Guest list
-Everything decorated in the room turns up in the final FPS level, arranged at
-the Party *as if for a guest*: the rug, the lamp, the fish tank. The goblin was
-furnishing the party all along. Ties decorating directly into the ending.
+**The signature moment is the first full push-through.** Build it with the care
+of the best gib in the FPS:
+- **Sound:** glass creaking in a way glass can't, a wet stretch, a slap on the desk.
+- **Motion:** the membrane recovers slowly and wobbles; the reflection of the
+  room swims across it.
+- **Residue:** a film on the glass and a stain on the bezel that stay for the rest
+  of the game. The screen never looks quite clean again.
 
-**Current lean:** combine **D** (the payoff for decorating) with **A** or **B**
-(the step outside). C is the most *Moon*, but risks feeling like a trick.
-Since the goblin can never leave the flat during play (§6), walking out of the
-front door is the strongest single payoff the game has. That favours **A** or
-**B**, and means C should only exist as a false ending, if at all.
+**Tech fit:** this is the SDF deformation pipeline applied to a household
+object. Same wobble, same softness as the guests, which is exactly why it reads
+as *wrong*.
+
+**The question it raises (Never list):** if things can come through the glass,
+can something go the other way?
+
+### 9.2 The beige machine becomes a body
+
+Beige plastic is already the colour of skin. Over the game the computer slowly
+stops being a machine. Every step is small; the player should only notice when
+they compare to the start.
+
+| Phase | The computer |
+| --- | --- |
+| **Gentle** | A warm hum. If you listen, the fan sounds a bit like breathing |
+| **Strange** | The case has a texture like pores under the grime. The CD tray moves too slowly, like it's reluctant to let go. The mouse cable is slightly too soft |
+| **Sinister** | The bezel sweats. The idle screen rises and falls. The tray comes out like a tongue. The power button is warm |
+
+The door (§6) goes through the same change on the same schedule, so the two
+ends of the flat, the way in and the way out, become flesh together.
+
+### 9.3 Music you collect
+
+The main collectible is **music**: tracks from the game's own soundtrack,
+credited to made-up artists and labels (the Party's DJs, a lonely dungeon-synth
+project, a gabber crew with a terrible name). Each release has a **prerendered
+CG cover**, the visual target at 12 cm, and deadpan liner notes.
+
+**Where it comes from:**
+- **In the FPS:** hidden as secrets. A disc turning slowly on a pedestal, a
+  guest's Walkman still playing, a DJ booth. You hear a track in a level before
+  you find it.
+- **Through the portal:** pick it up in the game and the **CD tray slides out
+  with the disc on it.** Later discs come out warm. Late ones come through the
+  glass, wet, and still play.
+- **On the desktop:** MP3s arrive by modem or attached to mail from nobody.
+  Some are tracks you never found. Late ones are corrupted, or they're
+  recordings of *your flat*.
+
+**What you do with it:**
+- **Shelve it:** CDs on a rack in the room. The collection is the decoration.
+- **Play it:** discs on the stereo, MP3s in the desktop player. What's playing
+  becomes the room's atmosphere, mixed against the Party through the ceiling,
+  and later bleeds faintly into the FPS.
+- **Answer the knock with it** (§9.4).
+- **Burn a mix:** make a mix CD on the desktop and slide it under the door, as a
+  gift or a message. What comes back depends on what you sent.
+
+**Outside the game:** a fake discography with real tracks is a ready-made
+soundtrack release, and a natural invitation for guest artists from the noise
+and gabber scene.
+
+### 9.4 The knock
+
+**Someone knocks on the door, throughout the game.**
+
+- **It comes at irregular times,** gently at first. You can't open the door, but
+  you can **answer**: knock back, stay silent, play a track, slide something
+  under the door.
+- **The knock is a rhythm:** the kick pattern of a track, often one you've heard
+  inside a level. Paying attention to the game teaches you how to talk to the door.
+- **Play the right track and you've replied.** The music collection is your
+  vocabulary.
+- **It becomes a wordless language** (*L.O.L.*, prisoners tapping through a cell
+  wall). Answer well and something changes: a note, a new pattern, a parcel.
+  Answer badly or ignore it and the knocking changes mood.
+- **It follows the phases:** friendly, then insistent, then knocking from places a
+  door isn't.
+- **Who knocks is on the Never list.** At most, a shadow under the door, and once,
+  a pair of feet.
+
+The knocking conversation is the goblin's only relationship.
+
+### 9.5 Endings (candidates)
+
+Draft 2's A–D endings are retired as too safe. These grow out of the knock.
+They can combine (a climax plus an epilogue), or which one you get can depend
+on how you answered the door.
+
+**1. You built the last level.** Near the end the knocking is many knockers:
+the Party has come downstairs. You weren't invited, so the party invites
+itself in. The final FPS level is **your own flat**: the HUD appears over the
+room view, guests pour through the door, and you fight in the space you spent
+the whole game decorating. Every shelf and rug you placed is cover, a sightline
+or a choke point, and **the soundtrack is your CD collection, in shelf order.**
+Without knowing it, the player designed and scored the final level. It's the
+one time gore enters the flat (P7). *Current favourite.*
+
+**2. The knock from the glass.** The last knock doesn't come from the door. It
+comes from inside the monitor, tapping on the screen from the other side, in
+your own knock pattern. The membrane (§9.1) bulges. All game you couldn't get
+out; the ending is about what gets *in*.
+
+**3. The right answer.** If you learned the language, the last knock gets the
+right reply. Upstairs goes silent. The door opens by itself onto a lit, empty
+stairwell. The goblin looks at it... then sits back down at the computer, and
+the credits roll over the FPS title screen. The door stays open.
+
+**Possible shape:** 1 as the climax, then 2 or 3 as the epilogue, chosen by how
+you answered the knock across the game.
 
 ---
 
@@ -267,7 +372,9 @@ Removing from it needs a real reason.
   **≤ 60 words**; in-level signs and labels ≤ 5 words.
 - **Desktop mail:** ≤ 40 words per message, ≤ 3 new messages per floor. No
   sender names. Subjects do a lot of the work.
-- **Room:** notes under the door ≤ 12 words; catalogues are item names and prices.
+- **Room:** notes under the door ≤ 12 words.
+- **Music releases:** artist, title, track names, and liner notes ≤ 50 words
+  per release. The liner notes are allowed to be the funniest text in the game.
 - **Menus and item names** carry the deadpan jokes.
 - Nothing is voiced, so nothing needs subtitles.
 
@@ -397,6 +504,9 @@ answers. Dungeon synth plays here.
 - Not a cinematic narrative game.
 - Not a meta game where the inner game is a prop (P6).
 - Not an ARG / creepypasta jump-scare frame. The dread is quiet.
+- Not a *Videodrome* pastiche. The soft screen openly nods to it, but ours is
+  goblin-scale, domestic, a little funny, and built from the same deformation
+  as the guests.
 - Not a grimdark power fantasy. The goblin is pathetic and disgusting, and wins anyway.
 - Not a realistic place inside the FPS, ever. The room is the only real place.
 
@@ -474,15 +584,17 @@ A fictional magazine, *CD-ROM INFERNO*, issue 31, "First Look" page.
 
 ## 17. Open questions
 
-1. **The outer ending:** which of §9 A–D, or something else? (Lean: D + A or B.)
+1. **The outer ending:** which of §9.5's knock endings, and in what
+   combination? (Lean: 1 as the climax, 2 or 3 as the epilogue.)
 2. ~~Room door~~ **Decided 2026-09-10:** the goblin can never leave the flat
    before the ending; the reason is never given. Open: exactly how the door
    refuses in each phase (§6 has candidates).
 3. ~~Walkable or seated~~ **Decided 2026-09-10:** walk and look anywhere
    inside the flat. Open: is it one room, or one room plus a tiny bathroom
    or kitchenette?
-4. **Mail-order economy:** is FPS currency spent in the room a good idea, or does
-   it risk making the shooter feel like a grind for decorations?
+4. ~~Mail-order economy~~ **Decided 2026-09-10:** no currency. Things arrive
+   through the escalating portal (§9.1); music is the main collectible (§9.3).
+   Open: how many releases, and what the knock language's first "word" is.
 5. **Club levels:** pulsing geometry only, or dancing crowds that turn on you?
 6. **Title: working title GOBLIN, final title parked.** *Blud* reads as a Blood
    homage. Quick Steam/itch checks, 2026-09-10: *Gob* is taken three times over,
