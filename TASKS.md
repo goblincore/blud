@@ -186,6 +186,15 @@ resolution: [bodies-style-handoff.md](docs/dev-notes/2026-09-09-perf-spikes/bodi
   2026-09-09: soldier flashes light zombies and soldiers around them at range.
   Membership by current position (+1.5 m), nearest room from tunnels; the
   player's flash lights as a 0.14 s burst. Knobs: `setProbeDynamic(0.15, 1, 4)`.
+- [ ] **NEXT: render optimization pass** — backlog with owner notes in Obsidian
+  `Claude Notes/Planning/2026-09-09-blud-render-optimization-backlog.md`.
+  Order: (1) get `passTimings()` samples back (or an owner recording),
+  (2) shadow maps 1024² → 512 (both), (3) skip rooms out of view,
+  (4) half-res march + non-neural reconstruction (neural upscale failed),
+  (5) far-body LOD (fewer steps, coarser wounds), (6) static probe term per
+  vertex on walls, (7) gather the most active room, (8) accents out of the
+  direct light list. Tracer gather lights dispatched separately
+  ([plan](docs/superpowers/plans/2026-09-09-tracer-gather-lights.md)).
 - [x] **Level surfaces reading the probes, FORWARD path — built + GPU-verified
   2026-09-09** on `claude/level-probe-lighting` (not merged; owner playtest
   next). `ProbeLightingNode` (`webgpu/probe-lighting-node.ts`) adds each
