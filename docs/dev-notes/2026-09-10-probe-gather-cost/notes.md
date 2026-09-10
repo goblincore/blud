@@ -158,6 +158,54 @@ a pass the game does not run and omits a bound it has. An owner decision should
 re-sync those pins; until then the prelude is mandatory for a ship-truth
 number.
 
+## MEASURED: the cadence lever (rate 2 -> 4) is NULL, and the 4-5 ms must be amortised
+
+```
+BENCH_LEGS=baseline,probe-rate4 BENCH_ROOMS=3,4 BENCH_REPEATS=3 BENCH_PASSES=1
+BENCH_PRELUDE='__sdfGame.setOccluder(false);__sdfGame.setHullExitBound(true)'
+```
+Load 2.84, 81% idle — the quietest window of the session. New legs
+`probe-rate3` / `probe-rate4` were added to `scripts/sdf-game-bench.mjs` for
+this. Artifacts `/tmp/sdf-bench-proberate/`.
+
+| | room 3 | room 4 |
+| --- | ---: | ---: |
+| fenced frame p50, baseline (rate 2) | 15.90 | 17.28 |
+| fenced frame p50, rate 4 | 14.83 | **17.52** |
+| baseline spread | 17% | 21% |
+| rate-4 spread | 49% | **1%** |
+| `compute:probe-gather` row, baseline | 4.64 | 4.00 |
+| `compute:probe-gather` row, rate 4 | 4.90 | 4.02 |
+
+**Room 4's rate-4 leg has a 1% spread, so its 17.52 is solid, and it shows NO
+gain — the median frame did not get faster.** Room 3 nominally improved 7% but
+its rate-4 leg spread is 49%, so that is unresolved. Verdict: **halving the
+number of 4 ms gathers did not shorten the median frame.**
+
+**Why, and this matters more than the null result.** The pass-attribution row is
+invariant to cadence *by construction* — 4.64 -> 4.90 and 4.00 -> 4.02 — because
+it prices ONE gather, not a frame of gathers. And the fenced frame p50 is a
+**median over frames**: at rate 2 exactly half the frames contain a gather, so
+p50 already lands on a frame *without* one. Halving the frequency again cannot
+move it. Two consequences:
+
+1. **Do not quote the gather as a "4-5 ms pass" when talking about the frame.**
+   Its amortised cost at rate 2 is **~2 ms/frame**; the 4-5 ms figure is paid on
+   every other frame only. The earlier framing in this note (and the "second
+   largest GPU pass at 4-5 ms") overstates its frame impact by 2x. It is still
+   the second largest *pass*, and the -33% fix is real, but the frame budget it
+   consumes is about half what the pass row suggests.
+2. **The cadence knob is not the free 2x the briefing predicted.** It is worth
+   ~1 ms/frame of mean GPU work, and it does not show at p50 at all. If it is
+   taken, it should be judged on mean (chunk-mean) and on the fluorescence
+   latency it costs, not on p50.
+
+**What still stands:** the march is 51-63% of the labelled total at 6.7-9.7 ms
+per frame (it is NOT cadence-limited, so that row is a true per-frame cost), and
+the gather's dispatch is still 7 workgroups. Widening the dispatch therefore
+remains the right next lever for the gather — but the prize is ~4 ms on every
+OTHER frame, not 4 ms on every frame.
+
 ## MEASURED: the sweep fixes are worth -33%. Run of 2026-09-10 (round 3).
 
 ```

@@ -321,6 +321,17 @@ const ALL_LEGS = {
   'goo-cap-150': { setGooPerf: { particleCap: 150, areaPriority: true } },
   'goo-mintexel-1': { setGooPerf: { minTexelRadius: 1 } },
   'goo-density-off': { setGooPerf: { passGate: { density: false } } },
+  // PROBE GATHER CADENCE (2026-09-10). `probeGatherRate` SHIPS at 2 (every
+  // other frame) and setProbeGatherRate clamps to 1..4, so this is a pure
+  // cadence trade on what is now the #2 GPU pass (4-5 ms). READ IT CAREFULLY:
+  // the pass-attribution row measures the cost of ONE gather, so it does NOT
+  // move when only the frequency changes — the amortised saving only appears in
+  // the FENCED FRAME p50, which needs a quiet machine to mean anything. These
+  // legs exist so that trade can be priced with an alternated in-run A/B
+  // instead of a cross-run guess. Baseline IS rate 2; 'probe-rate1' is the
+  // every-frame diagnostic ceiling (the costliest cadence, not a lever).
+  'probe-rate3': { setProbeGatherRate: 3 },
+  'probe-rate4': { setProbeGatherRate: 4 },
   // MARCH ATTRIBUTION LEGS (2026-09-07: the march is the whole GPU frame and
   // grows 8 -> 19 -> 31 ms walk/fire/gib). Each prices one wound/chunk
   // mechanism against the shipped state. 'chunks-skip' is a diagnostic
