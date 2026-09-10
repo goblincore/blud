@@ -186,6 +186,11 @@ resolution: [bodies-style-handoff.md](docs/dev-notes/2026-09-09-perf-spikes/bodi
   2026-09-09: soldier flashes light zombies and soldiers around them at range.
   Membership by current position (+1.5 m), nearest room from tunnels; the
   player's flash lights as a 0.14 s burst. Knobs: `setProbeDynamic(0.15, 1, 4)`.
+- [ ] **NEXT: level surfaces reading the probes, FORWARD path** (owner wants
+  the forward renderer kept). A `ProbeLightingNode` adds probe irradiance to
+  the level materials' indirect diffuse via `material.lightsNode`; the
+  hemisphere light comes down as it comes up. Detailed plan with pinned facts:
+  [plan](docs/superpowers/plans/2026-09-10-level-probe-lighting.md).
 - [x] VHS post-FX wired, ships ON at the owner-tuned **`blud`** preset
   (`VHS_PRESETS.blud`, swept in the panel below 2026-09-09: artefacts up, mush
   down — full intensity + full horizontal blur, noise ~off at 0.005, grade
