@@ -158,7 +158,49 @@ a pass the game does not run and omits a bound it has. An owner decision should
 re-sync those pins; until then the prelude is mandatory for a ship-truth
 number.
 
-## Levers 1-3, partly DONE (commit `13fc0c30`)
+## MEASURED: the sweep fixes are worth -33%. Run of 2026-09-10 (round 3).
+
+```
+BENCH_OUT=/tmp/sdf-bench-gather
+BENCH_PRELUDE='__sdfGame.setOccluder(false);__sdfGame.setHullExitBound(true)'
+BENCH_LEGS=baseline BENCH_ROOMS=3,4 BENCH_REPEATS=3 BENCH_PASSES=1
+```
+Load 6.77 at start (another agent active), 79% idle. **Repeat spread 19% / 23%**
+(room 3 / room 4) — a usable run, unlike round 1's 116%.
+
+`compute:probe-gather`, the metric this note is about:
+
+| | room 3 | room 4 |
+| --- | ---: | ---: |
+| before (`13fc0c30`'s parent, round 1) | 7.19 | 6.02 |
+| **after (`13fc0c30` + `56da3ed3`)** | **4.85** | **3.99** |
+| delta | **-33%** | **-34%** |
+
+**This is well separated, which is why I am willing to report a cross-run
+number.** Per-leg values: round 1 read 7.19 / 6.02 / 6.86 / 6.05 / 6.83 / 6.15 /
+6.79 / 6.09 / 6.90 / 6.01 across five legs and two rooms — range **6.01-7.19**.
+This run reads 4.01 / 3.97 / 4.87 / 3.99 / 4.85 / 4.23 — range **3.97-4.87**. The
+ranges **do not overlap**: the lowest old value is 23% above the highest new
+one. Caveat carried: round 1's FRAME-level numbers were contaminated and are not
+used here; only the pass-attribution row is, and it was tight in both runs.
+
+The gather is now **25-35%** of the labelled GPU total (was 35-38%), and it is
+flat across segments — walk 3.99, fire 3.95, gib 4.13 (room 4) — still a
+constant tax rather than an effect spike.
+
+**What is NOT claimed.** Frame-level deltas are all inside the 19-23% repeat
+spread: fenced frame p50 read 16.15 / 16.64 here against 19.61 / 16.81 in round
+1, and `sdf:march` read 7.05 / 9.87 against 9.05 / 7.98 — the two rooms'
+march numbers essentially swapped, i.e. noise. **No frame-level win is asserted.**
+
+**What this implies for the next lever.** The observed -33% is real but SHORT of
+the 1.5-2x the shadow-sweep argument predicted, and the dispatch is still 7
+workgroups / 448 threads. So the residual ~4 ms is still occupancy/latency
+dominated rather than sweep-count dominated — which is exactly what the
+occupancy arithmetic below predicts, and it makes **widening the dispatch (R1)
+the confirmed next lever**, not more culling.
+
+## Levers 1-3, DONE (commits `13fc0c30`, `56da3ed3`)
 
 - **Bounding-sphere cull in the capsule sweep**, bounded by a `tMax`: the
   capsule is contained in the sphere around the segment midpoint of radius
