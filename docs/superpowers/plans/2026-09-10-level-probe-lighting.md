@@ -1,6 +1,7 @@
 # Level surfaces reading the probes — forward path (lighting P3/P4, step 3)
 
-**Status:** planned 2026-09-09 for the next session. Owner direction: keep the
+**Status:** DONE 2026-09-09 on `claude/level-probe-lighting` (tasks 1+2,
+GPU-verified — see Result at the end). Originally planned 2026-09-09 for the next session. Owner direction: keep the
 FORWARD renderer (the deferred look is not wanted yet); walls and floor must
 read the same probe grids and dynamic layer the bodies read.
 
@@ -57,7 +58,7 @@ re-listed.
 
 ### Task 1: `webgpu/probe-lighting-node.ts` + tests (dispatchable, pure)
 
-- [ ] Export `class ProbeLightingNode extends LightingNode` (import from
+- [x] Export `class ProbeLightingNode extends LightingNode` (import from
   `three/webgpu` — check the export name in this three version; fall back to
   `three/src/nodes/lighting/LightingNode.js`). Constructor takes the five
   static probe nodes (texture + 3 uniforms + cfg), the dynamic storage node +
@@ -68,28 +69,28 @@ re-listed.
   then `builder.context.irradiance.addAssign(E)`. Gate: when `gain == 0`
   and `dynCfg == 0` add nothing (the node is still in the list; the WGSL
   branch is skipped like the march's).
-- [ ] Export `levelLightsNode(sceneLights: Light[], probe: ProbeLightingNode)`
+- [x] Export `levelLightsNode(sceneLights: Light[], probe: ProbeLightingNode)`
   returning `lights([...sceneLights, probe])`.
-- [ ] Tests: the node's WGSL snippets are the SAME strings the march uses
+- [x] Tests: the node's WGSL snippets are the SAME strings the march uses
   (import equality), a parse contract on any new WGSL, and a builder-free
   unit test that `levelLightsNode` lists the scene lights first and the
   probe node last (LightsNode `_lights` order).
 
 ### Task 2: game wiring (interactive, GPU)
 
-- [ ] In the level-mesh loop (~L312), per surface: `enclosureKeyAt(mid)` →
+- [x] In the level-mesh loop (~L312), per surface: `enclosureKeyAt(mid)` →
   room id; create ONE `ProbeLightingNode` per room sharing that room's
   static probe uniforms (build them once per room from `roomProbes` — the
   grids arrive async; bind on `onReady` like `room-probes.ts` `stamp()`),
   and the shared `probeGather.probeDynNode`; set
   `mesh.material.lightsNode = levelLightsNode([hemi, ...accents, flashlight.spot], probeNode)`.
   Tunnel surfaces: nearest room by centre (same rule as `dynRoom`).
-- [ ] Per frame, in the block that stamps bodies' `probeDynCfg`: set each
+- [x] Per frame, in the block that stamps bodies' `probeDynCfg`: set each
   room node's dynamic cfg to the body values when that room is `dynRoom`,
   else 0. Hemisphere: `hemi.intensity = 0.8 * (1 - levelProbeWeight)`.
-- [ ] Seams: `__sdfGame.setLevelProbes(weight, gain)`, `?levelprobes=0`.
+- [x] Seams: `__sdfGame.setLevelProbes(weight, gain)`, `?levelprobes=0`.
   Default ON at matched level.
-- [ ] Verify (real Chrome, `__sdfGame.step` — hidden tabs stop rAF): parity
+- [x] Verify (real Chrome, `__sdfGame.step` — hidden tabs stop rAF): parity
   at 0; A/B screenshots: fire next to a wall (afterglow on the wall), a body
   standing on the floor with visibility 1 (darker floor under it), room 1
   red / room 2 green casts on floor and ceiling. Frame time before/after
@@ -104,3 +105,43 @@ re-listed.
 - The hemisphere is also what lights the gun and hands (check game-main
   ~L2521 "per-material env"); only the LEVEL materials get the probe node.
 - Cost: ~24 texture loads + 32 buffer loads per level pixel; measure.
+
+## Result (2026-09-09)
+
+- `webgpu/probe-lighting-node.ts` (+13 tests): `ProbeLightingNode`,
+  `createProbeLevelSlots`, `levelLightsNode`, `levelMatchedGain`,
+  `PROBE_LEVEL_WGSL` (includes `PROBE_GRID_WGSL` / `PROBE_DYNAMIC_WGSL` by
+  identity). Wired in `game-main.ts` below the gather: one node per room,
+  materials converted with three's own `renderer.library.fromMaterial` so
+  `lightsNode` is first-class; `refreshLevelLights()` re-lists when the
+  muzzle-flash PointLight arrives with the gun. Seams `__sdfGame.setLevelProbes(weight, gain)`
+  / `.levelProbes`, `?levelprobes=0`. Default ON at matched level.
+- **Two facts the plan had wrong.** (1) The hemisphere in the dungeon is
+  `DUNGEON_RIG.hemiIntensity = 0.05` — `applyRig` overwrites the 0.8 at the
+  constructor — so "match the hemi" is a tiny level; the fade is
+  `hemiBase * (1 - weight)` with `hemiBase` tracking the rig. (2) UNITS: the
+  march lights flesh as `albedo * amb`; three lights the level as
+  `irradiance * albedo / PI` (BRDF_Lambert). The evaluator returns `e * PI`
+  and `levelMatchedGain` divides it out, so `probeCfg.y` / `probeDynCfg.x`
+  mean the same on a wall as on a body. Before that factor the dynamic
+  layer moved a wall by 0.4 lum (inside noise).
+- **Measured** (frozen scene, `__sdfGame.step`, canvas readback, Rec.709
+  region means; noise ≈ 0.05–0.3): matched vs off ceiling +0.35 / wall
+  +0.2 (nothing brighter on the flip); gain 3: +9 / +10 (room 1's red on the
+  floor, the next room's green through the door — the static term reaches
+  the level); shot, 3 frames later, level on vs off: ceiling +7..9, wall
+  +7..8, decaying with the buffer (readback mean rad 12.1 → 1.4 → 0.2 over
+  80 frames, walls back at baseline). Beam bounce at the bodies' 0.15 gain
+  is +0.4 (noise) and +1.4 at gain 1 — the beam's bounce is faint on the
+  level, like on bodies.
+- **Not visible at defaults:** bodies darkening the floor. Visibility
+  multiplies only the static probe term, which is matched to a 0.05
+  hemisphere; the AmbientLight (0.035) and every direct light are
+  untouched. It shows if the owner raises the level gain
+  (`setLevelProbes(1, 3)` was clearly lit) — a tuning call, not a bug.
+- Frame time: vsync-locked at 16.7 ms on and off (cap lifted); the per-pass
+  timestamp collector returned no samples in this session, so the ~24
+  texture + 32 buffer loads per level pixel are unmeasured. 122 materials,
+  5 room pipelines, 14 lights re-listed per room.
+- Suite 4522/4523 (the pre-existing surface-nets contract is the one red),
+  tsc clean.

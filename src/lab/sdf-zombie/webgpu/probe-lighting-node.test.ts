@@ -55,6 +55,10 @@ describe('PROBE_LEVEL_WGSL — the level evaluates what the march evaluates', ()
     expect(PROBE_LEVEL_WGSL).toContain('if (probeDynCfg.x > 0.0 || probeDynCfg.y > 0.0)');
     expect(PROBE_LEVEL_WGSL).toContain('e * mix(1.0, dyn.w, probeDynCfg.y) + dyn.xyz * probeDynCfg.x');
   });
+
+  it('returns the sum in the march\'s units: times PI, since three divides by PI in BRDF_Lambert', () => {
+    expect(PROBE_LEVEL_WGSL).toContain(`return e * ${Math.PI};`);
+  });
 });
 
 describe('ProbeLightingNode + levelLightsNode — the light list', () => {
@@ -123,7 +127,8 @@ describe('levelMatchedGain — the probe level equals the hemisphere level', () 
     const g = levelMatchedGain(grid, hemi);
     const probeLum = luminance([0.5, 0.5, 0.5]) * SH_A0 * SH_Y00;
     const hemiLum = 0.05 * luminance([(0.34 + 0.13) / 2, (0.38 + 0.13) / 2, (0.44 + 0.12) / 2]);
-    expect(g * probeLum).toBeCloseTo(hemiLum, 9);
+    // What the evaluator adds is probe * gain * PI; that must equal the hemi.
+    expect(g * probeLum * Math.PI).toBeCloseTo(hemiLum, 9);
   });
 
   it('is 0 for a dark grid rather than infinite', () => {

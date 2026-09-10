@@ -36,6 +36,7 @@ import {
 import { WOUND_STEP_MUL, ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_PRIM_SHAPE, ROW_PRIM_COLOR, ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_CLUSTER_RANGE, ROW_CLUSTER_BOUNDS } from './march.wgsl';
 import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHADOW_HULL_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER, DEPTH_PREPASS_LAYER, FIELD_MESH_LAYER } from './sdf-layer';
 import { createFlashlight, DUNGEON_RIG, GALLERY_RIG, type AmbientRig } from './dungeon-lighting';
+import { ProbeLightingNode, createProbeLevelSlots, levelLightsNode, levelMatchedGain } from './probe-lighting-node';
 import { GOBLIN_SKIN } from './goblin-skin';
 import { GOBLIN_ARM_GLB, aimArm, loadGoblinArms, type GoblinArms } from './game-arms';
 import { flashPixels, smokePixels } from './flash-sprite';
@@ -347,6 +348,24 @@ async function main() {
   // is untouched.
   const hemi = new THREE.HemisphereLight(0xa39c93, 0x8f8880, 0.8);
   scene.add(hemi);
+  // LEVEL PROBES (lighting P3/P4 step 3): the walls, floor and ceiling take
+  // their indirect diffuse from the room's probe grid + the GPU gather's
+  // dynamic layer (probe-lighting-node.ts, wired below the gather). The
+  // hemisphere is the fill that replaces, so it fades as the weight rises —
+  // otherwise the level double-lights on the flip. ?levelprobes=0 pins the
+  // hemisphere at the rig's full intensity and the nodes at zero: the
+  // pre-probe look. Gain -1 = each room's matched level (levelMatchedGain).
+  const levelProbesParam = new URLSearchParams(location.search).get('levelprobes');
+  let levelProbeWeight = levelProbesParam === '0' || levelProbesParam === 'off' ? 0 : 1;
+  let levelProbeGain = -1;
+  let hemiBase = hemi.intensity;
+  const applyHemi = () => { hemi.intensity = hemiBase * (1 - levelProbeWeight); };
+  // Declared HERE, above applyRig (which restamps them): const/let are not
+  // hoisted, and the first applyRig runs long before the gather site below
+  // populates these — the cullCounts race, again.
+  const levelProbeNodes = new Map<number, ProbeLightingNode>();
+  const levelLightLists = new Map<number, THREE.LightsNode>();
+  const levelNodeMaterials: THREE.NodeMaterial[] = [];
 
   // -----------------------------------------------------------------------
   // THE GALLERY RIG (mesh side only). The lab factory ships a warm-sun +
@@ -455,9 +474,11 @@ async function main() {
   });
 
   function applyRig(rig: AmbientRig) {
-    hemi.intensity = rig.hemiIntensity;
+    hemiBase = rig.hemiIntensity;
+    applyHemi();
     hemi.color.setRGB(...rig.hemiSky);
     hemi.groundColor.setRGB(...rig.hemiGround);
+    restampLevelProbes();
     for (const child of scene.children) {
       if (child instanceof THREE.DirectionalLight) child.intensity = rig.sunIntensity;
       if (child instanceof THREE.AmbientLight) {
@@ -1113,6 +1134,13 @@ async function main() {
         if (!m) continue;
         const k = 1 - age / 0.14;
         directFlashes.push({ pos: [m[0], m[1], m[2]], intensity: 35 * k * k });
+      }
+      // The level's rooms take the same dynamic cfg as the bodies: the room
+      // the gather serves reads it, every other room reads 0 — and with the
+      // level probes off the level never reads the buffer at all.
+      for (const [roomId, node] of levelProbeNodes) {
+        const on = dynOn && dynRoom !== null && dynRoom.id === roomId && levelProbeWeight > 0;
+        node.slots.probeDynCfg.value.set(on ? probeDynGain : 0, on ? probeVisStrength : 0, 0, 0);
       }
       for (const a of actors) {
         const inDyn = dynOn && dynRoom !== null && nearRoom(a, dynRoom);
@@ -1803,12 +1831,110 @@ async function main() {
       fillIntensity: LIGHT_PRESETS['practical-hard-key'].fillIntensity,
     },
     workerFactory: () => new Worker(new URL('../probe-grid.worker.ts', import.meta.url), { type: 'module' }) as unknown as ProbeWorkerLike,
-    onReady: (roomId) => { if (import.meta.env.DEV) console.info(`[room-probes] room ${roomId} baked`); },
+    onReady: (roomId) => {
+      if (import.meta.env.DEV) console.info(`[room-probes] room ${roomId} baked`);
+      stampLevelProbeRoom(roomId);
+    },
   });
   if (probesOff) roomProbes.setProbes(0, -1);
   probeGather = createProbeGatherBinding(handle.renderer, {
     maxProbes: 10 * 4 * 10, maxBoxes: 16, maxCapsules: 1024, maxLights: 8,
   });
+
+  // -----------------------------------------------------------------------
+  // LEVEL SURFACES READING THE PROBES (lighting P3/P4 step 3; plan
+  // docs/superpowers/plans/2026-09-10-level-probe-lighting.md). ONE
+  // ProbeLightingNode per room, shared by every level surface of that room,
+  // bound to the room's static grid (through roomProbes, like a body) and
+  // to the gather's dynamic storage node (the same node the bodies bind, so
+  // walls and flesh read one buffer). `material.lightsNode` REPLACES the
+  // scene's light list, so each room's list re-lists every scene light —
+  // the hemisphere, the ambient, the accents, the flashlight and its shadow
+  // twin — and refreshLevelLights re-lists again when the muzzle-flash
+  // PointLight arrives with the gun. Forward path only: in deferred mode
+  // the level is a G-buffer producer and its lighting is the deferred
+  // stage's. Materials are converted to node materials up front with
+  // three's own fromMaterial so lightsNode is a first-class property and
+  // rides the pipeline cache key.
+  // -----------------------------------------------------------------------
+  const roomIdAt = (x: number, z: number): number => {
+    const key = enclosureKeyAt(x, z);
+    const inRoom = ROOMS.find(r => r.name === key);
+    if (inRoom) return inRoom.id;
+    // Tunnel and doorway surfaces: the nearest room by centre (dynRoom's rule).
+    let best = ROOMS[0]!, bestD = Infinity;
+    for (const r of ROOMS) {
+      const cx = (r.minX + r.maxX) / 2, cz = (r.minZ + r.maxZ) / 2;
+      const d = (cx - x) ** 2 + (cz - z) ** 2;
+      if (d < bestD) { bestD = d; best = r; }
+    }
+    return best.id;
+  };
+  const levelSceneLights = (): THREE.Light[] => {
+    const ls: THREE.Light[] = [];
+    scene.traverse(o => { if ((o as THREE.Light).isLight) ls.push(o as THREE.Light); });
+    return ls;
+  };
+  if (!deferredMode) {
+    const gatherNode = probeGather.probeDynNode;
+    for (const r of ROOMS) {
+      const slots = createProbeLevelSlots(gatherNode);
+      const node = new ProbeLightingNode(slots);
+      levelProbeNodes.set(r.id, node);
+      // The room's grid lands on these four slots when its bake arrives;
+      // the cfg is the LEVEL's (stampLevelProbeRoom), not the bodies' —
+      // bind() would write the body weight and the 4x-fill gain there.
+      roomProbes.bind({
+        probeTex: slots.probeTex, probeMin: slots.probeMin, probeInvExtent: slots.probeInvExtent,
+        probeDims: slots.probeDims, probeCfg: { value: new THREE.Vector4() },
+      }, r.id);
+      stampLevelProbeRoom(r.id);
+    }
+    const sceneLights = levelSceneLights();
+    for (const [roomId, node] of levelProbeNodes) levelLightLists.set(roomId, levelLightsNode(sceneLights, node));
+    // fromMaterial is three's own classic-to-node conversion (NodeLibrary.js);
+    // it is what the builder calls per pipeline, just not in the typings.
+    const library = handle.renderer.library as unknown as { fromMaterial(m: THREE.Material): THREE.NodeMaterial | null };
+    for (const mesh of levelGroup.children) {
+      if (!(mesh instanceof THREE.Mesh)) continue;
+      const list = levelLightLists.get(roomIdAt(mesh.position.x, mesh.position.z));
+      if (!list) continue;
+      const nm = library.fromMaterial(mesh.material as THREE.Material);
+      if (!nm) continue;
+      nm.lightsNode = list;
+      mesh.material = nm;
+      levelNodeMaterials.push(nm);
+    }
+  }
+  /** The room's level cfg: weight, and the gain that puts the probe level at
+   *  the hemisphere's (or the owner's override). 0/0 until the bake lands. */
+  function stampLevelProbeRoom(roomId: number) {
+    const node = levelProbeNodes.get(roomId);
+    if (!node) return;
+    const grid = roomProbes.gridOf(roomId);
+    let gain = 0;
+    if (grid) {
+      gain = levelProbeGain >= 0 ? levelProbeGain : levelMatchedGain(grid, {
+        sky: [hemi.color.r, hemi.color.g, hemi.color.b],
+        ground: [hemi.groundColor.r, hemi.groundColor.g, hemi.groundColor.b],
+        intensity: hemiBase,
+      });
+    }
+    node.slots.probeCfg.value.set(levelProbeWeight, gain, 0, 0);
+  }
+  function restampLevelProbes() {
+    for (const roomId of levelProbeNodes.keys()) stampLevelProbeRoom(roomId);
+  }
+  /** Re-list the scene's lights on every room (a light was added — the
+   *  muzzle flash with the gun) and force the level pipelines to rebuild. */
+  function refreshLevelLights() {
+    if (levelLightLists.size === 0) return;
+    const sceneLights = levelSceneLights();
+    for (const [roomId, node] of levelProbeNodes) {
+      levelLightLists.get(roomId)?.setLights([...sceneLights, node as unknown as THREE.Light]);
+    }
+    for (const nm of levelNodeMaterials) nm.needsUpdate = true;
+  }
 
   function spawnEnemy(name: string, room: RoomDef, start: Vec3, errs: string[]): ZombieActor {
     const enc = enclosureOf(room.name)!;
@@ -2746,6 +2872,8 @@ async function main() {
     // mostly onto the gun's own barrels.
     flashLight.position.set(MUZZLE_VIEW.x, MUZZLE_VIEW.y, MUZZLE_VIEW.z - 0.10);
     (aimRig ?? viewModelAnchor).add(flashLight);
+    // The level's light lists were built before this light existed.
+    refreshLevelLights();
     gunReady = true;
   } catch (err) {
     console.error('[sdf-game] gun model failed to load — firing still works', err);
@@ -5367,6 +5495,23 @@ async function main() {
     probeDynReadback: () => probeGather?.readback() ?? Promise.resolve(new Float32Array(0)),
     get bounceSpot() { return bounceSpotGain; },
     setProbes: (weight: number, gain = -1) => { roomProbes.setProbes(weight, gain); return { weight: roomProbes.weight, gain: roomProbes.gain }; },
+    /** LEVEL surfaces reading the probes (P3/P4 step 3): weight 0 = the
+     *  pre-probe level (hemisphere at full, nodes add nothing); gain -1 =
+     *  each room's hemisphere-matched level. The hemisphere fades with the
+     *  weight so the flip does not brighten the room. */
+    setLevelProbes: (weight: number, gain = -1) => {
+      levelProbeWeight = Math.max(0, Math.min(1, weight)); levelProbeGain = gain;
+      applyHemi(); restampLevelProbes();
+      return { weight: levelProbeWeight, gain: levelProbeGain };
+    },
+    get levelProbes() {
+      return {
+        weight: levelProbeWeight, gain: levelProbeGain, hemi: hemi.intensity, hemiBase,
+        wired: levelProbeNodes.size, materials: levelNodeMaterials.length,
+        lights: [...levelLightLists.values()][0]?.getLights().length ?? 0,
+        rooms: [...levelProbeNodes].map(([id, n]) => [id, n.slots.probeCfg.value.x, n.slots.probeCfg.value.y, n.slots.probeDynCfg.value.x, n.slots.probeDynCfg.value.y]),
+      };
+    },
     get probes() { return { weight: roomProbes.weight, gain: roomProbes.gain, ready: roomProbes.ready, matched: ROOMS.map(r => [r.id, roomProbes.matchedGain(r.id)]) }; },
     get smear() { return postAa.smear; },
     // VHS is the fourth chain stage, default OFF. While on it replaces the

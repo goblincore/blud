@@ -36,6 +36,15 @@ export const PROBE_LEVEL_INCLUDES: readonly string[] = [PROBE_GRID_WGSL, PROBE_D
  *
  *   E = probe * cfg.y * cfg.x                  (static grid; 0 when either is 0)
  *   E = E * mix(1, dyn.w, dynCfg.y) + dyn.xyz * dynCfg.x   (dynamic layer)
+ *   return E * PI
+ *
+ * THE PI. The march lights flesh as `albedo * amb` (march.wgsl.ts fleshLit);
+ * three's lighting model lights the level as `irradiance * albedo / PI`
+ * (BRDF_Lambert). Measured 2026-09-09 before this factor: the same dynamic
+ * buffer at the bodies' gain moved a wall by 0.4 luminance, within the
+ * readback noise. Scaling by PI here makes probeCfg.y and probeDynCfg.x
+ * MEAN THE SAME THING on a wall as on a body — the one-buffer promise —
+ * and levelMatchedGain divides it back out.
  *
  * Both gates at zero skip the reads entirely — the node stays in the light
  * list but adds nothing, which is what ?levelprobes=0 pins.
@@ -59,7 +68,7 @@ export const PROBE_LEVEL_WGSL = /* wgsl */ `fn probeLevelIrradiance(
     let dyn = probeDynamic(p, n, probeDyn, probeMin, probeInvExtent, probeDims);
     e = e * mix(1.0, dyn.w, probeDynCfg.y) + dyn.xyz * probeDynCfg.x;
   }
-  return e;
+  return e * 3.141592653589793;
 }`;
 
 /** The five static probe slots (room-probes.ts stamp() writes these) plus
@@ -166,7 +175,9 @@ export function levelLightsNode(sceneLights: readonly THREE.Light[], probe: Prob
  * mean contribution, so nothing gets brighter when the seam flips: a
  * hemisphere of intensity I with sky s and ground g averages I * (s + g) / 2
  * over those six normals (±x, ±z sit at the mix midpoint; +y and −y bracket
- * it). 0 when the grid is dark.
+ * it). The evaluator's PI (see PROBE_LEVEL_WGSL) is divided out so the
+ * hemisphere and the probe term meet in three's irradiance units. 0 when
+ * the grid is dark.
  */
 export function levelMatchedGain(
   grid: ProbeGrid, hemi: { sky: Vec3; ground: Vec3; intensity: number },
@@ -182,5 +193,5 @@ export function levelMatchedGain(
     (hemi.sky[0] + hemi.ground[0]) / 2, (hemi.sky[1] + hemi.ground[1]) / 2, (hemi.sky[2] + hemi.ground[2]) / 2,
   ];
   const target = hemi.intensity * luminance(mean);
-  return lum > 1e-6 ? target / lum : 0;
+  return lum > 1e-6 ? target / (lum * Math.PI) : 0;
 }
