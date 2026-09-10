@@ -227,6 +227,32 @@ async function main() {
   // __sdfGame.bench({ mode: 'passes' }) or __sdfGame.passTimings().
   const passTiming = installPassTiming(handle.renderer);
   const { scene, camera } = handle;
+
+  // LOADING SCREEN (spike program). The boot compiles for seconds before the
+  // game is playable — WebGPU init, the TSL graph, the weapon GLB, and since
+  // the warm-up ~1.7 s of pipeline compilation — and the page used to drop
+  // the player into whatever half-built frame existed at that moment. The
+  // overlay is page-level HTML visible from FIRST PAINT (before any JS);
+  // milestones below update it, and the game reveals itself only when the
+  // weapon is loaded AND the pipeline warm-up finished. It auto-hides 1.2 s
+  // after ready so headless drivers that never click are not blocked; a
+  // click on it requests pointer lock (the gesture the canvas needs anyway);
+  // ?loader=0 removes it (bench/screenshot determinism).
+  const loaderEl = document.getElementById('loader');
+  const loaderDisabled = new URLSearchParams(location.search).get('loader') === '0';
+  if (loaderDisabled && loaderEl) loaderEl.style.display = 'none';
+  function setLoader(text: string, ready = false): void {
+    if (loaderDisabled) return;
+    const status = document.getElementById('loader-status');
+    if (status) status.textContent = text;
+    if (ready) loaderEl?.classList.add('loader-ready');
+  }
+  setLoader('webgpu ready');
+  loaderEl?.addEventListener('click', () => {
+    const canvas = document.querySelector('#app canvas');
+    if (canvas) canvas.requestPointerLock();
+    loaderEl?.classList.add('loader-hidden');
+  });
   const telemetry = new GameTelemetry();
 
   // RENDER MODE — parsed ONCE at boot (hybrid deferred M2 task 5). Absent or
@@ -2266,6 +2292,7 @@ async function main() {
   }
 
   spawnAll(errors);
+  setLoader('level + actors');
   if (errors.length > 0) {
     console.error('[sdf-game] body errors:', errors.join(' | '));
   }
@@ -2743,6 +2770,11 @@ async function main() {
   /** Seconds since the last shot; >= FLASH.windowSec means no flash. */
   let flashAge = Infinity;
   let gunReady = false;
+  // LOADING SCREEN gate: resolved on BOTH paths below — a failed weapon load
+  // still boots the game, and the loader must not hang on it.
+  let resolveGunReady: () => void = () => {};
+  const gunReadyPromise = new Promise<void>((r) => { resolveGunReady = r; });
+  setLoader('weapon + effects');
   try {
     const gltf = await new GLTFLoader().loadAsync(GUN_GLB);
     // PBR metal is black without something to reflect — this page has no
@@ -2978,8 +3010,10 @@ async function main() {
     // The level's light lists were built before this light existed.
     refreshLevelLights();
     gunReady = true;
+    resolveGunReady();
   } catch (err) {
     console.error('[sdf-game] gun model failed to load — firing still works', err);
+    resolveGunReady();
   }
 
   // PIPELINE WARM-UP (spike program, 2026-09-10). three's WebGPU backend
@@ -3010,7 +3044,17 @@ async function main() {
     }
   };
   // ?warm=0 skips the warm-up (A/B: the first-shot freeze it removes).
-  if (new URLSearchParams(location.search).get('warm') !== '0') void warmPipelines();
+  setLoader('compiling pipelines');
+  const warmDone = new URLSearchParams(location.search).get('warm') !== '0'
+    ? warmPipelines()
+    : Promise.resolve();
+  // THE LOADER GATE: reveal the game only when the weapon is loaded AND the
+  // pipeline compilation finished — the two multi-second boot legs. READY
+  // auto-hides after 1.2 s so headless drivers that never click still run.
+  void Promise.all([gunReadyPromise, warmDone]).then(() => {
+    setLoader('READY — CLICK TO START', true);
+    window.setTimeout(() => loaderEl?.classList.add('loader-hidden'), 1200);
+  });
 
   /** Scratch, so the per-shot path allocates nothing. */
   const _muzA = new THREE.Vector3(), _muzB = new THREE.Vector3();
@@ -7755,5 +7799,7 @@ main().catch((err) => {
   const el = document.getElementById('errors');
   const msg = `FAILED: ${err instanceof Error ? err.message : String(err)}`;
   if (el) el.textContent = msg;
+  const loaderStatus = document.getElementById('loader-status');
+  if (loaderStatus) loaderStatus.textContent = 'FAILED — see console';
   console.error('[sdf-game] bootstrap failed', err);
 });
