@@ -15,7 +15,7 @@ import * as THREE from 'three/webgpu';
 import { wgslFn, uniform, storage, instanceIndex, compute } from 'three/tsl';
 import { withPassLabel } from './gpu-pass-timing';
 import { K_PROBE_GATHER } from './probe-dynamic.wgsl';
-import { DYN_VEC4_PER_PROBE, packBoxes, packCapsulesFromBoneInstances, packLights } from '../probe-dynamic';
+import { DYN_VEC4_PER_PROBE, packBoxes, packCapsulesFromBoneInstances, packLights, type DynLightInput } from '../probe-dynamic';
 import type { Box, Vec3 } from '../ambient';
 import type { ProbeGrid } from '../probe-grid';
 
@@ -36,7 +36,7 @@ export interface ProbeGatherFrame {
   instanceCount: number;
   /** Flesh margin added to every capsule radius, m. */
   capsuleMargin: number;
-  lights: { pos: Vec3; color: Vec3; intensity: number }[];
+  lights: DynLightInput[];
   /** 0..1, rotates the ray set so the estimate does not strobe. */
   frameSeed: number;
   /** 0..1, weight of the NEW estimate against last frame's. */
@@ -58,7 +58,7 @@ export interface ProbeGatherBinding {
 export function createProbeGatherBinding(renderer: THREE.WebGPURenderer, caps: ProbeGatherCaps): ProbeGatherBinding {
   const boxesN = 1 + caps.maxBoxes * 3;
   const capsN = 1 + caps.maxCapsules * 2;
-  const lightsN = 1 + caps.maxLights * 2;
+  const lightsN = 1 + caps.maxLights * 3; // LIGHT_FLOATS / 4 vec4 per light
   const dynN = caps.maxProbes * DYN_VEC4_PER_PROBE;
   const boxesAttr = new THREE.StorageBufferAttribute(boxesN, 4);
   const capsAttr = new THREE.StorageBufferAttribute(capsN, 4);

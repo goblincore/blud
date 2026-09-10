@@ -237,25 +237,44 @@ export function packCapsulesFromBoneInstances(
   return n;
 }
 
+/** Floats per packed light: three vec4. */
+export const LIGHT_FLOATS = 12;
+/** cosOuter value that marks a POINT light (no cone). Any cosine is > -1. */
+export const LIGHT_NO_CONE = -2;
+
+export interface DynLightInput {
+  pos: Vec3; color: Vec3; intensity: number;
+  /** SPOT lights: unit beam axis pointing away from the lamp, plus the cone
+   *  cosines the analytic beam uses (inner >= outer). Omit for a point light. */
+  axis?: Vec3; cosInner?: number; cosOuter?: number;
+}
+
 /**
- * Pack the frame's point lights. Layout: `[count,0,0,0]`, then two vec4 per
- * light — `pos.xyz, intensity`, `color.rgb, 0`.
+ * Pack the frame's lights. Layout: `[count,0,0,0]`, then THREE vec4 per
+ * light — `pos.xyz, intensity`, `color.rgb, cosOuter`, `axis.xyz, cosInner`.
+ * A point light writes cosOuter = LIGHT_NO_CONE and a zero axis; the gather
+ * then applies no cone falloff. A spot applies the analytic beam's
+ * `coneFall^2` (see MARCH_BODY_LIGHT) on top of the inverse square.
  */
 export function packLights(
-  lights: { pos: Vec3; color: Vec3; intensity: number }[],
+  lights: DynLightInput[],
   out: Float32Array,
 ): number {
   const count = lights.length;
-  const needed = 4 + count * 8;
+  const needed = 4 + count * LIGHT_FLOATS;
   if (out.length < needed) {
     throw new Error(`packLights: capacity ${out.length} floats < ${needed}`);
   }
   out[0] = count;
   let o = 4;
   for (const l of lights) {
+    const spot = l.axis !== undefined && l.cosOuter !== undefined && l.cosInner !== undefined;
     out[o + 0] = l.pos[0]; out[o + 1] = l.pos[1]; out[o + 2] = l.pos[2]; out[o + 3] = l.intensity;
-    out[o + 4] = l.color[0]; out[o + 5] = l.color[1]; out[o + 6] = l.color[2]; out[o + 7] = 0;
-    o += 8;
+    out[o + 4] = l.color[0]; out[o + 5] = l.color[1]; out[o + 6] = l.color[2];
+    out[o + 7] = spot ? l.cosOuter! : LIGHT_NO_CONE;
+    out[o + 8] = spot ? l.axis![0] : 0; out[o + 9] = spot ? l.axis![1] : 0; out[o + 10] = spot ? l.axis![2] : 0;
+    out[o + 11] = spot ? l.cosInner! : LIGHT_NO_CONE;
+    o += LIGHT_FLOATS;
   }
   return count;
 }
@@ -408,7 +427,7 @@ function dynSurfaceRadiance(
   const oy = point[1] + normal[1] * SHADOW_EPS;
   const oz = point[2] + normal[2] * SHADOW_EPS;
   for (let l = 0; l < nLights; l++) {
-    const base = 4 + l * 8;
+    const base = 4 + l * LIGHT_FLOATS;
     const px = lights[base + 0]!;
     const py = lights[base + 1]!;
     const pz = lights[base + 2]!;
@@ -426,7 +445,19 @@ function dynSurfaceRadiance(
     const ndl = normal[0] * lx + normal[1] * ly + normal[2] * lz;
     if (ndl <= 0) continue;
     if (dynShadowed([ox, oy, oz], [lx, ly, lz], d, capsules, nCaps, boxes, nBoxes)) continue;
-    const f = (intensity * ndl) / d2;
+    // Spot cone, mirroring the analytic beam: cos between the beam axis and
+    // the direction lamp -> point (which is -l), squared falloff between the
+    // outer and inner cosines. A point light has cosOuter = LIGHT_NO_CONE.
+    let cone = 1;
+    const cosOuter = lights[base + 7]!;
+    if (cosOuter > -1.5) {
+      const cosInner = lights[base + 11]!;
+      const c = -(lx * lights[base + 8]! + ly * lights[base + 9]! + lz * lights[base + 10]!);
+      const t = Math.min(1, Math.max(0, (c - cosOuter) / Math.max(cosInner - cosOuter, 1e-4)));
+      cone = t * t;
+      if (cone <= 0) continue;
+    }
+    const f = (intensity * ndl * cone) / d2;
     out[0] += albedo[0] * lights[base + 4]! * f;
     out[1] += albedo[1] * lights[base + 5]! * f;
     out[2] += albedo[2] * lights[base + 6]! * f;

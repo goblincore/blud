@@ -98,10 +98,13 @@ export const K_PROBE_GATHER = /* wgsl */ `fn kProbeGather(
       for (var l = 0u; l < nLights; l = l + 1u) {
         // vec4 index, not float offset: the count is element 0, light l is
         // 1 + 2l (packLights writes it at float 4 + 8l).
-        let lb = 1u + l * 2u;
+        let lb = 1u + l * 3u;
         let lp = (*lights)[lb].xyz;
         let intensity = (*lights)[lb].w;
         let color = (*lights)[lb + 1u].xyz;
+        let cosOuter = (*lights)[lb + 1u].w;
+        let axis = (*lights)[lb + 2u].xyz;
+        let cosInner = (*lights)[lb + 2u].w;
         let dvec = lp - bh.point;
         let d2 = dot(dvec, dvec);
         if (d2 < 1e-12) { continue; }
@@ -110,7 +113,16 @@ export const K_PROBE_GATHER = /* wgsl */ `fn kProbeGather(
         let ndl = dot(bh.normal, ld);
         if (ndl <= 0.0) { continue; }
         if (kdShadowed(o, ld, d, capsules, boxes)) { continue; }
-        radiance = radiance + color * (intensity * ndl / d2);
+        // Spot cone, mirroring the analytic beam; a point light packs
+        // cosOuter = -2 and takes cone = 1.
+        var cone = 1.0;
+        if (cosOuter > -1.5) {
+          let c = dot(-ld, axis);
+          let t = clamp((c - cosOuter) / max(cosInner - cosOuter, 1e-4), 0.0, 1.0);
+          cone = t * t;
+          if (cone <= 0.0) { continue; }
+        }
+        radiance = radiance + color * (intensity * ndl * cone / d2);
       }
       radiance = radiance * bh.albedo;
     }

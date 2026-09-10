@@ -179,8 +179,9 @@ resolution: [bodies-style-handoff.md](docs/dev-notes/2026-09-09-perf-spikes/bodi
   [Spec](docs/superpowers/specs/2026-09-09-gpu-probe-gather-design.md) ·
   [plan](docs/superpowers/plans/2026-09-09-gpu-probe-gather.md) ·
   [result](docs/dev-notes/2026-09-09-probe-grid-spike/result.md).
-  Next: tune both gains in play; soldier muzzle flashes as lights; the
-  flashlight beam as a gathered light (replacing the analytic spot).
+  Soldier muzzle flashes and the flashlight BEAM (as a spot) are gathered
+  lights too; the analytic bounce spot ships at gain 0 (`?bouncespot=1`).
+  Next: tune radiance gain (0.05) and visibility (1) in play.
 - [x] VHS post-FX wired, ships ON at the owner-tuned **`blud`** preset
   (`VHS_PRESETS.blud`, swept in the panel below 2026-09-09: artefacts up, mush
   down — full intensity + full horizontal blur, noise ~off at 0.005, grade

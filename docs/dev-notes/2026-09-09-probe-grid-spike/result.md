@@ -104,3 +104,18 @@ Process trap: Chrome (extension) and the in-app pane both report
 `visibilityState: hidden` when occluded and stop the loop; readbacks of a
 buffer that was never dispatched throw "reading 'size'". Drive frames with
 `__sdfGame.step(n)` for any GPU verification.
+
+## Update 2026-09-09 (later) — soldier flashes and the beam as gathered lights
+
+The light record is now three vec4 (`pos+I`, `color+cosOuter`, `axis+cosInner`);
+a point light packs `cosOuter = -2`, a spot applies the analytic beam's
+`coneFall²` on top of the inverse square. Per frame the gather lights are:
+the player's muzzle flash, every soldier's muzzle flash in the room (from
+`character.muzzle()`, 0.14 s like the sprite, 35×(1-t)²), and the flashlight
+BEAM as a spot (`flashlight.spot` intensity/colour, `sAxis`, the same
+cosInner/cosOuter the march gets). The analytic bounce spot ships at gain 0
+now that the beam itself is gathered (`?bouncespot=1` restores it).
+
+GPU-verified via `__sdfGame.step`: one light packed per frame without a
+shot, 81 total radiance / max 3.5 per probe from the beam alone, visibility
+min 2.66 with one body; zero errors.

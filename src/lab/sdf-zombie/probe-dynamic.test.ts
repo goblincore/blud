@@ -19,6 +19,7 @@ import {
   packBoxes,
   packCapsulesFromBoneInstances,
   packLights,
+  type DynLightInput,
   sampleProbeDynamic,
   type DynGrid,
   type DynScene,
@@ -56,11 +57,7 @@ const CENTRE: Vec3 = [0, 1.6, 0];
 const RAYS = DYN_RAY_CAP;
 const SEED = 0.25;
 
-interface DynLight {
-  pos: Vec3;
-  color: Vec3;
-  intensity: number;
-}
+type DynLight = DynLightInput;
 
 interface SceneOptions {
   lights?: DynLight[];
@@ -83,7 +80,7 @@ function sceneOf(opts: SceneOptions = {}): DynScene {
   const occluders = opts.occluders ?? [];
   const boxes = new Float32Array(4 + (1 + occluders.length) * 12);
   packBoxes(ROOM, WALL, occluders, boxes);
-  const lights = new Float32Array(4 + (opts.lights?.length ?? 0) * 8);
+  const lights = new Float32Array(4 + (opts.lights?.length ?? 0) * 12);
   packLights(opts.lights ?? [], lights);
   return {
     boxes,
@@ -292,18 +289,35 @@ describe('packCapsulesFromBoneInstances', () => {
 });
 
 describe('packLights', () => {
-  it('writes the count then pos/intensity and color per light', () => {
-    const out = new Float32Array(4 + 2 * 8);
+  it('writes the count then pos/intensity, color/cosOuter and axis/cosInner per light', () => {
+    const out = new Float32Array(4 + 2 * 12);
     const n = packLights([
       { pos: [1, 2, 3], color: [1, 0.8, 0.6], intensity: 55 },
-      { pos: [-1, 0, 0], color: [0, 1, 0], intensity: 2 },
+      { pos: [-1, 0, 0], color: [0, 1, 0], intensity: 2, axis: [0, 0, -1], cosInner: 0.9, cosOuter: 0.7 },
     ], out);
     expect(n).toBe(2);
     expect(out[0]).toBe(2);
     expectFloats(out.slice(4, 8), [1, 2, 3, 55]);
-    expectFloats(out.slice(8, 12), [1, 0.8, 0.6, 0]);
-    expectFloats(out.slice(12, 16), [-1, 0, 0, 2]);
-    expectFloats(out.slice(16, 20), [0, 1, 0, 0]);
+    expectFloats(out.slice(8, 12), [1, 0.8, 0.6, -2]);
+    expectFloats(out.slice(12, 16), [0, 0, 0, -2]);
+    expectFloats(out.slice(16, 20), [-1, 0, 0, 2]);
+    expectFloats(out.slice(20, 24), [0, 1, 0, 0.7]);
+    expectFloats(out.slice(24, 28), [0, 0, -1, 0.9]);
+  });
+});
+
+describe('spot lights in the gather', () => {
+  it('a spot aimed at the +X wall lights it; aimed away it does not', () => {
+    const at = gatherProbeDynamic(0, GRID, sceneOf({ lights: [
+      { pos: [0, 1.5, 0], color: [1, 1, 1], intensity: 4, axis: [1, 0, 0], cosInner: 0.95, cosOuter: 0.8 },
+    ] }), { raysPerProbe: RAYS, frameSeed: SEED });
+    const away = gatherProbeDynamic(0, GRID, sceneOf({ lights: [
+      { pos: [0, 1.5, 0], color: [1, 1, 1], intensity: 4, axis: [-1, 0, 0], cosInner: 0.95, cosOuter: 0.8 },
+    ] }), { raysPerProbe: RAYS, frameSeed: SEED });
+    const towardsAt = radAt(at.radiance, [1, 0, 0])[0]!;
+    const towardsAway = radAt(away.radiance, [1, 0, 0])[0]!;
+    expect(towardsAt).toBeGreaterThan(0);
+    expect(towardsAt).toBeGreaterThan(towardsAway * 4);
   });
 });
 

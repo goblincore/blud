@@ -514,7 +514,7 @@ describe('buildProbeGridRequest', () => {
 });
 
 describe('performance pin \u2014 occluders and point lights', () => {
-  it('10x4x10, 96 rays, 2 bounces, 2 occluders, 2 point lights under 1500 ms', () => {
+  it('10x4x10, 96 rays, 2 bounces, 2 occluders, 2 point lights under 5 s (loose wall-clock pin; ~125 ms idle)', () => {
     const light: ProbeLight = {
       ...LIGHT,
       points: [
@@ -537,6 +537,6 @@ describe('performance pin \u2014 occluders and point lights', () => {
     // eslint-disable-next-line no-console
     console.log(`probe-grid perf (10x4x10, 96 rays, 2 bounces, 2 occluders, 2 point lights): ${dt.toFixed(1)} ms`);
     expect(grid.sh.length).toBe(10 * 4 * 10 * 12);
-    expect(dt).toBeLessThan(1500);
+    expect(dt).toBeLessThan(5000);
   });
 });

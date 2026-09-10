@@ -541,6 +541,7 @@ async function main() {
   let probeGateLogs = 0;
   let probeLastGates: unknown = null;
   let probeLastCapsules = 0;
+  let probeLastLights = 0;
   // THE FISHEYE. The camera renders WIDER than the player sees and the blit
   // squeezes it back, which is what buys the bulge without losing the frame
   // to a warp that reaches off the buffer. `centerFovDeg` is the look knob;
@@ -1003,7 +1004,7 @@ async function main() {
       const dynOn = probeGather !== null && dynRoom !== null && dynGrid !== null
         && (probeDynGain > 0 || probeVisStrength > 0);
       probeGateLogs++;
-      probeLastGates = { bound: probeGather !== null, dynKey, room: dynRoom?.id ?? null, grid: !!dynGrid, gain: probeDynGain, vis: probeVisStrength, dynOn, flashI: flashLight ? flashLight.intensity : -1, flashAge, capsules: probeLastCapsules };
+      probeLastGates = { bound: probeGather !== null, dynKey, room: dynRoom?.id ?? null, grid: !!dynGrid, gain: probeDynGain, vis: probeVisStrength, dynOn, flashI: flashLight ? flashLight.intensity : -1, flashAge, capsules: probeLastCapsules, lights: probeLastLights };
       let probeCapsuleCount = 0;
       if (dynOn && probeGather && dynRoom && dynGrid) {
         for (const a of actors) {
@@ -1013,8 +1014,35 @@ async function main() {
           probeCapsuleCount += packBoneInstances(posed.bonePrims ?? [], posed.clusters.map(c => c.alive), sub, 1024 - probeCapsuleCount);
         }
         probeLastCapsules = probeCapsuleCount;
+        // THE LIGHTS. (1) The player's muzzle flash, a point light while its
+        // envelope burns. (2) Every soldier's muzzle flash in this room, from
+        // the same muzzle the effects sprite is posed at, 0.14 s like the
+        // sprite. (3) The flashlight BEAM as a spot light — the level lit by
+        // the beam bounces onto bodies, which the analytic bounce spot only
+        // approximated with one disc; that spot now ships at gain 0.
+        const gatherLights: import('../probe-dynamic').DynLightInput[] = [];
         const fI = flashLight ? flashLight.intensity : 0;
-        if (flashLight && fI > 0) flashLight.getWorldPosition(_flashWorld);
+        if (flashLight && fI > 0) {
+          flashLight.getWorldPosition(_flashWorld);
+          gatherLights.push({ pos: [_flashWorld.x, _flashWorld.y, _flashWorld.z], color: [1.0, 0.81, 0.58], intensity: fI });
+        }
+        for (const a of actors) {
+          if (a.room !== dynRoom.id || !a.character) continue;
+          const age = a.sinceFire();
+          if (!(age >= 0 && age < 0.14)) continue;
+          const m = a.character.muzzle();
+          if (!m) continue;
+          const k = 1 - age / 0.14;
+          gatherLights.push({ pos: [m[0], m[1], m[2]], color: [1.0, 0.72, 0.45], intensity: 35 * k * k });
+        }
+        if (spotOn > 0 && flashlight.spot.intensity > 0) {
+          const sp = flashlight.spot.position, sc = flashlight.spot.color;
+          gatherLights.push({
+            pos: [sp.x, sp.y, sp.z], color: [sc.r, sc.g, sc.b], intensity: flashlight.spot.intensity,
+            axis: [sAxis.x, sAxis.y, sAxis.z], cosInner, cosOuter,
+          });
+        }
+        probeLastLights = gatherLights.length;
         pendingGather = {
           grid: dynGrid,
           enclosure: { min: [dynRoom.minX, 0, dynRoom.minZ], max: [dynRoom.maxX, dynRoom.height, dynRoom.maxZ] },
@@ -1025,9 +1053,7 @@ async function main() {
           })),
           instances: probeCapsuleArrays.ab, instanceCount: probeCapsuleCount,
           capsuleMargin: 0.06,
-          lights: flashLight && fI > 0
-            ? [{ pos: [_flashWorld.x, _flashWorld.y, _flashWorld.z] as Vec3, color: [1.0, 0.81, 0.58] as Vec3, intensity: fI }]
-            : [],
+          lights: gatherLights,
           frameSeed: (probeFrame % 64) / 64,
           blend: 0.5,
           raysPerProbe: 32,
@@ -1697,7 +1723,9 @@ async function main() {
   // Flashlight bounce spot gain (P4 step 1): 1 = the physically-derived disc
   // irradiance; ?bouncespot=0 pins the bit-identical path.
   const bounceSpotParam = new URLSearchParams(location.search).get('bouncespot');
-  let bounceSpotGain = bounceSpotParam === null ? 1 : Math.max(0, Number(bounceSpotParam) || 0);
+  // Default 0 since the GPU gather lights the level with the beam itself
+  // (P4 step 2); ?bouncespot=1 or setBounceSpot brings the analytic disc back.
+  let bounceSpotGain = bounceSpotParam === null ? 0 : Math.max(0, Number(bounceSpotParam) || 0);
   const probesParam = new URLSearchParams(location.search).get('probes');
   const probesOff = probesParam === '0' || probesParam === 'off';
   const roomProbes = createRoomProbes({
@@ -1713,7 +1741,7 @@ async function main() {
   });
   if (probesOff) roomProbes.setProbes(0, -1);
   probeGather = createProbeGatherBinding(handle.renderer, {
-    maxProbes: 10 * 4 * 10, maxBoxes: 16, maxCapsules: 1024, maxLights: 4,
+    maxProbes: 10 * 4 * 10, maxBoxes: 16, maxCapsules: 1024, maxLights: 8,
   });
 
   function spawnEnemy(name: string, room: RoomDef, start: Vec3, errs: string[]): ZombieActor {
