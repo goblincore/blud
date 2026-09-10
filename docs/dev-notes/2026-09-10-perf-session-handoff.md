@@ -111,70 +111,74 @@ discipline below rather than replacing it.
 
 ### IT IS BUILT, AND IT ALREADY FAILS — read this before re-deriving it
 
-The instrument shipped 2026-09-10 (`0ca65f62`). `frame-hash.ts` (pure, 22 tests),
-`demo-hash.ts` (in-page, 13 tests), `__sdfGame.frameHash()` / `setDemoHold()` /
-`demoScenario()`, `scripts/sdf-demo-hash.sh` (`ab` | `record` | `verify` |
-`negative`), and the bench reports frame-hash drift beside census drift. **The
-live runs do NOT pass, and the failing evidence is the most useful thing here.**
+The instrument shipped 2026-09-10 (`0ca65f62`, `b04d36e5`). `frame-hash.ts`
+(pure, 22 tests), `demo-hash.ts` (in-page, 13 tests), `__sdfGame.frameHash()` /
+`setDemoHold()` / `demoScenario()`, `scripts/sdf-demo-hash.sh` (`ab` | `record` |
+`verify` | `negative`), and the bench reports frame-hash drift beside census
+drift. **The live runs do NOT pass, and the failing evidence is the most useful
+thing here.** Everything below is measured, not inferred; the stored run dirs are
+named where it matters.
 
-**What is PROVEN** (room 1, `?frozen=1`, warmup 60, render-locked, `demoHold`,
-flicker clock and `performance.now` pinned, 1280×800):
+**PROVEN — do not re-derive these:**
 
 1. **The readback and the digest are sound.** Hashing one position with NOTHING
-   between the reads returns an identical digest, in every run. A mismatch is
+   between the reads returns an identical digest, in EVERY run. A mismatch is
    therefore never a readback artefact — the frame really differs.
-2. **The render sequence IS DETERMINISTIC.** Sweeping 24 consecutive positions
-   and aligning two boots by offset (`/tmp/demo-phase-probe.mjs`, gather rate 1)
-   gives **d=1 matching 23/23 overlapping positions, with all 24 digests distinct
-   per boot**. Not a periodic artefact: a genuine one-position phase offset. Two
-   boots reached the recording having dispatched a different number of gathers
-   (84 vs 83), and that alone accounted for the entire difference.
-3. **The interlaced field's parity is real and is now a recorded property.**
-   Stepping ONE frame at a time on a locked, unchanging scene makes the march
-   digest alternate between exactly two values. `demoScenario` records the field
-   parity of every sample and the recorder **refuses a mixed-parity recording**
-   rather than reporting a phantom divergence. `every` must be EVEN (default 4).
-4. **The dispatch phase is now ANCHORED** (`setDemoHold(true)` zeroes
-   `probeFrame`) and a recording's `seedIdle` is part of the comparability
-   fingerprint. Measured effect: pre-demo dispatch counts went from 84 vs 83 to
-   **9 vs 5** — small and accounted for. It is a real correctness fix and it is
-   **not sufficient** (see below), which is exactly the kind of claim that needs
-   the numbers beside it.
-5. **With the gather's gains zeroed, the march still varies — between EXACTLY
-   TWO digests, and the two boots share both of them.** So there is a second,
-   period-2 mechanism that is NOT the gather's EMA and NOT the field parity
-   (the samples are all at the same recorded parity). Candidate to test next:
-   `FIELD_INTERLACE_WGSL`'s per-frame jitter phase, which advances per frame.
+2. **The render sequence IS deterministic.** A 24-position alignment sweep across
+   two page boots (gather rate 1) matches **23/23 overlapping positions at a
+   ONE-POSITION offset**, with all 24 digests distinct per boot. Not a periodic
+   artefact — a real phase offset. So "the renderer is nondeterministic" is
+   FALSE, and anything built on that assumption is wasted work.
+3. **The interlaced field's parity is real and is now recorded.** One frame at a
+   time on a locked, unchanging scene makes the march digest alternate between
+   exactly two values (run set `nogather`: A held `1142176106` throughout, B held
+   `1439188061` throughout, same recorded parity). `demoScenario` records each
+   sample's parity and the recorder **REFUSES a mixed-parity recording** instead
+   of reporting a phantom divergence. `every` must be EVEN.
+4. **The gather's dispatch SCHEDULE is deterministic: both boots dispatched
+   exactly 36 times** over the same spec (`final`). Schedule is not the problem.
+5. **The gather's `frameSeed` is now PINNED to 0 while a demo is held** (it
+   rotates per dispatch in play, which makes the blended estimate track a
+   different ray set every dispatch). This is a RECORDING-ONLY change and it is
+   the one thing here that alters a recording's look — a settled estimate rather
+   than an oscillating one.
 
-**THE BLOCKER, stated exactly.** The gather keeps state ACROSS frames — its
-`blend 0.6` is an EMA toward the current estimate and `frameSeed` rotates per
-DISPATCH (`(probeFrame % 64) / 64`), so a rendered frame is a function of the
-DISPATCH SEQUENCE and not of that frame's inputs. Anchoring the phase removes the
-offset but not the history dependence: re-running the alignment probe on the
-anchored build gives **no shift that aligns the two boots**. That is the honest
-state — and note it is a *different* finding from the un-anchored one, which is
-why the anchor is worth keeping.
+**NEGATIVE RESULTS — also do not re-derive:**
 
-**Next, in the order the evidence points:**
+- **Pinning the seed did NOT align two boots** (`pinned`, `final`: still 0 shared
+  digests, march still varies between samples at held parity). So the seed is not
+  the cause.
+- **Anchoring the dispatch phase did NOT align them either.** Resetting
+  `probeFrame` at `setDemoHold(true)` was tried and REMOVED — see the next point.
+- **`seedIdle` was a BAD diagnostic and is gone.** It was computed as
+  `probeFrame - demoSeedBase` across that reset boundary, which made it read
+  NEGATIVE (−34, −37, −1 in stored runs) and it was briefly used as evidence.
+  A diagnostic that can read as nonsense is worse than none. Do not reset a
+  running counter to fix a phase problem.
 
-1. **Decide whether a frame's identity includes its dispatch history.** It has
-   to, as the renderer currently stands. So either (a) settle the gather to
-   equilibrium before recording and hash the settled sequence position (cheap,
-   keeps the look), or (b) pin the seed outright for recordings (changes the
-   look: the rotation exists to stop the estimate strobing), or (c) make the
-   dispatch sequence position a recorded INPUT of the demo format — honest about
-   what the renderer is, and what Quake-style demos do with RNG anyway.
-2. **Then the period-2-with-gather-off mechanism** (item 5 above). Do this
-   second: it is independent of the gather, so it will still be there after (1),
-   and it is a two-digest alternation on an unchanging scene — the easiest kind
-   of bug to chase with this instrument.
-3. **Then `.dem` serialization** (stage 3), which needs a green hash.
+**THE BLOCKER, stated exactly.** With parity held, the seed pinned, the sim
+render-locked and the dispatch count identical, the gather's dynamic layer STILL
+differs between two boots. So the variation is in the gather's INPUTS, not its
+schedule and not its seed. Untested next candidates, in order: the packed bone
+capsule instances (`boneInstanceArrays` / `packCapsulesFromBoneInstances`), the
+gathered light list, or the enclosure/furniture packing — all repacked every
+frame from CPU state. **A cheap decisive test: hash the packed capsule array
+itself** (it is a small Float32Array) as a third layer in `demoScenario`, which
+says immediately whether the divergence enters through the gather's inputs.
 
-Two consequences worth banking: (a) none of this says "determinism is
-impossible" — item 2 proves the render sequence is deterministic, and the
-remaining problems are specific, named pieces of renderer state; (b) the
-existing gather **−33%** and the cost split survive regardless, because they rest
-on within-leg pass rows rather than frame-level comparisons.
+**Also unexplained, and INDEPENDENT of the gather:** with `setProbeDynamic(0,0)`
+the march still varies between exactly two digests (`nogather`), and the two
+boots do not share them. So a second, period-2, gather-independent mechanism
+exists — field jitter phase is the candidate, since the interlaced field's own
+jitter advances per frame. Fix that one too; it will still be there afterwards.
+
+**Order the evidence points in:** (1) hash the gather's inputs to find where the
+divergence enters; (2) the gather-independent period-2 mechanism; (3) `.dem`
+serialization (stage 3), which needs a green hash. Two things worth banking:
+the gather's **−33%** and the cost split survive regardless (they rest on
+within-leg pass rows, not frame-level comparisons); and the instrument already
+earns its keep by having turned "determinism is hard" into four falsified
+hypotheses and one precise open question.
 
 ## Merging these branches (HISTORICAL — already merged, kept for provenance)
 

@@ -1301,7 +1301,20 @@ async function main() {
           // Diagnostic seams (see ?dynrays / ?dynlights above); both default to
           // the shipped values, so an unset URL is bit-identical to before.
           lights: probeLightsBoot === null ? gatherLights : gatherLights.slice(0, probeLightsBoot),
-          frameSeed: demoHold ? ((probeFrame - demoSeedBase) % 64) / 64 : (probeFrame % 64) / 64,
+          // THE SEED IS PINNED WHILE A DEMO IS HELD. The rotation exists so the
+          // estimate does not strobe in play, but it makes each dispatch report
+          // the estimate of a DIFFERENT ray set, and the kernel blends toward it
+          // (`blend 0.6`), so the dynamic layer oscillates over the seed cycle
+          // instead of settling. Measured 2026-09-10: on a render-locked scene
+          // the march digest took 24 DISTINCT values over 24 consecutive
+          // positions, and two boots never aligned at any offset.
+          //
+          // Pinning removes the source rather than tracking it: with one ray set
+          // the EMA converges to a fixed point of a FROZEN scene, which is what
+          // a recording needs. It is a RECORDING-ONLY change — normal play keeps
+          // the rotation — and it is the one thing here that does alter the look
+          // of a recording (a settled estimate rather than an oscillating one).
+          frameSeed: demoHold ? 0 : (probeFrame % 64) / 64,
           blend: 0.6,
           fall: 0.12,
           raysPerProbe: probeRaysBoot === null ? 32 : probeRaysBoot,
@@ -5532,23 +5545,15 @@ function performBenchAction(a: BenchAction): void {
     setDemoHold: (on: boolean) => {
       demoHold = on;
       demoSeedBase = probeFrame;
-      // ANCHOR THE PHASE (measured 2026-09-10). The gather's `frameSeed` is
-      // `(probeFrame % 64) / 64` and `probeFrame` counts DISPATCHES, so it also
-      // advances every OTHER frame at the shipped rate of 2. Two boots that
-      // reach this point having dispatched a different number of times therefore
-      // start on a different seed — and since the gather's estimate is an EMA
-      // toward whatever the current ray set reports, every later frame inherits
-      // that phase. MEASURED: two boots' march digests matched EXACTLY over all
-      // 23 overlapping frames once one was shifted by a single position, and
-      // their pre-demo dispatch counts differed by exactly 1 (84 vs 83). So the
-      // renderer is deterministic; only the phase drifted.
-      //
-      // Resetting the counter on the demo seam re-anchors it, which is why this
-      // is a fix rather than a fudge: the value means "dispatches since the
-      // recording started", and that is only true if it starts at zero.
-      // `probeFrame` feeds nothing but the seed and the `probeDynamic.frames`
-      // diagnostic, so this cannot change what the game does.
-      if (on) probeFrame = 0;
+      // NOTE, and it is a lesson worth keeping: an earlier cut RESET
+      // `probeFrame` here to re-anchor the gather's per-dispatch seed phase. It
+      // was removed because (a) the seed is now PINNED for a recording (see the
+      // frameSeed site), so the phase no longer exists to anchor, and (b) the
+      // reset silently corrupted `seedIdle` — a diagnostic computed as
+      // `probeFrame - demoSeedBase` across a reset boundary, which made it
+      // NEGATIVE (-34, -37, -1 in the stored runs). A diagnostic that can read
+      // as nonsense is worse than no diagnostic: it was briefly used as
+      // evidence. Do not reset a running counter to fix a phase problem.
       return demoHold;
     },
     get demoHold() { return demoHold; },
@@ -5721,7 +5726,7 @@ function performBenchAction(a: BenchAction): void {
          *  design, so a set of mixed parities cannot be compared to anything. */
         parity,
         repeatedParity,
-        seedIdle: probeFrame - demoSeedBase,
+        dispatches: probeFrame - demoSeedBase,
         ms: Math.round(performance.now() - started),
         hashes,
       };

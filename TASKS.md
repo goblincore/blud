@@ -177,7 +177,7 @@ construction. Only `sdf:march` (6.7–9.7 ms, no cadence) is a true per-frame ro
   instance.** All three wrong-default bugs this session had the same signature —
   a wrong value that reads as a design choice rather than as an error.
 
-**[~] FRAME HASH — BUILT, AND IT ALREADY FAILS USEFULLY (`0ca65f62`).**
+**[~] FRAME HASH — BUILT, AND IT ALREADY FAILS USEFULLY (`0ca65f62`, `b04d36e5`).**
 `frame-hash.ts` (pure, 22 tests) + `demo-hash.ts` (in-page, 13 tests) +
 `frameHash()` / `setDemoHold()` / `demoScenario()` + `scripts/sdf-demo-hash.sh`
 (`ab` | `record` | `verify` | `negative`); the bench reports frame-hash drift
@@ -187,16 +187,18 @@ beside census drift. Hashes `marchTarget` + the gather's dynamic layer
 never an artefact); **the render sequence IS deterministic** — 24 consecutive
 positions aligned across two boots match **23/23 at a one-position offset**, all
 digests distinct; the interlaced field's two-value parity alternation is real, so
-mixed-parity recordings are REFUSED; the dispatch phase is anchored at
-`setDemoHold(true)` and a recording's `seedIdle` is part of the fingerprint
-(pre-demo dispatches went 84/83 → 9/5). **Still failing:** the gather's EMA +
-per-dispatch `frameSeed` make a frame a function of the DISPATCH SEQUENCE, so
-anchoring removes the offset but not the history dependence (re-probe: no shift
-aligns). With the gather zeroed a SECOND period-2 mechanism remains, the two
-boots sharing both digests — jitter phase is the candidate.
-**Next: (a) decide whether a frame's identity includes its dispatch history —
-settle the gather, pin the seed, or record the sequence position; (b) then the
-gather-independent period-2 mechanism; (c) then `.dem`.**
+mixed-parity recordings are REFUSED; and both boots dispatched **exactly 36
+gathers**, so the schedule is not the problem.
+**Falsified, do not retry:** pinning `frameSeed` during recordings, and anchoring
+the dispatch phase (that reset also corrupted the `seedIdle` diagnostic into
+negative values — both the reset and the diagnostic are gone).
+**Open:** with parity held, the seed pinned and dispatch counts identical, the
+dynamic layer STILL differs between boots — so the divergence enters through the
+gather's INPUTS (packed bone capsule instances, the gathered light list, or the
+enclosure packing). **Next: hash the packed capsule array as a third layer** —
+a small Float32Array that says immediately whether that is where it enters.
+Separately, a gather-independent period-2 mechanism remains (field jitter phase
+is the candidate). Full evidence: handoff, "IT IS BUILT".
 
 **NEXT, in order:** (1) the deeper-interlace `COMPOSITE_WGSL` generalisation —
 plan at `docs/superpowers/plans/2026-09-10-deeper-interlace-fields.md`, pure math

@@ -201,6 +201,7 @@ async function runOnce(conn, spec, label) {
       `${same(dyn) ? 'STABLE' : 'VARIES'} (${dyn.join(', ')})`,
     );
   }
+  console.log(`  ${label}: gather dispatches over the run: ${record.dispatches}`);
   console.log(
     `  ${label}: ${record.hashes.length} hashes over ${record.frames} frames ` +
     `(${record.ms} ms) · march ${march.width}x${march.height} nonZero ${march.stats.nonZero}` +
@@ -219,13 +220,11 @@ function fingerprint(spec, march, record) {
     version: march ? 1 : 0,
     marchWidth: march?.width ?? 0,
     marchHeight: march?.height ?? 0,
-    /** THE GATHER'S DISPATCH PHASE. The seed rotates per DISPATCH, so a
-     *  recording is only comparable to another that started on the same one.
-     *  Measured 2026-09-10: two boots whose pre-demo dispatch counts differed by
-     *  1 produced march digests that matched exactly once shifted by a single
-     *  frame — the phase, not the renderer, was the difference. A mismatch here
-     *  is refused rather than reported as a phantom divergence. */
-    seedIdle: record?.seedIdle ?? 0,
+    /** The gather's dispatch count over the recording. Recorded because it was
+     *  ONCE used as a phase proxy and proved not to be one — kept as an
+     *  observation, NOT as a gate: see `setDemoHold`'s note on the reset that
+     *  made it negative. Do not compare on this. */
+    dispatches: record?.seedIdle ?? 0,
     kind: spec.kind, room: spec.room, frames: spec.frames, every: spec.every,
     warmup: spec.warmup, pose: spec.pose, prelude: spec.prelude, sim: spec.sim === true,
   };
