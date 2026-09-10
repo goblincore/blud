@@ -201,8 +201,17 @@ in ONE stored run reuse digests from EARLIER runs, so this is a discrete branch
 chosen at boot, not noise — find the BRANCH, not another clock to freeze.
 **Excluded, each by measurement:** readback, sim state, field parity, gather seed,
 dispatch schedule (36/35/18), gather inputs (byte-identical), camera (identical to
-6 dp), VHS, and the room-probe worker bake (now gated by a new `roomProbesReady`
-seam — still diverges).
+6 dp), VHS (`setVhs(null)` over 4 boots → same 2 digests, same branch-B hash
+`3035244172`; VHS runs downstream of the march target and cannot touch it), and the
+room-probe worker bake (now gated by a new `roomProbesReady` seam — still
+diverges).
+**[x] VHS time pinned anyway** via a new `postAa.setTimeFrozen(on)` driven by
+`setDemoHold`. The owner's instinct was right even though it was not this bug: VHS
+OWNS temporal blending (reads the previous frame's output) AND drives 60/24 Hz
+row-noise hashes off `performance.now()`. Freezing the time removes the clock
+dependence but NOT the history — which is the standing reason the hash measures the
+march target and not the presented image, and it must be dealt with before the hash
+can ever cover the composited frame.
 **The branch is CHARACTERISED (4 boots, 1 vs 3):** at one body pixel, R −3.3%,
 G −6.6%, B −12.1%, **ALPHA BIT-IDENTICAL** — so not coverage, not a missing body,
 not vertex position; a UNEQUAL RGB scale is lighting/colour rather than exposure.

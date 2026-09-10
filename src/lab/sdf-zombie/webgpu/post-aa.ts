@@ -412,6 +412,30 @@ export interface PostAa {
   /** A live term override, clamped to VHS_TERM_RANGES. */
   setVhsTerm(name: keyof VhsTerms, value: number): void;
   /**
+   * FREEZE THE VHS TIME (deterministic demo recordings, 2026-09-10).
+   *
+   * VHS is the single most stateful stage in the chain, in two independent
+   * ways, and both are hostile to a reproducible frame:
+   *
+   *   1. It OWNS temporal blending (post-vhs.ts: the motion gate reads the
+   *      PREVIOUS frame's VHS output as `vhsPrevTex`, and smear is suppressed
+   *      to 0 while it is on), so its output is a function of how many frames
+   *      preceded it, not of the frame itself.
+   *   2. Its `time` drives `floor(time * 60)`, `floor(time * 24)` and
+   *      `floor(time * chromaBurstRate)` row-noise hashes, so those hashes
+   *      change 60/24/rate times a second.
+   *
+   * The clock was already wall-clock ON PURPOSE (see the update site), and a
+   * recorder was pinning it by overwriting `performance.now` in the page — a
+   * blunt instrument that also freezes anything ELSE reading the clock. This
+   * seam freezes exactly this uniform. It does NOT remove mechanism 1: VHS
+   * keeps its history, so a VHS pass in the chain still makes the COMPOSITED
+   * frame path-dependent. That is why the frame hash measures the march target
+   * rather than the presented image; freezing the time is a prerequisite for
+   * ever extending it, not a substitute.
+   */
+  setTimeFrozen(on: boolean): void;
+  /**
    * The SSCS stage (post-sscs.ts) — screen-space contact shadows occluded
    * against the capture's own depth. Default OFF here; the game page owns
    * the default-on decision because the stage is legacy-path-only (its flesh
@@ -566,6 +590,10 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   /** Last blit source encoding — diagnostic only, see the interface. */
   let blitSrcIsDisplay = false;
   const uVhsTime = uniform(0);
+  /** Demo-recording hold: while set, `uVhsTime` comes from the freeze instant
+   *  instead of the wall clock. Default OFF, so ordinary play is untouched. */
+  let vhsTimeFrozen = false;
+  let vhsFrozenAt = 0;
   const uVhsHasPrev = uniform(0);
   const uVhsIsDisplay = uniform(0);
   // One uniform per VhsTerms key, written by setVhs/setVhsTerm. Initialised to
@@ -909,7 +937,7 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
 
         vhsCurTex.value = vhsWrite.texture;
         vhsPrevTex.value = vhsRead.texture;
-        uVhsTime.value = performance.now() / 1000;
+        uVhsTime.value = vhsTimeFrozen ? vhsFrozenAt : performance.now() / 1000;
         uVhsHasPrev.value = vhsInputValid ? 1 : 0;
         uVhsIsDisplay.value = srcIsDisplay ? 1 : 0;
         setPassLabel('post:vhs');
@@ -993,6 +1021,10 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       refit();
     },
     setBlitFlipY(on) { uFlipY.value = on ? 1 : 0; },
+    setTimeFrozen(on) {
+      vhsTimeFrozen = on;
+      if (on) vhsFrozenAt = performance.now() / 1000;
+    },
     setVhs(preset) {
       vhsPreset = preset;
       // The pair's contents are stale after an off stretch (and after a preset

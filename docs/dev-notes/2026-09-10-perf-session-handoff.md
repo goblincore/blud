@@ -234,6 +234,30 @@ Also note the branch is a MINORITY event: 1 boot in 4 took branch A. So a two-ru
 A/B has a ~5-in-8 chance of drawing two different branches, which is why "record
 twice and compare" failed so reliably.
 
+**VHS: AUDITED, FALSIFIED AS THE CAUSE, AND PINNED ANYWAY.** Owner hypothesis
+(2026-09-10) that the VHS effects are nondeterministic and affect final pixels —
+right about the mechanism, wrong about this bug:
+
+- VHS is the most stateful stage in the chain in TWO independent ways: it **owns
+  temporal blending** (`post-vhs.ts`: the motion gate reads the PREVIOUS frame's
+  VHS output as `vhsPrevTex`, and smear is suppressed to 0 while it is on, so its
+  output depends on how many frames preceded it) and its `time` drives
+  `floor(time*60)` / `floor(time*24)` / `floor(time*chromaBurstRate)` row-noise
+  hashes.
+- **Falsified for the two-state branch:** 4 boots with `setVhs(null)` still
+  produced 2 distinct digests, and the branch-B digest was **exactly
+  `3035244172`, the same value the VHS-on runs produce**. So VHS is not the cause,
+  and it does not touch the march target (it runs downstream: the march target is
+  drawn INSIDE `postAa.render()`, so it is an input to the chain, not an output).
+- **Pinned anyway, because the instinct was right:** `postAa.setTimeFrozen(on)`,
+  driven by `setDemoHold`, freezes `uVhsTime` at the freeze instant instead of
+  wall-clock `performance.now()`. That replaces a blunt recorder-side hack
+  (overwriting `performance.now` in the page, which froze ANYTHING else reading
+  the clock). It does NOT remove the temporal blending — nothing can — and that is
+  the standing reason the frame hash measures the **march target** and not the
+  presented image. Extending the hash to the composited frame requires dealing
+  with VHS's history first, and that is now written down where the seam lives.
+
 **Everything now excluded, each by a measurement rather than an argument:**
 
 | candidate | how it was excluded |
@@ -245,7 +269,7 @@ twice and compare" failed so reliably.
 | dispatch schedule | 36 vs 35 vs 18 dispatches → same divergence |
 | gather inputs (bone capsules) | `instances` BYTE-IDENTICAL across boots, count 35 |
 | camera | logged: `[-7.4, 1.62, -7.4]` in both boots, to 6 dp |
-| post-fx (VHS) | `setVhs(null)` changes nothing |
+| post-fx (VHS) | `setVhs(null)` → same 2 digests, same branch-B hash `3035244172` |
 | room-probe worker bake | gated with `roomProbesReady` (new seam) — still diverges |
 
 **What that leaves, stated as a shape rather than a guess.** Inputs identical,

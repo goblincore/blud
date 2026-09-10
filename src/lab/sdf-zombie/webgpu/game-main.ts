@@ -5577,6 +5577,11 @@ function performBenchAction(a: BenchAction): void {
     setDemoHold: (on: boolean) => {
       demoHold = on;
       demoSeedBase = probeFrame;
+      // VHS's time hashes come off `performance.now()` 60/24/chromaBurst times a
+      // second, so pin them with the hold. Its temporal blend is NOT pinned by
+      // this and cannot be — see post-aa setTimeFrozen: that is exactly why the
+      // frame hash measures the march target and not the presented image.
+      postAa.setTimeFrozen(on);
       // NOTE, and it is a lesson worth keeping: an earlier cut RESET
       // `probeFrame` here to re-anchor the gather's per-dispatch seed phase. It
       // was removed because (a) the seed is now PINNED for a recording (see the
