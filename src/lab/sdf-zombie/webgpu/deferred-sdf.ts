@@ -58,6 +58,7 @@ import {
   HELPERS, MARCH_BODY_PARAMS, MARCH_BODY_TRACE, MARCH_BODY_SURFACE_PREP,
 } from './march.wgsl';
 import { NORMAL_GRADIENT_HELPERS, NORMAL_GRADIENT_GAME_HELPERS } from './normal-gradient.wgsl';
+import { TEMPORAL_START_WGSL } from './temporal-start';
 import { SURFACE_CLASS_FLESH } from './deferred-surface';
 
 /**
@@ -200,6 +201,9 @@ export const SDF_SURFACE_READ_PARAMS = /* wgsl */ `fn sdfSurfaceReadParams(dep: 
 function buildSdfSurfaceChain() {
   const sources = [
     ...HELPERS, ...NORMAL_GRADIENT_HELPERS, ...NORMAL_GRADIENT_GAME_HELPERS,
+    // MARCH_BODY_TRACE calls temporalStartFetch (plan 2026-09-10) — the
+    // shared trace text needs the helper in this chain too.
+    TEMPORAL_START_WGSL,
     SDF_SURFACE_STATE,
   ];
   const nodes = sources.reduce<ReturnType<typeof wgslFn>[]>(

@@ -1632,6 +1632,10 @@ async function main() {
   const GAME_DEPTH_GATE = 0;
   sdfLayer.setDepthGate(GAME_DEPTH_GATE > 0.5);
   sdfLayer.setDepthPreEnabled(GAME_DEPTH_PREPASS > 0.5);
+  // TEMPORAL REPROJECTION START (plan 2026-09-10). Ships OFF until the
+  // pass bench and the owner say otherwise; ?tstart=1 boots it on, and
+  // __sdfGame.setTemporalStart(on, margin, slope) flips it live.
+  sdfLayer.setTemporalStart(new URLSearchParams(location.search).get('tstart') === '1');
   // INTERLACED FIELDS ON (2026-09-09), replacing half-rate. Half-rate held
   // and reprojected the whole marched frame, which desynced from the
   // full-rate skeleton meshes whenever the player moved — reprojected flesh
@@ -2066,6 +2070,9 @@ async function main() {
           uniforms: sdfLayer.shellEntry.uniforms,
         },
         prev: sdfLayer.prev,
+        // Temporal reprojection start (plan 2026-09-10): passed
+        // unconditionally like prev — cfg.x 0 is the fetch identity.
+        lastFrame: sdfLayer.lastFrame,
         // The quarter-res depth prepass (close-up task 3). Passed
         // unconditionally like the shell bounds — the fetch identities make
         // the march bit-identical while sdfLayer.depthPreEnabled is false,
@@ -4034,6 +4041,7 @@ async function main() {
       // (owner: "hard to tell"). 0 = the shipped constant.
       ` · wstep ${(() => { const z = actors[0]?.view.uniforms.perfCfg.value.z ?? 0; return z > 0 ? z.toFixed(2) : `${WOUND_STEP_MUL} (ship)`; })()}` +
       (adaptiveEnabled ? ` · ADAPTIVE r${adaptiveState.rung}` : '') +
+      (sdfLayer.temporalStart.on ? ' · TSTART' : '') +
       (reloadSpeed !== 1 ? ` · RELOAD x${reloadSpeed} (T)` : '') +
       (hud.lockHint ? ' · click to lock' : '') +
       (wanderFrozen ? ' · FROZEN' : '');
@@ -6201,6 +6209,11 @@ async function main() {
      *  consumption of it. OFF (ship default) is bit-identical to the
      *  pre-task-3 frame; the census and the bench decide the flip. */
     setDepthPrepass(on: boolean) { sdfLayer.setDepthPreEnabled(on); },
+    /** Temporal reprojection start (plan 2026-09-10): rays start at last
+     *  frame's reprojected hit minus `margin` m (0.25 ships) and `slope`.
+     *  Off is bit-identical. */
+    setTemporalStart: (on: boolean, margin?: number, slope?: number) => { sdfLayer.setTemporalStart(on, margin, slope); return sdfLayer.temporalStart; },
+    get temporalStart() { return sdfLayer.temporalStart; },
     get depthPrepass() { return sdfLayer.depthPreEnabled; },
     get shell() {
       return {

@@ -38,6 +38,7 @@ import {
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
   ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS,
 } from './march.wgsl';
+import { TEMPORAL_START_WGSL } from './temporal-start';
 import { sdfSurfaceMarch, sdfSurfaceMrtNodes } from './deferred-sdf';
 import {
   encodeSurfaceClass, SURFACE_CLASS_FLESH,
@@ -176,7 +177,9 @@ function buildMarchFn() {
   // would have to go in the SAME slot or WGSL's declaration-before-use rule
   // breaks. (The specialiser that used that slot was retired 2026-09-01,
   // perf r2 task 4: its emitted call signature had rotted against SD_PRIM's.)
-  const sources = [...HELPERS, ...NORMAL_GRADIENT_HELPERS, ...NORMAL_GRADIENT_GAME_HELPERS];
+  // TEMPORAL_START_WGSL last: MARCH_BODY calls temporalStartFetch (plan
+  // 2026-09-10); it depends on nothing, and the chain carries it through.
+  const sources = [...HELPERS, ...NORMAL_GRADIENT_HELPERS, ...NORMAL_GRADIENT_GAME_HELPERS, TEMPORAL_START_WGSL];
   // EACH HELPER DEPENDS ON THE PREVIOUS ONE ONLY, not on every earlier one.
   // wgslFn includes a dependency's code transitively, and HELPERS is already a
   // strict declaration order, so a chain emits exactly the same WGSL as the
@@ -802,6 +805,27 @@ const PREV_FETCH_WGSL = /* wgsl */ `fn prevFetch(prevTex: texture_2d<f32>, scree
 }`;
 export const prevFetchNode = wgslFn(PREV_FETCH_WGSL);
 
+/** Last FRESH frame's final layer (RGBA, NDC depth in .a, >= 1 = nothing)
+ *  plus the inverse view-projection that made it — the temporal
+ *  reprojection start's source (plan 2026-09-10). Bound unconditionally;
+ *  `cfg.x` gates the fetch, 0 is the bit-identical march. */
+export interface LastFrameSource {
+  texture: THREE.Texture;
+  uniforms: { invVp: ReturnType<typeof uniform>; cfg: ReturnType<typeof uniform> };
+}
+let fallbackLast: { tex: THREE.DataTexture; invVp: ReturnType<typeof uniform>; cfg: ReturnType<typeof uniform> } | null = null;
+/** One shared fallback for views without a source: alpha 1 (nothing here),
+ *  identity inverse VP, cfg 0 (never fetched). One texture node per material
+ *  is built from it, so the shared-texture collapse trap does not apply. */
+function fallbackLastFrame() {
+  if (!fallbackLast) {
+    const tex = new THREE.DataTexture(new Float32Array([0, 0, 0, 1]), 1, 1, THREE.RGBAFormat, THREE.FloatType);
+    tex.needsUpdate = true;
+    fallbackLast = { tex, invVp: uniform(new THREE.Matrix4()), cfg: uniform(new THREE.Vector4(0, 0, 0, 0)) };
+  }
+  return fallbackLast;
+}
+
 /** The accumulated-depth gate's input, as the march material needs it. Same
  *  shape as OccluderSource: the texture binds unconditionally, the uniform
  *  gates the fetch. */
@@ -971,9 +995,12 @@ export function createMarchMaterial(
   // via encodeSurfaceClass. Ignored in lit mode. Default 'full' keeps the M1
   // encoding (class 2, no bit) exact.
   shadowReceiver?: ShadowReceiver,
-  // GPU probe gather dynamic layer (P3/P4), POSITIONALLY LAST: the read-only
-  // storage node of the dynamic probe buffer, or the 4-vec4 fallback.
+  // GPU probe gather dynamic layer (P3/P4): the read-only storage node of
+  // the dynamic probe buffer, or the 4-vec4 fallback.
   probeDyn?: unknown,
+  // Temporal reprojection start (plan 2026-09-10), POSITIONALLY LAST: last
+  // fresh frame's layer + inverse VP + cfg, or the never-fetched fallback.
+  lastFrame?: LastFrameSource,
 ) {
   const dataNode = dataTex instanceof THREE.Texture
     ? texture(dataTex)
@@ -1186,8 +1213,13 @@ export function createMarchMaterial(
     // bounceSpotCfg, bound in the same commit as the WGSL inputs.
     probeDyn: (probeDyn ?? fallbackProbeDyn()) as never,
     probeDynCfg: u.probeDynCfg,
-    // Direct muzzle flash — POSITIONALLY LAST after probeDynCfg.
+    // Direct muzzle flash — after probeDynCfg.
     bodyFlash: u.bodyFlash,
+    // Temporal reprojection start — POSITIONALLY LAST after bodyFlash, three
+    // slots bound in the same commit as the WGSL inputs.
+    lastTex: texture(lastFrame ? lastFrame.texture : fallbackLastFrame().tex),
+    lastInvVp: lastFrame ? lastFrame.uniforms.invVp : fallbackLastFrame().invVp,
+    temporalCfg: lastFrame ? lastFrame.uniforms.cfg : fallbackLastFrame().cfg,
   }) as unknown as Swizzled;
 
   const material = new MeshBasicNodeMaterial();
@@ -1531,6 +1563,9 @@ export interface GpuViewOpts {
   /** Accumulated colour+depth for the front-to-back per-body passes (perf
    *  round 2 task 5). Omit for the ungated march — 1e9 is the identity. */
   prev?: PrevSource;
+  /** Temporal reprojection start (plan 2026-09-10). Omit for the
+   *  from-camera march — the fetch identity is 0. */
+  lastFrame?: LastFrameSource;
   /** Quarter-resolution depth prepass (close-up task 3): this view's coarse
    *  twin renders into it, and the march starts from its nearest-touch
    *  distance. Omit for the from-camera march — the fetch identity is 0. */
@@ -1738,6 +1773,7 @@ export function createZombieGpuView(
     opts.cone, opts.occluder, tileNodes, opts.shell, opts.prev, opts.levelShadow,
     undefined, opts.depthPre, opts.output, opts.shadowReceiver,
     opts.probeDyn?.node,
+    opts.lastFrame,
   );
 
   // The coarse twin: same field, same proxy box, no shading, its own mesh on

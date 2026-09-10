@@ -532,7 +532,8 @@ describe('ported features reach the entry point', () => {
     // max(max(startT, shellIn), preStart): the max of lower bounds is the
     // tightest of them and still a lower bound. preStart collapses to 0 when
     // the pass is off, which is the identity inside the max.
-    expect(MARCH_BODY).toContain('var t = clamp(max(max(startT, shellIn), preStart), 0.0, tMax);');
+    // tempStart (plan 2026-09-10) is the fourth max term; 0 is its identity too.
+    expect(MARCH_BODY).toContain('var t = clamp(max(max(max(startT, shellIn), preStart), tempStart), 0.0, tMax);');
     // The prepass inputs ride POSITIONALLY LAST (after windDrift), and the
     // disabled identity is the fetch's 0 — never a missing binding (the
     // meltCfg rule: a declared input without a binding shades as zero and
@@ -735,14 +736,19 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     // bounceSpotRadiance, bounceSpotCfg) after probeCfg — lighting P4 step 1.
     // +2 GPU probe gather dynamic layer (probeDyn storage, probeDynCfg).
     // +1 direct muzzle flash (bodyFlash).
-    expect(names.length).toBe(96);
+    // +3 temporal reprojection start (lastTex, lastInvVp, temporalCfg) — plan 2026-09-10.
+    expect(names.length).toBe(99);
     expect(names).toContain('faceGlowRedOnly');
-    expect(names.slice(-18)).toEqual([
+    expect(names.slice(-21)).toEqual([
       'windDrift', 'bodyAnchor', 'woundBound', 'depthPreTex', 'depthPreCfg', 'normalGradientCfg',
       'probeTex', 'probeMin', 'probeInvExtent', 'probeDims', 'probeCfg',
       'bounceSpotPos', 'bounceSpotNormal', 'bounceSpotRadiance', 'bounceSpotCfg',
       'probeDyn', 'probeDynCfg', 'bodyFlash',
+      'lastTex', 'lastInvVp', 'temporalCfg',
     ]);
+    // The temporal start folds in AFTER preStart, as the fourth max term.
+    expect(MARCH_BODY).toContain('var t = clamp(max(max(max(startT, shellIn), preStart), tempStart), 0.0, tMax);');
+    expect(MARCH_BODY).toContain('temporalStartFetch(lastTex, tempNdc, lastInvVp, camPos, rd, temporalCfg)');
     // meltCfg sits between bodyHalf and the level-shadow tail, matching the
     // JS binding object in createMarchMaterial (positional — a swap silently
     // hands the shader the wrong uniform).

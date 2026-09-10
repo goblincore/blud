@@ -2280,7 +2280,15 @@ export const MARCH_BODY_PARAMS = /* wgsl */ `(
   // Direct muzzle flash on this body - owner 2026-09-09 - bound POSITIONALLY LAST.
   // xyz the burning muzzle in world space, w its intensity and 0 skips the term.
   // NO PARENS and NO COLONS in this comment either.
-  bodyFlash: vec4<f32>
+  bodyFlash: vec4<f32>,
+  // Temporal reprojection start - plan 2026-09-10 - bound POSITIONALLY LAST.
+  // lastTex is last fresh frame's layer with NDC depth in alpha, lastInvVp the
+  // inverse view projection that made it, temporalCfg x enable y margin z slope
+  // w max start. x at 0 keeps the march bit-identical.
+  // NO PARENS and NO COLONS in this comment either.
+  lastTex: texture_2d<f32>,
+  lastInvVp: mat4x4<f32>,
+  temporalCfg: vec4<f32>
 ) -> vec4<f32> {
 `;
 
@@ -2667,7 +2675,16 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
   // slack terms CONE_MARCH's stop carries, handed back to the ray here.
   let preT = depthPreFetch(depthPreTex, screenUV, depthPreCfg);
   let preStart = select(0.0, max(preT - (preT * depthPreCfg.y + 0.0012 + woundCfg2.z), 0.0), preT > 0.0);
-  var t = clamp(max(max(startT, shellIn), preStart), 0.0, tMax);
+  // TEMPORAL REPROJECTION START (plan 2026-09-10). Last fresh frame's hit at
+  // this pixel, unprojected with that frame's inverse VP and measured along
+  // THIS ray, minus a margin for flesh that moved toward the camera and a
+  // slope term - a fourth proven-ahead lower bound. Every off path returns 0,
+  // the identity inside the max, so ?tstart=0 is bit-identical. The ndc
+  // mapping from screenUV is the layer's own (no flip) - pinned on the GPU by
+  // Task 2 step 7.2 of the plan (a wrong flip reads the mirrored row).
+  let tempNdc = vec2<f32>(screenUV.x * 2.0 - 1.0, screenUV.y * 2.0 - 1.0);
+  let tempStart = temporalStartFetch(lastTex, tempNdc, lastInvVp, camPos, rd, temporalCfg);
+  var t = clamp(max(max(max(startT, shellIn), preStart), tempStart), 0.0, tMax);
   var hit = false;
   var prevRadius = 0.0;
   var stepLen = 0.0;

@@ -35,7 +35,8 @@ import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { wgslFn, texture, uv, vec4, uniform } from 'three/tsl';
 import { fieldParity, fieldTargetHeight, fieldJitterNdcY } from './field-render';
-import { createConeUniforms, createDepthPreUniforms, type ConeSource, type DepthPreSource, type OccluderSource, type PrevSource } from './zombie-gpu';
+import { createConeUniforms, createDepthPreUniforms, type ConeSource, type DepthPreSource, type LastFrameSource, type OccluderSource, type PrevSource } from './zombie-gpu';
+import { TEMPORAL_START_DEFAULTS } from './temporal-start';
 import { setPassLabel } from './gpu-pass-timing';
 
 // ---------------------------------------------------------------------------
@@ -520,6 +521,12 @@ export interface SdfLayer {
    *  that should be gated by nearer hits; `uniforms.enabled` is the gate —
    *  off is the single-pass ship behaviour and reads as "nothing recorded". */
   readonly prev: PrevSource;
+  /** Temporal reprojection start source (plan 2026-09-10). */
+  readonly lastFrame: LastFrameSource;
+  /** On = each ray starts at last frame's reprojected hit minus the margin
+   *  (m) and slope (fraction). Off is bit-identical (and skips the copy). */
+  setTemporalStart(on: boolean, margin?: number, slope?: number): void;
+  readonly temporalStart: { on: boolean; margin: number; slope: number; maxStart: number };
   /** Registers the bodies (one pass each, front to back) and the gib chunks
    *  (one shared final pass, gated by every body). Call every frame before
    *  render(); with the gate off these lists are simply not walked. */
@@ -740,6 +747,20 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     magFilter: THREE.NearestFilter,
   });
   const prevUniforms = { enabled: uniform(0) };
+  // TEMPORAL START source (plan 2026-09-10): the frame's final layer, copied
+  // once at the end of every MARCHED frame, with the inverse VP that made
+  // it; hold frames keep the last fresh copy. cfg.x ships 0 (never fetched,
+  // no blit) until setTemporalStart turns it on.
+  const lastTex = new THREE.RenderTarget(1, 1, {
+    depthBuffer: false,
+    type: THREE.FloatType,
+    minFilter: THREE.NearestFilter,
+    magFilter: THREE.NearestFilter,
+  });
+  const lastUniforms = {
+    invVp: uniform(new THREE.Matrix4()),
+    cfg: uniform(new THREE.Vector4(0, TEMPORAL_START_DEFAULTS.margin, TEMPORAL_START_DEFAULTS.slope, TEMPORAL_START_DEFAULTS.maxStart)),
+  };
   let bodies: THREE.Object3D[] = [];
   let chunks: THREE.Object3D[] = [];
   let chunkPass: 'merged' | 'split' | 'skip' = 'merged';
@@ -910,6 +931,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     forceFreshFrame = true;
     target.setSize(w, h);
     prev.setSize(w, h);
+    lastTex.setSize(w, h);
     // The whole-frame field buffers track the OUTPUT size, not sdfScale: the
     // polygonal pass has always rendered at full content resolution and must
     // keep doing so, halved only in the field axis.
@@ -1031,7 +1053,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
         // without this clear its depth stayed 1x1 and the 'bodies' depth
         // retain failed validation every frame — held rows then wove bone at
         // garbage depth. fieldPrev only escaped because it was already here.
-        for (const t of [coneCoarse, coneFine, occluder, shellEntry, shellExit, prev, depthPre, fieldPrev, fieldMeshPrev]) {
+        for (const t of [coneCoarse, coneFine, occluder, shellEntry, shellExit, prev, lastTex, depthPre, fieldPrev, fieldMeshPrev]) {
           renderer.setRenderTarget(t);
           void renderer.render(emptyScene, camera);
         }
@@ -1232,6 +1254,16 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
         renderer.setRenderTarget(target);
         void renderer.render(scene, camera);
       }
+      // TEMPORAL START copy (plan 2026-09-10): the marched layer, final for
+      // this frame, and the inverse of the VP that rendered it — paired here
+      // so the fetch can never unproject with the wrong camera. Marched
+      // frames only (inside !hold); off when the fetch is off.
+      if ((lastUniforms.cfg.value as THREE.Vector4).x > 0.5) {
+        setPassLabel('sdf:last-blit');
+        renderer.setRenderTarget(lastTex);
+        void renderer.render(blitScene, quadCam);
+        (lastUniforms.invVp.value as THREE.Matrix4).copy(_curVp).invert();
+      }
       } // !hold
 
       // Pass 3 — composite up. autoClear off, or this wipes pass 1.
@@ -1349,6 +1381,17 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     setShellEnabled(on) { shellUniforms.enabled.value = on ? 1 : 0; },
     get shellEnabled() { return shellUniforms.enabled.value > 0.5; },
     prev: { texture: prev.texture, uniforms: prevUniforms },
+    lastFrame: { texture: lastTex.texture, uniforms: lastUniforms },
+    setTemporalStart(on, margin, slope) {
+      const v = lastUniforms.cfg.value as THREE.Vector4;
+      v.x = on ? 1 : 0;
+      if (margin !== undefined) v.y = Math.max(0, margin);
+      if (slope !== undefined) v.z = Math.max(0, slope);
+    },
+    get temporalStart() {
+      const v = lastUniforms.cfg.value as THREE.Vector4;
+      return { on: v.x > 0.5, margin: v.y, slope: v.z, maxStart: v.w };
+    },
     setBodies(list, chunkList) { bodies = list; chunks = chunkList; },
     setDepthGate(on) { prevUniforms.enabled.value = on ? 1 : 0; },
     setChunkPass(mode) { chunkPass = mode; },
