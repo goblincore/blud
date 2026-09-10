@@ -153,6 +153,17 @@ popping variant, so it needs hysteresis.
   bench now does it automatically on every run. **The same "identical" leg has
   run with a 4× spread in droplets and a different body count** — so machine noise
   is not the only thing making deltas unreliable.
+- **The honest headline for this session's benches: run across all four stored
+  runs, EVERY ONE drifted — 0 of 4 had a repeatable workload, 127 drifted census
+  fields in total (26 / 12 / 64 / 25).** Not one A/B taken this session compared
+  legs whose workload was identical between repeats. Judge anything measured here
+  accordingly, and treat the determinism work as the prerequisite for the next
+  round of measurement rather than a nice-to-have.
+- What still stands despite that: the gather's **−33%** rests on a within-leg pass
+  row whose per-leg ranges do not overlap across two independent runs, and the
+  **cost split** rests on three separated within-leg values (5.00 / 2.16 / 0.01).
+  Both are the kind of evidence that survives a drifting workload. The
+  **frame-level numbers do not**, and none of them are claimed.
 - Do not bench while the owner has the game open; check
   `lsof -nP -iTCP:<port> | grep ESTABLISHED`.
 
