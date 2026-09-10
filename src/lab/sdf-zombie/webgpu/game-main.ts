@@ -613,6 +613,14 @@ async function main() {
   // pure rule returns [] and the frame packs no tracer light (bit-identical).
   const tracerLightParam = new URLSearchParams(location.search).get('tracerlight');
   let tracerLightGain = tracerLightParam === '0' || tracerLightParam === 'off' ? 0 : 2.0;
+  // TRACER SLOT CAP: the gather's cost is per-thread over the packed light
+  // count, and 8 tracers quadrupled it during firefights (p95 6 -> 27 ms).
+  // 2 bounds the worst case near the flashes alone; ?tracerlightslots and
+  // __sdfGame.setTracerLightSlots(n) restore more if the look wants them.
+  let tracerLightSlots = Math.max(
+    0,
+    Math.min(8, Number(new URLSearchParams(location.search).get('tracerlightslots') ?? 2) || 2),
+  );
   // DIRECT flash on bodies (march slot bodyFlash): intensity multiplier on
   // the flash lights before the shader's I*cos/d^2. 0 = off, bit-identical.
   let bodyFlashGain = 0.06;
@@ -1194,7 +1202,16 @@ async function main() {
         // (4) Live tracers LAST, filling only the slots the lights above left.
         // They are the least important read, so the flashes and the beam keep
         // their place; the gather's 8-light allocation is never exceeded.
-        const tracerSlots = 8 - gatherLights.length;
+        //
+        // TRACER SLOT CAP (spike program, 2026-09-10): the gather's cost is
+        // per-thread over the PACKED light count (32 rays x every light), and
+        // a firefight fills all 8 slots with tracers — the fire-segment bench
+        // measured the gather at p95 27 ms with tracers vs ~11 with them off,
+        // in BOTH tracerGain arms of an interleaved A/B. Capping the tracer
+        // contribution at 2 slots bounds the packed count near the flashes
+        // alone; __sdfGame.setTracerLightSlots restores more if the look
+        // wants them.
+        const tracerSlots = Math.min(tracerLightSlots, 8 - gatherLights.length);
         if (tracerSlots > 0 && tracerLightGain > 0) {
           gatherLights.push(...tracerGatherLights(liveTracers?.() ?? [], {
             eye: player.pos, room: dynRoom, margin: 1.5, gain: tracerLightGain,
@@ -5723,6 +5740,7 @@ async function main() {
     /** TRACERS as gathered lights. Raw intensity per pellet; 0 = off (no
      *  light packed). The owner tunes by eye and exaggerates with e.g. 6. */
     setTracerLight: (gain: number) => { tracerLightGain = Math.max(0, gain); return tracerLightGain; },
+    setTracerLightSlots: (slots: number) => { tracerLightSlots = Math.max(0, Math.min(8, Math.floor(slots))); return tracerLightSlots; },
     get tracerLight() { return tracerLightGain; },
     probeDynReadback: () => probeGather?.readback() ?? Promise.resolve(new Float32Array(0)),
     get bounceSpot() { return bounceSpotGain; },
