@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   fieldParity, fieldTargetHeight, fieldJitterNdcY, fieldRowSource, fieldHeldNeighbours,
-  fieldRingDepth, fieldPixelFraction, FIELD_COUNT,
+  fieldRingDepth, fieldPixelFraction, fieldHistorySlot, fieldHistoryRead, FIELD_COUNT,
 } from './field-render';
 
 describe('fieldParity', () => {
@@ -258,5 +258,135 @@ describe('the pixel fraction each divisor buys', () => {
     expect(fieldPixelFraction(2)).toBe(0.5);
     expect(fieldPixelFraction(3)).toBeCloseTo(1 / 3, 15);
     expect(fieldPixelFraction(4)).toBe(0.25);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE HISTORY RING. Two fields get away with one retained buffer and a linear
+// interpolation between the two fresh rows bracketing a held row. Three and
+// four cannot: interpolating two of three (or three of four) missing rows is
+// what makes a deep field read as "lower resolution" rather than as interlaced.
+// These pin which retained buffer holds the REAL sample for each row, which is
+// the piece that lets a deeper field reconstruct instead of blur.
+// ---------------------------------------------------------------------------
+
+describe('fieldHistorySlot — which retained buffer holds a row’s real sample', () => {
+  it('returns null exactly for the rows this frame draws fresh', () => {
+    for (const fields of FIELD_COUNTS) {
+      for (let frame = 0; frame < fields; frame++) {
+        const field = fieldParity(frame, fields);
+        for (const H of HEIGHTS) {
+          for (let y = 0; y < H; y++) {
+            const slot = fieldHistorySlot(y, field, fields);
+            expect(slot === null).toBe(fieldRowSource(y, field, fields).fresh);
+          }
+        }
+      }
+    }
+  });
+
+  it('always names a slot inside the ring the caller must retain', () => {
+    for (const fields of FIELD_COUNTS) {
+      const depth = fieldRingDepth(fields);
+      for (let frame = 0; frame < fields; frame++) {
+        const field = fieldParity(frame, fields);
+        for (let y = 0; y < 60; y++) {
+          const slot = fieldHistorySlot(y, field, fields);
+          if (slot === null) continue;
+          expect(slot).toBeGreaterThanOrEqual(0);
+          expect(slot).toBeLessThanOrEqual(depth - 1);
+          expect(Number.isInteger(slot)).toBe(true);
+        }
+      }
+    }
+  });
+
+  it('two fields put every held row in slot 0 — the single prevField we already have', () => {
+    for (let frame = 0; frame < 2; frame++) {
+      const field = fieldParity(frame, 2);
+      for (let y = 0; y < 40; y++) {
+        const slot = fieldHistorySlot(y, field, 2);
+        if (slot !== null) expect(slot).toBe(0);
+      }
+    }
+  });
+
+  it('the slot’s age really matches the frame that drew that row', () => {
+    // Slot k must mean "drawn k+1 frames ago". Walk frames in order and check
+    // the field that drew row y is the one the slot claims.
+    for (const fields of FIELD_COUNTS) {
+      for (let y = 0; y < 48; y++) {
+        const owner = y % fields;
+        for (let frame = 0; frame < fields * 2; frame++) {
+          const field = fieldParity(frame, fields);
+          const slot = fieldHistorySlot(y, field, fields);
+          if (slot === null) {
+            expect(field).toBe(owner);
+            continue;
+          }
+          const age = slot + 1;
+          // The frame `age` ago must have been the row's owner.
+          expect(fieldParity(frame - age, fields)).toBe(owner);
+          // ...and no nearer frame was.
+          for (let a = 1; a < age; a++) {
+            expect(fieldParity(frame - a, fields)).not.toBe(owner);
+          }
+        }
+      }
+    }
+  });
+
+  it('every non-fresh row gets a distinct slot per fresh row — no two held rows share a buffer', () => {
+    // Within one field cycle the non-fresh rows are exactly the other fields,
+    // and each must map to its own retained buffer, or a deep field would
+    // reconstruct two rows from the same stale sample.
+    for (const fields of FIELD_COUNTS) {
+      const field = 0;
+      const slots = new Set<number>();
+      for (let y = 0; y < fields; y++) {
+        const slot = fieldHistorySlot(y, field, fields);
+        if (slot !== null) slots.add(slot);
+      }
+      expect(slots.size).toBe(fields - 1);
+    }
+  });
+});
+
+describe('fieldHistoryRead — where in the retained buffer to read', () => {
+  it('reads the row’s own target row, and refuses out-of-range rows', () => {
+    for (const fields of FIELD_COUNTS) {
+      for (const H of HEIGHTS) {
+        const th = fieldTargetHeight(H, fields);
+        for (let frame = 0; frame < fields; frame++) {
+          const field = fieldParity(frame, fields);
+          for (let y = 0; y < H; y++) {
+            const r = fieldHistoryRead(y, field, H, fields);
+            const slot = fieldHistorySlot(y, field, fields);
+            if (slot === null) {
+              expect(r).toBeNull();
+              continue;
+            }
+            expect(r).not.toBeNull();
+            expect(r!.slot).toBe(slot);
+            expect(r!.row).toBe(fieldRowSource(y, field, fields).targetRow);
+            expect(r!.row).toBeGreaterThanOrEqual(0);
+            expect(r!.row).toBeLessThan(th);
+          }
+        }
+      }
+    }
+  });
+
+  it('agrees with fieldRowSource for every row it accepts', () => {
+    for (const fields of FIELD_COUNTS) {
+      for (let y = 0; y < 40; y++) {
+        for (let frame = 0; frame < fields; frame++) {
+          const field = fieldParity(frame, fields);
+          const r = fieldHistoryRead(y, field, 600, fields);
+          if (r === null) continue;
+          expect(r.row).toBe(Math.floor(y / fields));
+        }
+      }
+    }
   });
 });

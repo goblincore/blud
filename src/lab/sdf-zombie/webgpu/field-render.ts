@@ -153,3 +153,68 @@ export function fieldRingDepth(fields: number = FIELD_COUNT): number {
 export function fieldPixelFraction(fields: number = FIELD_COUNT): number {
   return 1 / fields;
 }
+
+/**
+ * Which RETAINED field buffer holds the TRUE sample for output row `y`, or
+ * `null` when this frame draws that row fresh.
+ *
+ * This is the piece a deeper field needs and two fields never did. With
+ * `fields = 2` a held row has exactly one missing neighbour-row, and the
+ * shipped composite fills it by INTERPOLATING the two fresh rows bracketing it
+ * (`fieldHeldNeighbours`) or by holding last frame's value (`comb`). With
+ * `fields = 3` or 4 there are two or three missing rows per fresh row, and
+ * interpolating all of them is what makes a deep field go soft — the artefact
+ * that gets blamed on the resolution rather than on the reconstruction.
+ *
+ * Retain `fieldRingDepth(fields)` previous field buffers and most held rows
+ * have a REAL sample available instead:
+ *
+ *   slot 0 = the field drawn ONE frame ago
+ *   slot k = the field drawn k + 1 frames ago
+ *
+ * Output row `y` belongs to field `y % fields`, so its sample was drawn
+ * `(currentField - y % fields) mod fields` frames ago; 0 means it is fresh
+ * now. The returned slot is that age minus one, i.e. in `[0, fields - 2]`,
+ * which is exactly the ring the caller must retain.
+ *
+ * `fields = 2` reproduces the shipped behaviour: every held row resolves to
+ * slot 0, the single `prevField` buffer the composite already has.
+ *
+ * Callers must still clamp to their target and must still fall back to the
+ * fresh-row interpolation at the image edges, where `y % fields` is inside the
+ * range but the retained buffer's row index is not.
+ */
+export function fieldHistorySlot(
+  y: number,
+  currentField: number,
+  fields: number = FIELD_COUNT,
+): number | null {
+  const owner = ((y % fields) + fields) % fields;
+  if (owner === currentField) return null;
+  const age = (((currentField - owner) % fields) + fields) % fields;
+  return age - 1;
+}
+
+/**
+ * The row index to read in the retained buffer for output row `y`, or `null`
+ * when there is no true sample to read.
+ *
+ * `fieldHistorySlot` says WHICH buffer; this says WHERE in it. The retained
+ * buffer is a `fieldTargetHeight(fullHeight, fields)`-tall field, so a row's
+ * own sample sits at `floor(y / fields)` — the same `targetRow`
+ * `fieldRowSource` reports. Returns `null` for a fresh row, and for a row
+ * whose slot exists but whose `targetRow` falls outside the retained buffer
+ * (the caller must then interpolate instead).
+ */
+export function fieldHistoryRead(
+  y: number,
+  currentField: number,
+  fullHeight: number,
+  fields: number = FIELD_COUNT,
+): { slot: number; row: number } | null {
+  const slot = fieldHistorySlot(y, currentField, fields);
+  if (slot === null) return null;
+  const row = Math.floor(y / fields);
+  if (row < 0 || row >= fieldTargetHeight(fullHeight, fields)) return null;
+  return { slot, row };
+}
