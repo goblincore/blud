@@ -1632,10 +1632,12 @@ async function main() {
   const GAME_DEPTH_GATE = 0;
   sdfLayer.setDepthGate(GAME_DEPTH_GATE > 0.5);
   sdfLayer.setDepthPreEnabled(GAME_DEPTH_PREPASS > 0.5);
-  // TEMPORAL REPROJECTION START (plan 2026-09-10). Ships OFF until the
-  // pass bench and the owner say otherwise; ?tstart=1 boots it on, and
+  // TEMPORAL REPROJECTION START (plan 2026-09-10). SHIPS ON (owner,
+  // 2026-09-10, after the own-body gate): march pass p50 14.9 -> 11.3 ms
+  // on the room-4 bench (walk 11.0 -> 7.0, gib 18.0 -> 13.8), no visible
+  // artefacts. ?tstart=0 pins the bit-identical march;
   // __sdfGame.setTemporalStart(on, margin, slope) flips it live.
-  sdfLayer.setTemporalStart(new URLSearchParams(location.search).get('tstart') === '1');
+  sdfLayer.setTemporalStart(new URLSearchParams(location.search).get('tstart') !== '0');
   // INTERLACED FIELDS ON (2026-09-09), replacing half-rate. Half-rate held
   // and reprojected the whole marched frame, which desynced from the
   // full-rate skeleton meshes whenever the player moved — reprojected flesh

@@ -186,6 +186,11 @@ resolution: [bodies-style-handoff.md](docs/dev-notes/2026-09-09-perf-spikes/bodi
   2026-09-09: soldier flashes light zombies and soldiers around them at range.
   Membership by current position (+1.5 m), nearest room from tunnels; the
   player's flash lights as a 0.14 s burst. Knobs: `setProbeDynamic(0.15, 1, 4)`.
+- [x] **Temporal reprojection start for the march — SHIPPED ON 2026-09-10**
+  (`?tstart=0` off). Rays start at last frame's reprojected hit minus a
+  margin, gated to the body being marched. March pass p50 14.9 → 11.3 ms on
+  the room-4 bench; no visible artefacts after the own-body gate.
+  [plan + result](docs/superpowers/plans/2026-09-10-temporal-march-start.md).
 - [ ] **NEXT: render optimization pass** — backlog with owner notes in Obsidian
   `Claude Notes/Planning/2026-09-09-blud-render-optimization-backlog.md`.
   Order: (1) get `passTimings()` samples back (or an owner recording),

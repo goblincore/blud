@@ -2,6 +2,16 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Task 1 is pure and dispatchable; Task 2 needs a GPU and the owner's bench.
 
+**Status:** SHIPPED ON 2026-09-10 (`?tstart=0` to disable). Result: the
+first playtest showed other bodies' silhouettes cutting into flesh and
+see-through — the per-pixel bound was the NEAREST body's depth while each
+pass marches one body; fixed with an own-body gate (reprojected point must
+lie inside this body's box along the ray) plus a one-sample inside check.
+Owner bench (room 4, passes): before the gate march p50 17.4 -> 7.3 ms;
+with the gate 14.9 -> 11.3 ms (walk 11.0 -> 7.0, fire 14.9 -> 11.3, gib
+18.0 -> 13.8; the on-run had fewer bodies, so treat as ~25-35%). Copy
+0.02-0.04 ms. Owner: "looks good, ship it".
+
 **Goal:** Cut the march's per-pixel step count at FULL resolution by
 starting each ray where last frame's hit at that screen position, reprojected
 through the camera's motion, says the surface was — minus a safety margin —
@@ -141,7 +151,7 @@ declared inputs in order and never samples (loads only).
 - Create: `src/lab/sdf-zombie/webgpu/temporal-start.ts`
 - Create: `src/lab/sdf-zombie/webgpu/temporal-start.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 // src/lab/sdf-zombie/webgpu/temporal-start.test.ts
@@ -241,12 +251,12 @@ describe('TEMPORAL_START_WGSL — parse and shape contract', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `npx vitest run src/lab/sdf-zombie/webgpu/temporal-start.test.ts`
 Expected: FAIL — `Cannot find module './temporal-start'`.
 
-- [ ] **Step 3: Write the module**
+- [x] **Step 3: Write the module**
 
 ```ts
 // src/lab/sdf-zombie/webgpu/temporal-start.ts
@@ -341,14 +351,14 @@ march passes must be the one whose uv addresses `lastTex` correctly (Task 2
 Step 6 determines the flip). The CPU twin takes the depth directly and is
 convention-free.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `npx vitest run src/lab/sdf-zombie/webgpu/temporal-start.test.ts`
 Expected: PASS, 11 tests. If "follows the camera" is off by the near-plane
 term, check that `project` and `temporalStart` use the same `vp` (the LAST
 camera's) — only `camPos`/`rayDir` are current.
 
-- [ ] **Step 5: Typecheck and commit**
+- [x] **Step 5: Typecheck and commit**
 
 Run: `npx tsc --noEmit -p .` — expected: clean.
 ```bash
@@ -367,7 +377,7 @@ git commit -m "feat(march): temporal reprojection start — CPU twin, WGSL, test
 - Modify: `src/lab/sdf-zombie/webgpu/game-main.ts` (view opts where `prev` is handed in; seams ~L1287–1351; HUD ~L4011)
 - Modify: `src/lab/sdf-zombie/webgpu/march.wgsl.test.ts` (input-order contract)
 
-- [ ] **Step 1: Contract test first** (append to `march.wgsl.test.ts`, following its existing MARCH_BODY input-order test — find `bodyFlash` in that file and extend the expected tail):
+- [x] **Step 1: Contract test first** (append to `march.wgsl.test.ts`, following its existing MARCH_BODY input-order test — find `bodyFlash` in that file and extend the expected tail):
 
 ```ts
 it('MARCH_BODY ends with the temporal-start inputs, in order (plan 2026-09-10)', () => {
@@ -381,7 +391,7 @@ it('folds tempStart into the start max, after preStart', () => {
 ```
 Run: `npx vitest run src/lab/sdf-zombie/webgpu/march.wgsl.test.ts` — expected: the two new tests FAIL.
 
-- [ ] **Step 2: `march.wgsl.ts`** — add to the MARCH_BODY signature, LAST:
+- [x] **Step 2: `march.wgsl.ts`** — add to the MARCH_BODY signature, LAST:
 ```wgsl
   bodyFlash: vec4<f32>,
   lastTex: texture_2d<f32>,
@@ -406,7 +416,7 @@ the helper: wherever MARCH_BODY's helper chain is built in `zombie-gpu.ts`
 (~L181–190, `sources = [...HELPERS, ...]`), add `TEMPORAL_START_WGSL` to the
 sources list BEFORE the body.
 
-- [ ] **Step 3: `zombie-gpu.ts`** — next to `PrevSource`:
+- [x] **Step 3: `zombie-gpu.ts`** — next to `PrevSource`:
 ```ts
 /** Last FRESH frame's final layer (RGBA, NDC depth in .a, >= 1 = nothing)
  *  plus the inverse view-projection that made it. Bound unconditionally;
@@ -432,7 +442,7 @@ float texture with alpha 1 = nothing; a `uniform(new THREE.Matrix4())`; a
 fallback texture is fine here because only ONE texture node is built per
 material from it, unlike the deferred trap; still, create it in a factory).
 
-- [ ] **Step 4: `sdf-layer.ts`**
+- [x] **Step 4: `sdf-layer.ts`**
 ```ts
   // TEMPORAL START source (plan 2026-09-10): the frame's final layer,
   // copied once at the end of every MARCHED frame, with the inverse VP that
@@ -481,7 +491,7 @@ Interface + object:
 ```
 Import `LastFrameSource` from `./zombie-gpu`.
 
-- [ ] **Step 5: `game-main.ts`** — in `viewGpuOpts` (where `probeDyn` rides,
+- [x] **Step 5: `game-main.ts`** — in `viewGpuOpts` (where `probeDyn` rides,
 ~L1844) add `lastFrame: sdfLayer.lastFrame,`; boot:
 ```ts
   // Temporal reprojection start (plan 2026-09-10). ?tstart=0 pins the
@@ -497,7 +507,7 @@ Seams next to `setDepthPrepass`:
 ```
 HUD (~L4011): `(sdfLayer.temporalStart.on ? ' · TSTART' : '')`.
 
-- [ ] **Step 6: Run the contract tests, typecheck, commit**
+- [x] **Step 6: Run the contract tests, typecheck, commit**
 
 Run: `npx vitest run src/lab/sdf-zombie/webgpu/march.wgsl.test.ts src/lab/sdf-zombie/webgpu/temporal-start.test.ts` — PASS.
 Run: `npx tsc --noEmit -p .` — clean.
@@ -506,7 +516,7 @@ git add -A src/lab/sdf-zombie/webgpu
 git commit -m "feat(march): temporal reprojection start wired — lastTex copy, march slot, __sdfGame.setTemporalStart / ?tstart=1 (ships OFF)"
 ```
 
-- [ ] **Step 7: GPU checks** (`__sdfGame.step` drives frames in a hidden pane)
+- [x] **Step 7: GPU checks** (`__sdfGame.step` drives frames in a hidden pane)
 
 1. Parity: `?tstart=0` (and the default) must be bit-identical — frozen-scene
    canvas readback region means equal to before, plus the HUD shows no TSTART.
@@ -524,7 +534,7 @@ git commit -m "feat(march): temporal reprojection start wired — lastTex copy, 
    owner's stress case (many wounded bodies filling the screen). Report the
    table in the commit that flips the default, or the reason it stays OFF.
 
-- [ ] **Step 8: Owner decision** — ship ON (flip `tstartParam !== '0'`) or keep the knob. Record margin/slope chosen in `TEMPORAL_START_DEFAULTS` and the layer's cfg default together.
+- [x] **Step 8: Owner decision** — ship ON (flip `tstartParam !== '0'`) or keep the knob. Record margin/slope chosen in `TEMPORAL_START_DEFAULTS` and the layer's cfg default together.
 
 ### Risks
 
