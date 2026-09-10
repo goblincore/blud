@@ -41,6 +41,13 @@
 // Usage: LAB_VITE_PORT=5277 LAB_CDP_PORT=9277 node scripts/sdf-demo-hash.mjs ab
 // (or scripts/sdf-demo-hash.sh, which owns the vite + Chrome lifecycle)
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+
+// The digest lives in scripts/lib/demo-digest.mjs so it can be unit-tested
+// without executing this script's main body. See that file's header.
+import { fnv1aBytes } from './lib/demo-digest.mjs';
+// decodePng + hashPresented live in scripts/lib/ so they can be unit-tested
+// without executing this script's main body (which opens Chrome).
+import { hashPresented } from './lib/demo-presented.mjs';
 import { connectGame, applyShipDefaults, bootCloseupPage, sleep, StageFail } from './lib/sdf-closeup-stage.mjs';
 
 const VITE = Number(process.env.LAB_VITE_PORT ?? process.argv[2] ?? 5277);
@@ -94,6 +101,10 @@ function loadSpec(arg) {
      *  differ, the nondeterminism is in the readback or in unwritten texels, not
      *  in anything the scene does between frames. */
     resample: 2,
+    /** Also hash the PRESENTED canvas (the image the owner sees). Default true:
+     *  it is the surface that actually matters, and it catches post-chain bugs the
+     *  GPU layers cannot see. */
+    presented: true,
   };
   if (!arg) return defaults;
   if (arg.endsWith('.json')) {
@@ -224,6 +235,24 @@ async function runOnce(conn, spec, label) {
   // while the level stays bit-identical. Logged, not hashed: a diagnostic.
   const cam = await evaluate('(() => { const c = __sdfGame.cameraWorld(); return c.map(v => +v.toFixed(6)); })()');
   console.log(`  ${label}: camera ${JSON.stringify(cam)}`);
+  // THE PRESENTED FRAME (owner request, 2026-09-10). `frameHash` reads GPU
+  // targets and answers "did the RENDERER change"; this answers "did the SCREEN
+  // change". Everything downstream of the march — the interlaced field's held
+  // rows, FXAA, the VHS pass with its own temporal blend and 60/24 Hz row-noise
+  // hashes — is invisible to the former, so a bug in any of it needs this one.
+  // 8-bit by construction: the canvas is premultiplied sRGB, so sub-LSB
+  // differences do not exist here.
+  let presented = null;
+  if (spec.presented !== false) {
+    const shot = await evaluate('(() => __sdfGame.presentedShot())()', 120_000);
+    if (typeof shot === 'string' && shot.length > 0) {
+      presented = hashPresented(shot);
+      record.presented = presented;
+      console.log(`  ${label}: presented ${presented.width}x${presented.height} hash ${presented.hash} nonZeroBytes ${presented.nonZeroBytes}`);
+    } else {
+      console.log(`  ${label}: presented shot UNAVAILABLE (no canvas) — skipping the screen-level hash`);
+    }
+  }
   console.log(`  ${label}: gather dispatches over the run: ${record.dispatches}`);
   console.log(
     `  ${label}: ${record.hashes.length} hashes over ${record.frames} frames ` +
@@ -258,6 +287,15 @@ function fingerprint(spec, march, record) {
  *  rather than imported so this script has no build step — the pure module is
  *  the tested implementation, and a divergence tool that is itself untested
  *  would just move the problem. */
+/** The presented-frame comparison, which is NOT part of the layer diff: it is 8-bit
+ *  screen data, not a GPU layer, and it is the one the owner can see. */
+function presentedDiff(a, b) {
+  const pa = a.record.presented, pb = b.record.presented;
+  if (!pa || !pb) return null;
+  if (pa.hash === pb.hash && pa.width === pb.width && pa.height === pb.height) return null;
+  return { hashA: pa.hash, hashB: pb.hash, nonZeroA: pa.nonZeroBytes, nonZeroB: pb.nonZeroBytes };
+}
+
 function firstDivergence(a, b) {
   const n = Math.min(a.record.hashes.length, b.record.hashes.length);
   for (let i = 0; i < n; i++) {
@@ -321,7 +359,13 @@ try {
       fail(`fingerprint mismatch — the stored recording is not comparable.\n  stored ${JSON.stringify(stored.fingerprint)}\n  fresh  ${JSON.stringify(fresh.fingerprint)}`);
     }
     const d = firstDivergence(stored, fresh);
-    writeFileSync(`${OUT}/verify.json`, JSON.stringify({ path, divergence: d, fresh }, null, 2));
+    const pd = presentedDiff(stored, fresh);
+    writeFileSync(`${OUT}/verify.json`, JSON.stringify({ path, divergence: d, presented: pd, fresh }, null, 2));
+    if (pd) {
+      console.error(`FAIL: THE PRESENTED FRAME DIVERGED — hash ${pd.hashA} vs ${pd.hashB}`);
+      console.error('  The GPU layers may agree while the SCREEN does not: the difference is downstream of them.');
+      process.exit(1);
+    }
     if (d) {
       console.error(`FAIL: REPLAY DIVERGED at frame ${d.frame} — ${d.detail.join('; ')}`);
       console.error(`  ${fresh.record.hashes.length} frames recorded, detail in ${OUT}/verify.json`);

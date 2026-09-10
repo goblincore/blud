@@ -205,6 +205,20 @@ dispatch schedule (36/35/18), gather inputs (byte-identical), camera (identical 
 `3035244172`; VHS runs downstream of the march target and cannot touch it), and the
 room-probe worker bake (now gated by a new `roomProbesReady` seam — still
 diverges).
+**[x] THE PRESENTED FRAME IS HASHED (owner request).** `__sdfGame.presentedShot()`
+returns the canvas as base64 PNG; `scripts/lib/demo-presented.mjs` decodes and
+digests it; the recorder hashes it every sampled frame and compares it across runs.
+New failure path: **"GPU layers MATCH but the presented frame does NOT"** — which
+localises a difference to the post chain by elimination. Verified live (800x600,
+same nonZeroBytes, different digests `3654678759` vs `465050184`). **8-BIT by
+construction**, so sub-LSB differences do not exist here — use it for what the
+owner SEES, `frameHash` for what the renderer COMPUTED. **VHS's temporal blend
+still blocks a green screen hash** even with `setTimeFrozen` (which fixes the
+clock half only).
+**Method guards:** the recorder's duplicated FNV-1a is GATED by `frame-hash.test.ts`
+against canonical vectors (a tool-side digest skew would fake every divergence),
+and `demo-presented.test.mjs` (7 tests) covers the PNG decoder through all five
+filter types plus both false-pass cases.
 **[x] VHS time pinned anyway** via a new `postAa.setTimeFrozen(on)` driven by
 `setDemoHold`. The owner's instinct was right even though it was not this bug: VHS
 OWNS temporal blending (reads the previous frame's output) AND drives 60/24 Hz

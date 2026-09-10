@@ -234,6 +234,41 @@ Also note the branch is a MINORITY event: 1 boot in 4 took branch A. So a two-ru
 A/B has a ~5-in-8 chance of drawing two different branches, which is why "record
 twice and compare" failed so reliably.
 
+**THE PRESENTED FRAME IS NOW HASHED TOO — the screen-level gate the owner asked
+for.** The GPU-layer hash answers "did the RENDERER change"; it is NOT the image
+the owner looks at, because everything downstream of the march (the interlaced
+field's held rows, FXAA, SSCS, the VHS pass with its own temporal blend and 60/24
+Hz row-noise hashes) runs after it and is invisible to it. So:
+
+- `__sdfGame.presentedShot()` returns the CANVAS as base64 PNG —
+  `toDataURL` on the renderer's own `domElement`, which sidesteps the whole
+  question of which intermediate target is "the output".
+- `scripts/lib/demo-presented.mjs` decodes it and digests the pixels; the recorder
+  hashes it alongside every sampled frame and compares it across runs. New
+  failure path: **"the GPU layers MATCH but the presented frame does NOT"**,
+  which localises a difference to the post chain by elimination.
+- **Trade, stated plainly:** the canvas is 8-BIT premultiplied sRGB, so a
+  difference below one 8-bit step does not exist here — and the 2026-09-05 flicker
+  wobble lives at exactly that level. Use the presented hash for what the owner
+  SEES; use `frameHash` for what the renderer COMPUTED. Neither subsumes the other.
+- **VHS still has to be dealt with first for a GREEN screen hash**, because it owns
+  temporal blending: with the shipped default on, the presented frame is
+  history-dependent whatever else is pinned. That is the owner's point, and it is
+  why the seam to fix it (`postAa.setTimeFrozen`) returns only HALF the problem —
+  the clock, not the history.
+- Verified live: 800x600, identical `nonZeroBytes` across two boots, **different
+  digests** (`3654678759` vs `465050184`) — the screen-level gate is live.
+
+**Method guards added, because this tool's own failures are the dangerous ones:**
+`scripts/lib/demo-digest.mjs` holds the recorder's FNV-1a copy, and
+`frame-hash.test.ts` GATES the duplication against the canonical FNV-1a vectors
+(empty, `a`, `abc`, `01234567`, `01020304`) plus a 200 KB pseudo-random buffer —
+if the in-page and node-side digests ever disagreed, EVERY recording would report
+a divergence that is an artefact of the tool. `scripts/lib/demo-presented.test.mjs`
+(7 tests) covers the PNG decoder through all five filter types and both
+false-pass cases: two encodings of one image must hash IDENTICALLY, and a one-byte
+change must NOT.
+
 **VHS: AUDITED, FALSIFIED AS THE CAUSE, AND PINNED ANYWAY.** Owner hypothesis
 (2026-09-10) that the VHS effects are nondeterministic and affect final pixels —
 right about the mechanism, wrong about this bug:

@@ -5571,6 +5571,33 @@ function performBenchAction(a: BenchAction): void {
      */
     frameHash: async (frame = 0) =>
       hashFrame(frameHashDeps, frame),
+    /** THE PRESENTED FRAME, as the browser composes it.
+     *
+     *  WHY THIS IS A SEPARATE PATH from `frameHash`. `frameHash` reads GPU
+     *  targets (the march target, the gather's layers) — the right instrument for
+     *  asking "did the RENDERER change", and the one that catches a zeroed probe
+     *  layer or a mistranscribed kernel. But it is NOT the image the owner looks
+     *  at: everything downstream of the march — the interlaced field's held rows,
+     *  FXAA, the VHS pass with its own temporal blend and 60/24 Hz row-noise
+     *  hashes — runs after it, and a shader bug in any of those would be invisible
+     *  to it. This returns the CANVAS instead, so a caller can hash what is
+     *  actually on screen.
+     *
+     *  The trade, stated plainly: `toDataURL` yields 8-BIT premultiplied sRGB, so
+     *  a difference below one 8-bit step is invisible here — and the 2026-09-05
+     *  flicker wobble lives at exactly that level. Use this to check what the
+     *  owner SEES; use `frameHash` to check what the renderer COMPUTED. Neither
+     *  subsumes the other.
+     *
+     *  Returns base64 PNG without the data-URL prefix. The caller decodes and
+     *  hashes it (scripts/sdf-demo-hash.mjs, using the same tested byte digest),
+     *  so no image codec is needed in the page. */
+    presentedShot: (): string => {
+      const canvas = handle.renderer.domElement as HTMLCanvasElement;
+      const url = canvas.toDataURL('image/png');
+      const comma = url.indexOf(',');
+      return comma >= 0 ? url.slice(comma + 1) : url;
+    },
     /** Pin the render-side subsampling clocks the frame hash needs constant
      *  (actor animation phase, gather frameSeed). See the demoHold declaration.
      *  OFF by default and inert in normal play. */

@@ -89,7 +89,20 @@ export default defineConfig({
     // scripts/ is in for the CLI tests that shell out to a tool (blob-measure);
     // they live beside their script because a test importing node builtins
     // cannot sit under src/ without breaking the app typecheck.
-    include: ['src/**/*.test.ts', 'scripts/**/*.test.ts', 'scripts/census-diff.test.mjs'],
+    //
+    // The .mjs entries are LISTED rather than globbed, and that is deliberate:
+    // scripts/**/*.test.mjs would also sweep in the `node:test` suites
+    // (scripts/lib/normal-gradient-*.test.mjs, scripts/zombie-normal-gradient-check.test.mjs),
+    // which are written for `node --test` and report "No test suite found" under
+    // vitest. `npm test` has never covered them, and a config change must not
+    // silently change what `npm test` means. Add a new .mjs vitest suite here.
+    include: [
+      'src/**/*.test.ts',
+      'scripts/**/*.test.ts',
+      'scripts/census-diff.test.mjs',
+      'scripts/lib/demo-digest.test.mjs',
+      'scripts/lib/demo-presented.test.mjs',
+    ],
     exclude: ['**/node_modules/**', '**/.claude/**', 'docs/**', 'dist/**'],
   },
   build: {

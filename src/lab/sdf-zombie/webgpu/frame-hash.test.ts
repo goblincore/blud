@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { fnv1aBytes as recorderFnv, FNV_OFFSET as REC_OFFSET, FNV_PRIME as REC_PRIME } from '../../../../scripts/lib/demo-digest.mjs';
 import {
   fnv1aBytes,
   fnv1aFloats,
@@ -259,5 +260,48 @@ describe('compareFrames / firstDivergence — the gate', () => {
     const c = compareFrames(only, extra);
     expect(c.equal).toBe(false);
     expect(c.changedLayers).toEqual(['probeDyn']);
+  });
+});
+
+// --- CROSS-IMPLEMENTATION DIGEST (deterministic demo recordings stage 2) -----
+//
+// scripts/lib/demo-digest.mjs hashes the PRESENTED frame (a decoded canvas PNG) in
+// plain node, with no build step — so it carries its own copy of FNV-1a rather
+// than importing this module. If the two ever disagreed, every recording would
+// report a divergence that is an artefact of the TOOL rather than of the game,
+// which is the single worst failure this instrument could have. So the duplication
+// is GATED here, against fixed vectors rather than against each other: two copies
+// agreeing on a wrong answer would still be wrong.
+
+describe('the recorder digest matches this module', () => {
+  it('reproduces the canonical FNV-1a 32-bit vectors', () => {
+    // Reference outputs from the FNV specification. `abc` and `01234567` are the
+    // two most widely published 32-bit vectors, so a sign or multiply bug cannot
+    // hide behind a self-consistent pair.
+    expect(fnv1aBytes([])).toBe(0x811c9dc5);
+    expect(fnv1aBytes([0x61])).toBe(0xe40c292c);
+    expect(fnv1aBytes([0x61, 0x62, 0x63])).toBe(0x1a47e90b);
+    // '01234567' as BYTES — built by hand rather than via Buffer, so this test
+    // needs no node types.
+    expect(fnv1aBytes([0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37])).toBe(0xd97f649d);
+    expect(fnv1aBytes([1, 2, 3, 4])).toBe(0x5734a87d);
+  });
+
+  it('agrees with the recorder copy byte for byte, over the vectors AND a large buffer', () => {
+    for (const bytes of [[], [0x61], [0x61, 0x62, 0x63], [1, 2, 3, 4], [0xff], [0x00]]) {
+      expect(recorderFnv(new Uint8Array(bytes))).toBe(fnv1aBytes(bytes));
+    }
+    // The real workload is a decoded PNG — a few hundred KB. Agreement on
+    // four-byte vectors would not prove much about that.
+    const buf = new Uint8Array(200_000);
+    let x = 123456789;
+    for (let i = 0; i < buf.length; i++) { x = (Math.imul(x, 1103515245) + 12345) >>> 0; buf[i] = x >>> 24; }
+    expect(recorderFnv(buf)).toBe(fnv1aBytes(buf));
+  });
+
+  it('shares the offset basis and prime, so a divergence is a red test rather than a silent skew', () => {
+    expect(REC_OFFSET).toBe(0x811c9dc5);
+    expect(REC_PRIME).toBe(0x01000193);
+    expect(fnv1aBytes(new Uint8Array(0))).toBe(REC_OFFSET);
   });
 });
