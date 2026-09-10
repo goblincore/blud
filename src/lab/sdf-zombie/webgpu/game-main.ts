@@ -85,6 +85,7 @@ import {
 } from './game-level';
 import { stepPlayer, eyeOf, PLAYER, type PlayerState, type MoveInput } from './game-player';
 import { createRoomProbes, type ProbeWorkerLike } from './room-probes';
+import { computeBounceSpot } from '../flashlight-bounce';
 import { createZombieActor, segmentHitsBox, type ZombieActor } from './game-actor';
 import { separate, minPairDistance, type CrowdAgent } from '../crowd';
 import { arbitrate, RING_TUNING, type RingClaimant } from '../melee-ring';
@@ -933,11 +934,44 @@ async function main() {
       const flashGate  = spotOn + 2.2 * fv;
       const flashInner = Math.max(-1, cosInner - 0.45 * fv);
       const flashOuter = Math.max(-1, cosOuter - 0.45 * fv);
+      // FLASHLIGHT BOUNCE SPOT (lighting P4 step 1). Where the beam axis
+      // lands on the player's enclosure (paint colours, that room's furniture
+      // first), as one disc light every body adds to its ambient. Computed
+      // once per frame here, not per actor. Tunnels use their enclosure's
+      // walls as-is. bounceSpotGain 0 (?bouncespot=0) is bit-identical.
+      let bounceSpot: ReturnType<typeof computeBounceSpot> = null;
+      if (bounceSpotGain > 0 && flashGate > 0) {
+        const key = enclosureKeyAt(player.pos[0], player.pos[2]);
+        const roomDef = ROOMS.find(r => r.name === key);
+        const enc = enclosureOf(key);
+        if (enc) {
+          const walls = roomDef ? {
+            negX: roomDef.wallColor, posX: roomDef.wallColor, negY: roomDef.floorColor,
+            posY: roomDef.ceilColor, negZ: roomDef.wallColor, posZ: roomDef.wallColor,
+          } : enc.walls;
+          const occ = roomDef ? FURNITURE.filter(f => f.room === roomDef.id)
+            .map(f => ({ min: [f.minX, 0, f.minZ] as Vec3, max: [f.maxX, f.height, f.maxZ] as Vec3 })) : [];
+          const sp = flashlight.spot.position, sc = flashlight.spot.color;
+          bounceSpot = computeBounceSpot({
+            pos: [sp.x, sp.y, sp.z], axis: [sAxis.x, sAxis.y, sAxis.z],
+            intensity: flashGate, cosInner: flashInner, cosOuter: flashOuter,
+            range: flashlight.spot.distance, keyGain: beamTuning.gain, color: [sc.r, sc.g, sc.b],
+          }, enc.box, walls, occ);
+        }
+      }
       for (const a of actors) {
         a.view.uniforms.spotPos.value.copy(flashlight.spot.position);
         a.view.uniforms.spotAxis.value.copy(sAxis);
         a.view.uniforms.spotCfg.value.set(flashGate, flashInner, flashOuter, flashlight.spot.distance);
         a.view.uniforms.spotColor.value.copy(flashlight.spot.color);
+        if (bounceSpot) {
+          a.view.uniforms.bounceSpotPos.value.set(bounceSpot.pos[0], bounceSpot.pos[1], bounceSpot.pos[2]);
+          a.view.uniforms.bounceSpotNormal.value.set(bounceSpot.normal[0], bounceSpot.normal[1], bounceSpot.normal[2]);
+          a.view.uniforms.bounceSpotRadiance.value.set(bounceSpot.radiance[0], bounceSpot.radiance[1], bounceSpot.radiance[2]);
+          a.view.uniforms.bounceSpotCfg.value.set(bounceSpotGain, bounceSpot.radius, 0, 0);
+        } else {
+          a.view.uniforms.bounceSpotCfg.value.x = 0;
+        }
         if (fv > 0) {
           // Push warm. The flash is burning powder, not the flashlight's white.
           const c = a.view.uniforms.spotColor.value;
@@ -1583,6 +1617,10 @@ async function main() {
   // is bit-identical) for the parity and bench drivers. The gain defaults to
   // each room's matched level — the level of today's P1 at ambientGain 4 —
   // so only the direction and hue of the ambient change, not its brightness.
+  // Flashlight bounce spot gain (P4 step 1): 1 = the physically-derived disc
+  // irradiance; ?bouncespot=0 pins the bit-identical path.
+  const bounceSpotParam = new URLSearchParams(location.search).get('bouncespot');
+  let bounceSpotGain = bounceSpotParam === null ? 1 : Math.max(0, Number(bounceSpotParam) || 0);
   const probesParam = new URLSearchParams(location.search).get('probes');
   const probesOff = probesParam === '0' || probesParam === 'off';
   const roomProbes = createRoomProbes({
@@ -5136,6 +5174,9 @@ async function main() {
     setSmear: (v: number) => postAa.setSmear(v),
     /** Per-room probe grids (P3 step 2): weight 0 = bit-identical P1; gain -1
      *  = each room's matched level, else an absolute multiplier. */
+    /** Flashlight bounce spot (P4 step 1): 0 = off and bit-identical. */
+    setBounceSpot: (gain: number) => { bounceSpotGain = Math.max(0, gain); return bounceSpotGain; },
+    get bounceSpot() { return bounceSpotGain; },
     setProbes: (weight: number, gain = -1) => { roomProbes.setProbes(weight, gain); return { weight: roomProbes.weight, gain: roomProbes.gain }; },
     get probes() { return { weight: roomProbes.weight, gain: roomProbes.gain, ready: roomProbes.ready, matched: ROOMS.map(r => [r.id, roomProbes.matchedGain(r.id)]) }; },
     get smear() { return postAa.smear; },

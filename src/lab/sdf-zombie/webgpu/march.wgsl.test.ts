@@ -731,11 +731,14 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     // the level-shadow tail, in that order. +1 opt-in faceGlowRedOnly mask.
     // +5 static probe grid (probeTex, probeMin, probeInvExtent, probeDims,
     // probeCfg) appended after normalGradientCfg — lighting P3 step 1.
-    expect(names.length).toBe(89);
+    // +4 flashlight bounce spot (bounceSpotPos, bounceSpotNormal,
+    // bounceSpotRadiance, bounceSpotCfg) after probeCfg — lighting P4 step 1.
+    expect(names.length).toBe(93);
     expect(names).toContain('faceGlowRedOnly');
-    expect(names.slice(-11)).toEqual([
+    expect(names.slice(-15)).toEqual([
       'windDrift', 'bodyAnchor', 'woundBound', 'depthPreTex', 'depthPreCfg', 'normalGradientCfg',
       'probeTex', 'probeMin', 'probeInvExtent', 'probeDims', 'probeCfg',
+      'bounceSpotPos', 'bounceSpotNormal', 'bounceSpotRadiance', 'bounceSpotCfg',
     ]);
     // meltCfg sits between bodyHalf and the level-shadow tail, matching the
     // JS binding object in createMarchMaterial (positional — a swap silently

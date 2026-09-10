@@ -1,5 +1,6 @@
 import { AMBIENT_AT, WALL_CONTRIBUTION } from './ambient.wgsl';
 import { PROBE_GRID_WGSL } from './probe-grid.wgsl';
+import { FLASHLIGHT_BOUNCE_WGSL } from './flashlight-bounce.wgsl';
 import { SEG_VOLUME_WGSL } from './skeleton-spike/volume.wgsl';
 import { TILE_MAX_ENTRIES } from './tile-cull';
 import { MAX_PRIMS, MAX_CLUSTERS, BONE_SEG_MAX } from '../validate';
@@ -2262,7 +2263,14 @@ export const MARCH_BODY_PARAMS = /* wgsl */ `(
   probeMin: vec3<f32>,
   probeInvExtent: vec3<f32>,
   probeDims: vec4<f32>,
-  probeCfg: vec4<f32>
+  probeCfg: vec4<f32>,
+  // Flashlight bounce spot - lighting P4 step 1 - bound POSITIONALLY LAST.
+  // Four slots. bounceSpotCfg x is the gain and 0 keeps the compose bit-identical.
+  // NO PARENS and NO COLONS in this comment either.
+  bounceSpotPos: vec3<f32>,
+  bounceSpotNormal: vec3<f32>,
+  bounceSpotRadiance: vec3<f32>,
+  bounceSpotCfg: vec4<f32>
 ) -> vec4<f32> {
 `;
 
@@ -3560,6 +3568,12 @@ export const MARCH_BODY_LIGHT = /* wgsl */ `  // ---- ANALYTIC FLASHLIGHT ------
   if (probeCfg.x > 0.0) {
     amb = mix(amb, probeIrradiance(p, n, probeTex, probeMin, probeInvExtent, probeDims) * probeCfg.y, probeCfg.x);
   }
+  // FLASHLIGHT BOUNCE SPOT (lighting P4 step 1). The beam's lit patch on the
+  // level, found on the CPU each frame, added as one analytic disc light so
+  // a body between the lamp and the wall is lit from behind by the glow.
+  // The gain gate lives inside the function - at bounceSpotCfg.x = 0 it
+  // returns zero and amb is untouched. No field evaluations.
+  amb = amb + bounceSpotIrradiance(p, n, bounceSpotPos, bounceSpotNormal, bounceSpotRadiance, bounceSpotCfg);
   // HIGHLIGHT SHOULDER (spotCfg2.y). A body standing in the beam used to run
   // past 1.0 on every channel and hard-clip, which does not just look blown —
   // it DELETES the wounds: crater, lip, char and clean skin all clamp to the
@@ -3849,7 +3863,7 @@ export const HELPERS = [
   Q_ROT, Q_MUL, Q_FROM_TO, REST_POINT,
   APPLY_CARVES, APPLY_WOUNDS, WOUND_MASK, TISSUE_RAMP, CHAR_MASK, SAMPLE_VOLUME,
   FOLD_GROUP, FOLD_BONE_RANGE, SEG_VOLUME_WGSL, APPLY_BONES, MAP_BODY, CALC_NORMAL, WOUND_SHADOW, TEXEL, FLICKER, SOFT_SHOULDER,
-  WALL_CONTRIBUTION, AMBIENT_AT, PROBE_GRID_WGSL, LEVEL_SHADOW,
+  WALL_CONTRIBUTION, AMBIENT_AT, PROBE_GRID_WGSL, FLASHLIGHT_BOUNCE_WGSL, LEVEL_SHADOW,
   // Quarter-res depth prepass fetch (close-up task 3). No field deps — it is
   // a textureLoad — so it rides last, ahead of MARCH_BODY which calls it.
   DEPTH_PRE_FETCH,

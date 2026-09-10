@@ -554,6 +554,14 @@ export function defaultUniforms(faceTex: THREE.Texture) {
     probeInvExtent: uniform(new THREE.Vector3(0, 0, 0)),
     probeDims: uniform(new THREE.Vector4(1, 1, 1, 0)),
     probeCfg: uniform(new THREE.Vector4(0, 0.25, 0, 0)),
+    /** FLASHLIGHT BOUNCE SPOT (lighting P4 step 1). The beam's lit patch on
+     *  the level as one analytic disc light: position, normal, radiance and
+     *  cfg (x gain — 0 is bit-identical — y radius). Rewritten per frame by
+     *  the game from computeBounceSpot; the lab leaves it at 0. */
+    bounceSpotPos: uniform(new THREE.Vector3(0, 0, 0)),
+    bounceSpotNormal: uniform(new THREE.Vector3(0, 1, 0)),
+    bounceSpotRadiance: uniform(new THREE.Vector3(0, 0, 0)),
+    bounceSpotCfg: uniform(new THREE.Vector4(0, 0.5, 0, 0)),
   };
 }
 
@@ -1146,6 +1154,12 @@ export function createMarchMaterial(
     probeInvExtent: u.probeInvExtent,
     probeDims: u.probeDims,
     probeCfg: u.probeCfg,
+    // Flashlight bounce spot (P4 step 1) — POSITIONALLY LAST, four slots
+    // after probeCfg, bound in the same commit as the WGSL inputs.
+    bounceSpotPos: u.bounceSpotPos,
+    bounceSpotNormal: u.bounceSpotNormal,
+    bounceSpotRadiance: u.bounceSpotRadiance,
+    bounceSpotCfg: u.bounceSpotCfg,
   }) as unknown as Swizzled;
 
   const material = new MeshBasicNodeMaterial();
