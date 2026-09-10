@@ -90,6 +90,7 @@ import { stepPlayer, eyeOf, PLAYER, type PlayerState, type MoveInput } from './g
 import { createRoomProbes, type ProbeWorkerLike } from './room-probes';
 import { computeBounceSpot } from '../flashlight-bounce';
 import { createProbeGatherBinding, type ProbeGatherBinding } from './probe-gather-compute';
+import { tracerGatherLights } from '../tracer-lights';
 import { boneInstanceArrays, packBoneInstances, INSTANCE_FLOATS } from './bone-instancer';
 import { createZombieActor, segmentHitsBox, type ZombieActor } from './game-actor';
 import { separate, minPairDistance, type CrowdAgent } from '../crowd';
@@ -562,6 +563,12 @@ async function main() {
   // next to the room probes once the level exists. ?probedyn=0 zeroes both
   // gains — the storage read is skipped and the march is bit-identical.
   let probeGather: ProbeGatherBinding | null = null;
+  // TRACERS as gathered lights: the pellet lists are declared AFTER this draw
+  // callback and after an await (the gun GLTF load), so a frame CAN render in
+  // between — the same boot race the `cullCounts` comment describes. The
+  // gather reads this provider, never the consts directly; it is assigned
+  // right after `soldierPellets` exists.
+  let liveTracers: (() => readonly Projectile[]) | null = null;
   const probeDynParam = new URLSearchParams(location.search).get('probedyn');
   let probeDynGain = probeDynParam === '0' || probeDynParam === 'off' ? 0 : 0.15;
   let probeVisStrength = probeDynParam === '0' || probeDynParam === 'off' ? 0 : 1;
@@ -570,6 +577,11 @@ async function main() {
   // lives 0.14 s; at 1x the bounce was a quarter of the key on a body next
   // to the muzzle. Flash sources only — the beam stays physical.
   let probeFlashBoost = 4;
+  // TRACER LIGHTS. Raw intensity per pellet in the gathered light list, the
+  // same units as the flash entries. ?tracerlight=0 (or off) zeroes it: the
+  // pure rule returns [] and the frame packs no tracer light (bit-identical).
+  const tracerLightParam = new URLSearchParams(location.search).get('tracerlight');
+  let tracerLightGain = tracerLightParam === '0' || tracerLightParam === 'off' ? 0 : 2.0;
   // DIRECT flash on bodies (march slot bodyFlash): intensity multiplier on
   // the flash lights before the shader's I*cos/d^2. 0 = off, bit-identical.
   let bodyFlashGain = 0.06;
@@ -1131,6 +1143,16 @@ async function main() {
             pos: [sp.x, sp.y, sp.z], color: [sc.r, sc.g, sc.b], intensity: flashlight.spot.intensity,
             axis: [sAxis.x, sAxis.y, sAxis.z], cosInner, cosOuter,
           });
+        }
+        // (4) Live tracers LAST, filling only the slots the lights above left.
+        // They are the least important read, so the flashes and the beam keep
+        // their place; the gather's 8-light allocation is never exceeded.
+        const tracerSlots = 8 - gatherLights.length;
+        if (tracerSlots > 0 && tracerLightGain > 0) {
+          gatherLights.push(...tracerGatherLights(liveTracers?.() ?? [], {
+            eye: player.pos, room: dynRoom, margin: 1.5, gain: tracerLightGain,
+            slugRadius: SLUG.radius, cap: tracerSlots,
+          }));
         }
         probeLastLights = gatherLights.length;
         pendingGather = {
@@ -3046,6 +3068,9 @@ async function main() {
    *  They stop at solid level geometry and expire; actor damage remains a later phase. */
   const soldierPellets: Projectile[] = [];
   const soldierPelletViews: TracerView[] = [];
+  // The gather's tracer provider (declared at the top, next to probeGather) can
+  // only be wired once both lists exist — see the boot-race note there.
+  liveTracers = () => [...pellets, ...soldierPellets];
 
   // TRACERS. A shot in flight is drawn as a stretched, additively-blended
   // light streak (tracer-sprite.ts), not as the shaded ball this used to be:
@@ -5548,6 +5573,10 @@ async function main() {
       return { radianceGain: probeDynGain, visStrength: probeVisStrength, flashBoost: probeFlashBoost };
     },
     get probeDynamic() { return { radianceGain: probeDynGain, visStrength: probeVisStrength, frames: probeFrame, errors: probeGatherErrors, bound: probeGather !== null, reached: probeGateLogs, gates: probeLastGates }; },
+    /** TRACERS as gathered lights. Raw intensity per pellet; 0 = off (no
+     *  light packed). The owner tunes by eye and exaggerates with e.g. 6. */
+    setTracerLight: (gain: number) => { tracerLightGain = Math.max(0, gain); return tracerLightGain; },
+    get tracerLight() { return tracerLightGain; },
     probeDynReadback: () => probeGather?.readback() ?? Promise.resolve(new Float32Array(0)),
     get bounceSpot() { return bounceSpotGain; },
     setProbes: (weight: number, gain = -1) => { roomProbes.setProbes(weight, gain); return { weight: roomProbes.weight, gain: roomProbes.gain }; },
