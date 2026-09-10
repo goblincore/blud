@@ -234,9 +234,12 @@ export interface PassTiming {
   /** Resolve both pools and drain every labelled sample recorded since the
    *  last collect. Samples three recorded before install() are dropped. */
   collect(): Promise<PassSample[]>;
-  /** Pass COUNT per label since the last call (draw census): a label whose
-   *  pass count multiplies during fire is re-rendering the scene — shadow
-   *  faces, per-light re-renders — even when its exclusive ms looks small. */
+  /** Pass COUNT per label since the last call, AGGREGATED over frames
+   *  (draw census): a label whose pass count multiplies during fire is
+   *  re-rendering the scene — shadow faces, per-light re-renders — even
+   *  when its exclusive ms looks small. BENCH-ONLY per-frame grouping:
+   *  frameNo advances via beginPassFrame, which only the bench calls; in
+   *  live play this returns session totals per label. */
   countsSinceLast(): { label: string; passes: number }[];
 }
 
@@ -305,13 +308,14 @@ export function installPassTiming(renderer: THREE.WebGPURenderer): PassTiming {
   return {
     installed: true,
     countsSinceLast() {
-      const out: { label: string; passes: number }[] = [];
+      const byLabel = new Map<string, number>();
       for (const [key, passes] of passCounts) {
         const bar = key.indexOf('|');
-        out.push({ label: key.slice(bar + 1), passes });
+        const label = key.slice(bar + 1);
+        byLabel.set(label, (byLabel.get(label) ?? 0) + passes);
       }
       passCounts.clear();
-      return out;
+      return [...byLabel].map(([label, passes]) => ({ label, passes }));
     },
     async collect() {
       const out: PassSample[] = [];

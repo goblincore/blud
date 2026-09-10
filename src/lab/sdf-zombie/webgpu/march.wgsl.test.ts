@@ -619,9 +619,11 @@ describe('ported features reach the entry point', () => {
     // was inert: min <= shellIn <= prevT almost everywhere (task 5 finding).
     expect(MARCH_BODY).toContain('if (max(shellIn, bodyEntry) > prevT) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }');
     expect(MARCH_BODY).toContain('let bodyEntry = max(max(min(bLo.x, bHi.x), min(bLo.y, bHi.y)), max(min(bLo.z, bHi.z), 0.0));');
-    expect(MARCH_BODY).toContain('let tMax = min(tMaxSel, prevT)');
-    // + the temporal-start graze slack (5 cm past the exit; see the holes fix).
-    expect(MARCH_BODY).toContain('+ select(0.0, 0.05, temporalCfg.x > 0.5);');
+    expect(MARCH_BODY).toContain('let tMax = min(tMaxSel, prevT);');
+    // The 5 cm graze slack from 48f00de2 was REMOVED (adversarial review: a
+    // behaviour change riding a debug commit, superseded by the graze
+    // accept in 426118e8). The removal is pinned so it cannot creep back.
+    expect(MARCH_BODY).not.toContain('+ select(0.0, 0.05, temporalCfg.x > 0.5)');
   });
 
   it('stops the cone one shell amp early (X1.21.2 pale tile wedges)', () => {

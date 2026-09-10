@@ -617,10 +617,10 @@ async function main() {
   // count, and 8 tracers quadrupled it during firefights (p95 6 -> 27 ms).
   // 2 bounds the worst case near the flashes alone; ?tracerlightslots and
   // __sdfGame.setTracerLightSlots(n) restore more if the look wants them.
-  let tracerLightSlots = Math.max(
-    0,
-    Math.min(8, Number(new URLSearchParams(location.search).get('tracerlightslots') ?? 2) || 2),
-  );
+  const tracerSlotsParam = Number(new URLSearchParams(location.search).get('tracerlightslots'));
+  let tracerLightSlots = Number.isFinite(tracerSlotsParam) && tracerSlotsParam >= 0
+    ? Math.min(8, Math.floor(tracerSlotsParam))
+    : 2;
   // DIRECT flash on bodies (march slot bodyFlash): intensity multiplier on
   // the flash lights before the shader's I*cos/d^2. 0 = off, bit-identical.
   let bodyFlashGain = 0.06;
@@ -3045,25 +3045,37 @@ async function main() {
   const warmPipelines = async () => {
     const t0 = performance.now();
     const flipped: THREE.Object3D[] = [];
-    scene.traverse((o) => {
-      if (!o.visible && (o as THREE.Mesh).isMesh) { flipped.push(o); o.visible = true; }
-    });
+    // Adversarial review 7e04e1e6: the render loop is ALREADY armed here
+    // (createLabRenderer starts it; the game drawFn replaced the default at
+    // setDrawFn) — the flip-visible compile renders the flipped meshes for
+    // ~100 frames unless the loop is paused. Pause; nothing needs to draw
+    // while the loader is up.
+    handle.setLoopRunning(false);
     try {
+      scene.traverse((o) => {
+        // Any invisible Object3D, not just meshes: a hidden GROUP (flash
+        // group) hides visible children that compileAsync would otherwise
+        // skip — the first-shot freeze survived for exactly those.
+        if (!o.visible) { flipped.push(o); o.visible = true; }
+      });
       await handle.renderer.compileAsync(scene, camera);
       if (gooLayer) await gooLayer.precompile(camera);
       const done = { ms: Math.round(performance.now() - t0), flipped: flipped.length };
       (window as unknown as Record<string, unknown>).__warmDone = done;
-      console.log(`[warm] pipelines compiled in ${done.ms} ms (${done.flipped} hidden meshes included)`);
+      console.log(`[warm] pipelines compiled in ${done.ms} ms (${done.flipped} hidden objects included)`);
     } catch (err) {
       console.error('[warm] pipeline warm-up failed', err);
     } finally {
       for (const o of flipped) o.visible = false;
+      handle.setLoopRunning(true);
     }
   };
   // ?warm=0 skips the warm-up (A/B: the first-shot freeze it removes).
   setLoader('compiling pipelines');
+  // Adversarial review 794a7cfc: a compileAsync that never settles would
+  // hold the loader (and the flipped meshes) forever — bound it.
   const warmDone = new URLSearchParams(location.search).get('warm') !== '0'
-    ? warmPipelines()
+    ? Promise.race([warmPipelines(), new Promise<void>((r) => setTimeout(r, 15000))])
     : Promise.resolve();
   // THE LOADER GATE: reveal the game only when the weapon is loaded AND the
   // pipeline compilation finished — the two multi-second boot legs. READY
@@ -5736,6 +5748,7 @@ async function main() {
       });
       return { meshes, visible, instanced, top: [...byName].sort((a, b) => b[1] - a[1]).slice(0, 24) };
     },
+    // `frames` is a DISPATCH counter (half-rate gather => ~half the drawn frames).
     get probeDynamic() { return { radianceGain: probeDynGain, visStrength: probeVisStrength, frames: probeFrame, errors: probeGatherErrors, bound: probeGather !== null, reached: probeGateLogs, gates: probeLastGates, rate: probeGatherRate }; },
     /** TRACERS as gathered lights. Raw intensity per pellet; 0 = off (no
      *  light packed). The owner tunes by eye and exaggerates with e.g. 6. */

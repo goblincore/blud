@@ -43,10 +43,9 @@ export const TEMPORAL_MARGIN_FLOOR = 0.25;
  * The adaptive start margin for a measured worst-body translation of
  * `maxDisp` metres over one history interval (fresh frame to fresh frame,
  * measured by sdf-layer). 1.5x slack for inter-interval acceleration,
- * floored at TEMPORAL_MARGIN_FLOOR, capped at the shipped constant. A scene
- * of slow walkers therefore starts its rays ~0.05-0.08 m from last frame's
- * surface instead of 0.25 m + slope; a scene with a 10 m/s gib caps at the
- * shipped figure. Pure — the layer calls this per fresh frame.
+ * floored at TEMPORAL_MARGIN_FLOOR, capped at the shipped constant. With
+ * floor == cap the margin is the shipped figure for every input (parked —
+ * see TEMPORAL_MARGIN_FLOOR). Pure — the layer calls this per fresh frame.
  */
 export function temporalMarginForMotion(maxDisp: number, cap = TEMPORAL_START_DEFAULTS.margin): number {
   return Math.min(cap, Math.max(TEMPORAL_MARGIN_FLOOR, 1.5 * maxDisp));
