@@ -390,17 +390,28 @@ async function applyLeg(name) {
   const overrides = LEGS[name] ?? ALL_LEGS[name] ?? {};
   // Ship defaults first, so legs cannot contaminate each other.
   //
-  // ⚠ TWO PINS BELOW ARE NOT SHIP TRUTH (audited 2026-09-10).
-  // `setOccluder(true)` and `setHullExitBound(false)` are the OPPOSITE of what
-  // the game runs — `setOccluderEnabled(false)` and `GAME_HULL_EXIT_BOUND = 1`
-  // (game-main.ts). So every delta this harness produces is taken with one
-  // extra pass the game does not run, and with a march bound the game DOES
-  // have switched off. The hull-exit pin's stated reason below ("= 1 FAILS
-  // render parity") was root-caused as scene fog on 2026-09-04 and the bound
-  // then shipped 1 with a bit-identical re-census on hits/rasterised/
-  // meanStepsHit, so that justification is stale.
-  // Until an owner decision re-syncs these pins, measure ship truth explicitly:
+  // ✅ RESYNCED TO SHIP TRUTH (2026-09-10, resolving the audit below). Both pins
+  // now match what the game actually runs: `setOccluderEnabled(false)` and
+  // `GAME_HULL_EXIT_BOUND = 1` (game-main.ts). Before this, every delta the
+  // harness produced was taken with one extra pass the game does NOT run and
+  // with a march bound the game DOES have switched off — so the harness was
+  // measuring a configuration that does not exist, which is the same failure
+  // class as the two URL-default bugs that shipped this session.
+  //
+  // The reason the hull-exit pin was ever OFF ("= 1 FAILS render parity",
+  // task 1b: background bodies vanish past a foreground hull) was root-caused
+  // as scene fog on 2026-09-04, and the bound then shipped ON with a
+  // bit-identical re-census on hits/rasterised/meanStepsHit. The pin was simply
+  // never re-synced afterwards.
+  //
+  // CONSEQUENCE FOR OLD NUMBERS: stored bench.json files taken before this
+  // change were measured in the OLD configuration. They remain internally
+  // consistent (every leg in one run shared it) but are NOT comparable to a run
+  // from now on. Tag them in dev-notes rather than mixing the two.
+  //
+  // The BENCH_PRELUDE workaround is no longer needed:
   //   BENCH_PRELUDE='__sdfGame.setOccluder(false);__sdfGame.setHullExitBound(true)'
+  // (that prelude is now a no-op; it is kept in older notes for provenance).
   await evaluate(`(() => {
     // ANY NEW SEAM A LEG CAN SET MUST BE RESET HERE. The 2026-09-10 probe-gather
     // legs were added WITHOUT this, and the omission silently corrupted two
@@ -412,7 +423,7 @@ async function applyLeg(name) {
     __sdfGame.setProbeGatherRate(2);
     __sdfGame.setProbeRays(null);
     __sdfGame.setProbeLights(null);
-    __sdfGame.setOccluder(true);
+    __sdfGame.setOccluder(false);   // ship truth (game-main.ts: setOccluderEnabled(false))
     __sdfGame.setCone(false);
     __sdfGame.setFxaa(true);
     __sdfGame.setSdfScale(1.0);
@@ -424,12 +435,12 @@ async function applyLeg(name) {
     // Perf round 2 task 5b: the depth gate DEFAULTS OFF (its pass structure
     // measured as a net loss at 3-4 bodies — see game-main.ts). Pinned here
     // so legs cannot inherit state; the 'depth-gate-on' leg is the A/B.
-    // Perf round 2 task 1's GAME_HULL_EXIT_BOUND = 1 FAILS render parity
-    // (task 1b: whole background bodies vanish past a foreground hull; see
-    // notes.md). Until the owner resolves that, benches measure the bound OFF
-    // — the state every baseline in these notes was taken in — and task 9's
-    // table keeps it OFF per the plan.
-    __sdfGame.setHullExitBound(false);
+    // SHIP TRUTH: GAME_HULL_EXIT_BOUND = 1 in game-main.ts. The old pin held it
+    // OFF on the grounds that it "FAILS render parity" (task 1b); that was
+    // root-caused as scene fog on 2026-09-04 and the bound shipped ON. See the
+    // audit note above — and note that a bench measuring a config the game does
+    // not run is the bug, not the pin being "conservative".
+    __sdfGame.setHullExitBound(true);
     // Tiles ship OFF (playtest-gated); pinned so the tile legs are the A/B.
     __sdfGame.setTiles(false);
     __sdfGame.setTileRayCull(false);

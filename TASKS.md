@@ -199,6 +199,13 @@ enclosure packing). **Next: hash the packed capsule array as a third layer** —
 a small Float32Array that says immediately whether that is where it enters.
 Separately, a gather-independent period-2 mechanism remains (field jitter phase
 is the candidate). Full evidence: handoff, "IT IS BUILT".
+**[x] AND IT ALREADY FIRES ON THE BENCH.** `endHash` is wired into the page's
+bench, so the harness reports frame-level drift beside census drift. A
+`baseline,occluder-off` × 3 × 2 run reports **all four leg-runs drifting on BOTH
+layers** (baseline march rep0→rep1 `2990198133`→`1661108024`, max 11.13→12.55;
+probeDyn drifted too). **Stage 1 fixed the census-visible part of the drift; this
+is the part it could not see — two repeats of one leg do not just COUNT different
+things, they RENDER different frames.**
 
 **NEXT, in order:** (1) the deeper-interlace `COMPOSITE_WGSL` generalisation —
 plan at `docs/superpowers/plans/2026-09-10-deeper-interlace-fields.md`, pure math
@@ -211,9 +218,16 @@ LOD, **re-aimed** — the step axis is dead, use per-pixel work.
 
 **Bench discipline, reconfirmed twice:** read the Repeatability section FIRST and
 judge each delta against its own legs' spread. Only a within-leg pass row
-survives a busy machine. Tag ship-truth runs with
-`BENCH_PRELUDE='__sdfGame.setOccluder(false);__sdfGame.setHullExitBound(true)'`
-— the harness still pins the opposite of both.
+survives a busy machine.
+**[x] The harness ship-truth pins are RESYNCED (2026-09-10).** `setOccluder(false)`
+and `setHullExitBound(true)` are now the pins, matching what the game runs
+(`setOccluderEnabled(false)`, `GAME_HULL_EXIT_BOUND = 1`). Before this, every
+delta the harness produced was taken with one extra pass the game does not run
+and with a march bound the game has ON switched off — so it measured a
+configuration that does not exist. The `BENCH_PRELUDE='…setOccluder(false)…'`
+workaround is now a NO-OP. **Stored bench.json files predate the flip: they stay
+internally consistent but are NOT comparable to a run from now on** — tag them
+rather than mixing the two.
 
 **[x] FRAME SPIKES SOLVED — interlaced scanline fields (`86185b01`).** Owner
 captures: worst frame **125 → 38 ms**, p99 **63 → 34.3**, over-budget frames

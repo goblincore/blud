@@ -7465,6 +7465,13 @@ function performBenchAction(a: BenchAction): void {
           },
           resolveGpu: () => handle.resolveGpu(),
           passTimings: () => passTiming.collect(),
+          // THE FRAME HASH, once per leg and AFTER every timing sample (see
+          // BenchDeps.endHash). The census below counts what the page CONTAINS;
+          // this digests what it RENDERS — the half of the workload the census
+          // is blind to, and the half that shipped two playtest-caught bugs on
+          // 2026-09-10 (the zeroed dynamic probe layer, and tracer light slots
+          // defaulting to 0).
+          endHash: () => hashFrame({ readMarchTarget: readMarchTargetForHash, readProbeDyn: readProbeDynForHash }, frameCount),
           now: () => performance.now(),
           hidden: () => document.hidden,
           census: () => ({

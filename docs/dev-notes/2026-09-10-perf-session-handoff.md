@@ -172,6 +172,23 @@ boots do not share them. So a second, period-2, gather-independent mechanism
 exists — field jitter phase is the candidate, since the interlaced field's own
 jitter advances per frame. Fix that one too; it will still be there afterwards.
 
+**THE BENCH-LEVEL GATE NOW FIRES ON REAL DATA.** `endHash` is wired into the
+page's bench deps and the harness reports frame-hash drift beside census drift.
+Run `BENCH_LEGS=baseline,occluder-off BENCH_ROOMS=3 BENCH_REPEATS=2
+BENCH_PASSES=1` (2026-09-10) and it reports **all four leg-runs drifting, on BOTH
+layers**, with the numbers:
+
+| leg/room | marchTarget rep0 → rep1 | max |
+| --- | --- | --- |
+| baseline/room3 | 2990198133 → 1661108024 | 11.13 → 12.55 |
+| occluder-off/room3 | 2461999575 → 2852495086 | 8.54 → 12.44 |
+
+probeDyn drifted too (3173156444 → 2428443327, etc.). **So the census gate alone
+was not the whole story: two repeats of one leg do not merely COUNT different
+things, they RENDER different frames.** Stage 1 fixed the census-visible part of
+the drift; this is the part it could not see, and it is why every A/B measured
+across those repeats was measuring the scenario.
+
 **Order the evidence points in:** (1) hash the gather's inputs to find where the
 divergence enters; (2) the gather-independent period-2 mechanism; (3) `.dem`
 serialization (stage 3), which needs a green hash. Two things worth banking:
@@ -335,11 +352,15 @@ popping variant, so it needs hysteresis.
   legs' spread**. A delta smaller than either leg's spread is UNRESOLVED, not zero.
 - **Only a within-leg pass row survives a busy machine.** `compute:probe-gather`
   held 6.01–7.19 ms across five legs while frame times swung 116%.
-- Tag ship-truth runs with
-  `BENCH_PRELUDE='__sdfGame.setOccluder(false);__sdfGame.setHullExitBound(true)'`
-  — **the harness still pins the OPPOSITE of both** (`setOccluder(true)`,
-  `setHullExitBound(false)`), so every untagged delta includes a pass the game
-  does not run and omits a bound it has.
+- **RESOLVED 2026-09-10 (later): the harness pins are RESYNCED TO SHIP TRUTH.**
+  `setOccluder(false)` and `setHullExitBound(true)` are now what the harness
+  pins, matching the game (`setOccluderEnabled(false)`, `GAME_HULL_EXIT_BOUND =
+  1`). The `BENCH_PRELUDE='__sdfGame.setOccluder(false);__sdfGame.setHullExitBound(true)'`
+  workaround is a NO-OP from now on — kept here for provenance, because every
+  stored run in this directory predates the flip and was measured with one extra
+  pass the game does not run and a bound it has switched OFF. **Those runs stay
+  internally consistent but are not comparable to a run taken after the flip.**
+  This also retires open question 1 below.
 - `node scripts/census-diff.mjs <bench.json>` reports workload drift, and the
   bench now does it automatically on every run. **The same "identical" leg has
   run with a 4× spread in droplets and a different body count** — so machine noise
@@ -372,7 +393,8 @@ re-diagnose it, and should not assume it was caused by anything they did.
 
 ## Open questions for the owner
 
-1. Re-sync the harness ship-truth pins, or keep them?
+1. ~~Re-sync the harness ship-truth pins, or keep them?~~ **DONE 2026-09-10** —
+   resynced to ship truth; see "Measurement discipline".
 2. Is `probeGatherRate` 2→3/4 an acceptable look trade (~1 ms of mean GPU work)?
    **This is now the biggest demonstrated frame-level win of the session
    (−5.2% room 3, resolved) and it is waiting on this answer alone** — the
