@@ -60,7 +60,12 @@ export function temporalStart(
  * The WGSL twin. `cfg = (enabled, margin, slope, maxStart)`. `ndc` is the
  * pixel's clip xy under the convention the layer was rendered with — the
  * caller (MARCH_BODY) derives it from screenUV; see the plan's flip note.
- * Inputs stay comment-free: the wgslFn parser reads `name: type` pairs.
+ * Returns vec2(start, t): .x is the CPU twin's value, .y the RAW reprojected
+ * distance along the ray (0 on every off path) so the march can test whether
+ * that point lies inside the body it is marching — the layer's depth is the
+ * NEAREST body at the pixel, and a body behind it must not start past its
+ * own surface (the 2026-09-10 see-through). Inputs stay comment-free: the
+ * wgslFn parser reads `name: type` pairs.
  */
 export const TEMPORAL_START_WGSL = /* wgsl */ `fn temporalStartFetch(
   lastTex: texture_2d<f32>,
@@ -69,18 +74,18 @@ export const TEMPORAL_START_WGSL = /* wgsl */ `fn temporalStartFetch(
   camPos: vec3<f32>,
   rayDir: vec3<f32>,
   cfg: vec4<f32>
-) -> f32 {
-  if (cfg.x < 0.5) { return 0.0; }
+) -> vec2<f32> {
+  if (cfg.x < 0.5) { return vec2<f32>(0.0, 0.0); }
   let dims = vec2<f32>(textureDimensions(lastTex, 0));
   let uv = vec2<f32>(ndc.x * 0.5 + 0.5, ndc.y * 0.5 + 0.5);
   let c = clamp(vec2<i32>(floor(uv * dims)), vec2<i32>(0, 0), vec2<i32>(dims) - vec2<i32>(1, 1));
   let d = textureLoad(lastTex, c, 0).a;
-  if (d >= 1.0) { return 0.0; }
+  if (d >= 1.0) { return vec2<f32>(0.0, 0.0); }
   let w = lastInvVp * vec4<f32>(ndc, d, 1.0);
-  if (abs(w.w) < 1e-12) { return 0.0; }
+  if (abs(w.w) < 1e-12) { return vec2<f32>(0.0, 0.0); }
   let p = w.xyz / w.w - camPos;
   let t = dot(p, rayDir);
-  if (t <= 0.0) { return 0.0; }
+  if (t <= 0.0) { return vec2<f32>(0.0, 0.0); }
   let start = t - cfg.y - t * cfg.z;
-  return clamp(start, 0.0, cfg.w);
+  return vec2<f32>(clamp(start, 0.0, cfg.w), t);
 }`;

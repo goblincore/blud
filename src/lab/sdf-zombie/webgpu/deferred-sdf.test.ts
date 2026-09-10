@@ -119,8 +119,11 @@ describe('the surface entry IS the production march, not a copy', () => {
     // budget is unchanged relative to the legacy path). calcNormal's own
     // calls live in CALC_NORMAL's source; the scatter/shadow probes are all
     // in the lighting tail this entry does not include. A THIRD call would
-    // mean a per-attachment retrace crept back in.
-    expect(MARCH_SURFACE.match(/\bmapBody\(/g)).toHaveLength(2);
+    // mean a per-attachment retrace crept back in. The THIRD (plan
+    // 2026-09-10) is the temporal start's inside check — one sample, taken
+    // only when the reprojected bound is live, before the loop; not a
+    // retrace.
+    expect(MARCH_SURFACE.match(/\bmapBody\(/g)).toHaveLength(3);
   });
 
   it('exits before every light-dependent term and the display conversion', () => {

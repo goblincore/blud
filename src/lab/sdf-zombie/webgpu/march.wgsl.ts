@@ -2683,7 +2683,22 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
   // mapping from screenUV is the layer's own (no flip) - pinned on the GPU by
   // Task 2 step 7.2 of the plan (a wrong flip reads the mirrored row).
   let tempNdc = vec2<f32>(screenUV.x * 2.0 - 1.0, screenUV.y * 2.0 - 1.0);
-  let tempStart = temporalStartFetch(lastTex, tempNdc, lastInvVp, camPos, rd, temporalCfg);
+  let temp = temporalStartFetch(lastTex, tempNdc, lastInvVp, camPos, rd, temporalCfg);
+  // OWN-BODY GATE. The layer's depth is the NEAREST body at the pixel, but
+  // this pass marches ONE body: if last frame's hit was another body in
+  // front, starting there skips this body's own surface (the 2026-09-10
+  // see-through - other bodies' silhouettes cut into flesh). Trust the
+  // reprojected point only when it lies inside THIS body's proxy box along
+  // the ray, margin either side; then confirm the start is OUTSIDE the field
+  // with one sample - inside means the surface was skipped, fall back.
+  var tempStart = 0.0;
+  if (temp.y > 0.0 && temp.y >= bodyEntry - temporalCfg.y && temp.y <= tMax + temporalCfg.y) {
+    tempStart = temp.x;
+    if (tempStart > 0.0) {
+      let d0 = mapBody(camPos + rd * tempStart, data, counts, counts2, vec4<f32>(0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound).x;
+      if (d0 <= 0.0) { tempStart = 0.0; }
+    }
+  }
   var t = clamp(max(max(max(startT, shellIn), preStart), tempStart), 0.0, tMax);
   var hit = false;
   var prevRadius = 0.0;

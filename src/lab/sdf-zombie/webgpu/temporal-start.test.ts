@@ -85,8 +85,10 @@ describe('TEMPORAL_START_WGSL — parse and shape contract', () => {
   it('loads, never samples, and returns the identity (0) on the off paths', () => {
     expect(TEMPORAL_START_WGSL).toContain('textureLoad(');
     expect(TEMPORAL_START_WGSL).not.toContain('textureSample');
-    expect(TEMPORAL_START_WGSL).toContain('if (cfg.x < 0.5) { return 0.0; }');
-    expect(TEMPORAL_START_WGSL).toContain('if (d >= 1.0) { return 0.0; }');
+    expect(TEMPORAL_START_WGSL).toContain('if (cfg.x < 0.5) { return vec2<f32>(0.0, 0.0); }');
+    expect(TEMPORAL_START_WGSL).toContain('if (d >= 1.0) { return vec2<f32>(0.0, 0.0); }');
+    // .y carries the raw reprojected distance for the march's own-body test.
+    expect(TEMPORAL_START_WGSL).toContain('return vec2<f32>(clamp(start, 0.0, cfg.w), t);');
   });
   it('shares the margin formula with the CPU twin', () => {
     expect(TEMPORAL_START_WGSL).toContain('t - cfg.y - t * cfg.z');

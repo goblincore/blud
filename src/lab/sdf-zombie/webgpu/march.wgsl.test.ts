@@ -749,6 +749,10 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     // The temporal start folds in AFTER preStart, as the fourth max term.
     expect(MARCH_BODY).toContain('var t = clamp(max(max(max(startT, shellIn), preStart), tempStart), 0.0, tMax);');
     expect(MARCH_BODY).toContain('temporalStartFetch(lastTex, tempNdc, lastInvVp, camPos, rd, temporalCfg)');
+    // Own-body gate + inside check: the reprojected point must sit in THIS
+    // body's box and the start must be outside the field, else 0.
+    expect(MARCH_BODY).toContain('temp.y >= bodyEntry - temporalCfg.y && temp.y <= tMax + temporalCfg.y');
+    expect(MARCH_BODY).toContain('if (d0 <= 0.0) { tempStart = 0.0; }');
     // meltCfg sits between bodyHalf and the level-shadow tail, matching the
     // JS binding object in createMarchMaterial (positional — a swap silently
     // hands the shader the wrong uniform).
