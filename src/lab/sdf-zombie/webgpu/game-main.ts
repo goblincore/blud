@@ -701,8 +701,13 @@ async function main() {
   // LEGACY PATH ONLY: the flesh mask is the march target's depth-in-alpha,
   // which field modes repurpose at half height and deferred mode replaces
   // with its own G-buffer (?skeleton=volume players: add &sscs=off).
+  // SHIPS OFF (owner decision, 2026-09-10): the FPV weapon is always inside
+  // SSCS's 0.8 m march volume (the flashlight is mounted at the weapon), so
+  // melee-range receivers painted a weapon-silhouette contact-shadow smear —
+  // the gray rectangle that moves with the gun. Excluding the viewmodel from
+  // the occluder depth is the proper fix; until then ?sscs=on opts in.
   const sscsParam = new URLSearchParams(location.search).get('sscs');
-  const sscsEnabled = sscsParam !== 'off' && !deferredMode;
+  const sscsEnabled = sscsParam === 'on' && !deferredMode;
   if (sscsEnabled) {
     postAa.setSscsFleshTex(sdfLayer.marchTarget.texture);
     postAa.setSscs(true);

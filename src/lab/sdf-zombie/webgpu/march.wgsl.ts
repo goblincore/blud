@@ -2916,6 +2916,12 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
         // the old form LENGTHENED the step to 0.6 in the very zones that
         // wanted it shortest; min() keeps omega there instead.
         stepLen = d * min(select(omega, 0.6, conservative), select(omega, woundMul, nearWound));
+        // CRAWL FLOOR (temporal start): graze rays near the surface step
+        // sub-millimetre distances and burn 15-30 samples crossing the last
+        // few cm (the gib-segment march cost of the holes fix). A 2 mm floor
+        // bounds the crawl to ~window/2mm steps; the graze accept (1 cm) and
+        // the eps accept still land hits that the floor steps across.
+        stepLen = max(stepLen, select(0.0, 0.002, temporalCfg.x > 0.5));
       }
     }
     prevRadius = radius;
