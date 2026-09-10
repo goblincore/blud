@@ -169,8 +169,15 @@ resolution: [bodies-style-handoff.md](docs/dev-notes/2026-09-09-perf-spikes/bodi
   player's enclosure (paint, furniture first) as one analytic disc light every
   body adds to its ambient — a body between the lamp and a wall is lit from
   behind. `__sdfGame.setBounceSpot(g)` / `?bouncespot=0` = bit-identical.
-  [plan](docs/superpowers/plans/2026-09-09-flashlight-bounce-spot.md). Next:
-  body occlusion of probes/spot (needs a GPU gather); flash afterglow injection.
+  [plan](docs/superpowers/plans/2026-09-09-flashlight-bounce-spot.md).
+- [ ] **GPU probe gather — dynamic layer** (owner-approved 2026-09-09, the
+  paper's core). Per-frame compute pass writes a dynamic probe layer next to
+  the static grid: muzzle-flash radiance (first) and body visibility (second),
+  bodies as capsule occluders from the bone instancer. Two march slots,
+  `?probedyn=0` bit-identical.
+  [Spec](docs/superpowers/specs/2026-09-09-gpu-probe-gather-design.md) ·
+  [plan](docs/superpowers/plans/2026-09-09-gpu-probe-gather.md). Task 1 (pure
+  twin + kernel WGSL) dispatched; task 2 (binding, march, game) in session.
 - [x] VHS post-FX wired, ships ON at the owner-tuned **`blud`** preset
   (`VHS_PRESETS.blud`, swept in the panel below 2026-09-09: artefacts up, mush
   down — full intensity + full horizontal blur, noise ~off at 0.005, grade
