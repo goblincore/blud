@@ -221,6 +221,28 @@ worth remembering: a poisoned seam does not look like an error, it looks like a
 baseline reported `compute:probe-gather 0.01 ms`, which reads as "the gather is
 free" rather than as "the harness is lying".
 
+### CORRECTION (2026-09-10, later): that 0.01 ms had TWO causes, not one
+
+I first blamed it entirely on the missing reset. It was also a **shipped boot
+bug**: `URLSearchParams.get` returns null for an absent parameter and
+`Number(null)` is `0`, which passed the seams' `isFinite(v) && v >= 0` guard
+because 0 is a legitimate value for them. So a bare page booted with
+`raysPerProbe = 0` and an empty light list, and the dynamic probe layer was
+already zero BEFORE any leg ran. The reset gap then kept it zero across reps.
+
+**This reached the owner's screen** as a visual regression: characters in the
+player's room as near-black silhouettes with no features, characters in other
+rooms normally lit until they crossed into the player's room and inherited the
+zeroed layer, and flashlit ones keeping contrast because the direct flashlight
+never goes through the gather. Fixed in `e4eba930`, then made structural in
+`f3541064` — `webgpu/boot-params.ts` now reads the raw string so ABSENT is
+distinguishable from an explicit 0, with `boot-params.test.ts` as the gate.
+
+**The lesson generalises past this file:** a boot-param default is what you get
+when the parameter is ABSENT, not what the number parses to. And the logic had to
+leave the 8k-line closure to become testable at all — which is why a one-line
+parsing error survived to a playtest.
+
 --- (original VOID text, kept for the record) ---
 
 ```
