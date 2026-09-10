@@ -96,7 +96,9 @@ export const K_PROBE_GATHER = /* wgsl */ `fn kProbeGather(
       // Lift off the surface so the shadow ray cannot re-enter its own box.
       let o = bh.point + bh.normal * 1e-4;
       for (var l = 0u; l < nLights; l = l + 1u) {
-        let lb = 4u + l * 2u;
+        // vec4 index, not float offset: the count is element 0, light l is
+        // 1 + 2l (packLights writes it at float 4 + 8l).
+        let lb = 1u + l * 2u;
         let lp = (*lights)[lb].xyz;
         let intensity = (*lights)[lb].w;
         let color = (*lights)[lb + 1u].xyz;
@@ -184,7 +186,7 @@ fn kdHitBox(
   var best = KdBoxHit(false, 1e30, vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(0.0, 0.0, 0.0));
   let n = u32((*boxes)[0].x);
   for (var b = 0u; b < n; b = b + 1u) {
-    let bb = 4u + b * 3u;
+    let bb = 1u + b * 3u; // vec4 index; count is element 0
     let mn = (*boxes)[bb].xyz;
     let kind = (*boxes)[bb].w;
     let mx = (*boxes)[bb + 1u].xyz;
@@ -283,7 +285,7 @@ fn kdHitCapsule(
   var best = KdCapsuleHit(false, 1e30, vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(0.0, 0.0, 0.0));
   let n = u32((*capsules)[0].x);
   for (var c = 0u; c < n; c = c + 1u) {
-    let cb = 4u + c * 2u;
+    let cb = 1u + c * 2u; // vec4 index; count is element 0
     let a = (*capsules)[cb].xyz;
     let r = (*capsules)[cb].w;
     let b = (*capsules)[cb + 1u].xyz;

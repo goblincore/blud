@@ -73,3 +73,34 @@ toggling weight restores the P1 frame; the effect on a lit body is subtle
 under the flashlight (the key dominates) and shows on the shadow side.
 
 Not done: body occlusion of probes, flashlight injection (both dynamic).
+
+## Update 2026-09-09 (late) — the GPU gather: dynamic layer shipped ON
+
+The paper's core is in: a per-frame compute pass (`probe-gather-compute.ts`,
+kernel `K_PROBE_GATHER` in `probe-dynamic.wgsl.ts`, CPU twin `probe-dynamic.ts`)
+writes a DYNAMIC probe layer (L1 radiance from the muzzle flash + L1 body
+visibility) for the player's room, read by the march via two storage slots
+(`probeDyn`, `probeDynCfg`; both pins at 95). Bodies are capsules packed from
+each actor's posed bones with the instancer's own packer; boxes are the room
++ furniture; the light is `flashLight` (world pos, 55×envelope).
+Compose: `amb = amb * mix(1, vis, y) + dyn * x`. Defaults x 0.05, y 1;
+`?probedyn=0` / `setProbeDynamic(0,0)` bit-identical.
+
+Verified in real Chrome with the hand-step seam (`__sdfGame.step`, because a
+hidden tab stops requestAnimationFrame): 90 capsules for two bodies; 55 of
+400 probes occluded, min visibility 0.55/3.545; a slug fired puts 404 total
+radiance into the layer (max probe 12); zero errors.
+
+Two bugs found only on the GPU, both now pinned:
+- `renderer.compute()` INSIDE the post-aa render callback broke the pass
+  state and stalled the loop after a handful of frames. The dispatch now
+  runs at the top of the draw function, one frame behind the packing.
+- The kernel indexed all three input buffers at `4u + k*stride` (a float
+  offset) instead of `1u + k*stride` (vec4 index): lights read zeros, boxes
+  and capsules read misaligned records. Source-text pins in
+  probe-dynamic.wgsl.test.ts.
+
+Process trap: Chrome (extension) and the in-app pane both report
+`visibilityState: hidden` when occluded and stop the loop; readbacks of a
+buffer that was never dispatched throw "reading 'size'". Drive frames with
+`__sdfGame.step(n)` for any GPU verification.

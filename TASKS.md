@@ -170,14 +170,17 @@ resolution: [bodies-style-handoff.md](docs/dev-notes/2026-09-09-perf-spikes/bodi
   body adds to its ambient — a body between the lamp and a wall is lit from
   behind. `__sdfGame.setBounceSpot(g)` / `?bouncespot=0` = bit-identical.
   [plan](docs/superpowers/plans/2026-09-09-flashlight-bounce-spot.md).
-- [ ] **GPU probe gather — dynamic layer** (owner-approved 2026-09-09, the
-  paper's core). Per-frame compute pass writes a dynamic probe layer next to
-  the static grid: muzzle-flash radiance (first) and body visibility (second),
-  bodies as capsule occluders from the bone instancer. Two march slots,
-  `?probedyn=0` bit-identical.
+- [x] **GPU probe gather — dynamic layer, ON** (the paper's core). Per-frame
+  compute pass writes muzzle-flash radiance + body visibility per probe for
+  the player's room; bodies are capsules from their posed bones. Two march
+  slots (pins 95); `?probedyn=0` / `__sdfGame.setProbeDynamic(0,0)`
+  bit-identical; defaults radiance 0.05, visibility 1 — untuned, owner to
+  judge. GPU-verified via `__sdfGame.step` (hidden tabs stop rAF).
   [Spec](docs/superpowers/specs/2026-09-09-gpu-probe-gather-design.md) ·
-  [plan](docs/superpowers/plans/2026-09-09-gpu-probe-gather.md). Task 1 (pure
-  twin + kernel WGSL) dispatched; task 2 (binding, march, game) in session.
+  [plan](docs/superpowers/plans/2026-09-09-gpu-probe-gather.md) ·
+  [result](docs/dev-notes/2026-09-09-probe-grid-spike/result.md).
+  Next: tune both gains in play; soldier muzzle flashes as lights; the
+  flashlight beam as a gathered light (replacing the analytic spot).
 - [x] VHS post-FX wired, ships ON at the owner-tuned **`blud`** preset
   (`VHS_PRESETS.blud`, swept in the panel below 2026-09-09: artefacts up, mush
   down — full intensity + full horizontal blur, noise ~off at 0.005, grade

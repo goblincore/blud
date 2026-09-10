@@ -141,3 +141,17 @@ describe('probe-dynamic WGSL — the hard perf constraint', () => {
     }
   });
 });
+
+describe('K_PROBE_GATHER buffer indexing (vec4 units, count at element 0)', () => {
+  // The buffers are arrays of vec4; the packers write the count at float 0
+  // and the first record at float 4, i.e. vec4 index 1. Indexing the lights
+  // at 4u + 2l read two slots past the only light and every flash produced
+  // zero radiance on the GPU (owner-observed 2026-09-09) while the CPU twin,
+  // which indexes floats, was correct.
+  it('reads light l at vec4 index 1 + 2l, box b at 1 + 3b, capsule c at 1 + 2c', () => {
+    expect(K_PROBE_GATHER).toContain('let lb = 1u + l * 2u;');
+    expect(K_PROBE_GATHER).toContain('let bb = 1u + b * 3u;');
+    expect(K_PROBE_GATHER).toContain('let cb = 1u + c * 2u;');
+    expect(K_PROBE_GATHER).not.toMatch(/= 4u \+ [lbc] \* [23]u;/);
+  });
+});
