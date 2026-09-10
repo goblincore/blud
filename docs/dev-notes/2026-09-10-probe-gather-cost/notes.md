@@ -158,7 +158,70 @@ a pass the game does not run and omits a bound it has. An owner decision should
 re-sync those pins; until then the prelude is mandatory for a ship-truth
 number.
 
-## MEASURED: the cadence lever (rate 2 -> 4) is NULL, and the 4-5 ms must be amortised
+## MEASURED: the primary-vs-shadow split — the shadow path is ~56%
+
+**This is the measurement the GI research briefing named as the one that decides
+whether widening the dispatch or deleting the per-light sweep pays more.** It was
+taken with two new diagnostic seams, both WRONG FRAMES ON PURPOSE:
+
+```
+?dynrays=0    -> nRays 0: no ray work at all (dispatch + setup + blend floor)
+?dynlights=0  -> empty light list: the per-light loop never runs, so kdShadowed
+                 is never called. Primary rays only.
+```
+Harness legs `probe-norays` / `probe-nolights`; also exposed as
+`__sdfGame.setProbeRays(null|n)` / `setProbeLights(null|n)`.
+
+| | room 3 | room 4 |
+| --- | ---: | ---: |
+| baseline (32 rays, all lights) | 5.00 | 4.09 |
+| `probe-nolights` (primary only) | 2.16 | 1.83 |
+| `probe-norays` (floor) | 0.01 | 0.01 |
+| **primary rays** | **2.15** | **1.82** |
+| **per-light shadow** | **2.84** | **2.26** |
+| shadow share | **57%** | **55%** |
+
+So the ~50-70% shadow share that the briefing carried as an **op-count MODEL**
+is now a **measurement**, in both rooms, agreeing with the model. The dispatch
+floor is ~0.01 ms, i.e. the 7-workgroup dispatch itself is not the cost — the
+work behind it is, which is consistent with the latency reading rather than with
+a dispatch-overhead reading.
+
+Cross-check that the numbers are internally consistent: the `probe-rate4` leg in
+the same run read 4.74 / 4.23, statistically the same as baseline, exactly as it
+must be — cadence changes how OFTEN the gather runs, not what one gather costs.
+
+**Consequence for the plan:** R2 (replace the per-light analytic sweep with the
+shadow map the frame already rasterises) targets **~56% of the gather**. R1
+(widen the dispatch from 7 workgroups) targets the whole per-gather cost. With
+the gather amortising to ~2 ms/frame at `rate 2`, R2's prize is ~1.1 ms/frame
+and R1's is the occupancy ceiling on the remaining ~4 ms per gather.
+
+**Caveat:** the run's FRAME-level numbers are unusable (worst repeat spread
+**187%** — another busy window), and only these pass rows are quoted, as
+before. The pass row is a within-leg number and the three values here are
+separated by more than any plausible noise (5.00 vs 2.16 vs 0.01).
+
+## VOID: the cadence result (rate 2 -> 4) — a harness bug in my own legs
+
+**⚠ Everything below is VOID. Do not cite it.** It was run before I added the
+new probe seams to the harness's ship-defaults reset, so the `probe-rate4` leg
+(left LAST in the order) kept `probeGatherRate = 4` set for the NEXT repeat's
+`baseline` leg. The 'baseline' column in that run is a mixture of rate 2 and
+rate 4 — the harness's own rule 2, "legs reset first", violated by my own
+addition. **ANY NEW SEAM A LEG CAN SET MUST BE PINNED IN THE RESET BLOCK**, which
+is now fixed (`setProbeGatherRate(2)`, `setProbeRays(null)`, `setProbeLights(null)`,
+with a comment saying why).
+
+The explanation below — that a p50 cannot see the cadence because at rate 2 the
+median frame already excludes the gather — remains **plausible but is now a
+HYPOTHESIS, not a measurement.** The same bug class produced a second symptom
+worth remembering: a poisoned seam does not look like an error, it looks like a
+*good* result. In the split run before the reset fix, every leg including
+baseline reported `compute:probe-gather 0.01 ms`, which reads as "the gather is
+free" rather than as "the harness is lying".
+
+--- (original VOID text, kept for the record) ---
 
 ```
 BENCH_LEGS=baseline,probe-rate4 BENCH_ROOMS=3,4 BENCH_REPEATS=3 BENCH_PASSES=1

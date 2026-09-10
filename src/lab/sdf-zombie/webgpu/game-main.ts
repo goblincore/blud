@@ -603,6 +603,28 @@ async function main() {
   let probeGatherRateBoot = Number.isFinite(probeRateParam) && probeRateParam >= 1
     ? Math.min(4, Math.floor(probeRateParam))
     : null;
+  // PROBE-GATHER COST SPLIT (2026-09-10). Two diagnostic seams that divide the
+  // gather's cost into its primary-ray part and its per-light shadow part,
+  // which is the split that decides whether widening the dispatch or replacing
+  // the per-light sweep pays more. Both are WRONG FRAMES ON PURPOSE:
+  //
+  //   ?dynrays=0  -> nRays 0, so no ray work at all. What is left is the
+  //                  dispatch, the per-probe setup and the blend.
+  //   ?dynlights=0 -> the light list is empty, so the per-light loop never
+  //                  runs and kdShadowed is never called. Primary rays only.
+  //
+  //   primary = lights0 - rays0        shadow = shipped - lights0
+  //
+  // Before these, the "shadow is ~50-70% of the work" figure was an op-count
+  // MODEL, not a measurement (see the probe-gather-cost note).
+  const probeRaysParam = Number(new URLSearchParams(location.search).get('dynrays'));
+  let probeRaysBoot = Number.isFinite(probeRaysParam) && probeRaysParam >= 0
+    ? Math.max(0, Math.min(64, Math.floor(probeRaysParam)))
+    : null;
+  const probeLightsParam = Number(new URLSearchParams(location.search).get('dynlights'));
+  let probeLightsBoot = Number.isFinite(probeLightsParam) && probeLightsParam >= 0
+    ? Math.max(0, Math.floor(probeLightsParam))
+    : null;
   // FLASH BOOST. The muzzle light's envelope has already fallen to ~a third
   // of peak by the frame the gather packs it (one frame of lag), and it
   // lives 0.14 s; at 1x the bounce was a quarter of the key on a body next
@@ -1234,11 +1256,13 @@ async function main() {
           })),
           instances: probeCapsuleArrays.ab, instanceCount: probeCapsuleCount,
           capsuleMargin: 0.06,
-          lights: gatherLights,
+          // Diagnostic seams (see ?dynrays / ?dynlights above); both default to
+          // the shipped values, so an unset URL is bit-identical to before.
+          lights: probeLightsBoot === null ? gatherLights : gatherLights.slice(0, probeLightsBoot),
           frameSeed: (probeFrame % 64) / 64,
           blend: 0.6,
           fall: 0.12,
-          raysPerProbe: 32,
+          raysPerProbe: probeRaysBoot === null ? 32 : probeRaysBoot,
         };
       }
       // DIRECT FLASH SOURCES for the bodyFlash slot: every burning muzzle in
@@ -5722,6 +5746,22 @@ async function main() {
     setProbeGatherRate(framesPerGather: number) {
       probeGatherRate = Math.max(1, Math.min(4, Math.floor(framesPerGather)));
       return probeGatherRate;
+    },
+    /** Diagnostic cost-split seams (see ?dynrays / ?dynlights). BOTH PRODUCE
+     *  WRONG FRAMES ON PURPOSE — they exist to divide the gather's cost into
+     *  primary-ray and per-light-shadow parts, which is the measurement that
+     *  decides whether widening the dispatch or replacing the per-light sweep
+     *  pays more. null restores the shipped value (32 rays, every light). */
+    setProbeRays(n: number | null) {
+      probeRaysBoot = n === null ? null : Math.max(0, Math.min(64, Math.floor(n)));
+      return probeRaysBoot;
+    },
+    setProbeLights(n: number | null) {
+      probeLightsBoot = n === null ? null : Math.max(0, Math.floor(n));
+      return probeLightsBoot;
+    },
+    get probeCostSplit() {
+      return { rays: probeRaysBoot, lights: probeLightsBoot };
     },
     // DRAW CENSUS (spike program): per-frame draw/compute totals from the
     // renderer's info. This frame is MANY render() calls (one per pass), and

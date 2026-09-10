@@ -332,6 +332,15 @@ const ALL_LEGS = {
   // every-frame diagnostic ceiling (the costliest cadence, not a lever).
   'probe-rate3': { setProbeGatherRate: 3 },
   'probe-rate4': { setProbeGatherRate: 4 },
+  // PROBE GATHER COST SPLIT (2026-09-10). Both legs are WRONG FRAMES ON
+  // PURPOSE — a diagnostic ceiling, like 'chunks-skip', not a lever. The split
+  // they produce is the measurement that decides whether widening the gather's
+  // dispatch (7 workgroups / 448 threads) or deleting its per-light shadow
+  // sweep pays more. Before these the shadow share was an op-count MODEL.
+  //   primary = probe-nolights - probe-norays
+  //   shadow  = baseline       - probe-nolights
+  'probe-norays': { setProbeRays: 0 },
+  'probe-nolights': { setProbeLights: 0 },
   // MARCH ATTRIBUTION LEGS (2026-09-07: the march is the whole GPU frame and
   // grows 8 -> 19 -> 31 ms walk/fire/gib). Each prices one wound/chunk
   // mechanism against the shipped state. 'chunks-skip' is a diagnostic
@@ -392,6 +401,16 @@ async function applyLeg(name) {
   // Until an owner decision re-syncs these pins, measure ship truth explicitly:
   //   BENCH_PRELUDE='__sdfGame.setOccluder(false);__sdfGame.setHullExitBound(true)'
   await evaluate(`(() => {
+    // ANY NEW SEAM A LEG CAN SET MUST BE RESET HERE. The 2026-09-10 probe-gather
+    // legs were added WITHOUT this, and the omission silently corrupted two
+    // runs: 'probe-norays' (last in the order) left rays=0 for the NEXT rep's
+    // baseline, so the pass-attribution median landed on 0.01 ms for every leg
+    // including baseline — which reads as "the gather is free" rather than as
+    // "the harness is lying". Same class as the pin bug above. If a leg sets it,
+    // pin it.
+    __sdfGame.setProbeGatherRate(2);
+    __sdfGame.setProbeRays(null);
+    __sdfGame.setProbeLights(null);
     __sdfGame.setOccluder(true);
     __sdfGame.setCone(false);
     __sdfGame.setFxaa(true);
