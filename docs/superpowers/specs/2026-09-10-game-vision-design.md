@@ -301,5 +301,11 @@ A fictional magazine, *CD-ROM INFERNO*, issue 31, "First Look" page.
    guests that turn on you?
 4. **Broadcast/VHS framing:** menus-only, or a bigger conceit?
 5. **Hauling bodies:** in scope (the physics exists-ish) or trophies only?
-6. **Working title:** keep *Blud*, or does the Party premise want its own name?
+6. **Title: unresolved, parked.** *Blud* reads as a Blood homage. Owner leans
+   **GOB** or **GOON**; party-themed names rejected as titles (fine as in-game
+   names). Quick Steam/itch check, 2026-09-10: *Gob* is taken three times over,
+   by goblin games (Steam app 2538120; itch: gamma girl, OnePen, st33d). *Goon*
+   is free as a bare title but the word is dominated by "gooning" slang in
+   search and tags. Paths: GOB plus subtitle, a longer name with GOB as the
+   logo, or Gob as the goblin's name inside a differently titled game.
 7. **Roster cuts:** which existing characters don't belong at the Party?
