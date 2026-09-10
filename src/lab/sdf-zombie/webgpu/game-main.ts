@@ -572,6 +572,11 @@ async function main() {
   const probeDynParam = new URLSearchParams(location.search).get('probedyn');
   let probeDynGain = probeDynParam === '0' || probeDynParam === 'off' ? 0 : 0.15;
   let probeVisStrength = probeDynParam === '0' || probeDynParam === 'off' ? 0 : 1;
+  // ?proberate=1 restores every-frame gathers (see probeGatherRate above).
+  const probeRateParam = Number(new URLSearchParams(location.search).get('proberate'));
+  let probeGatherRateBoot = Number.isFinite(probeRateParam) && probeRateParam >= 1
+    ? Math.min(4, Math.floor(probeRateParam))
+    : null;
   // FLASH BOOST. The muzzle light's envelope has already fallen to ~a third
   // of peak by the frame the gather packs it (one frame of lag), and it
   // lives 0.14 s; at 1x the bounce was a quarter of the key on a body next
@@ -600,6 +605,17 @@ async function main() {
   const _flashWorld = new THREE.Vector3();
   let probeFrame = 0;
   let probeGatherErrors = 0;
+  // GATHER AMORTIZATION (spike hunt, 2026-09-10): the dynamic gather is a
+  // FIXED ~5.7 ms compute every frame — the largest standing per-frame GPU
+  // cost the lighting batch added — and during fire bursts its measured
+  // time balloons to ~27 ms under submission congestion. The kernel already
+  // blends across dispatches (blend 0.6 rise, 0.12 fall), so dispatching
+  // every OTHER frame halves that cost for a one-frame lag on indirect
+  // radiance the layer smooths anyway. 1 = every frame (the old behaviour;
+  // setProbeGatherRate / ?proberate flip it live).
+  let probeGatherRate = 2;
+  if (probeGatherRateBoot !== null) probeGatherRate = probeGatherRateBoot;
+  let probeGatherTick = 0;
   let pendingGather: import('./probe-gather-compute').ProbeGatherFrame | null = null;
   // The gather's capsule source: this room's actors' posed bones, packed
   // with the bone instancer's OWN packer into a private array. Not the
@@ -1104,7 +1120,12 @@ async function main() {
       probeGateLogs++;
       probeLastGates = { bound: probeGather !== null, dynKey, room: dynRoom?.id ?? null, grid: !!dynGrid, gain: probeDynGain, vis: probeVisStrength, dynOn, flashI: playerFlashLightIntensity(), flashAge, capsules: probeLastCapsules, lights: probeLastLights };
       let probeCapsuleCount = 0;
-      if (dynOn && probeGather && dynRoom && dynGrid) {
+      // Amortized rate: pack (and therefore dispatch, one frame later) only
+      // on due ticks; skipped frames leave the dynamic layer frozen, which
+      // the kernel's own cross-dispatch blending already models.
+      const gatherDue = probeGatherRate <= 1 || probeGatherTick % probeGatherRate === 0;
+      probeGatherTick++;
+      if (dynOn && probeGather && dynRoom && dynGrid && gatherDue) {
         for (const a of actors) {
           if (!nearRoom(a, dynRoom) || probeCapsuleCount >= 1024) continue;
           const posed = a.posed();
@@ -5582,7 +5603,11 @@ async function main() {
       if (flashBoost !== undefined) probeFlashBoost = Math.max(0, flashBoost);
       return { radianceGain: probeDynGain, visStrength: probeVisStrength, flashBoost: probeFlashBoost };
     },
-    get probeDynamic() { return { radianceGain: probeDynGain, visStrength: probeVisStrength, frames: probeFrame, errors: probeGatherErrors, bound: probeGather !== null, reached: probeGateLogs, gates: probeLastGates }; },
+    setProbeGatherRate(framesPerGather: number) {
+      probeGatherRate = Math.max(1, Math.min(4, Math.floor(framesPerGather)));
+      return probeGatherRate;
+    },
+    get probeDynamic() { return { radianceGain: probeDynGain, visStrength: probeVisStrength, frames: probeFrame, errors: probeGatherErrors, bound: probeGather !== null, reached: probeGateLogs, gates: probeLastGates, rate: probeGatherRate }; },
     /** TRACERS as gathered lights. Raw intensity per pellet; 0 = off (no
      *  light packed). The owner tunes by eye and exaggerates with e.g. 6. */
     setTracerLight: (gain: number) => { tracerLightGain = Math.max(0, gain); return tracerLightGain; },
