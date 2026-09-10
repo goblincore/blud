@@ -209,6 +209,31 @@ within one boot the values are stable. So this is a discrete branch chosen at
 boot, not continuous noise — which is why every "pin one more clock" attempt
 failed and why the right move is to find the BRANCH, not to keep freezing time.
 
+**THE BRANCH IS NOW CHARACTERISED, NOT JUST DETECTED.** Sampling the SAME march
+pixels across FOUR independent boots (2 distinct digests; 1 branch hit once, the
+other 3 times) gives, at one body pixel:
+
+| channel | branch A | branch B | delta |
+| --- | ---: | ---: | ---: |
+| R | 0.875281 | 0.846257 | −3.3% |
+| G | 0.752314 | 0.702719 | −6.6% |
+| B | 0.585664 | 0.514960 | −12.1% |
+| A | 0.969916 | 0.969916 | **identical** |
+
+Three things follow, and they are sharp. **Alpha is bit-identical**, so this is not
+coverage, not a missing/extra body and not vertex position — the same surface is
+hit at the same depth. **RGB scale down unequally (3.3% / 6.6% / 12.1%, blue
+worst)**, which is a LIGHTING/colour difference and not exposure (a uniform gain
+would move all three equally). And a CONTROL pixel in tile 0 reads
+`[0.008023, 0.009134, 0.01096, 1]` in **all four boots** — so the level is genuinely
+identical and the branch lives entirely in body shading. A blue-weighted shortfall
+of that shape points at the lighting path that feeds the body — the probe/dynamic
+layer's contribution — rather than at geometry.
+
+Also note the branch is a MINORITY event: 1 boot in 4 took branch A. So a two-run
+A/B has a ~5-in-8 chance of drawing two different branches, which is why "record
+twice and compare" failed so reliably.
+
 **Everything now excluded, each by a measurement rather than an argument:**
 
 | candidate | how it was excluded |

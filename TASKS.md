@@ -203,6 +203,13 @@ chosen at boot, not noise — find the BRANCH, not another clock to freeze.
 dispatch schedule (36/35/18), gather inputs (byte-identical), camera (identical to
 6 dp), VHS, and the room-probe worker bake (now gated by a new `roomProbesReady`
 seam — still diverges).
+**The branch is CHARACTERISED (4 boots, 1 vs 3):** at one body pixel, R −3.3%,
+G −6.6%, B −12.1%, **ALPHA BIT-IDENTICAL** — so not coverage, not a missing body,
+not vertex position; a UNEQUAL RGB scale is lighting/colour rather than exposure.
+A control pixel in tile 0 reads identical in all four boots, so the level really is
+stable. A minority branch (1 in 4) means a two-run A/B has ~5-in-8 odds of drawing
+two different branches — which is why "record twice and compare" failed so
+reliably. **Next: the body's lighting path, blue-weighted, not geometry.**
 
 **Open — and the obvious hypothesis is FALSIFIED.** A third layer now hashes the
 gather's INPUTS (packed bone capsule instances). Result: **`instances` IDENTICAL
