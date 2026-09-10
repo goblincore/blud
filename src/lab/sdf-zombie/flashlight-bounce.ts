@@ -25,17 +25,13 @@
  * ZERO FIELD EVALUATIONS. The patch is found with pure slab arithmetic against
  * a handful of AABBs — no SDF taps — so the CPU cost is constant per frame.
  *
- * BASE DISCREPANCY (2026-09-09). The plan imports `hitAabbEntry` from
- * `probe-grid.ts`, but that export does not exist on this worktree's base
- * (`main` @ e16060fd); it lands only on the P3-step-2 branch. The task's rule 4
- * forbids touching `probe-grid.ts`, so this file mirrors that helper locally
- * (same slab semantics and outward normal) rather than adding it to its home.
+ * hitAabbEntry and hitEnclosure are imported from probe-grid.ts (the P3 gather).
  * If/when `probe-grid.ts` gains `hitAabbEntry`, delete the local copy and
  * import it — `hitEnclosure` is already imported from there.
  */
 
 import type { Box, EnclosureWalls, Vec3 } from './ambient';
-import { hitEnclosure } from './probe-grid';
+import { hitEnclosure, hitAabbEntry } from './probe-grid';
 
 /** `Vec3` is readonly; accumulators below are plain mutable triples. */
 type Mut3 = [number, number, number];
@@ -93,65 +89,6 @@ function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
 }
 
-/**
- * Nearest positive slab ENTRY of a ray into `box` from OUTSIDE.
- *
- * Returns null when the origin is inside the box (no entry exists), when the
- * box is entirely behind the ray, or when the ray misses. The returned normal
- * is the outward face normal, pointing back toward the ray origin — matching
- * `ProbeHit.normal`'s toward-the-probe convention.
- *
- * LOCAL MIRROR of the `hitAabbEntry` the plan expected in `probe-grid.ts`; see
- * the header note. Keep its semantics identical if it ever moves back.
- */
-function hitAabbEntry(origin: Vec3, dir: Vec3, box: Box): OccluderHit | null {
-  let tEnter = -Infinity;
-  let tExit = Infinity;
-  let enterAxis: 0 | 1 | 2 = 0;
-  let enterSide: -1 | 1 = 1;
-
-  for (const a of AXES) {
-    const o = origin[a];
-    const d = dir[a];
-    const lo = box.min[a];
-    const hi = box.max[a];
-    if (Math.abs(d) < 1e-12) {
-      // Parallel to this slab: a miss only if the origin is outside it.
-      if (o < lo || o > hi) return null;
-      continue;
-    }
-    let tNear = (lo - o) / d;
-    let tFar = (hi - o) / d;
-    // After the swap tNear is the near plane. If the swap happened, the near
-    // plane is the max face, whose outward normal is +1.
-    let side: -1 | 1 = -1;
-    if (tNear > tFar) {
-      const tmp = tNear;
-      tNear = tFar;
-      tFar = tmp;
-      side = 1;
-    }
-    if (tNear > tEnter) {
-      tEnter = tNear;
-      enterAxis = a;
-      enterSide = side;
-    }
-    if (tFar < tExit) tExit = tFar;
-  }
-
-  if (tEnter > tExit) return null; // slab intersection empty
-  if (tExit <= 0) return null; // box entirely behind the ray
-  if (tEnter < 0) return null; // origin inside the box: no entry
-
-  const nrm: Mut3 = [0, 0, 0];
-  nrm[enterAxis] = enterSide;
-  const t = tEnter;
-  return {
-    t,
-    point: [origin[0] + dir[0] * t, origin[1] + dir[1] * t, origin[2] + dir[2] * t],
-    normal: [nrm[0], nrm[1], nrm[2]],
-  };
-}
 
 function insideBox(p: Vec3, box: Box): boolean {
   return (

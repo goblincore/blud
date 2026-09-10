@@ -164,8 +164,13 @@ resolution: [bodies-style-handoff.md](docs/dev-notes/2026-09-09-perf-spikes/bodi
   [plan](docs/superpowers/plans/2026-09-09-static-probe-grid-spike.md).
   **Step 2 shipped ON in the game:** one grid per room baked in a worker at
   boot (~2 s total), stamped per body at spawn, matched to P1's level.
-  `?probes=0` / `__sdfGame.setProbes(0)` = bit-identical P1. Next: body
-  occlusion of probes, flashlight injection (both dynamic, GPU gather).
+  `?probes=0` / `__sdfGame.setProbes(0)` = bit-identical P1.
+- [x] Flashlight bounce spot (P4 step 1), ON: the beam's lit patch on the
+  player's enclosure (paint, furniture first) as one analytic disc light every
+  body adds to its ambient — a body between the lamp and a wall is lit from
+  behind. `__sdfGame.setBounceSpot(g)` / `?bouncespot=0` = bit-identical.
+  [plan](docs/superpowers/plans/2026-09-09-flashlight-bounce-spot.md). Next:
+  body occlusion of probes/spot (needs a GPU gather); flash afterglow injection.
 - [x] VHS post-FX wired, ships ON at the owner-tuned **`blud`** preset
   (`VHS_PRESETS.blud`, swept in the panel below 2026-09-09: artefacts up, mush
   down — full intensity + full horizontal blur, noise ~off at 0.005, grade
