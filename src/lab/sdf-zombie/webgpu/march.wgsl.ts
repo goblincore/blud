@@ -2529,7 +2529,18 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
   let bHi = (bodyCentre + bodyHalf - camPos) * invRd;
   let bodyEntry = max(max(min(bLo.x, bHi.x), min(bLo.y, bHi.y)), max(min(bLo.z, bHi.z), 0.0));
   if (max(shellIn, bodyEntry) > prevT) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
-  let tMax = min(tMaxSel, prevT);
+  let tMax = min(tMaxSel, prevT)
+    // GRAZE SLACK (temporal start, 2026-09-10). At silhouette pixels the
+    // ray's entry/exit window through this body is razor-thin, and the
+    // acceptance has to land inside it; the temporal start re-phases the
+    // walk, and a hair's overshoot past the exit discarded NEARLY
+    // CONVERGED rays — the stacked-corridor holes (per-pixel temporalDiag:
+    // broken pixels end at the same t as their healthy twins with 17-29
+    // steps vs 5-8, missing the acceptance window). The field of THIS body
+    // is empty beyond its own box, so a 5 cm extension can only let an
+    // in-progress convergence finish; scoped to the temporal start so
+    // ?tstart=0 stays bit-identical.
+    + select(0.0, 0.05, temporalCfg.x > 0.5);
   let steps = i32(marchCfg.x);
   // HIT EPSILON (X1.26): the primitive literal was 1.2 mm. A trilinear
   // reconstruction of a baked SDF is not exact to the surface, so volume

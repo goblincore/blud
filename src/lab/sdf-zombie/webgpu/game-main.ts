@@ -6486,6 +6486,84 @@ async function main() {
     },
 
     /**
+     * TEMPORAL START PER-PIXEL DIAG (spike program, 2026-09-10). Freezes ONE
+     * frame (loop off), renders it with the temporal start ON and OFF — the
+     * ONLY difference is temporalCfg.x, the lastTex copy is the same frozen
+     * frame — and classifies every marched pixel by (hitOn, hitOff). The
+     * classes that matter: hitOff && !hitOn = a pixel the temporal start
+     * BROKE (the see-through holes); hitOn && !hitOff = pixels it created
+     * (inside-accepts). Per broken pixel we keep the ray distance t each leg
+     * ended at and the step counts, which separates "started past the
+     * surface, ran out of budget" (steps ~96, tOn ~ body far side) from
+     * "terminated early" (few steps, tOn short).
+     */
+    async temporalDiag() {
+      const prevMode = actors[0]?.view.uniforms.debugCfg.value.x ?? 0;
+      for (const a of actors) a.view.uniforms.debugCfg.value.x = 4;
+      const prevWarm = sdfLayer.temporalStart.on;
+      try {
+        handle.setLoopRunning(false);
+        handle.step(1 / 60);
+        await handle.resolveGpu();
+        const read = async () => {
+          const t = sdfLayer.marchTarget;
+          const w = t.width;
+          const h = t.height;
+          const buf = new Float32Array(
+            await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h),
+          );
+          const floatsPerRow = Math.ceil((w * 16) / 256) * 256 / 4;
+          return { w, h, buf, floatsPerRow };
+        };
+        sdfLayer.setTemporalStart(true);
+        // dt = 0: re-render the SAME frozen sim state — the two legs must
+        // differ ONLY by temporalCfg.x, or a swinging limb between legs
+        // masquerades as the artifact (measured 2026-09-10: dt=1/60 legs
+        // 'broke' ~450 px that were just melee motion).
+        handle.step(0);
+        await handle.resolveGpu();
+        const A = await read();
+        sdfLayer.setTemporalStart(false);
+        handle.step(0);
+        await handle.resolveGpu();
+        const B = await read();
+        let broke = 0, fixed = 0, bothMiss = 0, bothHit = 0;
+        const broken: { x: number; y: number; tOn: number; tOff: number; stepsOn: number; stepsOff: number }[] = [];
+        const pushCap = 400;
+        for (let row = 0; row < A.h; row++) {
+          const base = row * A.floatsPerRow;
+          for (let col = 0; col < A.w; col++) {
+            const o = base + col * 4;
+            if (A.buf[o + 2]! < 0.5 || B.buf[o + 2]! < 0.5) continue;
+            const hitA = A.buf[o + 1]! > 0.5;
+            const hitB = B.buf[o + 1]! > 0.5;
+            if (hitA && hitB) { bothHit++; continue; }
+            if (!hitA && !hitB) { bothMiss++; continue; }
+            if (!hitA && hitB) {
+              broke++;
+              if (broken.length < pushCap) {
+                broken.push({ x: col, y: row, tOn: A.buf[o + 3]!, tOff: B.buf[o + 3]!, stepsOn: A.buf[o]!, stepsOff: B.buf[o]! });
+              }
+            } else fixed++;
+          }
+        }
+        const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
+        return {
+          broke, fixed, bothMiss, bothHit,
+          meanStepsOnBroken: mean(broken.map((b) => b.stepsOn)),
+          meanStepsOffBroken: mean(broken.map((b) => b.stepsOff)),
+          meanTOnBroken: mean(broken.map((b) => b.tOn)),
+          meanTOffBroken: mean(broken.map((b) => b.tOff)),
+          brokenSample: broken,
+        };
+      } finally {
+        for (const a of actors) a.view.uniforms.debugCfg.value.x = prevMode;
+        sdfLayer.setTemporalStart(prevWarm);
+        handle.setLoopRunning(true);
+      }
+    },
+
+    /**
      * SCREEN COVERAGE of the outer hull, against the proxy boxes it would
      * replace.
      *
