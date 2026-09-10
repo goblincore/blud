@@ -144,3 +144,10 @@ new march slot `bodyFlash` (pins 96): the strongest burning muzzle by I/d²
 distance floor, `__sdfGame.setBodyFlash(g)` (default 0.06, 0 = off).
 Chrome A/B on one pose: the close body goes dark-red → lit on the shot; the
 zombie 4 m down the tunnel takes a warm cast.
+
+## Update 2026-09-09 (owner confirmed soldier flashes light bodies at range; "why not mine?")
+
+The player's flash fed the lighting from the sprite's exp envelope (20 → 7 →
+gone in two frames), so the one-frame-lagged gather barely saw it. It now
+has the soldiers' 0.14 s burst as a LIGHT (55·(1-t)², sprite unchanged):
+measured 43 / 23 / 4.5 / 0 over steps 1/3/6/9.

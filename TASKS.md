@@ -181,7 +181,11 @@ resolution: [bodies-style-handoff.md](docs/dev-notes/2026-09-09-perf-spikes/bodi
   [result](docs/dev-notes/2026-09-09-probe-grid-spike/result.md).
   Soldier muzzle flashes and the flashlight BEAM (as a spot) are gathered
   lights too; the analytic bounce spot ships at gain 0 (`?bouncespot=1`).
-  Next: tune radiance gain (0.05) and visibility (1) in play.
+  Afterglow (rise 0.6 / fall 0.12), flash boost 4×, and a DIRECT per-body
+  muzzle light (`bodyFlash` slot, `setBodyFlash`, 0.06) — owner-confirmed
+  2026-09-09: soldier flashes light zombies and soldiers around them at range.
+  Membership by current position (+1.5 m), nearest room from tunnels; the
+  player's flash lights as a 0.14 s burst. Knobs: `setProbeDynamic(0.15, 1, 4)`.
 - [x] VHS post-FX wired, ships ON at the owner-tuned **`blud`** preset
   (`VHS_PRESETS.blud`, swept in the panel below 2026-09-09: artefacts up, mush
   down — full intensity + full horizontal blur, noise ~off at 0.005, grade

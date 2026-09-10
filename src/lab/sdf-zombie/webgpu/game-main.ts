@@ -537,6 +537,10 @@ async function main() {
   // DIRECT flash on bodies (march slot bodyFlash): intensity multiplier on
   // the flash lights before the shader's I*cos/d^2. 0 = off, bit-identical.
   let bodyFlashGain = 0.06;
+  /** The player's muzzle flash as a LIGHT SOURCE for bodies and probes: a
+   *  0.14 s burst shaped like the soldiers' (55 at the shot, (1-t)^2), so it
+   *  survives the gather's one-frame lag. The sprite keeps its own envelope. */
+  const playerFlashLightIntensity = () => (flashAge >= 0 && flashAge < 0.14 ? 55 * (1 - flashAge / 0.14) ** 2 : 0);
   /** An actor counts as in a room when its CURRENT position is inside the
    *  room's ground rect grown by `margin` — a body that wandered from the
    *  next room into this one, or stands in the tunnel mouth, is lit by this
@@ -1032,7 +1036,7 @@ async function main() {
       const dynOn = probeGather !== null && dynRoom !== null && dynGrid !== null
         && (probeDynGain > 0 || probeVisStrength > 0);
       probeGateLogs++;
-      probeLastGates = { bound: probeGather !== null, dynKey, room: dynRoom?.id ?? null, grid: !!dynGrid, gain: probeDynGain, vis: probeVisStrength, dynOn, flashI: flashLight ? flashLight.intensity : -1, flashAge, capsules: probeLastCapsules, lights: probeLastLights };
+      probeLastGates = { bound: probeGather !== null, dynKey, room: dynRoom?.id ?? null, grid: !!dynGrid, gain: probeDynGain, vis: probeVisStrength, dynOn, flashI: playerFlashLightIntensity(), flashAge, capsules: probeLastCapsules, lights: probeLastLights };
       let probeCapsuleCount = 0;
       if (dynOn && probeGather && dynRoom && dynGrid) {
         for (const a of actors) {
@@ -1049,7 +1053,11 @@ async function main() {
         // the beam bounces onto bodies, which the analytic bounce spot only
         // approximated with one disc; that spot now ships at gain 0.
         const gatherLights: import('../probe-dynamic').DynLightInput[] = [];
-        const fI = flashLight ? flashLight.intensity : 0;
+        // The PLAYER's flash as a LIGHT uses the soldiers' 0.14 s burst shape,
+        // not the sprite's envelope: that one is gone within two frames, and
+        // with one frame of gather lag the layer never saw it (owner: "why
+        // doesn't my muzzle flash do the same").
+        const fI = playerFlashLightIntensity();
         if (flashLight && fI > 0) {
           flashLight.getWorldPosition(_flashWorld);
           gatherLights.push({ pos: [_flashWorld.x, _flashWorld.y, _flashWorld.z], color: [1.0, 0.81, 0.58], intensity: fI * probeFlashBoost });
@@ -1092,9 +1100,10 @@ async function main() {
       // play (the player's and the soldiers'), unboosted; each body takes the
       // strongest by I/d^2 from its own position.
       const directFlashes: { pos: Vec3; intensity: number }[] = [];
-      if (flashLight && flashLight.intensity > 0) {
+      const playerFlashI = playerFlashLightIntensity();
+      if (flashLight && playerFlashI > 0) {
         flashLight.getWorldPosition(_flashWorld);
-        directFlashes.push({ pos: [_flashWorld.x, _flashWorld.y, _flashWorld.z], intensity: flashLight.intensity });
+        directFlashes.push({ pos: [_flashWorld.x, _flashWorld.y, _flashWorld.z], intensity: playerFlashI });
       }
       for (const a of actors) {
         if (!a.character) continue;
