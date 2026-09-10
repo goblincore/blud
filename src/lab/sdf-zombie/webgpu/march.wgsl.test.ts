@@ -532,8 +532,12 @@ describe('ported features reach the entry point', () => {
     // max(max(startT, shellIn), preStart): the max of lower bounds is the
     // tightest of them and still a lower bound. preStart collapses to 0 when
     // the pass is off, which is the identity inside the max.
-    // tempStart (plan 2026-09-10) is the fourth max term; 0 is its identity too.
-    expect(MARCH_BODY).toContain('var t = clamp(max(max(max(startT, shellIn), preStart), tempStart), 0.0, tMax);');
+    // tempStart (plan 2026-09-10) is the fifth max term; 0 is its identity
+    // too. bodyEntry is the sixth: the proxy box contains the hull contains
+    // the flesh, so the ray-box entry is a lower bound like the others — and
+    // it catches the pixels whose temporal gate failed, which used to
+    // restart from the shared shellIn and walk their own empty proxy space.
+    expect(MARCH_BODY).toContain('var t = clamp(max(max(max(max(startT, shellIn), preStart), tempStart), bodyEntry), 0.0, tMax);');
     // The prepass inputs ride POSITIONALLY LAST (after windDrift), and the
     // disabled identity is the fetch's 0 — never a missing binding (the
     // meltCfg rule: a declared input without a binding shades as zero and
@@ -746,13 +750,22 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
       'probeDyn', 'probeDynCfg', 'bodyFlash',
       'lastTex', 'lastInvVp', 'temporalCfg',
     ]);
-    // The temporal start folds in AFTER preStart, as the fourth max term.
-    expect(MARCH_BODY).toContain('var t = clamp(max(max(max(startT, shellIn), preStart), tempStart), 0.0, tMax);');
+    // The temporal start folds in AFTER preStart, with bodyEntry as the
+    // sixth lower-bound term (see the other pin above for the argument).
+    expect(MARCH_BODY).toContain('var t = clamp(max(max(max(max(startT, shellIn), preStart), tempStart), bodyEntry), 0.0, tMax);');
     expect(MARCH_BODY).toContain('temporalStartFetch(lastTex, tempNdc, lastInvVp, camPos, rd, temporalCfg)');
     // Own-body gate + inside check: the reprojected point must sit in THIS
-    // body's box and the start must be outside the field, else 0.
+    // body's box and the start must be outside the field AND outside a
+    // wound's near zone (mapBody.z — the field is not a bound beside a
+    // crater; a start there banded the wounded closeup at a 0.05 m margin).
+    // The shellAmp backoff keeps the start outside the DISPLACED silhouette
+    // too, and the recovery probes rewind (2x penetration when inside,
+    // 0.15 fixed when in-zone) instead of dropping the bound.
     expect(MARCH_BODY).toContain('temp.y >= bodyEntry - temporalCfg.y && temp.y <= tMax + temporalCfg.y');
-    expect(MARCH_BODY).toContain('if (d0 <= 0.0) { tempStart = 0.0; }');
+    expect(MARCH_BODY).toContain('var s = temp.x - woundCfg2.z;');
+    expect(MARCH_BODY).toContain('if (dres0.x > 0.0 && dres0.z < 0.5) { break; }');
+    expect(MARCH_BODY).toContain('let back = select(s + 2.0 * dres0.x, s - 0.15, dres0.z >= 0.5);');
+    expect(MARCH_BODY).toContain('if (dres0.x > 0.0 && dres0.z < 0.5) { tempStart = s; }');
     // meltCfg sits between bodyHalf and the level-shadow tail, matching the
     // JS binding object in createMarchMaterial (positional — a swap silently
     // hands the shader the wrong uniform).

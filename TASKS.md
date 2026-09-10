@@ -191,6 +191,13 @@ resolution: [bodies-style-handoff.md](docs/dev-notes/2026-09-09-perf-spikes/bodi
   margin, gated to the body being marched. March pass p50 14.9 → 11.3 ms on
   the room-4 bench; no visible artefacts after the own-body gate.
   [plan + result](docs/superpowers/plans/2026-09-10-temporal-march-start.md).
+  Follow-up (same day, unpushed): `bodyEntry` folded into the start max,
+  recovery probes rewind instead of dropping the bound, wound-zone gate on
+  the accepted start, adaptive motion-scaled margin (floor 0.15 — the
+  frozen-scene pixel bisect: 0.15 clean, 0.10 bands the tissue ramp where
+  the start beats the hull face). Room-4 A/B: gib −17%, walk/fire −5%, no
+  regression; closeup diff is HUD-text clean. Instruments:
+  `scripts/tmp/tstart-ab.mjs` + `tstart-artifact-check.mjs`.
 - [ ] **NEXT: render optimization pass, round 2** — backlog with owner notes in
   Obsidian `Claude Notes/Planning/2026-09-09-blud-render-optimization-backlog.md`.
   Done in round 1 (2026-09-10): pass timings via `__sdfGame.bench({mode:'passes'})`,

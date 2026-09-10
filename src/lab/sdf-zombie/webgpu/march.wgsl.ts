@@ -2690,16 +2690,56 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
   // see-through - other bodies' silhouettes cut into flesh). Trust the
   // reprojected point only when it lies inside THIS body's proxy box along
   // the ray, margin either side; then confirm the start is OUTSIDE the field
-  // with one sample - inside means the surface was skipped, fall back.
+  // with one sample - inside means the surface was skipped, and the
+  // recovery probes below rewind to the surface instead of dropping the
+  // whole bound.
   var tempStart = 0.0;
   if (temp.y > 0.0 && temp.y >= bodyEntry - temporalCfg.y && temp.y <= tMax + temporalCfg.y) {
-    tempStart = temp.x;
-    if (tempStart > 0.0) {
-      let d0 = mapBody(camPos + rd * tempStart, data, counts, counts2, vec4<f32>(0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound).x;
-      if (d0 <= 0.0) { tempStart = 0.0; }
+    // shellAmp backoff: with shell displacement live, the displaced
+    // silhouette sticks out up to shellAmp beyond the smooth field the probe
+    // below samples — the same slack preStart carries. woundCfg2.z is 0 at
+    // the shipping default, so this is the identity there.
+    var s = temp.x - woundCfg2.z;
+    if (s > 0.0) {
+      var dres0 = mapBody(camPos + rd * s, data, counts, counts2, vec4<f32>(0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound);
+      // ACCEPTANCE: outside the field AND outside a wound's near zone
+      // (dres0.z). Near a crater applyWounds' smax fillet OVERSTATES the
+      // distance — the field is not a bound there — and a start beside the
+      // zone lets the first step land inside the carve: the frozen-scene
+      // pixel diff (2026-09-10) showed banded deep-tissue/char striping on
+      // the wounded closeup at a 0.05 m adaptive margin, while the shipped
+      // 0.25 m margin rendered pixel-identical to tstart off. Clean skin
+      // keeps the tight start; wound-adjacent pixels back off below.
+      // RECOVERY PROBES. Inside (x <= 0) means the surface reached the
+      // start — flesh moved toward the camera, or this pixel sits on a
+      // silhouette slope the flat slope term undershoots; rewind by twice
+      // the reported penetration (twice: the field under-reports Euclid by
+      // the group distortion factor). In-zone (z >= 0.5) rewinds by a fixed
+      // 0.15 — the zone reaches ~wound radius + rim beyond the crater, so a
+      // couple of steps clear it. Three probes at most, then the bound is
+      // dropped (max() below still marches from bodyEntry). A rewind before
+      // the box entry always probes positive-and-out-of-zone (every prim of
+      // this body lies inside the box; zones only exist around its own
+      // wounds), so the loop self-terminates there.
+      for (var probe = 0; probe < 3; probe = probe + 1) {
+        if (dres0.x > 0.0 && dres0.z < 0.5) { break; }
+        let back = select(s + 2.0 * dres0.x, s - 0.15, dres0.z >= 0.5);
+        if (back <= 0.0) { break; }
+        s = back;
+        dres0 = mapBody(camPos + rd * s, data, counts, counts2, vec4<f32>(0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound);
+      }
+      if (dres0.x > 0.0 && dres0.z < 0.5) { tempStart = s; }
     }
   }
-  var t = clamp(max(max(max(startT, shellIn), preStart), tempStart), 0.0, tMax);
+  // bodyEntry joins the fold as the FIFTH term (startT, shellIn, preStart,
+  // tempStart, bodyEntry). The proxy box CONTAINS the hull contains the
+  // flesh, so nothing of this body is nearer than the ray-box entry — the
+  // same argument the accumulated-depth discard above already rests on. It is a lower bound
+  // like every other term: in a crowd it is the tighter bound for a body
+  // whose cone/coarse touch sits at the tile's FRONT surface, and it catches
+  // the pixels whose temporal gate failed — those used to restart from the
+  // shared shellIn and walk their own empty proxy space.
+  var t = clamp(max(max(max(max(startT, shellIn), preStart), tempStart), bodyEntry), 0.0, tMax);
   var hit = false;
   var prevRadius = 0.0;
   var stepLen = 0.0;

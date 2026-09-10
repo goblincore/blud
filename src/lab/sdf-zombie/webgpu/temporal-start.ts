@@ -28,6 +28,33 @@ export interface TemporalCfg {
 export const TEMPORAL_START_DEFAULTS: TemporalCfg = { enabled: 1, margin: 0.25, slope: 0.02, maxStart: 50 };
 
 /**
+ * Floor for the ADAPTIVE margin, metres. Two floors compete: motion wants a
+ * small pad, the march wants the start to stay at or behind the outer hull
+ * face — the frozen-scene pixel bisect (2026-09-10, wounded closeup, VHS
+ * off, field off) put the line between 0.15 (pixel-identical to tstart off)
+ * and 0.10 (3.8k px of banded deep-tissue shading on convex skin): once the
+ * start beats the hull face, the accept tolerance lands samples alternately
+ * inside/outside the skin and the tissue ramp paints them. The shipped
+ * 0.25 was never exposed (it never beats the hull face at close range), so
+ * 0.15 is the tightest PROVEN-safe pad, and the adaptive margin only bites
+ * above it when bodies actually move.
+ */
+export const TEMPORAL_MARGIN_FLOOR = 0.15;
+
+/**
+ * The adaptive start margin for a measured worst-body translation of
+ * `maxDisp` metres over one history interval (fresh frame to fresh frame,
+ * measured by sdf-layer). 1.5x slack for inter-interval acceleration,
+ * floored at TEMPORAL_MARGIN_FLOOR, capped at the shipped constant. A scene
+ * of slow walkers therefore starts its rays ~0.05-0.08 m from last frame's
+ * surface instead of 0.25 m + slope; a scene with a 10 m/s gib caps at the
+ * shipped figure. Pure — the layer calls this per fresh frame.
+ */
+export function temporalMarginForMotion(maxDisp: number, cap = TEMPORAL_START_DEFAULTS.margin): number {
+  return Math.min(cap, Math.max(TEMPORAL_MARGIN_FLOOR, 1.5 * maxDisp));
+}
+
+/**
  * The CPU twin. `d` is last frame's NDC depth at this pixel (>= 1 = nothing),
  * `ndc` the pixel's clip-space xy in [-1, 1] (convention-free: the caller
  * maps uv to ndc), `lastInvVp` the inverse view-projection of the frame that

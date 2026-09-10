@@ -118,12 +118,16 @@ describe('the surface entry IS the production march, not a copy', () => {
     // surfaceParams — the same probe the legacy light tail pays, so the
     // budget is unchanged relative to the legacy path). calcNormal's own
     // calls live in CALC_NORMAL's source; the scatter/shadow probes are all
-    // in the lighting tail this entry does not include. A THIRD call would
+    // in the lighting tail this entry does not include. A FOURTH call would
     // mean a per-attachment retrace crept back in. The THIRD (plan
     // 2026-09-10) is the temporal start's inside check — one sample, taken
     // only when the reprojected bound is live, before the loop; not a
-    // retrace.
-    expect(MARCH_SURFACE.match(/\bmapBody\(/g)).toHaveLength(3);
+    // retrace. The FOURTH and FIFTH (2026-09-10 follow-up) are the recovery
+    // probes' two textual sites in that same pre-loop gate — first probe
+    // plus rewind loop — runtime-bounded at three evals, still gated on the
+    // live bound, still not a retrace. (Count is textual: two sites, one
+    // loop body.)
+    expect(MARCH_SURFACE.match(/\bmapBody\(/g)).toHaveLength(4);
   });
 
   it('exits before every light-dependent term and the display conversion', () => {

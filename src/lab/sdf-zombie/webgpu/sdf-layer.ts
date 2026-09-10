@@ -36,7 +36,7 @@ import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { wgslFn, texture, uv, vec4, uniform } from 'three/tsl';
 import { fieldParity, fieldTargetHeight, fieldJitterNdcY } from './field-render';
 import { createConeUniforms, createDepthPreUniforms, type ConeSource, type DepthPreSource, type LastFrameSource, type OccluderSource, type PrevSource } from './zombie-gpu';
-import { TEMPORAL_START_DEFAULTS } from './temporal-start';
+import { TEMPORAL_START_DEFAULTS, temporalMarginForMotion } from './temporal-start';
 import { setPassLabel } from './gpu-pass-timing';
 
 // ---------------------------------------------------------------------------
@@ -761,6 +761,15 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     invVp: uniform(new THREE.Matrix4()),
     cfg: uniform(new THREE.Vector4(0, TEMPORAL_START_DEFAULTS.margin, TEMPORAL_START_DEFAULTS.slope, TEMPORAL_START_DEFAULTS.maxStart)),
   };
+  // ADAPTIVE MARGIN state (temporal-start.ts temporalMarginForMotion). The
+  // per-body world positions of the last FRESH frame; the margin measures
+  // fresh-frame-to-fresh-frame translation, which covers half-rate holds
+  // natively (their history spans two frame intervals and so does the
+  // measurement). An explicit margin via setTemporalStart turns the
+  // adaptation off for A/Bs.
+  const temporalBodyPos = new Map<THREE.Object3D, THREE.Vector3>();
+  const temporalPosScratch = new THREE.Vector3();
+  let temporalAdaptiveMargin = true;
   let bodies: THREE.Object3D[] = [];
   let chunks: THREE.Object3D[] = [];
   let chunkPass: 'merged' | 'split' | 'skip' = 'merged';
@@ -1098,6 +1107,39 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       // still holds the last fresh frame's result (nothing between frames
       // clears it). This skip IS the half-rate win.
       if (!hold) {
+      // ADAPTIVE MARGIN (temporalMarginForMotion). The start margin only has
+      // to cover how far flesh can move toward the camera over one history
+      // interval, so scale the shipped 0.25 m constant down to what the
+      // bodies ACTUALLY moved fresh frame to fresh frame. Runs before the
+      // march reads temporalCfg; chunks count too — detached gibs march on
+      // the same material and are the fastest things in the scene. A body
+      // the map has never seen (first frame, spawn, teleport) reads as moved
+      // by the cap: unknown motion is covered, not assumed away. Stored
+      // before the unseen check so the map seeds on the very first frame.
+      if (temporalAdaptiveMargin && (lastUniforms.cfg.value as THREE.Vector4).x > 0.5) {
+        let temporalMaxDisp = 0;
+        let temporalPosCapHit = false;
+        const measure = (o: THREE.Object3D): void => {
+          const cur = o.getWorldPosition(temporalPosScratch);
+          const lastPos = temporalBodyPos.get(o);
+          temporalBodyPos.set(o, cur.clone());
+          if (lastPos === undefined) { temporalPosCapHit = true; return; }
+          const d = cur.distanceTo(lastPos);
+          if (d > temporalMaxDisp) { temporalMaxDisp = d; }
+        };
+        for (const o of bodies) measure(o);
+        for (const o of chunks) measure(o);
+        (lastUniforms.cfg.value as THREE.Vector4).y = temporalPosCapHit
+          ? TEMPORAL_START_DEFAULTS.margin
+          : temporalMarginForMotion(temporalMaxDisp);
+        // Corpses despawn; drop keys the scene no longer holds so the map
+        // cannot grow across a long session. Runs only when stale entries
+        // actually outnumber the live set.
+        if (temporalBodyPos.size > (bodies.length + chunks.length) * 2 + 8) {
+          const live = new Set([...bodies, ...chunks]);
+          for (const k of temporalBodyPos.keys()) { if (!live.has(k)) temporalBodyPos.delete(k); }
+        }
+      }
       // Pass 1b — the cone pre-pass, wide level then narrow, each starting
       // where the last stopped. No shading in either; the wide level is a
       // sixty-fourth of the pixels and the narrow one a quarter.
@@ -1385,12 +1427,14 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     setTemporalStart(on, margin, slope) {
       const v = lastUniforms.cfg.value as THREE.Vector4;
       v.x = on ? 1 : 0;
-      if (margin !== undefined) v.y = Math.max(0, margin);
+      // An explicit margin pins cfg.y and disables the per-frame adaptation;
+      // omit it and the margin tracks measured body motion every fresh frame.
+      if (margin !== undefined) { v.y = Math.max(0, margin); temporalAdaptiveMargin = false; }
       if (slope !== undefined) v.z = Math.max(0, slope);
     },
     get temporalStart() {
       const v = lastUniforms.cfg.value as THREE.Vector4;
-      return { on: v.x > 0.5, margin: v.y, slope: v.z, maxStart: v.w };
+      return { on: v.x > 0.5, margin: v.y, slope: v.z, maxStart: v.w, adaptiveMargin: temporalAdaptiveMargin };
     },
     setBodies(list, chunkList) { bodies = list; chunks = chunkList; },
     setDepthGate(on) { prevUniforms.enabled.value = on ? 1 : 0; },

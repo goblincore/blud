@@ -12,6 +12,30 @@ with the gate 14.9 -> 11.3 ms (walk 11.0 -> 7.0, fire 14.9 -> 11.3, gib
 18.0 -> 13.8; the on-run had fewer bodies, so treat as ~25-35%). Copy
 0.02-0.04 ms. Owner: "looks good, ship it".
 
+**Aggressive follow-up (same day, session).** Four changes on top: (1)
+`bodyEntry` — the ray-box entry already computed for the accumulated-depth
+discard — joins the start max as a fifth lower bound; (2) recovery probes:
+when the one-sample check finds the start inside, rewind by twice the
+reported penetration and re-probe (≤ 3 evals) instead of dropping the
+bound; (3) the accepted start must also sit OUTSIDE a wound's near zone
+(mapBody.z — the field is not a bound beside a crater); (4) the margin is
+adaptive: measured fresh-frame-to-fresh-frame body translation × 1.5,
+capped at 0.25, floored at **0.15**. The floor is a measured cliff, not a
+guess — the frozen-scene pixel diff (wounded closeup, VHS + field weave
+off, HUD masked) puts it between 0.15 (pixel-identical to tstart off) and
+0.10 (3.8k px of banded deep-tissue shading): once the start beats the
+outer-hull face, the accept tolerance lands samples alternately
+inside/outside the skin and the tissue ramp paints them. The shipped 0.25
+never beats the hull face up close, which is why it never showed. Room-4
+firefight A/B at the ship config (sdf:march p50): gib 7.83 -> 6.52 ms
+(−17%, 4/4 paired reps vs off), walk −5%, fire −5%, no regression leg.
+Frozen closeup diff at floor 0.15: HUD-text clean. A latent defect worth
+its own task: accept-tolerance + tissue-ramp fragility just inside the
+hull face (the perf spec's accept-retraction lever). Pre-existing on main,
+unrelated: surface-nets.wgsl.test.ts HULL_FIELD arity pin (17 vs 19).
+Instruments: `scripts/tmp/tstart-ab.mjs` (perf A/B driver),
+`tstart-artifact-check.mjs` (frozen-scene pixel diff, `TSTART_PIN` bisect).
+
 **Goal:** Cut the march's per-pixel step count at FULL resolution by
 starting each ray where last frame's hit at that screen position, reprojected
 through the camera's motion, says the surface was — minus a safety margin —
