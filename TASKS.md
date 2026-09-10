@@ -4,6 +4,22 @@
 > Per-milestone step-by-step tasks live in `docs/superpowers/plans/`.
 > This file is **coarse-grained state only** — keep rows to ≤2 lines and link out for detail.
 
+## Character — cyberbride (translucent-flesh cyborg) — 2026-09-09
+
+- [x] `cyberbride`: Willendorf female corpse in .blob + a full chrome
+  endoskeleton kit (`cyberbride-kit.wam` → committed glTF), registered with
+  `fleshAlpha: 0.78`. Specs:
+  `docs/superpowers/specs/2026-09-09-cyberbride-character-design.md`; wrap-up:
+  `docs/dev-notes/2026-09-09-cyberbride/wrap-up.md`.
+- [x] NEW FORWARD-PATH FEATURE: translucent SDF flesh. `sdfLayer.setGhostBodies(list, alpha)`
+  marches ghost bodies into their own target and composites src-alpha over
+  the polygonal pass, so kit meshes BEHIND the flesh surface show through it
+  ('off'/'bodies' field styles; 'sdf'/'frame' fall back to opaque; deferred
+  renderer NOT wired). A/B: the lab panel's "body → flesh alpha (see-through)"
+  slider, or `__sdfLab.setGhostAlpha(a)`.
+- [!] Not wired: the game's spawn list doesn't field her yet, and the
+  deferred renderer needs the routed-forward seam for translucency.
+
 ## Raymarch — Claybook cheap wins — 2026-09-09
 
 - [x] Last-step SECANT accept in `MARCH_BODY` (Claybook GDC slide 25), behind

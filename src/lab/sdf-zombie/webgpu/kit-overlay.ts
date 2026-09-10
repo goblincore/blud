@@ -94,6 +94,14 @@ const LOOK: Record<string, {
 }> = {
   iron: { metalness: 0.72, roughness: 0.16, envIntensity: 1.15 },
   brass: { metalness: 0.78, roughness: 0.22, envIntensity: 1.25 },
+  // ---- cyberbride (the endoskeleton) ----
+  // Bright gun chrome, brighter than iron: it lives BEHIND flesh at 78%
+  // opacity, so everything about it must overshoot to survive the trip —
+  // the env map especially, since the flesh dims its specular by (1-alpha)
+  // like everything else. darkiron is the joints/vertebrae/jaw alloy; its
+  // job is CONTRAST against the chrome so the frame reads as assembly.
+  chrome:   { metalness: 0.85, roughness: 0.12, envIntensity: 1.8 },
+  darkiron: { metalness: 0.70, roughness: 0.32, envIntensity: 0.9 },
   // Not metal, but not matte either — oiled leather catches a broad sheen.
   leather: { metalness: 0.05, roughness: 0.48, envIntensity: 0.55 },
   // Sunglass lens. The lowest roughness and the highest env intensity in the

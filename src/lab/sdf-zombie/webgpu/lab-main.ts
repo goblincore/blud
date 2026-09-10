@@ -267,6 +267,21 @@ async function main() {
   });
   const body = heroView.body;
 
+  // TRANSLUCENT FLESH (the cyberbride): her body marches into the SDF
+  // layer's ghost target and composites at the registry's fleshAlpha, so
+  // her chrome kit shows through her skin. See sdf-layer's setGhostBodies
+  // for the pass structure. One shared setter backs the boot wiring, the
+  // panel slider and the console knob: 1.0 restores the EMPTY ghost list,
+  // which is exactly the historical opaque path; below 1 the hero is in the
+  // list (any character can be dragged translucent — it is a look knob).
+  const applyFleshAlpha = (v: number) => {
+    if (v >= 0.999) sdfLayer.setGhostBodies([], 1);
+    else sdfLayer.setGhostBodies([heroView.gpu.object], v);
+  };
+  if (entry.fleshAlpha !== undefined && entry.fleshAlpha < 1) {
+    applyFleshAlpha(entry.fleshAlpha);
+  }
+
   const errorsEl = document.getElementById('errors');
   function showErrors(b: BuildResult) {
     if (errorsEl) errorsEl.textContent = b.errors.join('\n');
@@ -3229,6 +3244,18 @@ async function main() {
     get: () => stepsOverride ?? 0,
     set: (v) => { stepsOverride = v > 0 ? v : null; },
   });
+  // SEE-THROUGH FLESH — the ghost pass's alpha (the cyberbride's skin, but
+  // it works on ANY character: dragging it puts the hero in the ghost list).
+  // 1.00 = opaque = exactly the historical composite, so the slider is
+  // lossless to fiddle with. get() reads the layer's live uniform, so the
+  // slider boots showing the registry's fleshAlpha for characters that
+  // declare one.
+  const fleshAlphaSlider = addSlider(bodyBox, {
+    label: 'flesh alpha (see-through)', min: 0.1, max: 1, step: 0.01,
+    get: () => sdfLayer.ghostAlpha,
+    set: applyFleshAlpha,
+  });
+  fleshAlphaSlider.title = 'Flesh opacity for the ghost composite. 1 = opaque; below 1, meshes behind the skin (a kit) show through it.';
 
   // Face. Sliders regenerate the face primitives and rebuild the body, so a
   // param change alters which primitives exist rather than just their values.
@@ -3951,6 +3978,14 @@ async function main() {
       ? { released: [...meltBones.released], chunks: meltBones.chunkIds.length }
       : null),
     backend: handle.backend,
+    /**
+     * Translucent-flesh alpha for the ghost pass (the cyberbride's
+     * see-through skin), 0.05..1. 1 = opaque — restores the empty ghost
+     * list, exactly the historical path. Same setter the panel's
+     * "flesh alpha" slider drives.
+     */
+    setGhostAlpha: applyFleshAlpha,
+    get ghostAlpha() { return sdfLayer.ghostAlpha; },
     /**
      * The renderer, scene and camera — enough to call
      * `renderer.debug.getShaderAsync(scene, camera, mesh)` and read the WGSL
