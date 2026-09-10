@@ -116,6 +116,68 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+### 2026-09-10 — perf session: gather −33%, a measured split, two levers closed
+
+Branch **`claude/sdf-march-perf-518bcc`** (17 commits off `main`). Companion
+branch **`claude/determinism-stage1`** for demo determinism.
+
+**SHIPPED AND MEASURED — probe gather −33%.** `compute:probe-gather` went
+**7.19 → 4.85 ms** (room 3) and **6.02 → 3.99** (room 4), with non-overlapping
+per-leg ranges and 19%/23% repeat spread. Three exact optimisations: a
+bounding-sphere cull with a `tMax` bound in `kdHitCapsule`, an any-hit
+`kdCapsuleBlocks` bounded by the light distance replacing the full nearest search
+the shadow path ran per light per ray, and testing the ≤16 boxes before the ~200
+capsules in `kdShadowed`. Equivalence is PROVEN against an independent reference
+in `probe-dynamic-cull.test.ts`, not asserted.
+
+**MEASURED — the gather's cost split, which was previously a model.** With
+diagnostic seams (`?dynrays=0` = no ray work, `?dynlights=0` = primary rays
+only): primary **2.15 / 1.82 ms**, per-light shadow **2.84 / 2.26 ms** =
+**57% / 55%**. So the shadow share is real, and R2 (sample the shadow map the
+frame already rasterises instead of sweeping analytically) targets ~56% of it.
+
+**READ THIS BEFORE QUOTING THE GATHER.** It runs every OTHER frame
+(`probeGatherRate = 2`), so its amortised cost is **~2 ms/frame**, not the 4–5 ms
+the pass row shows. The pass row prices ONE gather and is invariant to cadence by
+construction. Only `sdf:march` (6.7–9.7 ms, no cadence) is a true per-frame row.
+
+**CLOSED — do not re-open:**
+- **Cone pre-pass: DO NOT SHIP.** The documented −22% does not reproduce
+  (`sdf:march` is *higher* with it on); `TASKS.md` X1.14 already measured 0.4%
+  and X1.15 says the occluder hull supersedes it. Enabling it also reproduces a
+  CPU submission stall (`gpu:idle` 15–20 ms, negative harness gap) in two
+  independent runs.
+- **Step budget / miss-pixel 96-step tail: DEAD.** A 6× cut produces NO
+  monotonic trend in `sdf:march`, reproducing the 2026-08-31 finding on the
+  interlace config. Per-step is not the axis.
+- **The cone's −22% in `sdf-layer.ts:220-238` is stale doc-rot** (predates the
+  occluder hull).
+
+**FIXED + GATED (both were MY bugs, both owner-visible):**
+- Harness legs reset: new probe seams were not pinned in the ship-defaults
+  block, so a leg leaked into the next rep's baseline. Rule: **any new seam a leg
+  can set MUST be pinned in the reset block.**
+- `?dynrays` / `?dynlights` booted every unparameterised page with ZERO rays and
+  an empty light list (`Number(null) === 0` passed a `>= 0` guard), zeroing the
+  dynamic probe layer — characters in the player's room rendered as black
+  silhouettes. Fixed and made structural in `webgpu/boot-params.ts`
+  (`parseIntParam` reads the RAW string) with `boot-params.test.ts` as the gate.
+
+**NEXT, in order:** (1) the deeper-interlace `COMPOSITE_WGSL` generalisation —
+plan at `docs/superpowers/plans/2026-09-10-deeper-interlace-fields.md`, pure math
+already done and tested, **needs a GPU round trip** because a bad binding there
+is division by zero in the composite; (2) the census-diff demo repeatability
+gate (`docs/superpowers/plans/2026-09-10-deterministic-demo-recordings.md`) —
+three of six bench windows this session were unusable; (3) R1, widening the
+gather's 7-workgroup dispatch, now backed by the measured split; (4) far-body
+LOD, **re-aimed** — the step axis is dead, use per-pixel work.
+
+**Bench discipline, reconfirmed twice:** read the Repeatability section FIRST and
+judge each delta against its own legs' spread. Only a within-leg pass row
+survives a busy machine. Tag ship-truth runs with
+`BENCH_PRELUDE='__sdfGame.setOccluder(false);__sdfGame.setHullExitBound(true)'`
+— the harness still pins the opposite of both.
+
 **[x] FRAME SPIKES SOLVED — interlaced scanline fields (`86185b01`).** Owner
 captures: worst frame **125 → 38 ms**, p99 **63 → 34.3**, over-budget frames
 **6.3% → 0.0%**, longest stall run **12 frames → 1**, avg fps pinned at the 30
