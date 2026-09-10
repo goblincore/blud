@@ -90,6 +90,7 @@ import { stepPlayer, eyeOf, PLAYER, type PlayerState, type MoveInput } from './g
 import { createRoomProbes, type ProbeWorkerLike } from './room-probes';
 import { computeBounceSpot } from '../flashlight-bounce';
 import { createProbeGatherBinding, type ProbeGatherBinding } from './probe-gather-compute';
+import { parseIntParam } from './boot-params';
 import { tracerGatherLights } from '../tracer-lights';
 import { boneInstanceArrays, packBoneInstances, INSTANCE_FLOATS } from './bone-instancer';
 import { createZombieActor, segmentHitsBox, type ZombieActor } from './game-actor';
@@ -599,10 +600,12 @@ async function main() {
   let probeDynGain = probeDynParam === '0' || probeDynParam === 'off' ? 0 : 0.15;
   let probeVisStrength = probeDynParam === '0' || probeDynParam === 'off' ? 0 : 1;
   // ?proberate=1 restores every-frame gathers (see probeGatherRate above).
-  const probeRateParam = Number(new URLSearchParams(location.search).get('proberate'));
-  let probeGatherRateBoot = Number.isFinite(probeRateParam) && probeRateParam >= 1
-    ? Math.min(4, Math.floor(probeRateParam))
-    : null;
+  // ALL THREE of these go through parseIntParam now: it reads the RAW string, so
+  // an absent parameter yields null (the shipped default) rather than 0. Doing
+  // it by hand is what shipped the zeroed-dynamic-layer regression — see
+  // boot-params.ts for the whole story and boot-params.test.ts for the gate.
+  const bootSearch = new URLSearchParams(location.search);
+  let probeGatherRateBoot = parseIntParam(bootSearch.get('proberate'), { min: 1, max: 4 });
   // PROBE-GATHER COST SPLIT (2026-09-10). Two diagnostic seams that divide the
   // gather's cost into its primary-ray part and its per-light shadow part,
   // which is the split that decides whether widening the dispatch or replacing
@@ -617,25 +620,10 @@ async function main() {
   //
   // Before these, the "shadow is ~50-70% of the work" figure was an op-count
   // MODEL, not a measurement (see the probe-gather-cost note).
-  // ⚠ READ THE RAW STRING, NOT `Number(...)`. `URLSearchParams.get` returns
-  // null for an absent param and `Number(null)` is 0 — which is a VALID value
-  // for both of these (0 rays / 0 lights are the diagnostic modes), so testing
-  // the number alone silently turns every unparameterised page into the
-  // no-rays-no-lights diagnostic frame. That shipped for one session: the
-  // dynamic probe layer went fully zero, so bodies in the player's room had no
-  // indirect light and rendered as black silhouettes, while bodies in OTHER
-  // rooms stayed lit until they crossed into the player's grid. `?proberate`
-  // above escaped it only because it requires >= 1, so 0 failed the test.
-  const probeRaysRaw = new URLSearchParams(location.search).get('dynrays');
-  const probeRaysNum = probeRaysRaw === null ? NaN : Number(probeRaysRaw);
-  let probeRaysBoot = Number.isFinite(probeRaysNum)
-    ? Math.max(0, Math.min(64, Math.floor(probeRaysNum)))
-    : null;
-  const probeLightsRaw = new URLSearchParams(location.search).get('dynlights');
-  const probeLightsNum = probeLightsRaw === null ? NaN : Number(probeLightsRaw);
-  let probeLightsBoot = Number.isFinite(probeLightsNum)
-    ? Math.max(0, Math.floor(probeLightsNum))
-    : null;
+  // min 0 is correct here and is exactly what made the old hand-rolled guard
+  // unsafe: 0 is a real mode, so ABSENT must be detected before coercion.
+  let probeRaysBoot = parseIntParam(bootSearch.get('dynrays'), { min: 0, max: 64 });
+  let probeLightsBoot = parseIntParam(bootSearch.get('dynlights'), { min: 0, max: 1024 });
   // FLASH BOOST. The muzzle light's envelope has already fallen to ~a third
   // of peak by the frame the gather packs it (one frame of lag), and it
   // lives 0.14 s; at 1x the bounce was a quarter of the key on a body next
