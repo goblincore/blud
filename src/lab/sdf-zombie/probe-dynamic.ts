@@ -516,19 +516,10 @@ function dynShadowed(
   boxes: Float32Array,
   nBoxes: number,
 ): boolean {
-  for (let c = 0; c < nCaps; c++) {
-    const base = 4 + c * 8;
-    const a: Vec3 = [capsules[base + 0]!, capsules[base + 1]!, capsules[base + 2]!];
-    const r = capsules[base + 3]!;
-    const b: Vec3 = [capsules[base + 4]!, capsules[base + 5]!, capsules[base + 6]!];
-    // ANY-HIT, bounded by the light distance (2026-09-10) — not a nearest
-    // search. Returning on the first blocker retires the rest of the list, and
-    // the bound rejects capsules entered beyond the light without the
-    // quadratic. The answer is identical to `hitCapsule(...) !== null &&
-    // h.t < dist`; only the work differs. This is the gather's hottest path:
-    // it runs once per LIGHT per ray, so up to 8 times per ray.
-    if (capsuleBlocks(origin, dir, a, b, r, dist)) return true;
-  }
+  // BOXES FIRST (2026-09-10) — same reasoning as the kernel's kdShadowed: the
+  // result is an OR, so order cannot change it, and testing at most 16 boxes
+  // before ~200 capsules short-circuits the capsule sweep whenever a wall or a
+  // piece of furniture is in the way.
   for (let b = 0; b < nBoxes; b++) {
     const base = 4 + b * 12;
     if (boxes[base + 3]! < 0.5) continue; // the enclosure is the light's own room
@@ -538,6 +529,18 @@ function dynShadowed(
     };
     const h = hitAabbEntry(origin, dir, box);
     if (h !== null && h.t < dist) return true;
+  }
+  for (let c = 0; c < nCaps; c++) {
+    const base = 4 + c * 8;
+    const a: Vec3 = [capsules[base + 0]!, capsules[base + 1]!, capsules[base + 2]!];
+    const r = capsules[base + 3]!;
+    const b2: Vec3 = [capsules[base + 4]!, capsules[base + 5]!, capsules[base + 6]!];
+    // ANY-HIT, bounded by the light distance (2026-09-10) — not a nearest
+    // search. Returning on the first blocker retires the rest of the list, and
+    // the bound rejects capsules entered beyond the light without the
+    // quadratic. The answer is identical to `hitCapsule(...) !== null &&
+    // h.t < dist`; only the work differs.
+    if (capsuleBlocks(origin, dir, a, b2, r, dist)) return true;
   }
   return false;
 }

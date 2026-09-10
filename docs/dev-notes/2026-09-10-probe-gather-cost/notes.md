@@ -91,14 +91,29 @@ for (var l = 0u; l < nLights; l = l + 1u) {          // up to 8 lights
 ```
 
 `maxCapsules: 1024`, and the capsules are packed from posed bone instances
-(`packCapsulesFromBoneInstances`, 2 per bone), so `nCaps` is realistically
-300-900 at the 4-8 bodies the census shows on screen.
+(`packCapsulesFromBoneInstances`, 2 per bone). **CORRECTED 2026-09-10:** this
+note first said "realistically 300-900". The project's own measurement is
+**~45 capsules per body**, so 4-8 bodies on screen is **~180-360 capsules**
+(900 would need ~20 bodies). The revision REINFORCES the conclusion below — the
+per-thread cost is roughly half what I first estimated, which makes the
+6-7 ms look even more like latency than like arithmetic.
 
-So the per-thread worst case is `32 rays x (1 + 8 shadow sweeps) x ~600 capsules`
-≈ **1.7e5 capsule/box tests per probe**, i.e. of order **7e7 for the whole
+So the per-thread worst case is `32 rays x (1 + 8 shadow sweeps) x ~200 capsules`
+≈ **3.4e4 capsule/box tests per probe**, i.e. of order **1.4e7 for the whole
 gather**, executed by **7 workgroups**. Whatever the exact figure, this is both
 (a) genuinely heavy per thread and (b) dispatched nowhere near wide enough to
 hide the latency — an M3 has far more than 7 resident workgroup slots.
+
+**Occupancy arithmetic (verified dispatch + hardware numbers, from the
+2026-09-10 research briefing):** three.js `WebGPUBackend` dispatches
+`ceil(count / size)` = `ceil(400/64)` = **7 workgroups = 448 threads**. An M3
+10-core GPU has **1280 ALUs**, so the gather occupies ~35% of ONE wave and
+~2 warps per core — effectively no latency hiding. A static op-count model
+(~95-110 ops + 3 sqrt + 2 div per capsule test) predicts **0.2-0.7 ms at full
+occupancy** and **1-4 ms at 448 threads** against the 6-7 ms measured. The gap
+is latency, not ALU. Mark that arithmetic INFERRED, not measured — but it
+agrees with the shape of the fix list below, where widening the dispatch is
+lever 1.
 
 ## The levers, in the order I would try them
 
@@ -142,6 +157,62 @@ to measure the config the game actually runs. Without it, every delta includes
 a pass the game does not run and omits a bound it has. An owner decision should
 re-sync those pins; until then the prelude is mandatory for a ship-truth
 number.
+
+## Levers 1-3, partly DONE (commit `13fc0c30`)
+
+- **Bounding-sphere cull in the capsule sweep**, bounded by a `tMax`: the
+  capsule is contained in the sphere around the segment midpoint of radius
+  `|ba|/2 + r`, so a ray that misses the sphere cannot hit the capsule, and one
+  whose sphere exit is behind the origin cannot have a positive entry. Two dots
+  and at most one sqrt against the quadratic's three. Sound because
+  `t_capsule_entry >= t_sphere_entry`. `kProbeGather` passes the box hit it
+  already has.
+- **`kdCapsuleBlocks`: any-hit, bounded by the light distance**, replacing the
+  full nearest search the shadow path ran per light per ray (up to 8x per ray).
+- **Boxes first in `kdShadowed`** — a boolean OR, so order cannot change the
+  answer, but <=16 boxes tested before ~200 capsules short-circuits the capsule
+  sweep whenever a wall or furniture is in the way.
+- Equivalence is PROVEN, not asserted: `probe-dynamic-cull.test.ts` checks an
+  independent reference (bisection on the true point-to-segment distance) over
+  900 randomised capsule/ray pairs for all three properties.
+
+## Strategic findings from the 2026-09-10 GI research briefing
+
+1. **There is no maintained "DDGI 2.0".** NVIDIA-RTX/RTXGI v2.x ABANDONED DDGI —
+   its own Readme calls v2 "replac[ing] traditional probe-based irradiance
+   caching with a world-space radiance cache" and ships only NRC + SHaRC, for
+   path tracing; it points DDGI at the frozen v1 repo (last release v1.3.7, May
+   2023). So DDGI 2019/2021 remains the live reference. Do not go looking for a
+   newer paper to adopt.
+2. **Direct on-stack prior art: `speedball-gi`** — BVH-traced DDGI for *three.js
+   WebGPU targeting three r185*, the exact version this project pins. npm
+   v0.7.0, published 2026-08-20. It has `cascades` as an option, explicit dirty
+   lanes (`markTransformsDirty` / `markDeformsDirty` / `markTopologyDirty`),
+   idle-gated structural rebuilds, and a `jitterMode: 'gated'` that holds a
+   STABLE sampling basis to cut flicker — the opposite of this gather's
+   per-frame `frameSeed` rotation of the Fibonacci set, which is presumably why
+   the afterglow blend exists. **Read it before designing anything further.**
+   The BVH point is the important one: blud sweeps explicit capsule lists where
+   DDGI-family engines trace an acceleration structure, and that is what makes
+   the per-thread cost here what it is.
+3. **The gather re-derives analytically what the frame already rasterises.**
+   `dungeon-lighting.ts` enables `SHADOW_HULL_LAYER` on the spotlight's shadow
+   camera and `deferred-shadows.ts` renders a map containing level geometry plus
+   inflated character proxies; `march.wgsl.ts` `LEVEL_SHADOW` already samples
+   it. The gather binds **no shadow map at all** and sweeps capsules+boxes per
+   light instead. For the flashlight — the dominant indirect contributor — that
+   whole per-light sweep could become one texture fetch. This is exactly what
+   DDGI does (the app traces, the probe pass shades from the frame's data).
+   Caveat: muzzle-flash point lights have no shadow map and keep the analytic
+   path.
+4. **`probeGatherRate` is already 2** (`game-main.ts:650`, `setProbeGatherRate`
+   clamps 1..4), so "gather less often" is already spent; **4 is a one-line 2x**
+   on the #2 pass, at the cost of the dynamic layer's response time.
+5. **Godot SDFGI is NOT a model for this problem.** The deep-dive CONTRADICTS the
+   hypothesis: Godot only voxelises `GI_MODE_STATIC` geometry and dynamic
+   objects cannot contribute at all (they can only receive). blud's gather
+   exists precisely to make posed bodies occlude, so SDFGI's cascades are worth
+   reading for update SCHEDULING but not for dynamic-object handling.
 
 ## Original plan for this run (superseded by the contamination)
 

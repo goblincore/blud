@@ -497,9 +497,15 @@ fn kdShadowed(
   capsules: ptr<storage, array<vec4<f32>>, read>,
   boxes: ptr<storage, array<vec4<f32>>, read>
 ) -> bool {
-  if (kdCapsuleBlocks(origin, dir, capsules, dist)) { return true; }
+  // BOXES FIRST (2026-09-10). The result is a boolean OR of two independent
+  // tests, so the order cannot change the answer — but the box list is at most
+  // 16 entries against ~200 capsules (measured: ~45 capsules per body), so
+  // testing the cheap list first and short-circuiting skips the capsule sweep
+  // outright whenever a wall or a piece of furniture is in the way. In a
+  // dungeon that is the common case, and this runs once per LIGHT per ray.
   let bh = kdHitBox(origin, dir, boxes, true);
   if (bh.hit && bh.t < dist) { return true; }
+  if (kdCapsuleBlocks(origin, dir, capsules, dist)) { return true; }
   return false;
 }`;
 
