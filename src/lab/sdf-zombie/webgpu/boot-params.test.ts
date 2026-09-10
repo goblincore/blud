@@ -62,6 +62,18 @@ describe('parseIntParam — absent is NOT zero', () => {
     expect(dynLights ?? Number.MAX_SAFE_INTEGER).toBe(Number.MAX_SAFE_INTEGER);
     expect(probeRate ?? 2).toBe(2);
   });
+
+  it('fixes the pre-existing ?tracerlightslots default, which was silently 0', () => {
+    // Same bug class, found by auditing rather than by a playtest: the old
+    // expression was `Number.isFinite(Number(null)) && Number(null) >= 0`, both
+    // true, so an absent param produced 0 instead of the intended default of 2
+    // — tracer lights never fed the gather's dynamic light list on a bare page.
+    expect(parseIntParam(null, { min: 0, max: 8 }) ?? 2).toBe(2);
+    // An explicit 0 must still switch them OFF, which is the whole reason the
+    // guard cannot simply require > 0.
+    expect(parseIntParam('0', { min: 0, max: 8 }) ?? 2).toBe(0);
+    expect(parseIntParam('5', { min: 0, max: 8 }) ?? 2).toBe(5);
+  });
 });
 
 describe('hasParam', () => {

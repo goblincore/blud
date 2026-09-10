@@ -638,10 +638,15 @@ async function main() {
   // count, and 8 tracers quadrupled it during firefights (p95 6 -> 27 ms).
   // 2 bounds the worst case near the flashes alone; ?tracerlightslots and
   // __sdfGame.setTracerLightSlots(n) restore more if the look wants them.
-  const tracerSlotsParam = Number(new URLSearchParams(location.search).get('tracerlightslots'));
-  let tracerLightSlots = Number.isFinite(tracerSlotsParam) && tracerSlotsParam >= 0
-    ? Math.min(8, Math.floor(tracerSlotsParam))
-    : 2;
+  // PRE-EXISTING BUG, fixed 2026-09-10 while auditing the ?dynrays class: this
+  // was `Number.isFinite(Number(null)) && Number(null) >= 0` — and an absent
+  // param gives Number(null) === 0, which passes, so the default was 0 and
+  // tracer lights NEVER fed the gather's dynamic light list on a bare page. The
+  // intended default is 2 (the comment above the tracer slot cap says so, and
+  // ?tracerlightslots=0 remains the way to switch them off explicitly).
+  let tracerLightSlots = parseIntParam(
+    new URLSearchParams(location.search).get('tracerlightslots'), { min: 0, max: 8 },
+  ) ?? 2;
   // DIRECT flash on bodies (march slot bodyFlash): intensity multiplier on
   // the flash lights before the shader's I*cos/d^2. 0 = off, bit-identical.
   let bodyFlashGain = 0.06;
