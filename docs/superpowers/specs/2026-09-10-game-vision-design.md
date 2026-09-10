@@ -93,7 +93,7 @@ The camp comes from **sincerity**, not jokes.
 
 | Layer | What it is | Its job | Camera |
 | --- | --- | --- | --- |
-| **0. The Room** | A small basement room. The goblin's, fully seen, decorated over time | Home, mood, the Party through the ceiling, the ending | First person, free look; walkable but small |
+| **0. The Room** | A small basement flat. The goblin's, fully seen, decorated over time. **You can never leave it** | Home, mood, the Party through the ceiling, the ending | First person; walk and look anywhere inside |
 | **1. The Desktop** | A made-up 90s OS on the beige CRT: the FPS icon, mail, files, a music tracker, a screensaver | The adventure layer; mysterious messages; bridge between room and game | Looking at the monitor |
 | **2. The FPS** | The full shooter: floors (episodes) with the Cloakroom hub | The main game | Full shooter, bezel pushed almost out of view |
 
@@ -133,10 +133,26 @@ real SDF scene, so it's fair game for deformation later (§6).
 **Small, specific, the goblin's.** Seeing someone's room is seeing who they
 are, so the room does the characterisation the goblin never says.
 
+**Walkable, but you can't leave.** First person, walk and look anywhere in the
+flat: one main room, maybe a cupboard-sized bathroom or kitchenette. The front
+door is there, and it is the most important object in the flat, because it
+never takes you out. The reason is on the Never list (§10). How it refuses
+is design space, and it should shift with the tone phases (§8):
+
+- **Gentle:** the goblin reaches for the handle and just... doesn't. Turns back
+  to the room, as if it forgot why it got up.
+- **Strange:** the handle turns, the door opens a crack, and there's the same
+  room again from the other side, or a second door right behind it.
+- **Sinister:** the door is soft. It gives under the hand, like the guests do.
+
+Notes under the door, catalogues and parcels still arrive. Things come in;
+the goblin doesn't go out. The high window shows only feet passing and light
+from upstairs. So the one thing the ending has to deliver is **leaving**
+(§9).
+
 **Contents at start:** a desk and the beige CRT, a chair too big for a goblin,
-a mattress, a door (locked from outside? unanswered question), a high
-basement window showing only feet passing and light from upstairs, pipes that
-carry the music, a bucket under a leak.
+a mattress, the front door, the high basement window, pipes that carry the
+music, a bucket under a leak.
 
 **Decorating (the fun part):**
 - **Trophies come through the monitor.** Beat a floor, find a secret, and an
@@ -224,6 +240,9 @@ furnishing the party all along. Ties decorating directly into the ending.
 
 **Current lean:** combine **D** (the payoff for decorating) with **A** or **B**
 (the step outside). C is the most *Moon*, but risks feeling like a trick.
+Since the goblin can never leave the flat during play (§6), walking out of the
+front door is the strongest single payoff the game has. That favours **A** or
+**B**, and means C should only exist as a false ending, if at all.
 
 ---
 
@@ -232,7 +251,8 @@ furnishing the party all along. Ties decorating directly into the ending.
 - Who throws the Party, or whether there is a host at all.
 - **Whether the Party in the FPS and the party upstairs are the same party.**
 - **Who sends the mail, or how they know.**
-- **Whether the room door is locked from outside.**
+- **Why the goblin can't leave the flat.** Locked, afraid, forbidden, or
+  something about the door itself: never said.
 - Why the goblin wasn't invited, or what it wants at the top.
 - What the world was before, or whether this is Hell / a dream / a TV show.
 - The goblin's face. At most: hands, arm, a shadow, a covered mirror.
@@ -455,9 +475,12 @@ A fictional magazine, *CD-ROM INFERNO*, issue 31, "First Look" page.
 ## 17. Open questions
 
 1. **The outer ending:** which of §9 A–D, or something else? (Lean: D + A or B.)
-2. **Room door:** can the goblin ever open it before the ending? What's outside?
-3. **Walkable room or seated look-around?** Walking is more fun for decorating;
-   seated is cheaper and more claustrophobic.
+2. ~~Room door~~ **Decided 2026-09-10:** the goblin can never leave the flat
+   before the ending; the reason is never given. Open: exactly how the door
+   refuses in each phase (§6 has candidates).
+3. ~~Walkable or seated~~ **Decided 2026-09-10:** walk and look anywhere
+   inside the flat. Open: is it one room, or one room plus a tiny bathroom
+   or kitchenette?
 4. **Mail-order economy:** is FPS currency spent in the room a good idea, or does
    it risk making the shooter feel like a grind for decorations?
 5. **Club levels:** pulsing geometry only, or dancing crowds that turn on you?
