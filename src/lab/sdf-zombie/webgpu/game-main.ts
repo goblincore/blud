@@ -617,13 +617,24 @@ async function main() {
   //
   // Before these, the "shadow is ~50-70% of the work" figure was an op-count
   // MODEL, not a measurement (see the probe-gather-cost note).
-  const probeRaysParam = Number(new URLSearchParams(location.search).get('dynrays'));
-  let probeRaysBoot = Number.isFinite(probeRaysParam) && probeRaysParam >= 0
-    ? Math.max(0, Math.min(64, Math.floor(probeRaysParam)))
+  // ⚠ READ THE RAW STRING, NOT `Number(...)`. `URLSearchParams.get` returns
+  // null for an absent param and `Number(null)` is 0 — which is a VALID value
+  // for both of these (0 rays / 0 lights are the diagnostic modes), so testing
+  // the number alone silently turns every unparameterised page into the
+  // no-rays-no-lights diagnostic frame. That shipped for one session: the
+  // dynamic probe layer went fully zero, so bodies in the player's room had no
+  // indirect light and rendered as black silhouettes, while bodies in OTHER
+  // rooms stayed lit until they crossed into the player's grid. `?proberate`
+  // above escaped it only because it requires >= 1, so 0 failed the test.
+  const probeRaysRaw = new URLSearchParams(location.search).get('dynrays');
+  const probeRaysNum = probeRaysRaw === null ? NaN : Number(probeRaysRaw);
+  let probeRaysBoot = Number.isFinite(probeRaysNum)
+    ? Math.max(0, Math.min(64, Math.floor(probeRaysNum)))
     : null;
-  const probeLightsParam = Number(new URLSearchParams(location.search).get('dynlights'));
-  let probeLightsBoot = Number.isFinite(probeLightsParam) && probeLightsParam >= 0
-    ? Math.max(0, Math.floor(probeLightsParam))
+  const probeLightsRaw = new URLSearchParams(location.search).get('dynlights');
+  const probeLightsNum = probeLightsRaw === null ? NaN : Number(probeLightsRaw);
+  let probeLightsBoot = Number.isFinite(probeLightsNum)
+    ? Math.max(0, Math.floor(probeLightsNum))
     : null;
   // FLASH BOOST. The muzzle light's envelope has already fallen to ~a third
   // of peak by the frame the gather packs it (one frame of lag), and it
