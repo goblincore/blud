@@ -1,0 +1,350 @@
+# Cyberbride — the machine that grew itself a bride. A chrome endoskeleton
+# (the KIT: characters/cyberbride-kit.wam) worn under a translucent female
+# corpse: the flesh is authored so the renderer can draw it at less than full
+# opacity (registry `fleshAlpha`), and the chrome skeleton ghosts through the
+# skin everywhere the skin covers it.
+#
+# AUTHORED FROM A DESCRIPTION, the soldier/widow method — no reference mesh
+# exists, so there is no bake and no measure loop. The brief (owner,
+# 2026-09-09): "a cyborg terminator like character ... a combination of mesh
+# (for the hard surfaces) and SDF for the flesh ... flesh slightly
+# translucent/transparent such that the metal skeleton can be seen beneath
+# it ... basically something like the soldier character but a female ... I
+# still want the zombie like skin texture though transparent as well as
+# physical markers that she is a female so like oversized grotesque mammary
+# glands like the venus de willendorf ... scary teeth like from some of the
+# other monsters ... pointy ears ... try out the hair system one of the
+# school girls uses".
+#
+# THE THREE BEATS that carry her silhouette (design doc:
+# docs/superpowers/specs/2026-09-09-cyberbride-character-design.md):
+#   1. THE HOURGLASS GHOST — Venus de Willendorf hips WIDER than the bust,
+#      both wider than the waist, with the chrome ribcage and spine reading
+#      through the torso. From behind she is hips and spine; from the front,
+#      breasts and pelvis.
+#   2. THE GRIN — a row of chunky fangs (the cyclops' teeth, scaled to a
+#      female head) over a dark maw, plus two red glowing eyes. The one
+#      saturated accent on a grey body.
+#   3. THE CHROME — not authored here at all: skull, ribs, spine, pelvis and
+#      limb bones are the kit (see its header). What the .blob owes the kit
+#      is a body thin enough in the right places for the ghost to read, and
+#      an interior `bones` block so WOUNDS also reveal anatomy the usual way.
+#
+# FEMALE, NOT THE SCHOOLGIRL. The schoolgirl herself is ruled out by the
+# brief ("she isnt really scary or a monster"): her FRAME is what ports (the
+# upright dead-straight skeleton, the strand hair), and the widow's
+# hourglass is the proportion budget. What makes her a monster: corpse
+# palette, the maw, the ears, the glow, and the flesh being see-through.
+#
+# NUDE EXCEPT THE SKIRT. The Willendorf read and the rib ghost both need a
+# bare torso — any blouse would hide the two things she exists for. The
+# burial skirt (a warp shell, the schoolgirl-described skirt pattern in
+# funeral grey) starts at the waist and ends mid-thigh.
+
+model cyberbride
+  height 1.72
+  # humanoid | digitigrade. Checked, not decorative — see blob-checks.ts.
+  stance humanoid
+
+skeleton
+  # The female/soldier vertical budget, one centimetre taller than the
+  # schoolgirl: root at 0.86 so the leg chain (0.42 + 0.415 below the pelvis
+  # tail at 0.96) lands the ankle at 0.125, legs just under half the
+  # standing height. Ordinary-human scale like the rest of the cast.
+  root pelvis at 0.86 len=0.10
+
+  # Dead upright. The zombie owns the stoop, the goblin the hunch; she was
+  # dressed for a wedding and the machine holds her pose forever.
+  bone spine1 parent=pelvis dir=up pitch=0 len=0.15
+  bone chest  parent=spine1 dir=up pitch=0 len=0.15
+  bone spine2 parent=chest  dir=up pitch=0 len=0.06
+  bone neck   parent=spine2 dir=up pitch=0 len=0.08
+  # Carries the face block: at=0.55 puts the cranium centre at ~1.52, chin
+  # ~1.45, flesh crown ~1.61; the hair tops at ~1.64.
+  bone skull  parent=neck   dir=up pitch=2 len=0.22
+
+  mirror
+    # Shoulder socket at x ~0.104, y ~1.34. The goblin lesson: shoulder reach
+    # is a function of chest width — the yoke here is half-width ~0.072, so
+    # 0.024/0.080 lands the socket just proud of it, and NARROW: her first
+    # draft (0.028/0.095, the schoolgirl's numbers) left the deltoid balls
+    # 23 mm of air off the yoke and the arms failed their fuse probe. Her
+    # shoulders are the narrowest in the cast.
+    bone clavicle parent=spine2  side=0.024 dir=side  len=0.080
+    # Arms hang DOWN and OUT (tilt 16, forearm pitched 18 forward) — the
+    # schoolgirl's fog-line lesson applies double on a bare torso. Three
+    # collisions to clear, in the order the probes found them: the mounds'
+    # widest slice (slimmed instead), the HIP ellipsoid's outer shoulder at
+    # y ~0.91 (tilt: at the schoolgirl's 9 the forearm inner face sat ON
+    # it), and the skirt's hem rim (shortened instead). The forward forearm
+    # is also just her rest pose: hands a little in front of the thighs.
+    bone upperarm parent=clavicle dir=down tilt=16 pitch=2  len=0.24
+    bone forearm  parent=upperarm dir=down tilt=8 pitch=18 len=0.21
+    bone hand     parent=forearm  dir=down pitch=8         len=0.09
+    # Legs: dead straight with a whisper of outward slant. side=0.062 —
+    # slightly wider than the schoolgirl's 0.058 because the hips they hang
+    # from are wider (0.130 vs her 0.104).
+    bone thigh    parent=pelvis dir=down tilt=2 side=0.062 len=0.42
+    bone shin     parent=thigh  dir=down tilt=2            len=0.415
+    # The foot bone only positions the foot prims (the house pattern).
+    bone foot     parent=shin   dir=fwd                    len=0.12
+  end
+
+body
+  # ============================================================
+  # TORSO — the Willendorf read. Every mass here is body; the only garment
+  # is the skirt shell further down. Skin is corpse-pale (see palette).
+  # ============================================================
+  # HIPS — the widest thing on her (half-width 0.118*1.30 = 0.153), the
+  # beat the whole figure hangs from. A SHORT band (tall 0.62): the first
+  # draft was a tall barrel whose widest slice hid UNDER the skirt hem, so
+  # the front view read slim legs under a dark apron. The band's widest
+  # line (y ~0.83) now sits bare below the hem (0.905) and IS the
+  # silhouette there. Eyeballed against the Willendorf brief; no mesh.
+  blob torso on pelvis at=0.70 r=0.118 wide=1.30 tall=0.62 deep=0.86 blend=0.008
+  # BUTTOCKS — two back mounds so the profile reads as a shelf, not an egg.
+  blob torso on pelvis at=0.55 offset=(0.052,0,-0.052) r=0.066 deep=1.00 blend=0.008 both
+  # BELLY — soft and convex (deep 0.90 keeps it proud in profile), cinched
+  # only a little at the top: the Willendorf waist is SOFT, not the widow's
+  # wasp. 0.082 falling to 0.068 where the skirt waistband sits.
+  bar  torso on spine1 from=0.30 to=1.00 r=0.082 r2=0.068 deep=0.90 blend=0.008
+  # RIBCAGE — WIDER AT THE TOP than the belly below it (the soldier
+  # pot-belly lesson runs forward: his taper ran backwards and read as an
+  # egg). 0.064 at the midriff to 0.086 under the shoulders.
+  bar  torso on chest  from=0.05 to=0.80 r=0.064 r2=0.086 deep=0.85 blend=0.008
+  # Yoke: chest top to the neck.
+  bar  torso on spine2 from=0.00 to=0.90 r=0.072 r2=0.044 deep=0.78 blend=0.006
+
+  # ============================================================
+  # THE BREASTS — the brief's "oversized grotesque mammary glands like the
+  # venus de willendorf". Two mounds, each a drooped cone: base r=0.054
+  # (10.8 cm across, near double the schoolgirl's 0.052 mounds on a body
+  # only 2 cm taller), the tip= pointing DOWN and FORWARD so the mass sags
+  # the way the Venus's do rather than sitting as spheres bolted on.
+  # Centred at x +-0.038, z +0.042, seated LOW on the chest (at=0.42). Two
+  # drafts failed before this one, both to the ARMS: the first rode high and
+  # wide (r 0.058 at +-0.048, at=0.62) and its upper poles swallowed the
+  # deltoid balls; the second cleared the deltoid but its widest slice
+  # kissed the upper-arm shaft at tilt 13. at=0.42 drops the mass below the
+  # shaft's inner face and r 0.052 keeps the outer reach at 0.091. It is
+  # still near double the schoolgirl's mounds on a body 2 cm taller, and
+  # inside the hips (0.130) — the Willendorf taper is hips>bust, and it is
+  # also what keeps her reading female rather than simply round.
+  # ============================================================
+  blob torso on chest  at=0.62 offset=(0.052,0,0.050) tip=(0.010,-0.056,0.030) r=0.060 r2=0.052 wide=1.02 deep=0.95 blend=0.008 both
+
+  # ============================================================
+  # THE BURIAL SKIRT — one flared warp shell, funeral grey — pale hexes, not mid: under this key a mid grey renders BLACK (6a6460 read as wet tar, 8a847c barely better), so the cloth is c8c2b6 and leans on shading for its depth. Waist to UPPER
+  # THIGH (hem y ~0.90, just under the hip line). It started mid-thigh with
+  # a 0.19 hem and the daylight probe caught it twice: the cone's slant
+  # wrapped the resting forearm and the hanging HAND sat 19 mm inside its
+  # surface. A dead woman's shift is short anyway — the Venus reads as
+  # hiked-up lace, not a ballgown — and above the hands the arms keep their
+  # air. Waist r 0.080 stands clear of the belly bar (0.068 at the
+  # waistband); the warp folds run vertically (zero on Y freezes that sine
+  # axis) and sway in the same wind the hair strands ripple in. THE CLIP IS
+  # WORLD Y (sdShellWrap's dPlane = 0.905 - y): it sits 5 mm above the tip
+  # end (y 0.900) so it rounds the hem AND cuts the mirror lobe a shell
+  # grows below its own cone end — the first clip value (-0.700, copied
+  # from the schoolgirl without doing this arithmetic) left that lobe
+  # hanging 20 cm below the hem, and the daylight probe caught the forearm
+  # wearing it. Hem 0.134
+  # (x1.12 = 0.150 half-width): the first hem, 0.190, wrapped the hanging
+  # hand; even 0.150 put its RIM under the resting forearm's inner face —
+  # the shift hangs straight from the hip, not flared.
+  # ============================================================
+  shell torso on spine1 at=0.580 r=0.080 r2=0.134 tip=(0,-0.147,0) wide=1.12 tall=0.40 deep=0.85 thick=0.005 warp=0.010 warpFreq=(20,0,20) clip=(0,-1,0) clipd=-0.905 rim=0.008 blend=0.006 color=c8c2b6 gloss=0.12
+
+  # ============================================================
+  # ARMS — slim rubber-hose, bare the whole way (schoolgirl port; the kit
+  # adds arm bones UNDER them, and nothing covers them).
+  # ============================================================
+  blob arm on clavicle at=1.00 offset=(0,-0.020,0) r=0.028 tall=0.85 blend=0.005 mirror core
+  bar  arm on upperarm from=0.05 to=0.98 r=0.029 r2=0.023 blend=0.0045 mirror
+  blob arm on forearm  at=0.00 r=0.023 blend=0.0045 mirror
+  bar  arm on forearm  from=0.05 to=0.95 r=0.022 r2=0.018 blend=0.004 mirror
+  # at=0.32, not the schoolgirl's 0.50: the shipped-character strandedOf
+  # sweep caught the mitt FLOATING 17 mm clear of the forearm's end cap (her
+  # forearm bar is a hair shorter than the bone, and the wrist had nothing
+  # in it). Slid back along the hand bone until the probe reads fused.
+  blob arm on hand at=0.32 offset=(0,0,0.008) r=0.026 wide=0.85 tall=1.10 deep=1.20 blend=0.004 mirror
+
+  # ============================================================
+  # LEGS — bare from hem to foot; heavy thigh (the Willendorf legs are
+  # strong) tapering hard to the ankle.
+  # ============================================================
+  blob leg on thigh at=0.00 r=0.072 deep=1.05 blend=0.006 mirror core
+  bar  leg on thigh from=0.02 to=1.00 r=0.074 r2=0.042 deep=1.05 blend=0.005 mirror
+  blob leg on shin  at=0.00 r=0.042 deep=1.05 blend=0.005 mirror
+  bar  leg on shin  from=0.02 to=0.99 r=0.042 r2=0.028 blend=0.005 mirror
+  # Bare corpse foot (no boots): heel behind the ankle, toe forward, tread
+  # on the floor (centre y 0.062, half-tall 0.058 -> sole ~0.004).
+  blob leg on foot at=0.00 r=0.044 wide=1.10 tall=1.10 deep=1.28 blend=0.006 offset=(0,-0.052,0.012) mirror
+
+  # ============================================================
+  # HEAD — neck, cranium (the face block's ellipsoid carries the face),
+  # the MAW, the EARS, the HAIR. No painted eyes/nose: the flat sheet the
+  # registry gives her paints the features (three dispatches proved painted
+  # prim faces read as a visor band); the two exceptions below are the
+  # glowing eye prims (small, round, seated IN the face — the
+  # gargoyle/cyberdemon precedent) and the teeth, which are GEOMETRY like
+  # every maw in the cast.
+  # ============================================================
+  # Neck: slim, between the collar line and the jaw.
+  bar head on neck from=0.10 to=0.90 r=0.030 deep=1.15 blend=0.004
+
+  # ---- THE MAW -----------------------------------------------------------
+  # Dark interior FIRST (the gnasher lesson: teeth over a dark interior read
+  # as a mouth; teeth over skin read as a comb). A flattened slab seated
+  # behind the jaw surface at mouth height (cranium centre 1.52, chin
+  # ~1.45, mouth line ~1.468 -> local y -0.052). The face ellipsoid's front
+  # at that height is z ~0.073: the maw's front (z +0.0745) sits ON the lip
+  # line — a dark OPENING. The first draft sat at z 0.046, wholly INSIDE
+  # the flesh, and the mouth vanished; teeth bases at z 0.068-0.075 ON the
+  # lip read as a pale SNOUT in profile. Inside for the roots, proud for
+  # the tips, dark at the line — that is the whole recipe.
+  blob head on skull at=0.55 offset=(0,-0.052,0.058) r=0.030 wide=1.15 tall=0.30 deep=0.55 blend=0.003 color=1c0d0c gloss=0.30
+  # THE UPPER FANGS — five chunky spikes (the cyclops' row, scaled ~0.3x
+  # for a female head: his r 0.030/r2 0.007 on a 0.5 m skull, these
+  # r 0.009/r2 0.0015 on 0.09 semi-axes). ROOTS seated inside the jaw
+  # (z 0.055-0.060 < the 0.073 lip line), TIPS angling down-and-FORWARD
+  # past it (z ~0.078-0.083 at y ~-0.075 local): the second draft pointed
+  # the tips DOWN-and-BACK (z -0.005) and every tooth hid inside the
+  # flesh — a mouth needs its teeth PROUD of the lip line to read at all.
+  # Painted pale bone so they read against the dark maw.
+  blob head on skull at=0.55 r=0.009 r2=0.0015 wide=1.30 blend=0.002 offset=(-0.024,-0.046,0.055) tip=(0.002,-0.026,0.023) color=d8cdae gloss=0.6
+  blob head on skull at=0.55 r=0.009 r2=0.0015 wide=1.30 blend=0.002 offset=(-0.012,-0.049,0.058) tip=(0.001,-0.025,0.021) color=d8cdae gloss=0.6
+  blob head on skull at=0.55 r=0.010 r2=0.0015 wide=1.30 blend=0.002 offset=(0.000,-0.050,0.060) tip=(0.000,-0.026,0.022) color=d8cdae gloss=0.6
+  blob head on skull at=0.55 r=0.009 r2=0.0015 wide=1.30 blend=0.002 offset=(0.012,-0.049,0.058) tip=(-0.001,-0.025,0.021) color=d8cdae gloss=0.6
+  blob head on skull at=0.55 r=0.009 r2=0.0015 wide=1.30 blend=0.002 offset=(0.024,-0.046,0.055) tip=(-0.002,-0.026,0.023) color=d8cdae gloss=0.6
+  # THE LOWER FANGS — a shorter pair rising from the jawline BETWEEN the
+  # uppers (an interlocking underbite, the gnasher overlap), tips reaching
+  # the upper row's bases. `both` mirrors the pair.
+  blob head on skull at=0.55 r=0.008 r2=0.0012 wide=1.30 blend=0.002 offset=(-0.018,-0.066,0.050) tip=(0.001,0.014,0.024) both color=d8cdae gloss=0.6
+
+  # ---- THE EYES — two red glows seated in the face -----------------------
+  # Painted prims, round and small, poking ~5 mm THROUGH the ellipsoid's
+  # front (z reach ~0.091 at eye height): the first draft sat 12 mm inside
+  # (z 0.079) and was INVISIBLE — buried prims do not glow through flesh.
+  # The GLOW_PRIMS allowlist pins exactly these two (pack.test.ts).
+  blob head on skull at=0.55 offset=(0.026,0.006,0.086) r=0.0105 blend=0.002 both color=ff2200 glow=0.9
+
+  # ---- THE EARS — imp points (the goblin's ear, scaled to this skull) ----
+  # r2 is a true point; tip= sweeps it out and UP out of the cranium
+  # (half-width 0.068), chamfer creases the base in. The base at x 0.058 is
+  # INSIDE the cranium (that is what attaches it); the point stands ~45 mm
+  # clear of the head.
+  blob head on skull at=0.58 r=0.024 r2=0.002 wide=0.80 deep=0.44 blend=0.0020 chamfer offset=(0.058,0.008,-0.004) tip=(0.075,0.088,-0.016) both
+
+  # ============================================================
+  # THE HAIR — schoolgirl-described's three-bundle strand pattern, in
+  # corpse ash-grey. The crown stays a MASS (a hair silhouette is a volume
+  # strands cannot make); every hanging EDGE is strands, and the curtains
+  # run LONG (tip y -0.150 vs her -0.116): a corpse bride's hair keeps
+  # growing. All strand counts <= 16 (STRAND_COUNT_MAX); wave <= 0.27.
+  # ============================================================
+  # Crown mass — a bell, slightly wider than tall, sitting high on the
+  # cranium (0.084 against the 0.072 face radius; tops out ~1.65). The
+  # first crown (r 0.079, tall 0.84, 8e8a86) read as a DARK CAP with a
+  # ring of skull showing under it: too small and too dark — pale grey
+  # hexes render dark under this key, and the curtains' roots left a
+  # skin gap at the back.
+  blob head on skull at=0.55 offset=(0,0.032,-0.006) r=0.084 wide=1.04 tall=0.95 deep=1.12 blend=0.006 color=9a948c gloss=0.18
+  # Blunt fringe over the brow, stopping at the eyebrow line (the decal
+  # paints the true hairline, so the geometry stays back of it).
+  blob head on skull at=0.55 offset=(0,0.050,0.054) tip=(0,-0.060,0.014) r=0.033 wide=1.25 deep=0.72 strand=12 wave=0.13 cycles=2 fat=0.80 blend=0.004 color=9a948c gloss=0.20
+  # Side curtains — temple to BELOW the jaw (widow's-peak to shoulder
+  # length), tapered, mirrored.
+  blob head on skull at=0.55 offset=(0.058,0.028,0.004) tip=(0.004,-0.150,0.008) r=0.030 r2=0.024 wide=0.86 deep=1.18 strand=8 wave=0.17 cycles=2.5 fat=0.80 blend=0.005 both color=9a948c gloss=0.22
+  # The nape — short strands closing the underside at the neck.
+  blob head on skull at=0.55 offset=(0,0.014,-0.054) tip=(0,-0.096,-0.004) r=0.034 r2=0.028 wide=1.05 deep=0.80 strand=8 wave=0.14 cycles=2 fat=0.80 blend=0.005 color=9a948c gloss=0.22
+
+# ============================================================
+# FACE BLOCK — a small oval skull under the hair: narrow jaw, light brow.
+# The schoolgirl-derived female numbers, tuned only where her comments
+# recorded a solve (headWidth/jawWidth). The face ITSELF is the registry's
+# flat sheet; no painted features.
+# ============================================================
+face
+  headRadius 0.072
+  headWidth  0.94
+  headHeight 1.26
+  headDepth  1.24
+  jawWidth   0.76
+  jawHeight  0.72
+  jawDrop    0.056
+  jawJut     0.020
+  noseLength 0.034
+  noseWidth  0.90
+  noseDrop   0.050
+  browHeavy  0.0
+  browRise   0.0
+  headBlend  0.005
+
+# ============================================================
+# INTERIOR BONES — what wounds and the melt reveal (the soldier's pattern:
+# ratio 0.38 auto-derives the limb bones; the two places players actually
+# shoot are authored). The KIT'S chrome is what reads through intact
+# translucent skin; THESE pale rows are what a wound crater finds when the
+# flesh is torn open. Rib layout is the soldier's three paired two-piece
+# hoops + sternum + rear spine, scaled 0.72x to this chest (his cage spans
+# +-0.132; the cyberbride ribcage bar is 0.086 at the top).
+# ============================================================
+bones
+  ratio 0.38
+
+  # SKULL — the cranium only. The soldier pairs it with an authored jaw
+  # prim, but his chin is buried in a much bigger face ellipsoid; HER chin
+  # (face block jawDrop) hangs BELOW the ellipsoid in a lip of flesh far
+  # too thin to hide a 4 mm-walled bone prim — two drafts breached it and
+  # bone shows through intact skin. The jaw's reveal is the KIT's chrome
+  # jaw, seen through the skin; wounds below the cranium show the tissue
+  # ramp like any shallow wound.
+  blob head on skull at=0.45 r=0.048 wide=0.94 tall=1.10 deep=1.06
+
+  # RIBCAGE — three paired two-piece hoops, `both` keeps them symmetric.
+  # SIZED TO THIS CAGE, not scaled from the soldier's: his tips reached
+  # +-0.132 inside a 0.174 half-width chest; this ribcage bar is 0.064-0.086
+  # half-width at the rib rows, so the tips stop at +-0.054..0.058 with the
+  # 4 mm skin margin — the first draft carried 0.72x of HIS numbers and
+  # fifteen bone prims breached the flesh surface.
+  bar torso on chest from=0.78 to=0.78 offset=(0,0,-0.036) tip=(0.054,-0.006,0.026) bend=(0.010,0,0.010) r=0.006 both
+  bar torso on chest from=0.78 to=0.78 offset=(0.054,-0.006,-0.004) tip=(-0.054,0.006,0.044) bend=(0,0,0.010) r=0.006 both
+  bar torso on chest from=0.55 to=0.55 offset=(0,0,-0.038) tip=(0.058,-0.008,0.028) bend=(0.011,0,0.012) r=0.007 both
+  bar torso on chest from=0.55 to=0.55 offset=(0.058,-0.008,-0.004) tip=(-0.058,0.008,0.046) bend=(0,0,0.012) r=0.007 both
+  bar torso on chest from=0.32 to=0.32 offset=(0,0,-0.036) tip=(0.052,-0.012,0.026) bend=(0.009,0,0.009) r=0.006 both
+  bar torso on chest from=0.32 to=0.32 offset=(0.052,-0.012,-0.005) tip=(-0.052,0.012,0.044) bend=(0,0,0.009) r=0.006 both
+  # STERNUM and REAR SPINE — inside the bar's z reach (deep 0.85 gives
+  # ~0.054-0.073 of half-depth at these heights; the drafts at z +0.066 /
+  # -0.058 poked out front and back).
+  bar torso on chest from=0.28 to=0.88 r=0.008 offset=(0,0,0.046)
+  bar torso on chest from=0.18 to=0.95 r=0.010 offset=(0,0,-0.044)
+
+# ============================================================
+# PALETTE — corpse bride skin. The zombie look the brief asks for is the
+# cast's latex-corpse sheen; hers is that, killed: cooler and greyer than
+# the schoolgirl's warm 0.815/0.586/0.432, with a BRUISE-GREEN mottle (a
+# hue away from the base, per the reference.md rule — a darker-only mottle
+# is invisible) at an amplitude that reads as rot patches, not freckles.
+# ALL VALUES EYEBALLED — no reference mesh; every number here is the
+# starting point the frames will judge.
+# ============================================================
+palette
+  # sRGB ~ (200,178,170) — pale corpse pink-grey, lighter than it will
+  # render once translucency dims it; the frames will pull it if it floats.
+  baseColor     0.55 0.44 0.41
+  deepColor     0.45 0.07 0.07
+  charColor     0.16 0.10 0.09
+  specIntensity 0.38
+  specRoughness 0.45
+  fresnelBoost  0.9
+  # Backlit scatter, well above the schoolgirl's 0.22: she is supposed to
+  # read as thin. NOTE this is the fake-SSS term, NOT the see-through
+  # alpha — that is registry fleshAlpha + sdf-layer's ghost pass.
+  translucency  0.35
+  surfaceNoiseAmp    0.10
+  silhouetteNoiseAmp 0.02
+  wetness       0.45
+  mottleAmp     0.30
+  mottleScale   2.2
+  mottleColor   0.26 0.33 0.20

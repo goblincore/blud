@@ -451,6 +451,7 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
     'cyberdemon.blob': 2,
     'gnasher.blob': 2,
     'bloatmaw.blob': 2,
+    'cyberbride.blob': 2,
   };
 
   it('every shipped character packs primClip.w all-zero EXCEPT the named glow authors, at their exact authored count', () => {
@@ -464,6 +465,8 @@ describe('primClip row — w = per-prim glow (hard-surface task 3)', () => {
     // pins them at exactly two, so this allowlist and that test agree.
     // gnasher: two small amber eyes under a heavy brow (2026-09-08), also
     // pinned at exactly two in gnasher-blob.test.ts.
+    // cyberbride: two red eyes seated in the face mask (2026-09-09), also
+    // pinned at exactly two in cyberbride-blob.test.ts.
     for (const [name, raw] of Object.entries(CHARACTERS)) {
       const built = buildBody(compileBlob(parseBlob(raw)), DEFAULT_BUILD_OPTS);
       const packed = packBody(built);

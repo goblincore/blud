@@ -1,0 +1,233 @@
+# Cyberbride kit — the CHROME half: a full endoskeleton worn under
+# translucent flesh. The flesh (characters/cyberbride.blob) composites at
+# registry fleshAlpha 0.78 over the polygonal pass, so this skeleton ghosts
+# through her skin everywhere skin covers it — the terminator brief. Wounds
+# also reveal it where they cut deep enough to beat the flesh depth.
+#
+# WHY TWO LANGUAGES FOR ONE CHARACTER: see soldier-kit.wam's header — flesh
+# in .blob because blended SDFs are round, the machine in .wam because every
+# joint, rib band and jaw edge needs hard geometry. Unlike the other kits,
+# which are ARMOUR standing OFF the body, this one is deliberately BURIED:
+# every part is sized to ~0.90-0.95 of the flesh it hides in, because a
+# buried skeleton that pokes through intact skin is a modelling error (the
+# .blob's bone-breach check exists for exactly that). Judge the fit through
+# the translucency, not as a naked frame — though ?fleshAlpha=1 in the lab
+# shows the bare machine for exactly that check.
+#
+# THE SKELETON BELOW MIRRORS characters/cyberbride.blob AND MUST TRACK IT.
+# Two conversions apply, neither optional (soldier-kit.wam's header is the
+# spec):
+#
+#   * UNITS. WAM lengths are fractions of `height`; .blob's are metres. Her
+#     height is 1.72, so every number here is the .blob metre value / 1.72.
+#   * PITCH SIGN ON `down` BONES. WAM's pitch tips an `up` bone forward and
+#     a `down` bone BACKWARD; .blob's always carries toward +z. Up bones
+#     (spine1, chest, spine2, neck, skull) share pitch verbatim; down bones
+#     (upperarm, forearm, hand, thigh, shin) NEGATE. Her .blob carries
+#     pitch 2 on upperarm, 10 on forearm, 8 on hand -> -2/-18/-8 here.
+#     tilt never flips.
+#
+# BUILD:  scripts/build-wam-kit.sh cyberbride
+#   -> public/assets/lab/cyberbride-kit.gltf, registered `kit:` in
+#   character-registry.ts. WAM lives outside this repo, so the compiled
+#   glTF is committed.
+#
+# EXPECTED LINTS, correct to ignore: this is the INSIDE of the character —
+# the pelvis/ribs/jaw sit wholly inside authored flesh, so lints about
+# geometry-near-no-bone or parts overlapping each other are the design, not
+# bugs. The lowest-geometry lint is satisfied by the foot frames near y=0.
+
+model cyberbride-kit
+  height 1.72
+  # chunky = 8-sided lofts, matching the cast's kits: faceted chrome under
+  # smooth raymarched flesh is the contrast that makes the ghost read as
+  # MACHINE rather than as a second body.
+  style chunky
+
+palette
+  # Polished gun chrome — the Terminator read. Kept BRIGHT: it lives behind
+  # flesh at 78% opacity, and a dark alloy would vanish entirely.
+  chrome   #c8ccd2
+  # Joints, vertebrae, the jaw hydraulics — the dark alloy that makes the
+  # bright bone read as assembly rather than as a statue.
+  darkiron #4a4f56
+
+skeleton
+  # .blob's `root pelvis at 0.86 len=0.10` is a BONE from crotch to hip
+  # line; WAM's root is a bare POINT, so `hips` restores the missing
+  # segment (0.10/1.72) and every .blob `parent=pelvis` becomes
+  # `parent=hips`. 0.86/1.72 = 0.5 exactly.
+  root pelvis at 0.5
+  bone hips   parent=pelvis dir=up len=0.05814
+  bone spine1 parent=hips   dir=up pitch=0 len=0.08721
+  bone chest  parent=spine1 dir=up pitch=0 len=0.08721
+  bone spine2 parent=chest  dir=up pitch=0 len=0.03488
+  bone neck   parent=spine2 dir=up pitch=0 len=0.04651
+  bone skull  parent=neck   dir=up pitch=2 len=0.12791
+  mirror
+    # clavicle is dir=side (pitch is a no-op there); foot is dir=fwd (pitch
+    # and tilt are inert after normalisation) — both hand-written, matching
+    # .blob verbatim. down-bone pitches NEGATED from .blob: upperarm
+    # 2->-2, forearm 18->-18, hand 8->-8.
+    bone clavicle parent=spine2  side=0.01395 dir=side len=0.04651
+    bone upperarm parent=clavicle dir=down tilt=16 pitch=-2  len=0.13953
+    bone forearm  parent=upperarm dir=down tilt=8  pitch=-18 len=0.12209
+    bone hand     parent=forearm  dir=down        pitch=-8  len=0.05233
+    bone thigh    parent=hips     side=0.03605 dir=down tilt=2 len=0.24419
+    bone shin     parent=thigh    dir=down tilt=2 len=0.24128
+    bone foot     parent=shin     dir=fwd len=0.06977
+  end
+
+parts
+  mirror
+    # ============ ARMS ============
+    # SHOULDER BALL at the socket (x +-0.104, y ~1.32 in .blob metres) —
+    # 65 mm of chrome where the deltoid flesh is thinnest.
+    attach shoulder bone=upperarm at=0.0 kind=sphere size=0.0378 material=chrome
+    # HUMERUS — a tapered rod down the upperarm, inside the flesh (flesh
+    # r 0.029-0.023 m; the bone peaks at 0.029: 0.9x).
+    loft humerus bone=upperarm at=0.08 dir=down len=0.1453 material=chrome
+      ring 0.00 w=0.0330 d=0.0330
+      ring 0.50 w=0.0280 d=0.0280
+      ring 1.00 w=0.0230 d=0.0230
+      cap start=none end=none
+    # ELBOW BALL at the forearm's head.
+    attach elbow bone=forearm at=0.0 kind=sphere size=0.0291 material=darkiron
+    # RADIUS + ULNA — two rods, the ulna a thinner rod offset toward the
+    # back of the forearm; two tubes read as ASSEMBLY where one reads as a
+    # robot arm from a cartoon.
+    loft radius bone=forearm at=0.05 dir=down len=0.1337 material=chrome
+      ring 0.00 w=0.0250 d=0.0250
+      ring 1.00 w=0.0180 d=0.0180
+      cap start=none end=none
+    loft ulna bone=forearm at=0.05 dir=down len=0.1337 offset=(-0.0058,0,-0.0052) material=darkiron
+      ring 0.00 w=0.0174 d=0.0174
+      ring 1.00 w=0.0116 d=0.0116
+      cap start=none end=none
+    # HAND — a chrome metacarpal plate in the mitt flesh (the .blob hand is
+    # a blunt mitt; the plate gives it a palm/ridge read through the skin),
+    # plus knuckle bar at the plate's far edge.
+    attach palm bone=hand at=0.40 kind=box offset=(0,0,0.005) size=0.007 w=0.024 h=0.007 d=0.030 material=chrome
+    attach knuckles bone=hand at=0.80 kind=box offset=(0,0,0.009) size=0.005 w=0.023 h=0.005 d=0.008 material=darkiron
+
+    # ============ LEGS ============
+    # HIP BALL at the socket (x +-0.062).
+    attach hipjoint bone=thigh at=0.0 kind=sphere size=0.0407 material=darkiron
+    # FEMUR — the heaviest rod in the rig; the thigh flesh is 0.074 m
+    # radius at the top, so the bone reads as a column inside a column.
+    loft femur bone=thigh at=0.06 dir=down len=0.2267 material=chrome
+      ring 0.00 w=0.0465 d=0.0465
+      ring 0.50 w=0.0349 d=0.0349
+      ring 1.00 w=0.0267 d=0.0267
+      cap start=none end=none
+    # KNEE BALL at the shin's head — the patina of a runner machine.
+    attach knee bone=shin at=0.0 kind=sphere size=0.0331 material=chrome
+    # TIBIA + FIBULA, as the arm: main rod + thin back rod.
+    loft tibia bone=shin at=0.05 dir=down len=0.2209 material=chrome
+      ring 0.00 w=0.0331 d=0.0331
+      ring 1.00 w=0.0174 d=0.0174
+      cap start=none end=none
+    loft fibula bone=shin at=0.05 dir=down len=0.2209 offset=(0.0058,0,0.0041) material=darkiron
+      ring 0.00 w=0.0157 d=0.0157
+      ring 1.00 w=0.0110 d=0.0110
+      cap start=none end=none
+    # ANKLE + FOOT FRAME — a flat plate under the foot flesh with two toe
+    # caps, so the bare corpse foot reads skeletal from below.
+    attach ankle bone=foot at=0.0 kind=sphere size=0.0233 material=darkiron
+    attach footframe bone=foot at=0.45 kind=box offset=(0,-0.048,0.004) size=0.012 w=0.050 h=0.014 d=0.080 material=chrome
+    attach toecap bone=foot at=0.95 kind=box offset=(0,-0.056,0.020) size=0.010 w=0.040 h=0.012 d=0.018 material=darkiron
+
+    # ============ PELVIS — the iliac wings ============
+    # Two plates flaring up-and-out from the hip line, inside the hip band
+    # flesh (half-width 0.153 m): the wings peak at x ~0.11, y ~0.96, so
+    # they ghost through the hip skin from the front and crown the pelvis
+    # from behind. frame=fwd so d is the plate THICKNESS in profile.
+    loft wing bone=hips at=0.45 dir=up tilt=20 len=0.0581 offset=(0.029,0,-0.006) frame=fwd shape=squarish material=chrome
+      ring 0.00 w=0.044 d=0.016
+      ring 0.45 w=0.064 d=0.012
+      ring 1.00 w=0.086 d=0.009
+      cap start=flat end=flat
+
+
+  end
+
+  # NO CLAVICLE BARS. The first draft had chrome rings riding the clavicle
+  # bones — but the flesh yoke ends at y ~1.26 and she is NUDE above it, so
+  # the bars had nothing to hide in and the opaque A/B frame caught them as
+  # two bright sticks lying ON the shoulders. The shoulder balls carry the
+  # machine read at that height; the clavicles stay flesh-only.
+
+  # ============ RIBCAGE — the centrepiece ============
+  # One banded basket down the chest bone (y 1.267 -> 1.174 in .blob
+  # metres), inside the ribcage bar's flesh (half-width 0.064-0.086, deep
+  # 0.85). The rib READ is alternating ring widths: smooth-min interpolation
+  # between a wide and a narrow ring makes a waist, and eight of them make
+  # RIBS — the same trick the cuirass uses for plate, pointed at bone.
+  # cap none: an open basket, so the silhouette from below is ribs, not a
+  # bathtub.
+  loft ribcage bone=chest at=1.05 dir=down len=0.0930 frame=fwd shape=squarish material=chrome
+    ring 0.00 w=0.075 d=0.057
+    ring 0.14 w=0.082 d=0.062
+    ring 0.28 w=0.076 d=0.058
+    ring 0.42 w=0.084 d=0.064
+    ring 0.56 w=0.078 d=0.060
+    ring 0.70 w=0.083 d=0.063
+    ring 0.84 w=0.075 d=0.058
+    ring 1.00 w=0.064 d=0.050
+    cap start=none end=none
+
+  # STERNUM — a blade down the basket's front, standing just inside the
+  # breastbone flesh (the chest bar's z front is ~0.055-0.073 m).
+  attach sternum bone=chest at=0.70 kind=box offset=(0,0,0.030) size=0.012 w=0.021 h=0.050 d=0.008 material=chrome
+
+  # ============ SPINE — vertebrae up the back ============
+  # Knuckles of dark alloy at z -0.046, one per ~5 cm of column: the
+  # segmented read is what makes it a SPINE and not a rod. Three on the
+  # chest, two on spine1, one each on spine2 and the neck.
+  attach vertC1 bone=chest  at=0.15 kind=box offset=(0,0,-0.046) size=0.007 w=0.016 h=0.013 d=0.009 material=darkiron
+  attach vertC2 bone=chest  at=0.50 kind=box offset=(0,0,-0.047) size=0.007 w=0.017 h=0.013 d=0.009 material=darkiron
+  attach vertC3 bone=chest  at=0.85 kind=box offset=(0,0,-0.046) size=0.0065 w=0.016 h=0.012 d=0.009 material=darkiron
+  attach vertL1 bone=spine1 at=0.30 kind=box offset=(0,0,-0.045) size=0.012 w=0.029 h=0.023 d=0.016 material=darkiron
+  attach vertL2 bone=spine1 at=0.70 kind=box offset=(0,0,-0.044) size=0.007 w=0.016 h=0.013 d=0.009 material=darkiron
+  attach vertT1 bone=spine2 at=0.50 kind=box offset=(0,0,-0.042) size=0.0065 w=0.015 h=0.012 d=0.009 material=darkiron
+  attach vertN1 bone=neck   at=0.50 kind=box offset=(0,0,-0.030) size=0.006 w=0.013 h=0.010 d=0.008 material=darkiron
+
+  # ============ SKULL ============
+  # THE CRANIUM DOME — an 8-sided ellipsoid just inside the face
+  # ellipsoid's crown (face semi-x 0.068; the dome peaks at 0.070), so the
+  # forehead and crown ghost chrome through the thinnest skin she has. The
+  # eye kind is WAM's low-poly ellipsoid: chunky is the point.
+  attach cranium bone=skull at=0.55 kind=eye offset=(0,0.004,-0.004) size=0.050 w=0.079 h=0.092 d=0.087 material=chrome
+  # UPPER JAW — a wedge under the dome's front, its face just inside the
+  # lip line (flesh front ~0.073 m at mouth height).
+  attach upperjaw bone=skull at=0.28 kind=box offset=(0,-0.030,0.034) size=0.008 w=0.041 h=0.017 d=0.024 material=chrome
+  # LOWER JAW — the chrome chin, buried in the chin flesh (chin ~1.38 m),
+  # hinged by two dark caps at the sides.
+  attach lowerjaw bone=skull at=0.18 kind=box offset=(0,-0.046,0.028) size=0.007 w=0.034 h=0.013 d=0.020 material=darkiron
+  attach hingeL bone=skull at=0.22 kind=sphere offset=(0.048,-0.026,0.014) size=0.015 material=darkiron
+  attach hingeR bone=skull at=0.22 kind=sphere offset=(-0.048,-0.026,0.014) size=0.015 material=darkiron
+  # Two_lit_sockets: dark rings seated in the face at the glow prims'
+  # positions (x +-0.026, z +0.086) — the SDF eyes glow INSIDE these, so
+  # the light reads as coming from a housing, not from flesh.
+  attach orbitL bone=skull at=0.48 kind=eye offset=(0.026,-0.002,0.046) size=0.016 w=0.019 h=0.019 d=0.014 material=darkiron
+  attach orbitR bone=skull at=0.48 kind=eye offset=(-0.026,-0.002,0.046) size=0.016 w=0.019 h=0.019 d=0.014 material=darkiron
+
+
+  # ============ PUBIS + SACRUM ============
+  # The pelvis basket's front and back closures, inside the hip band.
+  attach pubis bone=hips at=0.30 kind=box offset=(0,-0.004,0.029) size=0.007 w=0.029 h=0.026 d=0.007 material=chrome
+  attach sacrum bone=hips at=0.55 kind=box offset=(0,0,-0.022) size=0.007 w=0.027 h=0.029 d=0.007 material=darkiron
+
+textures
+  # Chrome: bright alloy, quiet vertical brush, ao doing the assembly-line
+  # crevice work. The METAL half of the read lives in kit-overlay.ts's LOOK
+  # table (`chrome`), not here.
+  texture chrome base=#c8ccd2
+    gradient axis=v from=-0.04 to=0.06
+    noise scale=0.10 amount=0.02
+    ao amount=0.14
+  # Darkiron: darker alloy with a little more tooth.
+  texture darkiron base=#4a4f56
+    gradient axis=v from=-0.05 to=0.07
+    noise scale=0.14 amount=0.04
+    ao amount=0.18

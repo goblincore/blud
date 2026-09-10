@@ -37,6 +37,7 @@ import gargoyleBlobSrc from './characters/gargoyle.blob?raw';
 import cyberdemonBlobSrc from './characters/cyberdemon.blob?raw';
 import bloatmawBlobSrc from './characters/bloatmaw.blob?raw';
 import gnasherBlobSrc from './characters/gnasher.blob?raw';
+import cyberbrideBlobSrc from './characters/cyberbride.blob?raw';
 import {
   ZOMBIE_PROFILE, SOLDIER_PROFILE, motionProfileFor, type MotionProfile,
 } from './motion-profile';
@@ -72,6 +73,17 @@ export interface CharacterEntry {
    *  motion-profile.ts; this records WHICH one. Characters without a bespoke
    *  profile get motionProfileFor(name) — the zombie default. */
   profile: MotionProfile;
+  /**
+   * Flesh opacity for the forward SDF layer's ghost pass, 0..1. Absent = 1 =
+   * exactly the historical opaque composite. Below 1, the character's body
+   * marches into the ghost target and composites with src-alpha blending, so
+   * polygonal content BEHIND the flesh surface (her kit, a wall she backs
+   * onto) shows through it — the cyberbride's chrome endoskeleton seen
+   * through skin. Pure data, like everything else here; sdf-layer.ts owns
+   * the rendering. Only the forward path honours it (the deferred renderer
+   * does not, yet).
+   */
+  fleshAlpha?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -266,6 +278,30 @@ export const CHARACTERS: Readonly<Record<string, CharacterEntry>> = {
     kit: '/assets/lab/gnasher-kit.gltf',
     face: ZOMBIE_FLAT,
     profile: motionProfileFor('gnasher'),
+  },
+  cyberbride: {
+    name: 'cyberbride', src: cyberbrideBlobSrc,
+    // THE CHROME HALF: skull, jaw, ribcage, spine, pelvis and limb bones —
+    // a full endoskeleton, compiled from characters/cyberbride-kit.wam by
+    // scripts/build-wam-kit.sh into the committed glTF. It renders in the
+    // polygonal pass UNDERNEATH the flesh; see fleshAlpha for how it stays
+    // visible.
+    kit: '/assets/lab/cyberbride-kit.gltf',
+    // No sheet block and no decal: the face is the flat zombie MASK (a
+    // luminance feature map, not a picture — there is no reference mesh to
+    // bake), with two red glow prims in the sockets and a fang row over a
+    // dark maw. See the .blob header.
+    face: ZOMBIE_FLAT,
+    // THE SEE-THROUGH HALF: her flesh composites at this alpha instead of 1,
+    // so the chrome endoskeleton ghosts through the skin (the terminator
+    // brief). Tuned by eye against the turntable; 1 would hide the kit
+    // entirely, much lower and she stops reading as a body at all.
+    fleshAlpha: 0.78,
+    // The zombie shamble, deliberately — motionProfileFor falls back to it.
+    // The machine wears her like a dress and walks her the way the cast
+    // walks; a bespoke gait is a rig/gameplay change, not part of this
+    // character's authoring task (the cyberdemon precedent).
+    profile: motionProfileFor('cyberbride'),
   },
 };
 

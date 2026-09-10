@@ -1013,7 +1013,17 @@ async function main() {
     // LEGACY ONLY — the deferred mode's SDF producer pass is fed by the
     // router, not by sdf-layer's body list.
     updateVisibleActors();
-    sdfLayer.setBodies(visibleActors.map(a => a.view.object), chunkObjects());
+    // THE GHOST SPLIT: translucent-flesh characters (registry `fleshAlpha`)
+    // march into the SDF layer's ghost target and composite blended, so
+    // their kits show through their skin. The ghost quad takes ONE alpha —
+    // every shipped translucent character shares it by construction.
+    const ghostActors = visibleActors.filter(
+      a => a.character?.entry.fleshAlpha !== undefined && a.character.entry.fleshAlpha < 1);
+    const opaqueActors = visibleActors.filter(a => !ghostActors.includes(a));
+    sdfLayer.setBodies(opaqueActors.map(a => a.view.object), chunkObjects());
+    sdfLayer.setGhostBodies(
+      ghostActors.map(a => a.view.object),
+      ghostActors.length > 0 ? ghostActors[0]!.character!.entry.fleshAlpha! : 1);
     if (gooEnabled && gooLayer) {
       gooLayer.render(camera, () => sdfLayer.render(scene, camera));
     } else {

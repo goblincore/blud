@@ -482,6 +482,9 @@ export interface SdfLayer {
   /** Interlaced scanline fields. Mutually exclusive with half-rate. */
   setFieldStyle(style: FieldStyle): void;
   readonly fieldStyle: FieldStyle;
+  /** The ghost composite's alpha (what setGhostBodies last set, 1 default).
+   *  Read-only knob for capture scripts and the lab console. */
+  readonly ghostAlpha: number;
   /** Back-compat boolean: true selects 'frame'. */
   setFieldMode(on: boolean): void;
   readonly fieldMode: boolean;
@@ -524,6 +527,16 @@ export interface SdfLayer {
    *  (one shared final pass, gated by every body). Call every frame before
    *  render(); with the gate off these lists are simply not walked. */
   setBodies(bodies: THREE.Object3D[], chunks: THREE.Object3D[]): void;
+  /**
+   * Bodies whose flesh is TRANSLUCENT (registry `fleshAlpha` < 1), and the
+   * alpha to composite them at. They march into their own target and
+   * composite with src-alpha blending over the polygonal pass, so meshes
+   * BEHIND the flesh surface show through it (the cyberbride's chrome
+   * endoskeleton). Honoured in the 'off' and 'bodies' field styles; in
+   * 'sdf'/'frame' the ghosts fall back to marching opaquely with everyone
+   * else. An empty list renders exactly as before this existed.
+   */
+  setGhostBodies(bodies: THREE.Object3D[], alpha: number): void;
   /** The accumulated-depth gate. OFF = one march pass, bit-identical to the
    *  pre-task-5 frame. ON = one pass per body, nearest first, each gated and
    *  bounded by the depth every nearer pass recorded. */
@@ -631,6 +644,32 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     type: THREE.FloatType,
     minFilter: THREE.NearestFilter,
     magFilter: THREE.NearestFilter,
+  });
+
+  // THE GHOST TARGET — where TRANSLUCENT flesh (registry `fleshAlpha` < 1)
+  // marches instead. Same encoding as `target` (colour + depth-in-alpha);
+  // different DESTINATION, and the destination is the whole feature: the
+  // opaque composite would fold ghost flesh into the opaque picture at full
+  // coverage, and there is no per-pixel "this one is translucent" lane in a
+  // single target's alpha (it is already depth). Marching ghosts separately
+  // buys a second composite draw whose quad can BLEND (src-alpha) over the
+  // polygonal pass — which is what lets a kit mesh BEHIND the flesh surface
+  // (the cyberbride's chrome endoskeleton) show through it, while the
+  // existing depth test still hides it behind walls and keeps kit-in-front
+  // depth-correct. Cleared to alpha 1 like `target`: 1.0 stays the
+  // "nothing marched here" sentinel the composite discards on.
+  const ghostTarget = new THREE.RenderTarget(1, 1, {
+    depthBuffer: true,
+    type: THREE.FloatType,
+    minFilter: THREE.NearestFilter,
+    magFilter: THREE.NearestFilter,
+  });
+  // The ghost half of the field retain ('sdf'/'bodies' interleave): same job
+  // as `fieldPrev`, one style behind, for the ghost composite's held rows.
+  const ghostPrev = new THREE.RenderTarget(1, 1, {
+    type: THREE.FloatType, format: THREE.RGBAFormat,
+    minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
+    depthBuffer: true,
   });
 
   // Accumulated colour+depth so far in this frame's front-to-back walk. A
@@ -743,6 +782,10 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   let bodies: THREE.Object3D[] = [];
   let chunks: THREE.Object3D[] = [];
   let chunkPass: 'merged' | 'split' | 'skip' = 'merged';
+  // Translucent bodies (registry `fleshAlpha`), marched into ghostTarget and
+  // composited by the ghost quad. Empty by default: no ghost list, no ghost
+  // passes, bit-identical frame.
+  let ghostBodies: THREE.Object3D[] = [];
   // The blit is an identity copy target -> prev in texture space: both are
   // render targets with the same orientation, so no flipY enters (the canvas
   // composite needs one; a target-to-target copy does not).
@@ -877,6 +920,49 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   quad.frustumCulled = false;
   const quadScene = new THREE.Scene();
   quadScene.add(quad);
+
+  // THE GHOST COMPOSITE — the same WGSL, the ghost textures, one new fact:
+  // the quad material is TRANSPARENT and its alpha is a uniform, not 1.0.
+  // Three's normal src-over blending then does the terminator maths: where
+  // the ghost march hit, colour arrives at `fleshAlpha` over whatever pass 1
+  // (kits) and pass 3 (opaque flesh) already put in the output — the chrome
+  // endoskeleton behind the skin shows through at (1 - alpha); where nothing
+  // marched, the sentinel still discards, so no empty pixel blends; and
+  // `depthNode` + the depth test are untouched, so a wall in front still
+  // occludes and kit metal IN FRONT of the flesh still wins. alpha 1.0
+  // (every non-ghost character) makes src-over a mathematical overwrite, so
+  // a full-ghost-free frame is bit-identical to before.
+  const uFleshAlpha = uniform(1.0);
+  const ghostSampled = composite({
+    layerTex: texture(ghostTarget.texture),
+    prevFieldTex: texture(ghostPrev.texture),
+    texCoord: uv(),
+    flipY: uFlipY,
+    holdMode: uHoldMode,
+    heldInv: uHeldInv,
+    curVp: uCurVp,
+    fieldMode: uCompositeField,
+    fieldParityF: uFieldParity,
+    fieldComb: uFieldComb,
+    outHeight: uOutHeight,
+  }) as unknown as { xyz: unknown; w: unknown };
+  const ghostQuadMat = new MeshBasicNodeMaterial();
+  ghostQuadMat.colorNode = vec4(ghostSampled.xyz as never, uFleshAlpha as never);
+  ghostQuadMat.depthNode = ghostSampled.w as never;
+  ghostQuadMat.depthWrite = true;
+  ghostQuadMat.depthTest = true;
+  // NOT set on quadMat, deliberately: coverage for the opaque composite is
+  // resolved by discard, and a transparent material that also writes depth
+  // is what once painted the scene in black scanlines (see meshQuadMat).
+  // The ghost quad CAN be transparent because its pixels are exactly the
+  // discarded-here ones the opaque quad never wrote — the two quads divide
+  // the screen between them.
+  ghostQuadMat.transparent = true;
+  const ghostQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), ghostQuadMat);
+  ghostQuad.frustumCulled = false;
+  ghostQuad.renderOrder = 1; // after the opaque composite within the frame's own scene
+  const ghostScene = new THREE.Scene();
+  ghostScene.add(ghostQuad);
   // Pulled back to z = 1 so the plane at z = 0 sits INSIDE the [0, 1] depth
   // range rather than exactly on the near plane, which is degenerate.
   const quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 2);
@@ -910,6 +996,11 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     forceFreshFrame = true;
     target.setSize(w, h);
     prev.setSize(w, h);
+    // Ghost targets track the march target's grid exactly (they ARE a march
+    // target and a field retain, one group over).
+    ghostTarget.setSize(w, h);
+    if (fieldStyle === 'sdf' || fieldStyle === 'bodies') ghostPrev.setSize(w, h);
+    else ghostPrev.setSize(Math.max(1, fullW), fieldStyle === 'frame' ? fieldTargetHeight(fullH) : 1);
     // The whole-frame field buffers track the OUTPUT size, not sdfScale: the
     // polygonal pass has always rendered at full content resolution and must
     // keep doing so, halved only in the field axis.
@@ -1031,7 +1122,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
         // without this clear its depth stayed 1x1 and the 'bodies' depth
         // retain failed validation every frame — held rows then wove bone at
         // garbage depth. fieldPrev only escaped because it was already here.
-        for (const t of [coneCoarse, coneFine, occluder, shellEntry, shellExit, prev, depthPre, fieldPrev, fieldMeshPrev]) {
+        for (const t of [coneCoarse, coneFine, occluder, shellEntry, shellExit, prev, depthPre, fieldPrev, fieldMeshPrev, ghostPrev]) {
           renderer.setRenderTarget(t);
           void renderer.render(emptyScene, camera);
         }
@@ -1075,6 +1166,17 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       // hold frame: they exist only to feed the march, and the march target
       // still holds the last fresh frame's result (nothing between frames
       // clears it). This skip IS the half-rate win.
+      // Ghost bodies are excluded from every march pass below and drawn in
+      // their own pass 2b — see the pass 2b comment. 'sdf'/'frame' field
+      // styles have no ghost composite wired, so their ghosts march WITH
+      // the opaque bodies and render opaque (documented gap, not a bug:
+      // both styles are experiments off by default).
+      const ghosting = ghostBodies.length > 0
+        && (fieldStyle === 'off' || fieldStyle === 'bodies');
+      const ghostWasVisible = new Map<THREE.Object3D, boolean>();
+      if (ghosting) {
+        for (const o of ghostBodies) { ghostWasVisible.set(o, o.visible); o.visible = false; }
+      }
       if (!hold) {
       // Pass 1b — the cone pre-pass, wide level then narrow, each starting
       // where the last stopped. No shading in either; the wide level is a
@@ -1232,6 +1334,25 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
         renderer.setRenderTarget(target);
         void renderer.render(scene, camera);
       }
+
+      // Pass 2b — the ghost bodies alone, into ghostTarget. Opaque bodies
+      // and chunks are hidden for the draw: this target must hold ONLY
+      // translucent flesh, or the ghost composite would blend opaque
+      // bodies a second time at flesh alpha. (In the per-body gated branch
+      // above, body visibility was already restored — hide it again here.)
+      // The clear leaves alpha at 1.0, the same "nothing here" sentinel.
+      if (ghosting) {
+        setPassLabel('sdf:ghost-march');
+        const opaqueHidden = new Map<THREE.Object3D, boolean>();
+        for (const o of [...bodies, ...chunks]) { opaqueHidden.set(o, o.visible); o.visible = false; }
+        for (const [o, v] of ghostWasVisible) o.visible = v;
+        camera.layers.set(SDF_LAYER);
+        renderer.setRenderTarget(ghostTarget);
+        renderer.clear();
+        void renderer.render(scene, camera);
+        for (const [o, v] of opaqueHidden) o.visible = v;
+        for (const [o, v] of ghostWasVisible) o.visible = v;
+      }
       } // !hold
 
       // Pass 3 — composite up. autoClear off, or this wipes pass 1.
@@ -1242,6 +1363,20 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       renderer.autoClear = false;
       void renderer.render(quadScene, quadCam);
       renderer.autoClear = prevAutoClear;
+
+      // Pass 3b — the ghost composite, blended over everything pass 1 and
+      // pass 3 left in the output (autoClear stays off). Runs on hold frames
+      // too: ghostTarget holds the last fresh ghost march, and the same
+      // holdMode uniforms that steer pass 3's held composite steer this one.
+      if (ghostBodies.length > 0
+        && (fieldStyle === 'off' || fieldStyle === 'bodies')) {
+        setPassLabel('sdf:ghost-composite');
+        renderer.setRenderTarget(outputTarget);
+        const prevAutoClearGhost = renderer.autoClear;
+        renderer.autoClear = false;
+        void renderer.render(ghostScene, quadCam);
+        renderer.autoClear = prevAutoClearGhost;
+      }
 
       if (fieldStyle === 'bodies') {
         // The skeleton's own half-height field, at this frame's jitter, then
@@ -1277,6 +1412,11 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
         renderer.autoClear = prevAuto;
 
         renderer.copyTextureToTexture(target.texture, fieldPrev.texture);
+        // The ghost half of the field retain: held rows of the interleave
+        // sample ghostPrev exactly as the opaque held rows sample fieldPrev.
+        if (ghostBodies.length > 0) {
+          renderer.copyTextureToTexture(ghostTarget.texture, ghostPrev.texture);
+        }
         // Depth is retained WITH colour: a held row is a snapshot of one
         // instant, not last frame's pixels at this frame's depth.
         renderer.copyTextureToTexture(fieldMesh.texture, fieldMeshPrev.texture);
@@ -1350,6 +1490,24 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     get shellEnabled() { return shellUniforms.enabled.value > 0.5; },
     prev: { texture: prev.texture, uniforms: prevUniforms },
     setBodies(list, chunkList) { bodies = list; chunks = chunkList; },
+    setGhostBodies(list, alpha) {
+      // Only a LIST CHANGE forces a fresh march: alpha is composite-side
+      // (a uniform on the ghost quad), so an alpha-only drag — the lab's
+      // flesh-alpha slider fires per input event — must not re-run the
+      // march, just re-blend the held target. Game callers re-pass a freshly
+      // mapped array every frame, so the compare is ELEMENT-wise, not by
+      // reference.
+      const changed = list.length !== ghostBodies.length
+        || list.some((o, i) => o !== ghostBodies[i]);
+      if (changed) {
+        ghostBodies = list;
+        // The ghost target's previous content belongs to a different body
+        // list; the first frame must march, not hold.
+        forceFreshFrame = true;
+      }
+      uFleshAlpha.value = Math.max(0.05, Math.min(1, alpha));
+    },
+    get ghostAlpha() { return uFleshAlpha.value; },
     setDepthGate(on) { prevUniforms.enabled.value = on ? 1 : 0; },
     setChunkPass(mode) { chunkPass = mode; },
     get chunkPass() { return chunkPass; },
@@ -1406,6 +1564,8 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     dispose() {
       target.dispose();
       prev.dispose();
+      ghostTarget.dispose();
+      ghostPrev.dispose();
       coneCoarse.dispose();
       coneFine.dispose();
       depthPre.dispose();
