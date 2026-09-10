@@ -1,9 +1,19 @@
 # Actor LOD and visibility culling — design
 
 **Date:** 2026-09-09
-**Status:** approved in brainstorm; not yet planned
-**Owner decisions:** three-tier LOD; suspended actors keep converging via a cheap
-route proxy (not a hard freeze); restore measurement first.
+**Status:** ⚠ **SUPERSEDED by
+[`plans/2026-09-09-actor-lod-culling.md`](../plans/2026-09-09-actor-lod-culling.md)**
+— Phase 0 measured this document's premise as WRONG and the plan deleted most of
+it. **Do not implement the three-tier LOD / `stepCoarse` / `resume` design
+below.** What actually shipped is the `setBodies` visibility cull (`fecbc54a`).
+Two corrections to the body text: the CPU block this document blames costs
+**0.7 ms** of a ~22 ms frame (mesh-skeleton 0.5 + encounter 0.2), not the frame;
+and the "walk already costs 33.9 ms" figure at §"Problem" came from a
+**contaminated** run — the quiet-machine number is **20.9–22.7 ms**
+(`dev-notes/2026-09-09-perf-spikes/phase0-baseline.md:73-77`).
+**Owner decisions (historical):** three-tier LOD; suspended actors keep
+converging via a cheap route proxy (not a hard freeze); restore measurement
+first.
 
 ## Problem
 

@@ -368,6 +368,18 @@ async function applyLeg(name) {
   // BENCH_LEGS filter may have excluded from the throughput matrix.
   const overrides = LEGS[name] ?? ALL_LEGS[name] ?? {};
   // Ship defaults first, so legs cannot contaminate each other.
+  //
+  // ⚠ TWO PINS BELOW ARE NOT SHIP TRUTH (audited 2026-09-10).
+  // `setOccluder(true)` and `setHullExitBound(false)` are the OPPOSITE of what
+  // the game runs — `setOccluderEnabled(false)` and `GAME_HULL_EXIT_BOUND = 1`
+  // (game-main.ts). So every delta this harness produces is taken with one
+  // extra pass the game does not run, and with a march bound the game DOES
+  // have switched off. The hull-exit pin's stated reason below ("= 1 FAILS
+  // render parity") was root-caused as scene fog on 2026-09-04 and the bound
+  // then shipped 1 with a bit-identical re-census on hits/rasterised/
+  // meanStepsHit, so that justification is stale.
+  // Until an owner decision re-syncs these pins, measure ship truth explicitly:
+  //   BENCH_PRELUDE='__sdfGame.setOccluder(false);__sdfGame.setHullExitBound(true)'
   await evaluate(`(() => {
     __sdfGame.setOccluder(true);
     __sdfGame.setCone(false);

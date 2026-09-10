@@ -1,10 +1,30 @@
 # Raymarcher performance — design
 
-Status: DECIDED 2026-08-24. All four open questions answered by the owner and
-the approach locked ("Approach 1 extended", below). Implementation plan:
-`docs/superpowers/plans/2026-08-24-raymarcher-perf.md`; execution queued as
-dispatch tasks `~/.claude/dispatch/plans/2026-08-24-perf-task-{1..4}.md`
-(owner triggers task-1 in dispatch-ui, the rest chain).
+> ## ⚠ SUPERSEDED (2026-09-10) — read `TASKS.md`, not this document
+>
+> The shipped answer is **not** "Approach 1 extended". It is **interlaced
+> `'bodies'` fields + a temporal reprojection start** at a fixed **800×600**
+> content rung with `sdfScale` **1.0**. In this document's own terms:
+>
+> - **Dead:** the scale ≥ 0.7 quality floor and the full-window (1536×1704 CSS)
+>   target — the owner capped content at 800×600; the **adaptive controller
+>   ships OFF** and was rejected ("the drop in resolution is noticeable…");
+>   **quality LOD never shipped**.
+> - **Built and lost:** the low-res conservative prepass.
+> - **Shipped:** temporal depth reprojection, at full resolution
+>   (`?tstart=0` disables).
+> - **Also wrong inside, measured later:** "No single SHADING feature is the
+>   cost" (post-hit shading is ~30% of a wounded fill-screen frame), and "GPU
+>   timestamps are unreliable / there is no headroom signal" (per-pass
+>   attribution ships and is routine: `BENCH_PASSES=1`, `gpu-pass-timing.ts`).
+>
+> Keep this file only for the reasoning that led to interlacing. Where it
+> disagrees with `TASKS.md`, `TASKS.md` wins.
+
+Status (historical): DECIDED 2026-08-24. All four open questions answered by the
+owner and the approach locked ("Approach 1 extended", below). Implementation
+plan: `docs/superpowers/plans/2026-08-24-raymarcher-perf.md`; execution queued
+as dispatch tasks `~/.claude/dispatch/plans/2026-08-24-perf-task-{1..4}.md`.
 
 ## Goal
 

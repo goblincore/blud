@@ -4078,8 +4078,15 @@ async function main() {
   /**
    * SCREEN COVERAGE ESTIMATE (2026-09-09), for telemetry only.
    *
-   * The march is fill-bound — measured 18.6 ms + 0.237 ms per 1k pixels — so
-   * its cost tracks COVERED PIXELS, not body count. Captures record
+   * The march is the dominant pass, and the one lever with a measured large
+   * number is PIXEL COUNT (quartering the pixels bought -54%), so its cost
+   * tracks COVERED PIXELS, not body count. NOTE the model once quoted here
+   * (18.6 ms + 0.237 ms per 1k px, X1.4) predates the `'bodies'` interlace
+   * halving the march target, and a 6x cut in the step budget bought only
+   * -6..-31% (mostly single-digit) — the cost is per-PIXEL, not per-step. See
+   * docs/dev-notes/2026-08-31-game-perf-baseline/notes.md:204-238.
+   *
+   * Captures record
    * `bodiesOnScreen` and `totalWounds` but nothing about area, which makes the
    * two candidate explanations for the close-up spikes indistinguishable:
    * "wounds are expensive" vs "a body filling the screen is expensive and you

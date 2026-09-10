@@ -119,13 +119,19 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 **[x] FRAME SPIKES SOLVED — interlaced scanline fields (`86185b01`).** Owner
 captures: worst frame **125 → 38 ms**, p99 **63 → 34.3**, over-budget frames
 **6.3% → 0.0%**, longest stall run **12 frames → 1**, avg fps pinned at the 30
-cap. The march is 75–83% of the GPU frame and its cost is covered pixels, so
+cap. The march is the dominant pass — **75–83% of the GPU frame in the
+PRE-interlace 2026-09-09 phase-0 run** — and its cost tracks covered pixels, so
 marching half the scanlines each frame halves it; the comb is the intended
-old-video look, not a cost.
+old-video look, not a cost. The shipped `'bodies'` field marches **800×300**
+(800×600 content, height halved), so those percentages are not the current
+shape of the frame; see the "Timings are stale" bullet below.
 [Result](docs/dev-notes/2026-09-09-perf-spikes/field-rendering-result.md) ·
 [spec](docs/superpowers/specs/2026-09-09-interlaced-field-rendering-design.md).
-**Ships `'frame'` at comb 0.6; `'bodies'` is FIXED (`9f205aaa`) and is the
-owner's call to flip.** `__sdfGame.setFieldStyle('off'|'sdf'|'bodies'|'frame')`
+**Ships `'bodies'` at `setFieldComb(0.6)`** — the flip landed 2026-09-09
+(`game-main.ts` calls `setFieldStyle('bodies')`; it was reverted to `'frame'`
+for a day while two mesh-pass defects were diagnosed, both fixed in
+`9f205aaa`). `'frame'` remains available via
+`__sdfGame.setFieldStyle('off'|'sdf'|'bodies'|'frame')`
 and `setFieldComb(x)` (one number, 0–1). 2026-09-09 review fixes on top:
 composite held rows carry the held depth (`b67999c8`), held rows bracketed by
 parity, polys unjittered in `'sdf'`/`'bodies'`, `'frame'` weaves on the output
@@ -2805,8 +2811,12 @@ Key reference docs (open these before touching their area):
   wounds exposed hull spheres inside craters (fixed by wound exclusion in
   `buildHullInstances`). Residual: stacked-vs-solo still ~4.8x — hidden bodies
   march to the clamp through interpenetrating fields; fold into `X1.10`.
-- `X1.29` [x] **Near-wound step multiplier — MEASURED, DELIBERATELY LEFT AT
-  0.6.** Owner A/B'd 0.6 against the sound 0.4 on screen (`setWoundStep`) and
+- `X1.29` [x] **Near-wound step multiplier — SUPERSEDED (2026-09-05): the GAME
+  ships 1.0.** `GAME_WOUND_STEP` is 1.0 (`perfCfg.z`, `game-main.ts:1472`) on
+  the owner's look verdict; the 0.6 discussed below is now only the shader's
+  compiled `WOUND_STEP_MUL` fallback, which the lab still uses. **Read the rest
+  as the derivation behind the sound 0.4/0.48 numbers, not as ship state.**
+  Original: owner A/B'd 0.6 against the sound 0.4 on screen (`setWoundStep`) and
   could not tell them apart, so the frame budget won. Everything below is why
   it is a decision now rather than an oversight, so it can be re-taken without
   re-deriving. The wounded field is not a distance bound and nobody had
