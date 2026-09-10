@@ -478,21 +478,48 @@ Party, endless rails of coats that may be skins, a counter, a bell nobody
 answers. Dungeon synth plays here.
 
 - **Levels branch off it** through service lifts, stairwells and laundry chutes,
-  grouped into **floors** (episodes). Clearing a floor opens the way *up*.
+  grouped into **floors** of the building. Clearing a floor opens the way *up*.
 - **Claim tickets** are the light adventure layer: found in levels, redeemed at
   the counter for a weapon, a key, a mask, something alive. **Some tickets
   can't be redeemed in the game;** they work on the desktop or in the room.
 - **Hauled things stay:** trophies accumulate in the goblin's corner of the
   Cloakroom, which mirrors the room outside.
 
-| Floor | Theme | Frame phase | Music bias | Level-name samples |
-| --- | --- | --- | --- | --- |
-| **B — Service** | Kitchens, boilers, laundry, the larder | Gentle | Noise, dungeon synth | *The Larder*, *Hot Water*, *Plates Laid* |
-| **G — The Queue** | Entrances, lists, doors, velvet ropes | Strange | Trap, slow and heavy | *The Queue*, *Guest List*, *No Re-Entry* |
-| **1 — The Floor** | Club spaces inside non-places | Strange | Hard gabber | *Floorfiller*, *The Stack*, *4AM* |
-| **∞ — Upstairs** | The Party itself, or the building (§9) | Sinister | All of it, then silence | *Afterparty*, *Lights Up* |
+### 12.5 Scope: it's shareware (decided 2026-09-10)
 
-### 12.5 Level grammar (rules for non-places)
+**The FPS inside the game is a shareware episode: about 10 levels, not 30.**
+That's the size of the classic first episodes (Wolfenstein 3D's was 10 levels;
+Doom's and Quake's were around 8–9 including a secret), and it's a size one
+person can actually make well.
+
+| # | Level | Floor | Frame phase | Music bias |
+| --- | --- | --- | --- | --- |
+| 0 | *The demo level* (cold open, §4.1) | B — Service | Cold open | Noise |
+| 1–2 | e.g. *The Larder*, *Hot Water* | B — Service | Gentle | Noise, dungeon synth |
+| 3–4 | e.g. *The Queue*, *Guest List* | G — The Queue | Strange | Trap, slow and heavy |
+| 5–6 | e.g. *Floorfiller*, *4AM* | 1 — The Floor | Strange → sinister | Hard gabber |
+| 7 | *Lights Up* | ∞ — Upstairs | Sinister | All of it, then silence |
+| S | A secret level | Anywhere | — | A track you can only get here |
+| F | **Your flat** (ending 1, §9.5) | The room | Finale | Your CD shelf |
+
+**Why this works beyond scope:**
+- **The finale reuses the room.** Level F needs no new architecture; the player
+  decorated it.
+- **Levels can be remixed instead of added.** A level revisited in a later phase
+  can come back changed (lights out, a room gone soft, guests rearranged). That's
+  content from state, not new geometry.
+- **The Cloakroom stays small.** A hub for ~8 levels is one room with a few doors.
+
+**The shareware fiction pays off:**
+- **The nag screen.** Finishing the episode shows *"Order the full version!"*
+  with floors that don't exist yet. Registration is by mail.
+- **The full version never arrives.** Or does it? The order form can go under
+  the door; something comes back. This is the pitch line made literal: *the game
+  from the back of the box that never existed.* It's a strong candidate to tie
+  into the knock and the endings.
+- **The demo level is on a magazine cover disc** in the room, as in §4.1.
+
+### 12.6 Level grammar (rules for non-places)
 
 1. **Start from a function** (queueing, storing, serving, dancing), never from a
    real location.
@@ -651,5 +678,8 @@ A fictional magazine, *CD-ROM INFERNO*, issue 31, "First Look" page.
    words (*Gobelin*, *Rausch*, *Gaki*, *Duende*), and a separate campy name for the
    *inner* FPS, which the frame now allows.
 7. **Roster cuts:** which existing characters don't belong at the Party?
-8. **Scope:** what's the smallest frame that proves the idea? Suggest: room
-   (no decorating yet), desktop with FPS + mail + files, one floor, one leak.
+8. **Scope:** the FPS is a ~10-level shareware episode (§12.5). Still open:
+   what's the smallest slice that proves the whole idea? Suggest: the demo
+   level, the pull-back, the wet CD, the room (no decorating yet), and a desktop
+   with the FPS icon and mail.
+9. **The full version:** does ordering it tie into the knock or the ending?
