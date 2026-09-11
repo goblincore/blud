@@ -63,7 +63,15 @@ export interface UpscaleModel {
   inOffset: Float32Array;
   /** FNV-1a 32 of every weight, bias and normalization value, hex. */
   weightHash: string;
+  /** 'trained' for a loaded export (parseUpscaleModelJson); absent means seeded random weights. */
+  source?: UpscaleModelSource;
+  /** Training run and step of a trained export. */
+  run?: string;
+  step?: number;
 }
+
+/** Where a model's weights came from. Random weights are a cost/parity probe, never a look. */
+export type UpscaleModelSource = 'random' | 'trained';
 
 /** PyTorch PixelShuffle: out[c, 2y+i, 2x+j] = last[c*4 + i*2 + j](y, x). */
 export function subPixelChannel(c: number, i: number, j: number): number {
@@ -144,4 +152,145 @@ export function parseUpscaleConfig(raw: { model?: unknown; layout?: unknown; inp
   const seed = raw.seed === undefined || raw.seed === null ? 1 : Number(raw.seed);
   if (!Number.isInteger(seed)) throw new Error(`upscale: seed must be an integer, got ${String(raw.seed)}`);
   return { model, layout, inputs, seed };
+}
+
+/**
+ * MODEL JSON (docs/superpowers/plans/2026-09-11-neural-upscale-p3-contracts.md §2) — what the
+ * PyTorch trainer exports and the game loads. Arrays are base64 float32; this code assumes a
+ * little-endian host, which every WebGPU browser platform is.
+ */
+export const UPSCALE_MODEL_FORMAT = 'blud-upscale-model/1';
+
+export interface UpscaleModelLayerJson {
+  inC: number;
+  outC: number;
+  relu: boolean;
+  weights: string;
+  bias: string;
+}
+
+export interface UpscaleModelJson {
+  format: typeof UPSCALE_MODEL_FORMAT;
+  id: UpscaleModelId;
+  inputs: UpscaleInputSet;
+  source: UpscaleModelSource;
+  run?: string;
+  step?: number;
+  layers: UpscaleModelLayerJson[];
+  inScale: number[];
+  inOffset: number[];
+  weightHash: string;
+  trainedOn?: { dataset: string; manifestHash: string };
+  metrics?: Record<string, number | null> | null;
+}
+
+function float32ToBase64(arr: Float32Array): string {
+  const bytes = new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength);
+  let s = '';
+  for (let k = 0; k < bytes.length; k += 0x8000) s += String.fromCharCode(...bytes.subarray(k, k + 0x8000));
+  return btoa(s);
+}
+
+function base64ToFloat32(b64: string, what: string): Float32Array {
+  let s: string;
+  try {
+    s = atob(b64);
+  } catch {
+    throw new Error(`upscale model: ${what} is not base64`);
+  }
+  if (s.length % 4 !== 0) throw new Error(`upscale model: ${what} has ${s.length} bytes, not whole float32s`);
+  const bytes = new Uint8Array(s.length);
+  for (let k = 0; k < s.length; k++) bytes[k] = s.charCodeAt(k);
+  return new Float32Array(bytes.buffer);
+}
+
+export function serializeUpscaleModel(
+  model: UpscaleModel,
+  extra: Pick<UpscaleModelJson, 'trainedOn' | 'metrics'> = {},
+): UpscaleModelJson {
+  return {
+    format: UPSCALE_MODEL_FORMAT,
+    id: model.id,
+    inputs: model.inputs,
+    source: model.source ?? 'random',
+    ...(model.run !== undefined ? { run: model.run } : {}),
+    ...(model.step !== undefined ? { step: model.step } : {}),
+    layers: model.layers.map((l) => ({
+      inC: l.inC, outC: l.outC, relu: l.relu, weights: float32ToBase64(l.weights), bias: float32ToBase64(l.bias),
+    })),
+    inScale: Array.from(model.inScale),
+    inOffset: Array.from(model.inOffset),
+    weightHash: hashModel(model),
+    ...extra,
+  };
+}
+
+/**
+ * Validates a model JSON and returns the model. Checks the format, id, inputs, the layer chain
+ * against INPUT_CHANNELS/HIDDEN_WIDTHS, relu flags, array lengths and finiteness, then recomputes
+ * weightHash; any mismatch throws. `source` defaults to 'trained'.
+ */
+export function parseUpscaleModelJson(json: unknown): UpscaleModel {
+  if (typeof json !== 'object' || json === null) throw new Error('upscale model: not a JSON object');
+  const j = json as Partial<Record<keyof UpscaleModelJson, unknown>>;
+  if (j.format !== UPSCALE_MODEL_FORMAT) {
+    throw new Error(`upscale model: format ${String(j.format)}, expected ${UPSCALE_MODEL_FORMAT}`);
+  }
+  const id = j.id as UpscaleModelId;
+  if (!UPSCALE_MODEL_IDS.includes(id)) throw new Error(`upscale model: unknown id ${String(j.id)}`);
+  const inputs = j.inputs as UpscaleInputSet;
+  if (!UPSCALE_INPUT_SETS.includes(inputs)) throw new Error(`upscale model: unknown inputs ${String(j.inputs)}`);
+  const source = (j.source ?? 'trained') as UpscaleModelSource;
+  if (source !== 'trained' && source !== 'random') throw new Error(`upscale model: unknown source ${String(j.source)}`);
+  if (j.run !== undefined && typeof j.run !== 'string') throw new Error('upscale model: run must be a string');
+  if (j.step !== undefined && !Number.isInteger(j.step)) throw new Error('upscale model: step must be an integer');
+
+  const widths = [INPUT_CHANNELS[inputs], ...HIDDEN_WIDTHS[id], LAST_CHANNELS];
+  const layerCount = widths.length - 1;
+  if (!Array.isArray(j.layers) || j.layers.length !== layerCount) {
+    throw new Error(`upscale model: ${id} needs ${layerCount} layers, got ${Array.isArray(j.layers) ? j.layers.length : 'none'}`);
+  }
+  const layers: ConvLayer[] = j.layers.map((raw: unknown, k: number) => {
+    const l = (raw ?? {}) as Partial<UpscaleModelLayerJson>;
+    const inC = widths[k]!;
+    const outC = widths[k + 1]!;
+    if (l.inC !== inC || l.outC !== outC) {
+      throw new Error(`upscale model: layer ${k} is ${String(l.inC)}->${String(l.outC)}, expected ${inC}->${outC}`);
+    }
+    const relu = k < layerCount - 1;
+    if (l.relu !== relu) throw new Error(`upscale model: layer ${k} relu must be ${relu}`);
+    if (typeof l.weights !== 'string' || typeof l.bias !== 'string') {
+      throw new Error(`upscale model: layer ${k} weights and bias must be base64 strings`);
+    }
+    const weights = base64ToFloat32(l.weights, `layer ${k} weights`);
+    const bias = base64ToFloat32(l.bias, `layer ${k} bias`);
+    if (weights.length !== outC * inC * 9) {
+      throw new Error(`upscale model: layer ${k} has ${weights.length} weights, expected ${outC * inC * 9}`);
+    }
+    if (bias.length !== outC) throw new Error(`upscale model: layer ${k} has ${bias.length} biases, expected ${outC}`);
+    if (!weights.every((v) => Number.isFinite(v)) || !bias.every((v) => Number.isFinite(v))) {
+      throw new Error(`upscale model: layer ${k} has non-finite values`);
+    }
+    return { inC, outC, relu, weights, bias };
+  });
+  const norm = (v: unknown, name: string): Float32Array => {
+    if (!Array.isArray(v) || v.length !== widths[0] || !v.every((x) => typeof x === 'number' && Number.isFinite(x))) {
+      throw new Error(`upscale model: ${name} must be ${widths[0]} finite numbers`);
+    }
+    return Float32Array.from(v as number[]);
+  };
+  const model: UpscaleModel = {
+    id, inputs, seed: 0, layers,
+    inScale: norm(j.inScale, 'inScale'),
+    inOffset: norm(j.inOffset, 'inOffset'),
+    weightHash: '',
+    source,
+    ...(j.run !== undefined ? { run: j.run as string } : {}),
+    ...(j.step !== undefined ? { step: j.step as number } : {}),
+  };
+  model.weightHash = hashModel(model);
+  if (j.weightHash !== model.weightHash) {
+    throw new Error(`upscale model: weightHash ${String(j.weightHash)} does not match the weights (${model.weightHash})`);
+  }
+  return model;
 }
