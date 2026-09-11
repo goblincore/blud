@@ -258,6 +258,18 @@ probeDyn drifted too). **Stage 1 fixed the census-visible part of the drift; thi
 is the part it could not see — two repeats of one leg do not just COUNT different
 things, they RENDER different frames.**
 
+**[x] DEEPER FIELDS (h/3, h/4) — MEASURED AND REJECTED ON LOOK (owner, 2026-09-10).**
+*"when it's still it's not that bad but it's when moving the lines are just way too
+distracting at 3 and 4. 2 is fine."* The still-frame softness WAS my build (steps 1-2
+shipped without step 3) and the **history ring (`8e57c278`) fixed that half**. The
+**motion tearing is structural**: at h/3 a held row reads a real sample taken 1-2
+frames ago, which is a stale image at a different camera position once you move, so
+the weave interleaves three instants down the screen. Fixing it needs temporal
+REPROJECTION on held rows — a real feature that would eat much of the saving and
+carries the desync risk that retired half-rate C2. **h/2 stays; `?fields` is an
+opt-in diagnostic, NOT a pending look decision.** The generalisation and the ring stay
+(tested, inert at 2, a prerequisite for any future temporal work).
+
 **[x] FLESH BUG RESOLVED (`43779459`) — it was ONE COMMENT, and it was mine.**
 `b1da21d1` put a `//` comment inside `COMPOSITE_WGSL`'s parameter list; three's WGSL
 parser sweeps the parameter text with `/name\s*:\s*type/` INCLUDING comments, so

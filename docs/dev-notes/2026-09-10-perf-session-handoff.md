@@ -818,3 +818,42 @@ nothing, read the log before building an instrument.**
 **What remains genuinely open:** the owner's look pass at h/3 and h/4 (behind
 `?fieldsdemo=1`), then the history ring (step 3), then the measurement. The perf
 lever is still real and untouched — `sdf:march` at 51-63% of the labelled GPU frame.
+
+
+### DEEPER FIELDS (h/3, h/4): OWNER LOOK PASS — REJECTED ON LOOK, and why it is structural
+
+**Verdict (owner, 2026-09-10):** *"when it's still it's not that bad but it's when
+moving the lines are just way too distracting at 3 and 4. 2 is fine."*
+
+That splits the artefact into the two halves the plan predicted, and only one of them
+was fixable:
+
+- **BIGGER FIELD LINES** — the trade, pre-approved, and it is what it is. The comb
+  period goes from 2 rows to 3-4.
+- **LOW RESOLUTION / SOFTNESS when still** — this WAS my build. Steps 1-2 shipped
+  without step 3, so two of every three held rows at h/3 (three of four at h/4) had
+  no real sample and were interpolated. **The history ring (`8e57c278`) fixed this
+  half**: still frames went from "significantly more distracting" to "not that bad".
+- **TEARING / DISTRACTION IN MOTION** — NOT fixable by history, and this is the real
+  verdict. At h/3 every pixel is sampled once every 3 frames; a held row reads a REAL
+  sample, but one taken 1 or 2 frames AGO. On a still camera those are the same
+  sample. In motion they are a stale image at a different camera position, so the
+  weave interleaves three different instants down the screen. That is inherent to a
+  deep interlaced field.
+
+**Fixing the motion case requires temporal REPROJECTION on held rows** — re-render
+them from the current camera using the stored depth, the way the retired half-rate
+C2 path did (and C2 was itself retired for desyncing from full-rate geometry under
+camera motion). That is a real feature, it would consume much of the saving, and it
+carries the same desync risk that killed C2.
+
+**DECISION: h/2 stays. h/3 and h/4 are NOT shipped, and `?fields` remains an
+opt-in diagnostic rather than a look.** The generalisation stays in the tree because
+it is tested, it is inert at 2, and the ring is a prerequisite for any future
+temporal work — but nobody should read `?fields=3` as a pending look decision. It
+was measured and rejected.
+
+**The measurement is now MOOT for the shipping decision** (no point benching a look
+that is rejected), but it stays on record as the reason the answer is not "try
+harder on depth": the lever's upper bound was `sdf:march` at 51-63% of the labelled
+GPU frame, and h/2 already takes a third of what a full-height march would cost.
