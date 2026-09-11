@@ -1,6 +1,8 @@
 # Neural upscale P3 — face/body capture v2 and RunPod training — design
 
-**Date:** 2026-09-11 · **Status:** approved design, owner "yes you can write the spec" 2026-09-11
+**Date:** 2026-09-11 · **Status:** approved design, owner "yes you can write the spec" 2026-09-11;
+revised after the owner's first review (detail across body, wounds and faces, weighted to medium and
+far range; capture conditions made explicit)
 **Parent spec:** `docs/superpowers/specs/2026-09-11-neural-upscale-espcn-design.md` (stage, network
 family, layouts, §4 reconstruction). **P1+P2 results:** `docs/dev-notes/2026-09-11-neural-upscale/`
 (`g1-parity.md` PASS, `g2-pairs.md` PASS; the cost bench is deferred).
@@ -11,20 +13,22 @@ family, layouts, §4 reconstruction). **P1+P2 results:** `docs/dev-notes/2026-09
 |---|---|
 | Visibility | A **dashboard** openable from any device while training runs, **plus loading checkpoints into the game** to judge them in motion |
 | Scope | A **bigger capture**, then **train on RunPod from the start** (no Mac-only pilot phase) |
-| What matters | **Face and body surface detail**, and **aliased edges** at low resolution. Gore is not the priority |
+| What matters | **More detail across the board** — body surface, wounds and faces, **especially at medium and far range** — plus **aliased edges**. Faces and outlines lead; gore spectacle (gibs, severs) is not the target |
 | Budget | **~$10** RunPod spend cap for this phase |
 
 ## Goal
 
-Train the ESPCN-family upscaler (s8/s16/s32 × `rgb`/`rgbd`) on a capture designed around faces,
-body detail and silhouettes. Measure it against nearest and bicubic on exactly those regions, and
-put the best checkpoints in front of the owner in-game. **Quality first; cost is measured later.**
+Train the ESPCN-family upscaler (s8/s16/s32 × `rgb`/`rgbd`) on a capture designed around body,
+wound and face detail at close, medium and far range, and around silhouettes. Measure it against
+nearest and bicubic on exactly those regions and distances, and put the best checkpoints in front
+of the owner in-game. **Quality first; cost is measured later.**
 
 ## Known limit (stated up front)
 
 A single-frame upscaler can reduce edge aliasing and sharpen surfaces. But face features only a
 pixel or two across at 400×300 (eye and mouth lines) were never sampled, so the network can only
-infer them. The dashboard's face crops show how much is recovered. If faces fall short, the next
+infer them — and at medium and far range that covers more of the body (a face at 4 m is only a
+handful of input pixels). The dashboard's per-distance crops show how much is recovered. If faces fall short, the next
 levers are temporal reconstruction (jittered history) or a small full-resolution face pass. Both
 are **out of scope** here.
 
@@ -48,20 +52,40 @@ keeps working through that module. Add `scripts/upscale-capture-v2.mjs`.
   cluster (from `a.posed().clusters`, as `aimAtNearestSurface` reads it), or `null`.
 - A way to list spawnable character types (for `spawnDebugCharacter(name)`). If no list exists,
   add `characterNames()`.
+- `actorWounds(actorId)` → each wound's world-space centre, radius and type. Actors already hold
+  them (`wounds()` in `game-actor.ts`), so wound regions can be projected like the head.
 
-**Framing classes** (seeded `mulberry32`; the seed is recorded):
+**Framing** (seeded `mulberry32`; the seed is recorded). Distance classes set the mix, and the
+look-at target varies inside each class:
 
-| Class | Share | Look-at | Distance | Orbit around the body's facing | Camera height |
+| Class | Share | Distance | Look-at mix | Orbit around the body's facing | Camera height |
 |---|---|---|---|---|---|
-| face | 40% | head centre | 0.6–1.2 m | ±60° | head height ±0.15 m |
-| body | 40% | torso centre | 1.5–3.0 m | ±90° | 1.2–1.8 m |
-| far | 20% | torso centre | 3.0–6.0 m | full circle | 1.4–1.8 m |
+| close | 20% | 0.6–1.5 m | head 50%, wound 30%, torso 20% | ±75° | look-at height ±0.2 m |
+| medium | 45% | 1.5–3.5 m | head 30%, wound 30%, torso 40% | ±120° | 1.2–1.8 m |
+| far | 35% | 3.5–7.0 m | torso 70%, head 30% | full circle | 1.3–1.8 m |
+
+A wound look-at falls back to the torso when the body has no wound.
 
 **Content:**
 - **Characters:** every spawnable character type, round-robin across sequences.
-- **Wounds:** about 25% of sequences take 1–3 pellet hits (`fire`, aimed at the body) before
-  capture, as body detail rather than gore.
-- **Lighting:** the shipped lighting of each room, with no special lighting sweeps.
+- **Wounds:** about 50% of sequences are wounded before capture with 1–4 pellet or slug hits
+  (`fire` / `fireSlug`, aimed at the body). About 1 in 5 of those also take a blast (`explode`),
+  placed far enough away to wound rather than gib. Wound surfaces are body detail. Severs and gibs
+  that happen anyway stay in the data, but nothing aims for them.
+- **Lighting:** the shipped lighting of each room. The frozen flicker clock gets a seeded phase per
+  sequence (see Capture conditions), so practical-light flicker varies across the dataset.
+
+**Capture conditions** — what is and isn't in the data:
+
+| Condition | Setting | Why, and the effect |
+|---|---|---|
+| Post-processing (FXAA, smear, VHS, lens, colour transfer) | not in the data, **by construction** | The capture reads the SDF march target, before the composite. In-game the upscaler also runs before post-processing |
+| Field rendering | **off** for input and target | The target is native progressive 800×600. Fields stack on top later (P5) |
+| Temporal accumulation | off | The stage refuses to stack with it until P5 |
+| Temporal ray start | on, as shipped | It only moves where rays start; captures stay bit-deterministic with it (G2) |
+| Probe-lighting afterglow | **pinned** (`setProbeBlend(1)`, `setProbeFall(1)`) | Otherwise lighting drifts between the input and target renders and the pair mismatches. Effect: training sees the per-frame lighting estimate, slightly noisier than the smoothed in-game lighting |
+| Practical-light flicker clock | frozen, at a **seeded phase per sequence** | Frozen for pair consistency. The phase is set by pinning `performance.now` before re-freezing, so flicker lighting isn't one value across the dataset |
+| Page | `sdf-game.html?frozen=1&vhs=off` | Same as the P2 capture |
 
 **Motion guarantee.**
 - Between captured frames the simulation advances `ADVANCE` frames.
@@ -81,7 +105,8 @@ keeps working through that module. Add `scripts/upscale-capture-v2.mjs`.
 - **Per-pair manifest entry:**
   - crop origin and full-frame size;
   - class, character, room, distance, orbit, wounds;
-  - projected head centre and radius in output px (head radius 0.12 m);
+  - projected head centre and radius in output px (head radius 0.12 m), and each visible wound's
+    projected centre and radius;
   - near/far, and IoU against the previous captured frame.
 
 **Size, location, splits.**
@@ -89,7 +114,8 @@ keeps working through that module. Add `scripts/upscale-capture-v2.mjs`.
 - Written to `UPSCALE_DATA_ROOT` (default `~/blud-upscale-data/<name>`), outside every worktree and
   outside `/tmp`, because the capture takes hours.
 - 10% of **sequences** held out for validation, chosen by a seeded hash; never adjacent frames.
-- **Showcase set** (fixed validation crops the dashboard shows): 12 pairs — 6 face, 4 body, 2 far.
+- **Showcase set** (fixed validation crops the dashboard shows): 12 pairs — 3 close, 5 medium,
+  4 far — with faces, wounds and silhouettes all represented among the medium and far picks.
 
 **Checks.** The existing G2 checks run at the start of every capture session. A determinism
 spot-check (render twice, ≤ 1e-6) runs every 100 pairs. A failure stops the capture.
@@ -137,15 +163,18 @@ Every script is device-agnostic (`cuda` → `mps` → `cpu`).
 - **Coverage:** a hinge with margin 0.25. Target flesh wants margin ≥ +0.25; target non-flesh wants
   ≤ −0.25. Weight 1.
 - **Region weights, matching the owner's priority:**
-  - face region (inside the projected head circle) ×3;
+  - face region (inside the projected head circle) ×2;
+  - wound regions (inside projected wound circles) ×2;
   - silhouette edge band (target flesh within 2 output px of non-flesh, or where input and target
-    coverage disagree) ×2;
-  - body interior ×1.
+    coverage disagree) ×1.5;
+  - body interior ×1;
+  - where regions overlap, the largest weight applies (not the product).
 - All weights are recorded in the run config.
 
 **Sampling and schedule (defaults, recorded per run).**
-- Crops: 64×64 input (128×128 target) from the pair crops. 50% are centred in a face region when
-  the pair has one; the rest are uniform over flesh.
+- Crops: 64×64 input (128×128 target) from the pair crops. 50% are centred in a face or wound region
+  when the pair has one; the rest are uniform over flesh, so medium and far bodies stay well
+  represented.
 - A pair crop smaller than 64×64 (far bodies are often ~20 input px wide) is **padded with the
   no-flesh sentinel** (rgb 0, clip depth 1.0), never resized. Padding is non-flesh, so it only
   enters the coverage loss, exactly as empty screen does in-game.
@@ -154,7 +183,8 @@ Every script is device-agnostic (`cuda` → `mps` → `cpu`).
 - Per-run limit: 20,000 steps **or** 25 minutes, whichever comes first.
 
 **Validation (every 500 steps, on full validation pairs).**
-- Flesh-masked mean |Δ log1p rgb|, reported overall and per region (face, edge band, interior).
+- Flesh-masked mean |Δ log1p rgb|, reported overall, per region (face, wound, edge band, interior)
+  and per distance class (close, medium, far).
 - Coverage error rate.
 - Baselines computed once:
   - **nearest** (the zero model);
@@ -214,8 +244,8 @@ outputs, both layouts.
 - The trainer writes `dashboard.json` and PNG crops; `index.html` is static, with inline JS and SVG
   charts, no CDN, and refreshes every 30 s.
 - **Status:** per-run state, step, best validation, and spend against the cap.
-- **Curves:** train and validation loss; face, edge and interior error, with the nearest and
-  bicubic baselines as flat lines.
+- **Curves:** train and validation loss; error per region (face, wound, edge, interior) and per
+  distance class (close, medium, far), with the nearest and bicubic baselines as flat lines.
 - **Showcase:** the 12 fixed validation crops at the latest and best checkpoints — nearest |
   bicubic | model | native, shown enlarged with nearest filtering so pixels stay visible.
 - **Exposure:** proxy URLs are unlisted, not authenticated. The page holds only project-asset
@@ -265,8 +295,8 @@ is acceptable.
 **G3 parity** (§3), for every model shown in-game.
 
 **G4 quality.**
-- At least one run's best checkpoint beats coverage-aware bicubic on the validation set,
-  **overall and on faces and on the edge band**.
+- At least one run's best checkpoint beats coverage-aware bicubic on the validation set **overall,
+  on faces, wounds and the edge band, and in the medium and far distance classes**.
 - G4 only decides whether the in-game look is worth the owner's time. **The owner's in-game A/B
   verdict decides.**
 
