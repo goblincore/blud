@@ -1816,8 +1816,30 @@ async function main() {
   // Absent is NOT zero — the boot-param rule: this reads the RAW string, and a
   // missing parameter must leave the shipped 2 alone rather than pin a divisor
   // nobody asked for. A bad value degrades to 2, and the shader clamps again.
+  // ⚠ DEEPER FIELDS ARE GATED OFF BEHIND A FLAG, NOT SHIPPED (2026-09-10).
+  //
+  // The divisor generalisation itself is sound and tested: fieldCount is a clamped
+  // uniform, both weaves share one row derivation, the parity cycles over the live
+  // divisor, and the target heights follow it. What is NOT sound is the ASSEMBLY:
+  // the owner reports that at fields 3 and 4 the SDF flesh still does not render on
+  // screen — the bone weave is fixed and the skeleton is now in the right place,
+  // but the flesh is missing. Measured while chasing it, all in ONE boot at held
+  // parity:
+  //
+  //   - the flesh IS marched at every divisor: surface texels (alpha < 1) cover
+  //     3.90% of the march target at h/2, 3.91% at h/3 and 3.91% at h/4, so this
+  //     is NOT culling, sizing or parity in the march;
+  //   - the heights are right (800x300 / 800x200 / 800x150) with no non-finite
+  //     texels anywhere.
+  //
+  // So the flesh is lost between the march target and the composited frame. That
+  // has to be found with the OUTPUT target in hand rather than guessed at again.
+  // Until then `?fields=3|4` also needs `?fieldsdemo=1`, so no page can be left in
+  // a state the owner reads as a regression. `__sdfGame.setFieldCount` still works
+  // for debugging. Remove this gate along with the assembly fix.
   const fieldsBoot = parseIntParam(new URLSearchParams(location.search).get('fields'), { min: 2, max: 8 });
-  if (fieldsBoot !== null) sdfLayer.setFieldCount(fieldsBoot);
+  const fieldsGate = new URLSearchParams(location.search).get('fieldsdemo') === '1';
+  if (fieldsBoot !== null && (fieldsBoot === 2 || fieldsGate)) sdfLayer.setFieldCount(fieldsBoot);
   // Headless A/B seams (2026-08-27 hull-holes diagnosis): ship defaults stay
   // ON/ON; the driver flips these between captures. Mirrors the lab's
   // __sdfLab.setOccluder.

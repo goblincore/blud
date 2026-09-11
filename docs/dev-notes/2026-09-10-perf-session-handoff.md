@@ -633,3 +633,46 @@ is the class of bug this was, not a wrong constant.
 **`'frame'` stays two-field** and `setFieldCount` refuses above 2 for it. Note
 that its weave now also goes through the generalised form with nf = 2, which is
 why the refusal is a LOOK decision rather than a correctness one.
+
+
+### h/3 and h/4: GATED OFF — the assembly is still broken, and here is the exact state
+
+**Owner report, twice:**
+1. "the skeleton is outside the armor on field 3 and 4" — **FIXED** (the bone weave
+   `FIELD_INTERLEAVE_WGSL` still used `outRow / 2`; it now shares one row
+   derivation with the flesh weave, gated by a test that compares the two shaders'
+   maths line for line).
+2. "still no flesh" — **NOT FIXED.** `?fields=3` and `?fields=4` now also require
+   `?fieldsdemo=1`, so a normal page cannot be left looking regressed.
+
+**WHAT IS MEASURED, in one boot, at held parity (no cross-boot comparison, because
+two boots disagree at h/2 anyway — the two-state branch):**
+
+| | h/2 | h/3 | h/4 |
+| --- | --- | --- | --- |
+| march target | 800x300 | 800x200 | 800x150 |
+| **surface texels (alpha < 1)** | **3.90%** | **3.91%** | **3.91%** |
+| non-finite texels | 0 | 0 | 0 |
+| RGB non-zero | 100% | 100% | 100% |
+
+**So the flesh IS marched at every divisor**, in the right proportion. The bug is
+NOT culling, NOT target sizing, NOT the parity cycle in the march. The flesh is
+lost BETWEEN the march target and the composited frame.
+
+**Three hypotheses tried and falsified along the way** (do not retry):
+- the bone weave's hardcoded `/ 2` — real, fixed, but not this;
+- `fieldParity(frameIndex)` defaulting to 2 fields — real (it made a third of the
+  fresh rows unreachable), fixed, but not this;
+- the jitter's two-field centering — real, fixed, but not this.
+
+**The next step, precisely:** read the OUTPUT target (the surface `'bodies'`
+composites into — `__sdfGame.sdfTarget` exists as an object, not a function) at
+h/2 vs h/3 in ONE boot, and compare its surface-texel share against the march
+target's 3.9%. If the output loses them, the loss is in the composite's fresh/held
+row split; if the output keeps them, it is in the bone weave's write order or the
+presented frame. **Do not instrument the march target again — it is exonerated.**
+
+**A caution earned the hard way:** the first probes "proved" things by sampling a
+sparse grid (5 surface points at h/2, 6 at h/3) and by comparing hashes ACROSS
+boots and ACROSS parities. Each produced confident, meaningless answers. Count
+EVERY texel, stay in ONE boot, and hold the field parity.

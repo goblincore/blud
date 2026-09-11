@@ -258,6 +258,18 @@ probeDyn drifted too). **Stage 1 fixed the census-visible part of the drift; thi
 is the part it could not see — two repeats of one leg do not just COUNT different
 things, they RENDER different frames.**
 
+**[!] DEEPER INTERLACE — GATED OFF (`?fields=3|4` also needs `?fieldsdemo=1`);
+the flesh does not render and the ASSEMBLY is the open bug (2026-09-10).**
+Two of the three two-field constants are fixed (the bone weave's `outRow / 2`, and
+`fieldParity` defaulting to 2 fields — which made a third of the fresh rows
+unreachable), and the third (the jitter's two-field centering) with them.
+**Measured in ONE boot at held parity:** the flesh IS marched at every divisor —
+surface texels cover **3.90% / 3.91% / 3.91%** at h/2, h/3, h/4, with 0
+non-finite and 100% RGB non-zero — so culling, sizing and the march parity are
+EXONERATED. The flesh is lost between the march target and the composited frame.
+**Next: read the OUTPUT target (`sdfTarget`) at h/2 vs h/3 in one boot and compare
+its surface share with 3.9%. Do NOT instrument the march target again.**
+
 **[~] DEEPER INTERLACE — steps 1+2 DONE, measurement DEFERRED (2026-09-10).**
 `fieldCount` is a live uniform (LAST input, shader-clamped so a bad binding
 degrades to no-interlace rather than dividing by zero in the composite);
