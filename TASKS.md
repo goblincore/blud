@@ -124,6 +124,17 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 > (its item 1 was R1). Both carry the CURRENT vs HISTORICAL doc map and the traps.
 > Everything below is the detail behind them.
 
+> **THE MARCH'S CHEAP TEMPORAL LEVER IS ALREADY BANKED — DO NOT REBUILD IT.**
+> Temporal START (start the ray from last frame's reprojected hit depth, margin
+> 0.25 m) SHIPS, owner-passed, `?tstart=0` to disable: room-4 march p50 17.4 → 7.3
+> ms pre-gate, 14.9 → 11.3 with the own-body gate. C2's half-rate per-pixel
+> reprojection is built and VERIFIED (raw hold lags dx=+21 px, reproject dx=0) and
+> retired to a toggle. What remains is ONE thing: the held rows of a DEEPER
+> interlace get no reprojection. Scoped experiment, first change and the numeric
+> acceptance test (dx ≈ 0 at nf=3) are in
+> [docs/dev-notes/2026-09-10-temporal-reprojection-NEXT-SESSION.md](docs/dev-notes/2026-09-10-temporal-reprojection-NEXT-SESSION.md)
+> §"SCOPED — 2026-09-10, session 2".
+
 > **THE MARCH'S PIXEL-WASTE METRIC IS BROKEN, AND THAT IS THE FIRST THING TO
 > FIX.** `__sdfGame.occupancy()` returns BEFORE the discard, so inside overlapping
 > proxy boxes the giving-up fragment wins the depth test and reports "no flesh":
