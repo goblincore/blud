@@ -171,3 +171,47 @@ h/3/h/4 decision cannot be re-litigated from a screenshot.
 
 **Regression gate:** `__sdfGame.frameHash()`, compared WITHIN one boot across
 repeats (`demoScenario`'s `repeated`), never across boots.
+
+---
+
+# RESULT of the pre-test — IT IS CAMERA MOTION, BY ~15x
+
+Rig: `scripts/sdf-fields-motion-probe.{mjs,sh}`. Owner's own framing of the test:
+*"i could of course freeze them and move around them to see the camera movement
+side. if it looks good then we can then figure out the motion vector side of it."*
+That is exactly what this measures. `?frozen=1` (the subject does not move at all),
+`stageCloseUp` puts a body at **0.7 m** filling the frame (extreme parallax on
+purpose — the worst case), and h/2 is A/B'd against h/3 **at a matched pose in one
+boot** via the live `setFieldCount`.
+
+| case | mean \|Δ\| (8-bit levels) | pixels changed by >2 levels |
+| --- | ---: | ---: |
+| **still camera** | **0.80** | 25,591 / 480,000 (5.3%) |
+| **strafe 0.25 m** | **12.06** | 334,501 / 480,000 (69.7%) |
+
+**15x more difference, and 13x more visibly-changed pixels, the moment the camera
+moves — with the subject frozen.** That is the held rows carrying a sample from an
+OLDER CAMERA, which is precisely the component a reprojected held row removes. The
+still column is also the useful control: at a still camera h/3 is nearly
+indistinguishable from h/2 (0.8 levels), i.e. **the reconstruction is not the
+problem — the staleness is.** That matches the owner's report ("when it's still
+it's not that bad but it's when moving the lines are just way too distracting at 3
+and 4") and now it is a number.
+
+Shots from that run (one boot, matched poses, directly comparable):
+`2026-09-10-temporal-reprojection-NEXT-SESSION/shots/` —
+`f2-still.png`, `f3-still.png`, `f2-strafe.png`, `f3-strafe.png`.
+
+**Verdict: PROMISING, and the experiment is worth building.** The remaining
+artifact after reprojection will be body motion (the motion-vector side the owner
+wants to defer until this half looks good), which the frozen subject here
+deliberately removes.
+
+⚠ A metric in this rig that DID NOT work, recorded so nobody trusts it: the
+per-row-phase vertical gradient (intended to show the comb as a phase-dependent
+signature) came back with spreads of 0.1–1.9% in every case, including the strafe
+pair — because the graded image is the WHOLE frame and the crisp level contributes
+the same gradient at every phase, diluting the body's comb. The mean-|Δ| A/B was
+the metric that answered the question; the row-phase spread is not evidence of
+anything at this framing. If someone wants the comb signature, restrict the
+gradient to the body's pixels (the SDF target) rather than the whole frame.

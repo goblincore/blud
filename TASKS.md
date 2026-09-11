@@ -135,6 +135,15 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 > [docs/dev-notes/2026-09-10-temporal-reprojection-NEXT-SESSION.md](docs/dev-notes/2026-09-10-temporal-reprojection-NEXT-SESSION.md)
 > §"SCOPED — 2026-09-10, session 2".
 
+> **HELD-ROW REPROJECTION: THE PRE-TEST SAYS IT IS CAMERA MOTION, BY ~15x.**
+> Subject frozen (`?frozen=1`), body staged at 0.7 m filling the frame, h/2 vs h/3
+> A/B'd at a matched pose in one boot: still camera 0.80 mean |Δ| levels (5.3% of
+> pixels), strafe 0.25 m **12.06 levels (69.7%)**. The reconstruction is not the
+> problem — the staleness is, and that is the term a reprojected held row removes.
+> Rig `scripts/sdf-fields-motion-probe.sh`; shots and numbers in the temporal
+> reprojection note. NEXT: the per-slot held camera + reprojected held row, then
+> the owner's eyes in motion; the motion-vector (body) side comes after.
+
 > **THE MARCH'S PIXEL-WASTE METRIC IS BROKEN, AND THAT IS THE FIRST THING TO
 > FIX.** `__sdfGame.occupancy()` returns BEFORE the discard, so inside overlapping
 > proxy boxes the giving-up fragment wins the depth test and reports "no flesh":
