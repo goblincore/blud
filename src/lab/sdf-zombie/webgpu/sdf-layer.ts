@@ -523,13 +523,31 @@ export const TEMPORAL_ACCUM_WGSL = /* wgsl */ `fn temporalAccum(
   curTex: texture_2d<f32>,
   histTex: texture_2d<f32>,
   texCoord: vec2<f32>,
+  flipY: f32,
   curInvVp: mat4x4<f32>,
   prevVp: mat4x4<f32>,
   alpha: f32
 ) -> vec4<f32> {
   let curDims = vec2<f32>(textureDimensions(curTex, 0));
   let outDims = vec2<f32>(textureDimensions(histTex, 0));
-  let st = texCoord;
+  // THE SAME CONVENTION AS THE COMPOSITE, and this is not optional. A quad
+  // sampling uv() writes with the OPPOSITE Y origin to the texture's texel rows
+  // (uv.y = 1 is the TOP fragment, texel row 0 is the top row, and
+  // textureLoad(uv * dims) therefore reads the BOTTOM row from the top fragment).
+  // The repo already paid for this once: the field ring's retention had to become
+  // a TRUE TEXTURE COPY because a quad blit produced a vertically MIRRORED
+  // retained field. A blend cannot be a copy, so it takes the shared flipY
+  // uniform instead of hard-coding a mirrored index — which is the other thing the
+  // ring's note forbids, because it bakes in one platform's convention.
+  //
+  // SYMPTOM THIS FIXES (owner, 2026-09-10): "when i turn accumulation on in the
+  // console it causes the sdf bodies to mirror across the x axis so it looks like
+  // the sdf bodies are walking on the ceiling and the mesh parts are walking
+  // upright" — the flesh goes through this pass and the mesh does not, so ONLY the
+  // flesh flipped. My gate could not see it because the staged body was vertically
+  // CENTRED, where a mirror is invisible to a difference metric.
+  var st = texCoord;
+  if (flipY > 0.5) { st.y = 1.0 - st.y; }
 
   // THIS FRAME'S SAMPLE — BILINEAR, and that is the whole ballgame.
   //
@@ -1372,6 +1390,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     curTex: texture(target.texture),
     histTex: texture(accumPrev.texture),
     texCoord: uv(),
+    flipY: uFlipY,
     curInvVp: uAccumCurInvVp,
     prevVp: uAccumPrevVp,
     alpha: uAccumAlpha,

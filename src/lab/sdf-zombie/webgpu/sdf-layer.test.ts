@@ -3,7 +3,7 @@ import * as THREE from 'three/webgpu';
 // @ts-expect-error — deep three source import for the real wgslFn parser; no
 // public type declarations exist for three/src/* (same as march.wgsl.test.ts).
 import WGSLNodeFunction from 'three/src/renderers/webgpu/nodes/WGSLNodeFunction.js';
-import { createSdfLayer, isHoldFrame, rotateHeldCameras, sortFrontToBack, SDF_LAYER, FIELD_MESH_LAYER, COMPOSITE_WGSL, FIELD_INTERLEAVE_WGSL, DEPTH_PREPASS_BLOCK_PX, DEPTH_PREPASS_DIV, depthPrepassSize } from './sdf-layer';
+import { createSdfLayer, isHoldFrame, rotateHeldCameras, sortFrontToBack, SDF_LAYER, FIELD_MESH_LAYER, COMPOSITE_WGSL, FIELD_INTERLEAVE_WGSL, TEMPORAL_ACCUM_WGSL, DEPTH_PREPASS_BLOCK_PX, DEPTH_PREPASS_DIV, depthPrepassSize } from './sdf-layer';
 
 describe('depth prepass sizing (close-up task 3)', () => {
   it('the block footprint constant stays in step with the downsample factor', () => {
@@ -201,6 +201,10 @@ describe('weave shaders parse to their REAL parameter list — no comment phanto
   it.each([
     ['COMPOSITE_WGSL', COMPOSITE_WGSL],
     ['FIELD_INTERLEAVE_WGSL', FIELD_INTERLEAVE_WGSL],
+    // The accumulation resolve: it carries DEPTH in alpha like the weaves do, and
+    // it takes the shared flipY convention, so a phantom input here would break a
+    // pass the owner sees as his own bodies upside down.
+    ['TEMPORAL_ACCUM_WGSL', TEMPORAL_ACCUM_WGSL],
   ])('%s', (_name, src) => {
     const parsed = new WGSLNodeFunction(src);
     const names = parsed.inputs.map((i: { name: string }) => i.name);

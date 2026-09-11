@@ -191,3 +191,47 @@ session); **re-run the cost on a quiet machine before quoting it.**
    SHIMMER (unconverged aliasing crawling), not ghosting, which is pre-accepted.
 3. Only after that: the frame-hash epoch/window protocol wiring, then decide
    whether the low-res march becomes the default.
+
+---
+
+# FIXED 2026-09-10 — the flesh was MIRRORED (owner-caught), and the gate could not see it
+
+**Owner, on the view test:** *"when i turn accumulation on in the console it causes
+the sdf bodies to mirror across the x axis so it looks like the sdf bodies are
+walking on the ceiling and the mesh parts (skeleton and armor) are walking
+upright."*
+
+**Cause: my resolve quad read its textures with the wrong Y origin.** A quad
+sampling `uv()` writes with the OPPOSITE Y origin to the texture's texel rows —
+`uv.y = 1` is the TOP fragment while texel row 0 is the top row, so
+`textureLoad(uv * dims)` reads the BOTTOM row from the top fragment. **The repo
+already paid for this once**: the field ring's retention had to become a TRUE
+TEXTURE COPY because a quad blit produced a vertically mirrored retained field.
+A blend cannot be a copy, so the fix is the other thing that note allows: the
+resolve now takes the SAME `flipY` uniform the composite does and applies the same
+adjustment, instead of hard-coding a mirrored index (which that note forbids,
+because it bakes in one platform's convention).
+
+The tell that it was this and not the composite: **only the flesh flipped.** The
+flesh goes through this pass; the mesh skeleton, armor and viewmodel are drawn
+directly at full resolution and stayed upright.
+
+**Why gate 1 missed it, and the lesson:** the staged subject was vertically
+CENTRED, and a mirror of a centred subject is invisible to a difference metric —
+the curve converged beautifully while the body was upside down. A gate that stages
+one framing inherits that framing's blind spots.
+
+**The verification that does see it** (`/tmp/flip-check.mjs`, ad-hoc — worth
+keeping if this pass survives): stage the body OFF-CENTRE (pitch shifted), then
+compare the accumulation's first frame of an epoch (alpha = 1, i.e. an identity
+case) against the raw low-res march, and against that same capture flipped:
+
+| | mean \|Δ\| |
+| --- | ---: |
+| accumulation frame 1 vs the raw 0.5 march | **0.375** |
+| ... vs the same capture flipped in Y | **30.162** |
+
+0.375 is the identity, and it is also independent evidence that the BILINEAR
+reconstruction is doing its job: with a nearest fetch a sub-pixel jitter made this
+comparison read ~7 levels, and bilinear turns it into a sub-pixel resampling
+difference.

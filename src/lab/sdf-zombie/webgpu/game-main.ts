@@ -1838,27 +1838,6 @@ async function main() {
   // artefacts. ?tstart=0 pins the bit-identical march;
   // __sdfGame.setTemporalStart(on, margin, slope) flips it live.
   sdfLayer.setTemporalStart(new URLSearchParams(location.search).get('tstart') !== '0');
-  // TEMPORAL ACCUMULATION (2026-09-10, plan docs/superpowers/plans/2026-09-10-temporal-accumulation.md).
-  // A half-scale march is worth ~8 ms of a 16.6 ms frame but is "too pixelated and
-  // aliased" on its own; this reconstructs it from a jittered, camera-reprojected
-  // history. `?accum=1` turns it on AND drops the march to the default scale,
-  // because accumulating at full scale is pointless; `?accumscale=` and
-  // `?accumalpha=` override. Turning it on turns the field weave OFF (mutually
-  // exclusive — accumulation replaces the weave, it does not join it).
-  {
-    const accumRaw = new URLSearchParams(location.search).get('accum');
-    if (accumRaw !== null && accumRaw !== '0') {
-      const accumSearch = new URLSearchParams(location.search);
-      // DEFAULT THE SCALE, don't just allow it: accumulating at full scale is a
-      // temporal AA with none of the perf win, so `?accum=1` on its own would be a
-      // switch that looks like it does nothing. `?accumscale=` overrides.
-      const scale = parseFloatParam(accumSearch.get('accumscale'), { min: 0.2, max: 1 })
-        ?? TEMPORAL_ACCUM_DEFAULT_SCALE;
-      sdfLayer.setScale(scale);
-      const alpha = parseFloatParam(accumSearch.get('accumalpha'), { min: 0.01, max: 1 });
-      sdfLayer.setTemporalAccum(true, alpha ?? undefined);
-    }
-  }
   // INTERLACED FIELDS ON (2026-09-09), replacing half-rate. Half-rate held
   // and reprojected the whole marched frame, which desynced from the
   // full-rate skeleton meshes whenever the player moved — reprojected flesh
@@ -1900,6 +1879,33 @@ async function main() {
   // exactly what it says.
   const fieldsBoot = parseIntParam(new URLSearchParams(location.search).get('fields'), { min: 2, max: 8 });
   if (fieldsBoot !== null) sdfLayer.setFieldCount(fieldsBoot);
+
+  // ORDER MATTERS AND THIS IS THE LAST WORD ON THE WEAVE. The block above sets
+  // fieldStyle 'bodies' (and `?fields`), so an accumulation switch applied BEFORE
+  // it would be silently overwritten and the owner would still see the interlace
+  // with `?accum=1` — which is exactly what happened on the first look (2026-09-10).
+  // Accumulation REPLACES the weave, so it has to speak after it.
+  // TEMPORAL ACCUMULATION (2026-09-10, plan docs/superpowers/plans/2026-09-10-temporal-accumulation.md).
+  // A half-scale march is worth ~8 ms of a 16.6 ms frame but is "too pixelated and
+  // aliased" on its own; this reconstructs it from a jittered, camera-reprojected
+  // history. `?accum=1` turns it on AND drops the march to the default scale,
+  // because accumulating at full scale is pointless; `?accumscale=` and
+  // `?accumalpha=` override. Turning it on turns the field weave OFF (mutually
+  // exclusive — accumulation replaces the weave, it does not join it).
+  {
+    const accumRaw = new URLSearchParams(location.search).get('accum');
+    if (accumRaw !== null && accumRaw !== '0') {
+      const accumSearch = new URLSearchParams(location.search);
+      // DEFAULT THE SCALE, don't just allow it: accumulating at full scale is a
+      // temporal AA with none of the perf win, so `?accum=1` on its own would be a
+      // switch that looks like it does nothing. `?accumscale=` overrides.
+      const scale = parseFloatParam(accumSearch.get('accumscale'), { min: 0.2, max: 1 })
+        ?? TEMPORAL_ACCUM_DEFAULT_SCALE;
+      sdfLayer.setScale(scale);
+      const alpha = parseFloatParam(accumSearch.get('accumalpha'), { min: 0.01, max: 1 });
+      sdfLayer.setTemporalAccum(true, alpha ?? undefined);
+    }
+  }
   // Headless A/B seams (2026-08-27 hull-holes diagnosis): ship defaults stay
   // ON/ON; the driver flips these between captures. Mirrors the lab's
   // __sdfLab.setOccluder.
