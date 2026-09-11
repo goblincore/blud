@@ -77,8 +77,8 @@ shoot the bell, and the enemies come. Ours is a **funeral bell**.
   world reacts to shooting, and it gives the player control over the pacing of
   the biggest outdoor fight.
 
-**Possible rule for every level:** one set piece the player *triggers*, not one
-that just happens to them. (Candidate for the vision's level rules.)
+**Rule for every level:** one set piece the player *triggers*, not one that
+just happens to them. Now vision §10.6, rule 9; the bell is the first.
 
 ## 5. Map (rough)
 

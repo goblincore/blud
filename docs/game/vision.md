@@ -321,6 +321,23 @@ minotaur, dragon, schoolgirl) must earn a role or be cut.
 6. Big architecture, small goblin routes.
 7. A music source placed in the geometry.
 8. Later levels borrow objects from the flat.
+9. **One set piece the player triggers** (decided 2026-09-10). Not something
+   that happens *to* you: you shoot, pull or break something, and the level
+   answers. Ideally you choose the moment, and it follows the music.
+
+**Set-piece candidates** (first pass; only the Wake's is designed):
+
+| Level | Set piece |
+| --- | --- |
+| The Wake | **The funeral bell:** each toll wakes a wave of the dead ([design](levels/00-the-wake/design.md)) |
+| The Keep | The banquet bell or gong: the absent guests arrive to eat |
+| Cold Storage | Shoot the freezer controls: every tank thaws at once |
+| The Big Top | Cut the ropes: the tent comes down soft over the crowd |
+| Night Train | The emergency brake: everything in the carriages flies forward |
+| The Ship | Vent the airlock: low gravity becomes no gravity, bodies drift |
+| The Works | Start the line: the dolls come off the belt finished, and alive |
+| Floorfiller | Shoot the speaker stack: the drop hits, the room swells, the Headliner arrives |
+| Hell | Cut the first artery: the tumour wakes up |
 
 ---
 
