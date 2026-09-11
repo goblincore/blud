@@ -1,0 +1,73 @@
+import pytest
+import torch
+
+from nupscale.model import Upscaler, linear_depth
+from tests.helpers import random_march, scalar_forward
+
+
+def test_layer_chain_matches_the_typescript_model():
+    m = Upscaler("s8", "rgb")
+    assert [(c.in_channels, c.out_channels) for c in m.convs] == [(4, 8), (8, 8), (8, 16)]
+    m = Upscaler("s32", "rgbd")
+    assert [(c.in_channels, c.out_channels) for c in m.convs] == [(5, 32), (32, 32), (32, 16)]
+    assert all(c.padding_mode == "replicate" and c.kernel_size == (3, 3) and c.padding == (1, 1) for c in m.convs)
+
+
+def test_input_normalization_buffers():
+    m = Upscaler("s16", "rgbd")
+    assert m.in_scale.dtype == torch.float32
+    assert m.in_scale[:4].tolist() == [1.0, 1.0, 1.0, 1.0]
+    assert m.in_scale[4].item() == 0.10000000149011612
+    assert float(m.in_offset.abs().sum()) == 0.0
+    assert Upscaler("s16", "rgb").in_scale.tolist() == [1.0, 1.0, 1.0, 1.0]
+
+
+def test_unknown_ids_raise():
+    with pytest.raises(ValueError, match="model id"):
+        Upscaler("s64", "rgb")
+    with pytest.raises(ValueError, match="input set"):
+        Upscaler("s8", "rgba")
+
+
+def test_zero_model_is_all_zero():
+    m = Upscaler("zero", "rgbd")
+    assert all(int(torch.count_nonzero(c.weight.detach())) == 0 and int(torch.count_nonzero(c.bias.detach())) == 0 for c in m.convs)
+
+
+def test_icnr_last_layer_shares_one_kernel_per_channel():
+    last = Upscaler("s16", "rgb", seed=3).convs[-1]
+    w = last.weight.detach()
+    for c in range(4):
+        for s in range(1, 4):
+            assert torch.equal(w[c * 4 + s], w[c * 4])
+    assert int(torch.count_nonzero(last.bias.detach())) == 0
+    assert 0 < float(w.abs().max()) < 0.1
+
+
+def test_seeded_init_is_deterministic():
+    a, b, c = Upscaler("s8", "rgb", seed=5), Upscaler("s8", "rgb", seed=5), Upscaler("s8", "rgb", seed=6)
+    assert all(torch.equal(x, y) for x, y in zip(a.state_dict().values(), b.state_dict().values()))
+    assert not torch.equal(a.convs[0].weight, c.convs[0].weight)
+
+
+def test_linear_depth_matches_the_reference_formula():
+    near, far = 0.1, 200.0
+    d = torch.tensor([0.0, 0.5, 0.999], dtype=torch.float64)
+    expect = [near * far / (far - v * (far - near)) for v in d.tolist()]
+    assert linear_depth(d, near, far).tolist() == pytest.approx(expect, rel=1e-12)
+
+
+@pytest.mark.parametrize("inputs", ["rgb", "rgbd"])
+def test_forward_matches_the_scalar_typescript_twin(inputs):
+    torch.manual_seed(0)
+    m = Upscaler("s8", inputs, seed=7).double()
+    with torch.no_grad():
+        for conv in m.convs:
+            conv.bias.uniform_(-0.2, 0.2)
+        # Break ICNR's shared kernels so a sub-pixel channel-order mistake cannot hide.
+        m.convs[-1].weight.add_(torch.randn_like(m.convs[-1].weight) * 0.1)
+    march = random_march(4, 5, seed=11).double()
+    got = m(march[None], 0.1, 200.0)[0]
+    want = torch.tensor(scalar_forward(m, march, 0.1, 200.0), dtype=torch.float64)
+    assert got.shape == (16, 4, 5)
+    assert torch.allclose(got, want, rtol=1e-9, atol=1e-9)
