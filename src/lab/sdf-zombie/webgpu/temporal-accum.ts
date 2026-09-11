@@ -23,6 +23,14 @@
 // progressing. See the frame-hash decision note
 // (docs/dev-notes/2026-09-10-temporal-accumulation-frame-hash-DECISION.md).
 
+/** The march scale the accumulation is designed around. MEASURED: 0.5 is a
+ *  quarter of the marched pixels for HALF the march cost (8.18 -> 4.12 ms room 4),
+ *  and below it there is nothing left to take (0.35 buys 0.2 ms of frame). The
+ *  reconstruction is what makes a quarter-res march acceptable at all, so this is
+ *  the pair the boot param defaults to; accumulating at full scale is a temporal
+ *  AA with none of the win. */
+export const TEMPORAL_ACCUM_DEFAULT_SCALE = 0.5;
+
 /** Weight of the NEW sample against the accumulated history. 0.25 settles to
  *  ~94% of a converged value in ten frames (~0.17 s at 60 Hz), which is inside
  *  the window where the owner reads ghosting as CRT wear rather than as smearing.

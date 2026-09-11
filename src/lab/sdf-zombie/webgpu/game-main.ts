@@ -91,6 +91,7 @@ import { createRoomProbes, type ProbeWorkerLike } from './room-probes';
 import { computeBounceSpot } from '../flashlight-bounce';
 import { createProbeGatherBinding, type ProbeGatherBinding } from './probe-gather-compute';
 import { parseFloatParam, parseIntParam } from './boot-params';
+import { TEMPORAL_ACCUM_DEFAULT_SCALE } from './temporal-accum';
 import { hashFrame, DEFAULT_TILES_X, DEFAULT_TILES_Y } from './demo-hash';
 import { paddedRowStrideFloats } from './frame-hash';
 import { tracerGatherLights } from '../tracer-lights';
@@ -1848,8 +1849,12 @@ async function main() {
     const accumRaw = new URLSearchParams(location.search).get('accum');
     if (accumRaw !== null && accumRaw !== '0') {
       const accumSearch = new URLSearchParams(location.search);
-      const scale = parseFloatParam(accumSearch.get('accumscale'), { min: 0.2, max: 1 });
-      if (scale !== null) sdfLayer.setScale(scale);
+      // DEFAULT THE SCALE, don't just allow it: accumulating at full scale is a
+      // temporal AA with none of the perf win, so `?accum=1` on its own would be a
+      // switch that looks like it does nothing. `?accumscale=` overrides.
+      const scale = parseFloatParam(accumSearch.get('accumscale'), { min: 0.2, max: 1 })
+        ?? TEMPORAL_ACCUM_DEFAULT_SCALE;
+      sdfLayer.setScale(scale);
       const alpha = parseFloatParam(accumSearch.get('accumalpha'), { min: 0.01, max: 1 });
       sdfLayer.setTemporalAccum(true, alpha ?? undefined);
     }
