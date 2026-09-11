@@ -1901,7 +1901,15 @@ async function main() {
       // switch that looks like it does nothing. `?accumscale=` overrides.
       const scale = parseFloatParam(accumSearch.get('accumscale'), { min: 0.2, max: 1 })
         ?? TEMPORAL_ACCUM_DEFAULT_SCALE;
-      sdfLayer.setScale(scale);
+      // THE GAME'S OWN STATE IS THE SOURCE OF TRUTH, not the layer's. Writing
+      // sdfLayer.setScale() directly leaves the game's `sdfScale` at 1.0, and
+      // anything that re-applies it (a resize, the adaptive path, a later seam)
+      // silently undoes this — which is exactly what a state read showed:
+      // ?accumscale=0.35 booted with the layer at 1.0 (2026-09-10). Same two
+      // lines the setSdfScale seam uses.
+      sdfScale = Math.min(1, Math.max(0.2, scale));
+      sdfLayer.setScale(sdfScale);
+      deferredApi?.setScale(sdfScale);
       const alpha = parseFloatParam(accumSearch.get('accumalpha'), { min: 0.01, max: 1 });
       sdfLayer.setTemporalAccum(true, alpha ?? undefined);
     }
