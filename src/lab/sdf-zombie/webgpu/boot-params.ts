@@ -60,3 +60,22 @@ export function parseIntParam(
 export function hasParam(raw: string | null): boolean {
   return raw !== null;
 }
+
+/**
+ * Parse a FRACTIONAL boot parameter. Same contract as `parseIntParam` — absent
+ * or unparseable is `null`, meaning "the caller's shipped default" — because the
+ * `Number(null) === 0` trap does not care whether the value has a fractional
+ * part. A separate function rather than a flag on `parseIntParam`, so a caller
+ * cannot silently floor a seam that needs its fraction (`?dynblend=0.5` is a
+ * meaningful value; `?dynrays=32.7` is not).
+ */
+export function parseFloatParam(
+  raw: string | null,
+  opts: { min: number; max: number },
+): number | null {
+  if (raw === null || raw.trim() === '') return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return null;
+  if (n < opts.min) return null;
+  return Math.min(opts.max, n);
+}

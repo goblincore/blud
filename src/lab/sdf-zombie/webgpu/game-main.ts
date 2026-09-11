@@ -90,7 +90,7 @@ import { stepPlayer, eyeOf, PLAYER, type PlayerState, type MoveInput } from './g
 import { createRoomProbes, type ProbeWorkerLike } from './room-probes';
 import { computeBounceSpot } from '../flashlight-bounce';
 import { createProbeGatherBinding, type ProbeGatherBinding } from './probe-gather-compute';
-import { parseIntParam } from './boot-params';
+import { parseFloatParam, parseIntParam } from './boot-params';
 import { hashFrame, DEFAULT_TILES_X, DEFAULT_TILES_Y } from './demo-hash';
 import { paddedRowStrideFloats } from './frame-hash';
 import { tracerGatherLights } from '../tracer-lights';
@@ -662,6 +662,28 @@ async function main() {
   // unsafe: 0 is a real mode, so ABSENT must be detected before coercion.
   let probeRaysBoot = parseIntParam(bootSearch.get('dynrays'), { min: 0, max: 64 });
   let probeLightsBoot = parseIntParam(bootSearch.get('dynlights'), { min: 0, max: 1024 });
+  // THE AFTERGLOW RATES, as verification seams (R1, 2026-09-10). `blend` is the
+  // weight of the NEW estimate against last frame's record and `fall` the rate at
+  // which a record decays when the estimate drops, so the shipped pair (0.6 rise,
+  // 0.12 fall) makes the layer a function of its own HISTORY as well as of this
+  // frame: two runs that dispatched a different number of frames before the read
+  // differ for a reason that has nothing to do with the gather's maths, which is
+  // exactly what made every cross-boot A/B of the gather unreadable (measured
+  // 2026-09-10: two boots of ONE build disagreed at every ray count).
+  //
+  //   ?dynblend=1&dynfall=1 -> the record IS this frame's estimate, exactly
+  //                   (mix(prev, new, 1) is new), with no decay behind it, so the
+  //                   dynamic layer becomes a PURE FUNCTION of the frame's inputs
+  //                   and two runs at the same state must agree byte for byte —
+  //                   the only configuration in which a reduction race or a
+  //                   mis-reduced probe is measurable at all. BOTH are needed:
+  //                   blend 1 alone still carries history, because the rate is
+  //                   `lumNew > lumPrev ? blend : fall`.
+  //
+  // They are WRONG FRAMES ON PURPOSE (no afterglow) and default to the shipped
+  // 0.6 / 0.12, so an unparameterised page is bit-identical to before.
+  let probeBlendBoot = parseFloatParam(bootSearch.get('dynblend'), { min: 0, max: 1 });
+  let probeFallBoot = parseFloatParam(bootSearch.get('dynfall'), { min: 0, max: 1 });
   // FLASH BOOST. The muzzle light's envelope has already fallen to ~a third
   // of peak by the frame the gather packs it (one frame of lag), and it
   // lives 0.14 s; at 1x the bounce was a quarter of the key on a body next
@@ -1315,8 +1337,8 @@ async function main() {
           // the rotation — and it is the one thing here that does alter the look
           // of a recording (a settled estimate rather than an oscillating one).
           frameSeed: demoHold ? 0 : (probeFrame % 64) / 64,
-          blend: 0.6,
-          fall: 0.12,
+          blend: probeBlendBoot ?? 0.6,
+          fall: probeFallBoot ?? 0.12,
           raysPerProbe: probeRaysBoot === null ? 32 : probeRaysBoot,
         };
       }
@@ -6264,7 +6286,21 @@ function performBenchAction(a: BenchAction): void {
       return probeLightsBoot;
     },
     get probeCostSplit() {
-      return { rays: probeRaysBoot, lights: probeLightsBoot };
+      return { rays: probeRaysBoot, lights: probeLightsBoot, blend: probeBlendBoot, fall: probeFallBoot };
+    },
+    /** The gather's afterglow rates (?dynblend / ?dynfall). Set BOTH to 1 for the
+     *  PURE-ESTIMATE configuration the R1 dispatch check measures in: the record
+     *  becomes exactly this frame's estimate, so the dynamic layer stops
+     *  depending on how many frames the run dispatched before the read — without
+     *  which two boots are not comparable to each other at all. null restores the
+     *  shipped 0.6 / 0.12. */
+    setProbeBlend(n: number | null) {
+      probeBlendBoot = n === null ? null : Math.max(0, Math.min(1, n));
+      return probeBlendBoot;
+    },
+    setProbeFall(n: number | null) {
+      probeFallBoot = n === null ? null : Math.max(0, Math.min(1, n));
+      return probeFallBoot;
     },
     // DRAW CENSUS (spike program): per-frame draw/compute totals from the
     // renderer's info. This frame is MANY render() calls (one per pass), and

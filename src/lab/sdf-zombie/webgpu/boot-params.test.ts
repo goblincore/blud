@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseIntParam, hasParam } from './boot-params';
+import { parseFloatParam, parseIntParam, hasParam } from './boot-params';
 
 // Regression gate for the 2026-09-10 visual regression: the probe-gather
 // diagnostic seams booted every UNPARAMETERISED page with zero rays and an
@@ -81,5 +81,34 @@ describe('hasParam', () => {
     expect(hasParam(null)).toBe(false);
     expect(hasParam('')).toBe(true);   // `?frozen` with no value IS present
     expect(hasParam('0')).toBe(true);  // and so is an explicit zero
+  });
+});
+
+describe('parseFloatParam — the same contract, for fractional seams', () => {
+  // `?dynblend` (R1 verification seam) is the first fractional boot parameter.
+  // The `Number(null) === 0` trap is about the RAW STRING, not about whether the
+  // value has a fraction: 0 is a legitimate blend (the record is never updated,
+  // i.e. the afterglow is frozen), so absent must still be distinguishable.
+  it('returns null for absent/empty/unparseable, never 0', () => {
+    expect(parseFloatParam(null, { min: 0, max: 1 })).toBeNull();
+    expect(parseFloatParam('', { min: 0, max: 1 })).toBeNull();
+    expect(parseFloatParam('  ', { min: 0, max: 1 })).toBeNull();
+    expect(parseFloatParam('abc', { min: 0, max: 1 })).toBeNull();
+    expect(parseFloatParam('NaN', { min: 0, max: 1 })).toBeNull();
+  });
+
+  it('KEEPS the fraction, which is the whole reason it is not parseIntParam', () => {
+    expect(parseFloatParam('0.5', { min: 0, max: 1 })).toBe(0.5);
+    expect(parseFloatParam('0.35', { min: 0, max: 1 })).toBe(0.35);
+    // The seam this exists for: 1 = the record IS this frame's estimate.
+    expect(parseFloatParam('1', { min: 0, max: 1 })).toBe(1);
+    // And 0 is a real mode (a frozen afterglow), not "absent".
+    expect(parseFloatParam('0', { min: 0, max: 1 })).toBe(0);
+    expect(parseFloatParam('0', { min: 0, max: 1 })).not.toBeNull();
+  });
+
+  it('clamps to the range and rejects below the floor', () => {
+    expect(parseFloatParam('2', { min: 0, max: 1 })).toBe(1);
+    expect(parseFloatParam('-0.5', { min: 0, max: 1 })).toBeNull();
   });
 });
