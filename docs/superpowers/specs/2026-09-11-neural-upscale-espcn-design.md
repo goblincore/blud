@@ -226,9 +226,22 @@ input set:
 **G2 — pairs (end of P2).**
 - **Determinism:** rendering the same state twice at the same scale gives max abs
   difference ≤ 1e-6 and identical coverage.
-- **Alignment:** with a staged body, the flesh-coverage centroid of the 400×300 input
-  (×2, in output pixels) lies within 0.5 output px of the 800×600 target's centroid.
-  Coverage IoU (target downsampled by 2×2 majority) is ≥ 0.85.
+- **Alignment** *(amended 2026-09-11 after the first capture runs)*: registration of
+  **linear depth** on interior flesh (`scripts/lib/upscale-registration.mjs`, `mode: 'depth'`).
+  - Each input texel's linear depth is compared with the mean linear depth of the 2×2 output
+    block it should sample, for output shifts of −2..+2 px, using only texels whose whole
+    candidate window is flesh.
+  - *Why depth, not colour:* lit colour has HDR highlights (~28) and sub-texel detail whose
+    variance inside a 2×2 block exceeds the best-shift colour error, so colour registration
+    read a false (0, +1) on a frame whose depth registered at (0.0002, 0.003) px. Colour
+    registration is still reported, ungated.
+  - The best whole-pixel shift must be (0, 0), and the 2-D quadratic vertex must lie within
+    0.25 output px on both axes, with at least 500 interior texels.
+  - Coverage IoU (target downsampled by 2×2 majority) stays ≥ 0.85.
+  - *Why not the original centroid check:* a coverage-centroid offset is dominated by
+    silhouette aliasing between a 400×300 and an 800×600 march (1–3 px measured with no
+    misregistration). A centroid over the shared mask is equal by construction, so it
+    cannot detect anything. The centroid offset is still reported, but it no longer gates.
 - **Orientation:** readbacks preserve texel row order (no flip in the capture code).
   With the camera pitched so the body sits below screen centre, the coverage centroid
   row is > H/2, confirming row 0 = top (the composite's convention, `sdf-layer.ts`

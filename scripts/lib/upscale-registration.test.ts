@@ -72,3 +72,45 @@ describe('registerHalfRes', () => {
     expect(() => registerHalfRes(halfRes(80, 60, 0, 0), native(150, 120))).toThrow(/not 2x/);
   });
 });
+
+describe('registerHalfRes depth mode (what gates G2)', () => {
+  const near = 0.1;
+  const far = 200;
+  /** Linear view depth -> WebGPU [0,1] clip depth (inverse of the shader's linearization). */
+  const clip = (z: number) => (far - (near * far) / z) / (far - near);
+  const depthField = (u: number, v: number) => 2.5 + 0.3 * Math.sin(0.05 * u + 0.03 * v) + 0.2 * Math.cos(0.04 * v - 0.02 * u);
+
+  /** Smooth geometry, but colour is uncorrelated per-pixel HDR detail (highlights up to 28) —
+   *  the situation measured on the real march, where colour registration read a false shift. */
+  function scene(w: number, h: number, pos: (i: number, j: number) => [number, number], seed: number): Img {
+    const img = { w, h, data: new Float32Array(w * h * 4) };
+    let s = seed >>> 0;
+    const rnd = () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; };
+    for (let j = 0; j < h; j++) {
+      for (let i = 0; i < w; i++) {
+        const p = (j * w + i) * 4;
+        const [u, v] = pos(i, j);
+        for (let c = 0; c < 3; c++) img.data[p + c] = rnd() < 0.02 ? 28 * rnd() : 0.4 * rnd();
+        img.data[p + 3] = clip(depthField(u, v));
+      }
+    }
+    return img;
+  }
+  const hr = scene(160, 120, (X, Y) => [X + 0.5, Y + 0.5], 1);
+  const lrAt = (sx: number, sy: number) => scene(80, 60, (x, y) => [2 * x + 1 + sx, 2 * y + 1 + sy], 2);
+
+  it('registers aligned geometry even when colour is dominated by uncorrelated HDR detail', () => {
+    const r = registerHalfRes(lrAt(0, 0), hr, { mode: 'depth', near, far });
+    expect(r.argmin).toEqual({ ox: 0, oy: 0 });
+    expect(Math.abs(r.subpixel.x)).toBeLessThan(0.05);
+    expect(Math.abs(r.subpixel.y)).toBeLessThan(0.05);
+  });
+
+  it('finds a vertical geometric shift', () => {
+    expect(registerHalfRes(lrAt(0, 1), hr, { mode: 'depth', near, far }).argmin).toEqual({ ox: 0, oy: 1 });
+  });
+
+  it('refuses depth mode without near and far', () => {
+    expect(() => registerHalfRes(lrAt(0, 0), hr, { mode: 'depth' })).toThrow(/near and far/);
+  });
+});

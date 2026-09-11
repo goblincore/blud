@@ -7,7 +7,7 @@
 // setRenderLock(true) makes step(n) pure re-renders; the sim advances only between frames.
 //
 // G2 checks run on the first staged frame before anything is saved:
-//   determinism (same scale twice, and 0.5 -> 1.0 -> 0.5), alignment (content registration
+//   determinism (same scale twice, and 0.5 -> 1.0 -> 0.5), alignment (linear-depth registration
 //   on interior flesh + coverage IoU), orientation (body staged below centre => centroid
 //   row > H/2), depth sanity.
 //
@@ -136,16 +136,26 @@ checks.temporalStart = temporalStartOff ? 'off (needed for determinism)' : 'on (
 
 const lr = await renderAt(0.5);
 const hr = await renderAt(1.0);
+// UPSCALE_DUMP_CHECK=1 saves the exact frames the G2 checks score, so a failing check can be
+// diagnosed offline instead of by re-booting the GPU page per hypothesis.
+if (process.env.UPSCALE_DUMP_CHECK) {
+  writeFileSync(`${OUT}/check-in.npy`, encodeNpy(lr.data, [lr.h, lr.w, 4]));
+  writeFileSync(`${OUT}/check-target.npy`, encodeNpy(hr.data, [hr.h, hr.w, 4]));
+}
 const cl = coverage(lr), ch = coverage(hr);
 if (cl.n < 500) fail(`G2: only ${cl.n} flesh pixels at 400x300 — the staged body is not in frame`);
-// ALIGNMENT = content registration on interior flesh (scripts/lib/upscale-registration.mjs).
-// The coverage-centroid offset stays in the report but does NOT gate: silhouette aliasing
-// between a 400x300 and an 800x600 march moves it 1-3 px with no misregistration
-// (docs/dev-notes/2026-09-11-neural-upscale/g2-pairs.md).
-const reg = registerHalfRes(lr, hr);
+// ALIGNMENT = registration of LINEAR DEPTH on interior flesh (scripts/lib/upscale-registration.mjs).
+// Depth is geometry only. Two other measures stay in the report but do NOT gate, both measured
+// on this frame with the geometry aligned (docs/dev-notes/2026-09-11-neural-upscale/g2-pairs.md):
+//   - colour registration: HDR highlights (~28) and sub-texel detail swamp any shift signal;
+//     it read a false (0, +1);
+//   - coverage centroid: silhouette aliasing between a 400x300 and an 800x600 march moves it 1-3 px.
+const reg = registerHalfRes(lr, hr, { mode: 'depth', near, far });
+const regColour = registerHalfRes(lr, hr, { mode: 'rgb' });
 checks.alignment = {
   inputCoverage: cl.frac, targetCoverage: ch.frac,
-  registration: { texels: reg.texels, argmin: reg.argmin, subpixelOutputPx: reg.subpixel, mse: reg.mse },
+  registration: { mode: 'depth', texels: reg.texels, argmin: reg.argmin, subpixelOutputPx: reg.subpixel, mse: reg.mse },
+  colourRegistration: { gated: false, argmin: regColour.argmin, subpixelOutputPx: regColour.subpixel },
   coverageCentroidOffsetOutputPx: { dx: 2 * cl.cx - ch.cx, dy: 2 * cl.cy - ch.cy, gated: false },
 };
 let inter = 0, union = 0;

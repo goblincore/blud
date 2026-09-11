@@ -17,21 +17,36 @@
 // (0, 0) gives a sub-pixel estimate. Only INTERIOR texels count — the whole output window any
 // candidate shift reads is flesh in the native image — so silhouettes cannot enter, and
 // every shift is scored on the same texels.
+//
+// DEPTH, NOT COLOUR, IS WHAT GATES G2 ({ mode: 'depth', near, far }). Measured on the first
+// staged frame (docs/dev-notes/2026-09-11-neural-upscale/g2-pairs.md): lit colour carries HDR
+// highlights up to ~28 and sub-texel detail whose variance INSIDE a 2x2 output block (8.9e-2)
+// exceeds the colour error at the best shift (3.6e-2), so colour registration read a false
+// (0, +1). Linear depth is geometry only and registered the same frame at (0.0002, 0.003) px
+// with a clean, symmetric error surface. 'rgb' mode stays available as a reported number.
 
 const isFlesh = (img, x, y) => img.data[(y * img.w + x) * 4 + 3] < 1;
 
 /**
  * @param {{w:number,h:number,data:Float32Array}} lr input march (RGBA, alpha >= 1 = no flesh)
  * @param {{w:number,h:number,data:Float32Array}} hr native march at exactly 2x
- * @param {{radius?: number}} [opts] search radius in output px (default 2, minimum 1)
+ * @param {{radius?: number, mode?: 'rgb' | 'depth', near?: number, far?: number}} [opts]
+ *   radius: search radius in output px (default 2, minimum 1).
+ *   mode: 'rgb' compares lit colour; 'depth' compares linear view depth from the clip depth in
+ *   alpha, near*far / (far - d*(far - near)), and requires near and far.
  * @returns {{ texels: number, mse: number[][], argmin: {ox:number, oy:number}, subpixel: {x:number, y:number} }}
  *   mse[oy + radius][ox + radius]. subpixel > 0 means the input sits toward +x / +y (down).
  */
-export function registerHalfRes(lr, hr, { radius = 2 } = {}) {
+export function registerHalfRes(lr, hr, { radius = 2, mode = 'rgb', near, far } = {}) {
   if (hr.w !== 2 * lr.w || hr.h !== 2 * lr.h) {
     throw new Error(`registerHalfRes: ${hr.w}x${hr.h} is not 2x ${lr.w}x${lr.h}`);
   }
   if (radius < 1) throw new Error('registerHalfRes: radius must be >= 1');
+  if (mode !== 'rgb' && mode !== 'depth') throw new Error(`registerHalfRes: unknown mode ${mode}`);
+  if (mode === 'depth' && !(Number.isFinite(near) && Number.isFinite(far) && far > near && near > 0)) {
+    throw new Error('registerHalfRes: depth mode needs near and far (0 < near < far)');
+  }
+  const linear = (clip) => (near * far) / (far - clip * (far - near));
   const texels = [];
   for (let y = 0; y < lr.h; y++) {
     for (let x = 0; x < lr.w; x++) {
@@ -58,12 +73,18 @@ export function registerHalfRes(lr, hr, { radius = 2 } = {}) {
         const l = (y * lr.w + x) * 4;
         const a = ((2 * y + oy) * hr.w + 2 * x + ox) * 4;
         const b = a + 4, c = a + hr.w * 4, d = c + 4;
-        for (let ch = 0; ch < 3; ch++) {
-          const diff = lr.data[l + ch] - 0.25 * (hr.data[a + ch] + hr.data[b + ch] + hr.data[c + ch] + hr.data[d + ch]);
+        if (mode === 'depth') {
+          const diff = linear(lr.data[l + 3])
+            - 0.25 * (linear(hr.data[a + 3]) + linear(hr.data[b + 3]) + linear(hr.data[c + 3]) + linear(hr.data[d + 3]));
           sum += diff * diff;
+        } else {
+          for (let ch = 0; ch < 3; ch++) {
+            const diff = lr.data[l + ch] - 0.25 * (hr.data[a + ch] + hr.data[b + ch] + hr.data[c + ch] + hr.data[d + ch]);
+            sum += diff * diff;
+          }
         }
       }
-      const e = n ? sum / (3 * n) : Infinity;
+      const e = n ? sum / ((mode === 'depth' ? 1 : 3) * n) : Infinity;
       mse[oy + radius][ox + radius] = e;
       if (e < best.e) best = { ox, oy, e };
     }
