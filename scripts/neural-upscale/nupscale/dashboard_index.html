@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Blud upscale training</title>
+<style>
+:root { color-scheme: dark; --bg: #111316; --panel: #1b1e23; --ink: #e6e6e6; --dim: #8b929c; --line: #2c3139; --good: #6fcf7f; --bad: #e36b6b; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, sans-serif; }
+main { max-width: 1200px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 18px; margin: 0 0 4px; }
+h2 { font-size: 15px; margin: 24px 0 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.dim { color: var(--dim); }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px; overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; }
+th, td { padding: 4px 8px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align: left; }
+.charts { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+svg { width: 100%; height: auto; display: block; }
+.legend { font-size: 12px; } .legend span { margin-right: 10px; white-space: nowrap; }
+.shots { display: grid; gap: 10px; }
+.shot { display: flex; gap: 8px; overflow-x: auto; align-items: flex-start; }
+.shot figure { margin: 0; }
+.shot img { image-rendering: pixelated; display: block; max-height: 320px; }
+figcaption { font-size: 12px; color: var(--dim); }
+select { background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 2px 6px; font: inherit; }
+.good { color: var(--good); } .bad { color: var(--bad); }
+</style>
+</head>
+<body>
+<main>
+<h1>Blud neural upscale — training</h1>
+<div id="meta" class="dim">loading…</div>
+<h2>Runs <span class="dim">(best checkpoint; green = beats coverage-aware bicubic)</span></h2>
+<div class="panel"><table id="runs"></table></div>
+<h2>Curves <select id="curveRun" aria-label="run for curves"></select></h2>
+<div class="charts" id="charts"></div>
+<h2>Showcase <select id="shotRun" aria-label="run for showcase"></select>
+<select id="shotWhich" aria-label="checkpoint"><option>best</option><option>latest</option></select></h2>
+<div class="shots" id="shots"></div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const COLORS = ['#e0a458', '#6fb3e0', '#b58be0', '#6fcf7f', '#e36b6b', '#d6d66b'];
+const BASE_COLORS = { nearest: '#8b929c', bicubic: '#f0f0f0', native: '#d98bb0' };
+const G4 = ['overall', 'face', 'wound', 'edge', 'class:medium', 'class:far'];
+const COLS = ['overall', 'face', 'wound', 'edge', 'interior', 'class:close', 'class:medium', 'class:far', 'coverage_error_rate'];
+let data = null;
+
+const fmt = (v, d = 4) => (v === null || v === undefined ? '—' : Number(v).toFixed(d));
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+async function load() {
+  try {
+    const r = await fetch('dashboard.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    data = await r.json();
+    render();
+  } catch (e) {
+    $('meta').textContent = 'Could not load dashboard.json: ' + e.message + ' (retrying every 30 s)';
+  }
+  setTimeout(load, 30000);
+}
+
+function bestRun() {
+  let b = null;
+  for (const r of data.runs) if (r.best && r.best.overall != null && (!b || r.best.overall < b.best.overall)) b = r;
+  return b ? b.name : (data.runs[0] || {}).name;
+}
+
+function fillSelect(id, names) {
+  const sel = $(id);
+  const keep = sel.value;
+  if ([...sel.options].map((o) => o.value).join('|') !== names.join('|')) {
+    sel.innerHTML = names.map((n) => `<option>${esc(n)}</option>`).join('');
+  }
+  sel.value = names.includes(keep) ? keep : bestRun();
+}
+
+function render() {
+  const d = data;
+  const ds = d.dataset ? ` · ${esc(d.dataset.name)}: ${d.dataset.train} train / ${d.dataset.val} val pairs` : '';
+  const spend = d.spend ? ` · spend $${fmt(d.spend.spentUsd, 2)} of $${fmt(d.spend.capUsd, 2)} ($${fmt(d.spend.hourlyUsd, 2)}/h)` : '';
+  $('meta').innerHTML = `Updated ${esc(new Date(d.updated).toLocaleString())}${ds}${spend}`;
+  const names = d.runs.map((r) => r.name);
+  fillSelect('curveRun', names);
+  fillSelect('shotRun', names);
+  renderRuns(d);
+  renderCharts(d);
+  renderShots(d);
+}
+
+function renderRuns(d) {
+  const b = d.baselines || {};
+  const bic = b.bicubic || {};
+  const head = `<tr><th>run</th><th>state</th><th>step</th><th>best @</th>${COLS.map((c) => `<th>${esc(c.replace('class:', '').replace('coverage_error_rate', 'cov err'))}</th>`).join('')}<th>G4</th></tr>`;
+  const baseRows = ['nearest', 'bicubic', 'native'].filter((k) => b[k]).map((k) =>
+    `<tr class="dim"><td>${k}</td><td>baseline</td><td></td><td></td>${COLS.map((c) => `<td>${fmt(b[k][c])}</td>`).join('')}<td></td></tr>`);
+  const runRows = d.runs.map((r) => {
+    const cells = COLS.map((c) => {
+      const v = r.best ? r.best[c] : null;
+      const cls = v != null && bic[c] != null ? (v < bic[c] ? 'good' : 'bad') : '';
+      return `<td class="${cls}">${fmt(v)}</td>`;
+    }).join('');
+    const g4 = r.g4 ? (G4.every((k) => r.g4[k] === true) ? '<span class="good">pass</span>' : '<span class="bad">not yet</span>') : '—';
+    return `<tr><td>${esc(r.name)}</td><td>${esc(r.state)}</td><td>${r.step}/${r.maxSteps}</td><td>${r.bestStep ?? '—'}</td>${cells}<td>${g4}</td></tr>`;
+  });
+  $('runs').innerHTML = head + baseRows.join('') + runRows.join('');
+}
+
+function chart(title, series) {
+  const W = 360, H = 200, L = 48, R = 8, T = 22, B = 24;
+  const pts = series.flatMap((s) => s.points);
+  if (!pts.length) return `<div class="panel dim">${esc(title)}: no data yet</div>`;
+  const xs = pts.map((p) => p[0]);
+  const ys = pts.map((p) => p[1]).concat(series.filter((s) => s.flat != null).map((s) => s.flat));
+  let x0 = Math.min(...xs), x1 = Math.max(...xs);
+  if (x1 === x0) x1 = x0 + 1;
+  let y0 = Math.min(...ys), y1 = Math.max(...ys);
+  if (y1 === y0) y1 = y0 + 1e-3;
+  const pad = (y1 - y0) * 0.05;
+  y0 -= pad; y1 += pad;
+  const sx = (x) => L + ((x - x0) / (x1 - x0)) * (W - L - R);
+  const sy = (y) => T + (1 - (y - y0) / (y1 - y0)) * (H - T - B);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}">`;
+  svg += `<text x="${L}" y="14" fill="#e6e6e6" font-size="12">${esc(title)}</text>`;
+  svg += `<line x1="${L}" y1="${H - B}" x2="${W - R}" y2="${H - B}" stroke="#2c3139"/><line x1="${L}" y1="${T}" x2="${L}" y2="${H - B}" stroke="#2c3139"/>`;
+  svg += `<text x="${L - 4}" y="${T + 8}" fill="#8b929c" font-size="10" text-anchor="end">${fmt(y1, 3)}</text>`;
+  svg += `<text x="${L - 4}" y="${H - B}" fill="#8b929c" font-size="10" text-anchor="end">${fmt(y0, 3)}</text>`;
+  svg += `<text x="${L}" y="${H - 8}" fill="#8b929c" font-size="10">${x0}</text><text x="${W - R}" y="${H - 8}" fill="#8b929c" font-size="10" text-anchor="end">${x1}</text>`;
+  for (const s of series) {
+    if (s.flat != null) {
+      svg += `<line x1="${L}" x2="${W - R}" y1="${sy(s.flat).toFixed(1)}" y2="${sy(s.flat).toFixed(1)}" stroke="${s.color}" stroke-dasharray="4 3" opacity="0.8"/>`;
+    } else if (s.points.length) {
+      svg += `<polyline fill="none" stroke="${s.color}" stroke-width="1.5" points="${s.points.map((p) => `${sx(p[0]).toFixed(1)},${sy(p[1]).toFixed(1)}`).join(' ')}"/>`;
+    }
+  }
+  svg += '</svg>';
+  const legend = series.map((s) => `<span style="color:${s.color}">${s.flat != null ? '- -' : '—'} ${esc(s.name)}</span>`).join('');
+  return `<div class="panel">${svg}<div class="legend">${legend}</div></div>`;
+}
+
+function renderCharts(d) {
+  const b = d.baselines || {};
+  const flats = (key) => ['nearest', 'bicubic', 'native'].filter((k) => b[k] && b[k][key] != null)
+    .map((k) => ({ name: k, color: BASE_COLORS[k], flat: b[k][key], points: [] }));
+  const valOf = (run, key) => run.val.filter((v) => v.metrics[key] != null).map((v) => [v.step, v.metrics[key]]);
+  const all = chart('validation overall, all runs', [
+    ...d.runs.map((r, i) => ({ name: r.name, color: COLORS[i % COLORS.length], points: valOf(r, 'overall') })),
+    ...flats('overall'),
+  ]);
+  const run = d.runs.find((r) => r.name === $('curveRun').value);
+  if (!run) { $('charts').innerHTML = all; return; }
+  const one = (key, title, color) => chart(title, [{ name: run.name, color, points: valOf(run, key) }, ...flats(key)]);
+  $('charts').innerHTML = [
+    all,
+    chart(`${run.name} train loss`, [
+      { name: 'total', color: COLORS[0], points: run.train.map((t) => [t[0], t[1]]) },
+      { name: 'colour', color: COLORS[1], points: run.train.map((t) => [t[0], t[2]]) },
+      { name: 'detail', color: COLORS[2], points: run.train.map((t) => [t[0], t[3]]) },
+      { name: 'coverage', color: COLORS[4], points: run.train.map((t) => [t[0], t[4]]) },
+    ]),
+    one('face', 'face', COLORS[0]),
+    one('wound', 'wound', COLORS[4]),
+    one('edge', 'edge band', COLORS[1]),
+    one('interior', 'body interior', COLORS[3]),
+    one('class:close', 'close range', COLORS[2]),
+    one('class:medium', 'medium range', COLORS[2]),
+    one('class:far', 'far range', COLORS[2]),
+    one('coverage_error_rate', 'coverage error rate', COLORS[5]),
+  ].join('');
+}
+
+function renderShots(d) {
+  const run = $('shotRun').value;
+  const which = $('shotWhich').value;
+  const imgs = ((d.showcase.runs || {})[run] || {})[which] || {};
+  const v = encodeURIComponent(d.updated);
+  const fig = (src, cap) => (src ? `<figure><img src="${esc(src)}?v=${v}" alt="${esc(cap)}" loading="lazy"><figcaption>${esc(cap)}</figcaption></figure>` : '');
+  $('shots').innerHTML = d.showcase.pairs.map((p) => `<div class="panel"><div class="dim">${esc(p.id)} · ${esc(p.class)}</div><div class="shot">`
+    + fig(p.base.nearest, 'nearest') + fig(p.base.bicubic, 'bicubic') + fig(imgs[p.id], `${run} (${which})`)
+    + fig(p.base.native, 'native single-ray') + fig(p.base.target, 'supersampled target') + '</div></div>').join('')
+    || '<div class="dim">no showcase pairs</div>';
+}
+
+$('curveRun').onchange = () => data && renderCharts(data);
+$('shotRun').onchange = () => data && renderShots(data);
+$('shotWhich').onchange = () => data && renderShots(data);
+load();
+</script>
+</body>
+</html>
