@@ -328,6 +328,25 @@ contaminated attempt gave `sdf:march` 1.13 ms (r3) beside 8.75 (r4) — the cens
 drift again; no number is quoteable. Re-measure on a QUIET machine against
 `fields=2`, reading `sdf:march`.
 
+## NEXT SESSION — full temporal reprojection on held rows (owner-deferred 2026-09-10)
+
+**Deferred by the owner, not started.** Spec:
+[docs/dev-notes/2026-09-10-temporal-reprojection-NEXT-SESSION.md](docs/dev-notes/2026-09-10-temporal-reprojection-NEXT-SESSION.md).
+
+Why it is on the list: the deeper fields were rejected on look for MOTION tearing
+(the history ring fixed the still half). Scope it as a general capability, not as
+"fix h/3" — if held rows reproject correctly under motion, that unlocks deep fields
+AND revisits the retired half-rate C2 path, which failed for the same reason.
+
+**The trap to read first:** `holdMode 2` already does a per-pixel reprojection, but
+it is CAMERA-ONLY — it assumes the held row is the same scene from an older camera.
+True for walls, FALSE for a body that has moved, and the bodies are what the owner
+was looking at. C2 died on exactly this axis. It needs PER-VERTEX motion vectors,
+a motion-vector target, a disocclusion validity test, and depth added to the history
+ring first (the ring stores colour only today). Order: ring depth -> motion vectors
+-> validity -> composite. Acceptance is the owner's eyes IN MOTION; a still-frame
+comparison cannot see this defect.
+
 ## Gather dispatch R1 — measured, designed, ready (2026-09-10)
 
 **The scaling evidence is IN and it justifies R1.** Sweeping ray count via
