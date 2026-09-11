@@ -2,7 +2,8 @@
 
 **Date:** 2026-09-11 · **Status:** approved design, owner "yes you can write the spec" 2026-09-11;
 revised after the owner's first review (detail across body, wounds and faces, weighted to medium and
-far range; capture conditions made explicit)
+far range; capture conditions made explicit); training target made supersampled (option 3a) after
+the second review
 **Parent spec:** `docs/superpowers/specs/2026-09-11-neural-upscale-espcn-design.md` (stage, network
 family, layouts, §4 reconstruction). **P1+P2 results:** `docs/dev-notes/2026-09-11-neural-upscale/`
 (`g1-parity.md` PASS, `g2-pairs.md` PASS; the cost bench is deferred).
@@ -15,6 +16,7 @@ family, layouts, §4 reconstruction). **P1+P2 results:** `docs/dev-notes/2026-09
 | Scope | A **bigger capture**, then **train on RunPod from the start** (no Mac-only pilot phase) |
 | What matters | **More detail across the board** — body surface, wounds and faces, **especially at medium and far range** — plus **aliased edges**. Faces and outlines lead; gore spectacle (gibs, severs) is not the target |
 | Budget | **~$10** RunPod spend cap for this phase |
+| Training target | **Supersampled 800×600** (option 3a): each target pixel averages ~16 sub-pixel-jittered renders, so the network learns clean detail instead of native aliasing. Output resolution and factor stay 800×600 and 2×; the input stays the real single-ray 400×300 march. Smooth-silhouette blending (3b) is a later step |
 
 ## Goal
 
@@ -54,6 +56,9 @@ keeps working through that module. Add `scripts/upscale-capture-v2.mjs`.
   add `characterNames()`.
 - `actorWounds(actorId)` → each wound's world-space centre, radius and type. Actors already hold
   them (`wounds()` in `game-actor.ts`), so wound regions can be projected like the head.
+- `setMarchJitter(jx, jy)` / `setMarchJitter(null)` → a sub-pixel view offset in output px, applied
+  around the march only (`setViewOffset` before it, `clearViewOffset` after), the way temporal
+  accumulation applies its jitter. Dev-only, default off.
 
 **Framing** (seeded `mulberry32`; the seed is recorded). Distance classes set the mix, and the
 look-at target varies inside each class:
@@ -75,16 +80,44 @@ A wound look-at falls back to the torso when the body has no wound.
 - **Lighting:** the shipped lighting of each room. The frozen flicker clock gets a seeded phase per
   sequence (see Capture conditions), so practical-light flicker varies across the dataset.
 
+**Supersampled target (option 3a).**
+- **Why:** the native single-ray 800×600 render is itself aliased. Training toward it would teach
+  the network to reproduce stair-steps and texture shimmer.
+- **Samples:** 16 renders of the same frozen state at scale 1.0, jittered on a **centred 4×4 grid**
+  of offsets {−0.375, −0.125, +0.125, +0.375} output px on each axis. The offsets average to zero,
+  so the target stays registered to the input. Not `accumJitter`: its Halton offsets lie in
+  [0, 1) and average +0.5 px.
+- **Per target pixel:**
+  - hit count k (of 16); coverage = **k ≥ 8** (majority vote, ties count as covered);
+  - colour = mean rgb of the hit samples;
+  - clip depth = the centre-most hit sample's depth, or 1.0 (sentinel) when not covered. Depth is
+    not learned — the stage takes depth from the input — so this only fixes the sentinel convention;
+  - coverage fraction k/16, stored separately so option 3b never needs a re-capture.
+- **In-page averaging:** the 16 samples are accumulated in the page, and only the averaged target
+  crosses CDP.
+- **Temporal ray start is OFF for target samples.** Its reprojection matrix is taken from the
+  unjittered view-projection while the march is jittered, so ray starts would come from the wrong
+  camera. The **input** render keeps it on, as shipped.
+- **Native reference:** for validation and showcase pairs only, the unjittered single-ray 800×600
+  render is also stored, so the dashboard can show native aliasing next to the model.
+- **Checks, added to G2:**
+  - The jitter offsets average to exactly zero.
+  - A render at offset (0, 0) bit-matches a render with jitter off.
+  - The supersampled target's linear depth (from the centre-most samples) registers to the input
+    at (0, 0) by the same registration gate.
+  - The existing G2 checks keep running on the single-ray native render.
+
 **Capture conditions** — what is and isn't in the data:
 
 | Condition | Setting | Why, and the effect |
 |---|---|---|
 | Post-processing (FXAA, smear, VHS, lens, colour transfer) | not in the data, **by construction** | The capture reads the SDF march target, before the composite. In-game the upscaler also runs before post-processing |
-| Field rendering | **off** for input and target | The target is native progressive 800×600. Fields stack on top later (P5) |
+| Field rendering | **off** for input and target | The target is progressive 800×600 (supersampled, see above). Fields stack on top later (P5) |
 | Temporal accumulation | off | The stage refuses to stack with it until P5 |
 | Temporal ray start | on, as shipped | It only moves where rays start; captures stay bit-deterministic with it (G2) |
 | Probe-lighting afterglow | **pinned** (`setProbeBlend(1)`, `setProbeFall(1)`) | Otherwise lighting drifts between the input and target renders and the pair mismatches. Effect: training sees the per-frame lighting estimate, slightly noisier than the smoothed in-game lighting |
 | Practical-light flicker clock | frozen, at a **seeded phase per sequence** | Frozen for pair consistency. The phase is set by pinning `performance.now` before re-freezing, so flicker lighting isn't one value across the dataset |
+| Target sampling | 16 jittered renders on a centred 4×4 grid, averaged in the page; temporal ray start off for these samples | See Supersampled target |
 | Page | `sdf-game.html?frozen=1&vhs=off` | Same as the P2 capture |
 
 **Motion guarantee.**
@@ -101,7 +134,11 @@ A wound look-at falls back to the torso when the body has no wound.
 **Storage per pair.**
 - **Crop:** the union flesh bounding box of the input (×2) and the target, padded by 8 input px,
   clamped to the frame, with the origin aligned so that output origin = 2 × input origin.
-- **Files:** `in.npy` (h×w×4) and `target.npy` (2h×2w×4), both float32. Clip depth needs float32.
+- **Files** (all float32; clip depth needs float32):
+  - `in.npy` (h×w×4) — the single-ray 400×300 input;
+  - `target.npy` (2h×2w×4) — the supersampled target;
+  - `target-coverage.npy` (2h×2w×1) — coverage fraction k/16;
+  - `native.npy` (2h×2w×4) — the single-ray 800×600 render, **validation and showcase pairs only**.
 - **Per-pair manifest entry:**
   - crop origin and full-frame size;
   - class, character, room, distance, orbit, wounds;
@@ -110,7 +147,8 @@ A wound look-at falls back to the torso when the body has no wound.
   - near/far, and IoU against the previous captured frame.
 
 **Size, location, splits.**
-- Target: **~1,000 pairs**, hard cap 4 GB.
+- Target: **~1,000 pairs**, hard cap 5 GB (the coverage-fraction channel and the validation-only
+  native renders add roughly 30% over the first estimate).
 - Written to `UPSCALE_DATA_ROOT` (default `~/blud-upscale-data/<name>`), outside every worktree and
   outside `/tmp`, because the capture takes hours.
 - 10% of **sequences** held out for validation, chosen by a seeded hash; never adjacent frames.
@@ -190,6 +228,8 @@ Every script is device-agnostic (`cuda` → `mps` → `cpu`).
   - **nearest** (the zero model);
   - **coverage-aware bicubic**: bicubic over flesh taps only, weights renormalized, coverage from
     the nearest texel.
+  - **native single-ray reference** (validation pairs): the native 800×600 render's error against
+    the supersampled target. A model below this line is cleaner than rendering at full resolution.
 
 **Checkpoints.**
 - Written at every validation. The best-by-validation checkpoint is kept separately.
@@ -245,9 +285,10 @@ outputs, both layouts.
   charts, no CDN, and refreshes every 30 s.
 - **Status:** per-run state, step, best validation, and spend against the cap.
 - **Curves:** train and validation loss; error per region (face, wound, edge, interior) and per
-  distance class (close, medium, far), with the nearest and bicubic baselines as flat lines.
+  distance class (close, medium, far), with the nearest, bicubic and native single-ray references as flat lines.
 - **Showcase:** the 12 fixed validation crops at the latest and best checkpoints — nearest |
-  bicubic | model | native, shown enlarged with nearest filtering so pixels stay visible.
+  bicubic | model | native single-ray | supersampled target — shown enlarged with nearest filtering
+  so pixels stay visible.
 - **Exposure:** proxy URLs are unlisted, not authenticated. The page holds only project-asset
   crops and metrics.
 
@@ -286,7 +327,8 @@ is acceptable.
 
 **Pre-flight (local, must pass before any pod launch).**
 - Smoke training on the 60 existing pairs (`/tmp/blud-upscale-data/smoke-2026-09-11-r4`,
-  regenerate if gone), CPU/MPS, ≤ 10 minutes.
+  regenerate if gone), CPU/MPS, ≤ 10 minutes. Those pairs have single-ray targets, which is fine
+  for proving the pipeline.
 - Training loss falls, and the model beats nearest on its own training crops (an overfit sanity check).
 - The export round-trips, G3 parity passes, and the dashboard renders locally.
 
@@ -297,6 +339,8 @@ is acceptable.
 **G4 quality.**
 - At least one run's best checkpoint beats coverage-aware bicubic on the validation set **overall,
   on faces, wounds and the edge band, and in the medium and far distance classes**.
+- All errors are measured against the **supersampled target**. Whether the model also beats the
+  native single-ray render is reported, not required.
 - G4 only decides whether the in-game look is worth the owner's time. **The owner's in-game A/B
   verdict decides.**
 
@@ -321,6 +365,9 @@ is acceptable.
 
 - Temporal reconstruction.
 - A full-resolution face pass.
+- **Option 3b:** fractional coverage output plus a blended composite for smooth silhouettes. The
+  composite is all-or-nothing today. The capture already stores `target-coverage.npy`, so 3b needs
+  no re-capture.
 - **Richer aux inputs** (normal/albedo/wound via MRT). The parent spec's P3-prep decision:
   **deferred again**. This round stays `rgb`/`rgbd`; revisit only if G4 fails on faces and `rgbd`
   doesn't help.

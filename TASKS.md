@@ -13,7 +13,7 @@
 - [x] G2 pairs PASS (re-run r4): gate re-scoped to linear-depth registration — marches aligned at (0.0002, 0.003) px;
   colour and centroid checks were misreading aliasing. 60 pairs, 559 MB in /tmp (regenerable) — `g2-pairs.md`.
 - [-] G1 cost bench (plan Task 6) DEFERRED 2026-09-11 (owner: machine under load; quality first, optimize after).
-- [ ] P3 spec `docs/superpowers/specs/2026-09-11-neural-upscale-p3-training-design.md`: detail capture v2 (~1,000 pairs, medium/far-weighted),
+- [ ] P3 spec `docs/superpowers/specs/2026-09-11-neural-upscale-p3-training-design.md`: detail capture v2 (~1,000 pairs, medium/far-weighted, 16× supersampled target),
   RunPod 6-run grid ($10 cap), pod dashboard, in-game A/B. Owner: RunPod API key, launch OK. Plan not yet written.
 
 ## Raymarch — Claybook cheap wins — 2026-09-09
