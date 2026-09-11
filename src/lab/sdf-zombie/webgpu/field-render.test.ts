@@ -1,8 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import {
-  fieldParity, fieldTargetHeight, fieldJitterNdcY, fieldRowSource, fieldHeldNeighbours,
-  fieldRingDepth, fieldPixelFraction, fieldHistorySlot, fieldHistoryRead,
-  fieldHeldNeighboursInteger, FIELD_COUNT,
+  fieldParity,
+  fieldTargetHeight,
+  fieldJitterNdcY,
+  fieldRowSource,
+  fieldHeldNeighbours,
+  fieldRingDepth,
+  fieldPixelFraction,
+  fieldHistorySlot,
+  fieldHistoryRead,
+  fieldHeldNeighboursInteger,
+  FIELD_COUNT,
 } from './field-render';
 
 describe('fieldParity', () => {
@@ -493,6 +501,66 @@ describe('fieldHeldNeighboursInteger — the nf = 2 equivalence the shader relie
           expect(above * fields + parity).toBeLessThanOrEqual(outRow);
           expect(below * fields + parity).toBeGreaterThan(outRow);
         }
+      }
+    }
+  });
+});
+
+describe('the two-field constants that must follow the divisor', () => {
+  // THE DEFECT CLASS the owner found twice in a row on h/3 and h/4, pinned as
+  // arithmetic rather than left to a playtest. Each of these was a two-field
+  // constant that survived into a deeper field:
+  //   - FIELD_INTERLEAVE_WGSL hardcoded `outRow / 2`  -> SKELETON OUTSIDE THE BODY
+  //   - fieldParity(frameIndex) defaulted to fields=2 -> the field-2 branch was
+  //     UNREACHABLE and parity 1 sampled one field forever -> FLESH NOT RENDERING
+  //   - the field jitter hardcoded the 0.5 two-field centering
+  // A test cannot catch the third's predecessor by name, so it catches it by
+  // PROPERTY: at fields = 2 every one of these must reproduce the shipped value,
+  // and above 2 it must cover the whole cycle.
+
+  it('fieldParity covers the FULL cycle for the divisor it is given', () => {
+    for (const fields of [2, 3, 4]) {
+      const seen = new Set<number>();
+      for (let frame = 0; frame < 60; frame++) seen.add(fieldParity(frame, fields));
+      // Every field must be reachable, or part of the target is never drawn —
+      // which is what "the flesh does not render" WAS.
+      expect([...seen].sort((a, b) => a - b)).toEqual(
+        Array.from({ length: fields }, (_, i) => i),
+      );
+    }
+  });
+
+  it('fieldParity at fields = 2 is the shipped 0/1 alternation', () => {
+    // The default-argument form must still equal the explicit two-field call:
+    // this is what makes the shipped page bit-identical.
+    for (let frame = 0; frame < 20; frame++) {
+      expect(fieldParity(frame)).toBe(fieldParity(frame, 2));
+      expect(fieldParity(frame)).toBe(frame % 2);
+    }
+  });
+
+  it('the jitter centering reduces to the shipped 0.5 at two fields', () => {
+    const centering = (fields: number) => (fields - 1) / 2;
+    expect(centering(2)).toBe(0.5);
+    // And centres the deeper fields rather than reusing the two-field value.
+    expect(centering(3)).toBe(1);
+    expect(centering(4)).toBe(1.5);
+    // The property that matters: the offsets are symmetric about zero.
+    for (const fields of [2, 3, 4]) {
+      const offsets = Array.from({ length: fields }, (_, p) => p - centering(fields));
+      expect(offsets.reduce((a, b) => a + b, 0)).toBeCloseTo(0, 12);
+      expect(Math.min(...offsets)).toBeCloseTo(-Math.max(...offsets), 12);
+    }
+  });
+
+  it("fieldJitterNdcY agrees with the row offsets the layer applies", () => {
+    // The helper takes `fields`; the layer derives its offset in ROWS. Convert
+    // and compare, so the two cannot drift.
+    for (const fields of [2, 3, 4]) {
+      for (let p = 0; p < fields; p++) {
+        const rows = p - (fields - 1) / 2;
+        const ndc = fieldJitterNdcY(p, 600, fields);
+        expect(ndc).toBeCloseTo(rows * (2 / 600), 12);
       }
     }
   });

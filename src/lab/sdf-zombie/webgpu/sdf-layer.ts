@@ -1075,14 +1075,28 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       // (fieldJitterNdcY documents the same +/- 1/H in NDC terms) and neither
       // is the biased one. Applied around the WHOLE layer render so every
       // pre-pass shares the march's sampling grid; cleared at the end.
-      const parity = fieldMode ? fieldParity(frameIndex) : 0;
+      // THE PARITY MUST CYCLE OVER THE LIVE DIVISOR. `fieldParity` defaults to
+      // fields = 2, and that default was the second half of the h/3 defect: with
+      // nf = 3 the shader tests `outRow % 3 == parity`, so a parity that only ever
+      // reaches 0 or 1 makes the FIELD-2 BRANCH UNREACHABLE — a third of the fresh
+      // rows never match, and `parity == 1` samples field 1's rows forever. The
+      // owner saw the result as "the SDF flesh does not render". Passing the live
+      // divisor is what makes the cycle 0,1,2 and the three fields actually rotate.
+      const parity = fieldMode ? fieldParity(frameIndex, fieldCount) : 0;
       if (fieldMode) uFieldParity.value = parity;
       // The jitter is in rows of the grid being FIELDED: the output grid for
       // 'frame' (fieldFull is output-sized), the sdfScale'd grid otherwise.
       const applyFieldJitter = () => {
         const jw = fieldStyle === 'frame' ? Math.max(1, fullW) : Math.max(1, Math.round(fullW * scale));
         const jh = fieldStyle === 'frame' ? Math.max(1, fullH) : Math.max(1, Math.round(fullH * scale));
-        camera.setViewOffset(jw, jh, 0, parity - 0.5, jw, jh);
+        // CENTRED OVER THE LIVE DIVISOR, not over two fields. `parity - 0.5` is
+        // the two-field centering (fields - 1) / 2 = 0.5; at nf = 3 the fields
+        // must sit at -1 / 0 / +1 full-res rows, and at nf = 4 at -1.5 … +1.5.
+        // Leaving it at 0.5 would bias every field off-centre, which is the same
+        // "the two-field constant survived into a deeper field" defect as the
+        // unreachable parity branch. At nf = 2 this is EXACTLY parity - 0.5, so
+        // the shipped h/2 sampling is untouched.
+        camera.setViewOffset(jw, jh, 0, parity - (fieldCount - 1) / 2, jw, jh);
       };
       // 'frame' fields the polygonal pass too, so it is jittered with the
       // rest. 'sdf'/'bodies' draw the polys at FULL height, unfielded, and
