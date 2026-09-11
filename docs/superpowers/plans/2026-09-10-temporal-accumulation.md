@@ -235,3 +235,79 @@ case) against the raw low-res march, and against that same capture flipped:
 reconstruction is doing its job: with a nearest fetch a sub-pixel jitter made this
 comparison read ~7 levels, and bilinear turns it into a sub-pixel resampling
 difference.
+
+---
+
+# VIEW-TEST VERDICTS (owner, 2026-09-10) — reconstruction REJECTED, the smear LIKED
+
+Three separate findings from one play session, and they point different ways.
+
+**1. RECONSTRUCTION AT 0.5 — REJECTED.** "its too low res its too blurry". Gate 1
+passed on the metric (5.82 → 0.35 against a converged full-scale accumulation,
+converging on schedule) and the look still fails. **A converging metric is not a
+look verdict** — worth remembering next to the fact that the gate also missed a
+Y-flip because its subject was centred.
+
+**2. PERFORMANCE READS WORSE AND SPIKIER THAN THE FIELDS** — despite the march
+costing half as much in the bench. Not yet explained, but the code has an obvious
+suspect: the ping-pong is a `copyTextureToTexture` of a FULL-RESOLUTION RGBA32F
+buffer (~16 MB/frame), which is not a labelled pass and so is invisible to the pass
+timing I quoted. That copy is the first thing to price, and swapping bindings for a
+copy is the likely fix.
+
+**3. THE SM EAR IS LIKED, BUT AS AN EFFECT, NOT AS RECONSTRUCTION.** In the owner's
+words: *"i like the smearing effect but applied selectively in a way that looks like
+per object motion blur"*, and *"i think it would be cool with the fields ... our
+defaults was that that was acceptable sharpness and performance but the lines were a
+bit distracting but if with the smear blur i think that would look interesting"*.
+
+### The ghosting they described IS the mechanism, mis-reprojected
+
+Reported artifact: *"when a zombie or character walks the texture of them seems to
+smear from previous frames so its like they are painting a series of past frames but
+in their silhouette."*
+
+That is exactly what a CAMERA-ONLY reprojection does to a moving object, and it is
+worth being precise about why: the history is fetched at the position predicted by
+the camera. For a static camera that is the SAME pixel, so the running
+`mix(history, current, alpha)` accumulates whatever was at that pixel over the last
+~1/alpha frames — a stack of the body's past appearances, offset along its motion,
+painted inside its current silhouette. The streak direction is right (it follows the
+motion) but the SAMPLING is wrong, because nothing in the pass knows the body moved.
+
+**So the effect the owner likes is a proto-per-object-motion-blur, and the artifact
+is the same thing without the per-object term.** Fixing the term is not a
+workaround for the smear — it IS the feature: reproject the history by each body's
+own screen-space velocity and the stale stack becomes a velocity-aligned streak,
+which is what per-object motion blur is.
+
+### What that implies for the plan, and the cheapest way to a verdict
+
+- **The jitter goes away.** It exists only to reconstruct resolution, and
+  reconstruction is rejected. A blur wants the reprojection and the blend, nothing
+  else.
+- **The low-res march goes away with it.** At the shipped scale there is nothing to
+  reconstruct, so "too blurry" cannot happen; the blur is then purely the smear.
+- **Per-object motion vectors move from "deferred follow-up" (the plan's task 3) to
+  the main event.** The vertex data is close to hand — `bone-instancer.ts` packs
+  posed instances per frame — but a screen-space motion field still needs its own
+  pass and target, and it must cover the MESH parts too (skeleton, armor), not just
+  the marched flesh, or bone and flesh will smear differently.
+- **Keeping the shipped weave AND adding the smear is the expensive option**: the
+  accumulation currently sits BEFORE the composite, on the raw march target, and is
+  mutually exclusive with the weave. Blur-on-top-of-the-fields means accumulating
+  the WOVEN flesh, i.e. restructuring the composite so the weave output becomes an
+  input to the resolve rather than the final step. Worth it only if the owner wants
+  the h/2 half-row saving kept alongside the blur.
+
+**Cheapest next step, before ANY motion-vector work:** the owner's own A/B at full
+sharpness and no reconstruction — scale 1.0, no weave, no jitter, alpha tuned:
+
+```js
+__sdfGame.setSdfScale(1);
+__sdfGame.setTemporalAccum(true, 0.6);   // try 0.5 / 0.6 / 0.75
+```
+
+If the smear still reads well there — sharp flesh, trails only on movement — then
+per-object vectors are worth building. If it only looked good because the low-res
+march was already smearing, the effect was a by-product and the direction is dead.
