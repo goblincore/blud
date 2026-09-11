@@ -328,8 +328,36 @@ contaminated attempt gave `sdf:march` 1.13 ms (r3) beside 8.75 (r4) — the cens
 drift again; no number is quoteable. Re-measure on a QUIET machine against
 `fields=2`, reading `sdf:march`.
 
-**NEXT, in order:** (1) [DONE above — steps 1+2; steps 3 (history ring) and 4 (measure + owner look)
-remain, see the deeper-interlace block]; (2) the census-diff demo repeatability
+## Gather dispatch R1 — measured, designed, ready (2026-09-10)
+
+**The scaling evidence is IN and it justifies R1.** Sweeping ray count via
+`BENCH_PRELUDE="__sdfGame.setProbeRays(N)"` (room 4, `BENCH_PASSES=1`):
+
+| rays/probe | `compute:probe-gather` p50 |
+| --- | ---: |
+| 32 (shipped) | 4.00 ms |
+| 16 | 1.83 ms |
+| 8 | 0.75 ms |
+| 4 | 0.21 ms |
+
+Near-perfectly LINEAR, so the cost is unshareable per-ray work run serially inside
+**448 threads (7 workgroups) on 1280 ALUs** — no latency hiding. `probe-norays` reads
+**0.01 ms**, so dispatch + setup + blend is negligible: essentially all 4 ms is ray
+work. The frame moves with it (room-4 median 17.7 -> 12.5 ms at 4 rays), so the
+gather is a large slice of the frame.
+
+⚠ **A LANDMINE:** there is no `probe-r4`/`probe-r8` leg in the harness. `BENCH_LEGS`
+naming a leg that does not exist SILENTLY measures `baseline`. Use the prelude.
+
+**Design + verification plan:** [docs/dev-notes/2026-09-10-r1-gather-dispatch-design.md](docs/dev-notes/2026-09-10-r1-gather-dispatch-design.md).
+One thread per `(probe, ray)` = 200 workgroups. **FIRST STEP, 10 minutes:** verify
+whether three's TSL can pass `ptr<workgroup, array<...>>` into a `wgslFn` function —
+that decides between the one-dispatch shared-tree design and the workgroup-per-probe
+fallback, and it cannot be answered without a GPU round trip. Do NOT write the kernel
+before answering it: landing WGSL on an unverified binding mechanism is what caused
+the flesh regression earlier today (`43779459`).
+
+**NEXT, in order:** (1) the R1 binding-support probe, then R1 itself; (2) the census-diff demo repeatability
 gate (`docs/superpowers/plans/2026-09-10-deterministic-demo-recordings.md`) —
 three of six bench windows this session were unusable; (3) R1, widening the
 gather's 7-workgroup dispatch, now backed by the measured split; (4) far-body
