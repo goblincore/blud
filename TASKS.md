@@ -116,6 +116,13 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 
 ## Current focus
 
+> **Session start: read
+> [docs/dev-notes/2026-09-10-PASSOFF.md](docs/dev-notes/2026-09-10-PASSOFF.md) first.**
+> It says what was built, what is CURRENT vs HISTORICAL among the 2026-09-10 notes,
+> the next actions in evidence order, and the seven traps that each cost real time.
+> Everything below is the detail behind it.
+
+
 ### 2026-09-10 — perf session: gather −33%, a measured split, two levers closed
 
 **BOTH BRANCHES ARE MERGED INTO `main`** — `claude/sdf-march-perf-518bcc`
