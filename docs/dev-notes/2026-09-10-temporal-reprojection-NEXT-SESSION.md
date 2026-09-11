@@ -302,7 +302,12 @@ What it needs, in the order that de-risks it:
    exactly-rendered polygons).
 4. **A jitter sequence** and its determinism consequences: the whole frame becomes
    a function of its entire history, which changes what `frameHash`'s `repeated`
-   check means and interacts with the two-state branch.
+   check means and interacts with the two-state branch. **SETTLED — see
+   [2026-09-10-temporal-accumulation-frame-hash-DECISION.md](2026-09-10-temporal-accumulation-frame-hash-DECISION.md):** every layer stays in the
+   hash (nothing dropped, the accumulated output is ADDED and the version bumped),
+   but the accumulator must be resettable and epoch-labelled, the gate becomes a
+   SEQUENCE comparison from a fresh epoch, and the jitter must be a pure function
+   of frames-since-epoch that `demoHold` must NOT freeze.
 
 Pieces that already exist and would carry over: `sdfScale` already marches at a
 scaled resolution (`setSdfScale`, reset to 1.0 in the ship defaults) — that is the

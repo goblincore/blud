@@ -148,7 +148,12 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 > ceiling — do not build it expecting deeper interlace. Code: `main` @ fc7c70c7
 > (inert, OFF), branch `held-row-reproj` @ 81a87262 (wiring + rig), unmerged.
 > Deeper fields would need temporal ACCUMULATION on every row; shape and first
-> experiment in the temporal reprojection note's FINAL VERDICT section.
+> experiment in the temporal reprojection note's FINAL VERDICT section, and the
+> frame-hash question is DECIDED in
+> [docs/dev-notes/2026-09-10-temporal-accumulation-frame-hash-DECISION.md](docs/dev-notes/2026-09-10-temporal-accumulation-frame-hash-DECISION.md)
+> (keep every layer and ADD the accumulated one; the accumulator must be
+> resettable and epoch-labelled; the gate is a sequence comparison from an epoch;
+> the jitter must NOT be frozen by demoHold).
 
 > **THE MARCH'S PIXEL-WASTE METRIC IS BROKEN, AND THAT IS THE FIRST THING TO
 > FIX.** `__sdfGame.occupancy()` returns BEFORE the discard, so inside overlapping
