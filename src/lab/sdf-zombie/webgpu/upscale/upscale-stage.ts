@@ -118,7 +118,11 @@ export function createUpscaleStage(config: UpscaleConfig, marchTexture: THREE.Te
       const state = wgslFn(spec.state);
       // Includes are cast: three's types reject an inline node array (same runtime shape deferred-sdf.ts passes).
       const run = wgslFn(spec.run, [state] as never);
-      const cached = (run(args as never) as unknown as { toVar: (n: string) => unknown }).toVar(`upRun${spec.name}`);
+      // NOT `upRun${name}`: the cached TSL var becomes a module-scope
+      // `var<private>` and WGSL shares one namespace with the generated
+      // `fn upRun${name}` — the collision is a redeclaration and every pipeline
+      // fails to compile (caught by scripts/upscale-smoke.mjs).
+      const cached = (run(args as never) as unknown as { toVar: (n: string) => unknown }).toVar(`upCache${spec.name}`);
       const outs: Record<string, unknown> = {};
       spec.reads.forEach((src, k) => { outs[`f${k}`] = wgslFn(src, [state] as never)({ dep: cached as never }); });
       material.mrtNode = mrt(outs as never) as never;

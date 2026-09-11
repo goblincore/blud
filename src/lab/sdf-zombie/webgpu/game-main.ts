@@ -91,6 +91,7 @@ import { createRoomProbes, type ProbeWorkerLike } from './room-probes';
 import { computeBounceSpot } from '../flashlight-bounce';
 import { createProbeGatherBinding, type ProbeGatherBinding } from './probe-gather-compute';
 import { parseFloatParam, parseIntParam } from './boot-params';
+import { parseUpscaleConfig, UPSCALE_SCALE } from './upscale/upscale-model';
 import { TEMPORAL_ACCUM_DEFAULT_SCALE } from './temporal-accum';
 import { hashFrame, DEFAULT_TILES_X, DEFAULT_TILES_Y } from './demo-hash';
 import { paddedRowStrideFloats } from './frame-hash';
@@ -1912,6 +1913,29 @@ async function main() {
       deferredApi?.setScale(sdfScale);
       const alpha = parseFloatParam(accumSearch.get('accumalpha'), { min: 0.01, max: 1 });
       sdfLayer.setTemporalAccum(true, alpha ?? undefined);
+    }
+  }
+
+  // NEURAL UPSCALE STAGE (spec docs/superpowers/specs/2026-09-11-neural-upscale-espcn-design.md).
+  // `?upscale=<s8|s16|s32|zero>` enables it with RANDOM weights (a cost/parity
+  // probe, not a look) and drops the march to 0.5 — the stage upscales exactly 2x.
+  // `?upscalelayout=<sp|dc>`, `?upscaleinputs=<rgb|rgbd>`, `?upscaleseed=<int>`.
+  // Dev-only; absent = the shipped path. The scale goes through the game's own
+  // sdfScale state, exactly like the ?accum block above (b9fad129).
+  {
+    const upSearch = new URLSearchParams(location.search);
+    const upRaw = upSearch.get('upscale');
+    if (upRaw !== null && upRaw !== '0') {
+      const cfg = parseUpscaleConfig({
+        model: upRaw,
+        layout: upSearch.get('upscalelayout') ?? undefined,
+        inputs: upSearch.get('upscaleinputs') ?? undefined,
+        seed: parseIntParam(upSearch.get('upscaleseed'), { min: 0, max: 2 ** 31 - 1 }) ?? undefined,
+      });
+      sdfScale = UPSCALE_SCALE;
+      sdfLayer.setScale(sdfScale);
+      deferredApi?.setScale(sdfScale);
+      sdfLayer.setUpscale(cfg);
     }
   }
   // Headless A/B seams (2026-08-27 hull-holes diagnosis): ship defaults stay
@@ -7049,6 +7073,22 @@ function performBenchAction(a: BenchAction): void {
      *  one — see the frame-hash decision note. */
     setTemporalAccum: (on: boolean, alpha?: number) => sdfLayer.setTemporalAccum(on, alpha),
     resetTemporalAccum: () => sdfLayer.resetTemporalAccum(),
+    /** NEURAL UPSCALE (spec 2026-09-11). Enabling also sets the march scale to 0.5
+     *  through applySdfScale (the game's own state). `null` turns the stage off and
+     *  leaves the scale alone — callers restore it. Random weights: cost/parity only. */
+    setUpscale: (raw: { model: string; layout?: string; inputs?: string; seed?: number } | null) => {
+      if (raw === null) return sdfLayer.setUpscale(null);
+      const cfg = parseUpscaleConfig(raw);
+      applySdfScale(UPSCALE_SCALE);
+      return sdfLayer.setUpscale(cfg);
+    },
+    /** Stage state plus the camera's near/far (what rgbd depth linearization uses).
+     *  near/far are reported even when the stage is off (the capture script needs them). */
+    upscaleInfo: () => ({
+      ...sdfLayer.upscaleInfo,
+      near: (camera as THREE.PerspectiveCamera).near,
+      far: (camera as THREE.PerspectiveCamera).far,
+    }),
     get temporalAccum() { return sdfLayer.temporalAccum; },
     get temporalStart() { return sdfLayer.temporalStart; },
     get depthPrepass() { return sdfLayer.depthPreEnabled; },

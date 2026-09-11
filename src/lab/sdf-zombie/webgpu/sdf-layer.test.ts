@@ -370,3 +370,97 @@ describe('field jitter placement', () => {
     layer.dispose();
   });
 });
+
+describe('neural upscale stage in the layer (spec 2026-09-11-neural-upscale-espcn-design.md)', () => {
+  /** Same shape as the field tests' fake renderer: records every render() target. */
+  function fakeRenderer() {
+    const calls: { target: THREE.RenderTarget | null }[] = [];
+    let currentTarget: THREE.RenderTarget | null = null;
+    let clearAlpha = 1;
+    const r = {
+      autoClear: true,
+      getRenderTarget: () => currentTarget,
+      setRenderTarget: (t: THREE.RenderTarget | null) => { currentTarget = t; },
+      render: () => { calls.push({ target: currentTarget }); },
+      clear: () => {},
+      getClearAlpha: () => clearAlpha,
+      setClearAlpha: (a: number) => { clearAlpha = a; },
+      getClearColor: (c: THREE.Color) => c,
+      setClearColor: vi.fn(),
+      getClearDepth: () => 1,
+      setClearDepth: vi.fn(),
+      copyTextureToTexture: vi.fn(),
+      compileAsync: vi.fn(async () => {}),
+    };
+    return { renderer: r as unknown as THREE.WebGPURenderer, calls };
+  }
+  const cfg = { model: 's8', layout: 'sp', inputs: 'rgb', seed: 1 } as const;
+
+  it('is off by default: no stage passes run', () => {
+    const { renderer, calls } = fakeRenderer();
+    const layer = createSdfLayer(renderer);
+    layer.setSize(800, 600);
+    layer.render(new THREE.Scene(), new THREE.PerspectiveCamera());
+    expect(layer.upscaleInfo.on).toBe(false);
+    expect(layer.upscaleStage).toBeNull();
+    expect(calls.some((c) => c.target?.textures[0]?.name === 'f0')).toBe(false);
+    layer.dispose();
+  });
+
+  it('on: forces fields off, sizes 400x300 -> 800x600, and runs every pass in order before the composite', () => {
+    const { renderer, calls } = fakeRenderer();
+    const layer = createSdfLayer(renderer);
+    layer.setSize(800, 600);
+    layer.setFieldStyle('bodies');
+    layer.setScale(0.5);
+    const info = layer.setUpscale(cfg);
+    expect(info.on).toBe(true);
+    expect(layer.fieldStyle).toBe('off');
+    expect(info.inSize).toEqual({ width: 400, height: 300 });
+    expect(info.outSize).toEqual({ width: 800, height: 600 });
+    layer.render(new THREE.Scene(), new THREE.PerspectiveCamera());
+    const stage = layer.upscaleStage!;
+    const idx = stage.passes.map((p) => calls.findIndex((c) => c.target === stage.targetFor(p.name)));
+    expect(idx.every((i) => i >= 0)).toBe(true);
+    expect([...idx].sort((a, b) => a - b)).toEqual(idx);
+    const marchIdx = calls.findIndex((c) => c.target === layer.marchTarget);
+    expect(marchIdx).toBeGreaterThanOrEqual(0);
+    expect(marchIdx).toBeLessThan(idx[0]!);
+    const compositeAfter = calls.findIndex((c, k) => k > idx[idx.length - 1]! && c.target === layer.outputTarget);
+    expect(compositeAfter).toBeGreaterThan(idx[idx.length - 1]!);
+    layer.dispose();
+  });
+
+  it('on: refuses temporal accumulation and field styles; off restores both', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { renderer } = fakeRenderer();
+    const layer = createSdfLayer(renderer);
+    layer.setSize(800, 600);
+    layer.setScale(0.5);
+    layer.setUpscale(cfg);
+    expect(layer.setTemporalAccum(true)).toBe(false);
+    layer.setFieldStyle('bodies');
+    expect(layer.fieldStyle).toBe('off');
+    expect(warn).toHaveBeenCalled();
+    expect(layer.setUpscale(null).on).toBe(false);
+    expect(layer.upscaleStage).toBeNull();
+    layer.setFieldStyle('bodies');
+    expect(layer.fieldStyle).toBe('bodies');
+    expect(layer.setTemporalAccum(true)).toBe(true);
+    warn.mockRestore();
+    layer.dispose();
+  });
+
+  it('turning accumulation off while the stage is on keeps the composite on the stage output', () => {
+    const { renderer } = fakeRenderer();
+    const layer = createSdfLayer(renderer);
+    layer.setSize(800, 600);
+    layer.setUpscale(cfg);
+    layer.setTemporalAccum(false);
+    expect(layer.upscaleInfo.on).toBe(true);
+    expect(layer.compositeSource).toBe('upscale');
+    layer.setUpscale(null);
+    expect(layer.compositeSource).toBe('march');
+    layer.dispose();
+  });
+});

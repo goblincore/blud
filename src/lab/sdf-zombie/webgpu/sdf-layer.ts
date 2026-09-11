@@ -39,6 +39,8 @@ import { createConeUniforms, createDepthPreUniforms, type ConeSource, type Depth
 import { TEMPORAL_START_DEFAULTS, temporalMarginForMotion } from './temporal-start';
 import { TEMPORAL_ACCUM_DEFAULT_ALPHA, TEMPORAL_ACCUM_CONVERGED_FRAMES, accumAlpha, accumJitter } from './temporal-accum';
 import { setPassLabel } from './gpu-pass-timing';
+import { createUpscaleStage, upscaleInfoOf, type UpscaleInfo, type UpscaleStage } from './upscale/upscale-stage';
+import type { UpscaleConfig } from './upscale/upscale-model';
 
 // ---------------------------------------------------------------------------
 // HALF-RATE (lever C2, temporal amortisation) — render the march every OTHER
@@ -878,6 +880,16 @@ export interface SdfLayer {
    *  Turning it ON turns the field weave OFF — they are mutually exclusive, and
    *  accumulation replaces the weave rather than joining it. */
   setTemporalAccum(on: boolean, alpha?: number): boolean;
+  /** NEURAL UPSCALE STAGE (spec docs/superpowers/specs/2026-09-11-neural-upscale-espcn-design.md).
+   *  march -> upscale -> composite. `null` turns it off. On: forces field style
+   *  'off' and refuses temporal accumulation (stacking is P5); the composite reads
+   *  the stage's output-resolution flesh. The caller sets the march scale. */
+  setUpscale(config: UpscaleConfig | null): UpscaleInfo;
+  readonly upscaleInfo: UpscaleInfo;
+  /** The live stage, for measurement readbacks only; null when off. */
+  readonly upscaleStage: UpscaleStage | null;
+  /** Which flesh texture the composite reads: the raw march, the accumulated history, or the upscale output. */
+  readonly compositeSource: 'march' | 'accum' | 'upscale';
   resetTemporalAccum(): void;
   readonly temporalAccum: {
     on: boolean; alpha: number; epoch: number; frames: number; convergedFrames: number;
@@ -1038,6 +1050,9 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
    *  resize, a teleport): that frame takes the current sample at alpha = 1, which
    *  re-seeds the history without a clear pass. */
   let accumSeed = true;
+
+  /** The neural upscale stage, or null (spec 2026-09-11). */
+  let upscale: UpscaleStage | null = null;
 
   /** Reset the accumulation to a defined state. The epoch advances so a stored
    *  hash knows which history it came from, and the next frame re-seeds instead
@@ -1340,6 +1355,11 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
    */
   let coneFineTile: number = CONE_TILE_FINE;
 
+  // The composite's output-resolution flesh input. Held as a node so the upscale
+  // stage can REBIND its value (stage output) without touching COMPOSITE_WGSL:
+  // the default path keeps the same shader and the same accumNext binding.
+  const accumTexNode = texture(accumNext.texture);
+
   const sampled = composite({
     layerTex: texture(target.texture),
     prevFieldTex: texture(fieldPrev.texture),
@@ -1357,7 +1377,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     fieldComb: uFieldComb,
     outHeight: uOutHeight,
     fieldCount: uFieldCount,
-    accumTex: texture(accumNext.texture),
+    accumTex: accumTexNode,
     accumOn: uAccumOn,
     heldInv1: uHeldInv1,
     heldInv2: uHeldInv2,
@@ -1449,6 +1469,8 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     // reconstructs. Reallocating it also invalidates its contents, so reset.
     accumPrev.setSize(fullW, fullH);
     accumNext.setSize(fullW, fullH);
+    // The upscale stage reads the march grid and writes the output grid.
+    upscale?.setSize(w, h, fullW, fullH);
     resetAccum();
     // The whole-frame field buffers track the OUTPUT size, not sdfScale: the
     // polygonal pass has always rendered at full content resolution and must
@@ -1873,6 +1895,11 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
         accumFrames++;
       }
 
+      // NEURAL UPSCALE STAGE (2026-09-11): between the march and the composite,
+      // where the accumulation resolve sits (the two are exclusive until P5). The
+      // composite reads upscale.output through accumTexNode.
+      if (upscale) upscale.render(renderer, quadCam, camera);
+
       // Pass 3 — composite up. autoClear off, or this wipes pass 1.
       setPassLabel('sdf:composite');
       camera.layers.mask = restore;
@@ -2029,8 +2056,13 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     },
     get heldReproject() { return heldReproject; },
     setTemporalAccum(on, alpha) {
+      if (on && upscale) {
+        console.warn('[sdf-layer] temporal accumulation refused while the upscale stage is on (stacking is P5)');
+        return accumOn;
+      }
       accumOn = on;
-      (uAccumOn.value as number) = on ? 1 : 0;
+      // The composite's output-resolution branch also carries the upscale stage.
+      (uAccumOn.value as number) = on || upscale !== null ? 1 : 0;
       if (alpha !== undefined) (uAccumAlpha.value as number) = Math.min(1, Math.max(0.01, alpha));
       // MUTUALLY EXCLUSIVE WITH THE FIELD WEAVE, and accumulation wins: the
       // composite's field branch returns before the accumulated source is ever
@@ -2044,6 +2076,29 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       return accumOn;
     },
     resetTemporalAccum() { resetAccum(); },
+    setUpscale(config) {
+      if (config === null) {
+        upscale?.dispose();
+        upscale = null;
+        accumTexNode.value = accumNext.texture;
+        (uAccumOn.value as number) = accumOn ? 1 : 0;
+        return upscaleInfoOf(null);
+      }
+      if (accumOn) {
+        console.warn('[sdf-layer] upscale: turning temporal accumulation OFF (the two do not stack until P5)');
+        this.setTemporalAccum(false);
+      }
+      if (fieldStyle !== 'off') this.setFieldStyle('off');
+      upscale?.dispose();
+      upscale = createUpscaleStage(config, target.texture, uFlipY);
+      upscale.setSize(target.width, target.height, fullW, fullH);
+      accumTexNode.value = upscale.output.texture;
+      (uAccumOn.value as number) = 1;
+      return upscaleInfoOf(upscale);
+    },
+    get upscaleInfo() { return upscaleInfoOf(upscale); },
+    get upscaleStage() { return upscale; },
+    get compositeSource() { return upscale ? 'upscale' : accumOn ? 'accum' : 'march'; },
     get temporalAccum() {
       return {
         on: accumOn,
@@ -2069,6 +2124,10 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     },
     setFieldStyle(style) {
       if (style === fieldStyle) return;
+      if (upscale && style !== 'off') {
+        console.warn(`[sdf-layer] field style '${style}' refused while the upscale stage is on (stacking is P5)`);
+        return;
+      }
       fieldStyle = style;
       fieldMode = style !== 'off';
       uFieldMode.value = style === 'frame' ? 1 : 0;
@@ -2124,6 +2183,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
      *  resolution ladder automatically. */
     get pixelConeK() { return coneKFor(1); },
     dispose() {
+      upscale?.dispose();
       target.dispose();
       prev.dispose();
       coneCoarse.dispose();
