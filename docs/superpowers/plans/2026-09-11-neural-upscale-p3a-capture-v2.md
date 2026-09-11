@@ -1177,7 +1177,7 @@ In `game-main.ts`, directly after `import { runUpscaleSelfCheck } from './upscal
 import { accumulateSamples, float32ToBase64, jitterGrid, sampleOrder } from './upscale/supersample';
 ```
 
-Then run `grep -n "from '../damage'" src/lab/sdf-zombie/webgpu/game-main.ts`. If an import from `'../damage'` exists, add `woundWorldPos` to it. Otherwise add this line next to the other `'../'` imports:
+Then run `grep -n "from '../damage'" src/lab/sdf-zombie/webgpu/game-main.ts`. At the time of writing, that import **already lists `woundWorldPos`**, so there is nothing to add (a second copy is a `Duplicate identifier` error). Only if no `'../damage'` import names it, add this line next to the other `'../'` imports:
 
 ```ts
 import { woundWorldPos } from '../damage';
