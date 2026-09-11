@@ -692,21 +692,40 @@ async function main() {
   // TRACER LIGHTS. Raw intensity per pellet in the gathered light list, the
   // same units as the flash entries. ?tracerlight=0 (or off) zeroes it: the
   // pure rule returns [] and the frame packs no tracer light (bit-identical).
+  //
+  // THE DEFAULT IS 6, RAISED FROM 2 ON 2026-09-10, and it is a MEASUREMENT, not
+  // a taste call: the effect had never been priced against the 8-bit canvas. At
+  // gain 2 a volley frozen mid-flight down room 1's lane moved 4800/6400
+  // probe-layer floats and lifted the WHOLE FRAME by about one 8-bit level
+  // (1,930 pixels past a 2-level threshold, max delta 27, spatially uniform) —
+  // real, and invisible in motion, which is exactly the owner's "i cant tell if
+  // the tracers light up the room". At gain 8 it is 291,630 pixels (60.8%) with
+  // a max delta of 80, and the room visibly brightens. 6 sits between the two,
+  // on the visible side. The layer's response is exactly LINEAR in this gain
+  // (0.5338 per unit), so the knob is honest. Full evidence:
+  // docs/dev-notes/2026-09-10-tracer-light-visibility/.
   const tracerLightParam = new URLSearchParams(location.search).get('tracerlight');
-  let tracerLightGain = tracerLightParam === '0' || tracerLightParam === 'off' ? 0 : 2.0;
-  // TRACER SLOT CAP: the gather's cost is per-thread over the packed light
-  // count, and 8 tracers quadrupled it during firefights (p95 6 -> 27 ms).
-  // 2 bounds the worst case near the flashes alone; ?tracerlightslots and
-  // __sdfGame.setTracerLightSlots(n) restore more if the look wants them.
-  // PRE-EXISTING BUG, fixed 2026-09-10 while auditing the ?dynrays class: this
-  // was `Number.isFinite(Number(null)) && Number(null) >= 0` — and an absent
-  // param gives Number(null) === 0, which passes, so the default was 0 and
-  // tracer lights NEVER fed the gather's dynamic light list on a bare page. The
-  // intended default is 2 (the comment above the tracer slot cap says so, and
-  // ?tracerlightslots=0 remains the way to switch them off explicitly).
+  let tracerLightGain = tracerLightParam === '0' || tracerLightParam === 'off' ? 0 : 6.0;
+  // TRACER SLOT CAP: how many tracers can be gathered at once. RAISED FROM 2 TO
+  // 4 on 2026-09-10, and it turned out to be the BIGGER of the two levers: at
+  // the OLD gain 2, going from 2 slots to 8 took visibly-changed pixels from
+  // 1,930 to 207,929 (108x), because the shipped case sat just under the 8-bit
+  // threshold and the response is nonlinear through it.
+  //
+  // The old rationale here was cost — "8 tracers quadrupled it during
+  // firefights (p95 6 -> 27 ms)". THAT IS OBSOLETE: it priced the pre-R1 gather
+  // (4.00 ms). After R1 (0.18 ms) a packed-light-count sweep across 1/2/4 lights
+  // and 16/32/64 rays put every configuration between 0.14 and 0.39 ms, i.e.
+  // inside the instrument's own resolution, so the cap is no longer a cost knob.
+  //
+  // ?tracerlightslots=N (0 = off) and __sdfGame.setTracerLightSlots(n) override.
+  //
+  // (This default was once silently 0 rather than 2 — the `Number(null) === 0`
+  // class that blacked out the dynamic layer. `parseIntParam` reads the RAW
+  // string, and boot-params.ts + boot-params.test.ts carry the whole story.)
   let tracerLightSlots = parseIntParam(
     new URLSearchParams(location.search).get('tracerlightslots'), { min: 0, max: 8 },
-  ) ?? 2;
+  ) ?? 4;
   // DIRECT flash on bodies (march slot bodyFlash): intensity multiplier on
   // the flash lights before the shader's I*cos/d^2. 0 = off, bit-identical.
   let bodyFlashGain = 0.06;
@@ -6346,6 +6365,10 @@ function performBenchAction(a: BenchAction): void {
     setTracerLight: (gain: number) => { tracerLightGain = Math.max(0, gain); return tracerLightGain; },
     setTracerLightSlots: (slots: number) => { tracerLightSlots = Math.max(0, Math.min(8, Math.floor(slots))); return tracerLightSlots; },
     get tracerLight() { return tracerLightGain; },
+    /** The slot cap, so a rig can report WHAT it measured against rather than
+     *  assuming — `setTracerLightSlots` without a getter is the "silent seam"
+     *  failure this file keeps re-learning. */
+    get tracerLightSlots() { return tracerLightSlots; },
     probeDynReadback: () => probeGather?.readback() ?? Promise.resolve(new Float32Array(0)),
     get bounceSpot() { return bounceSpotGain; },
     setProbes: (weight: number, gain = -1) => { roomProbes.setProbes(weight, gain); return { weight: roomProbes.weight, gain: roomProbes.gain }; },

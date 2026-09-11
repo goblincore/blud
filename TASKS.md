@@ -177,19 +177,31 @@ resolution: six bench legs came back non-monotonic and all stayed under 0.39 ms
 The defensible claim is the BOUND, not a slope. **Consequence: more lights, more
 rays and more frequent gathers are now affordable, and R2 is not.**
 
-**TRACERS: the shipped gain sits BELOW the visible threshold — measured.**
-Shooting down room 1's lane with the volley frozen mid-flight, only the tracer
-gain changing: at the shipped **gain 2** with the shipped **2-slot cap** the
-tracers move 4800/6400 probe-layer floats and lift the whole frame by ~1 8-bit
-level (1,930 pixels over 2 levels, max 27) — real, and invisible in motion, which
-is exactly the owner's "i cant tell". At **gain 8** it is 291,630 pixels (60.8%)
-and the room visibly brightens. **The SLOT CAP is the bigger lever:** 2 → 8 slots
-at the shipped gain 2 takes visibly-changed pixels from 1,930 to 207,929 (108x),
-because the shipped case sits just under the threshold. Recommendation, owner's
-look call: `tracerLightGain` 2 → 6–8 and/or `tracerLightSlots` 2 → 4–8; cost is
-unmeasurable. Full evidence + the three rig traps:
-[docs/dev-notes/2026-09-10-tracer-light-visibility/](docs/dev-notes/2026-09-10-tracer-light-visibility/README.md).
+**TRACERS: SHIPPED VISIBLE — gain 2 → 6, slots 2 → 4 (2026-09-10).** At the old
+defaults the tracers lifted the whole frame by ~1 8-bit level (1,796 pixels over
+2 levels, max 29) — real, and invisible in motion, which is exactly the owner's
+"i cant tell". At the new defaults, measured IN ONE BOOT on one frozen volley:
+**369,088 pixels (76.9%) visibly changed, max delta 68** — 205x, with the probe
+layer's response exactly linear in both seams (0.5338 per gain unit per 2
+tracers). Cost: unmeasurable (the gather is 0.18 ms). The slot cap is the bigger
+lever of the two and is the seam to turn first. Reversible live:
+`?tracerlight=N` / `?tracerlightslots=N`.
+[docs/dev-notes/2026-09-10-tracer-light-visibility/](docs/dev-notes/2026-09-10-tracer-light-visibility/README.md)
+(evidence, before/after images in `shots/`, and the three rig traps).
 Rig: `scripts/sdf-game-tracer-light-check.sh`.
+
+**AND THE LIMIT THAT MATTERS: the dynamic light is SINGLE-ROOM BY CONSTRUCTION.**
+Shooting INTO another room lights nothing, and no gain value changes that: the
+tracer is dropped from the light list outside the gather's room + 1.5 m
+(`tracer-lights.ts`), the probes being lit are the PLAYER'S room's
+(`dynRoom = enclosureKeyAt(player.pos)`), and there is exactly ONE 400-probe
+dynamic layer bound into the level lighting (`game-main.ts` ~2107, ~2255). The
+muzzle flash has the same gate — which is the giveaway that this is the
+architecture, not the tracer feature. Doing it for real needs a layer per lit
+room, a gather per room with a light, and per-room material binding; the GPU time
+is small (0.18 ms/room) and the bookkeeping is the work. Also note the rig above
+measures an UPPER BOUND (frozen volley = the steady state); in play the light
+moves and the afterglow ramps over ~4 frames.
 
 
 ### 2026-09-10 — perf session: gather −33%, a measured split, two levers closed

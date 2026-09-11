@@ -1,21 +1,52 @@
-# Do the tracers light the room? YES — and the shipped gain sits below the visible threshold
+# Do the tracers light the room? YES — and the shipped gain sat below the visible threshold
 
 **Question (owner, 2026-09-10):** *"i cant tell if the tracers light up the room
 or not (i suppose shooting down a dark hallway would be a good test) maybe they
 need to be amped up a bit so i can see."*
 
-**Answer: they light the room, the plumbing works, and at the SHIPPED gain the
-effect is a 1–2 level lift of the whole frame — real, measured, and below what
-anyone would notice in motion. At gain 8 it is 2–12 levels and unmistakable. The
-binding limit is the 2-tracer slot cap as much as the gain.**
+**Answer: they light the room, the plumbing works, and at the OLD shipped gain the
+effect was a 1–2 level lift of the whole frame — real, measured, and below what
+anyone would notice in motion.**
 
-Rig: `scripts/sdf-game-tracer-light-check.mjs` (+ `.sh`). It fires one volley
-down room 1's measured clear lane, freezes it mid-flight, and then takes a gain
-ladder from that ONE frozen frame.
+## 0. APPLIED — the shipping values changed
+
+| seam | was | now |
+| --- | --- | --- |
+| `tracerLightGain` (`?tracerlight`) | 2.0 | **6.0** |
+| `tracerLightSlots` (`?tracerlightslots`) | 2 | **4** |
+
+Measured IN ONE BOOT, one frozen volley, only the two seams changing between
+rungs (so the two-state branch cannot confound it). Noise floor for the run: 284
+pixels changed, **zero** above 2 levels, max delta 1; the probe layer matches
+**bit for bit** between the two gain-0 rungs (0/6400 floats).
+
+| config | gather's lights | probe-layer floats moved | max layer delta | pixels changed >2 levels | max channel delta |
+| --- | --- | --- | --- | --- | --- |
+| gain 0 (control) | 2 | 0 | 0 | 0 (floor) | 1 |
+| **BEFORE (2 slots, gain 2)** | 4 | 4800/6400 | 1.068 | **1,796 (0.37%)** | 29 |
+| **AFTER (4 slots, gain 6)** | 6 | 4800/6400 | 6.429 | **369,088 (76.9%)** | 68 |
+| (8 slots, gain 6) | 8 | 4800/6400 | 9.768 | 400,644 (83.5%) | 70 |
+| (4 slots, gain 20) | 4+2 | 4800/6400 | 21.43 | 417,882 (87.1%) | 79 |
+
+**The shipped change takes visibly-changed pixels from 0.37% to 76.9% of the
+frame — 205x — with no measurable cost.** Images (full frame + centre crop, same
+boot, same volley): `shots/02-BEFORE-shipped-2slots-gain2.png`,
+`shots/03-AFTER-shipped-4slots-gain6.png`, and the two `-zoom.png` crops beside
+them.
+
+The layer response is **exactly linear in BOTH seams**, which is the internal
+check that the light count is what the cap says it is: 0.5338 per gain unit at 2
+slots (= 2 tracers), 1.0715 at 4 (= 4 tracers), 1.628 at 8 slots, where the
+8-light allocation caps it at 6 tracers — i.e. exactly 3x the 2-slot response.
 
 ---
 
-## 1. The shipped configuration (2 tracer slots — the default)
+Rig: `scripts/sdf-game-tracer-light-check.mjs` (+ `.sh`). It fires one volley
+down room 1's measured clear lane, freezes it mid-flight, and then takes a gain
+ladder from that ONE frozen frame. `TRACER_LADDER=slots:gain,...` varies BOTH
+seams per rung, which is how the table above stays in one boot.
+
+## 1. The old configuration (2 tracer slots, gain 2 — the default until today)
 
 Frozen volley of 16 projectiles, `?vhs=off`, sim locked, only the tracer gain
 changing between rungs. **The probe layer is bit-identical between the two gain-0
@@ -96,25 +127,86 @@ read `sdf:march` 7.16 ms / frame 15.17 while the five legs after it read
 4.5–4.9 ms / 9.7–11.7 ms, and several of those legs are near-no-ops, so that
 spread is leg ORDER, not the seams. Do not read that run's `baseline` row.
 
-## 4. Recommendation (owner's look call)
+## 4. Recommendation — APPLIED (kept as the reasoning)
 
-- **`tracerLightGain` 2 → 6–8.** The threshold is between 2 and 8; at 8 the room
-  visibly brightens on every shot. Cost: unmeasurable.
-- **`tracerLightSlots` 2 → 4–8** (there is already a seam:
-  `?tracerlightslots=N` / `setTracerLightSlots`, and `tracerLightGather` fills
-  only the slots the flash and the flashlight left). This is the bigger lever at
-  the shipped gain and it also makes a burst read as a moving glow rather than a
-  single point.
-- Both are one-line changes in `game-main.ts` (the defaults at the seam
-  declarations). Nothing else needs touching — the plumbing, the room gate, the
-  nearest-first cap and the probe path all work as designed.
-- PNGs to judge by eye were written to `/tmp/sdf-tracer-light-slots2/`
-  (shipped case: `00-gain000.png`, `01-gain002.png`, `02-gain008.png`,
-  `03-gain020.png` plus `-zoom.png` crops) and `/tmp/sdf-tracer-light-slots8/`
-  (the wide-slot case). Regenerate any time with
-  `TRACER_SLOTS=2 TRACER_GAINS=0,2,8,20,0 scripts/sdf-game-tracer-light-check.sh`.
+Applied as `tracerLightGain` 2 → **6** and `tracerLightSlots` 2 → **4**, the two
+defaults at the seam declarations in `game-main.ts`. Nothing else was touched: the
+plumbing, the room gate, the nearest-first cap and the probe path all work as
+designed, and the change is one line each.
 
-## 5. Rig traps — three of them cost a run each
+- Gain 6 rather than 8: the threshold is between 2 and 8, and at 6 the frame is
+  already 76.9% visibly changed against 82.0% at 8 — the curve is saturating, so
+  the extra gain buys little and risks reading as a muzzle flash rather than a
+  travelling glow.
+- 4 slots rather than 8: 76.9% against 83.5%, i.e. most of the benefit with half
+  the lights, and it leaves the gather's 8-light allocation room for real lights.
+  It is the seam to turn first if the owner wants more.
+- Both are reversible live: `?tracerlight=N` (0/off = the old behaviour) and
+  `?tracerlightslots=N`, or `__sdfGame.setTracerLight(n)` /
+  `setTracerLightSlots(n)`.
+- Images: `shots/` in this directory (full frames + centre crops, all from ONE
+  boot so they are directly comparable). Regenerate with
+  `TRACER_LADDER=0:0,2:2,4:6,8:6,4:20,0:0 scripts/sdf-game-tracer-light-check.sh`.
+
+## 5. WHY SHOOTING INTO ANOTHER ROOM LIGHTS NOTHING — it is single-room by construction
+
+**Owner, after the change shipped: "i dont really see any difference ... i shoot
+into another room i guess i expect to see like the tracer light up the room."**
+That expectation is correct about what a dynamic light SHOULD do and wrong about
+what this system can do today, and no gain value can bridge it. Three separate
+mechanisms each forbid it:
+
+1. **The tracer is dropped from the light list before it can matter.**
+   `tracerGatherLights` (src/lab/sdf-zombie/tracer-lights.ts) keeps only
+   projectiles inside the gather's room grown by a 1.5 m margin, x/z:
+   `if (p.pos[0] < room.minX - margin || p.pos[0] > room.maxX + margin) continue;`
+   A round that has crossed into the next room is outside that box and returns
+   `[]` for that tracer.
+2. **The probes being lit are the PLAYER'S room's probes.**
+   `dynRoom` is `enclosureKeyAt(player.pos)` (or the nearest room by centre from a
+   tunnel/doorway) and the gather packs THAT room's enclosure, furniture, capsule
+   set and grid — game-main.ts ~1249-1275. So even a light that survived the gate
+   would illuminate the player's own grid, not the far room's.
+3. **There is exactly ONE dynamic layer, and it is sized for one grid.**
+   `createProbeGatherBinding(..., { maxProbes: 10*4*10, ... })` allocates a single
+   400-probe buffer (game-main.ts ~2107) and exactly one `probeDyn` node is bound
+   into the level lighting (~2255). Room B's surfaces, if visible through a
+   doorway, are not reading a layer computed for room B.
+
+**The muzzle flash has the same gate**, which is the giveaway that this is the
+architecture and not the tracer feature: a shot fired through a doorway does not
+light the far room either, flash and all.
+
+**What it would take to do it** — a real capability, not a tweak: bake a grid per
+room (already done: `roomProbes.gridOf(roomId)`, per-room worker bakes exist),
+allocate a dynamic layer per LIT room, dispatch the gather once per room that has
+a light in it, and bind each room's surfaces to their own layer. The gather is
+now 0.18 ms per room, so lighting the player's room plus the two nearest would
+cost on the order of half a millisecond — it is the bookkeeping (N buffers, N
+dispatches, per-room material binding, and deciding which rooms are "visible
+enough to bother") that is the work, not the GPU time.
+
+**Not attempted here**: the owner's interest was "a way of testing the dynamic
+light", not a new subsystem.
+
+## 6. A limit of THIS rig: it measures an UPPER BOUND, not the in-play value
+
+Every number above comes from a volley FROZEN mid-flight with the afterglow seams
+pinned (`setProbeBlend(1); setProbeFall(1)`). That makes the layer equal to the
+frame's estimate for a light that SITS STILL — the steady state. In play the light
+MOVES with the pellets, so each probe sees it briefly, and the shipped afterglow
+ramps toward the estimate at 0.6 per gather (i.e. ~84% after two gathers, ~4
+frames), while a pellet crossing an 8 m room at 30 m/s is present for ~0.27 s
+(~8 gathers). So the in-play response is BELOW these figures by an amount this
+rig does not measure — the 1,796 → 369,088 pixel comparison is still a like-for-
+like comparison of the two shipped configurations, but "76.9% of the frame" is
+not what a shot in play changes.
+
+The live-fire version of this measurement (no freeze: fire a burst in a room and
+diff the layer against a no-fire control, same boot, same # of steps) is the
+honest follow-up if this matters. It is not written yet.
+
+## 7. Rig traps — three of them cost a run each
 
 1. **A CROSS-BOOT PIXEL DIFF IS THE TWO-STATE BRANCH, NOT YOUR LIGHT.** The first
    version of this rig fired a fresh volley in a fresh page per gain. Two gain-0

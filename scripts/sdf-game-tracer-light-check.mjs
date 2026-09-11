@@ -63,8 +63,24 @@ import { decodePng } from './lib/demo-presented.mjs';
 const VITE = Number(process.argv[2] ?? process.env.LAB_VITE_PORT ?? 5277);
 const CDP = Number(process.argv[3] ?? process.env.LAB_CDP_PORT ?? 9277);
 const OUT = process.env.GAME_OUT ?? '/tmp/sdf-tracer-light';
-const GAINS = (process.env.TRACER_GAINS ?? '0,2,8,20,60,0').split(',').map(Number);
-const SLOTS = Number(process.env.TRACER_SLOTS ?? 8);
+// The ladder brackets the SHIPPED gain (6, raised from 2 on 2026-09-10), the old
+// shipped value (2) and two extremes, and it ENDS on 0 again for the noise floor.
+const GAINS = (process.env.TRACER_GAINS ?? '0,2,6,8,20,0').split(',').map(Number);
+// TRACER_SLOTS unset = LEAVE THE PAGE'S SHIPPED CAP ALONE, so the rig verifies
+// the shipped configuration by default instead of a seam value of its own.
+const SLOTS = process.env.TRACER_SLOTS ? Number(process.env.TRACER_SLOTS) : null;
+// TRACER_LADDER=slots:gain,... — varies BOTH seams per rung. This is how the
+// before/after pair is made comparable: the shipped configuration before
+// 2026-09-10 was (2 slots, gain 2) and after it is (4, 6), and comparing those
+// across two BOOTS would fold in the two-state branch (see the header). In one
+// boot the only difference is the two numbers.
+const LADDER = process.env.TRACER_LADDER
+  ? process.env.TRACER_LADDER.split(',').map((tok) => {
+    const [sl, g] = tok.split(':').map(Number);
+    if (!Number.isFinite(sl) || !Number.isFinite(g)) fail(`bad TRACER_LADDER token "${tok}" (want slots:gain)`);
+    return { slots: sl, gain: g };
+  })
+  : GAINS.map((gain) => ({ slots: SLOTS, gain }));
 const STEPS = Number(process.env.TRACER_STEPS ?? 4);
 // Frames to step between ladder rungs. Must be EVEN (same field parity as the
 // reference rung) and large enough to refill every HELD row — see the rung loop.
@@ -114,7 +130,8 @@ if (!baked) fail('roomProbesReady never landed');
 await evaluate(`(() => { ${POSE}; __sdfGame.step(90); return 1; })()`);
 // History-free dynamic layer (see the header).
 await evaluate('(() => { __sdfGame.setProbeBlend(1); __sdfGame.setProbeFall(1); return 1; })()');
-await evaluate(`(() => { __sdfGame.setTracerLightSlots(${SLOTS}); return __sdfGame.tracerLightSlots; })()`);
+if (SLOTS !== null) await evaluate(`(() => __sdfGame.setTracerLightSlots(${SLOTS}))()`);
+const shippedSlots = await evaluate('__sdfGame.tracerLightSlots');
 const lightsIdle = await evaluate('(() => __sdfGame.probeDynamic.gates?.lights ?? null)()');
 
 // Trigger, waiting for a loaded off-cooldown gun (the look rig's own lesson: the
@@ -134,7 +151,7 @@ if (!inFlight) {
 // FREEZE THE VOLLEY MID-FLIGHT. After this tick() mutates nothing: the pellets
 // hang where they are, and every rung below differs only by the tracer gain.
 await evaluate('(() => { __sdfGame.freeze(true); __sdfGame.setRenderLock(true); return __sdfGame.renderLock; })()');
-console.log(`staged: ${inFlight} projectiles in flight, frozen. idle lights ${lightsIdle}, tracer slots ${SLOTS}`);
+console.log(`staged: ${inFlight} projectiles in flight, frozen. idle lights ${lightsIdle}, tracer slots ${shippedSlots}`);
 
 const READ = `(async () => {
   const dyn = await __sdfGame.probeDynReadback();
@@ -159,8 +176,8 @@ const READ = `(async () => {
 })()`;
 
 const rungs = [];
-for (let i = 0; i < GAINS.length; i++) {
-  const gain = GAINS[i];
+for (let i = 0; i < LADDER.length; i++) {
+  const { slots, gain } = LADDER[i];
   // RESOLVE THE GPU BEFORE READING, or the reading belongs to the PREVIOUS rung.
   // Measured the hard way on this rig's first in-boot attempt: without the fence
   // the rung that set gain 0 reported eight lights' worth of layer (the rung
@@ -176,18 +193,19 @@ for (let i = 0; i < GAINS.length; i++) {
   // still sitting in the held rows. TRACER_FLUSH frames (8 = four field cycles at
   // the shipped field count, and four gathers at probeGatherRate 2) is the
   // smallest number that reliably clears it.
+  if (slots !== null) await evaluate(`(() => __sdfGame.setTracerLightSlots(${slots}))()`);
   await evaluate(`(() => { __sdfGame.setTracerLight(${gain}); __sdfGame.step(${FLUSH}); return __sdfGame.tracerLight; })()`);
   await evaluate('__sdfGame.resolveGpu()');
   const r = await evaluate(READ);
-  const name = `${String(i).padStart(2, '0')}-gain${String(gain).padStart(3, '0')}`;
+  const name = `${String(i).padStart(2, '0')}-slots${slots ?? 'page'}-gain${String(gain).padStart(3, '0')}`;
   writeFileSync(`${OUT}/${name}.png`, Buffer.from(r.shot, 'base64'));
   const zoom = await send('Page.captureScreenshot', {
     format: 'png', clip: { x: 1280 / 2 - 220, y: 800 / 2 - 150, width: 440, height: 300, scale: 2 },
   });
   writeFileSync(`${OUT}/${name}-zoom.png`, Buffer.from(zoom.result.data, 'base64'));
-  console.log(`gain ${String(gain).padStart(3)}: lights ${r.lights} (idle ${lightsIdle})  projectiles ${r.projectiles}  `
-    + `layer nonzero ${r.nonZero}/6400 maxAbs ${r.maxAbs.toExponential(3)} digest ${r.digest.toString(16)}`);
-  rungs.push({ gain, ...r, name });
+  console.log(`slots ${String(slots ?? 'page').padStart(4)} gain ${String(gain).padStart(3)}: lights ${r.lights} (idle ${lightsIdle})  `
+    + `projectiles ${r.projectiles}  layer nonzero ${r.nonZero}/6400 maxAbs ${r.maxAbs.toExponential(3)} digest ${r.digest.toString(16)}`);
+  rungs.push({ slots, gain, ...r, name });
 }
 
 // ---------------------------------------------------------------------------
@@ -256,14 +274,14 @@ for (const r of rungs) {
     if (d > maxAbs) maxAbs = d;
   }
   const perUnit = r.gain ? ` (${(maxAbs / r.gain).toFixed(4)} per gain unit)` : '';
-  console.log(`gain ${String(r.gain).padStart(3)}: probes moved ${String(moved).padStart(4)}/6400  `
+  console.log(`slots ${String(r.slots ?? 'page').padStart(4)} gain ${String(r.gain).padStart(3)}: probes moved ${String(moved).padStart(4)}/6400  `
     + `maxAbs delta ${maxAbs.toExponential(3)}${perUnit}  digest ${r.digest.toString(16)}`);
 }
 
 console.log('\n=== PRESENTED FRAME: each rung against rung 0 (same frozen volley) ===');
 for (const r of rungs) {
   const d = pixelDiff(readPng(ref.name), readPng(r.name));
-  console.log(`gain ${String(r.gain).padStart(3)}: pixels changed ${String(d.changed).padStart(6)}/${d.pixels} `
+  console.log(`slots ${String(r.slots ?? 'page').padStart(4)} gain ${String(r.gain).padStart(3)}: pixels changed ${String(d.changed).padStart(6)}/${d.pixels} `
     + `(${(100 * d.changed / d.pixels).toFixed(2)}%)  by >2 levels ${String(d.over2).padStart(6)}  `
     + `max channel delta ${String(d.maxDelta).padStart(3)}  box ${d.box ? d.box.join(',') : '-'}`);
 }
@@ -271,7 +289,7 @@ for (const r of rungs) {
 console.log('\n=== WHERE THE LIGHT LANDS (mean |delta| per cell; . <0.5  : <2  + <5  # <12  @ >=12; * = a pixel moved >=10) ===');
 console.log('    columns = x, rows = y, top-left is the frame origin');
 for (const r of rungs) {
-  console.log(`  gain ${String(r.gain).padStart(3)} (rung ${r.name}):`);
+  console.log(`  slots ${r.slots ?? 'page'} gain ${r.gain} (rung ${r.name}):`);
   for (const line of mapCells(readPng(ref.name), readPng(r.name))) console.log(`    ${line}`);
 }
 
