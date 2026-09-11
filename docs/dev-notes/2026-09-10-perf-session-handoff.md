@@ -730,3 +730,49 @@ how a missing-flesh bug hid behind a provably-correct march.
 
 **Deprioritise until this is fixed:** the h/3 and h/4 PERFORMANCE measurement and
 the owner's look pass. Both are wasted effort while the output is wrong.
+
+
+### ⚠ CORRECTION, and the thing to check first: MY OUTPUT READBACK IS GARBAGE
+
+The owner reports the flesh is missing on a **completely default page** (no
+`?fields`, standing still), which is a REGRESSION, not a deeper-field defect. That
+reframes everything below and it also invalidates my output-target numbers.
+
+**The evidence that my instrument is broken, not the game:** reading the output
+target at the brightest flesh texel returns
+
+```
+sameTexelInOutput: rgba [8781, 8992, 9230, 15360]
+```
+
+Those are IMPOSSIBLE for an rgba32f colour target, where every channel is 0-1. I
+read `Float32Array` over the base64 bytes of `readRenderTargetPixelsAsync` on a
+target whose format I never checked. So:
+
+- the "OUTPUT: surfaces 0 (0.00%)" figure in the table above is MEANINGLESS — it was
+  measuring my own mis-decoded buffer, and it read 0% at h/2 as well, which I
+  noticed and explained away instead of treating as the red flag it was;
+- the "100% bright" figure from the next probe is equally meaningless;
+- **the march-target numbers are sound** (they came from `readMarchTarget`, which
+  is the seam the frame hash already used and whose de-padding is proven), so
+  "the flesh is marched at 3.90% / 3.91% / 3.91%" still stands.
+
+**CHECK THIS FIRST, before touching any field maths:** get a trustworthy
+output readback. Either establish the output target's real format (its
+`texture.format`, and whether it is half-float or integer, so `Float32Array` is
+wrong) or read the PRESENTED canvas instead — `__sdfGame.presentedShot()` is
+already proven to work and returns real 8-bit pixels. The canvas is the honest
+surface anyway, because it is what the owner is looking at.
+
+**And re-frame the bug:** with the flesh missing at DEFAULT settings, the divisor
+is a red herring. Whatever is wrong, it is wrong in the shipped configuration. The
+place to look is the diff this branch made to the DEFAULT path — which is only
+`COMPOSITE_WGSL` and `FIELD_INTERLEAVE_WGSL` gaining a clamped `nf` (proven
+equivalent at nf = 2 by diffing the reachable logic) and the boot-param block.
+
+**Was this branch's default EVER verified on screen?** No. I never took a
+before/after look at h/2 — the bit-identity probe's control failed and I moved on
+to the feature instead of stopping. That is the process failure underneath all of
+the above: the plan said "do not land blind", and I landed step 1 without a
+working gate for the DEFAULT path, then debugged a feature on top of an unverified
+baseline.
