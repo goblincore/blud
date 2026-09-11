@@ -92,6 +92,7 @@ import { computeBounceSpot } from '../flashlight-bounce';
 import { createProbeGatherBinding, type ProbeGatherBinding } from './probe-gather-compute';
 import { parseFloatParam, parseIntParam } from './boot-params';
 import { parseUpscaleConfig, UPSCALE_SCALE } from './upscale/upscale-model';
+import { runUpscaleSelfCheck } from './upscale/upscale-selfcheck';
 import { TEMPORAL_ACCUM_DEFAULT_SCALE } from './temporal-accum';
 import { hashFrame, DEFAULT_TILES_X, DEFAULT_TILES_Y } from './demo-hash';
 import { paddedRowStrideFloats } from './frame-hash';
@@ -7089,6 +7090,15 @@ function performBenchAction(a: BenchAction): void {
       near: (camera as THREE.PerspectiveCamera).near,
       far: (camera as THREE.PerspectiveCamera).far,
     }),
+    /** G1-parity (spec 2026-09-11): GPU output vs the CPU twin, in-page. Requires
+     *  freeze(true) + setRenderLock(true) first. Returns statistics only. */
+    upscaleSelfCheck: (opts?: { compareLayouts?: boolean }) => runUpscaleSelfCheck({
+      renderer: handle.renderer,
+      layer: sdfLayer,
+      camera: camera as THREE.PerspectiveCamera,
+      renderFrames: (n: number) => { handle.setLoopRunning(false); for (let k = 0; k < n; k++) handle.step(1 / 60); },
+      resolveGpu: () => handle.resolveGpu(),
+    }, opts ?? {}),
     get temporalAccum() { return sdfLayer.temporalAccum; },
     get temporalStart() { return sdfLayer.temporalStart; },
     get depthPrepass() { return sdfLayer.depthPreEnabled; },
