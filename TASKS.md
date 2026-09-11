@@ -260,7 +260,12 @@ things, they RENDER different frames.**
 
 **[!] DEEPER INTERLACE — ⚠ READ THE BRIEF FIRST:
 [docs/dev-notes/2026-09-10-interlace-handoff-START-HERE.md](docs/dev-notes/2026-09-10-interlace-handoff-START-HERE.md).**
-The ACTUAL bug is NOT the fields: the flesh is missing on a DEFAULT page (no
+**✅ MISSING FLESH RESOLVED 2026-09-10:** a `//` comment inside `COMPOSITE_WGSL`'s
+parameter list became a phantom wgslFn input (`deliberately: these`), so the composite
+never compiled at ANY divisor. The comment moved out of the signature and the shader is
+pinned by `sdf-layer.test.ts` "no comment phantoms". The flesh is verified on screen at
+h/2, h/3 and h/4. Open: the owner's look pass at h/3 and h/4, then drop the
+`?fieldsdemo=1` gate. The history below predates the fix. The ACTUAL bug is NOT the fields: the flesh is missing on a DEFAULT page (no
 `?fields`, standing still) — a regression in the shipped config. The divisor work is
 a red herring until that is fixed, and the first action is a five-minute checkout of
 `b1da21d1~1` to see whether the default was already broken before it. **The

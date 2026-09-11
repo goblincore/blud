@@ -253,6 +253,13 @@ export const CONE_TILE_FINE = 0;
  * `flipY` is a uniform rather than a constant because whether a render target
  * comes back the same way up as the canvas is a property of the backend, not
  * something to assume. It is verified on screen and pinned in lab-main.
+ *
+ * ⚠ NO COMMENTS INSIDE THE PARAMETER LIST. three's wgslFn parser reads every
+ * `word: word` between the parens as an input, comments included; a phantom
+ * input gets float(0) bound, the call gains an argument and the composite never
+ * compiles — no flesh on any page (2026-09-10). Pinned by sdf-layer.test.ts.
+ * Inputs bind BY NAME from the object below, so a new one goes anywhere in the
+ * list, but must be bound in the same commit (the meltCfg rule).
  */
 export const COMPOSITE_WGSL = /* wgsl */ `fn sdfComposite(
   layerTex: texture_2d<f32>,
@@ -266,8 +273,6 @@ export const COMPOSITE_WGSL = /* wgsl */ `fn sdfComposite(
   fieldParityF: f32,
   fieldComb: f32,
   outHeight: f32,
-  // LAST, deliberately: these bind POSITIONALLY, so adding an input means adding
-  // it here AND binding it in the same commit (the file's own "meltCfg rule").
   fieldCount: f32
 ) -> vec4<f32> {
   let dims = vec2<f32>(textureDimensions(layerTex, 0));

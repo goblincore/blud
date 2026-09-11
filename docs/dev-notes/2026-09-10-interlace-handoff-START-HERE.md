@@ -1,5 +1,18 @@
 # START HERE — deeper interlace (h/3, h/4) investigation handoff
 
+> **✅ RESOLVED 2026-09-10 — the missing flesh was a shader-parse bug, not the
+> fields.** `b1da21d1` added a `//` comment *inside* `COMPOSITE_WGSL`'s parameter
+> list. The comment contained `deliberately: these`, and three's
+> `WGSLNodeFunction` reads that as an input named `deliberately`. The
+> `sdfComposite` call then got 13 arguments for 12 parameters, so the composite
+> pipeline never compiled. That broke **every** divisor, including the default h/2.
+> The console said so at load: ``THREE.TSL: Input 'deliberately' not found in
+> 'Fn()'``. Fix: the comment moved out of the signature. It is pinned by
+> `sdf-layer.test.ts` ("no comment phantoms"), which runs the real parser on
+> both weave shaders. Verified on screen: the flesh renders at h/2, h/3 and h/4.
+> The `?fieldsdemo=1` gate in `game-main.ts` is still in place, pending the
+> owner's look pass. The rest of this brief is the investigation history.
+
 **Working copy:** `/Users/donny/Projects/blud` on **`main`**, tree clean, HEAD
 `1c21ac9c`. Nothing is pushed (50 commits ahead of `origin`). You are looking at
 this same working copy — no branch to fetch.

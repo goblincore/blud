@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
+// @ts-expect-error — deep three source import for the real wgslFn parser; no
+// public type declarations exist for three/src/* (same as march.wgsl.test.ts).
+import WGSLNodeFunction from 'three/src/renderers/webgpu/nodes/WGSLNodeFunction.js';
 import { createSdfLayer, isHoldFrame, sortFrontToBack, SDF_LAYER, FIELD_MESH_LAYER, COMPOSITE_WGSL, FIELD_INTERLEAVE_WGSL, DEPTH_PREPASS_BLOCK_PX, DEPTH_PREPASS_DIV, depthPrepassSize } from './sdf-layer';
 
 describe('depth prepass sizing (close-up task 3)', () => {
@@ -180,6 +183,29 @@ describe("'bodies' field style — the skeleton mesh pass", () => {
     const retained = [...new Set(calls.map(c => c.target))].find(t => t?.depthTexture === depthCopy.dst)!;
     expect(clears.some(c => c.target === retained && c.alpha === 0)).toBe(true);
     layer.dispose();
+  });
+});
+
+describe('weave shaders parse to their REAL parameter list — no comment phantoms', () => {
+  // WGSLNodeFunction sweeps the whole parameter list, comments included, with
+  // /name\s*:\s*type/. A `word: word` inside a signature comment becomes a
+  // PHANTOM input, the call site binds float(0) into it, the call has one
+  // argument too many and the pipeline never compiles. Seen 2026-09-10: the
+  // fieldCount comment's "deliberately: these" killed the composite on the
+  // DEFAULT page — no flesh, only the skeleton mesh. Same class as the
+  // 2026-09-02 MARCH_BODY phantom (march.wgsl.test.ts), which had no pin here.
+  const declared = (src: string) => {
+    const params = src.slice(src.indexOf('(') + 1, src.indexOf(') ->')).replace(/\/\/[^\n]*/g, '');
+    return [...params.matchAll(/([A-Za-z_0-9]+)\s*:/g)].map((m) => m[1]);
+  };
+  it.each([
+    ['COMPOSITE_WGSL', COMPOSITE_WGSL],
+    ['FIELD_INTERLEAVE_WGSL', FIELD_INTERLEAVE_WGSL],
+  ])('%s', (_name, src) => {
+    const parsed = new WGSLNodeFunction(src);
+    const names = parsed.inputs.map((i: { name: string }) => i.name);
+    expect(names).toEqual(declared(src));
+    expect(parsed.inputs.every((i: { type?: string }) => i.type !== undefined)).toBe(true);
   });
 });
 
