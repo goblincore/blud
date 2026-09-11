@@ -2,6 +2,9 @@
 
 **Date:** 2026-09-10 · **Design:** [design.md](design.md) · **Scope:** [../../production-scope.md](../../production-scope.md) (G2, G4)
 
+**Implementation:** [implementation.md](implementation.md) turns these tasks into
+three agent-ready plans (level format + Blender pipeline, game loop, content).
+
 Status: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked.
 **Deps** lists task IDs that must land first. Engine-heavy tasks get their own
 superpowers spec/plan when they start; link it on the task.

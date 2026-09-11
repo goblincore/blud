@@ -18,6 +18,11 @@ the shooting and the bodies in 5–8 minutes, then hand over to the pull-back.
 - **The goblin starts with a melee tool and finds the sawn-off early.**
 - **Last pickup:** a CD in an open coffin. Picking it up ends the level and
   starts the pull-back.
+- **Blockout v1 limits (2026-09-11):** every floor is at one height, so the
+  crypt sits *at grade* (a low, dark room) rather than down stairs, and the
+  goblin-only fence gap is a narrow 1.4 m passage, not a crawl space. Stairs
+  and crouching need engine work first. See the
+  [implementation brief](implementation.md) §3.
 
 ## 2. What doesn't work (level rule 2)
 
