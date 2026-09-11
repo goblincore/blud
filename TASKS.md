@@ -4,6 +4,11 @@
 > Per-milestone step-by-step tasks live in `docs/superpowers/plans/`.
 > This file is **coarse-grained state only** — keep rows to ≤2 lines and link out for detail.
 
+## Game design — GOBLIN vision + production scope — 2026-09-10
+
+- [x] Vision draft 3: goblin in a flat it can't leave, playing a 10-level shareware FPS on a CRT; frame layers, knock, endings. [Spec](docs/superpowers/specs/2026-09-10-game-vision-design.md).
+- [ ] Production scope draft 1 (milestones G0–G10, asset inventory). First decision: level authoring route. [Scope](docs/superpowers/plans/2026-09-10-goblin-production-scope.md).
+
 ## Raymarch — Claybook cheap wins — 2026-09-09
 
 - [x] Last-step SECANT accept in `MARCH_BODY` (Claybook GDC slide 25), behind
