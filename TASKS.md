@@ -117,8 +117,12 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 ## Current focus
 
 > **Session start: read
-> [docs/dev-notes/2026-09-10-PASSOFF-2.md](docs/dev-notes/2026-09-10-PASSOFF-2.md) first**
-> (this session's: R1 shipped, and what it unlocked). Then
+> [docs/dev-notes/2026-09-10-PASSOFF-3.md](docs/dev-notes/2026-09-10-PASSOFF-3.md) first**
+> (latest: R1 shipped, then TWO temporal ideas built and killed — held-row
+> reprojection and accumulation-as-reconstruction — plus the per-object motion-blur
+> idea that is liked but unspecced, and the open items). Then
+> [docs/dev-notes/2026-09-10-PASSOFF-2.md](docs/dev-notes/2026-09-10-PASSOFF-2.md)**
+> (R1 and what it unlocked). Then
 > [docs/dev-notes/2026-09-10-PASSOFF.md](docs/dev-notes/2026-09-10-PASSOFF.md) —
 > the earlier session's, still correct except that its NEXT-ACTION ORDER is done
 > (its item 1 was R1). Both carry the CURRENT vs HISTORICAL doc map and the traps.
