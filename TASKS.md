@@ -267,8 +267,14 @@ unreachable), and the third (the jitter's two-field centering) with them.
 surface texels cover **3.90% / 3.91% / 3.91%** at h/2, h/3, h/4, with 0
 non-finite and 100% RGB non-zero — so culling, sizing and the march parity are
 EXONERATED. The flesh is lost between the march target and the composited frame.
-**Next: read the OUTPUT target (`sdfTarget`) at h/2 vs h/3 in one boot and compare
-its surface share with 3.9%. Do NOT instrument the march target again.**
+**Tool left for the next agent (committed):** `node scripts/sdf-field-count-diag.mjs`
+— reads the march AND output targets at every divisor in one boot, counting surface
+texels over every texel. **Its output verdict is not yet trustworthy:** the output
+target reads 0% surfaces at h/2 TOO, and h/2 works, so `alpha < 1` is the wrong
+marker for the output (it is full-height and publishes a different alpha). Re-base
+that side on COLOUR before trusting it. New seam for the job:
+`__sdfGame.readOutputTarget()`. **Do NOT instrument the march target again — it is
+exonerated (3.90%/3.91%/3.91%).**
 
 **[~] DEEPER INTERLACE — steps 1+2 DONE, measurement DEFERRED (2026-09-10).**
 `fieldCount` is a live uniform (LAST input, shader-clamped so a bad binding

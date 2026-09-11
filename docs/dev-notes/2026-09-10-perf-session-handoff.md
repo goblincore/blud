@@ -676,3 +676,57 @@ presented frame. **Do not instrument the march target again — it is exonerated
 sparse grid (5 surface points at h/2, 6 at h/3) and by comparing hashes ACROSS
 boots and ACROSS parities. Each produced confident, meaningless answers. Count
 EVERY texel, stay in ONE boot, and hold the field parity.
+
+
+### HANDOFF: state of the deeper-interlace branch for the next agent
+
+**Branch state:** all committed on `main`, working tree clean, `tsc` clean, 78
+focused tests green. The deeper fields are GATED (`?fields=3|4` also needs
+`?fieldsdemo=1`), so nothing is user-visible unless asked for.
+
+**The tool you should start with — committed, not in /tmp:**
+
+```
+LAB_VITE_PORT=5277 LAB_CDP_PORT=9277 node scripts/sdf-field-count-diag.mjs
+```
+
+It reads the MARCH target and the OUTPUT target at each divisor in ONE boot and
+counts surface texels over every texel. Its four encoded traps (one boot only;
+hold the field parity; count every texel, never sample; de-pad the 256-byte rows)
+are each a mistake that produced a confident, meaningless answer on an earlier
+attempt. Read its header before editing it.
+
+**What it currently reports, and the correction to make first:**
+
+| divisor | march target | surfaces | output target | surfaces |
+| --- | --- | --- | --- | --- |
+| 2 | 800x300 | **3.90%** | 800x600 | 0.00% |
+| 3 | 800x200 | **3.91%** | 800x600 | 0.00% |
+| 4 | 800x150 | **3.91%** | 800x600 | 0.00% |
+
+**Alpha is the WRONG MARKER FOR THE OUTPUT.** It reads 0% at h/2 as well, and h/2
+is the working shipped configuration — the output is FULL height (800x600) and the
+composite publishes a different alpha there, so `alpha < 1` does not mean "surface"
+in that texture. The tool's verdict line is therefore wrong for the output side and
+must be re-based on COLOUR (a surface texel is one whose RGB differs from the level
+behind it) before its output numbers mean anything. The MARCH numbers are sound and
+are the ones quoted above.
+
+**What is established beyond doubt:** the flesh is marched at every divisor, in the
+right proportion, with correct target heights and no non-finite values. The march,
+the sizing and the field parity are exonerated. The flesh is lost between the march
+target and the presented frame.
+
+**Three falsified hypotheses, do not retry:** the bone weave's hardcoded `/ 2`
+(real, fixed — this was "skeleton outside the armor"); `fieldParity` defaulting to
+2 fields (real, fixed — a third of the fresh rows were unreachable); the jitter's
+two-field centering (real, fixed). All three are now gated by property-based tests
+in `field-render.test.ts`, because this was one bug CLASS three times over.
+
+**New seam added for you:** `__sdfGame.readOutputTarget()` returns the texture
+`'bodies'` composites into (base64 rgba32f + logical w/h), plus
+`SdfLayer.outputTarget`. Before this the output was unreadable, which is precisely
+how a missing-flesh bug hid behind a provably-correct march.
+
+**Deprioritise until this is fixed:** the h/3 and h/4 PERFORMANCE measurement and
+the owner's look pass. Both are wasted effort while the output is wrong.

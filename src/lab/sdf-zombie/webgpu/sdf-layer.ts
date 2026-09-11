@@ -461,6 +461,13 @@ export interface SdfLayer {
    * against what the polygonal pass left behind.
    */
   setOutputTarget(t: THREE.RenderTarget | null): void;
+  /** The target the layer actually composites into, for evidence readback.
+   *  Null when nothing is redirecting, in which case "the output" is the canvas.
+   *  Added 2026-09-10 alongside the h/3 investigation: the march target and the
+   *  composited output are DIFFERENT textures, and being able to read only the
+   *  former is what let a missing-flesh bug hide behind a provably-correct
+   *  march. */
+  readonly outputTarget: THREE.RenderTarget | null;
   /** Full-resolution size of the output, in device pixels. */
   setSize(width: number, height: number): void;
   /** 1 = full resolution, 0.5 = quarter the pixels. */
@@ -1461,6 +1468,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       if (!hold) forceFreshFrame = false;
     },
     setOutputTarget(t) { outputTarget = t; },
+    get outputTarget() { return outputTarget; },
     setSize(width, height) {
       fullW = width;
       fullH = height;
