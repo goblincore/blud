@@ -258,7 +258,15 @@ probeDyn drifted too). **Stage 1 fixed the census-visible part of the drift; thi
 is the part it could not see — two repeats of one leg do not just COUNT different
 things, they RENDER different frames.**
 
-**[!] DEEPER INTERLACE — GATED OFF (`?fields=3|4` also needs `?fieldsdemo=1`);
+**[!] DEEPER INTERLACE — ⚠ READ THE BRIEF FIRST:
+[docs/dev-notes/2026-09-10-interlace-handoff-START-HERE.md](docs/dev-notes/2026-09-10-interlace-handoff-START-HERE.md).**
+The ACTUAL bug is NOT the fields: the flesh is missing on a DEFAULT page (no
+`?fields`, standing still) — a regression in the shipped config. The divisor work is
+a red herring until that is fixed, and the first action is a five-minute checkout of
+`b1da21d1~1` to see whether the default was already broken before it. **The
+output-target readback in `sdf-field-count-diag.mjs` is BROKEN** (returns `[8781,
+8992, 9230, 15360]` on an rgba32f target — impossible), so every "output lost the
+surfaces" conclusion is void; the march numbers stand. GATED OFF (`?fields=3|4` also needs `?fieldsdemo=1`);
 the flesh does not render and the ASSEMBLY is the open bug (2026-09-10).**
 Two of the three two-field constants are fixed (the bone weave's `outRow / 2`, and
 `fieldParity` defaulting to 2 fields — which made a third of the fresh rows
