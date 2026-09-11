@@ -6,8 +6,9 @@
 
 ## Game design — GOBLIN vision + production scope — 2026-09-10
 
-- [x] Vision draft 3: goblin in a flat it can't leave, playing a 10-level shareware FPS on a CRT; frame layers, knock, endings. [Spec](docs/superpowers/specs/2026-09-10-game-vision-design.md).
-- [ ] Production scope draft 1 (milestones G0–G10, asset inventory). First decision: level authoring route. [Scope](docs/superpowers/plans/2026-09-10-goblin-production-scope.md).
+- [x] Vision draft 3: goblin in a flat it can't leave, playing a 10-level shareware FPS on a CRT; frame layers, knock, endings. [Vision](docs/game/vision.md).
+- [ ] Production scope draft 1 (milestones G0–G10, asset inventory). Level route: Blender (B/D), proven on the Wake + flat. [Scope](docs/game/production-scope.md).
+- [ ] First content in flight: the Flat ([tasks](docs/game/flat/tasks.md)) and level 0 The Wake ([tasks](docs/game/levels/00-the-wake/tasks.md)). Start with the render-to-texture spike (F-T2) and the melee prototype (W-B4).
 
 ## Raymarch — Claybook cheap wins — 2026-09-09
 

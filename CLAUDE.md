@@ -46,6 +46,7 @@ concepts** — do not conflate them.
 | --- | --- |
 | `src/lab/sdf-zombie/` | Active SDF game + character tools + WebGPU lab + benchmarks |
 | `src/game/`, `src/sim/`, `src/main.ts` | Retired game + old NotBlood sim (reference only) |
+| `docs/game/` | Game design and content: vision, production scope, the flat, per-level design + tasks |
 | `docs/superpowers/specs/` | Design specs (one per direction change) |
 | `docs/superpowers/plans/` | Implementation plans (one per milestone) |
 | `docs/tuning-sources.md`, `docs/tuning-sources-gibs.md` | NotBlood value sources |

@@ -2,7 +2,7 @@
 
 **Status:** draft 3, 2026-09-10. A clean write-up of the general shape agreed
 in conversation. Details are still open (§14), but the structure is settled.
-**Production scope:** [2026-09-10-goblin-production-scope.md](../plans/2026-09-10-goblin-production-scope.md).
+**Production scope:** [production-scope.md](production-scope.md).
 
 **Working title:** *GOBLIN*. Final title parked (§14).
 
@@ -262,7 +262,7 @@ the theme. Every level follows the same rules (§10.6).
 
 | # | Level | Type | What doesn't work | SDF showcase | Enemy spotlight | Phase |
 | --- | --- | --- | --- | --- | --- | --- |
-| 0 | ***The Wake*** (demo) | Cemetery, crypt | A wake with nobody left to mourn; a CD in an open coffin | First bodies, first gore | Zombies | Cold open |
+| 0 | ***The Wake*** (demo) | Cemetery, funeral home | A wake with nobody left to mourn; a CD in an open coffin | First bodies, first gore | Zombies | Cold open |
 | 1 | ***The Keep*** | Gothic castle | A banquet for guests who never come | Stone that goes soft when shot | Gargoyles | Gentle |
 | 2 | ***Cold Storage*** | Research lab | Storage that keeps nothing; specimens keep themselves | Glass tanks | Soldiers, a bloatmaw in a tank | Gentle |
 | 3 | ***The Big Top*** | Circus | A show for empty seats | Rubbery, inflatable, pops | Clowns | Strange |
@@ -289,6 +289,11 @@ modelled or prototyped outside the game: a grapeshot hand-cannon (*Loose
 Change*) and the dynamite bundle (*Party Favours*, lab page only). A 10-level
 episode needs roughly 5–6 weapons; each must pass the test *what does it do to
 a body that nothing else does?*
+
+- **Starting melee** (The Wake): a gravedigger's tool. Candidates: shovel,
+  pickaxe, axe. Decision open; see [the Wake design](levels/00-the-wake/design.md).
+- **A chainsaw, of course (decided 2026-09-10).** Continuous cutting through
+  soft bodies is a deformation showcase no other weapon gives. Found mid-episode.
 
 **Enemies are the guests and staff of the Party:** zombies are spent guests,
 soldiers are door security, clowns are the entertainment, gnashers are

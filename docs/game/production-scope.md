@@ -1,6 +1,6 @@
 # GOBLIN — Production Scope (draft 1)
 
-**Date:** 2026-09-10 · **Vision:** [2026-09-10-game-vision-design.md](../specs/2026-09-10-game-vision-design.md)
+**Date:** 2026-09-10 · **Vision:** [vision.md](vision.md)
 
 **What this is:** a coarse map from the vision to *what has to be built*,
 systems and assets, in a sensible order. Not a step-by-step implementation plan;
@@ -199,7 +199,12 @@ Plus the Cloakroom hub.
 | Bonewalker, minotaur, dragon, schoolgirl, others | Authored, unplaced | Role or cut |
 
 ### 5.3 Weapons (~5–6)
-Sawn-off (in play) · dynamite (lab only) · grapeshot (model only) · 2–3 new.
+Sawn-off (in play) · starting melee: shovel / pickaxe / axe (new) · dynamite
+(lab only) · grapeshot (model only) · **chainsaw** (new, decided) · 1–2 more.
+
+### 5.8 First tasks in flight
+- **The Flat:** [design](flat/design.md) · [tasks](flat/tasks.md)
+- **The Wake:** [design](levels/00-the-wake/design.md) · [tasks](levels/00-the-wake/tasks.md)
 
 ### 5.4 The Flat
 Room shell, desk, beige PC (with staged flesh versions), CRT (deformable
