@@ -44,13 +44,41 @@ Avoid the pitchfork (Blood's starting weapon). Current lean: **pickaxe** or
 | --- | --- | --- | --- | --- | --- |
 | 1 | **The gates** | Iron gates, a lane, a gatehouse | Movement, look, melee | 1–2 slow zombies (mourners), one at a time | You start here. Nothing explained |
 | 2 | **The open grave** | Just past the gates | Pickup; the gun | None, then 2 zombies climb out | The sawn-off lies in an open grave / on a dead groundskeeper |
-| 3 | **The graveyard** | Open ground, fog, headstones, a mausoleum | Shooting crowds, reloading | A loose group of 5–8 | A goblin-only gap under a fence leads to a secret |
+| 3 | **The graveyard** | Open ground, fog, headstones, a mausoleum, **the bell tower** | Shooting crowds, reloading | A loose group of 5–8, then **the bell** (§4.1) | A goblin-only gap under a fence leads to a secret |
 | 4 | **The crypt / basement** | Tight, dark; flashlight | Close-range fights | 3–5 in small rooms | First time the Party's music is heard *above* |
 | 5 | **The funeral home** | Parlour: pews, flowers, the coffin, the organ | The level's music source | Quiet walk-in, then the mourners all turn | Biggest fight. The organ keeps playing |
 | 6 | **The open coffin** | The front of the parlour | — | None | The CD inside. Picking it up ends the level |
 
 **Length target:** 5–8 minutes for a first-time player. Zombie total: roughly
-15–25 depending on playtest.
+15–25 depending on playtest (the bell adds to it).
+
+### 4.1 Set piece: the bell (added 2026-09-10)
+
+Inspired by a giant-bell moment in a Warhammer 40,000 *Space Marine* game:
+shoot the bell, and the enemies come. Ours is a **funeral bell**.
+
+- **The bell tower** rises over the graveyard, visible from the gates, so the
+  player sees it long before reaching it. A huge, dark bell hangs in the open
+  belfry.
+- **The crypt stairs are sealed** (a gate, a slab) until the bell rings. The
+  level tells you nothing; the bell is the only obvious thing to shoot.
+- **Shooting the bell tolls it,** and **each toll wakes the dead:** graves burst
+  open across the graveyard and mourners climb out. The toll is loud enough to
+  silence everything else for a moment, including the organ in the distance.
+- **Three tolls, three waves, and the player picks the moment.** The first toll
+  opens the crypt stairs and brings a small wave; each further toll brings a
+  bigger wave and a reward (ammo, a secret grave opening). You can walk away
+  after one.
+- **The bell gives (P2, world law 2):** shots leave soft dents in the bronze. A
+  metal thing behaving like flesh, as early as the demo level.
+- **Frame rhyme:** the toll rhythm can match the knock pattern in the flat.
+  Never stated.
+- **Why it works here:** it's the demo's spectacle moment, it teaches that the
+  world reacts to shooting, and it gives the player control over the pacing of
+  the biggest outdoor fight.
+
+**Possible rule for every level:** one set piece the player *triggers*, not one
+that just happens to them. (Candidate for the vision's level rules.)
 
 ## 5. Map (rough)
 
@@ -60,8 +88,9 @@ Avoid the pitchfork (Blood's starting weapon). Current lean: **pickaxe** or
                               v
         ┌──────────── [3 GRAVEYARD] ─────────────┐
         │   headstones, fog, mausoleum           │
+        │   BELL TOWER (shoot: tolls = waves)    │
         │   fence gap ─> (secret)                │
-        └─────────────── stairs down ────────────┘
+        └──── crypt stairs (open on 1st toll) ───┘
                               │
                               v
                      [4 CRYPT / BASEMENT]
@@ -97,6 +126,8 @@ The first release the player owns. Sets the tone for all of them.
 - Funeral organ: the diegetic music source, audible from the graveyard, loud in
   the parlour.
 - The Party: muffled kick through the funeral home ceiling, first heard in the crypt.
+- **The bell:** a toll that ducks every other sound, long decay rolling across
+  the graveyard; dented tolls sound flatter and wetter.
 - Zombies: wet, wordless mourning sounds.
 - Surfaces: gravel lane, grass, stone crypt, carpeted parlour.
 - The CD pickup: the last sound before the pull-back; should feel wrong.
