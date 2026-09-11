@@ -273,7 +273,9 @@ export const COMPOSITE_WGSL = /* wgsl */ `fn sdfComposite(
   fieldParityF: f32,
   fieldComb: f32,
   outHeight: f32,
-  fieldCount: f32
+  fieldCount: f32,
+  prevFieldTex1: texture_2d<f32>,
+  prevFieldTex2: texture_2d<f32>
 ) -> vec4<f32> {
   let dims = vec2<f32>(textureDimensions(layerTex, 0));
   var st = texCoord;
@@ -304,7 +306,30 @@ export const COMPOSITE_WGSL = /* wgsl */ `fn sdfComposite(
       // field verbatim, which IS the comb artifact and the point of the
       // feature; 0 = interpolate vertically from THIS frame's field instead,
       // trading vertical detail for no comb.
-      let held = textureLoad(prevFieldTex, vec2<i32>(col, tRow), 0);
+      // THE HISTORY RING, consulted before interpolating anything.
+      //
+      // With ONLY the immediate previous field, every held row has to be
+      // interpolated from the two bracketing marched rows — which is VERTICAL
+      // BLUR rather than interlacing, and at h/3 that is two rows in three (h/4:
+      // three in four). The ring retains "nf - 1" fields so a held row's OWN
+      // sample is usually still there to read. Owner-visible reason this exists:
+      // h/3 and h/4 read as "significantly more distracting in terms of the low
+      // resolution", which is the reconstruction, not the field count.
+      //
+      // AT nf = 2 THIS MUST BE EXACTLY THE OLD PATH, and it is: the shader above
+      // has already established outRow % nf != fieldParityF, and with nf = 2 that
+      // forces (outRow % nf) == 1 - fieldParityF, so slot == 0 and the first
+      // branch fires. The ring is therefore unreachable for the shipped two-field
+      // case and h/2 is bit-identical by construction.
+      let slot = (i32(fieldParityF) - (outRow % nf) + nf) % nf - 1;
+      var held: vec4<f32>;
+      if (slot <= 0) {
+        held = textureLoad(prevFieldTex, vec2<i32>(col, tRow), 0);
+      } else if (slot == 1) {
+        held = textureLoad(prevFieldTex1, vec2<i32>(col, tRow), 0);
+      } else {
+        held = textureLoad(prevFieldTex2, vec2<i32>(col, tRow), 0);
+      }
       // The two FRESH rows bracketing this held row — fieldHeldNeighboursInteger
       // from field-render.ts, which PROVES this integer form equals the intended
       // float one on every held row at fields 2, 3 and 4. THE INTEGER FORM IS
@@ -388,7 +413,9 @@ export const FIELD_INTERLEAVE_WGSL = /* wgsl */ `fn sdfFieldInterleave(
   comb: f32,
   gateAlpha: f32,
   outHeight: f32,
-  fieldCount: f32
+  fieldCount: f32,
+  prevTex1: texture_2d<f32>,
+  prevTex2: texture_2d<f32>
 ) -> vec4<f32> {
   var st = texCoord;
   if (flipY > 0.5) { st.y = 1.0 - st.y; }
@@ -420,11 +447,30 @@ export const FIELD_INTERLEAVE_WGSL = /* wgsl */ `fn sdfFieldInterleave(
   // skeleton showed through the body. Only while moving, because standing
   // still the two depths agree (owner-caught).
   let dHeld = textureLoad(prevDepth, vec2<i32>(col, tRow), 0);
+  // NOTE: depth follows slot 0 unconditionally. The retained ring stores COLOUR
+  // only; adding depth to it is a further step, and until then a deep field's
+  // held rows take their depth from the most recent field (the pre-ring
+  // behaviour). Colour and depth desyncing is the bug this file already records
+  // being owner-caught, so this is called out rather than left implicit.
   if (gateAlpha > 0.5 && textureLoad(prevTex, vec2<i32>(col, tRow), 0).w < 0.5) { discard; }
   // The row this frame did not draw. comb 1 = hold last frame's field
   // verbatim, which IS the interlace artifact; 0 = interpolate vertically
   // from THIS frame's field, trading vertical detail for no comb.
-  let held = textureLoad(prevTex, vec2<i32>(col, tRow), 0);
+  // THE SAME RING LOOKUP AS THE COMPOSITE, and it must be the same: this weave
+  // puts BONE on the flesh's grid, so if one of them reconstructs a held row from
+  // a different field than the other, the skeleton lands on rows the flesh did not
+  // draw. That is not hypothetical — it is precisely the "skeleton outside the
+  // armour" defect, and the test that compares these two shaders line for line
+  // failed when only the composite learned about the ring.
+  let slot = (i32(parity) - (outRow % nf) + nf) % nf - 1;
+  var held: vec4<f32>;
+  if (slot <= 0) {
+    held = textureLoad(prevTex, vec2<i32>(col, tRow), 0);
+  } else if (slot == 1) {
+    held = textureLoad(prevTex1, vec2<i32>(col, tRow), 0);
+  } else {
+    held = textureLoad(prevTex2, vec2<i32>(col, tRow), 0);
+  }
   // The two FRESH rows bracketing this held row — fieldHeldNeighboursInteger,
   // the same integer derivation the composite uses. At nf = 2 it reduces exactly
   // to the shipped "tRow - i32(parity)", including the -1 edge, which is why the
@@ -736,6 +782,21 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   // is an attachment, not a texture; DepthTexture is what makes it readable.
   fieldFull.depthTexture = new THREE.DepthTexture(1, 1);
   /** Last frame's half-height output, woven with this frame's. */
+  // THE HISTORY RING (deeper interlace fields, step 3, 2026-09-10). `fieldPrev`
+  // is slot 0 — the field drawn one frame ago — and these two hold the fields
+  // before it, so at h/3 and h/4 a held row can read its OWN sample instead of
+  // being interpolated from the bracketing marched rows. Only allocated to the
+  // depth a deeper field needs; at nf = 2 the shader never reads past slot 0, so
+  // their CONTENT is irrelevant to the shipped path (they still cost two 1x1
+  // textures at h/2, which is nothing).
+  const fieldRing0 = new THREE.RenderTarget(1, 1, {
+    type: THREE.FloatType, format: THREE.RGBAFormat,
+    minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
+  });
+  const fieldRing1 = new THREE.RenderTarget(1, 1, {
+    type: THREE.FloatType, format: THREE.RGBAFormat,
+    minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
+  });
   const fieldPrev = new THREE.RenderTarget(1, 1, {
     type: THREE.FloatType, format: THREE.RGBAFormat,
     minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
@@ -751,6 +812,17 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     depthBuffer: true,
   });
   fieldMesh.depthTexture = new THREE.DepthTexture(1, 1);
+  // The MESH ring, parallel to the flesh ring: this weave reconstructs held bone
+  // rows the same way, so it needs the same depth of history or bone and flesh
+  // reconstruct from different fields.
+  const fieldMeshRing0 = new THREE.RenderTarget(1, 1, {
+    type: THREE.FloatType, format: THREE.RGBAFormat,
+    minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
+  });
+  const fieldMeshRing1 = new THREE.RenderTarget(1, 1, {
+    type: THREE.FloatType, format: THREE.RGBAFormat,
+    minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
+  });
   const fieldMeshPrev = new THREE.RenderTarget(1, 1, {
     type: THREE.FloatType, format: THREE.RGBAFormat,
     minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
@@ -769,6 +841,8 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     gateAlpha: uniform(1),
     outHeight: uOutHeight,
     fieldCount: uFieldCount,
+    prevTex1: texture(fieldMeshRing0.texture),
+    prevTex2: texture(fieldMeshRing1.texture),
   }) as unknown as { xyz: unknown; w: unknown };
   const meshQuadMat = new MeshBasicNodeMaterial();
   meshQuadMat.colorNode = vec4(meshWoven.xyz as never, 1.0);
@@ -800,6 +874,10 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     gateAlpha: uniform(0),
     outHeight: uOutHeight,
     fieldCount: uFieldCount,
+    // 'frame' refuses fields > 2, so this path never reads past slot 0; the ring is
+    // bound for shape only.
+    prevTex1: texture(fieldRing0.texture),
+    prevTex2: texture(fieldRing1.texture),
   }) as unknown as { xyz: unknown; w: unknown };
   fieldQuadMat.colorNode = vec4(woven.xyz as never, 1.0);
   // Republishes the depth the layer has always left behind, so the goo layer
@@ -953,6 +1031,8 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   const sampled = composite({
     layerTex: texture(target.texture),
     prevFieldTex: texture(fieldPrev.texture),
+    prevFieldTex1: texture(fieldRing0.texture),
+    prevFieldTex2: texture(fieldRing1.texture),
     texCoord: uv(),
     flipY: uFlipY,
     holdMode: uHoldMode,
@@ -1027,11 +1107,18 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     // wrong one silently weaves mismatched texel grids.
     if (fieldStyle === 'sdf' || fieldStyle === 'bodies') fieldPrev.setSize(w, h);
     else fieldPrev.setSize(fw, fh);
+    // The ring slots track fieldPrev exactly: they hold the SAME field, one and
+    // two frames older, so a mismatched size would weave mismatched grids — the
+    // defect class that produced "skeleton outside the body".
+    fieldRing0.setSize(fieldPrev.width, fieldPrev.height);
+    fieldRing1.setSize(fieldPrev.width, fieldPrev.height);
     // The mesh field follows the MARCH target's grid so bone and flesh weave
     // on identical texel rows.
     const mh = fieldStyle === 'bodies' ? h : 1;
     fieldMesh.setSize(fieldStyle === 'bodies' ? w : 1, mh);
     fieldMeshPrev.setSize(fieldStyle === 'bodies' ? w : 1, mh);
+    fieldMeshRing0.setSize(fieldMeshPrev.width, fieldMeshPrev.height);
+    fieldMeshRing1.setSize(fieldMeshPrev.width, fieldMeshPrev.height);
     occluder.setSize(w, h);
     shellEntry.setSize(w, h);
     shellExit.setSize(w, h);
@@ -1439,9 +1526,15 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
         void renderer.render(meshScene, quadCam);
         renderer.autoClear = prevAuto;
 
+        // RING ROTATION: shift slot0 -> slot1 -> slot2 BEFORE overwriting slot 0,
+        // so a held row's own sample is still reachable the frame after next.
+        renderer.copyTextureToTexture(fieldRing0.texture, fieldRing1.texture);
+        renderer.copyTextureToTexture(fieldPrev.texture, fieldRing0.texture);
         renderer.copyTextureToTexture(target.texture, fieldPrev.texture);
         // Depth is retained WITH colour: a held row is a snapshot of one
         // instant, not last frame's pixels at this frame's depth.
+        renderer.copyTextureToTexture(fieldMeshRing0.texture, fieldMeshRing1.texture);
+        renderer.copyTextureToTexture(fieldMeshPrev.texture, fieldMeshRing0.texture);
         renderer.copyTextureToTexture(fieldMesh.texture, fieldMeshPrev.texture);
         renderer.copyTextureToTexture(fieldMesh.depthTexture!, fieldMeshPrev.depthTexture!);
         camera.clearViewOffset();
