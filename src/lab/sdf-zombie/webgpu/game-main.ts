@@ -1810,36 +1810,23 @@ async function main() {
   // docs/dev-notes/2026-09-09-perf-spikes/bodies-style-handoff.md
   sdfLayer.setFieldStyle('bodies');
   sdfLayer.setFieldComb(0.6);
-  // DEEPER INTERLACE FIELDS (plan 2026-09-10, step 2). `?fields=N` selects the
+  // DEEPER INTERLACE FIELDS (plan 2026-09-10, steps 1-2). `?fields=N` selects the
   // divisor: 2 is the shipped half-height field, 3 and 4 march a third or a
-  // quarter of the rows (owner-approved on screen, where they must be judged).
-  // Absent is NOT zero — the boot-param rule: this reads the RAW string, and a
-  // missing parameter must leave the shipped 2 alone rather than pin a divisor
+  // quarter of the rows. The owner gate on h/3 and h/4 is an ON-SCREEN look call —
+  // the comb changes period from 2 rows to 3-4 — and the arithmetic here is not
+  // that decision.
+  //
+  // Absent is NOT zero — the boot-param rule: this reads the RAW string, so a
+  // missing parameter leaves the shipped 2 alone rather than pinning a divisor
   // nobody asked for. A bad value degrades to 2, and the shader clamps again.
-  // ⚠ DEEPER FIELDS ARE GATED OFF BEHIND A FLAG, NOT SHIPPED (2026-09-10).
   //
-  // The divisor generalisation itself is sound and tested: fieldCount is a clamped
-  // uniform, both weaves share one row derivation, the parity cycles over the live
-  // divisor, and the target heights follow it. What is NOT sound is the ASSEMBLY:
-  // the owner reports that at fields 3 and 4 the SDF flesh still does not render on
-  // screen — the bone weave is fixed and the skeleton is now in the right place,
-  // but the flesh is missing. Measured while chasing it, all in ONE boot at held
-  // parity:
-  //
-  //   - the flesh IS marched at every divisor: surface texels (alpha < 1) cover
-  //     3.90% of the march target at h/2, 3.91% at h/3 and 3.91% at h/4, so this
-  //     is NOT culling, sizing or parity in the march;
-  //   - the heights are right (800x300 / 800x200 / 800x150) with no non-finite
-  //     texels anywhere.
-  //
-  // So the flesh is lost between the march target and the composited frame. That
-  // has to be found with the OUTPUT target in hand rather than guessed at again.
-  // Until then `?fields=3|4` also needs `?fieldsdemo=1`, so no page can be left in
-  // a state the owner reads as a regression. `__sdfGame.setFieldCount` still works
-  // for debugging. Remove this gate along with the assembly fix.
+  // There was briefly a `?fieldsdemo=1` gate here, active while a phantom WGSL
+  // input (fixed in 43779459) made the flesh vanish at every divisor INCLUDING the
+  // default. The gate is GONE: keeping it would ship a parameter that silently
+  // does nothing, which is a trap for the next reader. `?fields=N` now does
+  // exactly what it says.
   const fieldsBoot = parseIntParam(new URLSearchParams(location.search).get('fields'), { min: 2, max: 8 });
-  const fieldsGate = new URLSearchParams(location.search).get('fieldsdemo') === '1';
-  if (fieldsBoot !== null && (fieldsBoot === 2 || fieldsGate)) sdfLayer.setFieldCount(fieldsBoot);
+  if (fieldsBoot !== null) sdfLayer.setFieldCount(fieldsBoot);
   // Headless A/B seams (2026-08-27 hull-holes diagnosis): ship defaults stay
   // ON/ON; the driver flips these between captures. Mirrors the lab's
   // __sdfLab.setOccluder.

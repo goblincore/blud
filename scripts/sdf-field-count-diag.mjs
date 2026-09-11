@@ -51,7 +51,7 @@ const conn = await connectGame({ vite: VITE, cdp: CDP, width: 1280, height: 800,
 const { send, evaluate } = conn;
 
 await send('Page.bringToFront');
-await bootCloseupPage({ send, evaluate, url: `http://localhost:${VITE}/sdf-game.html?frozen=1&fieldsdemo=1`, fail });
+await bootCloseupPage({ send, evaluate, url: `http://localhost:${VITE}/sdf-game.html?frozen=1`, fail });
 await applyShipDefaults(evaluate);
 await evaluate('(() => { __sdfGame.setOccluder(false); __sdfGame.setHullExitBound(true); return 1; })()');
 await evaluate('(() => { __sdfGame.setLightClockFrozen(true); __sdfGame.setDemoHold(true); return 1; })()');
@@ -90,10 +90,25 @@ async function readAt(divisor) {
   await evaluate('(() => { __sdfGame.step(2); return 1; })()');
   const march = await evaluate('__sdfGameDebug.readMarchTarget()', 180_000);
   const marchStats = surfaceCount(march.w, march.h, march.rgba32f);
-  const out = await evaluate('__sdfGame.readOutputTarget()', 180_000);
-  const outStats = out ? surfaceCount(out.w, out.h, out.rgba32f) : null;
+  // ⚠ THE OUTPUT READBACK IS NOT TRUSTWORTHY AND ITS NUMBERS ARE NOT REPORTED.
+  // `readOutputTarget` wraps a Float32Array over readRenderTargetPixelsAsync bytes
+  // on a target whose FORMAT was never established; sampling the brightest flesh
+  // texel returns [8781, 8992, 9230, 15360], which is impossible for an rgba32f
+  // colour target where every channel is 0-1. On 2026-09-10 this reported "output
+  // surfaces 0.00%" at h/2 AS WELL — and h/2 is the working config — which was the
+  // tell that the READER was broken, and it got explained away for hours and sent
+  // an entire investigation after the composite. A tool that reports a confident
+  // wrong verdict is worse than no tool, so this one now REFUSES.
+  //
+  // To restore it: establish the target's real texture.format (half-float and
+  // integer formats both decode wrong as Float32Array), or read the PRESENTED
+  // canvas instead via __sdfGame.presentedShot() — proven, real 8-bit pixels, and
+  // the surface the owner actually looks at.
+  // (read `out` never assigned: see the note above)
+  const out = null;
+  void out;
   const shot = await evaluate('(() => __sdfGame.presentedShot())()', 120_000);
-  return { set, fieldCount: await evaluate('(() => __sdfGame.fieldCount)()'), marchStats, outStats, shotBytes: shot ? shot.length : 0 };
+  return { set, fieldCount: await evaluate('(() => __sdfGame.fieldCount)()'), marchStats, shotBytes: shot ? shot.length : 0 };
 }
 
 console.log(`sdf-field-count-diag — divisors ${DIVISORS.join(', ')}`);
@@ -104,22 +119,16 @@ for (const d of DIVISORS) {
   rows.push({ d, ...r });
   console.log(`  ?fields=${d} → setFieldCount returned ${r.set}, live ${r.fieldCount}`);
   console.log(`      march   : ${r.marchStats.w}x${r.marchStats.h}  surfaces ${String(r.marchStats.surfaces).padStart(7)} (${r.marchStats.pct}%)  nonFinite ${r.marchStats.nonFinite}  rgbNonZero ${r.marchStats.rgbNonZero}`);
-  if (r.outStats) {
-    console.log(`      OUTPUT  : ${r.outStats.w}x${r.outStats.h}  surfaces ${String(r.outStats.surfaces).padStart(7)} (${r.outStats.pct}%)  nonFinite ${r.outStats.nonFinite}  rgbNonZero ${r.outStats.rgbNonZero}`);
-  } else {
-    console.log('      OUTPUT  : no redirect active (readOutputTarget returned null) — the frame goes straight to the canvas');
-  }
+  console.log('      OUTPUT  : NOT MEASURED — the output readback decodes the wrong format (see the note in readAt).');
   console.log(`      canvas  : ${r.shotBytes} base64 chars of PNG`);
 }
 
-console.log('\n  READ THIS:');
-for (const r of rows) {
-  const m = Number(r.marchStats.pct);
-  const o = r.outStats ? Number(r.outStats.pct) : null;
-  if (o === null) continue;
-  const verdict = o < m * 0.5
-    ? 'OUTPUT LOST THE SURFACES → the fault is the composite’s fresh/held row split'
-    : 'OUTPUT KEPT THE SURFACES → the fault is later: bone weave write order or the presented frame';
-  console.log(`    h/${r.d}: march ${m}% → output ${o}%   ${verdict}`);
-}
+console.log('\n  WHAT THIS ESTABLISHES:');
+console.log('    The flesh IS marched at every divisor, in the right proportion, with correct');
+console.log('    target heights and no non-finite texels. That exonerates the march, the target');
+console.log('    sizing and the field parity — do NOT instrument the march target for a');
+console.log('    missing-flesh bug again.');
+console.log('    The OUTPUT half is disabled on purpose: its readback is broken (recorded');
+console.log('    2026-09-10) and a confident wrong verdict here cost hours. Fix the reader or');
+console.log('    compare __sdfGame.presentedShot() canvases instead.');
 process.exit(0);

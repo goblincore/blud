@@ -267,7 +267,9 @@ test that runs the real parser and requires parsed inputs == declared params, pl
 152-fn scan. **The console said it at load** (`THREE.TSL: Input 'deliberately' not
 found`); nobody read it. Second instance of the class (see `march.wgsl.test.ts`), and
 "inputs bind positionally" — which the offending comment claimed — is false: they
-bind BY NAME. **Next: the owner's look pass at h/3 and h/4, then the history ring.**
+bind BY NAME. **`?fieldsdemo=1` IS GONE** (removed after the fix): `?fields=N` alone now does what
+it says. Verified live — `?fields=3` → 800x200, `?fields=4` → 800x150, no errors.
+**Next: the owner's look pass at h/3 and h/4, then the history ring.**
 
 **[!] DEEPER INTERLACE — historical brief (SUPERSEDED, kept for the lesson):
 [docs/dev-notes/2026-09-10-interlace-handoff-START-HERE.md](docs/dev-notes/2026-09-10-interlace-handoff-START-HERE.md).**
