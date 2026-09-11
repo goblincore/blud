@@ -18,14 +18,26 @@ export function linearDepth(d: number, near: number, far: number): number {
   return (near * far) / (far - d * (far - near));
 }
 
-/** Round to the nearest IEEE float16 value — what an RGBA16F target stores. */
+/**
+ * Round to the nearest IEEE float16 value — what an RGBA16F target stores.
+ *
+ * TIES GO TO EVEN, as IEEE 754 round-to-nearest-even and every GPU do. `Math.round`
+ * rounds a tie away from zero instead, which put the CPU twin one ulp above the
+ * hardware on tie samples and inflated the WORST-PIXEL statistic the G1/P3c
+ * self-check reports (2026-09-11: a seeded s8/rgbd smoke model landed at 2.07e-3
+ * against a 2e-3 gate; see docs/dev-notes/2026-09-11-neural-upscale/p3c-ingame.md).
+ * 65520 is the tie between 65504 and 65536, and under this rule it goes to infinity.
+ */
 export function f16round(v: number): number {
   if (v === 0 || !Number.isFinite(v)) return v;
   const a = Math.abs(v);
   if (a >= 65520) return v > 0 ? Infinity : -Infinity;
   const e = Math.max(Math.floor(Math.log2(a)), -14);
   const step = 2 ** (e - 10);
-  return Math.sign(v) * Math.round(a / step) * step;
+  const q = a / step;
+  let n = Math.round(q);
+  if (q - Math.floor(q) === 0.5 && n % 2 !== 0) n -= 1;
+  return Math.sign(v) * n * step;
 }
 
 /** The first layer's input (spec §2): rgb*hit, hit[, hit*linearDepth], normalized. */

@@ -112,6 +112,15 @@ describe('upscale CPU twin', () => {
     expect(f16round(1e6)).toBe(Infinity);
     expect(f16round(2 ** -20)).toBe(2 ** -20);
     expect(f16round(0)).toBe(0);
+    // TIES GO TO EVEN (what the GPU does). Math.round would give the odd neighbour here.
+    expect(f16round(1 + 0.5 * 2 ** -10)).toBe(1);
+    expect(f16round(1 + 2.5 * 2 ** -10)).toBe(1 + 2 * 2 ** -10);
+    expect(f16round(-(1 + 0.5 * 2 ** -10))).toBe(-1);
+    expect(f16round(3 + 0.5 * 2 ** -9)).toBe(3);
+    expect(f16round(1.5 * 2 ** -24)).toBe(2 ** -23);
+    expect(f16round(0.5 * 2 ** -24)).toBe(0);
+    // and a non-tie still goes to the nearest value, not the even one
+    expect(f16round(1 + 0.6 * 2 ** -10)).toBe(1 + 2 ** -10);
   });
 
   it('reconstructPixel follows the spec §4 candidate order and sentinel rules', () => {

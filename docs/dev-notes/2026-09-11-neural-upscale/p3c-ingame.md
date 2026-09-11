@@ -92,3 +92,38 @@ server sessions), so this is deterministic weights, not flake.
   frame is re-derived after the stage lifecycle; both are far above the 1,000-px sanity floor and
   both have zero coverage mismatches.
 - vite had to be started fresh (port 5323 was down); the plan's 404-stale-config note did not apply.
+
+## Update 2026-09-11 — both follow-ups done; the smoke passes, and the rounding fix was inert
+
+Owner asked for both fixes from the diagnosis above.
+
+**1. `f16round` now rounds half to even** (`upscale-reference.ts`), matching IEEE 754
+round-to-nearest-even and the hardware; `Math.round` had been rounding ties away from zero. Tie
+cases are pinned in `upscale-reference.test.ts` (including subnormals and a non-tie control).
+
+**2. The smoke fixture is seeded 1, not 3** (`upscale-make-test-model.ts`) — the same seed the
+G1-parity reference fixtures use. New `weightHash e9f4faf6`.
+
+**Re-run on the GPU (this machine, Metal, Chrome headless):**
+
+```
+scripts/upscale-parity.mjs                      → G1-PARITY: PASS (7 configs x 2 layouts,
+                                                   sp 1.56e-3 .. 1.91e-3, dc 1.10e-3 .. 1.44e-3,
+                                                   0 coverage / 0 depth mismatches, 0 console errors)
+scripts/upscale-trained-smoke.mjs (seed 1)      → SMOKE: PASS
+                                                   sp 1.7084844229057876e-3, dc 1.2266360863805981e-3,
+                                                   sp-vs-dc 8.277553864373568e-4, covered 19340
+```
+
+**The tie theory was wrong, and the numbers say so.** The seed-1 smoke reproduces the pre-change
+control to every digit (`1.7084844229057876e-3`, `1.2266360863805981e-3`, `8.277553864373568e-4`),
+so round-to-nearest-even moved nothing: this workload hits **no exact ties** — a tie needs
+`value / ulp` to land on exactly .5, which float arithmetic here effectively never produces. The
+residual GPU-vs-twin gap is accumulation, not tie direction: the shader sums each 3x3 convolution in
+fp32 (with FMA contraction), the twin sums in float64 and rounds once per stored feature map.
+
+So the change is a correctness fix to the emulator, not a fix to this metric. What made the smoke
+green is the seed, and the honest reading of the gate is unchanged: **2e-3 is calibrated for the
+worst pixel of the G1 reference fixtures**, seed 3 sat 3.6 % outside it, and a real trained export
+sits well inside (1.28e-3 measured on the pre-flight s8-rgb export).
+
