@@ -3,7 +3,7 @@ import * as THREE from 'three/webgpu';
 // @ts-expect-error — deep three source import for the real wgslFn parser; no
 // public type declarations exist for three/src/* (same as march.wgsl.test.ts).
 import WGSLNodeFunction from 'three/src/renderers/webgpu/nodes/WGSLNodeFunction.js';
-import { createSdfLayer, isHoldFrame, sortFrontToBack, SDF_LAYER, FIELD_MESH_LAYER, COMPOSITE_WGSL, FIELD_INTERLEAVE_WGSL, DEPTH_PREPASS_BLOCK_PX, DEPTH_PREPASS_DIV, depthPrepassSize } from './sdf-layer';
+import { createSdfLayer, isHoldFrame, rotateHeldCameras, sortFrontToBack, SDF_LAYER, FIELD_MESH_LAYER, COMPOSITE_WGSL, FIELD_INTERLEAVE_WGSL, DEPTH_PREPASS_BLOCK_PX, DEPTH_PREPASS_DIV, depthPrepassSize } from './sdf-layer';
 
 describe('depth prepass sizing (close-up task 3)', () => {
   it('the block footprint constant stays in step with the downsample factor', () => {
@@ -213,11 +213,51 @@ describe('field weave shaders — depth is never interpolated', () => {
   // Both weaves republish their .w as depth. A mix() of two depths is a
   // surface that exists nowhere; the composite's field branch regressed on
   // this after the interleave was fixed (7bfd3b29), so pin BOTH sources.
-  it('the composite field branch returns the held depth verbatim on a held row', () => {
+  it('the composite field branch republishes ONE surface\'s depth on a held row', () => {
     const branch = COMPOSITE_WGSL.slice(COMPOSITE_WGSL.indexOf('if (fieldMode > 0.5)'), COMPOSITE_WGSL.indexOf('// holdMode:'));
-    expect(branch).toContain('held.w)');
+    // WAS `toContain('held.w)')` — true while the held row returned the held
+    // sample verbatim. The held-row reprojection (2026-09-10) republishes either
+    // that same sample's depth OR its reprojected depth, and the invariant the
+    // pin exists for is that it is never a BLEND: a mix of two depths describes a
+    // surface that exists nowhere.
+    expect(branch).toContain('var heldDepth = held.w;');
+    expect(branch).toContain('heldDepth = clamp(clipCur.z / clipCur.w, 0.0, 0.9999);');
     expect(branch).not.toMatch(/mix\(\(a \+ b\)/);
+    // heldDepth is passed through the vec4, never into the mix() with the colour.
+    expect(branch).not.toMatch(/mix\([^)]*heldDepth/);
     expect(branch).toContain('if (held.w >= 1.0) { discard; }');
+  });
+  it('the composite draws a held row\'s sample from the camera that wrote ITS slot', () => {
+    // Three ring slots, three different frames, three different cameras. Reading
+    // the wrong one is SILENT — it reprojects through a neighbouring frame's
+    // camera and reads as a plausible smear — so the slot -> camera mapping and
+    // the rotation order are both pinned here (the host rotates the matrices in
+    // the same source->destination order it rotates the textures).
+    const branch = COMPOSITE_WGSL.slice(COMPOSITE_WGSL.indexOf('if (fieldMode > 0.5)'), COMPOSITE_WGSL.indexOf('// holdMode:'));
+    expect(branch).toContain('var heldInvSlot = heldInv1;');
+    expect(branch).toContain('heldInvSlot = heldInv;');
+    expect(branch).toContain('heldInvSlot = heldInv1;');
+    expect(branch).toContain('heldInvSlot = heldInv2;');
+    // Repo-relative, like dev-save.test.ts: process cwd is the repo root under
+    // vitest, and import.meta.url is not a file: URL through the transform.
+    // The matrices rotate with the textures, in the same order, and that order
+    // is the whole function — see rotateHeldCameras' own note.
+    const slots = [0, 1, 2].map((k) => new THREE.Matrix4().makeTranslation(k, k, k));
+    const current = new THREE.Matrix4().makeTranslation(9, 9, 9);
+    rotateHeldCameras(slots, current);
+    const tx = (m: THREE.Matrix4) => [m.elements[12], m.elements[13], m.elements[14]];
+    expect(tx(slots[0]!)).toEqual([9, 9, 9]);   // this frame
+    expect(tx(slots[1]!)).toEqual([0, 0, 0]);   // was slot 0
+    expect(tx(slots[2]!)).toEqual([1, 1, 1]);   // was slot 1, NOT the overwritten slot 0
+  });
+  it('the held-row reprojection is HORIZONTAL only, by construction', () => {
+    // A held row's sample must stay in the row it belongs to — that IS the field
+    // structure — so the reprojected coordinate contributes a COLUMN and never a
+    // row. Resampling the reprojected row would tear one sample across several and
+    // defeat the weave; see the shader's own note.
+    const branch = COMPOSITE_WGSL.slice(COMPOSITE_WGSL.indexOf('if (fieldMode > 0.5)'), COMPOSITE_WGSL.indexOf('// holdMode:'));
+    expect(branch).toContain('let cRep = clamp(i32(floor(stRep.x * dims.x)), 0, i32(dims.x) - 1);');
+    expect(branch).not.toMatch(/stRep\.y/);
   });
   it('the interleave returns the held depth verbatim on a held row', () => {
     expect(FIELD_INTERLEAVE_WGSL).toContain('return vec4<f32>(woven.xyz, dHeld);');

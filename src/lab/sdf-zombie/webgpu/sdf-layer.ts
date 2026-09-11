@@ -82,6 +82,25 @@ export function isHoldFrame(frameIndex: number, halfRate: boolean, needsFresh: b
 }
 
 /**
+ * Rotate the per-slot HELD CAMERAS exactly as the history ring rotates its
+ * textures: slot2 <- slot1, then slot1 <- slot0, then slot0 <- `current`.
+ *
+ * ORDER IS THE WHOLE FUNCTION. The reverse (slot1 before slot2) copies an
+ * already-overwritten slot, and nothing about the result looks like an error —
+ * every held row is simply reprojected through a neighbouring frame's camera,
+ * which reads as a plausible smear. So it is pure, exported and unit-tested
+ * rather than inlined at the rotation site.
+ *
+ * `slots` is [slot0, slot1, slot2] and is mutated in place; `current` is the
+ * inverse view-projection of the frame that just marched.
+ */
+export function rotateHeldCameras(slots: THREE.Matrix4[], current: THREE.Matrix4): void {
+  slots[2]!.copy(slots[1]!);
+  slots[1]!.copy(slots[0]!);
+  slots[0]!.copy(current);
+}
+
+/**
  * Nearest first by world-position distance. Pure; returns a new array. The
  * front-to-back per-body walk (perf round 2 task 5) draws in this order so
  * every pass's accumulated depth is the nearest surface so far at each pixel
@@ -275,7 +294,10 @@ export const COMPOSITE_WGSL = /* wgsl */ `fn sdfComposite(
   outHeight: f32,
   fieldCount: f32,
   prevFieldTex1: texture_2d<f32>,
-  prevFieldTex2: texture_2d<f32>
+  prevFieldTex2: texture_2d<f32>,
+  heldInv1: mat4x4<f32>,
+  heldInv2: mat4x4<f32>,
+  heldReproject: f32
 ) -> vec4<f32> {
   let dims = vec2<f32>(textureDimensions(layerTex, 0));
   var st = texCoord;
@@ -323,12 +345,22 @@ export const COMPOSITE_WGSL = /* wgsl */ `fn sdfComposite(
       // case and h/2 is bit-identical by construction.
       let slot = (i32(fieldParityF) - (outRow % nf) + nf) % nf - 1;
       var held: vec4<f32>;
+      // THE HELD SAMPLE'S OWN CAMERA. Slot 0 is the field marched one frame ago,
+      // slot 1 two, slot 2 three — three DIFFERENT cameras — so the reprojection
+      // below needs the inverse view-projection of the frame that wrote THIS
+      // slot, rotated in lockstep with the textures (sdf-layer.ts, RING ROTATION).
+      // heldInv (no suffix) is the half-rate C2 path's single held camera and is
+      // NOT used here: fields and half-rate are mutually exclusive.
+      var heldInvSlot = heldInv1;
       if (slot <= 0) {
         held = textureLoad(prevFieldTex, vec2<i32>(col, tRow), 0);
+        heldInvSlot = heldInv;
       } else if (slot == 1) {
         held = textureLoad(prevFieldTex1, vec2<i32>(col, tRow), 0);
+        heldInvSlot = heldInv1;
       } else {
         held = textureLoad(prevFieldTex2, vec2<i32>(col, tRow), 0);
+        heldInvSlot = heldInv2;
       }
       // The two FRESH rows bracketing this held row — fieldHeldNeighboursInteger
       // from field-render.ts, which PROVES this integer form equals the intended
@@ -350,7 +382,59 @@ export const COMPOSITE_WGSL = /* wgsl */ `fn sdfComposite(
       // the sentinel test runs on the held field, not on a blend that can
       // pass while both inputs disagree about whether anything is there.
       if (held.w >= 1.0) { discard; }
-      fieldTexel = vec4<f32>(mix((a.xyz + b.xyz) * 0.5, held.xyz, fieldComb), held.w);
+      var heldCol = held.xyz;
+      var heldDepth = held.w;
+      // HELD-ROW REPROJECTION (2026-09-10). A held row is a snapshot of an
+      // OLDER CAMERA: at nf = 3 two rows in three carry a sample taken 1-3
+      // frames ago at the camera of that frame, composited at THIS frame's
+      // screen position. The pre-test measured what that costs — with the
+      // subject frozen, h/3 differs from h/2 by 0.80 mean 8-bit levels at a
+      // still camera and 12.06 the moment the camera strafes, 15x — i.e. the
+      // staleness is the artifact, not the reconstruction.
+      //
+      // The maths is the C2 path's, reused verbatim (it is MEASURED there: a
+      // raw hold's flesh best-aligns at dx = +21 px on a 6 m/s sweep, the
+      // reprojection at dx = 0). Unproject the held sample through the CAMERA
+      // THAT WROTE ITS SLOT, project with the current camera, and resample.
+      //
+      // ⚠ HORIZONTAL ONLY, DELIBERATELY. A held row's content must stay in the
+      // row it belongs to — the field's whole structure is "this output row's
+      // sample lives at this texture row" — so the reprojected coordinate's ROW
+      // is discarded (tRow is kept) and only the COLUMN moves. That is exact for
+      // a lateral translate, which is the motion the owner reported and the case
+      // the pre-test measured; a pitch or forward component also displaces the
+      // content VERTICALLY, and that part stays stale. Do not "fix" it by
+      // resampling the reprojected row: it would tear one row's sample across
+      // several and defeat the weave.
+      if (heldReproject > 0.5) {
+        let ndcHeld = vec2<f32>(st.x * 2.0 - 1.0, 1.0 - st.y * 2.0);
+        let world = heldInvSlot * vec4<f32>(ndcHeld, held.w, 1.0);
+        let clipCur = curVp * (world / world.w);
+        if (clipCur.w > 0.0) {
+          let ndcCur = clipCur.xy / clipCur.w;
+          let stRep = vec2<f32>((ndcCur.x + 1.0) * 0.5, (1.0 - ndcCur.y) * 0.5);
+          let cRep = clamp(i32(floor(stRep.x * dims.x)), 0, i32(dims.x) - 1);
+          var rep: vec4<f32>;
+          if (slot <= 0) {
+            rep = textureLoad(prevFieldTex, vec2<i32>(cRep, tRow), 0);
+          } else if (slot == 1) {
+            rep = textureLoad(prevFieldTex1, vec2<i32>(cRep, tRow), 0);
+          } else {
+            rep = textureLoad(prevFieldTex2, vec2<i32>(cRep, tRow), 0);
+          }
+          // Only take it if the reprojected texel is a SURFACE in that older
+          // field: landing on the far sentinel means the reprojection points at
+          // background that field has no data for (the disocclusion case C2
+          // documented as pale edge streaking), and the un-reprojected sample is
+          // the lesser artifact there.
+          if (rep.w < 1.0) { heldCol = rep.xyz; }
+          // The depth DOES follow the reprojection: the held row's depth has to
+          // describe the current camera or it tests against the polygonal pass a
+          // frame behind (the desync that retired C2).
+          heldDepth = clamp(clipCur.z / clipCur.w, 0.0, 0.9999);
+        }
+      }
+      fieldTexel = vec4<f32>(mix((a.xyz + b.xyz) * 0.5, heldCol, fieldComb), heldDepth);
     }
     if (fieldTexel.w >= 1.0) { discard; }
     return fieldTexel;
@@ -634,6 +718,10 @@ export interface SdfLayer {
   /** On = each ray starts at last frame's reprojected hit minus the margin
    *  (m) and slope (fraction). Off is bit-identical (and skips the copy). */
   setTemporalStart(on: boolean, margin?: number, slope?: number): void;
+  /** Reproject a held row's stale sample through the camera that wrote it
+   *  (?heldreproj / setHeldReproject). OFF ships the pre-2026-09-10 held row. */
+  setHeldReproject(on: boolean): boolean;
+  readonly heldReproject: boolean;
   readonly temporalStart: { on: boolean; margin: number; slope: number; maxStart: number };
   /** Registers the bodies (one pass each, front to back) and the gib chunks
    *  (one shared final pass, gated by every body). Call every frame before
@@ -744,6 +832,24 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   const uHoldMode = uniform(0);
   const uHeldInv = uniform(new THREE.Matrix4());
   const uCurVp = uniform(new THREE.Matrix4());
+  // HELD-ROW REPROJECTION (2026-09-10, fields only). One inverse view-projection
+  // PER RING SLOT: slot 0 is the field marched one frame ago, slot 1 two, slot 2
+  // three, so a held row's stale sample can be reprojected through the camera
+  // that actually wrote it. uHeldInv above is the half-rate C2 path's single held
+  // camera and stays what it was — fields and half-rate are mutually exclusive.
+  // Rotated in lockstep with the textures (see RING ROTATION): push order is
+  // slot1 <- slot0, slot2 <- slot1, slot0 <- this frame, the same order the
+  // textures are copied in.
+  const uHeldInv1 = uniform(new THREE.Matrix4());
+  const uHeldInv2 = uniform(new THREE.Matrix4());
+  /** Scratch for the ring rotation's current view-projection (jittered). */
+  const _ringVp = new THREE.Matrix4();
+  /** 0 = the pre-2026-09-10 held row verbatim (bit-identical), 1 = reprojected.
+   *  Ships OFF until the owner's look: at nf = 2 the held row IS the shipped
+   *  look the owner accepted, so this cannot default on without re-deciding h/2
+   *  as well. `?heldreproj=1` / `setHeldReproject(on)`. */
+  const uHeldReproject = uniform(0);
+  let heldReproject = false;
 
   // FloatType because the alpha channel carries DEPTH. At 8 bits per channel
   // the composite would resolve depth to 256 steps and the flesh would z-fight
@@ -1045,6 +1151,9 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     fieldComb: uFieldComb,
     outHeight: uOutHeight,
     fieldCount: uFieldCount,
+    heldInv1: uHeldInv1,
+    heldInv2: uHeldInv2,
+    heldReproject: uHeldReproject,
   }) as unknown as { xyz: unknown; w: unknown };
 
   const quadMat = new MeshBasicNodeMaterial();
@@ -1531,6 +1640,20 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
         renderer.copyTextureToTexture(fieldRing0.texture, fieldRing1.texture);
         renderer.copyTextureToTexture(fieldPrev.texture, fieldRing0.texture);
         renderer.copyTextureToTexture(target.texture, fieldPrev.texture);
+        // The per-slot CAMERAS rotate with the textures, in the SAME ORDER and
+        // for the same reason (source -> destination reads as slot2 <- slot1,
+        // then slot1 <- slot0, then slot0 <- this frame). Getting the order
+        // wrong is silent: every held row would be reprojected through its
+        // neighbour's camera, which is a plausible-looking smear rather than an
+        // error. The current VP is captured HERE because this is the last moment
+        // the JITTERED projection is still installed (clearViewOffset follows):
+        // the retained field was marched with the field jitter applied, so a
+        // camera without it reprojects every held row half a row off.
+        _ringVp.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse).invert();
+        rotateHeldCameras(
+          [uHeldInv.value as THREE.Matrix4, uHeldInv1.value as THREE.Matrix4, uHeldInv2.value as THREE.Matrix4],
+          _ringVp,
+        );
         // Depth is retained WITH colour: a held row is a snapshot of one
         // instant, not last frame's pixels at this frame's depth.
         renderer.copyTextureToTexture(fieldMeshRing0.texture, fieldMeshRing1.texture);
@@ -1619,6 +1742,12 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       const v = lastUniforms.cfg.value as THREE.Vector4;
       return { on: v.x > 0.5, margin: v.y, slope: v.z, maxStart: v.w, adaptiveMargin: temporalAdaptiveMargin };
     },
+    setHeldReproject(on) {
+      heldReproject = on;
+      (uHeldReproject.value as number) = on ? 1 : 0;
+      return heldReproject;
+    },
+    get heldReproject() { return heldReproject; },
     setBodies(list, chunkList) { bodies = list; chunks = chunkList; },
     setDepthGate(on) { prevUniforms.enabled.value = on ? 1 : 0; },
     setChunkPass(mode) { chunkPass = mode; },
