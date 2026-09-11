@@ -3,6 +3,7 @@ import type { Plugin } from 'vite';
 import { resolve } from 'path';
 import { saveFace, savePalette } from './src/lab/dev-save';
 import { saveGameplayCapture } from './scripts/lib/game-telemetry-save';
+import { listModels, modelStoreRoot, readModelText } from './scripts/lib/upscale-model-store';
 import { execFileSync } from 'node:child_process';
 
 function readTelemetryBuild(cwd = process.cwd()) {
@@ -49,6 +50,18 @@ function labDevSave(): Plugin {
             try { res.end(JSON.stringify(saveGameplayCapture(server.config.root, JSON.parse(Buffer.concat(chunks).toString('utf8'))))); }
             catch (error) { res.statusCode = 400; res.end(JSON.stringify({ ok: false, error: String(error) })); }
           });
+          return;
+        }
+        // Trained neural upscale models (docs/superpowers/plans/2026-09-11-neural-upscale-p3-contracts.md §4).
+        if (url.pathname === '/__lab/upscale-models' || url.pathname.startsWith('/__lab/upscale-model/')) {
+          if (req.method !== 'GET') { res.statusCode = 405; res.end(); return; }
+          const store = modelStoreRoot(server.config.root);
+          res.setHeader('content-type', 'application/json');
+          res.setHeader('cache-control', 'no-store');
+          if (url.pathname === '/__lab/upscale-models') { res.end(JSON.stringify(listModels(store))); return; }
+          const text = readModelText(store, url.pathname.slice('/__lab/upscale-model/'.length));
+          if (text === null) { res.statusCode = 404; res.end(JSON.stringify({ ok: false, error: 'no such model' })); return; }
+          res.end(text);
           return;
         }
         if (!url.pathname.startsWith('/__lab/save-')) return next();

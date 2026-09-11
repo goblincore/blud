@@ -5,6 +5,8 @@ dist/
 *.log
 .superpowers/
 .vite/
+# Trained neural upscale models pulled from training runs (dev-only; accepted models get committed elsewhere)
+.upscale-models/
 .worktrees/
 
 # dev tooling
