@@ -1,0 +1,16 @@
+old: /tmp/g3.json  label=r0-old-a  at=2026-09-11T01:58:34.056Z  dispatch frames 82,86,90,94,98,102,106,110,114,118,122
+new: /tmp/g4b.json  label=r0-old-b  at=2026-09-11T01:59:21.837Z  dispatch frames 83,87,91,95,99,103,107,111,115,119,123
+old console problems: 0  new: 0
+
+=== /tmp/g4b.json vs /tmp/g3.json (CROSS-BOOT: check the input gates before believing any of it) ===
+rays= 0  floats changed    0/6400  rel>1e-6:    0  maxAbs 0.000e+0  maxRel 0.000e+0  nonzero 0=0  inputs IDENTICAL  (bit-identical)
+rays= 1  floats changed    0/6400  rel>1e-6:    0  maxAbs 0.000e+0  maxRel 0.000e+0  nonzero 1484=1484  inputs IDENTICAL  (bit-identical)
+rays= 2  floats changed    0/6400  rel>1e-6:    0  maxAbs 0.000e+0  maxRel 0.000e+0  nonzero 2805=2805  inputs IDENTICAL  (bit-identical)
+rays= 3  floats changed    0/6400  rel>1e-6:    0  maxAbs 0.000e+0  maxRel 0.000e+0  nonzero 2953=2953  inputs IDENTICAL  (bit-identical)
+rays= 5  floats changed    0/6400  rel>1e-6:    0  maxAbs 0.000e+0  maxRel 0.000e+0  nonzero 3411=3411  inputs IDENTICAL  (bit-identical)
+rays= 8  floats changed    0/6400  rel>1e-6:    0  maxAbs 0.000e+0  maxRel 0.000e+0  nonzero 4151=4151  inputs IDENTICAL  (bit-identical)
+rays=16  floats changed    0/6400  rel>1e-6:    0  maxAbs 0.000e+0  maxRel 0.000e+0  nonzero 5041=5041  inputs IDENTICAL  (bit-identical)
+rays=31  floats changed    0/6400  rel>1e-6:    0  maxAbs 0.000e+0  maxRel 0.000e+0  nonzero 5800=5800  inputs IDENTICAL  (bit-identical)
+rays=32  floats changed    0/6400  rel>1e-6:    0  maxAbs 0.000e+0  maxRel 0.000e+0  nonzero 5896=5896  inputs IDENTICAL  (bit-identical)
+rays=47  floats changed    0/6400  rel>1e-6:    0  maxAbs 0.000e+0  maxRel 0.000e+0  nonzero 6088=6088  inputs IDENTICAL  (bit-identical)
+rays=64  floats changed    0/6400  rel>1e-6:    0  maxAbs 0.000e+0  maxRel 0.000e+0  nonzero 6256=6256  inputs IDENTICAL  (bit-identical)

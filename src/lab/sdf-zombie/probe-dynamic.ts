@@ -49,6 +49,53 @@ export const DYN_FLOATS_PER_PROBE = DYN_VEC4_PER_PROBE * 4;
 export const DYN_RAY_CAP = 64;
 
 /**
+ * THE GATHER'S WORKGROUP SIZE, and the shape of the R1 dispatch (2026-09-10).
+ *
+ * The pass runs one thread per (probe, ray). A workgroup this wide holds
+ * `PROBE_GATHER_WORKGROUP / tpp` WHOLE probes, where `tpp` is the
+ * threads-per-probe below — which is why `tpp` is a power of two: a probe's ray
+ * group must never straddle two workgroups, because the reduction that folds it
+ * is workgroup-local (WebGPU has no barrier between workgroups in a dispatch).
+ */
+export const PROBE_GATHER_WORKGROUP = 64;
+
+/**
+ * Threads the gather spawns per probe: the smallest power of two that can hold
+ * `raysPerProbe`, clamped to [1, PROBE_GATHER_WORKGROUP].
+ *
+ * Not simply `raysPerProbe`, for two reasons. It must divide
+ * PROBE_GATHER_WORKGROUP so the groups tile the workgroup exactly, and it must
+ * be at least 1 when the ray count is 0 — the `?dynrays=0` control still writes
+ * the decayed record for every probe, which is what the one-thread-per-probe
+ * pass did. Rays beyond the count are idle threads that contribute zeros, and
+ * the fold reads only the first `rays` slots, so a padded group costs slots and
+ * nothing else.
+ *
+ * BOTH SIDES SHARE THIS. The kernel takes the value as `gather.x` rather than
+ * re-deriving it, so exactly one place decides it; the host uses it to size the
+ * dispatch through `gatherWorkgroupCount` below.
+ */
+export function gatherThreadsPerProbe(raysPerProbe: number): number {
+  const rays = Math.min(Math.max(0, Math.floor(raysPerProbe)), DYN_RAY_CAP);
+  let tpp = 1;
+  while (tpp < rays && tpp < PROBE_GATHER_WORKGROUP) tpp *= 2;
+  return tpp;
+}
+
+/**
+ * Workgroups to dispatch for `probeCount` probes at `raysPerProbe` rays. The
+ * last workgroup is partial whenever `probeCount * tpp` is not a multiple of
+ * PROBE_GATHER_WORKGROUP; its surplus threads are out of range, so they do no
+ * ray work and write nothing — the kernel tests the PROBE index, never the
+ * thread index, and that test is a flag rather than a guard (the barrier must
+ * stay in uniform control flow).
+ */
+export function gatherWorkgroupCount(probeCount: number, raysPerProbe: number): number {
+  const tpp = gatherThreadsPerProbe(raysPerProbe);
+  return Math.ceil((Math.max(0, Math.floor(probeCount)) * tpp) / PROBE_GATHER_WORKGROUP);
+}
+
+/**
  * The Fibonacci lattice's golden angle and a full turn. Exported so the WGSL
  * pin test can assert the exact literals in `K_PROBE_GATHER` — the one place
  * the two copies of the ray set are allowed to share a number.

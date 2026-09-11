@@ -6,12 +6,13 @@
  * `probe-dynamic.wgsl.test.ts` (source text and the real wgslFn parser). Change
  * one, change both.
  *
- * THE SEAM. A compute pass runs `kProbeGather` once per probe every frame over
- * this frame's boxes (the room's enclosure plus its furniture), body capsules
- * (two per posed bone) and point lights (the muzzle flash first). It writes the
- * dynamic layer: three vec4 of L1 radiance in the static packing plus one vec4
- * of scalar L1 visibility. `probeDynamic` is the march's read, a manual
- * trilinear over that storage buffer, returning `(radiance.rgb, visibility)`.
+ * THE SEAM. A compute pass runs `kProbeGather` over this frame's boxes (the
+ * room's enclosure plus its furniture), body capsules (two per posed bone) and
+ * point lights (the muzzle flash first), ONE THREAD PER (probe, ray) with each
+ * probe's ray group folded by its lane 0. It writes the dynamic layer: three
+ * vec4 of L1 radiance in the static packing plus one vec4 of scalar L1
+ * visibility. `probeDynamic` is the march's read, a manual trilinear over that
+ * storage buffer, returning `(radiance.rgb, visibility)`.
  *
  * ORDER. `kProbeGather` is declared first, as the wgslFn parse contract
  * requires; WGSL module-scope declarations may be used before they are defined,
@@ -21,17 +22,47 @@
 import {
   DYN_RAY_CAP,
   GOLDEN_ANGLE,
+  PROBE_GATHER_WORKGROUP,
   TWO_PI,
 } from '../probe-dynamic';
 import { SH_A0, SH_A1, SH_Y00, SH_Y1 } from '../probe-grid';
 
 /**
- * One thread per probe. The FIRST statement is the count guard so threads past
- * `cfg.x` retire before touching storage. Rays per probe is `min(cfg.y, 64)`.
- * `cfg` = `(probeCount, raysPerProbe, frameSeed, blend)`; the three grid vec4s
- * are exactly what the static evaluator binds (`min.xyz, 0`,
- * `invExtent.xyz, 0`, `(nx, ny, nz, 0)`). The new estimate is blended into the
- * previous frame's texels by `cfg.w` for stability.
+ * ONE THREAD PER (probe, ray) — the R1 dispatch widening (2026-09-10).
+ *
+ * The pass used to run one thread per probe: 400 threads, i.e. ~7 workgroups
+ * of 64, ~35% of one wave on an M3, two warps per core, no latency hiding. Its
+ * cost measured near-perfectly LINEAR in the ray count, which is what says the
+ * work is unshareable per-ray work executed serially inside each thread. Now a
+ * workgroup of `PROBE_GATHER_WORKGROUP` threads covers `WG / tpp` WHOLE probes,
+ * every thread runs ONE ray, and each probe's group is folded by its lane 0.
+ * Same work, `tpp` times the parallelism.
+ *
+ * `tpp` (threads per probe, `gather.x`) is the next power of two at least the
+ * ray count, clamped to [1, WG] — see `gatherThreadsPerProbe`. A power of two
+ * so that a probe's ray group never straddles two workgroups, which is what
+ * makes a workgroup-LOCAL reduction correct at any ray count. It is at least 1
+ * when the ray count is 0, so the `?dynrays=0` control still dispatches one
+ * thread per probe and writes the decayed record, exactly as the old pass did.
+ *
+ * THE REDUCTION is the whole difficulty, and Tint dictates its shape:
+ *  - There is NO count guard in this kernel. `workgroupBarrier` may not sit in
+ *    non-uniform control flow, and three emits its own
+ *    `if (instanceIndex >= count) return;` ahead of the kernel whenever
+ *    compute() is given a NUMERIC count — which is why the host dispatches with
+ *    an explicit WORKGROUP-count array instead (probe-gather-compute.ts). The
+ *    probe-count test here is therefore a FLAG: threads past the last probe do
+ *    no ray work and contribute zeros, but they still reach the barrier.
+ *  - The barrier is unconditional and at the function's top level.
+ *  - The fold is SERIAL in ascending lane order, not a tree: exact at any `tpp`
+ *    and it reproduces the old per-probe accumulation ORDER exactly. The terms
+ *    are the same values, so the estimate is equivalent; only the compiler's
+ *    freedom to contract a multiply-add into an FMA can differ in the last ulp.
+ *
+ * `cfg` = `(probeCount, raysPerProbe, frameSeed, blend)`, `gather.x` = tpp. The
+ * three grid vec4s are exactly what the static evaluator binds (`min.xyz,
+ * fall`, `invExtent.xyz, 0`, `(nx, ny, nz, 0)`). The new estimate is blended
+ * into the previous frame's texels by `cfg.w` for stability.
  */
 export const K_PROBE_GATHER = /* wgsl */ `fn kProbeGather(
   boxes: ptr<storage, array<vec4<f32>>, read>,
@@ -42,43 +73,57 @@ export const K_PROBE_GATHER = /* wgsl */ `fn kProbeGather(
   gridMin: vec4<f32>,
   gridInvExtent: vec4<f32>,
   gridDims: vec4<f32>,
+  gather: vec4<f32>,
   gi: u32
 ) -> void {
-  if (gi >= u32(cfg.x)) { return; }
-
   let nRays = min(u32(cfg.y), ${DYN_RAY_CAP}u);
+  let probeCount = u32(cfg.x);
+  let tpp = max(1u, u32(gather.x));
+  let probe = gi / tpp;
+  let lane = gi % tpp;
+  let valid = probe < probeCount;
+  // This thread's slot in the workgroup's shared scratch. instanceIndex is the
+  // linear invocation index (workgroupId * workgroupSize + localId; see
+  // WGSLNodeBuilder _getWGSLComputeCode) and the dispatch is 1-D, so gi % WG is
+  // the local invocation index.
+  let lin = gi % ${PROBE_GATHER_WORKGROUP}u;
+  // The group's base slot. tpp divides the workgroup size, so groupBase is the
+  // same for every thread of a probe and the group is contiguous.
+  let groupBase = (lin / tpp) * tpp;
+
   let nBoxes = u32((*boxes)[0].x);
   let nCaps = u32((*capsules)[0].x);
   let nLights = u32((*lights)[0].x);
 
-  // Probe position, mirroring probePosition(): x fastest, then y, then z, and
-  // a one-probe axis sits at the cell centre.
-  let extent = vec3<f32>(1.0, 1.0, 1.0) / max(gridInvExtent.xyz, vec3<f32>(1e-9, 1e-9, 1e-9));
-  let span = max(gridDims.xyz - vec3<f32>(1.0, 1.0, 1.0), vec3<f32>(0.0, 0.0, 0.0));
-  let nx = i32(gridDims.x);
-  let ny = i32(gridDims.y);
-  let gix = i32(gi);
-  let ix = gix % nx;
-  let iy = (gix / nx) % ny;
-  let iz = gix / (nx * ny);
-  var tp = vec3<f32>(0.5, 0.5, 0.5);
-  if (span.x > 0.0) { tp.x = f32(ix) / span.x; }
-  if (span.y > 0.0) { tp.y = f32(iy) / span.y; }
-  if (span.z > 0.0) { tp.z = f32(iz) / span.z; }
-  let origin = gridMin.xyz + extent * tp;
+  // THIS THREAD'S RAY, packed into the same four vec4s the old pass used for a
+  // whole probe's accumulators, so the fold below adds the same terms in the
+  // same order as the old serial r00 = r00 + radiance * SH_Y00 loop.
+  // (No backticks in this string — one breaks the TypeScript parse; that trap
+  // has been hit three times in this file's history, see the perf handoff.)
+  var acc0 = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+  var acc1 = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+  var acc2 = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+  var acc3 = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+  var hits = 0u;
 
-  var r00 = vec3<f32>(0.0, 0.0, 0.0);
-  var r1m1 = vec3<f32>(0.0, 0.0, 0.0);
-  var r10 = vec3<f32>(0.0, 0.0, 0.0);
-  var r11 = vec3<f32>(0.0, 0.0, 0.0);
-  var v00 = 0.0;
-  var v1m1 = 0.0;
-  var v10 = 0.0;
-  var v11 = 0.0;
-  var nHit = 0u;
+  if (valid && lane < nRays) {
+    // Probe position, mirroring probePosition(): x fastest, then y, then z, and
+    // a one-probe axis sits at the cell centre.
+    let extent = vec3<f32>(1.0, 1.0, 1.0) / max(gridInvExtent.xyz, vec3<f32>(1e-9, 1e-9, 1e-9));
+    let span = max(gridDims.xyz - vec3<f32>(1.0, 1.0, 1.0), vec3<f32>(0.0, 0.0, 0.0));
+    let nx = i32(gridDims.x);
+    let ny = i32(gridDims.y);
+    let gp = i32(probe);
+    let ix = gp % nx;
+    let iy = (gp / nx) % ny;
+    let iz = gp / (nx * ny);
+    var tp = vec3<f32>(0.5, 0.5, 0.5);
+    if (span.x > 0.0) { tp.x = f32(ix) / span.x; }
+    if (span.y > 0.0) { tp.y = f32(iy) / span.y; }
+    if (span.z > 0.0) { tp.z = f32(iz) / span.z; }
+    let origin = gridMin.xyz + extent * tp;
 
-  for (var i = 0u; i < nRays; i = i + 1u) {
-    let dir = kdFibonacci(i, nRays, cfg.z);
+    let dir = kdFibonacci(lane, nRays, cfg.z);
     let bh = kdHitBox(origin, dir, boxes, false);
     // Bound the capsule sweep by the box hit already in hand: a capsule entered
     // beyond the box surface can never win the comparison below, so it is
@@ -135,40 +180,67 @@ export const K_PROBE_GATHER = /* wgsl */ `fn kProbeGather(
       let ym1 = ${SH_Y1} * dir.y;
       let y10 = ${SH_Y1} * dir.z;
       let y11 = ${SH_Y1} * dir.x;
-      r00 = r00 + radiance * ${SH_Y00};
-      r1m1 = r1m1 + radiance * ym1;
-      r10 = r10 + radiance * y10;
-      r11 = r11 + radiance * y11;
-      v00 = v00 + vis * ${SH_Y00};
-      v1m1 = v1m1 + vis * ym1;
-      v10 = v10 + vis * y10;
-      v11 = v11 + vis * y11;
-      nHit = nHit + 1u;
+      acc0 = vec4<f32>(radiance.x * ${SH_Y00}, radiance.y * ${SH_Y00}, radiance.z * ${SH_Y00}, radiance.x * ym1);
+      acc1 = vec4<f32>(radiance.y * ym1, radiance.z * ym1, radiance.x * y10, radiance.y * y10);
+      acc2 = vec4<f32>(radiance.z * y10, radiance.x * y11, radiance.y * y11, radiance.z * y11);
+      acc3 = vec4<f32>(vis * ${SH_Y00}, vis * ym1, vis * y10, vis * y11);
+      hits = 1u;
     }
   }
 
-  // projectL1's (4pi / N) weight, with N floored at 1 so an all-miss probe
-  // writes zeros rather than a NaN.
-  let w = (4.0 * ${SH_A0}) / f32(max(1u, nHit));
-  let new0 = vec4<f32>(r00.x, r00.y, r00.z, r1m1.x) * w;
-  let new1 = vec4<f32>(r1m1.y, r1m1.z, r10.x, r10.y) * w;
-  let new2 = vec4<f32>(r10.z, r11.x, r11.y, r11.z) * w;
-  let new3 = vec4<f32>(v00, v1m1, v10, v11) * w;
+  // Hand this thread's contribution to the workgroup. EVERY thread writes here —
+  // an idle lane or a thread past the last probe writes zeros — and every thread
+  // reaches the barrier below, which is what keeps it in uniform control flow.
+  // Nothing reads the scratch before the barrier.
+  gProbeScratch[lin * 4u + 0u] = acc0;
+  gProbeScratch[lin * 4u + 1u] = acc1;
+  gProbeScratch[lin * 4u + 2u] = acc2;
+  gProbeScratch[lin * 4u + 3u] = acc3;
+  gProbeHit[lin] = hits;
+  workgroupBarrier();
 
-  let base = gi * 4u;
-  // AFTERGLOW. Radiance rises at cfg.w and FALLS at gridMin.w (a spare slot;
-  // the fall rate, e.g. 0.12 = a ~0.3 s tail at 60 Hz). A muzzle flash lives
-  // 0.14 s; blended symmetrically it was a two-frame flicker on a body. Rise
-  // or fall is decided on the L00 luminance, and the whole radiance record
-  // takes one rate so the lobes stay coherent. Visibility keeps cfg.w.
-  let prev0 = (*probeDyn)[base + 0u];
-  let lumNew = dot(new0.xyz, vec3<f32>(0.2126, 0.7152, 0.0722));
-  let lumPrev = dot(prev0.xyz, vec3<f32>(0.2126, 0.7152, 0.0722));
-  let rate = select(gridMin.w, cfg.w, lumNew > lumPrev);
-  (*probeDyn)[base + 0u] = mix(prev0, new0, rate);
-  (*probeDyn)[base + 1u] = mix((*probeDyn)[base + 1u], new1, rate);
-  (*probeDyn)[base + 2u] = mix((*probeDyn)[base + 2u], new2, rate);
-  (*probeDyn)[base + 3u] = mix((*probeDyn)[base + 3u], new3, cfg.w);
+  // ONE thread per probe folds its group and writes the record: the old pass's
+  // read-modify-write of the probe record must stay single-threaded (two writers
+  // is a race that shows up as flicker, not as a compile error). Walking the
+  // group in ascending slot order is the old accumulation order.
+  if (lane == 0u && valid) {
+    var s0 = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+    var s1 = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+    var s2 = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+    var s3 = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+    var nHit = 0u;
+    for (var s = 0u; s < tpp; s = s + 1u) {
+      let k = (groupBase + s) * 4u;
+      s0 = s0 + gProbeScratch[k + 0u];
+      s1 = s1 + gProbeScratch[k + 1u];
+      s2 = s2 + gProbeScratch[k + 2u];
+      s3 = s3 + gProbeScratch[k + 3u];
+      nHit = nHit + gProbeHit[groupBase + s];
+    }
+
+    // projectL1's (4pi / N) weight, with N floored at 1 so an all-miss probe
+    // writes zeros rather than a NaN.
+    let w = (4.0 * ${SH_A0}) / f32(max(1u, nHit));
+    let new0 = s0 * w;
+    let new1 = s1 * w;
+    let new2 = s2 * w;
+    let new3 = s3 * w;
+
+    let base = probe * 4u;
+    // AFTERGLOW. Radiance rises at cfg.w and FALLS at gridMin.w (a spare slot;
+    // the fall rate, e.g. 0.12 = a ~0.3 s tail at 60 Hz). A muzzle flash lives
+    // 0.14 s; blended symmetrically it was a two-frame flicker on a body. Rise
+    // or fall is decided on the L00 luminance, and the whole radiance record
+    // takes one rate so the lobes stay coherent. Visibility keeps cfg.w.
+    let prev0 = (*probeDyn)[base + 0u];
+    let lumNew = dot(new0.xyz, vec3<f32>(0.2126, 0.7152, 0.0722));
+    let lumPrev = dot(prev0.xyz, vec3<f32>(0.2126, 0.7152, 0.0722));
+    let rate = select(gridMin.w, cfg.w, lumNew > lumPrev);
+    (*probeDyn)[base + 0u] = mix(prev0, new0, rate);
+    (*probeDyn)[base + 1u] = mix((*probeDyn)[base + 1u], new1, rate);
+    (*probeDyn)[base + 2u] = mix((*probeDyn)[base + 2u], new2, rate);
+    (*probeDyn)[base + 3u] = mix((*probeDyn)[base + 3u], new3, cfg.w);
+  }
 }
 
 struct KdBoxHit {
@@ -507,7 +579,17 @@ fn kdShadowed(
   if (bh.hit && bh.t < dist) { return true; }
   if (kdCapsuleBlocks(origin, dir, capsules, dist)) { return true; }
   return false;
-}`;
+}
+
+// THE WORKGROUP SCRATCH (module scope, emitted with the kernel's own source —
+// see surface-nets.wgsl.ts, which declares its workgroup storage the same way
+// and is the reason this shape is known to survive Tint). Four vec4 per thread,
+// the same packing the kernel produces and the fold consumes, plus one hit flag
+// per thread: Tint will not accept a workgroup variable declared inside a
+// non-entry-point function, and three's workgroupArray node buys nothing here
+// because we index it ourselves.
+var<workgroup> gProbeScratch: array<vec4<f32>, ${PROBE_GATHER_WORKGROUP * 4}>;
+var<workgroup> gProbeHit: array<u32, ${PROBE_GATHER_WORKGROUP}>;`;
 
 /**
  * Manual trilinear over the 8 probes surrounding `p`, blending the four vec4

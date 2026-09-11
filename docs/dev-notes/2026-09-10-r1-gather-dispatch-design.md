@@ -1,7 +1,15 @@
 # R1 — widen the gather's dispatch: design + evidence, ready to implement
 
-**Status: DESIGNED, NOT IMPLEMENTED.** The measurement that justifies it is done and
-recorded below. The reason it is not implemented yet is stated at the end, honestly.
+**Status: IMPLEMENTED 2026-09-10 — see
+[2026-09-10-r1-gather-dispatch-implemented/](2026-09-10-r1-gather-dispatch-implemented/README.md)
+for the result (4.00 ms → 0.18 ms on `compute:probe-gather`), the equivalence
+proof against this build, and the two things that turned out to matter (NO count
+guard anywhere, because of the barrier; and `threadsPerProbe` must be a power of
+two that divides the workgroup so a probe's ray group cannot straddle two
+workgroups). Everything below is the design as written BEFORE implementing, and
+is kept because it is the evidence for why this shape was chosen.**
+
+The measurement that justifies it is done and recorded below.
 
 ## The evidence (2026-09-10, room 4, `BENCH_PASSES=1`, within-leg pass row)
 
@@ -123,6 +131,16 @@ dispatch, still no extra buffer, and no shared-array function parameter.
    full-occupancy floor is 0.2-0.7 ms; treat that as INFERRED, not promised).
 
 ## Status: READY TO IMPLEMENT (probe passed 2026-09-10)
+
+> **IMPLEMENTED. Read
+> [2026-09-10-r1-gather-dispatch-implemented/](2026-09-10-r1-gather-dispatch-implemented/README.md)
+> first — it records what the four steps below actually required, the measured
+> result, and the equivalence proof.** Step 3 as written here ("Dispatch
+> `compute(call, probes * rays, [64])`") is the one step that had to change: a
+> numeric count makes three emit a guard ahead of the kernel call and Tint then
+> rejects the barrier behind it, so the dispatch is an explicit WORKGROUP-count
+> array instead, and the per-frame count is `probes * threadsPerProbe / 64` with
+> `threadsPerProbe` a power of two. The rest held.
 
 Option A it is. The next concrete steps, in order:
 

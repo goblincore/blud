@@ -12,9 +12,12 @@ import {
   DYN_VEC4_PER_PROBE,
   BONE_INSTANCE_FLOATS,
   GOLDEN_ANGLE,
+  PROBE_GATHER_WORKGROUP,
   TWO_PI,
   blendDynamic,
   gatherProbeDynamic,
+  gatherThreadsPerProbe,
+  gatherWorkgroupCount,
   hitCapsule,
   packBoxes,
   packCapsulesFromBoneInstances,
@@ -526,5 +529,60 @@ describe('blendDynamicAfterglow', () => {
     blendDynamicAfterglow(out, dark, 1, 0.12, after);
     expect(after[0]).toBeCloseTo(10 * 0.88, 5); // decays at the fall rate
     expect(after[12]).toBeCloseTo(0, 9);        // visibility does not linger
+  });
+});
+
+describe('R1 gather dispatch shape — threads per probe', () => {
+  // The reduction is workgroup-LOCAL: WebGPU has no barrier between workgroups
+  // in one dispatch, so a probe's ray group must lie wholly inside one
+  // workgroup. These two properties are what make that true for every ray count
+  // the debug seam can set (0..64), and the kernel would silently mis-reduce
+  // (or fail to compile) if either were broken.
+
+  it('is the next power of two, so it always divides the workgroup size', () => {
+    for (let rays = 0; rays <= DYN_RAY_CAP; rays++) {
+      const tpp = gatherThreadsPerProbe(rays);
+      expect(Number.isInteger(Math.log2(tpp))).toBe(true);
+      expect(PROBE_GATHER_WORKGROUP % tpp).toBe(0);
+      expect(tpp).toBeGreaterThanOrEqual(Math.max(1, rays));
+      // Never larger than it needs to be: halving it would no longer hold `rays`.
+      if (rays > 1) expect(Math.floor(tpp / 2)).toBeLessThan(rays);
+    }
+  });
+
+  it('spawns at least one thread per probe when there are no rays', () => {
+    // `?dynrays=0` is the documented cost-split control. The old pass still ran
+    // one thread per probe and wrote the DECAYED record; a dispatch of zero
+    // workgroups would leave the layer frozen at its last value instead, which
+    // silently changes what that control measures.
+    expect(gatherThreadsPerProbe(0)).toBe(1);
+    expect(gatherWorkgroupCount(400, 0)).toBe(Math.ceil(400 / PROBE_GATHER_WORKGROUP));
+  });
+
+  it('sizes the dispatch to cover every probe, rounded up to whole workgroups', () => {
+    // The shipped 400-probe grid at 32 rays: 200 workgroups of 64, against the
+    // 7 the one-thread-per-probe pass dispatched.
+    expect(gatherThreadsPerProbe(32)).toBe(32);
+    expect(gatherWorkgroupCount(400, 32)).toBe(200);
+    expect(gatherWorkgroupCount(400, 64)).toBe(400);
+    // A partial last workgroup is legitimate; it must never be dropped.
+    expect(gatherWorkgroupCount(1, 32)).toBe(1);
+    expect(gatherWorkgroupCount(0, 32)).toBe(0);
+    for (const rays of [1, 2, 3, 5, 8, 16, 31, 47, 64]) {
+      const tpp = gatherThreadsPerProbe(rays);
+      for (const probes of [1, 7, 42, 399, 400]) {
+        expect(gatherWorkgroupCount(probes, rays) * PROBE_GATHER_WORKGROUP)
+          .toBeGreaterThanOrEqual(probes * tpp);
+      }
+    }
+  });
+
+  it('clamps the ray count the same way the CPU twin does', () => {
+    // The host used to do Math.min(64, rays) and leave a negative value to the
+    // kernel's u32 cast.
+    expect(gatherThreadsPerProbe(-5)).toBe(1);
+    expect(gatherThreadsPerProbe(2.7)).toBe(2);
+    expect(gatherThreadsPerProbe(1000)).toBe(PROBE_GATHER_WORKGROUP);
+    expect(gatherThreadsPerProbe(DYN_RAY_CAP)).toBe(PROBE_GATHER_WORKGROUP);
   });
 });

@@ -1,0 +1,16 @@
+old: /tmp/g4b.json  label=r0-old-b  at=2026-09-11T01:59:21.837Z  dispatch frames 83,87,91,95,99,103,107,111,115,119,123
+new: /tmp/g2b.json  label=r1-new-b  at=2026-09-11T01:59:13.471Z  dispatch frames 83,87,91,95,99,103,107,111,115,119,123
+old console problems: 0  new: 0
+
+=== /tmp/g2b.json vs /tmp/g4b.json (CROSS-BOOT: check the input gates before believing any of it) ===
+rays= 0  floats changed    0/6400  rel>1e-6:    0  maxAbs 0.000e+0  maxRel 0.000e+0  nonzero 0=0  inputs IDENTICAL  (bit-identical)
+rays= 1  floats changed    0/6400  rel>1e-6:    0  maxAbs 0.000e+0  maxRel 0.000e+0  nonzero 1484=1484  inputs IDENTICAL  (bit-identical)
+rays= 2  floats changed   89/6400  rel>1e-6:    6  maxAbs 5.960e-8  maxRel 1.181e-5  nonzero 2805=2805  inputs IDENTICAL  worst probe 399 ch 3
+rays= 3  floats changed  156/6400  rel>1e-6:    5  maxAbs 5.960e-8  maxRel 1.715e-6  nonzero 2953=2953  inputs IDENTICAL  worst probe 349 ch 10
+rays= 5  floats changed  344/6400  rel>1e-6:   13  maxAbs 5.960e-8  maxRel 1.709e-5  nonzero 3411=3411  inputs IDENTICAL  worst probe 279 ch 10
+rays= 8  floats changed  437/6400  rel>1e-6:    5  maxAbs 5.960e-8  maxRel 4.026e-6  nonzero 4151=4151  inputs IDENTICAL  worst probe 317 ch 10
+rays=16  floats changed  648/6400  rel>1e-6:   18  maxAbs 5.960e-8  maxRel 2.653e-5  nonzero 5041=5041  inputs IDENTICAL  worst probe 349 ch 3
+rays=31  floats changed  844/6400  rel>1e-6:   20  maxAbs 5.960e-8  maxRel 5.270e-6  nonzero 5800=5800  inputs IDENTICAL  worst probe 217 ch 3
+rays=32  floats changed  816/6400  rel>1e-6:   13  maxAbs 5.960e-8  maxRel 3.946e-6  nonzero 5896=5896  inputs IDENTICAL  worst probe 368 ch 9
+rays=47  floats changed 1112/6400  rel>1e-6:   45  maxAbs 5.960e-8  maxRel 8.773e-5  nonzero 6088=6088  inputs IDENTICAL  worst probe 147 ch 4
+rays=64  floats changed 1156/6400  rel>1e-6:   32  maxAbs 5.960e-8  maxRel 1.987e-5  nonzero 6256=6256  inputs IDENTICAL  worst probe 386 ch 5

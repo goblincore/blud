@@ -120,7 +120,53 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 > [docs/dev-notes/2026-09-10-PASSOFF.md](docs/dev-notes/2026-09-10-PASSOFF.md) first.**
 > It says what was built, what is CURRENT vs HISTORICAL among the 2026-09-10 notes,
 > the next actions in evidence order, and the seven traps that each cost real time.
-> Everything below is the detail behind it.
+> Everything below is the detail behind it. **Its next-action order is now partly
+> superseded: R1 landed — see the first section below.**
+
+
+### 2026-09-10 — R1 SHIPPED: the gather is 10–32× faster
+
+**DONE, VERIFIED, BENCHED.** `compute:probe-gather` **4.00 → 0.18 ms** (room 4)
+and **4.87 → 0.15 ms** (room 3). The pass used to run one thread per PROBE (400
+threads = ~7 workgroups of 64, ~35% of one wave, no latency hiding) and measured
+near-perfectly LINEAR in ray count, i.e. unshareable per-ray work executed
+serially. It now runs one thread per (probe, ray) — 200 workgroups at 32 rays —
+with a workgroup-local reduction folded by each probe's lane 0. Labelled GPU
+total **−2.1 to −2.5 ms/frame**. Evidence, tables and the full trail:
+[docs/dev-notes/2026-09-10-r1-gather-dispatch-implemented/](docs/dev-notes/2026-09-10-r1-gather-dispatch-implemented/README.md).
+
+**EQUIVALENCE IS PROVEN, NOT ASSERTED.** Against the pre-R1 build (`49fb77ee`,
+worktree) in identical conditions: the dynamic probe layer differs by **at most
+one ulp (5.96e-8) at every ray count**, the hit structure is identical
+(non-zero float counts equal at all 11 sweep points), and **`rays=1` is
+BIT-IDENTICAL** — which, because that output depends on the whole capsule/box/
+light set, also certifies the two boots fed the gather byte-identical inputs.
+
+**READ BEFORE ACTING ON THE OLD ORDER.** R2's target was ~56% of 4 ms; the pass
+is 0.18 ms now, so R2 is worth ~0.1 ms — a poor trade, exactly as the design
+predicted. Cadence 2→4 was −5.2% at 4 ms and is ~0.2% of the frame now; the
+owner's look call should be made on the LOOK alone.
+
+**OPEN AND UNEXPLAINED: `sdf:march` reads 1.2–1.5 ms HIGHER** in four R1 runs
+across two rooms. Most of it is a pass-boundary move (the frame's unlabelled gap
+shrinks by about the same amount), but the residual is not explained, and the
+control that would settle it must gate the gather at the SOURCE: `setProbeRays(0)`
+does NOT work as a gather-off control (with no rays the march row collapses to
+~0 ms and the gap balloons to 11–12 ms).
+
+**NEW SEAMS — `?dynblend` / `?dynfall`** (+ `__sdfGame.setProbeBlend` /
+`setProbeFall`), both pinned in the bench reset block. Set BOTH to 1 for a
+history-free gather: without them no cross-run A/B of the gather is a measurement
+at all (two boots of ONE build disagree, because the afterglow depends on how many
+frames the run dispatched before the read). `?dynblend=1` alone is not enough —
+the rate is `lumNew > lumPrev ? blend : fall`.
+
+**GATES.** `scripts/sdf-gather-dispatch-check.sh` measures it (in-page FNV over
+the f32 bit patterns + the raw buffer; `--diff A B` compares two saved runs with
+NO browser). vitest pins the barrier shape (exactly one, top-level, unreachable
+behind any guard), the ABSENCE of a count guard in the kernel, the power-of-two
+`threadsPerProbe` that keeps a probe's ray group inside one workgroup, and the
+module-scope workgroup declarations in the GENERATED WGSL, not just the source.
 
 
 ### 2026-09-10 — perf session: gather −33%, a measured split, two levers closed
