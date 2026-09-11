@@ -177,18 +177,33 @@ resolution: six bench legs came back non-monotonic and all stayed under 0.39 ms
 The defensible claim is the BOUND, not a slope. **Consequence: more lights, more
 rays and more frequent gathers are now affordable, and R2 is not.**
 
-**TRACERS: SHIPPED VISIBLE — gain 2 → 6, slots 2 → 4 (2026-09-10).** At the old
-defaults the tracers lifted the whole frame by ~1 8-bit level (1,796 pixels over
-2 levels, max 29) — real, and invisible in motion, which is exactly the owner's
-"i cant tell". At the new defaults, measured IN ONE BOOT on one frozen volley:
-**369,088 pixels (76.9%) visibly changed, max delta 68** — 205x, with the probe
-layer's response exactly linear in both seams (0.5338 per gain unit per 2
-tracers). Cost: unmeasurable (the gather is 0.18 ms). The slot cap is the bigger
-lever of the two and is the seam to turn first. Reversible live:
-`?tracerlight=N` / `?tracerlightslots=N`.
+**TRACERS: MEASURED, RAISED TO gain 6 / slots 4, THEN REVERTED TO 2 / 2 — same
+day, 2026-09-10.** The raise was on a real measurement (one boot, one frozen
+volley, noise floor 284 px with ZERO above 2 levels: the shipped defaults changed
+1,796 pixels by >2 levels, gain 6/slots 4 changed 369,088 = 76.9%); the REVERT is
+on the owner's look, and its reason is a limitation of the rig rather than of the
+plumbing — **the rig freezes the volley, i.e. it measures the STEADY STATE**, while
+in play the light moves and the afterglow ramps over ~4 frames; and **in the room
+you shoot FROM the muzzle flash is already lighting it**, so a faint second light
+is not what you would notice. The plumbing is proven (the light reaches the
+probes; the layer responds exactly linearly, 0.5338/gain-unit per 2 tracers; the
+light count is exactly what the cap implies). **Tracer lights would earn their
+keep in a room you are NOT in, where nothing competes with them** — revisit
+alongside the multi-room work below, and turn the SLOT CAP first (the bigger of
+the two levers: 1,796 → 207,929 pixels at shipped gain).
 [docs/dev-notes/2026-09-10-tracer-light-visibility/](docs/dev-notes/2026-09-10-tracer-light-visibility/README.md)
 (evidence, before/after images in `shots/`, and the three rig traps).
 Rig: `scripts/sdf-game-tracer-light-check.sh`.
+
+**NEXT (sketched, NOT scheduled): LIGHT ANOTHER ROOM.** Owner wants it "at some
+point... maybe some kind of basic is it in the line of sight algorithm". Sketch
+with what already exists (the `TUNNELS` room graph via `accentRoomsFor`, the
+per-room light list `levelSceneLights`, per-room grids, `segmentHitsBox` as the
+LOS primitive) and the one hard constraint — **a `probeDyn` storage node is bound
+at material creation and CANNOT be rebound**, so each receiving room needs its own
+node at build time:
+[docs/dev-notes/2026-09-10-multi-room-dynamic-light-SKETCH.md](docs/dev-notes/2026-09-10-multi-room-dynamic-light-SKETCH.md).
+Cost is no longer the obstacle (0.18 ms per room per gather, after R1).
 
 **AND THE LIMIT THAT MATTERS: the dynamic light is SINGLE-ROOM BY CONSTRUCTION.**
 Shooting INTO another room lights nothing, and no gain value changes that: the

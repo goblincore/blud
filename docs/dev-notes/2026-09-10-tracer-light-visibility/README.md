@@ -8,7 +8,39 @@ need to be amped up a bit so i can see."*
 effect was a 1–2 level lift of the whole frame — real, measured, and below what
 anyone would notice in motion.**
 
-## 0. APPLIED — the shipping values changed
+## 0. SHIPPED THEN REVERTED — the measurements stand, the defaults do not
+
+**The defaults are back at `tracerLightGain = 2.0` / `tracerLightSlots = 2`**
+(commit `172d8f96` raised them to 6/4; the revert is the commit after it). The
+owner's reason, and it is a better one than the measurement could give:
+
+> "i cant see it in the room i am in either but also because of the muzzle flash it
+> almost doesnt matter in the room i am in."
+
+Two things follow, and BOTH are limitations of the measurement below rather than
+of the plumbing:
+
+1. **The rig measures the STEADY STATE, not play.** It freezes the volley
+   mid-flight, so every probe sees the light for the whole time. In play the light
+   MOVES and the shipped afterglow ramps toward the estimate at 0.6 per gather
+   (~84% after two gathers), while a pellet crossing an 8 m room at 30 m/s is
+   present for ~0.27 s. The in-play effect is below the 76.9% headline by an
+   amount this rig does not measure. See §6.
+2. **In the room you shoot FROM, the tracer light is competing with the muzzle
+   flash** — a small second light in a room that just got a big one. It was never
+   going to be the thing you notice there.
+
+The plumbing is nonetheless proven: the light reaches the probes, the layer's
+response is exactly linear in both seams, and the light count is exactly what the
+slot cap implies. **Where tracer lights would earn their keep is a room you are
+NOT in**, because there is no competing flash there — which is why the revert is
+recorded next to the multi-room sketch
+([2026-09-10-multi-room-dynamic-light-SKETCH.md](2026-09-10-multi-room-dynamic-light-SKETCH.md))
+rather than as a dead end.
+
+Everything below is kept as measured, with the caveat applied.
+
+## 0b. What was measured while applied
 
 | seam | was | now |
 | --- | --- | --- |

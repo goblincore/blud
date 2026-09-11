@@ -69,14 +69,15 @@ describe('parseIntParam — absent is NOT zero', () => {
     // true, so an absent param produced 0 instead of a real default — tracer
     // lights never fed the gather's dynamic light list on a bare page.
     //
-    // The shipped default is 4 (it was 2 until 2026-09-10; the number is not
-    // what this test is about — what it is about is that ABSENT yields a real
-    // slot count at all, and that an EXPLICIT 0 still switches them off).
-    expect(parseIntParam(null, { min: 0, max: 8 }) ?? 4).toBe(4);
+    // The shipped default is 2 (it went to 4 for part of 2026-09-10 and came
+    // back — the number is not what this test is about; what it is about is that
+    // ABSENT yields a real slot count at all, and that an EXPLICIT 0 still
+    // switches them off).
+    expect(parseIntParam(null, { min: 0, max: 8 }) ?? 2).toBe(2);
     // An explicit 0 must still switch them OFF, which is the whole reason the
     // guard cannot simply require > 0.
-    expect(parseIntParam('0', { min: 0, max: 8 }) ?? 4).toBe(0);
-    expect(parseIntParam('5', { min: 0, max: 8 }) ?? 4).toBe(5);
+    expect(parseIntParam('0', { min: 0, max: 8 }) ?? 2).toBe(0);
+    expect(parseIntParam('5', { min: 0, max: 8 }) ?? 2).toBe(5);
   });
 });
 
