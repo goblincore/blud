@@ -153,10 +153,20 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 > worth `sdf:march` 8.18 → 4.12 ms and the fenced frame 16.64 → 8.51 ms — ~8 ms of
 > a 16.6 ms frame**, the best single lever measured this session. Below 0.5 there
 > is nothing left (0.35 buys 0.2 ms of frame). Bench legs `sdfscale-0.75/0.5/0.35`.
-> THE OWNER'S CHEAP DECISION FIRST: `__sdfGame.setSdfScale(0.5)` in the console —
-> if the aliasing is already acceptable, SHIP THE SCALE AND BUILD NOTHING. Shape,
-> cost table and the accumulation plan: temporal reprojection note's FINAL VERDICT
-> + cost sections. Frame-hash question DECIDED in
+> THE OWNER LOOKED: **`setSdfScale(0.5)` alone is "too pixelated and aliased"**, so
+> the RECONSTRUCTION is the point of the exercise, not a nicety. PLAN:
+> [docs/superpowers/plans/2026-09-10-temporal-accumulation.md](docs/superpowers/plans/2026-09-10-temporal-accumulation.md).
+> Its design rests on three verified facts — the march target IS `sdfScale`'d; the
+> composite ALREADY nearest-upsamples it at output res; and the level must stay
+> CRISP (so the accumulation is FLESH-ONLY, before the composite, never of the
+> composited result). The accumulation must be at OUTPUT resolution: into the
+> low-res grid it is only a blur, and the JITTER — which changes which low-res
+> texel each output pixel reads — is what turns it into supersampling.
+> **KILL CRITERION FIRST: still-camera convergence.** With a frozen camera the
+> accumulating frame must move measurably toward the `sdfScale 1.0` render and
+> settle; if it does not, the project is dead and no motion vectors get built.
+> Camera reprojection only, no validity/clamping/object vectors in v1 (ghosting
+> pre-accepted by the owner). Frame-hash question DECIDED in
 > [docs/dev-notes/2026-09-10-temporal-accumulation-frame-hash-DECISION.md](docs/dev-notes/2026-09-10-temporal-accumulation-frame-hash-DECISION.md)
 > (keep every layer and ADD the accumulated one; the accumulator must be
 > resettable and epoch-labelled; the gate is a sequence comparison from an epoch;
