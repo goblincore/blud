@@ -210,11 +210,35 @@ describe('field weave shaders — depth is never interpolated', () => {
     // division by zero in the composite.
     expect(COMPOSITE_WGSL).toContain('let nf = clamp(i32(fieldCount + 0.5), 1, 8);');
   });
-  it('the interleave (the frame style) still owes the two-field form', () => {
-    // FIELD_INTERLEAVE_WGSL weaves the WHOLE assembled picture, so generalising it
-    // is a different job from the composite's flesh-only branch — see the plan's
-    // step 2. Pinned here so the mismatch stays visible rather than silent.
-    expect(FIELD_INTERLEAVE_WGSL).toContain('let base = tRow - i32(parity);');
+  it('the interleave uses the SAME generalised neighbour form as the composite', () => {
+    // THIS IS A CORRECTNESS REQUIREMENT, not tidiness, and it was learned from a
+    // live defect (2026-09-10, owner): on h/3 and h/4 the skeleton rendered
+    // OUTSIDE the body. This weave is what puts BONE on the flesh's grid, so when
+    // it still computed rows as `outRow / 2` while the composite used h/3, the two
+    // weaves disagreed about which rows were fresh and the bone landed where the
+    // flesh had not drawn. The two weaves must therefore derive their rows
+    // IDENTICALLY — if one changes, this test should stop whoever changed it.
+    expect(FIELD_INTERLEAVE_WGSL).toContain('let own = tRow0 * nf + i32(parity);');
+    expect(FIELD_INTERLEAVE_WGSL).toContain('let base = select(tRow0 - 1, tRow0, own <= outRow);');
+    expect(FIELD_INTERLEAVE_WGSL).toContain('let nf = clamp(i32(fieldCount + 0.5), 1, 8);');
+    // And the same derivation as the composite, character for character, apart
+    // from the parity uniform's name.
+    // Compare the CODE, not the prose: strip comment lines and blank lines, so a
+    // longer explanation in one shader cannot make this fail while the maths is
+    // identical (it did on the first cut), and so a genuine drift in the maths
+    // cannot hide behind matching comments.
+    const derive = (src: string) => src
+      // The two shaders take their fresh texture under different names
+      // (layerTex vs curTex) — that is intentional, so normalise it rather than
+      // let a naming difference stand in for a maths difference.
+      .replace(/fieldParityF/g, 'parity')
+      .replace(/layerTex/g, 'curTex')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0 && !l.startsWith('//'))
+      .filter((l) => /tRow0|own|base|nf =|outRow % nf/.test(l))
+      .join('\n');
+    expect(derive(FIELD_INTERLEAVE_WGSL)).toBe(derive(COMPOSITE_WGSL));
   });
 });
 

@@ -382,15 +382,23 @@ export const FIELD_INTERLEAVE_WGSL = /* wgsl */ `fn sdfFieldInterleave(
   parity: f32,
   comb: f32,
   gateAlpha: f32,
-  outHeight: f32
+  outHeight: f32,
+  fieldCount: f32
 ) -> vec4<f32> {
   var st = texCoord;
   if (flipY > 0.5) { st.y = 1.0 - st.y; }
   let dims = vec2<f32>(textureDimensions(curTex, 0));
   let col = clamp(i32(floor(st.x * dims.x)), 0, i32(dims.x) - 1);
   let outRow = i32(floor(st.y * outHeight));
-  let tRow = clamp(outRow / 2, 0, i32(dims.y) - 1);
-  if ((outRow % 2) == i32(parity)) {
+  // GENERALISED with the composite (deeper interlace fields, 2026-09-10), and it
+  // has to be: this weave puts BONE on the flesh's grid, so if the two weaves
+  // disagree about how many fields there are, the skeleton lands on rows the
+  // flesh did not draw — it renders outside the body. Clamped for the same
+  // reason as the composite: a missing binding must degrade, not divide by zero.
+  let nf = clamp(i32(fieldCount + 0.5), 1, 8);
+  let tRow0 = outRow / nf;
+  let tRow = clamp(tRow0, 0, i32(dims.y) - 1);
+  if ((outRow % nf) == i32(parity)) {
     let fresh = textureLoad(curTex, vec2<i32>(col, tRow), 0);
     // Coverage lives in the SOURCE alpha. The mesh field is cleared to alpha
     // 0 where no bone was drawn; without this the weave paints opaque black
@@ -412,11 +420,13 @@ export const FIELD_INTERLEAVE_WGSL = /* wgsl */ `fn sdfFieldInterleave(
   // verbatim, which IS the interlace artifact; 0 = interpolate vertically
   // from THIS frame's field, trading vertical detail for no comb.
   let held = textureLoad(prevTex, vec2<i32>(col, tRow), 0);
-  // The two FRESH rows bracketing this held row (see fieldHeldNeighbours):
-  // held row 2r+1 (parity 0) lies between r and r+1; held row 2r (parity 1)
-  // between r-1 and r. Using r, r+1 for both bobbed the interpolated share
-  // one row at field rate.
-  let base = tRow - i32(parity);
+  // The two FRESH rows bracketing this held row — fieldHeldNeighboursInteger,
+  // the same integer derivation the composite uses. At nf = 2 it reduces exactly
+  // to the shipped "tRow - i32(parity)", including the -1 edge, which is why the
+  // two-field look is unchanged. The original note still applies: using r, r+1
+  // for both parities bobbed the interpolated share one row at field rate.
+  let own = tRow0 * nf + i32(parity);
+  let base = select(tRow0 - 1, tRow0, own <= outRow);
   let a = textureLoad(curTex, vec2<i32>(col, clamp(base, 0, i32(dims.y) - 1)), 0);
   let b = textureLoad(curTex, vec2<i32>(col, clamp(base + 1, 0, i32(dims.y) - 1)), 0);
   let woven = mix((a + b) * 0.5, held, comb);
@@ -746,6 +756,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     comb: uFieldComb,
     gateAlpha: uniform(1),
     outHeight: uOutHeight,
+    fieldCount: uFieldCount,
   }) as unknown as { xyz: unknown; w: unknown };
   const meshQuadMat = new MeshBasicNodeMaterial();
   meshQuadMat.colorNode = vec4(meshWoven.xyz as never, 1.0);
@@ -776,6 +787,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     comb: uFieldComb,
     gateAlpha: uniform(0),
     outHeight: uOutHeight,
+    fieldCount: uFieldCount,
   }) as unknown as { xyz: unknown; w: unknown };
   fieldQuadMat.colorNode = vec4(woven.xyz as never, 1.0);
   // Republishes the depth the layer has always left behind, so the goo layer

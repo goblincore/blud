@@ -602,3 +602,34 @@ comparison is never evidence in this project yet.**
 — a room-3 pass row that cannot be real, i.e. the census drift again. No number
 here is worth quoting. **Re-measure on a quiet machine, reading `sdf:march`
 (the one true per-frame row) against `fields=2`.**
+
+
+### The h/3 and h/4 defect the owner found, and its cause
+
+**Symptom (owner, live):** on `?fields=3` and `?fields=4` the SDF flesh did not
+render and the SKELETON APPEARED OUTSIDE THE BODY. It was my bug, introduced by
+landing step 1 without step 2's second half.
+
+**Cause:** there are TWO weaves, and I generalized only one. `COMPOSITE_WGSL`
+weaves the flesh (its field branch) and `FIELD_INTERLEAVE_WGSL` weaves the BONE
+onto the flesh's grid. The first learned about `fieldCount`; the second still
+computed `tRow = outRow / 2` and `base = tRow - i32(parity)`. So at nf = 3 the
+two weaves disagreed about which rows were fresh, and the bone landed on rows the
+flesh had not drawn — exactly "skeleton outside the body".
+
+**The plan said so, in the same sentence I read and did not act on:** *"Both the
+march target and (for `'bodies'`) `fieldMesh` must move together, or bone and
+flesh weave on different grids."* The target heights WERE both moved (they share
+`h`). The two WEAVES were not — the sentence names the buffers, and I checked the
+buffers.
+
+**Fix:** `FIELD_INTERLEAVE_WGSL` takes `fieldCount` as its last input, clamps it
+the same way, and derives its rows with the same proven integer form. A new test
+asserts the two shaders' row/neighbour derivations are IDENTICAL **code line for
+code line** (comments stripped, `fieldParityF`/`parity` and
+`layerTex`/`curTex` normalised), so the pair can never drift apart again — which
+is the class of bug this was, not a wrong constant.
+
+**`'frame'` stays two-field** and `setFieldCount` refuses above 2 for it. Note
+that its weave now also goes through the generalised form with nf = 2, which is
+why the refusal is a LOOK decision rather than a correctness one.
