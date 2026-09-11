@@ -117,11 +117,19 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 ## Current focus
 
 > **Session start: read
-> [docs/dev-notes/2026-09-10-PASSOFF.md](docs/dev-notes/2026-09-10-PASSOFF.md) first.**
-> It says what was built, what is CURRENT vs HISTORICAL among the 2026-09-10 notes,
-> the next actions in evidence order, and the seven traps that each cost real time.
-> Everything below is the detail behind it. **Its next-action order is now partly
-> superseded: R1 landed — see the first section below.**
+> [docs/dev-notes/2026-09-10-PASSOFF-2.md](docs/dev-notes/2026-09-10-PASSOFF-2.md) first**
+> (this session's: R1 shipped, and what it unlocked). Then
+> [docs/dev-notes/2026-09-10-PASSOFF.md](docs/dev-notes/2026-09-10-PASSOFF.md) —
+> the earlier session's, still correct except that its NEXT-ACTION ORDER is done
+> (its item 1 was R1). Both carry the CURRENT vs HISTORICAL doc map and the traps.
+> Everything below is the detail behind them.
+
+> **THE MARCH'S STEP AXIS IS EXHAUSTED — measure before levering.** Every step
+> lever is banked (plain sphere tracing at omega 1.0, wound step 1.0, the secant
+> last step, footprint AA) or owner-observed dead (over-relaxation → box washes;
+> the quarter-res depth prepass → visible geometry deletion, reverted the same
+> day; the cone pre-pass; deeper interlace). The missing measurement is a
+> per-pixel STEP-COUNT HISTOGRAM. See PASSOFF-2 §2.1.
 
 
 ### 2026-09-10 — R1 SHIPPED: the gather is 10–32× faster
