@@ -776,3 +776,45 @@ to the feature instead of stopping. That is the process failure underneath all o
 the above: the plan said "do not land blind", and I landed step 1 without a
 working gate for the DEFAULT path, then debugged a feature on top of an unverified
 baseline.
+
+
+### ✅ RESOLVED `43779459`: the flesh bug was ONE COMMENT, and it was mine
+
+Everything in the sections above about the flesh is superseded. The cause:
+
+**`b1da21d1` put a `//` comment INSIDE `COMPOSITE_WGSL`'s parameter list**, between
+`outHeight: f32,` and `fieldCount: f32`. Three's `WGSLNodeFunction` sweeps the whole
+parameter list with `/name\s*:\s*type/` — **comments included** — so the text
+`"deliberately: these"` parsed as a PHANTOM INPUT named `deliberately`. The call site
+bound `float(0)` into it, `sdfComposite` was invoked with 13 arguments for 12
+parameters, and **the composite pipeline never compiled**. No flesh on any page, at
+every divisor including the default h/2.
+
+It was pinned by a test that runs the REAL parser over both weave shaders and
+requires the parsed inputs to equal the declared parameters, plus a scan of all 152
+WGSL fns in `src/` (no other phantoms).
+
+**The three lessons, in the order they cost time:**
+
+1. **The console said it at load, on every page:**
+   `THREE.TSL: Input 'deliberately' not found in 'Fn()'.` Nobody read it. An entire
+   investigation — probes, bisects, a new readback seam — went into a bug whose cause
+   was printed in the log from the first frame.
+2. **This is the SECOND instance of the class.** The 2026-09-02 `MARCH_BODY` phantom
+   is pinned in `march.wgsl.test.ts`; `sdf-layer.ts` had no equivalent pin. A known
+   failure mode with a known test was walked into in a file that lacked the test.
+3. **"Inputs bind POSITIONALLY" was simply FALSE** — and that false belief was *in
+   the offending comment*, which is why it was there. They bind BY NAME from the
+   call-site object. A comment asserting a mechanism is a claim, and this one was
+   wrong on top of being a landmine.
+
+**And the meta-lesson about the measurement discipline this project prizes:** the
+march target was measured correctly (3.90%/3.91%/3.91% surfaces) and that was used
+to CONCLUDE "the march is fine, so the fault must be downstream" — but the march
+being fine was never the question. The question was "does the OUTPUT compile", and a
+compiler error is not a measurement problem. **When a whole subsystem silently does
+nothing, read the log before building an instrument.**
+
+**What remains genuinely open:** the owner's look pass at h/3 and h/4 (behind
+`?fieldsdemo=1`), then the history ring (step 3), then the measurement. The perf
+lever is still real and untouched — `sdf:march` at 51-63% of the labelled GPU frame.

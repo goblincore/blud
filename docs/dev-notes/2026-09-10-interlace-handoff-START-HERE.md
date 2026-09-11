@@ -1,4 +1,32 @@
-# START HERE — deeper interlace (h/3, h/4) investigation handoff
+# ✅ RESOLVED — this brief is now historical
+
+**The bug was found and fixed in `43779459`.** The flesh was missing on EVERY page,
+including the default, because a `//` comment inside `COMPOSITE_WGSL`'s parameter
+list became a phantom WGSL input: three's `wgslNodeFunction` sweeps the parameter
+text with `/name\s*:\s*type/`, comments included, so `"deliberately: these"` parsed
+as an input named `deliberately`. The call site bound `float(0)` to it, the call had
+13 arguments for 12 parameters, and the composite pipeline never compiled. The
+console said so at load: `THREE.TSL: Input 'deliberately' not found in 'Fn()'`.
+
+Everything below — the checkout bisect, the broken output readback, the field-maths
+suspicions — was chasing that one comment. **Read the sections below as a record of
+a wrong investigation, not as instructions.** The three things worth keeping from it:
+
+1. **Read the console at load.** The error was printed on every page and never seen.
+   An entire afternoon of measurement went into a bug whose cause was in the log.
+2. **It is the SECOND instance of this class.** The 2026-09-02 `MARCH_BODY` phantom
+   is pinned in `march.wgsl.test.ts`; this file had no pin, so it happened again.
+   Now pinned in `sdf-layer.test.ts` by running the real parser and requiring the
+   parsed inputs to equal the declared parameters.
+3. **"Inputs bind positionally" was FALSE**, and that wrong belief is in the comment
+   that caused the bug. They bind BY NAME from the call-site object.
+
+The `?fieldsdemo=1` gate stays until the owner's look pass at h/3 and h/4 — which is
+now the actual next step, and it is a look decision, not a bug hunt.
+
+---
+
+# START HERE — deeper interlace (h/3, h/4) investigation handoff — HISTORICAL
 
 > **✅ RESOLVED 2026-09-10 — the missing flesh was a shader-parse bug, not the
 > fields.** `b1da21d1` added a `//` comment *inside* `COMPOSITE_WGSL`'s parameter

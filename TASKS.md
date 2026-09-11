@@ -258,7 +258,18 @@ probeDyn drifted too). **Stage 1 fixed the census-visible part of the drift; thi
 is the part it could not see — two repeats of one leg do not just COUNT different
 things, they RENDER different frames.**
 
-**[!] DEEPER INTERLACE — ⚠ READ THE BRIEF FIRST:
+**[x] FLESH BUG RESOLVED (`43779459`) — it was ONE COMMENT, and it was mine.**
+`b1da21d1` put a `//` comment inside `COMPOSITE_WGSL`'s parameter list; three's WGSL
+parser sweeps the parameter text with `/name\s*:\s*type/` INCLUDING comments, so
+`"deliberately: these"` became a phantom input, the call gained an argument and the
+composite never compiled — no flesh on ANY page, default included. Pinned now by a
+test that runs the real parser and requires parsed inputs == declared params, plus a
+152-fn scan. **The console said it at load** (`THREE.TSL: Input 'deliberately' not
+found`); nobody read it. Second instance of the class (see `march.wgsl.test.ts`), and
+"inputs bind positionally" — which the offending comment claimed — is false: they
+bind BY NAME. **Next: the owner's look pass at h/3 and h/4, then the history ring.**
+
+**[!] DEEPER INTERLACE — historical brief (SUPERSEDED, kept for the lesson):
 [docs/dev-notes/2026-09-10-interlace-handoff-START-HERE.md](docs/dev-notes/2026-09-10-interlace-handoff-START-HERE.md).**
 **✅ MISSING FLESH RESOLVED 2026-09-10:** a `//` comment inside `COMPOSITE_WGSL`'s
 parameter list became a phantom wgslFn input (`deliberately: these`), so the composite
