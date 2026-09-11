@@ -368,6 +368,14 @@ gather is a large slice of the frame.
 ⚠ **A LANDMINE:** there is no `probe-r4`/`probe-r8` leg in the harness. `BENCH_LEGS`
 naming a leg that does not exist SILENTLY measures `baseline`. Use the prelude.
 
+**✅ THE PROBE PASSED — OPTION A IS VIABLE, R1 IS READY TO IMPLEMENT.** Pinned as
+`src/lab/sdf-zombie/webgpu/probe-gather-workgroup.test.ts` (4 tests): `workgroupArray`
+constructs, **a workgroup array CAN be passed into a `wgslFn`**, and the generated
+function parses it as a declared typed input with no phantom. ⚠ **`workgroupBarrier`
+is NOT a TSL export in this three build** — the barrier must be declared in WGSL text,
+which the probe found and which would otherwise have been a silent compile failure.
+Option B (`subgroupAdd`) stays a fallback.
+
 **Design + verification plan:** [docs/dev-notes/2026-09-10-r1-gather-dispatch-design.md](docs/dev-notes/2026-09-10-r1-gather-dispatch-design.md).
 One thread per `(probe, ray)` = 200 workgroups. **FIRST STEP, 10 minutes:** verify
 whether three's TSL can pass `ptr<workgroup, array<...>>` into a `wgslFn` function —

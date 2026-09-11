@@ -45,7 +45,26 @@ maths — same rays, same SH weights, same blend.
 
 The reduction is the whole difficulty, and there are two shapes:
 
-### Option A — workgroup-shared tree (preferred if it compiles)
+### ✅ THE OPEN QUESTION IS ANSWERED: OPTION A IS VIABLE
+
+The probe ran (permanently pinned now as
+`src/lab/sdf-zombie/webgpu/probe-gather-workgroup.test.ts`, 4 tests):
+
+- **`workgroupArray('float', 64)` exists and constructs.** So does `subgroupAdd`,
+  the Option B reduction.
+- **A `workgroupArray` node CAN be passed into a `wgslFn` and produces a node** —
+  the R1 design's central assumption holds. Option A is available, and Option B
+  stays as a fallback rather than a necessity.
+- **The generated function parses the workgroup pointer as a DECLARED input with a
+  type**, and there is no phantom — checked with the same real parser that caught
+  the `deliberately` phantom (`43779459`), because that failure mode is exactly what
+  an unverified WGSL signature looks like.
+- ⚠ **`workgroupBarrier` is NOT a function export in this three build.** The barrier
+  must come from the WGSL side (kernel text / module scope), not a TSL call. Found
+  by the probe, and it would otherwise have been a silent compile failure of exactly
+  the kind that cost this session an afternoon.
+
+### Option A — workgroup-shared tree (NOW CONFIRMED VIABLE)
 
 Each thread computes its ray's 12 floats (3 radiance vec4 + 3 visibility vec4
 packed as the kernel already packs them, or 8 scalars) and writes them to a
@@ -56,11 +75,9 @@ record.
 - **Pro**: ONE dispatch. No second buffer, no second kernel, no extra memory.
 - **Pro**: a fixed tree IS a fixed summation order, so the result is bit-stable —
   which matters because the frame hash (and any future `.dem`) compares bit patterns.
-- **Risk / THE OPEN QUESTION**: this needs `ptr<workgroup, array<...>>` passed into a
-  `wgslFn`-generated function, i.e. TSL binding a `WorkgroupNode` to a function
-  parameter. **I do not know whether three's TSL supports that**, and it cannot be
-  determined without a GPU round trip. Verify THAT FIRST with a 10-line probe kernel
-  before writing any of this.
+- **The binding question is RESOLVED** (see above): passing a `workgroupArray` into a
+  `wgslFn` works. The remaining unknown is only the BARRIER, which must be declared
+  in WGSL text since `workgroupBarrier` is not a TSL export here.
 
 ### Option B — two-pass, workgroup-per-probe (safe fallback)
 
@@ -105,7 +122,22 @@ dispatch, still no extra buffer, and no shared-array function parameter.
    `compute:probe-gather` row. Target: 4.00 -> 1.0-2.0 ms (the notes' inferred
    full-occupancy floor is 0.2-0.7 ms; treat that as INFERRED, not promised).
 
-## Why this is not implemented yet, stated plainly
+## Status: READY TO IMPLEMENT (probe passed 2026-09-10)
+
+Option A it is. The next concrete steps, in order:
+
+1. Declare the shared scratch array and the barrier **in the WGSL kernel text**,
+   since `workgroupBarrier` has no TSL export.
+2. Restructure `K_PROBE_GATHER` to one thread per `(probe, ray)`: compute the ray's
+   SH contribution, write it into the shared array at the thread's lane, barrier,
+   tree-reduce over the workgroup, and let ONE thread per probe do the projection,
+   the `nHit` floor, the luminance comparison and the read-modify-write blend.
+3. Dispatch `compute(call, probes * rays, [64])` and make the probe index
+   `gi / nRays`, the lane `gi % nRays`.
+4. Verify against the CPU twin and the `?dynrays` oracle, then bench the
+   `compute:probe-gather` row against 4.00 ms.
+
+## Why this was not implemented in the R1 session, stated plainly
 
 The remaining unknown is a **TSL/WGSL capability question** (Option A's shared-array
 parameter), and resolving it requires a GPU round trip. Writing 150 lines of WGSL on
