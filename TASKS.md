@@ -10,12 +10,11 @@
   Reopens the 09-08 idea (that pilot was 1.4k params). Stage contract, `sp`/`dc` layouts.
 - [x] P1+P2 built (plan `docs/superpowers/plans/2026-09-11-neural-upscale-p1p2.md`): stage, both layouts,
   G1-parity and the G2 capture pipeline — verdicts in `docs/dev-notes/2026-09-11-neural-upscale/`.
-- [!] G2 pairs FAIL — alignment centroid 1.162 output px > 0.5; coarse-march edge aliasing
-  (shared flesh region pixel-exact, IoU 0.987), no dataset written. Decide gate re-scope vs
-  staging before training — `g2-pairs.md`.
+- [x] G2 pairs PASS (re-run r4): gate re-scoped to linear-depth registration — marches aligned at (0.0002, 0.003) px;
+  colour and centroid checks were misreading aliasing. 60 pairs, 559 MB in /tmp (regenerable) — `g2-pairs.md`.
 - [-] G1 cost bench (plan Task 6) DEFERRED 2026-09-11 (owner: machine under load; quality first, optimize after).
-- [ ] Next: P3 training plan — train s8/s16/s32 and judge quality first; M3 overfit first, RunPod for volume.
-  Blocked on the G2 alignment verdict: there are no training pairs yet.
+- [ ] Next: P3 training plan — train s8/s16/s32, judge quality first; M3 overfit, then RunPod. Capture needs more
+  pose diversity (seq 0 is 13/19 near-static) and flesh-weighted crops.
 
 ## Raymarch — Claybook cheap wins — 2026-09-09
 

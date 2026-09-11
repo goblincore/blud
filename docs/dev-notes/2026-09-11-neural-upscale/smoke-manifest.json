@@ -1,5 +1,33 @@
 {
-  "created": "2026-09-11T18:13:17.750Z",
+  "created": "2026-09-11T19:03:14.197Z",
+  "spec": "docs/superpowers/specs/2026-09-11-neural-upscale-espcn-design.md",
+  "checkout": "6db708e097ef6fc9cbc9d0e7ebdf74e2ad3bfc0c",
+  "page": "sdf-game.html?frozen=1&vhs=off",
+  "input": {
+    "w": 400,
+    "h": 300,
+    "sdfScale": 0.5,
+    "fieldStyle": "off"
+  },
+  "target": {
+    "w": 800,
+    "h": 600,
+    "sdfScale": 1,
+    "fieldStyle": "off"
+  },
+  "channels": [
+    "r",
+    "g",
+    "b",
+    "clipDepth (>= 1.0 means no flesh)"
+  ],
+  "dtype": "float32 little-endian, shape (H, W, 4)",
+  "rowOrder": "row 0 = texel row 0 = top of the rendered image (verified by checks.orientation)",
+  "depth": "WebGPU [0,1] clip depth; linear = near*far / (far - d*(far - near))",
+  "near": 0.1,
+  "far": 200,
+  "temporalStart": "on (shipped)",
+  "content": "flesh layer only, tracked public/assets/lab/* — no Blood placeholder assets",
   "checks": {
     "nearFar": {
       "near": 0.1,
@@ -14,8 +42,71 @@
     "alignment": {
       "inputCoverage": 0.041675,
       "targetCoverage": 0.04066458333333333,
-      "centroidDxOutputPx": -0.00042056755921748845,
-      "centroidDyOutputPx": 1.16243551330723,
+      "registration": {
+        "mode": "depth",
+        "texels": 4210,
+        "argmin": {
+          "ox": 0,
+          "oy": 0
+        },
+        "subpixelOutputPx": {
+          "x": 0.0001604415264533877,
+          "y": 0.0028990051114039647
+        },
+        "mse": [
+          [
+            0.00006353279908962276,
+            0.00002710638735154243,
+            0.000016715392092893484,
+            0.000027061990089721245,
+            0.00006344357941458876
+          ],
+          [
+            0.000051734907723340046,
+            0.000015243975862058021,
+            0.000004769561310881859,
+            0.000015216755065030068,
+            0.00005168464338633486
+          ],
+          [
+            0.00004884088199772674,
+            0.000011762244969246875,
+            0.0000011234829250285149,
+            0.000011755375248548709,
+            0.00004882140618005208
+          ],
+          [
+            0.000053505608565167054,
+            0.000015611715739515887,
+            0.000004727522598970881,
+            0.00001561507659765443,
+            0.00005351925278413532
+          ],
+          [
+            0.00006494441264386428,
+            0.0000257722268256268,
+            0.000014590330231902253,
+            0.000025815102178055265,
+            0.0000650102501567562
+          ]
+        ]
+      },
+      "colourRegistration": {
+        "gated": false,
+        "argmin": {
+          "ox": 0,
+          "oy": 1
+        },
+        "subpixelOutputPx": {
+          "x": 0.7818464572155355,
+          "y": 1.005915647402272
+        }
+      },
+      "coverageCentroidOffsetOutputPx": {
+        "dx": -0.00042056755921748845,
+        "dy": 1.16243551330723,
+        "gated": false
+      },
       "iou": 0.9874376869391824
     },
     "orientation": {
@@ -27,8 +118,666 @@
     },
     "depthMeanAbsDiffMetres": 0.002187324418808602
   },
-  "g2Failures": [
-    "centroid offset > 0.5 output px"
-  ],
-  "frames": []
+  "frames": [
+    {
+      "seq": 0,
+      "frame": 0,
+      "room": 1,
+      "body": 1,
+      "dist": 2.5,
+      "orbit": 0,
+      "input": "seq0/frame000-in.npy",
+      "target": "seq0/frame000-target.npy",
+      "inputCoverage": 0.04033333333333333
+    },
+    {
+      "seq": 0,
+      "frame": 1,
+      "room": 1,
+      "body": 1,
+      "dist": 2.5,
+      "orbit": 0,
+      "input": "seq0/frame001-in.npy",
+      "target": "seq0/frame001-target.npy",
+      "inputCoverage": 0.036283333333333334
+    },
+    {
+      "seq": 0,
+      "frame": 2,
+      "room": 1,
+      "body": 1,
+      "dist": 2.5,
+      "orbit": 0,
+      "input": "seq0/frame002-in.npy",
+      "target": "seq0/frame002-target.npy",
+      "inputCoverage": 0.037408333333333335
+    },
+    {
+      "seq": 0,
+      "frame": 3,
+      "room": 1,
+      "body": 1,
+      "dist": 2.5,
+      "orbit": 0,
+      "input": "seq0/frame003-in.npy",
+      "target": "seq0/frame003-target.npy",
+      "inputCoverage": 0.0375
+    },
+    {
+      "seq": 0,
+      "frame": 4,
+      "room": 1,
+      "body": 1,
+      "dist": 2.5,
+      "orbit": 0,
+      "input": "seq0/frame004-in.npy",
+      "target": "seq0/frame004-target.npy",
+      "inputCoverage": 0.037533333333333335
+    },
+    {
+      "seq": 0,
+      "frame": 5,
+      "room": 1,
+      "body": 1,
+      "dist": 2.5,
+      "orbit": 0,
+      "input": "seq0/frame005-in.npy",
+      "target": "seq0/frame005-target.npy",
+      "inputCoverage": 0.037866666666666667
+    },
+    {
+      "seq": 0,
+      "frame": 6,
+      "room": 1,
+      "body": 1,
+      "dist": 2.5,
+      "orbit": 0,
+      "input": "seq0/frame006-in.npy",
+      "target": "seq0/frame006-target.npy",
+      "inputCoverage": 0.0377
+    },
+    {
+      "seq": 0,
+      "frame": 7,
+      "room": 1,
+      "body": 1,
+      "dist": 2.5,
+      "orbit": 0,
+      "input": "seq0/frame007-in.npy",
+      "target": "seq0/frame007-target.npy",
+      "inputCoverage": 0.03610833333333333
+    },
+    {
+      "seq": 0,
+      "frame": 8,
+      "room": 1,
+      "body": 1,
+      "dist": 2.5,
+      "orbit": 0,
+      "input": "seq0/frame008-in.npy",
+      "target": "seq0/frame008-target.npy",
+      "inputCoverage": 0.034333333333333334
+    },
+    {
+      "seq": 0,
+      "frame": 9,
+      "room": 1,
+      "body": 1,
+      "dist": 2.5,
+      "orbit": 0,
+      "input": "seq0/frame009-in.npy",
+      "target": "seq0/frame009-target.npy",
+      "inputCoverage": 0.034375
+    },
+    {
+      "seq": 0,
+      "frame": 10,
+      "room": 1,
+      "body": 1,
+      "dist": 2.5,
+      "orbit": 0,
+      "input": "seq0/frame010-in.npy",
+      "target": "seq0/frame010-target.npy",
+      "inputCoverage": 0.034208333333333334
+    },
+    {
+      "seq": 0,
+      "frame": 11,
+      "room": 1,
+      "body": 1,
+      "dist": 2.5,
+      "orbit": 0,
+      "input": "seq0/frame011-in.npy",
+      "target": "seq0/frame011-target.npy",
+      "inputCoverage": 0.034183333333333336
+    },
+    {
+      "seq": 0,
+      "frame": 12,
+      "room": 1,
+      "body": 1,
+      "dist": 2.5,
+      "orbit": 0,
+      "input": "seq0/frame012-in.npy",
+      "target": "seq0/frame012-target.npy",
+      "inputCoverage": 0.0341
+    },
+    {
+      "seq": 0,
+      "frame": 13,
+      "room": 1,
+      "body": 1,
+      "dist": 2.5,
+      "orbit": 0,
+      "input": "seq0/frame013-in.npy",
+      "target": "seq0/frame013-target.npy",
+      "inputCoverage": 0.034216666666666666
+    },
+    {
+      "seq": 0,
+      "frame": 14,
+      "room": 1,
+      "body": 1,
+      "dist": 2.5,
+      "orbit": 0,
+      "input": "seq0/frame014-in.npy",
+      "target": "seq0/frame014-target.npy",
+      "inputCoverage": 0.034183333333333336
+    },
+    {
+      "seq": 0,
+      "frame": 15,
+      "room": 1,
+      "body": 1,
+      "dist": 2.5,
+      "orbit": 0,
+      "input": "seq0/frame015-in.npy",
+      "target": "seq0/frame015-target.npy",
+      "inputCoverage": 0.034183333333333336
+    },
+    {
+      "seq": 0,
+      "frame": 16,
+      "room": 1,
+      "body": 1,
+      "dist": 2.5,
+      "orbit": 0,
+      "input": "seq0/frame016-in.npy",
+      "target": "seq0/frame016-target.npy",
+      "inputCoverage": 0.03411666666666666
+    },
+    {
+      "seq": 0,
+      "frame": 17,
+      "room": 1,
+      "body": 1,
+      "dist": 2.5,
+      "orbit": 0,
+      "input": "seq0/frame017-in.npy",
+      "target": "seq0/frame017-target.npy",
+      "inputCoverage": 0.034216666666666666
+    },
+    {
+      "seq": 0,
+      "frame": 18,
+      "room": 1,
+      "body": 1,
+      "dist": 2.5,
+      "orbit": 0,
+      "input": "seq0/frame018-in.npy",
+      "target": "seq0/frame018-target.npy",
+      "inputCoverage": 0.034183333333333336
+    },
+    {
+      "seq": 0,
+      "frame": 19,
+      "room": 1,
+      "body": 1,
+      "dist": 2.5,
+      "orbit": 0,
+      "input": "seq0/frame019-in.npy",
+      "target": "seq0/frame019-target.npy",
+      "inputCoverage": 0.03419166666666667
+    },
+    {
+      "seq": 1,
+      "frame": 0,
+      "room": 3,
+      "body": 4,
+      "dist": 3,
+      "orbit": 1.2,
+      "input": "seq1/frame000-in.npy",
+      "target": "seq1/frame000-target.npy",
+      "inputCoverage": 0.03460833333333333
+    },
+    {
+      "seq": 1,
+      "frame": 1,
+      "room": 3,
+      "body": 4,
+      "dist": 3,
+      "orbit": 1.2,
+      "input": "seq1/frame001-in.npy",
+      "target": "seq1/frame001-target.npy",
+      "inputCoverage": 0.03515
+    },
+    {
+      "seq": 1,
+      "frame": 2,
+      "room": 3,
+      "body": 4,
+      "dist": 3,
+      "orbit": 1.2,
+      "input": "seq1/frame002-in.npy",
+      "target": "seq1/frame002-target.npy",
+      "inputCoverage": 0.03730833333333333
+    },
+    {
+      "seq": 1,
+      "frame": 3,
+      "room": 3,
+      "body": 4,
+      "dist": 3,
+      "orbit": 1.2,
+      "input": "seq1/frame003-in.npy",
+      "target": "seq1/frame003-target.npy",
+      "inputCoverage": 0.03824166666666667
+    },
+    {
+      "seq": 1,
+      "frame": 4,
+      "room": 3,
+      "body": 4,
+      "dist": 3,
+      "orbit": 1.2,
+      "input": "seq1/frame004-in.npy",
+      "target": "seq1/frame004-target.npy",
+      "inputCoverage": 0.03905
+    },
+    {
+      "seq": 1,
+      "frame": 5,
+      "room": 3,
+      "body": 4,
+      "dist": 3,
+      "orbit": 1.2,
+      "input": "seq1/frame005-in.npy",
+      "target": "seq1/frame005-target.npy",
+      "inputCoverage": 0.03808333333333333
+    },
+    {
+      "seq": 1,
+      "frame": 6,
+      "room": 3,
+      "body": 4,
+      "dist": 3,
+      "orbit": 1.2,
+      "input": "seq1/frame006-in.npy",
+      "target": "seq1/frame006-target.npy",
+      "inputCoverage": 0.03938333333333333
+    },
+    {
+      "seq": 1,
+      "frame": 7,
+      "room": 3,
+      "body": 4,
+      "dist": 3,
+      "orbit": 1.2,
+      "input": "seq1/frame007-in.npy",
+      "target": "seq1/frame007-target.npy",
+      "inputCoverage": 0.03695
+    },
+    {
+      "seq": 1,
+      "frame": 8,
+      "room": 3,
+      "body": 4,
+      "dist": 3,
+      "orbit": 1.2,
+      "input": "seq1/frame008-in.npy",
+      "target": "seq1/frame008-target.npy",
+      "inputCoverage": 0.038533333333333336
+    },
+    {
+      "seq": 1,
+      "frame": 9,
+      "room": 3,
+      "body": 4,
+      "dist": 3,
+      "orbit": 1.2,
+      "input": "seq1/frame009-in.npy",
+      "target": "seq1/frame009-target.npy",
+      "inputCoverage": 0.0373
+    },
+    {
+      "seq": 1,
+      "frame": 10,
+      "room": 3,
+      "body": 4,
+      "dist": 3,
+      "orbit": 1.2,
+      "input": "seq1/frame010-in.npy",
+      "target": "seq1/frame010-target.npy",
+      "inputCoverage": 0.034883333333333336
+    },
+    {
+      "seq": 1,
+      "frame": 11,
+      "room": 3,
+      "body": 4,
+      "dist": 3,
+      "orbit": 1.2,
+      "input": "seq1/frame011-in.npy",
+      "target": "seq1/frame011-target.npy",
+      "inputCoverage": 0.035975
+    },
+    {
+      "seq": 1,
+      "frame": 12,
+      "room": 3,
+      "body": 4,
+      "dist": 3,
+      "orbit": 1.2,
+      "input": "seq1/frame012-in.npy",
+      "target": "seq1/frame012-target.npy",
+      "inputCoverage": 0.0376
+    },
+    {
+      "seq": 1,
+      "frame": 13,
+      "room": 3,
+      "body": 4,
+      "dist": 3,
+      "orbit": 1.2,
+      "input": "seq1/frame013-in.npy",
+      "target": "seq1/frame013-target.npy",
+      "inputCoverage": 0.036191666666666664
+    },
+    {
+      "seq": 1,
+      "frame": 14,
+      "room": 3,
+      "body": 4,
+      "dist": 3,
+      "orbit": 1.2,
+      "input": "seq1/frame014-in.npy",
+      "target": "seq1/frame014-target.npy",
+      "inputCoverage": 0.03954166666666667
+    },
+    {
+      "seq": 1,
+      "frame": 15,
+      "room": 3,
+      "body": 4,
+      "dist": 3,
+      "orbit": 1.2,
+      "input": "seq1/frame015-in.npy",
+      "target": "seq1/frame015-target.npy",
+      "inputCoverage": 0.04011666666666667
+    },
+    {
+      "seq": 1,
+      "frame": 16,
+      "room": 3,
+      "body": 4,
+      "dist": 3,
+      "orbit": 1.2,
+      "input": "seq1/frame016-in.npy",
+      "target": "seq1/frame016-target.npy",
+      "inputCoverage": 0.04335
+    },
+    {
+      "seq": 1,
+      "frame": 17,
+      "room": 3,
+      "body": 4,
+      "dist": 3,
+      "orbit": 1.2,
+      "input": "seq1/frame017-in.npy",
+      "target": "seq1/frame017-target.npy",
+      "inputCoverage": 0.046475
+    },
+    {
+      "seq": 1,
+      "frame": 18,
+      "room": 3,
+      "body": 4,
+      "dist": 3,
+      "orbit": 1.2,
+      "input": "seq1/frame018-in.npy",
+      "target": "seq1/frame018-target.npy",
+      "inputCoverage": 0.0467
+    },
+    {
+      "seq": 1,
+      "frame": 19,
+      "room": 3,
+      "body": 4,
+      "dist": 3,
+      "orbit": 1.2,
+      "input": "seq1/frame019-in.npy",
+      "target": "seq1/frame019-target.npy",
+      "inputCoverage": 0.045533333333333335
+    },
+    {
+      "seq": 2,
+      "frame": 0,
+      "room": 4,
+      "body": 7,
+      "dist": 2,
+      "orbit": -0.8,
+      "input": "seq2/frame000-in.npy",
+      "target": "seq2/frame000-target.npy",
+      "inputCoverage": 0.112925
+    },
+    {
+      "seq": 2,
+      "frame": 1,
+      "room": 4,
+      "body": 7,
+      "dist": 2,
+      "orbit": -0.8,
+      "input": "seq2/frame001-in.npy",
+      "target": "seq2/frame001-target.npy",
+      "inputCoverage": 0.1143
+    },
+    {
+      "seq": 2,
+      "frame": 2,
+      "room": 4,
+      "body": 7,
+      "dist": 2,
+      "orbit": -0.8,
+      "input": "seq2/frame002-in.npy",
+      "target": "seq2/frame002-target.npy",
+      "inputCoverage": 0.11824166666666666
+    },
+    {
+      "seq": 2,
+      "frame": 3,
+      "room": 4,
+      "body": 7,
+      "dist": 2,
+      "orbit": -0.8,
+      "input": "seq2/frame003-in.npy",
+      "target": "seq2/frame003-target.npy",
+      "inputCoverage": 0.11856666666666667
+    },
+    {
+      "seq": 2,
+      "frame": 4,
+      "room": 4,
+      "body": 7,
+      "dist": 2,
+      "orbit": -0.8,
+      "input": "seq2/frame004-in.npy",
+      "target": "seq2/frame004-target.npy",
+      "inputCoverage": 0.121275
+    },
+    {
+      "seq": 2,
+      "frame": 5,
+      "room": 4,
+      "body": 7,
+      "dist": 2,
+      "orbit": -0.8,
+      "input": "seq2/frame005-in.npy",
+      "target": "seq2/frame005-target.npy",
+      "inputCoverage": 0.12073333333333333
+    },
+    {
+      "seq": 2,
+      "frame": 6,
+      "room": 4,
+      "body": 7,
+      "dist": 2,
+      "orbit": -0.8,
+      "input": "seq2/frame006-in.npy",
+      "target": "seq2/frame006-target.npy",
+      "inputCoverage": 0.1198
+    },
+    {
+      "seq": 2,
+      "frame": 7,
+      "room": 4,
+      "body": 7,
+      "dist": 2,
+      "orbit": -0.8,
+      "input": "seq2/frame007-in.npy",
+      "target": "seq2/frame007-target.npy",
+      "inputCoverage": 0.13636666666666666
+    },
+    {
+      "seq": 2,
+      "frame": 8,
+      "room": 4,
+      "body": 7,
+      "dist": 2,
+      "orbit": -0.8,
+      "input": "seq2/frame008-in.npy",
+      "target": "seq2/frame008-target.npy",
+      "inputCoverage": 0.14025833333333335
+    },
+    {
+      "seq": 2,
+      "frame": 9,
+      "room": 4,
+      "body": 7,
+      "dist": 2,
+      "orbit": -0.8,
+      "input": "seq2/frame009-in.npy",
+      "target": "seq2/frame009-target.npy",
+      "inputCoverage": 0.14601666666666666
+    },
+    {
+      "seq": 2,
+      "frame": 10,
+      "room": 4,
+      "body": 7,
+      "dist": 2,
+      "orbit": -0.8,
+      "input": "seq2/frame010-in.npy",
+      "target": "seq2/frame010-target.npy",
+      "inputCoverage": 0.157575
+    },
+    {
+      "seq": 2,
+      "frame": 11,
+      "room": 4,
+      "body": 7,
+      "dist": 2,
+      "orbit": -0.8,
+      "input": "seq2/frame011-in.npy",
+      "target": "seq2/frame011-target.npy",
+      "inputCoverage": 0.17469166666666666
+    },
+    {
+      "seq": 2,
+      "frame": 12,
+      "room": 4,
+      "body": 7,
+      "dist": 2,
+      "orbit": -0.8,
+      "input": "seq2/frame012-in.npy",
+      "target": "seq2/frame012-target.npy",
+      "inputCoverage": 0.19671666666666668
+    },
+    {
+      "seq": 2,
+      "frame": 13,
+      "room": 4,
+      "body": 7,
+      "dist": 2,
+      "orbit": -0.8,
+      "input": "seq2/frame013-in.npy",
+      "target": "seq2/frame013-target.npy",
+      "inputCoverage": 0.210525
+    },
+    {
+      "seq": 2,
+      "frame": 14,
+      "room": 4,
+      "body": 7,
+      "dist": 2,
+      "orbit": -0.8,
+      "input": "seq2/frame014-in.npy",
+      "target": "seq2/frame014-target.npy",
+      "inputCoverage": 0.23035
+    },
+    {
+      "seq": 2,
+      "frame": 15,
+      "room": 4,
+      "body": 7,
+      "dist": 2,
+      "orbit": -0.8,
+      "input": "seq2/frame015-in.npy",
+      "target": "seq2/frame015-target.npy",
+      "inputCoverage": 0.22249166666666667
+    },
+    {
+      "seq": 2,
+      "frame": 16,
+      "room": 4,
+      "body": 7,
+      "dist": 2,
+      "orbit": -0.8,
+      "input": "seq2/frame016-in.npy",
+      "target": "seq2/frame016-target.npy",
+      "inputCoverage": 0.21954166666666666
+    },
+    {
+      "seq": 2,
+      "frame": 17,
+      "room": 4,
+      "body": 7,
+      "dist": 2,
+      "orbit": -0.8,
+      "input": "seq2/frame017-in.npy",
+      "target": "seq2/frame017-target.npy",
+      "inputCoverage": 0.23133333333333334
+    },
+    {
+      "seq": 2,
+      "frame": 18,
+      "room": 4,
+      "body": 7,
+      "dist": 2,
+      "orbit": -0.8,
+      "input": "seq2/frame018-in.npy",
+      "target": "seq2/frame018-target.npy",
+      "inputCoverage": 0.23368333333333333
+    },
+    {
+      "seq": 2,
+      "frame": 19,
+      "room": 4,
+      "body": 7,
+      "dist": 2,
+      "orbit": -0.8,
+      "input": "seq2/frame019-in.npy",
+      "target": "seq2/frame019-target.npy",
+      "inputCoverage": 0.23689166666666667
+    }
+  ]
 }

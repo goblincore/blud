@@ -1,21 +1,99 @@
 # G2 — paired capture for training (determinism / alignment / orientation)
 
 - **Date:** 2026-09-11
-- **Checkout SHA:** `f26c3090ccfd3c7b5aef5d400daf370b9653fcd8` (Task 5, "G1-parity"; the capture
-  code is committed as its child — see Verdict for the branch state).
 - **Gate:** spec `docs/superpowers/specs/2026-09-11-neural-upscale-espcn-design.md`, Gates → **G2 — pairs**.
-- **Verdict: FAIL — the alignment-centroid sub-check.** Determinism, orientation, depth and
-  IoU all pass. `centroidDyOutputPx = 1.162` against the 0.5 output-px threshold.
-  **No dataset was written** — the capture script gates capture on the G2 checks and exits
-  before saving, so `/tmp/blud-upscale-data/smoke-2026-09-11/` holds only `manifest.json`
-  (the failure record, copied to `smoke-manifest.json`).
+- **Verdict: PASS — 60 pairs**, from re-run `r4` in the owner session (checkout `6db708e0`). The
+  alignment gate was re-scoped to linear-depth registration (see the Update section). The Python
+  loader verified the dataset.
+- **History:** the first run (task 7, checkout `f26c3090`) FAILED on the coverage-centroid
+  sub-check and wrote no dataset. Its record is kept below, marked as the first run.
+
+## Update 2026-09-11 (owner session) — alignment re-diagnosed; the gate now registers depth
+
+**Everything below about alignment is superseded by this section.** What changed:
+
+- **"Diagnosis" item 1 below is tautological.** The "shared flesh region is exactly aligned"
+  evidence computes both centroids over the same set of input texels, so they are equal by
+  construction. That check can never fail and proves nothing. It follows that "Options"
+  item 1 (gating on the intersection-mask centroid) would be a gate that cannot fail. It was
+  not used.
+- **A content-based registration test settles it.** The helper is
+  `scripts/lib/upscale-registration.mjs`; the offline tool is `scripts/upscale-g2-diag.py`,
+  run on frames dumped with `UPSCALE_DUMP_CHECK=1`. Each input texel is compared with the mean
+  of the 2×2 output block it should sample, at output shifts −2..+2, using interior flesh only.
+  A 2-D quadratic gives the sub-pixel vertex. Results on the same staged frame (room 1, 2.5 m,
+  pitch +0.2):
+
+  | Measure | Best shift (ox, oy) | Sub-pixel vertex (output px) | Notes |
+  |---|---|---|---|
+  | **Linear depth** | **(0, 0)** | **(0.0002, 0.003)** | MSE 1.1e-6 at 0; 1.2e-5 at ±1 x; 4.7e-6 at ±1 y — clean and symmetric |
+  | Colour (lit rgb) | (0, +1) | (0.78, 1.01) | **false** — see below |
+  | Mask IoU vs shift | (0, 0) | — | 0.9714 at 0, symmetric falloff |
+  | Silhouette extents | top +1, bottom +1, left −1, right +1 | — | half-res edge quantisation, not a consistent shift |
+
+- **Why colour cannot register.** Lit colour has HDR highlights up to ~28 and sub-texel
+  detail. The variance *inside* a 2×2 output block (8.9e-2) is larger than the colour MSE at
+  the best shift (3.6e-2). The jagged colour error surface (odd x-shifts worse in most rows)
+  is that detail aliasing, not geometry.
+- **Conclusion:** the 400×300 and 800×600 marches are geometrically aligned. The original
+  centroid failure was silhouette aliasing — the conclusion below was right, its proof was not.
+- **Gate change (spec amended):** alignment is now linear-depth registration: best shift
+  (0, 0), |vertex| ≤ 0.25 output px on both axes, and ≥ 500 interior texels. Coverage IoU
+  ≥ 0.85 is kept. Colour registration and the coverage centroid are reported but ungated.
+  Commits: `c1688bd5` (registration helper) and "fix(upscale): G2 registers LINEAR DEPTH".
+
+## Result of the passing run (r4, owner session)
+
+```bash
+LAB_VITE_PORT=5313 LAB_CDP_PORT=9313 UPSCALE_OUT=/tmp/blud-upscale-data/smoke-2026-09-11-r4 UPSCALE_DUMP_CHECK=1 \
+  bash -c '. scripts/lab-servers.sh; trap lab_servers_down EXIT; lab_servers_up; node scripts/upscale-pairs-capture.mjs'
+uv run --with numpy python3 scripts/upscale-pairs-load.py /tmp/blud-upscale-data/smoke-2026-09-11-r4
+```
+
+Run on checkout `6db708e0` with the default sequences (`1:2.5:0,3:3.0:1.2,4:2.0:-0.8`), 20 frames
+each, 6 simulation frames between captures.
+
+| Sub-check | Threshold | Measured | Result |
+|---|---|---|---|
+| Determinism (same scale ×2; 0.5→1.0→0.5) | ≤ 1e-6 | 0, 0, 0 (temporal start on, as shipped) | PASS |
+| Alignment — linear-depth registration | best (0, 0); vertex ≤ 0.25 px; ≥ 500 texels | (0, 0); (0.0002, 0.003) px; 4210 texels | PASS |
+| Alignment — coverage IoU | ≥ 0.85 | 0.987 | PASS |
+| Orientation (pitched up, row 0 = top) | centroid row > H/2 | 185.6 / 300 and 369.9 / 600 | PASS |
+| Depth sanity | < 0.05 m | 0.0022 m | PASS |
+| *Reported, ungated:* colour registration | — | (0, +1); vertex (0.78, 1.01) — false, see Update | — |
+| *Reported, ungated:* coverage centroid offset | — | dx −0.0004, dy 1.16 px | — |
+
+**G2: PASS — 60 pairs.** Loader output: `OK 60 pairs, input 400x300, target 800x600, near 0.1, far 200`.
+
+- **Dataset:** `/tmp/blud-upscale-data/smoke-2026-09-11-r4/`, 559 MB.
+  - Contents: 60 × (`frameNNN-in.npy` 300×400×4 + `frameNNN-target.npy` 600×800×4), plus the
+    scored check frames (`check-in.npy`, `check-target.npy`).
+  - **It lives in /tmp, so it is lost on reboot.** The command above regenerates it, and the
+    manifest records the checkout. `manifest.json` is copied to `smoke-manifest.json` beside
+    this note.
+- **Per sequence** (input flesh coverage; frame-to-frame silhouette IoU of the input):
+
+  | Seq | Staging | Coverage min / mean / max | Frame-to-frame IoU min / median | Near-static steps (IoU ≥ 0.98) |
+  |---|---|---|---|---|
+  | 0 | room 1, 2.5 m, orbit 0 | 3.4% / 3.6% / 4.0% | 0.693 / 0.992 | **13 / 19** |
+  | 1 | room 3, 3.0 m, orbit 1.2 | 3.5% / 3.9% / 4.7% | 0.691 / 0.761 | 0 / 19 |
+  | 2 | room 4, 2.0 m, orbit −0.8 | 11.3% / 16.8% / 23.7% | 0.401 / 0.773 | 0 / 19 |
+
+- **Diversity caveat for P3.** Sequence 0's body stops moving after about frame 8, so 13 of its
+  19 steps are near-duplicate poses. Its colour still changes between some of those frames
+  (mean |Δrgb| up to 0.26), most likely the per-frame probe lighting, which the capture pins to
+  its unblended estimate (`setProbeBlend(1)`). Each pair is internally consistent (same frozen
+  state at both scales), so this is a diversity issue, not a correctness one. A P3 capture
+  should re-stage, or advance further, when consecutive silhouettes stay above ~0.98 IoU.
+- **Flesh is a small fraction of each frame** (3.4–24%). Training should sample crops around
+  flesh, or weight the loss toward it, rather than use whole frames that are mostly sentinel.
 
 ## G1-parity carried in (the task asked for the verdict line)
 
 > G1-PARITY: PASS (worst GPU-vs-CPU relative rgb error **1.91e-3** against the 2e-3 gate;
 > zero coverage mismatches, zero depth mismatches, in both layouts; the zero model bit-exact).
 
-## Command
+## Command (first run)
 
 ```bash
 LAB_VITE_PORT=5313 LAB_CDP_PORT=9313 UPSCALE_OUT=/tmp/blud-upscale-data/smoke-2026-09-11 \
@@ -27,7 +105,7 @@ Run with the plan's default `UPSCALE_SEQS='1:2.5:0,3:3.0:1.2,4:2.0:-0.8'`, `UPSC
 `UPSCALE_ADVANCE=6`, `UPSCALE_PITCH_UP=0.2`. The G2 checks abort before any frame is captured,
 so the sequences/frame counts never run.
 
-## Results (verbatim from the log)
+## Results of the first run (verbatim from the log)
 
 ```
 G2 checks: {
@@ -144,7 +222,7 @@ and `(600,800,4)`, the sentinel `1/3` round-trips bit-exactly (`a[0,0,2] == np.f
 `True`), and the header is `.npy` v1.0 little-endian. So the `.npy` writer/reader pair and the
 Python loader are sound; only the GPU gate blocks the real dataset.
 
-## Dataset
+## Dataset (first run — superseded by the r4 result above)
 
 - **Path:** `/tmp/blud-upscale-data/smoke-2026-09-11/` — contains only `manifest.json`
   (the failure record). **No `.npy` pairs were written and no size is reported.** The
@@ -155,7 +233,7 @@ Python loader are sound; only the GPU gate blocks the real dataset.
 - Coverage per sequence: **not available** (capture never ran). The comparison framings above
   had input coverage 0.018–0.117 of the 400×300 frame.
 
-## Verdict and what would unblock it
+## Verdict of the first run (superseded — resolved by the Update above)
 
 **G2: FAIL** on alignment-centroid. The capture pipeline, `.npy` encode/decode and checks are
 implemented and the non-alignment sub-checks pass with strong margins. The failing metric is
@@ -177,7 +255,7 @@ Options for the owner (not applied):
 
 Left as-is on this branch: the capture script still hard-fails G2 and writes no dataset.
 
-## Left broken / not covered
+## Left broken / not covered (first run — the r4 result above replaces the first two bullets)
 
 - No smoke dataset, so "3 sequences × 20 frames round-trip through a Python `.npy` loader"
   (spec G2, last bullet) is unverified against real GPU data; only the synthetic loader check
