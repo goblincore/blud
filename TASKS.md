@@ -135,14 +135,20 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 > [docs/dev-notes/2026-09-10-temporal-reprojection-NEXT-SESSION.md](docs/dev-notes/2026-09-10-temporal-reprojection-NEXT-SESSION.md)
 > §"SCOPED — 2026-09-10, session 2".
 
-> **HELD-ROW REPROJECTION: THE PRE-TEST SAYS IT IS CAMERA MOTION, BY ~15x.**
-> Subject frozen (`?frozen=1`), body staged at 0.7 m filling the frame, h/2 vs h/3
-> A/B'd at a matched pose in one boot: still camera 0.80 mean |Δ| levels (5.3% of
-> pixels), strafe 0.25 m **12.06 levels (69.7%)**. The reconstruction is not the
-> problem — the staleness is, and that is the term a reprojected held row removes.
-> Rig `scripts/sdf-fields-motion-probe.sh`; shots and numbers in the temporal
-> reprojection note. NEXT: the per-slot held camera + reprojected held row, then
-> the owner's eyes in motion; the motion-vector (body) side comes after.
+> **HELD-ROW REPROJECTION: BUILT, MEASURED, AND REJECTED — DO NOT RE-DERIVE IT.**
+> Worse, the close-up that sold it: at the owner's REAL viewing range (body at
+> 4 m, walking-speed strafe) the reprojection does not move h/3 toward h/2 AT ALL
+> (h/2-vs-h/3 is 6.00 levels with it off, 6.17 with it on). It works only when a
+> body fills the frame (at 0.7 m, h/3 vs a same-pose ground truth: 15.53 → 9.25,
+> −40%), because parallax scales as 1/distance and the reprojection is
+> HORIZONTAL-only by design. The owner's verdict: "it looks exactly the same."
+> The residual at range is the ROW STRUCTURE (two rows in three are other
+> INSTANTS), which is also what "the lines are way too distracting at 3 and 4"
+> meant all along. CONSEQUENCE: the motion-vector follow-up inherits the same
+> ceiling — do not build it expecting deeper interlace. Code: `main` @ fc7c70c7
+> (inert, OFF), branch `held-row-reproj` @ 81a87262 (wiring + rig), unmerged.
+> Deeper fields would need temporal ACCUMULATION on every row; shape and first
+> experiment in the temporal reprojection note's FINAL VERDICT section.
 
 > **THE MARCH'S PIXEL-WASTE METRIC IS BROKEN, AND THAT IS THE FIRST THING TO
 > FIX.** `__sdfGame.occupancy()` returns BEFORE the discard, so inside overlapping

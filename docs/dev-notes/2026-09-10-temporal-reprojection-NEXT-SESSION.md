@@ -215,3 +215,105 @@ the same gradient at every phase, diluting the body's comb. The mean-|Δ| A/B wa
 the metric that answered the question; the row-phase spread is not evidence of
 anything at this framing. If someone wants the comb signature, restrict the
 gradient to the body's pixels (the SDF target) rather than the whole frame.
+
+---
+
+# FINAL VERDICT — the held-row reprojection does NOT pay. Do not ship it.
+
+Owner, after looking at it live at `?fields=3&heldreproj=1` with frozen enemies
+and strafing past them: **"it looks exactly the same."** Correct, and the numbers
+say why.
+
+## The measurement that decides it: at PLAY RANGE it does not reduce the artifact
+
+Same rig, same boot, staged at **4 m** (the owner's actual viewing range) instead
+of the close-up, 0.05 m strafe (~3 m/s walking), `?frozen`:
+
+| comparison (body at 4 m) | mean \|Δ\| | pixels >2 |
+| --- | ---: | ---: |
+| h/3, reproj off vs on | 4.23 | 31% |
+| **h/2 vs h/3, reproj OFF** | **6.00** | 38.9% |
+| **h/2 vs h/3, reproj ON** | **6.17** | 39.5% |
+
+**The reprojection does not move h/3 toward h/2 at all** (6.00 → 6.17, marginally
+worse). If it were fixing the staleness that separates the two, that gap would
+shrink. It changes 31% of pixels by ~4 levels and makes none of them right.
+
+The same measurement at the 0.7 m close-up (`stageCloseUp`'s "body fills the
+frame"), where the mechanism DOES work:
+
+| comparison | reproj OFF | reproj ON |
+| --- | ---: | ---: |
+| h/2 vs h/3, 0.25 m strafe | 20.29 | 16.21 |
+| h/3 distance to a SAME-POSE GROUND TRUTH (fielding off), 0.25 m | 15.53 | **9.25 (−40%)** |
+| h/3 distance to ground truth, 0.05 m | 17.89 | 14.31 (−20%) |
+
+and the identity gate: with a STILL camera the reprojection changes the frame by
+**0.18 levels** (7,059 px of 480,000) — a near no-op, exactly as designed.
+
+## Why, and what it means
+
+1. **Parallax scales as 1/distance.** At 0.7 m a 0.05 m step displaces content
+   ~40 px; at 4 m it is ~7 px. The pre-test's "camera motion dominates by 15x" was
+   measured at 0.7 m and is a CLOSE-UP result. Building the case for the project on
+   that framing was the error.
+2. **The reprojection is horizontal-only by design** (a held row's sample must stay
+   in its own row), so at range, where the offset is a few pixels, it cannot touch
+   the residual. That residual is the **ROW STRUCTURE**: at h/3 two rows in three
+   are samples from OTHER INSTANTS, and no sideways shift makes their content line
+   up with the fresh rows. **This is also almost certainly what the owner meant the
+   first time — "the lines are just way too distracting at 3 and 4". Lines = the
+   row structure, which this change never addressed.**
+
+**Therefore the motion-vector follow-up is not worth building either.** Moving
+bodies are the same class of fix — repositioning content WITHIN held rows — so it
+inherits the same ceiling while being far more work. Deeper interlace is not
+reachable by reprojection: the obstacle is the RECONSTRUCTION, not staleness.
+
+## Where the code is
+
+- `main` @ `fc7c70c7`: the layer half (per-slot held cameras, `rotateHeldCameras`,
+  the reprojection in `COMPOSITE_WGSL`), **OFF** by default, wired to nothing.
+  Harmless and inert; it is also the accurate record of why the idea fails.
+- Branch **`held-row-reproj`** @ `81a87262`: the `?heldreproj` wiring, the bench
+  reset-block pin, and the rig extensions (`FIELDS_PROBE_REPROJ`,
+  `FIELDS_PROBE_DIST`, the same-pose ground-truth reference). Unmerged on purpose.
+
+## If deeper interlace is ever wanted: the real shape of the problem
+
+Not "a better held row" — **reconstruct EVERY row from a temporally accumulated
+history**, i.e. march a low-resolution grid with a per-frame sub-pixel jitter and
+accumulate it into a full-resolution history reprojected with motion vectors. That
+is the only scheme in which the row structure does not exist, because no output
+pixel is a sample from a single older instant — each is a blend over time.
+
+What it needs, in the order that de-risks it:
+
+1. **Motion vectors**, camera AND object. Camera is available (this work built
+   per-frame VP retention; `temporal-start.ts` already reprojects by it). Object
+   motion is the real cost: a screen-space motion field for the marched bodies,
+   whose per-vertex data is close to hand in `bone-instancer.ts` (posed instances
+   per frame) but which needs its own pass and target.
+2. **A validity / disocclusion test** — the reprojected depth must agree; without
+   it this reads as smearing, which is worse than the comb.
+3. **Neighbourhood clamping** of the history against the current frame, the
+   standard anti-ghosting measure. Ghosting is THE failure mode of this class, and
+   it is what retired C2 for a related reason (reprojected flesh desyncing from
+   exactly-rendered polygons).
+4. **A jitter sequence** and its determinism consequences: the whole frame becomes
+   a function of its entire history, which changes what `frameHash`'s `repeated`
+   check means and interacts with the two-state branch.
+
+Pieces that already exist and would carry over: `sdfScale` already marches at a
+scaled resolution (`setSdfScale`, reset to 1.0 in the ship defaults) — that is the
+low-res march this scheme wants; the history ring is the pattern for the retained
+history; the temporal-start reprojection is the pattern for the camera term.
+
+**The cheap first experiment, before any of the above:** measure the CURRENT
+quarter-resolution march look — `setSdfScale(0.5)` with no accumulation at all —
+so the baseline artifact (shimmer/softness) is known. Then ask the one question
+that decides the project: accumulate with CAMERA-ONLY motion vectors and see how
+bad the ghosting on a walking body is. If that is unacceptable, the object-vector
+pass is mandatory before any look verdict is worth taking; if it is tolerable, the
+cheap version may already be shippable. Do not build the motion-vector pass before
+that number exists.
