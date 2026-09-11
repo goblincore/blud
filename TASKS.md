@@ -147,9 +147,16 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 > meant all along. CONSEQUENCE: the motion-vector follow-up inherits the same
 > ceiling — do not build it expecting deeper interlace. Code: `main` @ fc7c70c7
 > (inert, OFF), branch `held-row-reproj` @ 81a87262 (wiring + rig), unmerged.
-> Deeper fields would need temporal ACCUMULATION on every row; shape and first
-> experiment in the temporal reprojection note's FINAL VERDICT section, and the
-> frame-hash question is DECIDED in
+> **TEMPORAL ACCUMULATION — PROCEEDING (owner: "some ghosting is not a big deal
+> since it adds to the degraded CRT look").** The cost side is measured: a
+> **half-scale march (`setSdfScale(0.5)`, a quarter of the marched pixels) is
+> worth `sdf:march` 8.18 → 4.12 ms and the fenced frame 16.64 → 8.51 ms — ~8 ms of
+> a 16.6 ms frame**, the best single lever measured this session. Below 0.5 there
+> is nothing left (0.35 buys 0.2 ms of frame). Bench legs `sdfscale-0.75/0.5/0.35`.
+> THE OWNER'S CHEAP DECISION FIRST: `__sdfGame.setSdfScale(0.5)` in the console —
+> if the aliasing is already acceptable, SHIP THE SCALE AND BUILD NOTHING. Shape,
+> cost table and the accumulation plan: temporal reprojection note's FINAL VERDICT
+> + cost sections. Frame-hash question DECIDED in
 > [docs/dev-notes/2026-09-10-temporal-accumulation-frame-hash-DECISION.md](docs/dev-notes/2026-09-10-temporal-accumulation-frame-hash-DECISION.md)
 > (keep every layer and ADD the accumulated one; the accumulator must be
 > resettable and epoch-labelled; the gate is a sequence comparison from an epoch;

@@ -322,3 +322,50 @@ bad the ghosting on a walking body is. If that is unacceptable, the object-vecto
 pass is mandatory before any look verdict is worth taking; if it is tolerable, the
 cheap version may already be shippable. Do not build the motion-vector pass before
 that number exists.
+
+---
+
+# THE COST SIDE OF ACCUMULATION, MEASURED (2026-09-10, after the owner said proceed)
+
+Before building anything: what is a LOW-RESOLUTION march actually worth? The
+accumulation scheme exists to make one acceptable, so this is the ceiling it is
+spending against — and the first number that makes the idea look like more than a
+rescue mission. Room 4, `BENCH_PASSES=1`, median of 3, harness reset block pins
+`sdfScale` to 1.0 and the new legs override it:
+
+| `setSdfScale` | `sdf:march` | vs 1.0 | fenced frame p50 | vs 1.0 |
+| --- | ---: | ---: | ---: | ---: |
+| **1.0 (ships)** | **8.18** | — | **16.64** | — |
+| 0.75 | 5.35 | −2.83 (−35%) | 11.15 | −5.49 (−33%) |
+| 0.5 | 4.12 | −4.06 (−50%) | 8.51 | −8.13 (−49%) |
+| 0.35 | 3.63 | −4.55 (−56%) | 8.30 | −8.34 (−50%) |
+
+Legs: `sdfscale-0.75`, `sdfscale-0.5`, `sdfscale-0.35` in `scripts/sdf-game-bench.mjs`.
+
+**A half-scale march is worth ~8 ms of a 16.6 ms frame — nearly half of it**, and
+that is the BEST single lever measured this session (R1 was −2.1 to −2.5 ms). Two
+things to read carefully:
+
+- **The march is SUB-LINEAR in pixel count.** 0.5 is a QUARTER of the marched
+  pixels for HALF the cost; 0.35 is about an eighth for 56%. So a substantial part
+  of the pass is not per-marched-pixel at all — consistent with the repo's
+  "cost is per-PIXEL, not per-step" finding, and evidence there is a fixed
+  per-frame component (setup, clears, uniforms, proxy-box rasterisation) that no
+  resolution change touches.
+- **Below 0.5 there is nothing left to take**: 0.35 buys 0.49 ms of march and 0.21 ms
+  of frame over 0.5. So **0.5 is the sweet spot**, and the reconstruction should be
+  designed for that target rather than for the smallest possible grid.
+- The frame tracks the march almost 1:1 at 0.75 and 0.5 (the march is ~79% of the
+  labelled total), so this is a real frame-level win, not a pass-attribution move.
+
+**What this does NOT measure: the look, or the reconstruction's cost.** A
+half-scale march is upsampled today with a nearest tap and no history, so it is
+aliased; the accumulation's job is to spend some of those 8 ms back on looking
+right. **The decision it enables is cheap and belongs to the owner**: put
+`__sdfGame.setSdfScale(0.5)` in the console on the dev server and judge the
+aliasing as-is.
+
+- If a half-scale march already looks acceptable inside this game's degraded CRT
+  look, **there is nothing to build** — ship the scale and bank ~8 ms.
+- If it looks too aliased, build the accumulation, and its budget is the difference
+  between 8 ms and whatever the jitter + reprojection resolve costs.

@@ -352,6 +352,15 @@ const ALL_LEGS = {
   // same sweep. NOTE the legs are caps, so a scene that natively has fewer
   // lights than the cap measures the same thing twice — read the row together
   // with `__sdfGame.probeDynamic.gates.lights`.
+  // RESOLUTION SCALE (2026-09-10). `setSdfScale` (0.2..1) scales the MARCH target:
+  // 0.5 is a quarter of the marched pixels, 0.35 about an eighth. This is the
+  // priced half of the temporal-accumulation idea — the scheme wants a low-res
+  // march plus a jittered, reprojected history to reconstruct it, and these legs
+  // measure what the low-res march is worth on its own (the reconstruction adds
+  // cost back, so this is the CEILING, not the win). The ship defaults pin 1.0.
+  'sdfscale-0.75': { setSdfScale: 0.75 },
+  'sdfscale-0.5': { setSdfScale: 0.5 },
+  'sdfscale-0.35': { setSdfScale: 0.35 },
   'probe-lights1': { setProbeLights: 1 },
   'probe-lights2': { setProbeLights: 2 },
   'probe-lights4': { setProbeLights: 4 },
