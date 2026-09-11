@@ -4,6 +4,13 @@
 > Per-milestone step-by-step tasks live in `docs/superpowers/plans/`.
 > This file is **coarse-grained state only** — keep rows to ≤2 lines and link out for detail.
 
+## Neural upscale (ESPCN family) — flesh 400×300 → 800×600 — 2026-09-11
+
+- [ ] Spec approved: `docs/superpowers/specs/2026-09-11-neural-upscale-espcn-design.md`.
+  Reopens the 09-08 idea (that pilot was 1.4k params). Stage contract, `sp`/`dc` layouts.
+- [ ] P1+P2 plan (cost ladder → G1, aux MRT + paired capture → G2): not yet written.
+  Training (P3, M3/RunPod), full-res hull guide (P4), play build (P5) get own plans.
+
 ## Raymarch — Claybook cheap wins — 2026-09-09
 
 - [x] Last-step SECANT accept in `MARCH_BODY` (Claybook GDC slide 25), behind

@@ -1,5 +1,9 @@
 # Blud 320×240 → 800×600 Neural Upscaling Experiment Plan
 
+> **SUPERSEDED 2026-09-11** by `docs/superpowers/specs/2026-09-11-neural-upscale-espcn-design.md`.
+> The pilot below (1,425 params) lost to bicubic; the owner judged that a model-size
+> result, not a verdict on the approach. Its pairing/capture reasoning still applies.
+
 > **For agentic workers:** Use superpowers:executing-plans to execute this gated experiment task-by-task. Planning is approved; execution has not started.
 
 **Goal:** Test whether a tiny model trained on Blud can reconstruct acceptable 800×600 gameplay from actual 320×240 renders, while retaining a meaningful net performance saving.
