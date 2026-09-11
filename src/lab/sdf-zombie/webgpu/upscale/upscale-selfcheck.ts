@@ -108,13 +108,15 @@ export async function runUpscaleSelfCheck(deps: SelfCheckDeps, opts: { compareLa
   const initial = deps.layer.upscaleStage;
   if (!initial) throw new Error('upscaleSelfCheck: the upscale stage is off — call __sdfGame.setUpscale first');
   const original = { ...initial.config };
+  // Re-created stages must keep the SAME weights (a trained model is not reproducible from config).
+  const weights = initial.model;
   // REACH THE STEADY STAGE BEFORE MEASURING. Enabling the stage, and (once) its
   // first re-creation, each perturb the march target — a localized change in
   // ~1% of the texels that is stable afterwards under the render lock. Settle
   // both here so the two layouts are read on the SAME march; without this the
   // first layout is measured one stage-generation earlier than the second.
   deps.renderFrames(4);
-  deps.layer.setUpscale(original);
+  deps.layer.setUpscale(original, weights);
   deps.renderFrames(8);
   const layouts: UpscaleLayout[] = opts.compareLayouts ? ['sp', 'dc'] : [original.layout];
   const outputs = new Map<UpscaleLayout, FloatImage>();
@@ -122,7 +124,7 @@ export async function runUpscaleSelfCheck(deps: SelfCheckDeps, opts: { compareLa
   let marchRef: FloatImage | null = null;
   let marchStable = true;
   for (const layout of layouts) {
-    if (deps.layer.upscaleStage!.config.layout !== layout) deps.layer.setUpscale({ ...original, layout });
+    if (deps.layer.upscaleStage!.config.layout !== layout) deps.layer.setUpscale({ ...original, layout }, weights);
     // A new stage compiles its pipelines on first use: render several frames, measure the last.
     deps.renderFrames(8);
     await deps.resolveGpu();
@@ -139,7 +141,7 @@ export async function runUpscaleSelfCheck(deps: SelfCheckDeps, opts: { compareLa
     gpuVsCpu.push(compare(gpu, cpu, margin, layout));
     outputs.set(layout, gpu);
   }
-  if (deps.layer.upscaleStage!.config.layout !== original.layout) deps.layer.setUpscale(original);
+  if (deps.layer.upscaleStage!.config.layout !== original.layout) deps.layer.setUpscale(original, weights);
   const s = deps.layer.upscaleStage!;
   return {
     model: s.config.model,

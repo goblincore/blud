@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 import { uniform } from 'three/tsl';
 import { createUpscaleStage, upscaleInfoOf } from './upscale-stage';
+import { createUpscaleModel } from './upscale-model';
 
 function fakeRenderer() {
   const calls: { target: THREE.RenderTarget | null; autoClear: boolean }[] = [];
@@ -64,5 +65,19 @@ describe('upscale stage wiring', () => {
     const spies = stage.passes.map((p) => vi.spyOn(stage.targetFor(p.name), 'dispose'));
     stage.dispose();
     for (const s of spies) expect(s).toHaveBeenCalled();
+  });
+
+  it('uses trained weights when given, reports their provenance, and refuses a mismatched model', () => {
+    const trained = { ...createUpscaleModel('s16', 'rgbd', 4), source: 'trained' as const, run: 's16-rgbd', step: 1200 };
+    const stage = createUpscaleStage({ model: 's16', layout: 'sp', inputs: 'rgbd', seed: 1 }, new THREE.Texture(), uniform(1), trained);
+    expect(stage.model).toBe(trained);
+    expect(upscaleInfoOf(stage)).toMatchObject({ source: 'trained', run: 's16-rgbd', step: 1200, weightHash: trained.weightHash });
+    stage.dispose();
+    const random = createUpscaleStage({ model: 's8', layout: 'sp', inputs: 'rgb', seed: 1 }, new THREE.Texture(), uniform(1));
+    expect(upscaleInfoOf(random)).toMatchObject({ source: 'random', run: null, step: null });
+    random.dispose();
+    expect(upscaleInfoOf(null)).toMatchObject({ source: null, run: null, step: null });
+    expect(() => createUpscaleStage({ model: 's16', layout: 'sp', inputs: 'rgb', seed: 1 }, new THREE.Texture(), uniform(1), trained))
+      .toThrow(/does not match/);
   });
 });

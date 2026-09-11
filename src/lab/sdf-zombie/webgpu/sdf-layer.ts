@@ -40,7 +40,7 @@ import { TEMPORAL_START_DEFAULTS, temporalMarginForMotion } from './temporal-sta
 import { TEMPORAL_ACCUM_DEFAULT_ALPHA, TEMPORAL_ACCUM_CONVERGED_FRAMES, accumAlpha, accumJitter } from './temporal-accum';
 import { setPassLabel } from './gpu-pass-timing';
 import { createUpscaleStage, upscaleInfoOf, type UpscaleInfo, type UpscaleStage } from './upscale/upscale-stage';
-import type { UpscaleConfig } from './upscale/upscale-model';
+import type { UpscaleConfig, UpscaleModel } from './upscale/upscale-model';
 
 // ---------------------------------------------------------------------------
 // HALF-RATE (lever C2, temporal amortisation) — render the march every OTHER
@@ -883,8 +883,10 @@ export interface SdfLayer {
   /** NEURAL UPSCALE STAGE (spec docs/superpowers/specs/2026-09-11-neural-upscale-espcn-design.md).
    *  march -> upscale -> composite. `null` turns it off. On: forces field style
    *  'off' and refuses temporal accumulation (stacking is P5); the composite reads
-   *  the stage's output-resolution flesh. The caller sets the march scale. */
-  setUpscale(config: UpscaleConfig | null): UpscaleInfo;
+   *  the stage's output-resolution flesh. The caller sets the march scale.
+   *  `model` = trained weights (parseUpscaleModelJson), matching config's model and
+   *  inputs; absent = seeded random weights. A mismatch throws and keeps the old stage. */
+  setUpscale(config: UpscaleConfig | null, model?: UpscaleModel): UpscaleInfo;
   readonly upscaleInfo: UpscaleInfo;
   /** The live stage, for measurement readbacks only; null when off. */
   readonly upscaleStage: UpscaleStage | null;
@@ -2076,7 +2078,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       return accumOn;
     },
     resetTemporalAccum() { resetAccum(); },
-    setUpscale(config) {
+    setUpscale(config, model) {
       if (config === null) {
         upscale?.dispose();
         upscale = null;
@@ -2089,8 +2091,10 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
         this.setTemporalAccum(false);
       }
       if (fieldStyle !== 'off') this.setFieldStyle('off');
+      // Build first: a model/config mismatch throws here and leaves the old stage intact.
+      const next = createUpscaleStage(config, target.texture, uFlipY, model);
       upscale?.dispose();
-      upscale = createUpscaleStage(config, target.texture, uFlipY);
+      upscale = next;
       upscale.setSize(target.width, target.height, fullW, fullH);
       accumTexNode.value = upscale.output.texture;
       (uAccumOn.value as number) = 1;

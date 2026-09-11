@@ -4,6 +4,7 @@ import * as THREE from 'three/webgpu';
 // public type declarations exist for three/src/* (same as march.wgsl.test.ts).
 import WGSLNodeFunction from 'three/src/renderers/webgpu/nodes/WGSLNodeFunction.js';
 import { createSdfLayer, isHoldFrame, rotateHeldCameras, sortFrontToBack, SDF_LAYER, FIELD_MESH_LAYER, COMPOSITE_WGSL, FIELD_INTERLEAVE_WGSL, TEMPORAL_ACCUM_WGSL, DEPTH_PREPASS_BLOCK_PX, DEPTH_PREPASS_DIV, depthPrepassSize } from './sdf-layer';
+import { createUpscaleModel } from './upscale/upscale-model';
 
 describe('depth prepass sizing (close-up task 3)', () => {
   it('the block footprint constant stays in step with the downsample factor', () => {
@@ -461,6 +462,22 @@ describe('neural upscale stage in the layer (spec 2026-09-11-neural-upscale-espc
     expect(layer.compositeSource).toBe('upscale');
     layer.setUpscale(null);
     expect(layer.compositeSource).toBe('march');
+    layer.dispose();
+  });
+
+  it('uses given trained weights; a mismatched model throws and keeps the running stage', () => {
+    const { renderer } = fakeRenderer();
+    const layer = createSdfLayer(renderer);
+    layer.setSize(800, 600);
+    layer.setScale(0.5);
+    const trained = { ...createUpscaleModel('s8', 'rgb', 9), source: 'trained' as const, run: 's8-rgb', step: 100 };
+    const info = layer.setUpscale(cfg, trained);
+    const stage = layer.upscaleStage!;
+    expect(stage.model).toBe(trained);
+    expect(info).toMatchObject({ on: true, source: 'trained', run: 's8-rgb', step: 100, weightHash: trained.weightHash });
+    expect(() => layer.setUpscale({ ...cfg, inputs: 'rgbd' }, trained)).toThrow(/does not match/);
+    expect(layer.upscaleStage).toBe(stage);
+    expect(layer.upscaleInfo.weightHash).toBe(trained.weightHash);
     layer.dispose();
   });
 });

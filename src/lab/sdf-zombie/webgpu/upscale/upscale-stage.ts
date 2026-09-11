@@ -11,7 +11,7 @@ import { mrt, texture, uniform, uv, vec4, wgslFn } from 'three/tsl';
 import { setPassLabel } from '../gpu-pass-timing';
 import {
   createUpscaleModel, type UpscaleConfig, type UpscaleInputSet, type UpscaleLayout,
-  type UpscaleModel, type UpscaleModelId,
+  type UpscaleModel, type UpscaleModelId, type UpscaleModelSource,
 } from './upscale-model';
 import { planUpscalePasses, UPSCALE_RECONSTRUCT_WGSL, type PassSpec } from './upscale-wgsl';
 
@@ -37,6 +37,10 @@ export interface UpscaleInfo {
   inputs: UpscaleInputSet | null;
   seed: number | null;
   weightHash: string | null;
+  /** 'trained' for loaded weights, 'random' for seeded cost/parity weights. */
+  source: UpscaleModelSource | null;
+  run: string | null;
+  step: number | null;
   passes: string[];
   inSize: { width: number; height: number } | null;
   outSize: { width: number; height: number } | null;
@@ -44,7 +48,10 @@ export interface UpscaleInfo {
 
 export function upscaleInfoOf(stage: UpscaleStage | null): UpscaleInfo {
   if (!stage) {
-    return { on: false, model: null, layout: null, inputs: null, seed: null, weightHash: null, passes: [], inSize: null, outSize: null };
+    return {
+      on: false, model: null, layout: null, inputs: null, seed: null, weightHash: null,
+      source: null, run: null, step: null, passes: [], inSize: null, outSize: null,
+    };
   }
   return {
     on: true,
@@ -53,6 +60,9 @@ export function upscaleInfoOf(stage: UpscaleStage | null): UpscaleInfo {
     inputs: stage.config.inputs,
     seed: stage.config.seed,
     weightHash: stage.model.weightHash,
+    source: stage.model.source ?? 'random',
+    run: stage.model.run ?? null,
+    step: stage.model.step ?? null,
     passes: stage.passes.map((p) => p.name),
     inSize: { ...stage.inSize },
     outSize: { ...stage.outSize },
@@ -65,9 +75,16 @@ type Built = { spec: PassSpec; target: THREE.RenderTarget; scene: THREE.Scene; m
  * @param marchTexture the march target's texture (a stable object; resizing the
  *   target does not replace it).
  * @param flipY the layer's shared flipY uniform node (sdf-layer.ts `uFlipY`).
+ * @param trained weights from parseUpscaleModelJson; absent = seeded random weights from `config`.
+ *   Its id and inputs must match `config`.
  */
-export function createUpscaleStage(config: UpscaleConfig, marchTexture: THREE.Texture, flipY: unknown): UpscaleStage {
-  const model = createUpscaleModel(config.model, config.inputs, config.seed);
+export function createUpscaleStage(
+  config: UpscaleConfig, marchTexture: THREE.Texture, flipY: unknown, trained?: UpscaleModel,
+): UpscaleStage {
+  if (trained && (trained.id !== config.model || trained.inputs !== config.inputs)) {
+    throw new Error(`upscale: model ${trained.id}/${trained.inputs} does not match config ${config.model}/${config.inputs}`);
+  }
+  const model = trained ?? createUpscaleModel(config.model, config.inputs, config.seed);
   const passes = planUpscalePasses(model, config.layout);
   const uNearFar = uniform(new THREE.Vector2(0.1, 100));
   const uOutSize = uniform(new THREE.Vector2(1, 1));
