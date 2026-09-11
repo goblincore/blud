@@ -91,8 +91,11 @@ import { createRoomProbes, type ProbeWorkerLike } from './room-probes';
 import { computeBounceSpot } from '../flashlight-bounce';
 import { createProbeGatherBinding, type ProbeGatherBinding } from './probe-gather-compute';
 import { parseFloatParam, parseIntParam } from './boot-params';
-import { parseUpscaleConfig, UPSCALE_SCALE } from './upscale/upscale-model';
+import {
+  parseUpscaleConfig, parseUpscaleModelJson, UPSCALE_SCALE, type UpscaleConfig, type UpscaleModel,
+} from './upscale/upscale-model';
 import { runUpscaleSelfCheck } from './upscale/upscale-selfcheck';
+import type { UpscaleInfo } from './upscale/upscale-stage';
 import { TEMPORAL_ACCUM_DEFAULT_SCALE } from './temporal-accum';
 import { hashFrame, DEFAULT_TILES_X, DEFAULT_TILES_Y } from './demo-hash';
 import { paddedRowStrideFloats } from './frame-hash';
@@ -1921,12 +1924,95 @@ async function main() {
   // `?upscale=<s8|s16|s32|zero>` enables it with RANDOM weights (a cost/parity
   // probe, not a look) and drops the march to 0.5 — the stage upscales exactly 2x.
   // `?upscalelayout=<sp|dc>`, `?upscaleinputs=<rgb|rgbd>`, `?upscaleseed=<int>`.
+  // `?upscale=trained&upscalemodel=<name>` loads a TRAINED export from the dev model
+  // store instead (P3, docs/superpowers/plans/2026-09-11-neural-upscale-p3-contracts.md §4);
+  // a missing or invalid model leaves the stage off with a console error.
   // Dev-only; absent = the shipped path. The scale goes through the game's own
   // sdfScale state, exactly like the ?accum block above (b9fad129).
+  //
+  // A/B KEY (P3 spec §5): while an upscale config is active, U cycles
+  // native (march 1.0, the field style from before the stage) -> nearest (zero model) -> model.
+  // A label bottom-left names the mode. Switching reallocates targets; a hitch is expected.
+  const upscaleAb: {
+    mode: 'native' | 'nearest' | 'model';
+    config: UpscaleConfig | null;
+    model: UpscaleModel | null;
+    modelName: string | null;
+    fieldStyle: typeof sdfLayer.fieldStyle;
+  } = { mode: 'model', config: null, model: null, modelName: null, fieldStyle: sdfLayer.fieldStyle };
+  let upscaleAbLabel: HTMLDivElement | null = null;
+  function updateUpscaleAbLabel() {
+    const c = upscaleAb.config;
+    if (!c) {
+      if (upscaleAbLabel) upscaleAbLabel.hidden = true;
+      return;
+    }
+    if (!upscaleAbLabel) {
+      upscaleAbLabel = document.createElement('div');
+      upscaleAbLabel.id = 'upscale-ab';
+      upscaleAbLabel.setAttribute('style',
+        'position:fixed; left:8px; bottom:8px; z-index:40; pointer-events:none;'
+        + ' font:12px/1.3 monospace; color:#ffd98a; background:rgba(0,0,0,0.6); padding:3px 6px; border-radius:3px;');
+      document.body.appendChild(upscaleAbLabel);
+    }
+    const m = upscaleAb.model;
+    const what = upscaleAb.mode === 'native' ? 'native (march 1.0, no upscale)'
+      : upscaleAb.mode === 'nearest' ? 'nearest 2x (zero model)'
+      : m ? `model ${upscaleAb.modelName ?? m.id} (${m.id} ${m.inputs}${m.step !== undefined ? `, step ${m.step}` : ''})`
+      : `random ${c.model} ${c.inputs} (untrained weights)`;
+    upscaleAbLabel.textContent = `upscale [U]: ${what} · ${c.layout}`;
+    upscaleAbLabel.hidden = false;
+  }
+  /** `booted` = false during main()'s boot, which sets the scale the way the ?accum block does. */
+  function applyUpscaleAbMode(mode: 'native' | 'nearest' | 'model', booted = true): UpscaleInfo {
+    const c = upscaleAb.config;
+    if (!c) throw new Error('upscale A/B: no upscale config is active');
+    const scaleTo = (v: number) => {
+      if (booted) { applySdfScale(v); return; }
+      sdfScale = v;
+      sdfLayer.setScale(sdfScale);
+      deferredApi?.setScale(sdfScale);
+    };
+    let info: UpscaleInfo;
+    if (mode === 'native') {
+      info = sdfLayer.setUpscale(null);
+      scaleTo(1);
+      sdfLayer.setFieldStyle(upscaleAb.fieldStyle);
+    } else {
+      scaleTo(UPSCALE_SCALE);
+      info = mode === 'nearest'
+        ? sdfLayer.setUpscale({ model: 'zero', layout: c.layout, inputs: 'rgb', seed: 1 })
+        : sdfLayer.setUpscale(c, upscaleAb.model ?? undefined);
+    }
+    upscaleAb.mode = mode;
+    updateUpscaleAbLabel();
+    return info;
+  }
+  async function enableTrainedUpscale(name: string, layout?: string, booted = true): Promise<UpscaleInfo> {
+    const r = await fetch(`/__lab/upscale-model/${encodeURIComponent(name)}`, { cache: 'no-store' });
+    if (!r.ok) throw new Error(`upscale model ${name}: HTTP ${r.status} (expected .upscale-models/${name}/model.json)`);
+    const model = parseUpscaleModelJson(await r.json());
+    const config = parseUpscaleConfig({ model: model.id, inputs: model.inputs, layout, seed: 1 });
+    upscaleAb.config = config;
+    upscaleAb.model = model;
+    upscaleAb.modelName = name;
+    return applyUpscaleAbMode('model', booted);
+  }
   {
     const upSearch = new URLSearchParams(location.search);
     const upRaw = upSearch.get('upscale');
-    if (upRaw !== null && upRaw !== '0') {
+    if (upRaw === 'trained') {
+      const name = upSearch.get('upscalemodel');
+      if (!name) {
+        console.error('[upscale] ?upscale=trained needs &upscalemodel=<name> — the stage stays off');
+      } else {
+        try {
+          await enableTrainedUpscale(name, upSearch.get('upscalelayout') ?? undefined, false);
+        } catch (err) {
+          console.error(`[upscale] trained model ${name} not loaded — the stage stays off: ${String(err)}`);
+        }
+      }
+    } else if (upRaw !== null && upRaw !== '0') {
       const cfg = parseUpscaleConfig({
         model: upRaw,
         layout: upSearch.get('upscalelayout') ?? undefined,
@@ -1937,6 +2023,8 @@ async function main() {
       sdfLayer.setScale(sdfScale);
       deferredApi?.setScale(sdfScale);
       sdfLayer.setUpscale(cfg);
+      upscaleAb.config = cfg;
+      updateUpscaleAbLabel();
     }
   }
   // Headless A/B seams (2026-08-27 hull-holes diagnosis): ship defaults stay
@@ -2742,6 +2830,10 @@ async function main() {
       else pushProbeWeight(parked);
     }
     if (e.code === 'KeyE') { slugMode = !slugMode; updateHud(); }
+    // Neural upscale A/B (dev-only, P3): native -> nearest -> model while an upscale config is active.
+    if (e.code === 'KeyU' && !e.repeat && upscaleAb.config) {
+      applyUpscaleAbMode(upscaleAb.mode === 'native' ? 'nearest' : upscaleAb.mode === 'nearest' ? 'model' : 'native');
+    }
     // H hides/shows EVERY tuning panel together. They cover most of the
     // viewport, and until now the only way to dismiss them was to know the
     // console API -- which is no use to someone doing a look pass.
@@ -7076,13 +7168,38 @@ function performBenchAction(a: BenchAction): void {
     resetTemporalAccum: () => sdfLayer.resetTemporalAccum(),
     /** NEURAL UPSCALE (spec 2026-09-11). Enabling also sets the march scale to 0.5
      *  through applySdfScale (the game's own state). `null` turns the stage off and
-     *  leaves the scale alone — callers restore it. Random weights: cost/parity only. */
-    setUpscale: (raw: { model: string; layout?: string; inputs?: string; seed?: number } | null) => {
-      if (raw === null) return sdfLayer.setUpscale(null);
+     *  leaves the scale alone — callers restore it. `{ model }` = random weights (cost/parity
+     *  only) and returns the info. `{ trained: '<name>' }` loads a trained export from the dev
+     *  model store and returns a PROMISE of the info (P3); it rejects if the model is missing or invalid. */
+    setUpscale: (
+      raw: { model?: string; layout?: string; inputs?: string; seed?: number; trained?: string } | null,
+    ): UpscaleInfo | Promise<UpscaleInfo> => {
+      if (raw === null) {
+        upscaleAb.config = null;
+        upscaleAb.model = null;
+        upscaleAb.modelName = null;
+        updateUpscaleAbLabel();
+        return sdfLayer.setUpscale(null);
+      }
+      if (raw.trained !== undefined) return enableTrainedUpscale(raw.trained, raw.layout);
       const cfg = parseUpscaleConfig(raw);
       applySdfScale(UPSCALE_SCALE);
-      return sdfLayer.setUpscale(cfg);
+      const info = sdfLayer.setUpscale(cfg);
+      upscaleAb.config = cfg;
+      upscaleAb.model = null;
+      upscaleAb.modelName = null;
+      upscaleAb.mode = 'model';
+      updateUpscaleAbLabel();
+      return info;
     },
+    /** P3: the trained models in the dev store (GET /__lab/upscale-models). */
+    upscaleModels: async () => {
+      const r = await fetch('/__lab/upscale-models', { cache: 'no-store' });
+      if (!r.ok) throw new Error(`upscaleModels: HTTP ${r.status}`);
+      return r.json();
+    },
+    /** P3 A/B state: the mode U last selected, and the loaded model's store name. */
+    upscaleAb: () => ({ active: upscaleAb.config !== null, mode: upscaleAb.mode, model: upscaleAb.modelName }),
     /** Stage state plus the camera's near/far (what rgbd depth linearization uses).
      *  near/far are reported even when the stage is off (the capture script needs them). */
     upscaleInfo: () => ({

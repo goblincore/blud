@@ -15,6 +15,7 @@
 - [-] G1 cost bench (plan Task 6) DEFERRED 2026-09-11 (owner: machine under load; quality first, optimize after).
 - [ ] P3 spec `docs/superpowers/specs/2026-09-11-neural-upscale-p3-training-design.md`: detail capture v2 (~1,000 pairs, medium/far-weighted, 16× supersampled target),
   RunPod 6-run grid ($10 cap), pod dashboard, in-game A/B. Owner: RunPod API key, launch OK. Plans: `docs/superpowers/plans/2026-09-11-neural-upscale-p3-*.md` (contracts, p3a–p3d; trainer, loader and pod scripts verified while writing).
+- [ ] P3c in-game loader: `?upscale=trained&upscalemodel=<name>`, U key A/B, G3 parity script — smoke **FAIL** on the default seed-3 test model (`sp` GPU-vs-CPU rgb `2.07e-3` > `2e-3`); seed-1 control PASSes at `1.71e-3` and reproduces the G1 reference. Loader/A/B/missing-model all pass; diagnosis in `p3c-ingame.md`.
 - [ ] P3 plain-language overview for the owner: `docs/superpowers/plans/2026-09-11-neural-upscale-p3-overview.md`
   (copy into Obsidian `Claude Notes/Research/` once macOS stops blocking writes to ~/Documents). Nothing executed yet; dispatch order: p3a/p3b/p3c parallel, then p3d.
 
