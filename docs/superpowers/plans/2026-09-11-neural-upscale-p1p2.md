@@ -2144,7 +2144,7 @@ git commit -m "measure(upscale): G1 cost ladder — s8/s16/s32 x sp/dc against t
 - Create: `scripts/upscale-pairs-capture.mjs`
 - Create: `scripts/upscale-pairs-load.py`
 - Modify: `.gitignore`
-- Create: `docs/dev-notes/2026-09-11-neural-upscale/g2-pairs.md`
+- Create: `docs/dev-notes/2026-09-11-neural-upscale/g2-pairs.md`, `docs/dev-notes/2026-09-11-neural-upscale/smoke-manifest.json`
 - Modify: `TASKS.md`
 
 - [ ] **Step 1: Write the failing npy test**
@@ -2495,10 +2495,13 @@ if __name__ == "__main__":
 
 - [ ] **Step 6: Run the capture (smoke dataset: 3 sequences × 20 frames)**
 
+The dispatcher DELETES this task's worktree when the task ends, so the dataset must be written outside it:
+
 ```bash
-LAB_VITE_PORT=5313 LAB_CDP_PORT=9313 UPSCALE_OUT=.upscale-data/smoke-2026-09-11 bash -c '. scripts/lab-servers.sh; trap lab_servers_down EXIT; lab_servers_up; node scripts/upscale-pairs-capture.mjs' 2>&1 | tee /tmp/upscale-g2.log
-uv run --with numpy python3 scripts/upscale-pairs-load.py .upscale-data/smoke-2026-09-11
-du -sh .upscale-data/smoke-2026-09-11
+mkdir -p /tmp/blud-upscale-data
+LAB_VITE_PORT=5313 LAB_CDP_PORT=9313 UPSCALE_OUT=/tmp/blud-upscale-data/smoke-2026-09-11 bash -c '. scripts/lab-servers.sh; trap lab_servers_down EXIT; lab_servers_up; node scripts/upscale-pairs-capture.mjs' 2>&1 | tee /tmp/upscale-g2.log
+uv run --with numpy python3 scripts/upscale-pairs-load.py /tmp/blud-upscale-data/smoke-2026-09-11
+du -sh /tmp/blud-upscale-data/smoke-2026-09-11
 ```
 
 Expected: `G2: PASS — 60 pairs`, the Python line `OK 60 pairs, input 400x300, target 800x600, ...`, and a size near 60 × (1.9 MB + 7.7 MB) ≈ 580 MB.
@@ -2507,7 +2510,7 @@ If a room has no body, change that sequence's room in `UPSCALE_SEQS` (rooms 1-5)
 
 - [ ] **Step 7: Write the notes and update TASKS.md**
 
-Create `docs/dev-notes/2026-09-11-neural-upscale/g2-pairs.md` with: date, checkout SHA, command, the `G2 checks` JSON from the log, temporal-start state, dataset path and size, the Python loader output, coverage per sequence (min/mean), and the verdict.
+Create `docs/dev-notes/2026-09-11-neural-upscale/g2-pairs.md` with: date, checkout SHA, command, the `G2 checks` JSON from the log, temporal-start state, dataset path (`/tmp/blud-upscale-data/smoke-2026-09-11` — lost on reboot; the command above regenerates it) and size, the Python loader output, coverage per sequence (min/mean), and the verdict. Also copy the dataset's `manifest.json` to `docs/dev-notes/2026-09-11-neural-upscale/smoke-manifest.json` (small; it records exactly how the data was made).
 
 In `TASKS.md`, in the `## Neural upscale (ESPCN family)` section, replace the line starting `- [ ] P1+P2 plan` and its continuation with:
 
@@ -2526,6 +2529,6 @@ Run: `npm run build` — Expected: success.
 Run: `git status --short` — Expected: `.upscale-data/` does NOT appear.
 
 ```bash
-git add scripts/lib/npy.mjs scripts/lib/npy.test.ts scripts/upscale-pairs-capture.mjs scripts/upscale-pairs-load.py .gitignore docs/dev-notes/2026-09-11-neural-upscale/g2-pairs.md TASKS.md
+git add scripts/lib/npy.mjs scripts/lib/npy.test.ts scripts/upscale-pairs-capture.mjs scripts/upscale-pairs-load.py .gitignore docs/dev-notes/2026-09-11-neural-upscale/g2-pairs.md docs/dev-notes/2026-09-11-neural-upscale/smoke-manifest.json TASKS.md
 git commit -m "feat(upscale): paired frozen-frame capture + G2 checks (determinism, alignment, orientation)"
 ```
