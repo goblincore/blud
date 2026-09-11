@@ -124,6 +124,14 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 > (its item 1 was R1). Both carry the CURRENT vs HISTORICAL doc map and the traps.
 > Everything below is the detail behind them.
 
+> **THE MARCH'S PIXEL-WASTE METRIC IS BROKEN, AND THAT IS THE FIRST THING TO
+> FIX.** `__sdfGame.occupancy()` returns BEFORE the discard, so inside overlapping
+> proxy boxes the giving-up fragment wins the depth test and reports "no flesh":
+> room 4 read 29,588 marched pixels and ZERO hits, with 1.0 mean steps on the miss
+> rays. Rooms with 3 bodies therefore price nothing. Rig:
+> `scripts/sdf-march-occupancy.sh`; write-up in PASSOFF-2 §2.1. Fix the reader
+> (post-discard hit flag) before trusting any pixel-waste number.
+
 > **THE MARCH'S STEP AXIS IS EXHAUSTED — measure before levering.** Every step
 > lever is banked (plain sphere tracing at omega 1.0, wound step 1.0, the secant
 > last step, footprint AA) or owner-observed dead (over-relaxation → box washes;
