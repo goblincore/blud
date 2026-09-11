@@ -70,8 +70,11 @@ traffic. Unmeasured on our GPU.)
   `i` = row offset, `j` = column offset, `c ∈ {r, g, b, coverage}`.
 - **Input sets:**
   - `rgb` (4 channels): `rgb` (zeroed where no flesh), `hit` (0/1).
-  - `aux` (11 channels): `rgb`, `hit`, linear view depth (0 where no hit),
-    view-space normal octahedral-encoded (2), albedo rgb (3), wound mask (1).
+  - `rgbd` (5 channels): `rgb`, `hit`, linear view depth (0 where no hit). The depth
+    comes free from the march target's alpha, linearized in the first pass:
+    `near·far / (far − d·(far − near))` (WebGPU [0, 1] clip depth, no reversed depth).
+  - *(amended 2026-09-11)* The richer `aux` set (normal, albedo, wound mask) moved to a
+    P3-prep decision — see §5.
 - **Normalization:** the model manifest carries a per-input-channel `scale` and
   `offset`, applied in the first pass. Output residuals are in the input's colour units.
 - **Weights are baked into generated WGSL as constants.** A different model is a
@@ -115,18 +118,22 @@ For output pixel `(X, Y)`: `x = ⌊X/2⌋, y = ⌊Y/2⌋, j = X mod 2, i = Y mod
 With all-zero weights and biases this reproduces today's nearest upscale **exactly**
 (the zero-model invariant used in tests).
 
-### 5. Aux inputs from the march
+### 5. Richer aux inputs (normal, albedo, wound) — deferred to P3-prep
 
-- The lit march material gains an **optional `mrtNode`** writing two extra RGBA16F
-  targets when the aux set is requested:
-  - aux A: `normalOct.xy`, `linearViewDepth`, `hit`
-  - aux B: `albedo.rgb`, `woundMask`
-- Byte budget: RGBA32F (16) + 2 × RGBA16F (8 + 8) = 32 — exactly the default limit.
-- The shading variables already exist in scope (`march.wgsl.ts`: `n` :3103/3121,
-  `albedo` :3174, `wm` :3130). The existing surface-MRT path (`sdfSurfaceMrtNodes`,
-  `zombie-gpu.ts:1253-1273`, `deferred-sdf.ts:241`) is the template.
-- **Without `?upscale` the march target and material are unchanged** (no MRT, same
-  target count).
+*(Amended 2026-09-11 while planning.)* Writing aux MRT targets from the lit march
+means every material that renders into the march target must write every
+attachment. The target is shared by per-body passes, chunks and several material
+variants, so a single material without the MRT would make its pipeline invalid.
+Getting that right is real work, and it only pays off if aux inputs beat `rgbd`.
+
+- P1/P2 use `rgb` and `rgbd`, which need **no change to the march**. Depth and hit
+  (the silhouette signal) are already in the march target.
+- P3-prep decides whether richer inputs are worth it, and picks the source: the lit
+  march with an optional `mrtNode` (template: `sdfSurfaceMrtNodes`,
+  `zombie-gpu.ts:1253-1273`), or the existing deferred G-buffer
+  (`deferred-surface.ts`: `albedoRoughness`, `normalMetalness`).
+- The shading variables exist in `march.wgsl.ts`: `n` (:3103/3121), `albedo` (:3174),
+  `wm` (:3130).
 
 ### 6. Integration and flags
 
@@ -140,21 +147,26 @@ New module directory `src/lab/sdf-zombie/webgpu/upscale/`:
 | `upscale-stage.ts` | three.js wiring: targets sized from input, materials, `render(renderer, inputs) → texture`, pass labels, dispose |
 
 - **`sdf-layer.ts`:** runs the stage after the march and hull passes, before the
-  composite (where the accumulation resolve runs, `sdf-layer.ts:1857-1874`); the
-  composite reads its output.
+  composite (where the accumulation resolve runs, `sdf-layer.ts:1857-1874`). The
+  composite reads the stage output by **rebinding the `accumTex` TextureNode's value**
+  and setting `accumOn`. The composite shader itself is unchanged, so the default path
+  stays bit-identical.
 - **`game-main.ts` boot flags** (via `boot-params.ts`, placed like the `?accum` block at
   `game-main.ts:1895-1916`; the scale is set through the game's own `sdfScale` variable,
   per b9fad129):
   - `?upscale=<s8|s16|s32|zero>` enables the stage and sets scale 0.5.
   - `?upscalelayout=<sp|dc>` (default `sp`).
-  - `?upscaleinputs=<rgb|aux>` (default `rgb`).
+  - `?upscaleinputs=<rgb|rgbd>` (default `rgb`).
   - `?upscaleseed=<int>` (default 1).
-- **`__sdfGame` seams:** `setUpscale({model, layout, inputs, seed} | null)`,
-  `upscaleInfo()` → `{on, model, layout, inputs, weightHash, inSize, outSize}`, and
-  readbacks of the stage output and the aux targets.
-- GPU pass labels `sdf:upscale:L<n>`, `sdf:upscale:shuffle` in `gpu-pass-timing.ts`.
-- **Frame hash:** keep every existing layer; add the upscaled layer when on (the
-  accumulation decision, `docs/dev-notes/2026-09-10-temporal-accumulation-frame-hash-DECISION.md`).
+- **`__sdfGame` seams:**
+  - `setUpscale({model, layout, inputs, seed} | null)` (enabling also sets scale 0.5).
+  - `upscaleInfo()` → `{on, model, layout, inputs, seed, weightHash, inSize, outSize, near, far}`.
+  - `upscaleSelfCheck({compareLayouts})` compares the GPU output with the CPU twin
+    in-page and returns statistics only.
+- GPU pass labels: `sdf:upscale:<pass>` via `setPassLabel`.
+- **Frame hash** (upscaled layer added when on, per
+  `docs/dev-notes/2026-09-10-temporal-accumulation-frame-hash-DECISION.md`) moves to P5.
+  Nothing in P1/P2 records hashes with the stage on.
 
 ### 7. Paired capture (training data)
 
@@ -162,10 +174,13 @@ Script `scripts/upscale-pairs-capture.mjs`, built from `scripts/sdf-accum-conver
 (already renders one frozen state at scales 1.0 and 0.5 via `?frozen=1&vhs=off`,
 `freeze`, `setPose`, `step`, `setSdfScale`, pinned clocks).
 
-- Per frame, same frozen simulation state:
-  - **input:** scale 0.5, fields off, lit march target + aux A + aux B.
+- Per frame, same frozen simulation state (`setRenderLock(true)` makes `step(n)`
+  pure re-renders):
+  - **input:** scale 0.5, fields off, lit march target (rgb + clip depth).
   - **target:** scale 1.0, fields off, lit march target at 800×600 — the native
     progressive reference.
+  - The manifest records camera `near`/`far`, so depth can be linearized exactly as
+    the shader does.
 - Readbacks are float (`readRenderTargetPixelsAsync(..., textureIndex)`), with row-stride
   padding removed (`game-main.ts:7887-7909`). **Row 0 = top** in saved files.
 - Storage: `.npy` (`<f4`, shape `H×W×C`) per buffer + `manifest.json` (checkout SHA,
@@ -176,8 +191,11 @@ Script `scripts/upscale-pairs-capture.mjs`, built from `scripts/sdf-accum-conver
 
 ## Gates
 
-**Default path:** without `?upscale`, frame hashes are bit-identical to before this work,
-and all existing tests and `npm run build` pass.
+**Default path:** without `?upscale`, the rendered frame is unchanged. This is
+established **by construction** rather than by a before/after GPU hash:
+- `COMPOSITE_WGSL` is untouched, and `accumTex` stays bound to `accumNext`.
+- No stage passes run (pinned by a fake-renderer pass-sequence test).
+- All existing tests and `npm run build` pass.
 
 **G1 — cost (end of P1).** Bench legs in `scripts/sdf-game-bench.mjs`, room 4, median
 of 3, repeat-spread section read first:
@@ -186,8 +204,7 @@ of 3, repeat-spread section read first:
   - `native-progressive`: scale 1.0, fields off
   - `shipped-default`: today's game
   - `half-nearest`: scale 0.5, fields off
-  - `half-nearest-auxmrt`: the same, with the aux MRT written (prices the MRT alone)
-- **Ladder:** `s8/s16/s32 × sp/dc` with `rgb` inputs, plus `s16 × sp/dc` with `aux`
+- **Ladder:** `s8/s16/s32 × sp/dc` with `rgb` inputs, plus `s16 × sp/dc` with `rgbd`
   inputs (random weights — cost only, never quality).
 - **Headroom** `H = frame(native-progressive) − frame(half-nearest)`.
 - **Pass:** at least one ladder leg has `frame ≤ frame(half-nearest) + 0.5·H`, beyond
@@ -195,17 +212,27 @@ of 3, repeat-spread section read first:
 - If `native-progressive` p50 sits within 0.2 ms of a refresh-interval multiple, report it
   as a possible vsync bound and re-measure in a heavier room before judging.
 
-**G1-parity (P1):** in the browser, for each ladder model:
-- `sp` vs `dc` max abs difference ≤ 2e-3 on covered pixels, and identical coverage.
-- GPU vs CPU twin on a fixture ≤ 2e-3.
-- The zero model is bit-identical in coverage/depth to a nearest upscale.
+**G1-parity (P1):** in the browser, on a staged frozen frame, for each ladder model and
+input set:
+- **GPU vs CPU twin, each layout.** The twin emulates the GPU's RGBA16F feature
+  storage. Colour relative difference ≤ 2e-3 on pixels covered in both, zero depth
+  mismatches, and zero coverage mismatches outside the ±4e-3 band around the coverage
+  threshold. Half-float rounding legitimately flips decisions inside that band.
+- **`sp` vs `dc`:** colour relative difference ≤ 2e-3; coverage mismatches ≤ 0.5% of
+  pixels.
+- **The zero model:** coverage and depth identical to the twin (itself identical to a
+  nearest upscale by unit test), colour ≤ 1e-6.
 
 **G2 — pairs (end of P2).**
 - **Determinism:** rendering the same state twice at the same scale gives max abs
   difference ≤ 1e-6 and identical coverage.
-- **Alignment:** for projected body anchors, the 800×600 anchor pixel lies in the 2×2
-  block of the 400×300 anchor pixel.
-- **Orientation:** the saved files and the presented shot agree (no Y flip; see da9aa04b).
+- **Alignment:** with a staged body, the flesh-coverage centroid of the 400×300 input
+  (×2, in output pixels) lies within 0.5 output px of the 800×600 target's centroid.
+  Coverage IoU (target downsampled by 2×2 majority) is ≥ 0.85.
+- **Orientation:** readbacks preserve texel row order (no flip in the capture code).
+  With the camera pitched so the body sits below screen centre, the coverage centroid
+  row is > H/2, confirming row 0 = top (the composite's convention, `sdf-layer.ts`
+  `TEMPORAL_ACCUM_WGSL` note). The manifest records it.
 - A smoke dataset of 3 sequences × 20 frames round-trips through a Python `.npy` loader.
 
 ## Testing strategy
@@ -229,8 +256,8 @@ of 3, repeat-spread section read first:
 | Phase | Content | Plan |
 |---|---|---|
 | **P1** | Stage, model, CPU twin, WGSL both layouts, flags, parity script, bench legs → **G1** | first plan |
-| **P2** | Aux MRT, capture script, npy/manifest, determinism/alignment checks, smoke set → **G2** | first plan |
-| P3 | Training: PyTorch (device-agnostic CUDA/MPS; local M3 for overfit/sanity, **RunPod** for volume), ICNR init, L1 + gradient loss, `rgb` vs `aux`, export to model manifest, PyTorch↔CPU-twin parity | own plan, after G1 picks sizes |
+| **P2** | Capture script, npy/manifest, determinism/alignment/orientation checks, smoke set → **G2** | first plan |
+| P3 | Training: PyTorch (device-agnostic CUDA/MPS; local M3 for overfit/sanity, **RunPod** for volume), ICNR init, L1 + gradient loss, `rgb` vs `rgbd` (+ the §5 richer-aux decision), export to model manifest, PyTorch↔CPU-twin parity | own plan, after G1 picks sizes |
 | P4 | Full-res guide: outer shell hull rasterized at 800×600 as a coverage input to the per-output-pixel step | own plan |
 | P5 | Live play build with trained weights; stacking (fields on top, accumulation after); owner verdict vs native progressive | own plan |
 | later | Temporal reconstruction (VESPCN-style), only if single-frame flicker dominates | — |
