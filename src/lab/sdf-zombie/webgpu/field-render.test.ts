@@ -444,3 +444,56 @@ describe('fieldHeldNeighboursInteger — the form the composite shader can evalu
     }
   });
 });
+
+describe('fieldHeldNeighboursInteger — the nf = 2 equivalence the shader relies on', () => {
+  // WHY THIS IS THE REAL GATE for the composite's generalisation. The shader
+  // cannot be unit-tested without a GPU, so its correctness rests on the pure
+  // derivation it transcribes. The shipped two-field expression was
+  // `base = tRow - parity` with tRow = floor(outRow / 2); if the generalised
+  // integer form does not reduce to EXACTLY that at fields = 2, then turning the
+  // field count into a uniform silently changes the shipped look — the one thing
+  // the change must not do.
+  const shipped = (outRow: number, parity: number) => Math.floor(outRow / 2) - parity;
+
+  it('reduces to the shipped two-field expression on every HELD row', () => {
+    // HELD rows only, and that restriction is the finding, not a convenience.
+    // The shader evaluates this form ONLY in the `else` branch — the held case —
+    // so fresh rows are unreachable here. On those unreachable rows the two forms
+    // genuinely differ (measured: outRow 3 / parity 1 gives 1 vs 0), which is
+    // harmless in the shader and would have been a red herring in a test. Pinning
+    // the reachable set is therefore the correct gate: it is exactly the set
+    // whose behaviour must not change.
+    let checked = 0;
+    for (let outRow = 0; outRow < 600; outRow++) {
+      for (const parity of [0, 1]) {
+        const held = outRow % 2 !== parity;
+        if (!held) continue;
+        const dimsY = 300;
+        const { above } = fieldHeldNeighboursInteger(outRow, parity, 2);
+        const clamped = Math.max(0, Math.min(above, dimsY - 1));
+        const shippedClamped = Math.max(0, Math.min(shipped(outRow, parity), dimsY - 1));
+        expect(clamped).toBe(shippedClamped);
+        checked++;
+      }
+    }
+    // A filter that quietly matched nothing would pass silently.
+    expect(checked).toBeGreaterThan(500);
+  });
+
+  it('brackets the held row: above and below are consecutive and straddle outRow', () => {
+    // The property that has to hold for ANY field count — this is what makes the
+    // interpolation bracket the held row rather than merely sit near it.
+    for (const fields of [2, 3, 4]) {
+      for (let outRow = 0; outRow < 200; outRow++) {
+        for (let parity = 0; parity < fields; parity++) {
+          // Only HELD rows reach the neighbour form in the shader.
+          if (outRow % fields === parity) continue;
+          const { above, below } = fieldHeldNeighboursInteger(outRow, parity, fields);
+          expect(below).toBe(above + 1);
+          expect(above * fields + parity).toBeLessThanOrEqual(outRow);
+          expect(below * fields + parity).toBeGreaterThan(outRow);
+        }
+      }
+    }
+  });
+});

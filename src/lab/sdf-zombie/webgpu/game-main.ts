@@ -1810,6 +1810,14 @@ async function main() {
   // docs/dev-notes/2026-09-09-perf-spikes/bodies-style-handoff.md
   sdfLayer.setFieldStyle('bodies');
   sdfLayer.setFieldComb(0.6);
+  // DEEPER INTERLACE FIELDS (plan 2026-09-10, step 2). `?fields=N` selects the
+  // divisor: 2 is the shipped half-height field, 3 and 4 march a third or a
+  // quarter of the rows (owner-approved on screen, where they must be judged).
+  // Absent is NOT zero — the boot-param rule: this reads the RAW string, and a
+  // missing parameter must leave the shipped 2 alone rather than pin a divisor
+  // nobody asked for. A bad value degrades to 2, and the shader clamps again.
+  const fieldsBoot = parseIntParam(new URLSearchParams(location.search).get('fields'), { min: 2, max: 8 });
+  if (fieldsBoot !== null) sdfLayer.setFieldCount(fieldsBoot);
   // Headless A/B seams (2026-08-27 hull-holes diagnosis): ship defaults stay
   // ON/ON; the driver flips these between captures. Mirrors the lab's
   // __sdfLab.setOccluder.
@@ -8244,6 +8252,13 @@ function performBenchAction(a: BenchAction): void {
     setFieldMode: (on: boolean) => sdfLayer.setFieldMode(on),
     get fieldMode() { return sdfLayer.fieldMode; },
     setFieldComb: (v: number) => sdfLayer.setFieldComb(v),
+    /** THE INTERLACED FIELD DIVISOR (deeper interlace fields, 2026-09-10).
+     *  2 = shipped; 3 and 4 are owner-approved on screen, which is where they
+     *  must be judged — the arithmetic is not the decision. Returns what it
+     *  ACTUALLY set, because `frame` refuses anything but 2 (its weave still
+     *  hardcodes two fields) and a silent no-op would read as success. */
+    setFieldCount: (n: number) => sdfLayer.setFieldCount(n),
+    get fieldCount() { return sdfLayer.fieldCount; },
     get fieldComb() { return sdfLayer.fieldComb; },
     setActorCull(on: boolean) { actorCullEnabled = on; if (!on) lastSeenMs.clear(); },
     actorCull: () => ({ enabled: actorCullEnabled, ...cullCounts }),

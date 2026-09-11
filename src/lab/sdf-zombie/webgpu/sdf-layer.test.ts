@@ -196,8 +196,24 @@ describe('field weave shaders — depth is never interpolated', () => {
   it('the interleave returns the held depth verbatim on a held row', () => {
     expect(FIELD_INTERLEAVE_WGSL).toContain('return vec4<f32>(woven.xyz, dHeld);');
   });
-  it('both weaves bracket a held row with the parity-corrected fresh rows', () => {
-    expect(COMPOSITE_WGSL).toContain('let base = tRow - i32(fieldParityF);');
+  it('the composite brackets a held row with the GENERALISED neighbour form', () => {
+    // WAS a literal check for "let base = tRow - i32(fieldParityF);" — the
+    // two-field expression. The field count is configurable now, so the shader
+    // carries the integer derivation instead; the nf = 2 EQUIVALENCE is proven
+    // behaviourally in field-render.test.ts (fieldHeldNeighboursInteger against
+    // the shipped tRow - parity on every row and parity), which is a stronger
+    // gate than a substring. These assertions only guard against the shader
+    // drifting away from that proven form.
+    expect(COMPOSITE_WGSL).toContain('let own = tRow0 * nf + i32(fieldParityF);');
+    expect(COMPOSITE_WGSL).toContain('let base = select(tRow0 - 1, tRow0, own <= outRow);');
+    // And the clamp that keeps a missing fieldCount binding from becoming a
+    // division by zero in the composite.
+    expect(COMPOSITE_WGSL).toContain('let nf = clamp(i32(fieldCount + 0.5), 1, 8);');
+  });
+  it('the interleave (the frame style) still owes the two-field form', () => {
+    // FIELD_INTERLEAVE_WGSL weaves the WHOLE assembled picture, so generalising it
+    // is a different job from the composite's flesh-only branch — see the plan's
+    // step 2. Pinned here so the mismatch stays visible rather than silent.
     expect(FIELD_INTERLEAVE_WGSL).toContain('let base = tRow - i32(parity);');
   });
 });

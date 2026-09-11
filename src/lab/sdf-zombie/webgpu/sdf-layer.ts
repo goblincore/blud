@@ -265,7 +265,10 @@ export const COMPOSITE_WGSL = /* wgsl */ `fn sdfComposite(
   fieldMode: f32,
   fieldParityF: f32,
   fieldComb: f32,
-  outHeight: f32
+  outHeight: f32,
+  // LAST, deliberately: these bind POSITIONALLY, so adding an input means adding
+  // it here AND binding it in the same commit (the file's own "meltCfg rule").
+  fieldCount: f32
 ) -> vec4<f32> {
   let dims = vec2<f32>(textureDimensions(layerTex, 0));
   var st = texCoord;
@@ -279,9 +282,17 @@ export const COMPOSITE_WGSL = /* wgsl */ `fn sdfComposite(
   if (fieldMode > 0.5) {
     let col = clamp(i32(floor(st.x * dims.x)), 0, i32(dims.x) - 1);
     let outRow = i32(floor(st.y * outHeight));
-    let tRow = clamp(outRow / 2, 0, i32(dims.y) - 1);
+    // FIELD COUNT IS CLAMPED, NOT TRUSTED. These inputs bind POSITIONALLY, so a
+    // missing or zero binding would otherwise be a DIVISION BY ZERO inside the
+    // composite — broken rendering that no unit test here can catch without a
+    // GPU. Clamped, a bad binding degrades to "no interlace" rather than to NaN,
+    // and the frame hash reports a mismatch instead of an empty screen.
+    let nf = clamp(i32(fieldCount + 0.5), 1, 8);
+    // Integer division: outRow >= 0, so this is a true floor for every nf.
+    let tRow0 = outRow / nf;
+    let tRow = clamp(tRow0, 0, i32(dims.y) - 1);
     var fieldTexel: vec4<f32>;
-    if ((outRow % 2) == i32(fieldParityF)) {
+    if ((outRow % nf) == i32(fieldParityF)) {
       fieldTexel = textureLoad(layerTex, vec2<i32>(col, tRow), 0);
     } else {
       // The row this frame did not march. fieldComb 1 = hold last frame's
@@ -289,10 +300,18 @@ export const COMPOSITE_WGSL = /* wgsl */ `fn sdfComposite(
       // feature; 0 = interpolate vertically from THIS frame's field instead,
       // trading vertical detail for no comb.
       let held = textureLoad(prevFieldTex, vec2<i32>(col, tRow), 0);
-      // The two FRESH rows bracketing this held row. Half-target row r is
-      // output row 2r+parity, so held row 2r+1 (parity 0) sits between r
-      // and r+1, but held row 2r (parity 1) sits between r-1 and r.
-      let base = tRow - i32(fieldParityF);
+      // The two FRESH rows bracketing this held row — fieldHeldNeighboursInteger
+      // from field-render.ts, which PROVES this integer form equals the intended
+      // float one on every held row at fields 2, 3 and 4. THE INTEGER FORM IS
+      // THE CONTRACT: WGSL's / and % truncate toward zero, so the float
+      // derivation ceil((y - field)/fields) is wrong wherever y < field — a
+      // silently shifted scanline rather than a visible error.
+      //
+      // At nf = 2 this reduces EXACTLY to the shipped "tRow - i32(fieldParityF)":
+      // "own <= outRow" is then always true, so base = tRow, and the clamps below
+      // reproduce the original edges including the -1 case at tRow = 0.
+      let own = tRow0 * nf + i32(fieldParityF);
+      let base = select(tRow0 - 1, tRow0, own <= outRow);
       let a = textureLoad(layerTex, vec2<i32>(col, clamp(base, 0, i32(dims.y) - 1)), 0);
       let b = textureLoad(layerTex, vec2<i32>(col, clamp(base + 1, 0, i32(dims.y) - 1)), 0);
       // DEPTH IS NEVER INTERPOLATED (same rule as sdfFieldInterleave): the
@@ -489,6 +508,27 @@ export interface SdfLayer {
   /** 1 = hold the stale field (full comb); 0 = interpolate it away. */
   setFieldComb(v: number): void;
   readonly fieldComb: number;
+  /**
+   * THE INTERLACED FIELD DIVISOR (deeper interlace fields, 2026-09-10). 2 is the
+   * shipped half-height field; 3 and 4 march a third or a quarter of the rows.
+   *
+   * The look gate on h/3 and h/4 is owner-approved on the understanding that the
+   * comb period moves from 2 rows to 3-4 rows, so this is a LOOK lever that must
+   * be judged on screen — the arithmetic here is not the decision.
+   *
+   * Clamped to [2, 8]. 1 is refused rather than treated as "no interlace": a
+   * divisor of 1 would march every row while the composite still ran its FIELD
+   * branch, which is a different thing from `setFieldStyle('off')` and not a
+   * configuration anyone asked for. The shader clamps its own copy too, because
+   * the inputs bind positionally and a bad binding must degrade rather than
+   * divide by zero.
+   *
+   * `frame` (the whole-picture weave) is still TWO-FIELD ONLY — it hardcodes
+   * `% 2` / `/ 2` in FIELD_INTERLEAVE_WGSL. Rather than leave that silent, the
+   * setter REFUSES fields > 2 for that style and reports what it did.
+   */
+  setFieldCount(n: number): number;
+  readonly fieldCount: number;
   readonly willHold: boolean;
   readonly halfRate: boolean;
   setHalfRateMode(n: number): void;
@@ -609,6 +649,13 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   const uCompositeField = uniform(0); // 'sdf': the flesh-only weave
   const uFieldParity = uniform(0);
   const uFieldComb = uniform(1);
+  /** The interlaced field divisor: 2 = the shipped half-height field. Clamped in
+   *  the shader as well, so a zero here degrades to no-interlace rather than to a
+   *  division by zero in the composite. */
+  const uFieldCount = uniform(2);
+  /** The live divisor. `FIELD_COUNT`-equivalent default is 2 — the shipped
+   *  half-height field, so an untouched page is bit-identical. */
+  let fieldCount = 2;
   const uOutHeight = uniform(1);
   // Shared with the composite: both convert texCoord->st the same way, so
   // the interleave cannot pick rows in a different orientation.
@@ -893,6 +940,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     fieldParityF: uFieldParity,
     fieldComb: uFieldComb,
     outHeight: uOutHeight,
+    fieldCount: uFieldCount,
   }) as unknown as { xyz: unknown; w: unknown };
 
   const quadMat = new MeshBasicNodeMaterial();
@@ -929,7 +977,10 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     // 'sdf' halves the MARCH target (the composite weaves it). 'frame' leaves
     // the march at full height and halves the whole-frame buffer instead —
     // halving both would field twice and lose half the vertical detail.
-    const h = (fieldStyle === 'sdf' || fieldStyle === 'bodies') ? fieldTargetHeight(hFull) : hFull;
+    // `fieldCount` rides through so h/3 and h/4 actually land on a third or a
+    // quarter of the rows. The DEFAULT is 2, so an untouched page takes exactly
+    // the shipped path.
+    const h = (fieldStyle === 'sdf' || fieldStyle === 'bodies') ? fieldTargetHeight(hFull, fieldCount) : hFull;
     // The row count the weave interlaces on. 'sdf'/'bodies' weave the MARCH
     // target, whose grid is sdfScale'd; 'frame' weaves fieldFull, which is
     // output-sized. Using the scaled count for 'frame' at any scale but 1
@@ -945,7 +996,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     // polygonal pass has always rendered at full content resolution and must
     // keep doing so, halved only in the field axis.
     const fw = Math.max(1, fullW);
-    const fh = fieldStyle === 'frame' ? fieldTargetHeight(fullH) : 1;
+    const fh = fieldStyle === 'frame' ? fieldTargetHeight(fullH, fieldCount) : 1;
     fieldFull.setSize(fw, fh);
     // fieldPrev retains whichever buffer the style actually fields: the march
     // target in 'sdf', the whole-frame buffer in 'frame'. Sizing it to the
@@ -1467,6 +1518,22 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     get fieldMode() { return fieldMode; },
     setFieldComb(v) { uFieldComb.value = Math.max(0, Math.min(1, v)); },
     get fieldComb() { return uFieldComb.value; },
+    setFieldCount(n) {
+      // 'frame' weaves the whole assembled picture and still hardcodes two
+      // fields. Refusing is the honest option: silently leaving it at 2 would
+      // make `setFieldCount(4)` a no-op that reports success.
+      const wanted = Math.max(2, Math.min(8, Math.floor(n)));
+      if (fieldStyle === 'frame') return fieldCount;
+      if (wanted === fieldCount) return fieldCount;
+      fieldCount = wanted;
+      uFieldCount.value = fieldCount;
+      // The TARGET HEIGHT and the seam move with the divisor. Both the march
+      // target and (for 'bodies') fieldMesh must move together, or the flesh and
+      // the bone weave on different grids — the defect 'bodies' was fixed for.
+      resize();
+      return fieldCount;
+    },
+    get fieldCount() { return fieldCount; },
     get willHold() { return isHoldFrame(frameIndex, halfRate, forceFreshFrame); },
     get halfRate() { return halfRate; },
     setHalfRateMode(n) { halfRateMode = n === 0 ? 0 : 1; },

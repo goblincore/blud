@@ -564,3 +564,41 @@ re-diagnose it, and should not assume it was caused by anything they did.
    (wound look, probe tuning) requires a re-baseline — that is a real cost, and it
    is the reason the plan asks for first-divergent-frame + per-region diff counts
    rather than a bare number.
+
+
+## Deeper interlace fields — step 1 + 2 DONE (2026-09-10, later)
+
+The `fields` divisor is now a live uniform. `COMPOSITE_WGSL` takes `fieldCount`
+as its LAST input (positional binding), **clamped in the shader**
+(`clamp(i32(fieldCount + 0.5), 1, 8)`) so a missing or zero binding degrades to
+no-interlace instead of dividing by zero in the composite — the hazard the plan
+exists to avoid. `setFieldCount(n)` / `?fields=N` / `__sdfGame.setFieldCount`
+land with it, both target heights follow the divisor, and `'frame'` (whose weave
+still hardcodes `% 2`) **REFUSES** values above 2 rather than silently no-opping.
+
+**PROVEN, live:** `fields=2` → 800x300 (shipped), `fields=3` → **800x200**,
+`fields=4` → **800x150**, all with `nonFinite 0` and non-empty output; the clamp
+holds; `'frame'` returns 2 and holds 2; and the round trip through h/3 genuinely
+changes the target (so the lever is not inert).
+
+**NOT PROVEN — and this is the honest headline: the `fields = 2` BIT-IDENTITY
+CHECK DID NOT RUN.** It was the point of the exercise, and the probe could not
+establish it, because its own CONTROL failed: reading the march target twice with
+**no field-count change at all**, two steps apart, in a render-locked scene,
+returns DIFFERENT digests. A test whose control moves cannot conclude anything, so
+the identities above are what stand and the bit-identity claim is still open.
+Same-session reads are only bit-stable with NO step between them; stepping is
+enough to move the target even at fixed parity.
+
+**Method note, because the probe lied twice before it told the truth:** its first
+cut compared `fields=2` hashes ACROSS two boots — worthless, since two boots
+disagree at `fields=2` anyway (the two-state branch). Its second compared across
+field parities, because `demoScenario` steps a frame and `fieldParity(frameIndex)`
+flips. Both produced confident FAILs that meant nothing. **A cross-boot hash
+comparison is never evidence in this project yet.**
+
+**Measurement is deferred, not done.** One contaminated attempt at
+`BENCH_PRELUDE` h/3 returned `sdf:march` 1.13 ms (room 3) beside 8.75 ms (room 4)
+— a room-3 pass row that cannot be real, i.e. the census drift again. No number
+here is worth quoting. **Re-measure on a quiet machine, reading `sdf:march`
+(the one true per-frame row) against `fields=2`.**

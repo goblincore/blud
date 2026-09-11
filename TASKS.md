@@ -258,10 +258,22 @@ probeDyn drifted too). **Stage 1 fixed the census-visible part of the drift; thi
 is the part it could not see — two repeats of one leg do not just COUNT different
 things, they RENDER different frames.**
 
-**NEXT, in order:** (1) the deeper-interlace `COMPOSITE_WGSL` generalisation —
-plan at `docs/superpowers/plans/2026-09-10-deeper-interlace-fields.md`, pure math
-already done and tested, **needs a GPU round trip** because a bad binding there
-is division by zero in the composite; (2) the census-diff demo repeatability
+**[~] DEEPER INTERLACE — steps 1+2 DONE, measurement DEFERRED (2026-09-10).**
+`fieldCount` is a live uniform (LAST input, shader-clamped so a bad binding
+degrades to no-interlace rather than dividing by zero in the composite);
+`setFieldCount(n)` / `?fields=N` / `__sdfGame.setFieldCount` land with it; both
+target heights follow the divisor; `'frame'` REFUSES >2 rather than no-opping.
+**Proven live:** h/2 → 800x300 (shipped), h/3 → **800x200**, h/4 → **800x150**,
+all `nonFinite 0` and non-empty; the round trip genuinely changes the target.
+**NOT proven: the `fields = 2` bit-identity check could not run** — its control
+failed (two reads with NO field change, two steps apart, render-locked, return
+different digests), so the claim is still open. **Measurement deferred:** one
+contaminated attempt gave `sdf:march` 1.13 ms (r3) beside 8.75 (r4) — the census
+drift again; no number is quoteable. Re-measure on a QUIET machine against
+`fields=2`, reading `sdf:march`.
+
+**NEXT, in order:** (1) [DONE above — steps 1+2; steps 3 (history ring) and 4 (measure + owner look)
+remain, see the deeper-interlace block]; (2) the census-diff demo repeatability
 gate (`docs/superpowers/plans/2026-09-10-deterministic-demo-recordings.md`) —
 three of six bench windows this session were unusable; (3) R1, widening the
 gather's 7-workgroup dispatch, now backed by the measured split; (4) far-body
