@@ -37,6 +37,7 @@ import { wgslFn, texture, uv, vec4, uniform } from 'three/tsl';
 import { fieldParity, fieldTargetHeight, fieldJitterNdcY } from './field-render';
 import { createConeUniforms, createDepthPreUniforms, type ConeSource, type DepthPreSource, type LastFrameSource, type OccluderSource, type PrevSource } from './zombie-gpu';
 import { TEMPORAL_START_DEFAULTS, temporalMarginForMotion } from './temporal-start';
+import { TEMPORAL_ACCUM_DEFAULT_ALPHA, TEMPORAL_ACCUM_CONVERGED_FRAMES, accumAlpha, accumJitter } from './temporal-accum';
 import { setPassLabel } from './gpu-pass-timing';
 
 // ---------------------------------------------------------------------------
@@ -297,7 +298,9 @@ export const COMPOSITE_WGSL = /* wgsl */ `fn sdfComposite(
   prevFieldTex2: texture_2d<f32>,
   heldInv1: mat4x4<f32>,
   heldInv2: mat4x4<f32>,
-  heldReproject: f32
+  heldReproject: f32,
+  accumTex: texture_2d<f32>,
+  accumOn: f32
 ) -> vec4<f32> {
   let dims = vec2<f32>(textureDimensions(layerTex, 0));
   var st = texCoord;
@@ -461,7 +464,19 @@ export const COMPOSITE_WGSL = /* wgsl */ `fn sdfComposite(
     outDepth = clamp(clipCur.z / clipCur.w, 0.0, 0.9999);
   }
   let c = clamp(vec2<i32>(floor(st * dims)), vec2<i32>(0, 0), vec2<i32>(dims) - vec2<i32>(1, 1));
-  let texel = textureLoad(layerTex, c, 0);
+  // TEMPORAL ACCUMULATION (2026-09-10): when on, the flesh being composited is
+  // the reconstructed OUTPUT-RESOLUTION history rather than this frame's raw
+  // low-res march. The polygonal passes below are untouched — the level and the
+  // viewmodel stay crisp, which is the whole reason this happens before the
+  // composite instead of after it. accumOn 0 is bit-identical to the shipped
+  // path (one extra texture binding, never fetched).
+  var srcTexel = textureLoad(layerTex, c, 0);
+  if (accumOn > 0.5) {
+    let adims = vec2<f32>(textureDimensions(accumTex, 0));
+    let ac = clamp(vec2<i32>(floor(st * adims)), vec2<i32>(0, 0), vec2<i32>(adims) - vec2<i32>(1, 1));
+    srcTexel = textureLoad(accumTex, ac, 0);
+  }
+  let texel = srcTexel;
   // The target is cleared with alpha 1.0, which is the far plane and means
   // "the march discarded here". Without this the clear colour would paint over
   // the polygonal scene everywhere the bodies are not.
@@ -470,7 +485,125 @@ export const COMPOSITE_WGSL = /* wgsl */ `fn sdfComposite(
   return texel;
 }`;
 
+/**
+ * TEMPORAL ACCUMULATION resolve (plan docs/superpowers/plans/2026-09-10-temporal-accumulation.md).
+ *
+ * WHY, in one paragraph. The march can run at `sdfScale` 0.5 for ~8 ms of a
+ * 16.6 ms frame, but a half-scale march upsampled by a nearest tap is, in the
+ * owner's words, "too pixelated and aliased". This pass reconstructs it: the
+ * marching camera is JITTERED by a sub-pixel offset each frame, so every output
+ * pixel reads a DIFFERENT low-res texel over time, and accumulating those at
+ * OUTPUT resolution turns a quarter of the samples per frame into a supersampled
+ * image. Accumulating into the LOW-RES grid instead would average the
+ * sub-positions into the same texels — a box blur with no new detail — so the
+ * history here is output-sized and the jitter is the feature, not a detail.
+ *
+ * FLESH ONLY, and before the composite. The polygonal level and the viewmodel
+ * must stay crisp (that is what field style 'bodies' exists for), so nothing
+ * here ever sees the composited image.
+ *
+ * v1 IS CAMERA-ONLY, ON PURPOSE. No object motion vectors, no validity test, no
+ * neighbourhood clamping: the owner has pre-accepted ghosting ("some ghosting is
+ * not a big deal since it adds to the degraded CRT look"), and each of those is a
+ * measurable follow-up rather than a prerequisite. What it does NOT accept is
+ * shimmer, which is what the still-camera convergence gate measures.
+ *
+ * ONE GUARD WORTH KEEPING: the history is only blended where the CURRENT frame
+ * also has flesh (alpha < 1). Without it a body that moved would leave its
+ * accumulated silhouette painted over the background — the one ghost that reads
+ * as a bug rather than as CRT wear.
+ *
+ * No comments inside the PARAMETER LIST: three's wgslFn parser reads every
+ * word-colon-word pair between the parens as an input, comments included, and a
+ * phantom input silently breaks the pipeline (2026-09-10, pinned by
+ * sdf-layer.test.ts). (And no backticks anywhere in here — one breaks the
+ * enclosing TypeScript template literal. Both traps were hit writing this.)
+ */
+export const TEMPORAL_ACCUM_WGSL = /* wgsl */ `fn temporalAccum(
+  curTex: texture_2d<f32>,
+  histTex: texture_2d<f32>,
+  texCoord: vec2<f32>,
+  curInvVp: mat4x4<f32>,
+  prevVp: mat4x4<f32>,
+  alpha: f32
+) -> vec4<f32> {
+  let curDims = vec2<f32>(textureDimensions(curTex, 0));
+  let outDims = vec2<f32>(textureDimensions(histTex, 0));
+  let st = texCoord;
+
+  // THIS FRAME'S SAMPLE — BILINEAR, and that is the whole ballgame.
+  //
+  // A NEAREST fetch was the first version and it CANNOT work, measured: a
+  // sub-pixel jitter on a nearest reconstruction does not move the sample by a
+  // sub-pixel, it flips WHICH low-res texel the output pixel reads — a two-pixel
+  // jump at sdfScale 0.5. Accumulating those gives a two-pixel edge smear, not
+  // finer detail: gate 1 read 5-7 mean 8-bit levels from the full-scale render
+  // while the raw low-res march was 0.9, with sharpness UNCHANGED (so it was not
+  // a blur — it was quantised displacement).
+  //
+  // Bilinear places each sample at its true sub-pixel position with the right
+  // weight, which is what lets differently-jittered frames carry DIFFERENT
+  // information into the same output pixel. The target is NearestFilter, so the
+  // four taps are gathered by hand: filtering depth would be wrong anyway (a
+  // blended depth describes no surface), so only the COLOUR is interpolated and
+  // the coverage/depth comes from the nearest tap.
+  let f = st * curDims - vec2<f32>(0.5, 0.5);
+  let i0 = vec2<i32>(floor(f));
+  let fr = f - vec2<f32>(i0);
+  let maxI = vec2<i32>(curDims) - vec2<i32>(1, 1);
+  let a00 = textureLoad(curTex, clamp(i0, vec2<i32>(0, 0), maxI), 0);
+  let a10 = textureLoad(curTex, clamp(i0 + vec2<i32>(1, 0), vec2<i32>(0, 0), maxI), 0);
+  let a01 = textureLoad(curTex, clamp(i0 + vec2<i32>(0, 1), vec2<i32>(0, 0), maxI), 0);
+  let a11 = textureLoad(curTex, clamp(i0 + vec2<i32>(1, 1), vec2<i32>(0, 0), maxI), 0);
+  // Coverage first: a tap that has no surface contributes no colour, and the
+  // weights are renormalised over the taps that do. Without this a body's edge
+  // would drag the far sentinel's colour (a cleared texel) into the flesh.
+  let w00 = (1.0 - fr.x) * (1.0 - fr.y) * select(0.0, 1.0, a00.w < 1.0);
+  let w10 = fr.x * (1.0 - fr.y) * select(0.0, 1.0, a10.w < 1.0);
+  let w01 = (1.0 - fr.x) * fr.y * select(0.0, 1.0, a01.w < 1.0);
+  let w11 = fr.x * fr.y * select(0.0, 1.0, a11.w < 1.0);
+  let wSum = w00 + w10 + w01 + w11;
+  let nearIdx = clamp(vec2<i32>(floor(st * curDims)), vec2<i32>(0, 0), maxI);
+  var cur = textureLoad(curTex, nearIdx, 0);
+  if (wSum > 1e-5) {
+    let rgb = (a00.xyz * w00 + a10.xyz * w10 + a01.xyz * w01 + a11.xyz * w11) / wSum;
+    // DEPTH/COVERAGE FROM A SINGLE TAP, never a blend (the repo pins this rule for
+    // the weave): the reprojection below unprojects it, and a mixed depth
+    // describes a surface that exists nowhere.
+    cur = vec4<f32>(rgb, cur.w);
+  }
+
+  // Nothing marched here: carry the sentinel through so the composite discards
+  // and the polygonal scene shows. Deliberately NOT "keep the history" — see the
+  // silhouette-ghost note above.
+  if (cur.w >= 1.0) { return cur; }
+
+  // BACKWARD REPROJECTION: where was the surface NOW at this pixel, last frame?
+  // Unproject this pixel's OWN current depth with the current camera, project it
+  // with the previous frame's camera, read the history there. (The half-rate C2
+  // path reprojected forward instead, unprojecting with the HELD camera and
+  // projecting with the current one; that works when the source and destination
+  // are the same buffer, which a ping-pong history is not.)
+  let ndc = vec2<f32>(st.x * 2.0 - 1.0, 1.0 - st.y * 2.0);
+  let world = curInvVp * vec4<f32>(ndc, cur.w, 1.0);
+  let clipPrev = prevVp * (world / world.w);
+  if (clipPrev.w <= 0.0) { return cur; }
+  let ndcPrev = clipPrev.xy / clipPrev.w;
+  let stPrev = vec2<f32>((ndcPrev.x + 1.0) * 0.5, (1.0 - ndcPrev.y) * 0.5);
+  if (stPrev.x < 0.0 || stPrev.x > 1.0 || stPrev.y < 0.0 || stPrev.y > 1.0) { return cur; }
+  let histIdx = clamp(vec2<i32>(floor(stPrev * outDims)), vec2<i32>(0, 0), vec2<i32>(outDims) - vec2<i32>(1, 1));
+  let hist = textureLoad(histTex, histIdx, 0);
+  if (hist.w >= 1.0) { return cur; }
+
+  // DEPTH IS NOT BLENDED (the rule the weave already pins): the alpha this pass
+  // republishes is the CURRENT frame's depth, because a mix of two depths
+  // describes a surface that exists nowhere and the composite depth-tests the
+  // flesh against the polygonal pass with it.
+  return vec4<f32>(mix(hist.xyz, cur.xyz, alpha), cur.w);
+}`;
+
 const composite = wgslFn(COMPOSITE_WGSL);
+const temporalAccum = wgslFn(TEMPORAL_ACCUM_WGSL);
 
 /**
  * WHOLE-FRAME INTERLEAVE. In field mode the ENTIRE layer — polygonal scene,
@@ -722,6 +855,15 @@ export interface SdfLayer {
    *  (?heldreproj / setHeldReproject). OFF ships the pre-2026-09-10 held row. */
   setHeldReproject(on: boolean): boolean;
   readonly heldReproject: boolean;
+  /** Temporal accumulation of the marched flesh (?accum). OFF ships the plain
+   *  low-res march; this is what makes a half-scale march acceptable again.
+   *  Turning it ON turns the field weave OFF — they are mutually exclusive, and
+   *  accumulation replaces the weave rather than joining it. */
+  setTemporalAccum(on: boolean, alpha?: number): boolean;
+  resetTemporalAccum(): void;
+  readonly temporalAccum: {
+    on: boolean; alpha: number; epoch: number; frames: number; convergedFrames: number;
+  };
   readonly temporalStart: { on: boolean; margin: number; slope: number; maxStart: number };
   /** Registers the bodies (one pass each, front to back) and the gib chunks
    *  (one shared final pass, gated by every body). Call every frame before
@@ -844,6 +986,52 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   const uHeldInv2 = uniform(new THREE.Matrix4());
   /** Scratch for the ring rotation's current view-projection (jittered). */
   const _ringVp = new THREE.Matrix4();
+
+  // ---- TEMPORAL ACCUMULATION (plan 2026-09-10-temporal-accumulation.md) -------
+  // Output-sized FLESH history, ping-ponged by a texture copy rather than by
+  // rebinding: the resolve's materials hold FIXED bindings (read accumPrev, write
+  // accumNext) and one copy a frame moves next -> prev, the same true-copy pattern
+  // the field ring uses. Rebinding a TextureNode's value would also work, but a
+  // fixed pair cannot drift out of sync with what the shader thinks it is reading.
+  const accumOpts = {
+    type: THREE.FloatType,
+    format: THREE.RGBAFormat,
+    minFilter: THREE.NearestFilter,
+    magFilter: THREE.NearestFilter,
+    depthBuffer: false,
+  } as const;
+  const accumPrev = new THREE.RenderTarget(1, 1, { ...accumOpts });
+  const accumNext = new THREE.RenderTarget(1, 1, { ...accumOpts });
+  const uAccumOn = uniform(0);
+  const uAccumAlpha = uniform(TEMPORAL_ACCUM_DEFAULT_ALPHA);
+  // The two cameras the reprojection needs: this frame's inverse (to unproject
+  // the current depth) and the PREVIOUS frame's (to project into the history).
+  const uAccumCurInvVp = uniform(new THREE.Matrix4());
+  const uAccumPrevVp = uniform(new THREE.Matrix4());
+  const _accumCurVp = new THREE.Matrix4();
+  let accumOn = false;
+  /** Frames accumulated since the last reset — the history length, and the index
+   *  the jitter sequence is evaluated at. Both are what make an accumulated frame
+   *  comparable at all: without them "frame k" is not a comparison point. */
+  let accumFrames = 0;
+  /** Bumped by every reset, so a stored hash knows which history it came from. */
+  let accumEpoch = 0;
+  /** Set when the history must NOT be blended on the next frame (a reset, a
+   *  resize, a teleport): that frame takes the current sample at alpha = 1, which
+   *  re-seeds the history without a clear pass. */
+  let accumSeed = true;
+
+  /** Reset the accumulation to a defined state. The epoch advances so a stored
+   *  hash knows which history it came from, and the next frame re-seeds instead
+   *  of blending — which is what makes frame 0 of an epoch independent of
+   *  whatever the buffer happened to hold. Anything that moves the camera
+   *  discontinuously or reallocates must call this rather than reproject garbage
+   *  for the next N frames (see the frame-hash decision note). */
+  function resetAccum(): void {
+    accumSeed = true;
+    accumFrames = 0;
+    accumEpoch++;
+  }
   /** 0 = the pre-2026-09-10 held row verbatim (bit-identical), 1 = reprojected.
    *  Ships OFF until the owner's look: at nf = 2 the held row IS the shipped
    *  look the owner accepted, so this cannot default on without re-deciding h/2
@@ -1151,6 +1339,8 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     fieldComb: uFieldComb,
     outHeight: uOutHeight,
     fieldCount: uFieldCount,
+    accumTex: texture(accumNext.texture),
+    accumOn: uAccumOn,
     heldInv1: uHeldInv1,
     heldInv2: uHeldInv2,
     heldReproject: uHeldReproject,
@@ -1172,6 +1362,34 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   // range rather than exactly on the near plane, which is degenerate.
   const quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 2);
   quadCam.position.z = 1;
+
+  // The accumulation resolve: one full-screen quad, fixed bindings, writing
+  // accumNext (see the ping-pong note above). It runs between the march and the
+  // composite so the composite is handed reconstructed flesh, and the polygonal
+  // pass never sees an accumulated image.
+  const accumMat = new THREE.MeshBasicNodeMaterial();
+  const accumOut = temporalAccum({
+    curTex: texture(target.texture),
+    histTex: texture(accumPrev.texture),
+    texCoord: uv(),
+    curInvVp: uAccumCurInvVp,
+    prevVp: uAccumPrevVp,
+    alpha: uAccumAlpha,
+  }) as unknown as { xyz: unknown; w: unknown };
+  // BOTH colorNode and outputNode, exactly as the temporal-start blit does: the
+  // alpha channel IS the depth the composite depth-tests with, and with
+  // transparency off the pipeline forces alpha to 1 unless outputNode carries it.
+  // Missing this made every accumulated frame discard as "nothing here" — the
+  // flesh vanished and the gate read a 6.5x WORSE image than the raw low-res march
+  // it was supposed to improve (2026-09-10).
+  accumMat.colorNode = vec4(accumOut.xyz as never, accumOut.w as never);
+  accumMat.outputNode = vec4(accumOut.xyz as never, accumOut.w as never);
+  accumMat.depthTest = false;
+  accumMat.depthWrite = false;
+  const accumQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), accumMat);
+  accumQuad.frustumCulled = false;
+  const accumScene = new THREE.Scene();
+  accumScene.add(accumQuad);
 
   /** Cone footprint radius per unit distance for a tile of `px` pixels.
    *  `coneKFor(1)` is the ONE-PIXEL footprint the march's AA epsilon wants —
@@ -1205,6 +1423,14 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     target.setSize(w, h);
     prev.setSize(w, h);
     lastTex.setSize(w, h);
+    // The accumulation history is OUTPUT-sized, not march-sized: accumulating a
+    // low-res march INTO its own grid would average the jittered sub-positions
+    // into the same texels (a box blur, no new detail). At output resolution each
+    // pixel reads a different low-res texel as the jitter advances, which is what
+    // reconstructs. Reallocating it also invalidates its contents, so reset.
+    accumPrev.setSize(fullW, fullH);
+    accumNext.setSize(fullW, fullH);
+    resetAccum();
     // The whole-frame field buffers track the OUTPUT size, not sdfScale: the
     // polygonal pass has always rendered at full content resolution and must
     // keep doing so, halved only in the field axis.
@@ -1524,6 +1750,17 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
         renderer.setClearColor(prevClear);
       }
 
+      // TEMPORAL ACCUMULATION JITTER (2026-09-10). A per-frame SUB-PIXEL frustum
+      // offset, applied only around the march and cleared immediately after: this
+      // is what makes the low-res march sample a different sub-position of every
+      // output pixel each frame, i.e. what turns accumulation into reconstruction
+      // rather than blur. Indexed by frames-since-epoch, so it is deterministic
+      // AND advancing (see temporal-accum.ts — do NOT freeze it for recordings).
+      if (accumOn) {
+        const [jx, jy] = accumJitter(accumFrames);
+        camera.setViewOffset(fullW, fullH, jx, jy, fullW, fullH);
+      }
+
       // Pass 2 — the raymarched bodies alone, into the scaled target, each ray
       // starting from the distance the pre-pass proved empty. The clear leaves
       // alpha at 1.0, which is the "nothing here" sentinel the composite
@@ -1592,6 +1829,30 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
         (lastUniforms.invVp.value as THREE.Matrix4).copy(_curVp).invert();
       }
       } // !hold
+
+      // THE ACCUMULATION RESOLVE (2026-09-10), between the march and the
+      // composite: the composite is handed reconstructed flesh and the polygonal
+      // pass never sees an accumulated image. Fixed bindings — it reads
+      // accumPrev and writes accumNext — with one true-copy after it, the same
+      // pattern the field ring uses.
+      if (accumOn) {
+        camera.clearViewOffset();
+        setPassLabel('sdf:accum');
+        (uAccumCurInvVp.value as THREE.Matrix4).copy(_curVp).invert();
+        (uAccumAlpha.value as number) = accumSeed ? 1 : accumAlpha(accumFrames);
+        renderer.setRenderTarget(accumNext);
+        const prevAccumAuto = renderer.autoClear;
+        renderer.autoClear = false;
+        void renderer.render(accumScene, quadCam);
+        renderer.autoClear = prevAccumAuto;
+        renderer.copyTextureToTexture(accumNext.texture, accumPrev.texture);
+        // The NEXT frame reprojects against THIS frame's camera, so the pairing
+        // (history, camera) can never drift — the same reasoning the temporal
+        // start's invVp copy follows.
+        (uAccumPrevVp.value as THREE.Matrix4).copy(_curVp);
+        accumSeed = false;
+        accumFrames++;
+      }
 
       // Pass 3 — composite up. autoClear off, or this wipes pass 1.
       setPassLabel('sdf:composite');
@@ -1748,6 +2009,31 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       return heldReproject;
     },
     get heldReproject() { return heldReproject; },
+    setTemporalAccum(on, alpha) {
+      accumOn = on;
+      (uAccumOn.value as number) = on ? 1 : 0;
+      if (alpha !== undefined) (uAccumAlpha.value as number) = Math.min(1, Math.max(0.01, alpha));
+      // MUTUALLY EXCLUSIVE WITH THE FIELD WEAVE, and accumulation wins: the
+      // composite's field branch returns before the accumulated source is ever
+      // consulted, and the field's row jitter would fight the sub-pixel one. This
+      // is a replacement, not an addition — 'bodies' fields the flesh so it can
+      // hold rows; accumulation reconstructs the flesh instead, at full output
+      // resolution, so there are no held rows to disagree about.
+      if (on && fieldStyle !== 'off') this.setFieldStyle('off');
+      // Whatever is in the history buffer is from another configuration.
+      resetAccum();
+      return accumOn;
+    },
+    resetTemporalAccum() { resetAccum(); },
+    get temporalAccum() {
+      return {
+        on: accumOn,
+        alpha: uAccumAlpha.value as number,
+        epoch: accumEpoch,
+        frames: accumFrames,
+        convergedFrames: TEMPORAL_ACCUM_CONVERGED_FRAMES,
+      };
+    },
     setBodies(list, chunkList) { bodies = list; chunks = chunkList; },
     setDepthGate(on) { prevUniforms.enabled.value = on ? 1 : 0; },
     setChunkPass(mode) { chunkPass = mode; },

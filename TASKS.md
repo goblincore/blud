@@ -162,9 +162,17 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 > composited result). The accumulation must be at OUTPUT resolution: into the
 > low-res grid it is only a blur, and the JITTER — which changes which low-res
 > texel each output pixel reads — is what turns it into supersampling.
-> **KILL CRITERION FIRST: still-camera convergence.** With a frozen camera the
-> accumulating frame must move measurably toward the `sdfScale 1.0` render and
-> settle; if it does not, the project is dead and no motion vectors get built.
+> **GATE 1 PASSED (2026-09-10).** Implemented (OFF by default; turning it on turns
+> the field weave off). Still-camera convergence against a converged FULL-SCALE
+> accumulation: **5.818 → 0.347 mean |Δ| levels, settling inside the 17-frame window
+> α=0.25 predicts** — the reconstruction works. The metric matters: against the
+> UNJITTERED scale-1.0 render it reads as a catastrophic regression, because that
+> render is one aliased sample and removing aliasing must look "further away"; a
+> converged accumulation is the fair reference. A nearest reconstruction cannot work
+> (a sub-pixel jitter becomes a two-pixel texel flip; the tell was that sharpness was
+> UNCHANGED) — it is bilinear now. Resolve cost 0.05 ms against the 4.06 ms the
+> march gives up. **NEXT: a clean cost run on an idle machine, then the owner's eyes
+> in MOTION for shimmer** (ghosting is pre-accepted; shimmer is the unshippable one).
 > Camera reprojection only, no validity/clamping/object vectors in v1 (ghosting
 > pre-accepted by the owner). Frame-hash question DECIDED in
 > [docs/dev-notes/2026-09-10-temporal-accumulation-frame-hash-DECISION.md](docs/dev-notes/2026-09-10-temporal-accumulation-frame-hash-DECISION.md)

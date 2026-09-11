@@ -114,3 +114,80 @@ the accumulated flesh instead of the raw low-res layer.
 - Do not build motion vectors, a validity test or clamping before gate 1 has
   passed. Ghosting is accepted; reconvergence is not yet proven.
 - Do not freeze the jitter for recordings.
+
+---
+
+# IMPLEMENTED 2026-09-10 — and GATE 1 PASSES
+
+**Built:** `TEMPORAL_ACCUM_WGSL` + the resolve pass in `sdf-layer.ts` (output-sized
+`accumPrev`/`accumNext`, ping-ponged by a true texture copy — fixed bindings, so the
+shader cannot disagree with what it is reading), the sub-pixel jitter on the march
+camera, `resetHistory`/epoch, the composite's gated `accumTex` input, the pure module
+`temporal-accum.ts` (+9 tests), `?accum` / `?accumscale` / `?accumalpha`,
+`setTemporalAccum` / `resetTemporalAccum`, and the bench reset-block pin. **Ships
+OFF**; turning it on turns the field weave off (mutually exclusive — accumulation
+replaces the weave).
+
+## The kill criterion, measured: still-camera convergence
+
+`scripts/sdf-accum-convergence.{mjs,sh}`. Frozen camera, frozen sim, `?vhs=off`,
+body staged at 2.5 m, `ACCUM_FRAMES=20`, α = 0.25.
+
+| frames accumulated | mean \|Δ\| vs a CONVERGED full-scale accumulation |
+| --- | ---: |
+| **none (raw 0.5 march)** | **5.818** |
+| 1 | 1.600 |
+| 2 | 0.956 |
+| 4 | 0.545 |
+| 8 | 0.390 |
+| 12 | 0.356 |
+| 16 | **0.347** ← settled |
+| 20 | 0.352 |
+
+**The reconstruction works, and it converges on schedule**: 5.818 → 0.35, a 94%
+reduction, settling inside the 17-frame window α = 0.25 predicts — which is the
+independent confirmation that the blend rate is doing what the maths says.
+**Gate 1 PASSES.** Motion (and the owner's eyes) are worth measuring next.
+
+## Three things worth keeping from getting there
+
+1. **THE REFERENCE FOR THIS GATE WAS WRONG FIRST, IN A WAY THAT LOOKED LIKE A
+   FAILURE.** Against the *unjittered* scale-1.0 render the accumulation reads as
+   a catastrophic regression (5.8 vs the raw march's 0.5). That comparison is
+   meaningless by construction: the unjittered render is ONE ALIASED SAMPLE, and
+   the accumulation's entire job is to remove aliasing, so a smoother estimate
+   must read as "further away". A converged accumulation at full scale is the fair
+   reference — two reconstructions, one with 4× the samples. **Do not put the
+   aliased-render column back as the verdict.**
+2. **NEAREST RECONSTRUCTION CANNOT WORK, AND THE FAILURE WAS DIAGNOSABLE.**
+   Version 1 fetched the low-res march with a nearest tap. A sub-pixel jitter then
+   does not move the sample sub-pixel — it flips WHICH low-res texel the output
+   pixel reads, i.e. a two-pixel jump at scale 0.5, so the accumulation averaged
+   texel-quantum jumps into an edge smear. The tell: sharpness was UNCHANGED
+   (mean |horizontal gradient| 1.68 nearest vs 1.70 accumulated vs 1.64 at full
+   scale), so it was not a blur — it was quantised displacement. Fixed with a
+   hand-written bilinear gather (the target is NearestFilter) that renormalises
+   over the taps which actually carry a surface, with coverage/depth taken from a
+   SINGLE tap (a blended depth describes no surface — the rule the weave already
+   pins).
+3. **A RESIDUAL ODD/EVEN RIPPLE OF ~0.5-1.0 LEVELS REMAINS**, and it is the probe
+   gather's `probeGatherRate = 2` cadence showing through: the dynamic probe layer
+   refreshes every other frame, so the shading alternates and the accumulation
+   faithfully damps a real in-engine alternation rather than a bug in this pass.
+   If it ever matters, `?proberate=1` removes the source.
+
+## Cost
+
+`sdf:accum` (the resolve pass, including the ping-pong copy) measures **0.05 ms**
+— against the 4.06 ms the march gives up at scale 0.5. The frame numbers from that
+run are NOT usable (41 ms fenced frames, i.e. the machine was loaded by another
+session); **re-run the cost on a quiet machine before quoting it.**
+
+## Next
+
+1. A clean cost run (`BENCH_PRELUDE='__sdfGame.setSdfScale(0.5);__sdfGame.setTemporalAccum(true)'`)
+   on an idle machine.
+2. **The owner's eyes in motion** — `?accum=1&frozen=0` and walk: the question is
+   SHIMMER (unconverged aliasing crawling), not ghosting, which is pre-accepted.
+3. Only after that: the frame-hash epoch/window protocol wiring, then decide
+   whether the low-res march becomes the default.

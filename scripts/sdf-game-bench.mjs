@@ -449,6 +449,7 @@ async function applyLeg(name) {
     __sdfGame.setProbeLights(null);
     __sdfGame.setProbeBlend(null);   // R1 verification seams (?dynblend / ?dynfall);
     __sdfGame.setProbeFall(null);    // shipped 0.6 rise / 0.12 fall
+    __sdfGame.setTemporalAccum(false);   // accumulation ships OFF (2026-09-10)
     __sdfGame.setOccluder(false);   // ship truth (game-main.ts: setOccluderEnabled(false))
     __sdfGame.setCone(false);
     __sdfGame.setFxaa(true);

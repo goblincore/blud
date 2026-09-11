@@ -1837,6 +1837,23 @@ async function main() {
   // artefacts. ?tstart=0 pins the bit-identical march;
   // __sdfGame.setTemporalStart(on, margin, slope) flips it live.
   sdfLayer.setTemporalStart(new URLSearchParams(location.search).get('tstart') !== '0');
+  // TEMPORAL ACCUMULATION (2026-09-10, plan docs/superpowers/plans/2026-09-10-temporal-accumulation.md).
+  // A half-scale march is worth ~8 ms of a 16.6 ms frame but is "too pixelated and
+  // aliased" on its own; this reconstructs it from a jittered, camera-reprojected
+  // history. `?accum=1` turns it on AND drops the march to the default scale,
+  // because accumulating at full scale is pointless; `?accumscale=` and
+  // `?accumalpha=` override. Turning it on turns the field weave OFF (mutually
+  // exclusive — accumulation replaces the weave, it does not join it).
+  {
+    const accumRaw = new URLSearchParams(location.search).get('accum');
+    if (accumRaw !== null && accumRaw !== '0') {
+      const accumSearch = new URLSearchParams(location.search);
+      const scale = parseFloatParam(accumSearch.get('accumscale'), { min: 0.2, max: 1 });
+      if (scale !== null) sdfLayer.setScale(scale);
+      const alpha = parseFloatParam(accumSearch.get('accumalpha'), { min: 0.01, max: 1 });
+      sdfLayer.setTemporalAccum(true, alpha ?? undefined);
+    }
+  }
   // INTERLACED FIELDS ON (2026-09-09), replacing half-rate. Half-rate held
   // and reprojected the whole marched frame, which desynced from the
   // full-rate skeleton meshes whenever the player moved — reprojected flesh
@@ -7007,6 +7024,13 @@ function performBenchAction(a: BenchAction): void {
      *  frame's reprojected hit minus `margin` m (0.25 ships) and `slope`.
      *  Off is bit-identical. */
     setTemporalStart: (on: boolean, margin?: number, slope?: number) => { sdfLayer.setTemporalStart(on, margin, slope); return sdfLayer.temporalStart; },
+    /** Temporal accumulation of the marched flesh (?accum). OFF is the plain
+     *  low-res march. Turning it on turns the field weave off and the history is
+     *  re-seeded, so the first frame of the new epoch is independent of the old
+     *  one — see the frame-hash decision note. */
+    setTemporalAccum: (on: boolean, alpha?: number) => sdfLayer.setTemporalAccum(on, alpha),
+    resetTemporalAccum: () => sdfLayer.resetTemporalAccum(),
+    get temporalAccum() { return sdfLayer.temporalAccum; },
     get temporalStart() { return sdfLayer.temporalStart; },
     get depthPrepass() { return sdfLayer.depthPreEnabled; },
     get shell() {
