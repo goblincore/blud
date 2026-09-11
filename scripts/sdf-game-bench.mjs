@@ -342,6 +342,21 @@ const ALL_LEGS = {
   //   shadow  = baseline       - probe-nolights
   'probe-norays': { setProbeRays: 0 },
   'probe-nolights': { setProbeLights: 0 },
+  // PROBE-GATHER BUDGET CURVE (2026-09-10, after R1). R1 took
+  // `compute:probe-gather` from 4.00 ms to 0.18 ms, which turns the gather from
+  // a budget LINE into a knob that can be spent on quality — more lights, more
+  // rays, more frequent updates. These legs price that spend on the shipped
+  // workload. `setProbeLights` CAPS the frame's own list (lights are packed
+  // strongest-first), so probe-lights1/2/4 are "the same frame with only the
+  // first N lights gathered", and 'probe-nolights' above is the 0 end of the
+  // same sweep. NOTE the legs are caps, so a scene that natively has fewer
+  // lights than the cap measures the same thing twice — read the row together
+  // with `__sdfGame.probeDynamic.gates.lights`.
+  'probe-lights1': { setProbeLights: 1 },
+  'probe-lights2': { setProbeLights: 2 },
+  'probe-lights4': { setProbeLights: 4 },
+  'probe-rays16': { setProbeRays: 16 },
+  'probe-rays64': { setProbeRays: 64 },
   // MARCH ATTRIBUTION LEGS (2026-09-07: the march is the whole GPU frame and
   // grows 8 -> 19 -> 31 ms walk/fire/gib). Each prices one wound/chunk
   // mechanism against the shipped state. 'chunks-skip' is a diagnostic

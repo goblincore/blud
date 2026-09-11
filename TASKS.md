@@ -168,6 +168,29 @@ behind any guard), the ABSENCE of a count guard in the kernel, the power-of-two
 `threadsPerProbe` that keeps a probe's ray group inside one workgroup, and the
 module-scope workgroup declarations in the GENERATED WGSL, not just the source.
 
+### 2026-09-10 — R1's consequence: the gather is now a QUALITY knob
+
+**THE GATHER IS NO LONGER A BUDGET LINE.** At 0.15–0.39 ms, the light count
+(1/2/4 caps) and the ray count (16/32/64) are inside the instrument's own
+resolution: six bench legs came back non-monotonic and all stayed under 0.39 ms
+(new legs `probe-lights1/2/4`, `probe-rays16/64` in `scripts/sdf-game-bench.mjs`).
+The defensible claim is the BOUND, not a slope. **Consequence: more lights, more
+rays and more frequent gathers are now affordable, and R2 is not.**
+
+**TRACERS: the shipped gain sits BELOW the visible threshold — measured.**
+Shooting down room 1's lane with the volley frozen mid-flight, only the tracer
+gain changing: at the shipped **gain 2** with the shipped **2-slot cap** the
+tracers move 4800/6400 probe-layer floats and lift the whole frame by ~1 8-bit
+level (1,930 pixels over 2 levels, max 27) — real, and invisible in motion, which
+is exactly the owner's "i cant tell". At **gain 8** it is 291,630 pixels (60.8%)
+and the room visibly brightens. **The SLOT CAP is the bigger lever:** 2 → 8 slots
+at the shipped gain 2 takes visibly-changed pixels from 1,930 to 207,929 (108x),
+because the shipped case sits just under the threshold. Recommendation, owner's
+look call: `tracerLightGain` 2 → 6–8 and/or `tracerLightSlots` 2 → 4–8; cost is
+unmeasurable. Full evidence + the three rig traps:
+[docs/dev-notes/2026-09-10-tracer-light-visibility/](docs/dev-notes/2026-09-10-tracer-light-visibility/README.md).
+Rig: `scripts/sdf-game-tracer-light-check.sh`.
+
 
 ### 2026-09-10 — perf session: gather −33%, a measured split, two levers closed
 
