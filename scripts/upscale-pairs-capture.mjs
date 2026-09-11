@@ -7,8 +7,9 @@
 // setRenderLock(true) makes step(n) pure re-renders; the sim advances only between frames.
 //
 // G2 checks run on the first staged frame before anything is saved:
-//   determinism (same scale twice, and 0.5 -> 1.0 -> 0.5), alignment (coverage centroid
-//   and IoU), orientation (body staged below centre => centroid row > H/2), depth sanity.
+//   determinism (same scale twice, and 0.5 -> 1.0 -> 0.5), alignment (content registration
+//   on interior flesh + coverage IoU), orientation (body staged below centre => centroid
+//   row > H/2), depth sanity.
 //
 // Usage:
 //   LAB_VITE_PORT=5313 LAB_CDP_PORT=9313 bash -c '. scripts/lab-servers.sh; trap lab_servers_down EXIT; lab_servers_up; node scripts/upscale-pairs-capture.mjs'
@@ -18,6 +19,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { connectGame, applyShipDefaults, bootCloseupPage, sleep } from './lib/sdf-closeup-stage.mjs';
 import { encodeNpy } from './lib/npy.mjs';
+import { registerHalfRes } from './lib/upscale-registration.mjs';
 
 const VITE = Number(process.env.LAB_VITE_PORT ?? 5313);
 const CDP = Number(process.env.LAB_CDP_PORT ?? 9313);
@@ -101,8 +103,8 @@ async function stage(seq, pitchUp) {
 
 // ---- G2 checks on the first staged frame -------------------------------------
 const checks = {};
-// Pitched UP so the body sits below screen centre — only for the orientation check.
-// The captured sequences below are re-staged level (pitch offset 0).
+// Pitched UP so the body sits below screen centre, which the orientation check needs.
+// EVERY check runs on this frame; the captured sequences below are re-staged level.
 await stage(SEQS[0], PITCH_UP);
 const { near, far } = await evaluate('__sdfGame.upscaleInfo()');
 checks.nearFar = { near, far };
@@ -136,9 +138,15 @@ const lr = await renderAt(0.5);
 const hr = await renderAt(1.0);
 const cl = coverage(lr), ch = coverage(hr);
 if (cl.n < 500) fail(`G2: only ${cl.n} flesh pixels at 400x300 — the staged body is not in frame`);
+// ALIGNMENT = content registration on interior flesh (scripts/lib/upscale-registration.mjs).
+// The coverage-centroid offset stays in the report but does NOT gate: silhouette aliasing
+// between a 400x300 and an 800x600 march moves it 1-3 px with no misregistration
+// (docs/dev-notes/2026-09-11-neural-upscale/g2-pairs.md).
+const reg = registerHalfRes(lr, hr);
 checks.alignment = {
   inputCoverage: cl.frac, targetCoverage: ch.frac,
-  centroidDxOutputPx: 2 * cl.cx - ch.cx, centroidDyOutputPx: 2 * cl.cy - ch.cy,
+  registration: { texels: reg.texels, argmin: reg.argmin, subpixelOutputPx: reg.subpixel, mse: reg.mse },
+  coverageCentroidOffsetOutputPx: { dx: 2 * cl.cx - ch.cx, dy: 2 * cl.cy - ch.cy, gated: false },
 };
 let inter = 0, union = 0;
 for (let y = 0; y < lr.h; y++) for (let x = 0; x < lr.w; x++) {
@@ -158,7 +166,12 @@ for (let y = 0; y < lr.h; y++) for (let x = 0; x < lr.w; x++) {
 checks.depthMeanAbsDiffMetres = dN ? dSum / dN : NaN;
 
 const g2 = [];
-if (Math.hypot(checks.alignment.centroidDxOutputPx, checks.alignment.centroidDyOutputPx) > 0.5) g2.push('centroid offset > 0.5 output px');
+const regCheck = checks.alignment.registration;
+if (regCheck.texels < 500) g2.push(`registration: only ${regCheck.texels} interior flesh texels (need 500)`);
+if (regCheck.argmin.ox !== 0 || regCheck.argmin.oy !== 0) g2.push(`registration: best match at output shift (${regCheck.argmin.ox}, ${regCheck.argmin.oy}), not (0, 0)`);
+if (!(Math.abs(regCheck.subpixelOutputPx.x) <= 0.25 && Math.abs(regCheck.subpixelOutputPx.y) <= 0.25)) {
+  g2.push(`registration: sub-pixel offset (${regCheck.subpixelOutputPx.x}, ${regCheck.subpixelOutputPx.y}) exceeds 0.25 output px`);
+}
 if (checks.alignment.iou < 0.85) g2.push(`IoU ${checks.alignment.iou.toFixed(3)} < 0.85`);
 if (checks.orientation.rowZero !== 'top') g2.push('orientation unconfirmed: body staged below centre but centroid row <= H/2');
 if (!(checks.depthMeanAbsDiffMetres < 0.05)) g2.push(`mean depth diff ${checks.depthMeanAbsDiffMetres} m >= 0.05`);
