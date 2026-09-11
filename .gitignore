@@ -48,3 +48,6 @@ telemetry/
 # agents have already committed scratch to the repo root once.
 .lab-tmp/
 .tmp-chrome*/
+
+# Neural upscale training pairs (spec 2026-09-11 §7) — local data, never committed
+.upscale-data/

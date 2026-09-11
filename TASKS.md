@@ -8,8 +8,14 @@
 
 - [x] Spec approved: `docs/superpowers/specs/2026-09-11-neural-upscale-espcn-design.md`.
   Reopens the 09-08 idea (that pilot was 1.4k params). Stage contract, `sp`/`dc` layouts.
-- [ ] P1+P2 plan `docs/superpowers/plans/2026-09-11-neural-upscale-p1p2.md` dispatched (dsh, deepseek-v4-flash, 7 serial tasks).
-  Training (P3, M3/RunPod), full-res hull guide (P4), play build (P5) get own plans.
+- [x] P1+P2 built (plan `docs/superpowers/plans/2026-09-11-neural-upscale-p1p2.md`): stage, both layouts,
+  G1-parity and the G2 capture pipeline — verdicts in `docs/dev-notes/2026-09-11-neural-upscale/`.
+- [!] G2 pairs FAIL — alignment centroid 1.162 output px > 0.5; coarse-march edge aliasing
+  (shared flesh region pixel-exact, IoU 0.987), no dataset written. Decide gate re-scope vs
+  staging before training — `g2-pairs.md`.
+- [-] G1 cost bench (plan Task 6) DEFERRED 2026-09-11 (owner: machine under load; quality first, optimize after).
+- [ ] Next: P3 training plan — train s8/s16/s32 and judge quality first; M3 overfit first, RunPod for volume.
+  Blocked on the G2 alignment verdict: there are no training pairs yet.
 
 ## Raymarch — Claybook cheap wins — 2026-09-09
 

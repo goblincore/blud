@@ -1,0 +1,34 @@
+{
+  "created": "2026-09-11T18:13:17.750Z",
+  "checks": {
+    "nearFar": {
+      "near": 0.1,
+      "far": 200
+    },
+    "determinism": {
+      "sameScaleInput": 0,
+      "sameScaleTarget": 0,
+      "scaleRoundTrip": 0
+    },
+    "temporalStart": "on (shipped)",
+    "alignment": {
+      "inputCoverage": 0.041675,
+      "targetCoverage": 0.04066458333333333,
+      "centroidDxOutputPx": -0.00042056755921748845,
+      "centroidDyOutputPx": 1.16243551330723,
+      "iou": 0.9874376869391824
+    },
+    "orientation": {
+      "inputCentroidRow": 185.55558888222356,
+      "inputHeight": 300,
+      "targetCentroidRow": 369.9487422511399,
+      "targetHeight": 600,
+      "rowZero": "top"
+    },
+    "depthMeanAbsDiffMetres": 0.002187324418808602
+  },
+  "g2Failures": [
+    "centroid offset > 0.5 output px"
+  ],
+  "frames": []
+}
