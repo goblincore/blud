@@ -95,6 +95,7 @@ import {
   parseUpscaleConfig, parseUpscaleModelJson, UPSCALE_SCALE, type UpscaleConfig, type UpscaleModel,
 } from './upscale/upscale-model';
 import { runUpscaleSelfCheck } from './upscale/upscale-selfcheck';
+import { accumulateSamples, float32ToBase64, jitterGrid, sampleOrder } from './upscale/supersample';
 import type { UpscaleInfo } from './upscale/upscale-stage';
 import { TEMPORAL_ACCUM_DEFAULT_SCALE } from './temporal-accum';
 import { hashFrame, DEFAULT_TILES_X, DEFAULT_TILES_Y } from './demo-hash';
@@ -7216,6 +7217,55 @@ function performBenchAction(a: BenchAction): void {
       renderFrames: (n: number) => { handle.setLoopRunning(false); for (let k = 0; k < n; k++) handle.step(1 / 60); },
       resolveGpu: () => handle.resolveGpu(),
     }, opts ?? {}),
+    /** NEURAL UPSCALE P3 capture (spec 2026-09-11-neural-upscale-p3-training-design.md §1).
+     *  A fixed sub-pixel march jitter in output px, or null. Returns false when refused. */
+    setMarchJitter: (x: number | null, y = 0) => sdfLayer.setMarchJitter(x === null ? null : [x, y]),
+    /** P3 capture: replace every actor with the default cast (fresh, unwounded bodies). */
+    resetCast: () => { rebuildCast(); return actors.length; },
+    /** P3 capture: a full magazine, so scripted wound shots never click empty. */
+    refillShells: () => { shells = MAGAZINE_CAPACITY; updateHud(); return shells; },
+    /** P3 capture: world centre of an actor's live head or torso cluster, or null. */
+    actorLimbCenter: (actorId: number, limb: 'head' | 'torso') => {
+      const a = actors.find((q) => q.id === actorId);
+      const c = a?.posed().clusters.find((cc) => cc.limb === limb && cc.alive)?.center;
+      return c ? ([c[0], c[1], c[2]] as Vec3) : null;
+    },
+    /** P3 capture: an actor's wounds in world space — the transform rendering uses. */
+    actorWounds: (actorId: number) => {
+      const a = actors.find((q) => q.id === actorId);
+      if (!a) return [];
+      const posed = a.posed();
+      const yaw = a.pose().yaw;
+      return a.wounds().map((w) => ({ pos: woundWorldPos(posed.prims, w, yaw), radius: w.radius, type: w.type }));
+    },
+    /** P3 capture: every actor's head circle and wound circles, projected through the live camera to
+     *  output px (row 0 = top); circles behind the camera are omitted. Call after a render, with the
+     *  march jitter off. */
+    captureAnnotations: (width: number, height: number, headRadius = 0.12) => {
+      const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+      const circle = (c: readonly number[], r: number) => {
+        const centre = new THREE.Vector3(c[0], c[1], c[2]);
+        const a = centre.clone().project(camera);
+        if (a.z > 1) return null;
+        const b = centre.clone().addScaledVector(up, r).project(camera);
+        const ax = (a.x + 1) * 0.5 * width;
+        const ay = (1 - a.y) * 0.5 * height;
+        const bx = (b.x + 1) * 0.5 * width;
+        const by = (1 - b.y) * 0.5 * height;
+        return { x: ax, y: ay, r: Math.hypot(bx - ax, by - ay) };
+      };
+      return actors.map((a) => {
+        const posed = a.posed();
+        const yaw = a.pose().yaw;
+        const head = posed.clusters.find((cc) => cc.limb === 'head' && cc.alive)?.center;
+        const wounds: Array<{ x: number; y: number; r: number; type: unknown }> = [];
+        for (const w of a.wounds()) {
+          const c = circle(woundWorldPos(posed.prims, w, yaw), w.radius);
+          if (c) wounds.push({ ...c, type: w.type });
+        }
+        return { actorId: a.id, head: head ? circle(head, headRadius) : null, wounds };
+      });
+    },
     get temporalAccum() { return sdfLayer.temporalAccum; },
     get temporalStart() { return sdfLayer.temporalStart; },
     get depthPrepass() { return sdfLayer.depthPreEnabled; },
@@ -8057,6 +8107,36 @@ function performBenchAction(a: BenchAction): void {
         normalCaptureState() {
           const pieces=[...actors.map(a=>({key:`body:${a.id}`,view:a.view})),...liveChunks.map(c=>({key:`chunk:${c.id}`,view:c.view}))];
           return {camera:camera.matrixWorld.toArray(),projection:camera.projectionMatrix.toArray(),pieces:pieces.map(({key,view})=>({key,data:Array.from((view.dataTexture as THREE.DataTexture).image.data as Float32Array),uniforms:Object.fromEntries(Object.entries(view.uniforms).filter(([k])=>k!=='normalGradientCfg'&&k!=='debugCfg').map(([k,u])=>{const v=u.value;return [k,v&&typeof v==='object'&&'toArray' in v?(v as {toArray:()=>unknown}).toArray():v];}))}))};
+        },
+        /** NEURAL UPSCALE P3: the supersampled 800x600 training target. Renders the CURRENT state
+         *  grid*grid times with a centred sub-pixel march jitter and temporal ray start OFF (its
+         *  reprojection matrix is the unjittered camera), accumulating in-page; only the averaged
+         *  target crosses CDP. Caller: freeze + render lock on, scale 1.0, fields off, upscale off. */
+        async readSupersampledTarget(grid = 4) {
+          const t = sdfLayer.marchTarget;
+          const w = t.width, h = t.height;
+          const offsets = sampleOrder(jitterGrid(grid));
+          const stride = Math.ceil(w * 16 / 256) * 64;
+          const wasStart = sdfLayer.temporalStart.on;
+          const samples: Float32Array[] = [];
+          handle.setLoopRunning(false);
+          sdfLayer.setTemporalStart(false);
+          try {
+            for (const [jx, jy] of offsets) {
+              if (!sdfLayer.setMarchJitter([jx, jy])) throw new Error('readSupersampledTarget: march jitter refused (fields or accumulation on?)');
+              handle.step(1 / 60);
+              await handle.resolveGpu();
+              const raw = new Float32Array(await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h));
+              const dense = new Float32Array(w * h * 4);
+              for (let y = 0; y < h; y++) dense.set(raw.subarray(y * stride, y * stride + w * 4), y * w * 4);
+              samples.push(dense);
+            }
+          } finally {
+            sdfLayer.setMarchJitter(null);
+            sdfLayer.setTemporalStart(wasStart);
+          }
+          const { target, coverage } = accumulateSamples(samples, w, h);
+          return { w, h, offsets, target: float32ToBase64(target), coverage: float32ToBase64(coverage) };
         },
         async readMarchTarget() {
           handle.setLoopRunning(false);
