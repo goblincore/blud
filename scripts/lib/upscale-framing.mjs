@@ -18,7 +18,7 @@ export const VAL_EVERY = 10;
 export const SHOWCASE_COUNTS = { close: 3, medium: 5, far: 4 };
 /** +1 when a body's facing is (sin yaw, −cos yaw), the page's own forward convention. Flip to −1
  *  if the capture's face check (plan Task 7) shows the back of the head. */
-export const BODY_FACING_SIGN = 1;
+export const BODY_FACING_SIGN = -1;
 
 export function mulberry32(seed) {
   let a = seed >>> 0;

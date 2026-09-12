@@ -13,8 +13,8 @@
 - [x] G2 pairs PASS (re-run r4): gate re-scoped to linear-depth registration — marches aligned at (0.0002, 0.003) px;
   colour and centroid checks were misreading aliasing. 60 pairs, 559 MB in /tmp (regenerable) — `g2-pairs.md`.
 - [-] G1 cost bench (plan Task 6) DEFERRED 2026-09-11 (owner: machine under load; quality first, optimize after).
-- [ ] P3 spec `docs/superpowers/specs/2026-09-11-neural-upscale-p3-training-design.md`: detail capture v2 (~1,000 pairs, medium/far-weighted, 16× supersampled target),
-  RunPod 6-run grid ($10 cap), pod dashboard, in-game A/B. Owner: RunPod API key, launch OK. Plans: `docs/superpowers/plans/2026-09-11-neural-upscale-p3-*.md` (contracts, p3a–p3d; trainer, loader and pod scripts verified while writing).
+- [x] P3 spec `docs/superpowers/specs/2026-09-11-neural-upscale-p3-training-design.md`; plans p3a–p3d + contracts in `docs/superpowers/plans/`.
+- [x] P3a capture v2 built — smoke 24 pairs OK (`p3a-capture.md`). Owner: run the full ~1,000-pair capture (runbook in the plan).
 - [x] P3c in-game loader: `?upscale=trained&upscalemodel=<name>`, U key A/B, G3 parity script — smoke **PASS** (`sp 1.71e-3` ≤ `2e-3`) once the fixture moved to seed 1, the G1-reference seed. The twin's `f16round` now rounds half-to-even (a correctness fix; it moved no number — this workload hits no ties). G1 parity re-run PASS on all 7 configs. `p3c-ingame.md`.
 - [ ] P3 plain-language overview for the owner: `docs/superpowers/plans/2026-09-11-neural-upscale-p3-overview.md`
   (copy into Obsidian `Claude Notes/Research/` once macOS stops blocking writes to ~/Documents). Nothing executed yet; dispatch order: p3a/p3b/p3c parallel, then p3d.
