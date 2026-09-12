@@ -62,20 +62,52 @@ historically what these games did — Blood's enemies were pre-rendered CG sprit
 deferred twice) **plus** a perceptual/adversarial loss. Frame budget: the owner said ≤0.5 ms, which
 the march numbers say is far tighter than necessary.
 
-### Open questions for the spec
+### Resolved in conversation (2026-09-12)
 
-1. **Where does the target come from?** It must be the *same frame*, or pairs do not align. Strong
-   preference: an expensive "quality march" in the existing renderer (more AO rays, soft shadows,
-   bounce) rather than an offline renderer, which would mean exporting geometry and losing scene
-   fidelity.
-2. **What does the net see?** Normals are the obvious win — the march already computes them and
-   throws them away. Albedo and material id are the next tier and need MRT plumbing.
-3. **How is it judged?** Once a *look* is the goal, 0.0233 stops meaning anything: a GAN that looks
-   better will score worse. The owner becomes the metric, via the U key. The G4 gate structure does
-   not transfer, and something must replace it or we will fool ourselves.
-4. **Temporal stability.** Invented detail that flickers frame to frame is worse than no detail.
-   This is the central risk for characters — and notably *not* for blood or gibs, where chaotic
-   inconsistency is invisible.
+**1. The target is your own renderer with the brakes off.** Alignment is not the problem — the P3
+capture already freezes the scene and renders it twice, and posing a character identically is easy.
+The question was which renderer produces the look, and the answer is the existing march with
+expensive settings: more AO samples, more shadow rays, finer steps, better probe sampling. Same
+scene, same camera, alignment free; the work is shader work, not capture work.
+
+**Rejected: an offline renderer (Blender).** The characters are SDFs, not meshes. Meshing them and
+matching camera, FOV, lights and materials across two renderers guarantees small mismatches, and a
+mismatch teaches the net to change silhouettes — which it structurally cannot do (§2), so it would
+learn to blur instead.
+
+**FIRST TASK, before any capture or training: produce ONE still frame that looks right**, by any
+means and however slow. The net only ever copies; if the expensive render does not look
+pre-rendered, no amount of training gets there. This is a cheap gate — one frame, one afternoon of
+shader knobs — and it decides whether the project is real.
+
+**2. Inputs, ranked — and the cost lands on the march, not the upscaler.** Extra input channels come
+from the march target, so they widen the 6.7–13.1 ms pass, not the 0.3 ms model.
+
+- **Normals** — the big win. Orientation is what says where a crease darkens, which is most of what
+  soft ray-traced lighting is.
+- **Albedo** — separates "dark because painted dark" from "dark because shadowed". Earns its place
+  if the target relights the scene.
+- **Material id** — only worth the bandwidth once the roster has genuinely different materials.
+  Flesh, flesh and flesh buys nothing.
+
+Also an overfitting angle: more channels with only three characters give the net more ways to
+memorise instead of generalise.
+
+**3. How to judge it, without only eyeballing.** Once a *look* is the goal the old metric is
+actively misleading — a model that looks better will score worse on 0.0233 — so the G4 structure has
+to be replaced, not reused. Three mechanisms, all three wanted:
+
+- **Temporal stability as a number.** Render a slow camera move; measure frame-to-frame change in the
+  output that is NOT explained by change in the input. Flicker becomes a metric. Most important of
+  the three: it catches exactly what still frames hide and what would ruin the game in motion.
+- **A perceptual distance (LPIPS)** in place of L1 for *reporting*. Compares images the way a vision
+  model does; correlates with human judgement far better. Training-time only, so no frame cost.
+- **Blind forced-choice A/B.** Same scene, two variants, randomised, labels hidden, owner picks.
+  Keeps the human as the judge while removing the bias of knowing which is which.
+
+**4. Temporal stability is the central risk** for characters — invented detail that flickers is worse
+than no detail — and notably *not* a risk for blood or gibs, where chaotic inconsistency is invisible.
+That asymmetry is why gore is the safer place to be ambitious and faces are not.
 
 ## 4. Blood — overhaul, conventional rendering first
 
@@ -129,6 +161,8 @@ Parked until the mesh rework lands or the upscaler's measured cost changes the p
       identity, so it should hold up; novel *materials* (metal, glass, fur) are the risk.
 - [ ] **Local grid finishing**: s8/s16 done (0.0248/0.0253/0.0238/0.0240), s32 running. Expect ~3 %
       better than the pod's models — not visibly different.
+- [ ] **The still-frame gate** (first real task for the character look): one frame, expensive settings
+      in the existing march, that the owner actually wants. Everything else is downstream of it.
 - [ ] Then: brainstorm → spec for **either** the character pre-render look **or** the blood overhaul.
 - [ ] Owner: more side-by-side comparisons to name specific artifacts (shimmer, mush, distance).
 
