@@ -892,6 +892,12 @@ export interface SdfLayer {
   readonly upscaleStage: UpscaleStage | null;
   /** Which flesh texture the composite reads: the raw march, the accumulated history, or the upscale output. */
   readonly compositeSource: 'march' | 'accum' | 'upscale';
+  /** CAPTURE JITTER (neural upscale P3, spec 2026-09-11-neural-upscale-p3-training-design.md §1):
+   *  a fixed sub-pixel view offset in output px, applied around the march only. `null` turns it
+   *  off. Refused (returns false) while temporal accumulation or any field style is on — both drive
+   *  their own view offset — and dropped if either turns on later. */
+  setMarchJitter(offset: readonly [number, number] | null): boolean;
+  readonly marchJitter: readonly [number, number] | null;
   resetTemporalAccum(): void;
   readonly temporalAccum: {
     on: boolean; alpha: number; epoch: number; frames: number; convergedFrames: number;
@@ -1055,6 +1061,9 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
 
   /** The neural upscale stage, or null (spec 2026-09-11). */
   let upscale: UpscaleStage | null = null;
+
+  /** Capture jitter for supersampled training targets (P3), or null. */
+  let marchJitter: [number, number] | null = null;
 
   /** Reset the accumulation to a defined state. The epoch advances so a stored
    *  hash knows which history it came from, and the next frame re-seeds instead
@@ -1802,6 +1811,10 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       if (accumOn) {
         const [jx, jy] = accumJitter(accumFrames);
         camera.setViewOffset(fullW, fullH, jx, jy, fullW, fullH);
+      } else if (marchJitter) {
+        // CAPTURE JITTER (neural upscale P3): one fixed sub-pixel offset for supersampled
+        // training targets. Around the march only — cleared right after it, below.
+        camera.setViewOffset(fullW, fullH, marchJitter[0], marchJitter[1], fullW, fullH);
       }
 
       // Pass 2 — the raymarched bodies alone, into the scaled target, each ray
@@ -1872,6 +1885,9 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
         (lastUniforms.invVp.value as THREE.Matrix4).copy(_curVp).invert();
       }
       } // !hold
+      // Capture jitter is scoped to the march: nothing after it (accumulation, upscale,
+      // composite) may see the offset.
+      if (marchJitter) camera.clearViewOffset();
 
       // THE ACCUMULATION RESOLVE (2026-09-10), between the march and the
       // composite: the composite is handed reconstructed flesh and the polygonal
@@ -2062,6 +2078,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
         console.warn('[sdf-layer] temporal accumulation refused while the upscale stage is on (stacking is P5)');
         return accumOn;
       }
+      if (on) marchJitter = null;
       accumOn = on;
       // The composite's output-resolution branch also carries the upscale stage.
       (uAccumOn.value as number) = on || upscale !== null ? 1 : 0;
@@ -2103,6 +2120,16 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     get upscaleInfo() { return upscaleInfoOf(upscale); },
     get upscaleStage() { return upscale; },
     get compositeSource() { return upscale ? 'upscale' : accumOn ? 'accum' : 'march'; },
+    setMarchJitter(offset) {
+      if (offset === null) { marchJitter = null; return true; }
+      if (accumOn || fieldStyle !== 'off') {
+        console.warn('[sdf-layer] march jitter refused while temporal accumulation or a field style is on');
+        return false;
+      }
+      marchJitter = [offset[0], offset[1]];
+      return true;
+    },
+    get marchJitter() { return marchJitter; },
     get temporalAccum() {
       return {
         on: accumOn,
@@ -2132,6 +2159,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
         console.warn(`[sdf-layer] field style '${style}' refused while the upscale stage is on (stacking is P5)`);
         return;
       }
+      if (style !== 'off') marchJitter = null;
       fieldStyle = style;
       fieldMode = style !== 'off';
       uFieldMode.value = style === 'frame' ? 1 : 0;

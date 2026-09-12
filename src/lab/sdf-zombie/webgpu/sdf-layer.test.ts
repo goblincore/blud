@@ -481,3 +481,76 @@ describe('neural upscale stage in the layer (spec 2026-09-11-neural-upscale-espc
     layer.dispose();
   });
 });
+
+describe('capture march jitter (neural upscale P3)', () => {
+  function fakeRenderer() {
+    const calls: { target: THREE.RenderTarget | null; offset: [number, number] | null }[] = [];
+    let currentTarget: THREE.RenderTarget | null = null;
+    let clearAlpha = 1;
+    const r = {
+      autoClear: true,
+      getRenderTarget: () => currentTarget,
+      setRenderTarget: (t: THREE.RenderTarget | null) => { currentTarget = t; },
+      render: (_scene: THREE.Scene, camera: THREE.Camera) => {
+        const view = (camera as THREE.PerspectiveCamera).view;
+        calls.push({ target: currentTarget, offset: view?.enabled ? [view.offsetX, view.offsetY] : null });
+      },
+      clear: () => {},
+      getClearAlpha: () => clearAlpha,
+      setClearAlpha: (a: number) => { clearAlpha = a; },
+      getClearColor: (c: THREE.Color) => c,
+      setClearColor: vi.fn(),
+      getClearDepth: () => 1,
+      setClearDepth: vi.fn(),
+      copyTextureToTexture: vi.fn(),
+      compileAsync: vi.fn(async () => {}),
+    };
+    return { renderer: r as unknown as THREE.WebGPURenderer, calls };
+  }
+
+  it('is off by default: no render sees a view offset', () => {
+    const { renderer, calls } = fakeRenderer();
+    const layer = createSdfLayer(renderer);
+    layer.setSize(800, 600);
+    layer.render(new THREE.Scene(), new THREE.PerspectiveCamera());
+    expect(layer.marchJitter).toBeNull();
+    expect(calls.every((c) => c.offset === null)).toBe(true);
+    layer.dispose();
+  });
+
+  it('offsets the march and nothing after it', () => {
+    const { renderer, calls } = fakeRenderer();
+    const layer = createSdfLayer(renderer);
+    layer.setSize(800, 600);
+    expect(layer.setMarchJitter([0.375, -0.125])).toBe(true);
+    const camera = new THREE.PerspectiveCamera();
+    layer.render(new THREE.Scene(), camera);
+    const march = calls.findIndex((c) => c.target === layer.marchTarget);
+    expect(march).toBeGreaterThanOrEqual(0);
+    expect(calls[march]!.offset).toEqual([0.375, -0.125]);
+    expect(calls.slice(0, march).every((c) => c.offset === null)).toBe(true);
+    expect(calls.slice(march + 1).filter((c) => c.target !== layer.marchTarget).every((c) => c.offset === null)).toBe(true);
+    expect(camera.view?.enabled ?? false).toBe(false);
+    layer.dispose();
+  });
+
+  it('refuses while fields or accumulation are on, and drops when they turn on', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { renderer } = fakeRenderer();
+    const layer = createSdfLayer(renderer);
+    layer.setSize(800, 600);
+    layer.setFieldStyle('bodies');
+    expect(layer.setMarchJitter([0.125, 0.125])).toBe(false);
+    layer.setFieldStyle('off');
+    expect(layer.setMarchJitter([0.125, 0.125])).toBe(true);
+    layer.setTemporalAccum(true);
+    expect(layer.marchJitter).toBeNull();
+    layer.setTemporalAccum(false);
+    expect(layer.setMarchJitter([0.125, 0.125])).toBe(true);
+    layer.setFieldStyle('bodies');
+    expect(layer.marchJitter).toBeNull();
+    expect(layer.setMarchJitter(null)).toBe(true);
+    warn.mockRestore();
+    layer.dispose();
+  });
+});
