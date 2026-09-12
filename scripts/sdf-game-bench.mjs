@@ -410,6 +410,14 @@ const ALL_LEGS = {
   'upscale-s8': { setUpscale: { trained: 's8-rgb-best' } },
   'upscale-s32': { setUpscale: { trained: 's32-rgb-best' } },
   'upscale-s32-rgbd': { setUpscale: { trained: 's32-rgbd-best' } },
+  // SHIP TRUTH since 2026-09-12: the s32-rgbd stage + CAS sharpen 0.5 (same weights as the tracked
+  // asset public/assets/lab/upscale/s32-rgbd-best.json). Boot the page with BENCH_QUERY=upscale=0 so
+  // the default stage is not already on when the reset block runs.
+  'upscale-ship': { setUpscale: { trained: 's32-rgbd-best' }, setUpscaleSharpen: 0.5 },
+  'upscale-s64-rgb': { setUpscale: { trained: 'v3-s64-rgb-best' } },
+  // Needs the normal attachment: BENCH_QUERY=upscale=0&upscalenormals=1 (which also puts the MRT on
+  // every other leg in that run — compare against THAT run's baseline, not another run's).
+  'upscale-s64d-rgbn': { setUpscale: { trained: 'v3-s64d-rgbn-best' } },
 };
 // BENCH_LEGS lets a validation pass run one leg without the whole matrix.
 const LEGS = process.env.BENCH_LEGS

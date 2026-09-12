@@ -26,3 +26,24 @@ after `ps -Ao pcpu,comm | sort -rn | head` shows nothing but Chrome/node above 2
 
 An earlier 2-repeat run the same morning (`/tmp/sdf-game-bench-upscale/`) had its second repeat
 contaminated by a pytest run in parallel; its rep0 agrees with the minima above.
+
+## Final run, 2026-09-12 evening (after the s64 grid) — `/tmp/sdf-game-bench-final-{a,b}/`
+
+Run a: `BENCH_QUERY=upscale=0` (no normal attachment); run b: `…&upscalenormals=1` (attachment + MRT on
+every leg). 3 repeats, rooms 1 and 5. Small legs still 20–97 % spread (not a quiet machine); the s64 legs
+were the tightest (4–13 %), so their deltas are real.
+
+| leg | room 1 (min of 3) | room 5 (min of 3) |
+|---|---:|---:|
+| baseline (native march) | 9.31 | 10.76 |
+| march-half (nearest) | 8.86 | 10.15 |
+| **upscale-ship (s32-rgbd + CAS 0.5)** | **9.14** | **10.53** |
+| upscale-s32-rgbd | 9.36 | 11.19 |
+| upscale-s64-rgb | 12.50 | 16.11 |
+| upscale-s64d-rgbn (run b) | 24.70 | 33.62 |
+| baseline, run b (MRT on) | 9.32 | 14.59 |
+
+- **Ship config ≈ native cost**: the stage + sharpen spends what the half march saved. Zero net frame cost.
+- **s64-rgb ≈ 1.4× baseline, s64d-rgbn ≈ 2.7–3×** — confirms the owner's rejection of s64.
+- **Normal attachment / MRT cost: unresolved** (run-b baseline room 1 = run-a baseline; room 5 noisy).
+- The shipped game boots with the stage on; `baseline` here is the pre-stage march (see TASKS follow-up).

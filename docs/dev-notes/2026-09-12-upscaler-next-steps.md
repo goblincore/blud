@@ -185,6 +185,9 @@ retrain first, or the raw-fields net (current + previous field + parity in), whi
 - **Next training run, agreed:** same cost as s32 — a third layer at 16–24 wide with dilation, normals,
   higher gradient weight, reparameterised branches; and an s16 + normals + 3 layers variant as the
   "same quality, half the cost" candidate. No recapture needed (dataset v3).
-- **Open:** the trained-smoke parity bar for 64-wide models (moot if s64 is not pursued); the quiet
-  bench incl. the normal attachment cost; the bench's `baseline` leg is now NOT ship truth (ship = stage on).
+- **Bench (final run, g1-cost.md):** ship config ≈ native frame cost (9.1 vs 9.3 ms room 1, 10.5 vs 10.8 room 5 —
+  the stage + sharpen spends what the half march saved); s64-rgb ≈ 1.4×, s64d-rgbn ≈ 2.7–3× baseline (tight
+  spread, real). Normal-attachment cost below the noise floor.
+- **Open:** the trained-smoke parity bar for 64-wide models (moot if s64 is not pursued); the bench's
+  `baseline` leg is the pre-stage march, not ship truth (follow-up in TASKS).
 
