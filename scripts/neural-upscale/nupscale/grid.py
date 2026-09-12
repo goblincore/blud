@@ -112,6 +112,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--val-every", type=int, default=C.VAL_EVERY)
     ap.add_argument("--batch", type=int, default=C.BATCH)
     ap.add_argument("--device", default="auto")
+    ap.add_argument("--compile", action="store_true", help="fuse the step with torch.compile (~2x)")
     args = ap.parse_args(argv)
     root = Path(args.root)
     root.mkdir(parents=True, exist_ok=True)
@@ -119,7 +120,7 @@ def main(argv: list[str] | None = None) -> None:
 
     def make_config(model_id: str, inputs: str) -> RunConfig:
         return RunConfig(model_id, inputs, max_steps=args.max_steps, time_cap_s=args.time_cap_min * 60,
-                         val_every=args.val_every, batch=args.batch)
+                         val_every=args.val_every, batch=args.batch, compile=args.compile)
 
     try:
         summary = run_grid(load_dataset(args.data), root, meter=meter, device=pick_device(args.device),

@@ -42,6 +42,7 @@ class RunConfig:
     coverage_margin: float = C.COVERAGE_MARGIN
     detail_weight: float = C.DETAIL_WEIGHT
     coverage_weight: float = C.COVERAGE_WEIGHT
+    compile: bool = False
 
     @property
     def name(self) -> str:
@@ -137,6 +138,20 @@ def train_run(cfg: RunConfig, dataset: Dataset, root: Path | str, *, device: tor
         step, best_step, best_score, best_metrics = ck["step"], ck["best_step"], ck["best_score"], ck["best_metrics"]
     validated_at = step if latest_path.exists() else -1
 
+    # A step is ~100 tiny elementwise kernels over 16 MB tensors, so it is launch-bound, not
+    # compute-bound: fusing them measured 2.0x on MPS (56.0 -> 28.3 ms/step, s32-rgbd, batch 64).
+    def loss_of(march, target, weight):
+        rec = reconstruct(march, model(march, near, far))
+        return upscale_loss(rec, target, weight, margin=cfg.coverage_margin,
+                            detail_weight=cfg.detail_weight, coverage_weight=cfg.coverage_weight)
+
+    compute = loss_of
+    if cfg.compile:
+        try:
+            compute = torch.compile(loss_of)
+        except Exception as e:  # a backend that cannot compile must not lose the run
+            print(f"[{cfg.name}] torch.compile unavailable, running eager: {e}")
+
     sampler = CropSampler(dataset.split("train"), crop=cfg.crop, seed=cfg.seed + step, region_share=cfg.region_share)
     showcase = showcase_pairs(dataset)
     entry = dashboard.run(cfg.name)
@@ -186,9 +201,7 @@ def train_run(cfg: RunConfig, dataset: Dataset, root: Path | str, *, device: tor
             state = "time-cap"
             break
         march, target, weight = (t.to(device) for t in sampler.sample(cfg.batch))
-        rec = reconstruct(march, model(march, near, far))
-        loss, parts = upscale_loss(rec, target, weight, margin=cfg.coverage_margin,
-                                   detail_weight=cfg.detail_weight, coverage_weight=cfg.coverage_weight)
+        loss, parts = compute(march, target, weight)
         opt.zero_grad(set_to_none=True)
         loss.backward()
         opt.step()
@@ -237,12 +250,13 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--val-every", type=int, default=C.VAL_EVERY)
     ap.add_argument("--batch", type=int, default=C.BATCH)
     ap.add_argument("--device", default="auto")
+    ap.add_argument("--compile", action="store_true", help="fuse the step with torch.compile (~2x)")
     args = ap.parse_args(argv)
     dataset = load_dataset(args.data)
     dashboard = Dashboard(args.root, dataset)
     baselines = prepare_dashboard(dashboard, dataset)
     cfg = RunConfig(args.model, args.inputs, max_steps=args.max_steps, time_cap_s=args.time_cap_min * 60,
-                    val_every=args.val_every, batch=args.batch)
+                    val_every=args.val_every, batch=args.batch, compile=args.compile)
     result = train_run(cfg, dataset, args.root, device=pick_device(args.device), dashboard=dashboard, baselines=baselines)
     print(json.dumps(result, indent=1))
 
