@@ -52,6 +52,18 @@ const { near, far } = await evaluate('__sdfGame.upscaleInfo()');
 const characters = await evaluate('__sdfGame.characterNames()');
 if (!Array.isArray(characters) || characters.length === 0) fail('no characters');
 
+// ROSTER (owner, 2026-09-12): only the characters that are actually in the game. `characterNames()`
+// also lists work-in-progress bodies — a 44-pair probe drew 12 of them, 38 % of sequences could not
+// even spawn ('no motion joints'), and only 27 % of captured pairs were shipping content. Training
+// on bodies that will not ship spends capture time and dataset weight on nothing.
+// `UPSCALE_CHARACTERS=all` restores the old behaviour; a comma list picks any other roster.
+const ROSTER = process.env.UPSCALE_CHARACTERS ?? 'zombie,goblin,soldier';
+const cast = ROSTER === 'all' ? characters : ROSTER.split(',').map((s) => s.trim()).filter(Boolean);
+if (cast.length === 0) fail('UPSCALE_CHARACTERS is empty');
+const absent = cast.filter((c) => !characters.includes(c));
+if (absent.length) fail(`UPSCALE_CHARACTERS names ${absent.join(', ')}; the page offers ${characters.join(', ')}`);
+console.log(`roster: ${cast.join(', ')}${ROSTER === 'all' ? ' (every spawnable character)' : ''}`);
+
 async function readSupersampled() {
   await evaluate(`(() => { __sdfGame.setUpscale(null); __sdfGame.setFieldStyle('off'); __sdfGame.setSdfScale(1.0); __sdfGame.step(4); return 1; })()`);
   const r = await evaluate(`__sdfGameDebug.readSupersampledTarget(${GRID})`, 600_000);
@@ -223,13 +235,13 @@ const pairs = readJsonl(PAIR_FILE).filter((p) => p.seq < seqDone.length);
 writeFileSync(PAIR_FILE, pairs.map((p) => JSON.stringify(p) + '\n').join(''));
 let bytes = pairs.reduce((s, p) => s + p.bytes, 0);
 const rng = mulberry32(SEED);
-for (let i = 0; i < seqDone.length; i++) planSequence(rng, i, characters, ROOMS);
+for (let i = 0; i < seqDone.length; i++) planSequence(rng, i, cast, ROOMS);
 let seqIndex = seqDone.length;
 if (seqIndex) console.log(`resuming after ${seqIndex} sequences, ${pairs.length} pairs`);
 const pairsAtStart = pairs.length;
 
 while (pairs.length < PAIRS && bytes < CAP_BYTES) {
-  const plan = planSequence(rng, seqIndex, characters, ROOMS);
+  const plan = planSequence(rng, seqIndex, cast, ROOMS);
   const split = splitFor(SEED, seqIndex);
   const staged = await stageSequence(plan);
   let captured = 0;
@@ -269,6 +281,7 @@ writeFileSync(join(OUT, 'manifest.json'), JSON.stringify({
   spec: 'docs/superpowers/specs/2026-09-11-neural-upscale-p3-training-design.md',
   seed: SEED,
   near, far,
+  content: { characters: cast, rooms: ROOMS },
   input: { fullW: IN_W, fullH: IN_H, sdfScale: 0.5, fieldStyle: 'off', temporalStart: g2.checks.temporalStart },
   target: { fullW: OUT_W, fullH: OUT_H, samples: GRID * GRID, grid: GRID, coverageRule: 'k >= 8', temporalStart: 'off' },
   rowOrder: 'row 0 = top',

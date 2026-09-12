@@ -138,3 +138,15 @@ target is the same render, cleaned of aliasing.
    (more far-class and more skipped sequences). A 1,000-pair capture is therefore roughly
    **1–1.5 h**, not the "hours" the plan text assumes.
 
+### Roster narrowed to shipping characters (owner, 2026-09-12)
+
+The owner's call: **only zombie, goblin and soldier are in the game right now**; the other nine
+bodies `characterNames()` offers are unfinished. `scripts/upscale-capture-v2.mjs` now takes
+`UPSCALE_CHARACTERS`, defaulting to those three, and records the roster in the manifest under
+`content.characters`.
+
+Verified with an 8-pair run: `roster: zombie, goblin, soldier`, captured
+`{zombie: 4, goblin: 2, soldier: 2}`, and **`skippedSpawn` fell from 16-of-42 to 0** — the spawn
+failures were entirely unfinished bodies. `UPSCALE_CHARACTERS=all` restores the old behaviour, and a
+comma list adds a body as it becomes ready.
+

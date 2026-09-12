@@ -23,6 +23,17 @@ LAB_VITE_PORT=5320 LAB_CDP_PORT=9320 UPSCALE_NAME=v2-2026-09-12 UPSCALE_PAIRS=10
 uv run scripts/upscale-dataset-check.py ~/blud-upscale-data/v2-2026-09-12
 ```
 
+**Roster.** The capture draws only `zombie,goblin,soldier` — the characters actually in the game.
+The rest of `characterNames()` is work in progress and a third of it cannot spawn, so capturing it
+would spend time and dataset weight on bodies that will not ship. Override when that changes:
+
+```bash
+UPSCALE_CHARACTERS=zombie,goblin,soldier,minotaur   # add one as it becomes ready
+UPSCALE_CHARACTERS=all                              # whatever the page offers
+```
+
+Expect roughly **1–1.5 h** for 1,000 pairs (4.4–5.2 s/pair measured).
+
 ## 2. RunPod API key (once)
 
 ```bash
