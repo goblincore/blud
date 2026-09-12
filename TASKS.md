@@ -16,6 +16,7 @@
 - [x] P3 spec `docs/superpowers/specs/2026-09-11-neural-upscale-p3-training-design.md`; plans p3a–p3d + contracts in `docs/superpowers/plans/`.
 - [x] P3a capture v2 built — smoke 24 pairs OK (`p3a-capture.md`). Owner: run the full ~1,000-pair capture (runbook in the plan).
 - [x] P3c in-game loader: `?upscale=trained&upscalemodel=<name>`, U key A/B, G3 parity script — smoke **PASS** (`sp 1.71e-3` ≤ `2e-3`) once the fixture moved to seed 1, the G1-reference seed. The twin's `f16round` now rounds half-to-even (a correctness fix; it moved no number — this workload hits no ties). G1 parity re-run PASS on all 7 configs. `p3c-ingame.md`.
+- [x] P3d pre-flight PASS on the 60 smoke pairs: train, G3, pull round trip, dashboard, in-game smoke (`p3-preflight.md`).
 - [ ] P3 plain-language overview for the owner: `docs/superpowers/plans/2026-09-11-neural-upscale-p3-overview.md`
   (copy into Obsidian `Claude Notes/Research/` once macOS stops blocking writes to ~/Documents). Nothing executed yet; dispatch order: p3a/p3b/p3c parallel, then p3d.
 
