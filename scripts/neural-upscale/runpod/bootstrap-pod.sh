@@ -34,6 +34,13 @@ done
 [ -n "$DATA" ] && [ -f "$DATA/manifest.json" ] || die "--data <dataset dir with manifest.json> is required"
 [ -n "$HOURLY" ] || die "--hourly-usd <the pod's hourly price> is required (the spend meter uses it)"
 HERE=$(cd "$(dirname "$0")/.." && pwd)
+# RUNPOD_POD_ID is in the container's own environment, but an ssh session does NOT inherit it, and
+# without it the stop at the end dies on set -u. PID 1 always has it; fall back to that, and let the
+# caller override.
+if [ -z "${RUNPOD_POD_ID:-}" ] && [ -r /proc/1/environ ]; then
+  RUNPOD_POD_ID=$(tr '\0' '\n' < /proc/1/environ | sed -n 's/^RUNPOD_POD_ID=//p' | head -1)
+  export RUNPOD_POD_ID
+fi
 
 GRID=(python -m nupscale.grid --data "$DATA" --root "$ROOT" --hourly-usd "$HOURLY" --cap-usd "$CAP" --reserve-min "$GRACE_MIN")
 [ -n "$RUNS" ] && GRID+=(--runs "$RUNS")
@@ -52,7 +59,12 @@ fi
 
 echo "== $(date -u +%FT%TZ) bootstrap on pod ${RUNPOD_POD_ID:-unknown}"
 python -c 'import torch; print("torch", torch.__version__, "cuda", torch.cuda.is_available())'
-python -m pip install -q "numpy>=1.24" "pillow>=9.0"
+# numpy<2 on purpose: the RunPod torch 2.1 image is compiled against numpy 1.x, and an unpinned
+# "numpy>=1.24" happily installs numpy 2.x, after which every torch import fails. Only install what
+# is missing, so a working image is left alone.
+python -c "import numpy" 2>/dev/null || python -m pip install -q "numpy>=1.24,<2"
+python -c "import PIL" 2>/dev/null || python -m pip install -q "pillow>=9.0"
+python -c "import numpy, torch, PIL; print('deps ok: numpy', numpy.__version__, 'torch', torch.__version__, 'pillow', PIL.__version__)"
 # Billing starts when the container starts; PID 1's start time is the closest thing the pod can see.
 STARTED_AT=$(date -d "$(ps -o lstart= -p 1)" +%s)
 mkdir -p "$ROOT"
