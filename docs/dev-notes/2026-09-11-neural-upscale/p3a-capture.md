@@ -100,3 +100,41 @@ Four sequences were skipped because their drawn character cannot be spawned as a
    all 24 smoke pairs are `train`, no `native.npy` was written, and `showcase` is 0. The checker
    accepts this (the native-file-per-split rule holds vacuously). The full ~1,000-pair run spans
    enough sequences for ~10% `val` and a populated showcase.
+
+## Update 2026-09-12 — validation path verified, and two numbers the owner should know
+
+The 24-pair smoke put every pair in `train` (its sequences never hit the 1-in-10 validation
+draw), so the `val` split and its `native.npy` renders were untested. A second run was made purely
+to exercise them: **44 pairs, seed 1, `UPSCALE_FRAMES=2`**, which reaches sequence 17 — the first
+index `splitFor(1, ·)` marks `val` (then 22, 23, 24).
+
+```
+splits {'train': 40, 'val': 4}   val sequences [17, 22, 23]   showcase 4
+native.npy written for 4 of 4 val pairs, and for 0 train pairs
+s0017-f000  in (177, 331, 4)  target (354, 662, 4)  native (354, 662, 4)  float32, finite
+upscale-dataset-check.py -> OK
+```
+
+The trainer consumes it, which is the real proof — `compute_baselines` raises without val pairs and
+skips the native baseline without `native.npy`:
+
+```
+loaded 44 pairs | 40 train, 4 val | native on 4
+baselines: nearest 0.0208 | bicubic 0.0177 | native 0.0079
+```
+
+Native scoring far better than bicubic against the supersampled target is the expected shape: the
+target is the same render, cleaned of aliasing.
+
+**Two findings for the full run.**
+
+1. **Spawn failures are common.** This run skipped **16 of 42 sequences** (38 %) because the drawn
+   character could not be spawned — e.g. `gargoyle`, `bloatmaw`, both reporting
+   `zombie NNN: no motion joints`. The 24-pair smoke saw 4. The capture handles it (counts it in
+   `stats.skippedSpawn` and moves on), but the dataset's character mix is therefore whatever
+   spawns, not the full roster. Worth a look before the full run if character variety matters.
+   Characters actually captured here: bonewalker x4, clown x3, clown-alt x3, cyberdemon x4, female x4, gnasher x3, goblin x5, minotaur x4, schoolgirl x3, schoolgirl-described x4, soldier x3, zombie x4.
+2. **Time per pair is workload-dependent:** 3.58 s/pair on the 24-pair smoke, **5.25 s/pair** here
+   (more far-class and more skipped sequences). A 1,000-pair capture is therefore roughly
+   **1–1.5 h**, not the "hours" the plan text assumes.
+
