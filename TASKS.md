@@ -19,9 +19,10 @@
 - [x] P3d pre-flight PASS on the 60 smoke pairs: train, G3, pull round trip, dashboard, in-game smoke (`p3-preflight.md`).
 - [x] OWNER VERDICT 2026-09-12: **worth it** — playtested in-game, stable 30 fps, "smooth and details are not bad".
   All six runs passed G4 (best s32-rgbd 0.0233 vs bicubic 0.0284, nearest 0.0314, native 0.0141) for $2.21 of pod time.
-- [ ] P4 (brainstormed, spec pending): use the upscaler as an AESTHETIC tool — a 90s pre-rendered CG look
-  (soft ray-traced, Myst/FF7), characters only, via enriched inputs (normals) + a perceptual/adversarial loss.
-  Gated on the deferred cost bench (P1 Task 6) for real ms/frame.
+- [ ] P4 (brainstormed, spec pending) — **read `docs/dev-notes/2026-09-12-visual-direction-handoff.md` first**:
+  upscaler as an AESTHETIC tool (90s pre-rendered CG, soft ray-traced, characters only, normals + adversarial loss),
+  blood overhaul (conventional rendering FIRST — narrow-range filter, refraction, volume — then learn it cheap),
+  gibs parked pending the prebaked-mesh rework. Cost bench (P1 Task 6) still deferred.
 - [ ] P3 plain-language overview for the owner: `docs/superpowers/plans/2026-09-11-neural-upscale-p3-overview.md`
   (copy into Obsidian `Claude Notes/Research/` once macOS stops blocking writes to ~/Documents). Nothing executed yet; dispatch order: p3a/p3b/p3c parallel, then p3d.
 
