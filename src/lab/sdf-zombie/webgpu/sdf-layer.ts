@@ -33,14 +33,14 @@
 
 import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
-import { wgslFn, texture, uv, vec4, uniform } from 'three/tsl';
+import { wgslFn, texture, uv, vec4, uniform, mrt, output, cameraViewMatrix, mat3, mul } from 'three/tsl';
 import { fieldParity, fieldTargetHeight, fieldJitterNdcY } from './field-render';
-import { createConeUniforms, createDepthPreUniforms, type ConeSource, type DepthPreSource, type LastFrameSource, type OccluderSource, type PrevSource } from './zombie-gpu';
+import { createConeUniforms, createDepthPreUniforms, marchNormalRead, type ConeSource, type DepthPreSource, type LastFrameSource, type OccluderSource, type PrevSource } from './zombie-gpu';
 import { TEMPORAL_START_DEFAULTS, temporalMarginForMotion } from './temporal-start';
 import { TEMPORAL_ACCUM_DEFAULT_ALPHA, TEMPORAL_ACCUM_CONVERGED_FRAMES, accumAlpha, accumJitter } from './temporal-accum';
 import { setPassLabel } from './gpu-pass-timing';
 import { createUpscaleStage, upscaleInfoOf, type UpscaleInfo, type UpscaleStage } from './upscale/upscale-stage';
-import type { UpscaleConfig, UpscaleModel } from './upscale/upscale-model';
+import { inputsUseNormals, type UpscaleConfig, type UpscaleModel } from './upscale/upscale-model';
 
 // ---------------------------------------------------------------------------
 // HALF-RATE (lever C2, temporal amortisation) — render the march every OTHER
@@ -890,6 +890,9 @@ export interface SdfLayer {
   readonly upscaleInfo: UpscaleInfo;
   /** The live stage, for measurement readbacks only; null when off. */
   readonly upscaleStage: UpscaleStage | null;
+  /** The march's second attachment (view-space normal, rgba32f) when the layer was created with
+   *  `marchNormals`; null otherwise. */
+  readonly marchNormalTexture: THREE.Texture | null;
   /** Which flesh texture the composite reads: the raw march, the accumulated history, or the upscale output. */
   readonly compositeSource: 'march' | 'accum' | 'upscale';
   /** CAPTURE JITTER (neural upscale P3, spec 2026-09-11-neural-upscale-p3-training-design.md §1):
@@ -940,7 +943,15 @@ export interface SdfLayer {
  */
 export const DEFAULT_SDF_SCALE = 0.7;
 
-export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
+export interface SdfLayerOptions {
+  /** Allocate a second march attachment carrying the VIEW-space shading normal and render the
+   *  march with a renderer-level MRT into it (neural upscale rgbn/rgbdn inputs). Dev-only: the
+   *  shipped boot keeps the single-attachment target and its exact frame. */
+  marchNormals?: boolean;
+}
+
+export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayerOptions = {}): SdfLayer {
+  const marchNormals = options.marchNormals === true;
   let scale = DEFAULT_SDF_SCALE;
   let fullW = 1;
   let fullH = 1;
@@ -1091,7 +1102,29 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
     type: THREE.FloatType,
     minFilter: THREE.NearestFilter,
     magFilter: THREE.NearestFilter,
+    count: marchNormals ? 2 : 1,
   });
+  // RUNTIME NORMALS (2026-09-12): with two attachments every material drawn into `target` must
+  // emit both, so the MRT is set on the RENDERER around the march renders (three's MRTNode maps
+  // outputs to attachments BY NAME and drops unmatched names — a material-level mrtNode would
+  // break that material in every single-attachment target). `output` is each material's own
+  // final colour; the normal is the lit march's private global rotated into view space (unit in,
+  // unit out — no normalize, which would NaN on a fragment that never wrote it).
+  let marchMrt: unknown = null;
+  if (marchNormals) {
+    target.textures[0]!.name = 'output';
+    target.textures[1]!.name = 'marchNormal';
+    const n = marchNormalRead({ dep: output as never }) as unknown as { xyz: unknown; w: unknown };
+    marchMrt = mrt({
+      output,
+      marchNormal: vec4(mul(mat3(cameraViewMatrix as never), n.xyz as never) as never, n.w as never),
+    });
+  }
+  const withMarchMrt = <T>(fn: () => T): T => {
+    if (!marchMrt) return fn();
+    renderer.setMRT(marchMrt as never);
+    try { return fn(); } finally { renderer.setMRT(null); }
+  };
 
   // Accumulated colour+depth so far in this frame's front-to-back walk. A
   // pass cannot read the target it writes, so each body reads a blit of
@@ -1410,6 +1443,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
   // Pulled back to z = 1 so the plane at z = 0 sits INSIDE the [0, 1] depth
   // range rather than exactly on the near plane, which is degenerate.
   const quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 2);
+
   quadCam.position.z = 1;
 
   // The accumulation resolve: one full-screen quad, fixed bindings, writing
@@ -1537,7 +1571,8 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       try {
         camera.layers.set(SDF_LAYER);
         renderer.setRenderTarget(target);
-        await renderer.compileAsync(object, camera, scene);
+        if (marchMrt) renderer.setMRT(marchMrt as never);
+        try { await renderer.compileAsync(object, camera, scene); } finally { if (marchMrt) renderer.setMRT(null); }
       } finally {
         renderer.setRenderTarget(previousTarget);
         camera.layers.mask = previousMask;
@@ -1849,7 +1884,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
           for (const o of group) o.visible = true;
           setPassLabel('sdf:march');
           renderer.setRenderTarget(target);
-          void renderer.render(scene, camera);
+          withMarchMrt(() => renderer.render(scene, camera));
           for (const o of group) o.visible = false;
         }
         renderer.autoClear = prevAuto;
@@ -1859,20 +1894,20 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
         const wasVisible = new Map<THREE.Object3D, boolean>();
         for (const o of chunks) { wasVisible.set(o, o.visible); o.visible = false; }
         renderer.setRenderTarget(target);
-        void renderer.render(scene, camera);
+        withMarchMrt(() => renderer.render(scene, camera));
         if (chunkPass === 'split') {
           for (const [o, v] of wasVisible) o.visible = v;
           for (const o of bodies) { if (!wasVisible.has(o)) { wasVisible.set(o, o.visible); o.visible = false; } }
           setPassLabel('sdf:march-chunks');
           const prevAuto = renderer.autoClear;
           renderer.autoClear = false;
-          void renderer.render(scene, camera);
+          withMarchMrt(() => renderer.render(scene, camera));
           renderer.autoClear = prevAuto;
         }
         for (const [o, v] of wasVisible) o.visible = v;
       } else {
         renderer.setRenderTarget(target);
-        void renderer.render(scene, camera);
+        withMarchMrt(() => renderer.render(scene, camera));
       }
       // TEMPORAL START copy (plan 2026-09-10): the marched layer, final for
       // this frame, and the inverse of the VP that rendered it — paired here
@@ -2109,7 +2144,10 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       }
       if (fieldStyle !== 'off') this.setFieldStyle('off');
       // Build first: a model/config mismatch throws here and leaves the old stage intact.
-      const next = createUpscaleStage(config, target.texture, uFlipY, model);
+      if (inputsUseNormals(config.inputs) && !marchNormals) {
+        throw new Error(`upscale: input set ${config.inputs} needs march normals — boot with ?upscale=... so the layer allocates the attachment`);
+      }
+      const next = createUpscaleStage(config, target.texture, uFlipY, model, marchNormals ? target.textures[1] : undefined);
       upscale?.dispose();
       upscale = next;
       upscale.setSize(target.width, target.height, fullW, fullH);
@@ -2117,6 +2155,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer): SdfLayer {
       (uAccumOn.value as number) = 1;
       return upscaleInfoOf(upscale);
     },
+    get marchNormalTexture() { return marchNormals ? target.textures[1]! : null; },
     get upscaleInfo() { return upscaleInfoOf(upscale); },
     get upscaleStage() { return upscale; },
     get compositeSource() { return upscale ? 'upscale' : accumOn ? 'accum' : 'march'; },

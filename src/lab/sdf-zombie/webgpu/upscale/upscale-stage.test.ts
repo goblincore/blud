@@ -81,3 +81,32 @@ describe('upscale stage wiring', () => {
       .toThrow(/does not match/);
   });
 });
+
+describe('upscale post-sharpen', () => {
+  it('off: no extra pass and the network writes output; on: network writes netOut, sharpen writes output', () => {
+    const stage = createUpscaleStage({ model: 's8', layout: 'sp', inputs: 'rgb', seed: 2 }, new THREE.Texture(), uniform(1));
+    stage.setSize(400, 300, 800, 600);
+    expect(stage.sharpen).toBe(0);
+    expect(stage.targetFor('shuffle')).toBe(stage.output);
+    let { renderer, calls } = fakeRenderer();
+    stage.render(renderer, new THREE.OrthographicCamera(), new THREE.PerspectiveCamera());
+    expect(calls).toHaveLength(stage.passes.length);
+    expect(calls[calls.length - 1]!.target).toBe(stage.output);
+
+    stage.setSharpen(0.5);
+    expect(stage.sharpen).toBe(0.5);
+    expect(stage.targetFor('shuffle')).not.toBe(stage.output);
+    expect([stage.targetFor('shuffle').width, stage.targetFor('shuffle').height]).toEqual([800, 600]);
+    ({ renderer, calls } = fakeRenderer());
+    stage.render(renderer, new THREE.OrthographicCamera(), new THREE.PerspectiveCamera());
+    expect(calls).toHaveLength(stage.passes.length + 1);
+    expect(calls[calls.length - 2]!.target).toBe(stage.targetFor('shuffle'));
+    expect(calls[calls.length - 1]!.target).toBe(stage.output);
+    expect(upscaleInfoOf(stage).sharpen).toBe(0.5);
+    stage.setSharpen(7); expect(stage.sharpen).toBe(4);
+    expect(stage.sharpenMode).toBe('cas'); stage.setSharpenMode('unsharp'); expect(stage.sharpenMode).toBe('unsharp');
+    expect(upscaleInfoOf(stage).sharpenMode).toBe('unsharp');
+    stage.setSharpen(NaN); expect(stage.sharpen).toBe(0);
+    stage.dispose();
+  });
+});

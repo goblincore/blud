@@ -6,7 +6,7 @@ import math
 import torch
 from torch import nn
 
-from .constants import DEPTH_INPUT_SCALE, HIDDEN_WIDTHS, ICNR_SCALE, INPUT_CHANNELS, LAST_CHANNELS
+from .constants import DEPTH_INPUT_SCALE, HIDDEN_WIDTHS, ICNR_SCALE, INPUT_CHANNELS, LAST_CHANNELS, NORMAL_CHANNELS
 
 
 def linear_depth(clip: torch.Tensor, near: float, far: float) -> torch.Tensor:
@@ -33,7 +33,7 @@ class Upscaler(nn.Module):
             nn.Conv2d(a, b, 3, padding=1, padding_mode="replicate") for a, b in zip(widths[:-1], widths[1:])
         )
         in_scale = torch.ones(widths[0])
-        if inputs == "rgbd":
+        if inputs in ("rgbd", "rgbdn"):
             in_scale[4] = DEPTH_INPUT_SCALE
         self.register_buffer("in_scale", in_scale)
         self.register_buffer("in_offset", torch.zeros(widths[0]))
@@ -59,13 +59,23 @@ class Upscaler(nn.Module):
                 conv.weight.zero_()
                 conv.bias.zero_()
 
+    @property
+    def wants_normals(self) -> bool:
+        return self.inputs in ("rgbn", "rgbdn")
+
     def assemble(self, march: torch.Tensor, near: float, far: float) -> torch.Tensor:
-        """upscale-reference.ts `assembleInput`: rgb*hit, hit[, hit*linearDepth], then *inScale + inOffset."""
+        """upscale-reference.ts `assembleInput`: rgb*hit, hit[, hit*linearDepth][, normal*hit], then
+        *inScale + inOffset. `march` is (N, 4, h, w), or (N, 7, h, w) with the view-space normal in
+        channels 4..6 (dataset pairs that carry normal.npy) — required by the rgbn/rgbdn sets."""
         alpha = march[:, 3:4]
         hit = (alpha < 1).to(march.dtype)
         parts = [march[:, :3] * hit, hit]
-        if self.inputs == "rgbd":
+        if self.inputs in ("rgbd", "rgbdn"):
             parts.append(hit * linear_depth(alpha, near, far))
+        if self.wants_normals:
+            if march.shape[1] < 4 + NORMAL_CHANNELS:
+                raise ValueError(f"input set {self.inputs!r} needs normals (7 input channels), got {march.shape[1]}")
+            parts.append(march[:, 4:4 + NORMAL_CHANNELS] * hit)
         x = torch.cat(parts, dim=1)
         return x * self.in_scale.view(1, -1, 1, 1) + self.in_offset.view(1, -1, 1, 1)
 

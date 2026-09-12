@@ -46,6 +46,7 @@ Written by `scripts/upscale-capture-v2.mjs` (p3a), and by `nupscale.convert_p2` 
   pairs/<pair id>/target.npy
   pairs/<pair id>/target-coverage.npy
   pairs/<pair id>/native.npy  # validation pairs only
+  pairs/<pair id>/normal.npy  # optional (captures from 2026-09-12 on): rgbn/rgbdn input sets
   check-in.npy, check-target.npy   # optional, UPSCALE_DUMP_CHECK=1
 ```
 
@@ -57,6 +58,7 @@ Written by `scripts/upscale-capture-v2.mjs` (p3a), and by `nupscale.convert_p2` 
 | `target.npy` | (2h, 2w, 4) | r, g, b = mean of hit samples; clip depth of the first hit in sample order; covered iff hit count k ≥ 8 of 16, else (0, 0, 0, 1.0) |
 | `target-coverage.npy` | (2h, 2w, 1) | k / 16 |
 | `native.npy` | (2h, 2w, 4) | the single-ray 800×600 march, cropped (validation pairs only) |
+| `normal.npy` | (h, w, 3) | VIEW-space unit shading normal of the input march (x right, y up, z toward the camera), zero where `in` has no flesh. Captured by re-rendering the same frozen 400×300 frame in march debug mode 9 and rotating by the camera's matrixWorldInverse; the loader appends it as input channels 4..6 (`Pair.inp` becomes (7, h, w)). Optional: a pair without it can only train `rgb`/`rgbd` models |
 
 Clip depth is WebGPU [0, 1] clip depth. Linear view depth is
 `near·far / (far − d·(far − near))`, with `near`/`far` from the manifest.

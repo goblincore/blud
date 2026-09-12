@@ -38,6 +38,29 @@ export async function readMarch(evaluate) {
   return { w: r.w, h: r.h, data: new Float32Array(copy.buffer, copy.byteOffset, copy.byteLength / 4) };
 }
 
+/** The march re-rendered in normals mode (game-main readMarchNormals): { w, h, data } with the
+ *  WORLD-space normal in rgb and clip depth in alpha, plus `view` (camera matrixWorldInverse,
+ *  column-major 16). Same frozen frame and size as the last readMarch at the same scale. */
+export async function readMarchNormals(evaluate) {
+  const r = await evaluate('__sdfGameDebug.readMarchNormals()', 300_000);
+  const copy = Buffer.from(Buffer.from(r.rgba32f, 'base64'));
+  return { w: r.w, h: r.h, view: r.view, data: new Float32Array(copy.buffer, copy.byteOffset, copy.byteLength / 4) };
+}
+
+/** (h, w, 3) view-space unit normals from a normals read: rotate by the view matrix's 3x3, unit
+ *  length where the ray hit (alpha < 1), zero elsewhere. */
+export function viewSpaceNormals(nrm) {
+  const e = nrm.view, n = nrm.w * nrm.h, out = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    if (nrm.data[i * 4 + 3] >= 1) continue;
+    const x = nrm.data[i * 4], y = nrm.data[i * 4 + 1], z = nrm.data[i * 4 + 2];
+    const vx = e[0] * x + e[4] * y + e[8] * z, vy = e[1] * x + e[5] * y + e[9] * z, vz = e[2] * x + e[6] * y + e[10] * z;
+    const len = Math.hypot(vx, vy, vz) || 1;
+    out[i * 3] = vx / len; out[i * 3 + 1] = vy / len; out[i * 3 + 2] = vz / len;
+  }
+  return out;
+}
+
 /** Render the current (render-locked) state at an SDF scale, fields and upscale off, and read it. */
 export async function renderAt(evaluate, scale) {
   await evaluate(`(() => { __sdfGame.setUpscale(null); __sdfGame.setFieldStyle('off'); __sdfGame.setSdfScale(${scale}); __sdfGame.step(4); return 1; })()`);

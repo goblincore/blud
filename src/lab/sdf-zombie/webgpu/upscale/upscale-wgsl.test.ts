@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 // @ts-expect-error — deep three source import for the real wgslFn parser (same as sdf-layer.test.ts).
 import WGSLNodeFunction from 'three/src/renderers/webgpu/nodes/WGSLNodeFunction.js';
 import { createUpscaleModel, type ConvLayer } from './upscale-model';
-import { lit, matLiteral, planUpscalePasses, UPSCALE_RECONSTRUCT_WGSL } from './upscale-wgsl';
+import { lit, matLiteral, planUpscalePasses, UPSCALE_RECONSTRUCT_WGSL, UPSCALE_SHARPEN_WGSL } from './upscale-wgsl';
 
 const declared = (src: string) => {
   const params = src.slice(src.indexOf('(') + 1, src.indexOf(') ->')).replace(/\/\/[^\n]*/g, '');
@@ -15,6 +15,22 @@ const expectParses = (src: string) => {
 };
 
 describe('upscale pass plan', () => {
+  it('normal input sets bind a second texture on the first pass only, depth-first when both', () => {
+    for (const inputs of ['rgbn', 'rgbdn'] as const) {
+      const passes = planUpscalePasses(createUpscaleModel('s8', inputs, 1), 'sp');
+      expect(passes[0]!.params).toEqual(['march', 'normal']);
+      expect(passes[0]!.inputs).toEqual(['march', 'normal']);
+      expect(passes[0]!.usesNearFar).toBe(inputs === 'rgbdn');
+      expect(passes[0]!.run).toContain('textureLoad(normal, q4, 0).xyz * h4');
+      expect(passes[1]!.params).not.toContain('normal');
+      expect(passes[1]!.run).not.toContain('normal');
+    }
+    // rgbdn: depth is the first channel of the second vec4, then the normal
+    const dn = planUpscalePasses(createUpscaleModel('s8', 'rgbdn', 1), 'sp')[0]!.run;
+    expect(dn).toMatch(/let a1_0 = vec4<f32>\(h0 \* \(nearFar\.x[^;]*n0\.x[^;]*n0\.y[^;]*n0\.z[^;]*\);/);
+    expect(planUpscalePasses(createUpscaleModel('s8', 'rgb', 1), 'sp')[0]!.params).toEqual(['march']);
+  });
+
   it('s8 sub-pixel: two hidden convs, the 16-channel last conv, then the shuffle', () => {
     const passes = planUpscalePasses(createUpscaleModel('s8', 'rgb', 1), 'sp');
     expect(passes.map((p) => p.name)).toEqual(['L1a', 'L2a', 'L3a', 'shuffle']);
@@ -52,12 +68,20 @@ describe('upscale pass plan', () => {
 });
 
 describe('upscale WGSL sources', () => {
-  const all = (['s8', 's16', 's32', 'zero'] as const).flatMap((id) =>
-    (['rgb', 'rgbd'] as const).flatMap((inputs) =>
-      (['sp', 'dc'] as const).map((layout) => ({ id, inputs, layout, passes: planUpscalePasses(createUpscaleModel(id, inputs, 1), layout) }))));
+  const all = (['s8', 's16', 's32', 's64d', 'zero'] as const).flatMap((id) =>
+    (['rgb', 'rgbd', 'rgbn', 'rgbdn'] as const).flatMap((inputs) =>
+      (['sp', 'dc'] as const).filter((layout) => !(layout === 'dc' && id === 's64d'))
+        .map((layout) => ({ id, inputs, layout, passes: planUpscalePasses(createUpscaleModel(id, inputs, 1), layout) }))));
+
+  it('refuses the deconv layout when it would bind more than 16 textures (s64 last hidden layer)', () => {
+    expect(() => planUpscalePasses(createUpscaleModel('s64', 'rgb', 1), 'dc')).toThrow(/limit 16.*use layout sp/);
+    expect(() => planUpscalePasses(createUpscaleModel('s64', 'rgb', 1), 'sp')).not.toThrow();
+    expect(() => planUpscalePasses(createUpscaleModel('s32', 'rgb', 1), 'dc')).not.toThrow();
+  });
 
   it('every generated function parses to its real parameter list (no phantom inputs)', () => {
     expectParses(UPSCALE_RECONSTRUCT_WGSL);
+    expectParses(UPSCALE_SHARPEN_WGSL);
     for (const { passes } of all) {
       for (const p of passes) {
         expectParses(p.run);

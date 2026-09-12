@@ -6,6 +6,8 @@
  * (__sdfGame.freeze(true); __sdfGame.setRenderLock(true)), so re-rendering does
  * not change the march target. `marchStable` in the result verifies it.
  */
+import { inputsUseNormals } from './upscale-model';
+import { planUpscalePasses } from './upscale-wgsl';
 import type * as THREE from 'three/webgpu';
 import type { SdfLayer } from '../sdf-layer';
 import type { UpscaleLayout } from './upscale-model';
@@ -46,10 +48,10 @@ export interface SelfCheckResult {
 export const COVERAGE_BAND = 4e-3;
 
 /** RGBA32F render-target readback with WebGPU row padding removed; row 0 = texel row 0. */
-export async function readFloatTarget(renderer: THREE.WebGPURenderer, rt: THREE.RenderTarget): Promise<FloatImage> {
+export async function readFloatTarget(renderer: THREE.WebGPURenderer, rt: THREE.RenderTarget, textureIndex = 0): Promise<FloatImage> {
   const w = rt.width;
   const h = rt.height;
-  const raw = new Float32Array(await renderer.readRenderTargetPixelsAsync(rt, 0, 0, w, h) as unknown as ArrayLike<number>);
+  const raw = new Float32Array(await renderer.readRenderTargetPixelsAsync(rt, 0, 0, w, h, textureIndex) as unknown as ArrayLike<number>);
   const stride = Math.ceil((w * 16) / 256) * 64;
   const data = new Float32Array(w * h * 4);
   for (let y = 0; y < h; y++) data.set(raw.subarray(y * stride, y * stride + w * 4), y * w * 4);
@@ -118,7 +120,9 @@ export async function runUpscaleSelfCheck(deps: SelfCheckDeps, opts: { compareLa
   deps.renderFrames(4);
   deps.layer.setUpscale(original, weights);
   deps.renderFrames(8);
-  const layouts: UpscaleLayout[] = opts.compareLayouts ? ['sp', 'dc'] : [original.layout];
+  // 'dc' is refused for a 64-wide last hidden layer (17 sampled textures); compare what can plan.
+  const canPlan = (layout: UpscaleLayout) => { try { planUpscalePasses(weights ?? deps.layer.upscaleStage!.model, layout); return true; } catch { return false; } };
+  const layouts: UpscaleLayout[] = opts.compareLayouts ? (['sp', 'dc'] as const).filter(canPlan) : [original.layout];
   const outputs = new Map<UpscaleLayout, FloatImage>();
   const gpuVsCpu: LayoutCheck[] = [];
   let marchRef: FloatImage | null = null;
@@ -130,6 +134,8 @@ export async function runUpscaleSelfCheck(deps: SelfCheckDeps, opts: { compareLa
     await deps.resolveGpu();
     const stage = deps.layer.upscaleStage!;
     const march = await readFloatTarget(deps.renderer, deps.layer.marchTarget);
+    // rgbn/rgbdn: the march's second attachment (view-space normal), same size and frame.
+    const normal = inputsUseNormals(stage.model.inputs) ? await readFloatTarget(deps.renderer, deps.layer.marchTarget, 1) : undefined;
     const gpu = await readFloatTarget(deps.renderer, stage.output);
     if (marchRef) marchStable = marchStable && sameImage(marchRef, march);
     else marchRef = march;
@@ -137,6 +143,7 @@ export async function runUpscaleSelfCheck(deps: SelfCheckDeps, opts: { compareLa
     const cpu = upscaleReference(march, stage.model, layout, deps.camera.near, deps.camera.far, gpu.w, gpu.h, {
       halfFloatStorage: true,
       marginOut: margin,
+      normal,
     });
     gpuVsCpu.push(compare(gpu, cpu, margin, layout));
     outputs.set(layout, gpu);
@@ -151,7 +158,7 @@ export async function runUpscaleSelfCheck(deps: SelfCheckDeps, opts: { compareLa
     marchSize: { width: marchRef!.w, height: marchRef!.h },
     marchStable,
     gpuVsCpu,
-    layouts: opts.compareLayouts ? compareOutputs(outputs.get('sp')!, outputs.get('dc')!) : null,
+    layouts: opts.compareLayouts && outputs.has('sp') && outputs.has('dc') ? compareOutputs(outputs.get('sp')!, outputs.get('dc')!) : null,
     ms: performance.now() - t0,
   };
 }

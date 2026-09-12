@@ -94,8 +94,12 @@ def export_parity_fixture(model, pairs: list[Pair], near: float, far: float, out
     for k, pair in enumerate(pairs[:count]):
         march = pair.inp.unsqueeze(0)
         output = reconstruct(march, cpu(march, near, far)).march()[0]
-        _save_hwc(out / f"input-{k}.npy", pair.inp)
+        _save_hwc(out / f"input-{k}.npy", pair.inp[:4])
         _save_hwc(out / f"output-sp-{k}.npy", output)
-        fixtures.append({"pair": pair.id, "input": f"input-{k}.npy", "output": f"output-sp-{k}.npy"})
+        fx = {"pair": pair.id, "input": f"input-{k}.npy", "output": f"output-sp-{k}.npy"}
+        if pair.inp.shape[0] > 4:
+            _save_hwc(out / f"normal-{k}.npy", pair.inp[4:])
+            fx["normal"] = f"normal-{k}.npy"
+        fixtures.append(fx)
     (out / "meta.json").write_text(json.dumps({"near": near, "far": far, "fixtures": fixtures}, indent=1))
     return fixtures

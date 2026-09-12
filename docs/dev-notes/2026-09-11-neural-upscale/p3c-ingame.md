@@ -127,3 +127,32 @@ green is the seed, and the honest reading of the gate is unchanged: **2e-3 is ca
 worst pixel of the G1 reference fixtures**, seed 3 sat 3.6 % outside it, and a real trained export
 sits well inside (1.28e-3 measured on the pre-flight s8-rgb export).
 
+
+## Runtime normals (2026-09-12) — rgbn/rgbdn models load in-game
+
+Plan: `docs/superpowers/plans/2026-09-12-neural-upscale-runtime-normals.md`. Built as a **renderer-level
+MRT** around the march renders (three's MRTNode maps outputs to attachments BY NAME and drops unmatched
+names, so a material-level mrtNode would break that material in any single-attachment target). The lit
+march writes `gMarchNormal` (world, unit, after the face bump — the same `n` capture mode 9 returns); the
+layer rotates it into view space with `cameraViewMatrix` (no normalize: unit in, unit out, and normalize
+would NaN on a fragment that never wrote it). The second attachment exists only for `?upscale` boots
+(`createSdfLayer(renderer, { marchNormals })`), so the shipped frame keeps one attachment.
+
+- `upscale-smoke.mjs`: PASS, 0 shader errors on all six configs incl. `s8/rgbn` and `s64d/sp/rgbdn`.
+- **`dc` layout is refused at 64 wide** (planner guard): deconv binds march + 16 hidden textures = 17 >
+  WebGPU's 16 sampled textures per stage. `sp` is the only layout for s64/s64d.
+- G3 (TS twin vs PyTorch, CPU): `v3-s64d-rgbn-best` PASS, maxRelRgb 6e-7 — the normal channel order and
+  hit-masking match `nupscale/model.py` exactly.
+- `upscale-trained-smoke.mjs` (GPU vs twin with f16 emulation), bar 2e-3:
+
+  | model | maxRelRgb | coverage/depth mismatch |
+  |---|---:|---|
+  | v3-s64-rgb-best (no normals) | 4.06e-3 | 2 / 0 |
+  | v3-s64-rgbn-best | 2.93e-3 | 0 / 0 |
+  | v3-s64d-rgbn-best | 4.70e-3 | 0 / 0 |
+
+  **Not a normals bug** — the width-only model misses the bar by the most. The 2e-3 bar was set on the
+  s8–s32 ladder (P3c recorded 1.71e-3 for a trained s8); at 64 channels the per-feature f16 storage
+  rounding (half ulp ≈ 4.9e-4, and the GPU's conversion can differ from the twin's half-to-even by an
+  ulp) compounds over 576-term sums into the 3–5e-3 range. Coverage and depth are exact. The bar has NOT
+  been changed; whether it should scale with width is the owner's call (recorded, not decided).

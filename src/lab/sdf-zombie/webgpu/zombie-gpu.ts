@@ -32,7 +32,7 @@ import { NORMAL_GRADIENT_HELPERS, NORMAL_GRADIENT_GAME_HELPERS } from './normal-
 import type { TileGroupInput } from './tile-cull';
 import type { ComputeTileBinding } from './tile-bin-compute';
 import {
-  HELPERS, MARCH_BODY, CONE_MARCH, DEPTH_PREPASS_MARCH, DATA_ROWS,
+  HELPERS, MARCH_BODY, CONE_MARCH, DEPTH_PREPASS_MARCH, DATA_ROWS, MARCH_NORMAL_OUT,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE,
   ROW_PRIM_BEND, ROW_PRIM_COLOR, ROW_PRIM_SHELL, ROW_PRIM_WARP, ROW_PRIM_STRAND, ROW_PRIM_CLIP,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
@@ -171,6 +171,10 @@ export interface ZombieGpuView {
  * Each helper is itself a node, built by folding so that every one carries the
  * helpers declared before it.
  */
+/** The runtime-normals read fn + its private global (MARCH_NORMAL_OUT). Shared by the lit march
+ *  chain and the layer's march MRT; call as marchNormalRead({ dep }) with the march result. */
+export const marchNormalRead = wgslFn(MARCH_NORMAL_OUT);
+
 function buildMarchFn() {
   // mapBody sits at a fixed place in HELPERS — after the things it calls,
   // before calcNormal which calls it — so any future per-body variant of it
@@ -180,6 +184,8 @@ function buildMarchFn() {
   // TEMPORAL_START_WGSL last: MARCH_BODY calls temporalStartFetch (plan
   // 2026-09-10); it depends on nothing, and the chain carries it through.
   const sources = [...HELPERS, ...NORMAL_GRADIENT_HELPERS, ...NORMAL_GRADIENT_GAME_HELPERS, TEMPORAL_START_WGSL];
+  // marchNormalRead seeds the chain (rather than being a source string) so the SAME node — and
+  // its single `var<private> gMarchNormal` — is what the layer's MRT read includes. See MARCH_NORMAL_OUT.
   // EACH HELPER DEPENDS ON THE PREVIOUS ONE ONLY, not on every earlier one.
   // wgslFn includes a dependency's code transitively, and HELPERS is already a
   // strict declaration order, so a chain emits exactly the same WGSL as the
@@ -187,7 +193,7 @@ function buildMarchFn() {
   // At 26 helpers that is 25 edges rather than 325, and three's NodeBuilder
   // walks those edges repeatedly (NodeBuilder.get was 37.6% of a boot profile).
   const nodes = sources.reduce<ReturnType<typeof wgslFn>[]>(
-    (acc, src) => [...acc, wgslFn(src, acc.slice(-1))], [],
+    (acc, src) => [...acc, wgslFn(src, acc.slice(-1))], [marchNormalRead],
   );
   return wgslFn(MARCH_BODY, nodes.slice(-1));
 }

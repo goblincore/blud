@@ -43,7 +43,7 @@ describe('upscale model JSON (contracts §2)', () => {
   const cases: Array<[string, (j: UpscaleModelJson) => unknown, RegExp]> = [
     ['not an object', () => null, /not a JSON object/],
     ['format', (j) => ({ ...j, format: 'blud-upscale-model/0' }), /format/],
-    ['id', (j) => ({ ...j, id: 's64' }), /unknown id/],
+    ['id', (j) => ({ ...j, id: 's128' }), /unknown id/],
     ['inputs', (j) => ({ ...j, inputs: 'rgba' }), /unknown inputs/],
     ['layer count', (j) => ({ ...j, layers: j.layers.slice(0, 2) }), /needs 3 layers/],
     ['chain shape', (j) => ({ ...j, id: 's8' }), /layer 0 is 5->16, expected 5->8/],

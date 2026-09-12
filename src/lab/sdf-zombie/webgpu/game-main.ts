@@ -813,7 +813,20 @@ async function main() {
       k: postAa.lens.k,
     };
   }
-  const sdfLayer = createSdfLayer(handle.renderer);
+  // Runtime march normals (a second march attachment + renderer MRT) are allocated ONLY when the
+  // boot asks for a model that reads them: `?upscaleinputs=rgbn|rgbdn`, a trained model whose name
+  // contains 'rgbn'/'rgbdn', or an explicit `?upscalenormals=1`. Every other boot — including
+  // `?upscale=trained&upscalemodel=s32-rgbd-best` — keeps the single-attachment march exactly as
+  // shipped (owner 2026-09-12: "performance worse post this change" was the unconditional MRT).
+  const marchNormalsWanted = (() => {
+    const q = new URLSearchParams(location.search);
+    if (q.get('upscalenormals') === '1') return true;
+    if (q.get('upscalenormals') === '0') return false;
+    const inputs = q.get('upscaleinputs') ?? '';
+    const name = q.get('upscalemodel') ?? '';
+    return /rgbd?n\b/.test(inputs) || /rgbd?n(-|$)/.test(name);
+  })();
+  const sdfLayer = createSdfLayer(handle.renderer, { marchNormals: marchNormalsWanted });
   postAa.addSink(sdfLayer);
 
   // SSCS — screen-space contact shadows (post-sscs.ts, 2026-09-09 shadow
@@ -1989,9 +2002,15 @@ async function main() {
     updateUpscaleAbLabel();
     return info;
   }
-  async function enableTrainedUpscale(name: string, layout?: string, booted = true): Promise<UpscaleInfo> {
-    const r = await fetch(`/__lab/upscale-model/${encodeURIComponent(name)}`, { cache: 'no-store' });
-    if (!r.ok) throw new Error(`upscale model ${name}: HTTP ${r.status} (expected .upscale-models/${name}/model.json)`);
+  /** The SHIPPED upscaler (owner decision 2026-09-12): s32-rgbd, trained locally on dataset v2,
+   *  G3-verified, staged as a tracked asset. s64 was rejected — ~6x the compute for no visible gain. */
+  const SHIPPED_UPSCALE_URL = '/assets/lab/upscale/s32-rgbd-best.json';
+  const SHIPPED_UPSCALE_NAME = 'ship:s32-rgbd-best';
+  /** CAS-style post-sharpen strength shipped with it (UPSCALE_SHARPEN_WGSL, 'cas' mode). */
+  const SHIPPED_UPSCALE_SHARPEN = 0.5;
+  async function enableTrainedUpscale(name: string, layout?: string, booted = true, url?: string): Promise<UpscaleInfo> {
+    const r = await fetch(url ?? `/__lab/upscale-model/${encodeURIComponent(name)}`, { cache: 'no-store' });
+    if (!r.ok) throw new Error(`upscale model ${name}: HTTP ${r.status} (expected ${url ?? `.upscale-models/${name}/model.json`})`);
     const model = parseUpscaleModelJson(await r.json());
     const config = parseUpscaleConfig({ model: model.id, inputs: model.inputs, layout, seed: 1 });
     upscaleAb.config = config;
@@ -2013,7 +2032,18 @@ async function main() {
           console.error(`[upscale] trained model ${name} not loaded — the stage stays off: ${String(err)}`);
         }
       }
-    } else if (upRaw !== null && upRaw !== '0') {
+    } else if (upRaw === null) {
+      // DEFAULT (owner 2026-09-12): the shipped s32-rgbd stage with CAS sharpen. `?upscale=0` is the
+      // native march (the pre-stage picture); the U key still cycles native / nearest / model.
+      // NOTE this displaces the 'bodies' field style default: the stage forces fields off
+      // (the fields+stage stack was tried and reverted the same day).
+      try {
+        await enableTrainedUpscale(SHIPPED_UPSCALE_NAME, undefined, false, SHIPPED_UPSCALE_URL);
+        sdfLayer.upscaleStage?.setSharpen(SHIPPED_UPSCALE_SHARPEN);
+      } catch (err) {
+        console.error(`[upscale] shipped model not loaded — native march: ${String(err)}`);
+      }
+    } else if (upRaw !== '0') {
       const cfg = parseUpscaleConfig({
         model: upRaw,
         layout: upSearch.get('upscalelayout') ?? undefined,
@@ -2027,6 +2057,13 @@ async function main() {
       upscaleAb.config = cfg;
       updateUpscaleAbLabel();
     }
+    // `?upscalesharpen=0..1`: contrast-adaptive sharpen over the stage output (UPSCALE_SHARPEN_WGSL).
+    // Live: __sdfGame.setUpscaleSharpen(x).
+    const sharpenRaw = upSearch.get('upscalesharpen');
+    if (sharpenRaw !== null && sdfLayer.upscaleStage) sdfLayer.upscaleStage.setSharpen(Number(sharpenRaw));
+    else if (upRaw === 'trained' && sdfLayer.upscaleStage) sdfLayer.upscaleStage.setSharpen(SHIPPED_UPSCALE_SHARPEN);
+    const sharpenMode = upSearch.get('upscalesharpenmode');
+    if (sharpenMode === 'unsharp' && sdfLayer.upscaleStage) sdfLayer.upscaleStage.setSharpenMode('unsharp');
   }
   // Headless A/B seams (2026-08-27 hull-holes diagnosis): ship defaults stay
   // ON/ON; the driver flips these between captures. Mirrors the lab's
@@ -7203,6 +7240,22 @@ function performBenchAction(a: BenchAction): void {
     upscaleAb: () => ({ active: upscaleAb.config !== null, mode: upscaleAb.mode, model: upscaleAb.modelName }),
     /** Stage state plus the camera's near/far (what rgbd depth linearization uses).
      *  near/far are reported even when the stage is off (the capture script needs them). */
+    /** Whether the layer allocated the march normal attachment this boot (rgbn/rgbdn models). */
+    upscaleNormalsAllocated: (): boolean => sdfLayer.marchNormalTexture !== null,
+    /** Post-sharpen over the stage output, 0..1 (owner experiment 2026-09-12; `?upscalesharpen=`). */
+    setUpscaleSharpen: (strength: number): number => {
+      const st = sdfLayer.upscaleStage;
+      if (!st) return 0;
+      st.setSharpen(strength);
+      return st.sharpen;
+    },
+    /** 'cas' | 'unsharp' (see UpscaleStage.setSharpenMode; `?upscalesharpenmode=`). */
+    setUpscaleSharpenMode: (mode: 'cas' | 'unsharp'): string => {
+      const st = sdfLayer.upscaleStage;
+      if (!st) return 'off';
+      st.setSharpenMode(mode);
+      return st.sharpenMode;
+    },
     upscaleInfo: () => ({
       ...sdfLayer.upscaleInfo,
       near: (camera as THREE.PerspectiveCamera).near,
@@ -8152,6 +8205,23 @@ function performBenchAction(a: BenchAction): void {
           let binary = '';
           for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
           return { w, h, rgba32f: btoa(binary) };
+        },
+        /** Neural upscale normals capture (2026-09-12): the march target re-rendered with every
+         *  actor and chunk in debug mode 9 (march.wgsl.ts MARCH_BODY_LIGHT): rgb = the final
+         *  WORLD-space shading normal, alpha = clip depth as usual. Same frozen frame, same
+         *  size and layout as readMarchTarget. `view` is the camera's matrixWorldInverse
+         *  (column-major 16), for the capture to rotate normals into view space. */
+        async readMarchNormals() {
+          const prev = new Map<unknown, number>();
+          const views = [...actors.map((a) => a.view), ...liveChunks.map((c) => c.view)];
+          for (const v of views) { prev.set(v, v.uniforms.debugCfg.value.x); v.uniforms.debugCfg.value.x = 9; }
+          try {
+            const dbg = (window as unknown as { __sdfGameDebug: { readMarchTarget(): Promise<{ w: number; h: number; rgba32f: string }> } }).__sdfGameDebug;
+            const r = await dbg.readMarchTarget();
+            return { ...r, view: camera.matrixWorldInverse.toArray() };
+          } finally {
+            for (const v of views) v.uniforms.debugCfg.value.x = prev.get(v) ?? 0;
+          }
         },
         async normalPointSamples(bodyId: number | string, points: Vec3[]) {
           const view=typeof bodyId==='number'?actors.find(a=>a.id===bodyId)?.view:liveChunks.find(c=>`chunk:${c.id}`===bodyId)?.view;if(!view)throw new Error('missing probe piece');

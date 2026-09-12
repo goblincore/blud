@@ -13,7 +13,7 @@
  * NO COMMENTS INSIDE ANY GENERATED PARAMETER LIST (three's wgslFn parser reads
  * `word: word` there as a phantom input — see sdf-layer.test.ts).
  */
-import type { ConvLayer, UpscaleLayout, UpscaleModel } from './upscale-model';
+import { inputsUseDepth, inputsUseNormals, type ConvLayer, type UpscaleLayout, type UpscaleModel } from './upscale-model';
 
 export interface PassSpec {
   /** 'L1a', 'L2b', 'shuffle', 'deconv' — unique within a stage; also the pass label suffix. */
@@ -69,6 +69,58 @@ export function matLiteral(layer: ConvLayer, outChannels: readonly number[], v: 
 function biasLiteral(layer: ConvLayer, outChannels: readonly number[]): string {
   return `vec4<f32>(${outChannels.map((o) => lit(o >= 0 && o < layer.outC ? layer.bias[o]! : 0)).join(', ')})`;
 }
+
+/**
+ * POST-SHARPEN (owner experiment 2026-09-12): a contrast-adaptive sharpen (FSR RCAS-style) over the
+ * stage output. Flesh only (alpha < 1); non-flesh neighbours do not pull. The weight is strongest in
+ * LOW local contrast and fades on strong edges, and the result is clamped to the local min/max, so it
+ * cannot ring. HDR-safe: contrast is measured relative to the local max, not to 1.0. Alpha (clip
+ * depth) passes through. strength 0 = the pass is not run at all (see upscale-stage.ts).
+ */
+export const UPSCALE_SHARPEN_WGSL = /* wgsl */ `fn upSharpen(
+  src: texture_2d<f32>,
+  texCoord: vec2<f32>,
+  flipY: f32,
+  strength: f32,
+  mode: f32
+) -> vec4<f32> {
+  let dims = vec2<i32>(textureDimensions(src, 0));
+  let maxI = dims - vec2<i32>(1, 1);
+  var st = texCoord;
+  if (flipY > 0.5) { st.y = 1.0 - st.y; }
+  let p = clamp(vec2<i32>(floor(st * vec2<f32>(dims))), vec2<i32>(0, 0), maxI);
+  let c = textureLoad(src, p, 0);
+  if (c.w >= 1.0) { return c; }
+  var n = textureLoad(src, clamp(p + vec2<i32>(0, -1), vec2<i32>(0, 0), maxI), 0);
+  var s = textureLoad(src, clamp(p + vec2<i32>(0, 1), vec2<i32>(0, 0), maxI), 0);
+  var e = textureLoad(src, clamp(p + vec2<i32>(1, 0), vec2<i32>(0, 0), maxI), 0);
+  var w = textureLoad(src, clamp(p + vec2<i32>(-1, 0), vec2<i32>(0, 0), maxI), 0);
+  if (n.w >= 1.0) { n = c; }
+  if (s.w >= 1.0) { s = c; }
+  if (e.w >= 1.0) { e = c; }
+  if (w.w >= 1.0) { w = c; }
+  // MODE 1 = plain unsharp mask, NO clamp (owner comparison 2026-09-12): a 3x3 box blur over the
+  // flesh taps, then c + strength * (c - blur). Halos and grain are the point of the comparison.
+  if (mode > 0.5) {
+    var ne = textureLoad(src, clamp(p + vec2<i32>(1, -1), vec2<i32>(0, 0), maxI), 0);
+    var nw = textureLoad(src, clamp(p + vec2<i32>(-1, -1), vec2<i32>(0, 0), maxI), 0);
+    var se = textureLoad(src, clamp(p + vec2<i32>(1, 1), vec2<i32>(0, 0), maxI), 0);
+    var sw = textureLoad(src, clamp(p + vec2<i32>(-1, 1), vec2<i32>(0, 0), maxI), 0);
+    if (ne.w >= 1.0) { ne = c; }
+    if (nw.w >= 1.0) { nw = c; }
+    if (se.w >= 1.0) { se = c; }
+    if (sw.w >= 1.0) { sw = c; }
+    let blur = (c.xyz + n.xyz + s.xyz + e.xyz + w.xyz + ne.xyz + nw.xyz + se.xyz + sw.xyz) / 9.0;
+    return vec4<f32>(max(c.xyz + strength * (c.xyz - blur), vec3<f32>(0.0)), c.w);
+  }
+  let mn = min(min(min(n.xyz, s.xyz), min(e.xyz, w.xyz)), c.xyz);
+  let mx = max(max(max(n.xyz, s.xyz), max(e.xyz, w.xyz)), c.xyz);
+  let contrast = (mx - mn) / max(mx, vec3<f32>(1e-3));
+  let amp = sqrt(clamp(vec3<f32>(1.0) - contrast, vec3<f32>(0.0), vec3<f32>(1.0)));
+  let k = -min(strength, 1.0) * 0.2 * amp;
+  let sharp = (c.xyz + k * (n.xyz + s.xyz + e.xyz + w.xyz)) / (vec3<f32>(1.0) + 4.0 * k);
+  return vec4<f32>(clamp(sharp, mn, mx), c.w);
+}`;
 
 /** Shared §4 reconstruction, included by the shuffle and deconv passes. */
 export const UPSCALE_RECONSTRUCT_WGSL = /* wgsl */ `fn upReconstruct(
@@ -133,13 +185,27 @@ function tapCoords(center: string, maxI: string): string {
 function marchInputTaps(model: UpscaleModel): string {
   const s = model.inScale;
   const o = model.inOffset;
+  const useDepth = inputsUseDepth(model.inputs);
+  const useNormals = inputsUseNormals(model.inputs);
   const lines: string[] = [];
   for (let k = 0; k < 9; k++) {
     lines.push(`  let m${k} = textureLoad(march, q${k}, 0);`);
     lines.push(`  let h${k} = select(0.0, 1.0, m${k}.w < 1.0);`);
     lines.push(`  let a0_${k} = vec4<f32>(m${k}.xyz * h${k}, h${k}) * vec4<f32>(${lit(s[0]!)}, ${lit(s[1]!)}, ${lit(s[2]!)}, ${lit(s[3]!)}) + vec4<f32>(${lit(o[0]!)}, ${lit(o[1]!)}, ${lit(o[2]!)}, ${lit(o[3]!)});`);
-    if (model.inputs === 'rgbd') {
-      lines.push(`  let a1_${k} = vec4<f32>(h${k} * (nearFar.x * nearFar.y / (nearFar.y - m${k}.w * (nearFar.y - nearFar.x))) * ${lit(s[4]!)} + ${lit(o[4]!)}, 0.0, 0.0, 0.0);`);
+    // Second input vec4 (channels 4..7), mirroring nupscale/model.py `assemble`:
+    // [depth], [normal.xyz] — depth first when both are present (rgbdn).
+    const depthExpr = `h${k} * (nearFar.x * nearFar.y / (nearFar.y - m${k}.w * (nearFar.y - nearFar.x))) * ${lit(s[4]!)} + ${lit(o[4]!)}`;
+    if (useNormals) {
+      const nb = useDepth ? 5 : 4;
+      lines.push(`  let n${k} = textureLoad(normal, q${k}, 0).xyz * h${k};`);
+      const nx = `n${k}.x * ${lit(s[nb]!)} + ${lit(o[nb]!)}`;
+      const ny = `n${k}.y * ${lit(s[nb + 1]!)} + ${lit(o[nb + 1]!)}`;
+      const nz = `n${k}.z * ${lit(s[nb + 2]!)} + ${lit(o[nb + 2]!)}`;
+      lines.push(useDepth
+        ? `  let a1_${k} = vec4<f32>(${depthExpr}, ${nx}, ${ny}, ${nz});`
+        : `  let a1_${k} = vec4<f32>(${nx}, ${ny}, ${nz}, 0.0);`);
+    } else if (useDepth) {
+      lines.push(`  let a1_${k} = vec4<f32>(${depthExpr}, 0.0, 0.0, 0.0);`);
     }
   }
   return `${lines.join('\n')}\n`;
@@ -180,15 +246,16 @@ function convPass(model: UpscaleModel, layerIndex: number, passIndex: number, in
   const outCount = Math.min(16, layer.outC - outStart);
   const targets = outCount / 4;
   const fnName = `upRun${name}`;
-  const usesNearFar = first && model.inputs === 'rgbd';
-  const params = first ? ['march'] : inputs.map((_, k) => `in${k}`);
+  const usesNearFar = first && inputsUseDepth(model.inputs);
+  const usesNormal = first && inputsUseNormals(model.inputs);
+  const params = first ? (usesNormal ? ['march', 'normal'] : ['march']) : inputs.map((_, k) => `in${k}`);
   const sig = [
     ...params.map((p) => `${p}: texture_2d<f32>`),
     'texCoord: vec2<f32>',
     'flipY: f32',
     ...(usesNearFar ? ['nearFar: vec2<f32>'] : []),
   ];
-  const nIn = first ? (model.inputs === 'rgbd' ? 2 : 1) : inputs.length;
+  const nIn = first ? (usesNearFar || usesNormal ? 2 : 1) : inputs.length;
   let body = lowPrelude(params[0]!) + tapCoords('p', 'maxI') + (first ? marchInputTaps(model) : textureTaps(inputs.length));
   const globals: string[] = [];
   for (let t = 0; t < targets; t++) {
@@ -203,7 +270,7 @@ function convPass(model: UpscaleModel, layerIndex: number, passIndex: number, in
   const reads = globals.map((g, t) => `fn upRead${name}_${t}(dep: vec4<f32>) -> vec4<f32> {\n  return ${g};\n}`);
   return {
     name, kind: 'conv', outputRes: 'low', targets,
-    inputs: first ? ['march'] : [...inputs], params, usesNearFar, fnName, run, state, reads,
+    inputs: first ? [...params] : [...inputs], params, usesNearFar, fnName, run, state, reads,
   };
 }
 
@@ -246,7 +313,17 @@ function deconvPass(model: UpscaleModel, hiddenInputs: string[]): PassSpec {
 }
 
 /** The ordered pass list for a model and layout (spec §3). */
+/** WebGPU's default maxSampledTexturesPerShaderStage. A pass binds one texture per 4 input
+ *  channels (plus the march, plus the normal on the first pass); the 'dc' deconv pass binds the
+ *  march AND the whole last hidden layer, so 64 hidden channels (16 textures) + march = 17 is
+ *  over the limit and every pipeline fails to compile (upscale-smoke 2026-09-12, s64d/dc). */
+export const MAX_SAMPLED_TEXTURES = 16;
+
 export function planUpscalePasses(model: UpscaleModel, layout: UpscaleLayout): PassSpec[] {
+  const lastHidden = model.layers[model.layers.length - 2]?.outC ?? 0;
+  if (layout === 'dc' && 1 + lastHidden / 4 > MAX_SAMPLED_TEXTURES) {
+    throw new Error(`upscale: layout dc binds ${1 + lastHidden / 4} textures for a ${lastHidden}-wide last hidden layer (limit ${MAX_SAMPLED_TEXTURES}); use layout sp`);
+  }
   const passes: PassSpec[] = [];
   let inputs: string[] = ['march'];
   const convLayers = layout === 'sp' ? model.layers.length : model.layers.length - 1;

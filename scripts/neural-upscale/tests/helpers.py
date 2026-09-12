@@ -103,7 +103,7 @@ def scalar_reconstruct(march: torch.Tensor, last) -> torch.Tensor:
 
 
 def write_v2_dataset(root: Path | str, *, pairs: int = 6, size: tuple[int, int] = (12, 16), val_every: int = 3,
-                     seed: int = 1, native: bool = True, regions: bool = True) -> Path:
+                     seed: int = 1, native: bool = True, regions: bool = True, normals: bool = False) -> Path:
     """A tiny dataset v2: one pair per sequence; target = nearest-upsampled input plus a little
     noise on flesh. Every `val_every`-th sequence is validation (and showcase). Heads sit at the
     image centre; even pairs also have a wound."""
@@ -129,6 +129,11 @@ def write_v2_dataset(root: Path | str, *, pairs: int = 6, size: tuple[int, int] 
         if native and split == "val":
             np.save(d / "native.npy", hwc(upsample_nearest(inp)))
             files["native"] = f"pairs/{pid}/native.npy"
+        if normals:
+            nrm = torch.rand((3, h, w), generator=g) * 2 - 1
+            nrm = nrm / nrm.norm(dim=0, keepdim=True).clamp(min=1e-6) * (inp[3:4] < 1)
+            np.save(d / "normal.npy", hwc(nrm))
+            files["normal"] = f"pairs/{pid}/normal.npy"
         heads = [{"x": float(w), "y": float(h), "r": 3.0, "actorId": 1}] if regions else []
         wounds = [{"x": w * 1.4, "y": h * 1.2, "r": 1.5, "type": "pellet", "actorId": 1}] if regions and k % 2 == 0 else []
         entries.append({

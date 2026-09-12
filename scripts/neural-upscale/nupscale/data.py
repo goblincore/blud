@@ -10,10 +10,12 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from .constants import CROP_IN, DATASET_FORMAT, REGION_CENTRED_SHARE, REGION_WEIGHTS
+from .constants import CROP_IN, DATASET_FORMAT, FLIP_X, FLIP_Y, NORMAL_CHANNELS, REGION_CENTRED_SHARE, REGION_WEIGHTS
 from .regions import region_masks, weight_map
 
 SENTINEL = torch.tensor([0.0, 0.0, 0.0, 1.0])
+# The no-flesh sentinel for a 7-channel input (normal channels 4..6 are 0 off flesh).
+SENTINEL_N = torch.tensor([0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0])
 
 
 @dataclass
@@ -23,7 +25,7 @@ class Pair:
     split: str
     cls: str
     showcase: bool
-    inp: torch.Tensor                   # (4, h, w)
+    inp: torch.Tensor                   # (4, h, w); (7, h, w) when the pair has normal.npy: view-space nx, ny, nz * hit
     target: torch.Tensor                # (4, 2h, 2w)
     native: torch.Tensor | None         # (4, 2h, 2w), validation pairs only
     weight: torch.Tensor                # (1, 2h, 2w)
@@ -76,6 +78,10 @@ def load_dataset(root: Path | str, weights: dict[str, float] = REGION_WEIGHTS) -
             raise ValueError(f"pair {pid}: split {e['split']!r}")
         h, w = int(e["crop"]["h"]), int(e["crop"]["w"])
         inp = chw(_load(root, e["files"]["in"], (h, w, 4), pid))
+        normal_rel = e["files"].get("normal")
+        if normal_rel:
+            normal = chw(_load(root, normal_rel, (h, w, NORMAL_CHANNELS), pid))
+            inp = torch.cat([inp, normal * (inp[3:4] < 1)], dim=0)
         target = chw(_load(root, e["files"]["target"], (2 * h, 2 * w, 4), pid))
         native_rel = e["files"].get("native")
         native = chw(_load(root, native_rel, (2 * h, 2 * w, 4), pid)) if native_rel else None
@@ -110,12 +116,24 @@ class CropSampler:
     pixel. Pair crops smaller than the window are padded with the no-flesh sentinel, never resized."""
 
     def __init__(self, pairs: list[Pair], crop: int = CROP_IN, seed: int = 1,
-                 region_share: float = REGION_CENTRED_SHARE) -> None:
+                 region_share: float = REGION_CENTRED_SHARE, flip_x: float = FLIP_X, flip_y: float = FLIP_Y,
+                 negate_x: tuple[int, ...] = (), negate_y: tuple[int, ...] = ()) -> None:
+        """flip_x / flip_y: probability a window is mirrored along that axis (input, target and
+        weight together). negate_x / negate_y: input channels that are vector components along
+        that axis (a normal's x or y) and change sign under the mirror."""
         if not pairs:
             raise ValueError("CropSampler: no pairs")
         self.pairs = pairs
         self.crop = crop
         self.region_share = region_share
+        self.flip_x, self.flip_y = flip_x, flip_y
+        # Pairs with normals (7 channels): view space is x right, y up, so mirroring columns
+        # negates nx (channel 4) and mirroring rows negates ny (channel 5), unless told otherwise.
+        with_normals = pairs[0].inp.shape[0] == 4 + NORMAL_CHANNELS
+        if with_normals and not negate_x and not negate_y:
+            negate_x, negate_y = (4,), (5,)
+        self.sentinel = SENTINEL_N if with_normals else SENTINEL
+        self.negate_x, self.negate_y = tuple(negate_x), tuple(negate_y)
         self.rng = random.Random(seed)
         self.flesh = [p.masks["flesh"].nonzero() for p in pairs]
 
@@ -141,7 +159,7 @@ class CropSampler:
         return self._origin(cx, w), self._origin(cy, h)
 
     def sample(self, batch: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """march (B, 4, c, c), target (B, 4, 2c, 2c), weight (B, 1, 2c, 2c)."""
+        """march (B, 4 or 7, c, c), target (B, 4, 2c, 2c), weight (B, 1, 2c, 2c)."""
         c = self.crop
         one = torch.ones(1)
         marches, targets, weights = [], [], []
@@ -149,7 +167,20 @@ class CropSampler:
             k = self.rng.randrange(len(self.pairs))
             p = self.pairs[k]
             ox, oy = self.window(k)
-            marches.append(paste(p.inp, ox, oy, c, SENTINEL))
-            targets.append(paste(p.target, 2 * ox, 2 * oy, 2 * c, SENTINEL))
-            weights.append(paste(p.weight, 2 * ox, 2 * oy, 2 * c, one))
+            m = paste(p.inp, ox, oy, c, self.sentinel)
+            t = paste(p.target, 2 * ox, 2 * oy, 2 * c, SENTINEL)
+            w = paste(p.weight, 2 * ox, 2 * oy, 2 * c, one)
+            # Mirroring is exact for the §4 reconstruction: output column 2i-1-x swaps the
+            # sub-pixel parity AND the neighbour direction, which is what a mirrored input has.
+            if self.rng.random() < self.flip_x:
+                m, t, w = m.flip(2), t.flip(2), w.flip(2)
+                for ch in self.negate_x:
+                    m[ch] = -m[ch]
+            if self.rng.random() < self.flip_y:
+                m, t, w = m.flip(1), t.flip(1), w.flip(1)
+                for ch in self.negate_y:
+                    m[ch] = -m[ch]
+            marches.append(m)
+            targets.append(t)
+            weights.append(w)
         return torch.stack(marches), torch.stack(targets), torch.stack(weights)

@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { decodeNpy } from './lib/npy.mjs';
 import { compareReconstruction } from './lib/upscale-parity-compare';
-import { parseUpscaleModelJson } from '../src/lab/sdf-zombie/webgpu/upscale/upscale-model';
+import { inputsUseNormals, parseUpscaleModelJson } from '../src/lab/sdf-zombie/webgpu/upscale/upscale-model';
 import { upscaleReference, type FloatImage } from '../src/lab/sdf-zombie/webgpu/upscale/upscale-reference';
 
 const dir = process.argv[2];
@@ -16,12 +16,12 @@ if (!dir) {
 }
 const model = parseUpscaleModelJson(JSON.parse(readFileSync(join(dir, 'model.json'), 'utf8')));
 const meta = JSON.parse(readFileSync(join(dir, 'parity', 'meta.json'), 'utf8')) as {
-  near: number; far: number; fixtures: Array<{ pair: string; input: string; output: string }>;
+  near: number; far: number; fixtures: Array<{ pair: string; input: string; output: string; normal?: string }>;
 };
-const image = (file: string): FloatImage => {
+const image = (file: string, channels = 4): FloatImage => {
   const { shape, data } = decodeNpy(readFileSync(join(dir, 'parity', file)));
-  if (shape.length !== 3 || shape[2] !== 4) throw new Error(`${file}: shape (${shape.join(', ')}), expected (h, w, 4)`);
-  return { h: shape[0]!, w: shape[1]!, c: 4, data };
+  if (shape.length !== 3 || shape[2] !== channels) throw new Error(`${file}: shape (${shape.join(', ')}), expected (h, w, ${channels})`);
+  return { h: shape[0]!, w: shape[1]!, c: channels, data };
 };
 
 console.log(`model ${model.id} ${model.inputs} source ${model.source} run ${model.run ?? '-'} step ${model.step ?? '-'} weightHash ${model.weightHash}`);
@@ -29,10 +29,12 @@ let ok = meta.fixtures.length > 0;
 for (const f of meta.fixtures) {
   const input = image(f.input);
   const expected = image(f.output);
+  const normal = f.normal ? image(f.normal, 3) : undefined;
+  if (inputsUseNormals(model.inputs) && !normal) throw new Error(`${f.pair}: model ${model.inputs} needs a normal fixture`);
   if (expected.w !== input.w * 2 || expected.h !== input.h * 2) throw new Error(`${f.pair}: output is not 2x the input`);
   for (const layout of ['sp', 'dc'] as const) {
     const margin = new Float32Array(expected.w * expected.h);
-    const ours = upscaleReference(input, model, layout, meta.near, meta.far, expected.w, expected.h, { marginOut: margin });
+    const ours = upscaleReference(input, model, layout, meta.near, meta.far, expected.w, expected.h, { marginOut: margin, normal });
     const r = compareReconstruction(ours, expected, margin);
     ok = ok && r.pass;
     console.log(`${f.pair} ${layout}: covered ${r.covered}/${r.pixels} maxRelRgb ${r.maxRelRgb.toExponential(2)} `

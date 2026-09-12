@@ -19,6 +19,32 @@
 - [x] P3d pre-flight PASS on the 60 smoke pairs: train, G3, pull round trip, dashboard, in-game smoke (`p3-preflight.md`).
 - [x] OWNER VERDICT 2026-09-12: **worth it** — playtested in-game, stable 30 fps, "smooth and details are not bad".
   All six runs passed G4 (best s32-rgbd 0.0233 vs bicubic 0.0284, nearest 0.0314, native 0.0141) for $2.21 of pod time.
+- [x] LOCAL GRID 2026-09-12 (MacBook Air, 20k steps each): s32-rgbd best **0.02289** (G3 PASS, staged in
+  `.upscale-models/s32-rgbd-best`; `?upscale=trained&upscalemodel=s32-rgbd-best`). Steps are spent (every run
+  peaked by 16k); width is not (s8→s16→s32 = 0.0248→0.0238→0.0232); depth input buys nothing. Pod deleted.
+  Assessment + next steps: `docs/dev-notes/2026-09-12-upscaler-next-steps.md` (Obsidian copy in Research/).
+- [x] S64 GRID WITH NORMALS + FLIPS + 9-CHARACTER ROSTER (2026-09-12) — DONE, best **s64d-rgbn 0.0145** vs bicubic 0.0191 on v3
+  (normals + width stack; 3rd layer > 2× width; depth useless; edge band is where normals pay). Results §6 of the
+  next-steps note. **Runtime normals LANDED same day** (renderer-level MRT around the march, second attachment
+  for `?upscale` boots only; `dc` layout refused at 64 wide — 17 sampled textures): `v3-s64d-rgbn-best` loads
+  in-game (`?upscale=trained&upscalemodel=v3-s64d-rgbn-best`), compile smoke PASS on all configs, G3 PASS 6e-7.
+  Trained-smoke GPU-vs-twin sits at 3–5e-3 vs the 2e-3 bar for EVERY s64 model incl. the no-normals one — f16
+  accumulation at 64 wide, bar unchanged, owner's call (p3c-ingame.md). Fields + stage stack was tried and
+  REVERTED the same evening (owner: "looks bad" — comb artifacts sharpened; needs a fields-on retrain first). Built: `s64`/`s64d` ladder in py+ts;
+  `rgbn`/`rgbdn` input sets (Python side; TS twin + runtime MRT normals still TODO before an rgbn model can ship
+  in-game); flip augmentation in `CropSampler` (vector-aware); march debug mode 9 = world normals,
+  `__sdfGameDebug.readMarchNormals()`, capture writes view-space `normal.npy` (contracts §1). Smoke v3 6 pairs OK
+  (unit normals, hit mask identical, 7.7 s/pair). Roster: zombie goblin soldier + bonewalker clown cyberdemon
+  female gnasher minotaur (the other lab bodies fail to spawn: no motion joints). Launch: `.lab-tmp/grid-s64.sh`.
+- [x] COST BENCH (the deferred P1 Task 6): upscale legs added to `scripts/sdf-game-bench.mjs`
+  (`march-half`, `upscale-s8`, `upscale-s32`, `upscale-s32-rgbd`); clean 3-repeat run in `/tmp/sdf-game-bench-upscale-clean`.
+- [x] **SHIPPED 2026-09-12: s32-rgbd + CAS sharpen 0.5 is the default boot** (`public/assets/lab/upscale/
+  s32-rgbd-best.json`; `?upscale=0` = native). s64 REJECTED (6x compute, no visible gain). VHS 'blud' retuned
+  (intensity 0.81, blur 0.17). Unsharp mode tried, left off. Decisions: next-steps note §8.
+  FOLLOW-UP: `scripts/sdf-game-bench.mjs` `baseline` leg pins `setUpscale(null)` and is no longer ship truth —
+  add a ship leg that loads the tracked asset before trusting any new baseline number.
+- [ ] NEXT TRAINING RUN (agreed): s32-cost 3-layer dilated + normals + higher gradient weight + reparam;
+  and s16 + normals + 3 layers. Dataset v3, no recapture. Launcher pattern: `.lab-tmp/grid-s64.sh`.
 - [ ] P4 (brainstormed, spec pending) — **read `docs/dev-notes/2026-09-12-visual-direction-handoff.md` first**:
   upscaler as an AESTHETIC tool (90s pre-rendered CG, soft ray-traced, characters only, normals + adversarial loss),
   blood overhaul (conventional rendering FIRST — narrow-range filter, refraction, volume — then learn it cheap),

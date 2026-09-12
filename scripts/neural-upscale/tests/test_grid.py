@@ -48,7 +48,7 @@ def test_parse_runs():
     assert parse_runs("") == list(GRID)
     assert parse_runs("s16-rgbd, s8-rgb") == [("s16", "rgbd"), ("s8", "rgb")]
     with pytest.raises(ValueError, match="unknown run"):
-        parse_runs("s64-rgb")
+        parse_runs("s128-rgb")
 
 
 def test_grid_runs_everything_and_resumes(tmp_path):

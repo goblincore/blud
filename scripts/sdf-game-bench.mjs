@@ -401,6 +401,15 @@ const ALL_LEGS = {
   // kept as an explicit no-op leg for scripts that name it.
   'bone-cull-off': { setBoneCullMode: 'off' },
   'bone-seg-on': { setBoneCullMode: 'segment' },
+  // NEURAL UPSCALE legs (2026-09-12, the deferred P1 Task 6 cost gate, now on
+  // trained weights). 'march-half' is the raw saving of a 0.5 march with NO
+  // upscale (nearest, via the zero model); the trained legs load exports from
+  // .upscale-models/<name>/ — a missing model leaves the stage OFF and the leg
+  // silently measures march-half, so check `upscaleInfo().on` in the notes.
+  'march-half': { setUpscale: { model: 'zero', layout: 'sp', inputs: 'rgb', seed: 1 } },
+  'upscale-s8': { setUpscale: { trained: 's8-rgb-best' } },
+  'upscale-s32': { setUpscale: { trained: 's32-rgb-best' } },
+  'upscale-s32-rgbd': { setUpscale: { trained: 's32-rgbd-best' } },
 };
 // BENCH_LEGS lets a validation pass run one leg without the whole matrix.
 const LEGS = process.env.BENCH_LEGS
@@ -453,6 +462,9 @@ async function applyLeg(name) {
     __sdfGame.setOccluder(false);   // ship truth (game-main.ts: setOccluderEnabled(false))
     __sdfGame.setCone(false);
     __sdfGame.setFxaa(true);
+    __sdfGame.setUpscale(null);   // upscale legs set it; pin. NOTE (2026-09-12): the GAME now boots
+    // WITH the s32-rgbd stage + sharpen by default, so 'baseline' here is the pre-stage native march, NOT
+    // ship truth. A ship leg loading public/assets/lab/upscale/s32-rgbd-best.json is the follow-up (TASKS.md).
     __sdfGame.setSdfScale(1.0);
     __sdfGame.setAdaptive(false);
     __sdfGame.setMarchSteps(96);

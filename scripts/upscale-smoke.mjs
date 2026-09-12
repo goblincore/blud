@@ -23,6 +23,11 @@ const QUERIES = [
   'upscale=s8',
   'upscale=s16&upscalelayout=sp&upscaleinputs=rgbd',
   'upscale=s32&upscalelayout=dc&upscaleinputs=rgbd',
+  // Runtime normals (2026-09-12): the march's second attachment feeds the first pass.
+  'upscale=s8&upscaleinputs=rgbn',
+  'upscale=s64d&upscalelayout=sp&upscaleinputs=rgbdn',   // dc is refused at 64 wide (17 textures)
+  'upscale=s8&upscalesharpen=0.5',   // post-sharpen pass (UPSCALE_SHARPEN_WGSL)
+  'upscale=s8&upscalesharpen=1.5&upscalesharpenmode=unsharp',
 ];
 let bad = false;
 for (const q of QUERIES) {

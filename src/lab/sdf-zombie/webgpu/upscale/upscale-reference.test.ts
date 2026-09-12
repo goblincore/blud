@@ -4,7 +4,7 @@ import {
   type ConvLayer, type UpscaleModel,
 } from './upscale-model';
 import {
-  conv3x3, f16round, linearDepth, makeImage, reconstructPixel, upscaleReference,
+  assembleInput, conv3x3, f16round, linearDepth, makeImage, reconstructPixel, upscaleReference,
   type FloatImage,
 } from './upscale-reference';
 
@@ -63,7 +63,7 @@ describe('upscale model', () => {
   it('parses configs with defaults and rejects unknown values', () => {
     expect(parseUpscaleConfig({ model: 's16' })).toEqual({ model: 's16', layout: 'sp', inputs: 'rgb', seed: 1 });
     expect(parseUpscaleConfig({ model: 's8', layout: 'dc', inputs: 'rgbd', seed: 4 })).toEqual({ model: 's8', layout: 'dc', inputs: 'rgbd', seed: 4 });
-    expect(() => parseUpscaleConfig({ model: 's64' })).toThrow(/unknown model/);
+    expect(() => parseUpscaleConfig({ model: 's128' })).toThrow(/unknown model/);
     expect(() => parseUpscaleConfig({ model: 's8', layout: 'xx' })).toThrow(/unknown layout/);
     expect(() => parseUpscaleConfig({ model: 's8', inputs: 'aux' })).toThrow(/unknown input set/);
     expect(() => parseUpscaleConfig({ model: 's8', seed: 1.5 })).toThrow(/seed/);
@@ -178,13 +178,34 @@ describe('upscale CPU twin', () => {
     }
   });
 
+  it('assembles the view-space normal after hit (rgbn) or after depth (rgbdn), hit-masked', () => {
+    const march = randomMarch(6, 5, 11);
+    const normal = { w: 6, h: 5, c: 3, data: new Float32Array(90).map((_, k) => Math.sin(k)) };
+    for (const inputs of ['rgbn', 'rgbdn'] as const) {
+      const model = createUpscaleModel('s8', inputs, 1);
+      const x = assembleInput(march, model, 0.1, 100, normal);
+      const base = inputs === 'rgbdn' ? 5 : 4;
+      expect(x.c).toBe(inputs === 'rgbdn' ? 8 : 7);
+      for (let p = 0; p < 30; p++) {
+        const hit = march.data[p * 4 + 3]! < 1 ? 1 : 0;
+        for (let c = 0; c < 3; c++) expect(x.data[p * x.c + base + c]).toBeCloseTo(normal.data[p * 3 + c]! * hit, 7);
+        if (inputs === 'rgbdn') expect(x.data[p * x.c + 4]).toBeCloseTo(hit * linearDepth(march.data[p * 4 + 3]!, 0.1, 100) * model.inScale[4]!, 6);
+      }
+    }
+    expect(() => assembleInput(march, createUpscaleModel('s8', 'rgbn', 1), 0.1, 100)).toThrow(/needs a normal image/);
+    expect(() => assembleInput(march, createUpscaleModel('s8', 'rgbn', 1), 0.1, 100, { ...normal, w: 5 })).toThrow(/does not match/);
+    // rgb/rgbd ignore a normal image
+    expect(assembleInput(march, createUpscaleModel('s8', 'rgb', 1), 0.1, 100, normal).c).toBe(4);
+  });
+
   it('sub-pixel and deconvolution layouts agree for random models (the Colbert equivalence)', () => {
     const march = randomMarch(9, 7, 23);
+    const normal = { w: 9, h: 7, c: 4, data: new Float32Array(9 * 7 * 4).map((_, k) => Math.cos(k * 0.37)) };
     for (const id of ['s8', 's16'] as const) {
-      for (const inputs of ['rgb', 'rgbd'] as const) {
+      for (const inputs of ['rgb', 'rgbd', 'rgbn', 'rgbdn'] as const) {
         const model = createUpscaleModel(id, inputs, 3);
-        const sp = upscaleReference(march, model, 'sp', 0.1, 100, 18, 14);
-        const dc = upscaleReference(march, model, 'dc', 0.1, 100, 18, 14);
+        const sp = upscaleReference(march, model, 'sp', 0.1, 100, 18, 14, { normal });
+        const dc = upscaleReference(march, model, 'dc', 0.1, 100, 18, 14, { normal });
         let maxDiff = 0;
         for (let k = 0; k < sp.data.length; k++) maxDiff = Math.max(maxDiff, Math.abs(sp.data[k]! - dc.data[k]!));
         expect(maxDiff, `${id}/${inputs}`).toBeLessThanOrEqual(1e-5);

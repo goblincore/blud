@@ -20,7 +20,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { encodeNpy } from './lib/npy.mjs';
-import { bootCapturePage, maxAbsDiff, readMarch, renderAt, runG2Checks } from './lib/upscale-capture.mjs';
+import { bootCapturePage, maxAbsDiff, readMarch, readMarchNormals, renderAt, runG2Checks, viewSpaceNormals } from './lib/upscale-capture.mjs';
 import { cropFrame, fleshFraction, maskIoU, pairCrop, toLocalRegions } from './lib/upscale-crop.mjs';
 import { cameraPose, mulberry32, pickShowcase, planSequence, splitFor } from './lib/upscale-framing.mjs';
 import { registerHalfRes } from './lib/upscale-registration.mjs';
@@ -187,6 +187,19 @@ async function captureFrame(plan, split, id, f, prevInput) {
     await evaluate(`(() => { const g = __sdfGame; g.setRenderLock(false); g.freeze(false); g.step(${ADVANCE}); g.freeze(true); return 1; })()`);
   }
   if (fleshFraction(input.data, IN_W, IN_H) < 0.005) { stats.skippedEmpty++; return { input }; }
+  // NORMALS (2026-09-12, rgbn input sets): the same 0.5-scale frozen frame in normals mode.
+  // The trace is identical, so the hit mask must be — a differing alpha means the mode
+  // changed the march and the pair would train on misregistered normals.
+  const normals = await readMarchNormals(evaluate);
+  if (normals.w !== input.w || normals.h !== input.h) fail(`normals ${normals.w}x${normals.h} vs input ${input.w}x${input.h}`);
+  // The re-render is a second frame, so a grazing silhouette texel can flip under the temporal
+  // ray start (1 texel in ~120k seen at pair 932 of the first v3 run). Tolerate a trace, fail on
+  // a pattern; the loader masks normals by the INPUT hit, so a flipped texel gets a zero normal.
+  let maskDiff = 0;
+  for (let i = 3; i < input.data.length; i += 4) if ((input.data[i] < 1) !== (normals.data[i] < 1)) maskDiff++;
+  if (maskDiff > input.data.length / 4 * 0.001) fail(`normals hit mask differs from input at ${maskDiff} texels`);
+  if (maskDiff) stats.normalMaskDiffs = (stats.normalMaskDiffs ?? 0) + maskDiff;
+  const normalView = viewSpaceNormals(normals);
   const annotations = await evaluate(`__sdfGame.captureAnnotations(${OUT_W}, ${OUT_H})`);
   if (plan.lookAt === 'head') {
     const h = annotations.find((a) => a.actorId === id)?.head;
@@ -204,6 +217,7 @@ async function captureFrame(plan, split, id, f, prevInput) {
     target: `pairs/${pid}/target.npy`,
     targetCoverage: `pairs/${pid}/target-coverage.npy`,
     native: native ? `pairs/${pid}/native.npy` : null,
+    normal: `pairs/${pid}/normal.npy`,
   };
   const write = (rel, data, shape) => { const buf = encodeNpy(data, shape); writeFileSync(join(OUT, rel), buf); return buf.length; };
   const X = crop.x * 2, Y = crop.y * 2, W2 = crop.w * 2, H2 = crop.h * 2;
@@ -212,6 +226,7 @@ async function captureFrame(plan, split, id, f, prevInput) {
   bytes += write(files.target, cropFrame(target.data, OUT_W, OUT_H, 4, X, Y, W2, H2), [H2, W2, 4]);
   bytes += write(files.targetCoverage, cropFrame(target.coverage, OUT_W, OUT_H, 1, X, Y, W2, H2), [H2, W2, 1]);
   if (native) bytes += write(files.native, cropFrame(native.data, OUT_W, OUT_H, 4, X, Y, W2, H2), [H2, W2, 4]);
+  bytes += write(files.normal, cropFrame(normalView, IN_W, IN_H, 3, crop.x, crop.y, crop.w, crop.h), [crop.h, crop.w, 3]);
   if (process.env.UPSCALE_FACE_SHOT && !faceShotDone && plan.lookAt === 'head' && plan.class === 'close') {
     writeFileSync(join(OUT, `face-check-${pid}.png`), Buffer.from(await evaluate('__sdfGame.presentedShot()'), 'base64'));
     faceShotDone = true;

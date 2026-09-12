@@ -63,3 +63,45 @@ def test_region_centred_windows_contain_a_region(tmp_path):
         for _ in range(10):
             ox, oy = sampler.window(k)
             assert any(ox <= x / 2 < ox + 16 and oy <= y / 2 < oy + 16 for x, y in pairs[k].centres)
+
+
+def test_flips_mirror_input_target_and_weight_together(tmp_path):
+    ds = load_dataset(write_v2_dataset(tmp_path / "ds", pairs=2, size=(40, 48)))
+    pairs = ds.split("train")
+    plain = CropSampler(pairs, crop=16, seed=5, flip_x=0.0, flip_y=0.0).sample(6)
+    fx = CropSampler(pairs, crop=16, seed=5, flip_x=1.0, flip_y=0.0).sample(6)
+    fy = CropSampler(pairs, crop=16, seed=5, flip_x=0.0, flip_y=1.0, negate_y=(1,)).sample(6)
+    # same windows (same rng draws for the window), mirrored along one axis
+    assert torch.equal(fx[0], plain[0].flip(3)) and torch.equal(fx[1], plain[1].flip(3)) and torch.equal(fx[2], plain[2].flip(3))
+    assert torch.equal(fy[1], plain[1].flip(2)) and torch.equal(fy[2], plain[2].flip(2))
+    expect = plain[0].flip(2).clone()
+    expect[:, 1] = -expect[:, 1]
+    assert torch.equal(fy[0], expect)
+    # a mirrored batch is not the plain one (the flip actually happened)
+    assert not torch.equal(fx[0], plain[0])
+
+
+def test_flip_rate_zero_is_the_old_sampler(tmp_path):
+    ds = load_dataset(write_v2_dataset(tmp_path / "ds", pairs=2, size=(40, 48)))
+    a = CropSampler(ds.split("train"), crop=16, seed=7, flip_x=0.0, flip_y=0.0).sample(4)
+    b = CropSampler(ds.split("train"), crop=16, seed=7, flip_x=0.0, flip_y=0.0).sample(4)
+    assert torch.equal(a[0], b[0]) and torch.equal(a[1], b[1]) and torch.equal(a[2], b[2])
+
+
+def test_normals_load_as_channels_4_to_6_and_flip_as_vectors(tmp_path):
+    ds = load_dataset(write_v2_dataset(tmp_path / "ds", pairs=2, size=(40, 48), normals=True))
+    pairs = ds.split("train")
+    assert pairs[0].inp.shape[0] == 7
+    hit = pairs[0].inp[3] < 1
+    assert bool((pairs[0].inp[4:][:, ~hit] == 0).all())
+    assert torch.allclose(pairs[0].inp[4:][:, hit].norm(dim=0), torch.ones(int(hit.sum())), atol=1e-5)
+    plain = CropSampler(pairs, crop=16, seed=5, flip_x=0.0, flip_y=0.0).sample(4)
+    fx = CropSampler(pairs, crop=16, seed=5, flip_x=1.0, flip_y=0.0).sample(4)
+    fy = CropSampler(pairs, crop=16, seed=5, flip_x=0.0, flip_y=1.0).sample(4)
+    assert plain[0].shape == (4, 7, 16, 16)
+    ex = plain[0].flip(3).clone(); ex[:, 4] = -ex[:, 4]
+    ey = plain[0].flip(2).clone(); ey[:, 5] = -ey[:, 5]
+    assert torch.equal(fx[0], ex) and torch.equal(fy[0], ey)
+    # padding outside the pair is the 7-channel sentinel: depth 1, everything else 0
+    pad = plain[0][:, 3] == 1
+    assert bool((plain[0][:, 4:].permute(0, 2, 3, 1)[pad] == 0).all())

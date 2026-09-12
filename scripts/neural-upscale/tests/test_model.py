@@ -24,7 +24,7 @@ def test_input_normalization_buffers():
 
 def test_unknown_ids_raise():
     with pytest.raises(ValueError, match="model id"):
-        Upscaler("s64", "rgb")
+        Upscaler("s128", "rgb")
     with pytest.raises(ValueError, match="input set"):
         Upscaler("s8", "rgba")
 
@@ -71,3 +71,20 @@ def test_forward_matches_the_scalar_typescript_twin(inputs):
     want = torch.tensor(scalar_forward(m, march, 0.1, 200.0), dtype=torch.float64)
     assert got.shape == (16, 4, 5)
     assert torch.allclose(got, want, rtol=1e-9, atol=1e-9)
+
+
+def test_rgbn_assembles_hit_masked_normals_after_hit():
+    from tests.helpers import random_march
+    m = Upscaler("s8", "rgbn")
+    march = random_march(6, 8, seed=3)
+    nrm = torch.rand((3, 6, 8)) * 2 - 1
+    x = m.assemble(torch.cat([march, nrm], dim=0).unsqueeze(0), 0.1, 200.0)[0]
+    hit = (march[3] < 1).to(torch.float32)
+    assert x.shape[0] == 7
+    assert torch.equal(x[4:], nrm * hit)
+    assert torch.equal(x[3], hit)
+    with pytest.raises(ValueError, match="needs normals"):
+        m.assemble(march.unsqueeze(0), 0.1, 200.0)
+    d = Upscaler("s8", "rgbdn")
+    assert d.in_scale[4].item() == pytest.approx(0.1) and d.in_scale.shape[0] == 8
+    assert d.assemble(torch.cat([march, nrm], dim=0).unsqueeze(0), 0.1, 200.0).shape[1] == 8

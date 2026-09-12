@@ -3,7 +3,7 @@
  * checked against (spec §2-§4). Images are row 0 = texel row 0 (the top of
  * the rendered image in this renderer's convention), interleaved channels.
  */
-import type { ConvLayer, UpscaleLayout, UpscaleModel } from './upscale-model';
+import { inputsUseDepth, inputsUseNormals, type ConvLayer, type UpscaleLayout, type UpscaleModel } from './upscale-model';
 
 export interface FloatImage { w: number; h: number; c: number; data: Float32Array }
 
@@ -40,9 +40,18 @@ export function f16round(v: number): number {
   return Math.sign(v) * n * step;
 }
 
-/** The first layer's input (spec §2): rgb*hit, hit[, hit*linearDepth], normalized. */
-export function assembleInput(march: FloatImage, model: UpscaleModel, near: number, far: number): FloatImage {
+/** The first layer's input (spec §2): rgb*hit, hit[, hit*linearDepth][, normal*hit], normalized.
+ *  `normal` (3 or 4 channels, view space) is required by the rgbn/rgbdn sets and ignored otherwise;
+ *  channel order mirrors nupscale/model.py `assemble`. */
+export function assembleInput(march: FloatImage, model: UpscaleModel, near: number, far: number, normal?: FloatImage): FloatImage {
   const inC = model.layers[0]!.inC;
+  const useDepth = inputsUseDepth(model.inputs);
+  const useNormal = inputsUseNormals(model.inputs);
+  if (useNormal) {
+    if (!normal) throw new Error(`upscale: input set ${model.inputs} needs a normal image`);
+    if (normal.w !== march.w || normal.h !== march.h) throw new Error(`upscale: normal image ${normal.w}x${normal.h} does not match march ${march.w}x${march.h}`);
+  }
+  const nBase = useDepth ? 5 : 4;
   const out = makeImage(march.w, march.h, inC);
   const raw = new Array<number>(inC).fill(0);
   for (let p = 0; p < march.w * march.h; p++) {
@@ -53,7 +62,13 @@ export function assembleInput(march: FloatImage, model: UpscaleModel, near: numb
     raw[1] = march.data[b + 1]! * hit;
     raw[2] = march.data[b + 2]! * hit;
     raw[3] = hit;
-    if (inC === 5) raw[4] = hit * linearDepth(a, near, far);
+    if (useDepth) raw[4] = hit * linearDepth(a, near, far);
+    if (useNormal) {
+      const nb = p * normal!.c;
+      raw[nBase] = normal!.data[nb]! * hit;
+      raw[nBase + 1] = normal!.data[nb + 1]! * hit;
+      raw[nBase + 2] = normal!.data[nb + 2]! * hit;
+    }
     for (let k = 0; k < inC; k++) out.data[p * inC + k] = raw[k]! * model.inScale[k]! + model.inOffset[k]!;
   }
   return out;
@@ -120,6 +135,8 @@ export interface ReferenceOptions {
   /** Filled per output pixel with ownHit + coverageResidual - 0.5 (signed
    *  distance of the coverage decision from its threshold). */
   marginOut?: Float32Array;
+  /** The view-space normal image (3 or 4 channels, march size) for the rgbn/rgbdn sets. */
+  normal?: FloatImage;
 }
 
 /** The whole stage on the CPU: march image (RGBA, alpha = clip depth) -> output image. */
@@ -134,7 +151,7 @@ export function upscaleReference(
   };
   const layers = model.layers;
   const lastLayer = layers[layers.length - 1]!;
-  let hidden = assembleInput(march, model, near, far);
+  let hidden = assembleInput(march, model, near, far, opts.normal);
   for (let l = 0; l < layers.length - 1; l++) hidden = store(conv3x3(hidden, layers[l]!));
   const last = layout === 'sp' ? store(conv3x3(hidden, lastLayer)) : null;
   const out = makeImage(outW, outH, 4);

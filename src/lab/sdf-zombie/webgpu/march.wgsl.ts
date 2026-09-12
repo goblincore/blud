@@ -3566,7 +3566,36 @@ export const MARCH_BODY_SURFACE_PREP = /* wgsl */ `
  * fleshLit compose, the display conversion and the debug heatmaps. None of
  * this exists in the deferred surface entry.
  */
-export const MARCH_BODY_LIGHT = /* wgsl */ `  // ---- ANALYTIC FLASHLIGHT ----------------------------------------------
+/**
+ * NEURAL UPSCALE RUNTIME NORMALS (plan docs/superpowers/plans/2026-09-12-neural-upscale-runtime-normals.md).
+ * The lit march leaves its final shading normal (WORLD space, unit, after the face bump — the
+ * same `n` the capture's debug mode 9 returns) in a module-scope private, and this read fn hands
+ * it to a renderer-level MRT as a second colour attachment. The private-global pattern is
+ * deferred-sdf.ts's SDF_SURFACE_STATE: the declaration trails the fn because wgslFn's parser is
+ * ^fn-anchored, and a read fn taking the march result as `dep` orders the read after the write.
+ * ONE node must carry this source for every chain that includes MARCH_BODY (zombie-gpu.ts
+ * `marchNormalRead` seeds buildMarchFn's chain) — a second wgslFn of the same text would
+ * redeclare the var and fail every pipeline.
+ */
+export const MARCH_NORMAL_OUT = /* wgsl */ `fn readMarchNormal(dep: vec4<f32>) -> vec4<f32> {
+  return gMarchNormal;
+}
+var<private> gMarchNormal: vec4<f32>;
+`;
+
+export const MARCH_BODY_LIGHT = /* wgsl */ `  // Runtime normal out (MARCH_NORMAL_OUT): world-space unit n, before any early return below.
+  gMarchNormal = vec4<f32>(normalize(n), 1.0);
+  // NORMAL-OUTPUT MODE (debugCfg.x == 9, neural upscale normals capture,
+  // 2026-09-12). The final shading normal (after the face bump) in WORLD space,
+  // depth in alpha exactly as the lit output, so the same readback and crop
+  // apply. Read-back only, like the counters above; the capture script
+  // (scripts/upscale-capture-v2.mjs) rotates it into view space. The runtime
+  // stage gets normals from an MRT attachment later — this mode is the
+  // TRAINING-side source and must compute the same n the lit path shades with.
+  if (debugCfg.x > 8.5 && debugCfg.x < 9.5) {
+    return vec4<f32>(normalize(n), t);
+  }
+  // ---- ANALYTIC FLASHLIGHT ----------------------------------------------
   // The world's SpotLight is invisible to the march — SDF bodies are shaded
   // here, not by three — so the beam is re-evaluated analytically per pixel.
   //

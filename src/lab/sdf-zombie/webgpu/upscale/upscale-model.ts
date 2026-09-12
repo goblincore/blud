@@ -14,8 +14,8 @@
  * Pure TypeScript — no three.js — so the CPU twin and its tests stay GPU-free.
  */
 
-export type UpscaleModelId = 's8' | 's16' | 's32' | 'zero';
-export type UpscaleInputSet = 'rgb' | 'rgbd';
+export type UpscaleModelId = 's8' | 's16' | 's32' | 's64' | 's64d' | 'zero';
+export type UpscaleInputSet = 'rgb' | 'rgbd' | 'rgbn' | 'rgbdn';
 export type UpscaleLayout = 'sp' | 'dc';
 
 export interface UpscaleConfig {
@@ -25,18 +25,24 @@ export interface UpscaleConfig {
   seed: number;
 }
 
-export const UPSCALE_MODEL_IDS: readonly UpscaleModelId[] = ['s8', 's16', 's32', 'zero'];
+export const UPSCALE_MODEL_IDS: readonly UpscaleModelId[] = ['s8', 's16', 's32', 's64', 's64d', 'zero'];
 export const UPSCALE_LAYOUTS: readonly UpscaleLayout[] = ['sp', 'dc'];
-export const UPSCALE_INPUT_SETS: readonly UpscaleInputSet[] = ['rgb', 'rgbd'];
+export const UPSCALE_INPUT_SETS: readonly UpscaleInputSet[] = ['rgb', 'rgbd', 'rgbn', 'rgbdn'];
+/** Whether an input set carries hit*linearDepth (channel 4). */
+export function inputsUseDepth(inputs: UpscaleInputSet): boolean { return inputs === 'rgbd' || inputs === 'rgbdn'; }
+/** Whether an input set carries the view-space shading normal * hit (the last 3 channels).
+ *  Mirrors nupscale/model.py `assemble`: rgb*hit, hit, [depth], [normal]. */
+export function inputsUseNormals(inputs: UpscaleInputSet): boolean { return inputs === 'rgbn' || inputs === 'rgbdn'; }
 
 /** The march scale the stage is designed around: it upscales exactly 2x. */
 export const UPSCALE_SCALE = 0.5;
-/** Channels the first layer reads: rgb (zeroed off-flesh) + hit, then linear depth. */
-export const INPUT_CHANNELS: Readonly<Record<UpscaleInputSet, number>> = { rgb: 4, rgbd: 5 };
+/** Channels the first layer reads: rgb (zeroed off-flesh) + hit, then linear depth, then the
+ *  view-space normal (rgbn/rgbdn, 2026-09-12 — dataset v3 pairs carry normal.npy). */
+export const INPUT_CHANNELS: Readonly<Record<UpscaleInputSet, number>> = { rgb: 4, rgbd: 5, rgbn: 7, rgbdn: 8 };
 /** Hidden widths. 'zero' has s8's shape with every weight and bias 0. Every
  *  width is a multiple of 4 so feature maps pack into whole RGBA textures. */
 export const HIDDEN_WIDTHS: Readonly<Record<UpscaleModelId, readonly number[]>> = {
-  s8: [8, 8], s16: [16, 16], s32: [32, 32], zero: [8, 8],
+  s8: [8, 8], s16: [16, 16], s32: [32, 32], s64: [64, 64], s64d: [64, 64, 64], zero: [8, 8],
 };
 /** Last layer: 4 sub-pixels x (r, g, b, coverage). */
 export const LAST_CHANNELS = 16;
@@ -125,7 +131,7 @@ export function createUpscaleModel(id: UpscaleModelId, inputs: UpscaleInputSet, 
   });
   const inScale = new Float32Array(inC0).fill(1);
   const inOffset = new Float32Array(inC0);
-  if (inputs === 'rgbd') inScale[4] = DEPTH_INPUT_SCALE;
+  if (inputsUseDepth(inputs)) inScale[4] = DEPTH_INPUT_SCALE;
   const model: UpscaleModel = { id, inputs, seed, layers, inScale, inOffset, weightHash: '' };
   model.weightHash = hashModel(model);
   return model;

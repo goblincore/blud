@@ -85,7 +85,8 @@ for (const g of r.gpuVsCpu) {
   if (g.coverageMismatchFar > 0) problems.push(`${g.layout}: ${g.coverageMismatchFar} coverage mismatches outside the band`);
   if (g.depthMismatch > 0) problems.push(`${g.layout}: ${g.depthMismatch} depth mismatches`);
 }
-if (r.layouts.maxRelRgb > 2e-3) problems.push(`sp vs dc rgb ${r.layouts.maxRelRgb.toExponential(2)} > 2e-3`);
+if (r.layouts && r.layouts.maxRelRgb > 2e-3) problems.push(`sp vs dc rgb ${r.layouts.maxRelRgb.toExponential(2)} > 2e-3`);
+if (!r.layouts) console.log('  (dc layout not planned for this model — sp only)');
 console.log(`self-check: ${JSON.stringify(r.gpuVsCpu)} sp-vs-dc ${JSON.stringify(r.layouts)}`);
 
 // 3. the A/B key: model -> native -> nearest -> model
