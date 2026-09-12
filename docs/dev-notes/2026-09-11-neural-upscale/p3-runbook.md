@@ -100,6 +100,24 @@ scripts/neural-upscale/runpod/pull.sh <pod id>
 It installs every export into `.upscale-models/` and runs G3 parity on each. Never load a model
 whose parity fails.
 
+## 7b. If you will be away: pull automatically
+
+```bash
+caffeinate -i scripts/neural-upscale/runpod/watch-pull.sh <pod id> --stop
+```
+
+Polls the pod's own dashboard URL once a minute; the moment `exports.tar.gz` appears it runs the
+same pull as above (install + G3 parity per export), then **stops the pod** — so an unattended run
+does not burn the rest of the 40-minute grace window. `caffeinate -i` keeps the Mac awake; it needs
+to stay online.
+
+- Log: `~/blud-upscale-data/watch-pull-<pod id>.log`; it drops a `PULLED-<pod id>`,
+  `PULL-FAILED-<pod id>` or `TIMED-OUT-<pod id>` marker beside it, and posts a macOS notification.
+- A failed pull leaves the pod alone so you can retry; it never deletes anything.
+- `--interval <s>` and `--timeout-h <h>` (default 60 s, 8 h) tune the polling.
+- Verified locally against an `http.server`: it waited while the file was absent, pulled within one
+  interval of it appearing, installed both models and passed G3 on both.
+
 ## 8. Stop, delete, check the bill
 
 The pod stops itself 40 minutes after the grid ends. Confirm it has, then delete it once the pull
