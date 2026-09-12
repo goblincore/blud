@@ -70,10 +70,28 @@ The question was which renderer produces the look, and the answer is the existin
 expensive settings: more AO samples, more shadow rays, finer steps, better probe sampling. Same
 scene, same camera, alignment free; the work is shader work, not capture work.
 
-**Rejected: an offline renderer (Blender).** The characters are SDFs, not meshes. Meshing them and
-matching camera, FOV, lights and materials across two renderers guarantees small mismatches, and a
-mismatch teaches the net to change silhouettes — which it structurally cannot do (§2), so it would
-learn to blur instead.
+**Blender/Cycles is NOT rejected** (an earlier draft of this note rejected it; the owner pushed back
+and was right). Blender can take the SDF — via SDF/geometry-node add-ons, or more faithfully by
+sampling *our own* field into an OpenVDB grid per frame, which preserves the real primitives, cluster
+blending and wound carving instead of reimplementing them.
+
+The actual constraint is **sub-pixel silhouette agreement**, not representation. The net predicts a
+residual over a nearest upscale plus a coverage decision; if the target's edges sit half a pixel off,
+it learns to blur them — and the edge band is a weighted region, so that poisons the thing we are
+trying to improve. But this is **measurable with the instrument we already built**: the G2
+registration gate (linear-depth registration, argmin and sub-pixel offset) is what caught misaligned
+marches in P2. Point it at a Blender render and it answers the question.
+
+| | Own renderer, slowly | Blender / Cycles |
+|---|---|---|
+| Alignment | free | must be measured (G2 gate) |
+| The look | needs new WGSL: AO, soft shadows, bounce | real path tracing today |
+| Throughput | fast, in-engine | VDB export + render per frame; hours for 1,000 |
+| Fidelity to our SDF | exact | exact *if* sampled from our own field into VDB |
+
+**Best use of Blender regardless: the still-frame gate below.** Finding out what the look should be
+takes an evening in Cycles and days of shader work in WGSL. Establish the look with a renderer that
+already does GI properly, then decide how to mass-produce aligned targets.
 
 **FIRST TASK, before any capture or training: produce ONE still frame that looks right**, by any
 means and however slow. The net only ever copies; if the expensive render does not look
@@ -91,7 +109,9 @@ from the march target, so they widen the 6.7–13.1 ms pass, not the 0.3 ms mode
   Flesh, flesh and flesh buys nothing.
 
 Also an overfitting angle: more channels with only three characters give the net more ways to
-memorise instead of generalise.
+memorise instead of generalise. The fix is more characters in the *capture* — and note that training
+diversity and shipping readiness are different bars: a half-finished lab body still teaches the net
+how flesh shades, so the WIP roster is usable data while remaining unusable content.
 
 **3. How to judge it, without only eyeballing.** Once a *look* is the goal the old metric is
 actively misleading — a model that looks better will score worse on 0.0233 — so the G4 structure has
