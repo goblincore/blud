@@ -8,7 +8,11 @@ ROOT=${1:?usage: pack-exports.sh <run root>}
 cd "$ROOT"
 ITEMS=()
 for d in */exports; do [ -d "$d" ] && ITEMS+=("$d"); done
-for f in dashboard.json GRID_DONE.json STOPPED_AT_CAP GRID_FAILED.txt PREFLIGHT.json; do [ -e "$f" ] && ITEMS+=("$f"); done
+# Checkpoints are tiny (12-33 kB each) and CANNOT be regenerated once the pod is deleted: without
+# them there is no resuming a run and no exporting a different step. Always take them.
+for f in */ckpt-best.pt */ckpt-latest.pt; do [ -e "$f" ] && ITEMS+=("$f"); done
+# The dashboard, so it still opens locally after the pod is gone.
+for f in dashboard.json index.html img GRID_DONE.json STOPPED_AT_CAP GRID_FAILED.txt PREFLIGHT.json; do [ -e "$f" ] && ITEMS+=("$f"); done
 [ ${#ITEMS[@]} -gt 0 ] || { echo "pack-exports.sh: nothing to pack in $ROOT" >&2; exit 1; }
 COPYFILE_DISABLE=1 tar -czf exports.tar.gz.tmp "${ITEMS[@]}"
 mv exports.tar.gz.tmp exports.tar.gz

@@ -115,6 +115,14 @@ to stay online.
   `PULL-FAILED-<pod id>` or `TIMED-OUT-<pod id>` marker beside it, and posts a macOS notification.
 - A failed pull leaves the pod alone so you can retry; it never deletes anything.
 - `--interval <s>` and `--timeout-h <h>` (default 60 s, 8 h) tune the polling.
+- **`--delete` instead of `--stop`** also destroys the pod and its volume, but only when the local
+  copy checks out: every export's G3 parity passed, the grid wrote `GRID_DONE.json`, and the
+  checkpoints arrived. If any of that is missing it stops and leaves the pod for you. The pull now
+  takes everything that cannot be regenerated — model JSONs, parity fixtures, **`ckpt-best.pt` and
+  `ckpt-latest.pt` per run** (12-33 kB each) and the whole dashboard with its images — into
+  `.upscale-models/_pulled/<pod id>/`, so a deleted pod costs you nothing.
+- Stopping is usually enough: a stopped pod bills only for its volume, around 2 cents a day for a
+  16 GB disk. Deleting is irreversible, so the default is stop.
 - Verified locally against an `http.server`: it waited while the file was absent, pulled within one
   interval of it appearing, installed both models and passed G3 on both.
 
