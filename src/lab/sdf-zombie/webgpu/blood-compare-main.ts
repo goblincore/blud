@@ -13,6 +13,21 @@
 //   smooth                continuous reconstruction + AA silhouette coverage
 //   smooth-connections    both candidates together
 //
+// TWO ORTHOGONAL AXES (2026-09-13, reference-directed slug splash):
+//
+//   shape    'current' = the shipped droplet sim, rendered through a
+//                       reconstruction variant below (the accepted Smooth path
+//                       and the original both live here).
+//            'splash'  = the NEW procedural impact crown (impact-splash.ts):
+//                       curved fan/sheet lobes, ragged material-space holes,
+//                       detached droplets. It is a different SHAPE, not a
+//                       filter, and it renders alone so the two can never be
+//                       confused. It opens FROZEN at a representative crown
+//                       moment, loops when played, and has its own reset.
+//   filter   Original / Smooth / connections — applies to shape 'current'
+//            only; switching shape does not change the camera, seed or time
+//            controls, so the comparison is not confounded by framing.
+//
 // Single view shows one variant full-frame. WIPE view renders two variants
 // into two full-size offscreen targets and wipes B over A with a scissor at a
 // chosen fraction — both sides keep full output resolution and equal aspect
@@ -51,6 +66,11 @@ import {
 } from '../blood-sim';
 import { connectionBlobsForSim } from './blood-connections';
 import { createBloodView, type BloodView } from './blood-view-gpu';
+import {
+  createImpactSplashLayer, createImpactSplashEvent, stepImpactSplashEvent,
+  IMPACT_SPLASH_TUNING, type ImpactSplashEvent, type ImpactSplashLayer,
+} from './impact-splash';
+import type { Vec3 } from '../types';
 
 // -------------------------------------------------------------------------
 // Variants
@@ -75,6 +95,34 @@ export const VARIANTS: Variant[] = [
 function variantById(id: VariantId): Variant {
   return VARIANTS.find(v => v.id === id) ?? VARIANTS[0]!;
 }
+
+// -------------------------------------------------------------------------
+// SHAPE AXIS (Current slug vs Impact splash) — deliberately SEPARATE from the
+// reconstruction/filter variants above. The two are orthogonal questions:
+//   shape 'current'  = the shipped droplet sim, rendered through one of the
+//                      Original/Smooth/etc. reconstruction variants.
+//   shape 'splash'   = the procedural crown module, which is a different
+//                      SHAPE (crown/fan/sheets), not a different filter.
+// Both use the SAME camera, seed and elapsed-time controls, so a reviewer can
+// flip shape without the comparison being confounded by a moved camera.
+// -------------------------------------------------------------------------
+
+export type ShapeId = 'current' | 'splash';
+
+export const SHAPES: { id: ShapeId; label: string }[] = [
+  { id: 'current', label: 'Current slug (sim + reconstruction)' },
+  { id: 'splash', label: 'Impact splash (procedural crown)' },
+];
+
+/** The splash event's origin: the SAME front-of-proxy wound the current slug
+ *  burst uses ([0, 1.35, 0.55]), so the two shapes are the same event seen
+ *  two ways. `+Z` is OUTWARD (toward the default camera), which is the wound
+ *  normal pointing off the front of the body proxy — not world-up. */
+export const SPLASH_ORIGIN: Vec3 = [0, 1.35, 0.55];
+export const SPLASH_DIRECTION: Vec3 = [0, 0, 1];
+/** The representative crown moment the preview freezes on by default: the
+ *  crown has expanded and begun to tear, before dissolve eats the sheets. */
+export const SPLASH_CROWN_SEC = 0.30;
 
 // -------------------------------------------------------------------------
 // Sizes and the per-variant render order (both exported for CPU tests)
@@ -165,6 +213,7 @@ async function bootstrap(): Promise<void> {
   const diagEl = document.getElementById('diag')!;
   const controlsEl = document.getElementById('controls')!;
   const pausedEl = document.getElementById('paused');
+  const statusEl = document.getElementById('status');
   if (!mount || !controlsEl || !diagEl) throw new Error('comparison page DOM is incomplete');
 
   const fail = (err: unknown): void => {
@@ -246,6 +295,15 @@ async function bootstrap(): Promise<void> {
   for (const o of bloodView.objects) scene.add(o);
   bloodView.setBeadsVisible(false);
   bloodView.setMistVisible(true);
+
+  // --- impact splash layer (shape axis) ----------------------------------
+  // Shares the goo rig's light uniform NODES, so the crown and the goo are lit
+  // by one key. It lives in the fixture scene and is hidden in 'current' mode,
+  // so the shipped slug render is untouched. The event is emitted on demand by
+  // the shape control; the layer is CPU-only to build (no GPU work until the
+  // page renders one frame).
+  const splashLayer: ImpactSplashLayer = createImpactSplashLayer({ rig });
+  scene.add(splashLayer.object);
 
   // --- render targets for the wipe view ----------------------------------
   const targetOpts = { depthBuffer: true, type: THREE.HalfFloatType } as const;
@@ -413,6 +471,45 @@ async function bootstrap(): Promise<void> {
   }
   applyLayerToggles();
 
+  // --- shape axis + splash preview state ---------------------------------
+  // 'current' keeps the shipped sim path exactly as before. 'splash' renders
+  // only the procedural crown in the fixture scene (the sim is cleared so no
+  // stale beads/splats leak into the comparison). Camera, seed and elapsed
+  // controls are shared, so the two shapes are never framed differently.
+  let shape: ShapeId = 'current';
+  let splashFrozen = true;
+  let splashEvent: ImpactSplashEvent | null = null;
+
+  function resetSplash(): void {
+    splashLayer.clear();
+    splashEvent = splashLayer.emit(SPLASH_ORIGIN, SPLASH_DIRECTION, seed);
+    // Freeze on the representative crown moment by default; when the reviewer
+    // unfreezes, the event loops the full bounded lifetime.
+    splashEvent.time = splashFrozen ? SPLASH_CROWN_SEC : 0;
+  }
+
+  function advanceSplash(dt: number): void {
+    if (!splashEvent || splashFrozen) return;
+    stepImpactSplashEvent(splashEvent, dt);
+    if (splashEvent.time >= splashEvent.lifetime) {
+      // LOOP: same seed, so the loop is reproducible frame to frame.
+      splashEvent.time = 0;
+    }
+  }
+
+  function setShape(next: ShapeId): void {
+    shape = next;
+    if (shape === 'splash') {
+      // The splash is its own event, not a re-render of the sim: clear the
+      // sim so the current slug's droplets, mist and floor splats cannot be
+      // mistaken for the crown in the same frame.
+      clearSim();
+      resetSplash();
+    } else {
+      resetScenario();
+    }
+  }
+
   function renderVariant(v: Variant, target: THREE.RenderTarget | null): void {
     renderVariantFrame({
       gooLayer,
@@ -424,9 +521,20 @@ async function bootstrap(): Promise<void> {
 
   function draw(): void {
     // The blood view is variant-independent: pose it once per presented frame
-    // from the SAME sim, after the camera's world matrices are current.
+    // from the SAME sim, after the camera's world matrices are current. In
+    // splash mode the sim is empty, so this zeroes every instance and the
+    // crown is the only blood on screen.
     camera.updateMatrixWorld();
     bloodView.sync(sim, camera);
+    splashLayer.setVisible(shape === 'splash');
+    if (shape === 'splash') {
+      splashLayer.sync(camera);
+      renderer.setClearColor(background);
+      renderer.setRenderTarget(null);
+      renderer.render(scene, camera);
+      updateDiag();
+      return;
+    }
     renderer.setClearColor(background);
     if (!wipe) {
       renderVariant(variantById(variant), null);
@@ -457,7 +565,9 @@ async function bootstrap(): Promise<void> {
   }
 
   // --- camera orbit ------------------------------------------------------
-  const orbit = { yaw: 0, pitch: 0.18, distance: 1.8, tx: 0, ty: 1.15, tz: 0 };
+  // Close framing on the shared wound origin (SPLASH_ORIGIN is also the
+  // current slug burst's origin), so both shapes fill the frame the same way.
+  const orbit = { yaw: 0, pitch: 0.14, distance: 1.35, tx: 0, ty: 1.30, tz: 0.42 };
   function applyCamera(): void {
     const cp = Math.cos(orbit.pitch);
     camera.position.set(
@@ -497,9 +607,28 @@ async function bootstrap(): Promise<void> {
   }
 
   // --- diagnostics + capture API ----------------------------------------
+  function splashState(): Record<string, unknown> {
+    const ev = splashEvent;
+    const progress = ev && ev.lifetime > 0 ? Math.min(1, ev.time / ev.lifetime) : 0;
+    return {
+      shape,
+      frozen: splashFrozen,
+      origin: SPLASH_ORIGIN,
+      direction: SPLASH_DIRECTION,
+      time: ev ? ev.time : 0,
+      lifetime: ev ? ev.lifetime : IMPACT_SPLASH_TUNING.lifetimeSec,
+      progress,
+      crownMoment: SPLASH_CROWN_SEC,
+      events: splashLayer.eventCount,
+      vertices: splashLayer.vertexCount,
+      droplets: splashLayer.dropletCount,
+    };
+  }
+
   function candidateState(): Record<string, unknown> {
     return {
       seed, frame, scenario, playing, speed,
+      shape, splash: splashState(),
       variant, wipe, wipeA, wipeB, wipePos,
       strands: enableStrands, sheets: enableSheets,
       goo: gooVisible, mist: mistVisible,
@@ -519,22 +648,51 @@ async function bootstrap(): Promise<void> {
   function updateDiag(): void {
     const d = gooLayer.densityDiagnostics;
     const v = variantById(variant);
-    const lines = [
-      `seed ${seed}  frame ${frame}  scenario ${scenario}`,
-      `playing ${playing}  speed ${speed.toFixed(2)}`,
-      wipe
-        ? `wipe at ${wipePos.toFixed(2)}: left=B(${wipeB}) right=A(${wipeA})`
-        : `variant ${v.id} (recon=${v.reconstruction} conns=${v.connections ? 'on' : 'off'})`,
-      `strands ${enableStrands ? 'on' : 'off'}  sheets ${enableSheets ? 'on' : 'off'} (experimental)  extras ${gooLayer.extraBlobCount}`,
-      `goo ${gooVisible ? 'on' : 'off'}  mist ${mistVisible ? 'on' : 'off'} (beads/ribbons hidden as in game)`,
-      `source ${sourceW}x${sourceH}  output ${contentW}x${contentH}`,
-      `density ${d.densityWidth}x${d.densityHeight}  densityScale ${d.densityScale.toFixed(2)} of source`,
-      `density texels/source px ${d.texelsPerSourcePixelX.toFixed(2)},${d.texelsPerSourcePixelY.toFixed(2)}  /output px ${d.texelsPerOutputPixelX.toFixed(2)},${d.texelsPerOutputPixelY.toFixed(2)}`,
-      `sim droplets ${sim.droplets.length}  splats ${sim.splats.length}  backend ${handle.backend}`,
-    ];
+    const lines = shape === 'splash'
+      ? [
+        `seed ${seed}  shape ${shape}  scenario —`,
+        splashLegend(),
+        `splash origin [${SPLASH_ORIGIN.join(', ')}]  dir [${SPLASH_DIRECTION.join(', ')}] (outward, not world-up)`,
+        `splash frozen ${splashFrozen ? 'YES at crown' : 'no (looping)'}  reset to ${SPLASH_CROWN_SEC.toFixed(2)}s`,
+        `crown verts ${splashLayer.vertexCount}  droplets ${splashLayer.dropletCount}  events ${splashLayer.eventCount}`,
+        `reconstruction ${v.id} is INDEPENDENT of shape (applies to Current only)`,
+        `output ${contentW}x${contentH}  camera yaw ${orbit.yaw.toFixed(2)} pitch ${orbit.pitch.toFixed(2)} dist ${orbit.distance.toFixed(2)}`,
+        `backend ${handle.backend}`,
+      ]
+      : [
+        `seed ${seed}  frame ${frame}  scenario ${scenario}`,
+        `shape ${shape} (current slug)  playing ${playing}  speed ${speed.toFixed(2)}`,
+        wipe
+          ? `wipe at ${wipePos.toFixed(2)}: left=B(${wipeB}) right=A(${wipeA})`
+          : `reconstruction ${v.id} (recon=${v.reconstruction} conns=${v.connections ? 'on' : 'off'})`,
+        `strands ${enableStrands ? 'on' : 'off'}  sheets ${enableSheets ? 'on' : 'off'} (experimental)  extras ${gooLayer.extraBlobCount}`,
+        `goo ${gooVisible ? 'on' : 'off'}  mist ${mistVisible ? 'on' : 'off'} (beads/ribbons hidden as in game)`,
+        `source ${sourceW}x${sourceH}  output ${contentW}x${contentH}`,
+        `density ${d.densityWidth}x${d.densityHeight}  densityScale ${d.densityScale.toFixed(2)} of source`,
+        `density texels/source px ${d.texelsPerSourcePixelX.toFixed(2)},${d.texelsPerSourcePixelY.toFixed(2)}  /output px ${d.texelsPerOutputPixelX.toFixed(2)},${d.texelsPerOutputPixelY.toFixed(2)}`,
+        `sim droplets ${sim.droplets.length}  splats ${sim.splats.length}  backend ${handle.backend}`,
+      ];
     diagEl.textContent = lines.join('\n');
     if (pausedEl) pausedEl.style.display = playing ? 'none' : '';
+    if (statusEl) {
+      const ev = splashEvent;
+      statusEl.textContent = shape === 'splash'
+        ? `IMPACT SPLASH  t ${(ev ? ev.time : 0).toFixed(2)}/${(ev ? ev.lifetime : IMPACT_SPLASH_TUNING.lifetimeSec).toFixed(2)}s  ${splashFrozen ? 'FROZEN (crown)' : 'looping'}`
+        : `CURRENT SLUG  frame ${frame}/${150}  ${playing ? 'playing' : 'paused'}`;
+    }
   }
+
+  /** One concise status legend shared by the diag panel and the on-canvas
+   *  indicator: phase name + the elapsed/lifetime window it belongs to. */
+  function splashLegend(): string {
+    const ev = splashEvent;
+    const t = ev ? ev.time : 0;
+    const phase = t < IMPACT_SPLASH_TUNING.expandSec ? 'EXPAND (crown rising)'
+      : t < IMPACT_SPLASH_TUNING.tearEndSec ? 'TEAR/DROP (fingers + droplets)'
+        : 'DISSOLVE (sheets break up)';
+    return `t ${t.toFixed(2)}/${(ev ? ev.lifetime : IMPACT_SPLASH_TUNING.lifetimeSec).toFixed(2)}s  phase ${phase}`;
+  }
+
 
   // --- controls ----------------------------------------------------------
   function row(label: string, el: HTMLElement): void {
@@ -569,9 +727,44 @@ async function bootstrap(): Promise<void> {
   let wipeASelect: HTMLSelectElement | null = null;
   let wipeBSelect: HTMLSelectElement | null = null;
 
-  row('variant', select(VARIANTS.map(v => ({ id: v.id, label: v.label })), variant, (v) => {
+  // SHAPE first: Current slug vs the procedural Impact splash. This is a shape
+  // choice, not a filter choice, and it is independent of the reconstruction
+  // variants below it.
+  row('shape', select(SHAPES, shape, (s) => {
+    setShape(s); if (!playing) handle.drawOnce();
+  }));
+  // The reconstruction/filter variants apply to the Current slug render only.
+  row('filter', select(VARIANTS.map(v => ({ id: v.id, label: v.label })), variant, (v) => {
     variant = v; if (!playing) handle.drawOnce();
   }));
+
+  // Splash preview controls: a freeze toggle, an elapsed-time scrubber and a
+  // reset to the representative crown moment.
+  const splashFreezeToggle = checkbox('freeze at crown', splashFrozen, (on) => {
+    splashFrozen = on;
+    if (shape === 'splash') { resetSplash(); if (!playing) handle.drawOnce(); }
+  });
+  row('splash', splashFreezeToggle);
+  const splashTimeInput = document.createElement('input');
+  splashTimeInput.type = 'range'; splashTimeInput.min = '0'; splashTimeInput.max = String(IMPACT_SPLASH_TUNING.lifetimeSec); splashTimeInput.step = '0.01';
+  splashTimeInput.value = String(SPLASH_CROWN_SEC);
+  splashTimeInput.addEventListener('input', () => {
+    if (shape !== 'splash' || !splashEvent) return;
+    splashFrozen = true; splashFreezeToggle.querySelector('input')!.checked = true;
+    splashEvent.time = Number(splashTimeInput.value);
+    if (!playing) handle.drawOnce();
+  });
+  row('splash t', splashTimeInput);
+  const splashResetBtn = document.createElement('button');
+  splashResetBtn.textContent = 'Reset splash';
+  splashResetBtn.addEventListener('click', () => {
+    if (shape !== 'splash') return;
+    splashFrozen = true; splashFreezeToggle.querySelector('input')!.checked = true;
+    splashTimeInput.value = String(SPLASH_CROWN_SEC);
+    resetSplash(); if (!playing) handle.drawOnce();
+  });
+  row('', splashResetBtn);
+
   const wipeToggle = checkbox('wipe A/B', wipe, (on) => {
     wipe = on;
     if (wipeASelect) wipeASelect.style.display = on ? '' : 'none';
@@ -604,13 +797,20 @@ async function bootstrap(): Promise<void> {
   seedInput.type = 'number'; seedInput.value = String(seed); seedInput.style.width = '90px';
   seedInput.addEventListener('change', () => {
     const n = Number(seedInput.value);
-    if (Number.isFinite(n)) { seed = Math.floor(n); resetScenario(); if (!playing) handle.drawOnce(); }
+    if (Number.isFinite(n)) {
+      seed = Math.floor(n);
+      if (shape === 'splash') resetSplash(); else resetScenario();
+      if (!playing) handle.drawOnce();
+    }
   });
   row('seed', seedInput);
 
   const replayBtn = document.createElement('button');
   replayBtn.textContent = 'Replay';
-  replayBtn.addEventListener('click', () => { resetScenario(); if (!playing) handle.drawOnce(); });
+  replayBtn.addEventListener('click', () => {
+    if (shape === 'splash') resetSplash(); else resetScenario();
+    if (!playing) handle.drawOnce();
+  });
   row('', replayBtn);
 
   const playBtn = document.createElement('button');
@@ -618,7 +818,9 @@ async function bootstrap(): Promise<void> {
   const stepBtn = document.createElement('button');
   playBtn.textContent = 'Play'; pauseBtn.textContent = 'Pause'; stepBtn.textContent = 'Step';
   playBtn.addEventListener('click', () => {
-    playing = true; handle.setLoopRunning(true); updateDiag();
+    playing = true; handle.setLoopRunning(true);
+    if (shape === 'splash') { splashFrozen = false; splashFreezeToggle.querySelector('input')!.checked = false; }
+    updateDiag();
   });
   pauseBtn.addEventListener('click', () => {
     playing = false; handle.setLoopRunning(false); handle.drawOnce(); updateDiag();
@@ -684,22 +886,43 @@ async function bootstrap(): Promise<void> {
   hint.id = 'hint';
   hint.textContent = [
     'drag orbit · wheel zoom',
-    'opens mid-jet; Play loops the burst · Replay resets the same seed',
-    'capture: pick variant (+wipe), Play, Pause, then screenshot the canvas;',
-    '__bloodCompare.state() records seed/frame/source/output/density for the shot.',
+    'shape: Current slug (sim + filter) vs Impact splash (procedural crown)',
+    'splash opens FROZEN at the crown moment; Play loops it, Reset splash re-freezes',
+    'filter (Original/Smooth) is independent of shape and applies to Current only',
+    'capture: pick shape (+filter/wipe), Play/Pause or freeze, screenshot the canvas;',
+    '__bloodCompare.state() records seed/shape/splash time + source/output/density.',
   ].join('\n');
   controlsEl.appendChild(hint);
 
   // --- global API --------------------------------------------------------
   const api = {
     state: candidateState,
-    play: () => { playing = true; handle.setLoopRunning(true); },
+    play: () => {
+      playing = true; handle.setLoopRunning(true);
+      if (shape === 'splash') { splashFrozen = false; splashFreezeToggle.querySelector('input')!.checked = false; }
+    },
     pause: () => { playing = false; handle.setLoopRunning(false); handle.drawOnce(); },
     step: () => { playing = false; handle.setLoopRunning(false); handle.step(1 / 60); },
     replay: (nextSeed?: number) => {
       if (nextSeed !== undefined && Number.isFinite(nextSeed)) { seed = Math.floor(nextSeed); seedInput.value = String(seed); }
-      resetScenario(); if (!playing) handle.drawOnce();
+      if (shape === 'splash') resetSplash(); else resetScenario();
+      if (!playing) handle.drawOnce();
     },
+    setShape: (s: ShapeId) => { setShape(s); if (!playing) handle.drawOnce(); },
+    setSplashTime: (t: number) => {
+      if (!splashEvent || !Number.isFinite(t)) return;
+      splashFrozen = true;
+      splashEvent.time = Math.max(0, Math.min(splashEvent.lifetime, t));
+      splashTimeInput.value = String(splashEvent.time);
+      if (!playing) handle.drawOnce();
+    },
+    setSplashFrozen: (on: boolean) => {
+      splashFrozen = on;
+      splashFreezeToggle.querySelector('input')!.checked = on;
+      if (shape === 'splash' && !playing) handle.drawOnce();
+    },
+    resetSplash: () => { resetSplash(); if (!playing) handle.drawOnce(); },
+    splashState,
     setVariant: (v: VariantId) => { variant = v; if (!playing) handle.drawOnce(); },
     setWipe: (on: boolean, a?: VariantId, b?: VariantId, pos?: number) => {
       wipe = on; if (a) wipeA = a; if (b) wipeB = b;
@@ -721,10 +944,10 @@ async function bootstrap(): Promise<void> {
     },
     captureInstructions: () => [
       '1. npm run dev and open /sdf-blood-compare.html (WebGPU required).',
-      '2. Choose a scenario and variant, or enable the full-size wipe A/B.',
-      '3. Press Play, let the frame reach the wanted moment, press Pause.',
-      '4. Record __bloodCompare.state() (seed, frame, source, output, density) beside the image.',
-      '5. Screenshot the canvas region; compare only shots at the same source grid, output size and seed.',
+      '2. shape=Current slug: choose a scenario + filter (or full-size wipe A/B).',
+      '3. shape=Impact splash: the crown opens frozen at the crown moment; Play loops it.',
+      '4. Press Play/Pause (or leave frozen), then record __bloodCompare.state() beside the image.',
+      '5. Screenshot the canvas; compare only shots at the same seed, source grid, output size and time.',
       'Visual acceptance is PENDING: not verified during the training window.',
     ],
   };
@@ -732,6 +955,7 @@ async function bootstrap(): Promise<void> {
 
   // --- wiring ------------------------------------------------------------
   handle.setRenderCallback((dt) => {
+    if (shape === 'splash') { advanceSplash(dt); return; }
     // Replay short comparison clips instead of leaving an exhausted wound
     // dripping onto a floor full of old splats. Same seed each cycle.
     if (frame >= 150) resetScenario();
@@ -748,6 +972,7 @@ async function bootstrap(): Promise<void> {
   window.addEventListener('pagehide', () => {
     bloodView.dispose();
     gooLayer.dispose();
+    splashLayer.dispose();
     rtA.dispose(); rtB.dispose();
     blitA.geometry.dispose(); blitB.geometry.dispose();
     (blitA.material as THREE.Material).dispose();

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Blud — blood surface comparison (Original / Smooth / connections)</title>
+<title>Blud — blood comparison (Current slug / Impact splash / Original / Smooth)</title>
 <style>
   body { margin: 0; background: #101014; color: #e8e8e8; font: 12px monospace; overflow: hidden; }
   #app { width: 100vw; height: 100vh; }
@@ -27,6 +27,11 @@
     position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 10;
     background: rgba(8,8,12,0.8); border: 1px solid #3a3a44; padding: 3px 10px; color: #fc9;
   }
+  #status {
+    position: fixed; right: 8px; bottom: 8px; z-index: 10;
+    background: rgba(8,8,12,0.82); border: 1px solid #3a3a44; padding: 3px 10px;
+    color: #9cc; font-size: 11px; white-space: pre;
+  }
 </style>
 </head>
 <body>
@@ -40,6 +45,7 @@
     </details>
   </div>
   <div id="paused">paused — press Play (or Step)</div>
+  <div id="status"></div>
   <div id="errors"></div>
   <script type="module" src="/src/lab/sdf-zombie/webgpu/blood-compare-main.ts"></script>
 </body>

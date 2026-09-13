@@ -12,6 +12,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
   renderVariantFrame, VARIANTS, COMPARE_OUTPUT, COMPARE_SOURCE_PRESETS,
+  SHAPES, SPLASH_ORIGIN, SPLASH_DIRECTION, SPLASH_CROWN_SEC,
 } from './blood-compare-main';
 import type { BloodSim } from '../blood-sim';
 import type { GooLayer, GooDensityBlob } from './goo-layer';
@@ -212,5 +213,73 @@ describe('blood comparison page — production reuse and candidates', () => {
   it('never claims visual success in source (deferred acceptance)', () => {
     expect(src).toContain('Visual acceptance is PENDING');
     expect(src).toContain('NOT verified');
+  });
+});
+
+describe('blood comparison page — Current slug vs Impact splash shape axis', () => {
+  it('exposes exactly two shapes, separate from the filter variants', () => {
+    expect(SHAPES.map(s => s.id)).toEqual(['current', 'splash']);
+    expect(SHAPES.map(s => s.id)).not.toEqual(VARIANTS.map(v => v.id));
+    // Shape and filter are distinct controls.
+    expect(src).toContain("row('shape'");
+    expect(src).toContain("row('filter'");
+    expect(src).toContain('is INDEPENDENT of shape');
+  });
+
+  it('puts the splash at the SAME wound origin as the current slug burst, spraying outward', () => {
+    // The current burst fires spawnImpactGout at [0, 1.35, 0.55].
+    expect(SPLASH_ORIGIN).toEqual([0, 1.35, 0.55]);
+    // +Z is the OUTWARD wound normal toward the default camera, not world-up.
+    expect(SPLASH_DIRECTION[2]).toBeGreaterThan(0);
+    expect(SPLASH_DIRECTION[1]).toBe(0);
+    expect(src).toContain('splashLayer.emit(SPLASH_ORIGIN, SPLASH_DIRECTION, seed)');
+  });
+
+  it('uses the production impact-splash module and preserves the shared seed', () => {
+    for (const needle of [
+      'createImpactSplashLayer', 'createImpactSplashEvent', 'stepImpactSplashEvent',
+      'IMPACT_SPLASH_TUNING',
+    ]) {
+      expect(src, `${needle} must be used`).toContain(needle);
+    }
+    // No second seed source: the splash emits with the page's `seed`.
+    expect(src).toContain('splashLayer.emit(SPLASH_ORIGIN, SPLASH_DIRECTION, seed)');
+  });
+
+  it('freezes at the crown moment, loops, and has a reset', () => {
+    expect(SPLASH_CROWN_SEC).toBeGreaterThan(0);
+    expect(SPLASH_CROWN_SEC).toBeLessThan(1.15);
+    expect(src).toContain('splashFrozen');
+    expect(src).toContain('resetSplash');
+    expect(src).toContain('advanceSplash');
+    expect(src).toContain('freeze at crown');
+    // The loop restarts the same event at t=0 rather than emitting a new one.
+    expect(src).toContain('splashEvent.time = 0;');
+  });
+
+  it('renders the splash without the current sim/goo so shapes cannot be confused', () => {
+    // The splash branch runs before the variant render and returns.
+    expect(src).toContain("if (shape === 'splash') {");
+    expect(src).toContain('splashLayer.sync(camera)');
+    expect(src).toContain('splashLayer.setVisible(shape === \'splash\')');
+    // Entering splash clears the sim, so no stale slug droplets/splats leak in.
+    expect(src).toContain('clearSim();');
+  });
+
+  it('leaves a status legend and time indicator on the page', () => {
+    expect(html).toContain('id="status"');
+    expect(src).toContain('splashLegend');
+    expect(src).toContain('phase ');
+    expect(src).toContain('FROZEN (crown)');
+  });
+
+  it('exposes splash controls on the global API (no default promotion)', () => {
+    for (const needle of [
+      'setShape', 'setSplashTime', 'setSplashFrozen', 'resetSplash', 'splashState',
+    ]) {
+      expect(src, `${needle} must be exposed`).toContain(needle);
+    }
+    // Default remains the shipped current slug.
+    expect(src).toContain("let shape: ShapeId = 'current';");
   });
 });

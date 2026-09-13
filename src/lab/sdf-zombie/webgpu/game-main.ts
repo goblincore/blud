@@ -139,6 +139,7 @@ import { shouldSpill, GUT_DROPLET_SIZE, SPILL_CHANCE } from '../entrails-spawn';
 import { createBloodView } from './blood-view-gpu';
 import { createGooLayer, type GooLayer, type GooReconstruction } from './goo-layer';
 import { connectionBlobsForSim } from './blood-connections';
+import { createImpactSplashLayer, type ImpactSplashLayer } from './impact-splash';
 import { createGooPanel, type GooPanel } from './goo-panel';
 import { createVhsPanel, type VhsPanel } from './vhs-panel';
 import {
@@ -982,7 +983,9 @@ async function main() {
   //   ?goorecon=smooth    continuous reconstruction + AA silhouette composite
   //   ?gooconnections=1   tapered strands (sheets are a separate opt-in)
   //   ?goosheets=1        experimental stream-grid sheets
-  // Live equivalents: __sdfGame.setGooCandidate.
+  //   ?impactsplash=1     SUPPLEMENTARY procedural impact crown on top of the
+  //                       existing slug gout (does not replace it)
+  // Live equivalents: __sdfGame.setGooCandidate, __sdfGame.setImpactSplash.
   let gooReconstruction: GooReconstruction = 'original';
   let gooConnectionsEnabled = false;
   let gooStrandsEnabled = true;
@@ -990,6 +993,29 @@ async function main() {
   // hole swimming, but whether a density patch reads as a sheet is still an
   // open visual question. Opt in with ?goosheets=1 / setGooCandidate.
   let gooSheetsEnabled = false;
+  // SUPPLEMENTARY IMPACT SPLASH (reference-directed slug splash, 2026-09-13).
+  // A separate procedural crown effect fired ON TOP of the existing slug gout;
+  // it mutates no shared table and does not replace the Current slug. OFF by
+  // default: opt in with ?impactsplash=1 or __sdfGame.setImpactSplash.
+  let impactSplashEnabled = false;
+  let impactSplashLayer: ImpactSplashLayer | null = null;
+
+  /** Create the splash layer on first enable only, sharing the flesh/goo
+   *  light uniform NODES so it is lit by the same rig. Returns silently if
+   *  there is no actor view yet (the same pre-condition the goo layer has). */
+  function ensureImpactSplashLayer(): void {
+    if (impactSplashLayer) return;
+    const v = actors[0]?.view;
+    if (!v) return;
+    impactSplashLayer = createImpactSplashLayer({
+      rig: {
+        lightDir: v.uniforms.lightDir,
+        keyColor: v.uniforms.keyColor,
+        lightCfg: v.uniforms.lightCfg,
+      },
+    });
+    scene.add(impactSplashLayer.object);
+  }
 
   function sizeSdfLayer() {
     const s = postAa.contentSize;
@@ -4132,6 +4158,12 @@ async function main() {
     gooSheetsEnabled = gooCandidateBoot.get('goosheets') === '1';
     gooLayer.setReconstruction(gooReconstruction);
 
+    // SUPPLEMENTARY IMPACT SPLASH boot flag. Read AFTER the shipping defaults
+    // so it can only ever add the new crown, never move a shipped value. It
+    // is independent of the goo candidates above.
+    impactSplashEnabled = gooCandidateBoot.get('impactsplash') === '1';
+    if (impactSplashEnabled) ensureImpactSplashLayer();
+
     // Live tuning panel (owner ask, 2026-08-31: "add a ui i can tune the goo
     // manually"). The look is a five-knob family found by sweeping two at a
     // time and watching; retyping setGooTuning after every reload is not a
@@ -4434,7 +4466,17 @@ async function main() {
     // body, so pass the inward direction. The wound's stable stream id tags
     // the gout so it fuses with this wound's per-frame droplets and no
     // other emitter's.
-    spawnImpactGout(bloodSim, kind, anchor, [-normal[0], -normal[1], -normal[2]], bleedRng, woundStreamId(wound));
+    const streamId = woundStreamId(wound);
+    spawnImpactGout(bloodSim, kind, anchor, [-normal[0], -normal[1], -normal[2]], bleedRng, streamId);
+    // SUPPLEMENTARY impact crown (opt-in, ?impactsplash=1). The crown's axis
+    // is the OUTWARD wound normal — the hemisphere the blood leaves the body
+    // — so wall/body impacts orient away from the surface. The seed is
+    // derived from the wound's stable stream id, NOT from bleedRng, so it
+    // draws no random numbers and leaves the shipped gout/bleed stream
+    // bit-identical.
+    if (impactSplashEnabled && impactSplashLayer) {
+      impactSplashLayer.emit(anchor, normal, (streamId * 2654435761) >>> 0);
+    }
     // Gut-rope decision for this stamped wound — placed BELOW the
     // !bleedEnabled guard on purpose: the roll spends bleedRng, and the
     // invariant above (OFF mid-stream = ON-stream-paused) only holds if
@@ -5417,6 +5459,9 @@ async function main() {
         bloodView.sync(bloodSim, camera);
       }
       telemetry.end('blood-simulation-and-sync', bloodTiming);
+      // The optional impact crown advances even with bleed off, so an event
+      // already in flight finishes instead of freezing mid-burst.
+      impactSplashLayer?.step(cdt);
     }
 
     const eye = eyeOf(player);
@@ -5428,6 +5473,11 @@ async function main() {
       eye[2] - Math.cos(player.yaw) * cp,
     );
     camera.updateMatrixWorld();
+
+    // Optional impact crown: rebuild from the current event times after the
+    // camera is final (its sync takes the camera for parity; geometry is
+    // world-space). No-op when the feature is off.
+    impactSplashLayer?.sync(camera);
 
     // GOO DENSITY QUADS — pose them from the same sim state, every frame,
     // AFTER the camera is final and before the drawFn composites. The lab
@@ -7304,6 +7354,33 @@ function performBenchAction(a: BenchAction): void {
         strands: gooStrandsEnabled,
         sheets: gooSheetsEnabled,
         extraBlobs: gooLayer.extraBlobCount,
+      };
+    },
+
+    /**
+     * SUPPLEMENTARY IMPACT SPLASH (2026-09-13). A procedural crown fired ON
+     * TOP of the existing slug gout — it replaces nothing and mutates no
+     * shared constant, so the Current slug stays exactly as tuned. OFF unless
+     * this is called or ?impactsplash=1 is present; enabling it creates the
+     * layer on first use (sharing the flesh light rig) and adds it to the
+     * scene. Disabling keeps the layer but hides it, so toggling costs no
+     * rebuild.
+     */
+    setImpactSplash(o: { enabled?: boolean } = {}) {
+      if (o.enabled !== undefined) impactSplashEnabled = o.enabled;
+      if (impactSplashEnabled) ensureImpactSplashLayer();
+      impactSplashLayer?.setVisible(impactSplashEnabled);
+      return {
+        enabled: impactSplashEnabled,
+        available: impactSplashLayer !== null,
+        events: impactSplashLayer?.eventCount ?? 0,
+      };
+    },
+    get impactSplash() {
+      return {
+        enabled: impactSplashEnabled,
+        available: impactSplashLayer !== null,
+        events: impactSplashLayer?.eventCount ?? 0,
       };
     },
 
