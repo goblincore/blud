@@ -4152,3 +4152,74 @@ export const HELPERS = [
   // a textureLoad — so it rides last, ahead of MARCH_BODY which calls it.
   DEPTH_PRE_FETCH,
 ];
+
+/**
+ * RUN 5 (spec docs/superpowers/specs/2026-09-13-neural-upscale-run5-sdf-refine-design.md §4).
+ * The refine entry shares the march's PARAMS (+4 appended), SETUP, POST, SURFACE_PREP and LIGHT
+ * sections verbatim; only the walk is replaced. Per OUTPUT pixel: the hit comes from the four
+ * surrounding march texels (hit-gated bilinear of linear view depth, along THIS pixel's ray), the
+ * body's own SDF rejects the pixel if it disagrees by more than refineCfg.y march texels (another
+ * body, or an edge — the net keeps owning edges), then refineCfg.w Newton steps land on the true
+ * surface and the normal stencil shrinks to refineCfg.z of an OUTPUT pixel's footprint.
+ * refineCfg: x = enabled (0 discards everything), y = reject in march texels (1.0),
+ *            z = normal stencil in output-pixel footprints (0.25), w = Newton steps (2).
+ *
+ * Walk state the later sections read is declared here too. The hit-derived ones (t, hit, hitBest,
+ * hitField, hitNearWound) get the refine's real values; pure walk bookkeeping (clamped, d,
+ * nearWound, radius, root) gets the constant a converged clean hit leaves.
+ */
+export const REFINE_LOOP = /* wgsl */ `  if (refineCfg.x < 0.5) { discard; }
+  // The march texel grid under this output pixel - coneFetch's mapping, screenUV times dims.
+  let mDims = vec2<f32>(textureDimensions(marchTex, 0));
+  let mMax = vec2<i32>(mDims) - vec2<i32>(1, 1);
+  let q = screenUV * mDims - vec2<f32>(0.5, 0.5);
+  let c0 = clamp(vec2<i32>(floor(q)), vec2<i32>(0, 0), mMax);
+  let fr = clamp(q - vec2<f32>(c0), vec2<f32>(0.0), vec2<f32>(1.0));
+  var zsum = 0.0;
+  var wsum = 0.0;
+  for (var k = 0; k < 4; k = k + 1) {
+    let dx = k & 1;
+    let dy = k >> 1;
+    let mc = textureLoad(marchTex, clamp(c0 + vec2<i32>(dx, dy), vec2<i32>(0, 0), mMax), 0);
+    if (mc.w >= 1.0) { continue; }
+    let z = nearFar.x * nearFar.y / (nearFar.y - mc.w * (nearFar.y - nearFar.x));
+    let wgt = (1.0 - abs(fr.x - f32(dx))) * (1.0 - abs(fr.y - f32(dy)));
+    zsum = zsum + z * wgt;
+    wsum = wsum + wgt;
+  }
+  if (wsum <= 0.0) { discard; }
+  // View depth to distance along THIS pixel's ray - cosRay is minus the view-space z of rd.
+  var t = clamp((zsum / wsum) / max(cosRay, 1e-4), 0.0, tMax);
+  var hit = false;
+  var hitBest = -1;
+  var hitNearWound = false;
+  var hitField = vec4<f32>(0.0);
+  // Walk bookkeeping the later text mentions - a converged hit leaves these.
+  var clamped = false;
+  var d = 0.0;
+  var nearWound = false;
+  var radius = 0.0;
+  var root = 0.0;
+  var pRef = camPos + rd * t;
+  var dres = mapBody(pRef, data, counts, counts2, vec4<f32>(0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound);
+  // One MARCH texel's world footprint at this depth - aaCfg.x is the half-texel radius per unit.
+  let texelFoot = 2.0 * t * aaCfg.x;
+  if (abs(dres.x) > refineCfg.y * max(texelFoot, 1e-4)) { discard; }
+  for (var k = 0; k < i32(refineCfg.w); k = k + 1) {
+    t = t + dres.x;
+    pRef = camPos + rd * t;
+    dres = mapBody(pRef, data, counts, counts2, vec4<f32>(0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound);
+  }
+  hit = true;
+  hitBest = i32(dres.y);
+  hitField = dres;
+  hitNearWound = dres.z > 0.5;
+  nearWound = hitNearWound;
+  d = dres.x;
+  radius = abs(d);
+  // aaCfg.x is a MARCH texel radius - an output pixel is half of it.
+  gNormalEps = max(refineCfg.z * t * aaCfg.x, 2e-4);
+`;
+export const REFINE_PARAMS = MARCH_BODY_PARAMS.slice(0, MARCH_BODY_PARAMS.lastIndexOf(')')).replace(/\s*$/, '') +
+  `,\n  marchTex: texture_2d<f32>,\n  cosRay: f32,\n  nearFar: vec2<f32>,\n  refineCfg: vec4<f32>\n) -> vec4<f32> {\n`;
+export const REFINE_BODY = `fn refineBody${REFINE_PARAMS}${MARCH_TRACE_SETUP}${REFINE_LOOP}${MARCH_TRACE_POST}${MARCH_BODY_SURFACE_PREP}${MARCH_BODY_LIGHT}`;

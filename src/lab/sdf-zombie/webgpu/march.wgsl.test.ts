@@ -2465,4 +2465,28 @@ describe('run 5: MARCH_BODY_TRACE is SETUP + LOOP + POST', () => {
     expect(m.CALC_NORMAL).toContain('let e = vec2<f32>(1.0, -1.0) * gNormalEps;');
     expect(m.CALC_NORMAL).not.toContain('* 0.0015;');
   });
+
+  it('REFINE_BODY is params + setup + REFINE_LOOP + post + prep + light, with four refine params appended', async () => {
+    const m = await import('./march.wgsl');
+    expect(m.REFINE_BODY).toBe(`fn refineBody${m.REFINE_PARAMS}${m.MARCH_TRACE_SETUP}${m.REFINE_LOOP}${m.MARCH_TRACE_POST}${m.MARCH_BODY_SURFACE_PREP}${m.MARCH_BODY_LIGHT}`);
+    expect(m.REFINE_PARAMS.endsWith('  marchTex: texture_2d<f32>,\n  cosRay: f32,\n  nearFar: vec2<f32>,\n  refineCfg: vec4<f32>\n) -> vec4<f32> {\n')).toBe(true);
+    expect(m.REFINE_PARAMS.startsWith(m.MARCH_BODY_PARAMS.slice(0, m.MARCH_BODY_PARAMS.lastIndexOf(')')).replace(/\s*$/, ''))).toBe(true);
+  });
+  it('REFINE_LOOP declares every name the walk declares that the later sections read', async () => {
+    const m = await import('./march.wgsl');
+    const later = `${m.MARCH_TRACE_POST}${m.MARCH_BODY_SURFACE_PREP}${m.MARCH_BODY_LIGHT}`;
+    const declared = [...m.MARCH_TRACE_LOOP.matchAll(/\b(?:let|var)\s+([A-Za-z_]\w*)/g)].map((x) => x[1]!);
+    const needed = [...new Set(declared)].filter((n) => new RegExp(`\\b${n}\\b`).test(later));
+    expect(needed.length).toBeGreaterThan(0);
+    for (const n of needed) expect(m.REFINE_LOOP, `REFINE_LOOP must declare ${n}`).toMatch(new RegExp(`\\b(?:let|var)\\s+${n}\\b`));
+  });
+  it('REFINE_LOOP rejects on the SDF distance before any Newton step, never walks, and sets gNormalEps', async () => {
+    const m = await import('./march.wgsl');
+    expect(m.REFINE_LOOP).not.toContain('for (var i = 0; i < 512');
+    const reject = m.REFINE_LOOP.indexOf('refineCfg.y');
+    const newton = m.REFINE_LOOP.indexOf('t = t + dres.x');
+    expect(reject).toBeGreaterThan(-1); expect(newton).toBeGreaterThan(reject);
+    expect(m.REFINE_LOOP).toContain('gNormalEps = ');
+    expect(m.REFINE_LOOP).toContain('if (wsum <= 0.0) { discard; }');
+  });
 });
