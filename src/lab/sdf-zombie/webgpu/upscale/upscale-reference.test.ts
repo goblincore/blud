@@ -4,7 +4,7 @@ import {
   type ConvLayer, type UpscaleModel,
 } from './upscale-model';
 import {
-  assembleInput, conv3x3, convAt, f16round, linearDepth, makeImage, reconstructPixel, upscaleReference,
+  assembleHeadInput, assembleInput, conv3x3, convAt, f16round, linearDepth, makeImage, reconstructPixel, upscaleReference,
   type FloatImage,
 } from './upscale-reference';
 
@@ -258,5 +258,29 @@ describe('run-4 head in the twin', () => {
       expect(out.data[p * 4 + 3]).toBe(base.data[p * 4 + 3]);
     }
     expect(changed).toBeGreaterThan(0);
+  });
+});
+
+describe('run-5 refine channels in the twin', () => {
+  it('a zero head is a no-op with refine; refine channels enter only where accepted (refineC.w < 1)', () => {
+    const w = 12, h = 10;
+    const march = randomMarch(6, 5, 21);
+    const m = createUpscaleModel('s8', 'rgbn', 1, true, 'detail+refine');
+    const detail = { w, h, c: 4, data: new Float32Array(w * h * 4).map((_, k) => (k % 4 === 3 ? 1 : Math.sin(k * 0.7))) };
+    const refineN = { w, h, c: 4, data: new Float32Array(w * h * 4).map((_, k) => (k % 4 === 3 ? 1 : Math.cos(k * 0.3))) };
+    const refineC = { w, h, c: 4, data: new Float32Array(w * h * 4).map((_, k) => (k % 4 === 3 ? (k % 8 === 3 ? 0.5 : 1) : 0.3)) };
+    const normal = { w: march.w, h: march.h, c: 4, data: new Float32Array(march.w * march.h * 4).map((_, k) => Math.cos(k * 0.37)) };
+    const plain = upscaleReference(march, createUpscaleModel('s8', 'rgbn', 1), 'sp', 0.1, 100, w, h, { normal });
+    const same = upscaleReference(march, m, 'sp', 0.1, 100, w, h, { normal, detail, refineN, refineC });
+    expect(Array.from(same.data)).toEqual(Array.from(plain.data));
+    expect(() => upscaleReference(march, m, 'sp', 0.1, 100, w, h, { normal, detail })).toThrow(/needs opts.refineN and opts.refineC/);
+    const x = assembleHeadInput(same, detail, march, { n: refineN, c: refineC });
+    expect(x.c).toBe(17);
+    for (let p = 0; p < w * h; p++) {
+      const ga = refineC.data[p * 4 + 3]! < 1 ? 1 : 0;
+      expect(x.data[p * 17 + 16]).toBe(ga);
+      expect(x.data[p * 17 + 10]).toBeCloseTo(refineN.data[p * 4]! * ga);
+      expect(x.data[p * 17 + 13]).toBeCloseTo(refineC.data[p * 4]! * ga);
+    }
   });
 });

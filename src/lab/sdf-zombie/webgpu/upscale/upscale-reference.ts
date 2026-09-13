@@ -140,13 +140,28 @@ export interface ReferenceOptions {
   normal?: FloatImage;
   /** Run-4 detail field (4 channels, OUTPUT size: noise xyz, w = gate) — required by a model with a head. */
   detail?: FloatImage;
+  /** Run-5 refine normal image (4 channels, OUTPUT size, xyz + unused w) — required when the model's
+   *  headInputs is 'detail+refine'. */
+  refineN?: FloatImage;
+  /** Run-5 refine color image (4 channels, OUTPUT size, rgb + w = accept gate: w < 1 means accepted) —
+   *  required when the model's headInputs is 'detail+refine'. */
+  refineC?: FloatImage;
 }
 
-/** Run-4 head input (nupscale/model.py `Upscaler.head_input`): per output pixel
- *  [rgb*covered, covered, detail.xyz*gate, nearest-up march rgb*hit] (10 channels). */
-export function assembleHeadInput(out: FloatImage, detail: FloatImage, march: FloatImage): FloatImage {
+/** Run-4/5 head input (nupscale/model.py `Upscaler.head_input`): per output pixel
+ *  [rgb*covered (3), covered (1), detail.xyz*gate (3), nearest-up march rgb*hit (3)] (10 channels), and
+ *  when `refine` is given, seven more: [refineN.xyz*ga (3), refineC.rgb*ga (3), ga (1)] (17 total), where
+ *  ga = refineC.w < 1 (accepted) — this is the cross-language contract with nupscale/model.py head_input. */
+export function assembleHeadInput(
+  out: FloatImage, detail: FloatImage, march: FloatImage, refine?: { n: FloatImage; c: FloatImage },
+): FloatImage {
   if (detail.w !== out.w || detail.h !== out.h || detail.c !== 4) throw new Error(`upscale head: detail ${detail.w}x${detail.h}x${detail.c} does not match output ${out.w}x${out.h}x4`);
-  const x = makeImage(out.w, out.h, HEAD_IN_CHANNELS);
+  if (refine) {
+    if (refine.n.w !== out.w || refine.n.h !== out.h || refine.n.c !== 4) throw new Error(`upscale head: refineN ${refine.n.w}x${refine.n.h}x${refine.n.c} does not match output ${out.w}x${out.h}x4`);
+    if (refine.c.w !== out.w || refine.c.h !== out.h || refine.c.c !== 4) throw new Error(`upscale head: refineC ${refine.c.w}x${refine.c.h}x${refine.c.c} does not match output ${out.w}x${out.h}x4`);
+  }
+  const C = refine ? 17 : HEAD_IN_CHANNELS;
+  const x = makeImage(out.w, out.h, C);
   for (let Y = 0; Y < out.h; Y++) {
     const y = Math.min(Y >> 1, march.h - 1);
     for (let X = 0; X < out.w; X++) {
@@ -155,20 +170,32 @@ export function assembleHeadInput(out: FloatImage, detail: FloatImage, march: Fl
       const gate = detail.data[p * 4 + 3]! > 0 ? 1 : 0;
       const mb = (y * march.w + Math.min(X >> 1, march.w - 1)) * 4;
       const hit = march.data[mb + 3]! < 1 ? 1 : 0;
-      const b = p * HEAD_IN_CHANNELS;
+      const b = p * C;
       x.data[b] = out.data[p * 4]! * cov; x.data[b + 1] = out.data[p * 4 + 1]! * cov; x.data[b + 2] = out.data[p * 4 + 2]! * cov;
       x.data[b + 3] = cov;
       x.data[b + 4] = detail.data[p * 4]! * gate; x.data[b + 5] = detail.data[p * 4 + 1]! * gate; x.data[b + 6] = detail.data[p * 4 + 2]! * gate;
       x.data[b + 7] = march.data[mb]! * hit; x.data[b + 8] = march.data[mb + 1]! * hit; x.data[b + 9] = march.data[mb + 2]! * hit;
+      if (refine) {
+        const ga = refine.c.data[p * 4 + 3]! < 1 ? 1 : 0;
+        x.data[b + 10] = refine.n.data[p * 4]! * ga; x.data[b + 11] = refine.n.data[p * 4 + 1]! * ga; x.data[b + 12] = refine.n.data[p * 4 + 2]! * ga;
+        x.data[b + 13] = refine.c.data[p * 4]! * ga; x.data[b + 14] = refine.c.data[p * 4 + 1]! * ga; x.data[b + 15] = refine.c.data[p * 4 + 2]! * ga;
+        x.data[b + 16] = ga;
+      }
     }
   }
   return x;
 }
 
 /** Applies a model's head to a reconstructed output IN PLACE: rgb += residual where covered, clamped >= 0. */
-export function applyHead(out: FloatImage, model: UpscaleModel, detail: FloatImage, march: FloatImage, store: (img: FloatImage) => FloatImage = (i) => i): void {
+export function applyHead(
+  out: FloatImage, model: UpscaleModel, detail: FloatImage, march: FloatImage,
+  refine?: { n: FloatImage; c: FloatImage }, store: (img: FloatImage) => FloatImage = (i) => i,
+): void {
   if (!model.head) return;
-  let h = assembleHeadInput(out, detail, march);
+  if (model.headInputs === 'detail+refine' && !refine) {
+    throw new Error('upscaleReference: this model has a refine head and needs opts.refineN and opts.refineC');
+  }
+  let h = assembleHeadInput(out, detail, march, refine);
   for (let k = 0; k < model.head.length - 1; k++) h = store(conv3x3(h, model.head[k]!));
   const last = model.head[model.head.length - 1]!;
   for (let p = 0; p < out.w * out.h; p++) {
@@ -213,7 +240,10 @@ export function upscaleReference(
   }
   if (model.head) {
     if (!opts.detail) throw new Error('upscaleReference: this model has a head and needs opts.detail');
-    applyHead(out, model, opts.detail, march, store);
+    if (model.headInputs === 'detail+refine' && !(opts.refineN && opts.refineC)) {
+      throw new Error('upscaleReference: this model has a refine head and needs opts.refineN and opts.refineC');
+    }
+    applyHead(out, model, opts.detail, march, opts.refineN ? { n: opts.refineN, c: opts.refineC! } : undefined, store);
   }
   return out;
 }

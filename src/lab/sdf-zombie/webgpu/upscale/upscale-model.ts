@@ -25,6 +25,8 @@ export interface UpscaleConfig {
   seed: number;
   /** Run-4 full-res head (random-weight configs only; a trained model carries its own). */
   head?: boolean;
+  /** Run-5 head input set (random-weight configs only); ignored when `head` is not set. */
+  headInputs?: HeadInputs;
 }
 
 export const UPSCALE_MODEL_IDS: readonly UpscaleModelId[] = ['s8', 's16', 's32', 's64', 's64d', 't24', 't16', 'zero'];
@@ -64,6 +66,11 @@ export const LAST_CHANNELS = 16;
 export const HEAD_IN_CHANNELS = 10;
 export const HEAD_WIDTH = 8;
 export const HEAD_OUT_CHANNELS = 3;
+/** Run-5 head input sets (nupscale/model.py `head_input`, nupscale/constants.py HEAD_INPUT_CHANNELS).
+ *  'detail' is the run-4 10 channels above. 'detail+refine' adds [refineN.xyz * ga (3), refineC.rgb * ga
+ *  (3), ga (1)] = 17, where ga = refineC.w < 1 (accepted). Absent on a model/JSON means 'detail'. */
+export type HeadInputs = 'detail' | 'detail+refine';
+export function headInChannels(h: HeadInputs = 'detail'): number { return h === 'detail+refine' ? 17 : 10; }
 /** Linear view depth enters the network in tens of metres. */
 export const DEPTH_INPUT_SCALE = 0.1;
 
@@ -86,6 +93,8 @@ export interface UpscaleModel {
   layers: ConvLayer[];
   /** Run-4 head: [10 -> HEAD_WIDTH relu, HEAD_WIDTH -> 3] at output resolution; absent = no head. */
   head?: ConvLayer[];
+  /** Which channel set the head's first layer reads (headInChannels()). Present iff `head`. */
+  headInputs?: HeadInputs;
   /** Per input channel: network input = raw * inScale + inOffset. */
   inScale: Float32Array;
   inOffset: Float32Array;
@@ -136,7 +145,9 @@ export function hashModel(model: Pick<UpscaleModel, 'layers' | 'inScale' | 'inOf
  * are a cost probe and a parity fixture — never a quality result. He-uniform,
  * halved, keeps activations nonzero and well away from float16 overflow.
  */
-export function createUpscaleModel(id: UpscaleModelId, inputs: UpscaleInputSet, seed = 1, head = false): UpscaleModel {
+export function createUpscaleModel(
+  id: UpscaleModelId, inputs: UpscaleInputSet, seed = 1, head = false, headInputs: HeadInputs = 'detail',
+): UpscaleModel {
   const inC0 = INPUT_CHANNELS[inputs];
   const widths = [...HIDDEN_WIDTHS[id], LAST_CHANNELS];
   const dilations = [...HIDDEN_DILATIONS[id], 1];
@@ -169,9 +180,12 @@ export function createUpscaleModel(id: UpscaleModelId, inputs: UpscaleInputSet, 
       }
       return { inC: a, outC: b, dilation: 1, weights, bias, relu };
     };
-    headLayers = [mk(HEAD_IN_CHANNELS, HEAD_WIDTH, true, false), mk(HEAD_WIDTH, HEAD_OUT_CHANNELS, false, true)];
+    headLayers = [mk(headInChannels(headInputs), HEAD_WIDTH, true, false), mk(HEAD_WIDTH, HEAD_OUT_CHANNELS, false, true)];
   }
-  const model: UpscaleModel = { id, inputs, seed, layers, inScale, inOffset, weightHash: '', ...(headLayers ? { head: headLayers } : {}) };
+  const model: UpscaleModel = {
+    id, inputs, seed, layers, inScale, inOffset, weightHash: '',
+    ...(headLayers ? { head: headLayers, headInputs } : {}),
+  };
   model.weightHash = hashModel(model);
   return model;
 }
@@ -181,7 +195,15 @@ export function modelMacs(model: UpscaleModel, inW: number, inH: number): number
   return model.layers.reduce((sum, l) => sum + l.outC * l.inC * 9, 0) * inW * inH;
 }
 
-export function parseUpscaleConfig(raw: { model?: unknown; layout?: unknown; inputs?: unknown; seed?: unknown; head?: unknown }): UpscaleConfig {
+function parseHeadInputs(v: unknown): HeadInputs {
+  if (v === undefined || v === null || v === 'detail') return 'detail';
+  if (v === 'detail+refine') return 'detail+refine';
+  throw new Error(`upscale model: headInputs must be 'detail' or 'detail+refine', got ${String(v)}`);
+}
+
+export function parseUpscaleConfig(
+  raw: { model?: unknown; layout?: unknown; inputs?: unknown; seed?: unknown; head?: unknown; headInputs?: unknown },
+): UpscaleConfig {
   const model = raw.model as UpscaleModelId;
   if (!UPSCALE_MODEL_IDS.includes(model)) {
     throw new Error(`upscale: unknown model ${String(raw.model)} (expected ${UPSCALE_MODEL_IDS.join('|')})`);
@@ -196,7 +218,11 @@ export function parseUpscaleConfig(raw: { model?: unknown; layout?: unknown; inp
   }
   const seed = raw.seed === undefined || raw.seed === null ? 1 : Number(raw.seed);
   if (!Number.isInteger(seed)) throw new Error(`upscale: seed must be an integer, got ${String(raw.seed)}`);
-  return { model, layout, inputs, seed, ...(raw.head === true || raw.head === 1 || raw.head === '1' ? { head: true } : {}) };
+  const head = raw.head === true || raw.head === 1 || raw.head === '1';
+  return {
+    model, layout, inputs, seed,
+    ...(head ? { head: true, headInputs: parseHeadInputs(raw.headInputs) } : {}),
+  };
 }
 
 /**
@@ -217,8 +243,10 @@ export interface UpscaleModelLayerJson {
 }
 
 export interface UpscaleModelJson {
-  /** Run-4 head layers (optional / null): [10->8 relu, 8->3], same layer format. */
+  /** Run-4 head layers (optional / null): [headInChannels(headInputs)->8 relu, 8->3], same layer format. */
   head?: UpscaleModelLayerJson[] | null;
+  /** Run-5 head input set; absent/null means 'detail' (every run-4 export). */
+  headInputs?: HeadInputs | null;
   format: typeof UPSCALE_MODEL_FORMAT;
   id: UpscaleModelId;
   inputs: UpscaleInputSet;
@@ -267,9 +295,12 @@ export function serializeUpscaleModel(
     layers: model.layers.map((l) => ({
       inC: l.inC, outC: l.outC, relu: l.relu, dilation: l.dilation, weights: float32ToBase64(l.weights), bias: float32ToBase64(l.bias),
     })),
-    ...(model.head ? { head: model.head.map((l) => ({
-      inC: l.inC, outC: l.outC, relu: l.relu, dilation: 1, weights: float32ToBase64(l.weights), bias: float32ToBase64(l.bias),
-    })) } : {}),
+    ...(model.head ? {
+      head: model.head.map((l) => ({
+        inC: l.inC, outC: l.outC, relu: l.relu, dilation: 1, weights: float32ToBase64(l.weights), bias: float32ToBase64(l.bias),
+      })),
+      headInputs: model.headInputs ?? 'detail',
+    } : {}),
     inScale: Array.from(model.inScale),
     inOffset: Array.from(model.inOffset),
     weightHash: hashModel(model),
@@ -335,10 +366,11 @@ export function parseUpscaleModelJson(json: unknown): UpscaleModel {
     }
     return Float32Array.from(v as number[]);
   };
-  // Run-4 head: optional; when present it is exactly [10 -> HEAD_WIDTH relu, HEAD_WIDTH -> 3].
+  // Run-4/5 head: optional; when present it is exactly [headInChannels(headInputs) -> HEAD_WIDTH relu, HEAD_WIDTH -> 3].
+  const headInputs = parseHeadInputs(j.headInputs);
   let head: ConvLayer[] | undefined;
   if (j.head !== undefined && j.head !== null) {
-    const shape = [[HEAD_IN_CHANNELS, HEAD_WIDTH, true], [HEAD_WIDTH, HEAD_OUT_CHANNELS, false]] as const;
+    const shape = [[headInChannels(headInputs), HEAD_WIDTH, true], [HEAD_WIDTH, HEAD_OUT_CHANNELS, false]] as const;
     if (!Array.isArray(j.head) || j.head.length !== shape.length) throw new Error(`upscale model: head needs ${shape.length} layers`);
     head = (j.head as unknown[]).map((raw, k) => {
       const l = (raw ?? {}) as Partial<UpscaleModelLayerJson>;
@@ -358,7 +390,7 @@ export function parseUpscaleModelJson(json: unknown): UpscaleModel {
     inOffset: norm(j.inOffset, 'inOffset'),
     weightHash: '',
     source,
-    ...(head ? { head } : {}),
+    ...(head ? { head, headInputs } : {}),
     ...(j.run !== undefined ? { run: j.run as string } : {}),
     ...(j.step !== undefined ? { step: j.step as number } : {}),
   };

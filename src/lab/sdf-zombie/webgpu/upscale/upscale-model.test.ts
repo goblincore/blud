@@ -96,3 +96,20 @@ describe('run-4 head', () => {
     expect(() => parseUpscaleModelJson({ ...json, head: json.head!.map((l, k) => (k === 0 ? { ...l, inC: 7 } : l)) })).toThrow(/head layer 0 is 7->8/);
   });
 });
+
+describe('run-5 headInputs', () => {
+  it('defaults to detail, round-trips detail+refine with a 17-wide first head layer, and rejects a mismatch', () => {
+    const m = createUpscaleModel('s8', 'rgbn', 1, true, 'detail+refine');
+    expect(m.headInputs).toBe('detail+refine');
+    expect(m.head![0]!.inC).toBe(17);
+    const json = serializeUpscaleModel(m);
+    expect(json.headInputs).toBe('detail+refine');
+    const back = parseUpscaleModelJson(json);
+    expect(back.headInputs).toBe('detail+refine');
+    expect(back.head![0]!.inC).toBe(17);
+    expect(() => parseUpscaleModelJson({ ...json, headInputs: 'detail' })).toThrow(/head layer 0 is 17->8, expected 10->8/);
+    expect(() => parseUpscaleModelJson({ ...json, headInputs: 'bogus' })).toThrow(/headInputs/);
+    expect(createUpscaleModel('s8', 'rgbn', 1, true).headInputs).toBe('detail');
+    expect(createUpscaleModel('s8', 'rgbn', 1).headInputs).toBeUndefined();
+  });
+});
