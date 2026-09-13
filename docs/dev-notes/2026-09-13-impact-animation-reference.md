@@ -1,0 +1,4 @@
+
+## Additional user animation reference
+
+User supplied /Users/donny/Pictures/bloodreerence/blood_Fx_ue5_niagara (1).webp. Animated WebP: 120 frames, 3821 ms; roughly three repeated bursts. Reviewer contact sheet /tmp/blood-reference-contact.png. Visual envelope: rapid compact crown emergence, broad irregular sheet fingers by roughly 0.2-0.4 seconds into each cycle, tearing/dissolving into fragments and red fine spray by ~0.5-0.8s, mostly detached droplets by ~1s. These are approximate image observations, not physical simulation measurements. Crucial: mass loses continuity before merely falling as a blob. Crown expansion and sheet breakup matter more than increasing bead count. Darker solid sheets + brighter translucent fine spray; avoid uniformly opaque red lump. Adapt orientation to outward wound direction, not always ground-up.
