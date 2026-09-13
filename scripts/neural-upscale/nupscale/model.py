@@ -152,6 +152,10 @@ class Upscaler(nn.Module):
         """(N, 3, 2h, 2w) rgb residual from the full-res head; zero where not covered."""
         if self.head is None:
             raise ValueError("model has no head")
+        # A detail-only head ignores a refine tensor the trainer hands every head model on a refine
+        # dataset (run 5: the control and the experiment train on the same v3.2 pairs).
+        if self.head_inputs != "detail+refine":
+            refine = None
         x = self.head_input(rec_rgb, covered, detail, march, refine)
         h0, h1 = self.head
         y = h1(torch.relu(h0(x)))

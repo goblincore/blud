@@ -149,3 +149,16 @@ def test_refine_head_starts_as_a_no_op_and_needs_refine(tmp_path):
     assert not torch.allclose(out, plain)
     import pytest as _p
     with _p.raises(ValueError, match="refine"): predict(m, march, 0.1, 200.0, detail)
+
+
+def test_detail_only_head_ignores_a_refine_tensor(tmp_path):
+    """Run 5 control: a head_inputs='detail' model trained on a refine dataset (the trainer passes refine to
+    every head model) must not concatenate the refine channels."""
+    ds = load_dataset(write_v2_dataset(tmp_path / "ds", pairs=2, size=(12, 16), normals=True, detail=True, refine=True))
+    march, target, weight, detail, refine = CropSampler(ds.split("train"), crop=8, seed=1, flip_x=0.0, flip_y=0.0).sample_with_extras(2)
+    m = Upscaler("s8", "rgbn", seed=2, head=True)
+    with torch.no_grad():
+        m.head[1].weight.normal_(); m.head[1].bias.fill_(0.2)
+    with_refine = predict(m, march, 0.1, 200.0, detail, refine).march()
+    without = predict(m, march, 0.1, 200.0, detail).march()
+    assert torch.equal(with_refine, without)
