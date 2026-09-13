@@ -313,3 +313,38 @@ signal in it is thin. Next inputs on the same plumbing, in order of expected pay
    Shares the MV work with shutter motion blur, which the owner wants built conventionally first.
 
 Not worth doing: higher target resolution or a different scale factor (§ the Obsidian note); more net shape (§12).
+
+## 14. Run 5 results (2026-09-13) — the refine head is the new best; the pass is too expensive as built
+
+Controlled pair on dataset v3.2 (748 pairs, refine fields; capture 9 GB cap): same s32-rgbn net, same interior
+weight 2, same seed; run-4 head (detail only) vs run-5 head (detail + refine: refined world normal, re-lit
+colour, accept gate — 17 channels).
+
+| run | overall | face | wound | edge | interior | medium | far |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| s32-rgbn-head-int2 (control) | 0.01455 | 0.0211 | 0.0113 | 0.0611 | 0.00864 | 0.0121 | 0.0233 |
+| **s32-rgbn-headr-int2** | **0.01112** | **0.0143** | **0.0098** | **0.0481** | **0.00654** | **0.0093** | **0.0175** |
+| native 800×600 | 0.00905 | 0.0127 | 0.0068 | 0.0382 | 0.00538 | 0.0073 | 0.0152 |
+| bicubic | 0.01751 | 0.0251 | 0.0141 | 0.0675 | 0.01111 | 0.0138 | 0.0305 |
+
+- −24 % overall, −32 % face, every region and every distance class better; the first run since run 2 to move
+  outside run-to-run noise. Two thirds of the gap between the run-4 head and the native march is closed.
+- Capture gate: refine candidate vs target 0.0232 on flesh vs 0.0373 for the nearest-up input; rim overlap
+  0.959 after the wsum ≥ 0.5 acceptance rule (0.92 before — a halo on thin limbs).
+- Gates: G3 PASS 9e-7 on the headr export (and 1.5e-7 on a synthetic refine head); trained smoke coverage/depth
+  exact, GPU-vs-twin 3.6e-3 (the head's f16 pass, same class as run 4; bar unchanged).
+- **Gate 2 (owner, 2026-09-13):** "the refine head is definitely the best looking version, especially at
+  medium distance … but its performance I think is problematic — not sure the drops are worth the visual gain."
+- **Cost** (bench, 3 repeats, busy machine — directional): frame p50 room 1 29.1 → 35.7 ms (+23 %), room 2
+  31.6 → 45.8 ms (+45 %); `sdf:refine` 6.1 / 10.6 ms, scaling with body count; the march itself also rose
+  (+1–3 ms, shared setup). Cause: the twin runs the march's whole post-hit tail (probes, scatter, wound soft
+  shadow, level shadow) at 4× the pixels, for every body.
+
+**Next (owner direction):** gate the pass per body — each body has its own twin mesh, so hide it outside a
+distance band / off-screen / occluded (close bodies are most of the pixels and the least visible gain; far
+bodies are cheap either way; medium is where it shows). Prerequisite: a training augmentation that drops the
+refine channels for a fraction of crops so the head degrades to run-4 behaviour wherever the gate is off (today
+it only ever saw ga = 0 on rims). Then re-bench. If still too slow: a slim tail for the twin (key light + level
+shadow only), then the normal-only ablation. Optimise only what the data says is needed.
+
+Not worth doing: more net shape (§12), higher target res (Obsidian note 2026-09-13).

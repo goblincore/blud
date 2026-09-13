@@ -56,17 +56,17 @@
   Results + reading: next-steps note §13. NEXT CANDIDATES (Obsidian `Research/2026-09-13-upscaler-sample-the-surface-
   not-the-march.md`): one-step SDF refinement at output res → same head; meat/albedo through the anchor channel;
   temporal via anchor MVs (shared with shutter motion blur — build blur conventionally first).
-- [~] **RUN 5 — ONE-STEP SDF REFINEMENT AT OUTPUT RES, IN FLIGHT 2026-09-13.** Spec
-  `docs/superpowers/specs/2026-09-13-neural-upscale-run5-sdf-refine-design.md`, plan (with session log)
-  `docs/superpowers/plans/2026-09-13-neural-upscale-run5-sdf-refine.md`. Built + reviewed: `REFINE_BODY` (march
-  sections minus the walk), per-body refine twins (`REFINE_LAYER`), `sdf:refine` 2-attachment output-res pass +
-  `sdf:refine-view`, `?refine=1` / `__sdfGame.setRefine*` / `__sdfGameDebug.readRefine`, 17-channel head in
-  py + twin + WGSL (`headInputs: detail+refine`), capture v3.2 (`refine_n/refine_c.npy`), gates
-  `scripts/refine-smoke.mjs`, `scripts/upscale-refine-check.py`, `scripts/march-hash.mjs`. **Gate 1 PASS** (owner:
-  "looks like native"). Cost: `sdf:refine` ≈ 0.9× the march (full post-hit tail at 4× pixels) — optimise only if
-  the net wins (ablate normal-only first). 4-pair check: closeness refine 0.0185 vs input 0.0344 (PASS); rim
-  overlap 0.92 → wsum ≥ 0.5 acceptance in flight. NEXT: recheck → v3.2 capture (~800 pairs, 9 GB) → grid
-  (control head vs headr) → Gate 2 → §14.
+- [x] **RUN 5 — ONE-STEP SDF REFINEMENT AT OUTPUT RES — DONE 2026-09-13; QUALITY WIN, COST TOO HIGH AS BUILT.**
+  Spec `docs/superpowers/specs/2026-09-13-neural-upscale-run5-sdf-refine-design.md`, plan + log
+  `docs/superpowers/plans/2026-09-13-neural-upscale-run5-sdf-refine.md`. Controlled pair on v3.2 (748 pairs):
+  refine head **0.01112** vs control 0.01455 (−24 % overall, −32 % face; native 0.00905). Gate 2 (owner): "definitely
+  the best looking, especially at medium distance" — but frame +23 % (room 1) / +45 % (room 2); `sdf:refine` 6–11 ms.
+  Staged `.upscale-models/r5-*` (`?upscale=trained&upscalemodel=r5-s32-rgbn-headr-int2`). Results §14 of the
+  next-steps note. Gates: refine-smoke, refine-check, march-hash (fields-off canonical a8ab4efa), G3 9e-7.
+- [ ] **RUN 5b — per-body refine gating (next):** hide a body's refine twin outside a medium distance band /
+  off-screen / occluded (owner: close = most pixels, least gain; medium = where it shows); training augmentation
+  dropping the refine channels for a fraction of crops so the head degrades gracefully; retrain; re-bench. Then,
+  only if needed: slim twin tail (key + level shadow), normal-only ablation.
 - [ ] P4 (brainstormed, spec pending) — **read `docs/dev-notes/2026-09-12-visual-direction-handoff.md` first**:
   upscaler as an AESTHETIC tool (90s pre-rendered CG, soft ray-traced, characters only, normals + adversarial loss),
   blood overhaul (conventional rendering FIRST — narrow-range filter, refraction, volume — then learn it cheap),
