@@ -310,7 +310,7 @@ async function bootstrap(): Promise<void> {
   const sim: BloodSim = createBloodSim();
   let seed = 12345;
   let rng = makeSeededRng(seed);
-  let scenario: ScenarioId = 'burst';
+  let scenario: ScenarioId = 'jet';
   let frame = 0;
   let emitterAge = 0;
   let emitterAcc = 0;
@@ -352,6 +352,8 @@ async function bootstrap(): Promise<void> {
     scenarioStream = streamSeq++;
     if (scenario === 'burst') fireBurst();
     if (scenario === 'overlap') { fireGout(-0.28, 1.25, 0.36); fireGout(0.28, 1.35, 0.36); }
+    // Show an airborne event immediately, even while paused.
+    for (let i = 0; i < 30; i++) advance(1 / 60);
   }
 
   function advance(dt: number): void {
@@ -452,7 +454,7 @@ async function bootstrap(): Promise<void> {
   }
 
   // --- camera orbit ------------------------------------------------------
-  const orbit = { yaw: 0, pitch: 0.18, distance: 3.4, tx: 0, ty: 1.15, tz: 0 };
+  const orbit = { yaw: 0, pitch: 0.18, distance: 1.8, tx: 0, ty: 1.15, tz: 0 };
   function applyCamera(): void {
     const cp = Math.cos(orbit.pitch);
     camera.position.set(
@@ -679,7 +681,7 @@ async function bootstrap(): Promise<void> {
   hint.id = 'hint';
   hint.textContent = [
     'drag orbit · wheel zoom',
-    'starts paused; Play or Step to advance',
+    'opens mid-jet; Play loops the burst · Replay resets the same seed',
     'capture: pick variant (+wipe), Play, Pause, then screenshot the canvas;',
     '__bloodCompare.state() records seed/frame/source/output/density for the shot.',
   ].join('\n');
@@ -726,7 +728,12 @@ async function bootstrap(): Promise<void> {
   (globalThis as unknown as { __bloodCompare?: typeof api }).__bloodCompare = api;
 
   // --- wiring ------------------------------------------------------------
-  handle.setRenderCallback((dt) => { advance(dt); });
+  handle.setRenderCallback((dt) => {
+    // Replay short comparison clips instead of leaving an exhausted wound
+    // dripping onto a floor full of old splats. Same seed each cycle.
+    if (frame >= 150) resetScenario();
+    else advance(dt);
+  });
   handle.setDrawFn(() => { draw(); });
   attachOrbit(handle.canvas);
   applyCamera();

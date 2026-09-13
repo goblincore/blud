@@ -11,6 +11,7 @@
     background: rgba(8,8,12,0.82); border: 1px solid #3a3a44; border-radius: 4px;
     padding: 8px 10px; width: 300px; max-height: calc(100vh - 16px); overflow: auto;
   }
+  #ui summary { cursor: pointer; padding: 5px 0; }
   #ui h1 { font-size: 12px; margin: 0 0 6px; color: #c46a72; letter-spacing: 1px; }
   #ui .row { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
   #ui label { flex: 0 0 78px; color: #9a9aa4; }
@@ -32,9 +33,11 @@
   <div id="app"></div>
   <div id="ui">
     <h1>BLOOD SURFACE COMPARISON</h1>
+    <details><summary>Controls — compare / play / replay</summary>
     <div id="controls"></div>
     <div class="sep"></div>
     <div id="diag">booting…</div>
+    </details>
   </div>
   <div id="paused">paused — press Play (or Step)</div>
   <div id="errors"></div>
