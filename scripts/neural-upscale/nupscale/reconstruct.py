@@ -75,12 +75,17 @@ def with_head(rec: Reconstruction, head_rgb: torch.Tensor) -> Reconstruction:
                           src_rgb=rec.src_rgb, res_rgb=res, src_exists=rec.src_exists)
 
 
-def predict(model, march: torch.Tensor, near: float, far: float, detail: torch.Tensor | None = None) -> Reconstruction:
+def predict(model, march: torch.Tensor, near: float, far: float, detail: torch.Tensor | None = None,
+           refine: torch.Tensor | None = None) -> Reconstruction:
     """The whole network: low-res convs, §4 placement, then the full-res head when the model has one
-    (which then REQUIRES `detail`, (N, 4, 2h, 2w))."""
+    (which then REQUIRES `detail`, (N, 4, 2h, 2w)); a model with head_inputs "detail+refine" also
+    REQUIRES `refine` (N, 8, 2h, 2w)."""
     rec = reconstruct(march, model(march, near, far))
     if getattr(model, "head", None) is None:
         return rec
     if detail is None:
         raise ValueError("a model with a head needs the detail field (dataset pairs with detail.npy)")
-    return with_head(rec, model.head_residual(rec.rgb, rec.covered, detail, march))
+    if getattr(model, "head_inputs", "detail") == "detail+refine" and refine is None:
+        raise ValueError("a model with head_inputs detail+refine needs the refine field "
+                         "(dataset pairs with refine_n.npy/refine_c.npy)")
+    return with_head(rec, model.head_residual(rec.rgb, rec.covered, detail, march, refine))

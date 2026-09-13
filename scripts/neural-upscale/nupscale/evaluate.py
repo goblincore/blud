@@ -22,7 +22,8 @@ def predict_model(model, pair: Pair, near: float, far: float, device: torch.devi
     device = device or next(model.parameters()).device
     march = pair.inp.unsqueeze(0).to(device)
     detail = pair.detail.unsqueeze(0).to(device) if pair.detail is not None else None
-    return predict(model, march, near, far, detail).march()[0].cpu()
+    refine = pair.refine.unsqueeze(0).to(device) if pair.refine is not None else None
+    return predict(model, march, near, far, detail, refine).march()[0].cpu()
 
 
 @torch.no_grad()

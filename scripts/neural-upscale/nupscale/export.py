@@ -87,6 +87,7 @@ def export_model(model, out_dir: Path | str, *, run: str, step: int, dataset: st
         "head": [{"inC": c.in_channels, "outC": c.out_channels, "relu": k == 0, "dilation": 1,
                   "weights": b64(f32_bytes(c.weight)), "bias": b64(f32_bytes(c.bias))}
                  for k, c in enumerate(fused_for(model).head)] if getattr(model, "head", None) is not None else None,
+        "headInputs": model.head_inputs if getattr(model, "head", None) is not None else None,
         "inScale": np.frombuffer(in_scale, dtype="<f4").astype(float).tolist(),
         "inOffset": np.frombuffer(in_offset, dtype="<f4").astype(float).tolist(),
         "weightHash": hash_arrays(layers, in_scale, in_offset, head_layers(model)),
@@ -114,7 +115,8 @@ def export_parity_fixture(model, pairs: list[Pair], near: float, far: float, out
     for k, pair in enumerate(pairs[:count]):
         march = pair.inp.unsqueeze(0)
         detail = pair.detail.unsqueeze(0) if pair.detail is not None else None
-        output = predict(cpu, march, near, far, detail).march()[0]
+        refine = pair.refine.unsqueeze(0) if pair.refine is not None else None
+        output = predict(cpu, march, near, far, detail, refine).march()[0]
         _save_hwc(out / f"input-{k}.npy", pair.inp[:4])
         _save_hwc(out / f"output-sp-{k}.npy", output)
         fx = {"pair": pair.id, "input": f"input-{k}.npy", "output": f"output-sp-{k}.npy"}
@@ -124,6 +126,11 @@ def export_parity_fixture(model, pairs: list[Pair], near: float, far: float, out
         if pair.detail is not None:
             _save_hwc(out / f"detail-{k}.npy", pair.detail)
             fx["detail"] = f"detail-{k}.npy"
+        if pair.refine is not None:
+            _save_hwc(out / f"refine_n-{k}.npy", pair.refine[:4])
+            _save_hwc(out / f"refine_c-{k}.npy", pair.refine[4:])
+            fx["refineN"] = f"refine_n-{k}.npy"
+            fx["refineC"] = f"refine_c-{k}.npy"
         fixtures.append(fx)
     (out / "meta.json").write_text(json.dumps({"near": near, "far": far, "fixtures": fixtures}, indent=1))
     return fixtures

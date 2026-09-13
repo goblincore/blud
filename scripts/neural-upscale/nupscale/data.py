@@ -29,6 +29,8 @@ class Pair:
     target: torch.Tensor                # (4, 2h, 2w)
     native: torch.Tensor | None         # (4, 2h, 2w), validation pairs only
     detail: torch.Tensor | None         # (4, 2h, 2w) run-4 output-res skin-detail field (xyz noise, w gate), optional
+    refine: torch.Tensor | None         # (8, 2h, 2w) run-5: refine_n (xyz world normal, w=1 where written) cat
+                                         # refine_c (re-lit rgb, w=clip depth; accepted iff w<1), optional
     weight: torch.Tensor                # (1, 2h, 2w)
     masks: dict[str, torch.Tensor]      # bool (2h, 2w): flesh, face, wound, edge, interior
     centres: list[tuple[float, float]]  # face and wound centres, crop-local output px
@@ -88,13 +90,19 @@ def load_dataset(root: Path | str, weights: dict[str, float] = REGION_WEIGHTS) -
         native = chw(_load(root, native_rel, (2 * h, 2 * w, 4), pid)) if native_rel else None
         detail_rel = e["files"].get("detail")
         detail = chw(_load(root, detail_rel, (2 * h, 2 * w, 4), pid)) if detail_rel else None
+        refine_n_rel, refine_c_rel = e["files"].get("refineN"), e["files"].get("refineC")
+        refine = None
+        if refine_n_rel and refine_c_rel:
+            refine_n = chw(_load(root, refine_n_rel, (2 * h, 2 * w, 4), pid))
+            refine_c = chw(_load(root, refine_c_rel, (2 * h, 2 * w, 4), pid))
+            refine = torch.cat([refine_n, refine_c], dim=0)
         regions = e.get("regions") or {}
         heads = [(r["x"], r["y"], r["r"]) for r in regions.get("heads", [])]
         wounds = [(r["x"], r["y"], r["r"]) for r in regions.get("wounds", [])]
         masks = region_masks(target[3], inp[3], heads, wounds)
         ds.pairs.append(Pair(
             id=pid, seq=int(e["seq"]), split=e["split"], cls=e["class"], showcase=bool(e.get("showcase", False)),
-            inp=inp, target=target, native=native, detail=detail, weight=weight_map(masks, weights), masks=masks,
+            inp=inp, target=target, native=native, detail=detail, refine=refine, weight=weight_map(masks, weights), masks=masks,
             centres=[(float(x), float(y)) for x, y, _ in heads + wounds],
         ))
     if not ds.pairs:
@@ -168,14 +176,23 @@ class CropSampler:
         return march, target, weight
 
     def sample_with_detail(self, batch: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor | None]:
-        """As `sample`, plus detail (B, 4, 2c, 2c) when every pair carries detail.npy, else None.
-        Detail is cropped and flipped with the target; its xyz is a world-space noise vector that the
-        head sees only as a texture, so no component is negated on a flip."""
+        """As `sample`, plus detail (B, 4, 2c, 2c) when every pair carries detail.npy, else None."""
+        march, target, weight, detail, _ = self.sample_with_extras(batch)
+        return march, target, weight, detail
+
+    def sample_with_extras(self, batch: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
+        """As `sample`, plus detail (B, 4, 2c, 2c) when every pair carries detail.npy, and refine
+        (B, 8, 2c, 2c) when every pair carries refine_n.npy/refine_c.npy, else None for either.
+        Both are cropped and flipped with the target; their vector-looking channels (detail's xyz
+        noise, refine's world normal) are seen by the head only as textures, so no component is
+        negated on a flip -- unlike the march/normal input channels."""
         c = self.crop
         one = torch.ones(1)
         zero4 = torch.zeros(4)
+        zero8 = torch.tensor([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0])
         with_detail = all(p.detail is not None for p in self.pairs)
-        marches, targets, weights, details = [], [], [], []
+        with_refine = all(p.refine is not None for p in self.pairs)
+        marches, targets, weights, details, refines = [], [], [], [], []
         for _ in range(batch):
             k = self.rng.randrange(len(self.pairs))
             p = self.pairs[k]
@@ -184,20 +201,25 @@ class CropSampler:
             t = paste(p.target, 2 * ox, 2 * oy, 2 * c, SENTINEL)
             w = paste(p.weight, 2 * ox, 2 * oy, 2 * c, one)
             d = paste(p.detail, 2 * ox, 2 * oy, 2 * c, zero4) if with_detail else None
+            r = paste(p.refine, 2 * ox, 2 * oy, 2 * c, zero8) if with_refine else None
             # Mirroring is exact for the §4 reconstruction: output column 2i-1-x swaps the
             # sub-pixel parity AND the neighbour direction, which is what a mirrored input has.
             if self.rng.random() < self.flip_x:
                 m, t, w = m.flip(2), t.flip(2), w.flip(2)
                 if d is not None: d = d.flip(2)
+                if r is not None: r = r.flip(2)
                 for ch in self.negate_x:
                     m[ch] = -m[ch]
             if self.rng.random() < self.flip_y:
                 m, t, w = m.flip(1), t.flip(1), w.flip(1)
                 if d is not None: d = d.flip(1)
+                if r is not None: r = r.flip(1)
                 for ch in self.negate_y:
                     m[ch] = -m[ch]
             marches.append(m)
             targets.append(t)
             weights.append(w)
             if d is not None: details.append(d)
-        return torch.stack(marches), torch.stack(targets), torch.stack(weights), (torch.stack(details) if with_detail else None)
+            if r is not None: refines.append(r)
+        return (torch.stack(marches), torch.stack(targets), torch.stack(weights),
+               (torch.stack(details) if with_detail else None), (torch.stack(refines) if with_refine else None))

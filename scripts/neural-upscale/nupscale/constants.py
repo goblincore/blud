@@ -19,7 +19,10 @@ NORMAL_CHANNELS = 3
 LAST_CHANNELS = 16
 # Run-4 full-res HEAD (plan 2026-09-12-neural-upscale-run4-relief §4): one 3x3 layer at OUTPUT resolution over
 # [reconstructed rgb (3), covered (1), detail noise*gate (3), nearest-up input rgb*hit (3)] -> rgb residual.
-HEAD_IN_CHANNELS = 10
+# Run-5 (spec 2026-09-13 §6) adds "detail+refine": the same 10 channels plus refined world normal*gate (3),
+# re-lit rgb*gate (3), gate (1) -- 17 total. Channel order is a cross-language contract (TS twin mirrors it).
+HEAD_INPUT_CHANNELS = {"detail": 10, "detail+refine": 17}
+HEAD_IN_CHANNELS = HEAD_INPUT_CHANNELS["detail"]  # back-compat name
 HEAD_WIDTH = 8
 HEAD_OUT_CHANNELS = 3
 DEPTH_INPUT_SCALE = 0.1

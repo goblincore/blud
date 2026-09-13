@@ -116,3 +116,13 @@ def test_region_weight_override_reaches_the_weight_map(tmp_path):
     interior = p0.masks["interior"] & ~p0.masks["face"] & ~p0.masks["wound"] & ~p0.masks["edge"]
     assert bool(interior.any())
     assert torch.equal(p1.weight[0][interior], p0.weight[0][interior] * 2)
+
+
+def test_refine_loads_as_8_channels_and_crops_with_the_target(tmp_path):
+    ds = load_dataset(write_v2_dataset(tmp_path / "ds", pairs=2, size=(12, 16), normals=True, detail=True, refine=True))
+    p = ds.pairs[0]
+    assert p.refine is not None and p.refine.shape == (8, 24, 32)
+    assert torch.equal(p.refine[7] < 1, p.target[3] < 1)          # accept gate == target flesh in the synthetic set
+    march, target, weight, detail, refine = CropSampler(ds.split("train"), crop=8, seed=1, flip_x=1.0, flip_y=0.0).sample_with_extras(2)
+    assert refine.shape == (2, 8, 16, 16) and detail.shape == (2, 4, 16, 16)
+    assert torch.equal(refine[:, 7] < 1, target[:, 3] < 1)        # flipped together

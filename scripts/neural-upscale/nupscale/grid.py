@@ -117,6 +117,8 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--reparam", action="store_true", help="train hidden layers as 3x3+1x1+identity branches, fused at export")
     ap.add_argument("--tag", default="", help="run-name suffix, e.g. -dw1.0 or -rep (variants share a root)")
     ap.add_argument("--head", action="store_true", help="run-4 full-res head (every pair needs detail.npy)")
+    ap.add_argument("--head-inputs", default="detail", choices=["detail", "detail+refine"],
+                    help="head input set (run-5 detail+refine needs refine_n.npy/refine_c.npy too)")
     ap.add_argument("--interior-weight", type=float, default=None, help="override REGION_WEIGHTS[interior] (run 4: 2.0)")
     args = ap.parse_args(argv)
     root = Path(args.root)
@@ -127,6 +129,7 @@ def main(argv: list[str] | None = None) -> None:
         return RunConfig(model_id, inputs, max_steps=args.max_steps, time_cap_s=args.time_cap_min * 60,
                          val_every=args.val_every, batch=args.batch, compile=args.compile,
                          detail_weight=args.detail_weight, reparam=args.reparam, tag=args.tag, head=args.head,
+                         head_inputs=args.head_inputs,
                          region_weights={"interior": args.interior_weight} if args.interior_weight is not None else None)
 
     try:

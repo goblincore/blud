@@ -86,3 +86,13 @@ def test_head_export_and_hash_cover_the_head(tmp_path):
     assert weight_hash(m) != h0
     plain = Upscaler("s8", "rgb", seed=3)
     assert export_model(plain, tmp_path / "p", run="s8-rgb", step=1, dataset="d", manifest_hash="h", metrics=None)["head"] is None
+
+
+def test_refine_head_exports_headInputs_and_fixtures(tmp_path):
+    ds = load_dataset(write_v2_dataset(tmp_path / "ds", pairs=2, size=(12, 16), normals=True, detail=True, refine=True))
+    m = Upscaler("s8", "rgbn", seed=3, head=True, head_inputs="detail+refine")
+    doc = export_model(m, tmp_path / "e", run="r", step=1, dataset="d", manifest_hash="h", metrics=None)
+    assert doc["headInputs"] == "detail+refine" and doc["head"][0]["inC"] == 17
+    fx = export_parity_fixture(m, ds.pairs, 0.1, 200.0, tmp_path / "e" / "parity", count=1)
+    assert fx[0]["refineN"] == "refine_n-0.npy" and fx[0]["refineC"] == "refine_c-0.npy"
+    assert np.load(tmp_path / "e" / "parity" / "refine_c-0.npy").shape == (24, 32, 4)

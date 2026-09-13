@@ -6,7 +6,7 @@ import math
 import torch
 from torch import nn
 
-from .constants import (DEPTH_INPUT_SCALE, HEAD_IN_CHANNELS, HEAD_OUT_CHANNELS, HEAD_WIDTH, HIDDEN_DILATIONS, HIDDEN_WIDTHS,
+from .constants import (DEPTH_INPUT_SCALE, HEAD_INPUT_CHANNELS, HEAD_OUT_CHANNELS, HEAD_WIDTH, HIDDEN_DILATIONS, HIDDEN_WIDTHS,
                         ICNR_SCALE, INPUT_CHANNELS, LAST_CHANNELS, NORMAL_CHANNELS)
 from torch.nn import functional as F
 
@@ -56,16 +56,20 @@ class Upscaler(nn.Module):
     (N, 16, h, w); `reconstruct.reconstruct` places it. `reparam=True` trains the hidden layers as
     RepConv branches; `fused()` returns the plain equivalent for export."""
 
-    def __init__(self, model_id: str, inputs: str, seed: int = 1, reparam: bool = False, head: bool = False) -> None:
+    def __init__(self, model_id: str, inputs: str, seed: int = 1, reparam: bool = False, head: bool = False,
+                head_inputs: str = "detail") -> None:
         super().__init__()
         self.head_enabled = head
         if model_id not in HIDDEN_WIDTHS:
             raise ValueError(f"unknown model id {model_id!r} (expected {'|'.join(HIDDEN_WIDTHS)})")
         if inputs not in INPUT_CHANNELS:
             raise ValueError(f"unknown input set {inputs!r} (expected {'|'.join(INPUT_CHANNELS)})")
+        if head_inputs not in HEAD_INPUT_CHANNELS:
+            raise ValueError(f"unknown head_inputs {head_inputs!r} (expected {'|'.join(HEAD_INPUT_CHANNELS)})")
         self.model_id = model_id
         self.inputs = inputs
         self.reparam = reparam
+        self.head_inputs = head_inputs
         widths = [INPUT_CHANNELS[inputs], *HIDDEN_WIDTHS[model_id], LAST_CHANNELS]
         dilations = [*HIDDEN_DILATIONS[model_id], 1]
         convs: list[nn.Module] = []
@@ -77,9 +81,10 @@ class Upscaler(nn.Module):
             else:
                 convs.append(nn.Conv2d(a, b, 3, padding=d, dilation=d, padding_mode="replicate"))
         self.convs = nn.ModuleList(convs)
-        # Run-4 head: two full-res 3x3 convs (10 -> HEAD_WIDTH -> 3), replicate padded, ReLU between.
+        # Run-4 head: two full-res 3x3 convs (head_in -> HEAD_WIDTH -> 3), replicate padded, ReLU between.
+        head_in = HEAD_INPUT_CHANNELS[head_inputs]
         self.head = nn.ModuleList([
-            nn.Conv2d(HEAD_IN_CHANNELS, HEAD_WIDTH, 3, padding=1, padding_mode="replicate"),
+            nn.Conv2d(head_in, HEAD_WIDTH, 3, padding=1, padding_mode="replicate"),
             nn.Conv2d(HEAD_WIDTH, HEAD_OUT_CHANNELS, 3, padding=1, padding_mode="replicate"),
         ]) if head else None
         in_scale = torch.ones(widths[0])
@@ -105,17 +110,19 @@ class Upscaler(nn.Module):
                 continue
             conv.weight.copy_(torch.randn(conv.weight.shape, generator=g) * std)
             conv.bias.zero_()
-        if self.head is not None:
-            h0, h1 = self.head
-            h0.weight.copy_(torch.randn(h0.weight.shape, generator=g) * math.sqrt(2.0 / (HEAD_IN_CHANNELS * 9)))
-            h0.bias.zero_()
-            h1.weight.zero_()   # the head starts as a no-op: the network is exactly the headless one at step 0
-            h1.bias.zero_()
         last = self.convs[-1]
         std = math.sqrt(2.0 / (last.in_channels * 9))
         base = torch.randn((LAST_CHANNELS // 4, last.in_channels, 3, 3), generator=g) * std
         last.weight.copy_(base.repeat_interleave(4, dim=0) * ICNR_SCALE)
         last.bias.zero_()
+        # Drawn last: a headless model and one with a head (any head_inputs width) share the same
+        # RNG stream up to this point, so their low-res convs are bit-identical for the same seed.
+        if self.head is not None:
+            h0, h1 = self.head
+            h0.weight.copy_(torch.randn(h0.weight.shape, generator=g) * math.sqrt(2.0 / (h0.in_channels * 9)))
+            h0.bias.zero_()
+            h1.weight.zero_()   # the head starts as a no-op: the network is exactly the headless one at step 0
+            h1.bias.zero_()
         if self.model_id == "zero":
             for conv in [*self.convs, *(self.head or [])]:
                 for m in (conv.modules() if isinstance(conv, RepConv) else [conv]):
@@ -124,20 +131,28 @@ class Upscaler(nn.Module):
                         m.bias.zero_()
 
     @staticmethod
-    def head_input(rec_rgb: torch.Tensor, covered: torch.Tensor, detail: torch.Tensor, march: torch.Tensor) -> torch.Tensor:
-        """(N, 10, 2h, 2w): reconstructed rgb, covered, detail.xyz * gate, nearest-up input rgb * hit.
-        Mirrors upscale-reference.ts `assembleHeadInput`."""
+    def head_input(rec_rgb: torch.Tensor, covered: torch.Tensor, detail: torch.Tensor, march: torch.Tensor,
+                   refine: torch.Tensor | None = None) -> torch.Tensor:
+        """(N, 10 or 17, 2h, 2w): reconstructed rgb, covered, detail.xyz * gate, nearest-up input rgb * hit
+        [, refined world normal*gate, re-lit rgb*gate, gate] when `refine` (N, 8, 2h, 2w; xyz normal, w=1
+        where written, rgb re-lit, w=accept-clip-depth) is given. Mirrors upscale-reference.ts
+        `assembleHeadInput`. Channel order is a cross-language contract (TS twin)."""
         cov = covered.to(rec_rgb.dtype)
         d = detail[:, :3] * (detail[:, 3:4] > 0).to(rec_rgb.dtype)
         up = march.repeat_interleave(2, dim=2).repeat_interleave(2, dim=3)
         up_rgb = up[:, :3] * (up[:, 3:4] < 1).to(rec_rgb.dtype)
-        return torch.cat([rec_rgb * cov, cov, d, up_rgb], dim=1)
+        x = torch.cat([rec_rgb * cov, cov, d, up_rgb], dim=1)
+        if refine is not None:
+            ga = (refine[:, 7:8] < 1).to(rec_rgb.dtype)
+            x = torch.cat([x, refine[:, 0:3] * ga, refine[:, 4:7] * ga, ga], dim=1)
+        return x
 
-    def head_residual(self, rec_rgb: torch.Tensor, covered: torch.Tensor, detail: torch.Tensor, march: torch.Tensor) -> torch.Tensor:
+    def head_residual(self, rec_rgb: torch.Tensor, covered: torch.Tensor, detail: torch.Tensor, march: torch.Tensor,
+                      refine: torch.Tensor | None = None) -> torch.Tensor:
         """(N, 3, 2h, 2w) rgb residual from the full-res head; zero where not covered."""
         if self.head is None:
             raise ValueError("model has no head")
-        x = self.head_input(rec_rgb, covered, detail, march)
+        x = self.head_input(rec_rgb, covered, detail, march, refine)
         h0, h1 = self.head
         y = h1(torch.relu(h0(x)))
         return y * covered.to(y.dtype)
@@ -147,7 +162,8 @@ class Upscaler(nn.Module):
         """The plain-conv equivalent (RepConv branches folded); `self` when not reparameterised."""
         if not self.reparam:
             return self
-        plain = Upscaler(self.model_id, self.inputs, reparam=False, head=self.head is not None).to(self.in_scale.device)
+        plain = Upscaler(self.model_id, self.inputs, reparam=False, head=self.head is not None,
+                        head_inputs=self.head_inputs).to(self.in_scale.device)
         for k, conv in enumerate(self.convs):
             src = conv.fuse() if isinstance(conv, RepConv) else conv
             plain.convs[k].weight.copy_(src.weight)

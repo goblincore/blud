@@ -46,6 +46,9 @@ class RunConfig:
     reparam: bool = False
     """Run-4 full-res head (needs detail.npy in every pair)."""
     head: bool = False
+    """Head input set (constants.HEAD_INPUT_CHANNELS): "detail" (run-4, default) or "detail+refine"
+    (run-5, needs refine_n.npy/refine_c.npy in every pair too)."""
+    head_inputs: str = "detail"
     """Region weight overrides (spec §2 REGION_WEIGHTS), e.g. {"interior": 2.0} — run 4 weights the
     interior up because the edge band is solved."""
     region_weights: dict | None = None
@@ -137,7 +140,8 @@ def train_run(cfg: RunConfig, dataset: Dataset, root: Path | str, *, device: tor
     near, far = dataset.near, dataset.far
 
     torch.manual_seed(cfg.seed)
-    model = Upscaler(cfg.model_id, cfg.inputs, seed=cfg.seed, reparam=cfg.reparam, head=cfg.head).to(device)
+    model = Upscaler(cfg.model_id, cfg.inputs, seed=cfg.seed, reparam=cfg.reparam, head=cfg.head,
+                     head_inputs=cfg.head_inputs).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=cfg.lr)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=max(cfg.max_steps, 1))
     latest_path, best_path = run_dir / "ckpt-latest.pt", run_dir / "ckpt-best.pt"
@@ -152,8 +156,8 @@ def train_run(cfg: RunConfig, dataset: Dataset, root: Path | str, *, device: tor
 
     # A step is ~100 tiny elementwise kernels over 16 MB tensors, so it is launch-bound, not
     # compute-bound: fusing them measured 2.0x on MPS (56.0 -> 28.3 ms/step, s32-rgbd, batch 64).
-    def loss_of(march, target, weight, detail=None):
-        rec = predict(model, march, near, far, detail)
+    def loss_of(march, target, weight, detail=None, refine=None):
+        rec = predict(model, march, near, far, detail, refine)
         return upscale_loss(rec, target, weight, margin=cfg.coverage_margin,
                             detail_weight=cfg.detail_weight, coverage_weight=cfg.coverage_weight)
 
@@ -212,10 +216,11 @@ def train_run(cfg: RunConfig, dataset: Dataset, root: Path | str, *, device: tor
         if elapsed >= cfg.time_cap_s:
             state = "time-cap"
             break
-        march, target, weight, detail = sampler.sample_with_detail(cfg.batch)
+        march, target, weight, detail, refine = sampler.sample_with_extras(cfg.batch)
         march, target, weight = march.to(device), target.to(device), weight.to(device)
         detail = detail.to(device) if detail is not None else None
-        loss, parts = compute(march, target, weight, detail)
+        refine = refine.to(device) if refine is not None else None
+        loss, parts = compute(march, target, weight, detail, refine)
         opt.zero_grad(set_to_none=True)
         loss.backward()
         opt.step()
@@ -238,7 +243,7 @@ def train_run(cfg: RunConfig, dataset: Dataset, root: Path | str, *, device: tor
     export_parity_fixture(model, fixture_pairs, near, far, final_dir / "parity")
     if best_path.exists():
         ck = torch.load(best_path, map_location="cpu", weights_only=True)
-        best_model = Upscaler(cfg.model_id, cfg.inputs, reparam=cfg.reparam, head=cfg.head)
+        best_model = Upscaler(cfg.model_id, cfg.inputs, reparam=cfg.reparam, head=cfg.head, head_inputs=cfg.head_inputs)
         best_model.load_state_dict(ck["model"])
         best_dir = exports / f"{cfg.name}-best"
         export_model(best_model, best_dir, run=cfg.name, step=ck["step"], dataset=dataset.name,
