@@ -2348,7 +2348,7 @@ export const MARCH_BODY_PARAMS = /* wgsl */ `(
  * surface entry reuses this text verbatim. The debug early-returns and the
  * miss discard are part of the trace and behave identically in both entries.
  */
-export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anything folds. gWindDrift is read inside
+export const MARCH_TRACE_SETUP = /* wgsl */ `  // FIRST STATEMENT, before anything folds. gWindDrift is read inside
   // sdShell, which is reached from foldGroup on every mapBody call in this
   // invocation — the march steps, calcNormal, the AO and scatter probes. Set
   // it late and the normal would be taken against a different surface than
@@ -2815,7 +2815,10 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
   // whose cone/coarse touch sits at the tile's FRONT surface, and it catches
   // the pixels whose temporal gate failed — those used to restart from the
   // shared shellIn and walk their own empty proxy space.
-  var t = clamp(max(max(max(max(startT, shellIn), preStart), tempStart), bodyEntry), 0.0, tMax);
+`;
+/** Run 5 (plan 2026-09-13-neural-upscale-run5-sdf-refine): the walk alone — from `var t` to the
+ *  line before `if (!hit) { discard; }`. REFINE_LOOP replaces exactly this section. */
+export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(startT, shellIn), preStart), tempStart), bodyEntry), 0.0, tMax);
   var hit = false;
   var prevRadius = 0.0;
   var stepLen = 0.0;
@@ -3057,7 +3060,8 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
   if (debugCfg.x > 7.5 && debugCfg.x < 8.5) {
     return vec4<f32>(gDebugVolumeSamples, gDebugVolumeFallbacks, select(0.0, 1.0, hit), t);
   }
-  if (!hit) { discard; }
+`;
+export const MARCH_TRACE_POST = /* wgsl */ `  if (!hit) { discard; }
   // FLAT-ALBEDO SEAM (close-up diagnostics task 1, 2026-09-04). Returns the
   // body's base albedo AT THE HIT and skips the entire post-hit chain —
   // calcNormal (4 field evals), the anchor, the micro-detail fbm, wound/char
@@ -3574,6 +3578,7 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
     }
   }
 `;
+export const MARCH_BODY_TRACE = `${MARCH_TRACE_SETUP}${MARCH_TRACE_LOOP}${MARCH_TRACE_POST}`;
 
 /**
  * SECTION 3 of 4 — SURFACE PREP: the light-independent material terms the
