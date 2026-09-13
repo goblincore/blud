@@ -35,7 +35,7 @@ import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { wgslFn, texture, uv, vec4, uniform, mrt, output, cameraViewMatrix, mat3, mul } from 'three/tsl';
 import { fieldParity, fieldTargetHeight, fieldJitterNdcY } from './field-render';
-import { createConeUniforms, createDepthPreUniforms, marchNormalRead, marchAnchorRead, detailFieldFn, type ConeSource, type DepthPreSource, type LastFrameSource, type OccluderSource, type PrevSource } from './zombie-gpu';
+import { createConeUniforms, createDepthPreUniforms, createRefineUniforms, marchNormalRead, marchAnchorRead, detailFieldFn, type ConeSource, type DepthPreSource, type LastFrameSource, type OccluderSource, type PrevSource, type RefineSource } from './zombie-gpu';
 import { TEMPORAL_START_DEFAULTS, temporalMarginForMotion } from './temporal-start';
 import { TEMPORAL_ACCUM_DEFAULT_ALPHA, TEMPORAL_ACCUM_CONVERGED_FRAMES, accumAlpha, accumJitter } from './temporal-accum';
 import { setPassLabel } from './gpu-pass-timing';
@@ -208,6 +208,14 @@ export const DEPTH_PREPASS_LAYER = 7;
  * the real buffer resolves them against the level and the flesh.
  */
 export const FIELD_MESH_LAYER = 8;
+
+/**
+ * Run 5: the OUTPUT-resolution refine twins (`view.refineObject`). One mesh per
+ * body, the same proxy-box geometry as the march, drawn once per frame into the
+ * refine target at output resolution — its own layer, like every other twin, so
+ * no render list is mutated per frame.
+ */
+export const REFINE_LAYER = 9;
 
 /** The depth prepass's linear downsample factor per axis. 4 → one coarse
  *  texel per 4x4 block of SDF pixels → ~1/16 of the march work. */
@@ -899,8 +907,22 @@ export interface SdfLayer {
   readonly detailTarget: THREE.RenderTarget | null;
   /** Run 4: the same-body anchor jump limit (metres) for the detail pass's gradient extrapolation. */
   setDetailJumpMax(metres: number): void;
-  /** Which flesh texture the composite reads: the raw march, the accumulated history, or the upscale output. */
-  readonly compositeSource: 'march' | 'accum' | 'upscale';
+  /** Which flesh texture the composite reads: the raw march, the accumulated history, the upscale output,
+   *  or the Run-5 refine debug view. */
+  readonly compositeSource: 'march' | 'accum' | 'upscale' | 'refine-view';
+  /** Run 5: the refine twins' bindings (march target + refine uniforms); null unless created with `refine`. */
+  readonly refineSource: RefineSource | null;
+  /** Run 5: [0] re-lit rgb + clip depth (accepted iff w < 1), [1] world normal; output-res; null unless `refine`. */
+  readonly refineTarget: THREE.RenderTarget | null;
+  /** Run 5: run the refine pass (cfg.x). Throws if the layer was not created with `refine`. */
+  setRefine(on: boolean): void;
+  readonly refine: boolean;
+  /** Run 5: the refine entry's tuning (cfg.y/z/w). */
+  setRefineCfg(cfg: { reject?: number; normalEps?: number; steps?: number }): void;
+  readonly refineCfg: { reject: number; normalEps: number; steps: number };
+  /** Run 5: the Gate-1 picture in place of the composite source. */
+  setRefineView(on: boolean): void;
+  readonly refineView: boolean;
   /** CAPTURE JITTER (neural upscale P3, spec 2026-09-11-neural-upscale-p3-training-design.md §1):
    *  a fixed sub-pixel view offset in output px, applied around the march only. `null` turns it
    *  off. Refused (returns false) while temporal accumulation or any field style is on — both drive
@@ -954,10 +976,13 @@ export interface SdfLayerOptions {
    *  march with a renderer-level MRT into it (neural upscale rgbn/rgbdn inputs). Dev-only: the
    *  shipped boot keeps the single-attachment target and its exact frame. */
   marchNormals?: boolean;
+  /** Run 5: allocate the output-res refine targets and run the per-body refine pass; implies `marchNormals`. */
+  refine?: boolean;
 }
 
 export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayerOptions = {}): SdfLayer {
-  const marchNormals = options.marchNormals === true;
+  const refineOn = options.refine === true;
+  const marchNormals = options.marchNormals === true || refineOn;
   let scale = DEFAULT_SDF_SCALE;
   let fullW = 1;
   let fullH = 1;
@@ -1146,6 +1171,56 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     const m = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat); m.frustumCulled = false;
     detailScene = new THREE.Scene(); detailScene.add(m);
   }
+  // RUN 5 REFINE (spec 2026-09-13-neural-upscale-run5-sdf-refine-design §4): two OUTPUT-res
+  // attachments written by the refine twins (REFINE_LAYER) under a hardware depth test, nearest body
+  // wins. [0] 'output' = re-lit linear rgb, w = clip depth (ACCEPTED iff w < 1.0 — the march's own
+  // sentinel, so the clear alpha is the gate); [1] 'refineN' = WORLD-space unit normal, w = 1 where
+  // written (never a gate: the clear alpha is 1 too). FloatType so readback is exact.
+  // Allocated ONLY when the option is on: creating the uniform nodes at all perturbs the
+  // shipped frame (march-hash), and this path must stay byte-identical without `refine`.
+  const refineUniforms = refineOn ? createRefineUniforms() : null;
+  let refineTarget: THREE.RenderTarget | null = null;
+  let refineViewTarget: THREE.RenderTarget | null = null;
+  let refineMrt: unknown = null;
+  let refineView = false;
+  if (refineOn) {
+    refineTarget = new THREE.RenderTarget(1, 1, {
+      depthBuffer: true, type: THREE.FloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, count: 2,
+    });
+    refineTarget.textures[0]!.name = 'output';
+    refineTarget.textures[1]!.name = 'refineN';
+    refineMrt = mrt({ output, refineN: marchNormalRead({ dep: output as never }) });
+    // The Gate-1 picture: accepted refine pixels over the current output-res source.
+    refineViewTarget = new THREE.RenderTarget(1, 1, {
+      type: THREE.FloatType, format: THREE.RGBAFormat, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false,
+    });
+  }
+  const REFINE_VIEW_WGSL = /* wgsl */ `fn refineView(refineC: texture_2d<f32>, src: texture_2d<f32>, texCoord: vec2<f32>, flipY: f32, srcIsLow: f32) -> vec4<f32> {
+  let dims = vec2<i32>(textureDimensions(refineC, 0));
+  var st = texCoord;
+  if (flipY > 0.5) { st.y = 1.0 - st.y; }
+  let p = clamp(vec2<i32>(floor(st * vec2<f32>(dims))), vec2<i32>(0, 0), dims - vec2<i32>(1, 1));
+  let rc = textureLoad(refineC, p, 0);
+  if (rc.w < 1.0) { return rc; }
+  let sdims = vec2<i32>(textureDimensions(src, 0));
+  let sp = clamp(select(p, p / 2, srcIsLow > 0.5), vec2<i32>(0, 0), sdims - vec2<i32>(1, 1));
+  return textureLoad(src, sp, 0);
+}`;
+  let refineViewSrcNode: ReturnType<typeof texture> | null = null;
+  let uRefineViewSrcLow: ReturnType<typeof uniform> | null = null;
+  let refineViewScene: THREE.Scene | null = null;
+  if (refineOn) {
+    refineViewSrcNode = texture(target.texture);
+    uRefineViewSrcLow = uniform(1);
+    const mat = new MeshBasicNodeMaterial();
+    const out = wgslFn(REFINE_VIEW_WGSL)({ refineC: texture(refineTarget!.textures[0]!), src: refineViewSrcNode, texCoord: uv(), flipY: uFlipY, srcIsLow: uRefineViewSrcLow } as never) as unknown as { xyz: unknown; w: unknown };
+    mat.colorNode = vec4(out.xyz as never, 1.0);
+    mat.outputNode = vec4(out.xyz as never, out.w as never);
+    mat.depthTest = false; mat.depthWrite = false; mat.blending = THREE.NoBlending;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat); m.frustumCulled = false;
+    refineViewScene = new THREE.Scene(); refineViewScene.add(m);
+  }
+
   const withMarchMrt = <T>(fn: () => T): T => {
     if (!marchMrt) return fn();
     renderer.setMRT(marchMrt as never);
@@ -1468,6 +1543,14 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
   quadScene.add(quad);
   // Pulled back to z = 1 so the plane at z = 0 sits INSIDE the [0, 1] depth
   // range rather than exactly on the near plane, which is degenerate.
+  /** Point the composite back at whatever it would read with the refine VIEW off:
+   *  the upscale stage's output when the stage is on (setUpscale), else the accumulation
+   *  history with the same on-flag setTemporalAccum/setUpscale(null) leave behind. */
+  function restoreCompositeSource(): void {
+    accumTexNode.value = upscale ? upscale.output.texture : accumNext.texture;
+    (uAccumOn.value as number) = upscale !== null || accumOn ? 1 : 0;
+  }
+
   const quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 2);
 
   quadCam.position.z = 1;
@@ -1543,6 +1626,10 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     // The upscale stage reads the march grid and writes the output grid.
     upscale?.setSize(w, h, fullW, fullH);
     if (detailScene) detailTarget.setSize(Math.max(1, fullW), Math.max(1, fullH));
+    if (refineOn) {
+      refineTarget!.setSize(Math.max(1, fullW), Math.max(1, fullH));
+      refineViewTarget!.setSize(Math.max(1, fullW), Math.max(1, fullH));
+    }
     resetAccum();
     // The whole-frame field buffers track the OUTPUT size, not sdfScale: the
     // polygonal pass has always rendered at full content resolution and must
@@ -1983,7 +2070,28 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
         renderer.setRenderTarget(detailTarget);
         void renderer.render(detailScene, quadCam);
       }
+      // RUN 5 REFINE (spec 2026-09-13-…-run5-sdf-refine-design §4). After the jitter clear, so the
+      // twins march the same unjittered projection the march alpha encodes.
+      if (refineOn && refineUniforms!.cfg.value.x > 0.5) {
+        setPassLabel('sdf:refine');
+        refineUniforms!.nearFar.value.set(camera.near, camera.far);
+        camera.layers.set(REFINE_LAYER);
+        renderer.setRenderTarget(refineTarget);
+        renderer.clear();   // colour alpha 1.0 = not refined; depth cleared for the per-body test
+        renderer.setMRT(refineMrt as never);
+        try { void renderer.render(scene, camera); } finally { renderer.setMRT(null); }
+        camera.layers.set(SDF_LAYER);
+      }
       if (upscale) upscale.render(renderer, quadCam, camera);
+      if (refineOn && refineView && refineViewScene) {
+        setPassLabel('sdf:refine-view');
+        refineViewSrcNode!.value = upscale ? upscale.output.texture : target.texture;
+        (uRefineViewSrcLow!.value as number) = upscale ? 0 : 1;
+        renderer.setRenderTarget(refineViewTarget);
+        void renderer.render(refineViewScene, quadCam);
+        accumTexNode.value = refineViewTarget!.texture;
+        (uAccumOn.value as number) = 1;
+      }
 
       // Pass 3 — composite up. autoClear off, or this wipes pass 1.
       setPassLabel('sdf:composite');
@@ -2179,6 +2287,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
       if (inputsUseNormals(config.inputs) && !marchNormals) {
         throw new Error(`upscale: input set ${config.inputs} needs march normals — boot with ?upscale=... so the layer allocates the attachment`);
       }
+      // Run 5 (Task 12): pass { n: refineTarget.textures[1], c: refineTarget.textures[0] } when refineOn
       const next = createUpscaleStage(config, target.texture, uFlipY, model, marchNormals ? target.textures[1] : undefined,
         detailScene ? detailTarget.texture : undefined);
       upscale?.dispose();
@@ -2194,7 +2303,31 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     setDetailJumpMax(m) { (uDetailJumpMax.value as number) = Math.max(0.001, m); },
     get upscaleInfo() { return upscaleInfoOf(upscale); },
     get upscaleStage() { return upscale; },
-    get compositeSource() { return upscale ? 'upscale' : accumOn ? 'accum' : 'march'; },
+    get compositeSource() { return refineView ? 'refine-view' : upscale ? 'upscale' : accumOn ? 'accum' : 'march'; },
+    get refineSource() { return refineUniforms ? { texture: target.texture, uniforms: refineUniforms } : null; },
+    get refineTarget() { return refineTarget; },
+    setRefine(on) {
+      if (on && !refineUniforms) throw new Error('refine: boot with ?refine=1 so the layer allocates the refine targets');
+      if (refineUniforms) (refineUniforms.cfg.value as THREE.Vector4).x = on ? 1 : 0;
+    },
+    get refine() { return refineUniforms !== null && (refineUniforms.cfg.value as THREE.Vector4).x > 0.5; },
+    setRefineCfg(cfg) {
+      if (!refineUniforms) return;
+      const v = refineUniforms.cfg.value as THREE.Vector4;
+      if (cfg.reject !== undefined) v.y = Math.max(0, cfg.reject);
+      if (cfg.normalEps !== undefined) v.z = Math.max(0, cfg.normalEps);
+      if (cfg.steps !== undefined) v.w = Math.min(8, Math.max(0, Math.round(cfg.steps)));
+    },
+    get refineCfg() {
+      if (!refineUniforms) return { reject: 1, normalEps: 0.25, steps: 2 };
+      const v = refineUniforms.cfg.value as THREE.Vector4;
+      return { reject: v.y, normalEps: v.z, steps: v.w };
+    },
+    setRefineView(on) {
+      refineView = on;
+      if (!on) restoreCompositeSource();
+    },
+    get refineView() { return refineView; },
     setMarchJitter(offset) {
       if (offset === null) { marchJitter = null; return true; }
       if (accumOn || fieldStyle !== 'off') {

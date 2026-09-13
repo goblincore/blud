@@ -1,3 +1,5 @@
+// @ts-expect-error — node:fs available in vitest via happy-dom/node
+import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three/webgpu';
 // @ts-expect-error — deep three source import for the real wgslFn parser; no
@@ -552,5 +554,17 @@ describe('capture march jitter (neural upscale P3)', () => {
     expect(layer.setMarchJitter(null)).toBe(true);
     warn.mockRestore();
     layer.dispose();
+  });
+});
+
+describe('run 5 refine pass (source pins)', () => {
+  it('REFINE_LAYER is a new, unique layer and the pass is labelled sdf:refine', async () => {
+    const m = await import('./sdf-layer');
+    const layers = [m.SDF_LAYER, m.CONE_LAYER, m.OCCLUDER_LAYER, m.SHELL_LAYER, m.SHELL_EXIT_LAYER, m.SHADOW_HULL_LAYER, m.DEPTH_PREPASS_LAYER, m.FIELD_MESH_LAYER, m.REFINE_LAYER];
+    expect(new Set(layers).size).toBe(layers.length);
+    expect(m.REFINE_LAYER).toBe(9);
+    const src = readFileSync('src/lab/sdf-zombie/webgpu/sdf-layer.ts', 'utf8');
+    expect(src).toContain("setPassLabel('sdf:refine')");
+    expect(src).toContain("setPassLabel('sdf:refine-view')");
   });
 });
