@@ -1118,3 +1118,36 @@ git commit -m "docs(upscale run 5): results, gates, cost; refine-on bench leg"
 ## Log
 
 (append dated entries as tasks land: what was built, what the gates read, deviations from this plan and why)
+
+- **2026-09-13 (session 1, subagent-driven):** Tasks 1–6, 8, 10–12 landed and were two-stage reviewed
+  (HEAD 2405a1e4 at the time of writing). Deviations and findings:
+  - The plan's parity gate (`scripts/sdf-game-parity.mjs`) is a seam self-test and is broken at its first
+    evaluate; the refactor gate is now `scripts/march-hash.mjs` (sha1 over the exact float readback of the
+    march target: `room1`, `room1-repeat`, `room1-wounded`). Its first version (page `hashMarchTarget`,
+    truncating) could not see a wound; the exact version can. Bimodality across boots traced to the
+    field-interlace parity counter private to sdf-layer (`fieldParity(frameIndex)`), fixed by a boot render:
+    the gate now pins `setFieldStyle('off')` — the regime the upscale stage and the refine pass run in.
+    The Task-5 "createRefineUniforms() perturbs the shipped frame" bisection was that bimodality, not the
+    uniforms; the lazy allocation it chose stays (it is cleaner).
+  - REFINE_LOOP: the derived declared-names pin strips comments; only `t, hit, hitBest, hitField,
+    hitNearWound` are real reads of the walk's state. `aaCfg.x` = march-pixel footprint RADIUS per unit
+    distance (one march texel = 2·t·aaCfg.x, one output pixel = t·aaCfg.x).
+  - Twin binding drift (the meltCfg class of bug, new form): `createMarchMaterial` builds per-material
+    level-shadow and segment-volume texture nodes, and only the MAIN material's nodes are rebound (game-main
+    ~1463 per frame; `setSkeletonVolume`). The refine twin kept the 1×1 fallback → `LEVEL_SHADOW` returned
+    0 → key diffuse+spec vanished → ambient-only pale picture. Fixed by sharing the main material's nodes
+    (`levelShadowTexNodeIn`, `segVolume*NodeIn`). Diagnosis by per-pixel ratio (0.86 → 1.017 after) and the
+    flat-albedo seam (bit-identical, so the hit/albedo chain was never wrong).
+  - refine-smoke: fields must be off (the ship default 'bodies' halves the march height); 0.66 % of accepted
+    pixels sit one march texel outside the nearest hit (the rim the half-res march misses) — gated on the
+    3×3 neighbourhood, strict count reported.
+  - **Cost:** `sdf:refine` 6.6 ms p50 vs `sdf:march` 7.6 ms at the room-1 close-up (single run). The
+    10–20 % estimate counted the SDF evals only; the twin runs the whole post-hit tail (probes, scatter,
+    wound soft shadow, level shadow) at 4× the pixels. Decision (owner): run the experiment at full cost;
+    if it wins, ablate (normal-only variant) to find the cheapest sufficient input, then slim the tail.
+  - **Gate 1 (owner, 2026-09-13):** "the refine one looks good, like native basically." Edges resolve at
+    output res; interior relief is the same smoothness as the march (the geometry is smooth at this
+    distance); colour matches after the level-shadow fix. PASS → capture.
+  - Python: `reset_parameters` now draws the head AFTER the ICNR layer so headed/headless models at one seed
+    share low-res weights (needed for the no-op test; TS already drew in that order). Trained checkpoints
+    unaffected; from-scratch seeds pre/post this change do not bit-match.
