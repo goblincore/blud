@@ -4519,16 +4519,44 @@ async function main() {
    *  consequence: while the render lock is engaged `tick` does not run, so the
    *  clock does not advance and nothing expires out of the dwell — a frozen
    *  scene stays frozen, which is what the lock means. */
+  /** Run 5b: the per-body refine gate, shared by both cull modes. `centre` is
+   *  the torso centre (null = no torso cluster: nothing to measure, so no
+   *  twin); `kept` is the cull's verdict (always true with the cull off).
+   *  Reads `sightA` for the camera. Rule: the twin is drawn only for a
+   *  STANDING body (dead never refines — in either mode) inside the medium
+   *  band, on screen, with hysteresis so an edge-walking body cannot flicker.
+   *  Returns whether the twin is drawn. */
+  function gateRefineTwin(a: ZombieActor, centre: Vec3 | null, kept: boolean): boolean {
+    const twin = a.view.refineObject;
+    if (!twin) return false;
+    if (!centre) { twin.visible = false; return false; }
+    const dx = centre[0] - sightA[0], dy = centre[1] - sightA[1], dz = centre[2] - sightA[2];
+    const d = Math.hypot(dx, dy, dz);
+    const wasOn = twin.visible;
+    const inBand = wasOn
+      ? d >= refineBand.near - refineBand.hysteresis && d <= refineBand.far + refineBand.hysteresis
+      : d >= refineBand.near && d <= refineBand.far;
+    const on = kept && sdfLayer.refine && a.refineEligible() && inBand;
+    twin.visible = on;
+    return on;
+  }
+
   function updateVisibleActors(): void {
     const now = simClockMs;
     cullCounts.total = actors.length;
     if (!actorCullEnabled) {
       visibleActors = actors;
       cullCounts.visible = actors.length;
-      // Cull off: the band gate rides on the cull loop, so the twins keep
-      // whatever visibility they have (run 5's "every body refines"). Report
-      // what is actually drawn rather than a stale count.
-      refinedBodies = actors.reduce((k, a) => k + (a.view.refineObject?.visible ? 1 : 0), 0);
+      // Cull off: the frustum/dwell work is skipped, but the refine gate is
+      // NOT — the spec's first rule (a dead body never refines) has to hold in
+      // both modes, so a body that collapses with the cull off still loses its
+      // twin. Same band + hysteresis, every actor, no visibility work.
+      sightA[0] = camera.position.x; sightA[1] = camera.position.y; sightA[2] = camera.position.z;
+      refinedBodies = 0;
+      for (const a of actors) {
+        const torso = a.posed().clusters.find(c => c.limb === 'torso');
+        if (gateRefineTwin(a, torso ? torso.center as Vec3 : null, true)) refinedBodies++;
+      }
       coverage.screenFrac = 0; coverage.nearestM = 0; coverage.biggestFrac = 0;
       return;
     }
@@ -4542,7 +4570,6 @@ async function main() {
     const tanHalfFov = Math.tan((camera.fov * Math.PI / 180) / 2);
     let area = 0, nearest = 0, biggest = 0;
     refinedBodies = 0;
-    const refineOn = sdfLayer.refine;
     for (const a of actors) {
       const torso = a.posed().clusters.find(c => c.limb === 'torso');
       // No torso cluster (mid-gib, exotic body): never cull what we cannot
@@ -4550,7 +4577,7 @@ async function main() {
       // the refine twin stays off for it.
       if (!torso) {
         out.push(a); lastSeenMs.set(a.id, now);
-        if (a.view.refineObject) a.view.refineObject.visible = false;
+        gateRefineTwin(a, null, true);
         continue;
       }
       const c = torso.center;
@@ -4567,20 +4594,8 @@ async function main() {
       const kept = seen || since < CULL_DWELL_MS;
       if (kept) out.push(a);
 
-      // Run 5b: the refine twin is drawn only for a standing body inside the
-      // medium band, on screen. Hysteresis so a body walking along the edge
-      // does not flicker: enter at [near, far], leave at [near - h, far + h].
-      if (a.view.refineObject) {
-        const dcx = c[0] - sightA[0], dcy = c[1] - sightA[1], dcz = c[2] - sightA[2];
-        const d = Math.hypot(dcx, dcy, dcz);
-        const wasOn = a.view.refineObject.visible;
-        const inBand = wasOn
-          ? d >= refineBand.near - refineBand.hysteresis && d <= refineBand.far + refineBand.hysteresis
-          : d >= refineBand.near && d <= refineBand.far;
-        const on = kept && refineOn && a.refineEligible() && inBand;
-        a.view.refineObject.visible = on;
-        if (on) refinedBodies++;
-      }
+      // Run 5b: the per-body refine gate (see gateRefineTwin).
+      if (gateRefineTwin(a, c as Vec3, kept)) refinedBodies++;
 
       // Coverage estimate — only for bodies actually seen this frame, so a
       // body coasting on its dwell grace does not inflate the area.

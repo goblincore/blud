@@ -62,7 +62,7 @@ describe('soldier actor combat wiring', () => {
     expect(actor.refineEligible()).toBe(true);   // run 5b: a standing body refines
     for(let i=0;i<6;i++) hitLimb(actor,'thigh.l');
     for(let i=0;i<10;i++) actor.step(1/60);
-    expect(actor.refineEligible()).toBe(false);  // collapsing — past 'standing', never refines
+    expect(actor.refineEligible()).toBe(false);  // falling — past 'standing', never refines
     for(let i=0;i<240;i++) actor.step(1/60);
     expect(actor.corpseBakeEligible()).toBe(true);
     expect(actor.refineEligible()).toBe(false);  // settled
