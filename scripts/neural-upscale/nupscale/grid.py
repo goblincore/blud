@@ -120,6 +120,8 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--head-inputs", default="detail", choices=["detail", "detail+refine"],
                     help="head input set (run-5 detail+refine needs refine_n.npy/refine_c.npy too)")
     ap.add_argument("--interior-weight", type=float, default=None, help="override REGION_WEIGHTS[interior] (run 4: 2.0)")
+    ap.add_argument("--refine-drop", type=float, default=None,
+                    help="fraction of crops with the refine gate forced off (default: 0.3 for detail+refine heads, else 0.0)")
     args = ap.parse_args(argv)
     root = Path(args.root)
     root.mkdir(parents=True, exist_ok=True)
@@ -129,7 +131,7 @@ def main(argv: list[str] | None = None) -> None:
         return RunConfig(model_id, inputs, max_steps=args.max_steps, time_cap_s=args.time_cap_min * 60,
                          val_every=args.val_every, batch=args.batch, compile=args.compile,
                          detail_weight=args.detail_weight, reparam=args.reparam, tag=args.tag, head=args.head,
-                         head_inputs=args.head_inputs,
+                         head_inputs=args.head_inputs, refine_drop=args.refine_drop,
                          region_weights={"interior": args.interior_weight} if args.interior_weight is not None else None)
 
     try:

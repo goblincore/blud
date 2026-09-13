@@ -49,6 +49,23 @@ def test_run_writes_checkpoints_exports_and_dashboard(tmp_path):
     assert train_run(_cfg(), ds, root, device=CPU, dashboard=dash, baselines=baselines) == res
 
 
+def test_refine_head_validation_records_norefine_and_normal_only_metrics(tmp_path):
+    ds = load_dataset(write_v2_dataset(tmp_path / "ds", pairs=6, normals=True, detail=True, refine=True))
+    root = tmp_path / "runs"
+    dash = Dashboard(root, ds)
+    baselines = prepare_dashboard(dash, ds)
+    cfg = _cfg(max_steps=3, val_every=3, log_every=3, head=True, head_inputs="detail+refine")
+    res = train_run(cfg, ds, root, device=CPU, dashboard=dash, baselines=baselines)
+    assert res["state"] == "done"
+    saved = json.loads((root / "dashboard.json").read_text())
+    entry = saved["runs"][0]
+    val_entries = entry["val"]
+    assert val_entries and "metrics_norefine" in val_entries[-1] and "metrics_normal_only" in val_entries[-1]
+    assert val_entries[-1]["metrics_norefine"]["overall"] is not None
+    assert val_entries[-1]["metrics_normal_only"]["overall"] is not None
+    assert "best_extra" in entry and set(entry["best_extra"]) == {"norefine", "normal_only"}
+
+
 def test_resume_continues_from_the_latest_checkpoint(tmp_path):
     ds, root, dash, baselines = _setup(tmp_path)
     calls = {"n": 0}

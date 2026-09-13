@@ -93,9 +93,9 @@ function render() {
 function renderRuns(d) {
   const b = d.baselines || {};
   const bic = b.bicubic || {};
-  const head = `<tr><th>run</th><th>state</th><th>step</th><th>best @</th>${COLS.map((c) => `<th>${esc(c.replace('class:', '').replace('coverage_error_rate', 'cov err'))}</th>`).join('')}<th>G4</th></tr>`;
+  const head = `<tr><th>run</th><th>state</th><th>step</th><th>best @</th>${COLS.map((c) => `<th>${esc(c.replace('class:', '').replace('coverage_error_rate', 'cov err'))}</th>`).join('')}<th>G4</th><th>no-refine</th><th>normal-only</th></tr>`;
   const baseRows = ['nearest', 'bicubic', 'native'].filter((k) => b[k]).map((k) =>
-    `<tr class="dim"><td>${k}</td><td>baseline</td><td></td><td></td>${COLS.map((c) => `<td>${fmt(b[k][c])}</td>`).join('')}<td></td></tr>`);
+    `<tr class="dim"><td>${k}</td><td>baseline</td><td></td><td></td>${COLS.map((c) => `<td>${fmt(b[k][c])}</td>`).join('')}<td></td><td></td><td></td></tr>`);
   const runRows = d.runs.map((r) => {
     const cells = COLS.map((c) => {
       const v = r.best ? r.best[c] : null;
@@ -103,7 +103,10 @@ function renderRuns(d) {
       return `<td class="${cls}">${fmt(v)}</td>`;
     }).join('');
     const g4 = r.g4 ? (G4.every((k) => r.g4[k] === true) ? '<span class="good">pass</span>' : '<span class="bad">not yet</span>') : '—';
-    return `<tr><td>${esc(r.name)}</td><td>${esc(r.state)}</td><td>${r.step}/${r.maxSteps}</td><td>${r.bestStep ?? '—'}</td>${cells}<td>${g4}</td></tr>`;
+    const extra = r.best_extra || {};
+    const noRefine = extra.norefine ? fmt(extra.norefine.overall) : '';
+    const normalOnly = extra.normal_only ? fmt(extra.normal_only.overall) : '';
+    return `<tr><td>${esc(r.name)}</td><td>${esc(r.state)}</td><td>${r.step}/${r.maxSteps}</td><td>${r.bestStep ?? '—'}</td>${cells}<td>${g4}</td><td>${noRefine}</td><td>${normalOnly}</td></tr>`;
   });
   $('runs').innerHTML = head + baseRows.join('') + runRows.join('');
 }

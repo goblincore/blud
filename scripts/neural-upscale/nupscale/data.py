@@ -180,12 +180,16 @@ class CropSampler:
         march, target, weight, detail, _ = self.sample_with_extras(batch)
         return march, target, weight, detail
 
-    def sample_with_extras(self, batch: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
+    def sample_with_extras(self, batch: int, refine_drop: float = 0.0) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
         """As `sample`, plus detail (B, 4, 2c, 2c) when every pair carries detail.npy, and refine
         (B, 8, 2c, 2c) when every pair carries refine_n.npy/refine_c.npy, else None for either.
         Both are cropped and flipped with the target; their vector-looking channels (detail's xyz
         noise, refine's world normal) are seen by the head only as textures, so no component is
-        negated on a flip -- unlike the march/normal input channels."""
+        negated on a flip -- unlike the march/normal input channels.
+
+        `refine_drop` forces the accept gate (channel 7) off for that fraction of crops: the head
+        sees ga = 0 across the crop and must fall back to its detail-only behaviour -- run 5b, so
+        any per-body gating policy works with one model."""
         c = self.crop
         one = torch.ones(1)
         zero4 = torch.zeros(4)
@@ -202,6 +206,9 @@ class CropSampler:
             w = paste(p.weight, 2 * ox, 2 * oy, 2 * c, one)
             d = paste(p.detail, 2 * ox, 2 * oy, 2 * c, zero4) if with_detail else None
             r = paste(p.refine, 2 * ox, 2 * oy, 2 * c, zero8) if with_refine else None
+            if r is not None and self.rng.random() < refine_drop:
+                r = r.clone()
+                r[7] = 1.0
             # Mirroring is exact for the §4 reconstruction: output column 2i-1-x swaps the
             # sub-pixel parity AND the neighbour direction, which is what a mirrored input has.
             if self.rng.random() < self.flip_x:

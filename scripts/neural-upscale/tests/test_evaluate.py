@@ -8,6 +8,7 @@ from nupscale.constants import CLASSES
 from nupscale.data import load_dataset
 from nupscale.evaluate import aggregate, beats, g4_pass, pair_errors, predict_bicubic, predict_model, predict_nearest
 from nupscale.model import Upscaler
+from nupscale.reconstruct import predict
 from tests.helpers import random_march, upsample_nearest, write_v2_dataset
 
 
@@ -59,6 +60,25 @@ def test_uncovered_flesh_counts_as_black(tmp_path):
 def test_aggregate_is_pixel_weighted():
     m = aggregate([{"overall": (1.0, 1)}, {"overall": (3.0, 3)}, {"overall": (0.0, 0)}])
     assert m["overall"] == 1.0 and m["face"] is None
+
+
+def test_predict_model_refine_modes(tmp_path):
+    ds = load_dataset(write_v2_dataset(tmp_path / "ds", pairs=2, size=(12, 16), normals=True, detail=True, refine=True))
+    m = Upscaler("s8", "rgbn", seed=2, head=True, head_inputs="detail+refine")
+    with torch.no_grad(): m.head[1].weight.normal_(); m.head[1].bias.fill_(0.2)
+    p = ds.pairs[0]
+    on = predict_model(m, p, 0.1, 200.0, refine_mode="on")
+    off = predict_model(m, p, 0.1, 200.0, refine_mode="off")
+    no = predict_model(m, p, 0.1, 200.0, refine_mode="normal_only")
+    assert not torch.equal(on, off) and not torch.equal(on, no) and not torch.equal(off, no)
+    with pytest.raises(ValueError):
+        predict_model(m, p, 0.1, 200.0, refine_mode="bogus")
+    # 'off' == the same head fed a fully-closed accept gate everywhere: the refine columns
+    # contribute nothing beyond that.
+    refine_off = p.refine.clone()
+    refine_off[7] = 1.0
+    expect = predict(m, p.inp.unsqueeze(0), 0.1, 200.0, p.detail.unsqueeze(0), refine_off.unsqueeze(0)).march()[0]
+    assert torch.allclose(off, expect)
 
 
 def test_beats_and_g4():

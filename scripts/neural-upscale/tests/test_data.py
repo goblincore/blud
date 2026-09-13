@@ -126,3 +126,16 @@ def test_refine_loads_as_8_channels_and_crops_with_the_target(tmp_path):
     march, target, weight, detail, refine = CropSampler(ds.split("train"), crop=8, seed=1, flip_x=1.0, flip_y=0.0).sample_with_extras(2)
     assert refine.shape == (2, 8, 16, 16) and detail.shape == (2, 4, 16, 16)
     assert torch.equal(refine[:, 7] < 1, target[:, 3] < 1)        # flipped together
+
+
+def test_refine_drop_forces_the_gate_off_on_a_fraction_of_crops(tmp_path):
+    ds = load_dataset(write_v2_dataset(tmp_path / "ds", pairs=3, size=(12, 16), normals=True, detail=True, refine=True))
+    s = CropSampler(ds.split("train"), crop=8, seed=1, flip_x=0.0, flip_y=0.0)
+    _, _, _, _, r0 = s.sample_with_extras(16, refine_drop=0.0)
+    assert (r0[:, 7] < 1).any()                       # gate on somewhere
+    _, _, _, _, r1 = s.sample_with_extras(16, refine_drop=1.0)
+    assert not (r1[:, 7] < 1).any()                   # every crop's gate forced off
+    assert r1.shape == r0.shape and (r1[:, 7] >= 1).all()   # only the gate moves, shapes match
+    _, _, _, _, r5 = CropSampler(ds.split("train"), crop=8, seed=1, flip_x=0.0, flip_y=0.0).sample_with_extras(64, refine_drop=0.5)
+    off = sum(1 for k in range(64) if not (r5[k, 7] < 1).any())
+    assert 16 <= off <= 48                            # ~half, seeded

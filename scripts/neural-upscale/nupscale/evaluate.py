@@ -17,12 +17,27 @@ METRIC_KEYS = ("overall", *REGIONS, *(f"class:{c}" for c in CLASSES), "coverage_
 
 
 @torch.no_grad()
-def predict_model(model, pair: Pair, near: float, far: float, device: torch.device | None = None) -> torch.Tensor:
-    """(4, 2h, 2w) in the march convention, on the CPU."""
+def predict_model(model, pair: Pair, near: float, far: float, device: torch.device | None = None,
+                   refine_mode: str = "on") -> torch.Tensor:
+    """(4, 2h, 2w) in the march convention, on the CPU.
+
+    `refine_mode` controls how the refine twin's channels are fed to a refine head (no-op when
+    `pair.refine is None`): "on" passes it through unchanged; "off" forces the accept gate
+    (channel 7) to 1 everywhere, so the head falls back to detail-only behaviour; "normal_only"
+    zeroes the refine color channels (4:7) but leaves the gate, isolating the refine normal's
+    contribution. Any other value raises ValueError."""
+    if refine_mode not in ("on", "off", "normal_only"):
+        raise ValueError(f"unknown refine_mode: {refine_mode!r}")
     device = device or next(model.parameters()).device
     march = pair.inp.unsqueeze(0).to(device)
     detail = pair.detail.unsqueeze(0).to(device) if pair.detail is not None else None
     refine = pair.refine.unsqueeze(0).to(device) if pair.refine is not None else None
+    if refine is not None and refine_mode == "off":
+        refine = refine.clone()
+        refine[:, 7] = 1.0
+    elif refine is not None and refine_mode == "normal_only":
+        refine = refine.clone()
+        refine[:, 4:7] = 0.0
     return predict(model, march, near, far, detail, refine).march()[0].cpu()
 
 

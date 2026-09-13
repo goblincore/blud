@@ -49,6 +49,11 @@ class RunConfig:
     """Head input set (constants.HEAD_INPUT_CHANNELS): "detail" (run-4, default) or "detail+refine"
     (run-5, needs refine_n.npy/refine_c.npy in every pair too)."""
     head_inputs: str = "detail"
+    """Fraction of training crops with the refine accept gate forced off (data.py's
+    `sample_with_extras`). None resolves to 0.3 when `head_inputs == "detail+refine"` (run 5b's
+    augmentation, so the head degrades to run-4/detail-only behaviour when refine is withheld),
+    else 0.0."""
+    refine_drop: float | None = None
     """Region weight overrides (spec §2 REGION_WEIGHTS), e.g. {"interior": 2.0} — run 4 weights the
     interior up because the edge band is solved."""
     region_weights: dict | None = None
@@ -168,6 +173,7 @@ def train_run(cfg: RunConfig, dataset: Dataset, root: Path | str, *, device: tor
         except Exception as e:  # a backend that cannot compile must not lose the run
             print(f"[{cfg.name}] torch.compile unavailable, running eager: {e}")
 
+    refine_drop = cfg.refine_drop if cfg.refine_drop is not None else (0.3 if cfg.head_inputs == "detail+refine" else 0.0)
     sampler = CropSampler(dataset.split("train"), crop=cfg.crop, seed=cfg.seed + step, region_share=cfg.region_share)
     showcase = showcase_pairs(dataset)
     entry = dashboard.run(cfg.name)
@@ -175,20 +181,31 @@ def train_run(cfg: RunConfig, dataset: Dataset, root: Path | str, *, device: tor
     entry["train"] = [t for t in entry["train"] if t[0] <= step]
     entry["val"] = [v for v in entry["val"] if v["step"] <= step]
 
+    has_refine_head = cfg.head and cfg.head_inputs == "detail+refine"
+    best_extra = None
+
     def validate() -> None:
-        nonlocal best_step, best_score, best_metrics
+        nonlocal best_step, best_score, best_metrics, best_extra
         model.eval()
         metrics = evaluate(lambda p: predict_model(model, p, near, far, device), val)
+        val_entry = {"step": step, "metrics": metrics}
+        extra = None
+        if has_refine_head:
+            metrics_norefine = evaluate(lambda p: predict_model(model, p, near, far, device, refine_mode="off"), val)
+            metrics_normal_only = evaluate(lambda p: predict_model(model, p, near, far, device, refine_mode="normal_only"), val)
+            val_entry["metrics_norefine"] = metrics_norefine
+            val_entry["metrics_normal_only"] = metrics_normal_only
+            extra = {"norefine": metrics_norefine, "normal_only": metrics_normal_only}
         latest = dashboard.showcase_images(cfg.name, "latest")
         for p in showcase:
             rel = f"img/{cfg.name}-{p.id}-latest.png"
             save_march_png(predict_model(model, p, near, far, device), root / rel)
             latest[p.id] = rel
         model.train()
-        entry["val"] = [v for v in entry["val"] if v["step"] < step] + [{"step": step, "metrics": metrics}]
+        entry["val"] = [v for v in entry["val"] if v["step"] < step] + [val_entry]
         score = metrics["overall"]
         if score is not None and (best_score is None or score < best_score):
-            best_step, best_score, best_metrics = step, score, metrics
+            best_step, best_score, best_metrics, best_extra = step, score, metrics, extra
             _atomic_save({"model": model.state_dict(), "step": step, "metrics": metrics}, best_path)
             best = dashboard.showcase_images(cfg.name, "best")
             for p in showcase:
@@ -200,6 +217,8 @@ def train_run(cfg: RunConfig, dataset: Dataset, root: Path | str, *, device: tor
                       "best_metrics": best_metrics}, latest_path)
         entry.update(step=step, bestStep=best_step, best=best_metrics,
                      g4=beats(best_metrics, baselines["bicubic"]) if best_metrics else None)
+        if best_extra is not None:
+            entry["best_extra"] = best_extra
         dashboard.save()
 
     start = clock()
@@ -216,7 +235,7 @@ def train_run(cfg: RunConfig, dataset: Dataset, root: Path | str, *, device: tor
         if elapsed >= cfg.time_cap_s:
             state = "time-cap"
             break
-        march, target, weight, detail, refine = sampler.sample_with_extras(cfg.batch)
+        march, target, weight, detail, refine = sampler.sample_with_extras(cfg.batch, refine_drop=refine_drop)
         march, target, weight = march.to(device), target.to(device), weight.to(device)
         detail = detail.to(device) if detail is not None else None
         refine = refine.to(device) if refine is not None else None
