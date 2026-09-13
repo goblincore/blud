@@ -67,7 +67,7 @@ import { SegmentVolumeBinding, createSegmentAtlasTexture } from './skeleton-spik
 import { createPostAa } from './post-aa';
 import { type VhsPreset, type VhsTerms } from './post-vhs';
 import { type SscsTerms } from './post-sscs';
-import { type ZombieGpuView } from './zombie-gpu';
+import { type ZombieGpuView, type RefineTail } from './zombie-gpu';
 import { createOccluderHull, buildHullInstances, HULL_SHRINK, type HullInstance } from './occluder-hull';
 import { type BuildResult } from '../build-body';
 import { parseBlob } from '../blob-parse';
@@ -357,6 +357,19 @@ async function main() {
    *  frames-since-entry rather than of how long the page happened to boot. */
   let demoSeedBase = 0;
   let actorCullEnabled = true;
+  /** Run 5b: the distance band the refine twins are drawn in — from
+   *  `scripts/lib/upscale-framing.mjs` DISTANCE_M.medium = [1.5, 3.5].
+   *  Owner: close bodies are most of the pixels and the least visible gain
+   *  (the march already resolves them), far bodies are cheap either way, so
+   *  the twin only earns its cost in the middle. Hysteresis keeps a body
+   *  walking along the edge from flickering. */
+  const refineBand = { near: 1.5, far: 3.5, hysteresis: 0.25 };
+  /** Run 5b: the twin lighting tail every view should be on — so a LATE SPAWN
+   *  does not fall back to the default while the rest of the room is on the
+   *  other tail (same idiom as boneCullMode). */
+  let refineTailWanted: RefineTail = 'slim';
+  /** Bodies whose refine twin was drawn this frame (reset each cull pass). */
+  let refinedBodies = 0;
   let visibleActors: ZombieActor[] = [];
   const cullCounts = { visible: 0, total: 0 };
   const coverage = { screenFrac: 0, nearestM: 0, biggestFrac: 0 };
@@ -835,6 +848,15 @@ async function main() {
     const name = q.get('upscalemodel') ?? '';
     return /rgbd?n\b/.test(inputs) || /rgbd?n(-|$)/.test(name) || q.get('upscalehead') === '1';
   })();
+  // `?refineband=near,far` — the bench and the smoke widen or narrow the band.
+  {
+    const raw = new URLSearchParams(location.search).get('refineband');
+    if (raw) {
+      const parts = raw.split(',').map(Number);
+      const n = parts[0] ?? NaN, f = parts[1] ?? NaN;
+      if (Number.isFinite(n) && Number.isFinite(f) && f > n && n >= 0) { refineBand.near = n; refineBand.far = f; }
+    }
+  }
   const sdfLayer = createSdfLayer(handle.renderer, { marchNormals: marchNormalsWanted, refine: refineWanted });
   if (refineWanted) sdfLayer.setRefine(true);
   postAa.addSink(sdfLayer);
@@ -2649,6 +2671,7 @@ async function main() {
     // Ship default + any live toggle: a late spawn must not fall back to the
     // flat bone fold while the rest of the room culls.
     actor.view.setBoneCullMode(boneCullMode);
+    actor.view.setRefineTail(refineTailWanted);
     // skeleton=mesh: contract sources at REST bind (before any tick steps
     // the rig — stepActorMotion rewrites restPose, which limb local frames
     // are derived from), then the field drops this actor's bone rows so
@@ -4502,6 +4525,10 @@ async function main() {
     if (!actorCullEnabled) {
       visibleActors = actors;
       cullCounts.visible = actors.length;
+      // Cull off: the band gate rides on the cull loop, so the twins keep
+      // whatever visibility they have (run 5's "every body refines"). Report
+      // what is actually drawn rather than a stale count.
+      refinedBodies = actors.reduce((k, a) => k + (a.view.refineObject?.visible ? 1 : 0), 0);
       coverage.screenFrac = 0; coverage.nearestM = 0; coverage.biggestFrac = 0;
       return;
     }
@@ -4514,11 +4541,18 @@ async function main() {
     const halfHpx = th / 2;
     const tanHalfFov = Math.tan((camera.fov * Math.PI / 180) / 2);
     let area = 0, nearest = 0, biggest = 0;
+    refinedBodies = 0;
+    const refineOn = sdfLayer.refine;
     for (const a of actors) {
       const torso = a.posed().clusters.find(c => c.limb === 'torso');
       // No torso cluster (mid-gib, exotic body): never cull what we cannot
-      // measure — fall back to drawing it.
-      if (!torso) { out.push(a); lastSeenMs.set(a.id, now); continue; }
+      // measure — fall back to drawing it. No distance to band-test either, so
+      // the refine twin stays off for it.
+      if (!torso) {
+        out.push(a); lastSeenMs.set(a.id, now);
+        if (a.view.refineObject) a.view.refineObject.visible = false;
+        continue;
+      }
       const c = torso.center;
       bodySphere.center.set(c[0], c[1], c[2]);
       let seen = frustum.intersectsSphere(bodySphere);
@@ -4530,7 +4564,23 @@ async function main() {
       }
       if (seen) lastSeenMs.set(a.id, now);
       const since = now - (lastSeenMs.get(a.id) ?? -Infinity);
-      if (seen || since < CULL_DWELL_MS) out.push(a);
+      const kept = seen || since < CULL_DWELL_MS;
+      if (kept) out.push(a);
+
+      // Run 5b: the refine twin is drawn only for a standing body inside the
+      // medium band, on screen. Hysteresis so a body walking along the edge
+      // does not flicker: enter at [near, far], leave at [near - h, far + h].
+      if (a.view.refineObject) {
+        const dcx = c[0] - sightA[0], dcy = c[1] - sightA[1], dcz = c[2] - sightA[2];
+        const d = Math.hypot(dcx, dcy, dcz);
+        const wasOn = a.view.refineObject.visible;
+        const inBand = wasOn
+          ? d >= refineBand.near - refineBand.hysteresis && d <= refineBand.far + refineBand.hysteresis
+          : d >= refineBand.near && d <= refineBand.far;
+        const on = kept && refineOn && a.refineEligible() && inBand;
+        a.view.refineObject.visible = on;
+        if (on) refinedBodies++;
+      }
 
       // Coverage estimate — only for bodies actually seen this frame, so a
       // body coasting on its dwell grace does not inflate the area.
@@ -7238,11 +7288,21 @@ function performBenchAction(a: BenchAction): void {
     /** Run 5b: the refine twins' lighting tail — 'slim' (default) drops scatter, the wound
      *  soft shadow, the ambient bounce and the probe gather from the twin only; 'full' is
      *  run 5's behaviour. Applies to every live actor view (chunks have no refine twin). */
-    setRefineTail: (tail: 'full' | 'slim') => {
+    setRefineTail: (tail: RefineTail) => {
+      refineTailWanted = tail;
       for (const a of actors) a.view.setRefineTail(tail);
       return actors[0]?.view.refineTail ?? tail;
     },
-    refineInfo: () => ({ allocated: sdfLayer.refineSource !== null, on: sdfLayer.refine, view: sdfLayer.refineView, cfg: sdfLayer.refineCfg, tail: actors[0]?.view.refineTail ?? 'slim' }),
+    /** Run 5b: the per-body distance band. Clamped: near >= 0, far > near, hysteresis >= 0. */
+    setRefineBand: (band: { near?: number; far?: number; hysteresis?: number }) => {
+      const near = Math.max(0, band.near ?? refineBand.near);
+      const far = Math.max(near + 1e-6, band.far ?? refineBand.far);
+      const hysteresis = Math.max(0, band.hysteresis ?? refineBand.hysteresis);
+      refineBand.near = near; refineBand.far = far; refineBand.hysteresis = hysteresis;
+      return { ...refineBand };
+    },
+    refineBand: () => ({ ...refineBand }),
+    refineInfo: () => ({ allocated: sdfLayer.refineSource !== null, on: sdfLayer.refine, view: sdfLayer.refineView, cfg: sdfLayer.refineCfg, tail: actors[0]?.view.refineTail ?? 'slim', bodies: refinedBodies, band: { ...refineBand } }),
     setTemporalAccum: (on: boolean, alpha?: number) => sdfLayer.setTemporalAccum(on, alpha),
     resetTemporalAccum: () => sdfLayer.resetTemporalAccum(),
     /** NEURAL UPSCALE (spec 2026-09-11). Enabling also sets the march scale to 0.5

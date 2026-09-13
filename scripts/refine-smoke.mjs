@@ -79,6 +79,11 @@ await evaluate('(() => { __sdfGame.setSdfScale(0.5); return 1; })()');
 const info = await evaluate('(() => { __sdfGame.setRefine(true); return __sdfGame.refineInfo(); })()');
 if (!info || !info.allocated) fail(`refine not allocated by the boot: ${JSON.stringify(info)}`);
 if (!info.on) fail(`setRefine(true) did not take: ${JSON.stringify(info)}`);
+// Run 5b: the staged close-up sits at d ~ 0.7 m, OUTSIDE the medium band
+// [1.5, 3.5] the per-body gate ships with — this smoke checks the refine PASS,
+// not the gating policy, so open the band wide before the capture. (The policy
+// itself is exercised separately; see the run-5b plan, Task C.)
+await evaluate('__sdfGame.setRefineBand({ near: 0, far: 10 })');
 await evaluate('(() => { __sdfGame.step(6); return 1; })()');
 await evaluate('__sdfGame.resolveGpu()');
 
@@ -144,7 +149,8 @@ await evaluate('(() => { __sdfGame.setRefineView(false); __sdfGame.step(2); retu
 await evaluate('__sdfGame.resolveGpu()');
 writeFileSync(`${OUT}/frame-shipped.png`, Buffer.from(await evaluate('__sdfGame.presentedShot()'), 'base64'));
 
-console.log(JSON.stringify({ staged, w, h, accepted, outsideHit, strictOutside, badNormal, nonFinite, out: OUT }));
+const after = await evaluate('__sdfGame.refineInfo()');
+console.log(JSON.stringify({ staged, band: after.band, bodies: after.bodies, w, h, accepted, outsideHit, strictOutside, badNormal, nonFinite, out: OUT }));
 const problems = [];
 if (accepted === 0) problems.push('accepted === 0 — the refine pass wrote nothing');
 if (outsideHit > 0) problems.push(`${outsideHit} accepted texels sit outside a march hit`);
