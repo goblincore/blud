@@ -247,8 +247,20 @@ export async function createLabRenderer(mount: HTMLElement, cap?: RenderCap): Pr
   // issue 502668704 — the collapse-stall investigation, X1.22.1; see
   // docs/dev-notes/2026-08-16-collapse-stall/notes.md). 'opaque' keeps the
   // present on the overlay-capable path and stops tripping it.
+  // COLOUR ATTACHMENT BUDGET (run 4, 2026-09-12): the march can carry three rgba32f attachments
+  // (output + normal + anchor) = 48 bytes/sample, over WebGPU's default cap of 32. Ask the device for
+  // the adapter's real cap (Apple silicon reports 128) — only when the adapter offers more than the
+  // default, so a device that cannot simply keeps the default and the extra attachments stay off.
+  let requiredLimits: Record<string, number> | undefined;
+  try {
+    const gpu = (navigator as unknown as { gpu?: { requestAdapter(): Promise<{ limits: { maxColorAttachmentBytesPerSample?: number } } | null> } }).gpu;
+    const adapter = await gpu?.requestAdapter();
+    const cap = adapter?.limits.maxColorAttachmentBytesPerSample ?? 32;
+    if (cap > 32) requiredLimits = { maxColorAttachmentBytesPerSample: Math.min(cap, 64) };
+  } catch { /* leave the default */ }
   const renderer = new WebGPURenderer({
     antialias: false, trackTimestamp: true, alpha: false,
+    ...(requiredLimits ? { requiredLimits } : {}),
   });
   renderer.setPixelRatio(1); // explicit: we drive internal size ourselves
   // WebGPURenderer's signature takes a Color, where WebGLRenderer accepts a

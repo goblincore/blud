@@ -35,7 +35,7 @@ import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import { wgslFn, texture, uv, vec4, uniform, mrt, output, cameraViewMatrix, mat3, mul } from 'three/tsl';
 import { fieldParity, fieldTargetHeight, fieldJitterNdcY } from './field-render';
-import { createConeUniforms, createDepthPreUniforms, marchNormalRead, type ConeSource, type DepthPreSource, type LastFrameSource, type OccluderSource, type PrevSource } from './zombie-gpu';
+import { createConeUniforms, createDepthPreUniforms, marchNormalRead, marchAnchorRead, detailFieldFn, type ConeSource, type DepthPreSource, type LastFrameSource, type OccluderSource, type PrevSource } from './zombie-gpu';
 import { TEMPORAL_START_DEFAULTS, temporalMarginForMotion } from './temporal-start';
 import { TEMPORAL_ACCUM_DEFAULT_ALPHA, TEMPORAL_ACCUM_CONVERGED_FRAMES, accumAlpha, accumJitter } from './temporal-accum';
 import { setPassLabel } from './gpu-pass-timing';
@@ -893,6 +893,12 @@ export interface SdfLayer {
   /** The march's second attachment (view-space normal, rgba32f) when the layer was created with
    *  `marchNormals`; null otherwise. */
   readonly marchNormalTexture: THREE.Texture | null;
+  /** Run 4: the march's third attachment (rest-space noise anchor.xyz, w = detail gate), normals boots only. */
+  readonly marchAnchorTexture: THREE.Texture | null;
+  /** Run 4: the output-res skin-detail noise (xyz, w = gate), rgba32f; null unless normals are on. */
+  readonly detailTarget: THREE.RenderTarget | null;
+  /** Run 4: the same-body anchor jump limit (metres) for the detail pass's gradient extrapolation. */
+  setDetailJumpMax(metres: number): void;
   /** Which flesh texture the composite reads: the raw march, the accumulated history, or the upscale output. */
   readonly compositeSource: 'march' | 'accum' | 'upscale';
   /** CAPTURE JITTER (neural upscale P3, spec 2026-09-11-neural-upscale-p3-training-design.md §1):
@@ -1102,7 +1108,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     type: THREE.FloatType,
     minFilter: THREE.NearestFilter,
     magFilter: THREE.NearestFilter,
-    count: marchNormals ? 2 : 1,
+    count: marchNormals ? 3 : 1,
   });
   // RUNTIME NORMALS (2026-09-12): with two attachments every material drawn into `target` must
   // emit both, so the MRT is set on the RENDERER around the march renders (three's MRTNode maps
@@ -1114,11 +1120,31 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
   if (marchNormals) {
     target.textures[0]!.name = 'output';
     target.textures[1]!.name = 'marchNormal';
+    // Run 4: rest-space noise anchor + detail gate, for the output-res detail pass below.
+    target.textures[2]!.name = 'marchAnchor';
     const n = marchNormalRead({ dep: output as never }) as unknown as { xyz: unknown; w: unknown };
     marchMrt = mrt({
       output,
       marchNormal: vec4(mul(mat3(cameraViewMatrix as never), n.xyz as never) as never, n.w as never),
+      marchAnchor: marchAnchorRead({ dep: output as never }),
     });
+  }
+  // RUN 4 DETAIL PASS (plan 2026-09-12-neural-upscale-run4-relief): the skin-detail noise evaluated
+  // at OUTPUT resolution from marchAnchor (DETAIL_FIELD). rgba32f so the capture readback is exact.
+  // Runs only when the attachment exists, right after the march, before the upscale stage.
+  const detailTarget = new THREE.RenderTarget(1, 1, {
+    type: THREE.FloatType, format: THREE.RGBAFormat, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false,
+  });
+  const uDetailJumpMax = uniform(0.08);
+  let detailScene: THREE.Scene | null = null;
+  if (marchNormals) {
+    const mat = new MeshBasicNodeMaterial();
+    const out = detailFieldFn({ anchorTex: texture(target.textures[2]!), marchTex: texture(target.textures[0]!), texCoord: uv(), flipY: uFlipY, jumpMax: uDetailJumpMax } as never) as unknown as { xyz: unknown; w: unknown };
+    mat.colorNode = vec4(out.xyz as never, 1.0);
+    mat.outputNode = vec4(out.xyz as never, out.w as never);
+    mat.depthTest = false; mat.depthWrite = false; mat.blending = THREE.NoBlending;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat); m.frustumCulled = false;
+    detailScene = new THREE.Scene(); detailScene.add(m);
   }
   const withMarchMrt = <T>(fn: () => T): T => {
     if (!marchMrt) return fn();
@@ -1516,6 +1542,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     accumNext.setSize(fullW, fullH);
     // The upscale stage reads the march grid and writes the output grid.
     upscale?.setSize(w, h, fullW, fullH);
+    if (detailScene) detailTarget.setSize(Math.max(1, fullW), Math.max(1, fullH));
     resetAccum();
     // The whole-frame field buffers track the OUTPUT size, not sdfScale: the
     // polygonal pass has always rendered at full content resolution and must
@@ -1951,6 +1978,11 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
       // NEURAL UPSCALE STAGE (2026-09-11): between the march and the composite,
       // where the accumulation resolve sits (the two are exclusive until P5). The
       // composite reads upscale.output through accumTexNode.
+      if (detailScene) {
+        setPassLabel('sdf:detail');
+        renderer.setRenderTarget(detailTarget);
+        void renderer.render(detailScene, quadCam);
+      }
       if (upscale) upscale.render(renderer, quadCam, camera);
 
       // Pass 3 — composite up. autoClear off, or this wipes pass 1.
@@ -2156,6 +2188,9 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
       return upscaleInfoOf(upscale);
     },
     get marchNormalTexture() { return marchNormals ? target.textures[1]! : null; },
+    get marchAnchorTexture() { return marchNormals ? target.textures[2]! : null; },
+    get detailTarget() { return detailScene ? detailTarget : null; },
+    setDetailJumpMax(m) { (uDetailJumpMax.value as number) = Math.max(0.001, m); },
     get upscaleInfo() { return upscaleInfoOf(upscale); },
     get upscaleStage() { return upscale; },
     get compositeSource() { return upscale ? 'upscale' : accumOn ? 'accum' : 'march'; },

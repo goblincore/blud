@@ -8213,6 +8213,24 @@ function performBenchAction(a: BenchAction): void {
           for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
           return { w, h, rgba32f: btoa(binary) };
         },
+        /** Run 4: the output-res detail field (sdf-layer detailTarget) as { w, h, rgba32f } — same
+         *  de-pad as readMarchTarget. Null when the layer has no normal attachment. */
+        async readDetailTarget() {
+          const t = sdfLayer.detailTarget;
+          if (!t) return null;
+          handle.setLoopRunning(false);
+          handle.step(0);
+          await handle.resolveGpu();
+          const w = t.width, h = t.height;
+          const raw = new Float32Array(await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h));
+          const stride = Math.ceil(w * 16 / 256) * 64;
+          const dense = new Float32Array(w * h * 4);
+          for (let y = 0; y < h; y++) dense.set(raw.subarray(y * stride, y * stride + w * 4), y * w * 4);
+          const bytes = new Uint8Array(dense.buffer);
+          let binary = '';
+          for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+          return { w, h, rgba32f: btoa(binary) };
+        },
         /** Neural upscale normals capture (2026-09-12): the march target re-rendered with every
          *  actor and chunk in debug mode 9 (march.wgsl.ts MARCH_BODY_LIGHT): rgb = the final
          *  WORLD-space shading normal, alpha = clip depth as usual. Same frozen frame, same

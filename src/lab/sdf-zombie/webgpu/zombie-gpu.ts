@@ -32,7 +32,7 @@ import { NORMAL_GRADIENT_HELPERS, NORMAL_GRADIENT_GAME_HELPERS } from './normal-
 import type { TileGroupInput } from './tile-cull';
 import type { ComputeTileBinding } from './tile-bin-compute';
 import {
-  HELPERS, MARCH_BODY, CONE_MARCH, DEPTH_PREPASS_MARCH, DATA_ROWS, MARCH_NORMAL_OUT,
+  HELPERS, MARCH_BODY, CONE_MARCH, DEPTH_PREPASS_MARCH, DATA_ROWS, MARCH_NORMAL_OUT, MARCH_ANCHOR_READ, DETAIL_FIELD, HASH13, NOISE3, FBM,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE,
   ROW_PRIM_BEND, ROW_PRIM_COLOR, ROW_PRIM_SHELL, ROW_PRIM_WARP, ROW_PRIM_STRAND, ROW_PRIM_CLIP,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
@@ -174,6 +174,13 @@ export interface ZombieGpuView {
 /** The runtime-normals read fn + its private global (MARCH_NORMAL_OUT). Shared by the lit march
  *  chain and the layer's march MRT; call as marchNormalRead({ dep }) with the march result. */
 export const marchNormalRead = wgslFn(MARCH_NORMAL_OUT);
+/** Run 4: the anchor/gate read (MARCH_ANCHOR_READ), sharing marchNormalRead's private declaration. */
+export const marchAnchorRead = wgslFn(MARCH_ANCHOR_READ, [marchNormalRead] as never);
+/** Run 4: the output-res detail field (DETAIL_FIELD) on the march's own hash/noise/fbm chain. */
+export const detailFieldFn = (() => {
+  const chain = [HASH13, NOISE3, FBM].reduce<ReturnType<typeof wgslFn>[]>((acc, src) => [...acc, wgslFn(src, acc.slice(-1))], []);
+  return wgslFn(DETAIL_FIELD, chain.slice(-1));
+})();
 
 function buildMarchFn() {
   // mapBody sits at a fixed place in HELPERS — after the things it calls,

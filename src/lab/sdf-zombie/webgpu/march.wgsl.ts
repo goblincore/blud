@@ -738,6 +738,53 @@ export const SD_SHELL = /* wgsl */ `fn sdShell(dBase: f32, p: vec3<f32>, thick: 
   return max(max(d, dPlane), rim - length(vec2(d, dPlane))) / lip;
 }`;
 
+/**
+ * Run 4 DETAIL PASS (plan 2026-09-12-neural-upscale-run4-relief §2): the march's skin-detail noise —
+ * vec3(fbm(a*22), fbm(a*22+5), fbm(a*22+11)), the world-space normal perturbation applied under
+ * detailAmp — evaluated at OUTPUT resolution from the marchAnchor attachment. Each output pixel takes
+ * its march texel's rest-space anchor and extrapolates sub-texel with SCREEN-SPACE anchor gradients
+ * from same-body neighbours (a linear map holds across one texel; a jump larger than jumpMax metres
+ * is another body or a fold and contributes no gradient). w = the texel's detail gate.
+ */
+export const DETAIL_FIELD = /* wgsl */ `fn detailField(
+  anchorTex: texture_2d<f32>,
+  marchTex: texture_2d<f32>,
+  texCoord: vec2<f32>,
+  flipY: f32,
+  jumpMax: f32
+) -> vec4<f32> {
+  let dims = vec2<i32>(textureDimensions(anchorTex, 0));
+  let maxI = dims - vec2<i32>(1, 1);
+  var st = texCoord;
+  if (flipY > 0.5) { st.y = 1.0 - st.y; }
+  let q = st * vec2<f32>(dims);
+  let c = clamp(vec2<i32>(floor(q)), vec2<i32>(0, 0), maxI);
+  let f = q - (vec2<f32>(c) + vec2<f32>(0.5, 0.5));
+  // Gate on the march HIT (depth alpha < 1) as well as the detail gate: the anchor attachment's
+  // cleared background carries the clear colour's alpha, which is not a gate.
+  let a0 = textureLoad(anchorTex, c, 0);
+  if (a0.w <= 0.0 || textureLoad(marchTex, c, 0).w >= 1.0) { return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
+  let axp = textureLoad(anchorTex, clamp(c + vec2<i32>(1, 0), vec2<i32>(0, 0), maxI), 0);
+  let axm = textureLoad(anchorTex, clamp(c - vec2<i32>(1, 0), vec2<i32>(0, 0), maxI), 0);
+  let ayp = textureLoad(anchorTex, clamp(c + vec2<i32>(0, 1), vec2<i32>(0, 0), maxI), 0);
+  let aym = textureLoad(anchorTex, clamp(c - vec2<i32>(0, 1), vec2<i32>(0, 0), maxI), 0);
+  var dx = vec3<f32>(0.0);
+  var dy = vec3<f32>(0.0);
+  let dxp = axp.xyz - a0.xyz;
+  let dxm = a0.xyz - axm.xyz;
+  let okxp = axp.w > 0.0 && textureLoad(marchTex, clamp(c + vec2<i32>(1, 0), vec2<i32>(0, 0), maxI), 0).w < 1.0 && length(dxp) < jumpMax;
+  let okxm = axm.w > 0.0 && textureLoad(marchTex, clamp(c - vec2<i32>(1, 0), vec2<i32>(0, 0), maxI), 0).w < 1.0 && length(dxm) < jumpMax;
+  if (okxp && okxm) { dx = 0.5 * (dxp + dxm); } else if (okxp) { dx = dxp; } else if (okxm) { dx = dxm; }
+  let dyp = ayp.xyz - a0.xyz;
+  let dym = a0.xyz - aym.xyz;
+  let okyp = ayp.w > 0.0 && textureLoad(marchTex, clamp(c + vec2<i32>(0, 1), vec2<i32>(0, 0), maxI), 0).w < 1.0 && length(dyp) < jumpMax;
+  let okym = aym.w > 0.0 && textureLoad(marchTex, clamp(c - vec2<i32>(0, 1), vec2<i32>(0, 0), maxI), 0).w < 1.0 && length(dym) < jumpMax;
+  if (okyp && okym) { dy = 0.5 * (dyp + dym); } else if (okyp) { dy = dyp; } else if (okym) { dy = dym; }
+  let a = a0.xyz + dx * f.x + dy * f.y;
+  let d = vec3<f32>(fbm(a * 22.0), fbm(a * 22.0 + 5.0), fbm(a * 22.0 + 11.0));
+  return vec4<f32>(d, a0.w);
+}`;
+
 export const HASH13 = /* wgsl */ `fn hash13(pIn: vec3<f32>) -> f32 {
   var p = fract(pIn * 0.1031);
   p = p + dot(p, p.yzx + 33.33);
@@ -3134,6 +3181,8 @@ export const MARCH_BODY_TRACE = /* wgsl */ `  // FIRST STATEMENT, before anythin
   let wmCav = wmBoth.z;   // cavity-ness: only wounds whose flags row opened one
   let cm = charMask(p, data, woundCfg);
   let detailAmp = surfCfg2.y * (1.0 - max(gloss, metal));
+  // Run 4: hand the anchor + gate to the output-res detail pass (MARCH_ANCHOR_READ).
+  gMarchAnchor = vec4<f32>(anchor, detailAmp);
   if (detailAmp > 0.0) {
     let detailNoise = vec3<f32>(
       fbm(anchor * 22.0), fbm(anchor * 22.0 + 5.0), fbm(anchor * 22.0 + 11.0));
@@ -3613,7 +3662,15 @@ export const MARCH_NORMAL_OUT = /* wgsl */ `fn readMarchNormal(dep: vec4<f32>) -
   return gMarchNormal;
 }
 var<private> gMarchNormal: vec4<f32>;
+var<private> gMarchAnchor: vec4<f32>;
 `;
+
+/** Run 4 (plan 2026-09-12-neural-upscale-run4-relief): the rest-space noise anchor of the hit
+ *  (xyz) and the skin-detail gate detailAmp (w), for the output-resolution detail pass. Reads the
+ *  private declared in MARCH_NORMAL_OUT — include that node, never redeclare the var. */
+export const MARCH_ANCHOR_READ = /* wgsl */ `fn readMarchAnchor(dep: vec4<f32>) -> vec4<f32> {
+  return gMarchAnchor;
+}`;
 
 export const MARCH_BODY_LIGHT = /* wgsl */ `  // Runtime normal out (MARCH_NORMAL_OUT): world-space unit n, before any early return below.
   gMarchNormal = vec4<f32>(normalize(n), 1.0);
