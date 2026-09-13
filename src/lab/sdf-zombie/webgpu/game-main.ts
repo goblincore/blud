@@ -2251,7 +2251,12 @@ async function main() {
     if (o.visceraAmp !== undefined) { woundTuning.visceraAmp = o.visceraAmp; ramp = true; }
     if (o.visceraDepth !== undefined) { woundTuning.visceraDepth = o.visceraDepth; ramp = true; }
     if (o.organAmp !== undefined) { woundTuning.organAmp = o.organAmp; ramp = true; }
-    if (ramp) for (const a of actors) applyWoundRamp(a.view);
+    // MEAT DETAIL (2026-09-12): the four MEAT sliders write meatCfg live through the same re-apply.
+    // (First cut forgot these four lines — the sliders moved the record and nothing reached the field.)
+    for (const k of ['meatAmp', 'meatClot', 'meatGlint', 'meatCrevice'] as const) {
+      if (o[k] !== undefined) { woundTuning[k] = o[k]!; ramp = true; }
+    }
+    if (ramp) for (const a of actors) applyWoundRamp(a.view);   // chunks copy the body template's meatCfg at spawn
     if (o.gutSize !== undefined) woundTuning.gutSize = o.gutSize;
     // Spring knobs (organs r3): read at makeGutChain time in spillVerdict, so
     // they shape every rope spawned from now on; existing ropes keep theirs.
