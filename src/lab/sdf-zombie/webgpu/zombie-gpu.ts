@@ -60,6 +60,11 @@ export interface ZombieGpuView {
   refineObject?: THREE.Mesh;
   /** Live uniforms — the WebGPU stand-in for `ShaderMaterial.uniforms`. */
   uniforms: MarchUniforms;
+  /** Run 5b: which lighting tail the refine twin runs ('slim' by default). */
+  readonly refineTail: RefineTail;
+  /** Run 5b: rebuilds the refine twin's material on the other tail (A/B bench).
+   *  No-op without a refine twin. */
+  setRefineTail(tail: RefineTail): void;
   /** The 3D texture bound to the march's volume slot (X1.26). The shared
    *  1-cubed fallback while the volume branch stays disabled; a view that
    *  created its own fallback disposes it in dispose(). */
@@ -693,6 +698,39 @@ export interface ViewTileBinding {
  * would not satisfy it.
  */
 export type MarchUniforms = ReturnType<typeof defaultUniforms>;
+
+/** Run 5b: which lighting tail the refine twin runs. */
+export type RefineTail = 'full' | 'slim';
+
+/**
+ * Run 5b: the refine twin's lighting tail. 'slim' (the default) is a SHALLOW COPY of the
+ * body's uniforms in which the terms the refine head does not need are twin-owned zeros —
+ * the shader already skips each one at 0 (pinned in zombie-gpu.test.ts): scatter
+ * (surfCfg.w), the wound soft shadow (woundShadowCfg.x), the ambient bounce
+ * (bounceCfg.x = 0 is the flat fill "exactly as before"), and the probe gather
+ * (probeCfg.x, probeDynCfg.x/.y). Key light, flashlight beam, level shadow and bodyFlash
+ * stay. 'full' binds the body's own uniforms (run 5's behaviour), kept for the A/B bench.
+ *
+ * The twin's surfCfg.xyz are LIVE look knobs (spec/roughness/fresnel) that the twin must
+ * FOLLOW, so only `.w` is zeroed and `sync()` re-copies xyz each frame; the other four
+ * overrides are constant, so their sync is nothing.
+ */
+export function refineTailUniforms(u: MarchUniforms, tail: RefineTail):
+  { uniforms: MarchUniforms; sync: () => void } {
+  if (tail === 'full') return { uniforms: u, sync: () => {} };
+  const s = u.surfCfg.value;
+  const surfCfg = uniform(new THREE.Vector4(s.x, s.y, s.z, 0));
+  const woundShadowCfg = uniform(new THREE.Vector2(0, u.woundShadowCfg.value.y));
+  const bounceCfg = uniform(new THREE.Vector4(0, 1, 1, 1));
+  const probeCfg = uniform(new THREE.Vector4(0, 0, 0, 0));
+  const probeDynCfg = uniform(new THREE.Vector4(0, 0, 0, 0));
+  return {
+    uniforms: { ...u, surfCfg, woundShadowCfg, bounceCfg, probeCfg, probeDynCfg },
+    sync: () => {
+      surfCfg.value.set(u.surfCfg.value.x, u.surfCfg.value.y, u.surfCfg.value.z, 0);
+    },
+  };
+}
 
 /**
  * Swizzle accessors on a wgslFn result.
@@ -2003,22 +2041,30 @@ export function createZombieGpuView(
   // march texels instead. Chunks get no twin (same reasoning as depthPre). Bound only
   // when the layer was created with refine.
   let refineMesh: THREE.Mesh | undefined;
-  if (opts.refine) {
-    const refineMaterial = createMarchMaterial(
-      dataTex, volumeTex, u,
+  let refineTail: RefineTail = 'slim';
+  let refineTailSync: () => void = () => {};
+  // Run 5b: rebuilt on setRefineTail — the mesh and geometry are kept, only the
+  // material (and with it the uniform set the tail binds) is replaced.
+  const buildRefineMaterial = (tail: RefineTail) => {
+    const refineOpt = opts.refine!;
+    const tailU = refineTailUniforms(u, tail);
+    refineTailSync = tailU.sync;
+    const uu = tailU.uniforms;
+    return createMarchMaterial(
+      dataTex, volumeTex, uu,
       refineBody,
       undefined, undefined, tileNodes, undefined, undefined, opts.levelShadow,
       undefined, undefined, 'lit', undefined,
       opts.probeDyn?.node,
       undefined,
       {
-        marchTex: texture(opts.refine.texture),
+        marchTex: texture(refineOpt.texture),
         // The SAME ray the material integrates — createMarchMaterial's own rayDir is
         // internal, so recompute it identically here rather than approximating.
         cosRay: mul(cameraViewMatrix,
           vec4(normalize(sub(positionWorld, cameraPosition)), 0.0)).z.negate(),
-        nearFar: opts.refine.uniforms.nearFar,
-        refineCfg: opts.refine.uniforms.cfg,
+        nearFar: refineOpt.uniforms.nearFar,
+        refineCfg: refineOpt.uniforms.cfg,
       },
       // ONE level-shadow node across both materials. The per-frame rebind in the game
       // page assigns to the view's published node only; a twin with its own node would
@@ -2033,7 +2079,9 @@ export function createZombieGpuView(
       (material as unknown as MaterialWithSegmentVolume)
         .segVolumeMeta as unknown as ReturnType<typeof texture>,
     );
-    refineMesh = new THREE.Mesh(mesh.geometry, refineMaterial);
+  };
+  if (opts.refine) {
+    refineMesh = new THREE.Mesh(mesh.geometry, buildRefineMaterial(refineTail));
     refineMesh.frustumCulled = false;
     refineMesh.position.copy(mesh.position);
   }
@@ -2115,7 +2163,21 @@ export function createZombieGpuView(
       u.headAxes.value.set(...axes);
     },
     setHeadRotation(q) { u.headQuat.value.set(q[0], q[1], q[2], q[3]); },
-    setTime(seconds) { u.faceCfg3.value.y = seconds; },
+    setTime(seconds) {
+      u.faceCfg3.value.y = seconds;
+      // Run 5b: the slim twin's surfCfg.xyz follow the body's live look knobs.
+      refineTailSync();
+    },
+    get refineTail() { return refineTail; },
+    setRefineTail(tail: RefineTail) {
+      if (tail === refineTail) return;
+      refineTail = tail;
+      if (!refineMesh) return;
+      const old = refineMesh.material as THREE.Material;
+      refineMesh.material = buildRefineMaterial(tail) as unknown as THREE.Material;
+      old.dispose();
+      refineTailSync();
+    },
     setRootShift(x, z, bodyYaw = 0) {
       u.faceCfg3.value.z = x; u.faceCfg3.value.w = z;
       // Free lodCfg channel: the noise frame's yaw (see NOISE_LOCAL).
@@ -2161,6 +2223,7 @@ export function createZombieGpuView(
       material.dispose();
       coneMaterial.dispose();
       if (depthPreMaterial) depthPreMaterial.dispose();
+      if (refineMesh) (refineMesh.material as THREE.Material).dispose();
       dataTex.dispose();
       if (ownsVolume) volumeTex.dispose();
       // viewTiles' underlying binding is owned by its creator, not the view.

@@ -7235,7 +7235,14 @@ function performBenchAction(a: BenchAction): void {
     setRefine: (on: boolean) => { sdfLayer.setRefine(on); return sdfLayer.refine; },
     setRefineView: (on: boolean) => { sdfLayer.setRefineView(on); return sdfLayer.refineView; },
     setRefineCfg: (cfg: { reject?: number; normalEps?: number; steps?: number }) => { sdfLayer.setRefineCfg(cfg); return sdfLayer.refineCfg; },
-    refineInfo: () => ({ allocated: sdfLayer.refineSource !== null, on: sdfLayer.refine, view: sdfLayer.refineView, cfg: sdfLayer.refineCfg }),
+    /** Run 5b: the refine twins' lighting tail — 'slim' (default) drops scatter, the wound
+     *  soft shadow, the ambient bounce and the probe gather from the twin only; 'full' is
+     *  run 5's behaviour. Applies to every live actor view (chunks have no refine twin). */
+    setRefineTail: (tail: 'full' | 'slim') => {
+      for (const a of actors) a.view.setRefineTail(tail);
+      return actors[0]?.view.refineTail ?? tail;
+    },
+    refineInfo: () => ({ allocated: sdfLayer.refineSource !== null, on: sdfLayer.refine, view: sdfLayer.refineView, cfg: sdfLayer.refineCfg, tail: actors[0]?.view.refineTail ?? 'slim' }),
     setTemporalAccum: (on: boolean, alpha?: number) => sdfLayer.setTemporalAccum(on, alpha),
     resetTemporalAccum: () => sdfLayer.resetTemporalAccum(),
     /** NEURAL UPSCALE (spec 2026-09-11). Enabling also sets the march scale to 0.5
