@@ -1043,6 +1043,13 @@ export function createMarchMaterial(
   // (refineBody). Spread LAST into the call object; bound by name like every other
   // input — the positional notes above concern the WGSL parameter list, not this spread.
   extra?: Record<string, unknown>,
+  // Run 5, POSITIONALLY LAST: share an EXISTING level-shadow TextureNode instead of
+  // building a local one. Per-material nodes drift — the game's per-frame rebind
+  // (game-main's `view.levelShadowTex.value = map`) knows only the one node the view
+  // publishes, so a twin with its own node stays on the 1x1 fallback, LEVEL_SHADOW
+  // returns 0 and the key diffuse+spec vanish. Omitted, the local node is built as
+  // before and the main material is unchanged.
+  levelShadowTexNodeIn?: ReturnType<typeof texture>,
 ) {
   const dataNode = dataTex instanceof THREE.Texture
     ? texture(dataTex)
@@ -1065,7 +1072,7 @@ export function createMarchMaterial(
   // first shadow pass) and is rebound to the real depthTexture per frame by
   // the game page — same rebind-without-recompile mechanism as
   // setFaceTexture below.
-  const levelShadowTexNode = texture(
+  const levelShadowTexNode = levelShadowTexNodeIn ?? texture(
     levelShadow
       ? (levelShadow.light.shadow.map?.depthTexture ?? fallbackLevelShadowTexture())
       : fallbackLevelShadowTexture(),
@@ -2006,6 +2013,12 @@ export function createZombieGpuView(
         nearFar: opts.refine.uniforms.nearFar,
         refineCfg: opts.refine.uniforms.cfg,
       },
+      // ONE level-shadow node across both materials. The per-frame rebind in the game
+      // page assigns to the view's published node only; a twin with its own node would
+      // stay on the 1x1 fallback, LEVEL_SHADOW would return 0 for every pixel and the
+      // refine would render ambient-only (Gate-1 colour mismatch, 2026-09-13).
+      (material as unknown as MaterialWithLevelShadowTex)
+        .levelShadowTex as unknown as ReturnType<typeof texture>,
     );
     refineMesh = new THREE.Mesh(mesh.geometry, refineMaterial);
     refineMesh.frustumCulled = false;
