@@ -63,10 +63,18 @@
   the best looking, especially at medium distance" — but frame +23 % (room 1) / +45 % (room 2); `sdf:refine` 6–11 ms.
   Staged `.upscale-models/r5-*` (`?upscale=trained&upscalemodel=r5-s32-rgbn-headr-int2`). Results §14 of the
   next-steps note. Gates: refine-smoke, refine-check, march-hash (fields-off canonical a8ab4efa), G3 9e-7.
-- [ ] **RUN 5b — per-body refine gating (next):** hide a body's refine twin outside a medium distance band /
-  off-screen / occluded (owner: close = most pixels, least gain; medium = where it shows); training augmentation
-  dropping the refine channels for a fraction of crops so the head degrades gracefully; retrain; re-bench. Then,
-  only if needed: slim twin tail (key + level shadow), normal-only ablation.
+- [~] **RUN 5b — refine gating + graceful degradation + slim twin tail, IN FLIGHT 2026-09-13.** Spec
+  `docs/superpowers/specs/2026-09-13-neural-upscale-run5b-refine-gating-design.md`, plan
+  `docs/superpowers/plans/2026-09-13-neural-upscale-run5b-refine-gating.md`. A: `refine_drop` augmentation +
+  `val_norefine`/`val_normal_only` → retrain (after the `t16-rgb` v3.2 run in `.lab-tmp/grid-t16-rgb.log`);
+  B: slim twin tail via uniform overrides (no WGSL); C: per-body gating (standing bodies, medium band 1.5–3.5 m
+  with hysteresis, on screen; corpse bake hides the twin — a run-5 leak); D: bench within ~10 % of the control.
+- [ ] **DEFAULT-MODEL BENCH:** main still ships run-2's `s32-rgbd-best` (v2, no normals, no head). Candidates:
+  `t16-rgb` (training on v3.2 now — cheapest frame: single attachment, half MACs), `t16-rgbn-head`, run-5 control
+  `s32-rgbn-head` (v3.2). Bench frame p50 + quality, pick the new default, then use it as run 5b's baseline.
+- [ ] **CORPSE BAKE FOR EVERY CHARACTER:** `corpseBakeEligible` is soldier-only (`profile.name === 'soldier'` +
+  collapse settled), so dead zombies keep marching at full cost. Extending eligibility to any settled actor is
+  mostly the flag (the bake rejects on overflow and falls back). Independent of the upscaler.
 - [ ] P4 (brainstormed, spec pending) — **read `docs/dev-notes/2026-09-12-visual-direction-handoff.md` first**:
   upscaler as an AESTHETIC tool (90s pre-rendered CG, soft ray-traced, characters only, normals + adversarial loss),
   blood overhaul (conventional rendering FIRST — narrow-range filter, refraction, volume — then learn it cheap),
