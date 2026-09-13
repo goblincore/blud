@@ -4157,7 +4157,10 @@ export const HELPERS = [
  * RUN 5 (spec docs/superpowers/specs/2026-09-13-neural-upscale-run5-sdf-refine-design.md §4).
  * The refine entry shares the march's PARAMS (+4 appended), SETUP, POST, SURFACE_PREP and LIGHT
  * sections verbatim; only the walk is replaced. Per OUTPUT pixel: the hit comes from the four
- * surrounding march texels (hit-gated bilinear of linear view depth, along THIS pixel's ray), the
+ * surrounding march texels (hit-gated bilinear of linear view depth, along THIS pixel's ray) and
+ * only when at least HALF that bilinear weight is over hit texels (a grazing pixel whose
+ * footprint is mostly misses would converge on the silhouette's far side - a halo - so it is
+ * discarded and left to the net), the
  * body's own SDF rejects the pixel if it disagrees by more than refineCfg.y march texels (another
  * body, or an edge — the net keeps owning edges), then refineCfg.w Newton steps land on the true
  * surface and the normal stencil shrinks to refineCfg.z of an OUTPUT pixel's footprint.
@@ -4187,7 +4190,11 @@ export const REFINE_LOOP = /* wgsl */ `  if (refineCfg.x < 0.5) { discard; }
     zsum = zsum + z * wgt;
     wsum = wsum + wgt;
   }
-  if (wsum <= 0.0) { discard; }
+  // wsum is the bilinear weight of the HIT texels only, i.e. the fraction of this output
+  // pixel's footprint that lies over marched flesh. Below one half the pixel CENTRE sits over
+  // misses, and a Newton-converged point there is on the silhouette's far side - a lit halo
+  // outside the body - so the pixel is left to the net, which keeps owning that rim.
+  if (wsum < 0.5) { discard; }
   // View depth to distance along THIS pixel's ray - cosRay is minus the view-space z of rd.
   var t = clamp((zsum / wsum) / max(cosRay, 1e-4), 0.0, tMax);
   var hit = false;
