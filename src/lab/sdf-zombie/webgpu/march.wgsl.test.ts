@@ -2458,4 +2458,11 @@ describe('run 5: MARCH_BODY_TRACE is SETUP + LOOP + POST', () => {
     expect(m.MARCH_TRACE_LOOP).toContain('for (var i = 0; i < 512');
     expect(m.MARCH_TRACE_POST).not.toContain('for (var i = 0; i < 512');
   });
+
+  it('calcNormal takes its stencil size from gNormalEps, default 0.0015', async () => {
+    const m = await import('./march.wgsl');
+    expect(m.CALC_NORMAL).toContain('var<private> gNormalEps: f32 = 0.0015;');
+    expect(m.CALC_NORMAL).toContain('let e = vec2<f32>(1.0, -1.0) * gNormalEps;');
+    expect(m.CALC_NORMAL).not.toContain('* 0.0015;');
+  });
 });

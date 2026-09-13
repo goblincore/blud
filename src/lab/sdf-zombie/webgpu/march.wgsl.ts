@@ -1744,13 +1744,17 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
 // used 0.02 (2 cm on 6 cm limbs) and smeared normals exactly at the
 // high-curvature joints where they matter most.
 export const CALC_NORMAL = /* wgsl */ `fn calcNormal(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, counts2: vec4<f32>, noiseCfg: vec4<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>, volumeTex: texture_3d<f32>, volumePose0: vec4<f32>, volumePose1: vec4<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>, segVolumeAtlas: texture_3d<f32>, segVolumeMeta: texture_2d<f32>, perfCfg: vec4<f32>, woundBound: vec4<f32>) -> vec3<f32> {
-  let e = vec2<f32>(1.0, -1.0) * 0.0015;
+  let e = vec2<f32>(1.0, -1.0) * gNormalEps;
   return normalize(
     e.xyy * mapBody(p + e.xyy, data, counts, counts2, noiseCfg, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound).x +
     e.yyx * mapBody(p + e.yyx, data, counts, counts2, noiseCfg, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound).x +
     e.yxy * mapBody(p + e.yxy, data, counts, counts2, noiseCfg, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound).x +
     e.xxx * mapBody(p + e.xxx, data, counts, counts2, noiseCfg, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound).x);
-}`;
+}
+
+// Run 5: the refine entry (REFINE_LOOP) sets this to its output-pixel footprint; the march never
+// touches it, so x * 0.0015 is the exact pre-run-5 stencil.
+var<private> gNormalEps: f32 = 0.0015;`;
 
 // Nearest-neighbour fetch by uv.
 //
@@ -3578,7 +3582,7 @@ export const MARCH_TRACE_POST = /* wgsl */ `  if (!hit) { discard; }
     }
   }
 `;
-export const MARCH_BODY_TRACE = `${MARCH_TRACE_SETUP}${MARCH_TRACE_LOOP}${MARCH_TRACE_POST}`;
+export const MARCH_BODY_TRACE = /* wgsl */ `${MARCH_TRACE_SETUP}${MARCH_TRACE_LOOP}${MARCH_TRACE_POST}`;
 
 /**
  * SECTION 3 of 4 — SURFACE PREP: the light-independent material terms the
