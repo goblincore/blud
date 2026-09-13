@@ -30,6 +30,12 @@ const QUERIES = [
   'upscale=s8&upscaleinputs=rgbn&upscalehead=1',   // run-4 full-res head (H1/H2 over the detail field)
   'upscale=s8&upscalesharpen=0.5',   // post-sharpen pass (UPSCALE_SHARPEN_WGSL)
   'upscale=s8&upscalesharpen=1.5&upscalesharpenmode=unsharp',
+  // Run-5 refine head (H1 taps refineN/refineC). The game page does not parse `upscaleheadinputs`
+  // or `refine` yet — Task 6 adds both and turns this on by default; until then it is opt-in:
+  //   UPSCALE_SMOKE_REFINE=1 node scripts/upscale-smoke.mjs
+  ...(process.env.UPSCALE_SMOKE_REFINE === '1'
+    ? ['upscale=s8&upscaleinputs=rgbn&upscalehead=1&upscaleheadinputs=detail%2Brefine&refine=1']
+    : []),
 ];
 let bad = false;
 for (const q of QUERIES) {

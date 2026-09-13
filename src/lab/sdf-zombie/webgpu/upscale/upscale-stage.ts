@@ -11,7 +11,7 @@ import { mrt, texture, uniform, uv, vec4, wgslFn } from 'three/tsl';
 import { setPassLabel } from '../gpu-pass-timing';
 import {
   createUpscaleModel, type UpscaleConfig, type UpscaleInputSet, type UpscaleLayout,
-  type UpscaleModel, type UpscaleModelId, type UpscaleModelSource,
+  type UpscaleModel, type UpscaleModelId, type UpscaleModelSource, type HeadInputs,
   inputsUseNormals,
 } from './upscale-model';
 import { planUpscalePasses, UPSCALE_RECONSTRUCT_WGSL, UPSCALE_SHARPEN_WGSL, type PassSpec } from './upscale-wgsl';
@@ -54,6 +54,8 @@ export interface UpscaleInfo {
   passes: string[];
   /** Run-4 full-res head present. */
   head: boolean;
+  /** Which channel set the head's first layer reads; null when there is no stage. */
+  headInputs: HeadInputs | null;
   /** Post-sharpen strength (0 = off). */
   sharpen: number;
   sharpenMode: 'cas' | 'unsharp';
@@ -65,7 +67,7 @@ export function upscaleInfoOf(stage: UpscaleStage | null): UpscaleInfo {
   if (!stage) {
     return {
       on: false, model: null, layout: null, inputs: null, seed: null, weightHash: null,
-      source: null, run: null, step: null, passes: [], head: false, sharpen: 0, sharpenMode: 'cas', inSize: null, outSize: null,
+      source: null, run: null, step: null, passes: [], head: false, headInputs: null, sharpen: 0, sharpenMode: 'cas', inSize: null, outSize: null,
     };
   }
   return {
@@ -80,6 +82,7 @@ export function upscaleInfoOf(stage: UpscaleStage | null): UpscaleInfo {
     step: stage.model.step ?? null,
     passes: stage.passes.map((p) => p.name),
     head: !!stage.model.head,
+    headInputs: stage.model.headInputs ?? null,
     sharpen: stage.sharpen,
     sharpenMode: stage.sharpenMode,
     inSize: { ...stage.inSize },
@@ -89,16 +92,21 @@ export function upscaleInfoOf(stage: UpscaleStage | null): UpscaleInfo {
 
 type Built = { spec: PassSpec; target: THREE.RenderTarget; scene: THREE.Scene; mesh: THREE.Mesh; material: THREE.MeshBasicNodeMaterial };
 
+/** The two output-res refine attachments the 'detail+refine' head reads (sdf-layer `refineTarget`:
+ *  texture 1 = world normal, texture 0 = re-lit rgb with clip depth in w). */
+export type UpscaleRefineTextures = { n: THREE.Texture; c: THREE.Texture };
+
 /**
  * @param marchTexture the march target's texture (a stable object; resizing the
  *   target does not replace it).
  * @param flipY the layer's shared flipY uniform node (sdf-layer.ts `uFlipY`).
  * @param trained weights from parseUpscaleModelJson; absent = seeded random weights from `config`.
  *   Its id and inputs must match `config`.
+ * @param refine the output-res refine attachments, required by a 'detail+refine' head model.
  */
 export function createUpscaleStage(
   config: UpscaleConfig, marchTexture: THREE.Texture, flipY: unknown, trained?: UpscaleModel,
-  normalTexture?: THREE.Texture, detailTexture?: THREE.Texture,
+  normalTexture?: THREE.Texture, detailTexture?: THREE.Texture, refine?: UpscaleRefineTextures,
 ): UpscaleStage {
   if (trained && (trained.id !== config.model || trained.inputs !== config.inputs)) {
     throw new Error(`upscale: model ${trained.id}/${trained.inputs} does not match config ${config.model}/${config.inputs}`);
@@ -106,9 +114,12 @@ export function createUpscaleStage(
   if (inputsUseNormals(config.inputs) && !normalTexture) {
     throw new Error(`upscale: input set ${config.inputs} needs the march normal texture (boot with ?upscale so the layer allocates it)`);
   }
-  const model = trained ?? createUpscaleModel(config.model, config.inputs, config.seed, config.head === true);
+  const model = trained ?? createUpscaleModel(config.model, config.inputs, config.seed, config.head === true, config.headInputs);
   if (model.head && !detailTexture) {
     throw new Error('upscale: this model has a run-4 head and needs the detail field texture (normals boot: ?upscalenormals=1 or an rgbn model)');
+  }
+  if (model.headInputs === 'detail+refine' && !refine) {
+    throw new Error('upscale: this model has a refine head (headInputs detail+refine) and needs the refine textures (boot with ?refine=1)');
   }
   const passes = planUpscalePasses(model, config.layout);
   const uNearFar = uniform(new THREE.Vector2(0.1, 100));
@@ -153,6 +164,8 @@ export function createUpscaleStage(
     if (ref === 'march') return marchTexture;
     if (ref === 'normal') return normalTexture!;
     if (ref === 'detail') return detailTexture!;
+    if (ref === 'refineN') return refine!.n;
+    if (ref === 'refineC') return refine!.c;
     const [name, index] = ref.split(':');
     const t = targets.get(name!);
     if (!t) throw new Error(`upscale: pass input ${ref} is not produced by an earlier pass`);

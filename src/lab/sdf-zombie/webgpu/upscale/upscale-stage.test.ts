@@ -126,4 +126,12 @@ describe('run-4 head in the stage', () => {
     expect(upscaleInfoOf(stage).head).toBe(true);
     stage.dispose();
   });
+
+  it('a detail+refine model needs the refine textures and reports headInputs', () => {
+    const cfg = { model: 's8', layout: 'sp', inputs: 'rgbn', seed: 1, head: true, headInputs: 'detail+refine' } as const;
+    expect(() => createUpscaleStage(cfg, new THREE.Texture(), uniform(1), undefined, new THREE.Texture(), new THREE.Texture())).toThrow(/needs the refine textures/);
+    const stage = createUpscaleStage(cfg, new THREE.Texture(), uniform(1), undefined, new THREE.Texture(), new THREE.Texture(), { n: new THREE.Texture(), c: new THREE.Texture() });
+    expect(upscaleInfoOf(stage).headInputs).toBe('detail+refine');
+    expect(upscaleInfoOf(null).headInputs).toBeNull();
+  });
 });

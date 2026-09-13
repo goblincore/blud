@@ -317,14 +317,20 @@ function deconvPass(model: UpscaleModel, hiddenInputs: string[]): PassSpec {
 
 /**
  * RUN-4 HEAD (plan 2026-09-12-neural-upscale-run4-relief §4), two full-res passes after the placement:
- *   head1: 3x3 conv over the assembled 10-channel head input at every output pixel —
- *          [net.rgb*covered, covered] [detail.xyz*gate, up.r*hit] [up.g*hit, up.b*hit, 0, 0]
+ *   head1: 3x3 conv over the assembled head input at every output pixel —
+ *          headInputs 'detail' (10 channels):
+ *            a0 [net.rgb*covered, covered] a1 [detail.xyz*gate, up.r*hit] a2 [up.g*hit, up.b*hit, 0, 0]
+ *          headInputs 'detail+refine' (17 channels), ga = refineC.w < 1 (accepted):
+ *            a0 [net.rgb*covered, covered]          a1 [detail.xyz*gate, up.r*hit]
+ *            a2 [up.g*hit, up.b*hit, rn.x*ga, rn.y*ga]  a3 [rn.z*ga, rc.r*ga, rc.g*ga, rc.b*ga]
+ *            a4 [ga, 0, 0, 0]
  *          (mirrors upscale-reference.ts assembleHeadInput) -> HEAD_WIDTH channels, relu, 2 RGBA16F targets.
  *   head2: 3x3 conv over those -> rgb residual, added to the net output where covered (depth passes through).
  */
 function head1Pass(model: UpscaleModel, netPassName: string): PassSpec {
   const layer = model.head![0]!;
-  const params = ['net', 'march', 'detail'];
+  const refine = model.headInputs === 'detail+refine';
+  const params = ['net', 'march', 'detail', ...(refine ? ['refineN', 'refineC'] : [])];
   const sig = [...params.map((p) => `${p}: texture_2d<f32>`), 'texCoord: vec2<f32>', 'flipY: f32'];
   const lines: string[] = [];
   lines.push(`  let dims = vec2<i32>(textureDimensions(net, 0));`);
@@ -344,14 +350,23 @@ function head1Pass(model: UpscaleModel, netPassName: string): PassSpec {
     taps.push(`  let h${k} = select(0.0, 1.0, m${k}.w < 1.0);`);
     taps.push(`  let a0_${k} = vec4<f32>(n${k}.xyz * c${k}, c${k});`);
     taps.push(`  let a1_${k} = vec4<f32>(d${k}.xyz * g${k}, m${k}.x * h${k});`);
-    taps.push(`  let a2_${k} = vec4<f32>(m${k}.y * h${k}, m${k}.z * h${k}, 0.0, 0.0);`);
+    if (refine) {
+      taps.push(`  let rn${k} = textureLoad(refineN, q${k}, 0);`);
+      taps.push(`  let rc${k} = textureLoad(refineC, q${k}, 0);`);
+      taps.push(`  let ga${k} = select(0.0, 1.0, rc${k}.w < 1.0);`);
+      taps.push(`  let a2_${k} = vec4<f32>(m${k}.y * h${k}, m${k}.z * h${k}, rn${k}.x * ga${k}, rn${k}.y * ga${k});`);
+      taps.push(`  let a3_${k} = vec4<f32>(rn${k}.z * ga${k}, rc${k}.x * ga${k}, rc${k}.y * ga${k}, rc${k}.z * ga${k});`);
+      taps.push(`  let a4_${k} = vec4<f32>(ga${k}, 0.0, 0.0, 0.0);`);
+    } else {
+      taps.push(`  let a2_${k} = vec4<f32>(m${k}.y * h${k}, m${k}.z * h${k}, 0.0, 0.0);`);
+    }
   }
   body += `${taps.join('\n')}\n`;
   const targets = HEAD_WIDTH / 4;
   const globals: string[] = [];
   for (let t = 0; t < targets; t++) {
     const outCh = [0, 1, 2, 3].map((r) => 4 * t + r);
-    body += accumulate(layer, outCh, 3, `acc${t}`);
+    body += accumulate(layer, outCh, refine ? 5 : 3, `acc${t}`);
     const g = `gUpH1_${t}`;
     globals.push(g);
     body += `  ${g} = max(acc${t}, vec4<f32>(0.0));\n`;
@@ -361,7 +376,7 @@ function head1Pass(model: UpscaleModel, netPassName: string): PassSpec {
   const reads = globals.map((g, t) => `fn upReadH1_${t}(dep: vec4<f32>) -> vec4<f32> {\n  return ${g};\n}`);
   return {
     name: 'H1', kind: 'head1', outputRes: 'full', targets, final: false,
-    inputs: [`${netPassName}:0`, 'march', 'detail'], params, usesNearFar: false, fnName: 'upRunH1', run, state, reads,
+    inputs: [`${netPassName}:0`, 'march', 'detail', ...(refine ? ['refineN', 'refineC'] : [])], params, usesNearFar: false, fnName: 'upRunH1', run, state, reads,
   };
 }
 

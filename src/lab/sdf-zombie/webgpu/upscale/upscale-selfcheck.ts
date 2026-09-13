@@ -15,7 +15,9 @@ import { upscaleReference, type FloatImage } from './upscale-reference';
 
 export interface SelfCheckDeps {
   renderer: THREE.WebGPURenderer;
-  layer: SdfLayer;
+  // Task 5 adds `refineTarget` to SdfLayer itself; until then it is declared here so the
+  // 'detail+refine' head can read the output-res refine attachments.
+  layer: SdfLayer & { refineTarget?: THREE.RenderTarget | null };
   camera: THREE.PerspectiveCamera;
   renderFrames: (n: number) => void;
   resolveGpu: () => Promise<unknown>;
@@ -138,6 +140,10 @@ export async function runUpscaleSelfCheck(deps: SelfCheckDeps, opts: { compareLa
     const normal = inputsUseNormals(stage.model.inputs) ? await readFloatTarget(deps.renderer, deps.layer.marchTarget, 1) : undefined;
     // run-4 head: the layer's output-res detail field.
     const detail = stage.model.head && deps.layer.detailTarget ? await readFloatTarget(deps.renderer, deps.layer.detailTarget) : undefined;
+    // 'detail+refine' head: the layer's output-res refine attachments (1 = world normal, 0 = re-lit rgb).
+    const refine = stage.model.headInputs === 'detail+refine' && deps.layer.refineTarget
+      ? { n: await readFloatTarget(deps.renderer, deps.layer.refineTarget, 1), c: await readFloatTarget(deps.renderer, deps.layer.refineTarget, 0) }
+      : undefined;
     const gpu = await readFloatTarget(deps.renderer, stage.output);
     if (marchRef) marchStable = marchStable && sameImage(marchRef, march);
     else marchRef = march;
@@ -147,6 +153,8 @@ export async function runUpscaleSelfCheck(deps: SelfCheckDeps, opts: { compareLa
       marginOut: margin,
       normal,
       detail,
+      refineN: refine?.n,
+      refineC: refine?.c,
     });
     gpuVsCpu.push(compare(gpu, cpu, margin, layout));
     outputs.set(layout, gpu);

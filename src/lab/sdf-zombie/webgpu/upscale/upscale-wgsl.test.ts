@@ -28,6 +28,18 @@ describe('upscale pass plan', () => {
     expect(planUpscalePasses(createUpscaleModel('s8', 'rgb', 1), 'sp').filter((p) => p.final).map((p) => p.name)).toEqual(['shuffle']);
   });
 
+  it('a detail+refine head binds refineN/refineC on H1 and reads 5 input groups', () => {
+    const passes = planUpscalePasses(createUpscaleModel('s8', 'rgbn', 1, true, 'detail+refine'), 'sp');
+    expect(passes[4]!.inputs).toEqual(['shuffle:0', 'march', 'detail', 'refineN', 'refineC']);
+    expect(passes[4]!.params).toEqual(['net', 'march', 'detail', 'refineN', 'refineC']);
+    expect(passes[4]!.run).toContain('let rn0 = textureLoad(refineN, q0, 0);');
+    expect(passes[4]!.run).toContain('let ga0 = select(0.0, 1.0, rc0.w < 1.0);');
+    expect(passes[4]!.run).toContain('a4_0');
+    for (const p of passes.slice(4)) { expectParses(p.run); for (const r of p.reads) expectParses(r); if (p.state) expectParses(p.state); }
+    // the detail-only head is unchanged
+    expect(planUpscalePasses(createUpscaleModel('s8', 'rgbn', 1, true), 'sp')[4]!.inputs).toEqual(['shuffle:0', 'march', 'detail']);
+  });
+
   it('a dilated hidden layer offsets its taps by the dilation', () => {
     const passes = planUpscalePasses(createUpscaleModel('t16', 'rgb', 1), 'sp');
     expect(passes[1]!.run).toContain('vec2<i32>(-2, -2)');
