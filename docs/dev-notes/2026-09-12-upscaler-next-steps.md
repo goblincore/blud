@@ -277,3 +277,39 @@ r3-t24-rgbn-dw1.0` vs `r3-t24-rgbn`, both staged in the dev store as `r3-*`).
 Built for run 3 and kept: per-layer dilation across ladder/JSON/twin/WGSL, RepConv with exact fuse, grid flags
 (`--detail-weight --reparam --tag=` — note the `=`: a tag starting with '-' is otherwise read as a flag).
 
+
+## 13. Run 4 results (2026-09-13) — the full-res head is a keeper, and a subtle one
+
+Controlled pair on dataset v3.1 (652 / 57 pairs, detail fields): same s32-rgbn net, same interior weight 2, with
+and without the output-res head fed by the `sdf:detail` noise field.
+
+| run | overall | face | wound | edge | interior | best step |
+| --- | --- | --- | --- | --- | --- | --- |
+| s32-rgbn-int2 (control) | 0.01474 | 0.0214 | 0.0111 | 0.0617 | 0.00878 | 11000 |
+| s32-rgbn-head-int2 | **0.01443** | **0.0207** | 0.0112 | 0.0611 | **0.00852** | 11000 |
+| t16-rgbn-head-int2 | 0.01505 | 0.0220 | 0.0114 | 0.0614 | 0.00915 | 6500 |
+| bicubic | 0.01751 | 0.0251 | 0.0141 | 0.0675 | 0.01111 | |
+
+- Head beats control by 2–3 % on every region — inside run noise, so the metric cannot settle it. L1 against a
+  16-sample box-averaged target rewards the mean; a head that adds real relief can score flat and still look better.
+- **Owner look (in-game, U-key A/B, 2026-09-13):** "the heads look good — rather subtle, not a huge difference, but
+  not a regression for sure." Verdict: keep the head. It is not the visual step-change the plan hoped for.
+- Gates: G3 PyTorch-vs-twin PASS 7e-7 on the head export. Trained-smoke GPU-vs-twin: control 1.5e-3, head 3.0e-3
+  vs the 2e-3 bar, coverage/depth exact — the head's extra f16 full-res pass, same class as the s64 finding. Bar
+  unchanged.
+- t16 with the head peaks early (6500) and lands 4 % behind s32: the head does not rescue the half-cost tier.
+- Staged: `.upscale-models/r4-*`; `?upscale=trained&upscalemodel=r4-s32-rgbn-head-int2`.
+
+**Reading.** The head plumbing works and the net uses the channel, but a noise-only detail field carries little
+the target rewards — the skin noise is the *smallest* relief in the image. The channel is the right shape; the
+signal in it is thin. Next inputs on the same plumbing, in order of expected payoff (see the Obsidian note
+`Research/2026-09-13-upscaler-sample-the-surface-not-the-march.md`):
+
+1. **One-step SDF refinement at output res** — interpolate the hit point from the 4 march texels, 1–2 SDF evals to
+   Newton-step onto the surface, 4 more for a true output-res normal. ~10–20 % of march cost, real geometric
+   relief (muscle, knuckles, wound rims) into the same head.
+2. **Wound meat noise + albedo through the same anchor channel** — the rest of the demodulation from §10.
+3. **Temporal** (anchor-derived motion vectors, warped previous output, learned blend) — the Qualcomm design.
+   Shares the MV work with shutter motion blur, which the owner wants built conventionally first.
+
+Not worth doing: higher target resolution or a different scale factor (§ the Obsidian note); more net shape (§12).

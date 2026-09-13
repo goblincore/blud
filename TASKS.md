@@ -49,15 +49,13 @@
 - [x] WOUND MEAT DETAIL (2026-09-12): soldier wound band gets clots / striation / crevice / shattered glints
   (march.wgsl.ts soldierWound block), uniform `meatCfg` + wound-panel MEAT group (4 sliders); march param count
   re-pinned 99 → 100. Owner look pending (Chrome lost WebGPU under the training load — relaunch).
-- [~] **RUN 4 — FULL-RES RELIEF (radiance demodulation), IN FLIGHT 2026-09-13.** Plan
-  `docs/superpowers/plans/2026-09-12-neural-upscale-run4-relief.md` (log at the end). Pieces 1–5 pushed (cf7edee8):
-  marchAnchor attachment, `sdf:detail` output-res noise pass, capture `detail.npy`, the full-res HEAD in PyTorch / TS
-  twin / WGSL (G3 2.4e-7, smoke PASS), `--interior-weight`. UNATTENDED PIPELINE in worktree agitated-jennings-f0650e:
-  v3.1 capture (`~/blud-upscale-data/v3.1-2026-09-13`, ~650 pairs at the 5 GB cap; status
-  `.lab-tmp/capture-v31-status.txt`) → `.lab-tmp/run4-chain.sh` → `.lab-tmp/grid-run4.sh`
-  (`~/blud-upscale-data/runs-local-run4-2026-09-13`: s32-rgbn-int2 control vs s32-rgbn-head-int2, t16-rgbn-head-int2;
-  status `.lab-tmp/grid-run4-status.txt`). NEXT SESSION: read those status files; compare head vs control on
-  interior/face; stage `r4-*` exports (name must contain rgbn) and look; write §13 of the next-steps note.
+- [x] **RUN 4 — FULL-RES RELIEF (radiance demodulation) — DONE 2026-09-13, head KEPT.** Controlled pair on v3.1
+  (652/57 pairs): s32-rgbn-head-int2 **0.01443** vs control 0.01474 (2–3 % on every region, inside noise); t16-head
+  0.01505. Owner look: "subtle, not a regression" → keep. G3 PASS 7e-7; trained-smoke head 3.0e-3 (control 1.5e-3),
+  the head's f16 pass, bar unchanged. Staged `.upscale-models/r4-*` (`?upscale=trained&upscalemodel=r4-s32-rgbn-head-int2`).
+  Results + reading: next-steps note §13. NEXT CANDIDATES (Obsidian `Research/2026-09-13-upscaler-sample-the-surface-
+  not-the-march.md`): one-step SDF refinement at output res → same head; meat/albedo through the anchor channel;
+  temporal via anchor MVs (shared with shutter motion blur — build blur conventionally first).
 - [ ] P4 (brainstormed, spec pending) — **read `docs/dev-notes/2026-09-12-visual-direction-handoff.md` first**:
   upscaler as an AESTHETIC tool (90s pre-rendered CG, soft ray-traced, characters only, normals + adversarial loss),
   blood overhaul (conventional rendering FIRST — narrow-range filter, refraction, volume — then learn it cheap),
