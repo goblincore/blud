@@ -687,3 +687,281 @@ describe('goo perf page seam (source tripwires)', () => {
     expect(block).not.toContain('minTexelRadius');
   });
 });
+
+// -------------------------------------------------------------------------
+// BLOOD-SURFACE COMPARISON (2026-09-13) — the opt-in smooth reconstruction.
+// The interpolation/coverage maths is factored PURE so it can be pinned here;
+// the WGSL that mirrors it cannot compile in CI, so its structure is pinned
+// as text the same way the rest of this file does.
+// -------------------------------------------------------------------------
+
+import {
+  GOO_SURFACE_SMOOTH_WGSL, GOO_COVERAGE_SMOOTH_WGSL,
+  GOO_FIELD_EMPTY_EPS, GOO_NEIGHBOR_MIN_FRACTION,
+  sampleGooField, silhouetteCoverage, gooFieldGradient, neighborDensityUsable,
+  type GooDensityBlob,
+} from './goo-layer';
+
+/** Builds an interleaved RGBA field from per-texel [r,g,b] triples. */
+function makeField(texels: number[][]): Float32Array {
+  const out = new Float32Array(texels.length * 4);
+  texels.forEach((t, i) => {
+    out[i * 4] = t[0] ?? 0;
+    out[i * 4 + 1] = t[1] ?? 0;
+    out[i * 4 + 2] = t[2] ?? 0;
+    out[i * 4 + 3] = 1;
+  });
+  return out;
+}
+
+describe('sampleGooField (smooth reconstruction maths)', () => {
+  it('reads exact texel centres and clamps at the edges', () => {
+    const f = makeField([[1, 2, 0.3], [5, 6, 0.7]]); // 2x1
+    const a = sampleGooField(f, 2, 1, 0.25, 0.5); // centre of texel 0
+    expect(a.density).toBeCloseTo(1, 6);
+    expect(a.viewDepth).toBeCloseTo(2, 6);
+    expect(a.gutFrac).toBeCloseTo(0.3, 6);
+    // u=0 and u=1 clamp to the edge texels, not extrapolate.
+    expect(sampleGooField(f, 2, 1, 0, 0.5).density).toBeCloseTo(1, 6);
+    expect(sampleGooField(f, 2, 1, 1, 0.5).density).toBeCloseTo(5, 6);
+  });
+
+  it('interpolates density-weighted channels as a weighted MEAN, not a mean of ratios', () => {
+    // Texel A: density 1, depth 1 (g=1). Texel B: density 3, depth 3 (g=9).
+    // At the midpoint density is 2 and g is 5, so depth is 2.5 — the
+    // density-weighted mean. Averaging the ratios directly would give 2,
+    // which would let a thin bright stream drag a thick dark one.
+    const f = makeField([[1, 1, 1], [3, 9, 0.9]]);
+    const mid = sampleGooField(f, 2, 1, 0.5, 0.5);
+    expect(mid.density).toBeCloseTo(2, 6);
+    expect(mid.viewDepth).toBeCloseTo(2.5, 6);
+    // gut = (0.5*1 + 0.5*0.9) / (0.5*1 + 0.5*3) = 0.95 / 2 = 0.475
+    expect(mid.gutFrac).toBeCloseTo(0.475, 6);
+  });
+
+  it('reports an empty sample below the sentinel, with zeroed ratios', () => {
+    const empty = sampleGooField(makeField([[0, 0, 0], [0, 0, 0]]), 2, 1, 0.5, 0.5);
+    expect(empty.occupied).toBe(false);
+    expect(empty.density).toBe(0);
+    expect(empty.viewDepth).toBe(0);
+    expect(empty.gutFrac).toBe(0);
+  });
+
+  it('half-empty interpolation keeps a finite, occupancy-gated result', () => {
+    // One live texel beside an empty one: mid density is half, and the
+    // ratio still divides by the interpolated density. The important
+    // property for the surface pass is that the caller discards on density
+    // below threshold, so a noisy ratio near the empty edge is never shaded.
+    const f = makeField([[2, 4, 0], [0, 0, 0]]);
+    const mid = sampleGooField(f, 2, 1, 0.5, 0.5);
+    expect(mid.occupied).toBe(true);
+    expect(mid.density).toBeCloseTo(1, 6);
+    expect(mid.viewDepth).toBeCloseTo(2, 6); // (0.5*4 + 0.5*0) / 1
+    expect(Number.isFinite(mid.viewDepth)).toBe(true);
+  });
+
+  it('returns empty for degenerate dimensions rather than NaN', () => {
+    const s = sampleGooField([], 0, 0, 0.5, 0.5);
+    expect(s.occupied).toBe(false);
+    expect(Number.isFinite(s.density)).toBe(true);
+  });
+});
+
+describe('silhouetteCoverage (antialiased silhouette)', () => {
+  it('is half-covered exactly on the threshold', () => {
+    expect(silhouetteCoverage(0.65, 0.65, 0.1)).toBeCloseTo(0.5, 6);
+  });
+
+  it('ramps over one gradient-texel: +/- half a gradient saturates', () => {
+    expect(silhouetteCoverage(0.65 + 0.05, 0.65, 0.1)).toBeCloseTo(1, 6);
+    expect(silhouetteCoverage(0.65 - 0.05, 0.65, 0.1)).toBeCloseTo(0, 6);
+  });
+
+  it('is a hard 0/1 on a flat field (no phantom coverage)', () => {
+    // A uniform field either wholly clears the threshold or wholly misses;
+    // a fractional alpha there would paint a full-frame translucent sheet.
+    expect(silhouetteCoverage(0.9, 0.65, 0)).toBe(1);
+    expect(silhouetteCoverage(0.1, 0.65, 0)).toBe(0);
+  });
+
+  it('is monotonic in density and clamped to [0,1]', () => {
+    let prev = -1;
+    for (let d = 0; d <= 1.5; d += 0.05) {
+      const a = silhouetteCoverage(d, 0.65, 0.2);
+      expect(a).toBeGreaterThanOrEqual(prev);
+      expect(a).toBeGreaterThanOrEqual(0);
+      expect(a).toBeLessThanOrEqual(1);
+      prev = a;
+    }
+  });
+});
+
+describe('gooFieldGradient', () => {
+  it('recovers the per-texel slope of a linear ramp', () => {
+    // Densities 0, 1, 2, 3 across four texels: the slope is 1 per texel.
+    // The raw central difference spans TWO texels (so dx = 2), which is why
+    // the WGSL's gradMag applies the 0.5 factor to report per-texel slope.
+    const f = makeField([[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0]]);
+    const g = gooFieldGradient(f, 4, 1, 0.5, 0.5);
+    expect(g.dx).toBeCloseTo(2, 5);
+    expect(g.mag).toBeCloseTo(1, 5);
+  });
+
+  it('is zero on a flat field', () => {
+    const f = makeField([[2, 0, 0], [2, 0, 0]]);
+    expect(gooFieldGradient(f, 2, 1, 0.5, 0.5).mag).toBeCloseTo(0, 6);
+  });
+});
+
+describe('neighborDensityUsable (empty/depth-discontinuous rejection)', () => {
+  it('rejects neighbours below a quarter of the threshold', () => {
+    expect(GOO_NEIGHBOR_MIN_FRACTION).toBe(0.25);
+    expect(neighborDensityUsable(0.65 * 0.25, 0.65)).toBe(true);
+    expect(neighborDensityUsable(0.65 * 0.25 - 1e-4, 0.65)).toBe(false);
+  });
+
+  it('keeps a thin strand that is above the threshold', () => {
+    expect(neighborDensityUsable(0.7, 0.65)).toBe(true);
+  });
+
+  it('never accepts a below-empty density', () => {
+    expect(neighborDensityUsable(GOO_FIELD_EMPTY_EPS / 2, 0.65)).toBe(false);
+  });
+});
+
+describe('smooth reconstruction WGSL', () => {
+  it('both entry points start with fn (three anchors its parse to ^)', () => {
+    expect(/^fn\s+gooSurfaceSmooth\s*\(/.test(GOO_SURFACE_SMOOTH_WGSL)).toBe(true);
+    expect(/^fn\s+gooCoverageSmooth\s*\(/.test(GOO_COVERAGE_SMOOTH_WGSL)).toBe(true);
+  });
+
+  it('declares nothing reserved', () => {
+    for (const wgsl of [GOO_SURFACE_SMOOTH_WGSL, GOO_COVERAGE_SMOOTH_WGSL]) {
+      const clashes = declaredNames(wgsl).filter(d => RESERVED_WORDS.includes(d));
+      expect(clashes).toEqual([]);
+    }
+  });
+
+  it('reconstructs the field bilinearly with textureLoad, never textureSample', () => {
+    // The density target is NearestFilter by design; only manual bilinear
+    // fetches keep the file's integer-load discipline (and its behaviour at
+    // the edges). A sampler would silently reintroduce filtering choices.
+    for (const wgsl of [GOO_SURFACE_SMOOTH_WGSL, GOO_COVERAGE_SMOOTH_WGSL]) {
+      expect(wgsl).toContain('textureLoad');
+      expect(wgsl).not.toContain('textureSample');
+      expect(wgsl).not.toContain('textureSampleLevel');
+      // Five fetches per function: centre plus four neighbours.
+      expect((wgsl.match(/textureLoad\(densTex/g) ?? []).length).toBe(20);
+    }
+  });
+
+  it('derives coverage from the field gradient over exactly one texel', () => {
+    const coverage = /cov = clamp\(\(dens - thresh\) \/ gradMag \+ 0\.5, 0\.0, 1\.0\);/;
+    expect(GOO_SURFACE_SMOOTH_WGSL).toMatch(coverage);
+    expect(GOO_COVERAGE_SMOOTH_WGSL).toMatch(coverage);
+    expect(GOO_SURFACE_SMOOTH_WGSL).toMatch(/let gradMag = 0\.5 \* length\(vec2<f32>\(dR, dU\)\);/);
+  });
+
+  it('discards fully uncovered pixels in BOTH passes, so they cannot disagree', () => {
+    expect(GOO_SURFACE_SMOOTH_WGSL).toContain('if (cov <= 0.0) { discard; }');
+    expect(GOO_COVERAGE_SMOOTH_WGSL).toContain('if (cov <= 0.0) { discard; }');
+  });
+
+  it('floors neighbour density before it is used for a reconstructed depth', () => {
+    expect(GOO_SURFACE_SMOOTH_WGSL).toMatch(
+      /let minR = max\(thresh \* 0\.25, 1e-4\);/,
+    );
+    expect(GOO_SURFACE_SMOOTH_WGSL).toMatch(/if \(cR\.r < minR \|\| abs\(ddxB\.z\) < abs\(ddx\.z\)\)/);
+    expect(GOO_SURFACE_SMOOTH_WGSL).toMatch(/if \(cU\.r < minR \|\| abs\(ddyB\.z\) < abs\(ddy\.z\)\)/);
+  });
+
+  it('keeps the baseline shading family (base colour, absorption, glint, rim)', () => {
+    // The candidate must not become a second look: same literals, same
+    // spec/gloss/rim aliases, same half-texel-free soft edge.
+    expect(GOO_SURFACE_SMOOTH_WGSL).toContain('vec3<f32>(0.62, 0.11, 0.10)');
+    expect(GOO_SURFACE_SMOOTH_WGSL).toMatch(/exp\(-thick \* vec3<f32>\(0\.30, 2\.40, 2\.00\)\)/);
+    expect(GOO_SURFACE_SMOOTH_WGSL).toMatch(/let specStr = gooCfg2\.y;/);
+    expect(GOO_SURFACE_SMOOTH_WGSL).toMatch(/let glossPow = gooCfg2\.z;/);
+    expect(GOO_SURFACE_SMOOTH_WGSL).toMatch(/let rimStr = gooCfg2\.w;/);
+    // Normals keep both paths and the NaN fallback.
+    expect(GOO_SURFACE_SMOOTH_WGSL).toContain('let nCam = select(nGrad, nSurf, normalMode > 0.5);');
+    expect(GOO_SURFACE_SMOOTH_WGSL).toMatch(/if \(nSurfLen < 1e-8\) \{/);
+  });
+
+  it('returns coverage in alpha for the composite, depth in w from the surface', () => {
+    expect(GOO_COVERAGE_SMOOTH_WGSL).toMatch(/return vec4<f32>\(0\.0, 0\.0, 0\.0, cov\)/);
+    expect(GOO_SURFACE_SMOOTH_WGSL).toMatch(/return vec4<f32>\(lit, depthBuf\)/);
+  });
+});
+
+describe('smooth reconstruction wiring (source tripwires)', () => {
+  const src = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
+
+  it('defaults to the ORIGINAL path', () => {
+    expect(src).toContain("let reconstruction: GooReconstruction = 'original';");
+    expect(src).toMatch(/setReconstruction\(m: GooReconstruction\) \{ reconstruction = m; \}/);
+  });
+
+  it('keeps the baseline materials and adds a parallel smooth table', () => {
+    // The shipped table must still be built exactly as before; the candidate
+    // is a second table, never a rewrite of the first.
+    expect(src).toMatch(/overlay: \{ raw: makeOverlayMat\(target\.texture\), blur: makeOverlayMat\(blurB\.texture\) \}/);
+    expect(src).toMatch(/depth: \{ raw: makeDepthMat\(target\.texture\), blur: makeDepthMat\(blurB\.texture\) \}/);
+    expect(src).toMatch(/overlay: \{ raw: makeSmoothOverlayMat\(target\.texture\), blur: makeSmoothOverlayMat\(blurB\.texture\) \}/);
+    expect(src).toMatch(/depth: \{ raw: makeSmoothDepthMat\(target\.texture\), blur: makeSmoothDepthMat\(blurB\.texture\) \}/);
+  });
+
+  it('the smooth DEPTH material blends coverage but never writes depth', () => {
+    // The candidate's atomic depth-compositing change: coverage alpha, depth
+    // test on (occlusion respected), depth write off (a fringe must not
+    // occlude the scene behind it). Scoped to the candidate table.
+    const block = src.slice(src.indexOf('function makeSmoothDepthMat'), src.indexOf('const smoothSurfMats'));
+    expect(block).toContain('vec4(shaded.xyz as never, cov.w as never)');
+    expect(block).toContain('m.depthNode = shaded.w as never;');
+    expect(block).toContain('m.depthTest = true;');
+    expect(block).toContain('m.depthWrite = false;');
+    expect(block).toContain('m.transparent = true;');
+  });
+
+  it('the smooth composite returns after the full-res draw (density-res not combined)', () => {
+    expect(src).toContain("if (reconstruction === 'smooth') {");
+    expect(src).toContain("const wantSmooth = smoothSurfMats[mode][blurred ? 'blur' : 'raw'];");
+    // The baseline composite line must still be present below it.
+    expect(src).toContain("const wantMat = surfMats[mode][blurred ? 'blur' : 'raw'];");
+  });
+
+  it('the candidate reports why the density-res seam is bypassed', () => {
+    expect(src).toContain('smoothForcesFullResComposite: reconstruction === ');
+  });
+
+  it('reports density resolution independently of the output size', () => {
+    expect(src).toContain('get densityDiagnostics()');
+    expect(src).toContain('texelsPerOutputPixelX: lastSdfW > 0 ? target.width / lastSdfW : 0,');
+    expect(src).toContain('texelsPerOutputPixelY: lastSdfH > 0 ? target.height / lastSdfH : 0,');
+  });
+
+  it('extra connection blobs ride the SAME density instancer and cap', () => {
+    // Strands and sheets are shaded by the existing wet surface pass because
+    // they are density quads, not a second flat material. They are posed
+    // after droplets/splats and inside the cap.
+    expect(src).toContain('setExtraBlobs(blobs: readonly GooDensityBlob[])');
+    expect(src).toContain('const extraBudget = Math.min(extraCount, Math.max(0, particleCap - n));');
+    expect(src).toContain('extraHalfW[i] = b.halfW; extraHalfH[i] = b.halfH; extraRoll[i] = b.roll;');
+    expect(src).toContain('get extraBlobCount() { return extraCount; }');
+  });
+
+  it('defaults to no extras, so the shipped frame is unchanged', () => {
+    expect(src).toContain('let extraCount = 0;');
+  });
+});
+
+describe('connection blob shape', () => {
+  it('accepts optional weight/gut and requires finite placement fields', () => {
+    const blob: GooDensityBlob = { x: 0, y: 1, z: 2, halfW: 0.1, halfH: 0.1, roll: 0 };
+    expect(blob).toBeDefined();
+    const weighted: GooDensityBlob = { ...blob, weight: 0.5, gut: 1 };
+    expect(weighted.weight).toBe(0.5);
+    expect(weighted.gut).toBe(1);
+  });
+});
+

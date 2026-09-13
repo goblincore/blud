@@ -255,6 +255,328 @@ export function orderIndicesByAreaDesc(
   return out.sort((a, b) => (areas[b]! - areas[a]!) || (a - b));
 }
 
+// -------------------------------------------------------------------------
+// SMOOTH RECONSTRUCTION (blood-surface comparison task, 2026-09-13)
+//
+// The baseline surface pass floors the texture coordinate, reads ONE nearest
+// texel and hard-discards below the threshold. That is exact and cheap, and
+// it is also a block: the density target is half the SDF size (game
+// densityScale 0.5), so one density texel is TWO output pixels and every
+// silhouette lands on a 2-pixel staircase.
+//
+// The candidate reconstructs the field CONTINUOUSLY before it thresholds:
+//
+//   * BILINEAR FETCH at the continuous texel-centre coordinate, with the
+//     density-weighted channels (g = density*viewDepth, b = gut-weighted
+//     density) interpolated by the SAME weights. A linear combination of
+//     density-weighted sums is itself a density-weighted mean, so g/r is a
+//     coherent depth and b/r a coherent gut share. Nothing is mixed across
+//     the empty background: density r rides in the denominator of every
+//     ratio, so an empty neighbour contributes weight*r == 0 to it.
+//   * SILHOUETTE COVERAGE from the FIELD GRADIENT. A bilinear fetch at +/-
+//     one texel gives a smooth gradient, and the signed density distance
+//     (dens - thresh) / |grad| is then measured IN TEXELS; a one-texel ramp
+//     around the isocontour becomes the blend alpha. That is what removes
+//     the staircase without growing the blobs or weakening the highlights.
+//   * NORMALS from the interpolated field, with a density floor on the
+//     neighbours (GOO_NEIGHBOR_MIN_FRACTION). The baseline's 1e-4 empty test
+//     is meaningless once the field is interpolated: near a silhouette the
+//     interpolated neighbour depth is a ratio of two small numbers. A
+//     neighbour below a quarter of the threshold is rejected and the
+//     min-difference fallback takes the other side, exactly as the baseline
+//     does for a truly empty tap.
+//
+// Only the DEPTH composite changes shape: colour alpha = coverage, depth
+// test ON, depthWrite OFF. A partially covered fringe must not stamp a depth
+// that would then reject the opaque scene behind it, so the geometry write
+// is disabled for the candidate; occluding walls and bodies are still
+// respected by the hardware depth TEST against the scene buffer. The
+// baseline depth material (alpha 1, depthWrite on) is untouched and stays the
+// default. Combining this with the density-resolution perf seam is NOT
+// supported: the candidate always composites at full output resolution (the
+// low target's single alpha slot already carries depth in depth mode), and
+// `densityDiagnostics.smoothForcesFullResComposite` reports that.
+// -------------------------------------------------------------------------
+
+/** Empty sentinel for the reconstructed field — the same 1e-4 the baseline
+ *  uses for an unoccupied neighbour. */
+export const GOO_FIELD_EMPTY_EPS = 1e-4;
+
+/** A neighbour below this fraction of the threshold is rejected by the
+ *  normal reconstruction (see the smooth-reconstruction note). */
+export const GOO_NEIGHBOR_MIN_FRACTION = 0.25;
+
+/** One reconstructed field sample: density plus the two ratios the surface
+ *  pass consumes, or an empty sample where density is below the sentinel. */
+export interface GooFieldSample {
+  density: number;
+  /** g / r, 0 when the sample is empty (the ratio is meaningless there). */
+  viewDepth: number;
+  /** b / r clamped to [0,1], 0 when the sample is empty. */
+  gutFrac: number;
+  occupied: boolean;
+}
+
+/**
+ * PURE mirror of the smooth pass's bilinear fetch. `field` is the density
+ * target's CPU image — interleaved RGBA, .r density, .g density*viewDepth,
+ * .b gut-weighted density — of size width*height*4 floats. `u`/`v` are the
+ * flipped texture coordinates the WGSL uses.
+ *
+ * The ratios are computed AFTER interpolation, not before: averaging
+ * per-texel depths and then dividing would weight an empty texel's
+ * meaningless ratio by its interpolation weight. Because g and r are
+ * interpolated with the same kernel, g/r is the density-weighted mean depth
+ * by construction, and an empty neighbour's weight*r contribution to the
+ * denominator is zero.
+ */
+export function sampleGooField(
+  field: ArrayLike<number>, width: number, height: number, u: number, v: number,
+): GooFieldSample {
+  const empty: GooFieldSample = { density: 0, viewDepth: 0, gutFrac: 0, occupied: false };
+  if (width < 1 || height < 1 || field.length < width * height * 4) return empty;
+  const cx = u * width - 0.5;
+  const cy = v * height - 0.5;
+  const bx = Math.floor(cx);
+  const by = Math.floor(cy);
+  const fx = cx - bx;
+  const fy = cy - by;
+  const x0 = Math.min(width - 1, Math.max(0, bx));
+  const y0 = Math.min(height - 1, Math.max(0, by));
+  const x1 = Math.min(width - 1, Math.max(0, bx + 1));
+  const y1 = Math.min(height - 1, Math.max(0, by + 1));
+  const at = (x: number, y: number, c: number): number => field[(y * width + x) * 4 + c] ?? 0;
+  const w00 = (1 - fx) * (1 - fy);
+  const w10 = fx * (1 - fy);
+  const w01 = (1 - fx) * fy;
+  const w11 = fx * fy;
+  const r = at(x0, y0, 0) * w00 + at(x1, y0, 0) * w10 + at(x0, y1, 0) * w01 + at(x1, y1, 0) * w11;
+  if (!(r > GOO_FIELD_EMPTY_EPS)) return empty;
+  const g = at(x0, y0, 1) * w00 + at(x1, y0, 1) * w10 + at(x0, y1, 1) * w01 + at(x1, y1, 1) * w11;
+  const b = at(x0, y0, 2) * w00 + at(x1, y0, 2) * w10 + at(x0, y1, 2) * w01 + at(x1, y1, 2) * w11;
+  const viewDepth = g / Math.max(r, GOO_FIELD_EMPTY_EPS);
+  const gutFrac = Math.min(1, Math.max(0, b / Math.max(r, GOO_FIELD_EMPTY_EPS)));
+  return { density: r, viewDepth, gutFrac, occupied: true };
+}
+
+/**
+ * PURE mirror of the candidate silhouette coverage. `gradMag` is the
+ * per-texel density gradient magnitude (see `gooFieldGradient`); the signed
+ * density distance is converted to texels and a half-texel offset centres the
+ * ramp on the isocontour, so the transition is exactly one texel wide.
+ * A flat field (gradMag 0) is the degenerate case: either wholly inside or
+ * wholly outside, never partially covered.
+ */
+export function silhouetteCoverage(
+  density: number, threshold: number, gradMag: number,
+): number {
+  if (!(gradMag > 1e-6)) return density >= threshold ? 1 : 0;
+  const texels = (density - threshold) / gradMag;
+  return Math.min(1, Math.max(0, texels + 0.5));
+}
+
+/** Density gradient magnitude at the continuous coordinate, in density units
+ *  per texel (central difference over two texels). PURE mirror of the WGSL. */
+export function gooFieldGradient(
+  field: ArrayLike<number>, width: number, height: number, u: number, v: number,
+): { dx: number; dy: number; mag: number } {
+  const du = width > 0 ? 1 / width : 0;
+  const dv = height > 0 ? 1 / height : 0;
+  const l = sampleGooField(field, width, height, u - du, v).density;
+  const r = sampleGooField(field, width, height, u + du, v).density;
+  const d = sampleGooField(field, width, height, u, v - dv).density;
+  const up = sampleGooField(field, width, height, u, v + dv).density;
+  const dx = r - l;
+  const dy = up - d;
+  return { dx, dy, mag: 0.5 * Math.hypot(dx, dy) };
+}
+
+/** Whether an interpolated neighbour may contribute a reconstructed depth.
+ *  PURE mirror of the `minR` guard in the smooth WGSL. */
+export function neighborDensityUsable(density: number, threshold: number): boolean {
+  return density >= Math.max(threshold * GOO_NEIGHBOR_MIN_FRACTION, GOO_FIELD_EMPTY_EPS);
+}
+
+/** One bilinear density-field fetch, as WGSL, declaring the variable `out`.
+ *  Inlined (rather than a WGSL helper fn) because three's wgslFn parses
+ *  exactly one top-level function per source string; templating it into both
+ *  smooth entry points is what keeps their sampling from drifting. */
+function gooBilinearFetchWgsl(out: string, coord: string): string {
+  return `
+  let ${out}Coord = (${coord}) * dims - vec2<f32>(0.5);
+  let ${out}Base = floor(${out}Coord);
+  let ${out}Fr = ${out}Coord - ${out}Base;
+  let ${out}Max = vec2<i32>(dims) - vec2<i32>(1, 1);
+  let ${out}I0 = clamp(vec2<i32>(${out}Base), vec2<i32>(0, 0), ${out}Max);
+  let ${out}I1 = clamp(vec2<i32>(${out}Base) + vec2<i32>(1, 1), vec2<i32>(0, 0), ${out}Max);
+  let ${out}W00 = (1.0 - ${out}Fr.x) * (1.0 - ${out}Fr.y);
+  let ${out}W10 = ${out}Fr.x * (1.0 - ${out}Fr.y);
+  let ${out}W01 = (1.0 - ${out}Fr.x) * ${out}Fr.y;
+  let ${out}W11 = ${out}Fr.x * ${out}Fr.y;
+  let ${out} = textureLoad(densTex, ${out}I0, 0) * ${out}W00
+    + textureLoad(densTex, vec2<i32>(${out}I1.x, ${out}I0.y), 0) * ${out}W10
+    + textureLoad(densTex, vec2<i32>(${out}I0.x, ${out}I1.y), 0) * ${out}W01
+    + textureLoad(densTex, ${out}I1, 0) * ${out}W11;`;
+}
+
+/** Shared prefix of both smooth entry points: dims, flip, threshold, one
+ *  texel, the five bilinear fetches, the gradient and the coverage. The same
+ *  `cov` expression appears in both, so the shading pass and the overlay
+ *  alpha pass cannot disagree about where the silhouette is (the baseline's
+ *  duplicated discard has the same invariant). */
+const GOO_SMOOTH_FIELD_BLOCK = `
+  let thresh = gooCfg.x;
+  let texelUv = vec2<f32>(1.0, 1.0) / dims;${gooBilinearFetchWgsl('c', 'st')}${gooBilinearFetchWgsl('cL', 'st - vec2<f32>(texelUv.x, 0.0)')}${gooBilinearFetchWgsl('cR', 'st + vec2<f32>(texelUv.x, 0.0)')}${gooBilinearFetchWgsl('cD', 'st - vec2<f32>(0.0, texelUv.y)')}${gooBilinearFetchWgsl('cU', 'st + vec2<f32>(0.0, texelUv.y)')}
+  let dens = c.r;
+  // Per-texel central differences. dR/dU stay in density units so the
+  // gradient normal below keeps the baseline's bump strength.
+  let dR = cR.r - cL.r;
+  let dU = cU.r - cD.r;
+  let gradMag = 0.5 * length(vec2<f32>(dR, dU));
+  var cov = 0.0;
+  if (gradMag > 1e-5) {
+    cov = clamp((dens - thresh) / gradMag + 0.5, 0.0, 1.0);
+  } else if (dens >= thresh) {
+    cov = 1.0;
+  }`;
+
+/**
+ * The SMOOTH surface pass: same signature and same shading family as
+ * GOO_SURFACE_WGSL, over the continuously reconstructed field. Returns
+ * vec4(lit colour, depth-buffer value); the coverage alpha the composite
+ * blends with comes from GOO_COVERAGE_SMOOTH_WGSL.
+ *
+ * The shading body below is intentionally a copy of the baseline's, not a
+ * refactor: the candidate must differ ONLY in reconstruction, so both
+ * branches stay separately readable and the baseline stays bit-identical.
+ */
+export const GOO_SURFACE_SMOOTH_WGSL = /* wgsl */ `fn gooSurfaceSmooth(
+  densTex: texture_2d<f32>,
+  texCoord: vec2<f32>,
+  flipY: f32,
+  lightDir: vec3<f32>,
+  keyColor: vec3<f32>,
+  lightCfg: vec2<f32>,
+  camWorld: mat4x4<f32>,
+  camCfg: vec4<f32>,
+  gooCfg: vec3<f32>,
+  gooCfg2: vec4<f32>,
+  organColor: vec3<f32>,
+  shadowRed: f32,
+  normalMode: f32
+) -> vec4<f32> {
+  let dims = vec2<f32>(textureDimensions(densTex, 0));
+  var st = texCoord;
+  if (flipY > 0.5) { st.y = 1.0 - st.y; }
+  let specStr = gooCfg2.y;
+  let glossPow = gooCfg2.z;
+  let rimStr = gooCfg2.w;${GOO_SMOOTH_FIELD_BLOCK}
+  if (cov <= 0.0) { discard; }
+
+  // The scene-camera ray through this pixel, rebuilt from NDC (baseline).
+  let ndc = st * 2.0 - 1.0;
+  let rayCam = normalize(vec3<f32>(ndc.x * camCfg.x * camCfg.y, ndc.y * camCfg.x, -1.0));
+  let ray = normalize((camWorld * vec4<f32>(rayCam, 0.0)).xyz);
+
+  // Gradient normal over the SMOOTH field: the interpolated differences are
+  // continuous, so a texel no longer flips the normal's direction.
+  let grad = vec2<f32>(dR, dU) * ${GOO_TUNING.bump.toFixed(1)};
+  let nGrad = normalize(vec3<f32>(-grad.x, -grad.y, 1.0));
+
+  // Surface normal from the reconstructed view positions. One uv-texel and
+  // one NDC-texel are different units: uv advances 1/dims per texel, NDC 2/dims.
+  let texelNdc = vec2<f32>(2.0, 2.0) / dims;
+  let minR = max(thresh * ${GOO_NEIGHBOR_MIN_FRACTION}, 1e-4);
+  let dC = c.g / max(c.r, 1e-4);
+  let pC = vec3<f32>(ndc.x * camCfg.x * camCfg.y, ndc.y * camCfg.x, -1.0) * dC;
+  let pL = vec3<f32>((ndc.x - texelNdc.x) * camCfg.x * camCfg.y, ndc.y * camCfg.x, -1.0)
+    * (cL.g / max(cL.r, 1e-4));
+  let pR = vec3<f32>((ndc.x + texelNdc.x) * camCfg.x * camCfg.y, ndc.y * camCfg.x, -1.0)
+    * (cR.g / max(cR.r, 1e-4));
+  let pD = vec3<f32>(ndc.x * camCfg.x * camCfg.y, (ndc.y - texelNdc.y) * camCfg.x, -1.0)
+    * (cD.g / max(cD.r, 1e-4));
+  let pU = vec3<f32>(ndc.x * camCfg.x * camCfg.y, (ndc.y + texelNdc.y) * camCfg.x, -1.0)
+    * (cU.g / max(cU.r, 1e-4));
+
+  // Min-difference with a DENSITY floor, not the baseline's 1e-4: an
+  // interpolated neighbour near the silhouette has a tiny r and a meaningless
+  // g/r, and a quarter-threshold floor rejects it while keeping real thin
+  // strands (which sit above the threshold by definition).
+  var ddx = pR - pC;
+  let ddxB = pC - pL;
+  if (cR.r < minR || abs(ddxB.z) < abs(ddx.z)) { ddx = ddxB; }
+  var ddy = pU - pC;
+  let ddyB = pC - pD;
+  if (cU.r < minR || abs(ddyB.z) < abs(ddy.z)) { ddy = ddyB; }
+  var nSurf = cross(ddx, ddy);
+  let nSurfLen = length(nSurf);
+  if (nSurfLen < 1e-8) {
+    nSurf = nGrad;
+  } else {
+    nSurf = nSurf / nSurfLen;
+    if (nSurf.z < 0.0) { nSurf = -nSurf; }
+  }
+
+  let nCam = select(nGrad, nSurf, normalMode > 0.5);
+  let n = normalize((camWorld * vec4<f32>(nCam, 0.0)).xyz);
+
+  let viewDepth = c.g / max(c.r, 1e-4);
+  let near = camCfg.z;
+  let far = camCfg.w;
+  let depthBuf = clamp(far * (viewDepth - near) / (max(viewDepth, 1e-4) * (far - near)), 0.0, 1.0);
+
+  let L = normalize(lightDir);
+  let Vv = -ray;
+  let H = normalize(L + Vv);
+  let diff = max(dot(n, L), 0.0);
+  let softEdge = smoothstep(thresh, thresh * gooCfg.y, dens);
+
+  let thick = max(dens - thresh, 0.0) * gooCfg2.x;
+  let trans = exp(-thick * vec3<f32>(0.30, 2.40, 2.00));
+  let lambert = lightCfg.y + diff * lightCfg.x;
+
+  var gutFrac = c.b / max(c.r, 1e-4);
+  gutFrac = clamp(gutFrac, 0.0, 1.0);
+  let baseCol = mix(vec3<f32>(0.62, 0.11, 0.10), organColor, gutFrac);
+  var lit = baseCol * trans * lambert * keyColor
+    * mix(0.55, 1.0, softEdge);
+
+  lit = lit + vec3<f32>(1.0, 0.055, 0.07) * shadowRed * softEdge;
+
+  let glint = pow(max(dot(n, H), 0.0), glossPow);
+  lit = lit + keyColor * glint * specStr * softEdge;
+  let fres = pow(1.0 - max(dot(n, Vv), 0.0), 3.0);
+  lit = lit + keyColor * vec3<f32>(0.85, 0.14, 0.12) * fres * rimStr * softEdge;
+
+  if (gooCfg.z > 0.5) {
+    let c2 = max(lit, vec3<f32>(0.0));
+    let lo = c2 / 12.92;
+    let hi = pow((c2 + vec3<f32>(0.055)) / 1.055, vec3<f32>(2.4));
+    lit = select(hi, lo, c2 <= vec3<f32>(0.04045));
+  }
+
+  return vec4<f32>(lit, depthBuf);
+}`;
+
+/**
+ * The SMOOTH silhouette coverage, consumed as the composite's alpha in BOTH
+ * modes. Shares GOO_SMOOTH_FIELD_BLOCK with the surface pass, so the two
+ * cannot disagree about where the silhouette is — the same invariant
+ * GOO_ALPHA_WGSL duplicates for the baseline.
+ */
+export const GOO_COVERAGE_SMOOTH_WGSL = /* wgsl */ `fn gooCoverageSmooth(
+  densTex: texture_2d<f32>,
+  texCoord: vec2<f32>,
+  flipY: f32,
+  gooCfg: vec3<f32>
+) -> vec4<f32> {
+  let dims = vec2<f32>(textureDimensions(densTex, 0));
+  var st = texCoord;
+  if (flipY > 0.5) { st.y = 1.0 - st.y; }${GOO_SMOOTH_FIELD_BLOCK}
+  if (cov <= 0.0) { discard; }
+  return vec4<f32>(0.0, 0.0, 0.0, cov);
+}`;
+
 /**
  * The surface pass. Returns vec4(lit colour, depth-buffer value).
  *
@@ -568,6 +890,45 @@ export interface GooLightRig {
 /** three 0.185 types wgslFn's result as a plain Node; this keeps the swizzles honest. */
 type Swizzled = { xyz: unknown; w: unknown };
 
+/** Reconstruction strategy. 'original' is the shipped floored-nearest path and
+ *  MUST stay the default; 'smooth' is the opt-in continuous candidate. */
+export type GooReconstruction = 'original' | 'smooth';
+
+/**
+ * One extra density quad — candidate-only geometry (blood connections) fed
+ * into the SAME density pass as droplets and splats, so it is shaded by the
+ * same wet surface pass rather than a second, flat material.
+ *
+ * `halfW`/`halfH` are world half-extents BEFORE the scene-camera billboard,
+ * matching the droplets' `size * sizeScale * quadScale / 2` convention.
+ * `roll` is the screen-space rotation applied after the billboard.
+ */
+export interface GooDensityBlob {
+  x: number; y: number; z: number;
+  halfW: number; halfH: number;
+  roll: number;
+  /** Density multiplier (splatDensityWeight's slot). Default 1. */
+  weight?: number;
+  /** Gut mask (organs r3). Default 0 (blood). */
+  gut?: number;
+}
+
+/** Density-target resolution, reported independently of the output size so a
+ *  comparison can name the actual reconstruction grid. */
+export interface GooDensityDiagnostics {
+  densityWidth: number;
+  densityHeight: number;
+  sdfWidth: number;
+  sdfHeight: number;
+  densityScale: number;
+  /** densityWidth / sdfWidth, i.e. density texels per output pixel. */
+  texelsPerOutputPixelX: number;
+  texelsPerOutputPixelY: number;
+  /** True while 'smooth' is selected: the density-resolution perf seam is not
+   *  combined with the candidate, so the composite always runs full-res. */
+  smoothForcesFullResComposite: boolean;
+}
+
 export interface GooLayer {
   /**
    * The frame: density pass, then the separable blur (unless blurPx is 0),
@@ -620,6 +981,27 @@ export interface GooLayer {
   /** true = world-oriented surface normals reconstructed from depth;
    *  false = the original screen-space density-gradient normals. */
   setSurfaceNormals(on: boolean): void;
+  /**
+   * CANDIDATE (blood-surface comparison): 'original' is the shipped
+   * floored-nearest surface and is the default; 'smooth' switches the surface
+   * composite (both modes) to the continuous reconstruction with antialiased
+   * silhouette coverage. Only the material the composite draws with changes —
+   * the density and blur passes, every tuning uniform and the whole simulation
+   * are shared. Smooth forces the full-resolution composite (see
+   * GooDensityDiagnostics.smoothForcesFullResComposite).
+   */
+  setReconstruction(m: GooReconstruction): void;
+  readonly reconstruction: GooReconstruction;
+  /**
+   * CANDIDATE (blood connections): extra density quads posed by the next
+   * sync(), sharing the same particle cap as droplets and splats. Empty by
+   * default — the shipped frame is bit-identical with no blobs set.
+   */
+  setExtraBlobs(blobs: readonly GooDensityBlob[]): void;
+  /** How many extra blobs the last setExtraBlobs accepted (capped). */
+  readonly extraBlobCount: number;
+  /** Density-target resolution, independent of the canvas/output size. */
+  readonly densityDiagnostics: GooDensityDiagnostics;
   /**
    * ITEM 1 (close-up task 4): run the surface shading at DENSITY resolution
    * into an intermediate target, then composite it with a cheap upsample.
@@ -913,6 +1295,82 @@ export function createGooLayer(
   let mode: 'overlay' | 'depth' = 'overlay';
 
   // ---------------------------------------------------------------
+  // SMOOTH reconstruction materials (candidate). Same modes, same uniform
+  // NODES, same shading family as surfMats — only the field reconstruction
+  // and the coverage alpha differ. OVERLAY keeps depth test/write off (its
+  // whole contract); DEPTH alpha-blends the coverage and keeps depth TEST on
+  // but turns depth WRITE off, so a partially covered fringe cannot stamp a
+  // depth that rejects the scene behind it. There is deliberately no
+  // density-resolution smooth variant: surfaceLow's single alpha slot already
+  // carries depth in depth mode, and the candidate reports the full-res
+  // composite instead of sharing a channel silently.
+  // ---------------------------------------------------------------
+  const surfaceSmoothFn = wgslFn(GOO_SURFACE_SMOOTH_WGSL);
+  const coverageSmoothFn = wgslFn(GOO_COVERAGE_SMOOTH_WGSL);
+
+  function shadeSmoothOf(densTexture: THREE.Texture): Swizzled {
+    return surfaceSmoothFn({
+      densTex: texture(densTexture),
+      texCoord: uv(),
+      flipY: uFlipY,
+      lightDir: rig.lightDir,
+      keyColor: rig.keyColor,
+      lightCfg: rig.lightCfg,
+      camWorld: uCamWorld,
+      camCfg: uCamCfg,
+      gooCfg: vec3(uThresh, uEdge, uLegacy),
+      gooCfg2: vec4(uAbsorb, uSpec, uGloss, uRim),
+      organColor: uOrganColor,
+      shadowRed: uShadowRed,
+      normalMode: uNormalMode,
+    }) as unknown as Swizzled;
+  }
+
+  function coverageSmoothOf(densTexture: THREE.Texture): Swizzled {
+    return coverageSmoothFn({
+      densTex: texture(densTexture),
+      texCoord: uv(),
+      flipY: uFlipY,
+      gooCfg: vec3(uThresh, uEdge, uLegacy),
+    }) as unknown as Swizzled;
+  }
+
+  function makeSmoothOverlayMat(densTexture: THREE.Texture): MeshBasicNodeMaterial {
+    const shaded = shadeSmoothOf(densTexture);
+    const cov = coverageSmoothOf(densTexture);
+    const m = new MeshBasicNodeMaterial();
+    m.colorNode = vec4(shaded.xyz as never, cov.w as never);
+    m.depthWrite = false;
+    m.depthTest = false;
+    m.transparent = true;
+    m.fog = false;
+    return m;
+  }
+
+  function makeSmoothDepthMat(densTexture: THREE.Texture): MeshBasicNodeMaterial {
+    const shaded = shadeSmoothOf(densTexture);
+    const cov = coverageSmoothOf(densTexture);
+    const m = new MeshBasicNodeMaterial();
+    m.colorNode = vec4(shaded.xyz as never, cov.w as never);
+    m.depthNode = shaded.w as never;
+    // depthWrite OFF on purpose: coverage is partial at the silhouette, and a
+    // fringe depth write would occlude the scene behind it. The depth TEST is
+    // what preserves occlusion against walls and bodies.
+    m.depthWrite = false;
+    m.depthTest = true;
+    m.transparent = true;
+    m.fog = false;
+    return m;
+  }
+
+  const smoothSurfMats = {
+    overlay: { raw: makeSmoothOverlayMat(target.texture), blur: makeSmoothOverlayMat(blurB.texture) },
+    depth: { raw: makeSmoothDepthMat(target.texture), blur: makeSmoothDepthMat(blurB.texture) },
+  };
+  let reconstruction: GooReconstruction = 'original';
+
+
+  // ---------------------------------------------------------------
   // ITEM 1 (close-up task 4): the density-resolution surface path.
   // surfaceLow carries the SHADED result at density resolution; the
   // composite then only upsamples. NO depth attachment: the shading pass
@@ -1013,6 +1471,23 @@ export function createGooLayer(
   const candGut = new Float32Array(candCap);
   const candArea = new Float32Array(candCap);
   const candOrder: number[] = [];
+
+  // CONNECTION BLOBS (candidate). Stored in flat scratch arrays copied on
+  // setExtraBlobs, so sync() never allocates. The capacity is small on
+  // purpose: connections are meant to be sparse additions derived from the
+  // existing stream, not a second particle population. They share the
+  // particle cap with droplets/splats (never exceed it) and are dropped past
+  // it, which the caller's own budget makes rare.
+  const EXTRA_BLOB_CAP = 512;
+  const extraX = new Float32Array(EXTRA_BLOB_CAP);
+  const extraY = new Float32Array(EXTRA_BLOB_CAP);
+  const extraZ = new Float32Array(EXTRA_BLOB_CAP);
+  const extraHalfW = new Float32Array(EXTRA_BLOB_CAP);
+  const extraHalfH = new Float32Array(EXTRA_BLOB_CAP);
+  const extraRoll = new Float32Array(EXTRA_BLOB_CAP);
+  const extraWeight = new Float32Array(EXTRA_BLOB_CAP);
+  const extraGut = new Float32Array(EXTRA_BLOB_CAP);
+  let extraCount = 0;
 
   // DIAGNOSTIC counters — see the note where they are assigned in sync().
   let stretchMax: number = GOO_TUNING.stretchMax;
@@ -1186,6 +1661,22 @@ export function createGooLayer(
       // waiting for a blurPx = 0 crossing.
       if (!passGate.surface) return;
       setPassLabel('goo:surface');
+      if (reconstruction === 'smooth') {
+        // CANDIDATE path: continuous field reconstruction + antialiased
+        // silhouette coverage, always at full output resolution (the
+        // density-resolution perf seam is not combined with the candidate —
+        // see densityDiagnostics.smoothForcesFullResComposite). The material
+        // swap keeps a steady frame from mutating anything while
+        // setReconstruction still takes effect on the very next frame.
+        const wantSmooth = smoothSurfMats[mode][blurred ? 'blur' : 'raw'];
+        if (quad.material !== wantSmooth) quad.material = wantSmooth;
+        renderer.setRenderTarget(outputTarget);
+        const prevAutoClearSmooth = renderer.autoClear;
+        renderer.autoClear = false;
+        void renderer.render(quadScene, quadCam);
+        renderer.autoClear = prevAutoClearSmooth;
+        return;
+      }
       if (surfaceAtDensityRes) {
         // ITEM 1 path. Stage 1: the SAME shading graphs (makeOverlayMat /
         // makeLowDepthMat over the same density texture and uniform nodes)
@@ -1368,6 +1859,23 @@ export function createGooLayer(
           quads.setMatrixAt(n++, m);
         }
       }
+      // CONNECTIONS — extra density quads, posed AFTER the sim's own
+      // droplets/splats and inside the same cap. They are added last on
+      // purpose: the sim's particles are the primary read, and a busy frame
+      // drops connections rather than droplets. Gut mask and density weight
+      // ride the same per-instance attributes, so the same surface pass
+      // shades them (there is no second, flat material for strands).
+      const extraBudget = Math.min(extraCount, Math.max(0, particleCap - n));
+      for (let e = 0; e < extraBudget; e++) {
+        p.set(extraX[e]!, extraY[e]!, extraZ[e]!);
+        roll.setFromAxisAngle(zAxis, extraRoll[e]!);
+        q.copy(perspCam.quaternion).multiply(roll);
+        s.set(extraHalfW[e]! * 2, extraHalfH[e]! * 2, 1);
+        m.compose(p, q, s);
+        gutArr[n] = extraGut[e]!;
+        fallArr[n] = extraWeight[e]!;
+        quads.setMatrixAt(n++, m);
+      }
       for (let i = n; i < GOO_TUNING.maxParticles; i++) {
         m.makeScale(0, 0, 0);
         quads.setMatrixAt(i, m);
@@ -1449,6 +1957,18 @@ export function createGooLayer(
     setShadowRed(v) { uShadowRed.value = Math.max(0, Math.min(0.6, v)); },
     setSurfaceNormals(on) { uNormalMode.value = on ? 1 : 0; },
     setMode(m: 'overlay' | 'depth') { mode = m; },
+    setReconstruction(m: GooReconstruction) { reconstruction = m; },
+    setExtraBlobs(blobs: readonly GooDensityBlob[]) {
+      const count = Math.min(blobs.length, EXTRA_BLOB_CAP);
+      for (let i = 0; i < count; i++) {
+        const b = blobs[i]!;
+        extraX[i] = b.x; extraY[i] = b.y; extraZ[i] = b.z;
+        extraHalfW[i] = b.halfW; extraHalfH[i] = b.halfH; extraRoll[i] = b.roll;
+        extraWeight[i] = b.weight ?? 1;
+        extraGut[i] = b.gut ?? 0;
+      }
+      extraCount = count;
+    },
     // PERF SEAMS (close-up task 4) — every default is the shipped state.
     setSurfaceAtDensityRes(on) { surfaceAtDensityRes = on; },
     setMinTexelRadius(v) { minTexelRadius = Math.max(0, Math.min(16, v)); },
@@ -1490,6 +2010,20 @@ export function createGooLayer(
     get splatFadeTail() { return splatFadeTail; },
     get passGate() { return { ...passGate }; },
     get targetSize() { return { width: target.width, height: target.height }; },
+    get reconstruction() { return reconstruction; },
+    get extraBlobCount() { return extraCount; },
+    get densityDiagnostics(): GooDensityDiagnostics {
+      return {
+        densityWidth: target.width,
+        densityHeight: target.height,
+        sdfWidth: lastSdfW,
+        sdfHeight: lastSdfH,
+        densityScale,
+        texelsPerOutputPixelX: lastSdfW > 0 ? target.width / lastSdfW : 0,
+        texelsPerOutputPixelY: lastSdfH > 0 ? target.height / lastSdfH : 0,
+        smoothForcesFullResComposite: reconstruction === 'smooth',
+      };
+    },
     dispose() {
       target.dispose();
       blurA.dispose();
@@ -1500,6 +2034,9 @@ export function createGooLayer(
       quad.geometry.dispose();
       lowQuad.geometry.dispose();
       for (const byMode of Object.values(surfMats)) {
+        for (const m of Object.values(byMode)) m.dispose();
+      }
+      for (const byMode of Object.values(smoothSurfMats)) {
         for (const m of Object.values(byMode)) m.dispose();
       }
       for (const byMode of Object.values(lowMats)) {

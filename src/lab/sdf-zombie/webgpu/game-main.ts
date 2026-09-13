@@ -137,7 +137,8 @@ import {
 } from '../entrails';
 import { shouldSpill, GUT_DROPLET_SIZE, SPILL_CHANCE } from '../entrails-spawn';
 import { createBloodView } from './blood-view-gpu';
-import { createGooLayer, type GooLayer } from './goo-layer';
+import { createGooLayer, type GooLayer, type GooReconstruction } from './goo-layer';
+import { connectionBlobsForSim } from './blood-connections';
 import { createGooPanel, type GooPanel } from './goo-panel';
 import { createVhsPanel, type VhsPanel } from './vhs-panel';
 import {
@@ -975,6 +976,16 @@ async function main() {
   // so i dont have to toggle it on each time"). setGoo(false) stays the kill
   // switch; mode 'depth' vs 'overlay' stays a separate toggle.
   let gooEnabled = true;
+  // OPT-IN BLOOD-SURFACE CANDIDATES (2026-09-13). Both default to the
+  // shipped state, so an unparameterised URL renders the exact pre-candidate
+  // frame. Boot flags are read where the goo defaults are applied:
+  //   ?goorecon=smooth    continuous reconstruction + AA silhouette composite
+  //   ?gooconnections=1   tapered strands + sparse sheets from the same sim
+  // Live equivalents: __sdfGame.setGooCandidate.
+  let gooReconstruction: GooReconstruction = 'original';
+  let gooConnectionsEnabled = false;
+  let gooStrandsEnabled = true;
+  let gooSheetsEnabled = true;
 
   function sizeSdfLayer() {
     const s = postAa.contentSize;
@@ -4082,6 +4093,14 @@ async function main() {
     // wet stone the old floor was not enough to keep shadowed blood red.
     gooLayer.setShadowRed(0.19);
 
+    // CANDIDATE BOOT FLAGS (blood-surface comparison, 2026-09-13). Applied
+    // AFTER the shipping defaults, so a parameter only ever opts IN — it can
+    // never move a shipped value. Both default OFF; see the state note beside
+    // gooEnabled.
+    const gooCandidateBoot = new URLSearchParams(location.search);
+    gooReconstruction = gooCandidateBoot.get('goorecon') === 'smooth' ? 'smooth' : 'original';
+    gooConnectionsEnabled = gooCandidateBoot.get('gooconnections') === '1';
+    gooLayer.setReconstruction(gooReconstruction);
 
     // Live tuning panel (owner ask, 2026-08-31: "add a ui i can tune the goo
     // manually"). The look is a five-knob family found by sweeping two at a
@@ -5389,6 +5408,16 @@ async function main() {
     // splats persist in the sim after bleed is switched off, and the goo
     // draws them. Gating this would freeze the pools mid-frame instead.
     const gooTiming = telemetry.begin();
+    // CANDIDATE connections: derived deterministically from the SAME droplet
+    // array the sim already owns (no new particles, no new RNG). Set BEFORE
+    // sync so the density instancer poses them in the same pass. When the
+    // feature is off this clears any stale extras, so the shipped frame is
+    // bit-identical again on the very next frame after disabling it.
+    gooLayer?.setExtraBlobs(gooConnectionsEnabled
+      ? connectionBlobsForSim(bloodSim.droplets, {
+        enableStrands: gooStrandsEnabled, enableSheets: gooSheetsEnabled,
+      })
+      : []);
     gooLayer?.sync(bloodSim, camera);
     telemetry.end('goo-sync', gooTiming);
   }
@@ -6936,6 +6965,14 @@ function performBenchAction(a: BenchAction): void {
           rim: gooLayer.rim,
           stretch: gooLayer.stretch,
           shadowRed: gooLayer.shadowRed,
+          candidate: {
+            reconstruction: gooLayer.reconstruction,
+            connections: gooConnectionsEnabled,
+            strands: gooStrandsEnabled,
+            sheets: gooSheetsEnabled,
+            extraBlobs: gooLayer.extraBlobCount,
+            density: gooLayer.densityDiagnostics,
+          },
           perf: {
             surfaceAtDensityRes: gooLayer.surfaceAtDensityRes,
             minTexelRadius: gooLayer.minTexelRadius,
@@ -7195,6 +7232,39 @@ function performBenchAction(a: BenchAction): void {
         areaPriority: gooLayer.areaPriority,
         splatFadeTail: gooLayer.splatFadeTail,
         passGate: gooLayer.passGate,
+      };
+    },
+
+    /**
+     * BLOOD-SURFACE CANDIDATES (2026-09-13). Deliberately NOT part of
+     * setGooTuning: those are look knobs the panel copies, while reconstruction
+     * and connections are architectural candidates that must be opted into by
+     * flag or explicitly here. The baseline is 'original' + connections off.
+     *
+     * `connections` derives extra density quads from the SAME droplet array —
+     * no new particles, no new RNG. `strands`/`sheets` switch each family
+     * independently for attribution; both default on while connections are on.
+     */
+    setGooCandidate(o: {
+      reconstruction?: GooReconstruction;
+      connections?: boolean;
+      strands?: boolean;
+      sheets?: boolean;
+    }) {
+      if (!gooLayer) return { unavailable: true };
+      if (o.reconstruction !== undefined) {
+        gooReconstruction = o.reconstruction;
+        gooLayer.setReconstruction(o.reconstruction);
+      }
+      if (o.connections !== undefined) gooConnectionsEnabled = o.connections;
+      if (o.strands !== undefined) gooStrandsEnabled = o.strands;
+      if (o.sheets !== undefined) gooSheetsEnabled = o.sheets;
+      return {
+        reconstruction: gooLayer.reconstruction,
+        connections: gooConnectionsEnabled,
+        strands: gooStrandsEnabled,
+        sheets: gooSheetsEnabled,
+        extraBlobs: gooLayer.extraBlobCount,
       };
     },
 
