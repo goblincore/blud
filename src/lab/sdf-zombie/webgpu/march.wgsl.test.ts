@@ -2469,7 +2469,7 @@ describe('run 5: MARCH_BODY_TRACE is SETUP + LOOP + POST', () => {
   it('REFINE_BODY is params + setup + REFINE_LOOP + post + prep + light, with four refine params appended', async () => {
     const m = await import('./march.wgsl');
     expect(m.REFINE_BODY).toBe(`fn refineBody${m.REFINE_PARAMS}${m.MARCH_TRACE_SETUP}${m.REFINE_LOOP}${m.MARCH_TRACE_POST}${m.MARCH_BODY_SURFACE_PREP}${m.MARCH_BODY_LIGHT}`);
-    expect(m.REFINE_PARAMS.endsWith('  marchTex: texture_2d<f32>,\n  cosRay: f32,\n  nearFar: vec2<f32>,\n  refineCfg: vec4<f32>\n) -> vec4<f32> {\n')).toBe(true);
+    expect(m.REFINE_PARAMS.endsWith('  marchTex: texture_2d<f32>,\n  cosRay: f32,\n  nearFar: vec2<f32>,\n  refineCfg: vec4<f32>,\n  normalTex: texture_2d<f32>\n) -> vec4<f32> {\n')).toBe(true);
     expect(m.REFINE_PARAMS.startsWith(m.MARCH_BODY_PARAMS.slice(0, m.MARCH_BODY_PARAMS.lastIndexOf(')')).replace(/\s*$/, ''))).toBe(true);
   });
   it('REFINE_LOOP declares every name the walk declares that the later sections read', async () => {
@@ -2490,5 +2490,19 @@ describe('run 5: MARCH_BODY_TRACE is SETUP + LOOP + POST', () => {
     expect(reject).toBeGreaterThan(-1); expect(newton).toBeGreaterThan(reject);
     expect(m.REFINE_LOOP).toContain('gNormalEps = ');
     expect(m.REFINE_LOOP).toContain('if (wsum < 0.5) { discard; }');
+  });
+  it('run 5b: the march writes the per-body key into the normal attachment alpha', async () => {
+    const m = await import('./march.wgsl');
+    expect(m.MARCH_BODY_LIGHT).toContain('let bodyKey = dot(bodyCentre, vec3<f32>(1.0, 7.31, 13.7)) + 1.0;');
+    expect(m.MARCH_BODY_LIGHT).toContain('gMarchNormal = vec4<f32>(normalize(n), bodyKey);');
+    expect(m.MARCH_BODY_LIGHT).not.toContain('gMarchNormal = vec4<f32>(normalize(n), 1.0);');
+  });
+  it('run 5b: the ownership early-out precedes the first mapBody in REFINE_LOOP', async () => {
+    const m = await import('./march.wgsl');
+    expect(m.REFINE_LOOP).toContain('let myKey = dot(bodyCentre, vec3<f32>(1.0, 7.31, 13.7)) + 1.0;');
+    const gate = m.REFINE_LOOP.indexOf('nk != myKey');
+    const map = m.REFINE_LOOP.indexOf('mapBody(');
+    expect(gate).toBeGreaterThan(-1);
+    expect(map).toBeGreaterThan(gate);
   });
 });

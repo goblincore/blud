@@ -2324,7 +2324,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     get upscaleInfo() { return upscaleInfoOf(upscale); },
     get upscaleStage() { return upscale; },
     get compositeSource() { return refineView ? 'refine-view' : upscale ? 'upscale' : accumOn ? 'accum' : 'march'; },
-    get refineSource() { return refineUniforms ? { texture: target.texture, uniforms: refineUniforms } : null; },
+    get refineSource() { return refineUniforms ? { texture: target.texture, normalTexture: target.textures[1]!, uniforms: refineUniforms } : null; },
     get refineTarget() { return refineTarget; },
     setRefine(on) {
       if (on && !refineUniforms) throw new Error('refine: boot with ?refine=1 so the layer allocates the refine targets');

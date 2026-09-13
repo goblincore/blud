@@ -8311,6 +8311,17 @@ function performBenchAction(a: BenchAction): void {
           await handle.resolveGpu();
           return packFloatTarget(sdfLayer.marchTarget);
         },
+        /** Run 5b: the march MRT's NORMAL attachment as { w, h, rgba32f } — same frozen frame and
+         *  de-pad as readMarchTarget. rgb = view-space normal, alpha = the per-body key the refine
+         *  twins compare against (march.wgsl.ts MARCH_BODY_LIGHT `bodyKey`). Null when the layer
+         *  allocated no normal attachment. */
+        async readMarchNormalTarget() {
+          if (!sdfLayer.marchNormalTexture) return null;
+          handle.setLoopRunning(false);
+          handle.step(0);
+          await handle.resolveGpu();
+          return packFloatTarget(sdfLayer.marchTarget, 1);
+        },
         /** Run 4: the output-res detail field (sdf-layer detailTarget) as { w, h, rgba32f } — same
          *  de-pad as readMarchTarget. Null when the layer has no normal attachment. */
         async readDetailTarget() {

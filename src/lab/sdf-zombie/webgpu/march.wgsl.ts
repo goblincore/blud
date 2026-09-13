@@ -3682,7 +3682,11 @@ export const MARCH_ANCHOR_READ = /* wgsl */ `fn readMarchAnchor(dep: vec4<f32>) 
 }`;
 
 export const MARCH_BODY_LIGHT = /* wgsl */ `  // Runtime normal out (MARCH_NORMAL_OUT): world-space unit n, before any early return below.
-  gMarchNormal = vec4<f32>(normalize(n), 1.0);
+  // Run 5b: the normal attachment's alpha carries a per-body KEY (bodyCentre is per body and read from the
+  // same uniform by the march and by the refine twin, so it compares exactly). +1 keeps it off the cleared 0.
+  // No reader of the attachment consumes .w except the refine twin (pinned).
+  let bodyKey = dot(bodyCentre, vec3<f32>(1.0, 7.31, 13.7)) + 1.0;
+  gMarchNormal = vec4<f32>(normalize(n), bodyKey);
   // NORMAL-OUTPUT MODE (debugCfg.x == 9, neural upscale normals capture,
   // 2026-09-12). The final shading normal (after the face bump) in WORLD space,
   // depth in alpha exactly as the lit output, so the same readback and crop
@@ -4161,6 +4165,9 @@ export const HELPERS = [
  * only when at least HALF that bilinear weight is over hit texels (a grazing pixel whose
  * footprint is mostly misses would converge on the silhouette's far side - a halo - so it is
  * discarded and left to the net), the
+ * OWNERSHIP early-out (run 5b) drops a tap whose march texel belongs to another body - the key in
+ * the normal attachment's alpha - so a twin's proxy box costs nothing over pixels another body owns
+ * and the pass becomes screen- rather than body-bound, the
  * body's own SDF rejects the pixel if it disagrees by more than refineCfg.y march texels (another
  * body, or an edge — the net keeps owning edges), then refineCfg.w Newton steps land on the true
  * surface and the normal stencil shrinks to refineCfg.z of an OUTPUT pixel's footprint.
@@ -4180,18 +4187,24 @@ export const REFINE_LOOP = /* wgsl */ `  if (refineCfg.x < 0.5) { discard; }
   let fr = clamp(q - vec2<f32>(c0), vec2<f32>(0.0), vec2<f32>(1.0));
   var zsum = 0.0;
   var wsum = 0.0;
+  // Run 5b: this body's key, the same expression MARCH_BODY_LIGHT wrote into the normal
+  // attachment's alpha, from the SAME per-body uniform - so it compares exactly.
+  let myKey = dot(bodyCentre, vec3<f32>(1.0, 7.31, 13.7)) + 1.0;
   for (var k = 0; k < 4; k = k + 1) {
     let dx = k & 1;
     let dy = k >> 1;
-    let mc = textureLoad(marchTex, clamp(c0 + vec2<i32>(dx, dy), vec2<i32>(0, 0), mMax), 0);
-    if (mc.w >= 1.0) { continue; }
+    let mcc = clamp(c0 + vec2<i32>(dx, dy), vec2<i32>(0, 0), mMax);
+    let mc = textureLoad(marchTex, mcc, 0);
+    let nk = textureLoad(normalTex, mcc, 0).w;
+    if (mc.w >= 1.0 || nk != myKey) { continue; }
     let z = nearFar.x * nearFar.y / (nearFar.y - mc.w * (nearFar.y - nearFar.x));
     let wgt = (1.0 - abs(fr.x - f32(dx))) * (1.0 - abs(fr.y - f32(dy)));
     zsum = zsum + z * wgt;
     wsum = wsum + wgt;
   }
-  // wsum is the bilinear weight of the HIT texels only, i.e. the fraction of this output
-  // pixel's footprint that lies over marched flesh. Below one half the pixel CENTRE sits over
+  // wsum is the bilinear weight of the HIT texels THIS BODY OWNS only (run 5b: a texel whose
+  // normal-attachment alpha carries another body's key contributes nothing), i.e. the fraction of
+  // this output pixel's footprint that lies over THIS body's marched flesh. Below one half the pixel CENTRE sits over
   // misses, and a Newton-converged point there is on the silhouette's far side - a lit halo
   // outside the body - so the pixel is left to the net, which keeps owning that rim.
   if (wsum < 0.5) { discard; }
@@ -4228,5 +4241,5 @@ export const REFINE_LOOP = /* wgsl */ `  if (refineCfg.x < 0.5) { discard; }
   gNormalEps = max(refineCfg.z * t * aaCfg.x, 2e-4);
 `;
 export const REFINE_PARAMS = MARCH_BODY_PARAMS.slice(0, MARCH_BODY_PARAMS.lastIndexOf(')')).replace(/\s*$/, '') +
-  `,\n  marchTex: texture_2d<f32>,\n  cosRay: f32,\n  nearFar: vec2<f32>,\n  refineCfg: vec4<f32>\n) -> vec4<f32> {\n`;
+  `,\n  marchTex: texture_2d<f32>,\n  cosRay: f32,\n  nearFar: vec2<f32>,\n  refineCfg: vec4<f32>,\n  normalTex: texture_2d<f32>\n) -> vec4<f32> {\n`;
 export const REFINE_BODY = `fn refineBody${REFINE_PARAMS}${MARCH_TRACE_SETUP}${REFINE_LOOP}${MARCH_TRACE_POST}${MARCH_BODY_SURFACE_PREP}${MARCH_BODY_LIGHT}`;
