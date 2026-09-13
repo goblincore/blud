@@ -418,6 +418,13 @@ const ALL_LEGS = {
   // Needs the normal attachment: BENCH_QUERY=upscale=0&upscalenormals=1 (which also puts the MRT on
   // every other leg in that run — compare against THAT run's baseline, not another run's).
   'upscale-s64d-rgbn': { setUpscale: { trained: 'v3-s64d-rgbn-best' } },
+  // RUN 5 (2026-09-13). Boot with BENCH_QUERY='upscale=0&upscalenormals=1&refine=1' so the normal
+  // attachments AND the refine twins/targets exist; the ship-defaults block turns the refine pass OFF
+  // (setRefine(false)) so 'upscale-r5-head' measures the run-4-style head alone and 'refine-on' /
+  // 'upscale-r5-headr' add the pass. The headr model REQUIRES the pass on (its H1 binds refineN/refineC).
+  'refine-on': { setRefine: true },
+  'upscale-r5-head': { setUpscale: { trained: 'r5-s32-rgbn-head-int2' } },
+  'upscale-r5-headr': { setRefine: true, setUpscale: { trained: 'r5-s32-rgbn-headr-int2' } },
 };
 // BENCH_LEGS lets a validation pass run one leg without the whole matrix.
 const LEGS = process.env.BENCH_LEGS
@@ -470,6 +477,10 @@ async function applyLeg(name) {
     __sdfGame.setOccluder(false);   // ship truth (game-main.ts: setOccluderEnabled(false))
     __sdfGame.setCone(false);
     __sdfGame.setFxaa(true);
+    // Run 5 refine pass: pin OFF like every other seam a leg can set — but only
+    // when the boot actually allocated the refine twins/targets (?refine=1), since
+    // setRefine throws on an unallocated page and most runs never pass that flag.
+    if (__sdfGame.refineInfo && __sdfGame.refineInfo().allocated) __sdfGame.setRefine(false);
     __sdfGame.setUpscale(null);   // upscale legs set it; pin. NOTE (2026-09-12): the GAME now boots
     // WITH the s32-rgbd stage + sharpen by default, so 'baseline' here is the pre-stage native march, NOT
     // ship truth. A ship leg loading public/assets/lab/upscale/s32-rgbd-best.json is the follow-up (TASKS.md).
@@ -528,6 +539,14 @@ async function runLeg(name, room, mode) {
   // which is the entire point.
   await bootPage(2500);
   await applyLeg(name);
+  // Verification note: what the page actually loaded, not what the leg asked for
+  // (a missing/failed model load leaves the stage OFF and silently measures the
+  // wrong thing — see the upscale-legs comment above ALL_LEGS).
+  const infoNote = await evaluate(
+    `JSON.stringify({ up: __sdfGame.upscaleInfo ? __sdfGame.upscaleInfo().on : null, ` +
+    `refine: __sdfGame.refineInfo ? __sdfGame.refineInfo().on : null })`,
+  );
+  console.log(`  [${name}] upscaleInfo().on=${JSON.parse(infoNote).up} refineInfo().on=${JSON.parse(infoNote).refine}`);
   if (PRELUDE) { progress.phase = 'prelude'; await evaluate(PRELUDE); }
   const label = `${name}/room${room}/${mode}`;
   const opts = mode === 'spike'
