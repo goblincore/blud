@@ -235,3 +235,28 @@ describe('dilated conv', () => {
     expect(convAt(img, l2, 0, 1, 0)).toBe(0); // x - 2 clamps to 0
   });
 });
+
+describe('run-4 head in the twin', () => {
+  it('a zero head is a no-op; a nonzero head adds rgb only where covered and never below zero', () => {
+    const march = randomMarch(6, 5, 21);
+    const detail = { w: 12, h: 10, c: 4, data: new Float32Array(12 * 10 * 4).map((_, k) => (k % 4 === 3 ? 1 : Math.sin(k * 0.7))) };
+    const m = createUpscaleModel('s8', 'rgb', 4, true);
+    const base = upscaleReference(march, createUpscaleModel('s8', 'rgb', 4, false), 'sp', 0.1, 100, 12, 10);
+    const same = upscaleReference(march, m, 'sp', 0.1, 100, 12, 10, { detail });
+    expect(Array.from(same.data)).toEqual(Array.from(base.data));
+    expect(() => upscaleReference(march, m, 'sp', 0.1, 100, 12, 10)).toThrow(/needs opts.detail/);
+    m.head![1]!.bias.set([0.3, -5, 0.1]);
+    const out = upscaleReference(march, m, 'sp', 0.1, 100, 12, 10, { detail });
+    let changed = 0;
+    for (let p = 0; p < 120; p++) {
+      const covered = base.data[p * 4 + 3]! < 1;
+      for (let c = 0; c < 3; c++) {
+        const a = base.data[p * 4 + c]!, b = out.data[p * 4 + c]!;
+        if (!covered) expect(b).toBe(a);
+        else { expect(b).toBeGreaterThanOrEqual(0); if (a !== b) changed++; }
+      }
+      expect(out.data[p * 4 + 3]).toBe(base.data[p * 4 + 3]);
+    }
+    expect(changed).toBeGreaterThan(0);
+  });
+});

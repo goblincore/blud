@@ -10,7 +10,7 @@ import torch
 
 from .constants import BICUBIC_A, BICUBIC_MIN_WEIGHT, CLASSES, G4_KEYS
 from .data import Pair
-from .reconstruct import neighbours, reconstruct
+from .reconstruct import neighbours, predict, reconstruct
 from .regions import REGIONS
 
 METRIC_KEYS = ("overall", *REGIONS, *(f"class:{c}" for c in CLASSES), "coverage_error_rate")
@@ -21,7 +21,8 @@ def predict_model(model, pair: Pair, near: float, far: float, device: torch.devi
     """(4, 2h, 2w) in the march convention, on the CPU."""
     device = device or next(model.parameters()).device
     march = pair.inp.unsqueeze(0).to(device)
-    return reconstruct(march, model(march, near, far)).march()[0].cpu()
+    detail = pair.detail.unsqueeze(0).to(device) if pair.detail is not None else None
+    return predict(model, march, near, far, detail).march()[0].cpu()
 
 
 @torch.no_grad()

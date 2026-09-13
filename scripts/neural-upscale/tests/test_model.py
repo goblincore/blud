@@ -109,3 +109,26 @@ def test_dilated_ladder_matches_the_scalar_twin_and_reparam_fuses_exactly():
     assert not fused.reparam and all(type(c).__name__ == "Conv2d" for c in fused.convs)
     assert torch.allclose(rep(x, 0.1, 200.0), fused(x, 0.1, 200.0), atol=1e-4)
     assert [int(c.dilation[0]) for c in fused.convs] == [1, 2, 1, 1]
+
+
+def test_head_starts_as_a_no_op_then_adds_a_covered_only_residual(tmp_path):
+    from nupscale.data import load_dataset, CropSampler
+    from nupscale.reconstruct import predict, reconstruct
+    from tests.helpers import write_v2_dataset
+    ds = load_dataset(write_v2_dataset(tmp_path / "ds", pairs=2, size=(12, 16), normals=True, detail=True))
+    march, target, weight, detail = CropSampler(ds.split("train"), crop=8, seed=1, flip_x=0.0, flip_y=0.0).sample_with_detail(3)
+    assert detail is not None and detail.shape == (3, 4, 16, 16)
+    m = Upscaler("s8", "rgbn", seed=2, head=True)
+    plain = reconstruct(march, m(march, 0.1, 200.0)).march()
+    assert torch.allclose(predict(m, march, 0.1, 200.0, detail).march(), plain)   # zero-init last head layer
+    with torch.no_grad():
+        m.head[1].weight.normal_(); m.head[1].bias.fill_(0.2)
+    out = predict(m, march, 0.1, 200.0, detail)
+    assert not torch.allclose(out.march()[:, :3], plain[:, :3])
+    assert bool((out.rgb[~out.covered.expand_as(out.rgb)] == 0).all())
+    assert torch.equal(out.depth, reconstruct(march, m(march, 0.1, 200.0)).depth)
+    import pytest as _p
+    with _p.raises(ValueError, match="detail"):
+        predict(m, march, 0.1, 200.0, None)
+    fused = Upscaler("s8", "rgbn", seed=2, reparam=True, head=True).fused()
+    assert fused.head is not None

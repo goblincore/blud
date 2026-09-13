@@ -824,7 +824,7 @@ async function main() {
     if (q.get('upscalenormals') === '0') return false;
     const inputs = q.get('upscaleinputs') ?? '';
     const name = q.get('upscalemodel') ?? '';
-    return /rgbd?n\b/.test(inputs) || /rgbd?n(-|$)/.test(name);
+    return /rgbd?n\b/.test(inputs) || /rgbd?n(-|$)/.test(name) || q.get('upscalehead') === '1';
   })();
   const sdfLayer = createSdfLayer(handle.renderer, { marchNormals: marchNormalsWanted });
   postAa.addSink(sdfLayer);
@@ -2049,6 +2049,7 @@ async function main() {
         layout: upSearch.get('upscalelayout') ?? undefined,
         inputs: upSearch.get('upscaleinputs') ?? undefined,
         seed: parseIntParam(upSearch.get('upscaleseed'), { min: 0, max: 2 ** 31 - 1 }) ?? undefined,
+        head: upSearch.get('upscalehead') ?? undefined,   // run-4 full-res head on a random config
       });
       sdfScale = UPSCALE_SCALE;
       sdfLayer.setScale(sdfScale);

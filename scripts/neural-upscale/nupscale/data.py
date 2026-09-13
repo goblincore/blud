@@ -162,10 +162,20 @@ class CropSampler:
         return self._origin(cx, w), self._origin(cy, h)
 
     def sample(self, batch: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """march (B, 4 or 7, c, c), target (B, 4, 2c, 2c), weight (B, 1, 2c, 2c)."""
+        """march (B, 4 or 7, c, c), target (B, 4, 2c, 2c), weight (B, 1, 2c, 2c). `sample_with_detail`
+        also returns the run-4 detail crops."""
+        march, target, weight, _ = self.sample_with_detail(batch)
+        return march, target, weight
+
+    def sample_with_detail(self, batch: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor | None]:
+        """As `sample`, plus detail (B, 4, 2c, 2c) when every pair carries detail.npy, else None.
+        Detail is cropped and flipped with the target; its xyz is a world-space noise vector that the
+        head sees only as a texture, so no component is negated on a flip."""
         c = self.crop
         one = torch.ones(1)
-        marches, targets, weights = [], [], []
+        zero4 = torch.zeros(4)
+        with_detail = all(p.detail is not None for p in self.pairs)
+        marches, targets, weights, details = [], [], [], []
         for _ in range(batch):
             k = self.rng.randrange(len(self.pairs))
             p = self.pairs[k]
@@ -173,17 +183,21 @@ class CropSampler:
             m = paste(p.inp, ox, oy, c, self.sentinel)
             t = paste(p.target, 2 * ox, 2 * oy, 2 * c, SENTINEL)
             w = paste(p.weight, 2 * ox, 2 * oy, 2 * c, one)
+            d = paste(p.detail, 2 * ox, 2 * oy, 2 * c, zero4) if with_detail else None
             # Mirroring is exact for the §4 reconstruction: output column 2i-1-x swaps the
             # sub-pixel parity AND the neighbour direction, which is what a mirrored input has.
             if self.rng.random() < self.flip_x:
                 m, t, w = m.flip(2), t.flip(2), w.flip(2)
+                if d is not None: d = d.flip(2)
                 for ch in self.negate_x:
                     m[ch] = -m[ch]
             if self.rng.random() < self.flip_y:
                 m, t, w = m.flip(1), t.flip(1), w.flip(1)
+                if d is not None: d = d.flip(1)
                 for ch in self.negate_y:
                     m[ch] = -m[ch]
             marches.append(m)
             targets.append(t)
             weights.append(w)
-        return torch.stack(marches), torch.stack(targets), torch.stack(weights)
+            if d is not None: details.append(d)
+        return torch.stack(marches), torch.stack(targets), torch.stack(weights), (torch.stack(details) if with_detail else None)

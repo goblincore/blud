@@ -2179,7 +2179,8 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
       if (inputsUseNormals(config.inputs) && !marchNormals) {
         throw new Error(`upscale: input set ${config.inputs} needs march normals — boot with ?upscale=... so the layer allocates the attachment`);
       }
-      const next = createUpscaleStage(config, target.texture, uFlipY, model, marchNormals ? target.textures[1] : undefined);
+      const next = createUpscaleStage(config, target.texture, uFlipY, model, marchNormals ? target.textures[1] : undefined,
+        detailScene ? detailTarget.texture : undefined);
       upscale?.dispose();
       upscale = next;
       upscale.setSize(target.width, target.height, fullW, fullH);

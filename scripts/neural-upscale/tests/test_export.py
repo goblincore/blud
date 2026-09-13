@@ -1,3 +1,4 @@
+import torch
 import base64
 import json
 
@@ -72,3 +73,16 @@ def test_reparam_export_is_the_fused_plain_model(tmp_path):
     assert all(len(l["weights"]) == l["inC"] * l["outC"] * 9 * 4 for l in layers)
     doc = export_model(m, tmp_path / "e", run="t16-rgb-rep", step=1, dataset="d", manifest_hash="h", metrics=None)
     assert doc["layers"][1]["dilation"] == 2
+
+
+def test_head_export_and_hash_cover_the_head(tmp_path):
+    from nupscale.export import export_model, weight_hash
+    m = Upscaler("s8", "rgb", seed=3, head=True)
+    h0 = weight_hash(m)
+    doc = export_model(m, tmp_path / "e", run="s8-rgb-head", step=1, dataset="d", manifest_hash="h", metrics=None)
+    assert [(l["inC"], l["outC"], l["relu"]) for l in doc["head"]] == [(10, 8, True), (8, 3, False)]
+    with torch.no_grad():
+        m.head[1].bias.fill_(1.0)
+    assert weight_hash(m) != h0
+    plain = Upscaler("s8", "rgb", seed=3)
+    assert export_model(plain, tmp_path / "p", run="s8-rgb", step=1, dataset="d", manifest_hash="h", metrics=None)["head"] is None

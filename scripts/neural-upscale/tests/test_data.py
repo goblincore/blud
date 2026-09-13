@@ -105,3 +105,14 @@ def test_normals_load_as_channels_4_to_6_and_flip_as_vectors(tmp_path):
     # padding outside the pair is the 7-channel sentinel: depth 1, everything else 0
     pad = plain[0][:, 3] == 1
     assert bool((plain[0][:, 4:].permute(0, 2, 3, 1)[pad] == 0).all())
+
+
+def test_region_weight_override_reaches_the_weight_map(tmp_path):
+    from nupscale.constants import REGION_WEIGHTS
+    root = write_v2_dataset(tmp_path / "ds", pairs=2, size=(24, 32))
+    base = load_dataset(root)
+    boosted = load_dataset(root, weights={**REGION_WEIGHTS, "interior": 2.0})
+    p0, p1 = base.pairs[0], boosted.pairs[0]
+    interior = p0.masks["interior"] & ~p0.masks["face"] & ~p0.masks["wound"] & ~p0.masks["edge"]
+    assert bool(interior.any())
+    assert torch.equal(p1.weight[0][interior], p0.weight[0][interior] * 2)

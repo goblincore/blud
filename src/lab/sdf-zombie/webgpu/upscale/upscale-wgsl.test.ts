@@ -15,6 +15,19 @@ const expectParses = (src: string) => {
 };
 
 describe('upscale pass plan', () => {
+  it('a model with a head appends H1/H2 at full res and moves the final flag to H2', () => {
+    const passes = planUpscalePasses(createUpscaleModel('s8', 'rgbn', 1, true), 'sp');
+    expect(passes.map((p) => p.name)).toEqual(['L1a', 'L2a', 'L3a', 'shuffle', 'H1', 'H2']);
+    expect(passes.map((p) => p.final)).toEqual([false, false, false, false, false, true]);
+    expect(passes[4]!.inputs).toEqual(['shuffle:0', 'march', 'detail']);
+    expect(passes[4]!.targets).toBe(2);
+    expect(passes[5]!.inputs).toEqual(['shuffle:0', 'H1:0', 'H1:1']);
+    for (const p of passes.slice(4)) { expectParses(p.run); for (const r of p.reads) expectParses(r); if (p.state) expectParses(p.state); }
+    const dc = planUpscalePasses(createUpscaleModel('s8', 'rgb', 1, true), 'dc');
+    expect(dc.map((p) => p.name)).toEqual(['L1a', 'L2a', 'deconv', 'H1', 'H2']);
+    expect(planUpscalePasses(createUpscaleModel('s8', 'rgb', 1), 'sp').filter((p) => p.final).map((p) => p.name)).toEqual(['shuffle']);
+  });
+
   it('a dilated hidden layer offsets its taps by the dilation', () => {
     const passes = planUpscalePasses(createUpscaleModel('t16', 'rgb', 1), 'sp');
     expect(passes[1]!.run).toContain('vec2<i32>(-2, -2)');

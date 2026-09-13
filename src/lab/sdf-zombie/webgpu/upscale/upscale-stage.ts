@@ -52,6 +52,8 @@ export interface UpscaleInfo {
   run: string | null;
   step: number | null;
   passes: string[];
+  /** Run-4 full-res head present. */
+  head: boolean;
   /** Post-sharpen strength (0 = off). */
   sharpen: number;
   sharpenMode: 'cas' | 'unsharp';
@@ -63,7 +65,7 @@ export function upscaleInfoOf(stage: UpscaleStage | null): UpscaleInfo {
   if (!stage) {
     return {
       on: false, model: null, layout: null, inputs: null, seed: null, weightHash: null,
-      source: null, run: null, step: null, passes: [], sharpen: 0, sharpenMode: 'cas', inSize: null, outSize: null,
+      source: null, run: null, step: null, passes: [], head: false, sharpen: 0, sharpenMode: 'cas', inSize: null, outSize: null,
     };
   }
   return {
@@ -77,6 +79,7 @@ export function upscaleInfoOf(stage: UpscaleStage | null): UpscaleInfo {
     run: stage.model.run ?? null,
     step: stage.model.step ?? null,
     passes: stage.passes.map((p) => p.name),
+    head: !!stage.model.head,
     sharpen: stage.sharpen,
     sharpenMode: stage.sharpenMode,
     inSize: { ...stage.inSize },
@@ -95,7 +98,7 @@ type Built = { spec: PassSpec; target: THREE.RenderTarget; scene: THREE.Scene; m
  */
 export function createUpscaleStage(
   config: UpscaleConfig, marchTexture: THREE.Texture, flipY: unknown, trained?: UpscaleModel,
-  normalTexture?: THREE.Texture,
+  normalTexture?: THREE.Texture, detailTexture?: THREE.Texture,
 ): UpscaleStage {
   if (trained && (trained.id !== config.model || trained.inputs !== config.inputs)) {
     throw new Error(`upscale: model ${trained.id}/${trained.inputs} does not match config ${config.model}/${config.inputs}`);
@@ -103,7 +106,10 @@ export function createUpscaleStage(
   if (inputsUseNormals(config.inputs) && !normalTexture) {
     throw new Error(`upscale: input set ${config.inputs} needs the march normal texture (boot with ?upscale so the layer allocates it)`);
   }
-  const model = trained ?? createUpscaleModel(config.model, config.inputs, config.seed);
+  const model = trained ?? createUpscaleModel(config.model, config.inputs, config.seed, config.head === true);
+  if (model.head && !detailTexture) {
+    throw new Error('upscale: this model has a run-4 head and needs the detail field texture (normals boot: ?upscalenormals=1 or an rgbn model)');
+  }
   const passes = planUpscalePasses(model, config.layout);
   const uNearFar = uniform(new THREE.Vector2(0.1, 100));
   const uOutSize = uniform(new THREE.Vector2(1, 1));
@@ -146,6 +152,7 @@ export function createUpscaleStage(
   const textureOf = (ref: string): THREE.Texture => {
     if (ref === 'march') return marchTexture;
     if (ref === 'normal') return normalTexture!;
+    if (ref === 'detail') return detailTexture!;
     const [name, index] = ref.split(':');
     const t = targets.get(name!);
     if (!t) throw new Error(`upscale: pass input ${ref} is not produced by an earlier pass`);
@@ -163,7 +170,7 @@ export function createUpscaleStage(
     if (spec.outputRes === 'full') args.outSize = uOutSize;
 
     let target: THREE.RenderTarget;
-    if (spec.kind === 'conv') {
+    if (spec.kind === 'conv' || spec.kind === 'head1') {
       target = new THREE.RenderTarget(1, 1, { count: spec.targets, depthBuffer: false });
       target.textures.forEach((tex, k) => {
         tex.name = `f${k}`;
@@ -186,8 +193,12 @@ export function createUpscaleStage(
       spec.reads.forEach((src, k) => { outs[`f${k}`] = wgslFn(src, [state] as never)({ dep: cached as never }); });
       material.mrtNode = mrt(outs as never) as never;
     } else {
-      target = output;
-      const run = wgslFn(spec.run, [reconstructNode] as never);
+      // A full-res single-output pass: the FINAL one writes `output`; an intermediate one (the
+      // placement under a run-4 head) gets its own rgba32f target so depth survives.
+      target = spec.final ? output : new THREE.RenderTarget(1, 1, {
+        type: THREE.FloatType, format: THREE.RGBAFormat, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false,
+      });
+      const run = wgslFn(spec.run, spec.kind === 'head2' ? [] as never : [reconstructNode] as never);
       const out = run(args as never) as unknown as { xyz: unknown; w: unknown };
       material.colorNode = vec4(out.xyz as never, out.w as never);
       material.outputNode = vec4(out.xyz as never, out.w as never);
@@ -225,7 +236,10 @@ export function createUpscaleStage(
     setSize(inW, inH, outW, outH) {
       inSize.width = inW; inSize.height = inH;
       outSize.width = outW; outSize.height = outH;
-      for (const b of built) if (b.spec.outputRes === 'low') b.target.setSize(inW, inH);
+      for (const b of built) {
+        if (b.target === output) continue;
+        if (b.spec.outputRes === 'low') b.target.setSize(inW, inH); else b.target.setSize(outW, outH);
+      }
       output.setSize(outW, outH);
       netOut.setSize(outW, outH);
       (uOutSize.value as THREE.Vector2).set(outW, outH);

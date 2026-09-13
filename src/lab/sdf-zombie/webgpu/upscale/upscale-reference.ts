@@ -3,7 +3,7 @@
  * checked against (spec §2-§4). Images are row 0 = texel row 0 (the top of
  * the rendered image in this renderer's convention), interleaved channels.
  */
-import { inputsUseDepth, inputsUseNormals, type ConvLayer, type UpscaleLayout, type UpscaleModel } from './upscale-model';
+import { HEAD_IN_CHANNELS, inputsUseDepth, inputsUseNormals, type ConvLayer, type UpscaleLayout, type UpscaleModel } from './upscale-model';
 
 export interface FloatImage { w: number; h: number; c: number; data: Float32Array }
 
@@ -138,6 +138,44 @@ export interface ReferenceOptions {
   marginOut?: Float32Array;
   /** The view-space normal image (3 or 4 channels, march size) for the rgbn/rgbdn sets. */
   normal?: FloatImage;
+  /** Run-4 detail field (4 channels, OUTPUT size: noise xyz, w = gate) — required by a model with a head. */
+  detail?: FloatImage;
+}
+
+/** Run-4 head input (nupscale/model.py `Upscaler.head_input`): per output pixel
+ *  [rgb*covered, covered, detail.xyz*gate, nearest-up march rgb*hit] (10 channels). */
+export function assembleHeadInput(out: FloatImage, detail: FloatImage, march: FloatImage): FloatImage {
+  if (detail.w !== out.w || detail.h !== out.h || detail.c !== 4) throw new Error(`upscale head: detail ${detail.w}x${detail.h}x${detail.c} does not match output ${out.w}x${out.h}x4`);
+  const x = makeImage(out.w, out.h, HEAD_IN_CHANNELS);
+  for (let Y = 0; Y < out.h; Y++) {
+    const y = Math.min(Y >> 1, march.h - 1);
+    for (let X = 0; X < out.w; X++) {
+      const p = Y * out.w + X;
+      const cov = out.data[p * 4 + 3]! < 1 ? 1 : 0;
+      const gate = detail.data[p * 4 + 3]! > 0 ? 1 : 0;
+      const mb = (y * march.w + Math.min(X >> 1, march.w - 1)) * 4;
+      const hit = march.data[mb + 3]! < 1 ? 1 : 0;
+      const b = p * HEAD_IN_CHANNELS;
+      x.data[b] = out.data[p * 4]! * cov; x.data[b + 1] = out.data[p * 4 + 1]! * cov; x.data[b + 2] = out.data[p * 4 + 2]! * cov;
+      x.data[b + 3] = cov;
+      x.data[b + 4] = detail.data[p * 4]! * gate; x.data[b + 5] = detail.data[p * 4 + 1]! * gate; x.data[b + 6] = detail.data[p * 4 + 2]! * gate;
+      x.data[b + 7] = march.data[mb]! * hit; x.data[b + 8] = march.data[mb + 1]! * hit; x.data[b + 9] = march.data[mb + 2]! * hit;
+    }
+  }
+  return x;
+}
+
+/** Applies a model's head to a reconstructed output IN PLACE: rgb += residual where covered, clamped >= 0. */
+export function applyHead(out: FloatImage, model: UpscaleModel, detail: FloatImage, march: FloatImage, store: (img: FloatImage) => FloatImage = (i) => i): void {
+  if (!model.head) return;
+  let h = assembleHeadInput(out, detail, march);
+  for (let k = 0; k < model.head.length - 1; k++) h = store(conv3x3(h, model.head[k]!));
+  const last = model.head[model.head.length - 1]!;
+  for (let p = 0; p < out.w * out.h; p++) {
+    if (out.data[p * 4 + 3]! >= 1) continue;
+    const x = p % out.w, y = (p / out.w) | 0;
+    for (let c = 0; c < 3; c++) out.data[p * 4 + c] = Math.max(0, out.data[p * 4 + c]! + convAt(h, last, c, x, y));
+  }
 }
 
 /** The whole stage on the CPU: march image (RGBA, alpha = clip depth) -> output image. */
@@ -172,6 +210,10 @@ export function upscaleReference(
       if (opts.marginOut) opts.marginOut[p] = (march.data[(y * w + x) * 4 + 3]! < 1 ? 1 : 0) + res[3]! - 0.5;
       reconstructPixel(march, x, y, i, j, res, out.data, p * 4);
     }
+  }
+  if (model.head) {
+    if (!opts.detail) throw new Error('upscaleReference: this model has a head and needs opts.detail');
+    applyHead(out, model, opts.detail, march, store);
   }
   return out;
 }

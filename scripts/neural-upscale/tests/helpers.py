@@ -104,7 +104,8 @@ def scalar_reconstruct(march: torch.Tensor, last) -> torch.Tensor:
 
 
 def write_v2_dataset(root: Path | str, *, pairs: int = 6, size: tuple[int, int] = (12, 16), val_every: int = 3,
-                     seed: int = 1, native: bool = True, regions: bool = True, normals: bool = False) -> Path:
+                     seed: int = 1, native: bool = True, regions: bool = True, normals: bool = False,
+                     detail: bool = False) -> Path:
     """A tiny dataset v2: one pair per sequence; target = nearest-upsampled input plus a little
     noise on flesh. Every `val_every`-th sequence is validation (and showcase). Heads sit at the
     image centre; even pairs also have a wound."""
@@ -130,6 +131,12 @@ def write_v2_dataset(root: Path | str, *, pairs: int = 6, size: tuple[int, int] 
         if native and split == "val":
             np.save(d / "native.npy", hwc(upsample_nearest(inp)))
             files["native"] = f"pairs/{pid}/native.npy"
+        if detail:
+            det = torch.rand((4, 2 * h, 2 * w), generator=g) * 2 - 1
+            det[3] = flesh[0].to(torch.float32)
+            det[:3] = det[:3] * flesh
+            np.save(d / "detail.npy", hwc(det))
+            files["detail"] = f"pairs/{pid}/detail.npy"
         if normals:
             nrm = torch.rand((3, h, w), generator=g) * 2 - 1
             nrm = nrm / nrm.norm(dim=0, keepdim=True).clamp(min=1e-6) * (inp[3:4] < 1)

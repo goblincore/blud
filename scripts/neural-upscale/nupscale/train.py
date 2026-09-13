@@ -23,7 +23,7 @@ from .export import export_model, export_parity_fixture
 from .images import save_march_png
 from .losses import upscale_loss
 from .model import Upscaler
-from .reconstruct import reconstruct
+from .reconstruct import predict
 
 
 @dataclass
@@ -44,6 +44,11 @@ class RunConfig:
     coverage_weight: float = C.COVERAGE_WEIGHT
     compile: bool = False
     reparam: bool = False
+    """Run-4 full-res head (needs detail.npy in every pair)."""
+    head: bool = False
+    """Region weight overrides (spec §2 REGION_WEIGHTS), e.g. {"interior": 2.0} — run 4 weights the
+    interior up because the edge band is solved."""
+    region_weights: dict | None = None
     """Run-name suffix so variants of one (model, inputs) coexist in a root, e.g. '-dw1.0' or '-rep'."""
     tag: str = ""
 
@@ -51,8 +56,12 @@ class RunConfig:
     def name(self) -> str:
         return f"{self.model_id}-{self.inputs}{self.tag}"
 
+    @property
+    def weights(self) -> dict[str, float]:
+        return {**C.REGION_WEIGHTS, **(self.region_weights or {})}
+
     def record(self) -> dict:
-        return {**asdict(self), "regionWeights": dict(C.REGION_WEIGHTS), "edgeBandPx": C.EDGE_BAND_PX,
+        return {**asdict(self), "regionWeights": dict(self.weights), "edgeBandPx": C.EDGE_BAND_PX,
                 "icnrScale": C.ICNR_SCALE, "optimizer": "adam", "schedule": "cosine"}
 
 
@@ -128,7 +137,7 @@ def train_run(cfg: RunConfig, dataset: Dataset, root: Path | str, *, device: tor
     near, far = dataset.near, dataset.far
 
     torch.manual_seed(cfg.seed)
-    model = Upscaler(cfg.model_id, cfg.inputs, seed=cfg.seed, reparam=cfg.reparam).to(device)
+    model = Upscaler(cfg.model_id, cfg.inputs, seed=cfg.seed, reparam=cfg.reparam, head=cfg.head).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=cfg.lr)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=max(cfg.max_steps, 1))
     latest_path, best_path = run_dir / "ckpt-latest.pt", run_dir / "ckpt-best.pt"
@@ -143,8 +152,8 @@ def train_run(cfg: RunConfig, dataset: Dataset, root: Path | str, *, device: tor
 
     # A step is ~100 tiny elementwise kernels over 16 MB tensors, so it is launch-bound, not
     # compute-bound: fusing them measured 2.0x on MPS (56.0 -> 28.3 ms/step, s32-rgbd, batch 64).
-    def loss_of(march, target, weight):
-        rec = reconstruct(march, model(march, near, far))
+    def loss_of(march, target, weight, detail=None):
+        rec = predict(model, march, near, far, detail)
         return upscale_loss(rec, target, weight, margin=cfg.coverage_margin,
                             detail_weight=cfg.detail_weight, coverage_weight=cfg.coverage_weight)
 
@@ -203,8 +212,10 @@ def train_run(cfg: RunConfig, dataset: Dataset, root: Path | str, *, device: tor
         if elapsed >= cfg.time_cap_s:
             state = "time-cap"
             break
-        march, target, weight = (t.to(device) for t in sampler.sample(cfg.batch))
-        loss, parts = compute(march, target, weight)
+        march, target, weight, detail = sampler.sample_with_detail(cfg.batch)
+        march, target, weight = march.to(device), target.to(device), weight.to(device)
+        detail = detail.to(device) if detail is not None else None
+        loss, parts = compute(march, target, weight, detail)
         opt.zero_grad(set_to_none=True)
         loss.backward()
         opt.step()
@@ -227,7 +238,7 @@ def train_run(cfg: RunConfig, dataset: Dataset, root: Path | str, *, device: tor
     export_parity_fixture(model, fixture_pairs, near, far, final_dir / "parity")
     if best_path.exists():
         ck = torch.load(best_path, map_location="cpu", weights_only=True)
-        best_model = Upscaler(cfg.model_id, cfg.inputs, reparam=cfg.reparam)
+        best_model = Upscaler(cfg.model_id, cfg.inputs, reparam=cfg.reparam, head=cfg.head)
         best_model.load_state_dict(ck["model"])
         best_dir = exports / f"{cfg.name}-best"
         export_model(best_model, best_dir, run=cfg.name, step=ck["step"], dataset=dataset.name,

@@ -17,6 +17,11 @@ HIDDEN_DILATIONS = {k: tuple(d for _, d in v) for k, v in HIDDEN_LAYERS.items()}
 INPUT_CHANNELS = {"rgb": 4, "rgbd": 5, "rgbn": 7, "rgbdn": 8}
 NORMAL_CHANNELS = 3
 LAST_CHANNELS = 16
+# Run-4 full-res HEAD (plan 2026-09-12-neural-upscale-run4-relief §4): one 3x3 layer at OUTPUT resolution over
+# [reconstructed rgb (3), covered (1), detail noise*gate (3), nearest-up input rgb*hit (3)] -> rgb residual.
+HEAD_IN_CHANNELS = 10
+HEAD_WIDTH = 8
+HEAD_OUT_CHANNELS = 3
 DEPTH_INPUT_SCALE = 0.1
 ICNR_SCALE = 0.1
 

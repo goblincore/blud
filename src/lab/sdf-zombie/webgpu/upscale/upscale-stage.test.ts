@@ -110,3 +110,20 @@ describe('upscale post-sharpen', () => {
     stage.dispose();
   });
 });
+
+describe('run-4 head in the stage', () => {
+  it('needs a detail texture, sizes H1 at output res, and writes output from H2', () => {
+    const cfg = { model: 's8', layout: 'sp', inputs: 'rgbn', seed: 1, head: true } as const;
+    expect(() => createUpscaleStage(cfg, new THREE.Texture(), uniform(1), undefined, new THREE.Texture())).toThrow(/needs the detail field/);
+    const stage = createUpscaleStage(cfg, new THREE.Texture(), uniform(1), undefined, new THREE.Texture(), new THREE.Texture());
+    stage.setSize(400, 300, 800, 600);
+    expect(stage.passes.map((p) => p.name)).toEqual(['L1a', 'L2a', 'L3a', 'shuffle', 'H1', 'H2']);
+    expect([stage.targetFor('H1').width, stage.targetFor('H1').height]).toEqual([800, 600]);
+    expect(stage.targetFor('H1').textures).toHaveLength(2);
+    expect([stage.targetFor('shuffle').width, stage.targetFor('shuffle').height]).toEqual([800, 600]);
+    expect(stage.targetFor('shuffle')).not.toBe(stage.output);
+    expect(stage.targetFor('H2')).toBe(stage.output);
+    expect(upscaleInfoOf(stage).head).toBe(true);
+    stage.dispose();
+  });
+});

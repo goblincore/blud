@@ -136,6 +136,8 @@ export async function runUpscaleSelfCheck(deps: SelfCheckDeps, opts: { compareLa
     const march = await readFloatTarget(deps.renderer, deps.layer.marchTarget);
     // rgbn/rgbdn: the march's second attachment (view-space normal), same size and frame.
     const normal = inputsUseNormals(stage.model.inputs) ? await readFloatTarget(deps.renderer, deps.layer.marchTarget, 1) : undefined;
+    // run-4 head: the layer's output-res detail field.
+    const detail = stage.model.head && deps.layer.detailTarget ? await readFloatTarget(deps.renderer, deps.layer.detailTarget) : undefined;
     const gpu = await readFloatTarget(deps.renderer, stage.output);
     if (marchRef) marchStable = marchStable && sameImage(marchRef, march);
     else marchRef = march;
@@ -144,6 +146,7 @@ export async function runUpscaleSelfCheck(deps: SelfCheckDeps, opts: { compareLa
       halfFloatStorage: true,
       marginOut: margin,
       normal,
+      detail,
     });
     gpuVsCpu.push(compare(gpu, cpu, margin, layout));
     outputs.set(layout, gpu);

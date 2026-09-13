@@ -27,6 +27,7 @@ const QUERIES = [
   'upscale=s8&upscaleinputs=rgbn',
   'upscale=s64d&upscalelayout=sp&upscaleinputs=rgbdn',   // dc is refused at 64 wide (17 textures)
   'upscale=t16&upscaleinputs=rgbn',   // dilated 3-layer ladder (run 3)
+  'upscale=s8&upscaleinputs=rgbn&upscalehead=1',   // run-4 full-res head (H1/H2 over the detail field)
   'upscale=s8&upscalesharpen=0.5',   // post-sharpen pass (UPSCALE_SHARPEN_WGSL)
   'upscale=s8&upscalesharpen=1.5&upscalesharpenmode=unsharp',
 ];

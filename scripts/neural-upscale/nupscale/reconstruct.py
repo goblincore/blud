@@ -62,3 +62,25 @@ def reconstruct(march: torch.Tensor, last: torch.Tensor) -> Reconstruction:
     depth = torch.where(covered, src[:, 3:4], torch.ones_like(margin))
     return Reconstruction(rgb=rgb, depth=depth, covered=covered, margin=margin,
                           src_rgb=src_rgb, res_rgb=res_rgb, src_exists=src_exists)
+
+
+def with_head(rec: Reconstruction, head_rgb: torch.Tensor) -> Reconstruction:
+    """The reconstruction with the run-4 head's rgb residual added ON TOP OF THE PLACED (clamped) rgb —
+    rgb = max(rec.rgb + head, 0) — exactly the twin's applyHead (upscale-reference.ts), which sees
+    only the clamped placement. res_rgb is rewritten so src + res still equals that rgb, keeping the
+    loss's (src + res) formulation valid. Uncovered pixels stay black."""
+    res = torch.where(rec.covered, rec.rgb - rec.src_rgb + head_rgb, rec.res_rgb)
+    rgb = torch.where(rec.covered, (rec.rgb + head_rgb).clamp(min=0), torch.zeros_like(rec.src_rgb))
+    return Reconstruction(rgb=rgb, depth=rec.depth, covered=rec.covered, margin=rec.margin,
+                          src_rgb=rec.src_rgb, res_rgb=res, src_exists=rec.src_exists)
+
+
+def predict(model, march: torch.Tensor, near: float, far: float, detail: torch.Tensor | None = None) -> Reconstruction:
+    """The whole network: low-res convs, §4 placement, then the full-res head when the model has one
+    (which then REQUIRES `detail`, (N, 4, 2h, 2w))."""
+    rec = reconstruct(march, model(march, near, far))
+    if getattr(model, "head", None) is None:
+        return rec
+    if detail is None:
+        raise ValueError("a model with a head needs the detail field (dataset pairs with detail.npy)")
+    return with_head(rec, model.head_residual(rec.rgb, rec.covered, detail, march))

@@ -116,6 +116,8 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--detail-weight", type=float, default=C.DETAIL_WEIGHT, help="gradient-loss weight (spec §2)")
     ap.add_argument("--reparam", action="store_true", help="train hidden layers as 3x3+1x1+identity branches, fused at export")
     ap.add_argument("--tag", default="", help="run-name suffix, e.g. -dw1.0 or -rep (variants share a root)")
+    ap.add_argument("--head", action="store_true", help="run-4 full-res head (every pair needs detail.npy)")
+    ap.add_argument("--interior-weight", type=float, default=None, help="override REGION_WEIGHTS[interior] (run 4: 2.0)")
     args = ap.parse_args(argv)
     root = Path(args.root)
     root.mkdir(parents=True, exist_ok=True)
@@ -124,10 +126,12 @@ def main(argv: list[str] | None = None) -> None:
     def make_config(model_id: str, inputs: str) -> RunConfig:
         return RunConfig(model_id, inputs, max_steps=args.max_steps, time_cap_s=args.time_cap_min * 60,
                          val_every=args.val_every, batch=args.batch, compile=args.compile,
-                         detail_weight=args.detail_weight, reparam=args.reparam, tag=args.tag)
+                         detail_weight=args.detail_weight, reparam=args.reparam, tag=args.tag, head=args.head,
+                         region_weights={"interior": args.interior_weight} if args.interior_weight is not None else None)
 
     try:
-        summary = run_grid(load_dataset(args.data), root, meter=meter, device=pick_device(args.device),
+        weights = {**C.REGION_WEIGHTS, **({"interior": args.interior_weight} if args.interior_weight is not None else {})}
+        summary = run_grid(load_dataset(args.data, weights=weights), root, meter=meter, device=pick_device(args.device),
                            runs=parse_runs(args.runs), reserve_s=args.reserve_min * 60, make_config=make_config)
     except Exception:
         (root / "GRID_FAILED.txt").write_text(traceback.format_exc())

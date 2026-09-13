@@ -1,6 +1,6 @@
 # Neural upscale — run 4: full-resolution relief (radiance demodulation for skin detail)
 
-**Status:** in progress (started 2026-09-12 evening). **Pieces 1–3 DONE the same night** (see log at the end). **Owner goal:** more detail *inside* the silhouette —
+**Status:** in progress (started 2026-09-12 evening). **Pieces 1–5 DONE the same night; v3.1 capture + training pending** (see log at the end). **Owner goal:** more detail *inside* the silhouette —
 the skin relief that makes a body read as modeled and weighty (claymation / soft-CG mix). Silhouettes are
 done and not a target. Pores are below this resolution; relief at the scale of the existing skin noise and
 the wound meat detail is not.
@@ -50,3 +50,14 @@ demodulation. Order: 1 → 2 (GPU look) → 3 → 4/5 → 6.
   (optional); contracts §1 row. v4-smoke (4 pairs): gated pixels ≈ target flesh (99.6 % overlap), noise
   mean |.| 0.20, max 0.83. Next: piece 4, the full-res branch in the net (python + TS twin + WGSL), then a
   v3.1 capture (the v3 dataset has no detail.npy — a 1,000-pair recapture at ~5 s/pair ≈ 1.5 h).
+- **2026-09-13 ~00:30, pieces 4–5:** the full-res HEAD exists in all three implementations. PyTorch:
+  `Upscaler(head=True)` (10 → 8 relu → 3 at output res; last layer zero-init so step 0 = the headless net),
+  `reconstruct.predict()` / `with_head()` (head added on top of the CLAMPED placement — the twin's
+  semantics; res_rgb rewritten so the loss's src+res still holds), sampler `sample_with_detail`, export
+  `head` layers + hash after inScale/inOffset (zero-head vector ca56e995), parity fixtures `detail-k.npy`.
+  TS: `UpscaleModel.head`, parse/serialize/hash, `assembleHeadInput`/`applyHead` in the twin. WGSL: passes
+  `H1` (2× RGBA16F MRT at full res over [net, detail, march] taps) and `H2` (residual onto the placed rgb,
+  depth through); the placement pass loses `final` and gets its own rgba32f target. Stage binds `detail`.
+  Gates: G3 PASS 2.4e-7 on a NON-zero random head; compile smoke PASS (incl. `?upscalehead=1`); in-page
+  GPU-vs-twin 1.6e-3 (sp) / 1.4e-3 (dc). Piece 5: `--interior-weight` (REGION_WEIGHTS override).
+  v3.1 capture (1,000 pairs, nine characters, detail fields) launched 00:35; `.lab-tmp/grid-run4.sh` ready.

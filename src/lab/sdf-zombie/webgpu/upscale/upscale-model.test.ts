@@ -30,6 +30,8 @@ describe('upscale model JSON (contracts §2)', () => {
   it('matches the cross-language hash vectors (the Python exporter asserts the same)', () => {
     expect(parseUpscaleModelJson(serializeUpscaleModel(createUpscaleModel('zero', 'rgb', 1))).weightHash).toBe('3d86dba5');
     expect(parseUpscaleModelJson(serializeUpscaleModel(createUpscaleModel('zero', 'rgbd', 1))).weightHash).toBe('55870aa7');
+    // run-4 head (zero weights): nupscale weight_hash(Upscaler('zero','rgb',head=True)) == ca56e995
+    expect(parseUpscaleModelJson(serializeUpscaleModel(createUpscaleModel('zero', 'rgb', 1, true))).weightHash).toBe('ca56e995');
   });
 
   it('serializes seeded weights as random and defaults a missing source to trained', () => {
@@ -76,5 +78,21 @@ describe('dilated ladder (run 3)', () => {
     const s8 = serializeUpscaleModel(createUpscaleModel('s8', 'rgb', 1));
     const s8legacy = { ...s8, layers: s8.layers.map(({ dilation: _d, ...rest }) => rest) };
     expect(parseUpscaleModelJson(s8legacy).layers.map((l) => l.dilation)).toEqual([1, 1, 1]);
+  });
+});
+
+describe('run-4 head', () => {
+  it('round-trips through JSON, hashes after the inputs, and rejects a bad head shape', () => {
+    const m = createUpscaleModel('s8', 'rgbn', 3, true);
+    expect(m.head!.map((l) => [l.inC, l.outC, l.relu])).toEqual([[10, 8, true], [8, 3, false]]);
+    expect(Array.from(m.head![1]!.weights).every((v) => v === 0)).toBe(true);
+    const json = serializeUpscaleModel(m);
+    const back = parseUpscaleModelJson(json);
+    expect(back.head!.length).toBe(2);
+    expect(back.weightHash).toBe(m.weightHash);
+    const noHead = createUpscaleModel('s8', 'rgbn', 3, false);
+    expect(noHead.weightHash).not.toBe(m.weightHash);
+    expect(() => parseUpscaleModelJson({ ...json, head: json.head!.slice(0, 1) })).toThrow(/head needs 2 layers/);
+    expect(() => parseUpscaleModelJson({ ...json, head: json.head!.map((l, k) => (k === 0 ? { ...l, inC: 7 } : l)) })).toThrow(/head layer 0 is 7->8/);
   });
 });

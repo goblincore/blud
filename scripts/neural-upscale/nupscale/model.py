@@ -6,7 +6,9 @@ import math
 import torch
 from torch import nn
 
-from .constants import DEPTH_INPUT_SCALE, HIDDEN_DILATIONS, HIDDEN_WIDTHS, ICNR_SCALE, INPUT_CHANNELS, LAST_CHANNELS, NORMAL_CHANNELS
+from .constants import (DEPTH_INPUT_SCALE, HEAD_IN_CHANNELS, HEAD_OUT_CHANNELS, HEAD_WIDTH, HIDDEN_DILATIONS, HIDDEN_WIDTHS,
+                        ICNR_SCALE, INPUT_CHANNELS, LAST_CHANNELS, NORMAL_CHANNELS)
+from torch.nn import functional as F
 
 
 def linear_depth(clip: torch.Tensor, near: float, far: float) -> torch.Tensor:
@@ -54,8 +56,9 @@ class Upscaler(nn.Module):
     (N, 16, h, w); `reconstruct.reconstruct` places it. `reparam=True` trains the hidden layers as
     RepConv branches; `fused()` returns the plain equivalent for export."""
 
-    def __init__(self, model_id: str, inputs: str, seed: int = 1, reparam: bool = False) -> None:
+    def __init__(self, model_id: str, inputs: str, seed: int = 1, reparam: bool = False, head: bool = False) -> None:
         super().__init__()
+        self.head_enabled = head
         if model_id not in HIDDEN_WIDTHS:
             raise ValueError(f"unknown model id {model_id!r} (expected {'|'.join(HIDDEN_WIDTHS)})")
         if inputs not in INPUT_CHANNELS:
@@ -74,6 +77,11 @@ class Upscaler(nn.Module):
             else:
                 convs.append(nn.Conv2d(a, b, 3, padding=d, dilation=d, padding_mode="replicate"))
         self.convs = nn.ModuleList(convs)
+        # Run-4 head: two full-res 3x3 convs (10 -> HEAD_WIDTH -> 3), replicate padded, ReLU between.
+        self.head = nn.ModuleList([
+            nn.Conv2d(HEAD_IN_CHANNELS, HEAD_WIDTH, 3, padding=1, padding_mode="replicate"),
+            nn.Conv2d(HEAD_WIDTH, HEAD_OUT_CHANNELS, 3, padding=1, padding_mode="replicate"),
+        ]) if head else None
         in_scale = torch.ones(widths[0])
         if inputs in ("rgbd", "rgbdn"):
             in_scale[4] = DEPTH_INPUT_SCALE
@@ -97,28 +105,57 @@ class Upscaler(nn.Module):
                 continue
             conv.weight.copy_(torch.randn(conv.weight.shape, generator=g) * std)
             conv.bias.zero_()
+        if self.head is not None:
+            h0, h1 = self.head
+            h0.weight.copy_(torch.randn(h0.weight.shape, generator=g) * math.sqrt(2.0 / (HEAD_IN_CHANNELS * 9)))
+            h0.bias.zero_()
+            h1.weight.zero_()   # the head starts as a no-op: the network is exactly the headless one at step 0
+            h1.bias.zero_()
         last = self.convs[-1]
         std = math.sqrt(2.0 / (last.in_channels * 9))
         base = torch.randn((LAST_CHANNELS // 4, last.in_channels, 3, 3), generator=g) * std
         last.weight.copy_(base.repeat_interleave(4, dim=0) * ICNR_SCALE)
         last.bias.zero_()
         if self.model_id == "zero":
-            for conv in self.convs:
+            for conv in [*self.convs, *(self.head or [])]:
                 for m in (conv.modules() if isinstance(conv, RepConv) else [conv]):
                     if isinstance(m, nn.Conv2d):
                         m.weight.zero_()
                         m.bias.zero_()
+
+    @staticmethod
+    def head_input(rec_rgb: torch.Tensor, covered: torch.Tensor, detail: torch.Tensor, march: torch.Tensor) -> torch.Tensor:
+        """(N, 10, 2h, 2w): reconstructed rgb, covered, detail.xyz * gate, nearest-up input rgb * hit.
+        Mirrors upscale-reference.ts `assembleHeadInput`."""
+        cov = covered.to(rec_rgb.dtype)
+        d = detail[:, :3] * (detail[:, 3:4] > 0).to(rec_rgb.dtype)
+        up = march.repeat_interleave(2, dim=2).repeat_interleave(2, dim=3)
+        up_rgb = up[:, :3] * (up[:, 3:4] < 1).to(rec_rgb.dtype)
+        return torch.cat([rec_rgb * cov, cov, d, up_rgb], dim=1)
+
+    def head_residual(self, rec_rgb: torch.Tensor, covered: torch.Tensor, detail: torch.Tensor, march: torch.Tensor) -> torch.Tensor:
+        """(N, 3, 2h, 2w) rgb residual from the full-res head; zero where not covered."""
+        if self.head is None:
+            raise ValueError("model has no head")
+        x = self.head_input(rec_rgb, covered, detail, march)
+        h0, h1 = self.head
+        y = h1(torch.relu(h0(x)))
+        return y * covered.to(y.dtype)
 
     @torch.no_grad()
     def fused(self) -> "Upscaler":
         """The plain-conv equivalent (RepConv branches folded); `self` when not reparameterised."""
         if not self.reparam:
             return self
-        plain = Upscaler(self.model_id, self.inputs, reparam=False).to(self.in_scale.device)
+        plain = Upscaler(self.model_id, self.inputs, reparam=False, head=self.head is not None).to(self.in_scale.device)
         for k, conv in enumerate(self.convs):
             src = conv.fuse() if isinstance(conv, RepConv) else conv
             plain.convs[k].weight.copy_(src.weight)
             plain.convs[k].bias.copy_(src.bias)
+        if self.head is not None:
+            for k, conv in enumerate(self.head):
+                plain.head[k].weight.copy_(conv.weight)
+                plain.head[k].bias.copy_(conv.bias)
         plain.in_scale.copy_(self.in_scale)
         plain.in_offset.copy_(self.in_offset)
         return plain
