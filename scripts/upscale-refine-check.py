@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Run-5 capture gate (spec docs/superpowers/specs/2026-09-13-neural-upscale-run5-sdf-refine-design.md §5).
 For every pair carrying refine files: the overlap of accepted refine pixels (refine_c.w < 1) with the
-target flesh mask, and the mean |refine_c.rgb - target.rgb| over accepted pixels against the mean
-|nearest-up in.rgb - target.rgb| over the same pixels. PASS iff dataset-mean overlap >= 0.95 AND
+target flesh mask, and the mean |refine_c.rgb - target.rgb| over accepted-and-flesh pixels against the mean
+|nearest-up in.rgb - target.rgb| over the same pixels (the region the head residual acts on). PASS iff dataset-mean overlap >= 0.95 AND
 closeness_refine < closeness_input. A pair with only one of the two refine files is an error (a
 half-written capture must fail loudly, never read as "no refine").
 Usage: uv run --with numpy python3 scripts/upscale-refine-check.py <dataset dir>"""
@@ -28,8 +28,13 @@ def main() -> int:
         if not acc.any(): empty += 1; continue
         up = inp.repeat(2, axis=0).repeat(2, axis=1)
         ov += float((acc & flesh).sum() / acc.sum())
-        cr += float(np.abs(rc[..., :3] - tgt[..., :3])[acc].mean())
-        ci += float(np.abs(up[..., :3] - tgt[..., :3])[acc].mean())
+        # Closeness is measured where the head can act: accepted AND inside the target's flesh. The
+        # head residual is multiplied by `covered`, so rim pixels the refine accepts beyond the target
+        # silhouette never reach the loss; they are the OVERLAP criterion's business (a halo), not this one.
+        region = acc & flesh
+        if not region.any(): empty += 1; continue
+        cr += float(np.abs(rc[..., :3] - tgt[..., :3])[region].mean())
+        ci += float(np.abs(up[..., :3] - tgt[..., :3])[region].mean())
         n += 1
     if n == 0: print("REFINE CHECK: FAIL — every pair has zero accepted pixels"); return 1
     ov, cr, ci = ov / n, cr / n, ci / n
