@@ -32,7 +32,7 @@ import { NORMAL_GRADIENT_HELPERS, NORMAL_GRADIENT_GAME_HELPERS } from './normal-
 import type { TileGroupInput } from './tile-cull';
 import type { ComputeTileBinding } from './tile-bin-compute';
 import {
-  HELPERS, MARCH_BODY, CONE_MARCH, DEPTH_PREPASS_MARCH, DATA_ROWS, MARCH_NORMAL_OUT, MARCH_ANCHOR_READ, DETAIL_FIELD, HASH13, NOISE3, FBM,
+  HELPERS, MARCH_BODY, REFINE_BODY, CONE_MARCH, DEPTH_PREPASS_MARCH, DATA_ROWS, MARCH_NORMAL_OUT, MARCH_ANCHOR_READ, DETAIL_FIELD, HASH13, NOISE3, FBM,
   ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_REST_A, ROW_REST_B, ROW_PRIM_SHAPE,
   ROW_PRIM_BEND, ROW_PRIM_COLOR, ROW_PRIM_SHELL, ROW_PRIM_WARP, ROW_PRIM_STRAND, ROW_PRIM_CLIP,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
@@ -55,6 +55,9 @@ export interface ZombieGpuView {
    *  never rendered when omitted, so callers may add it to the scene
    *  unconditionally. */
   depthPreObject?: THREE.Object3D;
+  /** Run 5: the output-res refine twin — same proxy geometry, the refineBody entry,
+   *  rendered into the layer's output-res target only when opts.refine is passed. */
+  refineObject?: THREE.Mesh;
   /** Live uniforms — the WebGPU stand-in for `ShaderMaterial.uniforms`. */
   uniforms: MarchUniforms;
   /** The 3D texture bound to the march's volume slot (X1.26). The shared
@@ -182,7 +185,7 @@ export const detailFieldFn = (() => {
   return wgslFn(DETAIL_FIELD, chain.slice(-1));
 })();
 
-function buildMarchFn() {
+function buildEntryFn(entry: string) {
   // mapBody sits at a fixed place in HELPERS — after the things it calls,
   // before calcNormal which calls it — so any future per-body variant of it
   // would have to go in the SAME slot or WGSL's declaration-before-use rule
@@ -202,12 +205,16 @@ function buildMarchFn() {
   const nodes = sources.reduce<ReturnType<typeof wgslFn>[]>(
     (acc, src) => [...acc, wgslFn(src, acc.slice(-1))], [marchNormalRead],
   );
-  return wgslFn(MARCH_BODY, nodes.slice(-1));
+  return wgslFn(entry, nodes.slice(-1));
 }
 
 /** The default march entry (plus its dependency-ordered helpers), shared by
  *  the body views and the hands view. */
-export const marchBody = buildMarchFn();
+export const marchBody = buildEntryFn(MARCH_BODY);
+
+/** Run 5: the output-res refine entry (REFINE_BODY) on the same helper chain — same
+ *  gMarchNormal private, so the layer's MRT read of the normal works for both. */
+export const refineBody = buildEntryFn(REFINE_BODY);
 
 /** The coarse cone-march entry, sharing the same dependency-ordered helpers. */
 const coneMarch = (() => {
@@ -218,7 +225,7 @@ const coneMarch = (() => {
 })();
 
 /** The quarter-res depth-prepass entry (close-up task 3), same helper chain.
- *  Its own chain rather than coneMarch's final node — buildMarchFn's edge
+ *  Its own chain rather than coneMarch's final node — buildEntryFn's edge
  *  structure is load-bearing and boot-profiled, and this page is not the
  *  place to optimise node sharing away from a shipping path. */
 const depthPreMarch = (() => {
@@ -929,6 +936,22 @@ export interface DepthPreSource {
   uniforms: DepthPreUniforms;
 }
 
+/** Run 5: what the refine twin binds — the march target (400x300 colour + clip depth in
+ *  alpha) and the layer's refine uniforms. cfg: x enabled, y reject (march texels),
+ *  z normal stencil (output-pixel footprints), w Newton steps. */
+export function createRefineUniforms() {
+  return {
+    cfg: uniform(new THREE.Vector4(0, 1, 0.25, 2)),
+    nearFar: uniform(new THREE.Vector2(0.1, 200)),
+  };
+}
+export type RefineUniforms = ReturnType<typeof createRefineUniforms>;
+/** The refine twin's bound sources — same shape as DepthPreSource. */
+export interface RefineSource {
+  texture: THREE.Texture;
+  uniforms: RefineUniforms;
+}
+
 /**
  * The 1×1 depth-prepass texture views bind when their caller passes no
  * DepthPreSource — same contract as fallbackLevelShadowTexture. The binding
@@ -1016,6 +1039,10 @@ export function createMarchMaterial(
   // Temporal reprojection start (plan 2026-09-10), POSITIONALLY LAST: last
   // fresh frame's layer + inverse VP + cfg, or the never-fetched fallback.
   lastFrame?: LastFrameSource,
+  // Run 5: extra named inputs for an entry whose signature extends MARCH_BODY's
+  // (refineBody). Spread LAST into the call object; bound by name like every other
+  // input — the positional notes above concern the WGSL parameter list, not this spread.
+  extra?: Record<string, unknown>,
 ) {
   const dataNode = dataTex instanceof THREE.Texture
     ? texture(dataTex)
@@ -1029,6 +1056,9 @@ export function createMarchMaterial(
   // Hoisted above the march call: the accumulated-depth gate's cosRay reads
   // the same ray the march integrates.
   const rayDir = normalize(sub(positionWorld, cameraPosition));
+  /** The ray's cosine against the view axis — one definition, shared by the prev-depth
+   *  fetch and (via `extra`) any entry that needs it. */
+  const cosRay = mul(cameraViewMatrix, vec4(rayDir, 0.0)).z.negate();
   // Level-only shadow map (perf round 2 task 7). The node rides the march's
   // last three slots; its .value starts on the 1×1 fallback whenever the
   // twin light has not rendered yet (shadow.map is null before three's
@@ -1163,7 +1193,7 @@ export function createMarchMaterial(
           enabled: prev.uniforms.enabled,
           near: cameraNear,
           far: cameraFar,
-          cosRay: mul(cameraViewMatrix, vec4(rayDir, 0.0)).z.negate(),
+          cosRay,
         })
       : float(1e9),
     // The fragment's own proxy box: centre from the mesh's world matrix,
@@ -1236,6 +1266,7 @@ export function createMarchMaterial(
     lastTex: texture(lastFrame ? lastFrame.texture : fallbackLastFrame().tex),
     lastInvVp: lastFrame ? lastFrame.uniforms.invVp : fallbackLastFrame().invVp,
     temporalCfg: lastFrame ? lastFrame.uniforms.cfg : fallbackLastFrame().cfg,
+    ...(extra ?? {}),
   }) as unknown as Swizzled;
 
   const material = new MeshBasicNodeMaterial();
@@ -1586,6 +1617,9 @@ export interface GpuViewOpts {
    *  twin renders into it, and the march starts from its nearest-touch
    *  distance. Omit for the from-camera march — the fetch identity is 0. */
   depthPre?: DepthPreSource;
+  /** Run 5: the output-res refine pass. Present only when the layer was created with
+   *  refine — then this view gets a third twin mesh (refineObject) on REFINE_LAYER. */
+  refine?: RefineSource;
   /** Level-only shadow light (perf round 2 task 7) — the twin of the
    *  flashlight. Omit in the lab/hands: the binding falls back to a 1×1
    *  depth texture and levelShadowCfg.x = 0 keeps the march inert. */
@@ -1949,11 +1983,41 @@ export function createZombieGpuView(
     depthPreMesh.position.copy(mesh.position);
   }
 
+  // Run 5: the output-res refine twin — same proxy box, the refineBody entry, its own
+  // layer (sdf-layer REFINE_LAYER). No cone/occluder/shell/prev/depthPre sources: the
+  // fetch identities keep SETUP's gates open and the refine reads its start from the
+  // march texels instead. Chunks get no twin (same reasoning as depthPre). Bound only
+  // when the layer was created with refine.
+  let refineMesh: THREE.Mesh | undefined;
+  if (opts.refine) {
+    const refineMaterial = createMarchMaterial(
+      dataTex, volumeTex, u,
+      refineBody,
+      undefined, undefined, tileNodes, undefined, undefined, opts.levelShadow,
+      undefined, undefined, 'lit', undefined,
+      opts.probeDyn?.node,
+      undefined,
+      {
+        marchTex: texture(opts.refine.texture),
+        // The SAME ray the material integrates — createMarchMaterial's own rayDir is
+        // internal, so recompute it identically here rather than approximating.
+        cosRay: mul(cameraViewMatrix,
+          vec4(normalize(sub(positionWorld, cameraPosition)), 0.0)).z.negate(),
+        nearFar: opts.refine.uniforms.nearFar,
+        refineCfg: opts.refine.uniforms.cfg,
+      },
+    );
+    refineMesh = new THREE.Mesh(mesh.geometry, refineMaterial);
+    refineMesh.frustumCulled = false;
+    refineMesh.position.copy(mesh.position);
+  }
+
   const mainSegmentVolume = material as unknown as MaterialWithSegmentVolume;
   return {
     object: mesh,
     coneObject: coneMesh,
     depthPreObject: depthPreMesh,
+    refineObject: refineMesh,
     uniforms: u,
     volumeTexture: volumeTex,
     dataTexture: dataTex,
@@ -1998,6 +2062,10 @@ export function createZombieGpuView(
       if (depthPreMesh) {
         depthPreMesh.position.copy(mesh.position);
         depthPreMesh.scale.copy(mesh.scale);
+      }
+      if (refineMesh) {
+        refineMesh.position.copy(mesh.position);
+        refineMesh.scale.copy(mesh.scale);
       }
     },
     setWounds(worldPositions, radii, types, ages, splayScales, offsetScales, caps, owners) {

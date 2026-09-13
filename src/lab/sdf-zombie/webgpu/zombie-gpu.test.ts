@@ -596,3 +596,13 @@ describe('M2 task 2 — surface output options on the chunk factories', () => {
     template.dispose();
   });
 });
+
+describe('run 5 refine twin (source pins)', () => {
+  const src = readFileSync('src/lab/sdf-zombie/webgpu/zombie-gpu.ts', 'utf8');
+  it('builds refineBody on the march chain and binds the four refine inputs by name', () => {
+    expect(src).toContain('export const refineBody = buildEntryFn(REFINE_BODY);');
+    expect(src).toContain('export const marchBody = buildEntryFn(MARCH_BODY);');
+    for (const k of ['marchTex:', 'cosRay:', 'nearFar:', 'refineCfg:']) expect(src).toContain(k);
+    expect(src).toContain('refineObject:');
+  });
+});
