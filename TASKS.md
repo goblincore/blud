@@ -79,7 +79,8 @@
   placement. Prim rows: first keep CPU posing and share one tall atlas with per-instance row ranges; later pose on
   the GPU from the type template. Tile list (`?tiles-playtest`) becomes the per-pixel instance/cluster index. One
   material per type; gibs become instances; the refine becomes a fullscreen pass (no twins, no Task E).
-  Brainstorm + spec once run 5b reports.
+  Hand-off brief for a fresh session: `docs/superpowers/specs/2026-09-13-merged-crowd-march-brief.md` (Obsidian
+  copy in Planning/). Brainstorm + spec once run 5b reports.
 - [ ] **CORPSE BAKE FOR EVERY CHARACTER:** `corpseBakeEligible` is soldier-only (`profile.name === 'soldier'` +
   collapse settled), so dead zombies keep marching at full cost. Extending eligibility to any settled actor is
   mostly the flag (the bake rejects on overflow and falls back). Independent of the upscaler.
