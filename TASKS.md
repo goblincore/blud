@@ -72,6 +72,10 @@
 - [ ] **DEFAULT-MODEL BENCH:** main still ships run-2's `s32-rgbd-best` (v2, no normals, no head). Candidates:
   `t16-rgb` (training on v3.2 now — cheapest frame: single attachment, half MACs), `t16-rgbn-head`, run-5 control
   `s32-rgbn-head` (v3.2). Bench frame p50 + quality, pick the new default, then use it as run 5b's baseline.
+- [ ] **MERGED CROWD MARCH (structural, later):** one union field, one ray per pixel (shared prim/face/segment
+  atlases + per-body records in a buffer instead of ~100 per-material uniforms; the tile list `?tiles-playtest` is
+  the building block). Makes the march screen-bound and collapses the refine into one fullscreen pass (no twins,
+  no Task E). Renderer-refactor scale; decide after run 5b's cheap levers report their numbers.
 - [ ] **CORPSE BAKE FOR EVERY CHARACTER:** `corpseBakeEligible` is soldier-only (`profile.name === 'soldier'` +
   collapse settled), so dead zombies keep marching at full cost. Extending eligibility to any settled actor is
   mostly the flag (the bake rejects on overflow and falls back). Independent of the upscaler.
