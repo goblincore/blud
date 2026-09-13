@@ -67,8 +67,8 @@ import {
 import { connectionBlobsForSim } from './blood-connections';
 import { createBloodView, type BloodView } from './blood-view-gpu';
 import {
-  createImpactSplashLayer, createImpactSplashEvent, stepImpactSplashEvent,
-  IMPACT_SPLASH_TUNING, type ImpactSplashEvent, type ImpactSplashLayer,
+  createImpactSplashLayer, IMPACT_SPLASH_TUNING,
+  type ImpactSplashEvent, type ImpactSplashLayer,
 } from './impact-splash';
 import type { Vec3 } from '../types';
 
@@ -368,13 +368,24 @@ async function bootstrap(): Promise<void> {
   const sim: BloodSim = createBloodSim();
   let seed = 12345;
   let rng = makeSeededRng(seed);
-  let scenario: ScenarioId = 'jet';
+  // The shape comparison prefers the one-shot slug burst: it is the same
+  // event as the procedural crown (one wound, one origin), so both shapes can
+  // be frozen at the SAME elapsed event time. A sustained 'jet' has no single
+  // event time to match.
+  let scenario: ScenarioId = 'burst';
   let frame = 0;
   let emitterAge = 0;
   let emitterAcc = 0;
   let eventTimer = 0;
   let speed = 1;
   let playing = false;
+  // SHARED ELAPSED EVENT TIME (seconds since the impact). BOTH shapes are
+  // reconstructed from this one clock, so `current` at t and `splash` at t
+  // are the same moment of the same event — never jet-frame-30 vs an
+  // unrelated 0.3 s crown.
+  let eventTime = SPLASH_CROWN_SEC;
+  /** One-shot clock length for both shapes while playing. */
+  const LOOP_SEC = IMPACT_SPLASH_TUNING.lifetimeSec;
   // STABLE EMITTER STREAMS: every emission site gets a real id, never a
   // proximity guess. Each burst/gout is its own stream; a sustained wound
   // keeps one stream for its whole life. The connection builder refuses
@@ -401,24 +412,20 @@ async function bootstrap(): Promise<void> {
     spawnImpactGout(sim, 'slug', [x, y, z], [0, 0, -1], rng, streamSeq++);
   }
 
-  function resetScenario(): void {
-    clearSim();
-    rng = makeSeededRng(seed);
-    frame = 0;
-    emitterAge = 0;
-    emitterAcc = 0;
-    eventTimer = 0;
+  /** Prime one emission stream at t=0 for the current scenario. */
+  function primeScenario(): void {
     streamSeq = 1;
     scenarioStream = streamSeq++;
     if (scenario === 'burst') fireBurst();
     if (scenario === 'overlap') { fireGout(-0.28, 1.25, 0.36); fireGout(0.28, 1.35, 0.36); }
-    // Show an airborne event immediately, even while paused.
-    const previewSteps = scenario === 'burst' ? 3 : 30;
-    for (let i = 0; i < previewSteps; i++) advance(1 / 60);
   }
 
-  function advance(dt: number): void {
-    const sdt = Math.min(dt, 1 / 30) * speed;
+  /**
+   * Advance the raw simulation by an ALREADY speed-scaled dt. Pure in
+   * (seed, scenario, dt sequence), so replaying from 0 always reproduces the
+   * same frame at the same event time.
+   */
+  function advanceRaw(sdt: number): void {
     frame++;
     switch (scenario) {
       case 'burst':
@@ -443,6 +450,24 @@ async function bootstrap(): Promise<void> {
         break;
     }
     stepBlood(sim, sdt, rng);
+  }
+
+  /**
+   * Deterministically rebuild the Current slug state AT `seconds` since the
+   * event began: clear, prime the scenario at t=0, then step at a fixed
+   * 1/60 s. Re-simulating (rather than drifting a live clock) is what makes
+   * the event time EXACT and reproducible beside the procedural crown.
+   */
+  function simulateCurrentTo(seconds: number): void {
+    clearSim();
+    rng = makeSeededRng(seed);
+    frame = 0;
+    emitterAge = 0;
+    emitterAcc = 0;
+    eventTimer = 0;
+    primeScenario();
+    const steps = Math.max(0, Math.round(seconds * 60));
+    for (let i = 0; i < steps; i++) advanceRaw(1 / 60);
   }
 
   // --- render ------------------------------------------------------------
@@ -474,26 +499,38 @@ async function bootstrap(): Promise<void> {
   // --- shape axis + splash preview state ---------------------------------
   // 'current' keeps the shipped sim path exactly as before. 'splash' renders
   // only the procedural crown in the fixture scene (the sim is cleared so no
-  // stale beads/splats leak into the comparison). Camera, seed and elapsed
-  // controls are shared, so the two shapes are never framed differently.
-  let shape: ShapeId = 'current';
+  // stale beads/splats leak into the comparison). Camera, seed and the SHARED
+  // event-time control are common, so the two shapes are never framed or
+  // timed differently. The page DEFAULTS to the new Impact splash frozen at
+  // its representative crown moment (the review default); Current is one
+  // select away.
+  let shape: ShapeId = 'splash';
   let splashFrozen = true;
   let splashEvent: ImpactSplashEvent | null = null;
 
-  function resetSplash(): void {
+  /** (Re)build the splash event and pose it at the shared event time. */
+  function syncSplashTo(seconds: number): void {
     splashLayer.clear();
     splashEvent = splashLayer.emit(SPLASH_ORIGIN, SPLASH_DIRECTION, seed);
     // Freeze on the representative crown moment by default; when the reviewer
-    // unfreezes, the event loops the full bounded lifetime.
-    splashEvent.time = splashFrozen ? SPLASH_CROWN_SEC : 0;
+    // unfreezes, the shared event clock loops the bounded lifetime.
+    splashEvent.time = Math.max(0, Math.min(splashEvent.lifetime, seconds));
   }
 
-  function advanceSplash(dt: number): void {
-    if (!splashEvent || splashFrozen) return;
-    stepImpactSplashEvent(splashEvent, dt);
-    if (splashEvent.time >= splashEvent.lifetime) {
-      // LOOP: same seed, so the loop is reproducible frame to frame.
-      splashEvent.time = 0;
+  function resetSplash(): void {
+    syncSplashTo(eventTime);
+  }
+
+  /** One shared clock step for both shapes (see the render callback). */
+  function advanceEvent(dt: number): void {
+    const sdt = Math.min(dt, 1 / 30) * speed;
+    eventTime += sdt;
+    if (eventTime >= LOOP_SEC) eventTime = eventTime % LOOP_SEC;
+    if (shape === 'splash') {
+      if (splashEvent) splashEvent.time = Math.min(splashEvent.lifetime, eventTime);
+    } else {
+      // Re-simulate from 0 to the exact event time: no drift, no stale state.
+      simulateCurrentTo(eventTime);
     }
   }
 
@@ -504,9 +541,25 @@ async function bootstrap(): Promise<void> {
       // sim so the current slug's droplets, mist and floor splats cannot be
       // mistaken for the crown in the same frame.
       clearSim();
-      resetSplash();
+      syncSplashTo(eventTime);
     } else {
-      resetScenario();
+      // SHAPE COMPARISON PREFERS THE BURST: it is the one-shot event the
+      // crown models, so both shapes can sit at the same elapsed time.
+      if (scenario !== 'burst') {
+        scenario = 'burst';
+        if (scenarioSelect) scenarioSelect.value = 'burst';
+      }
+      simulateCurrentTo(eventTime);
+    }
+    if (filterSelect) {
+      // `as ShapeId` defeats the literal narrowing of the initializer: shape
+      // is reassigned through this closure, which TS's control-flow analysis
+      // does not track across the boot-time `setShape('splash')` call.
+      const current = (shape as ShapeId) === 'current';
+      filterSelect.disabled = !current;
+      filterSelect.title = current
+        ? 'reconstruction filter for the Current slug'
+        : 'inactive: the Impact splash is a procedural shape, not a filter';
     }
   }
 
@@ -613,6 +666,7 @@ async function bootstrap(): Promise<void> {
     return {
       shape,
       frozen: splashFrozen,
+      eventTime,
       origin: SPLASH_ORIGIN,
       direction: SPLASH_DIRECTION,
       time: ev ? ev.time : 0,
@@ -628,8 +682,10 @@ async function bootstrap(): Promise<void> {
   function candidateState(): Record<string, unknown> {
     return {
       seed, frame, scenario, playing, speed,
-      shape, splash: splashState(),
+      shape, eventTime, splash: splashState(),
       variant, wipe, wipeA, wipeB, wipePos,
+      filter: variant,
+      filterApplies: shape === 'current',
       strands: enableStrands, sheets: enableSheets,
       goo: gooVisible, mist: mistVisible,
       reconstruction: gooLayer.reconstruction,
@@ -648,23 +704,27 @@ async function bootstrap(): Promise<void> {
   function updateDiag(): void {
     const d = gooLayer.densityDiagnostics;
     const v = variantById(variant);
+    const filterState = shape === 'current'
+      ? `filter ${v.id} (recon=${v.reconstruction} conns=${v.connections ? 'on' : 'off'}) ACTIVE`
+      : `filter ${v.id} INACTIVE (applies to Current only)`;
     const lines = shape === 'splash'
       ? [
-        `seed ${seed}  shape ${shape}  scenario —`,
+        `seed ${seed}  shape ${shape}  scenario ${scenario} (unused by splash)`,
         splashLegend(),
+        `EVENT TIME t ${eventTime.toFixed(2)}s shared by both shapes; Current is re-simulated to this exact t`,
         `splash origin [${SPLASH_ORIGIN.join(', ')}]  dir [${SPLASH_DIRECTION.join(', ')}] (outward, not world-up)`,
         `splash frozen ${splashFrozen ? 'YES at crown' : 'no (looping)'}  reset to ${SPLASH_CROWN_SEC.toFixed(2)}s`,
         `crown verts ${splashLayer.vertexCount}  droplets ${splashLayer.dropletCount}  events ${splashLayer.eventCount}`,
-        `reconstruction ${v.id} is INDEPENDENT of shape (applies to Current only)`,
+        filterState,
         `output ${contentW}x${contentH}  camera yaw ${orbit.yaw.toFixed(2)} pitch ${orbit.pitch.toFixed(2)} dist ${orbit.distance.toFixed(2)}`,
         `backend ${handle.backend}`,
       ]
       : [
-        `seed ${seed}  frame ${frame}  scenario ${scenario}`,
+        `seed ${seed}  frame ${frame}  scenario ${scenario}  event t ${eventTime.toFixed(2)}s`,
         `shape ${shape} (current slug)  playing ${playing}  speed ${speed.toFixed(2)}`,
         wipe
           ? `wipe at ${wipePos.toFixed(2)}: left=B(${wipeB}) right=A(${wipeA})`
-          : `reconstruction ${v.id} (recon=${v.reconstruction} conns=${v.connections ? 'on' : 'off'})`,
+          : filterState,
         `strands ${enableStrands ? 'on' : 'off'}  sheets ${enableSheets ? 'on' : 'off'} (experimental)  extras ${gooLayer.extraBlobCount}`,
         `goo ${gooVisible ? 'on' : 'off'}  mist ${mistVisible ? 'on' : 'off'} (beads/ribbons hidden as in game)`,
         `source ${sourceW}x${sourceH}  output ${contentW}x${contentH}`,
@@ -677,8 +737,8 @@ async function bootstrap(): Promise<void> {
     if (statusEl) {
       const ev = splashEvent;
       statusEl.textContent = shape === 'splash'
-        ? `IMPACT SPLASH  t ${(ev ? ev.time : 0).toFixed(2)}/${(ev ? ev.lifetime : IMPACT_SPLASH_TUNING.lifetimeSec).toFixed(2)}s  ${splashFrozen ? 'FROZEN (crown)' : 'looping'}`
-        : `CURRENT SLUG  frame ${frame}/${150}  ${playing ? 'playing' : 'paused'}`;
+        ? `IMPACT SPLASH  t ${(ev ? ev.time : 0).toFixed(2)}/${(ev ? ev.lifetime : IMPACT_SPLASH_TUNING.lifetimeSec).toFixed(2)}s  ${splashFrozen ? 'FROZEN (crown)' : 'looping'}  filter ${variant} (inactive)`
+        : `CURRENT SLUG  event t ${eventTime.toFixed(2)}s  scenario ${scenario}  filter ${variant}  ${playing ? 'playing' : 'paused'}`;
     }
   }
 
@@ -726,6 +786,8 @@ async function bootstrap(): Promise<void> {
 
   let wipeASelect: HTMLSelectElement | null = null;
   let wipeBSelect: HTMLSelectElement | null = null;
+  let filterSelect: HTMLSelectElement | null = null;
+  let scenarioSelect: HTMLSelectElement | null = null;
 
   // SHAPE first: Current slug vs the procedural Impact splash. This is a shape
   // choice, not a filter choice, and it is independent of the reconstruction
@@ -734,34 +796,47 @@ async function bootstrap(): Promise<void> {
     setShape(s); if (!playing) handle.drawOnce();
   }));
   // The reconstruction/filter variants apply to the Current slug render only.
-  row('filter', select(VARIANTS.map(v => ({ id: v.id, label: v.label })), variant, (v) => {
+  // The label and the disabled state make that explicit rather than leaving a
+  // control that silently does nothing in splash mode.
+  filterSelect = select(VARIANTS.map(v => ({ id: v.id, label: v.label })), variant, (v) => {
     variant = v; if (!playing) handle.drawOnce();
-  }));
+  });
+  filterSelect.disabled = (shape as ShapeId) !== 'current';
+  row('filter (Current only)', filterSelect);
 
-  // Splash preview controls: a freeze toggle, an elapsed-time scrubber and a
-  // reset to the representative crown moment.
+  // Shared EVENT-TIME controls: a freeze toggle, an elapsed-time scrubber that
+  // drives BOTH shapes, and a reset to the representative crown moment.
   const splashFreezeToggle = checkbox('freeze at crown', splashFrozen, (on) => {
     splashFrozen = on;
     if (shape === 'splash') { resetSplash(); if (!playing) handle.drawOnce(); }
   });
-  row('splash', splashFreezeToggle);
-  const splashTimeInput = document.createElement('input');
-  splashTimeInput.type = 'range'; splashTimeInput.min = '0'; splashTimeInput.max = String(IMPACT_SPLASH_TUNING.lifetimeSec); splashTimeInput.step = '0.01';
-  splashTimeInput.value = String(SPLASH_CROWN_SEC);
-  splashTimeInput.addEventListener('input', () => {
-    if (shape !== 'splash' || !splashEvent) return;
-    splashFrozen = true; splashFreezeToggle.querySelector('input')!.checked = true;
-    splashEvent.time = Number(splashTimeInput.value);
+  row('splash freeze', splashFreezeToggle);
+  const eventTimeInput = document.createElement('input');
+  eventTimeInput.type = 'range'; eventTimeInput.min = '0'; eventTimeInput.max = String(IMPACT_SPLASH_TUNING.lifetimeSec); eventTimeInput.step = '0.01';
+  eventTimeInput.value = String(eventTime);
+  eventTimeInput.addEventListener('input', () => {
+    eventTime = Number(eventTimeInput.value);
+    if (shape === 'splash') {
+      splashFrozen = true; splashFreezeToggle.querySelector('input')!.checked = true;
+      if (splashEvent) splashEvent.time = eventTime;
+    } else {
+      simulateCurrentTo(eventTime);
+    }
     if (!playing) handle.drawOnce();
   });
-  row('splash t', splashTimeInput);
+  row('event t (both shapes)', eventTimeInput);
   const splashResetBtn = document.createElement('button');
-  splashResetBtn.textContent = 'Reset splash';
+  splashResetBtn.textContent = 'Reset to crown t';
   splashResetBtn.addEventListener('click', () => {
-    if (shape !== 'splash') return;
-    splashFrozen = true; splashFreezeToggle.querySelector('input')!.checked = true;
-    splashTimeInput.value = String(SPLASH_CROWN_SEC);
-    resetSplash(); if (!playing) handle.drawOnce();
+    eventTime = SPLASH_CROWN_SEC;
+    eventTimeInput.value = String(eventTime);
+    if (shape === 'splash') {
+      splashFrozen = true; splashFreezeToggle.querySelector('input')!.checked = true;
+      resetSplash();
+    } else {
+      simulateCurrentTo(eventTime);
+    }
+    if (!playing) handle.drawOnce();
   });
   row('', splashResetBtn);
 
@@ -789,9 +864,14 @@ async function bootstrap(): Promise<void> {
   wipePosInput.addEventListener('input', () => { wipePos = Number(wipePosInput.value); if (!playing) handle.drawOnce(); });
   row('wipe pos', wipePosInput);
 
-  row('scenario', select(SCENARIOS, scenario, (s) => {
-    scenario = s; resetScenario(); if (!playing) handle.drawOnce();
-  }));
+  scenarioSelect = select(SCENARIOS, scenario, (s) => {
+    scenario = s;
+    // Keep the event-time contract: the Current side is rebuilt at the shared
+    // time, and in splash mode the sim stays empty.
+    if (shape === 'current') simulateCurrentTo(eventTime); else clearSim();
+    if (!playing) handle.drawOnce();
+  });
+  row('scenario', scenarioSelect);
 
   const seedInput = document.createElement('input');
   seedInput.type = 'number'; seedInput.value = String(seed); seedInput.style.width = '90px';
@@ -799,7 +879,7 @@ async function bootstrap(): Promise<void> {
     const n = Number(seedInput.value);
     if (Number.isFinite(n)) {
       seed = Math.floor(n);
-      if (shape === 'splash') resetSplash(); else resetScenario();
+      if (shape === 'splash') resetSplash(); else simulateCurrentTo(eventTime);
       if (!playing) handle.drawOnce();
     }
   });
@@ -808,7 +888,7 @@ async function bootstrap(): Promise<void> {
   const replayBtn = document.createElement('button');
   replayBtn.textContent = 'Replay';
   replayBtn.addEventListener('click', () => {
-    if (shape === 'splash') resetSplash(); else resetScenario();
+    if (shape === 'splash') resetSplash(); else simulateCurrentTo(eventTime);
     if (!playing) handle.drawOnce();
   });
   row('', replayBtn);
@@ -905,15 +985,22 @@ async function bootstrap(): Promise<void> {
     step: () => { playing = false; handle.setLoopRunning(false); handle.step(1 / 60); },
     replay: (nextSeed?: number) => {
       if (nextSeed !== undefined && Number.isFinite(nextSeed)) { seed = Math.floor(nextSeed); seedInput.value = String(seed); }
-      if (shape === 'splash') resetSplash(); else resetScenario();
+      if (shape === 'splash') resetSplash(); else simulateCurrentTo(eventTime);
       if (!playing) handle.drawOnce();
     },
     setShape: (s: ShapeId) => { setShape(s); if (!playing) handle.drawOnce(); },
     setSplashTime: (t: number) => {
-      if (!splashEvent || !Number.isFinite(t)) return;
-      splashFrozen = true;
-      splashEvent.time = Math.max(0, Math.min(splashEvent.lifetime, t));
-      splashTimeInput.value = String(splashEvent.time);
+      if (!Number.isFinite(t)) return;
+      eventTime = Math.max(0, Math.min(IMPACT_SPLASH_TUNING.lifetimeSec, t));
+      eventTimeInput.value = String(eventTime);
+      if (shape === 'splash') {
+        if (!splashEvent) resetSplash();
+        else splashEvent.time = eventTime;
+        splashFrozen = true;
+        splashFreezeToggle.querySelector('input')!.checked = true;
+      } else {
+        simulateCurrentTo(eventTime);
+      }
       if (!playing) handle.drawOnce();
     },
     setSplashFrozen: (on: boolean) => {
@@ -921,7 +1008,11 @@ async function bootstrap(): Promise<void> {
       splashFreezeToggle.querySelector('input')!.checked = on;
       if (shape === 'splash' && !playing) handle.drawOnce();
     },
-    resetSplash: () => { resetSplash(); if (!playing) handle.drawOnce(); },
+    resetSplash: () => {
+      eventTime = SPLASH_CROWN_SEC;
+      eventTimeInput.value = String(eventTime);
+      resetSplash(); if (!playing) handle.drawOnce();
+    },
     splashState,
     setVariant: (v: VariantId) => { variant = v; if (!playing) handle.drawOnce(); },
     setWipe: (on: boolean, a?: VariantId, b?: VariantId, pos?: number) => {
@@ -929,7 +1020,12 @@ async function bootstrap(): Promise<void> {
       if (pos !== undefined && Number.isFinite(pos)) wipePos = Math.max(0.05, Math.min(0.95, pos));
       if (!playing) handle.drawOnce();
     },
-    setScenario: (s: ScenarioId) => { scenario = s; resetScenario(); if (!playing) handle.drawOnce(); },
+    setScenario: (s: ScenarioId) => {
+      scenario = s;
+      if (scenarioSelect) scenarioSelect.value = s;
+      if (shape === 'current') simulateCurrentTo(eventTime); else clearSim();
+      if (!playing) handle.drawOnce();
+    },
     setDensityScale: (v: number) => { gooLayer.setDensityScale(v); if (!playing) handle.drawOnce(); },
     setSource: (w: number, h: number) => {
       sourceW = Math.max(16, Math.round(w)); sourceH = Math.max(16, Math.round(h));
@@ -944,28 +1040,27 @@ async function bootstrap(): Promise<void> {
     },
     captureInstructions: () => [
       '1. npm run dev and open /sdf-blood-compare.html (WebGPU required).',
-      '2. shape=Current slug: choose a scenario + filter (or full-size wipe A/B).',
-      '3. shape=Impact splash: the crown opens frozen at the crown moment; Play loops it.',
-      '4. Press Play/Pause (or leave frozen), then record __bloodCompare.state() beside the image.',
-      '5. Screenshot the canvas; compare only shots at the same seed, source grid, output size and time.',
+      '2. Default is shape=Impact splash, FROZEN at the representative crown moment (event t).',
+      '3. Switch shape=Current slug: the scenario is forced to burst and re-simulated to the SAME event t.',
+      '4. filter applies to Current only and is disabled (labelled) in Impact splash; record state().',
+      '5. Press Play/Pause (or leave frozen), then record __bloodCompare.state() beside the image.',
+      '6. Screenshot the canvas; compare only shots at the same seed, event t, source grid and output size.',
       'Visual acceptance is PENDING: not verified during the training window.',
     ],
   };
   (globalThis as unknown as { __bloodCompare?: typeof api }).__bloodCompare = api;
 
   // --- wiring ------------------------------------------------------------
-  handle.setRenderCallback((dt) => {
-    if (shape === 'splash') { advanceSplash(dt); return; }
-    // Replay short comparison clips instead of leaving an exhausted wound
-    // dripping onto a floor full of old splats. Same seed each cycle.
-    if (frame >= 150) resetScenario();
-    else advance(dt);
-  });
+  // ONE clock for both shapes. Playing steps the shared event time and either
+  // poses the crown or re-simulates the Current slug to the exact same t, so
+  // the two sides never drift apart.
+  handle.setRenderCallback((dt) => { advanceEvent(dt); });
   handle.setDrawFn(() => { draw(); });
   attachOrbit(handle.canvas);
   applyCamera();
   scene.background = background;
-  resetScenario();
+  // Review default: the new Impact splash, frozen at the crown moment.
+  setShape('splash');
   handle.setLoopRunning(false);
   handle.drawOnce();
 

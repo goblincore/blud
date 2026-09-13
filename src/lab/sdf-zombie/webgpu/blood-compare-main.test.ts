@@ -220,10 +220,19 @@ describe('blood comparison page — Current slug vs Impact splash shape axis', (
   it('exposes exactly two shapes, separate from the filter variants', () => {
     expect(SHAPES.map(s => s.id)).toEqual(['current', 'splash']);
     expect(SHAPES.map(s => s.id)).not.toEqual(VARIANTS.map(v => v.id));
-    // Shape and filter are distinct controls.
+    // Shape and filter are distinct controls, and the filter row says so.
     expect(src).toContain("row('shape'");
-    expect(src).toContain("row('filter'");
-    expect(src).toContain('is INDEPENDENT of shape');
+    expect(src).toContain("row('filter (Current only)'");
+    expect(src).toContain('applies to Current only');
+  });
+
+  it('defaults to the new Impact splash frozen at its representative crown moment', () => {
+    // The review default is the candidate, not the shipped slug.
+    expect(src).toContain("let shape: ShapeId = 'splash';");
+    expect(src).toContain("setShape('splash');");
+    expect(SPLASH_CROWN_SEC).toBeGreaterThan(0);
+    expect(SPLASH_CROWN_SEC).toBeLessThan(1.15);
+    expect(src).toContain('let splashFrozen = true;');
   });
 
   it('puts the splash at the SAME wound origin as the current slug burst, spraying outward', () => {
@@ -236,25 +245,48 @@ describe('blood comparison page — Current slug vs Impact splash shape axis', (
   });
 
   it('uses the production impact-splash module and preserves the shared seed', () => {
-    for (const needle of [
-      'createImpactSplashLayer', 'createImpactSplashEvent', 'stepImpactSplashEvent',
-      'IMPACT_SPLASH_TUNING',
-    ]) {
+    for (const needle of ['createImpactSplashLayer', 'IMPACT_SPLASH_TUNING']) {
       expect(src, `${needle} must be used`).toContain(needle);
     }
     // No second seed source: the splash emits with the page's `seed`.
     expect(src).toContain('splashLayer.emit(SPLASH_ORIGIN, SPLASH_DIRECTION, seed)');
   });
 
+  it('compares the shapes at the SAME elapsed event time (one shared clock)', () => {
+    // One clock, used by both branches.
+    expect(src).toContain('let eventTime = SPLASH_CROWN_SEC;');
+    expect(src).toContain('simulateCurrentTo(eventTime)');
+    expect(src).toContain('function simulateCurrentTo(seconds: number)');
+    // The Current side is rebuilt from t=0 at a fixed 1/60 s, so a seek is
+    // exact and reproducible (never a drifting live frame count).
+    expect(src).toContain('advanceRaw(1 / 60)');
+    // Splash is posed from the same clock.
+    expect(src).toContain('splashEvent.time = Math.min(splashEvent.lifetime, eventTime)');
+    // Both shapes loop through one shared event clock while playing.
+    expect(src).toContain('function advanceEvent(dt: number)');
+  });
+
+  it('prefers the one-shot burst scenario when switching to the Current shape', () => {
+    expect(src).toContain("let scenario: ScenarioId = 'burst';");
+    const m = src.match(/SHAPE COMPARISON PREFERS THE BURST[\s\S]{0,400}?simulateCurrentTo\(eventTime\)/);
+    expect(m).not.toBeNull();
+    expect(m![0]).toContain("scenario = 'burst'");
+  });
+
+  it('states the filter explicitly and disables it for the splash shape', () => {
+    expect(src).toContain('filterSelect.disabled');
+    expect(src).toContain('applies to Current only');
+    expect(src).toContain("filterApplies: shape === 'current'");
+    expect(src).toContain('filter ${v.id} INACTIVE');
+  });
+
   it('freezes at the crown moment, loops, and has a reset', () => {
-    expect(SPLASH_CROWN_SEC).toBeGreaterThan(0);
-    expect(SPLASH_CROWN_SEC).toBeLessThan(1.15);
     expect(src).toContain('splashFrozen');
     expect(src).toContain('resetSplash');
-    expect(src).toContain('advanceSplash');
     expect(src).toContain('freeze at crown');
-    // The loop restarts the same event at t=0 rather than emitting a new one.
-    expect(src).toContain('splashEvent.time = 0;');
+    expect(src).toContain('Reset to crown t');
+    // One elapsed-time scrubber drives both shapes.
+    expect(src).toContain('event t (both shapes)');
   });
 
   it('renders the splash without the current sim/goo so shapes cannot be confused', () => {
@@ -273,13 +305,13 @@ describe('blood comparison page — Current slug vs Impact splash shape axis', (
     expect(src).toContain('FROZEN (crown)');
   });
 
-  it('exposes splash controls on the global API (no default promotion)', () => {
+  it('exposes splash controls on the global API (Current stays accessible)', () => {
     for (const needle of [
       'setShape', 'setSplashTime', 'setSplashFrozen', 'resetSplash', 'splashState',
     ]) {
       expect(src, `${needle} must be exposed`).toContain(needle);
     }
-    // Default remains the shipped current slug.
-    expect(src).toContain("let shape: ShapeId = 'current';");
+    // Both shapes remain selectable.
+    expect(SHAPES.map(s => s.id)).toContain('current');
   });
 });
