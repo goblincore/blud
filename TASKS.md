@@ -43,8 +43,12 @@
   (intensity 0.81, blur 0.17). Unsharp mode tried, left off. Decisions: next-steps note §8.
   FOLLOW-UP: `scripts/sdf-game-bench.mjs` `baseline` leg pins `setUpscale(null)` and is no longer ship truth —
   add a ship leg that loads the tracked asset before trusting any new baseline number.
-- [ ] NEXT TRAINING RUN (agreed): s32-cost 3-layer dilated + normals + higher gradient weight + reparam;
-  and s16 + normals + 3 layers. Dataset v3, no recapture. Launcher pattern: `.lab-tmp/grid-s64.sh`.
+- [x] RUN 3 DONE (2026-09-12): t24/t16 dilated ladder, reparam, gradient weight 1.0 — ALL within ±1 % of s32-rgbn
+  (0.0157–0.0164). The s32 cost class is saturated on L1; t16-rgbn (half cost, −3 %) is the cheap-tier candidate.
+  Next quality step = full-res procedural detail channels (demodulation) + a look metric, not net shape. Note §12.
+- [x] WOUND MEAT DETAIL (2026-09-12): soldier wound band gets clots / striation / crevice / shattered glints
+  (march.wgsl.ts soldierWound block), uniform `meatCfg` + wound-panel MEAT group (4 sliders); march param count
+  re-pinned 99 → 100. Owner look pending (Chrome lost WebGPU under the training load — relaunch).
 - [ ] P4 (brainstormed, spec pending) — **read `docs/dev-notes/2026-09-12-visual-direction-handoff.md` first**:
   upscaler as an AESTHETIC tool (90s pre-rendered CG, soft ray-traced, characters only, normals + adversarial loss),
   blood overhaul (conventional rendering FIRST — narrow-range filter, refraction, volume — then learn it cheap),

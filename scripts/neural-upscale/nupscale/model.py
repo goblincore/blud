@@ -6,7 +6,7 @@ import math
 import torch
 from torch import nn
 
-from .constants import DEPTH_INPUT_SCALE, HIDDEN_WIDTHS, ICNR_SCALE, INPUT_CHANNELS, LAST_CHANNELS, NORMAL_CHANNELS
+from .constants import DEPTH_INPUT_SCALE, HIDDEN_DILATIONS, HIDDEN_WIDTHS, ICNR_SCALE, INPUT_CHANNELS, LAST_CHANNELS, NORMAL_CHANNELS
 
 
 def linear_depth(clip: torch.Tensor, near: float, far: float) -> torch.Tensor:
@@ -15,12 +15,46 @@ def linear_depth(clip: torch.Tensor, near: float, far: float) -> torch.Tensor:
     return (near * far) / (far - d * (far - near))
 
 
-class Upscaler(nn.Module):
-    """3x3 replicate-padded convs at low resolution with ReLU between them; the last layer has
-    16 channels. `forward` returns that last layer (N, 16, h, w); `reconstruct.reconstruct`
-    places it."""
+class RepConv(nn.Module):
+    """Training-time structural reparameterisation (NTIRE-ESR style): a 3x3 conv, a 1x1 conv and
+    (when shapes allow) an identity branch, summed. `fuse()` folds all three into ONE plain
+    replicate-padded 3x3 conv with identical output, so the export is the same format as an
+    unreparameterised model and the runtime never knows. Replicate padding makes the fold exact:
+    the 1x1 and identity branches sit at the kernel centre, which never reads a padded texel."""
 
-    def __init__(self, model_id: str, inputs: str, seed: int = 1) -> None:
+    def __init__(self, in_c: int, out_c: int, dilation: int = 1) -> None:
+        super().__init__()
+        self.conv3 = nn.Conv2d(in_c, out_c, 3, padding=dilation, dilation=dilation, padding_mode="replicate")
+        self.conv1 = nn.Conv2d(in_c, out_c, 1)
+        self.identity = in_c == out_c
+        self.in_channels, self.out_channels, self.dilation = in_c, out_c, (dilation, dilation)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        y = self.conv3(x) + self.conv1(x)
+        return y + x if self.identity else y
+
+    @torch.no_grad()
+    def fuse(self) -> nn.Conv2d:
+        d = self.dilation[0]
+        fused = nn.Conv2d(self.in_channels, self.out_channels, 3, padding=d, dilation=d, padding_mode="replicate")
+        w = self.conv3.weight.clone()
+        w[:, :, 1, 1] += self.conv1.weight[:, :, 0, 0]
+        b = self.conv3.bias + self.conv1.bias
+        if self.identity:
+            for c in range(self.out_channels):
+                w[c, c, 1, 1] += 1.0
+        fused.weight.copy_(w)
+        fused.bias.copy_(b)
+        return fused
+
+
+class Upscaler(nn.Module):
+    """3x3 replicate-padded convs at low resolution with ReLU between them (hidden layers may be
+    dilated, HIDDEN_DILATIONS); the last layer has 16 channels. `forward` returns that last layer
+    (N, 16, h, w); `reconstruct.reconstruct` places it. `reparam=True` trains the hidden layers as
+    RepConv branches; `fused()` returns the plain equivalent for export."""
+
+    def __init__(self, model_id: str, inputs: str, seed: int = 1, reparam: bool = False) -> None:
         super().__init__()
         if model_id not in HIDDEN_WIDTHS:
             raise ValueError(f"unknown model id {model_id!r} (expected {'|'.join(HIDDEN_WIDTHS)})")
@@ -28,10 +62,18 @@ class Upscaler(nn.Module):
             raise ValueError(f"unknown input set {inputs!r} (expected {'|'.join(INPUT_CHANNELS)})")
         self.model_id = model_id
         self.inputs = inputs
+        self.reparam = reparam
         widths = [INPUT_CHANNELS[inputs], *HIDDEN_WIDTHS[model_id], LAST_CHANNELS]
-        self.convs = nn.ModuleList(
-            nn.Conv2d(a, b, 3, padding=1, padding_mode="replicate") for a, b in zip(widths[:-1], widths[1:])
-        )
+        dilations = [*HIDDEN_DILATIONS[model_id], 1]
+        convs: list[nn.Module] = []
+        for k, (a, b) in enumerate(zip(widths[:-1], widths[1:])):
+            d = dilations[k]
+            hidden = k < len(widths) - 2
+            if reparam and hidden:
+                convs.append(RepConv(a, b, d))
+            else:
+                convs.append(nn.Conv2d(a, b, 3, padding=d, dilation=d, padding_mode="replicate"))
+        self.convs = nn.ModuleList(convs)
         in_scale = torch.ones(widths[0])
         if inputs in ("rgbd", "rgbdn"):
             in_scale[4] = DEPTH_INPUT_SCALE
@@ -47,6 +89,12 @@ class Upscaler(nn.Module):
         g = torch.Generator().manual_seed(seed)
         for conv in self.convs[:-1]:
             std = math.sqrt(2.0 / (conv.in_channels * 9))
+            if isinstance(conv, RepConv):
+                conv.conv3.weight.copy_(torch.randn(conv.conv3.weight.shape, generator=g) * std)
+                conv.conv3.bias.zero_()
+                conv.conv1.weight.copy_(torch.randn(conv.conv1.weight.shape, generator=g) * std)
+                conv.conv1.bias.zero_()
+                continue
             conv.weight.copy_(torch.randn(conv.weight.shape, generator=g) * std)
             conv.bias.zero_()
         last = self.convs[-1]
@@ -56,8 +104,24 @@ class Upscaler(nn.Module):
         last.bias.zero_()
         if self.model_id == "zero":
             for conv in self.convs:
-                conv.weight.zero_()
-                conv.bias.zero_()
+                for m in (conv.modules() if isinstance(conv, RepConv) else [conv]):
+                    if isinstance(m, nn.Conv2d):
+                        m.weight.zero_()
+                        m.bias.zero_()
+
+    @torch.no_grad()
+    def fused(self) -> "Upscaler":
+        """The plain-conv equivalent (RepConv branches folded); `self` when not reparameterised."""
+        if not self.reparam:
+            return self
+        plain = Upscaler(self.model_id, self.inputs, reparam=False).to(self.in_scale.device)
+        for k, conv in enumerate(self.convs):
+            src = conv.fuse() if isinstance(conv, RepConv) else conv
+            plain.convs[k].weight.copy_(src.weight)
+            plain.convs[k].bias.copy_(src.bias)
+        plain.in_scale.copy_(self.in_scale)
+        plain.in_offset.copy_(self.in_offset)
+        return plain
 
     @property
     def wants_normals(self) -> bool:

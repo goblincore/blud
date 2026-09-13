@@ -56,15 +56,16 @@ def scalar_forward(model, march: torch.Tensor, near: float, far: float) -> list:
         weights = conv.weight.detach().reshape(-1).tolist()
         bias = conv.bias.detach().tolist()
         in_c, out_c = conv.in_channels, conv.out_channels
+        d = int(conv.dilation[0])
         out = [[[0.0] * w for _ in range(h)] for _ in range(out_c)]
         for o in range(out_c):
             for yy in range(h):
                 for xx in range(w):
                     s = bias[o]
                     for ky in range(3):
-                        sy = min(max(yy + ky - 1, 0), h - 1)
+                        sy = min(max(yy + (ky - 1) * d, 0), h - 1)
                         for kx in range(3):
-                            sx = min(max(xx + kx - 1, 0), w - 1)
+                            sx = min(max(xx + (kx - 1) * d, 0), w - 1)
                             for i in range(in_c):
                                 s += weights[((o * in_c + i) * 3 + ky) * 3 + kx] * x[i][sy][sx]
                     out[o][yy][xx] = max(0.0, s) if k < last else s

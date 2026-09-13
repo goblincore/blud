@@ -15,6 +15,14 @@ const expectParses = (src: string) => {
 };
 
 describe('upscale pass plan', () => {
+  it('a dilated hidden layer offsets its taps by the dilation', () => {
+    const passes = planUpscalePasses(createUpscaleModel('t16', 'rgb', 1), 'sp');
+    expect(passes[1]!.run).toContain('vec2<i32>(-2, -2)');
+    expect(passes[1]!.run).toContain('vec2<i32>(2, 0)');
+    expect(passes[0]!.run).not.toContain('vec2<i32>(-2, -2)');
+    expect(passes[2]!.run).not.toContain('vec2<i32>(-2, -2)');
+  });
+
   it('normal input sets bind a second texture on the first pass only, depth-first when both', () => {
     for (const inputs of ['rgbn', 'rgbdn'] as const) {
       const passes = planUpscalePasses(createUpscaleModel('s8', inputs, 1), 'sp');
@@ -68,7 +76,7 @@ describe('upscale pass plan', () => {
 });
 
 describe('upscale WGSL sources', () => {
-  const all = (['s8', 's16', 's32', 's64d', 'zero'] as const).flatMap((id) =>
+  const all = (['s8', 's16', 's32', 's64d', 't16', 'zero'] as const).flatMap((id) =>
     (['rgb', 'rgbd', 'rgbn', 'rgbdn'] as const).flatMap((inputs) =>
       (['sp', 'dc'] as const).filter((layout) => !(layout === 'dc' && id === 's64d'))
         .map((layout) => ({ id, inputs, layout, passes: planUpscalePasses(createUpscaleModel(id, inputs, 1), layout) }))));
@@ -141,7 +149,7 @@ describe('upscale literals', () => {
   });
 
   it('matLiteral is column-major: entry (col,row) = W[outChannels[row], 4v+col, ky, kx]', () => {
-    const layer: ConvLayer = { inC: 5, outC: 16, weights: new Float32Array(16 * 5 * 9), bias: new Float32Array(16), relu: false };
+    const layer: ConvLayer = { inC: 5, outC: 16, dilation: 1, weights: new Float32Array(16 * 5 * 9), bias: new Float32Array(16), relu: false };
     layer.weights.forEach((_, k) => { layer.weights[k] = k + 1; });
     const out = [4, 5, 6, 7];
     const m = matLiteral(layer, out, 1, 2, 0)!;

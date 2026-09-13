@@ -31,9 +31,11 @@ def f32_bytes(values) -> bytes:
 
 
 def model_layers(model) -> list[dict]:
-    """Each conv as {inC, outC, relu, weights, bias} with float32 LE bytes in PyTorch order."""
+    """Each conv as {inC, outC, relu, dilation, weights, bias} with float32 LE bytes in PyTorch order.
+    A reparameterised model is fused first (the export is always plain 3x3 convs)."""
+    model = model.fused() if getattr(model, "reparam", False) else model
     last = len(model.convs) - 1
-    return [{"inC": c.in_channels, "outC": c.out_channels, "relu": k < last,
+    return [{"inC": c.in_channels, "outC": c.out_channels, "relu": k < last, "dilation": int(c.dilation[0]),
              "weights": f32_bytes(c.weight), "bias": f32_bytes(c.bias)} for k, c in enumerate(model.convs)]
 
 
@@ -65,7 +67,7 @@ def export_model(model, out_dir: Path | str, *, run: str, step: int, dataset: st
         "source": "trained",
         "run": run,
         "step": int(step),
-        "layers": [{"inC": l["inC"], "outC": l["outC"], "relu": l["relu"],
+        "layers": [{"inC": l["inC"], "outC": l["outC"], "relu": l["relu"], "dilation": l["dilation"],
                     "weights": b64(l["weights"]), "bias": b64(l["bias"])} for l in layers],
         "inScale": np.frombuffer(in_scale, dtype="<f4").astype(float).tolist(),
         "inOffset": np.frombuffer(in_offset, dtype="<f4").astype(float).tolist(),
@@ -87,7 +89,7 @@ def _save_hwc(path: Path, chw_tensor: torch.Tensor) -> None:
 def export_parity_fixture(model, pairs: list[Pair], near: float, far: float, out_dir: Path | str,
                           count: int = 2) -> list[dict]:
     """The first `count` pairs' inputs and PyTorch's float32 CPU §4 reconstruction (contracts §3)."""
-    cpu = copy.deepcopy(model).to("cpu").float().eval()
+    cpu = copy.deepcopy(model.fused() if getattr(model, "reparam", False) else model).to("cpu").float().eval()
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     fixtures = []

@@ -43,10 +43,13 @@ class RunConfig:
     detail_weight: float = C.DETAIL_WEIGHT
     coverage_weight: float = C.COVERAGE_WEIGHT
     compile: bool = False
+    reparam: bool = False
+    """Run-name suffix so variants of one (model, inputs) coexist in a root, e.g. '-dw1.0' or '-rep'."""
+    tag: str = ""
 
     @property
     def name(self) -> str:
-        return f"{self.model_id}-{self.inputs}"
+        return f"{self.model_id}-{self.inputs}{self.tag}"
 
     def record(self) -> dict:
         return {**asdict(self), "regionWeights": dict(C.REGION_WEIGHTS), "edgeBandPx": C.EDGE_BAND_PX,
@@ -125,7 +128,7 @@ def train_run(cfg: RunConfig, dataset: Dataset, root: Path | str, *, device: tor
     near, far = dataset.near, dataset.far
 
     torch.manual_seed(cfg.seed)
-    model = Upscaler(cfg.model_id, cfg.inputs, seed=cfg.seed).to(device)
+    model = Upscaler(cfg.model_id, cfg.inputs, seed=cfg.seed, reparam=cfg.reparam).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=cfg.lr)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=max(cfg.max_steps, 1))
     latest_path, best_path = run_dir / "ckpt-latest.pt", run_dir / "ckpt-best.pt"
@@ -224,7 +227,7 @@ def train_run(cfg: RunConfig, dataset: Dataset, root: Path | str, *, device: tor
     export_parity_fixture(model, fixture_pairs, near, far, final_dir / "parity")
     if best_path.exists():
         ck = torch.load(best_path, map_location="cpu", weights_only=True)
-        best_model = Upscaler(cfg.model_id, cfg.inputs)
+        best_model = Upscaler(cfg.model_id, cfg.inputs, reparam=cfg.reparam)
         best_model.load_state_dict(ck["model"])
         best_dir = exports / f"{cfg.name}-best"
         export_model(best_model, best_dir, run=cfg.name, step=ck["step"], dataset=dataset.name,

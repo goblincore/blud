@@ -171,11 +171,11 @@ const FULL_PRELUDE = `  let lowDims = vec2<i32>(textureDimensions(march, 0));
 `;
 
 /** The 9 tap coordinates q0..q8, k = ky * 3 + kx, offset (kx - 1, ky - 1). */
-function tapCoords(center: string, maxI: string): string {
+function tapCoords(center: string, maxI: string, dilation = 1): string {
   const lines: string[] = [];
   for (let ky = 0; ky < 3; ky++) {
     for (let kx = 0; kx < 3; kx++) {
-      lines.push(`  let q${ky * 3 + kx} = clamp(${center} + vec2<i32>(${kx - 1}, ${ky - 1}), vec2<i32>(0, 0), ${maxI});`);
+      lines.push(`  let q${ky * 3 + kx} = clamp(${center} + vec2<i32>(${(kx - 1) * dilation}, ${(ky - 1) * dilation}), vec2<i32>(0, 0), ${maxI});`);
     }
   }
   return `${lines.join('\n')}\n`;
@@ -256,7 +256,7 @@ function convPass(model: UpscaleModel, layerIndex: number, passIndex: number, in
     ...(usesNearFar ? ['nearFar: vec2<f32>'] : []),
   ];
   const nIn = first ? (usesNearFar || usesNormal ? 2 : 1) : inputs.length;
-  let body = lowPrelude(params[0]!) + tapCoords('p', 'maxI') + (first ? marchInputTaps(model) : textureTaps(inputs.length));
+  let body = lowPrelude(params[0]!) + tapCoords('p', 'maxI', layer.dilation) + (first ? marchInputTaps(model) : textureTaps(inputs.length));
   const globals: string[] = [];
   for (let t = 0; t < targets; t++) {
     const outCh = [0, 1, 2, 3].map((r) => outStart + 4 * t + r);

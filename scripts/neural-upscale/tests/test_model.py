@@ -88,3 +88,24 @@ def test_rgbn_assembles_hit_masked_normals_after_hit():
     d = Upscaler("s8", "rgbdn")
     assert d.in_scale[4].item() == pytest.approx(0.1) and d.in_scale.shape[0] == 8
     assert d.assemble(torch.cat([march, nrm], dim=0).unsqueeze(0), 0.1, 200.0).shape[1] == 8
+
+
+def test_dilated_ladder_matches_the_scalar_twin_and_reparam_fuses_exactly():
+    from nupscale.constants import HIDDEN_DILATIONS
+    assert HIDDEN_DILATIONS["t24"] == (1, 2, 1) and HIDDEN_DILATIONS["t16"] == (1, 2, 1)
+    march = random_march(7, 9, seed=5)
+    m = Upscaler("t16", "rgb", seed=2)
+    assert [int(c.dilation[0]) for c in m.convs] == [1, 2, 1, 1]
+    torch_out = m(march.unsqueeze(0), 0.1, 200.0)[0]
+    ref = torch.tensor(scalar_forward(m, march, 0.1, 200.0), dtype=torch.float32)
+    assert torch.allclose(torch_out, ref, atol=1e-4)
+
+    rep = Upscaler("t16", "rgb", seed=3, reparam=True)
+    with torch.no_grad():
+        for conv in rep.convs[:-1]:
+            conv.conv1.weight.normal_(); conv.conv1.bias.normal_()
+    x = march.unsqueeze(0)
+    fused = rep.fused()
+    assert not fused.reparam and all(type(c).__name__ == "Conv2d" for c in fused.convs)
+    assert torch.allclose(rep(x, 0.1, 200.0), fused(x, 0.1, 200.0), atol=1e-4)
+    assert [int(c.dilation[0]) for c in fused.convs] == [1, 2, 1, 1]

@@ -39,7 +39,8 @@ export interface WoundKey<K extends string = string> {
 export type WoundTuningKey =
   | 'woundDepthAmp' | 'fatDepth' | 'muscleDepth' | 'boneRatio'
   | 'visceraAmp' | 'visceraDepth' | 'gutSize' | 'spillChance'
-  | 'coilTightness' | 'springiness' | 'organAmp';
+  | 'coilTightness' | 'springiness' | 'organAmp'
+  | 'meatAmp' | 'meatClot' | 'meatGlint' | 'meatCrevice';
 export type WoundTuningValues = Record<WoundTuningKey, number>;
 
 const _WOUND_KEYS = [
@@ -58,6 +59,11 @@ const _WOUND_KEYS = [
   { key: 'springiness', label: 'springiness', min: 0, max: 1, step: 0.01, value: 0.35 },
   // Live uniform write (march side): 0 shades organ prims as plain bone.
   { key: 'organAmp', label: 'organ tint', min: 0, max: 1, step: 0.01, value: 1 },
+  // MEAT DETAIL (2026-09-12, soldier wounds): march.wgsl.ts soldierWound block, uniform meatCfg.
+  { key: 'meatAmp', label: 'meat amp', min: 0, max: 3, step: 0.05, value: 1 },
+  { key: 'meatClot', label: 'meat clots', min: 0, max: 2.5, step: 0.05, value: 1 },
+  { key: 'meatGlint', label: 'meat glints', min: 0, max: 2, step: 0.05, value: 1 },
+  { key: 'meatCrevice', label: 'meat crevice', min: 0, max: 1.5, step: 0.05, value: 1 },
 ] as const satisfies readonly WoundKey<WoundTuningKey>[];
 
 type TableKeys = (typeof _WOUND_KEYS)[number]['key'];

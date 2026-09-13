@@ -2225,6 +2225,8 @@ async function main() {
     // preset default on every rebuild, so the panel's value must be
     // re-stamped after it or a cast rebuild would silently reset the knob.
     view.uniforms.organAmp.value = woundTuning.organAmp;
+    // MEAT DETAIL (2026-09-12): the four MEAT sliders → meatCfg (x amp, y clot, z glint, w crevice).
+    view.uniforms.meatCfg.value.set(woundTuning.meatAmp, woundTuning.meatClot, woundTuning.meatGlint, woundTuning.meatCrevice);
   }
 
   /** The applied tuning record plus body 1's live surfCfg3 — the shader

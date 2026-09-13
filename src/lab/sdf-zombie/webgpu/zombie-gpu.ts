@@ -339,6 +339,8 @@ export function defaultUniforms(faceTex: THREE.Texture) {
      *  wound tissue ramp (march.wgsl.ts TISSUE_RAMP). Defaults mirror
      *  henenlotter-latex; applyMaterial overwrites from the material. */
     surfCfg3: uniform(new THREE.Vector4(1.0, 0.004, 0.014, 1.0)),
+    /** MEAT DETAIL (soldier wounds, 2026-09-12): x amp, y clot, z glint, w crevice — wound panel MEAT group. */
+    meatCfg: uniform(new THREE.Vector4(1.0, 1.0, 1.0, 1.0)),
     /** The colour the albedo mottle mixes toward. Inert while surfCfg2.z is 0,
      *  which is every stock preset — see FleshMaterial.mottleAmp. */
     mottleColor: uniform(new THREE.Color(0.62, 0.24, 0.30)),
@@ -1070,6 +1072,7 @@ export function createMarchMaterial(
     surfCfg: u.surfCfg,
     surfCfg2: u.surfCfg2,
     surfCfg3: u.surfCfg3,
+    meatCfg: u.meatCfg,
     mottleColor: u.mottleColor,
     fatColor: u.fatColor,
     boneColor: u.boneColor,
@@ -2227,6 +2230,7 @@ export function createChunkGpuView(
     u.surfCfg.value.copy(template.surfCfg.value);
     u.surfCfg2.value.copy(template.surfCfg2.value);
     u.surfCfg3.value.copy(template.surfCfg3.value);
+    u.meatCfg.value.copy(template.meatCfg.value);
     u.mottleColor.value.copy(template.mottleColor.value);
     u.fatColor.value.copy(template.fatColor.value);
     u.boneColor.value.copy(template.boneColor.value);

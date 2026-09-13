@@ -191,3 +191,89 @@ retrain first, or the raw-fields net (current + previous field + parity in), whi
 - **Open:** the trained-smoke parity bar for 64-wide models (moot if s64 is not pursued); the bench's
   `baseline` leg is the pre-stage march, not ship truth (follow-up in TASKS).
 
+## 9. Run 3 (launched 2026-09-12 19:00) and the run-4 candidate
+
+**Run 3** (`.lab-tmp/grid-run3.sh`, dataset v3, 12k steps): t24-rgbn and t16-rgbn (3 layers, middle dilated 2 —
+RF 7 → 11 texels, ~s32 / ~half-s32 MACs); t24-rgbn-dw1.0 and s32-rgbn-dw1.0 (gradient/detail weight 0.5 → 1.0 —
+the "sharpen in training" experiment; the s32 variant isolates the axis against s32-rgbn 0.0158);
+t24-rgbn-rep (3x3‖1x1‖identity branches, fused at export — same runtime cost). Built for it: per-layer dilation in
+the ladder + JSON (`dilation`, absent = ladder value), the TS twin/WGSL taps, `RepConv.fuse()` (exact), grid
+flags `--detail-weight --reparam --tag`. G3 PASS on random dilated/fused exports; compile smoke PASS.
+
+**Owner observation (2026-09-12):** the skin's procedural bump (perlin-style normal perturbation on soldier and
+zombie) washes out through the upscaler, most visibly as lost specular grain under the flashlight. Cause: the
+bump is at or below one march texel at 400×300; the march samples it once, the 16-sample target averages it,
+and L1 predicts the mean — three averaging steps. A gradient weight cannot restore detail the input never had.
+
+**Run-4 candidate — full-res procedural detail channel (radiance demodulation).** The bump is procedural, so it
+is FREE at output resolution: evaluate the same noise / bump normal at 800×600 from the march's seed and feed it
+to the net as a full-res input, so it re-synthesises the specular grain over the low-res lit surface instead of
+guessing. Needs one extra full-res texture in capture and stage, and a first-layer branch at output resolution
+(a change to the pixel-shuffle structure). Stopgap: bump amplitude / flashlight gain in the march (changes the
+native look too).
+
+## 10. Demodulation — the general trick, and where else it applies (2026-09-12)
+
+Rule of thumb: anything that is a function of **surface position + a seed** is cheap at full resolution;
+anything that is a function of **light transport** is expensive. Split the picture into those two factors,
+march only the expensive one at 400×300, and let the net recombine them. Candidates in Blud:
+
+- **Albedo / face sheet** (the classic radiance demodulation): the face decal, palette ramps, wound and char
+  colouring are lookups given a surface point. Upscale unshaded irradiance only, remodulate with full-res
+  albedo — the face texture stops blurring through the net entirely.
+- **Skin bump** (§9): procedural normal perturbation, re-evaluated at 800×600 from the march's seed.
+- **Wound geometry**: rims are procedural carves with their own colour bands — re-evaluate edges at full res.
+- **Blood goo**: density/thickness are low-frequency (half-res is fine); the surface-normal detail and specular
+  highlight that read as "liquid" are the high-frequency factor, computable at full res over low-res thickness.
+- **Anything with a seed**: skin mottle, char crackle, bone-tube flecks.
+
+Shared plumbing: every full-res procedural needs a **surface point per output pixel**; the march gives one per
+low-res texel, but depth + the normal we now export define a plane per texel, so the full-res position is a
+cheap local reconstruction, not another march. That reconstruction is the enabling step for all of the above.
+Does NOT apply to soft shadows / bounce / AO — those are light transport and stay the net's job (the
+pre-rendered-look direction), so the two directions are complementary.
+
+## 11. Owner note — revealed flesh reads "smooth blobby red" (2026-09-12, screenshots)
+
+The soldier's skull-reveal state shows red flesh that reads as a smooth blob; the owner wants texture, grit,
+noise and specular variation so it reads as flesh + blood + wound. Two causes, two fixes:
+
+1. **The shader gives it none.** In `MARCH_BODY_SURFACE_PREP` the wound region is a colour ramp plus a
+   single wetness boost (`wetWound = max(wm * lip, gore)`, `woundWetBoost` 1.6–2.15, one `specPow`). No
+   albedo noise, no per-texel wetness variation, no fibre direction. Meat needs: (a) a dark clotted fbm
+   speckle in the albedo (two octaves, tissue-space so it does not swim), (b) wetness modulated by a second
+   noise so the highlight breaks into glints instead of one sheet, (c) anisotropic striation along the bone
+   or limb axis for muscle, (d) darker crevices where the carve depth is highest (the `tissueDepth` term is
+   already there to key it), (e) a slight `specPow` spread (tight glints on blood, broader on muscle).
+   This is shader work in one section of march.wgsl.ts, a few hours, and it improves the NATIVE look too.
+2. **The upscaler averages what little there is** (§9). Once (1) exists at march resolution it will still be
+   softened at 400×300 — which makes the wound band a prime demodulation candidate (§10): evaluate the
+   wound noise/wetness at full res from the same seed and let the net apply it.
+
+Order: shader detail first (it is the target the net would learn from), then the full-res channel.
+
+## 12. Run 3 results (2026-09-12 evening) — the cheap axes are FLAT
+
+Dataset v3, 12k steps. Reference from the v3 grid: s32-rgbn 0.0158 (edge .0621), s64d-rgbn 0.0145.
+
+| run | overall | face | edge | far | best step | wall s |
+|---|---:|---:|---:|---:|---:|---:|
+| t24-rgbn (3 layers, dilated, ~s32 MACs) | 0.0159 | 0.0235 | 0.0616 | 0.0251 | 8500 | 771 |
+| t24-rgbn-dw1.0 (gradient weight 1.0) | **0.0157** | 0.0232 | 0.0614 | 0.0250 | 8500 | 880 |
+| t24-rgbn-rep (reparameterised) | 0.0159 | 0.0234 | 0.0620 | 0.0252 | 11000 | 895 |
+| s32-rgbn-dw1.0 (known net, weight only) | 0.0159 | 0.0235 | 0.0623 | 0.0251 | 11000 | 559 |
+| t16-rgbn (~half s32 MACs) | 0.0164 | 0.0239 | 0.0636 | 0.0259 | 11000 | 561 |
+
+**Read:** every s32-cost variant lands within ±1 % of s32-rgbn. Dilation, reparameterisation and the doubled
+gradient weight are all neutral on the L1 metric. The only lever that moved it was raw width+depth (s64d, −8 %),
+which the bench priced at ~3× the frame and the owner rejected. So on THIS metric and THIS input the s32 cost
+class is saturated — the remaining gap to native (0.0098) is information the 400×300 input does not carry.
+Two things follow: (1) **t16-rgbn is the cheap-tier candidate**: half the compute, 3 % behind s32-rgbn — worth
+an in-game look; (2) the next quality step is not another net shape, it is **more input at full resolution**
+(§9/§10 demodulation: procedural bump/wound detail channels) and a **look metric** instead of L1 (research note).
+dw1.0 may still LOOK sharper — the metric cannot see that; it needs eyes (`?upscale=trained&upscalemodel=
+r3-t24-rgbn-dw1.0` vs `r3-t24-rgbn`, both staged in the dev store as `r3-*`).
+
+Built for run 3 and kept: per-layer dilation across ladder/JSON/twin/WGSL, RepConv with exact fuse, grid flags
+(`--detail-weight --reparam --tag=` — note the `=`: a tag starting with '-' is otherwise read as a flag).
+

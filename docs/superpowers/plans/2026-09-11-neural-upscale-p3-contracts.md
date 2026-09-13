@@ -126,9 +126,11 @@ models). Read by `parseUpscaleModelJson` (p3c).
   "run": "s16-rgbd",
   "step": 12500,
   "layers": [
-    { "inC": 5,  "outC": 16, "relu": true,  "weights": "<base64 float32 LE>", "bias": "<base64 float32 LE>" },
+    { "inC": 5,  "outC": 16, "relu": true,  "dilation": 1, "weights": "<base64 float32 LE>", "bias": "<base64 float32 LE>" },
     { "inC": 16, "outC": 16, "relu": true,  "weights": "...", "bias": "..." },
-    { "inC": 16, "outC": 16, "relu": false, "weights": "...", "bias": "..." }
+    { "inC": 16, "outC": 16, "relu": false, "dilation": 1, "weights": "...", "bias": "..." }
+    // `dilation` (2026-09-12, run 3): tap spacing of the 3x3, per HIDDEN_DILATIONS for the id (t24/t16 =
+    // 1,2,1 hidden); optional, absent = the ladder's value for the id; a present mismatch is rejected. A reparameterised model is FUSED before export — always plain convs.
   ],
   "inScale": [1, 1, 1, 1, 0.10000000149011612],
   "inOffset": [0, 0, 0, 0, 0],

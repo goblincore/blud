@@ -4,7 +4,7 @@ import {
   type ConvLayer, type UpscaleModel,
 } from './upscale-model';
 import {
-  assembleInput, conv3x3, f16round, linearDepth, makeImage, reconstructPixel, upscaleReference,
+  assembleInput, conv3x3, convAt, f16round, linearDepth, makeImage, reconstructPixel, upscaleReference,
   type FloatImage,
 } from './upscale-reference';
 
@@ -81,7 +81,7 @@ describe('upscale CPU twin', () => {
   it('conv3x3 uses PyTorch weight order and replicate borders', () => {
     const img = makeImage(3, 2, 1);
     img.data.set([0, 1, 2, 10, 11, 12]);
-    const layer: ConvLayer = { inC: 1, outC: 2, weights: new Float32Array(18), bias: new Float32Array(2), relu: false };
+    const layer: ConvLayer = { inC: 1, outC: 2, dilation: 1, weights: new Float32Array(18), bias: new Float32Array(2), relu: false };
     layer.weights[((0 * 1 + 0) * 3 + 0) * 3 + 0] = 1; // out 0 reads (x-1, y-1)
     layer.weights[((1 * 1 + 0) * 3 + 2) * 3 + 1] = 1; // out 1 reads (x, y+1)
     const out = conv3x3(img, layer);
@@ -94,7 +94,7 @@ describe('upscale CPU twin', () => {
 
   it('conv3x3 applies ReLU when asked', () => {
     const img = makeImage(2, 2, 1);
-    const layer: ConvLayer = { inC: 1, outC: 1, weights: new Float32Array(9), bias: new Float32Array([-1]), relu: true };
+    const layer: ConvLayer = { inC: 1, outC: 1, dilation: 1, weights: new Float32Array(9), bias: new Float32Array([-1]), relu: true };
     expect(Array.from(conv3x3(img, layer).data)).toEqual([0, 0, 0, 0]);
   });
 
@@ -201,7 +201,7 @@ describe('upscale CPU twin', () => {
   it('sub-pixel and deconvolution layouts agree for random models (the Colbert equivalence)', () => {
     const march = randomMarch(9, 7, 23);
     const normal = { w: 9, h: 7, c: 4, data: new Float32Array(9 * 7 * 4).map((_, k) => Math.cos(k * 0.37)) };
-    for (const id of ['s8', 's16'] as const) {
+    for (const id of ['s8', 's16', 't16'] as const) {
       for (const inputs of ['rgb', 'rgbd', 'rgbn', 'rgbdn'] as const) {
         const model = createUpscaleModel(id, inputs, 3);
         const sp = upscaleReference(march, model, 'sp', 0.1, 100, 18, 14, { normal });
@@ -220,5 +220,18 @@ describe('upscale CPU twin', () => {
     for (let p = 0; p < 80; p++) {
       if (margin[p]! <= 0) expect(out.data[p * 4 + 3]).toBe(1);
     }
+  });
+});
+
+describe('dilated conv', () => {
+  it('a dilation-2 layer reads taps two texels away (edge-clamped), same weights', () => {
+    const img = makeImage(5, 1, 1);
+    img.data.set([0, 1, 2, 3, 4]);
+    const w = new Float32Array(9); w[3] = 1; // left tap (ky=1, kx=0)
+    const l1 = { inC: 1, outC: 1, dilation: 1, weights: w, bias: new Float32Array([0]), relu: false };
+    const l2 = { ...l1, dilation: 2 };
+    expect(convAt(img, l1, 0, 3, 0)).toBe(2);
+    expect(convAt(img, l2, 0, 3, 0)).toBe(1);
+    expect(convAt(img, l2, 0, 1, 0)).toBe(0); // x - 2 clamps to 0
   });
 });

@@ -31,6 +31,7 @@ def test_export_model_json(tmp_path):
     assert (saved["format"], saved["id"], saved["inputs"], saved["source"], saved["run"], saved["step"]) == \
         (MODEL_FORMAT, "s8", "rgbd", "trained", "s8-rgbd", 500)
     assert [(l["inC"], l["outC"], l["relu"]) for l in saved["layers"]] == [(5, 8, True), (8, 8, True), (8, 16, False)]
+    assert [l["dilation"] for l in saved["layers"]] == [1, 1, 1]
     w0 = np.frombuffer(base64.b64decode(saved["layers"][0]["weights"]), dtype="<f4")
     assert np.array_equal(w0, m.convs[0].weight.detach().numpy().reshape(-1))
     assert saved["inScale"] == [1.0, 1.0, 1.0, 1.0, 0.10000000149011612] and saved["inOffset"] == [0.0] * 5
@@ -61,3 +62,13 @@ def test_parity_fixture(tmp_path):
     want = reconstruct(p.inp[None], m(p.inp[None], 0.1, 200.0)).march()[0].permute(1, 2, 0).detach().numpy()
     assert np.array_equal(out, want)
     assert np.array_equal(np.load(tmp_path / "parity" / "input-0.npy"), p.inp.permute(1, 2, 0).numpy())
+
+
+def test_reparam_export_is_the_fused_plain_model(tmp_path):
+    from nupscale.export import export_model, model_layers
+    m = Upscaler("t16", "rgb", seed=4, reparam=True)
+    layers = model_layers(m)
+    assert [l["dilation"] for l in layers] == [1, 2, 1, 1]
+    assert all(len(l["weights"]) == l["inC"] * l["outC"] * 9 * 4 for l in layers)
+    doc = export_model(m, tmp_path / "e", run="t16-rgb-rep", step=1, dataset="d", manifest_hash="h", metrics=None)
+    assert doc["layers"][1]["dilation"] == 2

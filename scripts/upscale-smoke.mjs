@@ -26,6 +26,7 @@ const QUERIES = [
   // Runtime normals (2026-09-12): the march's second attachment feeds the first pass.
   'upscale=s8&upscaleinputs=rgbn',
   'upscale=s64d&upscalelayout=sp&upscaleinputs=rgbdn',   // dc is refused at 64 wide (17 textures)
+  'upscale=t16&upscaleinputs=rgbn',   // dilated 3-layer ladder (run 3)
   'upscale=s8&upscalesharpen=0.5',   // post-sharpen pass (UPSCALE_SHARPEN_WGSL)
   'upscale=s8&upscalesharpen=1.5&upscalesharpenmode=unsharp',
 ];

@@ -14,7 +14,7 @@
  * Pure TypeScript — no three.js — so the CPU twin and its tests stay GPU-free.
  */
 
-export type UpscaleModelId = 's8' | 's16' | 's32' | 's64' | 's64d' | 'zero';
+export type UpscaleModelId = 's8' | 's16' | 's32' | 's64' | 's64d' | 't24' | 't16' | 'zero';
 export type UpscaleInputSet = 'rgb' | 'rgbd' | 'rgbn' | 'rgbdn';
 export type UpscaleLayout = 'sp' | 'dc';
 
@@ -25,7 +25,7 @@ export interface UpscaleConfig {
   seed: number;
 }
 
-export const UPSCALE_MODEL_IDS: readonly UpscaleModelId[] = ['s8', 's16', 's32', 's64', 's64d', 'zero'];
+export const UPSCALE_MODEL_IDS: readonly UpscaleModelId[] = ['s8', 's16', 's32', 's64', 's64d', 't24', 't16', 'zero'];
 export const UPSCALE_LAYOUTS: readonly UpscaleLayout[] = ['sp', 'dc'];
 export const UPSCALE_INPUT_SETS: readonly UpscaleInputSet[] = ['rgb', 'rgbd', 'rgbn', 'rgbdn'];
 /** Whether an input set carries hit*linearDepth (channel 4). */
@@ -42,7 +42,16 @@ export const INPUT_CHANNELS: Readonly<Record<UpscaleInputSet, number>> = { rgb: 
 /** Hidden widths. 'zero' has s8's shape with every weight and bias 0. Every
  *  width is a multiple of 4 so feature maps pack into whole RGBA textures. */
 export const HIDDEN_WIDTHS: Readonly<Record<UpscaleModelId, readonly number[]>> = {
-  s8: [8, 8], s16: [16, 16], s32: [32, 32], s64: [64, 64], s64d: [64, 64, 64], zero: [8, 8],
+  s8: [8, 8], s16: [16, 16], s32: [32, 32], s64: [64, 64], s64d: [64, 64, 64],
+  t24: [24, 24, 24], t16: [16, 16, 16], zero: [8, 8],
+};
+/** Per-hidden-layer dilation (mirrors nupscale/constants.py HIDDEN_DILATIONS). A dilated 3x3 reads
+ *  taps at ±d texels — same weights, wider receptive field. 't24'/'t16' (run 3, 2026-09-12): three
+ *  layers with the middle one dilated 2 (RF 7 -> 11 texels) at ~s32 / ~half-s32 multiply-adds.
+ *  The last (16-channel) layer is always dilation 1. */
+export const HIDDEN_DILATIONS: Readonly<Record<UpscaleModelId, readonly number[]>> = {
+  s8: [1, 1], s16: [1, 1], s32: [1, 1], s64: [1, 1], s64d: [1, 1, 1],
+  t24: [1, 2, 1], t16: [1, 2, 1], zero: [1, 1],
 };
 /** Last layer: 4 sub-pixels x (r, g, b, coverage). */
 export const LAST_CHANNELS = 16;
@@ -52,6 +61,8 @@ export const DEPTH_INPUT_SCALE = 0.1;
 export interface ConvLayer {
   inC: number;
   outC: number;
+  /** Tap spacing in texels (1 = a plain 3x3). */
+  dilation: number;
   /** outC * inC * 9 values, PyTorch order (see file header). */
   weights: Float32Array;
   /** outC values. */
@@ -115,6 +126,7 @@ export function hashModel(model: Pick<UpscaleModel, 'layers' | 'inScale' | 'inOf
 export function createUpscaleModel(id: UpscaleModelId, inputs: UpscaleInputSet, seed = 1): UpscaleModel {
   const inC0 = INPUT_CHANNELS[inputs];
   const widths = [...HIDDEN_WIDTHS[id], LAST_CHANNELS];
+  const dilations = [...HIDDEN_DILATIONS[id], 1];
   const rand = mulberry32(seed);
   const layers: ConvLayer[] = [];
   let inC = inC0;
@@ -126,7 +138,7 @@ export function createUpscaleModel(id: UpscaleModelId, inputs: UpscaleInputSet, 
       for (let k = 0; k < weights.length; k++) weights[k] = (rand() * 2 - 1) * a;
       for (let k = 0; k < bias.length; k++) bias[k] = (rand() * 2 - 1) * 0.05;
     }
-    layers.push({ inC, outC, weights, bias, relu: li < widths.length - 1 });
+    layers.push({ inC, outC, dilation: dilations[li]!, weights, bias, relu: li < widths.length - 1 });
     inC = outC;
   });
   const inScale = new Float32Array(inC0).fill(1);
@@ -171,6 +183,8 @@ export interface UpscaleModelLayerJson {
   inC: number;
   outC: number;
   relu: boolean;
+  /** Optional; absent = 1 (exports before 2026-09-12 have no field). Must match the ladder. */
+  dilation?: number;
   weights: string;
   bias: string;
 }
@@ -222,7 +236,7 @@ export function serializeUpscaleModel(
     ...(model.run !== undefined ? { run: model.run } : {}),
     ...(model.step !== undefined ? { step: model.step } : {}),
     layers: model.layers.map((l) => ({
-      inC: l.inC, outC: l.outC, relu: l.relu, weights: float32ToBase64(l.weights), bias: float32ToBase64(l.bias),
+      inC: l.inC, outC: l.outC, relu: l.relu, dilation: l.dilation, weights: float32ToBase64(l.weights), bias: float32ToBase64(l.bias),
     })),
     inScale: Array.from(model.inScale),
     inOffset: Array.from(model.inOffset),
@@ -265,6 +279,10 @@ export function parseUpscaleModelJson(json: unknown): UpscaleModel {
     }
     const relu = k < layerCount - 1;
     if (l.relu !== relu) throw new Error(`upscale model: layer ${k} relu must be ${relu}`);
+    const dilation = [...HIDDEN_DILATIONS[id], 1][k]!;
+    if (l.dilation !== undefined && l.dilation !== dilation) {
+      throw new Error(`upscale model: layer ${k} dilation ${String(l.dilation)}, expected ${dilation} for ${id}`);
+    }
     if (typeof l.weights !== 'string' || typeof l.bias !== 'string') {
       throw new Error(`upscale model: layer ${k} weights and bias must be base64 strings`);
     }
@@ -277,7 +295,7 @@ export function parseUpscaleModelJson(json: unknown): UpscaleModel {
     if (!weights.every((v) => Number.isFinite(v)) || !bias.every((v) => Number.isFinite(v))) {
       throw new Error(`upscale model: layer ${k} has non-finite values`);
     }
-    return { inC, outC, relu, weights, bias };
+    return { inC, outC, dilation, relu, weights, bias };
   });
   const norm = (v: unknown, name: string): Float32Array => {
     if (!Array.isArray(v) || v.length !== widths[0] || !v.every((x) => typeof x === 'number' && Number.isFinite(x))) {

@@ -70,7 +70,7 @@ def run_grid(dataset: Dataset, root: Path | str, *, meter, device, runs=C.GRID, 
     dashboard = Dashboard(root, dataset, meter=meter)
     baselines = prepare_dashboard(dashboard, dataset)
     for model_id, inputs in runs:
-        dashboard.run(f"{model_id}-{inputs}")
+        dashboard.run(make_config(model_id, inputs).name)
     dashboard.save()
     results, stopped = [], False
     for model_id, inputs in runs:
@@ -113,6 +113,9 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--batch", type=int, default=C.BATCH)
     ap.add_argument("--device", default="auto")
     ap.add_argument("--compile", action="store_true", help="fuse the step with torch.compile (~2x)")
+    ap.add_argument("--detail-weight", type=float, default=C.DETAIL_WEIGHT, help="gradient-loss weight (spec §2)")
+    ap.add_argument("--reparam", action="store_true", help="train hidden layers as 3x3+1x1+identity branches, fused at export")
+    ap.add_argument("--tag", default="", help="run-name suffix, e.g. -dw1.0 or -rep (variants share a root)")
     args = ap.parse_args(argv)
     root = Path(args.root)
     root.mkdir(parents=True, exist_ok=True)
@@ -120,7 +123,8 @@ def main(argv: list[str] | None = None) -> None:
 
     def make_config(model_id: str, inputs: str) -> RunConfig:
         return RunConfig(model_id, inputs, max_steps=args.max_steps, time_cap_s=args.time_cap_min * 60,
-                         val_every=args.val_every, batch=args.batch, compile=args.compile)
+                         val_every=args.val_every, batch=args.batch, compile=args.compile,
+                         detail_weight=args.detail_weight, reparam=args.reparam, tag=args.tag)
 
     try:
         summary = run_grid(load_dataset(args.data), root, meter=meter, device=pick_device(args.device),

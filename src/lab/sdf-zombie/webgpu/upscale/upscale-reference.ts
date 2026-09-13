@@ -77,10 +77,11 @@ export function assembleInput(march: FloatImage, model: UpscaleModel, near: numb
 /** One output channel of a 3x3 replicate-padded conv at (x, y), in float64. */
 export function convAt(input: FloatImage, layer: ConvLayer, o: number, x: number, y: number): number {
   let s = layer.bias[o]!;
+  const d = layer.dilation;
   for (let ky = 0; ky < 3; ky++) {
-    const yy = clampI(y + ky - 1, 0, input.h - 1);
+    const yy = clampI(y + (ky - 1) * d, 0, input.h - 1);
     for (let kx = 0; kx < 3; kx++) {
-      const xx = clampI(x + kx - 1, 0, input.w - 1);
+      const xx = clampI(x + (kx - 1) * d, 0, input.w - 1);
       const base = (yy * input.w + xx) * input.c;
       for (let i = 0; i < layer.inC; i++) {
         s += layer.weights[((o * layer.inC + i) * 3 + ky) * 3 + kx]! * input.data[base + i]!;

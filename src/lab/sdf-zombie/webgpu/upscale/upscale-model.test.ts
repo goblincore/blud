@@ -48,6 +48,7 @@ describe('upscale model JSON (contracts §2)', () => {
     ['layer count', (j) => ({ ...j, layers: j.layers.slice(0, 2) }), /needs 3 layers/],
     ['chain shape', (j) => ({ ...j, id: 's8' }), /layer 0 is 5->16, expected 5->8/],
     ['relu flag', (j) => ({ ...j, layers: j.layers.map((l, k) => (k === 2 ? { ...l, relu: true } : l)) }), /relu must be false/],
+    ['dilation', (j) => ({ ...j, layers: j.layers.map((l, k) => (k === 1 ? { ...l, dilation: 2 } : l)) }), /dilation 2, expected 1/],
     ['weights length', (j) => ({ ...j, layers: j.layers.map((l, k) => (k === 0 ? { ...l, weights: b64([1, 2]) } : l)) }), /has 2 weights/],
     ['partial float', (j) => ({ ...j, layers: j.layers.map((l, k) => (k === 0 ? { ...l, bias: 'AAA=' } : l)) }), /not whole float32s/],
     ['non-finite', (j) => ({ ...j, layers: j.layers.map((l, k) => (k === 1 ? { ...l, bias: b64(new Array(16).fill(Number.NaN)) } : l)) }), /non-finite/],
@@ -58,5 +59,22 @@ describe('upscale model JSON (contracts §2)', () => {
   ];
   it.each(cases)('rejects: %s', (_name, mutate, message) => {
     expect(() => parseUpscaleModelJson(mutate(trainedJson()))).toThrow(message);
+  });
+});
+
+describe('dilated ladder (run 3)', () => {
+  it('t24/t16 carry [1, 2, 1] hidden dilations, the last layer 1, and a missing JSON field defaults to 1', () => {
+    const m = createUpscaleModel('t16', 'rgbn', 1);
+    expect(m.layers.map((l) => l.dilation)).toEqual([1, 2, 1, 1]);
+    expect(m.layers.map((l) => [l.inC, l.outC])).toEqual([[7, 16], [16, 16], [16, 16], [16, 16]]);
+    const json = serializeUpscaleModel(m);
+    expect(json.layers.map((l) => l.dilation)).toEqual([1, 2, 1, 1]);
+    expect(parseUpscaleModelJson(json).layers[1]!.dilation).toBe(2);
+    // Absent field = the ladder's value (exports before 2026-09-12 have no field); the id decides.
+    const legacy = { ...json, layers: json.layers.map(({ dilation: _d, ...rest }) => rest) };
+    expect(parseUpscaleModelJson(legacy).layers.map((l) => l.dilation)).toEqual([1, 2, 1, 1]);
+    const s8 = serializeUpscaleModel(createUpscaleModel('s8', 'rgb', 1));
+    const s8legacy = { ...s8, layers: s8.layers.map(({ dilation: _d, ...rest }) => rest) };
+    expect(parseUpscaleModelJson(s8legacy).layers.map((l) => l.dilation)).toEqual([1, 1, 1]);
   });
 });

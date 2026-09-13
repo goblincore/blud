@@ -745,7 +745,8 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     // +2 GPU probe gather dynamic layer (probeDyn storage, probeDynCfg).
     // +1 direct muzzle flash (bodyFlash).
     // +3 temporal reprojection start (lastTex, lastInvVp, temporalCfg) — plan 2026-09-10.
-    expect(names.length).toBe(99);
+    // +1 meatCfg (soldier wound MEAT DETAIL, wound panel MEAT group, 2026-09-12), after surfCfg3.
+    expect(names.length).toBe(100);
     expect(names).toContain('faceGlowRedOnly');
     expect(names.slice(-21)).toEqual([
       'windDrift', 'bodyAnchor', 'woundBound', 'depthPreTex', 'depthPreCfg', 'normalGradientCfg',

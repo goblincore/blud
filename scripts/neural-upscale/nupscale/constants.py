@@ -1,7 +1,17 @@
 """Shared constants. Network shapes mirror src/lab/sdf-zombie/webgpu/upscale/upscale-model.ts."""
 
-HIDDEN_WIDTHS = {"s8": (8, 8), "s16": (16, 16), "s32": (32, 32), "s64": (64, 64), "s64d": (64, 64, 64),
-                 "zero": (8, 8)}
+# Hidden layers as (width, dilation) — the last (16-channel) layer is always dilation 1. Mirrors
+# upscale-model.ts HIDDEN_LAYERS. 't24'/'t16' (2026-09-12 run 3): three layers with the middle one
+# dilated 2, so the receptive field grows 7 -> 11 texels at ~s32 / ~half-s32 multiply-adds — the v3 grid
+# showed a third layer beats doubling width and the research pass says RF is the lever for AO/shadow.
+HIDDEN_LAYERS = {
+    "s8": ((8, 1), (8, 1)), "s16": ((16, 1), (16, 1)), "s32": ((32, 1), (32, 1)),
+    "s64": ((64, 1), (64, 1)), "s64d": ((64, 1), (64, 1), (64, 1)),
+    "t24": ((24, 1), (24, 2), (24, 1)), "t16": ((16, 1), (16, 2), (16, 1)),
+    "zero": ((8, 1), (8, 1)),
+}
+HIDDEN_WIDTHS = {k: tuple(w for w, _ in v) for k, v in HIDDEN_LAYERS.items()}
+HIDDEN_DILATIONS = {k: tuple(d for _, d in v) for k, v in HIDDEN_LAYERS.items()}
 # Input sets: rgb = rgb*hit + hit; rgbd adds hit*linearDepth; rgbn adds the view-space surface
 # normal * hit (dataset pairs with a normal.npy; 2026-09-12); rgbdn has both.
 INPUT_CHANNELS = {"rgb": 4, "rgbd": 5, "rgbn": 7, "rgbdn": 8}
@@ -44,7 +54,8 @@ BICUBIC_MIN_WEIGHT = 0.25
 # The grid (spec §4) and its spend estimate.
 GRID = (("s8", "rgb"), ("s8", "rgbd"), ("s16", "rgb"), ("s16", "rgbd"), ("s32", "rgb"), ("s32", "rgbd"),
         ("s64", "rgb"), ("s64", "rgbd"), ("s64d", "rgb"),
-        ("s32", "rgbn"), ("s64", "rgbn"), ("s64d", "rgbn"), ("s64", "rgbdn"))
+        ("s32", "rgbn"), ("s64", "rgbn"), ("s64d", "rgbn"), ("s64", "rgbdn"),
+        ("t24", "rgbn"), ("t16", "rgbn"), ("t24", "rgb"), ("t16", "rgb"))
 G4_KEYS = ("overall", "face", "wound", "edge", "class:medium", "class:far")
 RUN_OVERHEAD = 1.15
 RESERVE_S = 45 * 60
