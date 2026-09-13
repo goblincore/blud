@@ -56,6 +56,15 @@ export async function readDetailField(evaluate) {
   return { w: r.w, h: r.h, data: new Float32Array(copy.buffer, copy.byteOffset, copy.byteLength / 4) };
 }
 
+/** Run 5: both output-res refine attachments ({ c, n }, each { w, h, data: Float32Array, 4 ch }).
+ *  c = re-lit linear rgb + clip depth (accepted iff w < 1); n = world-space unit normal (w = 1 where written). */
+export async function readRefine(evaluate) {
+  const r = await evaluate('__sdfGameDebug.readRefine()', 300_000);
+  if (!r) throw new Error('readRefine returned null — boot the capture page with refine=1');
+  const img = (x) => { const b = Buffer.from(Buffer.from(x.rgba32f, 'base64')); return { w: x.w, h: x.h, data: new Float32Array(b.buffer, b.byteOffset, b.byteLength / 4) }; };
+  return { c: img(r.c), n: img(r.n) };
+}
+
 /** (h, w, 3) view-space unit normals from a normals read: rotate by the view matrix's 3x3, unit
  *  length where the ray hit (alpha < 1), zero elsewhere. */
 export function viewSpaceNormals(nrm) {

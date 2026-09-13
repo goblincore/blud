@@ -48,6 +48,8 @@ Written by `scripts/upscale-capture-v2.mjs` (p3a), and by `nupscale.convert_p2` 
   pairs/<pair id>/native.npy  # validation pairs only
   pairs/<pair id>/normal.npy  # optional (captures from 2026-09-12 on): rgbn/rgbdn input sets
   pairs/<pair id>/detail.npy  # optional (run 4, 2026-09-12 late): output-res skin-detail field
+  pairs/<pair id>/refine_n.npy  # optional (run 5, 2026-09-13): output-res refined WORLD normal
+  pairs/<pair id>/refine_c.npy  # optional (run 5, 2026-09-13): output-res re-lit rgb + clip depth
   check-in.npy, check-target.npy   # optional, UPSCALE_DUMP_CHECK=1
 ```
 
@@ -61,6 +63,8 @@ Written by `scripts/upscale-capture-v2.mjs` (p3a), and by `nupscale.convert_p2` 
 | `native.npy` | (2h, 2w, 4) | the single-ray 800×600 march, cropped (validation pairs only) |
 | `normal.npy` | (h, w, 3) | VIEW-space unit shading normal of the input march (x right, y up, z toward the camera), zero where `in` has no flesh. Captured by re-rendering the same frozen 400×300 frame in march debug mode 9 and rotating by the camera's matrixWorldInverse; the loader appends it as input channels 4..6 (`Pair.inp` becomes (7, h, w)). Optional: a pair without it can only train `rgb`/`rgbd` models |
 | `detail.npy` | (2h, 2w, 4) | Run 4: the march's skin-detail noise `vec3(fbm(a*22), fbm(a*22+5), fbm(a*22+11))` evaluated at OUTPUT resolution from the rest-space anchor (sub-texel via screen-space anchor gradients), w = gate (`detailAmp`, 0 off flesh). The world-space normal perturbation the march applies — at 4× the sampling density. Optional; feeds the full-res branch of run-4 models |
+| `refine_n.npy` | (2h, 2w, 4) | Run 5: WORLD-space unit normal of the Newton-refined surface point under each output pixel (march.wgsl.ts REFINE_LOOP: hit interpolated from the 4 march texels along the pixel's ray, rejected where the SDF disagrees by > 1 march texel, 2 Newton steps, calcNormal at 0.25 output-pixel footprint), w = 1 where written. Read the gate from `refine_c.npy` |
+| `refine_c.npy` | (2h, 2w, 4) | Run 5: the march's own lighting evaluated at the refined point with the refined normal (linear rgb, same encoding as `in.npy`), w = clip depth of the refined point; **accepted iff w < 1.0** (cleared to 1.0 = not refined). Optional; feeds `headInputs: "detail+refine"` models. Both files present or both absent (the loader and `scripts/upscale-refine-check.py` fail on one without the other) |
 
 Clip depth is WebGPU [0, 1] clip depth. Linear view depth is
 `near·far / (far − d·(far − near))`, with `near`/`far` from the manifest.
@@ -152,6 +156,9 @@ models). Read by `parseUpscaleModelJson` (p3c).
 - **`weightHash`** = FNV-1a 32 (offset 0x811c9dc5, prime 0x01000193) over the little-endian float32
   bytes of each layer's `weights` then `bias`, in layer order, then `inScale`, then `inOffset`.
   Lowercase hex, 8 digits. A reader recomputes it and rejects a mismatch.
+- **`headInputs`**: `"detail"` (default when absent; every run-4 export) or `"detail+refine"`; head
+  layer 0 `inC` is 10 or 17 accordingly (channel order: `nupscale/model.py head_input` =
+  `upscale-reference.ts assembleHeadInput`).
 
 **Cross-language test vectors** (computed by `hashModel` in `upscale-model.ts` and a Python port;
 both agree):
@@ -181,6 +188,8 @@ both agree):
 - `output-sp-k.npy` (2h, 2w, 4): PyTorch's §4 reconstruction on CPU in float32. rgb is
   `max(src + residual, 0)` where covered, else 0; alpha is the source texel's depth where covered,
   else 1.0.
+- Fixtures may also carry `"refineN": "refine_n-k.npy"`, `"refineC": "refine_c-k.npy"` (each
+  (2h, 2w, 4), the pair's refine arrays).
 
 ## 4. In-game model store (p3c)
 

@@ -15,12 +15,13 @@
 // Env: UPSCALE_DATA_ROOT (~/blud-upscale-data), UPSCALE_NAME, UPSCALE_SEED (1), UPSCALE_PAIRS (1000),
 //      UPSCALE_FRAMES (10 per sequence), UPSCALE_ADVANCE (6), UPSCALE_CAP_GB (5), UPSCALE_ROOMS (1,2,3,4,5),
 //      UPSCALE_FACE_SHOT=1 (save a presented-frame PNG of the first head close-up, for the face-direction check)
+//      UPSCALE_REFINE=0 skips the run-5 refine fields (refine_n.npy / refine_c.npy); default on
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { encodeNpy } from './lib/npy.mjs';
-import { bootCapturePage, maxAbsDiff, readDetailField, readMarch, readMarchNormals, renderAt, runG2Checks, viewSpaceNormals } from './lib/upscale-capture.mjs';
+import { bootCapturePage, maxAbsDiff, readDetailField, readMarch, readMarchNormals, readRefine, renderAt, runG2Checks, viewSpaceNormals } from './lib/upscale-capture.mjs';
 import { cropFrame, fleshFraction, maskIoU, pairCrop, toLocalRegions } from './lib/upscale-crop.mjs';
 import { cameraPose, mulberry32, pickShowcase, planSequence, splitFor } from './lib/upscale-framing.mjs';
 import { registerHalfRes } from './lib/upscale-registration.mjs';
@@ -37,6 +38,7 @@ const ADVANCE = Number(process.env.UPSCALE_ADVANCE ?? 6);
 const CAP_BYTES = Number(process.env.UPSCALE_CAP_GB ?? 5) * 1024 ** 3;
 const ROOMS = (process.env.UPSCALE_ROOMS ?? '1,2,3,4,5').split(',').map(Number);
 const GRID = 4, IN_W = 400, IN_H = 300, OUT_W = 800, OUT_H = 600;
+const REFINE = process.env.UPSCALE_REFINE !== '0';
 const fail = (m) => { console.error(`FAIL: ${m}`); process.exit(1); };
 setTimeout(() => fail('watchdog 12 h'), 12 * 3600_000).unref();
 mkdirSync(join(OUT, 'pairs'), { recursive: true });
@@ -49,7 +51,8 @@ const startedAt = Date.now();
 
 // upscale=0: no shipped stage at boot; upscalenormals=1: the normal + anchor attachments and the
 // output-res detail pass exist (run 4, plan 2026-09-12-neural-upscale-run4-relief §3).
-const { evaluate } = await bootCapturePage({ vite: VITE, cdp: CDP, fail, query: 'frozen=1&vhs=off&upscale=0&upscalenormals=1' });
+const { evaluate } = await bootCapturePage({ vite: VITE, cdp: CDP, fail, query: `frozen=1&vhs=off&upscale=0&upscalenormals=1${REFINE ? '&refine=1' : ''}` });
+if (REFINE) await evaluate('__sdfGame.setRefine(true)');
 const { near, far } = await evaluate('__sdfGame.upscaleInfo()');
 const characters = await evaluate('__sdfGame.characterNames()');
 if (!Array.isArray(characters) || characters.length === 0) fail('no characters');
@@ -205,6 +208,9 @@ async function captureFrame(plan, split, id, f, prevInput) {
   // RUN 4 DETAIL FIELD: the same frozen 0.5-scale frame's output-res skin noise (800x600, 4 ch).
   const detail = await readDetailField(evaluate);
   if (detail.w !== OUT_W || detail.h !== OUT_H) fail(`detail field ${detail.w}x${detail.h}, expected ${OUT_W}x${OUT_H}`);
+  // RUN 5 REFINE FIELDS: the same frozen frame's output-res re-lit candidate and refined normal.
+  const refine = REFINE ? await readRefine(evaluate) : null;
+  if (refine && (refine.c.w !== OUT_W || refine.c.h !== OUT_H || refine.n.w !== OUT_W || refine.n.h !== OUT_H)) fail(`refine ${refine.c.w}x${refine.c.h}, expected ${OUT_W}x${OUT_H}`);
   const annotations = await evaluate(`__sdfGame.captureAnnotations(${OUT_W}, ${OUT_H})`);
   if (plan.lookAt === 'head') {
     const h = annotations.find((a) => a.actorId === id)?.head;
@@ -224,6 +230,8 @@ async function captureFrame(plan, split, id, f, prevInput) {
     native: native ? `pairs/${pid}/native.npy` : null,
     normal: `pairs/${pid}/normal.npy`,
     detail: `pairs/${pid}/detail.npy`,
+    refineN: refine ? `pairs/${pid}/refine_n.npy` : null,
+    refineC: refine ? `pairs/${pid}/refine_c.npy` : null,
   };
   const write = (rel, data, shape) => { const buf = encodeNpy(data, shape); writeFileSync(join(OUT, rel), buf); return buf.length; };
   const X = crop.x * 2, Y = crop.y * 2, W2 = crop.w * 2, H2 = crop.h * 2;
@@ -234,6 +242,10 @@ async function captureFrame(plan, split, id, f, prevInput) {
   if (native) bytes += write(files.native, cropFrame(native.data, OUT_W, OUT_H, 4, X, Y, W2, H2), [H2, W2, 4]);
   bytes += write(files.normal, cropFrame(normalView, IN_W, IN_H, 3, crop.x, crop.y, crop.w, crop.h), [crop.h, crop.w, 3]);
   bytes += write(files.detail, cropFrame(detail.data, OUT_W, OUT_H, 4, X, Y, W2, H2), [H2, W2, 4]);
+  if (refine) {
+    bytes += write(files.refineN, cropFrame(refine.n.data, OUT_W, OUT_H, 4, X, Y, W2, H2), [H2, W2, 4]);
+    bytes += write(files.refineC, cropFrame(refine.c.data, OUT_W, OUT_H, 4, X, Y, W2, H2), [H2, W2, 4]);
+  }
   if (process.env.UPSCALE_FACE_SHOT && !faceShotDone && plan.lookAt === 'head' && plan.class === 'close') {
     writeFileSync(join(OUT, `face-check-${pid}.png`), Buffer.from(await evaluate('__sdfGame.presentedShot()'), 'base64'));
     faceShotDone = true;
