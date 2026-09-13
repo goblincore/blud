@@ -1,6 +1,6 @@
 # Neural upscale — run 4: full-resolution relief (radiance demodulation for skin detail)
 
-**Status:** in progress (started 2026-09-12 evening). **Pieces 1–2 DONE the same night** (see log at the end). **Owner goal:** more detail *inside* the silhouette —
+**Status:** in progress (started 2026-09-12 evening). **Pieces 1–3 DONE the same night** (see log at the end). **Owner goal:** more detail *inside* the silhouette —
 the skin relief that makes a body read as modeled and weighty (claymation / soft-CG mix). Silhouettes are
 done and not a target. Pores are below this resolution; relief at the scale of the existing skin noise and
 the wound meat detail is not.
@@ -45,3 +45,8 @@ demodulation. Order: 1 → 2 (GPU look) → 3 → 4/5 → 6.
   gradient extrapolation holds. Gated on the march hit as well as `detailAmp` (the cleared background of
   the anchor attachment carries the clear alpha). Look: `.lab-tmp/detail-shot.mjs` → `.lab-tmp/detail-field.png`.
   Next: piece 3 (capture `detail.npy`), then the full-res branch in the net.
+- **2026-09-12 late, piece 3:** capture boots with `upscale=0&upscalenormals=1`, reads the detail field after
+  the normals read and writes `detail.npy` (2h, 2w, 4) cropped like the target; loader → `Pair.detail`
+  (optional); contracts §1 row. v4-smoke (4 pairs): gated pixels ≈ target flesh (99.6 % overlap), noise
+  mean |.| 0.20, max 0.83. Next: piece 4, the full-res branch in the net (python + TS twin + WGSL), then a
+  v3.1 capture (the v3 dataset has no detail.npy — a 1,000-pair recapture at ~5 s/pair ≈ 1.5 h).

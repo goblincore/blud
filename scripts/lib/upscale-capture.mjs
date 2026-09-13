@@ -47,6 +47,15 @@ export async function readMarchNormals(evaluate) {
   return { w: r.w, h: r.h, view: r.view, data: new Float32Array(copy.buffer, copy.byteOffset, copy.byteLength / 4) };
 }
 
+/** Run 4: the output-res skin-detail field (game-main readDetailTarget): { w, h, data } rgba32f,
+ *  xyz = the march's detail noise at output resolution, w = gate (0 off flesh / detail off). */
+export async function readDetailField(evaluate) {
+  const r = await evaluate('__sdfGameDebug.readDetailTarget()', 300_000);
+  if (!r) throw new Error('readDetailTarget returned null — boot the capture page with upscalenormals=1');
+  const copy = Buffer.from(Buffer.from(r.rgba32f, 'base64'));
+  return { w: r.w, h: r.h, data: new Float32Array(copy.buffer, copy.byteOffset, copy.byteLength / 4) };
+}
+
 /** (h, w, 3) view-space unit normals from a normals read: rotate by the view matrix's 3x3, unit
  *  length where the ray hit (alpha < 1), zero elsewhere. */
 export function viewSpaceNormals(nrm) {

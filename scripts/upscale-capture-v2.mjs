@@ -20,7 +20,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { encodeNpy } from './lib/npy.mjs';
-import { bootCapturePage, maxAbsDiff, readMarch, readMarchNormals, renderAt, runG2Checks, viewSpaceNormals } from './lib/upscale-capture.mjs';
+import { bootCapturePage, maxAbsDiff, readDetailField, readMarch, readMarchNormals, renderAt, runG2Checks, viewSpaceNormals } from './lib/upscale-capture.mjs';
 import { cropFrame, fleshFraction, maskIoU, pairCrop, toLocalRegions } from './lib/upscale-crop.mjs';
 import { cameraPose, mulberry32, pickShowcase, planSequence, splitFor } from './lib/upscale-framing.mjs';
 import { registerHalfRes } from './lib/upscale-registration.mjs';
@@ -47,7 +47,9 @@ const readJsonl = (f) => (existsSync(f) ? readFileSync(f, 'utf8').split('\n').fi
 const stats = { skippedStatic: 0, skippedEmpty: 0, skippedNoHead: 0, skippedSpawn: 0, secondsPerPair: 0 };
 const startedAt = Date.now();
 
-const { evaluate } = await bootCapturePage({ vite: VITE, cdp: CDP, fail });
+// upscale=0: no shipped stage at boot; upscalenormals=1: the normal + anchor attachments and the
+// output-res detail pass exist (run 4, plan 2026-09-12-neural-upscale-run4-relief §3).
+const { evaluate } = await bootCapturePage({ vite: VITE, cdp: CDP, fail, query: 'frozen=1&vhs=off&upscale=0&upscalenormals=1' });
 const { near, far } = await evaluate('__sdfGame.upscaleInfo()');
 const characters = await evaluate('__sdfGame.characterNames()');
 if (!Array.isArray(characters) || characters.length === 0) fail('no characters');
@@ -200,6 +202,9 @@ async function captureFrame(plan, split, id, f, prevInput) {
   if (maskDiff > input.data.length / 4 * 0.001) fail(`normals hit mask differs from input at ${maskDiff} texels`);
   if (maskDiff) stats.normalMaskDiffs = (stats.normalMaskDiffs ?? 0) + maskDiff;
   const normalView = viewSpaceNormals(normals);
+  // RUN 4 DETAIL FIELD: the same frozen 0.5-scale frame's output-res skin noise (800x600, 4 ch).
+  const detail = await readDetailField(evaluate);
+  if (detail.w !== OUT_W || detail.h !== OUT_H) fail(`detail field ${detail.w}x${detail.h}, expected ${OUT_W}x${OUT_H}`);
   const annotations = await evaluate(`__sdfGame.captureAnnotations(${OUT_W}, ${OUT_H})`);
   if (plan.lookAt === 'head') {
     const h = annotations.find((a) => a.actorId === id)?.head;
@@ -218,6 +223,7 @@ async function captureFrame(plan, split, id, f, prevInput) {
     targetCoverage: `pairs/${pid}/target-coverage.npy`,
     native: native ? `pairs/${pid}/native.npy` : null,
     normal: `pairs/${pid}/normal.npy`,
+    detail: `pairs/${pid}/detail.npy`,
   };
   const write = (rel, data, shape) => { const buf = encodeNpy(data, shape); writeFileSync(join(OUT, rel), buf); return buf.length; };
   const X = crop.x * 2, Y = crop.y * 2, W2 = crop.w * 2, H2 = crop.h * 2;
@@ -227,6 +233,7 @@ async function captureFrame(plan, split, id, f, prevInput) {
   bytes += write(files.targetCoverage, cropFrame(target.coverage, OUT_W, OUT_H, 1, X, Y, W2, H2), [H2, W2, 1]);
   if (native) bytes += write(files.native, cropFrame(native.data, OUT_W, OUT_H, 4, X, Y, W2, H2), [H2, W2, 4]);
   bytes += write(files.normal, cropFrame(normalView, IN_W, IN_H, 3, crop.x, crop.y, crop.w, crop.h), [crop.h, crop.w, 3]);
+  bytes += write(files.detail, cropFrame(detail.data, OUT_W, OUT_H, 4, X, Y, W2, H2), [H2, W2, 4]);
   if (process.env.UPSCALE_FACE_SHOT && !faceShotDone && plan.lookAt === 'head' && plan.class === 'close') {
     writeFileSync(join(OUT, `face-check-${pid}.png`), Buffer.from(await evaluate('__sdfGame.presentedShot()'), 'base64'));
     faceShotDone = true;

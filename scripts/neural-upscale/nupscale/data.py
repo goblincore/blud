@@ -28,6 +28,7 @@ class Pair:
     inp: torch.Tensor                   # (4, h, w); (7, h, w) when the pair has normal.npy: view-space nx, ny, nz * hit
     target: torch.Tensor                # (4, 2h, 2w)
     native: torch.Tensor | None         # (4, 2h, 2w), validation pairs only
+    detail: torch.Tensor | None         # (4, 2h, 2w) run-4 output-res skin-detail field (xyz noise, w gate), optional
     weight: torch.Tensor                # (1, 2h, 2w)
     masks: dict[str, torch.Tensor]      # bool (2h, 2w): flesh, face, wound, edge, interior
     centres: list[tuple[float, float]]  # face and wound centres, crop-local output px
@@ -85,13 +86,15 @@ def load_dataset(root: Path | str, weights: dict[str, float] = REGION_WEIGHTS) -
         target = chw(_load(root, e["files"]["target"], (2 * h, 2 * w, 4), pid))
         native_rel = e["files"].get("native")
         native = chw(_load(root, native_rel, (2 * h, 2 * w, 4), pid)) if native_rel else None
+        detail_rel = e["files"].get("detail")
+        detail = chw(_load(root, detail_rel, (2 * h, 2 * w, 4), pid)) if detail_rel else None
         regions = e.get("regions") or {}
         heads = [(r["x"], r["y"], r["r"]) for r in regions.get("heads", [])]
         wounds = [(r["x"], r["y"], r["r"]) for r in regions.get("wounds", [])]
         masks = region_masks(target[3], inp[3], heads, wounds)
         ds.pairs.append(Pair(
             id=pid, seq=int(e["seq"]), split=e["split"], cls=e["class"], showcase=bool(e.get("showcase", False)),
-            inp=inp, target=target, native=native, weight=weight_map(masks, weights), masks=masks,
+            inp=inp, target=target, native=native, detail=detail, weight=weight_map(masks, weights), masks=masks,
             centres=[(float(x), float(y)) for x, y, _ in heads + wounds],
         ))
     if not ds.pairs:
