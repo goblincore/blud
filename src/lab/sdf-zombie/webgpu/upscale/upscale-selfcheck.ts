@@ -15,9 +15,7 @@ import { upscaleReference, type FloatImage } from './upscale-reference';
 
 export interface SelfCheckDeps {
   renderer: THREE.WebGPURenderer;
-  // Task 5 adds `refineTarget` to SdfLayer itself; until then it is declared here so the
-  // 'detail+refine' head can read the output-res refine attachments.
-  layer: SdfLayer & { refineTarget?: THREE.RenderTarget | null };
+  layer: SdfLayer;
   camera: THREE.PerspectiveCamera;
   renderFrames: (n: number) => void;
   resolveGpu: () => Promise<unknown>;

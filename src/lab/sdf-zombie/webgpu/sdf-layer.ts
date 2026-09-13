@@ -917,7 +917,12 @@ export interface SdfLayer {
   /** Run 5: run the refine pass (cfg.x). Throws if the layer was not created with `refine`. */
   setRefine(on: boolean): void;
   readonly refine: boolean;
-  /** Run 5: the refine entry's tuning (cfg.y/z/w). */
+  /** Run 5: the refine entry's tuning (cfg.y/z/w). Units:
+   *  - `reject` in MARCH texels — the pixel is discarded when |sdf| exceeds it times the march
+   *    texel's world footprint (2·t·aaCfg.x). Clamped to >= 0; default 1.
+   *  - `normalEps` in OUTPUT-pixel footprints — the normal stencil is it times t·aaCfg.x.
+   *    Clamped to >= 0; default 0.25.
+   *  - `steps` — Newton steps, rounded and clamped to the integer range 0..8; default 2. */
   setRefineCfg(cfg: { reject?: number; normalEps?: number; steps?: number }): void;
   readonly refineCfg: { reject: number; normalEps: number; steps: number };
   /** Run 5: the Gate-1 picture in place of the composite source. */
@@ -969,6 +974,11 @@ export interface SdfLayer {
  * too coarse by eye, which is the call that matters here; the slider spans
  * 0.25 to 1 for anyone who disagrees.
  */
+/** Run 5: the refine cfg vector's shipped defaults, read ONCE from a throwaway
+ *  createRefineUniforms() so the getter's no-layer fallback can never drift from
+ *  zombie-gpu's actual initial values (x enabled, y reject, z normalEps, w steps). */
+const REFINE_CFG_DEFAULTS = createRefineUniforms().cfg.value.clone();
+
 export const DEFAULT_SDF_SCALE = 0.7;
 
 export interface SdfLayerOptions {
@@ -1195,25 +1205,25 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
       type: THREE.FloatType, format: THREE.RGBAFormat, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false,
     });
   }
-  const REFINE_VIEW_WGSL = /* wgsl */ `fn refineView(refineC: texture_2d<f32>, src: texture_2d<f32>, texCoord: vec2<f32>, flipY: f32, srcIsLow: f32) -> vec4<f32> {
+  const REFINE_VIEW_WGSL = /* wgsl */ `fn refineView(refineC: texture_2d<f32>, src: texture_2d<f32>, texCoord: vec2<f32>, flipY: f32) -> vec4<f32> {
   let dims = vec2<i32>(textureDimensions(refineC, 0));
   var st = texCoord;
   if (flipY > 0.5) { st.y = 1.0 - st.y; }
   let p = clamp(vec2<i32>(floor(st * vec2<f32>(dims))), vec2<i32>(0, 0), dims - vec2<i32>(1, 1));
   let rc = textureLoad(refineC, p, 0);
   if (rc.w < 1.0) { return rc; }
+  // The source may be at march res or output res; derive the ratio from the two texture
+  // sizes rather than assuming a fixed 2x, which is wrong at any other sdfScale.
   let sdims = vec2<i32>(textureDimensions(src, 0));
-  let sp = clamp(select(p, p / 2, srcIsLow > 0.5), vec2<i32>(0, 0), sdims - vec2<i32>(1, 1));
+  let sp = clamp(vec2<i32>(vec2<f32>(p) * vec2<f32>(sdims) / vec2<f32>(dims)), vec2<i32>(0, 0), sdims - vec2<i32>(1, 1));
   return textureLoad(src, sp, 0);
 }`;
   let refineViewSrcNode: ReturnType<typeof texture> | null = null;
-  let uRefineViewSrcLow: ReturnType<typeof uniform> | null = null;
   let refineViewScene: THREE.Scene | null = null;
   if (refineOn) {
     refineViewSrcNode = texture(target.texture);
-    uRefineViewSrcLow = uniform(1);
     const mat = new MeshBasicNodeMaterial();
-    const out = wgslFn(REFINE_VIEW_WGSL)({ refineC: texture(refineTarget!.textures[0]!), src: refineViewSrcNode, texCoord: uv(), flipY: uFlipY, srcIsLow: uRefineViewSrcLow } as never) as unknown as { xyz: unknown; w: unknown };
+    const out = wgslFn(REFINE_VIEW_WGSL)({ refineC: texture(refineTarget!.textures[0]!), src: refineViewSrcNode, texCoord: uv(), flipY: uFlipY } as never) as unknown as { xyz: unknown; w: unknown };
     mat.colorNode = vec4(out.xyz as never, 1.0);
     mat.outputNode = vec4(out.xyz as never, out.w as never);
     mat.depthTest = false; mat.depthWrite = false; mat.blending = THREE.NoBlending;
@@ -2071,22 +2081,32 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
         void renderer.render(detailScene, quadCam);
       }
       // RUN 5 REFINE (spec 2026-09-13-…-run5-sdf-refine-design §4). After the jitter clear, so the
-      // twins march the same unjittered projection the march alpha encodes.
+      // twins march the same projection the march alpha encodes. setRefine forces field styles off
+      // and temporal accumulation off, so there is no field/accum view offset in play either.
       if (refineOn && refineUniforms!.cfg.value.x > 0.5) {
         setPassLabel('sdf:refine');
         refineUniforms!.nearFar.value.set(camera.near, camera.far);
         camera.layers.set(REFINE_LAYER);
         renderer.setRenderTarget(refineTarget);
-        renderer.clear();   // colour alpha 1.0 = not refined; depth cleared for the per-body test
         renderer.setMRT(refineMrt as never);
-        try { void renderer.render(scene, camera); } finally { renderer.setMRT(null); }
+        try {
+          // Clear with the MRT already set so BOTH attachments are cleared, and with alpha
+          // forced to 1: the colour attachment's alpha IS the accepted gate (w < 1), so a
+          // cleared-to-0 alpha would read as "every pixel refined at depth 0".
+          const prevAlpha = renderer.getClearAlpha();
+          renderer.setClearAlpha(1);
+          renderer.clear();
+          renderer.setClearAlpha(prevAlpha);
+          void renderer.render(scene, camera);
+        } finally { renderer.setMRT(null); }
         camera.layers.set(SDF_LAYER);
       }
       if (upscale) upscale.render(renderer, quadCam, camera);
-      if (refineOn && refineView && refineViewScene) {
+      if (refineOn && refineView && refineViewScene && refineUniforms!.cfg.value.x > 0.5) {
         setPassLabel('sdf:refine-view');
-        refineViewSrcNode!.value = upscale ? upscale.output.texture : target.texture;
-        (uRefineViewSrcLow!.value as number) = upscale ? 0 : 1;
+        // What the composite would be reading right now: the stage's output, else the
+        // accumulation history when accum is on, else the raw march target.
+        refineViewSrcNode!.value = upscale ? upscale.output.texture : accumOn ? accumNext.texture : target.texture;
         renderer.setRenderTarget(refineViewTarget);
         void renderer.render(refineViewScene, quadCam);
         accumTexNode.value = refineViewTarget!.texture;
@@ -2287,9 +2307,9 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
       if (inputsUseNormals(config.inputs) && !marchNormals) {
         throw new Error(`upscale: input set ${config.inputs} needs march normals — boot with ?upscale=... so the layer allocates the attachment`);
       }
-      // Run 5 (Task 12): pass { n: refineTarget.textures[1], c: refineTarget.textures[0] } when refineOn
       const next = createUpscaleStage(config, target.texture, uFlipY, model, marchNormals ? target.textures[1] : undefined,
-        detailScene ? detailTarget.texture : undefined);
+        detailScene ? detailTarget.texture : undefined,
+        refineTarget ? { n: refineTarget.textures[1]!, c: refineTarget.textures[0]! } : undefined);
       upscale?.dispose();
       upscale = next;
       upscale.setSize(target.width, target.height, fullW, fullH);
@@ -2308,6 +2328,15 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     get refineTarget() { return refineTarget; },
     setRefine(on) {
       if (on && !refineUniforms) throw new Error('refine: boot with ?refine=1 so the layer allocates the refine targets');
+      if (on) {
+        // Same exclusions setUpscale enforces: the refine twins march the projection the march
+        // alpha encodes, and both accumulation and any field style drive their own view offset.
+        if (accumOn) {
+          console.warn('[sdf-layer] refine: turning temporal accumulation OFF (the refine reads the march depth of THIS frame)');
+          this.setTemporalAccum(false);
+        }
+        if (fieldStyle !== 'off') this.setFieldStyle('off');
+      }
       if (refineUniforms) (refineUniforms.cfg.value as THREE.Vector4).x = on ? 1 : 0;
     },
     get refine() { return refineUniforms !== null && (refineUniforms.cfg.value as THREE.Vector4).x > 0.5; },
@@ -2319,11 +2348,15 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
       if (cfg.steps !== undefined) v.w = Math.min(8, Math.max(0, Math.round(cfg.steps)));
     },
     get refineCfg() {
-      if (!refineUniforms) return { reject: 1, normalEps: 0.25, steps: 2 };
+      if (!refineUniforms) return { reject: REFINE_CFG_DEFAULTS.y, normalEps: REFINE_CFG_DEFAULTS.z, steps: REFINE_CFG_DEFAULTS.w };
       const v = refineUniforms.cfg.value as THREE.Vector4;
       return { reject: v.y, normalEps: v.z, steps: v.w };
     },
     setRefineView(on) {
+      if (on && !(refineUniforms && refineUniforms.cfg.value.x > 0.5)) {
+        console.warn('[sdf-layer] refine view refused while the refine pass is off — setRefine(true) first');
+        return;
+      }
       refineView = on;
       if (!on) restoreCompositeSource();
     },
@@ -2446,6 +2479,8 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
       quadMat.dispose();
       blitQuad.geometry.dispose();
       blitMat.dispose();
+      refineTarget?.dispose();
+      refineViewTarget?.dispose();
     },
   };
 }
