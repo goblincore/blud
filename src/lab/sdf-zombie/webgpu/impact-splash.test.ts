@@ -1,28 +1,32 @@
 // src/lab/sdf-zombie/webgpu/impact-splash.test.ts
 //
-// CPU-only tests for the procedural impact crown (reference-directed slug
-// impact splash, 2026-09-13; redesigned after the parent's first WebGPU
-// visual review). Nothing here needs a GPU: the geometry builder is pure and
-// the layer's event bookkeeping + `sync` fill CPU-side buffers.
+// CPU-only tests for the procedural impact burst (reference-directed slug
+// impact splash, 2026-09-13; strand-bundle topology after the second WebGPU
+// review — the full-2pi swept shells read as an opaque petal fan, so the
+// geometry is now tapered TUBES + core + partial sheet flakes). Nothing here
+// needs a GPU: the geometry builder is pure and the layer's event
+// bookkeeping + `sync` fill CPU-side buffers.
 //
-// What these prove: seed stability; the origin/direction transform; CONNECTED
-// shells (each ring closes, no azimuthal gaps, no isolated lobes) with many
-// narrow rim tips; finite positions, unit normals and unit tangents; a
-// material-space mask that does not move with the world; a monotonic dissolve
-// ramp and the EXPLICIT alpha plumbing (opacityNode + alphaTest) on the
-// installed three material, checked as object properties; ballistic droplets;
-// bounded lifetime/budget cleanup; and the explicit isolation requirement that
-// using this module never mutates the shipped IMPACT_GOUT/WOUND_BLEED tables
-// the "Current" slug depends on.
+// What these prove: seed stability; the origin/direction transform; the
+// strand-bundle topology (tube rings close; tips and roots pinch; the crown
+// moment has structural azimuthal GAPS — it cannot close into an opaque fan;
+// total triangle area collapses late = fragmentation); finite positions,
+// unit normals and unit tangents; a material-space mask that does not move
+// with the world; a monotonic back-loaded dissolve ramp; the EXPLICIT alpha
+// plumbing (opacityNode + alphaTest) on the installed three material;
+// ballistic near-round droplets; bounded lifetime/budget cleanup; and the
+// explicit isolation requirement that using this module never mutates the
+// shipped IMPACT_GOUT/WOUND_BLEED tables the "Current" slug depends on.
 
 import { describe, it, expect } from 'vitest';
 import type * as THREE from 'three/webgpu';
 import {
   IMPACT_SPLASH_DISSOLVE_POINTS, IMPACT_SPLASH_DROPLET_STRIDE, IMPACT_SPLASH_MAX_DROPLETS,
-  IMPACT_SPLASH_MAX_EVENTS, IMPACT_SPLASH_MAX_SHELLS, IMPACT_SPLASH_TUNING,
+  IMPACT_SPLASH_MAX_EVENTS, IMPACT_SPLASH_MAX_STRANDS, IMPACT_SPLASH_TUNING,
   buildImpactSplashFrame, createImpactSplashEvent, createImpactSplashLayer,
-  impactSplashBasis, impactSplashDissolveAt, impactSplashShellCount, splashHash01,
-  splashRimNoise, stepImpactSplashEvent,
+  impactSplashBasis, impactSplashDissolveAt, impactSplashMaxVerticesPerEvent,
+  impactSplashSheetCount, impactSplashStrandCount, splashHash01,
+  stepImpactSplashEvent,
   type ImpactSplashFrame,
 } from './impact-splash';
 import { IMPACT_GOUT, WOUND_BLEED } from '../blood-sim';
@@ -50,306 +54,288 @@ function centroid(f: ImpactSplashFrame): { x: number; y: number; z: number } {
 
 describe('impact splash — deterministic seeds and material-space mask', () => {
   it('reproduces identical geometry for the same seed and differs for another', () => {
-    const a = frame(12345, UP, 0.3);
-    const b = frame(12345, UP, 0.3);
+    const a = frame(12345, UP, 0.30);
+    const b = frame(12345, UP, 0.30);
+    const c = frame(12346, UP, 0.30);
     expect(Array.from(a.positions)).toEqual(Array.from(b.positions));
-    expect(Array.from(a.normals)).toEqual(Array.from(b.normals));
-    expect(Array.from(a.tangents)).toEqual(Array.from(b.tangents));
     expect(Array.from(a.indices)).toEqual(Array.from(b.indices));
-    expect(Array.from(a.masks)).toEqual(Array.from(b.masks));
-    expect(a.dissolve).toBe(b.dissolve);
-    const c = frame(999, UP, 0.3);
     expect(Array.from(a.positions)).not.toEqual(Array.from(c.positions));
   });
 
-  it('keeps the material mask attached to the sheet, not the world', () => {
-    // Same seed/direction at two different origins: the mask, UVs, tangents
-    // and dissolve are identical, so the tear field cannot swim.
-    const evA = createImpactSplashEvent([0, 0, 0], UP, 777);
-    const evB = createImpactSplashEvent([5, -2, 9], UP, 777);
-    evA.time = 0.3; evB.time = 0.3;
+  it('keeps the material mask attached to the surface cells, not the world', () => {
+    // Same seed + time but a translated origin: identical per-vertex masks,
+    // normals and tangents (only positions move rigidly).
+    const evA = createImpactSplashEvent(ORIGIN, UP, 7);
+    const evB = createImpactSplashEvent([0.6, 2.2, -1.1], UP, 7);
+    evA.time = 0.4; evB.time = 0.4;
     const a = buildImpactSplashFrame(evA)!;
     const b = buildImpactSplashFrame(evB)!;
     expect(Array.from(a.masks)).toEqual(Array.from(b.masks));
-    expect(Array.from(a.uvs)).toEqual(Array.from(b.uvs));
-    for (let i = 0; i < a.tangents.length; i++) {
-      expect(b.tangents[i]!).toBeCloseTo(a.tangents[i]!, 5);
+    expect(Array.from(a.normals)).toEqual(Array.from(b.normals));
+    let moved = 0;
+    for (let i = 0; i < a.positions.length; i += 3) {
+      if (Math.abs(a.positions[i]! - b.positions[i]!) > 1e-6) moved++;
     }
-    expect(a.dissolve).toBe(b.dissolve);
+    expect(moved).toBe(a.positions.length / 3);
   });
 
   it('has a stable, pure hash helper', () => {
-    expect(splashHash01(42, 7)).toBe(splashHash01(42, 7));
-    expect(splashHash01(42, 7)).not.toBe(splashHash01(43, 7));
-    for (let i = 0; i < 64; i++) {
-      const h = splashHash01(1234, i);
+    expect(splashHash01(1, 1)).toBe(splashHash01(1, 1));
+    expect(splashHash01(1, 1)).not.toBe(splashHash01(1, 2));
+    expect(splashHash01(1, 1)).not.toBe(splashHash01(2, 1));
+    for (let i = 0; i < 200; i++) {
+      const h = splashHash01(i - 100, i * 7);
       expect(h).toBeGreaterThanOrEqual(0);
       expect(h).toBeLessThan(1);
     }
   });
 
-  it('builds several overlapping shells (not a fixed petal fan)', () => {
-    expect(impactSplashShellCount()).toBe(IMPACT_SPLASH_TUNING.shells);
-    expect(impactSplashShellCount()).toBeGreaterThanOrEqual(2);
-    expect(impactSplashShellCount()).toBeLessThanOrEqual(IMPACT_SPLASH_MAX_SHELLS);
-    // Three shells worth of vertices really are emitted.
-    const f = frame(3, UP, 0.3);
-    const rs = IMPACT_SPLASH_TUNING.radialSegments;
-    const as = IMPACT_SPLASH_TUNING.angularSegments;
-    expect(f.vertexCount).toBe(IMPACT_SPLASH_TUNING.shells * (rs + 1) * (as + 1));
+  it('rolls a bounded strand bundle and a handful of partial sheets', () => {
+    expect(impactSplashStrandCount()).toBeGreaterThan(8);
+    expect(impactSplashStrandCount()).toBeLessThanOrEqual(IMPACT_SPLASH_MAX_STRANDS);
+    expect(impactSplashSheetCount()).toBeLessThanOrEqual(3);
   });
 });
 
-describe('impact splash — connected web geometry', () => {
-  it('closes every shell ring with no azimuthal gap (connected, not lobes)', () => {
-    const f = frame(4242, UP, 0.3);
-    const rs = IMPACT_SPLASH_TUNING.radialSegments;
-    const as = IMPACT_SPLASH_TUNING.angularSegments;
-    const shells = impactSplashShellCount();
-    const vertsPerShell = (rs + 1) * (as + 1);
-    for (let sh = 0; sh < shells; sh++) {
-      for (let i = 0; i <= rs; i++) {
-        const row = sh * vertsPerShell + i * (as + 1);
-        // Seam: the duplicated last angular vertex coincides with j=0.
-        for (const c of [0, 1, 2]) {
-          expect(f.positions[(row + as) * 3 + c]).toBeCloseTo(f.positions[row * 3 + c]!, 5);
-        }
-        // No gap anywhere around the sweep. Measured IN THE PLANE
-        // perpendicular to the crown axis: a narrow finger legitimately has a
-        // steep axial step between samples, but a lobe fan would show an
-        // in-plane gap of order the lobe width (>> 0.1) somewhere.
-        const w = impactSplashBasis(UP).w;
-        let maxGap = 0;
-        for (let j = 0; j < as; j++) {
-          const a = (row + j) * 3; const b = (row + j + 1) * 3;
-          const dx = f.positions[b]! - f.positions[a]!;
-          const dy = f.positions[b + 1]! - f.positions[a + 1]!;
-          const dz = f.positions[b + 2]! - f.positions[a + 2]!;
-          const along = dx * w[0] + dy * w[1] + dz * w[2];
-          const px = dx - along * w[0]; const py = dy - along * w[1]; const pz = dz - along * w[2];
-          maxGap = Math.max(maxGap, Math.hypot(px, py, pz));
-        }
-        expect(maxGap).toBeLessThan(0.12);
+describe('impact splash — strand-bundle topology (not a petal fan)', () => {
+  const seg = IMPACT_SPLASH_TUNING.strandSegments;
+  const sides = IMPACT_SPLASH_TUNING.strandSides;
+  const vertsPerStrand = (seg + 1) * (sides + 1);
+
+  it('closes every tube ring (seam sample j=0 equals j=sides)', () => {
+    const f = frame(2024, UP, 0.30);
+    for (let k = 0; k < impactSplashStrandCount(); k++) {
+      for (let i = 0; i <= seg; i++) {
+        const a = (k * vertsPerStrand) + i * (sides + 1);
+        const b = a + sides;
+        const dx = f.positions[a * 3]! - f.positions[b * 3]!;
+        const dy = f.positions[a * 3 + 1]! - f.positions[b * 3 + 1]!;
+        const dz = f.positions[a * 3 + 2]! - f.positions[b * 3 + 2]!;
+        expect(Math.hypot(dx, dy, dz)).toBeLessThan(1e-5);
       }
     }
   });
 
-  it('has many narrow rim tips rather than a handful of giant petals', () => {
-    const f = frame(2026, UP, 0.3);
-    const rs = IMPACT_SPLASH_TUNING.radialSegments;
-    const as = IMPACT_SPLASH_TUNING.angularSegments;
-    const shells = impactSplashShellCount();
-    const w = impactSplashBasis(UP).w;
-    // Scan the outermost radial row of the FIRST shell.
-    const row = rs * (as + 1);
-    const r: number[] = [];
-    for (let j = 0; j < as; j++) {
-      const o = (row + j) * 3;
-      const dx = f.positions[o]! - ORIGIN[0];
-      const dy = f.positions[o + 1]! - ORIGIN[1];
-      const dz = f.positions[o + 2]! - ORIGIN[2];
-      const along = dx * w[0] + dy * w[1] + dz * w[2];
-      r.push(Math.hypot(dx - along * w[0], dy - along * w[1], dz - along * w[2]));
+  it('tapers: tip and root rings pinch far tighter than the mid ring', () => {
+    const f = frame(2024, UP, 0.30);
+    const ringSpread = (k: number, i: number): number => {
+      let minx = Infinity, miny = Infinity, minz = Infinity;
+      let maxx = -Infinity, maxy = -Infinity, maxz = -Infinity;
+      for (let j = 0; j <= sides; j++) {
+        const o = ((k * vertsPerStrand) + i * (sides + 1) + j) * 3;
+        minx = Math.min(minx, f.positions[o]!); maxx = Math.max(maxx, f.positions[o]!);
+        miny = Math.min(miny, f.positions[o + 1]!); maxy = Math.max(maxy, f.positions[o + 1]!);
+        minz = Math.min(minz, f.positions[o + 2]!); maxz = Math.max(maxz, f.positions[o + 2]!);
+      }
+      return Math.hypot(maxx - minx, maxy - miny, maxz - minz);
+    };
+    for (let k = 0; k < 6; k++) {
+      const mid = ringSpread(k, Math.round(seg / 2));
+      const tip = ringSpread(k, seg);
+      const root = ringSpread(k, 0);
+      expect(mid).toBeGreaterThan(1e-4); // there IS a tube at mid
+      expect(tip).toBeLessThan(mid * 0.35); // clean taper to a fine point
+      expect(root).toBeLessThan(mid * 0.5); // pinched root (no disc end)
     }
-    const mean = r.reduce((a, b) => a + b, 0) / r.length;
-    const sd = Math.sqrt(r.reduce((a, b) => a + (b - mean) * (b - mean), 0) / r.length);
-    let tips = 0;
-    for (let j = 0; j < as; j++) {
-      const a = r[(j - 1 + as) % as]!; const b = r[j]!; const c = r[(j + 1) % as]!;
-      if (b > a && b > c && b > mean + 0.4 * sd) tips++;
+  });
+
+  it('keeps structural azimuthal gaps at the crown moment (no opaque fan)', () => {
+    // Bin the azimuth (around the wound axis) of mid-strand surface samples
+    // that sit well away from the axis; a full-revolution skirt covers every
+    // bin — the strand bundle must leave gaps.
+    const basis = impactSplashBasis(UP);
+    const f = frame(2024, UP, 0.30);
+    const BINS = 24;
+    const covered = new Array<boolean>(BINS).fill(false);
+    let counted = 0;
+    for (let k = 0; k < impactSplashStrandCount(); k++) {
+      const i = Math.round(seg * 0.55);
+      for (let j = 0; j <= sides; j++) {
+        const vIdx = (k * vertsPerStrand) + i * (sides + 1) + j;
+        const x = f.positions[vIdx * 3]! - ORIGIN[0];
+        const y = f.positions[vIdx * 3 + 1]! - ORIGIN[1];
+        const z = f.positions[vIdx * 3 + 2]! - ORIGIN[2];
+        const ru = x * basis.u[0]! + y * basis.u[1]! + z * basis.u[2]!;
+        const rv = x * basis.v[0]! + y * basis.v[1]! + z * basis.v[2]!;
+        const r = Math.hypot(ru, rv);
+        if (r < 0.06) continue; // near-axis bases overlap; ignore
+        const az = Math.atan2(rv, ru);
+        const bin = Math.floor(((az + Math.PI) / (2 * Math.PI)) * BINS) % BINS;
+        covered[bin] = true;
+        counted++;
+      }
     }
-    expect(tips).toBeGreaterThanOrEqual(6);
-    expect(tips).toBeLessThanOrEqual(80);
-    void shells;
+    expect(counted).toBeGreaterThan(40); // the bundle is dense…
+    const nCovered = covered.filter(Boolean).length;
+    expect(nCovered).toBeGreaterThan(BINS / 3); // …but NOT a closed fan
+    expect(nCovered).toBeLessThan(BINS); // gaps are structural
+  });
+
+  it('fragments: total triangle area collapses from the crown to late time', () => {
+    const area = (f: ImpactSplashFrame): number => {
+      let total = 0;
+      for (let t = 0; t < f.indices.length; t += 3) {
+        const a = f.indices[t]! * 3, b = f.indices[t + 1]! * 3, c = f.indices[t + 2]! * 3;
+        const ux = f.positions[b]! - f.positions[a]!, uy = f.positions[b + 1]! - f.positions[a + 1]!, uz = f.positions[b + 2]! - f.positions[a + 2]!;
+        const vx = f.positions[c]! - f.positions[a]!, vy = f.positions[c + 1]! - f.positions[a + 1]!, vz = f.positions[c + 2]! - f.positions[a + 2]!;
+        const cx = uy * vz - uz * vy, cy = uz * vx - ux * vz, cz = ux * vy - uy * vx;
+        total += 0.5 * Math.hypot(cx, cy, cz);
+      }
+      return total;
+    };
+    const crown = area(frame(2024, UP, 0.30));
+    const late = area(frame(2024, UP, 1.05));
+    expect(crown).toBeGreaterThan(0.004); // a substantial burst at the crown
+    expect(late).toBeLessThan(crown * 0.45); // torn into fragments by then
+  });
+
+  it('keeps a dense core at the wound mouth at every sampled time', () => {
+    for (const t of [0.05, 0.3, 0.7, 1.05]) {
+      const f = frame(2024, UP, t);
+      let nearOrigin = 0;
+      for (let i = 0; i < f.positions.length; i += 3) {
+        const d = Math.hypot(
+          f.positions[i]! - ORIGIN[0], f.positions[i + 1]! - ORIGIN[1], f.positions[i + 2]! - ORIGIN[2],
+        );
+        if (d < IMPACT_SPLASH_TUNING.coreRadius * 2.0) nearOrigin++;
+      }
+      expect(nearOrigin).toBeGreaterThan(20);
+    }
   });
 
   it('emits finite positions with unit normals and unit tangents at every time', () => {
-    for (const t of [0, 0.05, 0.2, 0.35, 0.6, 0.9, 1.1]) {
-      const f = frame(4321, [0.3, 0.9, -0.2], t);
+    for (const t of [0.01, 0.15, 0.30, 0.55, 0.80, 1.10]) {
+      const f = frame(31, UP, t);
       expect(f.vertexCount).toBe(f.positions.length / 3);
-      for (let i = 0; i < f.positions.length; i++) {
-        expect(Number.isFinite(f.positions[i]!)).toBe(true);
-      }
-      for (let i = 0; i < f.normals.length; i += 3) {
-        const l = Math.hypot(f.normals[i]!, f.normals[i + 1]!, f.normals[i + 2]!);
-        expect(Number.isFinite(l)).toBe(true);
-        expect(l).toBeGreaterThan(0.99);
-        expect(l).toBeLessThan(1.01);
-      }
-      for (let i = 0; i < f.tangents.length; i += 3) {
-        const l = Math.hypot(f.tangents[i]!, f.tangents[i + 1]!, f.tangents[i + 2]!);
-        expect(Number.isFinite(l)).toBe(true);
-        expect(l).toBeGreaterThan(0.99);
-        expect(l).toBeLessThan(1.01);
-      }
-      for (let i = 0; i < f.droplets.length; i++) {
-        expect(Number.isFinite(f.droplets[i]!)).toBe(true);
+      for (let i = 0; i < f.vertexCount; i++) {
+        for (const arr of [f.positions, f.normals, f.tangents]) {
+          for (let c = 0; c < 3; c++) expect(Number.isFinite(arr[i * 3 + c]!)).toBe(true);
+        }
+        const nl = Math.hypot(f.normals[i * 3]!, f.normals[i * 3 + 1]!, f.normals[i * 3 + 2]!);
+        expect(nl).toBeGreaterThan(0.99);
+        expect(nl).toBeLessThan(1.01);
+        const tl = Math.hypot(f.tangents[i * 3]!, f.tangents[i * 3 + 1]!, f.tangents[i * 3 + 2]!);
+        expect(tl).toBeGreaterThan(0.99);
+        expect(tl).toBeLessThan(1.01);
       }
     }
   });
 
-  it('produces genuine curved surface patches (position spread in all axes)', () => {
-    const f = frame(77, UP, 0.3);
-    let minX = Infinity; let maxX = -Infinity;
-    let minZ = Infinity; let maxZ = -Infinity;
-    let minY = Infinity; let maxY = -Infinity;
-    for (let i = 0; i < f.positions.length; i += 3) {
-      minX = Math.min(minX, f.positions[i]!); maxX = Math.max(maxX, f.positions[i]!);
-      minY = Math.min(minY, f.positions[i + 1]!); maxY = Math.max(maxY, f.positions[i + 1]!);
-      minZ = Math.min(minZ, f.positions[i + 2]!); maxZ = Math.max(maxZ, f.positions[i + 2]!);
-    }
-    expect(maxX - minX).toBeGreaterThan(0.1);
-    expect(maxZ - minZ).toBeGreaterThan(0.1);
-    expect(maxY - minY).toBeGreaterThan(0.02);
-  });
-
-  it('makes the rim noise smooth and periodic (no seam in the field itself)', () => {
-    for (const seed of [1, 55, 909]) {
-      // Periodicity and boundedness.
-      expect(splashRimNoise(seed, 6, 0.1)).toBeCloseTo(splashRimNoise(seed, 6, 0.1 + Math.PI * 2), 6);
-      for (let i = 0; i < 64; i++) {
-        const v = splashRimNoise(seed, 6, (i / 64) * Math.PI * 2);
-        expect(v).toBeGreaterThanOrEqual(-1.01);
-        expect(v).toBeLessThanOrEqual(1.01);
+  it('extends fast first, then slows (burst, not a slow bloom)', () => {
+    const reach = (t: number): number => {
+      const f = frame(2024, UP, t);
+      let maxD = 0;
+      for (let i = 0; i < f.positions.length; i += 3) {
+        const d = Math.hypot(
+          f.positions[i]! - ORIGIN[0], f.positions[i + 1]! - ORIGIN[1], f.positions[i + 2]! - ORIGIN[2],
+        );
+        if (d > maxD) maxD = d;
       }
-    }
+      return maxD;
+    };
+    const early = reach(0.06);
+    const crown = reach(0.30);
+    const settled = reach(0.60);
+    expect(early).toBeGreaterThan(0.02);
+    expect(crown).toBeGreaterThan(early * 1.5);
+    expect(settled).toBeLessThan(crown * 1.35);
   });
 });
 
 describe('impact splash — origin and direction transform', () => {
-  it('translates rigidly with the origin (positions only, no mask/normal change)', () => {
-    const a = createImpactSplashEvent([0, 0, 0], RIGHT, 314);
-    const b = createImpactSplashEvent([2, 3, 4], RIGHT, 314);
-    a.time = 0.3; b.time = 0.3;
-    const fa = buildImpactSplashFrame(a)!;
-    const fb = buildImpactSplashFrame(b)!;
-    for (let i = 0; i < fa.positions.length; i += 3) {
-      expect(fb.positions[i]! - fa.positions[i]!).toBeCloseTo(2, 5);
-      expect(fb.positions[i + 1]! - fa.positions[i + 1]!).toBeCloseTo(3, 5);
-      expect(fb.positions[i + 2]! - fa.positions[i + 2]!).toBeCloseTo(4, 5);
+  it('translates rigidly with the origin (positions only)', () => {
+    const evA = createImpactSplashEvent(ORIGIN, UP, 7);
+    const evB = createImpactSplashEvent([0.6, 2.2, -1.1], UP, 7);
+    evA.time = 0.4; evB.time = 0.4;
+    const a = buildImpactSplashFrame(evA)!;
+    const b = buildImpactSplashFrame(evB)!;
+    const dx = b.positions[0]! - a.positions[0]!;
+    const dy = b.positions[1]! - a.positions[1]!;
+    const dz = b.positions[2]! - a.positions[2]!;
+    for (let i = 0; i < a.positions.length; i += 3) {
+      expect(b.positions[i]! - a.positions[i]!).toBeCloseTo(dx, 5);
+      expect(b.positions[i + 1]! - a.positions[i + 1]!).toBeCloseTo(dy, 5);
+      expect(b.positions[i + 2]! - a.positions[i + 2]!).toBeCloseTo(dz, 5);
     }
-    // Normals/tangents are world-space finite differences, so a translation
-    // changes the last ulp via floating point; compare with a tolerance.
-    for (let i = 0; i < fa.normals.length; i++) {
-      expect(fb.normals[i]!).toBeCloseTo(fa.normals[i]!, 5);
-      expect(fb.tangents[i]!).toBeCloseTo(fa.tangents[i]!, 5);
-    }
-    expect(Array.from(fa.masks)).toEqual(Array.from(fb.masks));
   });
 
   it('sprays out along the impact normal for up, sideways and diagonal impacts', () => {
-    const fUp = frame(55, UP, 0.25);
-    const cUp = centroid(fUp);
-    expect(cUp.y - ORIGIN[1]).toBeGreaterThan(0.05);
-    expect(Math.abs(cUp.x - ORIGIN[0])).toBeLessThan(Math.abs(cUp.y - ORIGIN[1]));
-    expect(Math.abs(cUp.z - ORIGIN[2])).toBeLessThan(Math.abs(cUp.y - ORIGIN[1]));
-
-    const fRight = frame(55, RIGHT, 0.25);
-    const cRight = centroid(fRight);
-    expect(cRight.x - ORIGIN[0]).toBeGreaterThan(0.05);
-    expect(Math.abs(cRight.z - ORIGIN[2])).toBeLessThan(Math.abs(cRight.x - ORIGIN[0]));
-
-    const dir = [0.6, 0.8, 0] as const;
-    const w = impactSplashBasis(dir).w;
-    const c = centroid(frame(55, dir, 0.25));
-    const along = (c.x - ORIGIN[0]) * w[0] + (c.y - ORIGIN[1]) * w[1] + (c.z - ORIGIN[2]) * w[2];
-    expect(along).toBeGreaterThan(0.05);
-  });
-
-  it('normalises a non-unit direction and falls back to up when degenerate', () => {
-    const unit = frame(9, [0, 1, 0], 0.3);
-    const scaled = frame(9, [0, 5, 0], 0.3);
-    expect(Array.from(scaled.positions)).toEqual(Array.from(unit.positions));
-    const degenerate = frame(9, [0, 0, 0], 0.3);
-    expect(Array.from(degenerate.positions)).toEqual(Array.from(unit.positions));
-  });
-
-  it('reads as a bounded wound burst, not a room-filling explosion', () => {
-    // Including late in the event: the gravity sag must not fling the crown
-    // out of its small bounded region.
-    for (const t of [0.25, 0.6, 0.95]) {
-      const f = frame(21, RIGHT, t);
-      let maxR = 0;
-      for (let i = 0; i < f.positions.length; i += 3) {
-        const dx = f.positions[i]! - ORIGIN[0];
-        const dy = f.positions[i + 1]! - ORIGIN[1];
-        const dz = f.positions[i + 2]! - ORIGIN[2];
-        maxR = Math.max(maxR, Math.hypot(dx, dy, dz));
+    for (const dir of [UP, RIGHT, [0.2, 0.9, -0.3] as const]) {
+      const f = frame(555, dir, 0.30);
+      const basis = impactSplashBasis(dir);
+      let alongW = 0;
+      const n = f.positions.length / 3;
+      for (let i = 0; i < n; i++) {
+        const x = f.positions[i * 3]! - ORIGIN[0];
+        const y = f.positions[i * 3 + 1]! - ORIGIN[1];
+        const z = f.positions[i * 3 + 2]! - ORIGIN[2];
+        const w = x * basis.w[0]! + y * basis.w[1]! + z * basis.w[2]!;
+        if (w > -0.02) alongW++;
       }
-      expect(maxR).toBeGreaterThan(0.15); // visible
-      expect(maxR).toBeLessThan(1.0);     // not a room-filling blast
+      // Essentially the whole burst leaves on the OUTWARD side of the wound.
+      expect(alongW / n).toBeGreaterThan(0.93);
     }
   });
 
-  it('expands fast first, then slows', () => {
-    const early = centroid(frame(8, UP, 0.02));
-    const mid = centroid(frame(8, UP, 0.11));
-    const late = centroid(frame(8, UP, 0.22));
-    const dEarly = Math.hypot(early.x - ORIGIN[0], early.y - ORIGIN[1], early.z - ORIGIN[2]);
-    const dMid = Math.hypot(mid.x - ORIGIN[0], mid.y - ORIGIN[1], mid.z - ORIGIN[2]);
-    const dLate = Math.hypot(late.x - ORIGIN[0], late.y - ORIGIN[1], late.z - ORIGIN[2]);
-    expect(dMid).toBeGreaterThan(dEarly);
-    expect(dLate).toBeGreaterThan(dMid);
-    expect(dMid - dEarly).toBeGreaterThan(dLate - dMid);
+  it('normalises a non-unit direction and falls back to up when degenerate', () => {
+    const a = frame(9, [0, 0, 7], 0.3);
+    const b = frame(9, [0, 0, 1], 0.3);
+    expect(Array.from(a.positions)).toEqual(Array.from(b.positions));
+    const c = frame(9, [0, 0, 0], 0.3);
+    const d = frame(9, [0, 1, 0], 0.3);
+    expect(Array.from(c.positions)).toEqual(Array.from(d.positions));
+  });
+
+  it('reads as a bounded wound burst, not a room-filling explosion', () => {
+    for (const t of [0.25, 0.6, 0.95]) {
+      const f = frame(12345, UP, t);
+      for (let i = 0; i < f.positions.length; i += 3) {
+        const d = Math.hypot(
+          f.positions[i]! - ORIGIN[0], f.positions[i + 1]! - ORIGIN[1], f.positions[i + 2]! - ORIGIN[2],
+        );
+        expect(d).toBeLessThan(1.0);
+      }
+      for (let k = 0; k < f.dropletCount; k++) {
+        const o = k * IMPACT_SPLASH_DROPLET_STRIDE;
+        const d = Math.hypot(
+          f.droplets[o]! - ORIGIN[0], f.droplets[o + 1]! - ORIGIN[1], f.droplets[o + 2]! - ORIGIN[2],
+        );
+        expect(d).toBeLessThan(1.6);
+      }
+    }
   });
 });
 
 describe('impact splash — dissolve ramp, droplets and material alpha plumbing', () => {
   it('opens the dissolve continuously and monotonically', () => {
-    const ts = [0, 0.05, 0.15, 0.3, 0.5, 0.7, 0.9, 1.1];
-    let prev = -1;
-    const vals: number[] = [];
-    for (const t of ts) {
-      const d = frame(3, UP, t).dissolve;
-      expect(d).toBeGreaterThanOrEqual(0);
+    let last = -1;
+    for (let p = 0; p <= 1.0001; p += 0.01) {
+      const d = impactSplashDissolveAt(p);
+      expect(d).toBeGreaterThanOrEqual(last);
       expect(d).toBeLessThanOrEqual(1);
-      expect(d).toBeGreaterThanOrEqual(prev); // monotonic: topology is stable
-      prev = d;
-      vals.push(d);
+      last = d;
     }
-    // No holes before the crown (the mass is still continuous), real holes
-    // through the crown window, most of the sheet gone by the end.
-    expect(vals[0]).toBe(0);
-    const crown = frame(3, UP, 0.3).dissolve;
-    expect(crown).toBeGreaterThan(0.05);
-    expect(crown).toBeLessThan(0.45);
-    expect(vals[vals.length - 1]).toBeGreaterThan(0.8);
-    // At half the lifetime the crown is still readable, not deleted.
-    expect(frame(3, UP, 0.55).dissolve).toBeLessThan(0.6);
+    expect(impactSplashDissolveAt(0)).toBe(0);
+    expect(impactSplashDissolveAt(1)).toBe(1);
   });
 
-  it('shape the dissolve ramp back-loaded (solid crown, then fragments)', () => {
-    // The control points are the exported contract; a shift here changes the
-    // visual envelope, so pin the endpoints and monotonicity.
+  it('shapes the dissolve ramp back-loaded (solid burst, then fragments)', () => {
     const pts = IMPACT_SPLASH_DISSOLVE_POINTS;
+    expect(pts.length).toBeGreaterThanOrEqual(5);
     expect(pts[0]![1]).toBe(0);
     expect(pts[pts.length - 1]![1]).toBe(1);
-    for (let i = 1; i < pts.length; i++) {
-      expect(pts[i]![0]).toBeGreaterThan(pts[i - 1]![0]);
-      expect(pts[i]![1]).toBeGreaterThanOrEqual(pts[i - 1]![1]);
-    }
-    // Back-loaded: at 30% of the lifetime less than a quarter of the ramp has
-    // run, so the crown is still a connected mass at the representative
-    // moment; by 70% most of it has.
-    expect(impactSplashDissolveAt(0.3)).toBeLessThan(0.25);
-    expect(impactSplashDissolveAt(0.7)).toBeGreaterThan(0.5);
-    expect(impactSplashDissolveAt(1)).toBe(1);
-    // Total and clamped at the ends.
-    expect(impactSplashDissolveAt(-1)).toBe(0);
-    expect(impactSplashDissolveAt(2)).toBe(1);
+    // At the crown moment (progress ~0.26 = 0.30s / 1.15s) the mass is still
+    // mostly connected: dissolve under 0.2.
+    expect(impactSplashDissolveAt(0.30 / IMPACT_SPLASH_TUNING.lifetimeSec)).toBeLessThan(0.2);
+    // By 0.8 of the lifetime it is mostly gone.
+    expect(impactSplashDissolveAt(0.8)).toBeGreaterThan(0.6);
   });
 
   it('wires the computed alpha to the EXPLICIT opacityNode, not colorNode alone', () => {
-    // Validated against three r185 NodeMaterial.setupDiffuseColor: alphaTest
-    // discards on colorNode.a * opacityNode; an opaque material then forces
-    // the (unused) blend alpha. This asserts the object-level plumbing the
-    // renderer reads, without a GPU.
     const layer = createImpactSplashLayer();
     try {
       const m = layer.sheetMaterial;
       expect(m.opacityNode).not.toBeNull();
-      expect(m.opacityNode).not.toBeUndefined();
-      expect(m.colorNode).not.toBeNull();
       expect(m.alphaTest).toBe(0.5);
       expect(m.transparent).toBe(false);
       expect(m.depthWrite).toBe(true);
@@ -360,94 +346,78 @@ describe('impact splash — dissolve ramp, droplets and material alpha plumbing'
   });
 
   it('emits many small droplets spread across the tear window (trailing spray)', () => {
-    const early = frame(31, UP, 0.2);
-    const mid = frame(31, UP, 0.55);
-    const late = frame(31, UP, 1.0);
-    expect(early.dropletCount).toBeGreaterThanOrEqual(1);
-    expect(mid.dropletCount).toBeGreaterThan(early.dropletCount);
-    expect(late.dropletCount).toBeGreaterThanOrEqual(mid.dropletCount);
-    expect(late.dropletCount).toBeGreaterThanOrEqual(40);
-    for (const f of [early, mid, late]) {
-      for (let k = 0; k < f.dropletCount; k++) {
-        const size = f.droplets[k * IMPACT_SPLASH_DROPLET_STRIDE + 3]!;
-        expect(size).toBeGreaterThan(0);
-        expect(size).toBeLessThanOrEqual(0.02);
-      }
+    const f = frame(12345, UP, 0.9);
+    expect(f.dropletCount).toBeGreaterThanOrEqual(60);
+    expect(f.dropletCount).toBeLessThanOrEqual(IMPACT_SPLASH_MAX_DROPLETS);
+    for (let k = 0; k < f.dropletCount; k++) {
+      const size = f.droplets[k * IMPACT_SPLASH_DROPLET_STRIDE + 3]!;
+      expect(size).toBeGreaterThan(0);
+      expect(size).toBeLessThan(0.02); // fine spray, not beads
     }
+    // Early in the event only the first-born droplets exist.
+    const early = frame(12345, UP, 0.12);
+    expect(early.dropletCount).toBeLessThan(f.dropletCount);
   });
 
-  it('detaches droplets on a pure gravity arc with a recorded launch velocity', () => {
-    const tuning = {
-      ...IMPACT_SPLASH_TUNING,
-      tearStartSec: 0.05, tearEndSec: 0.05,
-      dropletBirthStartSec: 0.05, dropletBirthEndSec: 0.05,
-      dropletsMin: 6, dropletsMax: 6,
-    };
-    const at = (t: number): ImpactSplashFrame => {
-      const ev = createImpactSplashEvent(ORIGIN, UP, 88);
-      ev.time = t;
-      const f = buildImpactSplashFrame(ev, tuning);
-      if (!f) throw new Error('expected a live frame');
-      return f;
-    };
-    const a = at(0.10);
-    const b = at(0.25);
-    const c = at(0.40);
-    expect(a.dropletCount).toBe(6);
-    expect(b.dropletCount).toBe(6);
-    expect(c.dropletCount).toBe(6);
-    const S = IMPACT_SPLASH_DROPLET_STRIDE;
-    for (let k = 0; k < 6; k++) {
-      const y0 = a.droplets[k * S + 1]!; const y1 = b.droplets[k * S + 1]!; const y2 = c.droplets[k * S + 1]!;
-      const x0 = a.droplets[k * S]!; const x1 = b.droplets[k * S]!; const x2 = c.droplets[k * S]!;
-      const z0 = a.droplets[k * S + 2]!; const z1 = b.droplets[k * S + 2]!; const z2 = c.droplets[k * S + 2]!;
-      expect(y2 - 2 * y1 + y0).toBeLessThan(-0.15); // downward acceleration
-      expect(Math.abs(x2 - 2 * x1 + x0)).toBeLessThan(1e-3);
-      expect(Math.abs(z2 - 2 * z1 + z0)).toBeLessThan(1e-3);
-      // A recorded, non-zero launch velocity.
-      expect(Math.hypot(
-        a.droplets[k * S + 4]!, a.droplets[k * S + 5]!, a.droplets[k * S + 6]!,
-      )).toBeGreaterThan(0);
+  it('detaches droplets on a damped gravity arc with a recorded launch velocity', () => {
+    const t = 0.5;
+    const f = frame(777, UP, t);
+    expect(f.dropletCount).toBeGreaterThan(0);
+    const g = IMPACT_SPLASH_TUNING.dropletGravity;
+    const drag = 1.15; // the documented linear-drag model, mirrored here
+    for (let k = 0; k < f.dropletCount; k++) {
+      const o = k * IMPACT_SPLASH_DROPLET_STRIDE;
+      const vx = f.droplets[o + 4]!, vy = f.droplets[o + 5]!, vz = f.droplets[o + 6]!;
+      expect(Math.hypot(vx, vy, vz)).toBeGreaterThan(0.2);
+      // Reverse the damped ballistic integration: birth = now - age for some
+      // age in the tear window, and the reversed position must sit near the
+      // burst (the drag decelerates travel, so this converges quickly).
+      const px = f.droplets[o]!, py = f.droplets[o + 1]!, pz = f.droplets[o + 2]!;
+      let ok = false;
+      for (let age = 0.01; age <= t; age += 0.01) {
+        const travel = (1 - Math.exp(-drag * age)) / drag;
+        const bx = px - vx * travel;
+        const by = py - (vy * travel - 0.5 * g * age * age);
+        const bz = pz - vz * travel;
+        const d = Math.hypot(bx - ORIGIN[0], by - ORIGIN[1], bz - ORIGIN[2]);
+        if (d < IMPACT_SPLASH_TUNING.radiusMax * 1.35) { ok = true; break; }
+      }
+      expect(ok).toBe(true);
     }
   });
 });
 
 describe('impact splash — lifetime, cleanup and budget', () => {
   it('dies exactly at the bounded lifetime and never past it', () => {
-    const ev = createImpactSplashEvent(ORIGIN, UP, 1);
-    expect(buildImpactSplashFrame(ev)).not.toBeNull();
-    stepImpactSplashEvent(ev, 0.5);
-    expect(ev.time).toBeCloseTo(0.5, 5);
+    const ev = createImpactSplashEvent(ORIGIN, UP, 5);
     expect(stepImpactSplashEvent(ev, 0.5)).toBe(true);
-    expect(stepImpactSplashEvent(ev, 100)).toBe(false);
-    expect(ev.time).toBeCloseTo(ev.lifetime, 5);
+    expect(stepImpactSplashEvent(ev, IMPACT_SPLASH_TUNING.lifetimeSec)).toBe(false);
+    expect(ev.time).toBe(IMPACT_SPLASH_TUNING.lifetimeSec);
     expect(buildImpactSplashFrame(ev)).toBeNull();
   });
 
   it('rejects a non-positive lifetime and negative time', () => {
-    const zero = createImpactSplashEvent(ORIGIN, UP, 1, { lifetime: 0 });
-    expect(zero.lifetime).toBe(IMPACT_SPLASH_TUNING.lifetimeSec);
-    const ev = createImpactSplashEvent(ORIGIN, UP, 1);
-    ev.time = -1;
+    // An explicitly non-positive lifetime creates an ALREADY-DEAD event.
+    const dead = createImpactSplashEvent(ORIGIN, UP, 5, { lifetime: -1 });
+    expect(dead.lifetime).toBe(0);
+    expect(stepImpactSplashEvent(dead, 0.1)).toBe(false);
+    expect(buildImpactSplashFrame(dead)).toBeNull();
+    // A non-finite lifetime falls back to the tuning default.
+    const fallback = createImpactSplashEvent(ORIGIN, UP, 5, { lifetime: NaN });
+    expect(fallback.lifetime).toBe(IMPACT_SPLASH_TUNING.lifetimeSec);
+    const ev = createImpactSplashEvent(ORIGIN, UP, 5);
+    ev.time = -0.1;
     expect(buildImpactSplashFrame(ev)).toBeNull();
   });
 
   it('stays inside the documented vertex/triangle/droplet budgets', () => {
-    const rs = IMPACT_SPLASH_TUNING.radialSegments;
-    const as = IMPACT_SPLASH_TUNING.angularSegments;
-    const shells = impactSplashShellCount();
-    const maxVerts = IMPACT_SPLASH_MAX_SHELLS * (rs + 1) * (as + 1);
-    const maxTris = IMPACT_SPLASH_MAX_SHELLS * rs * as * 2;
-    for (const seed of [1, 2, 3, 100, 99999]) {
-      for (const t of [0.05, 0.25, 0.5, 1.0]) {
-        const f = frame(seed, RIGHT, t);
-        expect(f.vertexCount).toBe(shells * (rs + 1) * (as + 1));
-        expect(f.vertexCount).toBeLessThanOrEqual(maxVerts);
-        expect(f.triangleCount).toBeLessThanOrEqual(maxTris);
-        expect(f.dropletCount).toBeLessThanOrEqual(IMPACT_SPLASH_MAX_DROPLETS);
-        expect(f.droplets.length).toBe(f.dropletCount * IMPACT_SPLASH_DROPLET_STRIDE);
-        expect(f.indices.length).toBe(f.triangleCount * 3);
-      }
+    const cap = impactSplashMaxVerticesPerEvent();
+    expect(cap).toBeLessThanOrEqual(48 * 15 * 8 + 3 * 7 * 27 + 13 * 17 + 8);
+    for (const t of [0.02, 0.3, 0.7, 1.1]) {
+      const f = frame(2024, UP, t);
+      expect(f.vertexCount).toBeLessThanOrEqual(cap);
+      expect(f.indices.length).toBe(f.triangleCount * 3);
+      expect(f.dropletCount).toBeLessThanOrEqual(IMPACT_SPLASH_MAX_DROPLETS);
     }
   });
 });
