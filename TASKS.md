@@ -72,10 +72,14 @@
 - [ ] **DEFAULT-MODEL BENCH:** main still ships run-2's `s32-rgbd-best` (v2, no normals, no head). Candidates:
   `t16-rgb` (training on v3.2 now — cheapest frame: single attachment, half MACs), `t16-rgbn-head`, run-5 control
   `s32-rgbn-head` (v3.2). Bench frame p50 + quality, pick the new default, then use it as run 5b's baseline.
-- [ ] **MERGED CROWD MARCH (structural, later):** one union field, one ray per pixel (shared prim/face/segment
-  atlases + per-body records in a buffer instead of ~100 per-material uniforms; the tile list `?tiles-playtest` is
-  the building block). Makes the march screen-bound and collapses the refine into one fullscreen pass (no twins,
-  no Task E). Renderer-refactor scale; decide after run 5b's cheap levers report their numbers.
+- [ ] **MERGED CROWD MARCH — HIGH PRIORITY AFTER RUN 5b (owner 2026-09-13: crowds are the game; gibs would
+  otherwise be an explosion of marched instances).** One union field, one ray per pixel. Split by what varies:
+  per TYPE (shared by all zombies): face sheet, segment-volume atlas, rest prim template, material/lighting knobs;
+  per INSTANCE (a record in a storage buffer): pose/bone transforms, wounds + severed flags, melt/flash, variant,
+  placement. Prim rows: first keep CPU posing and share one tall atlas with per-instance row ranges; later pose on
+  the GPU from the type template. Tile list (`?tiles-playtest`) becomes the per-pixel instance/cluster index. One
+  material per type; gibs become instances; the refine becomes a fullscreen pass (no twins, no Task E).
+  Brainstorm + spec once run 5b reports.
 - [ ] **CORPSE BAKE FOR EVERY CHARACTER:** `corpseBakeEligible` is soldier-only (`profile.name === 'soldier'` +
   collapse settled), so dead zombies keep marching at full cost. Extending eligibility to any settled actor is
   mostly the flag (the bake rejects on overflow and falls back). Independent of the upscaler.
