@@ -1,81 +1,22 @@
-// src/lab/sdf-zombie/webgpu/impact-splash.ts
+// Procedural, opt-in wound burst. Three curved membrane patches carry the
+// liquid mass; deterministic holes grow through them and intersect the rim.
+// A small number of thin ligaments end in rounded beads. Detached droplets
+// carry the late motion. Membranes translate outward while tearing, rather
+// than shrinking back into the wound.
 //
-// IMPACT SPLASH — an original procedural wound burst (reference-directed slug
-// impact splash, 2026-09-13). TOPOLOGY REBUILT after the second WebGPU review:
-// the previous 3 full-2pi swept SKIRT sheets read, from the front, as a broad
-// flower/fan of overlapping opaque petals — exactly what was rejected. No
-// amount of alpha holes inside full-revolution plates fixes that silhouette.
-//
-// WHY THIS EXISTS BESIDE THE SLUG GOUT. The shipped slug impact is a dense,
-// nearly stationary pulse (IMPACT_GOUT.slug) that reads as a collapsing blob.
-// The reference (a blood Niagara breakdown, see
-// docs/dev-notes/2026-09-13-impact-animation-reference.md) is a different
-// SHAPE: a compact burst of MANY NARROW TAPERED STRANDS (liquid jets)
-// radiating in varied cone angles from a dense core, a few small ragged sheet
-// flakes between them, all fragmenting fast into fine trailing spray. This
-// module adds that shape as a SUPPLEMENTARY, INDEPENDENTLY SELECTABLE effect.
-// It does not touch IMPACT_GOUT, WOUND_BLEED, stepBlood, `spawnImpactGout` or
-// any shared global — the existing slug remains the "Current" scenario.
-//
-// GEOMETRY (per event, all deterministic from the seed):
-//   * STRAND BUNDLE (the dominant mass): `tuning.strands` tapered tubes. Each
-//     strand has its own azimuth (golden-angle spread + jitter), cone angle
-//     from the wound axis (a tight inner jet cone + a wide outer cone), length,
-//     base radius, roll phase and lateral bend. The centerline decelerates
-//     outward (points cluster toward the tip) plus a lateral curl and the
-//     shared late world-sag. The radius profile pinches to zero at root AND
-//     tip (no open disc ends) and tapers over the whole length, so every
-//     strand reads as a tapered finger, not a cylinder. Gaps between strands
-//     are STRUCTURAL (there is no surface between tubes), so the burst can
-//     never close into an opaque fan.
-//   * CORE: a small displaced UV-sphere at the wound mouth that covers the
-//     strand roots and reads as the dense centre of the reference burst.
-//   * SHEET FLAKES: 2-3 small spherical-band patches (partial in azimuth —
-//     never a full revolution) at varied cone angles. They tear early: their
-//     dissolve is the event dissolve times `sheetDissolveBoost`.
-//   * FRAGMENTATION: every strand/sheet/core cell gets its own dissolve
-//     stagger, so the mass thins, tears (alpha noise) and vanishes piece by
-//     piece; the droplets carry the outward motion.
-//   * DROPLETS: many small, nearly ROUND beads (stretch ~1.25, not the old
-//     2.4 pills) launched along strand directions across the tear window.
-//
-// COORDINATE CONTRACT. An event carries an explicit `origin`, an OUTWARD
-// `direction` (the wound normal, i.e. the hemisphere the blood leaves the
-// body into), a deterministic integer `seed`, a mutable `time` and a bounded
-// `lifetime`. The basis is `basisFromAxis(direction)` (w = direction), so a
-// floor impact with an upward normal sprays up while a wall/body impact sprays
-// out of the wall — the effect is NOT hard-coded to world-up.
-//
-// GRAVITY CONTRACT. Gravity is a world-space -Y displacement applied AFTER the
-// local geometry is built, and it eases in only after the expansion window
-// (`droopStartSec`): the burst rides out first, then sags.
-//
-// ALPHA CONTRACT (validated against the installed three r185 source, not just
-// the maths). The material is an OPAQUE alpha-tested cutout:
-// `transparent=false`, `alphaTest=0.5`, `depthWrite=true`. In
-// `three/src/materials/nodes/NodeMaterial.js` `setupDiffuseColor()` builds
-// `diffuseColor.a` from `colorNode.a * opacityNode`, runs the alpha-test
-// `discard()` on that value, and only THEN, for an opaque material
-// (`NodeBuilder.isOpaque()`: `transparent===false && blending===NormalBlending
-// && alphaToCoverage===false`), forces `diffuseColor.a = 1.0`. The discard is
-// therefore already applied to the real computed alpha; the later force only
-// affects the (unused) blend alpha. The alpha is supplied through the
-// EXPLICIT `opacityNode` (not only packed into `colorNode`) so there is a
-// single, documented multiplication. `colorNode` is `vec4(rgb, 1.0)`, so no
-// alpha is smuggled through a channel three might reinterpret.
-//
-// BUDGET. `impactSplashMaxVerticesPerEvent()` bounds the per-event vertex
-// count (strands x rings x sides + sheets x band grid + core sphere) and
-// `IMPACT_SPLASH_MAX_DROPLETS` bounds the instance slots. The layer
-// preallocates those worst cases and only ever reduces the drawn range, so a
-// long-lived page cannot grow the geometry.
+// The event basis follows the outward wound normal; sag is world-space -Y.
+// Seed/time fully determine geometry. Buffers are bounded for eight events.
+// Alpha is explicitly supplied to opacityNode with alphaTest and depthWrite;
+// the shipped Current slug simulation and Smooth reconstruction are separate.
 
 import * as THREE from 'three/webgpu';
+import { resolveImpactSplashProfile, type ImpactSplashProfile } from './impact-splash-profiles';
+import { createImpactSplashSprites } from './impact-splash-sprites';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
   attribute, cameraPosition, clamp, cos, dot, faceDirection, float, max,
   mix, mx_noise_float, normalize, normalWorld, positionWorld, pow, sin,
-  smoothstep, uniform, vec3, vec4,
+  smoothstep, uniform, uv as surfaceUv, vec3, vec4,
 } from 'three/tsl';
 import { basisFromAxis } from '../vec';
 import type { Vec3 } from '../types';
@@ -83,7 +24,7 @@ import type { Vec3 } from '../types';
 /** Hard structural caps. Exported so callers can size their own buffers and
  *  tests can pin the budget without re-deriving the grid. */
 export const IMPACT_SPLASH_MAX_STRANDS = 48;
-export const IMPACT_SPLASH_MAX_SHEETS = 3;
+export const IMPACT_SPLASH_MAX_SHEETS = 6;
 /** Core displaced sphere grid (latitude rings x azimuth sectors), fixed. */
 export const IMPACT_SPLASH_CORE_RINGS = 12;
 export const IMPACT_SPLASH_CORE_SECTORS = 16;
@@ -186,31 +127,31 @@ export const IMPACT_SPLASH_TUNING: ImpactSplashTuning = {
   droopStartSec: 0.32,
   gravityGain: 0.42,
   curlGain: 0.35,
-  strands: 38,
-  strandSegments: 14,
+  strands: 12,
+  strandSegments: 22,
   strandSides: 7,
-  strandRadiusMin: 0.007,
-  strandRadiusMax: 0.028,
+  strandRadiusMin: 0.003,
+  strandRadiusMax: 0.010,
   strandConeInner: 0.10,
   strandConeOuter: 1.30,
-  strandCoreFrac: 0.60,
+  strandCoreFrac: 0.25,
   strandLengthMin: 0.45,
   strandLengthMax: 1.0,
   strandGrowSec: 0.14,
   strandDelaySec: 0.06,
   // (extension is driven by expandSec; strandGrowSec scales the delay fraction)
   strandDissolveSpread: 0.32,
-  sheets: 2,
-  radialSegments: 6,
-  angularSegments: 26,
-  sheetSpanMin: 0.9,
-  sheetSpanMax: 1.7,
-  sheetConeMin: 0.28,
-  sheetConeMax: 0.55,
-  sheetConeBand: 0.42,
-  sheetRadiusFrac: 0.55,
-  sheetDissolveBoost: 1.6,
-  coreRadius: 0.065,
+  sheets: 6,
+  radialSegments: 20,
+  angularSegments: 36,
+  sheetSpanMin: 0.55,
+  sheetSpanMax: 1.20,
+  sheetConeMin: 0.25,
+  sheetConeMax: 0.65,
+  sheetConeBand: 0.75,
+  sheetRadiusFrac: 0.92,
+  sheetDissolveBoost: 0.85,
+  coreRadius: 0.040,
   dropletsMin: 100,
   dropletsMax: 150,
   dropletBirthStartSec: 0.10,
@@ -239,6 +180,7 @@ export interface ImpactSplashEvent {
   readonly direction: Vec3;
   readonly seed: number;
   readonly lifetime: number;
+  readonly profile?: ImpactSplashProfile;
   time: number;
 }
 
@@ -338,6 +280,7 @@ export interface ImpactSplashEventOptions {
    *  back to the tuning default; a non-positive value creates an already-dead
    *  event (step returns false, the frame is null). */
   lifetime?: number;
+  profile?: Partial<ImpactSplashProfile>;
 }
 
 export function createImpactSplashEvent(
@@ -351,7 +294,7 @@ export function createImpactSplashEvent(
   const lifetime = (typeof requested === 'number' && Number.isFinite(requested))
     ? Math.max(0, requested)
     : IMPACT_SPLASH_TUNING.lifetimeSec;
-  return { origin, direction, seed: seed | 0, lifetime, time: 0 };
+  return { origin, direction, seed: seed | 0, lifetime, time: 0, profile: resolveImpactSplashProfile(options.profile) };
 }
 
 /** Advance one event; returns false once it is at/over its lifetime (the
@@ -519,7 +462,9 @@ function strandPoint(
   const cz = az * s + pz * bend - scales.curl * u * u;
   // Radius profile: pinched root, clean taper, pinched tip. The growth gate
   // slides a soft window from the root to the tip so the strand EXTENDS.
-  const taper = Math.pow(1 - u, 0.62);
+  // A thin ligament ending in a rounded bead, rather than a conical spike.
+  const taper = 0.42 * Math.pow(1 - u, 1.4)
+    + 0.95 * Math.exp(-Math.pow((u - 0.88) / 0.085, 2));
   const root = smooth01(u / 0.10);
   const growGate = clamp01((growU(scales.grow, st, tuning) - u) / 0.10);
   const radius = st.radius * radiusScale * root * taper * growGate;
@@ -683,19 +628,22 @@ export function buildImpactSplashFrame(
   // oriented outward like the old shells did.
   for (const fl of flakes) {
     const base = v;
-    const dSheet = clamp01(scales.dissolve * tuning.sheetDissolveBoost);
-    // Floor at a micro epsilon: at thin = 0 exactly the local surface
-    // differences collapse to zero and the normals would be zero-length. A
-    // 0.001-scale flake is invisible anyway (alpha discard + the core covers
-    // the wound mouth), but the unit-normal contract holds everywhere.
-    const thin = Math.max(1e-3, Math.pow(1 - dSheet, 1.2));
+
+    const thin = 1;
+    const sheetTime = Math.max(0, ev.time - fl.seed * 0.055);
+    const sheetGrow = Math.max(1e-4, burstScales(sheetTime, tuning).grow);
     const coneSpan = Math.max(1e-6, fl.cone1 - fl.cone0);
     const surfaceR = (psi: number, tn: number): [number, number, number] => {
       const ph2 = fl.azimuth - fl.span / 2 + fl.span * tn;
-      const wob = 0.14 * Math.sin(3.3 * ph2 + fl.seed * 91.0) + 0.09 * Math.sin(7.1 * tn * TAU + fl.seed * 57.0);
+      const wob = 0.14 * Math.sin(3.3 * ph2 + fl.seed * 91.0) + 0.035 * Math.sin(3.1 * tn * TAU + fl.seed * 57.0);
       const sN = clamp01((psi - fl.cone0) / coneSpan);
-      const R2 = fl.radius * scales.grow * (0.55 + 0.45 * sN) * (1 + wob) * thin;
-      return [Math.cos(ph2) * Math.sin(psi) * R2, Math.sin(ph2) * Math.sin(psi) * R2, Math.cos(psi) * R2];
+      const scallop = 0.055 * Math.sin(tn * 23 + fl.seed * 17)
+        + 0.025 * Math.sin(tn * 47 + fl.seed * 39);
+      const R2 = fl.radius * sheetGrow * (0.26 + 0.74 * sN)
+        * (1 + wob + scallop * sN * sN) * thin;
+      return [Math.cos(ph2) * Math.sin(psi) * R2, Math.sin(ph2) * Math.sin(psi) * R2, Math.cos(psi) * R2
+        + 0.055 * scales.grow * Math.sin(tn * 14 + sN * 5 + fl.seed * 19) * sN
+        + Math.max(0, ev.time - 0.22) * 0.20];
     };
     for (let i = 0; i <= band; i++) {
       const s = i / band;
@@ -733,12 +681,28 @@ export function buildImpactSplashFrame(
         tangents[v * 3] = tw[0]; tangents[v * 3 + 1] = tw[1]; tangents[v * 3 + 2] = tw[2];
         uvs[v * 2] = s; uvs[v * 2 + 1] = tn;
         masks[v] = clamp01(fl.mask + 0.12 * (s - 0.5));
-        seeds[v] = fl.seed;
+        seeds[v] = -fl.seed - 0.001; // Negative tags a translucent membrane.
         v++;
       }
     }
     for (let i = 0; i < band; i++) {
       for (let j = 0; j < spanN; j++) {
+        // Holes open in material coordinates and expand into the rim.
+        // Removing geometry makes holes visible from either side, without
+        // relying on overlapping alpha-tested surfaces to suggest tearing.
+        const su = (i + 0.5) / band;
+        const tv = (j + 0.5) / spanN;
+        let torn = false;
+        for (let hole = 0; hole < 14; hole++) {
+          const h = (n: number) => splashHash01(Math.floor(fl.seed * 100000), hole * 7 + n);
+          const hu = 0.18 + h(1) * 0.90;
+          const hv = h(2);
+          const opening = 0.40 + 2.2 * smooth01((ev.time - 0.08 - h(5) * 0.14) / 0.70);
+          const ru = (0.065 + h(3) * 0.12) * opening;
+          const rv = (0.025 + h(4) * 0.07) * opening;
+          if (((su - hu) / ru) ** 2 + ((tv - hv) / rv) ** 2 < 1) { torn = true; break; }
+        }
+        if (torn) continue;
         const p0 = base + i * (spanN + 1) + j;
         const p1 = p0 + 1;
         const p2 = p0 + (spanN + 1);
@@ -906,7 +870,7 @@ function buildWetShade(
   };
   const uv = inputs.uv;
   const mask = inputs.mask;
-  const seed = inputs.seed;
+  const seed = inputs.seed.abs();
   const dissolve = inputs.dissolve;
 
   const u = uv.x;
@@ -1062,6 +1026,32 @@ export function createImpactSplashLayer(options: { rig?: ImpactSplashLightRig } 
   sheetMaterial.transparent = false;
   sheetMaterial.fog = false;
 
+  // Separate translucent membranes from depth-writing core/ligaments.
+  const membraneGeometry = new THREE.BufferGeometry();
+  for (const name of Object.keys(geometry.attributes)) {
+    membraneGeometry.setAttribute(name, geometry.getAttribute(name));
+  }
+  const membraneIndex = new THREE.BufferAttribute(new Uint32Array(maxIndices), 1);
+  membraneIndex.setUsage(THREE.DynamicDrawUsage);
+  membraneGeometry.setIndex(membraneIndex);
+  membraneGeometry.setDrawRange(0, 0);
+  const membraneMaterial = new MeshBasicNodeMaterial();
+  membraneMaterial.colorNode = vec4(sheetShade.rgb, 1) as never;
+  // Thin edges transmit more light; thick patches and overlapping layers
+  // build density. This is coverage, not simply a paler RGB value.
+  const thickness = clamp(maskNode.mul(0.65).add(0.10), 0.15, 0.78);
+  membraneMaterial.opacityNode = sheetShade.alpha.mul(thickness)
+    .mul(float(1).sub(disNode.mul(0.5))) as never;
+  membraneMaterial.transparent = true;
+  membraneMaterial.depthWrite = false;
+  membraneMaterial.depthTest = true;
+  membraneMaterial.side = THREE.DoubleSide;
+  membraneMaterial.forceSinglePass = true;
+  membraneMaterial.fog = false;
+  const membranes = new THREE.Mesh(membraneGeometry, membraneMaterial);
+  membranes.frustumCulled = false;
+  membranes.renderOrder = 2;
+
   const sheet = new THREE.Mesh(geometry, sheetMaterial);
   sheet.frustumCulled = false;
   sheet.renderOrder = 1;
@@ -1101,9 +1091,33 @@ export function createImpactSplashLayer(options: { rig?: ImpactSplashLightRig } 
   for (let i = 0; i < droplets.count; i++) droplets.setMatrixAt(i, zero);
   droplets.instanceMatrix.needsUpdate = true;
 
+  // Fine atomized blood: soft coverage around a subset of flying drops.
+  const mistMaterial = new MeshBasicNodeMaterial();
+  const mistUv = surfaceUv().sub(0.5).mul(2);
+  const feather = float(1).sub(smoothstep(0.1, 1.0, mistUv.length()));
+  mistMaterial.colorNode = vec3(0.08, 0.001, 0.003) as never;
+  mistMaterial.opacityNode = feather.mul(feather).mul(0.10) as never;
+  mistMaterial.transparent = true;
+  mistMaterial.depthWrite = false;
+  mistMaterial.depthTest = true;
+  mistMaterial.fog = false;
+  const mistGeometry = new THREE.PlaneGeometry(1, 1);
+  const mist = new THREE.InstancedMesh(mistGeometry, mistMaterial,
+    IMPACT_SPLASH_MAX_DROPLETS * IMPACT_SPLASH_MAX_EVENTS);
+  mist.frustumCulled = false;
+  mist.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  mist.count = 0;
+  mist.renderOrder = 3;
+
+  const sprites = createImpactSplashSprites(rig);
   const group = new THREE.Group();
+  group.add(sprites.object);
+  sheet.visible = false;
+  membranes.visible = false;
   group.add(sheet);
+  group.add(membranes);
   group.add(droplets);
+  group.add(mist);
   group.visible = true;
 
   const events: ImpactSplashEvent[] = [];
@@ -1131,6 +1145,7 @@ export function createImpactSplashLayer(options: { rig?: ImpactSplashLightRig } 
   function clear(): void { events.length = 0; }
 
   function sync(_camera: THREE.Camera): void {
+    sprites.sync(events, _camera);
     const pos = posAttr.array as Float32Array;
     const nrm = nrmAttr.array as Float32Array;
     const tan = tanAttr.array as Float32Array;
@@ -1143,6 +1158,8 @@ export function createImpactSplashLayer(options: { rig?: ImpactSplashLightRig } 
     let iOff = 0;
     let vBase = 0;
     let dOff = 0;
+    const transparentTriangles: { a: number; b: number; c: number; z: number }[] = [];
+    const view = _camera.matrixWorldInverse.elements;
     for (const ev of events) {
       const frame = buildImpactSplashFrame(ev);
       if (!frame) continue;
@@ -1159,9 +1176,19 @@ export function createImpactSplashLayer(options: { rig?: ImpactSplashLightRig } 
       // different ages each get their OWN dissolve (a single shared uniform
       // would apply the oldest event's dissolve to every burst).
       dis.fill(frame.dissolve, vOff, vOff + vCount);
-      for (let k = 0; k < iCount; k++) idx[iOff + k] = frame.indices[k]! + vBase;
+      for (let k = 0; k < iCount; k += 3) {
+        const a = frame.indices[k]! + vBase;
+        const b = frame.indices[k + 1]! + vBase;
+        const c = frame.indices[k + 2]! + vBase;
+        if (sed[a]! < 0) {
+          const x = (pos[a*3]! + pos[b*3]! + pos[c*3]!) / 3;
+          const y = (pos[a*3+1]! + pos[b*3+1]! + pos[c*3+1]!) / 3;
+          const z = (pos[a*3+2]! + pos[b*3+2]! + pos[c*3+2]!) / 3;
+          transparentTriangles.push({a,b,c,z: view[2]! * x + view[6]! * y + view[10]! * z + view[14]!});
+        } else { idx[iOff++] = a; idx[iOff++] = b; idx[iOff++] = c; }
+      }
       vOff += vCount;
-      iOff += iCount;
+
       vBase += vCount;
       // Droplets into the instance matrices. The loop bound is the BUFFER
       // capacity, never `droplets.count` (the previous frame's draw count,
@@ -1180,13 +1207,32 @@ export function createImpactSplashLayer(options: { rig?: ImpactSplashLightRig } 
         scl.set(sz * 0.85, sz * IMPACT_SPLASH_TUNING.dropletStretch, sz * 0.85);
         m.compose(p, q, scl);
         droplets.setMatrixAt(dOff, m);
+        // Billboards use the camera orientation; all share one colour so
+        // their mutual alpha overlap is independent of instance order.
+        const cloudSize = sz * (14 + frame.dissolve * 18);
+        scl.set(cloudSize, cloudSize, 1);
+        m.compose(p, _camera.quaternion, scl);
+        mist.setMatrixAt(dOff, m);
         dOff++;
       }
     }
     const dropletSlots = dOff;
+    mist.count = dOff;
+    mist.instanceMatrix.needsUpdate = true;
     while (dOff < droplets.instanceMatrix.count) { droplets.setMatrixAt(dOff, zero); dOff++; }
     droplets.instanceMatrix.needsUpdate = true;
     droplets.count = Math.max(0, Math.min(droplets.instanceMatrix.count, dropletSlots));
+    // Sort all translucent triangles across events back-to-front. Sorting
+    // just the mesh would fail for intersecting sheets or camera orbit.
+    transparentTriangles.sort((a,b) => a.z - b.z);
+    let ti = 0;
+    for (const tri of transparentTriangles) {
+      membraneIndex.array[ti++] = tri.a;
+      membraneIndex.array[ti++] = tri.b;
+      membraneIndex.array[ti++] = tri.c;
+    }
+    membraneIndex.needsUpdate = true;
+    membraneGeometry.setDrawRange(0, ti);
     geometry.setDrawRange(0, iOff);
     posAttr.needsUpdate = true; nrmAttr.needsUpdate = true; tanAttr.needsUpdate = true;
     uvAttr.needsUpdate = true; maskAttr.needsUpdate = true; seedAttr.needsUpdate = true;
@@ -1206,10 +1252,16 @@ export function createImpactSplashLayer(options: { rig?: ImpactSplashLightRig } 
     sync,
     setVisible(v: boolean) { group.visible = v; },
     dispose() {
+      sprites.dispose();
       geometry.dispose();
+      membraneGeometry.dispose();
+      membraneMaterial.dispose();
       sheetMaterial.dispose();
       dropletGeom.dispose();
       dropletMaterial.dispose();
+      mistGeometry.dispose();
+      mistMaterial.dispose();
+      mist.dispose();
       (droplets as unknown as { dispose(): void }).dispose?.();
     },
   };

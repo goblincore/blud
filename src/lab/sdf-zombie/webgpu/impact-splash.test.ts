@@ -19,7 +19,7 @@
 // shipped IMPACT_GOUT/WOUND_BLEED tables the "Current" slug depends on.
 
 import { describe, it, expect } from 'vitest';
-import type * as THREE from 'three/webgpu';
+import * as THREE from 'three/webgpu';
 import {
   IMPACT_SPLASH_DISSOLVE_POINTS, IMPACT_SPLASH_DROPLET_STRIDE, IMPACT_SPLASH_MAX_DROPLETS,
   IMPACT_SPLASH_MAX_EVENTS, IMPACT_SPLASH_MAX_STRANDS, IMPACT_SPLASH_TUNING,
@@ -93,7 +93,7 @@ describe('impact splash — deterministic seeds and material-space mask', () => 
   it('rolls a bounded strand bundle and a handful of partial sheets', () => {
     expect(impactSplashStrandCount()).toBeGreaterThan(8);
     expect(impactSplashStrandCount()).toBeLessThanOrEqual(IMPACT_SPLASH_MAX_STRANDS);
-    expect(impactSplashSheetCount()).toBeLessThanOrEqual(3);
+    expect(impactSplashSheetCount()).toBeLessThanOrEqual(6);
   });
 });
 
@@ -412,7 +412,7 @@ describe('impact splash — lifetime, cleanup and budget', () => {
 
   it('stays inside the documented vertex/triangle/droplet budgets', () => {
     const cap = impactSplashMaxVerticesPerEvent();
-    expect(cap).toBeLessThanOrEqual(48 * 15 * 8 + 3 * 7 * 27 + 13 * 17 + 8);
+    expect(cap).toBeLessThanOrEqual(8192 + 8);
     for (const t of [0.02, 0.3, 0.7, 1.1]) {
       const f = frame(2024, UP, t);
       expect(f.vertexCount).toBeLessThanOrEqual(cap);
@@ -426,17 +426,17 @@ describe('impact splash — layer event API and independent baseline', () => {
   it('emits, caps and cleans up events through the production API', () => {
     const layer = createImpactSplashLayer();
     try {
-      layer.sync({} as THREE.Camera);
+      layer.sync(new THREE.PerspectiveCamera());
       expect(layer.dropletCount).toBe(0);
       for (let i = 0; i < IMPACT_SPLASH_MAX_EVENTS + 6; i++) layer.emit(ORIGIN, UP, i);
       expect(layer.eventCount).toBe(IMPACT_SPLASH_MAX_EVENTS);
       layer.step(0.55);
-      layer.sync({} as THREE.Camera);
+      layer.sync(new THREE.PerspectiveCamera());
       expect(layer.vertexCount).toBeGreaterThan(0);
       expect(layer.dropletCount).toBeGreaterThan(0);
       layer.step(IMPACT_SPLASH_TUNING.lifetimeSec);
       expect(layer.eventCount).toBe(0);
-      layer.sync({} as THREE.Camera);
+      layer.sync(new THREE.PerspectiveCamera());
       expect(layer.vertexCount).toBe(0);
       expect(layer.dropletCount).toBe(0);
     } finally {

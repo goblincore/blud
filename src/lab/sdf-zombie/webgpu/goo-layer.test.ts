@@ -1069,4 +1069,3 @@ describe('connection blob shape', () => {
     expect(weighted.gut).toBe(1);
   });
 });
-

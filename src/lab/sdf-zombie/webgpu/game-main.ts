@@ -1,3 +1,4 @@
+import { impactSplashProfiles, resolveImpactSplashProfile, type ImpactSplashProfile, type ImpactSplashWeapon } from './impact-splash-profiles';
 import { createEncounterNavigation } from './encounter-navigation';
 import { createEncounterDirector, clearSight, type EncounterAgent } from './encounter-director';
 import { createSoldierCorpseBakes } from './soldier-corpse-bake';
@@ -4451,7 +4452,10 @@ async function main() {
   /** Bleed's own sim clock — an accumulator, never wall time, so hand-
    *  stepped captures are deterministic. */
   let bleedClock = 0;
-  function registerBleed(a: ZombieActor, wound: Wound, kind: 'pellet' | 'slug' | 'stump'): void {
+  function registerBleed(
+    a: ZombieActor, wound: Wound, kind: 'pellet' | 'slug' | 'stump',
+    contact?: { point: Vec3; incoming: Vec3 },
+  ): void {
     if (!bleedEnabled) return;
     bleed.register(a.id, wound, kind, bleedClock);
     // IMPACT GOUT (blood-viscosity spec §a) — the dense one-tick pulse, at
@@ -4468,14 +4472,26 @@ async function main() {
     // other emitter's.
     const streamId = woundStreamId(wound);
     spawnImpactGout(bloodSim, kind, anchor, [-normal[0], -normal[1], -normal[2]], bleedRng, streamId);
-    // SUPPLEMENTARY impact crown (opt-in, ?impactsplash=1). The crown's axis
-    // is the OUTWARD wound normal — the hemisphere the blood leaves the body
-    // — so wall/body impacts orient away from the surface. The seed is
+    // SUPPLEMENTARY entry splash (opt-in, ?impactsplash=1). Projectile hits
+    // use the contact and incoming shot below; stumps use their outward
+    // wound normal. The seed is
     // derived from the wound's stable stream id, NOT from bleedRng, so it
     // draws no random numbers and leaves the shipped gout/bleed stream
     // bit-identical.
     if (impactSplashEnabled && impactSplashLayer) {
-      impactSplashLayer.emit(anchor, normal, (streamId * 2654435761) >>> 0);
+      // An immediate entry splash belongs to the projectile's actual surface
+      // contact, not the wound's reconstructed/carved anchor. Send it back
+      // toward the incoming shot and start just outside the contacted skin.
+      // Stumps have no projectile contact and retain their wound-normal path.
+      const splashDirection: Vec3 = contact
+        ? [-contact.incoming[0], -contact.incoming[1], -contact.incoming[2]]
+        : normal;
+      const splashOrigin: Vec3 = contact
+        ? [contact.point[0] + splashDirection[0] * 0.035,
+           contact.point[1] + splashDirection[1] * 0.035,
+           contact.point[2] + splashDirection[2] * 0.035]
+        : anchor;
+      impactSplashLayer.emit(splashOrigin, splashDirection, (streamId * 2654435761) >>> 0, { profile: impactSplashProfiles[kind] });
     }
     // Gut-rope decision for this stamped wound — placed BELOW the
     // !bleedEnabled guard on purpose: the roll spends bleedRng, and the
@@ -5339,7 +5355,7 @@ async function main() {
               wound: stamped ? describeRecordedWound(hitActor, stamped) : null,
               woundCount: hitActor.wounds().length,
             });
-            if (stamped) registerBleed(hitActor, stamped, p.kind);
+            if (stamped) registerBleed(hitActor, stamped, p.kind, { point: hitPoint, incoming: dirN });
             dead = true;
           }
         }
@@ -7366,13 +7382,18 @@ function performBenchAction(a: BenchAction): void {
      * scene. Disabling keeps the layer but hides it, so toggling costs no
      * rebuild.
      */
-    setImpactSplash(o: { enabled?: boolean } = {}) {
+    setImpactSplash(o: { enabled?: boolean; weapon?: ImpactSplashWeapon; profile?: Partial<ImpactSplashProfile> } = {}) {
+      const weapon = o.weapon ?? 'slug';
+      if (o.profile && Object.hasOwn(impactSplashProfiles, weapon)) {
+        impactSplashProfiles[weapon] = resolveImpactSplashProfile({ ...impactSplashProfiles[weapon], ...o.profile });
+      }
       if (o.enabled !== undefined) impactSplashEnabled = o.enabled;
       if (impactSplashEnabled) ensureImpactSplashLayer();
       impactSplashLayer?.setVisible(impactSplashEnabled);
       return {
         enabled: impactSplashEnabled,
         available: impactSplashLayer !== null,
+        profiles: structuredClone(impactSplashProfiles),
         events: impactSplashLayer?.eventCount ?? 0,
       };
     },
@@ -7380,6 +7401,7 @@ function performBenchAction(a: BenchAction): void {
       return {
         enabled: impactSplashEnabled,
         available: impactSplashLayer !== null,
+        profiles: structuredClone(impactSplashProfiles),
         events: impactSplashLayer?.eventCount ?? 0,
       };
     },

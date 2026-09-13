@@ -111,7 +111,7 @@ export type ShapeId = 'current' | 'splash';
 
 export const SHAPES: { id: ShapeId; label: string }[] = [
   { id: 'current', label: 'Current slug (sim + reconstruction)' },
-  { id: 'splash', label: 'Impact splash (procedural crown)' },
+  { id: 'splash', label: 'Impact splash (layered sprites)' },
 ];
 
 /** The splash event's origin: the SAME front-of-proxy wound the current slug
@@ -966,7 +966,7 @@ async function bootstrap(): Promise<void> {
   hint.id = 'hint';
   hint.textContent = [
     'drag orbit · wheel zoom',
-    'shape: Current slug (sim + filter) vs Impact splash (procedural crown)',
+    'shape: Current slug (sim + filter) vs Impact splash (layered sprites)',
     'splash opens FROZEN at the crown moment; Play loops it, Reset splash re-freezes',
     'filter (Original/Smooth) is independent of shape and applies to Current only',
     'capture: pick shape (+filter/wipe), Play/Pause or freeze, screenshot the canvas;',
