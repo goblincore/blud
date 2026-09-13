@@ -134,7 +134,7 @@ export function renderVariantFrame(
 
 type ScenarioId = 'burst' | 'jet' | 'overlap' | 'landing';
 const SCENARIOS: { id: ScenarioId; label: string }[] = [
-  { id: 'burst', label: 'burst (moving droplets)' },
+  { id: 'burst', label: 'burst (slug impact)' },
   { id: 'jet', label: 'jet (sustained wound)' },
   { id: 'overlap', label: 'overlap (two close gouts)' },
   { id: 'landing', label: 'landing (floor pools)' },
@@ -332,7 +332,9 @@ async function bootstrap(): Promise<void> {
   }
 
   function fireBurst(): void {
-    burst(sim, [0, 1.35, 0.36], rng, streamSeq++);
+    // Use the game wound-impact emitter, outside the proxy and aimed
+    // outward. The generic gib burst is too sparse for this comparison.
+    spawnImpactGout(sim, 'slug', [0, 1.35, 0.55], [0, 0, -1], rng, streamSeq++);
   }
 
   function fireGout(x: number, y: number, z: number): void {
@@ -353,7 +355,8 @@ async function bootstrap(): Promise<void> {
     if (scenario === 'burst') fireBurst();
     if (scenario === 'overlap') { fireGout(-0.28, 1.25, 0.36); fireGout(0.28, 1.35, 0.36); }
     // Show an airborne event immediately, even while paused.
-    for (let i = 0; i < 30; i++) advance(1 / 60);
+    const previewSteps = scenario === 'burst' ? 3 : 30;
+    for (let i = 0; i < previewSteps; i++) advance(1 / 60);
   }
 
   function advance(dt: number): void {
