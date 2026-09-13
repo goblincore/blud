@@ -154,6 +154,9 @@ def test_refine_head_starts_as_a_no_op_and_needs_refine(tmp_path):
 def test_detail_only_head_ignores_a_refine_tensor(tmp_path):
     """Run 5 control: a head_inputs='detail' model trained on a refine dataset (the trainer passes refine to
     every head model) must not concatenate the refine channels."""
+    from nupscale.data import load_dataset, CropSampler
+    from nupscale.reconstruct import predict
+    from tests.helpers import write_v2_dataset
     ds = load_dataset(write_v2_dataset(tmp_path / "ds", pairs=2, size=(12, 16), normals=True, detail=True, refine=True))
     march, target, weight, detail, refine = CropSampler(ds.split("train"), crop=8, seed=1, flip_x=0.0, flip_y=0.0).sample_with_extras(2)
     m = Upscaler("s8", "rgbn", seed=2, head=True)
