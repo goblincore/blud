@@ -34,7 +34,7 @@ import {
   initialAdaptiveState, stepAdaptive, scaleForRung, SCALE_LADDER,
 } from '../adaptive-scale';
 import { WOUND_STEP_MUL, ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_PRIM_SHAPE, ROW_PRIM_COLOR, ROW_PRIM_A, ROW_PRIM_B, ROW_PRIM_SCALE, ROW_PRIM_QUAT, ROW_CLUSTER_RANGE, ROW_CLUSTER_BOUNDS } from './march.wgsl';
-import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHADOW_HULL_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER, DEPTH_PREPASS_LAYER, FIELD_MESH_LAYER } from './sdf-layer';
+import { createSdfLayer, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHADOW_HULL_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER, DEPTH_PREPASS_LAYER, FIELD_MESH_LAYER, REFINE_LAYER } from './sdf-layer';
 import { createFlashlight, DUNGEON_RIG, GALLERY_RIG, type AmbientRig } from './dungeon-lighting';
 import { ProbeLightingNode, createProbeLevelSlots, levelLightsNode, levelMatchedGain } from './probe-lighting-node';
 import { GOBLIN_SKIN } from './goblin-skin';
@@ -818,7 +818,16 @@ async function main() {
   // contains 'rgbn'/'rgbdn', or an explicit `?upscalenormals=1`. Every other boot — including
   // `?upscale=trained&upscalemodel=s32-rgbd-best` — keeps the single-attachment march exactly as
   // shipped (owner 2026-09-12: "performance worse post this change" was the unconditional MRT).
-  const marchNormalsWanted = (() => {
+  // Run 5: the refine twins + output-res refine targets (sdf-layer REFINE_LAYER) exist only when the
+  // boot asks: `?refine=1`, or a trained model whose name contains 'headr' (run-5 exports). `?refine=0`
+  // forces off. Refine implies the normal attachments.
+  const refineWanted = (() => {
+    const q = new URLSearchParams(location.search);
+    if (q.get('refine') === '1') return true;
+    if (q.get('refine') === '0') return false;
+    return /headr(-|$)/.test(q.get('upscalemodel') ?? '');
+  })();
+  const marchNormalsWanted = refineWanted || (() => {
     const q = new URLSearchParams(location.search);
     if (q.get('upscalenormals') === '1') return true;
     if (q.get('upscalenormals') === '0') return false;
@@ -826,7 +835,8 @@ async function main() {
     const name = q.get('upscalemodel') ?? '';
     return /rgbd?n\b/.test(inputs) || /rgbd?n(-|$)/.test(name) || q.get('upscalehead') === '1';
   })();
-  const sdfLayer = createSdfLayer(handle.renderer, { marchNormals: marchNormalsWanted });
+  const sdfLayer = createSdfLayer(handle.renderer, { marchNormals: marchNormalsWanted, refine: refineWanted });
+  if (refineWanted) sdfLayer.setRefine(true);
   postAa.addSink(sdfLayer);
 
   // SSCS — screen-space contact shadows (post-sscs.ts, 2026-09-09 shadow
@@ -2050,6 +2060,7 @@ async function main() {
         inputs: upSearch.get('upscaleinputs') ?? undefined,
         seed: parseIntParam(upSearch.get('upscaleseed'), { min: 0, max: 2 ** 31 - 1 }) ?? undefined,
         head: upSearch.get('upscalehead') ?? undefined,   // run-4 full-res head on a random config
+        headInputs: upSearch.get('upscaleheadinputs') ?? undefined,   // run-5 'detail' | 'detail+refine'
       });
       sdfScale = UPSCALE_SCALE;
       sdfLayer.setScale(sdfScale);
@@ -2494,6 +2505,9 @@ async function main() {
         // material's single-node-graph trick is not worth rethinking for a
         // few dozen boxes.
         depthPre: sdfLayer.depthPre,
+        // Run 5: the output-res refine twins. Null unless the boot allocated refine (?refine=1),
+        // in which case createZombieGpuView builds a third twin mesh on REFINE_LAYER.
+        refine: sdfLayer.refineSource ?? undefined,
         levelShadow: { light: flashlight.levelShadow },
       }),
     };
@@ -2591,6 +2605,10 @@ async function main() {
       view.depthPreObject.layers.set(DEPTH_PREPASS_LAYER);
       scene.add(view.depthPreObject);
     }
+    if (view.refineObject) {
+      view.refineObject.layers.set(REFINE_LAYER);
+      scene.add(view.refineObject);
+    }
     scene.add(view.object);
     scene.add(view.coneObject);
     // DEFERRED MODE registrations: the proxy box is the SDF producer; the
@@ -2601,6 +2619,7 @@ async function main() {
       deferredApi.router.register(view.object, 'sdf');
       deferredApi.router.register(view.coneObject, 'exclude');
       if (view.depthPreObject) deferredApi.router.register(view.depthPreObject, 'exclude');
+      if (view.refineObject) deferredApi.router.register(view.refineObject, 'exclude');
       deferredApi.router.register(rigGroup, 'mesh', 'level-only');
     }
     const zombieId = nextId++;
@@ -2767,6 +2786,8 @@ async function main() {
       releaseSkeletonActor(a);
       scene.remove(a.view.object);
       scene.remove(a.view.coneObject);
+      if (a.view.depthPreObject) scene.remove(a.view.depthPreObject);
+      if (a.view.refineObject) scene.remove(a.view.refineObject);
       if (a.character) a.character.dispose();
       else a.view.dispose();
     }
@@ -7210,6 +7231,11 @@ function performBenchAction(a: BenchAction): void {
      *  low-res march. Turning it on turns the field weave off and the history is
      *  re-seeded, so the first frame of the new epoch is independent of the old
      *  one — see the frame-hash decision note. */
+    /** Run 5 refine pass (spec 2026-09-13 §4). setRefine throws unless the boot allocated it (?refine=1). */
+    setRefine: (on: boolean) => { sdfLayer.setRefine(on); return sdfLayer.refine; },
+    setRefineView: (on: boolean) => { sdfLayer.setRefineView(on); return sdfLayer.refineView; },
+    setRefineCfg: (cfg: { reject?: number; normalEps?: number; steps?: number }) => { sdfLayer.setRefineCfg(cfg); return sdfLayer.refineCfg; },
+    refineInfo: () => ({ allocated: sdfLayer.refineSource !== null, on: sdfLayer.refine, view: sdfLayer.refineView, cfg: sdfLayer.refineCfg }),
     setTemporalAccum: (on: boolean, alpha?: number) => sdfLayer.setTemporalAccum(on, alpha),
     resetTemporalAccum: () => sdfLayer.resetTemporalAccum(),
     /** NEURAL UPSCALE (spec 2026-09-11). Enabling also sets the march scale to 0.5
@@ -8162,6 +8188,19 @@ function performBenchAction(a: BenchAction): void {
      *  a returnByValue object). Outside every timing path; only the parity
      *  gate calls it. */
     installDebugProbe: () => {
+      /** Shared readback body for the float-target readers: de-pads the 256-byte-aligned rows
+       *  into a dense rgba32f base64 blob. `index` selects an MRT attachment. */
+      const packFloatTarget = async (t: THREE.RenderTarget, index = 0) => {
+        const w = t.width, h = t.height;
+        const raw = new Float32Array(await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h, index));
+        const stride = Math.ceil(w * 16 / 256) * 64;
+        const dense = new Float32Array(w * h * 4);
+        for (let y = 0; y < h; y++) dense.set(raw.subarray(y * stride, y * stride + w * 4), y * w * 4);
+        const bytes = new Uint8Array(dense.buffer);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+        return { w, h, rgba32f: btoa(binary) };
+      };
       (window as unknown as { __sdfGameDebug: unknown }).__sdfGameDebug = {
         /** Raw float readback, row padding removed. The driver compares these
          * bytes before any composite, color conversion or antialias filtering. */
@@ -8203,16 +8242,7 @@ function performBenchAction(a: BenchAction): void {
           handle.setLoopRunning(false);
           handle.step(0);
           await handle.resolveGpu();
-          const t = sdfLayer.marchTarget;
-          const w = t.width, h = t.height;
-          const raw = new Float32Array(await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h));
-          const stride = Math.ceil(w * 16 / 256) * 64;
-          const dense = new Float32Array(w * h * 4);
-          for (let y = 0; y < h; y++) dense.set(raw.subarray(y * stride, y * stride + w * 4), y * w * 4);
-          const bytes = new Uint8Array(dense.buffer);
-          let binary = '';
-          for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
-          return { w, h, rgba32f: btoa(binary) };
+          return packFloatTarget(sdfLayer.marchTarget);
         },
         /** Run 4: the output-res detail field (sdf-layer detailTarget) as { w, h, rgba32f } — same
          *  de-pad as readMarchTarget. Null when the layer has no normal attachment. */
@@ -8222,15 +8252,14 @@ function performBenchAction(a: BenchAction): void {
           handle.setLoopRunning(false);
           handle.step(0);
           await handle.resolveGpu();
-          const w = t.width, h = t.height;
-          const raw = new Float32Array(await handle.renderer.readRenderTargetPixelsAsync(t, 0, 0, w, h));
-          const stride = Math.ceil(w * 16 / 256) * 64;
-          const dense = new Float32Array(w * h * 4);
-          for (let y = 0; y < h; y++) dense.set(raw.subarray(y * stride, y * stride + w * 4), y * w * 4);
-          const bytes = new Uint8Array(dense.buffer);
-          let binary = '';
-          for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
-          return { w, h, rgba32f: btoa(binary) };
+          return packFloatTarget(t);
+        },
+        /** Run 5: both refine attachments as { c, n } of { w, h, rgba32f }; null unless the boot allocated them. */
+        async readRefine() {
+          const t = sdfLayer.refineTarget;
+          if (!t) return null;
+          handle.setLoopRunning(false); handle.step(0); await handle.resolveGpu();
+          return { c: await packFloatTarget(t, 0), n: await packFloatTarget(t, 1) };
         },
         /** Neural upscale normals capture (2026-09-12): the march target re-rendered with every
          *  actor and chunk in debug mode 9 (march.wgsl.ts MARCH_BODY_LIGHT): rgb = the final
