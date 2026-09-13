@@ -162,8 +162,8 @@ function errorMessage(err: unknown): string {
 async function bootstrap(): Promise<void> {
   const mount = document.getElementById('app');
   const errEl = document.getElementById('errors');
-  const diagEl = document.getElementById('diag');
-  const controlsEl = document.getElementById('controls');
+  const diagEl = document.getElementById('diag')!;
+  const controlsEl = document.getElementById('controls')!;
   const pausedEl = document.getElementById('paused');
   if (!mount || !controlsEl || !diagEl) throw new Error('comparison page DOM is incomplete');
 
@@ -332,7 +332,7 @@ async function bootstrap(): Promise<void> {
   }
 
   function fireBurst(): void {
-    burst(sim, [0, 1.35, 0], rng, streamSeq++);
+    burst(sim, [0, 1.35, 0.36], rng, streamSeq++);
   }
 
   function fireGout(x: number, y: number, z: number): void {
@@ -351,7 +351,7 @@ async function bootstrap(): Promise<void> {
     streamSeq = 1;
     scenarioStream = streamSeq++;
     if (scenario === 'burst') fireBurst();
-    if (scenario === 'overlap') { fireGout(-0.28, 1.25, 0); fireGout(0.28, 1.35, 0); }
+    if (scenario === 'overlap') { fireGout(-0.28, 1.25, 0.36); fireGout(0.28, 1.35, 0.36); }
   }
 
   function advance(dt: number): void {
@@ -364,17 +364,17 @@ async function bootstrap(): Promise<void> {
         break;
       case 'jet':
         emitterAcc = spawnWoundDroplets(
-          sim, 'slug', emitterAge, [0, 1.35, 0], [0, 1, 0], sdt, emitterAcc, rng, scenarioStream,
+          sim, 'slug', emitterAge, [0, 1.35, 0.36], [0, 0.5, 1], sdt, emitterAcc, rng, scenarioStream,
         );
         emitterAge += sdt;
         break;
       case 'overlap':
         eventTimer += sdt;
-        if (eventTimer >= 1.2) { eventTimer = 0; fireGout(-0.28, 1.25, 0); fireGout(0.28, 1.35, 0); }
+        if (eventTimer >= 1.2) { eventTimer = 0; fireGout(-0.28, 1.25, 0.36); fireGout(0.28, 1.35, 0.36); }
         break;
       case 'landing':
         emitterAcc = spawnWoundDroplets(
-          sim, 'pellet', emitterAge, [0, 0.6, 0], [0, 1, 0], sdt, emitterAcc, rng, scenarioStream,
+          sim, 'pellet', emitterAge, [0, 0.6, 0.36], [0, 0.5, 1], sdt, emitterAcc, rng, scenarioStream,
         );
         emitterAge += sdt;
         break;

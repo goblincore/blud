@@ -202,3 +202,11 @@ node_modules/.bin/esbuild <file> --format=esm --outfile=/dev/null
 
 Reviewer/user decides whether the candidate retains the liked appearance; no
 automatic promotion.
+
+## Reviewer follow-up — 2026-09-13
+
+Reviewed corrective branch and tested the actual comparison page in Chrome WebGPU. Fixed two TypeScript nullability errors and moved fixture emitters from inside the solid capsule onto its front surface (z=.36); previously depth correctly hid much of the emitted blood.
+
+Validation: 197 focused tests across blood-sim, goo-layer, goo-presets, blood-connections and blood-compare-main passed; tsc --noEmit passed after the fixes. Original, Smooth, Smooth+connections and experimental sheets rendered at the identical paused jet frame 30, seed 12345, output 800x600, source 400x300, density 200x150. Browser error/warning log was empty when switching to Smooth. Smooth visibly replaces square chunks with rounded glossy droplets. Connections thicken the flow; experimental sheets did not yet demonstrate the requested thin splash-sheet look in this fixture. Keep sheets off by default. No performance claim, full baseline image parity or gameplay acceptance established.
+
+Preview served from isolated /tmp/blud-blood-review on http://127.0.0.1:5413/sdf-blood-compare.html. Attempt to open game smoke timed out in browser control; full-game visual comparison remains pending.
