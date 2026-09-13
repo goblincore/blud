@@ -46,14 +46,17 @@ resolution with that body's march bindings. Per output pixel:
 
 1. Ray through the pixel centre from the camera.
 2. Gather the 4 surrounding march texels; world hit = march depth along the texel's ray, gated on hit. Bilinear
-   interpolation across hit texels only.
+   interpolation across hit texels only. The summed bilinear weight of the HIT texels is the fraction of the
+   output pixel's footprint over marched flesh; below **0.5** the pixel centre lies over misses and any converged
+   point is on the silhouette's far side (a lit halo), so the pixel is discarded and left to the net.
 3. Evaluate the body's SDF (`mapBody`) at the interpolated point. `|d| > refineReject` (default: one march texel's
    world footprint at that depth) → discard (another body, or an edge — the net keeps owning edges).
 4. Newton: advance along the pixel's ray by the signed distance; evaluate; advance once more (2 evals).
 5. Normal: central differences at half an output pixel's footprint, the march's `ngBody` code (4 evals).
 6. Light the refined point with the march's own lighting fragment (`MARCH_BODY_LIGHT` path) on the refined normal
    so wounds, skin and face terms match the shipped image.
-7. Write two rgba16f output-res targets under a depth test (nearest body wins):
+7. Write two rgba32f output-res targets under a depth test (nearest body wins) — 32-bit, not 16f, so the
+   readback the gates compare against the reference is exact:
    `refineN` = world normal xyz, w = 1 accepted; `refineC` = re-lit linear rgb, w = refined view depth.
 
 Controls: `__sdfGame.setRefine(on)`, `?refine=1`, a frame-stats timer for the pass, and a debug view that shows
