@@ -348,3 +348,42 @@ it only ever saw ga = 0 on rims). Then re-bench. If still too slow: a slim tail 
 shadow only), then the normal-only ablation. Optimise only what the data says is needed.
 
 Not worth doing: more net shape (§12), higher target res (Obsidian note 2026-09-13).
+
+## 15. Run 5b (2026-09-13) — the refine pass made affordable; a default-model bench
+
+Retrain of the run-5 refine head with `refine_drop` 0.3 (the head sees the gate off on 30 % of crops):
+
+| | refine on | refine forced off | colour zeroed (eval only) |
+| --- | --- | --- | --- |
+| s32-rgbn-headr-drop-int2 | **0.01118** (face 0.0145, interior 0.0065) | 0.01511 | 0.02672 |
+| run-5 head / control | 0.01112 | 0.01455 | |
+
+- The augmentation costs nothing with refine on (within noise); with the gate off the one model lands 4 % behind
+  a dedicated detail-only head — the price of one model for every gating policy. The colour-zeroed number is
+  NOT an ablation: it is an out-of-distribution input (gate on, colour absent) and scores worse than bicubic.
+  Whether the twin needs to light at all needs a TRAINED normal-only variant.
+- Render side: slim twin tail via uniform overrides (scatter, wound soft shadow, bounce, probe gather off;
+  −7…14 % of the pass only — the base gather/Newton/normal work dominates); per-body gating (standing bodies,
+  medium band 1.5–3.5 m with 0.25 m hysteresis, on screen; corpse bake hides the twin; dead never refines in
+  either cull mode — 15 standing → 0 after a blast); body-ownership early-out (the march writes a per-body key
+  into the normal attachment's alpha; a twin drops foreign texels on the first tap).
+- **Clean bench** (idle machine, rooms 1 / 2, fenced frame p50 = median of 3 repeats; the first repeat of every leg
+  ran ~2× faster than the other two — a harness artefact, so the median is the number):
+
+| leg | room 1 | room 2 | `sdf:refine` |
+| --- | --- | --- | --- |
+| baseline (no stage) | 18.9 | 21.3 | — |
+| upscale-ship (s32-rgbd, run 2) | 19.5 | 20.4 | — |
+| **upscale-t16-rgb (v3.2)** | **19.0** | **18.7** | — |
+| upscale-r5-head (control) | 21.9 | 22.2 | — |
+| **upscale-r5b-headr (slim, medium band)** | **21.3** | **24.3** | 3.9 / 3.2 |
+| upscale-r5b-headr-full (band) | 21.5 | 24.2 | 2.6 / 3.3 |
+| upscale-r5b-headr-open (every body) | 30.3 | 30.8 | ~9 |
+
+- **Gate (≤ +10 % vs the control): met** — room 1 −3 %, room 2 +9 %. The band is what did it (open band = +40 %);
+  slim vs full is inside the noise. The refine pass floors at ~3 ms even with few bodies in band (proxy-box
+  rasterisation + the gather), which is where the merged crowd march takes over.
+- **Default-model bench:** `t16-rgb` (no normals, no head, half the MACs) is the cheapest stage — at or below the
+  native-march baseline's frame time and 1–2 ms under the shipped s32-rgbd — at 0.0154 on v3.2 (6 % behind the
+  run-5 control head, which costs 3 ms more). Quality vs the shipped model on the same data is not measured
+  (the ship export predates the v3 metric); decide by eye.
