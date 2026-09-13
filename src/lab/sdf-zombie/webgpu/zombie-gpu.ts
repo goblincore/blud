@@ -1050,6 +1050,13 @@ export function createMarchMaterial(
   // returns 0 and the key diffuse+spec vanish. Omitted, the local node is built as
   // before and the main material is unchanged.
   levelShadowTexNodeIn?: ReturnType<typeof texture>,
+  // Run 5, POSITIONALLY LAST after levelShadowTexNodeIn: share EXISTING segment-volume
+  // nodes. Same drift hazard as the level shadow — the view's setSkeletonVolume rebinds
+  // .value on the nodes it knows about, and a twin holding its own pair would keep
+  // marching the all-zero fallback atlas. On a volume-backed body that makes mapBody
+  // disagree between the two entries and the refine's SDF reject discards every pixel.
+  segVolumeAtlasNodeIn?: ReturnType<typeof texture3D>,
+  segVolumeMetaNodeIn?: ReturnType<typeof texture>,
 ) {
   const dataNode = dataTex instanceof THREE.Texture
     ? texture(dataTex)
@@ -1058,8 +1065,8 @@ export function createMarchMaterial(
     ? texture3D(volumeTex)
     : volumeTex as ReturnType<typeof texture3D>;
   const segFallback = fallbackSegmentVolumeTextures();
-  const segVolumeAtlasNode = texture3D(segFallback.atlas);
-  const segVolumeMetaNode = texture(segFallback.meta);
+  const segVolumeAtlasNode = segVolumeAtlasNodeIn ?? texture3D(segFallback.atlas);
+  const segVolumeMetaNode = segVolumeMetaNodeIn ?? texture(segFallback.meta);
   // Hoisted above the march call: the accumulated-depth gate's cosRay reads
   // the same ray the march integrates.
   const rayDir = normalize(sub(positionWorld, cameraPosition));
@@ -2019,6 +2026,12 @@ export function createZombieGpuView(
       // refine would render ambient-only (Gate-1 colour mismatch, 2026-09-13).
       (material as unknown as MaterialWithLevelShadowTex)
         .levelShadowTex as unknown as ReturnType<typeof texture>,
+      // ...and the SAME segment-volume pair, so setSkeletonVolume's rebind of the main
+      // material's nodes reaches the twin without a third explicit assignment.
+      (material as unknown as MaterialWithSegmentVolume)
+        .segVolumeAtlas as unknown as ReturnType<typeof texture3D>,
+      (material as unknown as MaterialWithSegmentVolume)
+        .segVolumeMeta as unknown as ReturnType<typeof texture>,
     );
     refineMesh = new THREE.Mesh(mesh.geometry, refineMaterial);
     refineMesh.frustumCulled = false;
