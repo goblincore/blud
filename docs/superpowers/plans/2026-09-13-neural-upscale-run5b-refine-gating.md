@@ -120,6 +120,38 @@ with `const refineBand = { near: 1.5, far: 3.5, hysteresis: 0.25 }` (from `scrip
 - [ ] Bench legs: `'upscale-r5b-headr': { setRefine: true, setRefineTail: 'slim', setUpscale: { trained: 'r5b-s32-rgbn-headr-drop-int2' } }`, `'upscale-r5b-headr-full': { ...tail 'full' }`, control `upscale-r5-head`; BENCH_QUERY adds `refine=1` (band defaults). Rooms 1–2, 3 repeats on a quiet machine, `BENCH_PASSES=1`. Gate: frame p50 within ~10 % of the control. Also report `refineInfo().bodies` per room.
 - [ ] Owner look at medium distance (r5b vs control). Write §15 (numbers, `val_norefine`, `val_normal_only`, the tail decision, the band), TASKS row, dualmem checkpoint. If the frame gate fails with slim + band: the normal-only contract (14 channels, twin tail = Newton + normal only) is the next spec — do not start it inside this plan.
 
+## Task E: body-ownership early-out — make the refine pass screen-bound (after B and C)
+
+**Why (owner question, 2026-09-13):** the upscale net is screen-bound (fullscreen passes), the march is inherently
+body-bound, and the refine pass is body-bound only because every twin runs the 4-texel gather + one `mapBody` on
+every fragment of its proxy box before the SDF reject sorts ownership out; overlapping boxes repeat that per body.
+
+**Files:** `march.wgsl.ts` (+ test), `zombie-gpu.ts` (twin extra input), `sdf-layer.ts` (bind the normal
+attachment to the twins), `scripts/refine-smoke.mjs` (ownership check).
+
+- [ ] **Step 1: body key.** In `MARCH_BODY_LIGHT`, `gMarchNormal = vec4<f32>(normalize(n), 1.0)` becomes
+  `vec4<f32>(normalize(n), bodyKey)` with `let bodyKey = dot(bodyCentre, vec3<f32>(1.0, 7.31, 13.7)) + 1.0;` (bodyCentre
+  is already a PARAMS input, per body, from the mesh's world matrix — the march and the twin read the same
+  uniform, so the key compares EXACTLY; +1 keeps it away from the cleared 0). Check every reader of the normal
+  attachment's `.w` first: the layer's `marchMrt` passes `n.w` through; the stage's normal input uses `xyz*hit`
+  (upscale-wgsl `marchInputTaps` — confirm it never reads `.w`); the capture's normals path is debug mode 9
+  (alpha = t) and unaffected. Pin: source-text test that the write is `vec4<f32>(normalize(n), bodyKey)` and that
+  `upscale-wgsl.ts` does not read `normal` `.w`. G1/G3 unchanged (they never see `.w`).
+- [ ] **Step 2: the twin early-out.** `REFINE_PARAMS` gains `normalTex: texture_2d<f32>` (append after
+  `refineCfg`; update the params pin). In `REFINE_LOOP`, compute `let myKey = dot(bodyCentre, vec3<f32>(1.0, 7.31, 13.7)) + 1.0;`
+  and inside the 4-tap loop read `let nk = textureLoad(normalTex, <same coord>, 0).w;` and `if (mc.w >= 1.0 || nk != myKey) { continue; }`
+  — a foreign texel contributes no weight. `if (wsum < 0.5) { discard; }` then rejects pixels mostly owned by
+  another body BEFORE any `mapBody`. The SDF reject stays as the second line of defence. Pin: `nk != myKey` precedes
+  the first `mapBody(` in REFINE_LOOP.
+- [ ] **Step 3: bind.** `sdf-layer.ts` `refineSource` gains `normalTexture: target.textures[1]`; `zombie-gpu.ts`
+  passes `normalTex: texture(opts.refine.normalTexture)` in the twin's extras. (`RefineSource` type updated.)
+- [ ] **Step 4: verify.** tsc; march-hash: room1 CHANGES only in the normal attachment's alpha, which the hash
+  (attachment 0) does not cover — confirm room1 unchanged; refine-smoke PASS with a new check: for every accepted
+  pixel, the nearest march texel's normal.w equals the twin's key (read via `__sdfGameDebug` — add a
+  `readMarchNormalTarget()` if none exists, same pack helper); bench `sdf:refine` before/after in room 2 (5 bodies,
+  overlapping boxes) with the band wide open (`?refineband=0,99`) so the effect is isolated. Commit
+  `feat(refine): body-ownership early-out — twins skip foreign pixels on the first tap`.
+
 ## Follow-up (separate task, not this plan)
 - Corpse bake for every character: `corpseBakeEligible` is soldier-only (`profile.name === 'soldier'` + collapse settled). Extending to all standing→settled actors is mostly the flag; the bake rejects on overflow and falls back to the march, so the failure is safe. Independent perf win for any room with corpses.
 
