@@ -425,6 +425,14 @@ const ALL_LEGS = {
   'refine-on': { setRefine: true },
   'upscale-r5-head': { setUpscale: { trained: 'r5-s32-rgbn-head-int2' } },
   'upscale-r5-headr': { setRefine: true, setUpscale: { trained: 'r5-s32-rgbn-headr-int2' } },
+  // RUN 5b (2026-09-13). Refine-band legs on the drop-trained headr model, plus the tracked
+  // default (loaded from an untracked copy so a leg can name it) and the no-normals/no-head
+  // default candidate for the "what ships" question.
+  'upscale-ship': { setUpscale: { trained: 'ship-s32-rgbd-best' }, setUpscaleSharpen: 0.5 },   // the tracked default, loaded from the untracked copy
+  'upscale-t16-rgb': { setUpscale: { trained: 't16-rgb-v32' } },
+  'upscale-r5b-headr': { setRefine: true, setRefineTail: 'slim', setUpscale: { trained: 'r5b-s32-rgbn-headr-drop-int2' } },          // band = boot default (medium)
+  'upscale-r5b-headr-full': { setRefine: true, setRefineTail: 'full', setUpscale: { trained: 'r5b-s32-rgbn-headr-drop-int2' } },
+  'upscale-r5b-headr-open': { setRefine: true, setRefineTail: 'slim', setRefineBand: { near: 0, far: 99 }, setUpscale: { trained: 'r5b-s32-rgbn-headr-drop-int2' } },  // every standing body refined
 };
 // BENCH_LEGS lets a validation pass run one leg without the whole matrix.
 const LEGS = process.env.BENCH_LEGS
@@ -547,6 +555,16 @@ async function runLeg(name, room, mode) {
     `refine: __sdfGame.refineInfo ? __sdfGame.refineInfo().on : null })`,
   );
   console.log(`  [${name}] upscaleInfo().on=${JSON.parse(infoNote).up} refineInfo().on=${JSON.parse(infoNote).refine}`);
+  // run 5b: bodies-refined count + band, for legs that touch setRefineBand/setRefineTail.
+  const legOverrides = LEGS[name] ?? ALL_LEGS[name] ?? {};
+  if (/refine/i.test(name) || legOverrides.setRefine || legOverrides.setRefineBand || legOverrides.setRefineTail) {
+    const bandNote = await evaluate(
+      `JSON.stringify({ bodies: __sdfGame.refineInfo ? __sdfGame.refineInfo().bodies : null, ` +
+      `band: __sdfGame.refineInfo ? __sdfGame.refineInfo().band : null, ` +
+      `tail: __sdfGame.refineInfo ? __sdfGame.refineInfo().tail : null })`,
+    );
+    console.log(`  [${name}] refineInfo().bodies=${bandNote}`);
+  }
   if (PRELUDE) { progress.phase = 'prelude'; await evaluate(PRELUDE); }
   const label = `${name}/room${room}/${mode}`;
   const opts = mode === 'spike'
