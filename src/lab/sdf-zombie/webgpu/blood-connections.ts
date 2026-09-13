@@ -17,17 +17,25 @@
 //      `BloodSim`, so the baseline simulation stays bit-identical; and the
 //      builder draws no random numbers, so a seeded replay reproduces the
 //      connection geometry exactly.
-//   2. SAME EMITTER, NEARBY AGE AND SPACE. A connection is only ever made
-//      between droplets the builder has already put in one stream. Streams
-//      start from an explicit `stream` tag when the emitter supplied one
-//      (wound id / trail-source id), and otherwise fall back to a
-//      deterministic union of nodes that are close in space AND close in
-//      age. Two clusters that are far apart — the two-wounds case — never
-//      union, which is the difference between "a rope" and "a spider web".
+//   2. SAME EMITTER, PROVEN BY A STABLE STREAM ID. A connection is only ever
+//      made between droplets that carry the same `stream` tag. The tag is
+//      stamped at the emission site (wound / impact / trail source) and is
+//      never rolled, inferred or unioned by proximity: two wounds that happen
+//      to be close in space and age NEVER share a stream, because proximity is
+//      exactly the signal that "these two adjacent wounds are one rope" is
+//      wrong about. Untagged droplets are skipped outright rather than guessed
+//      at, so a lab burst with no emitter identity can never contaminate a
+//      tagged game stream.
 //   3. BUDGETED AND DEGENERACY-REJECTED. Every output is clamped by a named
 //      budget (nodes, strand length, strand count, sheet patches, total
 //      blobs) and anything degenerate (zero-length, collinear, no remaining
 //      life, non-finite) is dropped rather than emitted as a stretched quad.
+//   4. HOLE TOPOLOGY RIDES THE MATERIAL GRID, NOT THE WORLD. Sheet holes and
+//      radius noise are indexed by (stream id, grid col, grid row), and the
+//      patch itself is laid out in a stream-local frame built from the flow
+//      direction — never from the sorted world AABB. A sheet therefore moves
+//      WITH the stream and its holes do not swim frame to frame as the blood
+//      travels or as the AABB's widest axis happens to cross.
 //
 // The output is a list of GooDensityBlob placements, not meshes: feeding
 // them through goo-layer's density instancer is what keeps them shaded by
@@ -83,6 +91,9 @@ export interface ConnectionTuning {
   /** A cell with no node within this multiple of the grid pitch is skipped,
    *  so a sheet cannot become a rectangle floating over empty space. */
   sheetAttachFactor: number;
+  /** Remaining-life window over which a sheet fades out (seconds). 0 disables
+   *  the fade. Keeps a dying sheet from popping between two frames. */
+  sheetLifeFadeSec: number;
   /** Seed for the deterministic edge/hole noise. */
   noiseSeed: number;
 }
@@ -115,11 +126,9 @@ export const CONNECTION_TUNING: ConnectionTuning = {
   sheetSpanScale: 0.55,
   holeChance: 0.28,
   sheetAttachFactor: 1.6,
+  sheetLifeFadeSec: 0.5,
   noiseSeed: 0x9e3779b9,
 };
-
-/** A droplet that may carry an explicit, stable emitter identity. */
-interface StreamTagged { stream?: number }
 
 /** An axis-aligned triple, used instead of computed object keys. */
 type Triple = [number, number, number];
@@ -130,8 +139,8 @@ export interface ConnectionNode {
   radius: number;
   age: number;
   remaining: number;
-  /** Explicit emitter id, or undefined when the emitter did not tag one. */
-  stream: number | undefined;
+  /** Stable emitter id — REQUIRED for a node to take part. */
+  stream: number;
   /** Gut node (organs r3) — the strand inherits the mask. */
   gut: number;
   /** Stable index into the input array, for deterministic tie-breaks. */
@@ -139,9 +148,8 @@ export interface ConnectionNode {
 }
 
 export interface ConnectionStrand {
-  /** Explicit emitter id when known, else the derived group's index. */
+  /** The stream's stable emitter id. */
   stream: number;
-  explicitStream: boolean;
   /** Tapered path, oldest end first. */
   points: { x: number; y: number; z: number; radius: number }[];
   length: number;
@@ -155,6 +163,10 @@ export interface ConnectionSheet {
   halfH: number;
   blobs: number;
   holes: number;
+  /** Stream-local frame the patch was laid out in (unit vectors). Exposed so
+   *  a test can assert the frame is CONTINUOUS across a temporal step (no
+   *  abrupt axis flip) rather than only that a patch exists. */
+  basis: { axis0: Triple; axis1: Triple };
 }
 
 export interface ConnectionResult {
@@ -164,8 +176,13 @@ export interface ConnectionResult {
   blobs: GooDensityBlob[];
   streamCount: number;
   nodeCount: number;
-  /** Nodes dropped for no remaining life, wrong size or the node cap. */
+  /** Nodes dropped for no remaining life, wrong size, non-finite position or
+   *  the node cap. */
   nodesRejected: number;
+  /** Nodes dropped because they carried no `stream` tag. Kept separate from
+   *  the other rejections: an untagged node is not malformed, it simply
+   *  cannot be attributed to an emitter. */
+  untaggedRejected: number;
   /** Strands/sheets dropped or truncated by a budget. */
   budgetClamped: number;
   /** Strands/sheets dropped by a degeneracy test. */
@@ -208,75 +225,57 @@ export function valueNoise3(x: number, y: number, z: number, seed: number): numb
 // Stream derivation
 // -------------------------------------------------------------------------
 
-/** Union-find over the node array. Returns the group members in a
- *  deterministic order (by smallest input index). */
-function deriveStreamGroups(
-  nodes: ConnectionNode[], tuning: ConnectionTuning,
-): number[][] {
-  const n = nodes.length;
-  const parent = new Int32Array(n);
-  for (let i = 0; i < n; i++) parent[i] = i;
-  const find = (i: number): number => {
-    let r = i;
-    while (parent[r] !== r) r = parent[r]!;
-    while (parent[i] !== r) { const next = parent[i]!; parent[i] = r; i = next; }
-    return r;
-  };
-  const union = (a: number, b: number): void => {
-    const ra = find(a); const rb = find(b);
-    if (ra !== rb) parent[rb] = ra;
-  };
-  const link2 = tuning.maxLinkDist * tuning.maxLinkDist;
-  for (let i = 0; i < n; i++) {
-    const a = nodes[i]!;
-    for (let j = i + 1; j < n; j++) {
-      const b = nodes[j]!;
-      // EXPLICIT emitter identity is authoritative: two differently tagged
-      // emitters never connect, whatever their distance.
-      if (a.stream !== undefined && b.stream !== undefined && a.stream !== b.stream) continue;
-      if (Math.abs(a.age - b.age) > tuning.maxAgeDelta) continue;
-      const dx = a.x - b.x; const dy = a.y - b.y; const dz = a.z - b.z;
-      if (dx * dx + dy * dy + dz * dz > link2) continue;
-      union(i, j);
-    }
+/**
+ * Group nodes STRICTLY by their stable stream id. No union-find, no distance
+ * or age heuristic: two nodes are in one stream if and only if their emitter
+ * said so. Groups come back ordered by smallest input index, so a seeded
+ * replay cannot depend on Map iteration order.
+ */
+function deriveStreamGroups(nodes: ConnectionNode[]): number[][] {
+  const byStream = new Map<number, number[]>();
+  for (let i = 0; i < nodes.length; i++) {
+    const s = nodes[i]!.stream;
+    const list = byStream.get(s);
+    if (list) list.push(i); else byStream.set(s, [i]);
   }
-  const byRoot = new Map<number, number[]>();
-  for (let i = 0; i < n; i++) {
-    const r = find(i);
-    const list = byRoot.get(r);
-    if (list) list.push(i); else byRoot.set(r, [i]);
-  }
-  return [...byRoot.values()].sort((a, b) => a[0]! - b[0]!);
+  return [...byStream.values()].sort((a, b) => a[0]! - b[0]!);
 }
 
 /** Collect the droplets that may become connection nodes, deterministically
- *  (input order preserved so a seeded replay is stable). */
+ *  (input order preserved so a seeded replay is stable).
+ *
+ *  PROVENANCE IS STRICT. A droplet without a finite `stream` tag is rejected
+ *  here — it is never assigned an identity by proximity. `rejected` counts
+ *  the malformed/over-budget nodes; `untagged` counts the provenance
+ *  rejections separately so the page can say which one happened. */
 function collectNodes(droplets: readonly Droplet[], tuning: ConnectionTuning): {
-  nodes: ConnectionNode[]; rejected: number;
+  nodes: ConnectionNode[]; rejected: number; untagged: number;
 } {
   const nodes: ConnectionNode[] = [];
   let rejected = 0;
+  let untagged = 0;
   for (let i = 0; i < droplets.length; i++) {
     const d = droplets[i]!;
     if (d.kind === 'mist') continue;
     if (nodes.length >= tuning.maxNodes) { rejected++; continue; }
     if (d.size < tuning.minDropletSize) continue;
+    const stream = d.stream;
+    if (typeof stream !== 'number' || !Number.isFinite(stream)) { untagged++; continue; }
     const remaining = d.life - d.age;
     if (!(remaining > 0) || d.age > tuning.maxNodeAge) { rejected++; continue; }
     const p = d.pos;
     if (!Number.isFinite(p[0]) || !Number.isFinite(p[1]) || !Number.isFinite(p[2])) { rejected++; continue; }
-    const stream = (d as Droplet & StreamTagged).stream;
     nodes.push({
       x: p[0], y: p[1], z: p[2],
       radius: d.size,
       age: d.age,
       remaining,
-      stream: typeof stream === 'number' && Number.isFinite(stream) ? stream : undefined,
+      stream,
       gut: d.kind === 'gut' ? 1 : 0,
       index: i,
     });
   }
-  return { nodes, rejected };
+  return { nodes, rejected, untagged };
 }
 
 // -------------------------------------------------------------------------
@@ -291,7 +290,7 @@ function strandRadius(baseSize: number, t: number, tuning: ConnectionTuning): nu
 }
 
 function buildStrand(
-  members: number[], nodes: ConnectionNode[], streamId: number, explicit: boolean,
+  members: number[], nodes: ConnectionNode[], streamId: number,
   tuning: ConnectionTuning,
 ): ConnectionStrand | null {
   // Oldest first, ties by input index: the strand reads from the wound
@@ -332,7 +331,7 @@ function buildStrand(
     const t = last > 0 ? k / last : 0;
     return { x: node.x, y: node.y, z: node.z, radius: strandRadius(node.radius, t, tuning) };
   });
-  return { stream: streamId, explicitStream: explicit, points, length, gut: nodes[path[0]!]!.gut };
+  return { stream: streamId, points, length, gut: nodes[path[0]!]!.gut };
 }
 
 /** Blobs along a tapered strand, oldest end first. Spacing is tied to the
@@ -375,23 +374,83 @@ function strandBlobs(strand: ConnectionStrand, budget: number, tuning: Connectio
 // Sheets
 // -------------------------------------------------------------------------
 
-/** Axis index of the largest / second largest / smallest extent. */
-function extentAxes(members: number[], nodes: ConnectionNode[]): {
-  axes: [number, number, number];
-  lo: Triple; hi: Triple; size: Triple;
+/**
+ * Stable orthonormal STREAM-LOCAL frame. `axis0` is the flow direction
+ * (oldest -> newest). `axis1` is the principal direction of the nodes'
+ * spread measured in the plane perpendicular to flow, so the patch lies in
+ * the plane the stream actually occupies and rotates with the flow.
+ *
+ * This replaces the old sorted-world-AABB frame, which flipped
+ * discontinuously the moment two extents crossed and sent a flat stream's
+ * second axis out of its own plane. Nothing here reads absolute world
+ * position, so the layout is invariant to a rigid translation.
+ */
+function streamFrame(members: number[], nodes: ConnectionNode[]): {
+  centre: Triple; axis0: Triple; axis1: Triple;
 } {
-  const lo: Triple = [Infinity, Infinity, Infinity];
-  const hi: Triple = [-Infinity, -Infinity, -Infinity];
+  let oldest = members[0]!;
+  let newest = members[0]!;
+  const centre: Triple = [0, 0, 0];
   for (const i of members) {
     const n = nodes[i]!;
-    lo[0] = Math.min(lo[0], n.x); hi[0] = Math.max(hi[0], n.x);
-    lo[1] = Math.min(lo[1], n.y); hi[1] = Math.max(hi[1], n.y);
-    lo[2] = Math.min(lo[2], n.z); hi[2] = Math.max(hi[2], n.z);
+    centre[0] += n.x; centre[1] += n.y; centre[2] += n.z;
+    if (n.age < nodes[oldest]!.age || (n.age === nodes[oldest]!.age && i < oldest)) oldest = i;
+    if (n.age > nodes[newest]!.age || (n.age === nodes[newest]!.age && i > newest)) newest = i;
   }
-  const size: Triple = [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]];
-  const axes: [number, number, number] = [0, 1, 2];
-  axes.sort((a, b) => size[b]! - size[a]!);
-  return { axes, lo, hi, size };
+  const inv = 1 / Math.max(1, members.length);
+  centre[0] *= inv; centre[1] *= inv; centre[2] *= inv;
+
+  let fx = nodes[newest]!.x - nodes[oldest]!.x;
+  let fy = nodes[newest]!.y - nodes[oldest]!.y;
+  let fz = nodes[newest]!.z - nodes[oldest]!.z;
+  let fl = Math.hypot(fx, fy, fz);
+  if (fl < 1e-6) { fx = 1; fy = 0; fz = 0; fl = 1; }
+  fx /= fl; fy /= fl; fz /= fl;
+
+  // Continuous perpendicular basis: e1 is the world axis least aligned with
+  // flow, projected into the flow-perpendicular plane; e2 completes it.
+  const ax = Math.abs(fx); const ay = Math.abs(fy); const az = Math.abs(fz);
+  const ref: Triple = (ax <= ay && ax <= az) ? [1, 0, 0]
+    : (ay <= ax && ay <= az) ? [0, 1, 0] : [0, 0, 1];
+  const rd = ref[0] * fx + ref[1] * fy + ref[2] * fz;
+  let e1x = ref[0] - rd * fx; let e1y = ref[1] - rd * fy; let e1z = ref[2] - rd * fz;
+  let e1l = Math.hypot(e1x, e1y, e1z);
+  if (e1l < 1e-6) { e1x = 1; e1y = 0; e1z = 0; e1l = 1; }
+  e1x /= e1l; e1y /= e1l; e1z /= e1l;
+  const e2x = fy * e1z - fz * e1y;
+  const e2y = fz * e1x - fx * e1z;
+  const e2z = fx * e1y - fy * e1x;
+
+  // 2x2 covariance of the flow-perpendicular offsets; the principal
+  // eigenvector is axis1 (the direction the patch is widest across flow).
+  let cxx = 0; let cxy = 0; let cyy = 0;
+  for (const i of members) {
+    const n = nodes[i]!;
+    const dx = n.x - centre[0]; const dy = n.y - centre[1]; const dz = n.z - centre[2];
+    const px = dx * e1x + dy * e1y + dz * e1z;
+    const py = dx * e2x + dy * e2y + dz * e2z;
+    cxx += px * px; cxy += px * py; cyy += py * py;
+  }
+  const theta = 0.5 * Math.atan2(2 * cxy, cxx - cyy);
+  const ct = Math.cos(theta); const st = Math.sin(theta);
+  const sx = e1x * ct + e2x * st;
+  const sy = e1y * ct + e2y * st;
+  const sz = e1z * ct + e2z * st;
+  const sl = Math.hypot(sx, sy, sz) || 1;
+  return { centre, axis0: [fx, fy, fz], axis1: [sx / sl, sy / sl, sz / sl] };
+}
+
+/** Deterministic hash of (stream id, material grid col, grid row), in [0,1).
+ *  NOT a world position: the hole pattern is attached to the sheet's own
+ *  grid, so moving the blood cannot make holes swim, and translating the
+ *  whole stream leaves the pattern unchanged. */
+function gridHash(stream: number, col: number, row: number, seed: number): number {
+  let h = seed ^ Math.imul(stream | 0, 374761393)
+    ^ Math.imul((col + 1) | 0, 668265263)
+    ^ Math.imul((row + 1) | 0, 2147483647);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
 }
 
 function buildSheet(
@@ -399,23 +458,41 @@ function buildSheet(
   blobBudget: number,
 ): { sheet: ConnectionSheet; blobs: GooDensityBlob[] } | null {
   if (members.length < tuning.sheetMinNodes || blobBudget <= 0) return null;
-  const { axes, lo, hi, size } = extentAxes(members, nodes);
-  const [ax0, ax1, ax2] = axes;
-  // A stream that is essentially a line has a tiny second axis and is
+  const { centre, axis0, axis1 } = streamFrame(members, nodes);
+  const local0 = (n: ConnectionNode): number =>
+    (n.x - centre[0]) * axis0[0] + (n.y - centre[1]) * axis0[1] + (n.z - centre[2]) * axis0[2];
+  const local1 = (n: ConnectionNode): number =>
+    (n.x - centre[0]) * axis1[0] + (n.y - centre[1]) * axis1[1] + (n.z - centre[2]) * axis1[2];
+  let lo0 = Infinity; let hi0 = -Infinity;
+  let lo1 = Infinity; let hi1 = -Infinity;
+  let remaining = Infinity;
+  for (const i of members) {
+    const n = nodes[i]!;
+    const a = local0(n); const b = local1(n);
+    lo0 = Math.min(lo0, a); hi0 = Math.max(hi0, a);
+    lo1 = Math.min(lo1, b); hi1 = Math.max(hi1, b);
+    remaining = Math.min(remaining, n.remaining);
+  }
+  const size0 = hi0 - lo0; const size1 = hi1 - lo1;
+  // A stream that is essentially a line has a tiny second local extent and is
   // rejected — that is the "no collinear sheet" degeneracy test.
-  if (size[ax1]! < tuning.minRadius * 4 || size[ax0]! < tuning.minRadius * 4) return null;
+  if (size1 < tuning.minRadius * 4 || size0 < tuning.minRadius * 4) return null;
 
-  const centre: Triple = [
-    (lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2,
-  ];
-  const span0 = size[ax0]! * tuning.sheetSpanScale;
-  const span1 = size[ax1]! * tuning.sheetSpanScale;
+  const span0 = size0 * tuning.sheetSpanScale;
+  const span1 = size1 * tuning.sheetSpanScale;
+  const c0 = (lo0 + hi0) / 2; const c1 = (lo1 + hi1) / 2;
   const cols = Math.max(2, tuning.sheetCols);
   const rows = Math.max(2, tuning.sheetRows);
   const pitch0 = span0 / (cols - 1);
   const pitch1 = span1 / (rows - 1);
   const attach = tuning.sheetAttachFactor * Math.max(pitch0, pitch1, tuning.minRadius * 2);
   const attach2 = attach * attach;
+
+  // LIFE FADE: a sheet whose newest material is near the end of its life
+  // thins smoothly instead of popping out between two frames.
+  const lifeFade = tuning.sheetLifeFadeSec > 0
+    ? Math.min(1, Math.max(0, remaining / tuning.sheetLifeFadeSec))
+    : 1;
 
   const blobs: GooDensityBlob[] = [];
   let holes = 0;
@@ -424,10 +501,13 @@ function buildSheet(
       if (blobs.length >= blobBudget) { holes++; continue; }
       const fx = (c / (cols - 1)) - 0.5;
       const fy = (r / (rows - 1)) - 0.5;
-      const p: Triple = [centre[0], centre[1], centre[2]];
-      p[ax0] = centre[ax0]! + fx * span0 * 2;
-      p[ax1] = centre[ax1]! + fy * span1 * 2;
-      p[ax2] = centre[ax2]!;
+      const l0 = c0 + fx * span0 * 2;
+      const l1 = c1 + fy * span1 * 2;
+      const p: Triple = [
+        centre[0] + axis0[0] * l0 + axis1[0] * l1,
+        centre[1] + axis0[1] * l0 + axis1[1] * l1,
+        centre[2] + axis0[2] * l0 + axis1[2] * l1,
+      ];
       // ATTACHMENT GATE: at least one node must be near the cell, so the
       // patch follows the flow and cannot become a floating giant sail.
       let attached = false;
@@ -437,13 +517,14 @@ function buildSheet(
         if (dx * dx + dy * dy + dz * dz <= attach2) { attached = true; break; }
       }
       if (!attached) { holes++; continue; }
-      // SEEDED HOLES + ragged edge: a hole is skipped outright, and the
-      // surviving radius is modulated by smooth value noise so the breakup
-      // is irregular rather than a checkerboard.
-      if (hash01(p[0], p[1], p[2], tuning.noiseSeed) < tuning.holeChance) { holes++; continue; }
-      const n = valueNoise3(p[0] * 6, p[1] * 6, p[2] * 6, tuning.noiseSeed ^ 0x5bd1e995);
+      // SEEDED HOLES + ragged edge: the hole is a function of the MATERIAL
+      // grid cell, and the surviving radius is modulated by smooth value
+      // noise on the same local grid — neither reads a world coordinate, so
+      // neither swims as the sheet travels.
+      if (gridHash(streamId, c, r, tuning.noiseSeed) < tuning.holeChance) { holes++; continue; }
+      const n = valueNoise3(c * 0.6, r * 0.6, streamId * 0.37, tuning.noiseSeed ^ 0x5bd1e995);
       const edgeFade = 1 - 0.55 * Math.min(1, Math.hypot(fx, fy) * 2);
-      const radius = tuning.sheetRadiusScale * (0.55 + 0.9 * n) * edgeFade;
+      const radius = tuning.sheetRadiusScale * (0.55 + 0.9 * n) * edgeFade * lifeFade;
       if (!(radius > tuning.minRadius)) { holes++; continue; }
       blobs.push({ x: p[0], y: p[1], z: p[2], halfW: radius, halfH: radius, roll: 0 });
     }
@@ -457,6 +538,7 @@ function buildSheet(
       halfH: span1,
       blobs: blobs.length,
       holes,
+      basis: { axis0, axis1 },
     },
     blobs,
   };
@@ -469,8 +551,14 @@ function buildSheet(
 export interface ConnectionOptions {
   /** Tapered strands through cohesive streams. Default true. */
   enableStrands?: boolean;
-  /** Sparse ragged sheets where several nodes of one stream run together.
-   *  Default true. */
+  /**
+   * Sparse ragged sheets where several nodes of one stream run together.
+   * **Default FALSE.** Sheets are an EXPERIMENTAL candidate: the stream-local
+   * frame removed the old world-AABB axis flip and the world-position hole
+   * swimming, but whether a density patch reads as a sheet rather than a
+   * thicker rope is a question only the deferred visual pass can answer. The
+   * game and comparison page therefore leave them off unless asked.
+   */
   enableSheets?: boolean;
   /** Override any tuned budget (a copy is merged; the constant is not mutated). */
   tuning?: Partial<ConnectionTuning>;
@@ -485,13 +573,14 @@ export function buildBloodConnections(
 ): ConnectionResult {
   const tuning: ConnectionTuning = { ...CONNECTION_TUNING, ...(options.tuning ?? {}) };
   const enableStrands = options.enableStrands !== false;
-  const enableSheets = options.enableSheets !== false;
-  const { nodes, rejected } = collectNodes(droplets, tuning);
+  const enableSheets = options.enableSheets === true;
+  const { nodes, rejected, untagged } = collectNodes(droplets, tuning);
   const result: ConnectionResult = {
     strands: [], sheets: [], blobs: [],
     streamCount: 0,
     nodeCount: nodes.length,
     nodesRejected: rejected,
+    untaggedRejected: untagged,
     budgetClamped: 0,
     degenerateRejected: 0,
   };
@@ -499,15 +588,14 @@ export function buildBloodConnections(
 
   // Deterministic group iteration order (by smallest input index), so replay
   // cannot depend on Map insertion order.
-  const ordered = deriveStreamGroups(nodes, tuning);
+  const ordered = deriveStreamGroups(nodes);
   result.streamCount = ordered.length;
 
   if (enableStrands) {
     for (const members of ordered) {
       if (result.strands.length >= tuning.maxStrands) { result.budgetClamped++; continue; }
-      const explicit = nodes[members[0]!]!.stream;
-      const streamId = explicit ?? result.strands.length;
-      const strand = buildStrand(members, nodes, streamId, explicit !== undefined, tuning);
+      const streamId = nodes[members[0]!]!.stream;
+      const strand = buildStrand(members, nodes, streamId, tuning);
       if (!strand) { result.degenerateRejected++; continue; }
       const remaining = tuning.maxTotalBlobs - result.blobs.length;
       const budget = Math.min(tuning.maxStrandBlobs, remaining);
@@ -521,8 +609,7 @@ export function buildBloodConnections(
   if (enableSheets) {
     for (const members of ordered) {
       if (result.sheets.length >= tuning.maxSheetPatches) { result.budgetClamped++; continue; }
-      const explicit = nodes[members[0]!]!.stream;
-      const streamId = explicit ?? result.sheets.length;
+      const streamId = nodes[members[0]!]!.stream;
       const budget = Math.min(tuning.maxSheetBlobs, tuning.maxTotalBlobs - result.blobs.length);
       const built = buildSheet(members, nodes, streamId, tuning, budget);
       if (!built) { result.degenerateRejected++; continue; }

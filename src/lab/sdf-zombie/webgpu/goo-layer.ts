@@ -306,6 +306,24 @@ export const GOO_FIELD_EMPTY_EPS = 1e-4;
  *  normal reconstruction (see the smooth-reconstruction note). */
 export const GOO_NEIGHBOR_MIN_FRACTION = 0.25;
 
+/**
+ * DEPTH-DISCONTINUITY TOLERANCE (defect fix, 2026-09-13). The bilinear fetch
+ * mixes four texels with the same weights for every channel, so `g/r` is a
+ * density-weighted mean depth. That is correct inside ONE blood mass, but at
+ * a silhouette between a near layer and a far layer it invents a phantom
+ * depth half-way between them, and the phantom then bridges two separate
+ * blood bodies into one sheet.
+ *
+ * A neighbourhood is therefore treated as two separate layers when the
+ * occupied corner depths span more than this FRACTION of the nearest layer's
+ * depth (with an absolute floor so millimetre-near layers do not trip it).
+ * The blend still supplies density, but the depth and gut ratios fall back to
+ * the densest occupied corner — no interpolated bridge.
+ */
+export const GOO_FIELD_DEPTH_REL = 0.25;
+/** Absolute floor for the depth-spread tolerance, in view metres. */
+export const GOO_FIELD_DEPTH_MIN = 0.02;
+
 /** One reconstructed field sample: density plus the two ratios the surface
  *  pass consumes, or an empty sample where density is below the sentinel. */
 export interface GooFieldSample {
@@ -315,6 +333,10 @@ export interface GooFieldSample {
   /** b / r clamped to [0,1], 0 when the sample is empty. */
   gutFrac: number;
   occupied: boolean;
+  /** True when the occupied corners spanned more than the depth tolerance
+   *  and the ratios were taken from the densest corner instead of the blend.
+   *  See GOO_FIELD_DEPTH_REL. */
+  discontinuous: boolean;
 }
 
 /**
@@ -333,7 +355,9 @@ export interface GooFieldSample {
 export function sampleGooField(
   field: ArrayLike<number>, width: number, height: number, u: number, v: number,
 ): GooFieldSample {
-  const empty: GooFieldSample = { density: 0, viewDepth: 0, gutFrac: 0, occupied: false };
+  const empty: GooFieldSample = {
+    density: 0, viewDepth: 0, gutFrac: 0, occupied: false, discontinuous: false,
+  };
   if (width < 1 || height < 1 || field.length < width * height * 4) return empty;
   const cx = u * width - 0.5;
   const cy = v * height - 0.5;
@@ -354,25 +378,80 @@ export function sampleGooField(
   if (!(r > GOO_FIELD_EMPTY_EPS)) return empty;
   const g = at(x0, y0, 1) * w00 + at(x1, y0, 1) * w10 + at(x0, y1, 1) * w01 + at(x1, y1, 1) * w11;
   const b = at(x0, y0, 2) * w00 + at(x1, y0, 2) * w10 + at(x0, y1, 2) * w01 + at(x1, y1, 2) * w11;
-  const viewDepth = g / Math.max(r, GOO_FIELD_EMPTY_EPS);
-  const gutFrac = Math.min(1, Math.max(0, b / Math.max(r, GOO_FIELD_EMPTY_EPS)));
-  return { density: r, viewDepth, gutFrac, occupied: true };
+
+  // Occupied-corner depth bounds and the densest corner. Only corners that
+  // actually carry density AND carry interpolation weight can define a layer:
+  // an empty corner's g/r is 0, and a zero-weight corner is not part of this
+  // sample at all (otherwise an exact texel centre would look discontinuous
+  // because of a neighbour it did not fetch).
+  const cornerR = [at(x0, y0, 0), at(x1, y0, 0), at(x0, y1, 0), at(x1, y1, 0)];
+  const cornerG = [at(x0, y0, 1), at(x1, y0, 1), at(x0, y1, 1), at(x1, y1, 1)];
+  const cornerB = [at(x0, y0, 2), at(x1, y0, 2), at(x0, y1, 2), at(x1, y1, 2)];
+  const cornerW = [w00, w10, w01, w11];
+  let dLo = Infinity; let dHi = -Infinity;
+  let domIdx = -1; let domR = -Infinity;
+  for (let i = 0; i < 4; i++) {
+    const ri = cornerR[i]!;
+    if (!(ri > GOO_FIELD_EMPTY_EPS) || !(cornerW[i]! > 1e-6)) continue;
+    const di = cornerG[i]! / ri;
+    dLo = Math.min(dLo, di); dHi = Math.max(dHi, di);
+    if (ri > domR) { domR = ri; domIdx = i; }
+  }
+  if (domIdx < 0) return empty;
+
+  const tol = GOO_FIELD_DEPTH_REL * Math.max(dLo, GOO_FIELD_DEPTH_MIN);
+  const discontinuous = (dHi - dLo) > tol;
+  return {
+    density: r,
+    // The ratios are computed AFTER interpolation, not before: averaging
+    // per-texel depths and then dividing would weight an empty texel's
+    // meaningless ratio by its interpolation weight. When the corner depths
+    // are incompatible the blend IS the phantom, so fall back to the densest
+    // occupied corner instead.
+    viewDepth: discontinuous
+      ? cornerG[domIdx]! / Math.max(cornerR[domIdx]!, GOO_FIELD_EMPTY_EPS)
+      : g / Math.max(r, GOO_FIELD_EMPTY_EPS),
+    gutFrac: Math.min(1, Math.max(0,
+      discontinuous
+        ? cornerB[domIdx]! / Math.max(cornerR[domIdx]!, GOO_FIELD_EMPTY_EPS)
+        : b / Math.max(r, GOO_FIELD_EMPTY_EPS),
+    )),
+    occupied: true,
+    discontinuous,
+  };
 }
 
 /**
  * PURE mirror of the candidate silhouette coverage. `gradMag` is the
  * per-texel density gradient magnitude (see `gooFieldGradient`); the signed
- * density distance is converted to texels and a half-texel offset centres the
- * ramp on the isocontour, so the transition is exactly one texel wide.
- * A flat field (gradMag 0) is the degenerate case: either wholly inside or
- * wholly outside, never partially covered.
+ * density distance is converted to density texels, then to OUTPUT pixels
+ * using `texelsPerOutputPixel` (= density target size / output size), so the
+ * feather is one output pixel wide whatever the density-resolution slider
+ * does. A half-pixel offset centres the ramp on the isocontour. A flat field
+ * (gradMag 0) is the degenerate case: either wholly inside or wholly outside,
+ * never partially covered.
+ *
+ * `texelsPerOutputPixel` defaults to 1, which reproduces the pre-footprint
+ * behaviour exactly (ramp over one density texel).
  */
 export function silhouetteCoverage(
-  density: number, threshold: number, gradMag: number,
+  density: number, threshold: number, gradMag: number, texelsPerOutputPixel = 1,
 ): number {
   if (!(gradMag > 1e-6)) return density >= threshold ? 1 : 0;
   const texels = (density - threshold) / gradMag;
-  return Math.min(1, Math.max(0, texels + 0.5));
+  const px = texels / Math.max(texelsPerOutputPixel, 1e-6);
+  return Math.min(1, Math.max(0, px + 0.5));
+}
+
+/** Mean density texels per output pixel. The density target and the output
+ *  share an aspect in both pages, so one scalar is enough to convert the
+ *  isocontour distance into output pixels. Falls back to 1 on a degenerate
+ *  size. */
+export function densityTexelsPerOutputPixel(
+  densityW: number, densityH: number, outputW: number, outputH: number,
+): number {
+  if (!(outputW > 0) || !(outputH > 0) || !(densityW > 0) || !(densityH > 0)) return 1;
+  return 0.5 * (densityW / outputW + densityH / outputH);
 }
 
 /** Density gradient magnitude at the continuous coordinate, in density units
@@ -413,21 +492,47 @@ function gooBilinearFetchWgsl(out: string, coord: string): string {
   let ${out}W10 = ${out}Fr.x * (1.0 - ${out}Fr.y);
   let ${out}W01 = (1.0 - ${out}Fr.x) * ${out}Fr.y;
   let ${out}W11 = ${out}Fr.x * ${out}Fr.y;
-  let ${out} = textureLoad(densTex, ${out}I0, 0) * ${out}W00
-    + textureLoad(densTex, vec2<i32>(${out}I1.x, ${out}I0.y), 0) * ${out}W10
-    + textureLoad(densTex, vec2<i32>(${out}I0.x, ${out}I1.y), 0) * ${out}W01
-    + textureLoad(densTex, ${out}I1, 0) * ${out}W11;`;
+  let ${out}T0 = textureLoad(densTex, ${out}I0, 0);
+  let ${out}T1 = textureLoad(densTex, vec2<i32>(${out}I1.x, ${out}I0.y), 0);
+  let ${out}T2 = textureLoad(densTex, vec2<i32>(${out}I0.x, ${out}I1.y), 0);
+  let ${out}T3 = textureLoad(densTex, ${out}I1, 0);
+  let ${out} = ${out}T0 * ${out}W00 + ${out}T1 * ${out}W10
+    + ${out}T2 * ${out}W01 + ${out}T3 * ${out}W11;
+  let ${out}D0 = ${out}T0.g / max(${out}T0.r, 1e-4);
+  let ${out}D1 = ${out}T1.g / max(${out}T1.r, 1e-4);
+  let ${out}D2 = ${out}T2.g / max(${out}T2.r, 1e-4);
+  let ${out}D3 = ${out}T3.g / max(${out}T3.r, 1e-4);
+  var ${out}Lo: f32 = 1e30;
+  var ${out}Hi: f32 = -1e30;
+  if (${out}T0.r > 1e-4 && ${out}W00 > 1e-6) { ${out}Lo = min(${out}Lo, ${out}D0); ${out}Hi = max(${out}Hi, ${out}D0); }
+  if (${out}T1.r > 1e-4 && ${out}W10 > 1e-6) { ${out}Lo = min(${out}Lo, ${out}D1); ${out}Hi = max(${out}Hi, ${out}D1); }
+  if (${out}T2.r > 1e-4 && ${out}W01 > 1e-6) { ${out}Lo = min(${out}Lo, ${out}D2); ${out}Hi = max(${out}Hi, ${out}D2); }
+  if (${out}T3.r > 1e-4 && ${out}W11 > 1e-6) { ${out}Lo = min(${out}Lo, ${out}D3); ${out}Hi = max(${out}Hi, ${out}D3); }
+  let ${out}DomA = select(${out}T1, ${out}T0, ${out}T0.r >= ${out}T1.r);
+  let ${out}DomB = select(${out}T3, ${out}T2, ${out}T2.r >= ${out}T3.r);
+  let ${out}Dom = select(${out}DomB, ${out}DomA, ${out}DomA.r >= ${out}DomB.r);`;
 }
 
 /** Shared prefix of both smooth entry points: dims, flip, threshold, one
- *  texel, the five bilinear fetches, the gradient and the coverage. The same
- *  `cov` expression appears in both, so the shading pass and the overlay
- *  alpha pass cannot disagree about where the silhouette is (the baseline's
- *  duplicated discard has the same invariant). */
+ *  texel, the five bilinear fetches, the depth-discontinuity guard, the
+ *  gradient and the coverage. The same `cov` expression appears in both, so
+ *  the shading pass and the overlay alpha pass cannot disagree about where
+ *  the silhouette is (the baseline's duplicated discard has the same
+ *  invariant). */
 const GOO_SMOOTH_FIELD_BLOCK = `
   let thresh = gooCfg.x;
   let texelUv = vec2<f32>(1.0, 1.0) / dims;${gooBilinearFetchWgsl('c', 'st')}${gooBilinearFetchWgsl('cL', 'st - vec2<f32>(texelUv.x, 0.0)')}${gooBilinearFetchWgsl('cR', 'st + vec2<f32>(texelUv.x, 0.0)')}${gooBilinearFetchWgsl('cD', 'st - vec2<f32>(0.0, texelUv.y)')}${gooBilinearFetchWgsl('cU', 'st + vec2<f32>(0.0, texelUv.y)')}
   let dens = c.r;
+  // DEPTH-DISCONTINUITY GUARD. The four corner texels' occupied depths are
+  // compared before their ratios are trusted: a foreground/background pair
+  // would otherwise blend into a phantom depth between the two blood layers.
+  // Out of tolerance, the depth and gut ratios come from the densest corner,
+  // not the blend. Density itself still interpolates — it is additive and has
+  // no layer ambiguity.
+  let cDepthTol = ${GOO_FIELD_DEPTH_REL.toFixed(3)} * max(cLo, ${GOO_FIELD_DEPTH_MIN.toFixed(3)});
+  let cDiscont = (cHi - cLo) > cDepthTol;
+  let cDepth = select(c.g / max(c.r, 1e-4), cDom.g / max(cDom.r, 1e-4), cDiscont);
+  let cGut = select(c.b / max(c.r, 1e-4), cDom.b / max(cDom.r, 1e-4), cDiscont);
   // Per-texel central differences. dR/dU stay in density units so the
   // gradient normal below keeps the baseline's bump strength.
   let dR = cR.r - cL.r;
@@ -435,7 +540,9 @@ const GOO_SMOOTH_FIELD_BLOCK = `
   let gradMag = 0.5 * length(vec2<f32>(dR, dU));
   var cov = 0.0;
   if (gradMag > 1e-5) {
-    cov = clamp((dens - thresh) / gradMag + 0.5, 0.0, 1.0);
+    // Convert the density-texel distance to OUTPUT pixels first, so the
+    // feather is one output pixel wide at any density-resolution setting.
+    cov = clamp((dens - thresh) / gradMag / max(coverageTexels, 1e-6) + 0.5, 0.0, 1.0);
   } else if (dens >= thresh) {
     cov = 1.0;
   }`;
@@ -463,7 +570,8 @@ export const GOO_SURFACE_SMOOTH_WGSL = /* wgsl */ `fn gooSurfaceSmooth(
   gooCfg2: vec4<f32>,
   organColor: vec3<f32>,
   shadowRed: f32,
-  normalMode: f32
+  normalMode: f32,
+  coverageTexels: f32
 ) -> vec4<f32> {
   let dims = vec2<f32>(textureDimensions(densTex, 0));
   var st = texCoord;
@@ -487,27 +595,46 @@ export const GOO_SURFACE_SMOOTH_WGSL = /* wgsl */ `fn gooSurfaceSmooth(
   // one NDC-texel are different units: uv advances 1/dims per texel, NDC 2/dims.
   let texelNdc = vec2<f32>(2.0, 2.0) / dims;
   let minR = max(thresh * ${GOO_NEIGHBOR_MIN_FRACTION}, 1e-4);
-  let dC = c.g / max(c.r, 1e-4);
+  // The centre ratios come from the discontinuity guard (cDistance/cGut): a
+  // foreground/background blend never reaches the normal reconstruction.
+  let dC = cDepth;
+  let dL = cL.g / max(cL.r, 1e-4);
+  let dR2 = cR.g / max(cR.r, 1e-4);
+  let dD = cD.g / max(cD.r, 1e-4);
+  let dU2 = cU.g / max(cU.r, 1e-4);
+  // A neighbour is unusable when it is under the density floor OR its depth
+  // is on the far side of the layer tolerance — the same rule the centre
+  // sample uses, so an interpolated neighbour can never drag a phantom depth
+  // into the reconstructed surface.
+  let depthTol = ${GOO_FIELD_DEPTH_REL.toFixed(3)} * max(dC, ${GOO_FIELD_DEPTH_MIN.toFixed(3)});
+  let lBad = cL.r < minR || abs(dL - dC) > depthTol;
+  let rBad = cR.r < minR || abs(dR2 - dC) > depthTol;
+  let dBad = cD.r < minR || abs(dD - dC) > depthTol;
+  let uBad = cU.r < minR || abs(dU2 - dC) > depthTol;
   let pC = vec3<f32>(ndc.x * camCfg.x * camCfg.y, ndc.y * camCfg.x, -1.0) * dC;
   let pL = vec3<f32>((ndc.x - texelNdc.x) * camCfg.x * camCfg.y, ndc.y * camCfg.x, -1.0)
-    * (cL.g / max(cL.r, 1e-4));
+    * dL;
   let pR = vec3<f32>((ndc.x + texelNdc.x) * camCfg.x * camCfg.y, ndc.y * camCfg.x, -1.0)
-    * (cR.g / max(cR.r, 1e-4));
+    * dR2;
   let pD = vec3<f32>(ndc.x * camCfg.x * camCfg.y, (ndc.y - texelNdc.y) * camCfg.x, -1.0)
-    * (cD.g / max(cD.r, 1e-4));
+    * dD;
   let pU = vec3<f32>(ndc.x * camCfg.x * camCfg.y, (ndc.y + texelNdc.y) * camCfg.x, -1.0)
-    * (cU.g / max(cU.r, 1e-4));
+    * dU2;
 
-  // Min-difference with a DENSITY floor, not the baseline's 1e-4: an
-  // interpolated neighbour near the silhouette has a tiny r and a meaningless
-  // g/r, and a quarter-threshold floor rejects it while keeping real thin
-  // strands (which sit above the threshold by definition).
+  // Min-difference with a DENSITY+depth floor, not the baseline's 1e-4. If
+  // BOTH neighbours of an axis are rejected the difference is zeroed, so the
+  // cross product degenerates and the gradient normal takes over rather than
+  // a phantom surface.
   var ddx = pR - pC;
   let ddxB = pC - pL;
-  if (cR.r < minR || abs(ddxB.z) < abs(ddx.z)) { ddx = ddxB; }
+  var ddxOk = !rBad;
+  if (rBad || abs(ddxB.z) < abs(ddx.z)) { ddx = ddxB; ddxOk = !lBad; }
+  if (!ddxOk) { ddx = vec3<f32>(0.0); }
   var ddy = pU - pC;
   let ddyB = pC - pD;
-  if (cU.r < minR || abs(ddyB.z) < abs(ddy.z)) { ddy = ddyB; }
+  var ddyOk = !uBad;
+  if (uBad || abs(ddyB.z) < abs(ddy.z)) { ddy = ddyB; ddyOk = !dBad; }
+  if (!ddyOk) { ddy = vec3<f32>(0.0); }
   var nSurf = cross(ddx, ddy);
   let nSurfLen = length(nSurf);
   if (nSurfLen < 1e-8) {
@@ -520,7 +647,7 @@ export const GOO_SURFACE_SMOOTH_WGSL = /* wgsl */ `fn gooSurfaceSmooth(
   let nCam = select(nGrad, nSurf, normalMode > 0.5);
   let n = normalize((camWorld * vec4<f32>(nCam, 0.0)).xyz);
 
-  let viewDepth = c.g / max(c.r, 1e-4);
+  let viewDepth = cDepth;
   let near = camCfg.z;
   let far = camCfg.w;
   let depthBuf = clamp(far * (viewDepth - near) / (max(viewDepth, 1e-4) * (far - near)), 0.0, 1.0);
@@ -535,7 +662,7 @@ export const GOO_SURFACE_SMOOTH_WGSL = /* wgsl */ `fn gooSurfaceSmooth(
   let trans = exp(-thick * vec3<f32>(0.30, 2.40, 2.00));
   let lambert = lightCfg.y + diff * lightCfg.x;
 
-  var gutFrac = c.b / max(c.r, 1e-4);
+  var gutFrac = cGut;
   gutFrac = clamp(gutFrac, 0.0, 1.0);
   let baseCol = mix(vec3<f32>(0.62, 0.11, 0.10), organColor, gutFrac);
   var lit = baseCol * trans * lambert * keyColor
@@ -568,7 +695,8 @@ export const GOO_COVERAGE_SMOOTH_WGSL = /* wgsl */ `fn gooCoverageSmooth(
   densTex: texture_2d<f32>,
   texCoord: vec2<f32>,
   flipY: f32,
-  gooCfg: vec3<f32>
+  gooCfg: vec3<f32>,
+  coverageTexels: f32
 ) -> vec4<f32> {
   let dims = vec2<f32>(textureDimensions(densTex, 0));
   var st = texCoord;
@@ -914,14 +1042,23 @@ export interface GooDensityBlob {
 }
 
 /** Density-target resolution, reported independently of the output size so a
- *  comparison can name the actual reconstruction grid. */
+ *  comparison can name the actual reconstruction grid, the march/source grid
+ *  and the composite destination separately. */
 export interface GooDensityDiagnostics {
   densityWidth: number;
   densityHeight: number;
-  sdfWidth: number;
-  sdfHeight: number;
+  /** The march/SDF grid handed to setSize() (game: 400x300). */
+  sourceWidth: number;
+  sourceHeight: number;
+  /** The actual composite destination (game/canvas: 800x600). */
+  outputWidth: number;
+  outputHeight: number;
   densityScale: number;
-  /** densityWidth / sdfWidth, i.e. density texels per output pixel. */
+  /** densityWidth / sourceWidth — density texels per SOURCE pixel. */
+  texelsPerSourcePixelX: number;
+  texelsPerSourcePixelY: number;
+  /** densityWidth / outputWidth — density texels per OUTPUT pixel, the
+   *  footprint the smooth coverage feather is scaled by. */
   texelsPerOutputPixelX: number;
   texelsPerOutputPixelY: number;
   /** True while 'smooth' is selected: the density-resolution perf seam is not
@@ -1150,6 +1287,10 @@ export function createGooLayer(
   const uCamWorld = uniform(new THREE.Matrix4());
   // x tan(halfFovY), y aspect, z near, w far.
   const uCamCfg = uniform(new THREE.Vector4(1, 1, 0.1, 200));
+  // Density texels per OUTPUT pixel. The smooth coverage ramp is divided by
+  // this so the silhouette feather is one output pixel wide at any
+  // density-resolution setting; the original path never reads it.
+  const uCoverageTexels = uniform(1);
 
   // ---------------------------------------------------------------
   // Density pass: one InstancedMesh of unit quads, additively blending a
@@ -1323,6 +1464,7 @@ export function createGooLayer(
       organColor: uOrganColor,
       shadowRed: uShadowRed,
       normalMode: uNormalMode,
+      coverageTexels: uCoverageTexels,
     }) as unknown as Swizzled;
   }
 
@@ -1332,6 +1474,7 @@ export function createGooLayer(
       texCoord: uv(),
       flipY: uFlipY,
       gooCfg: vec3(uThresh, uEdge, uLegacy),
+      coverageTexels: uCoverageTexels,
     }) as unknown as Swizzled;
   }
 
@@ -1458,6 +1601,10 @@ export function createGooLayer(
   let particleCap: number = GOO_TUNING.maxParticles;
   let lastSdfW = 0;
   let lastSdfH = 0;
+  // The actual composite destination (canvas backing size or the output
+  // target), tracked for the coverage footprint and the diagnostics.
+  let lastOutputW = 0;
+  let lastOutputH = 0;
   const passGate = { density: true, blur: true, surface: true };
   // Area-priority scratch: candidate world positions/extents, collected once
   // per sync, reused across frames (never reallocated in steady state).
@@ -1597,6 +1744,15 @@ export function createGooLayer(
         camera.aspect,
         camera.near,
         camera.far,
+      );
+      // The composite's real destination: the caller's target when one is
+      // bound (post-aa capture), otherwise the canvas backing store. The
+      // smooth coverage ramp is scaled by density-texels-per-output-pixel so
+      // its feather is one output pixel wide regardless of densityScale.
+      lastOutputW = outputTarget ? outputTarget.width : renderer.domElement.width;
+      lastOutputH = outputTarget ? outputTarget.height : renderer.domElement.height;
+      uCoverageTexels.value = densityTexelsPerOutputPixel(
+        target.width, target.height, lastOutputW, lastOutputH,
       );
 
       if (targetsNeedInit) {
@@ -2016,11 +2172,15 @@ export function createGooLayer(
       return {
         densityWidth: target.width,
         densityHeight: target.height,
-        sdfWidth: lastSdfW,
-        sdfHeight: lastSdfH,
+        sourceWidth: lastSdfW,
+        sourceHeight: lastSdfH,
+        outputWidth: lastOutputW,
+        outputHeight: lastOutputH,
         densityScale,
-        texelsPerOutputPixelX: lastSdfW > 0 ? target.width / lastSdfW : 0,
-        texelsPerOutputPixelY: lastSdfH > 0 ? target.height / lastSdfH : 0,
+        texelsPerSourcePixelX: lastSdfW > 0 ? target.width / lastSdfW : 0,
+        texelsPerSourcePixelY: lastSdfH > 0 ? target.height / lastSdfH : 0,
+        texelsPerOutputPixelX: lastOutputW > 0 ? target.width / lastOutputW : 0,
+        texelsPerOutputPixelY: lastOutputH > 0 ? target.height / lastOutputH : 0,
         smoothForcesFullResComposite: reconstruction === 'smooth',
       };
     },

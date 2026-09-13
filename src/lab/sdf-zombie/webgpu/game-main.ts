@@ -980,12 +980,16 @@ async function main() {
   // shipped state, so an unparameterised URL renders the exact pre-candidate
   // frame. Boot flags are read where the goo defaults are applied:
   //   ?goorecon=smooth    continuous reconstruction + AA silhouette composite
-  //   ?gooconnections=1   tapered strands + sparse sheets from the same sim
+  //   ?gooconnections=1   tapered strands (sheets are a separate opt-in)
+  //   ?goosheets=1        experimental stream-grid sheets
   // Live equivalents: __sdfGame.setGooCandidate.
   let gooReconstruction: GooReconstruction = 'original';
   let gooConnectionsEnabled = false;
   let gooStrandsEnabled = true;
-  let gooSheetsEnabled = true;
+  // SHEETS OFF BY DEFAULT: the stream-local grid removed the world-position
+  // hole swimming, but whether a density patch reads as a sheet is still an
+  // open visual question. Opt in with ?goosheets=1 / setGooCandidate.
+  let gooSheetsEnabled = false;
 
   function sizeSdfLayer() {
     const s = postAa.contentSize;
@@ -3941,7 +3945,9 @@ async function main() {
       }, template);
     }
     if (bleedEnabled) {
-      spawnImpactGout(bloodSim, 'slug', at, [0, 1, 0], bleedRng);
+      // One-shot gib gout: a fresh emitter stream so it never fuses with a
+      // nearby wound's stream by proximity.
+      spawnImpactGout(bloodSim, 'slug', at, [0, 1, 0], bleedRng, nextEmitterStream++);
     }
   }
   // Now that the array exists, the frame draw can read it directly.
@@ -4027,6 +4033,29 @@ async function main() {
   const bleed = new BleedRegistry();
 
   // -----------------------------------------------------------------------
+  // STABLE EMITTER STREAM IDS (blood-connections provenance, 2026-09-13).
+  // blood-connections only ever fuses droplets that share a stream tag, so
+  // the tag must be a real emitter identity — never a proximity guess.
+  //
+  // A wound's id is ALLOCATED ONCE (WeakMap on the wound reference the
+  // registry stores) and reused by every per-frame droplet and its impact
+  // gout, so two adjacent wounds are always two streams. Trail droplets take
+  // a namespaced chunk id. Nothing here rolls an RNG and stepBlood never
+  // reads `stream`, so the shipped physics is bit-identical.
+  // -----------------------------------------------------------------------
+  let nextEmitterStream = 1;
+  const woundStreamIds = new WeakMap<Wound, number>();
+  function woundStreamId(wound: Wound): number {
+    let s = woundStreamIds.get(wound);
+    if (s === undefined) { s = nextEmitterStream++; woundStreamIds.set(wound, s); }
+    return s;
+  }
+  const TRAIL_STREAM_BASE = 0x40000000;
+  function trailStreamId(chunkId: number): number {
+    return TRAIL_STREAM_BASE + (chunkId >>> 0);
+  }
+
+  // -----------------------------------------------------------------------
   // GOO — screen-space metaball blood (X1.bleed-look round 2). The owner's
   // brief was "viscous and gooey and shiny blobbys and no hard edges ...
   // kinda like the metablob for the goo system", which is goo-layer.ts's own
@@ -4095,11 +4124,12 @@ async function main() {
 
     // CANDIDATE BOOT FLAGS (blood-surface comparison, 2026-09-13). Applied
     // AFTER the shipping defaults, so a parameter only ever opts IN — it can
-    // never move a shipped value. Both default OFF; see the state note beside
-    // gooEnabled.
+    // never move a shipped value. All default OFF; see the state note beside
+    // gooEnabled. Sheets are opt-in through the same path.
     const gooCandidateBoot = new URLSearchParams(location.search);
     gooReconstruction = gooCandidateBoot.get('goorecon') === 'smooth' ? 'smooth' : 'original';
     gooConnectionsEnabled = gooCandidateBoot.get('gooconnections') === '1';
+    gooSheetsEnabled = gooCandidateBoot.get('goosheets') === '1';
     gooLayer.setReconstruction(gooReconstruction);
 
     // Live tuning panel (owner ask, 2026-08-31: "add a ui i can tune the goo
@@ -4361,6 +4391,10 @@ async function main() {
           age: 0, life: Infinity,
           size: woundTuning.gutSize,
           kind: 'gut',
+          // The rope belongs to the wound that spilled it: reuse that wound's
+          // stable stream id so the gut nodes are attributed like every other
+          // emitter rather than falling through as untagged.
+          stream: woundStreamId(entry!.wound),
         }));
         for (const d of fresh) bloodSim.droplets.push(d);
         entry = { ...entry, droplets: fresh };
@@ -4397,8 +4431,10 @@ async function main() {
     const { anchor, normal } = woundEmitAnchorAndNormal(a.posed().prims, wound, a.pose().yaw);
     // The gout sprays back along the incoming shot; spawnImpactGout negates
     // what it is handed, and the wound normal already points OUT of the
-    // body, so pass the inward direction.
-    spawnImpactGout(bloodSim, kind, anchor, [-normal[0], -normal[1], -normal[2]], bleedRng);
+    // body, so pass the inward direction. The wound's stable stream id tags
+    // the gout so it fuses with this wound's per-frame droplets and no
+    // other emitter's.
+    spawnImpactGout(bloodSim, kind, anchor, [-normal[0], -normal[1], -normal[2]], bleedRng, woundStreamId(wound));
     // Gut-rope decision for this stamped wound — placed BELOW the
     // !bleedEnabled guard on purpose: the roll spends bleedRng, and the
     // invariant above (OFF mid-stream = ON-stream-paused) only holds if
@@ -5365,11 +5401,14 @@ async function main() {
           const { anchor, normal } = woundEmitAnchorAndNormal(a.posed().prims, e.wound, a.pose().yaw);
           e.acc = spawnWoundDroplets(
             bloodSim, e.kind, bleedClock - e.bornAt, anchor, normal, cdt, e.acc, bleedRng,
+            woundStreamId(e.wound),
           );
         }
         emitTrails(
           bloodSim,
-          liveChunks.map(c => ({ id: c.id, pos: c.state.pos, vel: c.state.vel })),
+          liveChunks.map(c => ({
+            id: c.id, pos: c.state.pos, vel: c.state.vel, stream: trailStreamId(c.id),
+          })),
           cdt, bleedRng,
         );
         stepBlood(bloodSim, cdt, bleedRng);
