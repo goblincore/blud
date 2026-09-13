@@ -2474,7 +2474,9 @@ describe('run 5: MARCH_BODY_TRACE is SETUP + LOOP + POST', () => {
   });
   it('REFINE_LOOP declares every name the walk declares that the later sections read', async () => {
     const m = await import('./march.wgsl');
-    const later = `${m.MARCH_TRACE_POST}${m.MARCH_BODY_SURFACE_PREP}${m.MARCH_BODY_LIGHT}`;
+    // Strip WGSL comments: the pin is about names read as CODE, not mentioned in prose.
+    const later = `${m.MARCH_TRACE_POST}${m.MARCH_BODY_SURFACE_PREP}${m.MARCH_BODY_LIGHT}`
+      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
     const declared = [...m.MARCH_TRACE_LOOP.matchAll(/\b(?:let|var)\s+([A-Za-z_]\w*)/g)].map((x) => x[1]!);
     const needed = [...new Set(declared)].filter((n) => new RegExp(`\\b${n}\\b`).test(later));
     expect(needed.length).toBeGreaterThan(0);

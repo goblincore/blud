@@ -4164,9 +4164,9 @@ export const HELPERS = [
  * refineCfg: x = enabled (0 discards everything), y = reject in march texels (1.0),
  *            z = normal stencil in output-pixel footprints (0.25), w = Newton steps (2).
  *
- * Walk state the later sections read is declared here too. The hit-derived ones (t, hit, hitBest,
- * hitField, hitNearWound) get the refine's real values; pure walk bookkeeping (clamped, d,
- * nearWound, radius, root) gets the constant a converged clean hit leaves.
+ * Walk state the later sections actually READ is declared here too: t, hit, hitBest, hitField
+ * and hitNearWound, each with the refine's real value. The walk's pure bookkeeping (step
+ * counters, prevRadius, omega/overshoot state) has no reader past the walk and is absent.
  */
 export const REFINE_LOOP = /* wgsl */ `  if (refineCfg.x < 0.5) { discard; }
   // The march texel grid under this output pixel - coneFetch's mapping, screenUV times dims.
@@ -4194,15 +4194,11 @@ export const REFINE_LOOP = /* wgsl */ `  if (refineCfg.x < 0.5) { discard; }
   var hitBest = -1;
   var hitNearWound = false;
   var hitField = vec4<f32>(0.0);
-  // Walk bookkeeping the later text mentions - a converged hit leaves these.
-  var clamped = false;
-  var d = 0.0;
-  var nearWound = false;
-  var radius = 0.0;
-  var root = 0.0;
   var pRef = camPos + rd * t;
   var dres = mapBody(pRef, data, counts, counts2, vec4<f32>(0.0), woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, woundBound);
-  // One MARCH texel's world footprint at this depth - aaCfg.x is the half-texel radius per unit.
+  // aaCfg.x is the footprint RADIUS per unit distance for one MARCH-RES pixel - see the
+  // PARAMS doc above - so at distance t a MARCH texel spans 2*t*aaCfg.x across and an
+  // OUTPUT pixel, being half the march texel, spans t*aaCfg.x. This is the march texel.
   let texelFoot = 2.0 * t * aaCfg.x;
   if (abs(dres.x) > refineCfg.y * max(texelFoot, 1e-4)) { discard; }
   for (var k = 0; k < i32(refineCfg.w); k = k + 1) {
@@ -4214,10 +4210,14 @@ export const REFINE_LOOP = /* wgsl */ `  if (refineCfg.x < 0.5) { discard; }
   hitBest = i32(dres.y);
   hitField = dres;
   hitNearWound = dres.z > 0.5;
-  nearWound = hitNearWound;
-  d = dres.x;
-  radius = abs(d);
-  // aaCfg.x is a MARCH texel radius - an output pixel is half of it.
+  // t*aaCfg.x is one OUTPUT pixel's world footprint (the same framing as texelFoot above
+  // and the PARAMS doc), so refineCfg.z scales the stencil in output-pixel footprints.
+  // The floor exists because the footprint goes to zero at the near plane and a stencil
+  // small enough to vanish into float spacing would collapse calcNormal's four taps onto
+  // the same value - an undefined normal. It sits far BELOW the march's 0.0015 default
+  // on purpose - the refined point is already ON the surface after the Newton steps, so
+  // there is no walk tolerance to straddle and a tight stencil is both safe and the whole
+  // point of the pass - while 2e-4 is still ~1e3 ulps of a metre-scale coordinate.
   gNormalEps = max(refineCfg.z * t * aaCfg.x, 2e-4);
 `;
 export const REFINE_PARAMS = MARCH_BODY_PARAMS.slice(0, MARCH_BODY_PARAMS.lastIndexOf(')')).replace(/\s*$/, '') +
