@@ -6690,7 +6690,10 @@ function performBenchAction(a: BenchAction): void {
         // settles `warmup` frames before its first hash, and a replay gets the
         // same treatment by not sampling its own first `hashFrom` frames. The
         // SIM still advances through every frame — only the samples are skipped.
-        if (opts.hash && f >= hashFrom && (f % every === 0 || f === file.frames.length - 1)) {
+        // The final frame is sampled only when it sits on the same interlace
+        // field as the regular samples: a recording with an even frame count
+        // would otherwise mix parities and the ab gate refuses the run.
+        if (opts.hash && f >= hashFrom && (f % every === 0 || (f === file.frames.length - 1 && (f & 1) === (hashFrom & 1)))) {
           await handle.resolveGpu();
           hashes.push(await hashFrame(frameHashDeps, f));
           parity.push(f % 2);
