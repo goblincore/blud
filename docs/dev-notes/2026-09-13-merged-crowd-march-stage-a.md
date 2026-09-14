@@ -189,6 +189,114 @@ by the lab-server trap. Recorded as an open limit, not a pass.
 Artifacts: `7e-rooms12/`, `7e-crowd8/`, `7e-crowd8-confirm/` (`bench.{json,md}` +
 `passes.{json,md}` each).
 
+## Task 7f — spread spawns and the scaling knee (2026-09-14)
+
+**The stacked-spawn finding.** `spawnDebugCharacter` placed every copy at
+`starts[actorsInRoom % starts.length]`, and room 1 has exactly ONE spawn point
+(`ROOMS[0]` = zombies 1, soldiers 1 in `game-level.ts`), so `BENCH_CROWD=8`
+stacked all 8 zombies on the same metre of floor. For the instanced proxy box
+that is the worst possible scene: every pixel folds the union of 8 coincident
+bodies (8 x ~37 groups in one tile, over the 64-entry cap, clamped and holed as
+well). The game never produces that scene, so the crowd-8 probe abort was a
+measurement fault, not a march fault. `spawnCrowd` now lays copies on a centred
+square grid (`crowdGridPoints`, default spacing 1.2 m, every point clamped 0.6 m
+inside the room floor) and the bench passes `BENCH_CROWD_SPACING`.
+
+**Seams (Step 1).** New pure module `crowd-spawn.ts` + test: `n` copies on a
+`ceil(sqrt(n))`-column grid centred on the room's first spawn point, pairwise
+>= spacing apart, all inside the floor rect; `n = 1` returns `p0`. `spawnDebugCharacter(name, start?)`
+takes an optional point (modulo default kept for its other callers) and `spawnCrowd`
+returns `{ ok, placed }`. With the spread spawn, **`BENCH_CROWD=8` crowd-on tiles-on
+now COMPLETES** (140 ms overall / 150 ms walk, under the 250 ms guard) where
+Task 7e recorded a reproducible probe abort.
+
+**Leg fix.** The ship-defaults block pins `setTiles(false)`, so the `crowd-on` leg
+({ setCrowd: true }) was silently tiles-OFF — the same configuration as
+`crowd-on-tiles-off` (verified on the page: boot `?tiles-playtest` enabled,
+`setTiles(false)` -> false, `setCrowd(true)` -> still false). `crowd-on` now sets
+`setTiles(true)`, and the bench records `tilesOn` on every row.
+
+### The knee
+
+repeats=1, `BENCH_PASSES=1`, `BENCH_QUERY='crowd=1&tiles-playtest'`, room 1.
+`sdf:march` is the pass-timer p50 over all segments. `bodies visible` is the
+baseline census max (`cullCounts.visible`) / crowd packed `info().visible` at end
+of run — **different instruments; they do not match, see the warning below**.
+`clamp/cull/fb` = crowd `clampedTiles` / `culledByBudget` / `tileFallbacks`.
+
+| n | load 1-min | bodies visible per-body / on / off | per-body march | crowd-on march | crowd-off march | clamp/cull/fb | probe abort? |
+|---:|---:|---|---:|---:|---:|---|---|
+| 2 | 2.36 | 8 / 1 / 4 | 69.56 | 10.24 | 24.59 | 0/0/0 | no |
+| 4 | 2.43 | 10 / 7 / 7 | 61.58 | 66.08 | 123.19 | 0/0/0 | no |
+| 6 | 1.60 | 12 / 7 / — | 76.57 | 82.77 | — | 0/0/0 | crowd-off |
+| 8 | 2.07 | 15 / 11 / — | 80.66 | 140.06 | — | 0/0/0 | crowd-off |
+| 12 | 2.44 | 17 / — / — | 99.51 | — | — | — | crowd-on + crowd-off |
+| 16 | 1.53 | 22 / — / — | 34.28 + | — | — | — | crowd-on + crowd-off |
+
++ The n=16 baseline is not a comparable scene (segment `sdf:march` walk 104.76 ms
+but fire 32.41 ms — the run-5 background-load drift, visible in the census too:
+walk 22->19, fire 19->5). Crowd 24 was **NOT run**: its precondition
+(n=16 crowd-on completes and is <= 2x the n=8 number) is unmet. `BENCH_CROWD_MAX=24`
+was never approached. Every abort is the frame guard (the probe's 30 s evaluate
+never answered / over cap); nothing hung, and baseline completed in every run.
+
+Per-segment `sdf:march` p50 (the walk segment is the close-up; the firefight drags
+the overall column):
+
+| n | leg | walk | fire | gib |
+|---:|---|---:|---:|---:|
+| 2 | per-body | 53.54 | 81.17 | 72.14 |
+| 2 | crowd-on | 11.58 | 7.83 | 10.02 |
+| 2 | crowd-off | 27.66 | 22.67 | 23.60 |
+| 4 | per-body | 42.53 | 71.55 | 62.19 |
+| 4 | crowd-on | 32.45 | 76.42 | 73.27 |
+| 4 | crowd-off | 94.82 | 131.69 | 149.95 |
+| 6 | per-body | 69.47 | 79.90 | 81.77 |
+| 6 | crowd-on | 84.70 | 118.78 | 74.60 |
+| 8 | per-body | 82.25 | 86.98 | 77.19 |
+| 8 | crowd-on | 150.21 | 106.12 | 158.34 |
+
+Derived ratios (tiles-on crowd; crowd(2) and per-body(2) are the `n=2` rows):
+
+| n | crowd(n)/crowd(2) | per-body(n)/per-body(2) | crowd/per-body | crowd-per-visible / per-body-per-visible |
+|---:|---:|---:|---:|---:|
+| 2 | 1.00 | 1.00 | 0.15 | 1.18 |
+| 4 | 6.45 | 0.89 | 1.07 | 1.53 |
+| 6 | 8.08 | 1.10 | 1.08 | 1.85 |
+| 8 | 13.68 | 1.16 | 1.74 | 2.37 |
+
+**Verdict.** (1) The crowd march does **not** show sub-linear scaling at fixed
+screen coverage: cost per visible body is roughly flat (~10-13 ms overall), so
+the tiles-on crowd is ~linear in visible bodies, and the raw crowd/per-body ratio
+climbs 0.15 -> 1.74 only because more bodies come on screen (coverage was not
+held fixed by this sweep, so the screen-bound claim is untested, not
+supported). (2) **Tiles-on is the better crowd mode** by ~1.9-2.4x at equal spawn
+(24.59 -> 10.24 at n=2; 123.19 -> 66.08 at n=4) and it is the only mode that
+measures past n=4 — tiles-off hits the frame guard at n=6 while tiles-on reaches
+n=8. (3) The residual per-visible-body premium is **not flat**: it grows
+1.18 -> 1.53 -> 1.85 -> 2.37 with n, the signature of overlapping-box duplicate
+traces (each pixel folds every stacked body), so **stage a-2 per-tile screen
+quads is the next task** — not a kernel profile.
+
+**A/B honesty warning (flag as required).** No row has crowd `visible` equal to
+the baseline `bodies`: baseline bodies 8/10/12/15/17/22 vs crowd-on visible
+1/7/7/11/—/— and crowd-off 4/7. The two numbers come from different instruments
+(per-body `cullCounts.visible` max over the whole run vs the crowd type's packed
+slot count on the final frame), so the mismatch partly reflects the dwell grace
+and mid-run kills, not only missing instances; the ratios above are still read
+against each leg's own baseline in the same run. `clampedTiles` and
+`culledByBudget` are **0 on every completed crowd row** — the spread spawn
+removed the 64-entry clamp (7e had already driven the clamp to 0 with
+visible-only packing; the grid keeps it there at 8 spawned bodies).
+
+**Gates (Step 1).** `npx tsc --noEmit -p .` clean; `crowd-spawn.test.ts` 5 tests
+pass; canonical `node scripts/march-hash.mjs` = `a8ab4efac15fc0376c3e4e05420f13e34d1511bd`
+(x2, wounded `da785297...`) — the frozen stage spawns no crowd, so the gate does
+not move; `node scripts/march-parity.mjs` **PASS** with tiles off and with
+`MARCH_PARITY_TILES=1`, every line identical to Task 7b.
+
+Artifacts: `7f-crowd{2,4,6,8,12,16}/` (`bench.{json,md}` + `passes.{json,md}`).
+
 ## Next
 
 Task 1 (`crowd-records.ts`) — the 16-vec4 instance record and the
