@@ -5298,7 +5298,7 @@ async function main() {
     } else {
       // The frame the tick CONSUMED, not a re-read after the fact: a live
       // event that lands mid-tick must belong to the next frame, not this one.
-      recorder?.push(inputFrame);
+      if (recorder) { recorder.push(inputFrame); updateDemoHud(); }
     }
     const held = inputFrame.keys;
     let input: MoveInput = holdPlayerPose
