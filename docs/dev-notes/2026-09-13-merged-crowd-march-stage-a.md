@@ -1030,3 +1030,24 @@ are the clean re-run.
 `crowdInfo().on true`, `default true`, `flag null`, `tilesOn true`,
 `dispatch quad`; `?crowd=0` reads `on false, flag 'crowd=0'`; `?refine=1` reads
 `on false, fallbackReason 'refine twin requested (?refine=1)'`.
+
+## Default flip re-gate after the shading fixes (2026-09-14, branch merge/crowd-default-flip)
+
+Merged main (room-keyed types, pinned hit slot, analytic normal gated to single-slot draws) into
+the flip branch. Canonical crowd hash `a350361d6a223946a4cb8aac9bc2a3a70ee15bfd` deterministic
+(x2) and unchanged by the fixes; per-body `a8ab4e…` reachable via `MARCH_HASH_PERBODY=1`;
+parity PASS; refine-smoke PASS.
+
+Bench (`BENCH_PASSES=1`, `baseline` = crowd default, `crowd-off` = per-body; load ~3.0–3.6):
+
+| room | repeats | crowd `sdf:march` | per-body `sdf:march` | crowd/per-body |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 1 | 10.79 | 66.26 | 0.16 |
+| 2 | 1 | 44.91 | 38.62 | 1.16 |
+| 2 | 3 | 51.25 | 42.86 | 1.20 |
+
+Room 2 (two overlapping zombies of one type) is ~20 % slower on the crowd default because a
+multi-slot draw now takes the finite-difference normal (four field taps per hit pixel) instead of
+the analytic gradient, which is wrong for slots >= 1 until it is recalibrated for instance bands
+(`scripts/crowd-normal-probe.mjs`). **Flip held** until that task lands and room 2 re-benches at
+or below per-body. Artifacts: `flip-fd-rooms12/`, `flip-fd-room2x3/`.
