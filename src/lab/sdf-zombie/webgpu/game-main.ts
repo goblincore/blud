@@ -8891,6 +8891,16 @@ function performBenchAction(a: BenchAction): void {
       if (errs.length > 0) console.error(`[sdf-game] spawnDebugCharacter(${name}):`, errs.join(' | ')) ;
       return { id: actor.id, room: room.id, errors: errs };
     },
+    /** Spawn `n` copies of `name` into the player's room (bench/crowd seam),
+     *  stopping at the first failure and returning how many landed. */
+    spawnCrowd: (name: string, n: number) => {
+      let ok = 0;
+      for (let i = 0; i < n; i++) {
+        try { (window as any).__sdfGame.spawnDebugCharacter(name); ok++; }
+        catch (e) { console.error('[sdf-game] spawnCrowd stopped at', i, e); break; }
+      }
+      return ok;
+    },
     uptime: () => (performance.now() - bootTime) / 1000,
     get frames() { return frameCount; },
     /** Where a view-model hangs (child of the camera). */

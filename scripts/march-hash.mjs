@@ -62,13 +62,16 @@ import { connectGame, applyShipDefaults, bootCloseupPage, stageCloseUp } from '.
 
 const VITE = Number(process.env.LAB_VITE_PORT ?? 5323);
 const CDP = Number(process.env.LAB_CDP_PORT ?? 9323);
+// MARCH_HASH_QUERY — extra query string appended to the boot URL, so a page
+// flag (e.g. `crowd=1`, `tiles-playtest`) can be hashed through this same gate.
+const EXTRA_QUERY = process.env.MARCH_HASH_QUERY ? `&${process.env.MARCH_HASH_QUERY}` : '';
 const fail = (msg) => { console.error(`FAIL: ${msg}`); process.exit(1); };
 setTimeout(() => { console.error('FAIL: watchdog 6 min'); process.exit(3); }, 6 * 60_000).unref();
 
 const { send, evaluate } = await connectGame({ vite: VITE, cdp: CDP, width: 1280, height: 800, onFail: fail });
 await bootCloseupPage({
   send, evaluate, fail,
-  url: `http://localhost:${VITE}/sdf-game.html?frozen=1&vhs=off&upscale=0`,
+  url: `http://localhost:${VITE}/sdf-game.html?frozen=1&vhs=off&upscale=0${EXTRA_QUERY}`,
 });
 // Belt-and-braces: the loop should already be stopped by the time any
 // step()-driven capture happens (step() calls setLoopRunning(false)
@@ -76,6 +79,11 @@ await bootCloseupPage({
 // more source of uncontrolled frames between boot and staging.
 await evaluate('__sdfGame.setLoopRunning(false)');
 await applyShipDefaults(evaluate);
+// MARCH_HASH_TILES — turn the tile-list march ON when the boot URL carried the
+// `tiles-playtest` flag (the controller is not `allowed` without it). The
+// tiles-off run is the canonical control; the tiles-on run records whether the
+// tile path is already bit-identical to the cluster walk.
+if (process.env.MARCH_HASH_TILES === '1') await evaluate('__sdfGame.setTiles(true)');
 // THE ACTUAL PIN (see header): force the field-interlace parity to a
 // constant 0 by turning field mode off, rather than trying to read or
 // normalize sdf-layer.ts's private frameIndex counter, which has no

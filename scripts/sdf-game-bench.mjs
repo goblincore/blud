@@ -47,6 +47,12 @@ const ROOM_IDS = (process.env.BENCH_ROOMS ?? '1,2,3,4,5').split(',').map(Number)
 // Results rows and meta record it, so a stored bench.json is never ambiguous
 // about what state the page was in.
 const PRELUDE = process.env.BENCH_PRELUDE ?? '';
+// BENCH_CROWD=n — spawn n copies of the zombie type into the player's room
+// after ship-defaults and before the leg overrides, so a crowd leg measures a
+// populated room (the per-body baseline) instead of an empty one. Uses the
+// `__sdfGame.spawnCrowd` seam added for the crowd-march work.
+const CROWD = Number(process.env.BENCH_CROWD ?? 0);
+const CROWD_PRELUDE = CROWD > 0 ? `__sdfGame.spawnCrowd('zombie', ${CROWD})` : '';
 // BENCH_PASSES=1 — per-pass GPU timestamp attribution (gpu-pass-timing.ts).
 // Runs the matrix in the harness's 'passes' mode: the same fence-per-chunk
 // frame timing as throughput, PLUS every render/compute pass summed by its
@@ -311,6 +317,12 @@ const ALL_LEGS = {
   // == 2). Baseline is the cluster walk with tiles OFF, as shipped.
   'tiles-on': { setTiles: true },
   'tiles-raycull': { setTiles: true, setTileRayCull: true },
+  // CROWD LEGS (2026-09-13, merged crowd march Task 0). Pair with BENCH_CROWD=n
+  // and BENCH_QUERY='crowd=1'. `setCrowd` is a no-op until the Task 6 game-main
+  // seam lands (the applier skips it when absent, like setTiles without
+  // tiles-playtest); until then these legs measure the per-body path.
+  'crowd-on': { setCrowd: true },
+  'crowd-on-tiles-off': { setCrowd: true, setTiles: false },
   // GOO DENSITY LEVERS (pass attribution 2026-09-07: goo:density equals the
   // march once blood flies). Run with BENCH_PASSES=1 and read the
   // goo:density row. 'goo-density-off' is the diagnostic ceiling — a wrong
@@ -518,7 +530,14 @@ async function applyLeg(name) {
     __sdfGame.setGooPerf({ densityScale: 0.5, particleCap: 1000, minTexelRadius: 0, areaPriority: false, splatFadeTail: 0, surfaceAtDensityRes: false, passGate: { density: true, blur: true, surface: true } });
     return 1;
   })()`);
+  // BENCH_CROWD — spawn the crowd after ship-defaults, before the leg
+  // overrides, so a leg's own overrides also apply to the spawned bodies.
+  if (CROWD_PRELUDE) { progress.phase = 'crowd-prelude'; await evaluate(CROWD_PRELUDE); }
   for (const [fn, arg] of Object.entries(overrides)) {
+    // The crowd seam lands in Task 6; until then `crowd-on` is a no-op (the
+    // same way `setTiles` is a no-op without `tiles-playtest`) rather than a
+    // page throw that would fail the leg.
+    if (fn === 'setCrowd' && !(await evaluate('typeof __sdfGame.setCrowd === "function"'))) continue;
     await evaluate(`__sdfGame.${fn}(${JSON.stringify(arg)})`);
   }
 }

@@ -45,7 +45,7 @@
 
 **Files:** `scripts/march-hash.mjs`, `scripts/sdf-game-bench.mjs`, `src/lab/sdf-zombie/webgpu/game-main.ts`, `docs/dev-notes/2026-09-13-merged-crowd-march-stage-a.md` (new)
 
-- [ ] **Step 1: Let march-hash take extra query flags.** In `scripts/march-hash.mjs`, where the page URL is built (`sdf-game.html?frozen=1&vhs=off&upscale=0`), append an env passthrough:
+- [x] **Step 1: Let march-hash take extra query flags.** In `scripts/march-hash.mjs`, where the page URL is built (`sdf-game.html?frozen=1&vhs=off&upscale=0`), append an env passthrough:
 
 ```js
 const EXTRA_QUERY = process.env.MARCH_HASH_QUERY ? `&${process.env.MARCH_HASH_QUERY}` : '';
@@ -53,7 +53,7 @@ const EXTRA_QUERY = process.env.MARCH_HASH_QUERY ? `&${process.env.MARCH_HASH_QU
 const url = `http://localhost:${VITE}/sdf-game.html?frozen=1&vhs=off&upscale=0${EXTRA_QUERY}`;
 ```
 
-- [ ] **Step 2: Record the tiles-on baseline.** Run, inside lab-servers:
+- [x] **Step 2: Record the tiles-on baseline.** Run, inside lab-servers:
 
 ```bash
 node scripts/march-hash.mjs
@@ -62,7 +62,7 @@ MARCH_HASH_QUERY='tiles-playtest' BENCH_PRELUDE='' node scripts/march-hash.mjs
 
 The second run needs tiles actually enabled: add to `march-hash.mjs`, after `applyShipDefaults`, `if (process.env.MARCH_HASH_TILES === '1') await evaluate('__sdfGame.setTiles(true)')`, and run it with `MARCH_HASH_TILES=1 MARCH_HASH_QUERY='tiles-playtest'`. Write both hashes into the dev note under `## Baselines (2026-09-13)`: `tiles-off room1 = a8ab4e…`, `tiles-on room1 = <value>`. If the two differ, the tile path is not bit-identical to the cluster walk today, and stage a-2's acceptance bar becomes "identical to the tiles-on baseline". Record which.
 
-- [ ] **Step 3: Add `__sdfGame.spawnCrowd(name, n)`.** In `game-main.ts` next to `spawnDebugCharacter` (the `__sdfGame` seam object, near the end of the file):
+- [x] **Step 3: Add `__sdfGame.spawnCrowd(name, n)`.** In `game-main.ts` next to `spawnDebugCharacter` (the `__sdfGame` seam object, near the end of the file):
 
 ```ts
 spawnCrowd: (name: string, n: number) => {
@@ -75,7 +75,7 @@ spawnCrowd: (name: string, n: number) => {
 },
 ```
 
-- [ ] **Step 4: Bench env `BENCH_CROWD`.** In `scripts/sdf-game-bench.mjs` next to `PRELUDE`:
+- [x] **Step 4: Bench env `BENCH_CROWD`.** In `scripts/sdf-game-bench.mjs` next to `PRELUDE`:
 
 ```js
 const CROWD = Number(process.env.BENCH_CROWD ?? 0);
@@ -91,7 +91,7 @@ and where `PRELUDE` is evaluated per leg, evaluate `CROWD_PRELUDE` first (after 
 
 and make the override applier call `__sdfGame.setCrowd(v)` for `setCrowd` (the seam lands in Task 6; until then the leg is a no-op like `setTiles` without the page flag — say so in the leg comment).
 
-- [ ] **Step 5: Baseline crowd bench (per-body path).** Run:
+- [x] **Step 5: Baseline crowd bench (per-body path).** Run:
 
 ```bash
 BENCH_PASSES=1 BENCH_ROOMS=1 BENCH_LEGS=baseline BENCH_CROWD=24 BENCH_OUT=docs/dev-notes/2026-09-13-merged-crowd-march-stage-a/crowd24-perbody node scripts/sdf-game-bench.mjs
@@ -99,7 +99,7 @@ BENCH_PASSES=1 BENCH_ROOMS=1 BENCH_LEGS=baseline BENCH_CROWD=24 BENCH_OUT=docs/d
 
 Record `sdf:march` p50 and the census (bodies seen) in the dev note.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add scripts/march-hash.mjs scripts/sdf-game-bench.mjs src/lab/sdf-zombie/webgpu/game-main.ts docs/dev-notes/2026-09-13-merged-crowd-march-stage-a.md
