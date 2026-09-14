@@ -1,9 +1,10 @@
 import * as THREE from 'three/webgpu';
-import { attribute, texture, uv, vec2, vec4, vec3, normalMap, normalize, cameraViewMatrix, positionView, dot, max, pow, float } from 'three/tsl';
+import { attribute, mix, texture, uv, vec2, vec4, vec3, normalMap, normalize, cameraViewMatrix, positionView, dot, max, pow, float } from 'three/tsl';
 import type { ImpactSplashEvent, ImpactSplashLightRig } from './impact-splash';
 import { basisFromAxis } from '../vec';
 
-const VARIANTS = 16;
+const VARIANTS = 32;
+const SHAPES = 16;
 const W = 96, H = 192;
 const PER_EVENT = 32, CAPACITY = PER_EVENT * 8;
 const hash = (n: number) => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
@@ -37,6 +38,19 @@ function makeAtlas(): THREE.DataTexture {
         const density=Math.exp(-Math.pow((x-center)/Math.max(0.015,radius),2))
           * (1-smooth((t-0.94)/0.13));
         field=Math.max(field,density);
+      }
+      if (v >= SHAPES) {
+        // Head-on splats: separated rounded lobes and torn bridges, rather
+        // than a fan of long fingers all rooted on the same straight edge.
+        field = 0;
+        const yy = (y - 0.5) * 2;
+        for (let l=0; l<7; l++) {
+          const a=hash(v*19+l*41)*Math.PI*2;
+          const r=0.12+hash(v*31+l*13)*0.48;
+          const rx=0.10+hash(v*17+l*53)*0.21;
+          const ry=0.10+hash(v*29+l*7)*0.24;
+          field=Math.max(field, Math.exp(-Math.pow((x-Math.cos(a)*r)/rx,2)-Math.pow((yy-Math.sin(a)*r)/ry,2)));
+        }
       }
       const coarse=noise(x*5+9,y*8,v*83);
       const fine=noise(x*19+4,y*31,v*23);
@@ -90,11 +104,15 @@ export function createImpactSplashSprites(rig: ImpactSplashLightRig) {
   const geometry=new THREE.PlaneGeometry(1,1);
   const variant=new THREE.InstancedBufferAttribute(new Float32Array(CAPACITY),1);
   const opacity=new THREE.InstancedBufferAttribute(new Float32Array(CAPACITY),1);
+  const front=new THREE.InstancedBufferAttribute(new Float32Array(CAPACITY),1);
+  geometry.setAttribute('splashFront',front);
   geometry.setAttribute('splashVariant',variant);
   geometry.setAttribute('splashOpacity',opacity);
   const atlasUv=vec2(uv().x.add(attribute('splashVariant','float')).div(VARIANTS),uv().y);
-  const sample=texture(atlas,atlasUv);
-  const N=vec3(normalMap(texture(normals,atlasUv),vec2(1.2)) as never);
+  const frontUv=atlasUv.add(vec2(SHAPES/VARIANTS,0));
+  const blend=float(attribute('splashFront','float') as never);
+  const sample=mix(texture(atlas,atlasUv),texture(atlas,frontUv),blend);
+  const N=vec3(normalMap(mix(texture(normals,atlasUv),texture(normals,frontUv),blend),vec2(1.2)) as never);
   const L=normalize(cameraViewMatrix.mul(vec4(rig.lightDir as never,0)).xyz);
   const V=normalize(positionView.negate());
   const H=normalize(L.add(V));
@@ -113,21 +131,24 @@ export function createImpactSplashSprites(rig: ImpactSplashLightRig) {
   const m=new THREE.Matrix4(), q=new THREE.Quaternion(), roll=new THREE.Quaternion();
   const scale=new THREE.Vector3(), pos=new THREE.Vector3(), delta=new THREE.Vector3();
   const axis=new THREE.Vector3(0,0,1);
-  const cards: {p:THREE.Vector3;velocity:THREE.Vector3;age:number;seed:number;small:boolean;scale:number;opacity:number;duration:number;angle:number;z:number}[]=[];
+  const cards: {p:THREE.Vector3;velocity:THREE.Vector3;age:number;seed:number;small:boolean;scale:number;opacity:number;duration:number;angle:number;explosion:boolean;z:number}[]=[];
   return {
     object:mesh,
     sync(events: readonly ImpactSplashEvent[], camera:THREE.Camera) {
       cards.length=0;
       for (const ev of events) {
         const basis=basisFromAxis(ev.direction);
-        for(let k=0;k<(ev.profile?.count ?? PER_EVENT);k++) {
+        const explosion=ev.profile?.style === 'explosion';
+        const count=ev.profile?.count ?? PER_EVENT;
+        const variedCount=explosion ? count : Math.max(0,Math.ceil(count*(0.7+hash(ev.seed+377)*0.3)));
+        for(let k=0;k<variedCount;k++) {
           const seed=ev.seed+k*83, h=(n:number)=>hash(seed+n*31);
           const age=ev.time-h(1)*0.10;
           if(age<=0 || age>=(ev.profile?.duration ?? 0.9)) continue;
           // Event-wide pressure/scale variation keeps the whole burst coherent,
           // while particle-level variation avoids repeated silhouettes.
           const pressure=0.75+hash(ev.seed+911)*0.50;
-          const phi=hash(ev.seed+57)*Math.PI*2+(h(2)-0.5)*1.0, cone=0.04+h(3)*(ev.profile?.spread ?? 1.1), speed=(0.6+h(4)*1.5)*pressure*(ev.profile?.speed ?? 1);
+          const phi=explosion ? h(2)*Math.PI*2 : hash(ev.seed+57)*Math.PI*2+(h(2)-0.5)*2.4, cone=(explosion ? 0.20 : 0.04)+h(3)*(ev.profile?.spread ?? 1.1), speed=(0.6+h(4)*1.5)*pressure*(ev.profile?.speed ?? 1);
           if(k>23+Math.floor(hash(ev.seed+377)*9)) continue;
           const local=[Math.cos(phi)*Math.sin(cone),Math.sin(phi)*Math.sin(cone),Math.cos(cone)];
           const velocity=new THREE.Vector3(
@@ -137,7 +158,7 @@ export function createImpactSplashSprites(rig: ImpactSplashLightRig) {
           const travel=(1-Math.exp(-age*2.8))/2.8;
           const p=new THREE.Vector3(...ev.origin).addScaledVector(velocity,travel);
           p.y-=0.6*age*age;
-          cards.push({p,velocity,age,seed,small:k>=18,scale:ev.profile?.scale ?? 1,opacity:ev.profile?.opacity ?? 1,duration:ev.profile?.duration ?? .9,angle:hash(ev.seed+57)*Math.PI*2,z:p.clone().applyMatrix4(camera.matrixWorldInverse).z});
+          cards.push({p,velocity,age,seed,small:explosion ? k>=18 : h(24)<0.3,scale:ev.profile?.scale ?? 1,opacity:ev.profile?.opacity ?? 1,duration:ev.profile?.duration ?? .9,angle:hash(seed+57)*Math.PI*2,explosion,z:p.clone().applyMatrix4(camera.matrixWorldInverse).z});
         }
       }
       cards.sort((a,b)=>a.z-b.z);
@@ -145,19 +166,26 @@ export function createImpactSplashSprites(rig: ImpactSplashLightRig) {
       for(const card of cards) {
         if(n>=CAPACITY) break;
         const h=(x:number)=>hash(card.seed+x*31);
-        const growth=smooth(card.age/0.07), fade=1-smooth((card.age/card.duration-0.25)/0.75);
+        const growth=smooth(card.age/(card.explosion ? 0.14 : 0.07));
+        const fade=card.explosion ? 1-smooth((card.age-0.28)/0.55) : 1-smooth((card.age/card.duration-0.25)/0.75);
         const length=(card.small?0.10:0.28)*(0.55+h(5)*1.15)*growth*card.scale;
         delta.copy(card.velocity).transformDirection(camera.matrixWorldInverse);
-        const angle=(Math.hypot(delta.x,delta.y)<0.3 ? card.angle : Math.atan2(-delta.x,delta.y))+(h(6)-0.5)*0.7+card.age*(h(7)-0.5);
+        const facing=card.explosion ? 0 : smooth((Math.abs(delta.z)-0.45)/0.45);
+        const sideAngle=Math.atan2(-delta.x,delta.y);
+        const angle=sideAngle+Math.atan2(Math.sin(card.angle-sideAngle),Math.cos(card.angle-sideAngle))*facing+(h(6)-0.5)*0.7+card.age*(h(7)-0.5);
         roll.setFromAxisAngle(axis,angle); q.copy(camera.quaternion).multiply(roll);
-        pos.copy(card.p); scale.set(length*(0.28+h(8)*0.25),length,1);
+        pos.copy(card.p);
+        const width=card.explosion ? 0.50+h(8)*0.45 : (0.28+h(8)*0.25)*(1-facing)+(0.7+h(8)*0.6)*facing;
+        const foreshorten=1-facing*0.48;
+        scale.set(length*width*foreshorten,length*foreshorten,1);
         m.compose(pos,q,scale); mesh.setMatrixAt(n,m);
-        variant.setX(n,Math.floor(h(9)*VARIANTS));
+        variant.setX(n,Math.floor(h(9)*SHAPES));
+        front.setX(n,facing);
         opacity.setX(n,(card.small?0.40:0.60+h(10)*0.30)*fade*card.opacity);
         n++;
       }
       mesh.count=n; mesh.instanceMatrix.needsUpdate=true;
-      variant.needsUpdate=true; opacity.needsUpdate=true;
+      variant.needsUpdate=true; opacity.needsUpdate=true; front.needsUpdate=true;
     },
     dispose(){geometry.dispose();material.dispose();atlas.dispose();normals.dispose();mesh.dispose();}
   };

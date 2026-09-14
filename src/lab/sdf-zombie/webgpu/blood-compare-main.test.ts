@@ -241,7 +241,7 @@ describe('blood comparison page — Current slug vs Impact splash shape axis', (
     // +Z is the OUTWARD wound normal toward the default camera, not world-up.
     expect(SPLASH_DIRECTION[2]).toBeGreaterThan(0);
     expect(SPLASH_DIRECTION[1]).toBe(0);
-    expect(src).toContain('splashLayer.emit(SPLASH_ORIGIN, SPLASH_DIRECTION, seed)');
+    expect(src).toContain('splashLayer.emit(SPLASH_ORIGIN, SPLASH_DIRECTION, seed,');
   });
 
   it('uses the production impact-splash module and preserves the shared seed', () => {
@@ -249,7 +249,7 @@ describe('blood comparison page — Current slug vs Impact splash shape axis', (
       expect(src, `${needle} must be used`).toContain(needle);
     }
     // No second seed source: the splash emits with the page's `seed`.
-    expect(src).toContain('splashLayer.emit(SPLASH_ORIGIN, SPLASH_DIRECTION, seed)');
+    expect(src).toContain('splashLayer.emit(SPLASH_ORIGIN, SPLASH_DIRECTION, seed,');
   });
 
   it('compares the shapes at the SAME elapsed event time (one shared clock)', () => {

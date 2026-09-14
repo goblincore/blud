@@ -1,3 +1,4 @@
+import { impactSplashPresets } from './impact-splash-profiles';
 // src/lab/sdf-zombie/webgpu/blood-compare-main.ts
 //
 // THE HONEST SYNCHRONIZED COMPARISON PAGE (blood-surface comparison task,
@@ -505,13 +506,14 @@ async function bootstrap(): Promise<void> {
   // its representative crown moment (the review default); Current is one
   // select away.
   let shape: ShapeId = 'splash';
+  let splashPreset: keyof typeof impactSplashPresets = 'spurt';
   let splashFrozen = true;
   let splashEvent: ImpactSplashEvent | null = null;
 
   /** (Re)build the splash event and pose it at the shared event time. */
   function syncSplashTo(seconds: number): void {
     splashLayer.clear();
-    splashEvent = splashLayer.emit(SPLASH_ORIGIN, SPLASH_DIRECTION, seed);
+    splashEvent = splashLayer.emit(SPLASH_ORIGIN, SPLASH_DIRECTION, seed, { profile: impactSplashPresets[splashPreset] });
     // Freeze on the representative crown moment by default; when the reviewer
     // unfreezes, the shared event clock loops the bounded lifetime.
     splashEvent.time = Math.max(0, Math.min(splashEvent.lifetime, seconds));
@@ -681,7 +683,7 @@ async function bootstrap(): Promise<void> {
 
   function candidateState(): Record<string, unknown> {
     return {
-      seed, frame, scenario, playing, speed,
+      seed, frame, scenario, playing, speed, splashPreset,
       shape, eventTime, splash: splashState(),
       variant, wipe, wipeA, wipeB, wipePos,
       filter: variant,
@@ -884,6 +886,20 @@ async function bootstrap(): Promise<void> {
     }
   });
   row('seed', seedInput);
+  row('impact preset', select([{id:'spurt',label:'Wound spurt'},{id:'explosion',label:'Blood explosion (saved)'}], splashPreset, (v) => {
+    splashPreset=v;
+    resetSplash();
+    if (!playing) handle.drawOnce();
+  }));
+  const variationBtn=document.createElement('button');
+  variationBtn.textContent='New variation';
+  variationBtn.addEventListener('click', () => {
+    seed=crypto.getRandomValues(new Uint32Array(1))[0]! & 0x7fffffff;
+    seedInput.value=String(seed);
+    if (shape === 'splash') resetSplash(); else simulateCurrentTo(eventTime);
+    if (!playing) handle.drawOnce();
+  });
+  row('',variationBtn);
 
   const replayBtn = document.createElement('button');
   replayBtn.textContent = 'Replay';

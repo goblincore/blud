@@ -1,4 +1,4 @@
-import { impactSplashProfiles, resolveImpactSplashProfile, type ImpactSplashProfile, type ImpactSplashWeapon } from './impact-splash-profiles';
+import { impactSplashPresets, impactSplashProfiles, resolveImpactSplashProfile, type ImpactSplashProfile, type ImpactSplashWeapon } from './impact-splash-profiles';
 import { createEncounterNavigation } from './encounter-navigation';
 import { createEncounterDirector, clearSight, type EncounterAgent } from './encounter-director';
 import { createSoldierCorpseBakes } from './soldier-corpse-bake';
@@ -7384,10 +7384,11 @@ function performBenchAction(a: BenchAction): void {
      * scene. Disabling keeps the layer but hides it, so toggling costs no
      * rebuild.
      */
-    setImpactSplash(o: { enabled?: boolean; weapon?: ImpactSplashWeapon; profile?: Partial<ImpactSplashProfile> } = {}) {
+    setImpactSplash(o: { enabled?: boolean; weapon?: ImpactSplashWeapon; preset?: keyof typeof impactSplashPresets; profile?: Partial<ImpactSplashProfile> } = {}) {
       const weapon = o.weapon ?? 'slug';
-      if (o.profile && Object.hasOwn(impactSplashProfiles, weapon)) {
-        impactSplashProfiles[weapon] = resolveImpactSplashProfile({ ...impactSplashProfiles[weapon], ...o.profile });
+      if ((o.profile || o.preset) && Object.hasOwn(impactSplashProfiles, weapon)) {
+        const base = o.preset && Object.hasOwn(impactSplashPresets, o.preset) ? impactSplashPresets[o.preset] : impactSplashProfiles[weapon];
+        impactSplashProfiles[weapon] = resolveImpactSplashProfile({ ...base, ...o.profile });
       }
       if (o.enabled !== undefined) impactSplashEnabled = o.enabled;
       if (impactSplashEnabled) ensureImpactSplashLayer();

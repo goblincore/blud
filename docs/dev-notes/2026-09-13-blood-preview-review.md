@@ -33,3 +33,18 @@ The superseded geometry builder is retained for the droplet path and reference t
 The supplied gameplay recording showed oversized overlapping impacts. Ordinary slug, pellet, and stump profiles now use smaller, shorter, narrower spurts with 7/4/5 cards respectively. Cards share an event direction with per-card jitter, including a coherent fallback for head-on shots; event seed varies direction, pressure, mask, size, and opacity. Supporting droplets/mist are scaled down too. Shotgun pellet wounds produce at most one supplementary splash per actor per shot; wound bleeding itself is unchanged. Larger effects remain possible through profiles, but no special sniper/headshot effect is added here.
 
 Follow-up validation: production build and 55 focused tests passed; the comparison render was inspected at 0.30 seconds and shows a compact directional spurt. Updated in-game scale and variation still need manual acceptance. No performance measurement was made for the increased goo resolution.
+
+## Front-view shapes and effect library (2026-09-14)
+
+Wound spurts blend from elongated side-view masks to compact broken-lobe masks when travelling toward the camera. The normal atlas follows the same mask blend; head-on cards shorten, widen and rotate independently. Per-event card count now varies as well as pressure and per-card shapes. Variation is seeded, so repeated seed/time remains reproducible.
+
+The lab's **impact preset** selector exposes **Wound spurt** and **Blood explosion (saved)**. The explosion retains the earlier broad radial trajectories, long cards, 32-card ceiling and slower fade. **New variation** changes the seed without moving the camera or time; **Replay** preserves it. Game tuning can select the library preset independently per weapon:
+
+```js
+__sdfGame.setImpactSplash({ weapon: 'slug', preset: 'explosion' });
+__sdfGame.setImpactSplash({ weapon: 'slug', preset: 'spurt' });
+```
+
+Optional `profile` fields override the selected preset; events retain a snapshot. Presets live in `impact-splash-profiles.ts`. These are two library entries, not automatic headshot classification.
+
+Validation: production build passed with existing chunk-size warnings; 56 focused tests passed (comparison tests retain their incomplete-DOM bootstrap warning). Both presets were rendered in the WebGPU lab from the front, and New variation changed the visible seed. Final in-game aesthetic acceptance and GPU cost remain unmeasured.
