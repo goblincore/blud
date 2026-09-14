@@ -1,7 +1,7 @@
 // scripts/refine-smoke.mjs — run-5 refine smoke + Gate-1 look.
 //
-// Boots the game frozen at `?frozen=1&vhs=off&upscale=0&refine=1`, stages the
-// standard close-up (room 1, ship defaults, the same wall-clock/probe pins
+// Boots the game frozen at `?frozen=1&vhs=off&upscale=0&refine=1&crowd=0`,
+// stages the standard close-up (room 1, ship defaults, the same wall-clock/probe pins
 // scripts/march-hash.mjs applies for a deterministic frame), turns the refine
 // pass on, and reads BOTH refine attachments plus the low-res march target.
 //
@@ -61,7 +61,11 @@ mkdirSync(OUT, { recursive: true });
 const { send, evaluate } = await connectGame({ vite: VITE, cdp: CDP, width: 1280, height: 800, onFail: fail });
 await bootCloseupPage({
   send, evaluate, fail,
-  url: `http://localhost:${VITE}/sdf-game.html?frozen=1&vhs=off&upscale=0&refine=1`,
+  // `crowd=0` (task-8 default flip): refine twins are per-body only until
+  // stage 3 turns refine into a fullscreen record-reading pass, so this smoke
+  // boots the per-body path explicitly rather than relying on the `?refine=1`
+  // compatibility fallback.
+  url: `http://localhost:${VITE}/sdf-game.html?frozen=1&vhs=off&upscale=0&refine=1&crowd=0`,
 });
 await applyShipDefaults(evaluate);
 // Same deterministic-frame pins as scripts/march-hash.mjs: the dungeon flicker

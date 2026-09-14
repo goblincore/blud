@@ -119,6 +119,27 @@
   `tile-binning-submit < 1 ms` bar is untested (48 bodies at 0.9 m fit no region in this level; a
   longer-sightline space is future work). Plan
   `docs/superpowers/plans/2026-09-14-merged-crowd-march-stage-a2-tile-quads.md`.
+  **TASK 8 DEFAULT FLIP LANDED (2026-09-14, task-8 commit `the merged crowd march is the default; ?crowd=0
+  opts out`):** the merged crowd march (quad
+  dispatch, tile list on) is the SHIPPED default — a flagless boot attaches every actor to its character type
+  and draws one union field per type. `?crowd=0` (or `__sdfGame.setCrowd(false)`) opts out to the per-body
+  path; `?crowd=1` is accepted as a no-op. `crowdInfo()` reports `{ on, default: true, flag: 'crowd=0' | null,
+  fallbackReason, tilesOn, dispatch, types }`. New canonical march hash (crowd quad, tiles on)
+  `a350361d6a223946a4cb8aac9bc2a3a70ee15bfd` (wounded `07f60ecf…`); the per-body hash
+  `a8ab4efac15fc0376c3e4e05420f13e34d1511bd` is unchanged and reachable in one self-checking command via
+  `MARCH_HASH_PERBODY=1 node scripts/march-hash.mjs`. **Crowd tiles are mandatory:** the per-type
+  `ComputeTileBinding` always bins and the draw fn stamps `tileCfg.x = 1`, independent of the per-body
+  `?tiles-playtest` switch (the old cross-coupling let a ship-defaults `setTiles(false)` silently pin the
+  crowd to the slow cluster walk). **Compatibility rule:** `?refine=1` or the cone pass forces the boot
+  per-body (the refine twins/cone read per-body state the instance record does not carry), warns once
+  (`[crowd] refine/cone twins are not supported under the crowd march (stage 3); falling back to per-body for
+  this boot`), and records the reason in `crowdInfo().fallbackReason`. Flip bench rooms 1–2
+  (`BENCH_LEGS=baseline,crowd-off`, `BENCH_PASSES=1`, `BENCH_REPEATS=1`): `sdf:march` room1 13.41 (crowd) vs
+  66.61 (per-body); room2 33.59 vs 37.63 — crowd ≤ per-body in both. **What remains:** stage 3 (refine as one
+  fullscreen record-reading pass; delete the REFINE_LAYER twins), stage 4 (gibs as a chunk/slot type, corpse
+  bake for every character), the 48-body `tile-binning-submit < 1 ms` bar (needs a longer-sightline scene; no
+  region in this level holds 48 at 0.9 m), and the per-instance `segVolumeMeta` gap (bone-cull 'segment'
+  falls back to 'cluster' for attached views).
 - [ ] **BAKED MESH LOD (plan 2026-09-14):** `docs/superpowers/plans/2026-09-14-baked-mesh-lod.md` — L1 textured bake (rest-anchor + aux vertex attrs, per-pixel detail/mottle/meat/gloss; the "untextured smooth corpse" fix), L2 corpse bake for every character, L3 distance LOD (per-type segment bake shared by all instances, posed per frame, hysteretic band; removes far bodies from the march). Owner 2026-09-14: distant crowds are the real crowd case.
 - [ ] **CORPSE BAKE FOR EVERY CHARACTER:** `corpseBakeEligible` is soldier-only (`profile.name === 'soldier'` +
   collapse settled), so dead zombies keep marching at full cost. Extending eligibility to any settled actor is

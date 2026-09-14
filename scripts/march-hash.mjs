@@ -66,9 +66,21 @@ import { connectGame, applyShipDefaults, bootCloseupPage, stageCloseUp } from '.
 
 const VITE = Number(process.env.LAB_VITE_PORT ?? 5323);
 const CDP = Number(process.env.LAB_CDP_PORT ?? 9323);
+// CANONICAL VALUES after the task-8 default flip (2026-09-14):
+//   crowd (shipped default, quad dispatch, tiles on) = a350361d6a223946a4cb8aac9bc2a3a70ee15bfd
+//   per-body (?crowd=0, tiles off)                  = a8ab4efac15fc0376c3e4e05420f13e34d1511bd
+// The per-body value stays reachable in one command:
+//   MARCH_HASH_PERBODY=1 node scripts/march-hash.mjs
+// (equivalently MARCH_HASH_QUERY='crowd=0' MARCH_HASH_TILES=0 node scripts/march-hash.mjs).
+const PERBODY_HASH = 'a8ab4efac15fc0376c3e4e05420f13e34d1511bd';
+// MARCH_HASH_PERBODY — the per-body opt-out gate (task 8). Boots `?crowd=0`
+// with the tile list off and asserts the canonical per-body sha1, so the old
+// gate is still one self-checking command after the default flip.
+const PERBODY = process.env.MARCH_HASH_PERBODY === '1';
 // MARCH_HASH_QUERY — extra query string appended to the boot URL, so a page
 // flag (e.g. `crowd=1`, `tiles-playtest`) can be hashed through this same gate.
-const EXTRA_QUERY = process.env.MARCH_HASH_QUERY ? `&${process.env.MARCH_HASH_QUERY}` : '';
+// MARCH_HASH_PERBODY forces `crowd=0` and wins over it.
+const EXTRA_QUERY = PERBODY ? '&crowd=0' : (process.env.MARCH_HASH_QUERY ? `&${process.env.MARCH_HASH_QUERY}` : '');
 // MARCH_HASH_ROOM — which room's fill-screen close-up to stage. Room 1 is the
 // canonical gate; room 2 is the crowd-parity diagnostic (more bodies per type).
 const ROOM = Number(process.env.MARCH_HASH_ROOM ?? 1);
@@ -91,11 +103,11 @@ await bootCloseupPage({
 // more source of uncontrolled frames between boot and staging.
 await evaluate('__sdfGame.setLoopRunning(false)');
 await applyShipDefaults(evaluate);
-// MARCH_HASH_TILES — turn the tile-list march ON when the boot URL carried the
-// `tiles-playtest` flag (the controller is not `allowed` without it). The
-// tiles-off run is the canonical control; the tiles-on run records whether the
-// tile path is already bit-identical to the cluster walk.
-if (process.env.MARCH_HASH_TILES === '1') await evaluate('__sdfGame.setTiles(true)');
+// MARCH_HASH_TILES — the per-BODY tile playtest (the controller is not
+// `allowed` without the page flag), NOT the crowd's tile list: the crowd march
+// always bins its own binding (task 8). MARCH_HASH_PERBODY pins this off so the
+// per-body canonical stays the tiles-off cluster walk.
+if (!PERBODY && process.env.MARCH_HASH_TILES === '1') await evaluate('__sdfGame.setTiles(true)');
 // THE ACTUAL PIN (see header): force the field-interlace parity to a
 // constant 0 by turning field mode off, rather than trying to read or
 // normalize sdf-layer.ts's private frameIndex counter, which has no
@@ -163,6 +175,9 @@ if (USE_MASK) {
 
 const cap0 = await capture(maskInfo);
 const room1 = cap0.hash;
+if (PERBODY && room1 !== PERBODY_HASH) {
+  fail(`per-body canonical moved: room1=${room1} expected ${PERBODY_HASH}`);
+}
 
 await evaluate('(() => { __sdfGame.step(2); return 1; })()');
 await evaluate('__sdfGame.resolveGpu()');

@@ -1175,13 +1175,32 @@ async function main() {
   // state is (see the cullCounts comment): the callback closes over these, and
   // a frame that renders before the boot reaches a later declaration throws
   // "Cannot access before initialization" and silently skips the crowd path.
-  const crowdFlag = new URLSearchParams(location.search).get('crowd') === '1';
+  // DEFAULT FLIP (task 8, 2026-09-14): the merged crowd march is the shipped
+  // path. `?crowd=0` (or `__sdfGame.setCrowd(false)`) opts out to the per-body
+  // path; `?crowd=1` is still accepted as a no-op. The distance-crowd bench
+  // (docs/dev-notes/2026-09-13-merged-crowd-march-stage-a.md, `## Distance
+  // crowd`) is the evidence: crowd-quad beats per-body at every n = 8..24 at
+  // both SDF scales, and 24 completes at ship scale under the frame guard.
+  const crowdParam = new URLSearchParams(location.search).get('crowd');
   // Stage a-2 dispatch: `?crowddispatch=boxes` restores the stage-a instanced
   // proxy boxes; anything else (including absent) uses the one-screen-quad
   // dispatch, which is the point of the stage.
   let crowdDispatch: 'boxes' | 'quad' = new URLSearchParams(location.search).get('crowddispatch') === 'boxes'
     ? 'boxes' : 'quad';
-  let crowdOn = crowdFlag;
+  let crowdOn = crowdParam !== '0';
+  // STAGE-3 COMPATIBILITY: the refine twins and the cone pass are unsupported
+  // under the crowd march (they read per-body state the instance record does
+  // not carry; stage 3 turns refine into a fullscreen record-reading pass). A
+  // boot that asks for either falls back to per-body for its whole life,
+  // warns once, and records why in crowdInfo().fallbackReason.
+  // `sdfLayer.coneEnabled` is the cone pass's own gate — it ships off and has
+  // no boot flag yet, so in practice only `?refine=1` triggers this today.
+  let crowdFallbackReason: string | null = null;
+  if (crowdOn && (refineWanted || sdfLayer.coneEnabled)) {
+    crowdFallbackReason = refineWanted ? 'refine twin requested (?refine=1)' : 'cone pass requested';
+    crowdOn = false;
+    console.warn('[crowd] refine/cone twins are not supported under the crowd march (stage 3); falling back to per-body for this boot');
+  }
   /** One CrowdType per character registry name; lazily created on first spawn. */
   const crowdTypes = new Map<string, CrowdType>();
   /** The first attached view per type — the source of the per-frame per-TYPE
@@ -1682,7 +1701,6 @@ async function main() {
         tilesY: Math.ceil(Math.max(1, csize.height) / TILE_SIZE_PX),
         tilePx: TILE_SIZE_PX,
       };
-      const tilesOn = gameTiles.diagnostics().enabled;
       const crowdTiming = telemetry.begin();
       // The level-shadow depth texture the type rebinds (same expression the
       // per-body loop's `map` uses; `flashlight.levelShadow.shadow.map` is
@@ -1692,7 +1710,12 @@ async function main() {
       for (const t of crowdTypes.values()) {
         const src = crowdSourceView.get(t);
         if (src) copyUniformValues(t.uniforms, src.uniforms);
-        t.uniforms.tileCfg.value.x = tilesOn ? 1 : 0;
+        // CROWD REQUIRES ITS TILE LIST (task 8). The per-body tile playtest
+        // (`gameTiles`) gates only the per-body path; the crowd type owns its
+        // own ComputeTileBinding and always bins it, so a ship-defaults
+        // `setTiles(false)` can no longer pin the crowd march to the slow
+        // per-slot cluster walk. tileCfg.x is the entry mode: 1 = tile list.
+        t.uniforms.tileCfg.value.x = 1;
         if (levelShadowMap !== null) t.levelShadowTex.value = levelShadowMap;
         vis.clear();
         for (const a of visibleActors) {
@@ -6305,6 +6328,17 @@ function performBenchAction(a: BenchAction): void {
      *  diagnostics). */
     crowdInfo: () => ({
       on: crowdOn,
+      // DEFAULT FLIP (task 8, 2026-09-14). `default` is the compiled-in
+      // default; `flag` echoes the opt-out so a script can distinguish "on
+      // because default" from "on because ?crowd=1". `fallbackReason` is set
+      // only when a stage-3-incompatible pass forced this boot per-body.
+      default: true,
+      flag: crowdParam === '0' ? 'crowd=0' : null,
+      fallbackReason: crowdFallbackReason,
+      // The crowd march requires its tile list (see the draw-fn sync block):
+      // true whenever the crowd is live. Gated on `on` so a crowd-off boot
+      // with stale type uniforms cannot read true.
+      tilesOn: crowdOn && [...crowdTypes.values()].some(t => t.info().tilesOn),
       dispatch: crowdDispatch,
       types: [...crowdTypes].map(([n, t]) => ({ name: n, ...t.info() })),
     }),

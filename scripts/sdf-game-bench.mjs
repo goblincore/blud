@@ -354,10 +354,10 @@ console.log('backend: webgpu');
 // The legs. Each is a named set of overrides applied on top of ship defaults.
 // ---------------------------------------------------------------------------
 const ALL_LEGS = {
-  // The crowd A/B under a `?crowd=1` boot: baseline must explicitly turn the
-  // crowd OFF or it would silently run the crowd path (the boot flag defaults
-  // `setCrowd`), and the A/B would compare crowd against crowd.
-  baseline: { setCrowd: false },
+  // TASK-8 DEFAULT FLIP (2026-09-14): the crowd march is the shipped default,
+  // so `baseline` IS the crowd path (quad dispatch, tiles on). The per-body
+  // control is the explicit `crowd-off` leg below.
+  baseline: {},
   // BLEED (bleeding-wounds, 2026-08-31) SHIPS ON, so baseline includes it;
   // this leg is the "before" column — setBleed(false) is pixel-identical to
   // the pre-feature page (the off-state parity gate proves that in pixels),
@@ -394,30 +394,32 @@ const ALL_LEGS = {
   // == 2). Baseline is the cluster walk with tiles OFF, as shipped.
   'tiles-on': { setTiles: true },
   'tiles-raycull': { setTiles: true, setTileRayCull: true },
-  // CROWD LEGS (2026-09-13, merged crowd march). Pair with BENCH_CROWD=n and
-  // BENCH_QUERY='crowd=1'; baseline explicitly turns the crowd OFF (see the
-  // baseline leg). `crowd-on` under a crowd=1 boot is already on, so
-  // setCrowd(true) is a no-op and the BENCH_CROWD spawns (which run after these
-  // overrides) attach to the crowd types.
+  // CROWD LEGS (2026-09-13, merged crowd march; task-8 default flip
+  // 2026-09-14). `baseline` is now the crowd path, so the A/B is `baseline`
+  // (crowd on, quad, tiles on) vs `crowd-off` (per-body). BENCH_CROWD=n pairs
+  // with these; the spawn prelude runs after the leg overrides, so both legs
+  // get the same N bodies.
   //
-  // TILES EXPLICIT ON 'crowd-on' (perf 7f, 2026-09-14). The ship-defaults block
-  // pins setTiles(false), so the boot's ?tiles-playtest is overridden before
-  // the leg runs — 'crowd-on' with no setTiles was therefore the SAME
-  // configuration as 'crowd-on-tiles-off' (verified on the page: boot enabled,
-  // setTiles(false) -> false, setCrowd(true) -> still false). The intended A/B
-  // is crowd tiles-on vs crowd tiles-off, so re-enable tiles here.
-  'crowd-on': { setCrowd: true, setTiles: true, setCrowdDispatch: 'quad' },
-  'crowd-on-tiles-off': { setCrowd: true, setTiles: false, setCrowdDispatch: 'quad' },
+  // CROWD TILES ARE MANDATORY (task 8): the crowd type always bins its own
+  // ComputeTileBinding and the draw-fn stamps tileCfg.x = 1, so there is no
+  // tiles-off crowd configuration and no `setTiles` in these legs — the old
+  // `crowd-on-tiles-off` leg measured the same frame as `crowd-on` and was
+  // removed. `setTiles` on a crowd leg controls only the per-body playtest and
+  // is inert.
+  'crowd-off': { setCrowd: false },
   // STAGE a-2 DISPATCH A/B (2026-09-14). 'crowd-quad' is the one-screen-quad
-  // dispatch (the stage default); 'crowd-boxes' is the stage-a instanced proxy
-  // boxes. 'crowd-on' above is kept as an alias of 'crowd-quad'.
-  'crowd-quad': { setCrowd: true, setTiles: true, setCrowdDispatch: 'quad' },
-  'crowd-boxes': { setCrowd: true, setTiles: true, setCrowdDispatch: 'boxes' },
+  // dispatch (the shipped default); 'crowd-boxes' is the stage-a instanced
+  // proxy boxes. 'crowd-on' is kept as an alias of 'crowd-quad' for older
+  // bench commands.
+  'crowd-on': { setCrowd: true, setCrowdDispatch: 'quad' },
+  'crowd-quad': { setCrowd: true, setCrowdDispatch: 'quad' },
+  'crowd-boxes': { setCrowd: true, setCrowdDispatch: 'boxes' },
   // DISTANCE SCENE SCALE A/B (2026-09-14). Same quad dispatch at half the
-  // march scale, and the per-body baseline at the same scale, so the distance
+  // march scale, and the per-body control at the same scale, so the distance
   // sweep can answer "does crowd-quad beat per-body at EVERY scale?" without
   // a cross-run scale comparison. Pair with BENCH_SCENE=distance.
-  'crowd-quad-s05': { setCrowd: true, setTiles: true, setCrowdDispatch: 'quad', setSdfScale: 0.5 },
+  // ('baseline-s05' predates the flip: it is the PER-BODY 0.5 control.)
+  'crowd-quad-s05': { setCrowd: true, setCrowdDispatch: 'quad', setSdfScale: 0.5 },
   'baseline-s05': { setCrowd: false, setSdfScale: 0.5 },
   // GOO DENSITY LEVERS (pass attribution 2026-09-07: goo:density equals the
   // march once blood flies). Run with BENCH_PASSES=1 and read the
@@ -619,7 +621,10 @@ async function applyLeg(name) {
     // audit note above — and note that a bench measuring a config the game does
     // not run is the bug, not the pin being "conservative".
     __sdfGame.setHullExitBound(true);
-    // Tiles ship OFF (playtest-gated); pinned so the tile legs are the A/B.
+    // Per-BODY tiles ship OFF (playtest-gated); pinned so the per-body tile
+    // legs are the A/B. TASK 8: this no longer touches the crowd march — the
+    // crowd type always bins its own tile list and the draw-fn stamps its
+    // tileCfg.x = 1 regardless of this switch.
     __sdfGame.setTiles(false);
     __sdfGame.setTileRayCull(false);
     // Wound levers at the GAME's shipped state (game-main.ts GAME_* consts:
@@ -738,9 +743,14 @@ async function runLeg(name, room, mode) {
   // the tile-binding fallback count. Null on a per-body-only boot.
   const ci = await evaluate('typeof __sdfGame.crowdInfo === "function" ? JSON.stringify(__sdfGame.crowdInfo()) : "null"');
   r.crowdInfo = JSON.parse(ci);
-  // Tiles state as actually applied (perf 7f): the crowd tiles-on/off columns
-  // are only readable if each row states which mode it measured.
-  r.tilesOn = await evaluate('typeof __sdfGame.tiles === "function" ? __sdfGame.tiles().enabled : null');
+  // Tiles state as actually applied (perf 7f; task 8). `__sdfGame.tiles()` is
+  // the per-BODY playtest controller and reads false on a flagless boot; the
+  // crowd's tile list is always on (it is required), so a crowd-on row reads
+  // its tilesOn from crowdInfo. Keep both raw fields so a row can never imply
+  // the crowd marched without its tile list.
+  r.perBodyTilesOn = await evaluate('typeof __sdfGame.tiles === "function" ? __sdfGame.tiles().enabled : null');
+  r.crowdTilesOn = r.crowdInfo && r.crowdInfo.on === true ? !!r.crowdInfo.tilesOn : null;
+  r.tilesOn = r.crowdInfo && r.crowdInfo.on === true ? r.crowdTilesOn : r.perBodyTilesOn;
   return r;
 }
 

@@ -155,7 +155,7 @@ export interface CrowdType {
    *  reference for the GPU binding — to learn each tile's distinct-slot set. */
   binInputs(): { groups: TileGroupInput[]; maxBlendK: number };
   info(): {
-    attached: number; visible: number; tileFallbacks: number;
+    attached: number; visible: number; tileFallbacks: number; tilesOn: boolean;
     culledByBudget: number; clampedTiles: number; dispatch: CrowdDispatch;
     /** Last quad NDC rect (null in boxes mode or when nothing is visible). */
     rect: [number, number, number, number] | null;
@@ -504,7 +504,11 @@ export function createCrowdType(
         }
         clampedTiles = diagBinner.bin(lastBinGroups, lastCamera, lastBinMaxBlendK).clampedTiles;
       }
-      return { attached, visible, tileFallbacks, culledByBudget, clampedTiles, dispatch, rect: lastRect, rectFrac: lastRectFrac, meanDistance: lastMeanDistance };
+      // tilesOn mirrors the entry mode the shader will take: tileCfg.x is
+      // stamped to 1 by the game's crowd sync (task 8: crowd mode requires the
+      // tile list), so this reads the ACTUAL uniform rather than a guess.
+      const tilesOn = uniforms.tileCfg.value.x > 0.5;
+      return { attached, visible, tileFallbacks, tilesOn, culledByBudget, clampedTiles, dispatch, rect: lastRect, rectFrac: lastRectFrac, meanDistance: lastMeanDistance };
     },
   };
 }

@@ -106,14 +106,19 @@ function compare(a, b) {
 
 const { send, evaluate } = await connectGame({ vite: VITE, cdp: CDP, width: 1280, height: 800, onFail: fail });
 
-// One boot of the staged close-up, captured lit AND flat-albedo. The boot
-// uses a bare URL (no crowd flag) and selects the path with setCrowd — the
-// literal two-boot design; the per-body boot is then exactly the plain page
-// (setCrowd(false) is a no-op). Every step count is identical on both boots so
+// One boot of the staged close-up, captured lit AND flat-albedo. Both boots
+// use a bare URL except the per-body control, which carries `crowd=0` (task-8
+// default flip), and still call setCrowd so a future default change cannot
+// silently collapse the two paths. Every step count is identical on both boots so
 // the march-jitter frame parity lands on the same phase.
 async function bootAndCapture({ room, crowd }) {
   const q = ['frozen=1', 'vhs=off', 'upscale=0'];
   if (TILES) q.push('tiles-playtest');
+  // Task-8 default flip: the per-body control boot asks for `?crowd=0`
+  // EXPLICITLY (it used to rely on the bare page being per-body; the bare page
+  // now ships the crowd). The crowd boot stays flagless so it exercises the
+  // shipped default. `setCrowd(false)` below is then a no-op on the control.
+  if (!crowd) q.push('crowd=0');
   await bootCloseupPage({ send, evaluate, fail, url: `http://localhost:${VITE}/sdf-game.html?${q.join('&')}` });
   await evaluate('__sdfGame.setLoopRunning(false)');
   await applyShipDefaults(evaluate);

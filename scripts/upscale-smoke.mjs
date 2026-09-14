@@ -33,8 +33,11 @@ const QUERIES = [
   // Run-5 refine head (H1 taps refineN/refineC). The game page does not parse `upscaleheadinputs`
   // or `refine` yet — Task 6 adds both and turns this on by default; until then it is opt-in:
   //   UPSCALE_SMOKE_REFINE=1 node scripts/upscale-smoke.mjs
+  // `crowd=0` (task-8 default flip): the refine head reads the per-body refine twins,
+  // which are unsupported under the crowd march until stage 3, so this variant boots
+  // the per-body path explicitly rather than relying on the `?refine=1` fallback.
   ...(process.env.UPSCALE_SMOKE_REFINE === '1'
-    ? ['upscale=s8&upscaleinputs=rgbn&upscalehead=1&upscaleheadinputs=detail%2Brefine&refine=1']
+    ? ['upscale=s8&upscaleinputs=rgbn&upscalehead=1&upscaleheadinputs=detail%2Brefine&refine=1&crowd=0']
     : []),
 ];
 let bad = false;

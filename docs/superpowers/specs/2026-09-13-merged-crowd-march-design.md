@@ -106,9 +106,12 @@ channels) plus a `variantSeed`.** Baked noise volumes remain parked.
 flesh already uses that receiver, so nothing is lost; a per-instance class lane is not needed until a
 producer wants per-instance receivers.
 
-**D10 — Flag first, default later.** `?crowd=1` / `__sdfGame.setCrowd(true)` selects the per-type crowd path;
-the per-body path stays the ship default until the acceptance bars in §5 hold, then the flag flips and the
-per-body path is deleted (not kept as a mode).
+**D10 — Flag first, default later (FLIPPED 2026-09-14).** `?crowd=1` / `__sdfGame.setCrowd(true)` selected
+the per-type crowd path; the owner ratified the flip on 2026-09-14 after the distance-crowd bench (§5 a-3),
+so a flagless boot now runs the crowd path and `?crowd=0` / `__sdfGame.setCrowd(false)` is the per-body
+opt-out. The per-body path is KEPT behind the flag rather than deleted for now, so the canonical
+`a8ab4e…` gate and the refine/cone fallback stay one command away; its removal is deferred until stage 3/4
+land (the design's original "delete, not a mode" remains the end state).
 
 ## 4. Data flow after stage (a)
 
@@ -129,7 +132,7 @@ fragment: SETUP preloads the tile list ▶ LOOP folds per-slot full fields, min 
 | a-0 | baselines: march-hash tiles-off (canonical) and tiles-on; crowd spawn seam + bench leg | hashes recorded in the plan; `BENCH_CROWD=n` runs |
 | a-1 | records + one-instance kernel (D4) for every body | march-hash bit-identical to canonical; refine-smoke PASS; `tsc` clean; vitest pins rewritten deliberately |
 | a-2 | per-type atlas, instanced mesh, per-type tile binding, `?crowd=1` | crowd path: hit mask identical within 0.1 %, max depth delta below the pinned bound, flat-albedo RGB byte-identical; per-body canonical sha1 unchanged |
-| a-3 | deferred registration, bench | `sdf:march` p50 flat or better at 3–5 bodies; crowd leg (24 and 48 zombies) shows cost growing with covered pixels, not bodies; tile-binning-submit < 1 ms at 48 |
+| a-3 | deferred registration, quad dispatch, bench | **DONE 2026-09-14 — this is the default flip (Task 8).** Quad dispatch + union screen-rect landed (`b3ee7742`, `1c68162f`). `sdf:march` ≤ per-body in rooms 1–2 (flip bench: room1 13.41 crowd vs 66.61 per-body; room2 33.59 vs 37.63). Distance-crowd scene (0.9 m grid in room 1's far half, ~6.3 m mean camera distance): 8–24 bodies complete at SDF scale 1.0 and 0.5; crowd-quad beats per-body at every completed n (total march 0.35–0.63x at 1.0, 0.79–0.84x at 0.5); 24-body `sdf:march` 30.20 ms, `rectFrac` 0.50 — cost grows with covered pixels, not body count. The 48-body `tile-binning-submit < 1 ms` bar is UNTESTED (no region in this level holds 48 at 0.9 m); a longer-sightline scene is future work. |
 | 3 | refine as one fullscreen pass reading records | refine-smoke PASS, no twins, Task E deleted |
 | 4 | gibs as a chunk type; corpse bake for all characters | `sharedLiveMaterial` invariant replaced by "one chunk type draw"; chunk bench flat |
 | b | GPU posing from the type's rest template | only if `packBody` shows in the crowd profile |

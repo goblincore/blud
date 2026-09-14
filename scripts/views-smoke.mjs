@@ -19,19 +19,23 @@
 // (a spawned chunk visible in the field). A withChunk equal to base means the
 // chunk marched the empty fallback record.
 //
-// Env: LAB_VITE_PORT / LAB_CDP_PORT (default 5323 / 9323). Run inside
-// scripts/lab-servers (see scripts/lab-servers.sh).
+// Env: LAB_VITE_PORT / LAB_CDP_PORT (default 5323 / 9323), VIEWS_SMOKE_QUERY
+// (extra boot URL flags; pass `crowd=0` to exercise the per-body control after
+// the task-8 default flip). Run inside scripts/lab-servers (see that file's header).
 import { connectGame, applyShipDefaults, bootCloseupPage, stageCloseUp } from './lib/sdf-closeup-stage.mjs';
 
 const VITE = Number(process.env.LAB_VITE_PORT ?? 5323);
 const CDP = Number(process.env.LAB_CDP_PORT ?? 9323);
+// VIEWS_SMOKE_QUERY — extra query flags appended to the boot URL (task-8
+// default flip: `VIEWS_SMOKE_QUERY='crowd=0'` runs the per-body control).
+const EXTRA_QUERY = process.env.VIEWS_SMOKE_QUERY ? `&${process.env.VIEWS_SMOKE_QUERY}` : '';
 const fail = (msg) => { console.error(`FAIL: ${msg}`); process.exit(1); };
 setTimeout(() => { console.error('FAIL: watchdog 6 min'); process.exit(3); }, 6 * 60_000).unref();
 
 const { send, evaluate } = await connectGame({ vite: VITE, cdp: CDP, width: 1280, height: 800, onFail: fail });
 await bootCloseupPage({
   send, evaluate, fail,
-  url: `http://localhost:${VITE}/sdf-game.html?frozen=1&vhs=off&upscale=0`,
+  url: `http://localhost:${VITE}/sdf-game.html?frozen=1&vhs=off&upscale=0${EXTRA_QUERY}`,
 });
 await evaluate('__sdfGame.setLoopRunning(false)');
 await applyShipDefaults(evaluate);

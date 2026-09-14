@@ -950,3 +950,83 @@ crowd the level can actually show.
 
 Artifacts: `dist-crowd{8,12,16,20,24}/` (`bench.{json,md}` + `passes.*` +
 `bench-progress.jsonl`).
+
+## Default flip (2026-09-14)
+
+Task 8 of the stage (a) plan. The owner ratified the flip on 2026-09-14 after
+the distance-crowd bench above; this lands it.
+
+**What changed.** `crowdOn` defaults to `true` (`?crowd=0` opts out; `?crowd=1`
+is a no-op). The crowd type's tile list is now mandatory: the draw-fn stamps
+`tileCfg.x = 1` for every type, and the per-body `?tiles-playtest` switch no
+longer gates it — the ship-defaults `setTiles(false)` used to pin the crowd to
+the slow cluster walk. `?refine=1` or the cone pass forces the boot per-body,
+warns once and records `crowdInfo().fallbackReason`. `crowdInfo()` gains
+`default: true`, `flag: 'crowd=0' | null`, `fallbackReason` and `tilesOn`.
+
+**Hashes (fields off, room 1, `node scripts/march-hash.mjs`).**
+
+| path | room1 | room1-wounded |
+| --- | --- | --- |
+| before (per-body, tiles off) | `a8ab4efac15fc0376c3e4e05420f13e34d1511bd` | `da785297dcc3f677320c563501ca861bac22d6d6` |
+| after (crowd quad, tiles on) | `a350361d6a223946a4cb8aac9bc2a3a70ee15bfd` | `07f60ecfd4e1e1cac9e26b8527d50abc74894e95` |
+
+The new canonical repeated bit-for-bit across two boots and the wounded variant
+differs from it, so the gate is still live. The per-body value is unchanged and
+stays reachable in one command:
+
+```bash
+node scripts/march-hash.mjs                          # crowd canonical (a350361d…)
+MARCH_HASH_PERBODY=1 node scripts/march-hash.mjs     # per-body (a8ab4e…), asserts it
+# equivalently: MARCH_HASH_QUERY='crowd=0' MARCH_HASH_TILES=0 node scripts/march-hash.mjs
+```
+
+The old crowd-tiles-on value `0b84c119…` recorded at Task 7d is superseded —
+it predates the stage a-2 quad dispatch and the `main` merge.
+
+**Gates (all inside lab-servers, `LAB_VITE_PORT=5323 LAB_CDP_PORT=9323`).**
+
+- `npx tsc --noEmit -p .` clean.
+- `npx vitest run crowd-type.test.ts march.wgsl.test.ts game-tile-playtest.test.ts` — 252 pass.
+- `node scripts/march-hash.mjs` x2 = `a350361d…`; `MARCH_HASH_PERBODY=1 …` = `a8ab4e…`.
+- `MARCH_PARITY_TILES=1 node scripts/march-parity.mjs` — **PASS** (quad). The
+  gated aggregates (`maskDiff`/`maskDiffFrac`, `maxDz`, flat-albedo
+  `rgbDiffChannels = 0`) match the Stage a-2 (3) quad lines; the ungated mean and
+  diff-channel counts drifted slightly because the `main` merge (blood
+  membranes, `7676084c`) landed between that note and this flip. The per-body
+  canonical is unchanged, so the drift is on the crowd side and well inside the
+  pinned thresholds.
+- `node scripts/refine-smoke.mjs` — **PASS** (boots `crowd=0`).
+- `UPSCALE_SMOKE_REFINE=1 node scripts/upscale-smoke.mjs` — **FAILS at the final
+  refine query with 8–9 `MeshBasicNodeMaterial` pipeline errors; PRE-EXISTING and
+  unrelated to the flip.** The same script fails identically on the pristine base
+  (the two source edits stashed; 12 errors at the same query), the refine query
+  passes standalone, and the errors are mesh-material pipeline failures that
+  accumulate over the smoke's 11 re-boots in one tab. All 11 upscale `info`
+  blocks are correct (`inSize` 400x300 / `outSize` 800x600). This needs a
+  separate fix (a fresh tab per query, or the blood-membrane material); it is
+  NOT a flip regression.
+- `node scripts/views-smoke.mjs` and
+  `VIEWS_SMOKE_QUERY='crowd=0' node scripts/views-smoke.mjs` — both
+  `{ base: 33344, withChunk: 33692 }` (spawning the test chunk increases the hit
+  count; chunks are per-body draws either way).
+
+**Flip bench** (`BENCH_PASSES=1 BENCH_REPEATS=1 BENCH_ROOMS=1,2
+BENCH_LEGS=baseline,crowd-off`, machine load ~5; no aborts, 0 % repeat spread).
+`baseline` is now the crowd path, `crowd-off` the per-body control.
+
+| room | leg | fenced frame p50 | `sdf:march` |
+| ---: | --- | ---: | ---: |
+| 1 | baseline (crowd quad) | 17.55 | 13.41 |
+| 1 | crowd-off (per-body) | 73.69 | 66.61 |
+| 2 | baseline (crowd quad) | 44.51 | 33.59 |
+| 2 | crowd-off (per-body) | 46.94 | 37.63 |
+
+Crowd ≤ per-body in both rooms. The first attempt (load ~20–30, concurrent
+mesh-LOD chain) aborted room-2 baseline on the frame guard; the numbers above
+are the clean re-run.
+
+**Acceptance probe** (`.lab-tmp`, not committed): flagless boot reads
+`crowdInfo().on true`, `default true`, `flag null`, `tilesOn true`,
+`dispatch quad`; `?crowd=0` reads `on false, flag 'crowd=0'`; `?refine=1` reads
+`on false, fallbackReason 'refine twin requested (?refine=1)'`.
