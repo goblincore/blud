@@ -117,6 +117,8 @@ export function createSoldierCorpseBakes(scene: THREE.Object3D, material: () => 
       }
     },
     setEnabled(on:boolean) { enabled=on; if(!on) clear(); },
+    /** See chunk-bake-jobs settled(): replay/bench drivers await this so the corpse swap lands on a fixed frame. */
+    settled: () => jobs.settled(),
     stats: () => ({enabled,pending:jobs.pendingId,baked:[...entries.values()].filter(e=>e.mesh).map(e=>e.actor.id),error:jobs.error}),
     dispose: clear,
   };

@@ -6622,6 +6622,19 @@ function performBenchAction(a: BenchAction): void {
     return file;
   }
 
+  /** WAIT FOR OUTSTANDING BAKE WORKERS (determinism, 2026-09-14). The gib
+   *  swap is pinned to the frame after its submit and the corpse swap to the
+   *  frame the reply arrives — both only if the reply HAS arrived. Two replays
+   *  of the owner's 56 s recording diverged at one sample because one worker
+   *  answered before a resolveGpu yield and the other after it. Every
+   *  hand-stepped driver (replay, bench, scenario hash) awaits this before a
+   *  step, so the reply is always in hand on the pinned frame. Live play never
+   *  calls it. */
+  async function awaitBakes(): Promise<void> {
+    await chunkBakeJobs.settled();
+    if (soldierCorpses) await soldierCorpses.settled();
+  }
+
   /** THE REPLAY DRIVER. Owns the sim: stops the loop, resets the sim clock and
    *  reseeds the streams, applies the scene flags and the start pose, then
    *  steps one fixed frame per recorded frame through applyInputFrame. The
@@ -6680,10 +6693,18 @@ function performBenchAction(a: BenchAction): void {
       simLocked = false;
       prevInputKeys = new Set<string>();
       currentInputFrame = { keys: [], dx: 0, dy: 0, fire: 0, reload: false, look: [player.yaw, player.pitch] };
+      // SETTLE BEFORE FRAME 0. Two replays of one recording differed at the
+      // FIRST sampled frame only (frame 0 or 92 alike) — whatever the boot left
+      // queued (worker replies, uploads, the first GPU fence) landed on the
+      // same yield that took the first hash. Drain it here, before any sim
+      // frame, so frame 0 starts from a page that has nothing in flight.
+      await awaitBakes();
+      await handle.resolveGpu();
       for (let f = 0; ; f++) {
         const frame = iter.next();
         if (!frame) break;
         currentInputFrame = frame;
+        await awaitBakes();
         handle.step(file.dt);
         frames++;
         // `hashFrom` skips the RENDER warm-up frames: the scripted recorder
@@ -6716,6 +6737,9 @@ function performBenchAction(a: BenchAction): void {
       ms: Math.round(performance.now() - started),
       dispatches: probeFrame - demoSeedBase,
       label: opts.label ?? file.startedAt,
+      // Bake outcomes, so a diverging replay can be blamed on a swap without a
+      // second run: which soldiers baked, the last gib swap frame, bake count.
+      bakes: { corpse: soldierCorpses?.stats() ?? null, chunkSwapFrame: lastBakeSwapFrame, chunkBakes: totalBakes, chunkError: chunkBakeJobs.error },
     };
   }
 
@@ -6784,6 +6808,7 @@ function performBenchAction(a: BenchAction): void {
         // it here too would fire every shot twice.
         currentInputFrame = frame;
         rec.push(frame);
+        await awaitBakes();
         handle.step(1 / 60);
         if (toggleSlug) {
           const off: DemoFrame = {
@@ -6792,6 +6817,7 @@ function performBenchAction(a: BenchAction): void {
           };
           currentInputFrame = off;
           rec.push(off);
+          await awaitBakes();
           handle.step(1 / 60);
         }
       }
@@ -7211,6 +7237,7 @@ function performBenchAction(a: BenchAction): void {
         for (let frame = 0; frame < total; frame++) {
           for (const a of actionsAt(scenario, frame)) performBenchAction(a);
           // 1/60 is the bench's fixed step and the only dt this format means.
+          await awaitBakes();
           handle.step(1 / 60);
           stepsTaken++;
           // The final frame is sampled only when the regular cadence would MISS
@@ -7237,6 +7264,7 @@ function performBenchAction(a: BenchAction): void {
           // field parity, which is a different frame by design. Stepping a pair
           // keeps parity fixed, so this control measures frame determinism
           // instead of measuring the interlace.
+          await awaitBakes();
           handle.step(2 / 60);
           stepsTaken += 2;
           await handle.resolveGpu();
@@ -9415,6 +9443,7 @@ function performBenchAction(a: BenchAction): void {
       try {
         const deps: BenchDeps = {
           step: (dt) => { beginPassFrame(); handle.step(dt); restoreHeldPose(); },
+          beforeStep: awaitBakes,
           // 'passes' mode: CPU tick/draw plus the telemetry phases the tick
           // already brackets (blood sim, goo sync, body step, ...). Telemetry
           // is switched active for the run so begin()/end() record; no frame

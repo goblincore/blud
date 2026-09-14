@@ -31,6 +31,11 @@ import { aggregatePassSamples, attributePassSamples, type PassSample } from './g
 export interface BenchDeps {
   /** Drive exactly one frame at this timestep. */
   step(dtSec: number): void;
+  /** Optional: awaited before EVERY step. The page uses it to wait for an
+   *  outstanding bake worker so a corpse/gib swap lands on the same frame in
+   *  every run (determinism, 2026-09-14). The time spent here is subtracted
+   *  from the chunk's frame cost — live play runs the worker in parallel. */
+  beforeStep?(): Promise<void>;
   /** Await a real GPU completion fence. */
   resolveGpu(): Promise<void>;
   /** A monotonic clock in milliseconds. */
@@ -230,6 +235,7 @@ export async function runBench(
   for (let i = 0; i < warmup; i++) {
     if (deps.hidden()) hiddenSteps++;
     if (i === 0) for (const a of actionsAt(scenario, 0)) deps.perform(a);
+    if (deps.beforeStep) await deps.beforeStep();
     deps.step(dt);
   }
   await deps.resolveGpu();
@@ -293,9 +299,13 @@ export async function runBench(
     while (f < seg.to) {
       const n = Math.min(chunkFrames, seg.to - f);
       const t0 = deps.now();
-      for (let i = 0; i < n; i++) stepOnce(f + i);
+      let waited = 0;
+      for (let i = 0; i < n; i++) {
+        if (deps.beforeStep) { const w0 = deps.now(); await deps.beforeStep(); waited += deps.now() - w0; }
+        stepOnce(f + i);
+      }
       await deps.resolveGpu();
-      record(seg.name, (deps.now() - t0) / n);
+      record(seg.name, (deps.now() - t0 - waited) / n);
       if (passMode) await recordPasses(seg.name);
       f += n;
     }
