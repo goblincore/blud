@@ -192,6 +192,9 @@ const RES_RUNGS = {
   '640': { mode: 'fixed', width: 640, height: 480 },
 } as const satisfies Record<string, RenderCap>;
 type ResRung = keyof typeof RES_RUNGS;
+/** `?graphics=high` (owner 2026-09-13): which SHIPPED_UPSCALE entry the boot loads. A BOOT
+ *  decision — 'high' also allocates the march normal attachments and the refine twins/targets. */
+type GraphicsLevel = 'default' | 'high';
 const DEFAULT_RES: ResRung = '800';
 function resRungFromUrl(fallback: ResRung = DEFAULT_RES): ResRung {
   const v = new URLSearchParams(location.search).get('res');
@@ -844,10 +847,20 @@ async function main() {
   // Run 5: the refine twins + output-res refine targets (sdf-layer REFINE_LAYER) exist only when the
   // boot asks: `?refine=1`, or a trained model whose name contains 'headr' (run-5 exports). `?refine=0`
   // forces off. Refine implies the normal attachments.
+  //
+  // GRAPHICS LEVEL (owner 2026-09-13). `?graphics=high` swaps the shipped default upscaler for the
+  // run-5b refine head, which READS the normal attachments and REQUIRES the refine pass — both are
+  // boot allocations, which is why this is a URL parameter and not a live toggle. `?upscale=0` (the
+  // native march) still allocates nothing extra even at 'high': there is no stage to feed.
+  const graphics: GraphicsLevel =
+    new URLSearchParams(location.search).get('graphics') === 'high' ? 'high' : 'default';
+  const graphicsHighUpscale = graphics === 'high'
+    && new URLSearchParams(location.search).get('upscale') !== '0';
   const refineWanted = (() => {
     const q = new URLSearchParams(location.search);
     if (q.get('refine') === '1') return true;
     if (q.get('refine') === '0') return false;
+    if (graphicsHighUpscale) return true;
     return /headr(-|$)/.test(q.get('upscalemodel') ?? '');
   })();
   const marchNormalsWanted = refineWanted || (() => {
@@ -2082,11 +2095,16 @@ async function main() {
     }
     return info;
   }
-  /** The SHIPPED upscaler (owner decision 2026-09-12): s32-rgbd, trained locally on dataset v2,
-   *  G3-verified, staged as a tracked asset. s64 was rejected — ~6x the compute for no visible gain. */
-  const SHIPPED_UPSCALE_URL = '/assets/lab/upscale/s32-rgbd-best.json';
-  const SHIPPED_UPSCALE_NAME = 'ship:s32-rgbd-best';
-  /** CAS-style post-sharpen strength shipped with it (UPSCALE_SHARPEN_WGSL, 'cas' mode). */
+  // SHIPPED UPSCALERS (owner 2026-09-13, after run 5b — see next-steps note §15):
+  //   default: t16-rgb (v3.2) — no normals, no head, the cheapest frame (19 ms vs 19.5–20.4 for s32-rgbd).
+  //   high:    the run-5b refine head — medium-band per-body refinement; needs the normal attachments + the
+  //            refine pass, so it is a BOOT decision (`?graphics=high`), not a live toggle.
+  // (The previous default, s32-rgbd-best.json, stays tracked for history / A-B.)
+  const SHIPPED_UPSCALE = {
+    default: { url: '/assets/lab/upscale/t16-rgb-v32.json', name: 'ship:t16-rgb-v32', refine: false },
+    high:    { url: '/assets/lab/upscale/r5b-s32-rgbn-headr-drop-int2.json', name: 'ship:r5b-s32-rgbn-headr-drop-int2', refine: true },
+  } as const;
+  /** CAS-style post-sharpen strength shipped with them (UPSCALE_SHARPEN_WGSL, 'cas' mode). */
   const SHIPPED_UPSCALE_SHARPEN = 0.5;
   async function enableTrainedUpscale(name: string, layout?: string, booted = true, url?: string): Promise<UpscaleInfo> {
     const r = await fetch(url ?? `/__lab/upscale-model/${encodeURIComponent(name)}`, { cache: 'no-store' });
@@ -2113,12 +2131,13 @@ async function main() {
         }
       }
     } else if (upRaw === null) {
-      // DEFAULT (owner 2026-09-12): the shipped s32-rgbd stage with CAS sharpen. `?upscale=0` is the
-      // native march (the pre-stage picture); the U key still cycles native / nearest / model.
-      // NOTE this displaces the 'bodies' field style default: the stage forces fields off
-      // (the fields+stage stack was tried and reverted the same day).
+      // DEFAULT (owner 2026-09-13): the shipped stage for this graphics level, with CAS sharpen.
+      // `?upscale=0` is the native march (the pre-stage picture); the U key still cycles
+      // native / nearest / model. NOTE this displaces the 'bodies' field style default: the stage
+      // forces fields off (the fields+stage stack was tried and reverted 2026-09-12).
+      const ship = SHIPPED_UPSCALE[graphics];
       try {
-        await enableTrainedUpscale(SHIPPED_UPSCALE_NAME, undefined, false, SHIPPED_UPSCALE_URL);
+        await enableTrainedUpscale(ship.name, undefined, false, ship.url);
         sdfLayer.upscaleStage?.setSharpen(SHIPPED_UPSCALE_SHARPEN);
       } catch (err) {
         console.error(`[upscale] shipped model not loaded — native march: ${String(err)}`);
@@ -7403,6 +7422,9 @@ function performBenchAction(a: BenchAction): void {
     },
     refineBand: () => ({ ...refineBand }),
     refineInfo: () => ({ allocated: sdfLayer.refineSource !== null, on: sdfLayer.refine, view: sdfLayer.refineView, cfg: sdfLayer.refineCfg, tail: actors[0]?.view.refineTail ?? 'slim', bodies: refinedBodies, band: { ...refineBand } }),
+    /** The boot's graphics level (`?graphics=high`) — which SHIPPED_UPSCALE entry was loaded.
+     *  Not a setter: 'high' allocates the normal attachments + refine targets at boot. */
+    graphics: (): GraphicsLevel => graphics,
     setTemporalAccum: (on: boolean, alpha?: number) => sdfLayer.setTemporalAccum(on, alpha),
     resetTemporalAccum: () => sdfLayer.resetTemporalAccum(),
     /** NEURAL UPSCALE (spec 2026-09-11). Enabling also sets the march scale to 0.5

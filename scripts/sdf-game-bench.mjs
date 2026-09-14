@@ -428,7 +428,12 @@ const ALL_LEGS = {
   // RUN 5b (2026-09-13). Refine-band legs on the drop-trained headr model, plus the tracked
   // default (loaded from an untracked copy so a leg can name it) and the no-normals/no-head
   // default candidate for the "what ships" question.
-  'upscale-ship': { setUpscale: { trained: 'ship-s32-rgbd-best' }, setUpscaleSharpen: 0.5 },   // the tracked default, loaded from the untracked copy
+  // SHIP TRUTH since 2026-09-13: t16-rgb (v3.2) + CAS 0.5 is the tracked default
+  // (public/assets/lab/upscale/t16-rgb-v32.json); the untracked store carries the same export, which
+  // is what this leg loads. 'upscale-ship-high' is `?graphics=high`: the run-5b refine head, refine
+  // pass on, slim tail, boot-default medium band.
+  'upscale-ship': { setUpscale: { trained: 't16-rgb-v32' }, setUpscaleSharpen: 0.5 },
+  'upscale-ship-high': { setRefine: true, setRefineTail: 'slim', setUpscale: { trained: 'r5b-s32-rgbn-headr-drop-int2' }, setUpscaleSharpen: 0.5 },
   'upscale-t16-rgb': { setUpscale: { trained: 't16-rgb-v32' } },
   'upscale-r5b-headr': { setRefine: true, setRefineTail: 'slim', setUpscale: { trained: 'r5b-s32-rgbn-headr-drop-int2' } },          // band = boot default (medium)
   'upscale-r5b-headr-full': { setRefine: true, setRefineTail: 'full', setUpscale: { trained: 'r5b-s32-rgbn-headr-drop-int2' } },
