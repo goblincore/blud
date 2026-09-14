@@ -73,7 +73,14 @@
 - [~] **SHIP: t16-rgb default + `graphics=high` (5b refine head) — in flight.** Track both exports under
   `public/assets/lab/upscale/`, boot by setting (`?graphics=high` / `__sdfGame.setGraphics`), keep CAS 0.5; bench
   `upscale-ship` leg points at the new default. Then merge to main.
-- [~] **BOOT/MID-GAME FREEZE — precompile the twin layers + upscale-stage/layer passes; hoist `flashAge` (TDZ at boot).**
+- [x] **BOOT/MID-GAME FREEZE — FIXED 2026-09-13** (e71cee3d…3c1480f1): `SdfLayer.precompilePasses` compiles every
+  twin layer in its own target+MRT (gated on the pass's own enable flag; 8 s race per compile) plus the private
+  fullscreen passes, `UpscaleStage.precompile` every net pass incl. sharpen; `[warm]` log now counts them. First
+  refined frame 21 → 6 ms in the headless check. `flashAge`/`bounceSpotGain` hoisted; a `drawReady` gate closes the
+  rest of the TDZ class (the draw callback was armed ~4700 lines before boot finished). Boot warm-up 1.0 → 1.9 s.
+- [ ] **SHELL-HULL TWIN SHADER IS BROKEN** (pre-existing, found by the warm-up work): `unresolved value 'woundBound'`
+  in its `mapBody` call — turning the shell pass on yields a failed pipeline (and hung `compileAsync` before the
+  race). Own ticket; until fixed, off-at-boot passes are not warmed and would stall once if switched on mid-session.
 - [ ] **MERGED CROWD MARCH — HIGH PRIORITY AFTER RUN 5b (owner 2026-09-13: crowds are the game; gibs would
   otherwise be an explosion of marched instances).** One union field, one ray per pixel. Split by what varies:
   per TYPE (shared by all zombies): face sheet, segment-volume atlas, rest prim template, material/lighting knobs;
