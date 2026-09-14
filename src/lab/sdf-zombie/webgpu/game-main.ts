@@ -70,6 +70,8 @@ import { type VhsPreset, type VhsTerms } from './post-vhs';
 import { type SscsTerms } from './post-sscs';
 import { type ZombieGpuView, type RefineTail, defaultUniforms, blankFaceTexture, type MarchUniforms } from './zombie-gpu';
 import { createCrowdType, type CrowdType } from './crowd-type';
+import { DATA_ROWS as CROWD_DATA_ROWS } from './march.wgsl';
+import { REC_VEC4S, REC_WIND_ALIVE, REC_COUNTS, REC_COUNTS2, REC_ANCHOR_BAND, REC_WOUND_BOUND, REC_VOL_POSE0, REC_MELT } from './crowd-records';
 import { TILE_SIZE_PX } from './tile-cull';
 import { createOccluderHull, buildHullInstances, HULL_SHRINK, type HullInstance } from './occluder-hull';
 import { type BuildResult } from '../build-body';
@@ -8335,6 +8337,42 @@ function performBenchAction(a: BenchAction): void {
         out[name] = per;
       }
       return out;
+    },
+    /** Diagnostic: per crowd type, each attached actor's slot, alive flag, counts row, band, bone cull mode,
+     *  wound count and whether it is the type's uniform source. */
+    crowdSlotDump() {
+      const out: Record<string, unknown[]> = {};
+      for (const [name, t] of crowdTypes) {
+        const rows: unknown[] = [];
+        for (const a of actors) {
+          if (a.crowd?.type !== t) continue;
+          const s = a.crowd.slot; const f = t.records.floats; const b = s * REC_VEC4S * 4;
+          rows.push({ actor: a.id, slot: s, alive: f[b + REC_WIND_ALIVE * 4 + 3], counts: Array.from(f.subarray(b + REC_COUNTS * 4, b + REC_COUNTS * 4 + 4)),
+            counts2: Array.from(f.subarray(b + REC_COUNTS2 * 4, b + REC_COUNTS2 * 4 + 4)), band: f[b + REC_ANCHOR_BAND * 4 + 3],
+            woundBound: Array.from(f.subarray(b + REC_WOUND_BOUND * 4, b + REC_WOUND_BOUND * 4 + 4)),
+            volPose0w: f[b + REC_VOL_POSE0 * 4 + 3], melt: Array.from(f.subarray(b + REC_MELT * 4, b + REC_MELT * 4 + 4)),
+            isSource: crowdSourceView.get(t) === a.view, room: a.room });
+        }
+        out[name] = rows;
+      }
+      return out;
+    },
+    /** Diagnostic: a band's row (4 floats per prim column) from a crowd type's atlas. */
+    crowdBandRow(typeName: string, slot: number, row: number, cols = 8) {
+      const t = crowdTypes.get(typeName); if (!t) return null;
+      const w = t.atlas.texture.image.width as number; const r0 = slot * CROWD_DATA_ROWS + row;
+      return Array.from(t.atlas.texels.subarray(r0 * w * 4, r0 * w * 4 + cols * 4));
+    },
+    /** Diagnostic: set one component of a uniform on every per-body view AND every crowd type
+     *  (idx 0..3 = x/y/z/w for vectors; -1 for scalars). */
+    setUniformAll(name: string, idx: number, value: number) {
+      const apply = (u: Record<string, { value: unknown }>) => {
+        const n = u[name]; if (!n) return;
+        if (idx < 0) { n.value = value; return; }
+        const v = n.value as Record<string, number>; v[['x', 'y', 'z', 'w'][idx]!] = value;
+      };
+      for (const a of actors) apply(a.view.uniforms as unknown as Record<string, { value: unknown }>);
+      for (const t of crowdTypes.values()) apply(t.uniforms as unknown as Record<string, { value: unknown }>);
     },
     setMarchDebugMode(x: number) {
       for (const a of actors) a.view.uniforms.debugCfg.value.x = x;
