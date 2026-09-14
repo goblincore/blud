@@ -1119,7 +1119,34 @@ async function main() {
    *  main() finishes — the same TDZ rule chunkObjects obeys. */
   let lightClockFrozen = false;
   let flickerClockFrozenAt = 0;
+  /** Flashlight bounce spot gain (P4 step 1): 1 = the physically-derived disc
+   *  irradiance; ?bouncespot=0 pins the bit-identical path. Default 0 since the
+   *  GPU gather lights the level with the beam itself (P4 step 2);
+   *  ?bouncespot=1 or setBounceSpot brings the analytic disc back.
+   *
+   *  DECLARED HERE for the same TDZ rule as lightClockFrozen above: the legacy
+   *  lighting branch of the draw callback reads it, and the loop draws while
+   *  boot is still awaiting the upscale model. Measured, not guessed — with
+   *  `flashAge` hoisted this was the very next `Cannot access ... before
+   *  initialization` the page threw. */
+  const bounceSpotParam = new URLSearchParams(location.search).get('bouncespot');
+  let bounceSpotGain = bounceSpotParam === null ? 0 : Math.max(0, Number(bounceSpotParam) || 0);
+  /** THE BOOT-FRAME GATE. `handle.setDrawFn` arms this callback here, ~4700
+   *  lines before main() finishes, and boot then AWAITS (the upscale model
+   *  fetch, the weapon GLB, the arms GLB) — so the loop draws frames while
+   *  most of the state below this point is still in its temporal dead zone.
+   *  Every such frame threw `Cannot access '<x>' before initialization` and
+   *  drew nothing; the owner saw one at boot (`flashAge`), and behind it stood
+   *  `bounceSpotGain`, `player`, `roomProbes`, `bakedChunkMat`, `flashLight` —
+   *  measured one at a time, each surfacing only once the one before it was
+   *  fixed. Hoisting works for a `let`; `player` and `roomProbes` are `const`s
+   *  with real initializers and cannot move. So the gate: no frame draws until
+   *  main() has built everything the callback reads (set right before the
+   *  `window.__sdfGame` seam). Nothing is lost — those frames drew nothing
+   *  anyway — and the loader covers the canvas for all of it. */
+  let drawReady = false;
   handle.setDrawFn(() => {
+    if (!drawReady) return;
     // GPU PROBE GATHER dispatch (P3/P4). OUTSIDE the post-aa pass on purpose:
     // renderer.compute() inside a render callback broke the renderer's pass
     // state and stalled the loop after five frames (owner-observed HUD at
@@ -2340,12 +2367,6 @@ async function main() {
   // is bit-identical) for the parity and bench drivers. The gain defaults to
   // each room's matched level — the level of today's P1 at ambientGain 4 —
   // so only the direction and hue of the ambient change, not its brightness.
-  // Flashlight bounce spot gain (P4 step 1): 1 = the physically-derived disc
-  // irradiance; ?bouncespot=0 pins the bit-identical path.
-  const bounceSpotParam = new URLSearchParams(location.search).get('bouncespot');
-  // Default 0 since the GPU gather lights the level with the beam itself
-  // (P4 step 2); ?bouncespot=1 or setBounceSpot brings the analytic disc back.
-  let bounceSpotGain = bounceSpotParam === null ? 0 : Math.max(0, Number(bounceSpotParam) || 0);
   const probesParam = new URLSearchParams(location.search).get('probes');
   const probesOff = probesParam === '0' || probesParam === 'off';
   const roomProbes = createRoomProbes({
@@ -5865,6 +5886,9 @@ function performBenchAction(a: BenchAction): void {
   }
 }
 
+  // Everything the draw callback reads now exists — let frames draw. See the
+  // boot-frame gate's note at setDrawFn.
+  drawReady = true;
   (window as unknown as { __sdfGame: unknown }).__sdfGame = {
     telemetry: telemetryControls ? {
       start: () => telemetryControls.start(), stop: () => telemetryControls.stop(), mark: () => telemetryControls.mark(),

@@ -217,6 +217,9 @@ export const FIELD_MESH_LAYER = 8;
  */
 export const REFINE_LAYER = 9;
 
+/** Per-pass ceiling for precompilePasses (see the bounded race there). */
+const PRECOMPILE_PASS_TIMEOUT_MS = 8000;
+
 /** The depth prepass's linear downsample factor per axis. 4 → one coarse
  *  texel per 4x4 block of SDF pixels → ~1/16 of the march work. */
 export const DEPTH_PREPASS_DIV = 4;
@@ -1734,44 +1737,64 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
         t: THREE.RenderTarget | null,
         mrtNode: unknown = null,
       ) => {
+        const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
         try {
           renderer.setRenderTarget(t);
           if (mrtNode) renderer.setMRT(mrtNode as never);
-          try { await renderer.compileAsync(s, cam); } finally { if (mrtNode) renderer.setMRT(null); }
+          try {
+            // BOUNDED. A compileAsync whose pipeline creation fails inside the
+            // backend can leave its promise unsettled — which would hold the
+            // warm-up (and the loader behind it) forever. A pass that does not
+            // settle here is simply left to compile the way it always did.
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            const timeout = new Promise<'timeout'>((r) => { timer = setTimeout(() => r('timeout'), PRECOMPILE_PASS_TIMEOUT_MS); });
+            const outcome = await Promise.race([renderer.compileAsync(s, cam).then(() => 'ok' as const), timeout]);
+            if (timer !== undefined) clearTimeout(timer);
+            if (outcome === 'timeout') { console.warn(`[sdf-layer] precompile ${what} did not settle in ${PRECOMPILE_PASS_TIMEOUT_MS} ms — skipped`); return; }
+          } finally { if (mrtNode) renderer.setMRT(null); }
           n++;
         } catch (err) {
-          console.warn(`[sdf-layer] precompile ${what} failed`, err);
+          console.warn(`[sdf-layer] precompile ${what} failed after ${Math.round((typeof performance !== 'undefined' ? performance.now() : 0) - t0)} ms`, err);
         }
       };
       try {
         // --- the marched twins, one layer at a time -------------------------
         camera.layers.set(SDF_LAYER);
         await compile('march', scene, camera, target, marchMrt);
-        camera.layers.set(CONE_LAYER);
-        await compile('cone', scene, camera, coneCoarse);
-        camera.layers.set(OCCLUDER_LAYER);
-        await compile('occluder', scene, camera, occluder);
-        camera.layers.set(SHELL_LAYER);
-        await compile('shell-entry', scene, camera, shellEntry);
-        camera.layers.set(SHELL_EXIT_LAYER);
-        await compile('shell-exit', scene, camera, shellExit);
-        camera.layers.set(DEPTH_PREPASS_LAYER);
-        await compile('depth-pre', scene, camera, depthPre);
+        // GATED BY THE SAME FLAG THE RENDER PATH READS. Warming a pass that is
+        // off is not free and not harmless: an off-by-default twin can carry a
+        // stale mapBody argument list that only fails at pipeline creation, and
+        // compiling it here would spend the warm-up's budget producing an error
+        // for a pass that never runs.
+        if (coneUniforms.enabled.value > 0.5) {
+          camera.layers.set(CONE_LAYER);
+          await compile('cone', scene, camera, coneCoarse);
+        }
+        if (occluderUniforms.enabled.value > 0.5) {
+          camera.layers.set(OCCLUDER_LAYER);
+          await compile('occluder', scene, camera, occluder);
+        }
+        if (shellUniforms.enabled.value > 0.5) {
+          camera.layers.set(SHELL_LAYER);
+          await compile('shell-entry', scene, camera, shellEntry);
+          camera.layers.set(SHELL_EXIT_LAYER);
+          await compile('shell-exit', scene, camera, shellExit);
+        }
+        if (depthPreUniforms.cfg.value.x > 0.5) {
+          camera.layers.set(DEPTH_PREPASS_LAYER);
+          await compile('depth-pre', scene, camera, depthPre);
+        }
         if (refineTarget && refineMrt) {
           camera.layers.set(REFINE_LAYER);
           await compile('refine', scene, camera, refineTarget, refineMrt);
         }
-        camera.layers.set(FIELD_MESH_LAYER);
-        await compile('field-mesh', scene, camera, fieldMesh);
         camera.layers.mask = previousMask;
         // --- the layer's own fullscreen passes -------------------------------
         await compile('prev-blit', blitScene, quadCam, prev);
-        await compile('accum', accumScene, quadCam, accumNext);
+        if (accumOn) await compile('accum', accumScene, quadCam, accumNext);
         if (detailScene) await compile('detail', detailScene, quadCam, detailTarget);
         if (refineViewScene && refineViewTarget) await compile('refine-view', refineViewScene, quadCam, refineViewTarget);
         await compile('composite', quadScene, quadCam, outputTarget);
-        await compile('field-interleave', fieldScene, quadCam, outputTarget);
-        await compile('field-mesh-weave', meshScene, quadCam, outputTarget);
         // --- the upscale stage's passes --------------------------------------
         if (upscale) n += await upscale.precompile(renderer, quadCam);
       } finally {

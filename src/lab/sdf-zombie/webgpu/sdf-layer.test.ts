@@ -100,6 +100,13 @@ describe('SDF-layer whole-pass precompile (mid-game shader stalls)', () => {
       compileAsync,
     } as unknown as THREE.WebGPURenderer;
     const layer = createSdfLayer(renderer);
+    // Each twin pass is warmed only when its own enable flag is on — the same
+    // flag the render path reads, so the warm-up cannot spend its budget (or
+    // raise a pipeline error) on a pass that never runs.
+    layer.setConeEnabled(true);
+    layer.setOccluderEnabled(true);
+    layer.setShellEnabled(true);
+    layer.setDepthPreEnabled(true);
     const scene = new THREE.Scene();
     camera.layers.set(9);
     const previousMask = camera.layers.mask;
@@ -112,6 +119,11 @@ describe('SDF-layer whole-pass precompile (mid-game shader stalls)', () => {
     for (const l of [SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER, DEPTH_PREPASS_LAYER]) {
       expect(masksForScene).toContain(1 << l);
     }
+    // An off pass is NOT warmed.
+    layer.setShellEnabled(false);
+    seen.length = 0;
+    await layer.precompilePasses(scene, camera);
+    expect(seen.filter((c) => c.scene === scene).map((c) => c.mask)).not.toContain(1 << SHELL_LAYER);
     // …and the fullscreen passes, which are private scenes of the layer.
     expect(seen.some((c) => c.scene !== scene)).toBe(true);
     // Every marched twin compiled into a real float target, never the canvas
