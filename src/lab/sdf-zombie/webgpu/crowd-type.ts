@@ -177,6 +177,10 @@ export interface CrowdType {
     recordsFlushes: number;
     /** setSkeletonVolume() calls that actually rebound the material pair. */
     volumeRebinds: number;
+    /** Frames where the type had NO drawn instances and sync() therefore
+     *  skipped the tile-bin compute entirely (startup-hitch work, 2026-09-14:
+     *  an idle type paid four compute dispatches per frame for nothing). */
+    idleSkips: number;
   };
 }
 
@@ -268,6 +272,8 @@ export function createCrowdType(
   let atlasRows = 0;
   let recordsFlushes = 0;
   let volumeRebinds = 0;
+  // Frames where the type drew nothing and the tile-bin compute was skipped.
+  let idleSkips = 0;
 
   const instOut = ib.array as Float32Array;
   // Reused per frame — the pack is CPU-side and the list is at most 64.
@@ -384,16 +390,30 @@ export function createCrowdType(
         list.push({ slot: inst.slot, centre: inst.centre, half: inst.half, visible });
       }
 
-      // Bin ONCE for every drawn instance of the type.
-      lastBinGroups.length = 0;
-      for (const g of groups) lastBinGroups.push(g);
-      lastBinMaxBlendK = maxBlendK;
+      // Bin ONCE for every drawn instance of the type. An IDLE TYPE (nothing
+      // drawn after the visible filter and the group budget) skips the bin
+      // entirely: it used to dispatch all four kernels per frame per type —
+      // 24 compute dispatches per frame for the boot cast's six types, most
+      // of them for types with no instance on screen — and each dispatch was
+      // timestamp-tracked, feeding the compute query pool. The stale tile
+      // lists an idle skip leaves behind are unread: nothing of this type
+      // draws this frame (boxes: instanceCount 0; quad: rect null hides both
+      // meshes), and the next frame that DOES draw re-bins before drawing
+      // (same-queue ordering).
+      let ok = false;
+      if (drawnSlots.length > 0) {
+        lastBinGroups.length = 0;
+        for (const g of groups) lastBinGroups.push(g);
+        lastBinMaxBlendK = maxBlendK;
+        ok = tiles.bin(groups, camera, maxBlendK, {
+          widthPx: grid.tilesX * grid.tilePx,
+          heightPx: grid.tilesY * grid.tilePx,
+        });
+      } else {
+        idleSkips++;
+      }
       lastCamera = camera;
       lastGrid = grid;
-      const ok = tiles.bin(groups, camera, maxBlendK, {
-        widthPx: grid.tilesX * grid.tilePx,
-        heightPx: grid.tilesY * grid.tilePx,
-      });
 
       // MEAN CAMERA-TO-BODY DISTANCE over the DRAWN set (distance scene,
       // 2026-09-14). `live` is nearest-first and holds every packed instance
@@ -466,7 +486,13 @@ export function createCrowdType(
       // box mode it equals the pack length).
       packedCount = drawnSlots.length;
 
-      if (!ok) {
+      if (drawnSlots.length === 0) {
+        // Idle: nothing of this type draws, so pin the instance count to zero
+        // (the quad mesh is already hidden by the rect block below / box
+        // instanceCount is 0) and leave the grid stamp alone — nothing reads
+        // it this frame.
+        instCfg.value.set(0, dispatch === 'quad' ? 2 : 1, 0, 0);
+      } else if (!ok) {
         // The binder refused for a reason other than the group budget (which
         // is capped above). ZERO the slot count for this frame: every pixel
         // draws nothing rather than walking every slot's full cluster list
@@ -555,7 +581,7 @@ export function createCrowdType(
       // stamped to 1 by the game's crowd sync (task 8: crowd mode requires the
       // tile list), so this reads the ACTUAL uniform rather than a guess.
       const tilesOn = uniforms.tileCfg.value.x > 0.5;
-      return { attached, visible, tileFallbacks, tilesOn, culledByBudget, clampedTiles, dispatch, rect: lastRect, rectFrac: lastRectFrac, meanDistance: lastMeanDistance, atlasFlushes, atlasRows, recordsFlushes, volumeRebinds };
+      return { attached, visible, tileFallbacks, tilesOn, culledByBudget, clampedTiles, dispatch, rect: lastRect, rectFrac: lastRectFrac, meanDistance: lastMeanDistance, atlasFlushes, atlasRows, recordsFlushes, volumeRebinds, idleSkips };
     },
   };
 }
