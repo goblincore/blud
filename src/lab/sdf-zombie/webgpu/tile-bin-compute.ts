@@ -5,8 +5,9 @@
 //
 //   kTileRange  one thread per group slot: projects the group's bound sphere
 //               to a conservative screen-space tile AABB — the EXACT
-//               arithmetic of TileBinner.bin, including the deliberate Y flip
-//               and the behind-camera cover-everything rule — and stores the
+//               arithmetic of TileBinner.bin, including the deliberate Y flip,
+//               the fully-behind-eye-plane zero-tile rule, and the
+//               eye-plane-crossing cover-everything rule — and stores the
 //               integer range.
 //   kTileCounts one thread per tile: counts covering groups by scanning the
 //               ranges.
@@ -122,17 +123,28 @@ const PROJECTION_BLOCK = /* wgsl */ `
   let rBlend = radius + blendReach;
   let v4 = viewM * vec4<f32>(centre, 1.0);
   let nearDist = -v4.z - rBlend;
+  // FARTHEST point along the view axis (view looks down -z, so the far end is
+  // -(z) + r). A sphere whose far end is still behind the eye plane is
+  // reachable by NO forward ray and touches no pixel, so it binds ZERO tiles.
+  // This mirrors tile-cull.ts's TileBinner byte for byte; the empty range is
+  // the same encoding the off-screen reject below uses (tx1 = ty1 = -1).
+  let farDist = -v4.z + rBlend;
   let clip = projM * vec4<f32>(v4.xyz, 1.0);
   var tx0 = 0;
   var tx1 = -1;
   var ty0 = 0;
   var ty1 = -1;
-  // Behind-camera / eye-plane-crossing spheres cover EVERY tile. The guard is
-  // 1e-6, not 0: a sphere grazing the eye plane must never fall through to
-  // the projection branch with a near-zero nearDist, where f32 rounding
-  // differs from the CPU reference's f64 and could exclude a boundary tile.
-  // Over-covering is the safe direction; omitting is the hole class.
-  if (nearDist <= 1e-6 || clip.w <= 0.0) {
+  if (farDist <= 0.0) {
+    // FULLY behind the eye plane: zero tiles. tx1/ty1 keep the empty encoding.
+    // Conservative vs the CPU's f64: omitting only when the far end is at or
+    // past the eye plane can never drop a group the CPU kept in front of it.
+  } else if (nearDist <= 1e-6 || clip.w <= 0.0) {
+    // Eye-plane-CROSSING spheres (near end in front, far end behind) or a
+    // centre behind the eye: cover EVERY tile. The guard is 1e-6, not 0: a
+    // sphere grazing the eye plane must never fall through to the projection
+    // branch with a near-zero nearDist, where f32 rounding differs from the
+    // CPU reference's f64 and could exclude a boundary tile. Over-covering is
+    // the safe direction; omitting is the hole class.
     tx1 = i32(cfg.z) - 1;
     ty1 = i32(cfg.w) - 1;
   } else {

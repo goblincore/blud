@@ -1513,29 +1513,6 @@ async function main() {
         // the per-body path (the view's own material reads the same record).
         a.view.syncRecord();
       }
-      // CROWD STAGE A: one sync per type per frame, after every attached view
-      // has written its record. The per-frame globals (beam, level shadow,
-      // dynamic probes, time, probe weight) are copied from the type's source
-      // view, which the loop above just updated; tileCfg.x follows the game's
-      // tile switch exactly as a per-body view's does.
-      if (crowdOn && crowdTypes.size > 0) {
-        const csize = sdfLayer.targetSize;
-        const grid = {
-          tilesX: Math.ceil(Math.max(1, csize.width) / TILE_SIZE_PX),
-          tilesY: Math.ceil(Math.max(1, csize.height) / TILE_SIZE_PX),
-          tilePx: TILE_SIZE_PX,
-        };
-        const tilesOn = gameTiles.diagnostics().enabled;
-        const crowdTiming = telemetry.begin();
-        for (const t of crowdTypes.values()) {
-          const src = crowdSourceView.get(t);
-          if (src) copyUniformValues(t.uniforms, src.uniforms);
-          t.uniforms.tileCfg.value.x = tilesOn ? 1 : 0;
-          if (map !== null) t.levelShadowTex.value = map;
-          t.sync(camera, grid);
-        }
-        telemetry.end('crowd-sync', crowdTiming);
-      }
       // Bone tubes take the SAME beam (bone-instancer's boneShade is the
       // march's own cone formula on these exact values).
       boneInstancer.uniforms.spotPos.value.copy(flashlight.spot.position);
@@ -1567,6 +1544,45 @@ async function main() {
     // LEGACY ONLY — the deferred mode's SDF producer pass is fed by the
     // router, not by sdf-layer's body list.
     updateVisibleActors();
+    // CROWD STAGE A: one sync per type per frame, after every attached view
+    // has written its record AND after updateVisibleActors(), so the visible
+    // set passed to sync() is THIS frame's. The per-frame globals (beam,
+    // level shadow, dynamic probes, time, probe weight) are copied from the
+    // type's source view, which the loop above just updated; tileCfg.x
+    // follows the game's tile switch exactly as a per-body view's does.
+    //
+    // VISIBLE-ONLY PACKING (perf 7e): `?crowd=1` attaches every actor at
+    // spawn; without this filter the crowd path packed and binned the whole
+    // level every frame and the cost tracked the cast, not the bodies on
+    // screen. The per-body path is untouched — it already draws only
+    // visibleActors.
+    if (crowdOn && crowdTypes.size > 0) {
+      const csize = sdfLayer.targetSize;
+      const grid = {
+        tilesX: Math.ceil(Math.max(1, csize.width) / TILE_SIZE_PX),
+        tilesY: Math.ceil(Math.max(1, csize.height) / TILE_SIZE_PX),
+        tilePx: TILE_SIZE_PX,
+      };
+      const tilesOn = gameTiles.diagnostics().enabled;
+      const crowdTiming = telemetry.begin();
+      // The level-shadow depth texture the type rebinds (same expression the
+      // per-body loop's `map` uses; `flashlight.levelShadow.shadow.map` is
+      // unchanged between there and here — nothing renders in between).
+      const levelShadowMap = flashlight.levelShadow.shadow.map?.depthTexture ?? null;
+      const vis = new Set<number>();
+      for (const t of crowdTypes.values()) {
+        const src = crowdSourceView.get(t);
+        if (src) copyUniformValues(t.uniforms, src.uniforms);
+        t.uniforms.tileCfg.value.x = tilesOn ? 1 : 0;
+        if (levelShadowMap !== null) t.levelShadowTex.value = levelShadowMap;
+        vis.clear();
+        for (const a of visibleActors) {
+          if (a.crowd?.type === t) vis.add(a.crowd.slot);
+        }
+        t.sync(camera, grid, vis);
+      }
+      telemetry.end('crowd-sync', crowdTiming);
+    }
     // Crowd stage a: one instanced mesh per type replaces its N hidden
     // per-body proxies; unattached (or crowd-off) actors keep their proxies.
     sdfLayer.setBodies(

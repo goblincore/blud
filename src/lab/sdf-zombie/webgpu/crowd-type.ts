@@ -118,10 +118,13 @@ export interface CrowdType {
   /** Frees a slot and marks its record dead. */
   detach(slot: number): void;
   /** Per frame: repack instance attrs, bin the type's tile lists, flush the
-   *  atlas and the record buffer. */
+   *  atlas and the record buffer. `visibleSlots` is the game's visible set for
+   *  THIS type (frustum + clear-sight cull); a slot not in it stays attached
+   *  and alive but is neither packed nor binned this frame. */
   sync(
     camera: THREE.PerspectiveCamera,
     grid: { tilesX: number; tilesY: number; tilePx: number },
+    visibleSlots: ReadonlySet<number>,
   ): void;
   /** Rebinds the type's shared sampled-skeleton atlas/meta pair. */
   setSkeletonVolume(atlas: THREE.Texture, meta: THREE.Texture): void;
@@ -180,6 +183,10 @@ export function createCrowdType(
   const slots: (ZombieGpuView | undefined)[] = new Array(MAX_CROWD_INSTANCES);
   let tileFallbacks = 0;
   let culledByBudget = 0;
+  // Instances actually packed/drawn by the LAST sync(). info().visible reads
+  // this, not the alive-record count: attached-but-hidden is a real state now
+  // (the game attaches every actor at spawn and filters per frame).
+  let packedCount = 0;
 
   const instOut = ib.array as Float32Array;
   // Reused per frame — the pack is CPU-side and the list is at most 64.
@@ -231,20 +238,25 @@ export function createCrowdType(
       free.add(slot);
     },
 
-    sync(camera, grid) {
+    sync(camera, grid, visibleSlots) {
       groups.length = 0;
       list.length = 0;
       live.length = 0;
       drawnSlots.length = 0;
       let maxBlendK = 0;
       for (let s = 0; s < MAX_CROWD_INSTANCES; s++) {
+        // VISIBLE-ONLY PACKING (perf 7e). `?crowd=1` attaches EVERY actor at
+        // spawn; the per-body baseline draws only the frustum+clear-sight
+        // culled set (updateVisibleActors). Packing the whole cast made the
+        // crowd path cost track the LEVEL, not the visible bodies — and the
+        // off-room behind-camera instance groups saturated every tile's
+        // 64-entry cap. A slot outside the set stays attached and alive; its
+        // record keeps its band, so re-showing costs nothing.
+        if (!visibleSlots.has(s)) continue;
         const v = slots[s];
         if (!v) continue;
         // Dead slots (detached, or a record the view has not synced) never
-        // enter the pack. attached-but-hidden is NOT a state here: the game
-        // hides the PER-BODY proxy when it attaches (the crowd box is what
-        // draws the instance), so attach/detach is the visibility gate and
-        // the packed instance is always visible.
+        // enter the pack.
         if (records.floats[s * REC_VEC4S * 4 + REC_WIND_ALIVE * 4 + 3]! < 0.5) continue;
         const p = v.object.position;
         const h = v.uniforms.bodyHalf.value;
@@ -296,6 +308,7 @@ export function createCrowdType(
 
       const n = packInstanceAttrs(list, instOut);
       geo.instanceCount = n;
+      packedCount = n;
       ib.needsUpdate = true;
 
       if (!ok) {
@@ -327,12 +340,13 @@ export function createCrowdType(
 
     info() {
       let attached = 0;
-      let visible = 0;
       for (let s = 0; s < MAX_CROWD_INSTANCES; s++) {
         if (!slots[s]) continue;
         attached++;
-        if (records.floats[s * REC_VEC4S * 4 + REC_WIND_ALIVE * 4 + 3]! > 0.5) visible++;
       }
+      // The count actually PACKED by the last sync() (the game's visible set),
+      // not the alive-record census — see packedCount above.
+      const visible = packedCount;
       // clampedTiles is diagnostic-only and computed ON DEMAND: a CPU
       // TileBinner over the last binned groups/camera (the same reference the
       // GPU binding is pinned bit-identical to) reports how many entries the

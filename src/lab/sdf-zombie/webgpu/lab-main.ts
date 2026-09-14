@@ -4104,9 +4104,16 @@ async function main() {
         v.set(g.center[0], g.center[1], g.center[2]).applyMatrix4(camera.matrixWorldInverse);
         const rBlend = g.radius + blendReach;
         const nearDist = -v.z - rBlend;
+        // Far end along the view axis (perf 7e): fully behind the eye plane ->
+        // ZERO tiles. Mirrors tile-cull.ts and the kTileRange kernel; without
+        // it this JS reimplementation would disagree with both and report a
+        // phantom range mismatch on every behind-camera group.
+        const farDist = -v.z + rBlend;
         const clipW = pe[3]! * v.x + pe[7]! * v.y + pe[11]! * v.z + pe[15]!;
         let tx0 = 0, tx1 = -1, ty0 = 0, ty1 = -1;
-        if (nearDist <= 0 || clipW <= 0) {
+        if (farDist <= 0) {
+          // Fully behind the eye plane: cover no tile (the empty default).
+        } else if (nearDist <= 0 || clipW <= 0) {
           tx1 = cpu.tilesX - 1; ty1 = cpu.tilesY - 1;
         } else {
           const clipX = pe[0]! * v.x + pe[4]! * v.y + pe[8]! * v.z;
@@ -4122,8 +4129,7 @@ async function main() {
             ty1 = Math.min(cpu.tilesY - 1, Math.floor((cy + rpix - 1e-6) / 16));
           }
         }
-        jsRanges.push([tx0, tx1, ty0, ty1, nearDist, clipW]);
-      }
+        jsRanges.push([tx0, tx1, ty0, ty1, nearDist, clipW]);      }
       const rangeSamples: unknown[] = [];
       for (let gi = 0; gi < groups.length; gi++) {
         const gr = [gpu.ranges[gi * 4]!, gpu.ranges[gi * 4 + 1]!, gpu.ranges[gi * 4 + 2]!, gpu.ranges[gi * 4 + 3]!];

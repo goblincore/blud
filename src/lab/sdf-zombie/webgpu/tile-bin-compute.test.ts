@@ -8,6 +8,7 @@
 // before, so the shipped text itself is under test).
 
 import { describe, expect, it } from 'vitest';
+import * as THREE from 'three/webgpu';
 import {
   GROUP_RECORD_SCALARS,
   K_TILE_COUNTS,
@@ -22,6 +23,7 @@ import {
 import {
   TILE_MAX_ENTRIES,
   TILE_SIZE_PX,
+  TileBinner,
   type TileGroupInput,
 } from './tile-cull';
 
@@ -119,6 +121,18 @@ describe('kernel sources', () => {
     expect(K_TILE_RANGE).toContain('i32(cfg.w) - 1');
   });
 
+  it('omits spheres FULLY behind the eye plane BEFORE the cover-all branch (perf 7e)', () => {
+    // A group whose FAR end (-v4.z + rBlend) is behind the eye plane is
+    // reachable by no forward ray; it must bind zero tiles, and the test must
+    // sit before the nearDist cover-all branch or a behind-camera sphere
+    // would still fold the whole level into every tile.
+    expect(K_TILE_RANGE).toContain('let farDist = -v4.z + rBlend;');
+    const farIdx = K_TILE_RANGE.indexOf('farDist <= 0.0');
+    const coverIdx = K_TILE_RANGE.indexOf('nearDist <= 1e-6');
+    expect(farIdx).toBeGreaterThan(-1);
+    expect(coverIdx).toBeGreaterThan(farIdx);
+  });
+
   it('pads the AABB edges sub-tile — GPU lists must SUPERSET the CPU’s', () => {
     // f32-vs-f64 boundary rounding flips floors at tile edges; the pad makes
     // the GPU conservative in the only safe direction. Missing entries are
@@ -143,6 +157,114 @@ describe('kernel sources', () => {
     // resolution on the DataTexture path.
     for (const src of [K_TILE_RANGE, K_TILE_COUNTS, K_TILE_SCAN, K_TILE_WRITE]) {
       expect(src).not.toContain('textureDimensions');
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CPU-vs-GPU A/B fixture (perf 7e). The REAL bit-identity gate is the
+// in-browser __sdfLab.tileAB / scripts/tile-ab.mjs; this is the CPU-side
+// fixture that covers the same two groups the new behind-plane rule exists
+// for, against a faithful JS transcription of PROJECTION_BLOCK. If those two
+// disagree, the source pins above fail first.
+// ---------------------------------------------------------------------------
+
+/** Hand-checkable camera: 90 deg fov, square viewport, at the origin looking
+ *  down -z. Same fixture as tile-cull.test.ts. */
+function straightCamera(): THREE.PerspectiveCamera {
+  const cam = new THREE.PerspectiveCamera(90, 1, 0.01, 100);
+  cam.position.set(0, 0, 0);
+  cam.lookAt(0, 0, -1);
+  cam.updateMatrixWorld();
+  cam.matrixWorldInverse.copy(cam.matrixWorld).invert();
+  return cam;
+}
+
+function fixtureGroup(over: Partial<TileGroupInput> = {}): TileGroupInput {
+  return {
+    bodyIndex: 0, start: 0, count: 3,
+    center: [0, 0, -4], radius: 0.1, distort: 1, flags: 0,
+    ...over,
+  };
+}
+
+/** A line-for-line JS transcription of PROJECTION_BLOCK / kTileRange, v4 = the
+ *  view-space centre. Only used to pin the CPU/GPU classification agreement. */
+function kernelRanges(
+  groups: TileGroupInput[], camera: THREE.PerspectiveCamera,
+  tilesX: number, tilesY: number, widthPx: number, heightPx: number, maxBlendK: number,
+): [number, number, number, number][] {
+  const pe = camera.projectionMatrix.elements;
+  const focalY = pe[5]!;
+  const blendReach = maxBlendK * 4;
+  const v = new THREE.Vector3();
+  return groups.map((g) => {
+    v.set(g.center[0], g.center[1], g.center[2]).applyMatrix4(camera.matrixWorldInverse);
+    const rBlend = g.radius + blendReach;
+    const nearDist = -v.z - rBlend;
+    const farDist = -v.z + rBlend;
+    const clipW = pe[3]! * v.x + pe[7]! * v.y + pe[11]! * v.z + pe[15]!;
+    let tx0 = 0, tx1 = -1, ty0 = 0, ty1 = -1;
+    if (farDist <= 0) {
+      // Fully behind the eye plane: zero tiles (the empty default).
+    } else if (nearDist <= 1e-6 || clipW <= 0) {
+      tx1 = tilesX - 1; ty1 = tilesY - 1;
+    } else {
+      const clipX = pe[0]! * v.x + pe[4]! * v.y + pe[8]! * v.z;
+      const clipY = pe[1]! * v.x + pe[5]! * v.y + pe[9]! * v.z;
+      const ndcX = clipX / clipW, ndcY = clipY / clipW;
+      const cx = (ndcX * 0.5 + 0.5) * widthPx;
+      const cy = (0.5 - ndcY * 0.5) * heightPx;
+      const rpix = (rBlend / nearDist) * focalY * (heightPx * 0.5);
+      const pad = rpix * 1e-5 + 0.01;
+      if (!(cx + rpix + pad <= 0 || cx - rpix - pad >= widthPx || cy + rpix + pad <= 0 || cy - rpix - pad >= heightPx)) {
+        tx0 = Math.max(0, Math.floor((cx - rpix - pad) / TILE_SIZE_PX));
+        tx1 = Math.min(tilesX - 1, Math.floor((cx + rpix + pad - 1e-6) / TILE_SIZE_PX));
+        ty0 = Math.max(0, Math.floor((cy - rpix - pad) / TILE_SIZE_PX));
+        ty1 = Math.min(tilesY - 1, Math.floor((cy + rpix + pad - 1e-6) / TILE_SIZE_PX));
+      }
+    }
+    return [tx0, tx1, ty0, ty1];
+  });
+}
+
+describe('CPU vs kTileRange fixture (perf 7e)', () => {
+  const camera = straightCamera();
+  const tilesX = 4, tilesY = 4, W = 64, H = 64;
+  // The two new groups, plus a normal in-front group as a control.
+  const fixture: TileGroupInput[] = [
+    fixtureGroup({ bodyIndex: 0 }),
+    fixtureGroup({ bodyIndex: 1, center: [0, 0, 5], radius: 0.5 }),
+    fixtureGroup({ bodyIndex: 2, center: [0, 0, 0.5], radius: 1 }),
+  ];
+  const ranges = kernelRanges(fixture, camera, tilesX, tilesY, W, H, 0);
+  const cpu = new TileBinner(W, H).bin(fixture, camera, 0);
+
+  it('classifies the fully-behind and straddling groups exactly as the CPU binner', () => {
+    expect(ranges[1]).toEqual([0, -1, 0, -1]); // fully behind -> zero tiles
+    expect(ranges[2]).toEqual([0, tilesX - 1, 0, tilesY - 1]); // straddle -> every tile
+  });
+
+  it('keeps every CPU tile entry in the kernel list, in ascending order', () => {
+    for (let ty = 0; ty < tilesY; ty++) {
+      for (let tx = 0; tx < tilesX; tx++) {
+        const cpuList: number[] = [];
+        const n = cpu.countAt(tx, ty);
+        for (let i = 0; i < n; i++) cpuList.push(cpu.entryAt(tx, ty, i)!.bodyIndex);
+        // The kernel list (ascending group index); the sub-tile safety pad can
+        // only ADD boundary groups, so the CPU list must be a subsequence.
+        const kernelList: number[] = [];
+        for (let gi = 0; gi < ranges.length; gi++) {
+          const [x0, x1, y0, y1] = ranges[gi]!;
+          if (tx >= x0 && tx <= x1 && ty >= y0 && ty <= y1) kernelList.push(gi);
+        }
+        let gi = 0;
+        for (const k of kernelList) {
+          if (gi < cpuList.length && k === cpuList[gi]) gi++;
+        }
+        expect({ tile: [tx, ty], cpu: cpuList, kernel: kernelList, matched: gi })
+          .toMatchObject({ matched: cpuList.length });
+      }
     }
   });
 });
