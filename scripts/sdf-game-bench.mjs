@@ -918,7 +918,10 @@ for (const leg of Object.keys(LEGS)) {
     // samples; a p95 over 12 is an order statistic one element from the top,
     // which is a max wearing a percentile's name. The spike pass below is
     // where p95 is answered, on real per-frame samples.
-    const seg = (n) => med(rs.map((r) => r.segments.find((s) => s.name === n).p50));
+    // A BENCH_DEMO run names its segments t0/t1/t2 (equal thirds of the
+    // recording), so the walk/fire/gib columns map positionally there.
+    const segIndex = { walk: 0, fire: 1, gib: 2 };
+    const seg = (n) => med(rs.map((r) => (r.segments.find((s) => s.name === n) ?? r.segments[segIndex[n]])?.p50 ?? NaN));
     table.push({
       leg, room, bodies: room,
       overallP50: med(rs.map((r) => r.overall.p50)),

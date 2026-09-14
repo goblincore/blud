@@ -1746,7 +1746,11 @@ async function main() {
         if (levelShadowMap !== null) t.levelShadowTex.value = levelShadowMap;
         vis.clear();
         for (const a of visibleActors) {
-          if (a.crowd?.type === t) vis.add(a.crowd.slot);
+          if (a.crowd?.type !== t) continue;
+          // A headless baked corpse is drawn by its mesh; its instance must not
+          // march too (see soldier-corpse-bake bakedState).
+          if (soldierCorpses?.bakedState(a.id) === 'headless') continue;
+          vis.add(a.crowd.slot);
         }
         t.sync(camera, grid, vis);
       }
