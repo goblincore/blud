@@ -10,7 +10,7 @@
 // the shipped Current slug simulation and Smooth reconstruction are separate.
 
 import * as THREE from 'three/webgpu';
-import { resolveImpactSplashProfile, type ImpactSplashProfile } from './impact-splash-profiles';
+import { impactSplashProfiles, resolveImpactSplashProfile, type ImpactSplashProfile } from './impact-splash-profiles';
 import { createImpactSplashSprites } from './impact-splash-sprites';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
@@ -294,7 +294,7 @@ export function createImpactSplashEvent(
   const lifetime = (typeof requested === 'number' && Number.isFinite(requested))
     ? Math.max(0, requested)
     : IMPACT_SPLASH_TUNING.lifetimeSec;
-  return { origin, direction, seed: seed | 0, lifetime, time: 0, profile: resolveImpactSplashProfile(options.profile) };
+  return { origin, direction, seed: seed | 0, lifetime, time: 0, profile: resolveImpactSplashProfile(options.profile ?? impactSplashProfiles.slug) };
 }
 
 /** Advance one event; returns false once it is at/over its lifetime (the
@@ -1193,11 +1193,13 @@ export function createImpactSplashLayer(options: { rig?: ImpactSplashLightRig } 
       // Droplets into the instance matrices. The loop bound is the BUFFER
       // capacity, never `droplets.count` (the previous frame's draw count,
       // which may be smaller and would silently drop this frame's droplets).
-      const dCount = Math.min(frame.dropletCount, IMPACT_SPLASH_MAX_DROPLETS);
+      const dCount = Math.min(frame.dropletCount, (ev.profile?.count ?? 32) * 2, IMPACT_SPLASH_MAX_DROPLETS);
       for (let k = 0; k < dCount && dOff < droplets.instanceMatrix.count; k++) {
         const o = k * IMPACT_SPLASH_DROPLET_STRIDE;
         p.set(frame.droplets[o]!, frame.droplets[o + 1]!, frame.droplets[o + 2]!);
-        const sz = frame.droplets[o + 3]!;
+        const effectScale = ev.profile?.scale ?? 1;
+        p.set(ev.origin[0] + (p.x - ev.origin[0]) * effectScale, ev.origin[1] + (p.y - ev.origin[1]) * effectScale, ev.origin[2] + (p.z - ev.origin[2]) * effectScale);
+        const sz = frame.droplets[o + 3]! * Math.sqrt(effectScale);
         vel.set(frame.droplets[o + 4]!, frame.droplets[o + 5]!, frame.droplets[o + 6]!);
         const speed = vel.length();
         if (speed > 1e-6) q.setFromUnitVectors(UP, vel.multiplyScalar(1 / speed));

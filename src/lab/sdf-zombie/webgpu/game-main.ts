@@ -978,16 +978,15 @@ async function main() {
   // so i dont have to toggle it on each time"). setGoo(false) stays the kill
   // switch; mode 'depth' vs 'overlay' stays a separate toggle.
   let gooEnabled = true;
-  // OPT-IN BLOOD-SURFACE CANDIDATES (2026-09-13). Both default to the
-  // shipped state, so an unparameterised URL renders the exact pre-candidate
-  // frame. Boot flags are read where the goo defaults are applied:
-  //   ?goorecon=smooth    continuous reconstruction + AA silhouette composite
+  // Smooth reconstruction at the full SDF grid is the game default.
+  // Boot flags are read where the goo defaults are applied:
+  //   ?goorecon=original  comparison fallback to the old reconstruction
   //   ?gooconnections=1   tapered strands (sheets are a separate opt-in)
   //   ?goosheets=1        experimental stream-grid sheets
   //   ?impactsplash=1     SUPPLEMENTARY procedural impact crown on top of the
   //                       existing slug gout (does not replace it)
   // Live equivalents: __sdfGame.setGooCandidate, __sdfGame.setImpactSplash.
-  let gooReconstruction: GooReconstruction = 'original';
+  let gooReconstruction: GooReconstruction = 'smooth';
   let gooConnectionsEnabled = false;
   let gooStrandsEnabled = true;
   // SHEETS OFF BY DEFAULT: the stream-local grid removed the world-position
@@ -4149,12 +4148,11 @@ async function main() {
     // wet stone the old floor was not enough to keep shadowed blood red.
     gooLayer.setShadowRed(0.19);
 
-    // CANDIDATE BOOT FLAGS (blood-surface comparison, 2026-09-13). Applied
-    // AFTER the shipping defaults, so a parameter only ever opts IN — it can
-    // never move a shipped value. All default OFF; see the state note beside
-    // gooEnabled. Sheets are opt-in through the same path.
+    // Smooth full-grid goo is the accepted default. Connections and sheets
+    // remain opt-in; original reconstruction is available for comparison.
     const gooCandidateBoot = new URLSearchParams(location.search);
-    gooReconstruction = gooCandidateBoot.get('goorecon') === 'smooth' ? 'smooth' : 'original';
+    gooReconstruction = gooCandidateBoot.get('goorecon') === 'original' ? 'original' : 'smooth';
+    gooLayer.setDensityScale(1);
     gooConnectionsEnabled = gooCandidateBoot.get('gooconnections') === '1';
     gooSheetsEnabled = gooCandidateBoot.get('goosheets') === '1';
     gooLayer.setReconstruction(gooReconstruction);
@@ -4452,6 +4450,7 @@ async function main() {
   /** Bleed's own sim clock — an accumulator, never wall time, so hand-
    *  stepped captures are deterministic. */
   let bleedClock = 0;
+  const lastSplashShot = new WeakMap<ZombieActor, number>();
   function registerBleed(
     a: ZombieActor, wound: Wound, kind: 'pellet' | 'slug' | 'stump',
     contact?: { point: Vec3; incoming: Vec3 },
@@ -4478,7 +4477,10 @@ async function main() {
     // derived from the wound's stable stream id, NOT from bleedRng, so it
     // draws no random numbers and leaves the shipped gout/bleed stream
     // bit-identical.
-    if (impactSplashEnabled && impactSplashLayer) {
+    const shotgunShot = wound.shot?.weapon === 'shotgun' ? wound.shot.shotId : undefined;
+    const repeatedPellet = shotgunShot !== undefined && lastSplashShot.get(a) === shotgunShot;
+    if (impactSplashEnabled && impactSplashLayer && !repeatedPellet) {
+      if (shotgunShot !== undefined) lastSplashShot.set(a, shotgunShot);
       // An immediate entry splash belongs to the projectile's actual surface
       // contact, not the wound's reconstructed/carved anchor. Send it back
       // toward the incoming shot and start just outside the contacted skin.

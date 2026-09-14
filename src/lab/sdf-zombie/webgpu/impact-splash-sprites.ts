@@ -113,7 +113,7 @@ export function createImpactSplashSprites(rig: ImpactSplashLightRig) {
   const m=new THREE.Matrix4(), q=new THREE.Quaternion(), roll=new THREE.Quaternion();
   const scale=new THREE.Vector3(), pos=new THREE.Vector3(), delta=new THREE.Vector3();
   const axis=new THREE.Vector3(0,0,1);
-  const cards: {p:THREE.Vector3;velocity:THREE.Vector3;age:number;seed:number;small:boolean;scale:number;opacity:number;z:number}[]=[];
+  const cards: {p:THREE.Vector3;velocity:THREE.Vector3;age:number;seed:number;small:boolean;scale:number;opacity:number;duration:number;angle:number;z:number}[]=[];
   return {
     object:mesh,
     sync(events: readonly ImpactSplashEvent[], camera:THREE.Camera) {
@@ -123,11 +123,11 @@ export function createImpactSplashSprites(rig: ImpactSplashLightRig) {
         for(let k=0;k<(ev.profile?.count ?? PER_EVENT);k++) {
           const seed=ev.seed+k*83, h=(n:number)=>hash(seed+n*31);
           const age=ev.time-h(1)*0.10;
-          if(age<=0 || age>=0.9) continue;
+          if(age<=0 || age>=(ev.profile?.duration ?? 0.9)) continue;
           // Event-wide pressure/scale variation keeps the whole burst coherent,
           // while particle-level variation avoids repeated silhouettes.
           const pressure=0.75+hash(ev.seed+911)*0.50;
-          const phi=h(2)*Math.PI*2, cone=0.20+h(3)*1.1, speed=(0.6+h(4)*1.5)*pressure*(ev.profile?.speed ?? 1);
+          const phi=hash(ev.seed+57)*Math.PI*2+(h(2)-0.5)*1.0, cone=0.04+h(3)*(ev.profile?.spread ?? 1.1), speed=(0.6+h(4)*1.5)*pressure*(ev.profile?.speed ?? 1);
           if(k>23+Math.floor(hash(ev.seed+377)*9)) continue;
           const local=[Math.cos(phi)*Math.sin(cone),Math.sin(phi)*Math.sin(cone),Math.cos(cone)];
           const velocity=new THREE.Vector3(
@@ -137,7 +137,7 @@ export function createImpactSplashSprites(rig: ImpactSplashLightRig) {
           const travel=(1-Math.exp(-age*2.8))/2.8;
           const p=new THREE.Vector3(...ev.origin).addScaledVector(velocity,travel);
           p.y-=0.6*age*age;
-          cards.push({p,velocity,age,seed,small:k>=18,scale:ev.profile?.scale ?? 1,opacity:ev.profile?.opacity ?? 1,z:p.clone().applyMatrix4(camera.matrixWorldInverse).z});
+          cards.push({p,velocity,age,seed,small:k>=18,scale:ev.profile?.scale ?? 1,opacity:ev.profile?.opacity ?? 1,duration:ev.profile?.duration ?? .9,angle:hash(ev.seed+57)*Math.PI*2,z:p.clone().applyMatrix4(camera.matrixWorldInverse).z});
         }
       }
       cards.sort((a,b)=>a.z-b.z);
@@ -145,12 +145,12 @@ export function createImpactSplashSprites(rig: ImpactSplashLightRig) {
       for(const card of cards) {
         if(n>=CAPACITY) break;
         const h=(x:number)=>hash(card.seed+x*31);
-        const growth=smooth(card.age/0.14), fade=1-smooth((card.age-0.28)/0.55);
+        const growth=smooth(card.age/0.07), fade=1-smooth((card.age/card.duration-0.25)/0.75);
         const length=(card.small?0.10:0.28)*(0.55+h(5)*1.15)*growth*card.scale;
         delta.copy(card.velocity).transformDirection(camera.matrixWorldInverse);
-        const angle=Math.atan2(-delta.x,delta.y)+(h(6)-0.5)*0.7+card.age*(h(7)-0.5);
+        const angle=(Math.hypot(delta.x,delta.y)<0.3 ? card.angle : Math.atan2(-delta.x,delta.y))+(h(6)-0.5)*0.7+card.age*(h(7)-0.5);
         roll.setFromAxisAngle(axis,angle); q.copy(camera.quaternion).multiply(roll);
-        pos.copy(card.p); scale.set(length*(0.50+h(8)*0.45),length,1);
+        pos.copy(card.p); scale.set(length*(0.28+h(8)*0.25),length,1);
         m.compose(pos,q,scale); mesh.setMatrixAt(n,m);
         variant.setX(n,Math.floor(h(9)*VARIANTS));
         opacity.setX(n,(card.small?0.40:0.60+h(10)*0.30)*fade*card.opacity);
