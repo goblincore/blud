@@ -863,6 +863,17 @@ export interface SdfLayer {
    */
   setFieldCount(n: number): number;
   readonly fieldCount: number;
+  /**
+   * REWIND THE INTERLACE PHASE (bench determinism, 2026-09-14). `frameIndex`
+   * picks which scanline band each render marches, so the march target is a
+   * TWO-STATE function of an absolute render counter. A single end-of-run frame
+   * hash is therefore only comparable at a FIXED phase; boot timing shifts the
+   * counter and the hash flaps between the two parity states (measured: rep0
+   * differed from rep1/rep2 only). The bench resets this at the start of every
+   * run so the RUN's frame count — not the page's — decides the phase. Render
+   * only: the sim never reads it.
+   */
+  resetFieldPhase(): void;
   readonly willHold: boolean;
   readonly halfRate: boolean;
   setHalfRateMode(n: number): void;
@@ -2545,6 +2556,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
       return fieldCount;
     },
     get fieldCount() { return fieldCount; },
+    resetFieldPhase() { frameIndex = 0; forceFreshFrame = true; },
     get willHold() { return isHoldFrame(frameIndex, halfRate, forceFreshFrame); },
     get halfRate() { return halfRate; },
     setHalfRateMode(n) { halfRateMode = n === 0 ? 0 : 1; },

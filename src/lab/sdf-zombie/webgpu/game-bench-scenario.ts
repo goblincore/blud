@@ -33,6 +33,7 @@
 // sampling term, which would measure the wrong split.
 import { DEFAULT_BONE_RATIO } from '../bone-derive';
 import { DUNGEON_RIG, GALLERY_RIG, type AmbientRig } from './dungeon-lighting';
+import type { DemoFrame } from './demo-recorder';
 
 /** One thing the harness asks the page to do, between frames. */
 export type BenchAction =
@@ -41,7 +42,11 @@ export type BenchAction =
   | { kind: 'look'; yaw: number; pitch: number }
   | { kind: 'aimSurface' }
   | { kind: 'fire'; barrels: 1 | 2 }
-  | { kind: 'fireSlug' };
+  | { kind: 'fireSlug' }
+  /** One frame of RECORDED player input (demo recordings stage 3). The bench
+   *  turns a `.dem` into one of these per frame, so a leg replays the exact
+   *  fight a recording captured through the same input seam live play uses. */
+  | { kind: 'input'; frame: DemoFrame };
 
 export interface ScenarioStep { at: number; action: BenchAction }
 
