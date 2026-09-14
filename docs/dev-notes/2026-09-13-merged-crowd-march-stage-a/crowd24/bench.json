@@ -1,0 +1,1737 @@
+{
+  "meta": {
+    "url": "http://localhost:5323/sdf-game.html?crowd=1&tiles-playtest",
+    "W": 1280,
+    "H": 800,
+    "repeats": 3,
+    "rooms": [
+      1
+    ],
+    "backend": "webgpu",
+    "prelude": "",
+    "when": "2026-09-14T04:50:44.596Z",
+    "complete": false,
+    "runsCompleted": 1,
+    "abandoned": "CDP socket closed (code 1006) — no browser left to bench",
+    "failures": [
+      {
+        "rep": 0,
+        "leg": "crowd-on",
+        "room": 1,
+        "mode": "passes",
+        "phase": "bench",
+        "error": "CDP Runtime.evaluate (id 34) never answered in 330s — rep0 crowd-on/room1/passes [bench]\n     params: {\"expression\":\"__sdfGame.bench({ room: 1, mode: \\\"passes\\\", warmup: 120, chunkFrames: 10, label: \\\"crowd-on/room1/passes\\\" })\",\"awaitPromise\":true,\"returnByValue\":true,\"timeout\":300000}",
+        "consoleTail": [
+          {
+            "type": "info",
+            "text": "[room-probes] room 1 baked"
+          },
+          {
+            "type": "info",
+            "text": "[room-probes] room 2 baked"
+          },
+          {
+            "type": "info",
+            "text": "[room-probes] room 3 baked"
+          },
+          {
+            "type": "info",
+            "text": "[room-probes] room 4 baked"
+          },
+          {
+            "type": "info",
+            "text": "[room-probes] room 5 baked"
+          },
+          {
+            "type": "log",
+            "text": "[warm] pipelines compiled in 1042 ms (43 hidden objects included)"
+          },
+          {
+            "type": "error",
+            "text": "[probe-gather] update failed Error: packCapsulesFromBoneInstances: 2048 capsules exceed max 1024\n    at packCapsulesFromBoneInstances (http://localhost:5323/src/lab/sdf-zombie/probe-dynamic.ts:197:11)\n    at Object.update (http://localhost:5323/src/lab/sdf-zombie/webgpu/probe-gather-compute.ts:61:7)\n    at http://localhost:5323/src/lab/sdf-zombie/webgpu/game-main.ts:659:21\n    at Object.step (http://localhost:5323/src/lab/sdf-zombie/webgpu/lab-renderer.ts:198:7)\n    at Object.step (http://localhost:5323/src/lab/sdf-zombie/webgpu/game-main.ts:6480:20)\n    at runBench (http://localhost:5323/src/lab/sdf-zombie/webgpu/game-bench.ts:62:10)\n    at Object.bench (http://localhost:5323/src/lab/sdf-zombie/webgpu/game-main.ts:6515:30)\n    at <anonymous>:1:11"
+          },
+          {
+            "type": "warning",
+            "text": "THREE.WebGPUTimestampQueryPool [render]: Maximum number of queries exceeded, when using trackTimestamp it is necessary to resolves the queries via renderer.resolveTimestampsAsync( THREE.TimestampQuery.RENDER )."
+          }
+        ]
+      },
+      {
+        "rep": 1,
+        "leg": "baseline",
+        "room": 1,
+        "mode": "passes",
+        "phase": "boot:wait-for-__sdfGame",
+        "error": "game page never booted (__sdfGame absent after 120s)",
+        "consoleTail": [
+          {
+            "type": "info",
+            "text": "[room-probes] room 3 baked"
+          },
+          {
+            "type": "info",
+            "text": "[room-probes] room 4 baked"
+          },
+          {
+            "type": "info",
+            "text": "[room-probes] room 5 baked"
+          },
+          {
+            "type": "log",
+            "text": "[warm] pipelines compiled in 1042 ms (43 hidden objects included)"
+          },
+          {
+            "type": "error",
+            "text": "[probe-gather] update failed Error: packCapsulesFromBoneInstances: 2048 capsules exceed max 1024\n    at packCapsulesFromBoneInstances (http://localhost:5323/src/lab/sdf-zombie/probe-dynamic.ts:197:11)\n    at Object.update (http://localhost:5323/src/lab/sdf-zombie/webgpu/probe-gather-compute.ts:61:7)\n    at http://localhost:5323/src/lab/sdf-zombie/webgpu/game-main.ts:659:21\n    at Object.step (http://localhost:5323/src/lab/sdf-zombie/webgpu/lab-renderer.ts:198:7)\n    at Object.step (http://localhost:5323/src/lab/sdf-zombie/webgpu/game-main.ts:6480:20)\n    at runBench (http://localhost:5323/src/lab/sdf-zombie/webgpu/game-bench.ts:62:10)\n    at Object.bench (http://localhost:5323/src/lab/sdf-zombie/webgpu/game-main.ts:6515:30)\n    at <anonymous>:1:11"
+          },
+          {
+            "type": "warning",
+            "text": "THREE.WebGPUTimestampQueryPool [render]: Maximum number of queries exceeded, when using trackTimestamp it is necessary to resolves the queries via renderer.resolveTimestampsAsync( THREE.TimestampQuery.RENDER )."
+          },
+          {
+            "type": "debug",
+            "text": "[vite] connecting..."
+          },
+          {
+            "type": "debug",
+            "text": "[vite] connected."
+          }
+        ]
+      },
+      {
+        "rep": 1,
+        "leg": "crowd-on",
+        "room": 1,
+        "mode": "passes",
+        "phase": "boot:wait-for-__sdfGame",
+        "error": "CDP socket closed (code 1006) — refusing to send CDP Runtime.evaluate (rep1 crowd-on/room1/passes [boot:wait-for-__sdfGame])",
+        "consoleTail": [
+          {
+            "type": "info",
+            "text": "[room-probes] room 5 baked"
+          },
+          {
+            "type": "log",
+            "text": "[warm] pipelines compiled in 1042 ms (43 hidden objects included)"
+          },
+          {
+            "type": "error",
+            "text": "[probe-gather] update failed Error: packCapsulesFromBoneInstances: 2048 capsules exceed max 1024\n    at packCapsulesFromBoneInstances (http://localhost:5323/src/lab/sdf-zombie/probe-dynamic.ts:197:11)\n    at Object.update (http://localhost:5323/src/lab/sdf-zombie/webgpu/probe-gather-compute.ts:61:7)\n    at http://localhost:5323/src/lab/sdf-zombie/webgpu/game-main.ts:659:21\n    at Object.step (http://localhost:5323/src/lab/sdf-zombie/webgpu/lab-renderer.ts:198:7)\n    at Object.step (http://localhost:5323/src/lab/sdf-zombie/webgpu/game-main.ts:6480:20)\n    at runBench (http://localhost:5323/src/lab/sdf-zombie/webgpu/game-bench.ts:62:10)\n    at Object.bench (http://localhost:5323/src/lab/sdf-zombie/webgpu/game-main.ts:6515:30)\n    at <anonymous>:1:11"
+          },
+          {
+            "type": "warning",
+            "text": "THREE.WebGPUTimestampQueryPool [render]: Maximum number of queries exceeded, when using trackTimestamp it is necessary to resolves the queries via renderer.resolveTimestampsAsync( THREE.TimestampQuery.RENDER )."
+          },
+          {
+            "type": "debug",
+            "text": "[vite] connecting..."
+          },
+          {
+            "type": "debug",
+            "text": "[vite] connected."
+          },
+          {
+            "type": "debug",
+            "text": "[vite] connecting..."
+          },
+          {
+            "type": "debug",
+            "text": "[vite] connected."
+          }
+        ]
+      }
+    ]
+  },
+  "results": [
+    {
+      "rep": 0,
+      "leg": "baseline",
+      "room": 1,
+      "prelude": "",
+      "mode": "passes",
+      "label": "baseline/room1/passes",
+      "passes": {
+        "available": true,
+        "overall": {
+          "name": "overall",
+          "frames": 361,
+          "labels": {
+            "sdf:march": {
+              "name": "sdf:march",
+              "n": 360,
+              "p50": 206.53364000000147,
+              "p95": 269.256017000007,
+              "p99": 281.15670999999566,
+              "max": 329.9574239999929,
+              "mean": 208.62750253611088
+            },
+            "cpu:draw": {
+              "name": "cpu:draw",
+              "n": 360,
+              "p50": 14.100000023841858,
+              "p95": 242.19999998807907,
+              "p99": 352.30000001192093,
+              "max": 613.8999999761581,
+              "mean": 45.80138888789548
+            },
+            "cpu:phase:wound-hit": {
+              "name": "cpu:phase:wound-hit",
+              "n": 3,
+              "p50": 13.099999904632568,
+              "p95": 19.400000035762787,
+              "p99": 19.400000035762787,
+              "max": 19.400000035762787,
+              "mean": 11.466666638851166
+            },
+            "cpu:tick": {
+              "name": "cpu:tick",
+              "n": 360,
+              "p50": 11.700000047683716,
+              "p95": 31.100000023841858,
+              "p99": 59.59999996423721,
+              "max": 84,
+              "mean": 14.294722223116292
+            },
+            "cpu:phase:body-step": {
+              "name": "cpu:phase:body-step",
+              "n": 360,
+              "p50": 7.199999988079071,
+              "p95": 18.799999952316284,
+              "p99": 45.39999997615814,
+              "max": 58.69999998807907,
+              "mean": 8.740277778936758
+            },
+            "sdf:polys": {
+              "name": "sdf:polys",
+              "n": 360,
+              "p50": 2.7222489999985555,
+              "p95": 23.060939999995753,
+              "p99": 29.87500300000829,
+              "max": 42.18727299999591,
+              "mean": 4.995717480555909
+            },
+            "gpu:idle": {
+              "name": "gpu:idle",
+              "n": 361,
+              "p50": 1.5891839999967488,
+              "p95": 16.287168999988353,
+              "p99": 28.51973200000066,
+              "max": 262.395245000007,
+              "mean": 4.595456385041813
+            },
+            "cpu:phase:skeleton-mesh": {
+              "name": "cpu:phase:skeleton-mesh",
+              "n": 360,
+              "p50": 1.199999988079071,
+              "p95": 3,
+              "p99": 4,
+              "max": 4.800000011920929,
+              "mean": 1.4055555542310079
+            },
+            "sdf:shell-hull": {
+              "name": "sdf:shell-hull",
+              "n": 360,
+              "p50": 0.7894050000031712,
+              "p95": 18.342886999991606,
+              "p99": 32.75074999999924,
+              "max": 41.614031000004616,
+              "mean": 3.061901663888764
+            },
+            "post:fxaa": {
+              "name": "post:fxaa",
+              "n": 360,
+              "p50": 0.4499520000026678,
+              "p95": 9.712019000005967,
+              "p99": 24.54958500000066,
+              "max": 30.23458099999698,
+              "mean": 1.704839402777361
+            },
+            "post:blit": {
+              "name": "post:blit",
+              "n": 361,
+              "p50": 0.4244929999986198,
+              "p95": 14.189534000004642,
+              "p99": 25.936394999996992,
+              "max": 239.28889000000345,
+              "mean": 2.525390382271938
+            },
+            "sdf:last-blit": {
+              "name": "sdf:last-blit",
+              "n": 360,
+              "p50": 0.294370000003255,
+              "p95": 13.231173000007402,
+              "p99": 19.259747999996762,
+              "max": 32.50046300000395,
+              "mean": 1.8284455194444793
+            },
+            "sdf:composite": {
+              "name": "sdf:composite",
+              "n": 360,
+              "p50": 0.21991300000081537,
+              "p95": 10.237177000002703,
+              "p99": 20.20202500000596,
+              "max": 26.51313800000935,
+              "mean": 1.4386441250005495
+            },
+            "post:vhs": {
+              "name": "post:vhs",
+              "n": 360,
+              "p50": 0.2119970000057947,
+              "p95": 4.811301000001549,
+              "p99": 23.373518000007607,
+              "max": 30.40816099999938,
+              "mean": 1.0169778805555931
+            },
+            "cpu:phase:encounter": {
+              "name": "cpu:phase:encounter",
+              "n": 360,
+              "p50": 0.19999998807907104,
+              "p95": 0.5,
+              "p99": 0.9000000357627869,
+              "max": 1.300000011920929,
+              "mean": 0.26277777784400513
+            },
+            "goo:surface": {
+              "name": "goo:surface",
+              "n": 360,
+              "p50": 0.18641399999614805,
+              "p95": 16.960242000001017,
+              "p99": 24.124382000009064,
+              "max": 27.385997999997926,
+              "mean": 1.7250573611106625
+            },
+            "post:vhs-input": {
+              "name": "post:vhs-input",
+              "n": 360,
+              "p50": 0.1382480000029318,
+              "p95": 9.277816999994684,
+              "p99": 19.882697000008193,
+              "max": 30.445492999991984,
+              "mean": 1.244758875000217
+            },
+            "effects": {
+              "name": "effects",
+              "n": 7,
+              "p50": 0.1181639999995241,
+              "p95": 14.973397000008845,
+              "p99": 14.973397000008845,
+              "max": 14.973397000008845,
+              "mean": 2.2458229999995507
+            },
+            "cpu:phase:blood-simulation-and-sync": {
+              "name": "cpu:phase:blood-simulation-and-sync",
+              "n": 360,
+              "p50": 0.10000002384185791,
+              "p95": 0.20000004768371582,
+              "p99": 0.40000003576278687,
+              "max": 1.0999999642372131,
+              "mean": 0.1027777761220932
+            },
+            "cpu:phase:goo-sync": {
+              "name": "cpu:phase:goo-sync",
+              "n": 360,
+              "p50": 0.09999996423721313,
+              "p95": 0.19999998807907104,
+              "p99": 0.699999988079071,
+              "max": 2,
+              "mean": 0.08055555704567167
+            },
+            "goo:density": {
+              "name": "goo:density",
+              "n": 237,
+              "p50": 0.058707999996840954,
+              "p95": 11.972399999998743,
+              "p99": 21.530463000002783,
+              "max": 24.227129999999306,
+              "mean": 1.5911796835434064
+            },
+            "cpu:phase:wound-flush": {
+              "name": "cpu:phase:wound-flush",
+              "n": 360,
+              "p50": 0,
+              "p95": 0.10000002384185791,
+              "p99": 0.20000004768371582,
+              "max": 2.300000011920929,
+              "mean": 0.02388888895511627
+            },
+            "cpu:phase:projectiles-and-hits": {
+              "name": "cpu:phase:projectiles-and-hits",
+              "n": 360,
+              "p50": 0,
+              "p95": 0.10000002384185791,
+              "p99": 3.300000011920929,
+              "max": 30,
+              "mean": 0.19888888912068473
+            },
+            "cpu:phase:chunks-and-guts": {
+              "name": "cpu:phase:chunks-and-guts",
+              "n": 360,
+              "p50": 0,
+              "p95": 0,
+              "p99": 0.10000002384185791,
+              "max": 0.10000002384185791,
+              "mean": 0.0025000000993410745
+            },
+            "cpu:phase:tile-binning-submit": {
+              "name": "cpu:phase:tile-binning-submit",
+              "n": 360,
+              "p50": 0,
+              "p95": 0.19999998807907104,
+              "p99": 0.30000001192092896,
+              "max": 1.4000000357627869,
+              "mean": 0.05833333316776487
+            }
+          },
+          "wall": {
+            "post:blit": {
+              "name": "post:blit",
+              "n": 361,
+              "p50": 390.591958,
+              "p95": 548.432924,
+              "p99": 613.143269,
+              "max": 2518.9813950000007,
+              "mean": 390.18836633518026
+            },
+            "sdf:composite": {
+              "name": "sdf:composite",
+              "n": 360,
+              "p50": 207.528583,
+              "p95": 270.010504,
+              "p99": 289.867077,
+              "max": 330.577164,
+              "mean": 208.2875330638891
+            },
+            "sdf:last-blit": {
+              "name": "sdf:last-blit",
+              "n": 360,
+              "p50": 207.380836,
+              "p95": 269.655177,
+              "p99": 283.808835,
+              "max": 330.313042,
+              "mean": 209.76026082222214
+            },
+            "goo:surface": {
+              "name": "goo:surface",
+              "n": 360,
+              "p50": 207.379668,
+              "p95": 270.965074,
+              "p99": 286.464838,
+              "max": 330.99145,
+              "mean": 207.91702531111122
+            },
+            "sdf:march": {
+              "name": "sdf:march",
+              "n": 360,
+              "p50": 206.53364,
+              "p95": 269.256017,
+              "p99": 281.15671,
+              "max": 329.957424,
+              "mean": 208.62750253611105
+            },
+            "post:vhs": {
+              "name": "post:vhs",
+              "n": 360,
+              "p50": 205.191202,
+              "p95": 274.151734,
+              "p99": 306.206536,
+              "max": 331.581066,
+              "mean": 203.9977792388888
+            },
+            "post:fxaa": {
+              "name": "post:fxaa",
+              "n": 360,
+              "p50": 204.873291,
+              "p95": 273.426328,
+              "p99": 299.432931,
+              "max": 331.315277,
+              "mean": 204.64300164999997
+            },
+            "post:vhs-input": {
+              "name": "post:vhs-input",
+              "n": 360,
+              "p50": 203.699809,
+              "p95": 274.139109,
+              "p99": 299.403223,
+              "max": 331.46311,
+              "mean": 204.35722615555548
+            },
+            "effects": {
+              "name": "effects",
+              "n": 7,
+              "p50": 190.119183,
+              "p95": 231.213888,
+              "p99": 231.213888,
+              "max": 231.213888,
+              "mean": 196.85440100000002
+            },
+            "goo:density": {
+              "name": "goo:density",
+              "n": 237,
+              "p50": 181.100487,
+              "p95": 252.873224,
+              "p99": 295.001957,
+              "max": 321.94092,
+              "mean": 154.39311392405065
+            },
+            "sdf:polys": {
+              "name": "sdf:polys",
+              "n": 360,
+              "p50": 86.324058,
+              "p95": 241.727478,
+              "p99": 277.00019,
+              "max": 289.197462,
+              "mean": 98.85507165555559
+            },
+            "sdf:shell-hull": {
+              "name": "sdf:shell-hull",
+              "n": 360,
+              "p50": 80.267482,
+              "p95": 449.609472,
+              "p99": 513.274085,
+              "max": 570.101093,
+              "mean": 170.6689161416666
+            }
+          },
+          "span": {
+            "name": "span",
+            "n": 361,
+            "p50": 228.67567699999927,
+            "p95": 297.9013699999996,
+            "p99": 323.1038200000039,
+            "max": 399.5605280000018,
+            "mean": 233.22781211357358
+          }
+        },
+        "segments": [
+          {
+            "name": "walk",
+            "frames": 121,
+            "labels": {
+              "sdf:march": {
+                "name": "sdf:march",
+                "n": 120,
+                "p50": 190.86304699999891,
+                "p95": 261.36701200000243,
+                "p99": 273.0072930000024,
+                "max": 275.224924999995,
+                "mean": 194.29477763333333
+              },
+              "cpu:draw": {
+                "name": "cpu:draw",
+                "n": 120,
+                "p50": 18.69999998807907,
+                "p95": 228.39999997615814,
+                "p99": 279.69999998807907,
+                "max": 302.4000000357628,
+                "mean": 40.42749999860923
+              },
+              "cpu:tick": {
+                "name": "cpu:tick",
+                "n": 120,
+                "p50": 13.199999988079071,
+                "p95": 43.5,
+                "p99": 71.19999998807907,
+                "max": 84,
+                "mean": 18.336666668951512
+              },
+              "cpu:phase:body-step": {
+                "name": "cpu:phase:body-step",
+                "n": 120,
+                "p50": 8,
+                "p95": 30.5,
+                "p99": 57.80000001192093,
+                "max": 58.69999998807907,
+                "mean": 11.70750000079473
+              },
+              "sdf:polys": {
+                "name": "sdf:polys",
+                "n": 120,
+                "p50": 3.58477899999707,
+                "p95": 25.268530000001192,
+                "p99": 38.80874099999346,
+                "max": 42.18727299999591,
+                "mean": 6.193341233333195
+              },
+              "gpu:idle": {
+                "name": "gpu:idle",
+                "n": 121,
+                "p50": 2.0338019999981043,
+                "p95": 16.24420999999711,
+                "p99": 28.51973200000066,
+                "max": 262.395245000007,
+                "mean": 6.254065347107676
+              },
+              "cpu:phase:skeleton-mesh": {
+                "name": "cpu:phase:skeleton-mesh",
+                "n": 120,
+                "p50": 1.300000011920929,
+                "p95": 3.599999964237213,
+                "p99": 4.399999976158142,
+                "max": 4.800000011920929,
+                "mean": 1.6441666627923648
+              },
+              "sdf:shell-hull": {
+                "name": "sdf:shell-hull",
+                "n": 120,
+                "p50": 0.7538639999984298,
+                "p95": 18.936211000000185,
+                "p99": 28.674521000000823,
+                "max": 32.75074999999924,
+                "mean": 2.947683124999882
+              },
+              "post:blit": {
+                "name": "post:blit",
+                "n": 121,
+                "p50": 0.5317419999992126,
+                "p95": 11.830069000003277,
+                "p99": 18.920210999996925,
+                "max": 239.28889000000345,
+                "mean": 3.469763231404801
+              },
+              "post:fxaa": {
+                "name": "post:fxaa",
+                "n": 120,
+                "p50": 0.5222009999997681,
+                "p95": 9.712019000005967,
+                "p99": 19.78511499999877,
+                "max": 21.526004999999714,
+                "mean": 1.6758935333330858
+              },
+              "cpu:phase:encounter": {
+                "name": "cpu:phase:encounter",
+                "n": 120,
+                "p50": 0.2999999523162842,
+                "p95": 0.699999988079071,
+                "p99": 1,
+                "max": 1.300000011920929,
+                "mean": 0.3199999993046125
+              },
+              "sdf:last-blit": {
+                "name": "sdf:last-blit",
+                "n": 120,
+                "p50": 0.26487099999940256,
+                "p95": 15.445223000002443,
+                "p99": 18.816337999996904,
+                "max": 19.259747999996762,
+                "mean": 2.2332180249998297
+              },
+              "post:vhs": {
+                "name": "post:vhs",
+                "n": 120,
+                "p50": 0.24374700000043958,
+                "p95": 8.502829000004567,
+                "p99": 14.016618999994535,
+                "max": 15.735468000006222,
+                "mean": 0.9711015000001983
+              },
+              "sdf:composite": {
+                "name": "sdf:composite",
+                "n": 120,
+                "p50": 0.22620499999902677,
+                "p95": 13.788748000006308,
+                "p99": 19.07533400000102,
+                "max": 20.20202500000596,
+                "mean": 1.7852171916669854
+              },
+              "goo:surface": {
+                "name": "goo:surface",
+                "n": 120,
+                "p50": 0.21082999999634922,
+                "p95": 16.960242000001017,
+                "p99": 20.841639999998733,
+                "max": 23.497849999999744,
+                "mean": 1.8199701583330048
+              },
+              "post:vhs-input": {
+                "name": "post:vhs-input",
+                "n": 120,
+                "p50": 0.15149799999926472,
+                "p95": 6.012115999998059,
+                "p99": 19.686615000005986,
+                "max": 19.952030000000377,
+                "mean": 0.9897866000004191
+              },
+              "cpu:phase:tile-binning-submit": {
+                "name": "cpu:phase:tile-binning-submit",
+                "n": 120,
+                "p50": 0.09999996423721313,
+                "p95": 0.30000001192092896,
+                "p99": 0.3999999761581421,
+                "max": 0.40000003576278687,
+                "mean": 0.08166666477918624
+              },
+              "cpu:phase:wound-flush": {
+                "name": "cpu:phase:wound-flush",
+                "n": 120,
+                "p50": 0,
+                "p95": 0.10000002384185791,
+                "p99": 0.10000002384185791,
+                "max": 0.20000004768371582,
+                "mean": 0.015000000099341075
+              },
+              "cpu:phase:projectiles-and-hits": {
+                "name": "cpu:phase:projectiles-and-hits",
+                "n": 120,
+                "p50": 0,
+                "p95": 0.10000002384185791,
+                "p99": 0.10000002384185791,
+                "max": 0.20000004768371582,
+                "mean": 0.019166666269302367
+              },
+              "cpu:phase:chunks-and-guts": {
+                "name": "cpu:phase:chunks-and-guts",
+                "n": 120,
+                "p50": 0,
+                "p95": 0,
+                "p99": 0,
+                "max": 0.10000002384185791,
+                "mean": 0.0008333335320154826
+              },
+              "cpu:phase:blood-simulation-and-sync": {
+                "name": "cpu:phase:blood-simulation-and-sync",
+                "n": 120,
+                "p50": 0,
+                "p95": 0.10000002384185791,
+                "p99": 0.10000002384185791,
+                "max": 0.19999998807907104,
+                "mean": 0.0449999988079071
+              },
+              "cpu:phase:goo-sync": {
+                "name": "cpu:phase:goo-sync",
+                "n": 120,
+                "p50": 0,
+                "p95": 0.10000002384185791,
+                "p99": 0.19999998807907104,
+                "max": 2,
+                "mean": 0.05666666875282923
+              }
+            },
+            "wall": {
+              "post:blit": {
+                "name": "post:blit",
+                "n": 121,
+                "p50": 358.433447,
+                "p95": 550.696472,
+                "p99": 599.858304,
+                "max": 2518.9813950000007,
+                "mean": 370.8296422727272
+              },
+              "sdf:composite": {
+                "name": "sdf:composite",
+                "n": 120,
+                "p50": 193.783043,
+                "p95": 261.73584,
+                "p99": 277.220103,
+                "max": 289.867077,
+                "mean": 194.01608460833333
+              },
+              "sdf:last-blit": {
+                "name": "sdf:last-blit",
+                "n": 120,
+                "p50": 192.709352,
+                "p95": 261.514218,
+                "p99": 273.212456,
+                "max": 274.897097,
+                "mean": 195.3961403
+              },
+              "goo:surface": {
+                "name": "goo:surface",
+                "n": 120,
+                "p50": 192.679143,
+                "p95": 268.955105,
+                "p99": 279.120283,
+                "max": 286.464838,
+                "mean": 194.67256072499995
+              },
+              "sdf:march": {
+                "name": "sdf:march",
+                "n": 120,
+                "p50": 190.863047,
+                "p95": 261.367012,
+                "p99": 273.007293,
+                "max": 275.224925,
+                "mean": 194.29477763333333
+              },
+              "post:fxaa": {
+                "name": "post:fxaa",
+                "n": 120,
+                "p50": 189.520317,
+                "p95": 264.256842,
+                "p99": 279.423945,
+                "max": 299.432931,
+                "mean": 189.35674910833333
+              },
+              "post:vhs": {
+                "name": "post:vhs",
+                "n": 120,
+                "p50": 187.338434,
+                "p95": 267.324088,
+                "p99": 284.199081,
+                "max": 299.861008,
+                "mean": 188.398929075
+              },
+              "post:vhs-input": {
+                "name": "post:vhs-input",
+                "n": 120,
+                "p50": 187.216643,
+                "p95": 266.695596,
+                "p99": 283.599005,
+                "max": 299.403223,
+                "mean": 188.39413709166678
+              },
+              "sdf:polys": {
+                "name": "sdf:polys",
+                "n": 120,
+                "p50": 6.443943,
+                "p95": 31.034317,
+                "p99": 40.336885,
+                "max": 45.954091,
+                "mean": 11.292324958333332
+              },
+              "sdf:shell-hull": {
+                "name": "sdf:shell-hull",
+                "n": 120,
+                "p50": 5.468,
+                "p95": 46.783869,
+                "p99": 56.938755,
+                "max": 60.533868,
+                "mean": 12.67543394166667
+              }
+            },
+            "span": {
+              "name": "span",
+              "n": 121,
+              "p50": 218.03842300000542,
+              "p95": 285.43406200000027,
+              "p99": 312.0424459999995,
+              "max": 399.5605280000018,
+              "mean": 220.87522262809915
+            }
+          },
+          {
+            "name": "fire",
+            "frames": 120,
+            "labels": {
+              "sdf:march": {
+                "name": "sdf:march",
+                "n": 120,
+                "p50": 218.76345199999923,
+                "p95": 280.46963599999435,
+                "p99": 293.4318559999956,
+                "max": 329.9574239999929,
+                "mean": 224.04036358333215
+              },
+              "cpu:phase:wound-hit": {
+                "name": "cpu:phase:wound-hit",
+                "n": 2,
+                "p50": 19.400000035762787,
+                "p95": 19.400000035762787,
+                "p99": 19.400000035762787,
+                "max": 19.400000035762787,
+                "mean": 16.249999970197678
+              },
+              "cpu:draw": {
+                "name": "cpu:draw",
+                "n": 120,
+                "p50": 14,
+                "p95": 289.69999998807907,
+                "p99": 557,
+                "max": 613.8999999761581,
+                "mean": 52.72666666507721
+              },
+              "cpu:tick": {
+                "name": "cpu:tick",
+                "n": 120,
+                "p50": 11.300000011920929,
+                "p95": 23.400000035762787,
+                "p99": 41,
+                "max": 52.89999997615814,
+                "mean": 12.902500001589457
+              },
+              "cpu:phase:body-step": {
+                "name": "cpu:phase:body-step",
+                "n": 120,
+                "p50": 6.699999988079071,
+                "p95": 13.800000011920929,
+                "p99": 15.199999988079071,
+                "max": 15.199999988079071,
+                "mean": 7.399166669944922
+              },
+              "sdf:polys": {
+                "name": "sdf:polys",
+                "n": 120,
+                "p50": 2.5443360000062967,
+                "p95": 23.58172299999569,
+                "p99": 29.365302000005613,
+                "max": 30.194329999998445,
+                "mean": 4.973229608334502
+              },
+              "gpu:idle": {
+                "name": "gpu:idle",
+                "n": 120,
+                "p50": 1.352355000009993,
+                "p95": 19.725531999996747,
+                "p99": 25.431236999997054,
+                "max": 30.068707999991602,
+                "mean": 4.003862083334328
+              },
+              "cpu:phase:skeleton-mesh": {
+                "name": "cpu:phase:skeleton-mesh",
+                "n": 120,
+                "p50": 1.100000023841858,
+                "p95": 2.100000023841858,
+                "p99": 3.199999988079071,
+                "max": 3.199999988079071,
+                "mean": 1.2608333319425582
+              },
+              "sdf:shell-hull": {
+                "name": "sdf:shell-hull",
+                "n": 120,
+                "p50": 0.7596959999937098,
+                "p95": 23.32968600001186,
+                "p99": 40.21626099999412,
+                "max": 41.614031000004616,
+                "mean": 3.612775874999473
+              },
+              "post:fxaa": {
+                "name": "post:fxaa",
+                "n": 120,
+                "p50": 0.418785999994725,
+                "p95": 20.683809999987716,
+                "p99": 26.250849999996717,
+                "max": 30.23458099999698,
+                "mean": 2.103875574999923
+              },
+              "post:blit": {
+                "name": "post:blit",
+                "n": 120,
+                "p50": 0.39528599999903236,
+                "p95": 14.819024000011268,
+                "p99": 26.392097999996622,
+                "max": 27.956239000006462,
+                "mean": 1.9600134000011773
+              },
+              "sdf:last-blit": {
+                "name": "sdf:last-blit",
+                "n": 120,
+                "p50": 0.3489530000006198,
+                "p95": 18.23401400000148,
+                "p99": 24.237129999994067,
+                "max": 32.50046300000395,
+                "mean": 2.0212286250000036
+              },
+              "sdf:composite": {
+                "name": "sdf:composite",
+                "n": 120,
+                "p50": 0.22191400000883732,
+                "p95": 7.98629400000209,
+                "p99": 20.754392999995616,
+                "max": 26.51313800000935,
+                "mean": 1.211006850000922
+              },
+              "effects": {
+                "name": "effects",
+                "n": 4,
+                "p50": 0.2174549999908777,
+                "p95": 14.973397000008845,
+                "p99": 14.973397000008845,
+                "max": 14.973397000008845,
+                "mean": 3.844660249998924
+              },
+              "cpu:phase:encounter": {
+                "name": "cpu:phase:encounter",
+                "n": 120,
+                "p50": 0.20000004768371582,
+                "p95": 0.5,
+                "p99": 0.9000000357627869,
+                "max": 1,
+                "mean": 0.2666666701436043
+              },
+              "post:vhs": {
+                "name": "post:vhs",
+                "n": 120,
+                "p50": 0.19849700000486337,
+                "p95": 7.92367099999683,
+                "p99": 25.261197999992874,
+                "max": 30.40816099999938,
+                "mean": 1.308002983333184
+              },
+              "goo:surface": {
+                "name": "goo:surface",
+                "n": 120,
+                "p50": 0.17091400000208523,
+                "p95": 19.892320999999356,
+                "p99": 26.706342999998014,
+                "max": 27.385997999997926,
+                "mean": 2.2437553083325232
+              },
+              "post:vhs-input": {
+                "name": "post:vhs-input",
+                "n": 120,
+                "p50": 0.1332059999986086,
+                "p95": 14.550694999998086,
+                "p99": 22.939691999999923,
+                "max": 30.445492999991984,
+                "mean": 1.6534452416665468
+              },
+              "cpu:phase:blood-simulation-and-sync": {
+                "name": "cpu:phase:blood-simulation-and-sync",
+                "n": 120,
+                "p50": 0.10000002384185791,
+                "p95": 0.30000001192092896,
+                "p99": 0.6000000238418579,
+                "max": 1.0999999642372131,
+                "mean": 0.1458333318432172
+              },
+              "cpu:phase:goo-sync": {
+                "name": "cpu:phase:goo-sync",
+                "n": 120,
+                "p50": 0.10000002384185791,
+                "p95": 0.30000001192092896,
+                "p99": 1,
+                "max": 1,
+                "mean": 0.11249999950329463
+              },
+              "goo:density": {
+                "name": "goo:density",
+                "n": 117,
+                "p50": 0.04866600000241306,
+                "p95": 11.972399999998743,
+                "p99": 21.530463000002783,
+                "max": 24.227129999999306,
+                "mean": 1.6799815726483516
+              },
+              "cpu:phase:wound-flush": {
+                "name": "cpu:phase:wound-flush",
+                "n": 120,
+                "p50": 0,
+                "p95": 0.10000002384185791,
+                "p99": 1,
+                "max": 2.300000011920929,
+                "mean": 0.04333333323399226
+              },
+              "cpu:phase:projectiles-and-hits": {
+                "name": "cpu:phase:projectiles-and-hits",
+                "n": 120,
+                "p50": 0,
+                "p95": 2.099999964237213,
+                "p99": 20.69999998807907,
+                "max": 30,
+                "mean": 0.5291666666666667
+              },
+              "cpu:phase:chunks-and-guts": {
+                "name": "cpu:phase:chunks-and-guts",
+                "n": 120,
+                "p50": 0,
+                "p95": 0,
+                "p99": 0.10000002384185791,
+                "max": 0.10000002384185791,
+                "mean": 0.004166666666666667
+              },
+              "cpu:phase:tile-binning-submit": {
+                "name": "cpu:phase:tile-binning-submit",
+                "n": 120,
+                "p50": 0,
+                "p95": 0.19999998807907104,
+                "p99": 0.20000004768371582,
+                "max": 1.4000000357627869,
+                "mean": 0.05750000129143397
+              }
+            },
+            "wall": {
+              "post:blit": {
+                "name": "post:blit",
+                "n": 120,
+                "p50": 429.415364,
+                "p95": 572.5457220000001,
+                "p99": 627.814294,
+                "max": 630.010428,
+                "mean": 414.3989499833333
+              },
+              "sdf:shell-hull": {
+                "name": "sdf:shell-hull",
+                "n": 120,
+                "p50": 291.759297,
+                "p95": 497.94757,
+                "p99": 557.224624,
+                "max": 570.101093,
+                "mean": 255.01203338333335
+              },
+              "goo:surface": {
+                "name": "goo:surface",
+                "n": 120,
+                "p50": 223.302092,
+                "p95": 281.896239,
+                "p99": 312.825977,
+                "max": 330.99145,
+                "mean": 222.8212076416667
+              },
+              "post:fxaa": {
+                "name": "post:fxaa",
+                "n": 120,
+                "p50": 222.809641,
+                "p95": 284.678572,
+                "p99": 314.470952,
+                "max": 331.315277,
+                "mean": 220.52744785000004
+              },
+              "post:vhs-input": {
+                "name": "post:vhs-input",
+                "n": 120,
+                "p50": 222.262317,
+                "p95": 286.346131,
+                "p99": 314.282871,
+                "max": 331.46311,
+                "mean": 221.48330681666678
+              },
+              "post:vhs": {
+                "name": "post:vhs",
+                "n": 120,
+                "p50": 221.072167,
+                "p95": 288.252184,
+                "p99": 314.023583,
+                "max": 331.581066,
+                "mean": 221.58585045833337
+              },
+              "sdf:composite": {
+                "name": "sdf:composite",
+                "n": 120,
+                "p50": 220.36243,
+                "p95": 282.103487,
+                "p99": 312.621189,
+                "max": 330.577164,
+                "mean": 223.66744500000007
+              },
+              "sdf:last-blit": {
+                "name": "sdf:last-blit",
+                "n": 120,
+                "p50": 219.723106,
+                "p95": 281.578954,
+                "p99": 312.026947,
+                "max": 330.313042,
+                "mean": 225.3345431916668
+              },
+              "sdf:march": {
+                "name": "sdf:march",
+                "n": 120,
+                "p50": 218.763452,
+                "p95": 280.469636,
+                "p99": 293.431856,
+                "max": 329.957424,
+                "mean": 224.04036358333332
+              },
+              "effects": {
+                "name": "effects",
+                "n": 4,
+                "p50": 195.914386,
+                "p95": 212.514883,
+                "p99": 212.514883,
+                "max": 212.514883,
+                "mean": 193.50176625
+              },
+              "goo:density": {
+                "name": "goo:density",
+                "n": 117,
+                "p50": 184.651225,
+                "p95": 276.723237,
+                "p99": 295.627781,
+                "max": 321.94092,
+                "mean": 159.48806246153845
+              },
+              "sdf:polys": {
+                "name": "sdf:polys",
+                "n": 120,
+                "p50": 174.116218,
+                "p95": 261.0296,
+                "p99": 286.340006,
+                "max": 289.197462,
+                "mean": 145.82918235000005
+              }
+            },
+            "span": {
+              "name": "span",
+              "n": 120,
+              "p50": 245.4117130000086,
+              "p95": 316.53137899999274,
+              "p99": 339.98839499999303,
+              "max": 348.204561999999,
+              "mean": 250.8976965083335
+            }
+          },
+          {
+            "name": "gib",
+            "frames": 120,
+            "labels": {
+              "sdf:march": {
+                "name": "sdf:march",
+                "n": 120,
+                "p50": 206.78526200000488,
+                "p95": 257.907189000005,
+                "p99": 269.256017000007,
+                "max": 270.8491170000052,
+                "mean": 207.54736639166694
+              },
+              "cpu:draw": {
+                "name": "cpu:draw",
+                "n": 120,
+                "p50": 12.599999964237213,
+                "p95": 245.10000002384186,
+                "p99": 266.19999998807907,
+                "max": 272,
+                "mean": 44.25
+              },
+              "cpu:tick": {
+                "name": "cpu:tick",
+                "n": 120,
+                "p50": 11.100000023841858,
+                "p95": 16.80000001192093,
+                "p99": 19.600000023841858,
+                "max": 19.900000035762787,
+                "mean": 11.644999998807908
+              },
+              "cpu:phase:body-step": {
+                "name": "cpu:phase:body-step",
+                "n": 120,
+                "p50": 6.700000047683716,
+                "p95": 10.5,
+                "p99": 11.300000011920929,
+                "max": 11.399999976158142,
+                "mean": 7.11416666607062
+              },
+              "sdf:polys": {
+                "name": "sdf:polys",
+                "n": 120,
+                "p50": 2.24446600000374,
+                "p95": 18.425843999997596,
+                "p99": 23.060939999995753,
+                "max": 29.87500300000829,
+                "mean": 3.8205816000000294
+              },
+              "cpu:phase:wound-hit": {
+                "name": "cpu:phase:wound-hit",
+                "n": 1,
+                "p50": 1.899999976158142,
+                "p95": 1.899999976158142,
+                "p99": 1.899999976158142,
+                "max": 1.899999976158142,
+                "mean": 1.899999976158142
+              },
+              "gpu:idle": {
+                "name": "gpu:idle",
+                "n": 120,
+                "p50": 1.4963520000019344,
+                "p95": 16.287168999988353,
+                "p99": 24.89799499999208,
+                "max": 38.59366100000625,
+                "mean": 3.5146199833328864
+              },
+              "cpu:phase:skeleton-mesh": {
+                "name": "cpu:phase:skeleton-mesh",
+                "n": 120,
+                "p50": 1.199999988079071,
+                "p95": 2,
+                "p99": 2.600000023841858,
+                "max": 3,
+                "mean": 1.3116666679581006
+              },
+              "sdf:shell-hull": {
+                "name": "sdf:shell-hull",
+                "n": 120,
+                "p50": 0.9123609999951441,
+                "p95": 17.53373300000385,
+                "p99": 19.480494999996154,
+                "max": 24.399502999993274,
+                "mean": 2.625245991666937
+              },
+              "post:fxaa": {
+                "name": "post:fxaa",
+                "n": 120,
+                "p50": 0.4193269999959739,
+                "p95": 6.943144000004395,
+                "p99": 19.361704000009922,
+                "max": 24.54958500000066,
+                "mean": 1.3347490999990745
+              },
+              "post:blit": {
+                "name": "post:blit",
+                "n": 120,
+                "p50": 0.3894940000027418,
+                "p95": 14.297323999999207,
+                "p99": 19.180208000005223,
+                "max": 19.926112999994075,
+                "mean": 2.138524741667061
+              },
+              "sdf:last-blit": {
+                "name": "sdf:last-blit",
+                "n": 120,
+                "p50": 0.28286999999545515,
+                "p95": 7.314346000013757,
+                "p99": 15.240058999988833,
+                "max": 15.584386999995331,
+                "mean": 1.230889908333605
+              },
+              "sdf:composite": {
+                "name": "sdf:composite",
+                "n": 120,
+                "p50": 0.20799700000497978,
+                "p95": 12.394518999994034,
+                "p99": 17.472566000011284,
+                "max": 23.132729999997537,
+                "mean": 1.3197083333337407
+              },
+              "cpu:phase:encounter": {
+                "name": "cpu:phase:encounter",
+                "n": 120,
+                "p50": 0.19999998807907104,
+                "p95": 0.30000001192092896,
+                "p99": 0.5,
+                "max": 0.6000000238418579,
+                "mean": 0.2016666640837987
+              },
+              "post:vhs": {
+                "name": "post:vhs",
+                "n": 120,
+                "p50": 0.19099699999787845,
+                "p95": 2.4634210000076564,
+                "p99": 14.236658000008902,
+                "max": 23.373518000007607,
+                "mean": 0.7718291583333969
+              },
+              "goo:surface": {
+                "name": "goo:surface",
+                "n": 120,
+                "p50": 0.1781219999975292,
+                "p95": 6.657772999998997,
+                "p99": 18.896629000009852,
+                "max": 19.53370199998608,
+                "mean": 1.1114466166664594
+              },
+              "post:vhs-input": {
+                "name": "post:vhs-input",
+                "n": 120,
+                "p50": 0.127665000007255,
+                "p95": 12.452267999993637,
+                "p99": 17.923060000000987,
+                "max": 19.882697000008193,
+                "mean": 1.0910447833336852
+              },
+              "effects": {
+                "name": "effects",
+                "n": 3,
+                "p50": 0.11520699999528006,
+                "p95": 0.1181639999995241,
+                "p99": 0.1181639999995241,
+                "max": 0.1181639999995241,
+                "mean": 0.1140400000003865
+              },
+              "cpu:phase:blood-simulation-and-sync": {
+                "name": "cpu:phase:blood-simulation-and-sync",
+                "n": 120,
+                "p50": 0.10000002384185791,
+                "p95": 0.20000004768371582,
+                "p99": 0.3999999761581421,
+                "max": 0.40000003576278687,
+                "mean": 0.11749999771515528
+              },
+              "cpu:phase:goo-sync": {
+                "name": "cpu:phase:goo-sync",
+                "n": 120,
+                "p50": 0.09999996423721313,
+                "p95": 0.19999998807907104,
+                "p99": 0.30000001192092896,
+                "max": 0.30000001192092896,
+                "mean": 0.07250000288089116
+              },
+              "goo:density": {
+                "name": "goo:density",
+                "n": 120,
+                "p50": 0.08841500000562519,
+                "p95": 13.489086000001407,
+                "p99": 21.31700800001272,
+                "max": 21.938122999999905,
+                "mean": 1.504597841666085
+              },
+              "cpu:phase:wound-flush": {
+                "name": "cpu:phase:wound-flush",
+                "n": 120,
+                "p50": 0,
+                "p95": 0.10000002384185791,
+                "p99": 0.10000002384185791,
+                "max": 0.5,
+                "mean": 0.013333333532015483
+              },
+              "cpu:phase:projectiles-and-hits": {
+                "name": "cpu:phase:projectiles-and-hits",
+                "n": 120,
+                "p50": 0,
+                "p95": 0.10000002384185791,
+                "p99": 0.40000003576278687,
+                "max": 3.300000011920929,
+                "mean": 0.04833333442608515
+              },
+              "cpu:phase:chunks-and-guts": {
+                "name": "cpu:phase:chunks-and-guts",
+                "n": 120,
+                "p50": 0,
+                "p95": 0,
+                "p99": 0.10000002384185791,
+                "max": 0.10000002384185791,
+                "mean": 0.0025000000993410745
+              },
+              "cpu:phase:tile-binning-submit": {
+                "name": "cpu:phase:tile-binning-submit",
+                "n": 120,
+                "p50": 0,
+                "p95": 0.10000002384185791,
+                "p99": 0.10000002384185791,
+                "max": 0.10000002384185791,
+                "mean": 0.035833333432674405
+              }
+            },
+            "wall": {
+              "post:blit": {
+                "name": "post:blit",
+                "n": 120,
+                "p50": 390.591958,
+                "p95": 519.1665780000001,
+                "p99": 538.449077,
+                "max": 547.6226859999999,
+                "mean": 385.4978294499999
+              },
+              "sdf:shell-hull": {
+                "name": "sdf:shell-hull",
+                "n": 120,
+                "p50": 286.92087200000003,
+                "p95": 434.59570099999996,
+                "p99": 513.274085,
+                "max": 551.451545,
+                "mean": 244.31928110000007
+              },
+              "sdf:last-blit": {
+                "name": "sdf:last-blit",
+                "n": 120,
+                "p50": 207.430042,
+                "p95": 258.07852,
+                "p99": 269.655177,
+                "max": 271.4829,
+                "mean": 208.55009897500005
+              },
+              "sdf:march": {
+                "name": "sdf:march",
+                "n": 120,
+                "p50": 206.785262,
+                "p95": 257.907189,
+                "p99": 269.256017,
+                "max": 270.849117,
+                "mean": 207.54736639166669
+              },
+              "sdf:composite": {
+                "name": "sdf:composite",
+                "n": 120,
+                "p50": 206.113147,
+                "p95": 258.343683,
+                "p99": 270.010504,
+                "max": 273.704408,
+                "mean": 207.17906958333333
+              },
+              "goo:surface": {
+                "name": "goo:surface",
+                "n": 120,
+                "p50": 204.648419,
+                "p95": 258.578929,
+                "p99": 267.680081,
+                "max": 270.965074,
+                "mean": 206.25730756666664
+              },
+              "post:fxaa": {
+                "name": "post:fxaa",
+                "n": 120,
+                "p50": 200.808603,
+                "p95": 259.248962,
+                "p99": 268.216073,
+                "max": 272.224221,
+                "mean": 204.0448079916667
+              },
+              "post:vhs-input": {
+                "name": "post:vhs-input",
+                "n": 120,
+                "p50": 200.277527,
+                "p95": 253.803877,
+                "p99": 267.718665,
+                "max": 273.211956,
+                "mean": 203.19423455833333
+              },
+              "post:vhs": {
+                "name": "post:vhs",
+                "n": 120,
+                "p50": 199.095629,
+                "p95": 259.628705,
+                "p99": 268.991478,
+                "max": 273.456494,
+                "mean": 202.0085581833333
+              },
+              "effects": {
+                "name": "effects",
+                "n": 3,
+                "p50": 190.119183,
+                "p95": 231.213888,
+                "p99": 231.213888,
+                "max": 231.213888,
+                "mean": 201.32458066666666
+              },
+              "goo:density": {
+                "name": "goo:density",
+                "n": 120,
+                "p50": 178.555108,
+                "p95": 235.678571,
+                "p99": 254.479033,
+                "max": 274.346314,
+                "mean": 149.42553909999998
+              },
+              "sdf:polys": {
+                "name": "sdf:polys",
+                "n": 120,
+                "p50": 166.643248,
+                "p95": 224.894193,
+                "p99": 257.01387,
+                "max": 277.00019,
+                "mean": 139.44370765833338
+              }
+            },
+            "span": {
+              "name": "span",
+              "n": 120,
+              "p50": 225.80463900000905,
+              "p95": 280.6753010000102,
+              "p99": 300.0153799999971,
+              "max": 306.5389900000009,
+              "mean": 228.01345544999992
+            }
+          }
+        ]
+      },
+      "endHash": {
+        "version": 1,
+        "frame": 526,
+        "tilesX": 4,
+        "tilesY": 3,
+        "layers": {
+          "marchTarget": {
+            "hash": 2048308512,
+            "width": 800,
+            "height": 600,
+            "floats": 1920000,
+            "stats": {
+              "nonZero": 480000,
+              "nonFinite": 0,
+              "zeroFractionMillionths": 0,
+              "min": 3.4061e-8,
+              "max": 8.95357,
+              "sampled": 480000
+            }
+          },
+          "probeDyn": {
+            "hash": 3415216381,
+            "width": 400,
+            "height": 1,
+            "floats": 6400,
+            "stats": {
+              "nonZero": 6364,
+              "nonFinite": 0,
+              "zeroFractionMillionths": 5625,
+              "min": -0.268125,
+              "max": 3.54491,
+              "sampled": 6400
+            }
+          },
+          "instances": {
+            "hash": 3044718398,
+            "width": 1024,
+            "height": 1,
+            "floats": 18432,
+            "stats": {
+              "nonZero": 1024,
+              "nonFinite": 0,
+              "zeroFractionMillionths": 0,
+              "min": -9.09966,
+              "max": -0.52955,
+              "sampled": 1024,
+              "count": 1024
+            }
+          }
+        },
+        "tiles": {
+          "marchTarget": [
+            3376491020,
+            3569510161,
+            3333015365,
+            2048484873,
+            1618938123,
+            1361285990,
+            1505716423,
+            1834500622,
+            3333015365,
+            3349947485,
+            3570396833,
+            341288293
+          ],
+          "probeDyn": [
+            2166136261,
+            2166136261,
+            2166136261,
+            2166136261,
+            2166136261,
+            2166136261,
+            2166136261,
+            2166136261,
+            341120837,
+            4223714128,
+            585515159,
+            2153213286
+          ],
+          "instances": [
+            2166136261,
+            2166136261,
+            2166136261,
+            2166136261,
+            2166136261,
+            2166136261,
+            2166136261,
+            2166136261,
+            2532198971,
+            3196588362,
+            2139857354,
+            2961113544
+          ]
+        }
+      },
+      "valid": true,
+      "hiddenSteps": 0,
+      "frames": 360,
+      "chunkFrames": 10,
+      "overall": {
+        "name": "overall",
+        "n": 36,
+        "p50": 234.6699999988079,
+        "p95": 320.77000000476835,
+        "p99": 336.03999999761584,
+        "max": 336.03999999761584,
+        "mean": 243.5063888890876
+      },
+      "segments": [
+        {
+          "name": "walk",
+          "n": 12,
+          "p50": 225.32000000476836,
+          "p95": 258.55,
+          "p99": 258.55,
+          "max": 258.55,
+          "mean": 222.90833333383003,
+          "census": {
+            "first": {
+              "bodies": 23,
+              "wounds": 0,
+              "chunks": 0,
+              "droplets": 0,
+              "splats": 0,
+              "gooQuads": 0
+            },
+            "last": {
+              "bodies": 25,
+              "wounds": 0,
+              "chunks": 0,
+              "droplets": 0,
+              "splats": 0,
+              "gooQuads": 0
+            }
+          }
+        },
+        {
+          "name": "fire",
+          "n": 12,
+          "p50": 262.1699999988079,
+          "p95": 336.03999999761584,
+          "p99": 336.03999999761584,
+          "max": 336.03999999761584,
+          "mean": 272.614166667064,
+          "census": {
+            "first": {
+              "bodies": 25,
+              "wounds": 0,
+              "chunks": 0,
+              "droplets": 0,
+              "splats": 0,
+              "gooQuads": 0
+            },
+            "last": {
+              "bodies": 25,
+              "wounds": 16,
+              "chunks": 0,
+              "droplets": 82,
+              "splats": 256,
+              "gooQuads": 303
+            }
+          }
+        },
+        {
+          "name": "gib",
+          "n": 12,
+          "p50": 234.08999999761582,
+          "p95": 271.7699999988079,
+          "p99": 271.7699999988079,
+          "max": 271.7699999988079,
+          "mean": 234.99666666636867,
+          "census": {
+            "first": {
+              "bodies": 25,
+              "wounds": 16,
+              "chunks": 0,
+              "droplets": 82,
+              "splats": 256,
+              "gooQuads": 303
+            },
+            "last": {
+              "bodies": 23,
+              "wounds": 17,
+              "chunks": 0,
+              "droplets": 10,
+              "splats": 256,
+              "gooQuads": 262
+            }
+          }
+        }
+      ],
+      "bodiesSeen": 25,
+      "crowdInfo": {
+        "on": false,
+        "types": [
+          {
+            "name": "soldier",
+            "attached": 0,
+            "visible": 0,
+            "tileFallbacks": 0
+          },
+          {
+            "name": "zombie",
+            "attached": 0,
+            "visible": 0,
+            "tileFallbacks": 0
+          }
+        ]
+      }
+    }
+  ],
+  "table": [
+    {
+      "leg": "baseline",
+      "room": 1,
+      "bodies": 1,
+      "overallP50": 234.6699999988079,
+      "overallMax": 336.03999999761584,
+      "walkP50": 225.32000000476836,
+      "fireP50": 262.1699999988079,
+      "gibP50": 234.08999999761582
+    }
+  ],
+  "spikes": []
+}

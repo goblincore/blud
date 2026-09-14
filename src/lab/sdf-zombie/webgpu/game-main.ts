@@ -8441,6 +8441,86 @@ function performBenchAction(a: BenchAction): void {
           await handle.resolveGpu();
           return packFloatTarget(sdfLayer.marchTarget);
         },
+        /** ROOM-2 PARITY DIAGNOSTIC (crowd stage a Task 7): per tile, whether
+         *  the PROXY BOXES of >= 2 distinct instances of the SAME character
+         *  type cover it. A non-multi tile is one where the crowd material's
+         *  per-slot loop has a single candidate instance, so a per-body vs
+         *  crowd hash mismatch there cannot be a union-fold/banding bug — it
+         *  must be the instanced-vs-per-body transform (stage a-2 fix).
+         *
+         *  WHY NOT TileBinner OVER THE TYPE'S GROUPS (the plan's first
+         *  suggestion): measured 2026-09-14 — TileBinner.bin fills EVERY tile
+         *  for a group whose sphere crosses the camera plane (`nearDist <= 0`
+         *  or `clipW <= 0`), and the full cast (every room) is attached to a
+         *  crowd type. One same-kind body anywhere behind the camera therefore
+         *  marks all 25x19 tiles multi (masked fraction 0.0000 in room 1 with
+         *  exactly one zombie), which makes the masked hash the sha1 of the
+         *  EMPTY string — a false "match". The box footprint is what the
+         *  fragment actually rasterises, so it is the real overlap.
+         *
+         *  The in-page buffer is a Uint8Array(tilesX*tilesY) (1 = multi); it
+         *  crosses CDP as a plain array. */
+        readTileSlotMask() {
+          camera.updateMatrixWorld();
+          camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
+          const size = sdfLayer.targetSize;
+          const W = Math.max(1, size.width), H = Math.max(1, size.height);
+          const tilesX = Math.ceil(W / TILE_SIZE_PX);
+          const tilesY = Math.ceil(H / TILE_SIZE_PX);
+          const mask = new Uint8Array(tilesX * tilesY);
+          const byKind = new Map<string, ZombieActor[]>();
+          for (const a of actors) {
+            const list = byKind.get(a.kind);
+            if (list) list.push(a); else byKind.set(a.kind, [a]);
+          }
+          const view = new THREE.Vector4();
+          const clip = new THREE.Vector4();
+          // Mark one kind's boxes, one actor at a time: a tile counts multi
+          // when the SAME tile was already covered by an earlier actor of the
+          // same kind. Crossing boxes from different kinds are separate draws.
+          for (const list of byKind.values()) {
+            const seen = new Uint8Array(tilesX * tilesY);
+            for (const a of list) {
+              const c = a.view.object.position;
+              const h = a.view.uniforms.bodyHalf.value;
+              let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+              let any = false;
+              for (let corner = 0; corner < 8; corner++) {
+                view.set(
+                  c.x + ((corner & 1) ? h.x : -h.x),
+                  c.y + ((corner & 2) ? h.y : -h.y),
+                  c.z + ((corner & 4) ? h.z : -h.z),
+                  1,
+                ).applyMatrix4(camera.matrixWorldInverse);
+                if (view.z >= 0) continue; // corner at/behind the eye plane
+                clip.set(view.x, view.y, view.z, 1).applyMatrix4(camera.projectionMatrix);
+                if (clip.w <= 0) continue;
+                any = true;
+                const px = (clip.x / clip.w * 0.5 + 0.5) * W;
+                const py = (0.5 - clip.y / clip.w * 0.5) * H;
+                if (px < minX) minX = px;
+                if (px > maxX) maxX = px;
+                if (py < minY) minY = py;
+                if (py > maxY) maxY = py;
+              }
+              // Fully behind the camera: the proxy cannot rasterise, so it can
+              // never be an overlap partner in this frame.
+              if (!any) continue;
+              const tx0 = Math.max(0, Math.floor(minX / TILE_SIZE_PX));
+              const tx1 = Math.min(tilesX - 1, Math.floor((maxX - 1e-6) / TILE_SIZE_PX));
+              const ty0 = Math.max(0, Math.floor(minY / TILE_SIZE_PX));
+              const ty1 = Math.min(tilesY - 1, Math.floor((maxY - 1e-6) / TILE_SIZE_PX));
+              for (let ty = ty0; ty <= ty1; ty++) {
+                for (let tx = tx0; tx <= tx1; tx++) {
+                  const t = ty * tilesX + tx;
+                  if (seen[t]) mask[t] = 1; // a second same-kind box covers t
+                  seen[t] = 1;
+                }
+              }
+            }
+          }
+          return { tilesX, tilesY, tilePx: TILE_SIZE_PX, mask: Array.from(mask) };
+        },
         /** Run 4: the output-res detail field (sdf-layer detailTarget) as { w, h, rgba32f } — same
          *  de-pad as readMarchTarget. Null when the layer has no normal attachment. */
         async readDetailTarget() {

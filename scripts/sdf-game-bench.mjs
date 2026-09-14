@@ -280,7 +280,10 @@ console.log('backend: webgpu');
 // The legs. Each is a named set of overrides applied on top of ship defaults.
 // ---------------------------------------------------------------------------
 const ALL_LEGS = {
-  baseline: {},
+  // The crowd A/B under a `?crowd=1` boot: baseline must explicitly turn the
+  // crowd OFF or it would silently run the crowd path (the boot flag defaults
+  // `setCrowd`), and the A/B would compare crowd against crowd.
+  baseline: { setCrowd: false },
   // BLEED (bleeding-wounds, 2026-08-31) SHIPS ON, so baseline includes it;
   // this leg is the "before" column — setBleed(false) is pixel-identical to
   // the pre-feature page (the off-state parity gate proves that in pixels),
@@ -317,10 +320,11 @@ const ALL_LEGS = {
   // == 2). Baseline is the cluster walk with tiles OFF, as shipped.
   'tiles-on': { setTiles: true },
   'tiles-raycull': { setTiles: true, setTileRayCull: true },
-  // CROWD LEGS (2026-09-13, merged crowd march Task 0). Pair with BENCH_CROWD=n
-  // and BENCH_QUERY='crowd=1'. `setCrowd` is a no-op until the Task 6 game-main
-  // seam lands (the applier skips it when absent, like setTiles without
-  // tiles-playtest); until then these legs measure the per-body path.
+  // CROWD LEGS (2026-09-13, merged crowd march). Pair with BENCH_CROWD=n and
+  // BENCH_QUERY='crowd=1'; baseline explicitly turns the crowd OFF (see the
+  // baseline leg). `crowd-on` under a crowd=1 boot is already on, so
+  // setCrowd(true) is a no-op and the BENCH_CROWD spawns (which run after these
+  // overrides) attach to the crowd types.
   'crowd-on': { setCrowd: true },
   'crowd-on-tiles-off': { setCrowd: true, setTiles: false },
   // GOO DENSITY LEVERS (pass attribution 2026-09-07: goo:density equals the
@@ -530,16 +534,20 @@ async function applyLeg(name) {
     __sdfGame.setGooPerf({ densityScale: 0.5, particleCap: 1000, minTexelRadius: 0, areaPriority: false, splatFadeTail: 0, surfaceAtDensityRes: false, passGate: { density: true, blur: true, surface: true } });
     return 1;
   })()`);
-  // BENCH_CROWD — spawn the crowd after ship-defaults, before the leg
-  // overrides, so a leg's own overrides also apply to the spawned bodies.
-  if (CROWD_PRELUDE) { progress.phase = 'crowd-prelude'; await evaluate(CROWD_PRELUDE); }
+  // Apply the leg's overrides FIRST, so a rebuild-inducing override
+  // (setCrowd) settles before the crowd prelude below. The crowd seam is
+  // present since Task 6; the guard remains for a page without it.
   for (const [fn, arg] of Object.entries(overrides)) {
-    // The crowd seam lands in Task 6; until then `crowd-on` is a no-op (the
-    // same way `setTiles` is a no-op without `tiles-playtest`) rather than a
-    // page throw that would fail the leg.
     if (fn === 'setCrowd' && !(await evaluate('typeof __sdfGame.setCrowd === "function"'))) continue;
     await evaluate(`__sdfGame.${fn}(${JSON.stringify(arg)})`);
   }
+  // BENCH_CROWD — spawn AFTER the leg overrides. Rebuild-inducing overrides
+  // (setCrowd(false) on the baseline leg) wipe spawnDebugCharacter's actors, so
+  // spawning BEFORE them would leave the per-body baseline with the default
+  // cast while the crowd leg kept its N — a dishonest A/B. Spawning last gives
+  // both legs the same N bodies, and a leg's own overrides are still in force
+  // when the bodies are built.
+  if (CROWD_PRELUDE) { progress.phase = 'crowd-prelude'; await evaluate(CROWD_PRELUDE); }
 }
 
 // Warmup is deliberately long. Switching a leg reallocates render targets
@@ -581,6 +589,10 @@ async function runLeg(name, room, mode) {
   const seen = Math.max(0, ...r.segments.flatMap((sg) => sg.census ? [sg.census.first.bodies, sg.census.last.bodies] : [0]));
   if (seen === 0) console.warn(`  WARN ${label}: census saw ZERO bodies — this run measured an empty room`);
   r.bodiesSeen = seen;
+  // Crowd census for the stage-a bench table: attached/visible per type and
+  // the tile-binding fallback count. Null on a per-body-only boot.
+  const ci = await evaluate('typeof __sdfGame.crowdInfo === "function" ? JSON.stringify(__sdfGame.crowdInfo()) : "null"');
+  r.crowdInfo = JSON.parse(ci);
   return r;
 }
 

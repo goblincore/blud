@@ -99,6 +99,10 @@ export interface CrowdType {
   ): void;
   /** Rebinds the type's shared sampled-skeleton atlas/meta pair. */
   setSkeletonVolume(atlas: THREE.Texture, meta: THREE.Texture): void;
+  /** The exact groups (and maxBlendK) the LAST sync() binned. The room-2
+   *  slot-mask diagnostic feeds these to the CPU TileBinner — the bit-identical
+   *  reference for the GPU binding — to learn each tile's distinct-slot set. */
+  binInputs(): { groups: TileGroupInput[]; maxBlendK: number };
   info(): { attached: number; visible: number; tileFallbacks: number };
 }
 
@@ -151,6 +155,10 @@ export function createCrowdType(
   // Reused per frame — the pack is CPU-side and the list is at most 64.
   const list: InstanceAttrSource[] = [];
   const groups: TileGroupInput[] = [];
+  // Snapshot of the last binned inputs for the room-2 slot-mask diagnostic.
+  // Copied (not aliased) because `groups` is reused next frame.
+  const lastBinGroups: TileGroupInput[] = [];
+  let lastBinMaxBlendK = 0;
 
   const levelShadowTex = (handles.material as unknown as {
     levelShadowTex: ReturnType<typeof texture>;
@@ -203,6 +211,9 @@ export function createCrowdType(
       // binding returns false; disable the tile gate for this frame and the
       // per-slot loop in MAP_BODY walks every slot's cluster list instead —
       // correct, just slower. Counted for the bench.
+      lastBinGroups.length = 0;
+      for (const g of groups) lastBinGroups.push(g);
+      lastBinMaxBlendK = maxBlendK;
       const ok = tiles.bin(groups, camera, maxBlendK, {
         widthPx: grid.tilesX * grid.tilePx,
         heightPx: grid.tilesY * grid.tilePx,
@@ -229,6 +240,8 @@ export function createCrowdType(
     },
 
     setSkeletonVolume(atlasTex, meta) { handles.setSkeletonVolume(atlasTex, meta); },
+
+    binInputs() { return { groups: lastBinGroups, maxBlendK: lastBinMaxBlendK }; },
 
     info() {
       let attached = 0;

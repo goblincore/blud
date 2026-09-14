@@ -21,6 +21,10 @@
 //
 // Output: ONE JSON line to stdout —
 //   { "room1": "<hash>", "room1-repeat": "<hash>", "room1-wounded": "<hash>" }
+// With MARCH_HASH_ROOM=2 the keys become room2-* and the wounded key is
+// omitted (the hardcoded wound rays are the room-1 staged pose). With
+// MARCH_HASH_MASK=1 the line also carries roomN-masked, roomN-masked-repeat,
+// roomN-masked-fraction and roomN-tiles.
 // room1-repeat must equal room1 (same staged state, hashed again after a
 // couple of extra steps) — that is the determinism proof this script
 // exists to provide before trusting a cross-commit comparison at all.
@@ -65,6 +69,14 @@ const CDP = Number(process.env.LAB_CDP_PORT ?? 9323);
 // MARCH_HASH_QUERY — extra query string appended to the boot URL, so a page
 // flag (e.g. `crowd=1`, `tiles-playtest`) can be hashed through this same gate.
 const EXTRA_QUERY = process.env.MARCH_HASH_QUERY ? `&${process.env.MARCH_HASH_QUERY}` : '';
+// MARCH_HASH_ROOM — which room's fill-screen close-up to stage. Room 1 is the
+// canonical gate; room 2 is the crowd-parity diagnostic (more bodies per type).
+const ROOM = Number(process.env.MARCH_HASH_ROOM ?? 1);
+// MARCH_HASH_MASK=1 — also hash only the march-target texels that fall in
+// tiles the CPU TileBinner marks SINGLE-SLOT (see __sdfGameDebug
+// .readTileSlotMask). The masked hash is the crowd-parity instrument: where a
+// tile holds one instance of a type, the per-slot loop is a single field eval.
+const USE_MASK = process.env.MARCH_HASH_MASK === '1';
 const fail = (msg) => { console.error(`FAIL: ${msg}`); process.exit(1); };
 setTimeout(() => { console.error('FAIL: watchdog 6 min'); process.exit(3); }, 6 * 60_000).unref();
 
@@ -103,7 +115,7 @@ await evaluate('__sdfGame.setFieldStyle("off")');
 // scripts/upscale-parity.mjs — blend/fall = 1 makes it a pure per-frame
 // estimate so the march target is a function of the frozen scene alone.
 await evaluate('(() => { __sdfGame.setLightClockFrozen(true); __sdfGame.setDemoHold(true); __sdfGame.setProbeBlend(1); __sdfGame.setProbeFall(1); return 1; })()');
-await stageCloseUp(evaluate, { room: 1 }, fail);
+await stageCloseUp(evaluate, { room: ROOM }, fail);
 await evaluate('(() => { __sdfGame.setSdfScale(0.5); __sdfGame.step(6); return 1; })()');
 await evaluate('__sdfGame.resolveGpu()');
 
@@ -118,21 +130,50 @@ await evaluate('__sdfGame.resolveGpu()');
 // an even number of internal frames each time) locks the parity so
 // successive logical captures land on the same phase; verified stable
 // across an intervening external step(2) too.
-const capture = async () => {
+const capture = async (maskInfo = null) => {
   await evaluate('__sdfGameDebug.readMarchTarget()');
   const r = await evaluate('__sdfGameDebug.readMarchTarget()');
   const bytes = Buffer.from(r.rgba32f, 'base64');
-  return createHash('sha1').update(bytes).digest('hex');
+  const full = createHash('sha1').update(bytes).digest('hex');
+  if (!maskInfo) return { hash: full, maskedHash: null, maskedFraction: null };
+  // Hash only the texels whose TILE is single-slot (mask 0). The mask grid is
+  // at the SDF-pass size (sdfLayer.targetSize); the readback IS that target.
+  const { tilesX, tilesY, tilePx, mask } = maskInfo;
+  const h = createHash('sha1');
+  let kept = 0, total = 0;
+  for (let y = 0; y < r.h; y++) {
+    const ty = Math.min(tilesY - 1, Math.floor(y / tilePx));
+    for (let x = 0; x < r.w; x++) {
+      total++;
+      const tx = Math.min(tilesX - 1, Math.floor(x / tilePx));
+      if (mask[ty * tilesX + tx]) continue;
+      kept++;
+      const o = (y * r.w + x) * 16;
+      h.update(bytes.subarray(o, o + 16));
+    }
+  }
+  return { hash: full, maskedHash: h.digest('hex'), maskedFraction: kept / total };
 };
 
-const room1 = await capture();
+let maskInfo = null;
+if (USE_MASK) {
+  maskInfo = await evaluate('__sdfGameDebug.readTileSlotMask()');
+  if (!maskInfo || !Array.isArray(maskInfo.mask)) fail('readTileSlotMask returned nothing');
+}
+
+const cap0 = await capture(maskInfo);
+const room1 = cap0.hash;
 
 await evaluate('(() => { __sdfGame.step(2); return 1; })()');
 await evaluate('__sdfGame.resolveGpu()');
-const room1Repeat = await capture();
+const cap1 = await capture(maskInfo);
+const room1Repeat = cap1.hash;
 
 if (room1Repeat !== room1) {
   fail(`not deterministic within boot: room1=${room1} room1-repeat=${room1Repeat}`);
+}
+if (maskInfo && cap1.maskedHash !== cap0.maskedHash) {
+  fail(`masked hash not deterministic: masked=${cap0.maskedHash} repeat=${cap1.maskedHash}`);
 }
 
 // Wounded variant — reuse the stamp dance from scripts/sdf-game-parity.mjs,
@@ -173,18 +214,30 @@ const stampWounds = () => evaluate(`(async () => {
   return { stamped: hits.length };
 })()`);
 
-const stamp = await stampWounds();
-if (!stamp.stamped) fail(`no wounds stamped: ${JSON.stringify(stamp)}`);
-await evaluate('__sdfGame.resolveGpu()');
-const room1Wounded = await capture();
+let capW = null;
+if (ROOM === 1) {
+  const stamp = await stampWounds();
+  if (!stamp.stamped) fail(`no wounds stamped: ${JSON.stringify(stamp)}`);
+  await evaluate('__sdfGame.resolveGpu()');
+  capW = await capture(maskInfo);
 
-if (room1Wounded === room1) {
-  fail(`wound not visible to the gate: room1-wounded=${room1Wounded} equals room1=${room1}`);
+  if (capW.hash === room1) {
+    fail(`wound not visible to the gate: room1-wounded=${capW.hash} equals room1=${room1}`);
+  }
+} else {
+  console.error(`note: room ${ROOM} — wounded variant skipped (the hardcoded shots are staged for room 1)`);
 }
 
-console.log(JSON.stringify({
-  room1,
-  'room1-repeat': room1Repeat,
-  'room1-wounded': room1Wounded,
-}));
+const K = `room${ROOM}`;
+const out = { [K]: room1, [`${K}-repeat`]: room1Repeat };
+if (maskInfo) {
+  out[`${K}-masked`] = cap0.maskedHash;
+  out[`${K}-masked-repeat`] = cap1.maskedHash;
+  out[`${K}-masked-fraction`] = +cap0.maskedFraction.toFixed(4);
+  out[`${K}-tiles`] = `${maskInfo.tilesX}x${maskInfo.tilesY}`;
+  const multi = maskInfo.mask.reduce((n, v) => n + v, 0);
+  out[`${K}-multi-tile-fraction`] = +(multi / maskInfo.mask.length).toFixed(4);
+}
+if (capW) out[`${K}-wounded`] = capW.hash;
+console.log(JSON.stringify(out));
 process.exit(0);
