@@ -112,7 +112,7 @@ git commit -m "bench(crowd): march-hash query passthrough, spawnCrowd seam, BENC
 
 **Files:** Create `src/lab/sdf-zombie/webgpu/crowd-records.ts`, `src/lab/sdf-zombie/webgpu/crowd-records.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import { describe, it, expect } from 'vitest';
@@ -156,12 +156,12 @@ describe('crowd records', () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `npx vitest run src/lab/sdf-zombie/webgpu/crowd-records.test.ts`
 Expected: FAIL — cannot resolve `./crowd-records`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```ts
 // src/lab/sdf-zombie/webgpu/crowd-records.ts
@@ -259,12 +259,12 @@ export function fallbackCrowdRecords(): CrowdRecords {
 }
 ```
 
-- [ ] **Step 4: Run the test**
+- [x] **Step 4: Run the test**
 
 Run: `npx vitest run src/lab/sdf-zombie/webgpu/crowd-records.test.ts`
 Expected: PASS (2 tests). If `storage(...)` throws outside a renderer in vitest, wrap node creation in a lazy getter (`get node()`), and keep the test on `floats` only.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/lab/sdf-zombie/webgpu/crowd-records.ts src/lab/sdf-zombie/webgpu/crowd-records.test.ts
