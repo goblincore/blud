@@ -1090,6 +1090,11 @@ async function main() {
   // a frame that renders before the boot reaches a later declaration throws
   // "Cannot access before initialization" and silently skips the crowd path.
   const crowdFlag = new URLSearchParams(location.search).get('crowd') === '1';
+  // Stage a-2 dispatch: `?crowddispatch=boxes` restores the stage-a instanced
+  // proxy boxes; anything else (including absent) uses the one-screen-quad
+  // dispatch, which is the point of the stage.
+  let crowdDispatch: 'boxes' | 'quad' = new URLSearchParams(location.search).get('crowddispatch') === 'boxes'
+    ? 'boxes' : 'quad';
   let crowdOn = crowdFlag;
   /** One CrowdType per character registry name; lazily created on first spawn. */
   const crowdTypes = new Map<string, CrowdType>();
@@ -2580,6 +2585,7 @@ async function main() {
         lastFrame: sdfLayer.lastFrame,
         probeDyn: probeGather ? { node: probeGather.probeDynNode } : undefined,
       },
+      { dispatch: crowdDispatch },
     );
     t.mesh.layers.set(SDF_LAYER);
     t.depthPreMesh.layers.set(DEPTH_PREPASS_LAYER);
@@ -5973,10 +5979,20 @@ function performBenchAction(a: BenchAction): void {
       crowdOn = on;
       rebuildCast();
     },
-    /** Crowd stage a census: the flag, and per type attached/live slots plus
-     *  tile-binding fallbacks (bench + hash diagnostics). */
+    /** STAGE a-2: swap the crowd dispatch on every live type (and remember it
+     *  for types created later). The instCfg.y stamp and the tile rebin land
+     *  on the next sync(); a fresh page boot with ?crowddispatch= is the
+     *  cheaper way to A/B. */
+    setCrowdDispatch(mode: 'boxes' | 'quad') {
+      crowdDispatch = mode;
+      for (const t of crowdTypes.values()) t.setDispatch(mode);
+    },
+    /** Crowd stage a census: the flag, the dispatch, and per type
+     *  attached/live slots plus tile-binding fallbacks (bench + hash
+     *  diagnostics). */
     crowdInfo: () => ({
       on: crowdOn,
+      dispatch: crowdDispatch,
       types: [...crowdTypes].map(([n, t]) => ({ name: n, ...t.info() })),
     }),
     backend: handle.backend,

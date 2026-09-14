@@ -13,6 +13,11 @@ import { REC_VEC4S, REC_COUNTS, REC_COUNTS2, REC_WOUND_BOUND, REC_ANCHOR_BAND, R
  *  off-ray shading probes — calcNormal's 0.0015 eps and the AO probe at
  *  n * 0.06 — still see every group the ray's own march did. */
 export const RAY_CULL_SLACK = '0.07';
+/** Extra metres added to the QUAD-dispatch entry sphere (stage a-2). The sphere
+ *  already carries blendReach x distortion; this covers the smin support's
+ *  outward bulge so a ray that just grazes a body still enters before its
+ *  surface. It widens `t` only — a conservative lower bound, never a miss. */
+export const QUAD_ENTRY_SLACK = '0.02';
 // src/lab/sdf-zombie/webgpu/march.wgsl.ts
 //
 // WGSL port of march.glsl.ts. Kept as a near line-for-line translation on
@@ -1417,6 +1422,11 @@ var<private> gWindDrift: vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
 var<private> gBodyAnchor: vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
 var<private> gTileActive: f32 = 0.0;
 var<private> gTileN: f32 = 0.0;
+// QUAD DISPATCH (stage a-2): the nearest conservative ray-sphere entry over
+// the pixel's preloaded tile entries. 1e9 means "the ray entered no inflated
+// sphere"; MARCH_TRACE_SETUP discards that fragment before stepping. Only read
+// when instCfg.y > 1 (quad mode) — the box path never touches it.
+var<private> gTileEntryT: f32 = 1e9;
 var<private> gTileBounds: array<vec4<f32>, ${TILE_MAX_ENTRIES}>;
 var<private> gTileGrp: array<vec4<f32>, ${TILE_MAX_ENTRIES}>;
 var<private> gTileBand: array<f32, ${TILE_MAX_ENTRIES}>;
@@ -2149,6 +2159,13 @@ export const DEPTH_PREPASS_MARCH = /* wgsl */ `fn depthPrepassMarch(
   inst: ptr<storage, array<vec4<f32>>, read>,
   instCfg: vec4<f32>
 ) -> f32 {
+  // QUAD DISPATCH (stage a-2). A quad-mode crowd draws ONE screen quad and
+  // hands this entry the reconstructed pixel ray as worldPos, so the coarse
+  // walk runs against the union field. This entry has no tile list to take a
+  // sphere entry from, so the walk stays conservative from t = 0; an empty
+  // pixel returns -1, which DEPTH_PRE_FETCH reads as the no-start identity.
+  // Every per-body caller is unchanged: there worldPos is the proxy-box
+  // fragment position and no quad branch is reachable.
   loadInstance(inst, i32(instCfg.z));
   gWindDrift = gInstWind;
   gBodyAnchor = gInstAnchor;
@@ -2494,6 +2511,11 @@ export const MARCH_TRACE_SETUP = /* wgsl */ `  // FIRST STATEMENT, before anythi
   gWindDrift = gInstWind;
   gBodyAnchor = gInstAnchor;
   let rd = normalize(worldPos - camPos);
+  // QUAD DISPATCH (stage a-2). instCfg.y: 0 per-body, 1 instanced proxy box,
+  // 2 screen quad. Declared at SETUP's top so the tile preload (below) and the
+  // box-entry block (much later) share one definition; for y <= 1 it is false
+  // and every branch below is dead.
+  let quadMode = instCfg.y > 1.5;
   // PERF INSTRUMENTATION (task 2): debugCfg.x 0 = off, 1 = steps-per-pixel
   // heatmap, 2 = prims-per-pixel. Everything below is guarded so the
   // shipping path pays exactly one uniform branch; gDebugMode hands the
@@ -2527,8 +2549,15 @@ export const MARCH_TRACE_SETUP = /* wgsl */ `  // FIRST STATEMENT, before anythi
     // for the post-hit probes that leave the ray (calcNormal eps, the AO
     // probe at n * 0.06) — those sample the same gTile list.
     let rayCull = tileCfg.x > 1.5;
-    let reach = gInstCounts.w * 4.0 + ${RAY_CULL_SLACK};
+    // QUAD DISPATCH (stage a-2): the per-ray cull's reach is slot 0's record
+    // (gInstCounts.w) in box/boxless mode; a quad frame has no per-instance
+    // record bound, so the type's max blend K rides instCfg.w instead. select
+    // keeps the box reach verbatim when quadMode is false.
+    let reach = select(gInstCounts.w, instCfg.w, quadMode) * 4.0 + ${RAY_CULL_SLACK};
     var w = 0;
+    // Nearest conservative sphere entry, accumulated over the entries that
+    // survive (or skip) the per-ray cull. Only meaningful in quad mode.
+    var entryT = 1e9;
     for (var e = 0; e < ${TILE_MAX_ENTRIES}; e = e + 1) {
       if (e >= i32(n)) { break; }
       // Entry stream: TILE_STRIDE vec4s per entry at base head.x. Same record
@@ -2542,6 +2571,19 @@ export const MARCH_TRACE_SETUP = /* wgsl */ `  // FIRST STATEMENT, before anythi
         let rInf = b.w + reach * max(g.z, 1.0);
         if (dot(oc, oc) - tc * tc > rInf * rInf) { continue; }
       }
+      if (quadMode) {
+        // Ray vs the INFLATED bound sphere (reach x distortion + slack). entryT
+        // is a lower bound on this body's first possible surface, so clamping
+        // the march to it can never drop a hit; max(tc - th, 0) folds the
+        // camera-inside-sphere case.
+        let ocQ = b.xyz - camPos;
+        let tcQ = dot(ocQ, rd);
+        let rQ = b.w + reach * max(g.z, 1.0) + ${QUAD_ENTRY_SLACK};
+        let d2Q = dot(ocQ, ocQ) - tcQ * tcQ;
+        if (d2Q <= rQ * rQ) {
+          entryT = min(entryT, max(tcQ - sqrt(max(rQ * rQ - d2Q, 0.0)), 0.0));
+        }
+      }
       gTileBounds[w] = b;
       gTileGrp[w] = g;
       gTileBand[w] = (*tileEnt)[lin + 2u].x * ${DATA_ROWS}.0;
@@ -2549,6 +2591,12 @@ export const MARCH_TRACE_SETUP = /* wgsl */ `  // FIRST STATEMENT, before anythi
       w = w + 1;
     }
     gTileN = f32(w);
+    // QUAD DISPATCH (stage a-2): a quad fragment whose tile list is EMPTY can
+    // have no surface — discard before the wound list and before any stepping.
+    // This sits inside the tiles-on block on purpose: tiles off falls through
+    // to the else-if below and marches from the camera instead.
+    if (quadMode && gTileN < 0.5) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
+    gTileEntryT = entryT;
     // PER-PIXEL SLOT TABLE (perf 7d). The binder emits entries sorted by slot
     // (groups are appended per slot in CrowdType.sync, and the ray-cull
     // filter is a monotone subset), so a slot's entries are one contiguous
@@ -2572,6 +2620,11 @@ export const MARCH_TRACE_SETUP = /* wgsl */ `  // FIRST STATEMENT, before anythi
         }
       }
     }
+  } else if (quadMode) {
+    // QUAD DISPATCH (stage a-2): tiles off, so there is no tile list to take a
+    // conservative entry from — march from the camera. Correct (an entry is
+    // only ever a lower bound), slow, and debug-only: sync() logs once.
+    gTileEntryT = 0.0;
   }
   // PER-RAY WOUND LIST (counts2.w gate, 2026-09-07). Built ONCE per pixel:
   // a wound whose REACH sphere the ray never enters cannot change this
@@ -2744,7 +2797,14 @@ export const MARCH_TRACE_SETUP = /* wgsl */ `  // FIRST STATEMENT, before anythi
   let boxHalf = select(gInstHalf, instHalf, instCfg.y > 0.5);
   let bLo = (boxCentre - boxHalf - camPos) * invRd;
   let bHi = (boxCentre + boxHalf - camPos) * invRd;
-  let bodyEntry = max(max(min(bLo.x, bHi.x), min(bLo.y, bHi.y)), max(min(bLo.z, bHi.z), 0.0));
+  let boxEntry = max(max(min(bLo.x, bHi.x), min(bLo.y, bHi.y)), max(min(bLo.z, bHi.z), 0.0));
+  // QUAD DISPATCH (stage a-2): in quad mode the fragment's conservative entry
+  // is the nearest tile-sphere entry (gTileEntryT == 1e9 when the ray entered
+  // none), not a box face. BIT IDENTITY: for instCfg.y <= 1 quadMode is false,
+  // both discards below are dead, bodyEntry == boxEntry verbatim, and
+  // gTileEntryT is never read.
+  let bodyEntry = select(boxEntry, gTileEntryT, quadMode);
+  if (quadMode && bodyEntry > 1e8) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
   if (max(shellIn, bodyEntry) > prevT) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
   let tMax = min(tMaxSel, prevT);
   let steps = i32(marchCfg.x);

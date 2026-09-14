@@ -30,7 +30,8 @@
 // `PASS`/`FAIL` line. Exit 1 on any exceeded threshold (which is named).
 //
 // Env: LAB_VITE_PORT / LAB_CDP_PORT (default 5323 / 9323),
-//      MARCH_PARITY_ROOMS (default `1,2`), MARCH_PARITY_TILES=1.
+//      MARCH_PARITY_ROOMS (default `1,2`), MARCH_PARITY_TILES=1,
+//      MARCH_PARITY_DISPATCH (default `quad`; `boxes` is the stage-a path).
 // Run inside scripts/lab-servers.sh (see that file's header).
 import { connectGame, applyShipDefaults, bootCloseupPage, stageCloseUp } from './lib/sdf-closeup-stage.mjs';
 
@@ -38,12 +39,15 @@ const VITE = Number(process.env.LAB_VITE_PORT ?? 5323);
 const CDP = Number(process.env.LAB_CDP_PORT ?? 9323);
 const ROOMS = (process.env.MARCH_PARITY_ROOMS ?? '1,2').split(',').map((s) => Number(s.trim())).filter((n) => Number.isFinite(n));
 const TILES = process.env.MARCH_PARITY_TILES === '1';
+const DISPATCH = process.env.MARCH_PARITY_DISPATCH === 'boxes' ? 'boxes' : 'quad';
 const fail = (msg) => { console.error(`FAIL: ${msg}`); process.exit(1); };
 setTimeout(() => { console.error('FAIL: watchdog 8 min'); process.exit(3); }, 8 * 60_000).unref();
 
-// THRESHOLDS — pinned from the measured maxima (Task 7b Step 3), not guessed.
-// Measured across rooms 1+2, tiles off/on, deterministic to the last bit on a
-// repeat run (2026-09-14):
+// THRESHOLDS — pinned from the measured maxima, one set per dispatch (stage
+// a-2 added the quad dispatch; the boxes set is the Task-7b one, unchanged).
+//
+// BOXES (Task 7b, 2026-09-14): measured across rooms 1+2, tiles off/on,
+// deterministic to the last bit on a repeat run —
 //   maskDiffFrac max 0.0 (exactly) — so the ratified 0.1 % bar is retained,
 //     not tightened to 0; it is the structural allowance for a rim pixel whose
 //     marginal AA gate an ULP flips, and 2x0 has no significant figure.
@@ -52,11 +56,34 @@ setTimeout(() => { console.error('FAIL: watchdog 8 min'); process.exit(3); }, 8 
 //     legitimately moves with the accepted `t` through the wound/AO terms; this
 //     is a smoke alarm over those pixels, NOT a proof of equality.
 //   flat RGB      measured exactly 0 channels / 0.0 — required bit-identical.
-const THRESH = {
+//
+// QUAD (stage a-2, 2026-09-14): the entry moves from a box face to the nearest
+// tile-sphere entry and the fragment is the union field, so the accepted `t`
+// may shift by at most an entry epsilon at the surface and silhouette rim
+// pixels can flip. MEASURED (tiles on, rooms 1+2, deterministic to the bit on
+// a repeat run):
+//   maskDiffFrac max 3.2721e-5 (room 2, exactly 1 rim pixel of 30561 hits;
+//     rooms 1 and the second run both came out maskDiff 0) -> 2x = 6.545e-5
+//     -> one sig fig 7e-5.
+//   maxDz         max 2.1837e-3 (room 2; room 1 9.890e-4) -> 2x = 4.367e-3
+//     -> one sig fig 4e-3.
+//   lit rgbMax    max 0.2944 (room 1) -> 2x = 0.589 -> 0.6 (the boxes smoke
+//     alarm, unchanged).
+//   flat RGB      measured exactly 0 channels / 0.0 — required bit-identical.
+// HARD CEILINGS regardless of measurement: maskDiffFrac <= 0.005, maxDz <= 2e-2.
+const BOXES_THRESH = {
   maskDiffFrac: 0.001,
   maxDz: 3e-3,
   rgbMax: 0.6,
 };
+const QUAD_THRESH = {
+  maskDiffFrac: 7e-5,
+  maxDz: 4e-3,
+  rgbMax: 0.6,
+};
+const THRESH = DISPATCH === 'boxes' ? BOXES_THRESH : QUAD_THRESH;
+const HARD_MASK_CEILING = 0.005;
+const HARD_DZ_CEILING = 2e-2;
 
 /** The Task-7b comparison: hit-mask difference, depth delta over common hits,
  *  and lit-RGB delta over common hits. Sizes must agree. */
@@ -91,6 +118,9 @@ async function bootAndCapture({ room, crowd }) {
   await evaluate('__sdfGame.setLoopRunning(false)');
   await applyShipDefaults(evaluate);
   if (TILES) await evaluate('__sdfGame.setTiles(true)');
+  // Stage a-2: pick the dispatch BEFORE setCrowd(true) builds the types — the
+  // type stores the dispatch it was created with. The per-body boot ignores it.
+  await evaluate(`__sdfGame.setCrowdDispatch(${JSON.stringify(DISPATCH)})`);
   await evaluate(`__sdfGame.setCrowd(${crowd})`);
   // Same pins march-hash.mjs uses: fields off (sdf-layer's private frame
   // counter makes fields-on bimodal), flicker clock frozen, probe afterglow a
@@ -130,9 +160,13 @@ for (const room of ROOMS) {
 
   for (const [flat, key] of [[false, 'lit'], [true, 'flat']]) {
     const m = compare(perBody[key], crowd[key]);
-    const line = { room, tiles: TILES, flat, ...m };
+    const line = { room, tiles: TILES, dispatch: DISPATCH, flat, ...m };
     console.log(JSON.stringify(line));
-    const tag = `room${room} tiles=${TILES ? 1 : 0} flat=${flat ? 1 : 0}`;
+    const tag = `room${room} tiles=${TILES ? 1 : 0} dispatch=${DISPATCH} flat=${flat ? 1 : 0}`;
+    // Stage a-2 hard ceilings: independent of the measured-pin set above, the
+    // quad entry must not exceed these (the boxes set cannot either).
+    check(`${tag} maskDiffFrac(hard)`, m.maskDiffFrac, HARD_MASK_CEILING, '');
+    check(`${tag} maxDz(hard)`, m.maxDz, HARD_DZ_CEILING, '');
     check(`${tag} maskDiffFrac`, m.maskDiffFrac, THRESH.maskDiffFrac, '');
     check(`${tag} maxDz`, m.maxDz, THRESH.maxDz, '');
     if (flat) {

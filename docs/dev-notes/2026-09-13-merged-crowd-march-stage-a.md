@@ -297,6 +297,77 @@ not move; `node scripts/march-parity.mjs` **PASS** with tiles off and with
 
 Artifacts: `7f-crowd{2,4,6,8,12,16}/` (`bench.{json,md}` + `passes.{json,md}`).
 
+## Stage a-2 (1) — quad dispatch (2026-09-14)
+
+Replaces the crowd type's instanced proxy boxes with ONE screen-covering quad
+per type: every pixel is the union field, marched once, so the duplicate traces
+Task 7f measured (per-visible-body premium 1.18× → 2.37× from 2 to 8 bodies)
+cannot recur. **Kernel.** `MARCH_TRACE_SETUP` gains a third entry mode
+(`instCfg.y == 2`, `quadMode`). The tile preload accumulates the nearest
+ray-vs-inflated-sphere entry (`gTileEntryT`; reach = the type's max blend K
+stamped in `instCfg.w` × 4 + `RAY_CULL_SLACK`, plus `QUAD_ENTRY_SLACK = 0.02`);
+the box-entry block selects it (`bodyEntry = select(boxEntry, gTileEntryT,
+quadMode)`) and discards a fragment whose ray entered no sphere
+(`bodyEntry > 1e8`) or whose tile list is empty (`gTileN < 0.5`). Tiles off in
+quad mode marches from the camera (`gTileEntryT = 0`; debug only). Per-body and
+box materials are untouched: for `instCfg.y <= 1` `quadMode` is false, both
+discards are dead, `bodyEntry == boxEntry` verbatim and `gTileEntryT` is never
+read.
+
+**Material.** `createCrowdMaterial(..., dispatch)` draws `PlaneGeometry(2, 2)`
+with `vertexNode = vec4(positionGeometry.xy, 1, 1)` and reconstructs the pixel
+ray from `screenUV` (`ndc.y = 1 - 2·uv.y`; the tile binner flips the same way)
+via `cameraProjectionMatrixInverse` / `cameraWorldMatrix`. `rays.rayDir` was
+added so the depth node (`camPos + rd · t`) and `cosRay` use the reconstructed
+ray, not the quad's interpolated positionWorld (the quad has no meaningful one).
+The depth-prepass twin shares the quad and the worldPos; that entry has no tile
+list, so it marches conservatively from t = 0, and an empty pixel returns -1,
+which `DEPTH_PRE_FETCH` reads as the no-start identity. `crowd-type.ts` builds
+BOTH geometry/material pairs; `setDispatch('boxes' | 'quad')` swaps them and
+quad `sync()` skips the attribute pack, stamping `instCfg.y = 2` and
+`instCfg.w = maxBlendK`. Game seams: `?crowddispatch=quad|boxes` (default
+quad), `__sdfGame.setCrowdDispatch(mode)`, `crowdInfo().dispatch`; bench legs
+`crowd-quad` / `crowd-boxes` (`crowd-on` is an alias of `crowd-quad`).
+
+### Gates
+
+- `npx tsc --noEmit -p .` clean.
+- `march.wgsl.test.ts` 231 pass (new quad-entry pins; the raw box-entry text is
+  pinned unchanged as `boxEntry`), `deferred-sdf.test.ts` 21 pass,
+  `crowd-type.test.ts` 7 pass (dispatch switch).
+- `node scripts/march-hash.mjs` ×2 =
+  `a8ab4efac15fc0376c3e4e05420f13e34d1511bd` (wounded `da785297…`) — the
+  canonical per-body path did not move.
+
+### Parity (`MARCH_PARITY_TILES=1`, rooms 1–2; raw lines)
+
+quad (default; deterministic on a repeat run, bit-for-bit):
+
+```
+{"room":1,"tiles":true,"dispatch":"quad","flat":false,"hitA":33344,"hitB":33344,"maskDiff":0,"maskDiffFrac":0,"maxDz":0.0009889602661132812,"meanDz":2.8566755854923297e-7,"rgbDiffChannels":95952,"rgbMax":0.294435515999794}
+{"room":1,"tiles":true,"dispatch":"quad","flat":true,"hitA":33344,"hitB":33344,"maskDiff":0,"maskDiffFrac":0,"maxDz":0.0009889602661132812,"meanDz":2.8566755854923297e-7,"rgbDiffChannels":0,"rgbMax":0}
+{"room":2,"tiles":true,"dispatch":"quad","flat":false,"hitA":30561,"hitB":30562,"maskDiff":1,"maskDiffFrac":0.000032721442361179283,"maxDz":0.0021837353706359863,"meanDz":0.0000014940928829297093,"rgbDiffChannels":91391,"rgbMax":0.1492014229297638}
+{"room":2,"tiles":true,"dispatch":"quad","flat":true,"hitA":30561,"hitB":30562,"maskDiff":1,"maskDiffFrac":0.000032721442361179283,"maxDz":0.0021837353706359863,"meanDz":0.0000014940928829297093,"rgbDiffChannels":0,"rgbMax":0}
+```
+
+boxes (stage-a path, must be unchanged at the 7b thresholds):
+
+```
+{"room":1,"tiles":true,"dispatch":"boxes","flat":false,"hitA":33344,"hitB":33344,"maskDiff":0,"maskDiffFrac":0,"maxDz":0.000989377498626709,"meanDz":1.7960046394772812e-7,"rgbDiffChannels":68229,"rgbMax":0.2943807393312454}
+{"room":1,"tiles":true,"dispatch":"boxes","flat":true,"hitA":33344,"hitB":33344,"maskDiff":0,"maskDiffFrac":0,"maxDz":0.000989377498626709,"meanDz":1.7960046394772812e-7,"rgbDiffChannels":0,"rgbMax":0}
+{"room":2,"tiles":true,"dispatch":"boxes","flat":false,"hitA":30561,"hitB":30561,"maskDiff":0,"maskDiffFrac":0,"maxDz":0.0013788342475891113,"meanDz":6.197900080266592e-7,"rgbDiffChannels":61328,"rgbMax":0.14931834489107132}
+{"room":2,"tiles":true,"dispatch":"boxes","flat":true,"hitA":30561,"hitB":30561,"maskDiff":0,"maskDiffFrac":0,"maxDz":0.0013788342475891113,"meanDz":6.197900080266592e-7,"rgbDiffChannels":0,"rgbMax":0}
+```
+
+**Pinned thresholds** (`scripts/march-parity.mjs`, keyed by dispatch; the boxes
+set is unchanged from 7b): quad `maskDiffFrac <= 7e-5`, `maxDz <= 4e-3`, lit
+`rgbMax <= 0.6`; **hard ceilings** regardless of measurement
+`maskDiffFrac <= 0.005`, `maxDz <= 2e-2`; flat albedo byte-identical (measured
+0 channels / 0.0). Both dispatch modes PASS. The quad move is small: the
+entry shifted from a box face to the nearest sphere, so the only mask flip is
+1 rim pixel in room 2 and flat albedo is bit-identical — the union field and
+material path are exact.
+
 ## Next
 
 Task 1 (`crowd-records.ts`) — the 16-vec4 instance record and the

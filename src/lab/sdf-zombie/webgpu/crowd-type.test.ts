@@ -127,3 +127,37 @@ describe('crowd type visible-only packing (perf 7e)', () => {
     expect(t.info().attached).toBe(3);
   });
 });
+
+describe('crowd type dispatch switch (stage a-2)', () => {
+  it('swaps the screen quad in for the proxy boxes and stamps instCfg.y', () => {
+    const renderer = { compute() { /* GPU dispatch stub */ } } as unknown as THREE.WebGPURenderer;
+    const t = createCrowdType(renderer, 'zombie', defaultUniforms(blankFaceTexture()), 256, 256);
+    expect(t.dispatch).toBe('boxes');
+    const boxGeo = t.mesh.geometry;
+    expect(boxGeo).toBeInstanceOf(THREE.InstancedBufferGeometry);
+
+    expect(t.attach(stubView(0, [groupFor(0)]))).toBe(0);
+    const camera = new THREE.PerspectiveCamera(90, 1, 0.01, 100);
+    camera.updateMatrixWorld();
+    camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
+    const grid = { tilesX: 16, tilesY: 16, tilePx: TILE_SIZE_PX };
+
+    t.sync(camera, grid, new Set([0]));
+    expect((t.instCfg.value as THREE.Vector4).y).toBe(1);
+
+    t.setDispatch('quad');
+    expect(t.dispatch).toBe('quad');
+    expect(t.mesh.geometry.type).toBe('PlaneGeometry');
+    t.sync(camera, grid, new Set([0]));
+    expect((t.instCfg.value as THREE.Vector4).y).toBe(2);
+    // x still bounds the slot walk for the tiles-off debug path.
+    expect((t.instCfg.value as THREE.Vector4).x).toBe(1);
+    expect(t.info().dispatch).toBe('quad');
+    expect(t.info().visible).toBe(1);
+
+    t.setDispatch('boxes');
+    t.sync(camera, grid, new Set([0]));
+    expect((t.instCfg.value as THREE.Vector4).y).toBe(1);
+    expect(t.mesh.geometry).toBe(boxGeo);
+  });
+});

@@ -352,8 +352,13 @@ const ALL_LEGS = {
   // configuration as 'crowd-on-tiles-off' (verified on the page: boot enabled,
   // setTiles(false) -> false, setCrowd(true) -> still false). The intended A/B
   // is crowd tiles-on vs crowd tiles-off, so re-enable tiles here.
-  'crowd-on': { setCrowd: true, setTiles: true },
-  'crowd-on-tiles-off': { setCrowd: true, setTiles: false },
+  'crowd-on': { setCrowd: true, setTiles: true, setCrowdDispatch: 'quad' },
+  'crowd-on-tiles-off': { setCrowd: true, setTiles: false, setCrowdDispatch: 'quad' },
+  // STAGE a-2 DISPATCH A/B (2026-09-14). 'crowd-quad' is the one-screen-quad
+  // dispatch (the stage default); 'crowd-boxes' is the stage-a instanced proxy
+  // boxes. 'crowd-on' above is kept as an alias of 'crowd-quad'.
+  'crowd-quad': { setCrowd: true, setTiles: true, setCrowdDispatch: 'quad' },
+  'crowd-boxes': { setCrowd: true, setTiles: true, setCrowdDispatch: 'boxes' },
   // GOO DENSITY LEVERS (pass attribution 2026-09-07: goo:density equals the
   // march once blood flies). Run with BENCH_PASSES=1 and read the
   // goo:density row. 'goo-density-off' is the diagnostic ceiling — a wrong

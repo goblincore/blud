@@ -13,6 +13,7 @@ import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
   wgslFn, positionWorld, cameraPosition, vec4, uniform, texture, texture3D, float,
   cameraProjectionMatrix, cameraViewMatrix, cameraNear, cameraFar, modelWorldMatrix, normalize, sub, mul, add, screenUV,
+  cameraProjectionMatrixInverse, cameraWorldMatrix,
   storage, attribute, positionGeometry, vec3,
 } from 'three/tsl';
 import type { BuildResult } from '../build-body';
@@ -1069,6 +1070,12 @@ export interface MarchRayOverride {
   startT: unknown;
   marchCfg: unknown;
   side: THREE.Side;
+  /** Optional explicit world ray direction. Per-body/box materials leave this
+   *  off and derive it from the fragment's positionWorld; a quad-dispatch
+   *  crowd has no meaningful positionWorld (clip-space vertex override) and
+   *  passes the reconstructed direction so the depth node and cosRay agree
+   *  with the ray the marcher integrates. */
+  rayDir?: unknown;
 }
 
 /** Builds the march material (depth-writing proxy-box shader). Exported for
@@ -1148,7 +1155,10 @@ export function createMarchMaterial(
   const segVolumeMetaNode = segVolumeMetaNodeIn ?? texture(segFallback.meta);
   // Hoisted above the march call: the accumulated-depth gate's cosRay reads
   // the same ray the march integrates.
-  const rayDir = normalize(sub(positionWorld, cameraPosition));
+  // The ray's world direction. Per-body/box materials derive it from the
+  // fragment's interpolated positionWorld; a quad-dispatch crowd reconstructs
+  // it from screenUV and passes it through `rays` (see crowdRayNodes).
+  const rayDir = (rays?.rayDir ?? normalize(sub(positionWorld, cameraPosition))) as never;
   /** The ray's cosine against the view axis — one definition, shared by the prev-depth
    *  fetch and (via `extra`) any entry that needs it. */
   const cosRay = mul(cameraViewMatrix, vec4(rayDir, 0.0)).z.negate();
@@ -1469,6 +1479,28 @@ export function writeViewRecord(
 }
 
 /**
+ * The full-screen-quad ray reconstruction (stage a-2). PlaneGeometry(2, 2)
+ * spans clip xy in [-1, 1]; z = w = 1 places the quad on the far plane so it
+ * never clips, and the marcher writes the real hit depth through depthNode.
+ * `screenUV` is three's screenCoordinate/screenSize — origin TOP-left, y down
+ * — so NDC.y = 1 - 2 uv.y, the same flip the tile binner uses (see
+ * tile-cull.ts). `worldPos` is the true far-plane point, which makes the march's
+ * `tMax = length(worldPos - camPos)` the pixel's actual far distance.
+ */
+function crowdRayNodes() {
+  const clip = vec4(positionGeometry.xy, float(1.0), float(1.0));
+  const ndc = vec4(
+    screenUV.x.mul(2).sub(1),
+    float(1).sub(screenUV.y).mul(2).sub(1),
+    float(1.0), float(1.0),
+  );
+  const view = cameraProjectionMatrixInverse.mul(ndc);
+  const viewFar = view.xyz.div(view.w);
+  const farWorld = cameraWorldMatrix.mul(vec4(viewFar, float(1.0))).xyz;
+  return { clip, worldPos: farWorld, rayDir: normalize(farWorld.sub(cameraPosition)) };
+}
+
+/**
  * Crowd stage a (Task 5): the ONE material pair a character type draws every
  * instance with. A thin wrapper around createMarchMaterial that
  *
@@ -1488,15 +1520,27 @@ export function createCrowdMaterial(
   crowd: { inst: CrowdRecords['node']; instCfg: ReturnType<typeof uniform> },
   tiles?: ComputeTileBinding,
   sources?: CrowdMaterialSources,
+  dispatch: 'boxes' | 'quad' = 'boxes',
+  // Quad dispatch builds a SECOND material pair per type; handing it the box
+  // pair's level-shadow node keeps the game's single per-frame rebind reaching
+  // whichever dispatch is active (a private node would stay on the fallback).
+  sharedLevelShadowTex?: ReturnType<typeof texture>,
 ): CrowdMaterialHandles {
-  // The instanced proxy box: a [-1, 1]^3 BoxGeometry, scaled by the instance's
-  // half extents and moved to its centre. positionGeometry, not positionLocal:
-  // positionLocal IS what positionNode assigns, so referencing it here would be
-  // self-referential. (The geometry is 2-wide because iHalf is a HALF extent —
-  // pos * iHalf must span ±half, matching the bLo/bHi entry maths.)
-  const instCentre = attribute('iCentre', 'vec3') as unknown as Vec3Node;
-  const instHalf = attribute('iHalf', 'vec3') as unknown as Vec3Node;
+  const quad = dispatch === 'quad';
+  // Box: a [-1, 1]^3 BoxGeometry scaled by the instance's half extents and
+  // moved to its centre — the iCentre/iHalf attributes ARE the box-entry
+  // override the shader reads. Quad: the plane carries no such attributes, so
+  // bind zero vec3 uniforms; MARCH_TRACE_SETUP still evaluates the box branch
+  // but selects the tile-sphere entry in quad mode, so the zeros never become
+  // the march's entry.
+  const instCentre = (quad
+    ? uniform(new THREE.Vector3(0, 0, 0))
+    : attribute('iCentre', 'vec3')) as unknown as Vec3Node;
+  const instHalf = (quad
+    ? uniform(new THREE.Vector3(0, 0, 0))
+    : attribute('iHalf', 'vec3')) as unknown as Vec3Node;
   const positionNode = instCentre.add(positionGeometry.mul(instHalf));
+  const quadNodes = quad ? crowdRayNodes() : undefined;
   const volumeTex = fallbackCrowdVolumeTexture();
   const segFallback = fallbackSegmentVolumeTextures();
   const depthSegAtlasNode = texture3D(segFallback.atlas);
@@ -1508,16 +1552,33 @@ export function createCrowdMaterial(
     undefined, sources?.occluder,
     tiles ? { header: tiles.headerNode, entries: tiles.entryNode } : undefined,
     sources?.shell, sources?.prev, undefined,
-    undefined, sources?.depthPre, 'lit', undefined,
+    quadNodes
+      ? {
+          worldPos: quadNodes.worldPos,
+          rayDir: quadNodes.rayDir,
+          startT: float(0),
+          marchCfg: u.marchCfg,
+          side: THREE.DoubleSide,
+        }
+      : undefined,
+    sources?.depthPre, 'lit', undefined,
     sources?.probeDyn?.node, sources?.lastFrame,
-    undefined, undefined, undefined, undefined,
+    undefined,
+    sharedLevelShadowTex,
+    undefined, undefined,
     { inst: crowd.inst, instCfg: crowd.instCfg, instCentre, instHalf },
   );
-  material.positionNode = positionNode as never;
+  if (quad) {
+    // Full-screen quad: the raw clip-space vertex; the ray override above
+    // carries worldPos/rayDir to the march and to the depth node.
+    material.vertexNode = quadNodes!.clip as never;
+  } else {
+    material.positionNode = positionNode as never;
+  }
 
   const depthPreCfg = sources?.depthPre ? sources.depthPre.uniforms.cfg : createDepthPreUniforms().cfg;
   const depthPreT = depthPreMarch({
-    worldPos: positionWorld,
+    worldPos: (quad ? quadNodes!.worldPos : positionWorld) as never,
     camPos: cameraPosition,
     data: texture(dataTex),
     volumeTex: texture3D(volumeTex),
@@ -1536,8 +1597,13 @@ export function createCrowdMaterial(
     instCfg: crowd.instCfg,
   }) as unknown as { div: (d: unknown) => unknown };
   const depthPreMaterial = new MeshBasicNodeMaterial();
-  depthPreMaterial.positionNode = positionNode as never;
-  depthPreMaterial.side = THREE.BackSide;
+  if (quad) {
+    depthPreMaterial.vertexNode = quadNodes!.clip as never;
+    depthPreMaterial.side = THREE.DoubleSide;
+  } else {
+    depthPreMaterial.positionNode = positionNode as never;
+    depthPreMaterial.side = THREE.BackSide;
+  }
   // FOG STAYS OFF: this material writes a distance through the main scene, and
   // scene fog would smoothstep-mix it toward fogColor (see the per-body twin).
   depthPreMaterial.fog = false;

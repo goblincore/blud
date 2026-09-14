@@ -38,7 +38,7 @@
 
 **Files:** `march.wgsl.ts`, `march.wgsl.test.ts`, `zombie-gpu.ts`, `crowd-type.ts`, `crowd-type.test.ts`, `game-main.ts`, `scripts/march-parity.mjs`
 
-- [ ] **Step 1: Failing kernel pins.** In `march.wgsl.test.ts` add:
+- [x] **Step 1: Failing kernel pins.** In `march.wgsl.test.ts` add:
 
 ```ts
 describe('crowd quad dispatch (stage a-2)', () => {
@@ -56,7 +56,7 @@ describe('crowd quad dispatch (stage a-2)', () => {
 
 Run `npx vitest run src/lab/sdf-zombie/webgpu/march.wgsl.test.ts` — FAIL.
 
-- [ ] **Step 2: Kernel — nearest sphere entry during the tile preload.** In `MARCH_TRACE_SETUP`'s preload loop (the one that fills `gTileBounds[w]` etc., after the optional `rayCull` test), accumulate the nearest conservative entry along the ray:
+- [x] **Step 2: Kernel — nearest sphere entry during the tile preload.** In `MARCH_TRACE_SETUP`'s preload loop (the one that fills `gTileBounds[w]` etc., after the optional `rayCull` test), accumulate the nearest conservative entry along the ray:
 
 ```wgsl
     var entryT = 1e9;
@@ -77,7 +77,7 @@ Run `npx vitest run src/lab/sdf-zombie/webgpu/march.wgsl.test.ts` — FAIL.
 
 `export const QUAD_ENTRY_SLACK = '0.02';` (metres; the sphere already carries blendReach × distortion, this covers the smin support's outward bulge). Declare `var<private> gTileEntryT: f32 = 1e9;` next to `gTileN`. `reach` already exists in that block (`gInstCounts.w * 4.0 + RAY_CULL_SLACK`); in quad mode `gInstCounts` is slot 0's record — replace `reach` in this block with the max `maxBlendK` the type stamps: add it as `instCfg.w` (`CrowdType.sync` sets `instCfg.value.w = maxBlendK`; per-body views set 0 and the box path never reads it): `let reach = select(gInstCounts.w, instCfg.w, quadMode) * 4.0 + RAY_CULL_SLACK`. When `tileCfg.x < 0.5` (tiles off) the preload does not run; in quad mode with tiles off set `gTileEntryT = 0.0` (march from the camera; correct, slow, only a debug configuration — log once from `sync()` when `dispatch === 'quad'` and tiles are off).
 
-- [ ] **Step 3: Kernel — entry selection and empty-tile discard.** Replace the box-entry block:
+- [x] **Step 3: Kernel — entry selection and empty-tile discard.** Replace the box-entry block:
 
 ```wgsl
   let quadMode = instCfg.y > 1.5;
@@ -96,9 +96,9 @@ The two `discard` lines must be placed AFTER the tile preload (it is — the pre
 
 Bit-identity argument (comment it): for `instCfg.y <= 1`, `quadMode` is false, both discards are dead, `bodyEntry == boxEntry` verbatim, and `gTileEntryT` is never read.
 
-- [ ] **Step 4: Run the kernel pins + the parser pin** — `npx vitest run src/lab/sdf-zombie/webgpu/march.wgsl.test.ts src/lab/sdf-zombie/webgpu/deferred-sdf.test.ts` — PASS (the 7d `WGSLNodeFunction` pin over every helper must still pass; no `(`/`)`/`:` in param-list comments).
+- [x] **Step 4: Run the kernel pins + the parser pin** — `npx vitest run src/lab/sdf-zombie/webgpu/march.wgsl.test.ts src/lab/sdf-zombie/webgpu/deferred-sdf.test.ts` — PASS (the 7d `WGSLNodeFunction` pin over every helper must still pass; no `(`/`)`/`:` in param-list comments).
 
-- [ ] **Step 5: Crowd material — quad vertex override and ray reconstruction.** In `zombie-gpu.ts` `createCrowdMaterial(atlasTex, uniforms, crowd, tiles, sources, dispatch: 'boxes' | 'quad' = 'boxes')`:
+- [x] **Step 5: Crowd material — quad vertex override and ray reconstruction.** In `zombie-gpu.ts` `createCrowdMaterial(atlasTex, uniforms, crowd, tiles, sources, dispatch: 'boxes' | 'quad' = 'boxes')`:
 
 ```ts
 import { vec4, vec3, positionGeometry, screenUV, cameraProjectionMatrixInverse, cameraWorldMatrix, cameraPosition, cameraFar, normalize, float } from 'three/tsl';
@@ -120,11 +120,11 @@ function crowdRayNodes() {
 
 For `dispatch === 'quad'`: `material.vertexNode = clip`, pass `rays: { worldPos, startT: float(0) }` through the existing `rays` override of `createMarchMaterial` (the hull-refine view is prior art for `rays`), bind `instCentre`/`instHalf` to zero vec3 uniforms, and set `instCfg.y = 2` in `sync()`. The depth-pre twin material gets the same `vertexNode` and `worldPos`. Verify how `createMarchMaterial` computes `depthNode` from the hit `t` and `worldPos` (it must use `camPos + rd * t`, not the interpolated vertex depth; if it derives depth from `positionWorld`, switch it to the ray form for the quad path only). Confirm `screenUV` orientation by a 30-second lab check: with `?crowd=1&crowddispatch=quad` the room-1 close-up must show bodies where the per-body path shows them (compare `readMarchTarget` hit masks in `march-parity`; a flipped ray gives `maskDiff ≈ 100 %`).
 
-- [ ] **Step 6: Crowd type — dispatch switch.** In `crowd-type.ts`: `createCrowdQuadGeometry()` returns `new THREE.PlaneGeometry(2, 2)`; `createCrowdType(renderer, name, uniforms, maxW, maxH, opts?: { dispatch?: 'boxes' | 'quad' })` builds BOTH geometries and both material pairs, and `mesh.geometry`/`mesh.material` (and the depth-pre twin) point at the active pair; `setDispatch(mode)` swaps them and stamps `instCfg.y` (1 boxes, 2 quad) on the next `sync()`. In quad mode `sync()` skips the instance-attribute pack (still computes `visible` for `info()`), stamps `instCfg.w = maxBlendK`, and sets `mesh.frustumCulled = false`. `info()` reports `dispatch`. Test (`crowd-type.test.ts`): after `setDispatch('quad')` + `sync`, `instCfg.value.y === 2` and `mesh.geometry` is the plane; after `setDispatch('boxes')`, `instCfg.value.y === 1` and the instanced geometry is back.
+- [x] **Step 6: Crowd type — dispatch switch.** In `crowd-type.ts`: `createCrowdQuadGeometry()` returns `new THREE.PlaneGeometry(2, 2)`; `createCrowdType(renderer, name, uniforms, maxW, maxH, opts?: { dispatch?: 'boxes' | 'quad' })` builds BOTH geometries and both material pairs, and `mesh.geometry`/`mesh.material` (and the depth-pre twin) point at the active pair; `setDispatch(mode)` swaps them and stamps `instCfg.y` (1 boxes, 2 quad) on the next `sync()`. In quad mode `sync()` skips the instance-attribute pack (still computes `visible` for `info()`), stamps `instCfg.w = maxBlendK`, and sets `mesh.frustumCulled = false`. `info()` reports `dispatch`. Test (`crowd-type.test.ts`): after `setDispatch('quad')` + `sync`, `instCfg.value.y === 2` and `mesh.geometry` is the plane; after `setDispatch('boxes')`, `instCfg.value.y === 1` and the instanced geometry is back.
 
-- [ ] **Step 7: Game seams.** `game-main.ts`: `?crowddispatch=quad|boxes` (default `quad`), passed to `createCrowdType`; `__sdfGame.setCrowdDispatch(mode)` loops types; `crowdInfo()` includes `dispatch`. Bench: legs `'crowd-quad': { setCrowd: true, setTiles: true, setCrowdDispatch: 'quad' }` and `'crowd-boxes': { ... 'boxes' }`; keep `crowd-on` as an alias of `crowd-quad`.
+- [x] **Step 7: Game seams.** `game-main.ts`: `?crowddispatch=quad|boxes` (default `quad`), passed to `createCrowdType`; `__sdfGame.setCrowdDispatch(mode)` loops types; `crowdInfo()` includes `dispatch`. Bench: legs `'crowd-quad': { setCrowd: true, setTiles: true, setCrowdDispatch: 'quad' }` and `'crowd-boxes': { ... 'boxes' }`; keep `crowd-on` as an alias of `crowd-quad`.
 
-- [ ] **Step 8: Parity re-pin.** `scripts/march-parity.mjs`: `MARCH_PARITY_DISPATCH` (default `quad`) calls `setCrowdDispatch` on the crowd boot. Run tiles-on (quad mode is only meaningful with tiles) for rooms 1–2:
+- [x] **Step 8: Parity re-pin.** `scripts/march-parity.mjs`: `MARCH_PARITY_DISPATCH` (default `quad`) calls `setCrowdDispatch` on the crowd boot. Run tiles-on (quad mode is only meaningful with tiles) for rooms 1–2:
 
 ```bash
 MARCH_PARITY_TILES=1 node scripts/march-parity.mjs
@@ -133,7 +133,7 @@ MARCH_PARITY_TILES=1 MARCH_PARITY_DISPATCH=boxes node scripts/march-parity.mjs  
 
 Expected for quad: `maskDiffFrac` small but possibly non-zero at silhouette rims (the entry moved from a box face to a sphere; the AA-gated hit can flip on rim pixels), `maxDz` larger than 7b's 1.4e-3 by up to one hit epsilon at the surface. Re-pin the QUAD thresholds from measurement (2× the maxima, one significant figure) as a separate threshold set keyed by dispatch; keep the boxes set unchanged. Hard ceilings regardless of measurement: `maskDiffFrac <= 0.005`, `maxDz <= 2e-2`, flat-albedo `rgbDiffChannels` restricted to pixels whose `|dz| > 0` (same prim, same albedo where t agrees). If any ceiling is exceeded, stop and report; the likely causes are a flipped ray (mask ≈ 100 %), a too-small `QUAD_ENTRY_SLACK` (mask diff concentrated at rims where the ray grazes a sphere — raise to 0.05 and re-measure), or the depth node still reading vertex depth (all hit pixels at far-plane depth).
 
-- [ ] **Step 9: Gates and commit**
+- [x] **Step 9: Gates and commit**
 
 ```bash
 npx tsc --noEmit -p .

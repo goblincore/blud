@@ -36,6 +36,17 @@ export { allocateSlot };
  *  iHalf.xyz, iSlot. */
 export const INST_FLOATS = 7;
 
+/** Crowd dispatch (stage a-2): one instanced proxy box per body, or one
+ *  screen-covering quad per type whose fragment is the union field. */
+export type CrowdDispatch = 'boxes' | 'quad';
+
+/** The full-screen quad a quad-dispatch crowd type draws. PlaneGeometry(2, 2)
+ *  spans clip xy in [-1, 1]; the material's vertexNode keeps it on the far
+ *  plane and reconstructs the pixel ray from screenUV (see crowdRayNodes). */
+export function createCrowdQuadGeometry(): THREE.PlaneGeometry {
+  return new THREE.PlaneGeometry(2, 2);
+}
+
 /**
  * The high-water mark of a set of occupied slots: max(slot) + 1, or 0 when
  * empty. `instCfg.x` is stamped with this, not MAX_CROWD_INSTANCES: since
@@ -97,6 +108,9 @@ export function packInstanceAttrs(list: InstanceAttrSource[], out: Float32Array)
 
 export interface CrowdType {
   readonly name: string;
+  /** Active dispatch, stamped into instCfg.y on the next sync() (1 boxes,
+   *  2 quad). Swap it with setDispatch(). */
+  readonly dispatch: CrowdDispatch;
   readonly atlas: CrowdPrimAtlas;
   readonly records: CrowdRecords;
   /** The per-TYPE uniform block the shared material binds. */
@@ -128,13 +142,16 @@ export interface CrowdType {
   ): void;
   /** Rebinds the type's shared sampled-skeleton atlas/meta pair. */
   setSkeletonVolume(atlas: THREE.Texture, meta: THREE.Texture): void;
+  /** Swaps between the instanced proxy boxes and the one-screen-quad dispatch.
+   *  The instCfg.y stamp and the tile rebin land on the next sync(). */
+  setDispatch(mode: CrowdDispatch): void;
   /** The exact groups (and maxBlendK) the LAST sync() binned. The room-2
    *  slot-mask diagnostic feeds these to the CPU TileBinner — the bit-identical
    *  reference for the GPU binding — to learn each tile's distinct-slot set. */
   binInputs(): { groups: TileGroupInput[]; maxBlendK: number };
   info(): {
     attached: number; visible: number; tileFallbacks: number;
-    culledByBudget: number; clampedTiles: number;
+    culledByBudget: number; clampedTiles: number; dispatch: CrowdDispatch;
   };
 }
 
@@ -145,6 +162,7 @@ export function createCrowdType(
   maxW: number,
   maxH: number,
   sources?: CrowdMaterialSources,
+  opts?: { dispatch?: CrowdDispatch },
 ): CrowdType {
   // ONE shared prim atlas, ONE record buffer, ONE material pair, ONE tile
   // binding — the whole point of the type. The atlas is allocated at the
@@ -172,10 +190,27 @@ export function createCrowdType(
   geo.setAttribute('iSlot', new THREE.InterleavedBufferAttribute(ib, 1, 6));
   geo.instanceCount = 0;
 
-  const handles = createCrowdMaterial(atlas.texture, uniforms, { inst: records.node, instCfg }, tiles, sources);
-  const mesh = new THREE.Mesh(geo, handles.material);
+  // QUAD DISPATCH (stage a-2): the second geometry/material pair. One screen
+  // quad per type draws a single fragment per pixel and reconstructs the pixel
+  // ray from screenUV; MARCH_TRACE_SETUP takes its entry from the tile spheres.
+  const quadGeo = createCrowdQuadGeometry();
+
+  const handles = createCrowdMaterial(
+    atlas.texture, uniforms, { inst: records.node, instCfg }, tiles, sources, 'boxes',
+  );
+  // The quad material shares the boxes material's level-shadow node so the
+  // game's single per-frame rebind (`t.levelShadowTex.value = map`) reaches
+  // whichever dispatch is active; both otherwise start on the 1x1 fallback.
+  const quadHandles = createCrowdMaterial(
+    atlas.texture, uniforms, { inst: records.node, instCfg }, tiles, sources, 'quad',
+    (handles.material as unknown as { levelShadowTex: ReturnType<typeof texture> }).levelShadowTex,
+  );
+  let dispatch: CrowdDispatch = opts?.dispatch ?? 'boxes';
+  const activeHandles = () => (dispatch === 'quad' ? quadHandles : handles);
+  const activeGeometry = () => (dispatch === 'quad' ? quadGeo : geo);
+  const mesh = new THREE.Mesh(activeGeometry(), activeHandles().material);
   mesh.frustumCulled = false; // the box attributes ARE the bounds; no double cull
-  const depthPreMesh = new THREE.Mesh(geo, handles.depthPreMaterial);
+  const depthPreMesh = new THREE.Mesh(activeGeometry(), activeHandles().depthPreMaterial);
   depthPreMesh.frustumCulled = false;
 
   const free = new Set<number>();
@@ -218,6 +253,7 @@ export function createCrowdType(
 
   return {
     name, atlas, records, uniforms, mesh, depthPreMesh, levelShadowTex, tiles, instCfg,
+    get dispatch() { return dispatch; },
 
     attach(view) {
       const slot = allocateSlot(free);
@@ -306,10 +342,21 @@ export function createCrowdType(
         heightPx: grid.tilesY * grid.tilePx,
       });
 
-      const n = packInstanceAttrs(list, instOut);
-      geo.instanceCount = n;
-      packedCount = n;
-      ib.needsUpdate = true;
+      // BOX DISPATCH: pack the live instances densely and draw that many proxy
+      // boxes. QUAD DISPATCH: one non-instanced screen quad draws every pixel,
+      // so there is no attribute pack and no instanceCount — but keep the box
+      // buffer at 0 so a later setDispatch('boxes') cannot draw stale rows
+      // before its own sync repacks them.
+      if (dispatch === 'boxes') {
+        const n = packInstanceAttrs(list, instOut);
+        geo.instanceCount = n;
+        ib.needsUpdate = true;
+      } else {
+        geo.instanceCount = 0;
+      }
+      // info().visible is the game-visible body count for BOTH dispatches (in
+      // box mode it equals the pack length).
+      packedCount = drawnSlots.length;
 
       if (!ok) {
         // The binder refused for a reason other than the group budget (which
@@ -318,7 +365,8 @@ export function createCrowdType(
         // per step. tileCfg.x is NOT touched — it follows the game's tile
         // switch, not this frame's bin result.
         tileFallbacks++;
-        instCfg.value.set(0, 1, 0, 0);
+        if (dispatch === 'quad') instCfg.value.set(0, 2, 0, 0);
+        else instCfg.value.set(0, 1, 0, 0);
       } else {
         // Stamp the ACTIVE grid for the shader, exactly as wireViewTiles does.
         uniforms.tileCfg.value.set(
@@ -326,15 +374,29 @@ export function createCrowdType(
         );
         // x is the loop upper bound — the attached high-water mark of the
         // DRAWN instances, not the capacity (free slots below it carry
-        // alive = 0 and are skipped); y = 1 marks the crowd material.
-        instCfg.value.set(highWater(drawnSlots), 1, 0, 0);
+        // alive = 0 and are skipped). y selects the entry mode: 1 instanced
+        // proxy box, 2 screen quad. w carries the type's max blend K to the
+        // quad path's tile-sphere inflation (the box path reads the record).
+        instCfg.value.set(highWater(drawnSlots), dispatch === 'quad' ? 2 : 1, 0, maxBlendK);
       }
 
       atlas.flush();
       records.flush();
     },
 
-    setSkeletonVolume(atlasTex, meta) { handles.setSkeletonVolume(atlasTex, meta); },
+    setSkeletonVolume(atlasTex, meta) {
+      handles.setSkeletonVolume(atlasTex, meta);
+      quadHandles.setSkeletonVolume(atlasTex, meta);
+    },
+
+    setDispatch(mode) {
+      if (mode === dispatch) return;
+      dispatch = mode;
+      mesh.geometry = activeGeometry();
+      mesh.material = activeHandles().material;
+      depthPreMesh.geometry = activeGeometry();
+      depthPreMesh.material = activeHandles().depthPreMaterial;
+    },
 
     binInputs() { return { groups: lastBinGroups, maxBlendK: lastBinMaxBlendK }; },
 
@@ -362,7 +424,7 @@ export function createCrowdType(
         }
         clampedTiles = diagBinner.bin(lastBinGroups, lastCamera, lastBinMaxBlendK).clampedTiles;
       }
-      return { attached, visible, tileFallbacks, culledByBudget, clampedTiles };
+      return { attached, visible, tileFallbacks, culledByBudget, clampedTiles, dispatch };
     },
   };
 }

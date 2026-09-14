@@ -645,7 +645,9 @@ describe('ported features reach the entry point', () => {
     // wherever the fragment lies behind an already-accumulated hit. min()
     // was inert: min <= shellIn <= prevT almost everywhere (task 5 finding).
     expect(MARCH_BODY).toContain('if (max(shellIn, bodyEntry) > prevT) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }');
-    expect(MARCH_BODY).toContain('let bodyEntry = max(max(min(bLo.x, bHi.x), min(bLo.y, bHi.y)), max(min(bLo.z, bHi.z), 0.0));');
+    // Stage a-2 renamed the raw ray-box entry to boxEntry so the quad mode can
+    // select against gTileEntryT; the box algebra itself is unchanged.
+    expect(MARCH_BODY).toContain('let boxEntry = max(max(min(bLo.x, bHi.x), min(bLo.y, bHi.y)), max(min(bLo.z, bHi.z), 0.0));');
     expect(MARCH_BODY).toContain('let tMax = min(tMaxSel, prevT);');
     // The 5 cm graze slack from 48f00de2 was REMOVED (adversarial review: a
     // behaviour change riding a debug commit, superseded by the graze
@@ -2542,7 +2544,8 @@ describe('crowd instance state', () => {
     const globals = FOLD_GROUP + INSTANCE_STATE;
     for (const g of ['gInstCounts', 'gInstCounts2', 'gInstWoundBound', 'gInstAnchor', 'gInstWind',
       'gInstMelt', 'gInstFlash', 'gInstNoiseShift', 'gInstHeadCentre', 'gInstHeadQuat',
-      'gInstVolPose0', 'gInstVolPose1', 'gInstCentre', 'gInstHalf', 'gBand', 'gSlot']) {
+      'gInstVolPose0', 'gInstVolPose1', 'gInstCentre', 'gInstHalf', 'gBand', 'gSlot',
+      'gTileEntryT']) {
       expect(globals).toContain(`var<private> ${g}`);
     }
     expect(INSTANCE_STATE).toContain(`fn loadInstance(inst: ptr<storage, array<vec4<f32>>, read>, slot: i32)`);
@@ -2563,5 +2566,24 @@ describe('crowd instance state', () => {
     expect(APPLY_CARVES).toContain('fn applyCarves(dIn: f32, p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, band: i32)');
     expect(APPLY_WOUNDS).toContain('band: i32');
     expect(MAP_BODY).toContain('for (var k = 0; k < ${MAX_CROWD_INSTANCES}; k = k + 1)'.replace('${MAX_CROWD_INSTANCES}', '64'));
+  });
+});
+
+describe('crowd quad dispatch (stage a-2)', () => {
+  it('has a quad entry mode gated on instCfg.y == 2 that discards empty tiles before stepping', () => {
+    expect(MARCH_TRACE_SETUP).toContain('let quadMode = instCfg.y > 1.5;');
+    expect(MARCH_TRACE_SETUP).toContain('if (quadMode && gTileN < 0.5) { discard;');
+    expect(MARCH_TRACE_SETUP).toContain('gTileEntryT');
+    expect(MARCH_TRACE_SETUP).toContain('let bodyEntry = select(boxEntry, gTileEntryT, quadMode);');
+  });
+
+  it('keeps the box entry text for instCfg.y <= 1', () => {
+    expect(MARCH_TRACE_SETUP).toContain('let boxEntry = max(max(min(bLo.x, bHi.x), min(bLo.y, bHi.y)), max(min(bLo.z, bHi.z), 0.0));');
+  });
+
+  it('accumulates the nearest sphere entry only in quad mode, with the type max blend reach', () => {
+    expect(MARCH_TRACE_SETUP).toContain('let reach = select(gInstCounts.w, instCfg.w, quadMode) * 4.0 +');
+    expect(MARCH_TRACE_SETUP).toContain('gTileEntryT = entryT;');
+    expect(MARCH_TRACE_SETUP).toContain('if (max(shellIn, bodyEntry) > prevT) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }');
   });
 });
