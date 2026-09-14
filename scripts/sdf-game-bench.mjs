@@ -53,6 +53,15 @@ const PRELUDE = process.env.BENCH_PRELUDE ?? '';
 // `__sdfGame.spawnCrowd` seam added for the crowd-march work.
 const CROWD = Number(process.env.BENCH_CROWD ?? 0);
 const CROWD_PRELUDE = CROWD > 0 ? `__sdfGame.spawnCrowd('zombie', ${CROWD})` : '';
+// BENCH_CROWD_MAX — hard ceiling on BENCH_CROWD. The 24-body crowd path hung
+// the GPU for 330 s and corrupted the owner's display on 2026-09-14; this
+// makes that failure mode a boot refusal instead of a display-corrupting run.
+const CROWD_MAX = Number(process.env.BENCH_CROWD_MAX ?? 24);
+// BENCH_FRAME_CAP_MS — the probe frame guard. Before each leg's real bench run
+// a tiny `mode: 'passes'` probe returns a fenced frame p50; above this cap (or
+// a 30 s evaluate timeout) the leg is ABORTED without the long run. A too-slow
+// scene must fail fast and visibly, never hold the GPU.
+const FRAME_CAP_MS = Number(process.env.BENCH_FRAME_CAP_MS ?? 250);
 // BENCH_PASSES=1 — per-pass GPU timestamp attribution (gpu-pass-timing.ts).
 // Runs the matrix in the harness's 'passes' mode: the same fence-per-chunk
 // frame timing as throughput, PLUS every render/compute pass summed by its
@@ -93,6 +102,11 @@ const MAX_CONSEC_FAILS = Number(process.env.BENCH_MAX_CONSEC_FAILS ?? 3);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const fail = (msg) => { console.error(`FAIL: ${msg}`); process.exit(1); };
+if (CROWD > CROWD_MAX) {
+  fail(`BENCH_CROWD=${CROWD} exceeds BENCH_CROWD_MAX=${CROWD_MAX} — refusing to start. `
+    + 'Raise BENCH_CROWD_MAX deliberately only after the frame guard is validated; '
+    + 'the unbounded crowd overflow hung the GPU for 330 s on 2026-09-14.');
+}
 
 mkdirSync(OUT, { recursive: true });
 
@@ -576,6 +590,29 @@ async function runLeg(name, room, mode) {
   console.log(`  [${name}] upscaleInfo().on=${JSON.parse(infoNote).up} refineInfo().on=${JSON.parse(infoNote).refine}`);
   if (PRELUDE) { progress.phase = 'prelude'; await evaluate(PRELUDE); }
   const label = `${name}/room${room}/${mode}`;
+  // FRAME GUARD (perf 7d). A tiny probe BEFORE the real run: the smallest
+  // accepted warmup/chunk, 'passes' mode, a 30 s CDP evaluate timeout. Its
+  // fenced frame p50 decides whether the scene is safe to bench at all. A
+  // probe that times out or reads over BENCH_FRAME_CAP_MS aborts the leg and
+  // SKIPS the long run — the honest early-out for the 24-body hang class.
+  progress.phase = 'probe';
+  let probe;
+  try {
+    probe = await evaluate(
+      `__sdfGame.bench({ room: ${room}, mode: "passes", warmup: 4, chunkFrames: 2, label: ${JSON.stringify(`${label}-probe`)} })`,
+      30_000,
+    );
+  } catch (e) {
+    return { aborted: 'frame-cap', probeP50: null, error: `probe evaluate failed after 30 s: ${e?.message ?? e}` };
+  }
+  const probeP50 = Number(probe?.overall?.p50 ?? Infinity);
+  if (!(probeP50 <= FRAME_CAP_MS)) {
+    return {
+      aborted: 'frame-cap',
+      probeP50: Number.isFinite(probeP50) ? probeP50 : null,
+      error: `probe frame p50 ${Number.isFinite(probeP50) ? `${probeP50.toFixed(2)} ms` : 'unavailable'} > BENCH_FRAME_CAP_MS=${FRAME_CAP_MS}`,
+    };
+  }
   const opts = mode === 'spike'
     ? `{ room: ${room}, mode: "spike", warmup: ${WARMUP}, label: ${JSON.stringify(label)} }`
     : `{ room: ${room}, mode: ${JSON.stringify(mode)}, warmup: ${WARMUP}, chunkFrames: ${CHUNK}, label: ${JSON.stringify(label)} }`;
@@ -601,6 +638,10 @@ async function runLeg(name, room, mode) {
 // ---------------------------------------------------------------------------
 const results = [];
 const failures = [];
+// Probe-aborted legs (frame cap / timeout). Kept separate from `results` so
+// the table/segment builders never see a row without segments; they still mark
+// the run incomplete and force a non-zero exit.
+const aborts = [];
 // Set when the matrix stops before it has attempted every leg — the report has
 // to distinguish "attempted and failed" from "never attempted at all".
 let abandoned = null;
@@ -679,6 +720,14 @@ for (let rep = 0; rep < REPEATS; rep++) {
         }
         continue;
       }
+      if (r.aborted) {
+        const row = { rep, leg, room, mode: MODE, ...r };
+        aborts.push(row);
+        try { appendFileSync(PROGRESS_JSONL, `${JSON.stringify(row)}\n`); } catch (e) { console.warn(`  WARN could not append ${PROGRESS_JSONL}: ${e?.message ?? e}`); }
+        console.warn(`  rep${rep} ${leg} room${room}: ABORTED (${r.aborted}) — ${r.error}`);
+        consecFails = 0;
+        continue;
+      }
       consecFails = 0;
       record({ rep, leg, room, prelude: PRELUDE, ...r });
       process.stdout.write(`  rep${rep} ${leg} room${room}: median ${r.overall.p50.toFixed(2)} ms (max chunk ${r.overall.max.toFixed(2)})\n`);
@@ -691,7 +740,7 @@ for (let rep = 0; rep < REPEATS; rep++) {
   }
 }
 progress.phase = 'matrix-done';
-if (!results.length) {
+if (!results.length && !aborts.length) {
   console.error(`\nFAIL: no leg-run completed — nothing to report. ${failures.length} failure(s) above.`);
   process.exit(1);
 }
@@ -743,6 +792,13 @@ for (const room of PASSES ? [] : ROOM_IDS) {
     });
     continue;
   }
+  if (r.aborted) {
+    const row = { rep: 0, leg: 'baseline', room, mode: 'spike', ...r };
+    aborts.push(row);
+    try { appendFileSync(PROGRESS_JSONL, `${JSON.stringify(row)}\n`); } catch (e) { console.warn(`  WARN could not append ${PROGRESS_JSONL}: ${e?.message ?? e}`); }
+    console.warn(`  spike room${room}: ABORTED (${r.aborted}) — ${r.error}`);
+    continue;
+  }
   spikes.push({ room, prelude: PRELUDE, ...r });
   process.stdout.write(`  spike room${room}: p50 ${r.overall.p50.toFixed(2)} max ${r.overall.max.toFixed(2)} ms\n`);
 }
@@ -753,20 +809,21 @@ writeFileSync(`${OUT}/bench.json`, JSON.stringify({
     when: new Date().toISOString(),
     // `complete: false` means legs are MISSING from every table below. Never
     // read a delta out of a partial matrix without checking this first.
-    complete: failures.length === 0 && !abandoned,
+    complete: failures.length === 0 && aborts.length === 0 && !abandoned,
     runsCompleted: results.length,
     abandoned,
     failures,
+    aborts,
   },
   results, table, spikes,
 }, null, 2));
 
 const lines = [];
 lines.push('');
-if (failures.length || abandoned) {
+if (failures.length || abandoned || aborts.length) {
   // Loudest thing in the report, first. A partial matrix that looks complete
   // is worse than no matrix at all.
-  lines.push(`## INCOMPLETE RUN — ${failures.length} leg-run(s) failed, ${results.length} completed`);
+  lines.push(`## INCOMPLETE RUN — ${failures.length} leg-run(s) failed, ${aborts.length} aborted, ${results.length} completed`);
   lines.push('');
   if (abandoned) {
     lines.push(`**The matrix was ABANDONED early: ${abandoned}.** Legs after the last`);
@@ -784,6 +841,17 @@ if (failures.length || abandoned) {
     lines.push(`| ${f.rep} | ${f.leg} | ${f.room} | ${f.mode} | ${f.phase} | ${f.error.replace(/\s+/g, ' ').slice(0, 200)} |`);
   }
   lines.push('');
+  if (aborts.length) {
+    lines.push('Aborted legs (probe frame p50 over BENCH_FRAME_CAP_MS, or the probe');
+    lines.push('timed out) — the real run was SKIPPED to protect the GPU:');
+    lines.push('');
+    lines.push('| rep | leg | room | aborted | probe p50 ms | reason |');
+    lines.push('| ---: | --- | ---: | --- | ---: | --- |');
+    for (const a of aborts) {
+      lines.push(`| ${a.rep} | ${a.leg} | ${a.room} | ${a.aborted} | ${a.probeP50 ?? 'n/a'} | ${String(a.error).replace(/\s+/g, ' ').slice(0, 200)} |`);
+    }
+    lines.push('');
+  }
 }
 lines.push('## Throughput (chunked + fenced) — median chunk-mean ms, median of repeats');
 lines.push('');
@@ -891,8 +959,8 @@ if (frameHashDrift > 0) {
   console.error('  Read the activity stats above first — a layer that went to zero names its own cause.');
 }
 
-if (failures.length || abandoned) {
-  console.error(`\nFAIL: ${failures.length} run(s) failed, ${results.length} completed — the tables above are PARTIAL.`);
+if (failures.length || abandoned || aborts.length) {
+  console.error(`\nFAIL: ${failures.length} run(s) failed, ${aborts.length} aborted (frame cap), ${results.length} completed — the tables above are PARTIAL.`);
   if (abandoned) console.error(`      Matrix abandoned early: ${abandoned}. Remaining legs were never attempted.`);
   console.error(`      Completed runs are also in ${PROGRESS_JSONL} (one JSON object per line).`);
   process.exit(1);
@@ -916,10 +984,12 @@ function writePassReport() {
   out.push('');
   out.push(`${W}x${H}, repeats=${REPEATS}, rooms=${ROOM_IDS.join(',')}${PRELUDE ? `, prelude: ${PRELUDE}` : ''}${QUERY ? `, query: ${QUERY}` : ''}`);
   out.push('');
-  if (failures.length || abandoned) {
+  if (failures.length || abandoned || aborts.length) {
     if (abandoned) out.push(`**MATRIX ABANDONED EARLY: ${abandoned} — later legs were never attempted.**`);
     out.push(`**INCOMPLETE — ${failures.length} leg-run(s) failed and are absent below:** `
       + failures.map((f) => `rep${f.rep} ${f.leg}/room${f.room} (${f.phase})`).join(', '));
+    if (aborts.length) out.push(`**${aborts.length} leg-run(s) aborted by the frame guard and skipped:** `
+      + aborts.map((a) => `rep${a.rep} ${a.leg}/room${a.room} (probe p50 ${a.probeP50 ?? 'n/a'} ms)`).join(', '));
     out.push('');
   }
   out.push('Pass ms = median over repeats of the per-frame GPU pass time p50 (overall,');
