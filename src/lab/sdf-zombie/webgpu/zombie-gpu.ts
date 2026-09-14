@@ -13,7 +13,7 @@ import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
   wgslFn, positionWorld, cameraPosition, vec4, uniform, texture, texture3D, float,
   cameraProjectionMatrix, cameraViewMatrix, cameraNear, cameraFar, modelWorldMatrix, normalize, sub, mul, add, screenUV,
-  storage,
+  storage, attribute, positionGeometry, vec3,
 } from 'three/tsl';
 import type { BuildResult } from '../build-body';
 import { packBody, PRIM_STRIDE, W_BONE, W_ORGAN } from '../pack';
@@ -636,6 +636,12 @@ function fallbackProbeDyn() {
 let fallbackInstCfgNode: ReturnType<typeof uniform> | null = null;
 /** One-instance config for materials built without a crowd (tests, hands view). */
 function fallbackInstCfg() { return (fallbackInstCfgNode ??= uniform(new THREE.Vector4(1, 0, 0, 0))); }
+let fallbackInstCentreNode: ReturnType<typeof uniform> | null = null;
+let fallbackInstHalfNode: ReturnType<typeof uniform> | null = null;
+/** Zero proxy-box overrides for materials built without a crowd — instCfg.y 0
+ *  makes MARCH_TRACE_SETUP select the record's centre/half instead. */
+function fallbackInstCentre() { return (fallbackInstCentreNode ??= uniform(new THREE.Vector3())); }
+function fallbackInstHalf() { return (fallbackInstHalfNode ??= uniform(new THREE.Vector3())); }
 
 function fallbackTileBindings() {
   if (!fallbackTileNodes) {
@@ -671,6 +677,12 @@ function fallbackLevelShadowTexture() {
   return fallbackLevelShadow;
 }
 
+let fallbackCrowdVolume: THREE.Data3DTexture | null = null;
+/** The shared 1-cubed volume a crowd material binds (its volume branch is off,
+ *  volumePose0.w stays 0). One per page, never disposed — the crowd types
+ *  outlive any single one of them. */
+function fallbackCrowdVolumeTexture() { return (fallbackCrowdVolume ??= createFallbackHandVolumeTexture()); }
+
 let fallbackSegmentVolume: { atlas: THREE.Data3DTexture; meta: THREE.DataTexture } | null = null;
 function fallbackSegmentVolumeTextures() {
   if (!fallbackSegmentVolume) {
@@ -692,11 +704,13 @@ function fallbackSegmentVolumeTextures() {
 /** A tiled view's binning surface: delegates to the owner's GPU binding and
  *  flips this view's tileCfg gate. */
 export interface ViewTileBinding {
-  /** Bin this frame's posed groups (see ComputeTileBinding.bin). */
+  /** Bin this frame's posed groups (see ComputeTileBinding.bin). Returns
+   *  false when the group count exceeded the binding's capacity — the caller
+   *  treats that as "fall back this frame". */
   bin(
     groups: TileGroupInput[], camera: THREE.PerspectiveCamera, maxBlendK: number,
     grid: { widthPx: number; heightPx: number },
-  ): void;
+  ): boolean;
   setEnabled(on: boolean): void;
   /** Per-ray sphere compaction of the tile list (prototype): with tiles
    *  enabled, tileCfg.x becomes 2 and the march drops entries whose inflated
@@ -1111,9 +1125,14 @@ export function createMarchMaterial(
   segVolumeAtlasNodeIn?: ReturnType<typeof texture3D>,
   segVolumeMetaNodeIn?: ReturnType<typeof texture>,
   // Crowd stage a, POSITIONALLY LAST: the per-instance record storage node
-  // and its config (x = instance count). Omitted, a one-slot fallback record
-  // keeps every existing material marching the pre-crowd one-instance field.
-  crowd?: { inst: CrowdRecords['node']; instCfg: ReturnType<typeof uniform> },
+  // and its config (x = instance count, y = 1 for a crowd material). Omitted,
+  // a one-slot fallback record keeps every existing material marching the
+  // pre-crowd one-instance field. instCentre/instHalf are the crowd proxy-box
+  // overrides; per-body materials bind zero vec3s and instCfg.y 0 ignores them.
+  crowd?: {
+    inst: CrowdRecords['node']; instCfg: ReturnType<typeof uniform>;
+    instCentre?: unknown; instHalf?: unknown;
+  },
 ) {
   const dataNode = dataTex instanceof THREE.Texture
     ? texture(dataTex)
@@ -1301,11 +1320,13 @@ export function createMarchMaterial(
     lastTex: texture(lastFrame ? lastFrame.texture : fallbackLastFrame().tex),
     lastInvVp: lastFrame ? lastFrame.uniforms.invVp : fallbackLastFrame().invVp,
     temporalCfg: lastFrame ? lastFrame.uniforms.cfg : fallbackLastFrame().cfg,
-    // Crowd stage a — the tail order is ..., temporalCfg, inst, instCfg.
-    // An unbound declared storage input reads as a null pointer and the
-    // pipeline dies, so the fallback record is always bound.
+    // Crowd stage a — the tail order is ..., temporalCfg, inst, instCfg,
+    // instCentre, instHalf. An unbound declared storage input reads as a null
+    // pointer and the pipeline dies, so the fallback record is always bound.
     inst: (crowd?.inst ?? fallbackCrowdRecords().node) as never,
     instCfg: crowd?.instCfg ?? fallbackInstCfg(),
+    instCentre: (crowd?.instCentre ?? fallbackInstCentre()) as never,
+    instHalf: (crowd?.instHalf ?? fallbackInstHalf()) as never,
     ...(extra ?? {}),
   }) as unknown as Swizzled;
 
@@ -1384,6 +1405,109 @@ export function createMarchMaterial(
   // the framebuffer alpha is never read.
   material.outputNode = vec4(marched.xyz as never, depth);
   return material;
+}
+
+/** What a crowd type needs back from its one material pair. */
+export interface CrowdMaterialHandles {
+  material: MeshBasicNodeMaterial;
+  depthPreMaterial: MeshBasicNodeMaterial;
+  /** Rebinds the shared sampled-skeleton atlas/meta on BOTH materials — same
+   *  drift hazard the per-body twins have (see createMarchMaterial's tail). */
+  setSkeletonVolume(atlas: THREE.Texture, meta: THREE.Texture): void;
+}
+
+/** TSL's `attribute` factory is untyped at runtime; this names the node
+ *  shape the crowd material's `iCentre`/`iHalf` attributes are used as. */
+type Vec3Node = ReturnType<typeof vec3>;
+
+/**
+ * Crowd stage a (Task 5): the ONE material pair a character type draws every
+ * instance with. A thin wrapper around createMarchMaterial that
+ *
+ *   (i)  places the unit proxy box per instance — positionNode reads the
+ *        per-instance `iCentre` / `iHalf` interleaved attributes;
+ *   (ii) passes the same two attributes as the WGSL `instCentre` / `instHalf`
+ *        box-entry overrides (instCfg.y = 1 selects them in MARCH_TRACE_SETUP);
+ *   (iii) binds the type's shared record buffer and tile header/entry nodes;
+ *   (iv) builds the quarter-res depth-prepass twin on the same record path.
+ *
+ * The fragment's `startT` still comes from its own box face, so a lone body is
+ * bit-identical to the per-body material; the fold set is the tile list.
+ */
+export function createCrowdMaterial(
+  dataTex: THREE.Texture,
+  u: MarchUniforms,
+  crowd: { inst: CrowdRecords['node']; instCfg: ReturnType<typeof uniform> },
+  tiles?: ComputeTileBinding,
+  depthPre?: DepthPreSource,
+): CrowdMaterialHandles {
+  // The instanced proxy box: a unit BoxGeometry in [-0.5, 0.5]^3, scaled by
+  // the instance's half extents and moved to its centre. positionGeometry, not
+  // positionLocal: positionLocal IS what positionNode assigns, so referencing
+  // it here would be self-referential.
+  const instCentre = attribute('iCentre', 'vec3') as unknown as Vec3Node;
+  const instHalf = attribute('iHalf', 'vec3') as unknown as Vec3Node;
+  const positionNode = instCentre.add(positionGeometry.mul(instHalf));
+  const volumeTex = fallbackCrowdVolumeTexture();
+  const segFallback = fallbackSegmentVolumeTextures();
+  const depthSegAtlasNode = texture3D(segFallback.atlas);
+  const depthSegMetaNode = texture(segFallback.meta);
+
+  const material = createMarchMaterial(
+    dataTex, volumeTex, u,
+    marchBody,
+    undefined, undefined,
+    tiles ? { header: tiles.headerNode, entries: tiles.entryNode } : undefined,
+    undefined, undefined, undefined,
+    undefined, undefined, 'lit', undefined,
+    undefined, undefined,
+    undefined, undefined, undefined, undefined,
+    { inst: crowd.inst, instCfg: crowd.instCfg, instCentre, instHalf },
+  );
+  material.positionNode = positionNode as never;
+
+  const depthPreCfg = depthPre ? depthPre.uniforms.cfg : createDepthPreUniforms().cfg;
+  const depthPreT = depthPreMarch({
+    worldPos: positionWorld,
+    camPos: cameraPosition,
+    data: texture(dataTex),
+    volumeTex: texture3D(volumeTex),
+    volumeMin: u.volumeMin,
+    volumeInvExtent: u.volumeInvExtent,
+    volumeWarp: u.volumeWarp,
+    volumeClip: u.volumeClip,
+    segVolumeAtlas: depthSegAtlasNode,
+    segVolumeMeta: depthSegMetaNode,
+    marchCfg: u.marchCfg,
+    woundCfg: u.woundCfg,
+    woundCfg2: u.woundCfg2,
+    depthPreCfg,
+    perfCfg: u.perfCfg,
+    inst: crowd.inst as never,
+    instCfg: crowd.instCfg,
+  }) as unknown as { div: (d: unknown) => unknown };
+  const depthPreMaterial = new MeshBasicNodeMaterial();
+  depthPreMaterial.positionNode = positionNode as never;
+  depthPreMaterial.side = THREE.BackSide;
+  // FOG STAYS OFF: this material writes a distance through the main scene, and
+  // scene fog would smoothstep-mix it toward fogColor (see the per-body twin).
+  depthPreMaterial.fog = false;
+  depthPreMaterial.outputNode = vec4(depthPreT as never, 0, 0, 1);
+  depthPreMaterial.depthNode = depthPreT.div(CONE_DEPTH_RANGE) as never;
+  depthPreMaterial.depthWrite = true;
+  depthPreMaterial.depthTest = true;
+
+  const mainSegVolume = material as unknown as MaterialWithSegmentVolume;
+  return {
+    material,
+    depthPreMaterial,
+    setSkeletonVolume(atlas, meta) {
+      mainSegVolume.segVolumeAtlas.value = atlas;
+      mainSegVolume.segVolumeMeta.value = meta;
+      (depthSegAtlasNode as unknown as { value: THREE.Texture }).value = atlas;
+      (depthSegMetaNode as unknown as { value: THREE.Texture }).value = meta;
+    },
+  };
 }
 
 /** Per-object inputs consumed by the one NodeMaterial shared by every gib.
@@ -1730,7 +1854,7 @@ function wireViewTiles(
   let rayCull = false;
   return {
     bin(groups, camera, maxBlendK, grid) {
-      binding.bin(groups, camera, maxBlendK, grid);
+      const ok = binding.bin(groups, camera, maxBlendK, grid);
       // Stamp the ACTIVE grid for the shader on every bin — adaptive
       // resolution moves it under our feet. x is the enable gate and keeps
       // whatever setEnabled last set.
@@ -1740,6 +1864,7 @@ function wireViewTiles(
         TILE_SIZE_PX,
         Math.ceil(Math.max(1, grid.heightPx) / TILE_SIZE_PX),
       );
+      return ok;
     },
     setEnabled(on) {
       tileCfg.x = on ? (rayCull ? 2 : 1) : 0;

@@ -2441,10 +2441,19 @@ export const MARCH_BODY_PARAMS = /* wgsl */ `(
   lastInvVp: mat4x4<f32>,
   temporalCfg: vec4<f32>,
   // Instance record and config - crowd stage a - bound POSITIONALLY LAST in
-  // the same commit as the kernel. instCfg x is the instance count. NO
-  // PARENS and NO COLONS in this comment either.
+  // the same commit as the kernel. instCfg x is the instance count, y is the
+  // crowd-material flag (1 = use instCentre/instHalf for the proxy box, 0 =
+  // use the record's bodyCentre/bodyHalf). NO PARENS and NO COLONS in this
+  // comment either.
   inst: ptr<storage, array<vec4<f32>>, read>,
-  instCfg: vec4<f32>
+  instCfg: vec4<f32>,
+  // Crowd proxy box overrides - Task 5 - POSITIONALLY LAST after instCfg.
+  // The instanced crowd material passes its per-instance box centre and half
+  // extent as ATTRIBUTES so every instance's box entry maths uses its own
+  // box; a per-body material binds zero vec3s and instCfg.y 0 selects the
+  // record instead. NO PARENS and NO COLONS in this comment either.
+  instCentre: vec3<f32>,
+  instHalf: vec3<f32>
 ) -> vec4<f32> {
 `;
 
@@ -2683,8 +2692,15 @@ export const MARCH_TRACE_SETUP = /* wgsl */ `  // FIRST STATEMENT, before anythi
   // inside that slab and the ±1e9 pair cancels in the min/max. The 0 clamp
   // is the camera-inside-the-box case: entry 0 never discards.
   let invRd = select(vec3<f32>(1e9), 1.0 / rd, abs(rd) > vec3<f32>(1e-8));
-  let bLo = (gInstCentre - gInstHalf - camPos) * invRd;
-  let bHi = (gInstCentre + gInstHalf - camPos) * invRd;
+  // Crowd proxy box - Task 5. The instanced crowd material carries its own
+  // centre and half extent as vertex attributes: every instance shares ONE
+  // record buffer, so the record's slot-0 box cannot describe the fragment's
+  // own box. instCfg.y > 0.5 marks a crowd material; per-body materials bind
+  // zeros and keep reading gInstCentre/gInstHalf bit-identically.
+  let boxCentre = select(gInstCentre, instCentre, instCfg.y > 0.5);
+  let boxHalf = select(gInstHalf, instHalf, instCfg.y > 0.5);
+  let bLo = (boxCentre - boxHalf - camPos) * invRd;
+  let bHi = (boxCentre + boxHalf - camPos) * invRd;
   let bodyEntry = max(max(min(bLo.x, bHi.x), min(bLo.y, bHi.y)), max(min(bLo.z, bHi.z), 0.0));
   if (max(shellIn, bodyEntry) > prevT) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }
   let tMax = min(tMaxSel, prevT);

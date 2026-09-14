@@ -26,10 +26,11 @@ import {
 } from './tile-cull';
 
 describe('tile-bin-compute structural caps', () => {
-  it('MAX_TILE_GROUPS equals TILE_MAX_ENTRIES — this is WHY nothing can overflow', () => {
-    // One group adds AT MOST one entry to any tile, so a tile's list can
-    // never exceed the group slot count. Raise both or neither.
-    expect(MAX_TILE_GROUPS).toBe(TILE_MAX_ENTRIES);
+  it('MAX_TILE_GROUPS is the crowd type capacity — 64 instances x 32 groups', () => {
+    // Shared by one crowd type's binding; the PER-TILE cap stays
+    // TILE_MAX_ENTRIES and is enforced inside the kernels (kTileCounts) and
+    // by kTileWrite. Raise this only with a matching groups-buffer allocation.
+    expect(MAX_TILE_GROUPS).toBe(2048);
   });
 
   it('group records are three vec4s, matching the entry-stream stride', () => {
@@ -88,11 +89,11 @@ describe('packGroups', () => {
     }
   });
 
-  it('throws LOUDLY past MAX_TILE_GROUPS — never silently drops entries', () => {
+  it('returns null past MAX_TILE_GROUPS — callers fall back, never truncate', () => {
     const out = new Float32Array(MAX_TILE_GROUPS * GROUP_RECORD_SCALARS);
     const many = Array.from({ length: MAX_TILE_GROUPS + 1 }, (_, i) =>
       g({ start: i }));
-    expect(() => packGroups(many, out)).toThrow(/exceed MAX_TILE_GROUPS/);
+    expect(packGroups(many, out)).toBeNull();
   });
 });
 

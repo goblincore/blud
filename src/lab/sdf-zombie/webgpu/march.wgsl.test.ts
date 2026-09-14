@@ -611,8 +611,12 @@ describe('ported features reach the entry point', () => {
     expect(MARCH_BODY).toContain('prevT: f32');
     expect(MARCH_BODY.indexOf('perfCfg: vec4<f32>')).toBeLessThan(MARCH_BODY.indexOf('prevT: f32'));
     // The per-body conservative entry rides LAST (positional): centre from the
-    // mesh's model matrix, half extents from the bodyHalf uniform.
-    expect(MARCH_BODY).toContain('let bLo = (gInstCentre - gInstHalf - camPos) * invRd;');
+    // mesh's model matrix, half extents from the bodyHalf uniform. Task 5
+    // added the crowd proxy-box overrides: instCfg.y 0 selects the record's
+    // gInstCentre/gInstHalf bit-identically, y 1 selects the attributes.
+    expect(MARCH_BODY).toContain('let boxCentre = select(gInstCentre, instCentre, instCfg.y > 0.5);');
+    expect(MARCH_BODY).toContain('let boxHalf = select(gInstHalf, instHalf, instCfg.y > 0.5);');
+    expect(MARCH_BODY).toContain('let bLo = (boxCentre - boxHalf - camPos) * invRd;');
     expect(MARCH_BODY.indexOf('prevT: f32')).toBeLessThan(MARCH_BODY.indexOf('inst: ptr<storage, array<vec4<f32>>, read>'));
     // max(shellIn, bodyEntry): BOTH are lower bounds on the first point at
     // which THIS body could be hit (shellIn the shared hull entry, weaker;
@@ -750,14 +754,15 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     // +3 temporal reprojection start (lastTex, lastInvVp, temporalCfg) — plan 2026-09-10.
     // +1 meatCfg (soldier wound MEAT DETAIL, wound panel MEAT group, 2026-09-12), after surfCfg3.
     // crowd stage a: 13 per-instance params move into the record, +inst +instCfg.
-    expect(names.length).toBe(89);
+    // crowd stage a task 5: +instCentre +instHalf (the instanced proxy box).
+    expect(names.length).toBe(91);
     expect(names).toContain('faceGlowRedOnly');
-    expect(names.slice(-19)).toEqual([
+    expect(names.slice(-21)).toEqual([
       'depthPreTex', 'depthPreCfg', 'normalGradientCfg',
       'probeTex', 'probeMin', 'probeInvExtent', 'probeDims', 'probeCfg',
       'bounceSpotPos', 'bounceSpotNormal', 'bounceSpotRadiance', 'bounceSpotCfg',
       'probeDyn', 'probeDynCfg',
-      'lastTex', 'lastInvVp', 'temporalCfg', 'inst', 'instCfg',
+      'lastTex', 'lastInvVp', 'temporalCfg', 'inst', 'instCfg', 'instCentre', 'instHalf',
     ]);
     // The temporal start folds in AFTER preStart, with bodyEntry as the
     // sixth lower-bound term (see the other pin above for the argument).
@@ -782,8 +787,11 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     expect(MARCH_BODY).toContain('tempStart = s;');
     // crowd stage a: the record pointer and its config are the two new
     // positional tails, in signature order (the JS binding object matches).
-    expect(names.indexOf('instCfg')).toBe(names.length - 1);
-    expect(names.indexOf('inst')).toBe(names.length - 2);
+    // crowd stage a task 5: instCentre/instHalf follow them (the proxy box).
+    expect(names.indexOf('instCfg')).toBe(names.length - 3);
+    expect(names.indexOf('inst')).toBe(names.length - 4);
+    expect(names.indexOf('instCentre')).toBe(names.length - 2);
+    expect(names.indexOf('instHalf')).toBe(names.length - 1);
   });
 });
 
@@ -2508,12 +2516,15 @@ describe('crowd instance state', () => {
     expect(INSTANCE_STATE).toContain(`${REC_VEC4S}`);
     expect(INSTANCE_STATE).toContain(`+ ${REC_ANCHOR_BAND}]`);
   });
-  it('removes every per-instance parameter from the signature and adds inst/instCfg last', () => {
+  it('removes every per-instance parameter from the signature and adds inst/instCfg/instCentre/instHalf last', () => {
     for (const p of ['counts:', 'counts2:', 'woundBound:', 'bodyCentre:', 'bodyHalf:', 'bodyAnchor:',
       'windDrift:', 'meltCfg:', 'bodyFlash:', 'headCentre:', 'headQuat:', 'volumePose0:', 'volumePose1:']) {
       expect(MARCH_BODY_PARAMS).not.toContain(p);
     }
-    expect(MARCH_BODY_PARAMS.replace(/\s+/g, ' ')).toMatch(/inst: ptr<storage, array<vec4<f32>>, read>, instCfg: vec4<f32>\s*\)/);
+    // Strip comments first: the crowd proxy-box comment sits between instCfg
+    // and instCentre, and the wgslFn parser sees it as ordinary text.
+    const sig = MARCH_BODY_PARAMS.replace(/\/\/[^\n]*/g, ' ').replace(/\s+/g, ' ');
+    expect(sig).toMatch(/inst: ptr<storage, array<vec4<f32>>, read>, instCfg: vec4<f32>, instCentre: vec3<f32>, instHalf: vec3<f32>\s*\)/);
   });
   it('bands the damage folds', () => {
     expect(APPLY_CARVES).toContain('fn applyCarves(dIn: f32, p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, band: i32)');

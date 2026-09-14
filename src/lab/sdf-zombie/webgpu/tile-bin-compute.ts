@@ -23,9 +23,17 @@
 // BIT-IDENTICAL to TileBinner for the same camera and groups — the unit gate
 // this module exists to pass.
 //
-// WHY THE ENTRY CAP IS STRUCTURAL, NOT ENFORCED. One group contributes AT
-// MOST ONE entry per tile, so a tile's list can never exceed the group slot
-// count; MAX_TILE_GROUPS === TILE_MAX_ENTRIES makes the cap unreachable.
+// WHY THE PER-TILE CAP IS NOW BOTH STRUCTURAL AND ENFORCED. One group
+// contributes AT MOST ONE entry per tile, so a tile's list can never exceed
+// the GROUP slot count. Once a crowd type shares one binding (MAX_TILE_GROUPS
+// = 2048 = 64 instances x 32 groups) that bound is far above TILE_MAX_ENTRIES,
+// so a dense tile really can be covered by more than 64 groups. Two places
+// then matter: kTileCounts clamps each tile's count at TILE_MAX_ENTRIES (what
+// the shader reads, and what the CPU TileBinner already clamps at), and
+// kTileWrite stops after that many entries. Together they keep the entry
+// stream inside worstCaseEntries AND the GPU list bit-identical to the CPU's
+// first-64-covering-groups. The 2048 slots are a CAPACITY for the whole type;
+// a type that exceeds it falls back rather than truncating.
 // Nothing is clamped and nothing can be truncated — the close-camera hole
 // class dies with the texture that carried it.
 //
@@ -43,11 +51,12 @@ import { wgslFn, uniform, storage, instanceIndex, compute } from 'three/tsl';
 import { TILE_MAX_ENTRIES, TILE_SIZE_PX, type TileGroupInput } from './tile-cull';
 
 /**
- * Group slots in the groups buffer. EQUALS TILE_MAX_ENTRIES on purpose: a
- * tile's entry list can then never exceed the cap, because one group adds at
- * most one entry to any tile. Pinned by test — raise both or neither.
+ * Group slots in the groups buffer. Shared by one crowd type (64 instances x
+ * ~32 groups), so it is now much larger than TILE_MAX_ENTRIES — which is why
+ * the per-tile clamp in kTileCounts/kTileWrite is reachable and load-bearing.
+ * Pinned by test.
  */
-export const MAX_TILE_GROUPS = TILE_MAX_ENTRIES;
+export const MAX_TILE_GROUPS = 2048;
 
 /** Floats per group record: [centre.xyz, radius], [start,count,distort,flags]
  *  (the ROW_GROUP_RANGE texel verbatim), [bodyIndex, 0, 0, 0]. Three vec4s —
@@ -71,18 +80,14 @@ export function worstCaseEntries(tilesX: number, tilesY: number): number {
 
 /**
  * Packs the binner's group inputs into the groups-buffer layout. Returns
- * `out` for chaining. Exported pure so tests pin exactly what the kernels
- * read. More groups than MAX_TILE_GROUPS throws LOUDLY — callers should never
- * hit it (hero bodies run ~40), and silent dropping would delete whole tiles'
- * lists downstream.
+ * `out` for chaining, or NULL when the frame has more groups than
+ * MAX_TILE_GROUPS — the caller's fallback signal (disable the tile gate and
+ * fold every slot's cluster walk: correct, just slower). Never truncated:
+ * dropping groups would delete whole tiles' lists and those pixels render as
+ * holes. Exported pure so tests pin exactly what the kernels read.
  */
-export function packGroups(groups: TileGroupInput[], out: Float32Array): Float32Array {
-  if (groups.length > MAX_TILE_GROUPS) {
-    throw new Error(
-      `[tile-bin-compute] ${groups.length} groups exceed MAX_TILE_GROUPS (${MAX_TILE_GROUPS}); `
-      + 'raise MAX_TILE_GROUPS and TILE_MAX_ENTRIES together',
-    );
-  }
+export function packGroups(groups: TileGroupInput[], out: Float32Array): Float32Array | null {
+  if (groups.length > MAX_TILE_GROUPS) return null;
   out.fill(0);
   for (let g = 0; g < groups.length; g++) {
     const s = groups[g]!;
@@ -207,6 +212,13 @@ export const K_TILE_COUNTS = /* wgsl */ `fn kTileCounts(
     let rg = (*ranges)[g];
     if (tx >= rg.x && tx <= rg.y && ty >= rg.z && ty <= rg.w) { n = n + 1; }
   }
+  // PER-TILE FOLD CAP. The CPU TileBinner clamps a tile at TILE_MAX_ENTRIES
+  // while walking groups ascending (its clampedTiles path); the shader reads
+  // at most that many entries anyway. With MAX_TILE_GROUPS now far larger
+  // than TILE_MAX_ENTRIES this clamp is reachable, and it is what keeps the
+  // entry stream inside worstCaseEntries AND the GPU list bit-identical to
+  // the CPU's first-64-covering-groups.
+  n = min(n, ${TILE_MAX_ENTRIES});
   (*outCounts)[ti] = u32(n);
 }`;
 
@@ -246,10 +258,14 @@ export const K_TILE_WRITE = /* wgsl */ `fn kTileWrite(
 ) -> void {
   if (ti >= u32(dims.w)) { return; }
   let base = (*headers)[ti].x;
+  let cap = (*headers)[ti].y;
   let tx = i32(ti % u32(cfg.z));
   let ty = i32(ti / u32(cfg.z));
   var slot = base;
   for (var g = 0u; g < u32(cfg.x); g++) {
+    // Matches kTileCounts' clamp: stop at the tile's capped count so this
+    // tile's entries never spill into the next tile's slot range.
+    if (slot - base >= cap) { break; }
     let rg = (*ranges)[g];
     if (tx >= rg.x && tx <= rg.y && ty >= rg.z && ty <= rg.w) {
       let rec = g * 3u;
@@ -281,7 +297,7 @@ export interface ComputeTileBinding {
   bin(
     groups: TileGroupInput[], camera: THREE.PerspectiveCamera, maxBlendK: number,
     grid: { widthPx: number; heightPx: number },
-  ): void;
+  ): boolean;
   /** Readback of headers/meta/entries/ranges for tests and debug tooling. */
   readback(): Promise<{
     /** Per-tile (base, count) pairs, length tilesX*tilesY*2 (ACTIVE grid). */
@@ -367,14 +383,10 @@ export function createComputeTileBinding(
   return {
     bin(groupsIn, camera, maxBlendK, grid) {
       if (disposed) throw new Error('tile binding disposed');
-      if (groupsIn.length > MAX_TILE_GROUPS) {
-        // Loud, never truncating — dropped groups would delete whole tiles'
-        // lists and those pixels render as holes.
-        throw new Error(
-          `[tile-bin-compute] ${groupsIn.length} groups exceed MAX_TILE_GROUPS (${MAX_TILE_GROUPS})`,
-        );
-      }
-      packGroups(groupsIn, groupsAttr.array as Float32Array);
+      // Over the group budget: return the fallback signal, never truncate.
+      // The caller disables the tile gate (tileCfg.x = 0) and the per-slot
+      // loop folds every slot's cluster walk — correct, just slower.
+      if (packGroups(groupsIn, groupsAttr.array as Float32Array) === null) return false;
       // BufferAttribute.version bump -> three re-uploads the (tiny) buffer.
       groupsAttr.needsUpdate = true;
 
@@ -403,6 +415,7 @@ export function createComputeTileBinding(
       // ONE pass, kernels in dependency order; same-queue ordering puts the
       // finished data ahead of everything three renders this frame.
       withPassLabel('compute:tile-bin', () => renderer.compute([rangeNode, countsNode, scanNode, writeNode]));
+      return true;
     },
     async readback() {
       if (disposed) throw new Error('tile binding disposed');

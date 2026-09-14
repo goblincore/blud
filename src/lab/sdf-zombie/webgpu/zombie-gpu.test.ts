@@ -196,10 +196,11 @@ describe('clip frame uniform (X1.27 task C3)', () => {
     // WGSL signature, so a missing entry is a silent uniform mismatch.
     const src = readFileSync('src/lab/sdf-zombie/webgpu/zombie-gpu.ts', 'utf8');
     const marchCalls = src.match(/volumeWarp: u\.volumeWarp,/g) ?? [];
-    // createMarchMaterial + cone twin + depth-prepass twin (close-up task 3).
-    expect(marchCalls.length).toBe(3);
+    // createMarchMaterial + cone twin + depth-prepass twin (close-up task 3)
+    // + the crowd type's depth-prepass twin (crowd stage a task 5).
+    expect(marchCalls.length).toBe(4);
     expect(src.match(/volumeWarp: u\.volumeWarp,\s*\n\s*volumeClip: u\.volumeClip,/g)?.length)
-      .toBe(3);
+      .toBe(4);
   });
 
   it('depth-prepass twin — fog off, positionally-last inputs, fallback identity', () => {

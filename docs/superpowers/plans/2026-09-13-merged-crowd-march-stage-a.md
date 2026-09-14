@@ -643,9 +643,9 @@ git commit -m "feat(crowd): per-instance march state lives in a storage record; 
 
 **Files:** Create `src/lab/sdf-zombie/webgpu/crowd-type.ts`, `crowd-type.test.ts`; modify `tile-bin-compute.ts`, `tile-bin-compute.test.ts`, `zombie-gpu.ts` (view options from Task 4 Step 2, `createCrowdMaterial` export)
 
-- [ ] **Step 1: Raise the group cap and stop throwing.** `tile-bin-compute.ts`: `export const MAX_TILE_GROUPS = 2048;` and `packGroups` returns `null` when `groups.length > MAX_TILE_GROUPS` (callers treat `null` as "fallback this frame" and count it). Update `tile-bin-compute.test.ts`: the `MAX_TILE_GROUPS === TILE_MAX_ENTRIES` assertion becomes `expect(MAX_TILE_GROUPS).toBe(2048)` and add `expect(packGroups(new Array(2049).fill(g), out)).toBeNull()`. Run: `npx vitest run src/lab/sdf-zombie/webgpu/tile-bin-compute.test.ts` — PASS.
+- [x] **Step 1: Raise the group cap and stop throwing.** `tile-bin-compute.ts`: `export const MAX_TILE_GROUPS = 2048;` and `packGroups` returns `null` when `groups.length > MAX_TILE_GROUPS` (callers treat `null` as "fallback this frame" and count it). Update `tile-bin-compute.test.ts`: the `MAX_TILE_GROUPS === TILE_MAX_ENTRIES` assertion becomes `expect(MAX_TILE_GROUPS).toBe(2048)` and add `expect(packGroups(new Array(2049).fill(g), out)).toBeNull()`. Run: `npx vitest run src/lab/sdf-zombie/webgpu/tile-bin-compute.test.ts` — PASS.
 
-- [ ] **Step 2: Failing test for slot allocation and instance attributes**
+- [x] **Step 2: Failing test for slot allocation and instance attributes**
 
 ```ts
 // crowd-type.test.ts
@@ -676,7 +676,7 @@ describe('crowd type slots', () => {
 
 Run: `npx vitest run src/lab/sdf-zombie/webgpu/crowd-type.test.ts` — FAIL, module missing.
 
-- [ ] **Step 3: Implement `crowd-type.ts`**
+- [x] **Step 3: Implement `crowd-type.ts`**
 
 ```ts
 import * as THREE from 'three/webgpu';
@@ -738,16 +738,45 @@ export interface CrowdType {
 - `detach(slot)`: `records.alive(slot, false)`, `slots[slot] = undefined`, `free.add(slot)`.
 - `sync(camera, grid)`: build `groups: TileGroupInput[]` by concatenating `view.getTileGroups()` for attached, visible views (their `bodyIndex` is already the slot); `const ok = tiles.bin(groups, camera, maxBlendK, grid)`; on `null`/overflow increment `tileFallbacks` and set `uniforms.tileCfg.value.x = 0` for this frame (the per-slot loop then does the cluster walk for every slot — correct, slower); pack instance attrs (`visible = view.object.visible`), `geo.instanceCount = n`, `ib.needsUpdate = true`, `instCfg.value.set(MAX_CROWD_INSTANCES, 1, 0, 0)` — the loop's `nInst` upper bound is the capacity; the alive flag skips free slots; then `atlas.flush(); records.flush();`.
 
-- [ ] **Step 4: Run tests** — `npx vitest run src/lab/sdf-zombie/webgpu/crowd-type.test.ts src/lab/sdf-zombie/webgpu/march.wgsl.test.ts src/lab/sdf-zombie/webgpu/deferred-sdf.test.ts` — PASS (param pin now 90).
+- [x] **Step 4: Run tests** — `npx vitest run src/lab/sdf-zombie/webgpu/crowd-type.test.ts src/lab/sdf-zombie/webgpu/march.wgsl.test.ts src/lab/sdf-zombie/webgpu/deferred-sdf.test.ts` — PASS (param pin now 91; the plan wrote 90 from the wrong 88 baseline).
 
-- [ ] **Step 5: Gate the per-body path again** — `npx tsc --noEmit -p .`, `node scripts/march-hash.mjs` ×2 → still `a8ab4e…` (the crowd type is not instantiated by anything yet; the two new zero params must not move the hash).
+- [x] **Step 5: Gate the per-body path again** — `npx tsc --noEmit -p .` clean, `node scripts/march-hash.mjs` ×2 → both `room1: a8ab4efac15fc0376c3e4e05420f13e34d1511bd`, `room1-wounded: da785297…`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/lab/sdf-zombie/webgpu/crowd-type.ts src/lab/sdf-zombie/webgpu/crowd-type.test.ts src/lab/sdf-zombie/webgpu/tile-bin-compute.ts src/lab/sdf-zombie/webgpu/tile-bin-compute.test.ts src/lab/sdf-zombie/webgpu/zombie-gpu.ts src/lab/sdf-zombie/webgpu/march.wgsl.ts src/lab/sdf-zombie/webgpu/march.wgsl.test.ts src/lab/sdf-zombie/webgpu/deferred-sdf.test.ts
 git commit -m "feat(crowd): CrowdType — shared atlas, records, one material, instanced proxy boxes, per-type tile binding"
 ```
+
+### Executor notes (2026-09-13, Task 5)
+
+- **Raising `MAX_TILE_GROUPS` above `TILE_MAX_ENTRIES` needed two kernel changes the plan
+  omitted.** With 2048 group slots a dense tile really can be covered by >64 groups, so
+  `kTileCounts` now clamps each tile's count at `TILE_MAX_ENTRIES` (exactly the CPU
+  `TileBinner`'s clamp) and `kTileWrite` stops at that count. Without them the entry stream
+  could write past `worstCaseEntries` and the GPU list would diverge from the CPU reference —
+  which is the Task 7 masked-parity gate. `tile-bin-compute.test.ts` pins the clamp only
+  structurally; the A/B (tile-ab.mjs) is the real check, and the room-2 masked parity in
+  Task 7 covers the crowd case.
+- **Param pin 91, not 90.** The plan's 88 base was wrong (13 removable per-instance params,
+  not 14); 89 + `instCentre` + `instHalf` = 91.
+- **`createCrowdMaterial` returns `{ material, depthPreMaterial, setSkeletonVolume }`** rather
+  than a bare material: the depth-pre twin binds `depthPreMarch` directly (its signature has
+  no `instCentre`/`instHalf` — it needs only the record + the placement `positionNode`), and
+  the type's `setSkeletonVolume` must rebind both materials' shared atlas/meta nodes.
+- **`createCrowdType` takes an optional `depthPre?: DepthPreSource` 6th arg** so the game can
+  hand the crowd twin the layer's depth-pre cfg (`sdfLayer.depthPre`). Omitted, the twin's cfg
+  is a fresh all-zero uniform and the pass does not run. Task 6 should pass `sdfLayer.depthPre`.
+- **Visibility: attach/detach is the gate.** The packed instance is always `visible` while
+  attached (the game hides the per-body proxy when it attaches — Task 6 Step 2 — so
+  `view.object.visible` is false and cannot be the crowd's visibility source). `detach` marks
+  the record dead and frees the slot; `info().visible` counts live attached slots.
+- **Rollback gap.** `view.rebind` re-points the view's sink/records but the view's own material
+  still references its ORIGINAL one-slot record node, so `setCrowd(false)` needs Task 6 to
+  re-sync (rebind back or rebuild) the per-body view; a plain `detach` alone leaves the hidden
+  per-body material reading a stale record. Stage-a rollback is expected to be a page reload
+  (`?crowd=0`), which Task 8 makes the canonical opt-out.
 
 ---
 
