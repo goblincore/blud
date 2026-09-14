@@ -52,7 +52,13 @@ const PRELUDE = process.env.BENCH_PRELUDE ?? '';
 // populated room (the per-body baseline) instead of an empty one. Uses the
 // `__sdfGame.spawnCrowd` seam added for the crowd-march work.
 const CROWD = Number(process.env.BENCH_CROWD ?? 0);
-const CROWD_PRELUDE = CROWD > 0 ? `__sdfGame.spawnCrowd('zombie', ${CROWD})` : '';
+// BENCH_CROWD_SPACING — grid pitch (metres) passed to `__sdfGame.spawnCrowd`.
+// Perf 7f: copies spread on a floor grid centred on the room's spawn point so
+// the bench measures bodies-in-a-room, not N stacked on the single spawn.
+const CROWD_SPACING = Number(process.env.BENCH_CROWD_SPACING ?? 1.2);
+const CROWD_PRELUDE = CROWD > 0
+  ? `__sdfGame.spawnCrowd('zombie', ${CROWD}, { spacing: ${CROWD_SPACING} })`
+  : '';
 // BENCH_CROWD_MAX — hard ceiling on BENCH_CROWD. The 24-body crowd path hung
 // the GPU for 330 s and corrupted the owner's display on 2026-09-14; this
 // makes that failure mode a boot refusal instead of a display-corrupting run.

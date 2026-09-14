@@ -88,6 +88,7 @@ import {
   enclosureKeyAt, enclosureOf, wanderBounds, spawnPoints, PLAYER_START,
   type RoomDef,
 } from './game-level';
+import { crowdGridPoints } from './crowd-spawn';
 import { stepPlayer, eyeOf, PLAYER, type PlayerState, type MoveInput } from './game-player';
 import { createRoomProbes, type ProbeWorkerLike } from './room-probes';
 import { computeBounceSpot } from '../flashlight-bounce';
@@ -9174,25 +9175,41 @@ function performBenchAction(a: BenchAction): void {
      *  (the zombie-only blind spot this gate exists to kill was exactly
      *  such a drift). Read-only, JSON-serialisable, order = registry order. */
     characterNames: (): string[] => [...characterNames()],
-    spawnDebugCharacter: (name: string) => {
+    spawnDebugCharacter: (name: string, start?: Vec3) => {
       const room = ROOMS.find(r => r.id === playerRoomId()) ?? ROOMS[0]!;
       const starts = spawnPoints(room);
-      const start = starts[actors.filter(a => a.room === room.id).length % starts.length]!;
+      // The game's own debug seam keeps the modulo default; crowdGridPoints()
+      // callers pass an explicit point (perf 7f).
+      const chosen = start ?? starts[actors.filter(a => a.room === room.id).length % starts.length]!;
       const errs: string[] = [];
-      const actor = spawnEnemy(name, room, start, errs);
+      const actor = spawnEnemy(name, room, chosen, errs);
       actors.push(actor);
       if (errs.length > 0) console.error(`[sdf-game] spawnDebugCharacter(${name}):`, errs.join(' | ')) ;
       return { id: actor.id, room: room.id, errors: errs };
     },
     /** Spawn `n` copies of `name` into the player's room (bench/crowd seam),
-     *  stopping at the first failure and returning how many landed. */
-    spawnCrowd: (name: string, n: number) => {
+     *  spread on a square grid centred on the room's first spawn point so the
+     *  bench measures bodies-in-a-room, not N stacked on one spawn (perf 7f).
+     *  `ring` is accepted for the seam but the measured layout is the grid.
+     *  Stops at the first failure; returns how many landed and where. */
+    spawnCrowd: (name: string, n: number, opts?: { spacing?: number; ring?: boolean }) => {
+      const room = ROOMS.find(r => r.id === playerRoomId()) ?? ROOMS[0]!;
+      const starts = spawnPoints(room);
+      const p0 = starts[0] ?? ([0, 0, 0] as Vec3);
+      const spacing = opts?.spacing ?? 1.2;
+      const points = crowdGridPoints(p0, n, spacing, {
+        minX: room.minX, maxX: room.maxX, minZ: room.minZ, maxZ: room.maxZ,
+      });
+      const placed: [number, number, number][] = [];
       let ok = 0;
-      for (let i = 0; i < n; i++) {
-        try { (window as any).__sdfGame.spawnDebugCharacter(name); ok++; }
-        catch (e) { console.error('[sdf-game] spawnCrowd stopped at', i, e); break; }
+      for (let i = 0; i < points.length; i++) {
+        try {
+          (window as any).__sdfGame.spawnDebugCharacter(name, points[i]);
+          placed.push([points[i]![0], points[i]![1], points[i]![2]]);
+          ok++;
+        } catch (e) { console.error('[sdf-game] spawnCrowd stopped at', i, e); break; }
       }
-      return ok;
+      return { ok, placed };
     },
     uptime: () => (performance.now() - bootTime) / 1000,
     get frames() { return frameCount; },
