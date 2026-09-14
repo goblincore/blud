@@ -7856,6 +7856,11 @@ function performBenchAction(a: BenchAction): void {
       const v = on ? 1 : 0;
       for (const a of actors) a.view.uniforms.debugCfg.value.y = v;
       for (const c of chunkViews) c.uniforms.debugCfg.value.y = v;
+      // Crowd stage a: a type's uniforms are seeded by copyUniformValues from
+      // its source actor view each frame (crowdOn block in the draw fn), so
+      // the write above usually reaches them — but the crowd parity gate must
+      // not depend on that frame ordering. Write the type nodes directly too.
+      for (const t of crowdTypes.values()) t.uniforms.debugCfg.value.y = v;
     },
     get flatAlbedo() { return (actors[0]?.view.uniforms.debugCfg.value.y ?? 0) > 0.5; },
     setHullExitBound(on: boolean) { for (const a of actors) a.view.uniforms.perfCfg.value.x = on ? 1 : 0; },

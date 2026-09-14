@@ -128,7 +128,7 @@ fragment: SETUP preloads the tile list ▶ LOOP folds per-slot full fields, min 
 | --- | --- | --- |
 | a-0 | baselines: march-hash tiles-off (canonical) and tiles-on; crowd spawn seam + bench leg | hashes recorded in the plan; `BENCH_CROWD=n` runs |
 | a-1 | records + one-instance kernel (D4) for every body | march-hash bit-identical to canonical; refine-smoke PASS; `tsc` clean; vitest pins rewritten deliberately |
-| a-2 | per-type atlas, instanced mesh, per-type tile binding, `?crowd=1` | march-hash with `?crowd=1` bit-identical on room 1; room 2 identical or diff confined to tiles holding ≥2 slots (diagnostic mask) |
+| a-2 | per-type atlas, instanced mesh, per-type tile binding, `?crowd=1` | crowd path: hit mask identical within 0.1 %, max depth delta below the pinned bound, flat-albedo RGB byte-identical; per-body canonical sha1 unchanged |
 | a-3 | deferred registration, bench | `sdf:march` p50 flat or better at 3–5 bodies; crowd leg (24 and 48 zombies) shows cost growing with covered pixels, not bodies; tile-binning-submit < 1 ms at 48 |
 | 3 | refine as one fullscreen pass reading records | refine-smoke PASS, no twins, Task E deleted |
 | 4 | gibs as a chunk type; corpse bake for all characters | `sharedLiveMaterial` invariant replaced by "one chunk type draw"; chunk bench flat |

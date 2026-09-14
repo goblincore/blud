@@ -191,3 +191,64 @@ not overlap there.)
 Artifacts: `7d-rooms12/`, `7d-crowd8/`, `7d-crowd24/` (`bench.{json,md}` +
 `passes.{json,md}` each). Guard: `BENCH_FRAME_CAP_MS` (default 250),
 `BENCH_CROWD_MAX` (default 24).
+
+## Task 7b — tolerance parity (2026-09-14)
+
+The crowd path (`?crowd=1`) cannot be sha1-identical to the per-body path: the
+instanced draw's vertex transform differs by ~1 ULP, which moves the accepted
+march `t` (Task 6 executor note; owner ratified 2026-09-14). The gate is now a
+**tolerance** comparison of the raw march target — `scripts/march-parity.mjs`.
+It boots each room twice (per-body `setCrowd(false)` / crowd `setCrowd(true)`),
+same pins as `march-hash.mjs`, and reads `__sdfGameDebug.readMarchTarget()`
+decoded in Node. Each boot is captured once lit and once with
+`setFlatAlbedo(true)` (debugCfg.y), so the flat-albedo RGB proof is separate
+from the lit-colour smoke test.
+
+```bash
+node scripts/march-parity.mjs                 # tiles off
+MARCH_PARITY_TILES=1 node scripts/march-parity.mjs   # tiles on
+```
+
+Measured (deterministic — a repeat tiles-off run reproduced every line to the
+last bit):
+
+```json
+{"room":1,"tiles":false,"flat":false,"hitA":33344,"hitB":33344,"maskDiff":0,"maskDiffFrac":0,"maxDz":0.00010192394256591797,"meanDz":1.1039837022202944e-7,"rgbDiffChannels":67198,"rgbMax":0.24311340879648924}
+{"room":1,"tiles":false,"flat":true,"hitA":33344,"hitB":33344,"maskDiff":0,"maskDiffFrac":0,"maxDz":0.00010192394256591797,"meanDz":1.1039837022202944e-7,"rgbDiffChannels":0,"rgbMax":0}
+{"room":2,"tiles":false,"flat":false,"hitA":30561,"hitB":30561,"maskDiff":0,"maskDiffFrac":0,"maxDz":0.0013788342475891113,"meanDz":6.197900080266592e-7,"rgbDiffChannels":61325,"rgbMax":0.14931834489107132}
+{"room":2,"tiles":false,"flat":true,"hitA":30561,"hitB":30561,"maskDiff":0,"maskDiffFrac":0,"maxDz":0.0013788342475891113,"meanDz":6.197900080266592e-7,"rgbDiffChannels":0,"rgbMax":0}
+{"room":1,"tiles":true,"flat":false,"hitA":33344,"hitB":33344,"maskDiff":0,"maskDiffFrac":0,"maxDz":0.000989377498626709,"meanDz":1.7960046394772812e-7,"rgbDiffChannels":68229,"rgbMax":0.2943807393312454}
+{"room":1,"tiles":true,"flat":true,"hitA":33344,"hitB":33344,"maskDiff":0,"maskDiffFrac":0,"maxDz":0.000989377498626709,"meanDz":1.7960046394772812e-7,"rgbDiffChannels":0,"rgbMax":0}
+{"room":2,"tiles":true,"flat":false,"hitA":30561,"hitB":30561,"maskDiff":0,"maskDiffFrac":0,"maxDz":0.0013788342475891113,"meanDz":6.197900080266592e-7,"rgbDiffChannels":88932,"rgbMax":0.15251003205776215}
+{"room":2,"tiles":true,"flat":true,"hitA":30561,"hitB":30561,"maskDiff":0,"maskDiffFrac":0,"maxDz":0.0013788342475891113,"meanDz":6.197900080266592e-7,"rgbDiffChannels":0,"rgbMax":0}
+```
+
+Observations:
+
+- **Hit mask: `maskDiff` is exactly 0 in every combination.** No rim pixel
+  flipped; coverage is bit-identical, not merely within the 0.1 % allowance.
+  (The room-2 `readTileSlotMask` cross-check the plan anticipated for a
+  mask-only failure was therefore not needed — there is no overlap to report.)
+- **Flat-albedo RGB is byte-identical** (`rgbDiffChannels 0`, `rgbMax 0`) in
+  every combination. This is the field/material proof: albedo, prim atlas,
+  records and the tile walk produce the exact same colour; only `t` moves.
+- **Lit RGB moves**, as expected: the post-hit chain (wound/AO terms) is a
+  function of the accepted `t`. Max channel delta 0.2944 (room 1, tiles on);
+  67–91 % of hit-pixel channels differ by at least one ULP. This is why the
+  gate proves flat albedo separately and treats lit colour as a smoke alarm.
+- **Depth delta**: room 1 max 1.02e-4 (tiles off) / 9.89e-4 (tiles on); room 2
+  max 1.379e-3 in both modes. With `setSdfScale(0.5)` well under one march step
+  at the surface.
+
+Pinned thresholds, each 2x the measured maximum rounded up to one significant
+figure (the mandated Step-3 rule):
+
+| threshold | measured max | pinned bound | reasoning |
+| --- | --- | --- | --- |
+| `maskDiffFrac` | 0 (exact) | **0.001** | 2x0 has no sig fig; the ratified 0.1 % rim allowance is retained, with 100 % measured headroom |
+| `maxDz` | 1.379e-3 | **3e-3** | 2x = 2.758e-3 -> 3e-3 |
+| lit `rgbMax` | 0.2944 | **0.6** | 2x = 0.589 -> 0.6 (smoke alarm over `t`-driven tint) |
+| flat RGB | 0 (exact) | **0** (required) | not a x2 threshold: byte-identical is the proof |
+
+Per-body canonical sha1 `a8ab4efac15fc0376c3e4e05420f13e34d1511bd` is
+unchanged (`scripts/march-hash.mjs`, run twice).

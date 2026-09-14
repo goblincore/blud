@@ -813,6 +813,12 @@ git commit -m "feat(crowd): CrowdType — shared atlas, records, one material, i
 > different accepted `t`. No uniform/record/band difference remains to fix;
 > `?crowd=1` cannot be byte-identical to the per-body path with one instanced
 > draw. Do not rebase `a8ab4e…`.
+>
+> **Ratified 2026-09-14 / gated by Task 7b:** crowd path: hit mask identical
+> within 0.1 %, max depth delta below the pinned bound, flat-albedo RGB
+> byte-identical; per-body canonical sha1 unchanged. Measured in Task 7b:
+> `maskDiff` exactly 0, flat-albedo RGB exactly identical, `maxDz` 1.379e-3
+> (pinned 3e-3), lit `rgbMax` 0.2944 (pinned 0.6). `a8ab4e…` still holds.
 
 ```bash
 npx tsc --noEmit -p .
