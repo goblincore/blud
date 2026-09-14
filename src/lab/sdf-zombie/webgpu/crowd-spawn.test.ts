@@ -4,7 +4,7 @@
 // page. The grid must spread copies so the bench measures bodies-in-a-room
 // rather than N stacked on the room's single spawn point.
 import { describe, it, expect } from 'vitest';
-import { crowdGridPoints, FLOOR_INSET_M, type FloorRect } from './crowd-spawn';
+import { crowdGridPoints, FLOOR_INSET_M, REGION_INSET_M, type FloorRect } from './crowd-spawn';
 
 // Room 1's interior ground rect (game-level.ts: -OUTER .. -BAND_HALF) and its
 // single spawn point. The bench's canonical crowded room.
@@ -51,6 +51,43 @@ describe('crowdGridPoints', () => {
     // cols = ceil(sqrt(8)) = 3 -> the first row is 3 distinct x values.
     const pts = crowdGridPoints(P0, 8, 1.2, ROOM1);
     expect(new Set(pts.slice(0, 3).map((p) => p[0])).size).toBe(3);
+  });
+
+  it('fits 24 copies at 0.9 m in a 3.5 x 7 m region, none closer than spacing', () => {
+    // The distance-crowd scene's far-half strip (perf task, 2026-09-14): the
+    // region is caller-authored and already inset from the room walls, so the
+    // grid centres on it and chooses columns to fit its 3.5 m span. Four
+    // columns x six rows at 0.9 m spans 2.7 x 4.5 m — it fits the region at
+    // the raw bounds, where the 0.5 m standoff alone could not (2.5 m usable
+    // < 2.7 m). Nobody may be closer than the requested spacing either way.
+    const region: FloorRect = { minX: -1.75, maxX: 1.75, minZ: -3.5, maxZ: 3.5 };
+    const pts = crowdGridPoints([0, 0, 0], 24, 0.9, region, { centre: [0, 0], inset: REGION_INSET_M });
+    expect(pts).toHaveLength(24);
+    for (const [x, y, z] of pts) {
+      expect(x).toBeGreaterThanOrEqual(region.minX - 1e-9);
+      expect(x).toBeLessThanOrEqual(region.maxX + 1e-9);
+      expect(z).toBeGreaterThanOrEqual(region.minZ - 1e-9);
+      expect(z).toBeLessThanOrEqual(region.maxZ + 1e-9);
+      expect(y).toBe(0);
+    }
+    for (let i = 0; i < pts.length; i++) {
+      for (let j = i + 1; j < pts.length; j++) {
+        const dx = pts[i]![0] - pts[j]![0];
+        const dz = pts[i]![2] - pts[j]![2];
+        expect(Math.hypot(dx, dz)).toBeGreaterThanOrEqual(0.9 - 1e-6);
+      }
+    }
+  });
+
+  it('centres a region grid on the region centre and keeps a 1-body control unclamped', () => {
+    const region: FloorRect = { minX: 2, maxX: 9, minZ: 10, maxZ: 17 };
+    const one = crowdGridPoints([5, 0, 13], 1, 0.9, region, { centre: [5.5, 13.5], inset: REGION_INSET_M });
+    expect(one).toEqual([[5.5, 0, 13.5]]);
+    const pts = crowdGridPoints([5, 0, 13], 9, 0.9, region, { centre: [5.5, 13.5], inset: REGION_INSET_M });
+    const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length;
+    const cz = pts.reduce((s, p) => s + p[2], 0) / pts.length;
+    expect(cx).toBeCloseTo(5.5, 6);
+    expect(cz).toBeCloseTo(13.5, 6);
   });
 
   it('clamps grid points inside a narrow floor', () => {

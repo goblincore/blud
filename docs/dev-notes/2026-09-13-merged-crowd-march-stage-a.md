@@ -848,3 +848,105 @@ The hands record is instead proved by `fpv-view.test.ts`'s new
 
 Also fixed: `deferred-sdf.test.ts`'s "trace's first statement precedes the
 prologue" pin now matches `loadInstance(inst, i32(instCfg.z));`.
+
+## Distance crowd (2026-09-14)
+
+**Why this scene.** The spec's a-3 bar was written as "24 and 48 zombies grow
+with covered pixels, not bodies", measured on a close-up stacked scene the game
+never shows: at the current FOV 24 bodies cannot be on screen close-up at once.
+The realistic crowd is **many bodies at distance**, and the march is pixel-bound,
+so a distant body is cheap per pixel while still paying the per-step fold of
+every sphere that covers a tile. This task measures that case so the Task-8
+default flip rests on the real workload.
+
+**Scene.** Room 1 (8 x 8 m, `ROOM_MINX=-8.8`). The player is placed 0.6 m in
+from the near corner `(-8.2, 0, -8.2)` looking along the room diagonal at the
+far corner `(minX+0.6 -> maxX, minZ+0.6 -> maxZ)`, pitch 0. The crowd is a
+`spawnCrowd` region grid at **0.9 m** pitch in the far half: `x in [centre,
+maxX-0.5]` (3.5 m) across the **full room depth** `z in [minZ+0.5, maxZ-0.5]`
+(7 m). That 3.5 x 7 m strip is the smallest region that holds 24 at 0.9 m with
+no pair closer than the pitch — a 3.5 x 3.5 quadrant caps at 16, and the
+crowd-spawn test pins exactly this region. Camera-to-body distance therefore
+runs ~3.4 m (near-z edge) to ~9.8 m (far corner); the room's **11 m diagonal is
+the longest sightline this level offers**, so that is the bound on "distance"
+here. A longer-sightline space is future work (out of scope for this task).
+
+**Seams added.** `__sdfGame.placePlayer({x,z,yaw,pitch})` (sets the pose fields
+`teleport()` writes and returns the enclosure key); `spawnCrowd(name, n, {region})`
+(centres the 7f grid on the region and fits its columns to the region span so an
+elongated region cannot clamp bodies into collisions); `crowdInfo().meanDistance`
+(mean camera-to-drawn-centre distance over packed slots). `bench({holdPlayer})`
+strips the firefight's frame-0 teleport/look/freeze, zeroes the walk input and
+re-pins pos/vel each step so the camera cannot drift. The distance prelude also
+freezes the wanderers (`freeze(true)`): without it a room-1 zombie walks the
+anchor down over the run and the *end-of-run* `meanDistance` (what the bench
+records) read 4.3 m instead of 6.1 m. The frame-guard probe runs **unarmed**
+(`noShots`) for this scene so it cannot mutate the measured crowd.
+
+### Sweep (load-checked; `BENCH_PASSES=1`, repeats=1, rooms=1, one run per command)
+
+`visible` = crowd-type drawn count (zombie), `meanDistance` m and `rectFrac` from
+the same end-of-run census; `clamped` = `clampedTiles` (0 unless noted). Numbers
+are `sdf:march` p50 ms **overall (walk segment in parentheses)** from
+`passes.json`. 1-min load recorded before each run. **One repeat per row**
+(`BENCH_REPEATS=1`, per the task's sweep command): these are single-run numbers
+with no repeat-spread estimate, so read the quad-vs-per-body deltas (0.5–2x)
+as robust and treat sub-10% differences as unresolved.
+
+| n (run) | load | visible | meanDist | rectFrac | clamped | per-body | crowd-quad | per-body s0.5 | crowd-quad s0.5 | abort? |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| 8 (`dist-crowd8`) | 2.61 | 8 | 6.12 | 0.27 | 0 | 24.92 (24.82) | 11.88 (12.73) | 9.09 (9.22) | 7.61 (7.57) | no |
+| 12 (`dist-crowd12`) | 2.37 | 12 | 6.29 | 0.34 | 0 | 30.54 (30.28) | 18.12 (17.95) | 11.63 (11.51) | 10.04 (9.85) | no |
+| 16 (`dist-crowd16`) | 2.85 | 16 | 6.16 | 0.46 | 0 | 44.64 (41.01) | 26.94 (27.37) | 14.13 (14.05) | 11.89 (12.99) | no |
+| 20 (`dist-crowd20`) | 2.82 | 20 | 6.31 | 0.49 | 0/3 | 57.78 (57.77) | 28.71 (28.74) | 15.79 (16.05) | 12.37 (12.27) | no |
+| 24 (`dist-crowd24`) | 2.76 | 24 | 6.38 | 0.50 | 0/90 | 60.96 (64.83) | 30.20 (30.33) | 17.09 (17.09) | 13.49 (13.41) | no |
+
+`clamped` is `crowd-quad / crowd-quad-s0.5`: the only nonzero is the 24-body
+0.5-scale quad (90 entries), which costs nothing measurable (13.49 vs the
+per-body 17.09). `culledByBudget` and `tileFallbacks` were **0 on every row**.
+
+### Per-visible-body cost (`sdf:march` p50 / end-of-run on-screen bodies)
+
+| n | scale 1.0 per-body | scale 1.0 quad | ratio | scale 0.5 per-body | scale 0.5 quad | ratio |
+|---:|---:|---:|---:|---:|---:|---:|
+| 8 | 2.27 | 1.32 | 0.58 | 0.83 | 0.85 | 1.02 |
+| 12 | 2.04 | 1.39 | 0.68 | 0.78 | 0.77 | 0.99 |
+| 16 | 2.35 | 1.58 | 0.67 | 0.74 | 0.70 | 0.94 |
+| 20 | 2.51 | 1.37 | 0.55 | 0.69 | 0.59 | 0.86 |
+| 24 | 2.26 | 1.21 | 0.54 | 0.63 | 0.54 | 0.86 |
+
+(The per-body divisor is the game census at the end of the run — n+3 bodies
+including the level's own soldier/zombie; the crowd divisor is the crowd type's
+own drawn count, n+1 in the same census. The two paths count the level's own
+cast slightly differently, so the per-body ratio is the honest column and the
+absolute per-visible-body numbers carry that caveat.) At ship scale the crowd
+path is **~0.54–0.68x per visible body**; at 0.5 it is 0.86–1.02x, a tie at n=8
+within a single repeat.
+
+### Verdict
+
+1. **Highest n completed: 24 at BOTH scales** (1.0 and 0.5). No leg aborted the
+   250 ms frame guard at any n, including 24. The 24-body ship-scale row is
+   `sdf:march` 30.20 ms (walk 30.33), fenced frame p50 36.42 ms — inside the a-2
+   (3) close-up n=16's 132.38 ms by 3.6x because the bodies are far.
+2. **Does crowd-quad beat per-body at every completed n?** Yes on the total
+   `sdf:march` p50 at every n at both scales (1.0: 0.35–0.63x; 0.5: 0.79–0.84x),
+   and on per-visible-body except n=8 at 0.5 (1.02, a tie inside one repeat).
+3. **Task-8 recommendation: FLIP THE DEFAULT** (quad dispatch on; per-body
+   retained behind a flag). Both conditions hold: quad ≤ per-body at every
+   completed row, and the 24-body row completes at **ship scale 1.0**, well under
+   the guard. The spec's a-3 bar is demonstrated on the realistic scene, not the
+   close-up: `rectFrac` at 24 is **0.50** (not 1.00 — the distant crowd covers
+   half the screen), `meanDistance` 6.38 m, and `sdf:march` is nearly flat from
+   n=16 to n=24 (26.94 -> 30.20 at 1.0; 11.89 -> 13.49 at 0.5) — the remaining
+   cost grows with covered pixels, not body count.
+
+**Left open (not blocking the flip, but recorded):** the spec's 48-body
+`tile-binning-submit < 1 ms` bar is untested — 48 bodies at 0.9 m do not fit any
+region in this level (a 48-body grid needs ~5.4 x 5.4 m at 0.9 m and the far
+half is 3.5 x 7 m), and a longer-sightline space to hold them is future work. The
+flip decision rests on the measured 8–24 range at both scales, which is the
+crowd the level can actually show.
+
+Artifacts: `dist-crowd{8,12,16,20,24}/` (`bench.{json,md}` + `passes.*` +
+`bench-progress.jsonl`).

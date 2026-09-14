@@ -107,9 +107,17 @@
   low-`n` fixed cost is **gone**: n=2 walk quad 0.99–1.23× boxes (was 3.4×), quad ≤ per-body in rooms 1–2, n=8
   overall 69.64 ≤ the a-2 (2) 92.99, 16 completes at 132.38. But `rectFrac` is already 1.00 from n=8 up (the
   rect has nothing left to give at high `n` — the cost is the flat per-body slope over a screen-bound quad),
-  **n=20 aborts the frame guard (probe never answered in 60 s) and 24 was not attempted. Next action: do NOT
-  flip the default (Task 8).** The single blocker is a 24-body crowd leg that completes under the 250 ms guard
-  (plus the untested 48-body `tile-binning-submit < 1 ms` bar). Plan
+  **n=20 aborts the frame guard (probe never answered in 60 s) and 24 was not attempted.**
+  **Distance-crowd bench (2026-09-14, `## Distance crowd` in the dev note):** the a-3 bar was re-measured on the
+  scene the game actually shows — the player in room 1's near corner down the 11 m diagonal, a 0.9 m grid of
+  bodies in the far-half 3.5 x 7 m strip (~6.3 m mean camera distance), camera pinned (`holdPlayer`) and
+  wanderers frozen. Sweep 8/12/16/20/24 at scales 1.0 and 0.5: **every row completed, including 24 at ship
+  scale** (`sdf:march` 30.20 ms overall / 30.33 walk, fenced 36.42 ms; `rectFrac` 0.50, `clampedTiles` 0),
+  and **crowd-quad beat per-body at every completed n at both scales** (total march 0.35–0.63x at 1.0, 0.79–0.84x
+  at 0.5; per-visible-body 0.54–0.68x at 1.0, tie at n=8 0.5). **RECOMMENDATION: FLIP THE DEFAULT (Task 8) —
+  quad dispatch on, per-body behind a flag.** Both flip conditions hold. Remaining non-blocking gap: the 48-body
+  `tile-binning-submit < 1 ms` bar is untested (48 bodies at 0.9 m fit no region in this level; a
+  longer-sightline space is future work). Plan
   `docs/superpowers/plans/2026-09-14-merged-crowd-march-stage-a2-tile-quads.md`.
 - [ ] **BAKED MESH LOD (plan 2026-09-14):** `docs/superpowers/plans/2026-09-14-baked-mesh-lod.md` — L1 textured bake (rest-anchor + aux vertex attrs, per-pixel detail/mottle/meat/gloss; the "untextured smooth corpse" fix), L2 corpse bake for every character, L3 distance LOD (per-type segment bake shared by all instances, posed per frame, hysteretic band; removes far bodies from the march). Owner 2026-09-14: distant crowds are the real crowd case.
 - [ ] **CORPSE BAKE FOR EVERY CHARACTER:** `corpseBakeEligible` is soldier-only (`profile.name === 'soldier'` +

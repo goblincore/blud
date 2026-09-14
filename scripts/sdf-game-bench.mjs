@@ -56,8 +56,62 @@ const CROWD = Number(process.env.BENCH_CROWD ?? 0);
 // Perf 7f: copies spread on a floor grid centred on the room's spawn point so
 // the bench measures bodies-in-a-room, not N stacked on the single spawn.
 const CROWD_SPACING = Number(process.env.BENCH_CROWD_SPACING ?? 1.2);
+// The distance scene packs 24 bodies into a 3.5 x 7 m strip, which needs the
+// tighter 0.9 m pitch (the room scene's 1.2 m default caps at 18 there). This
+// is the ``BENCH_CROWD_SPACING ?? 0.9`` the distance-task spec names.
+const DIST_CROWD_SPACING = Number(process.env.BENCH_CROWD_SPACING ?? 0.9);
+// BENCH_SCENE — the scene the crowd prelude builds. Default = the 7f room
+// grid (bodies spread from the room's spawn point). `distance` (perf task,
+// 2026-09-14) is the realistic crowd the 24-body close-up could never be: the
+// player is placed in room 1's NEAR corner looking down the room diagonal, and
+// the crowd is a grid in the FAR half of the room so the measured cost is
+// many bodies at distance, not a screen-filling stack. It also pins the
+// player (`holdPlayer`) so the firefight's frame-0 teleport cannot overwrite
+// the placed pose and the walk input cannot drift the camera mid-leg.
+const SCENE = process.env.BENCH_SCENE ?? '';
+/** The distance scene, evaluated in-page after the leg overrides (spawn must
+ *  come after a rebuild-inducing setCrowd — see the prelude comment below).
+ *
+ *  REGION GEOMETRY. Room 1 is 8 x 8 m. The far half in x is 3.5 m
+ *  ([centre..maxX]); the region spans the FULL room depth in z minus 0.5 m of
+ *  wall standoff (7 m). That 3.5 x 7 strip is the smallest region that holds
+ *  24 bodies at 0.9 m spacing with none closer than the pitch (a 3.5 x 3.5
+ *  quadrant caps at 16) — which is also the region the crowd-spawn test pins.
+ *  The near corner is 0.6 m in from the two near walls; yaw points at the
+ *  opposite corner (the page's forward is (sin yaw, -cos yaw)).
+ *
+ *  WANDERERS FROZEN. The firefight leaves the cast wandering on purpose; here
+ *  that is fatal to the measurement. A room-1 zombie walks the crowd anchor
+ *  down over the run, so the END-of-run crowdInfo (what the bench records) had
+ *  drifted from a 6.2 m mean to 4.3 m in the first smoke run. `holdPlayer`
+ *  pins the camera, and the freeze pins the bodies, so the meanDistance and
+ *  the pixel coverage describe one stable distant scene for the whole leg.
+ *  Both legs (quad and per-body) run the same frozen scene, so the A/B is
+ *  unaffected.
+ */
+function buildDistancePrelude() {
+  return `(() => {
+    const r = __sdfGame.rooms.find(x => x.id === 1);
+    const b = r.bounds;
+    const px = b.minX + 0.6, pz = b.minZ + 0.6;
+    const yaw = Math.atan2(b.maxX - px, -(b.maxZ - pz));
+    __sdfGame.teleport(1);
+    __sdfGame.placePlayer({ x: px, z: pz, yaw, pitch: 0 });
+    __sdfGame.freeze(true);
+    const region = {
+      minX: (b.minX + b.maxX) / 2,
+      maxX: b.maxX - 0.5,
+      minZ: b.minZ + 0.5,
+      maxZ: b.maxZ - 0.5,
+    };
+    __sdfGame.spawnCrowd('zombie', ${CROWD}, { spacing: ${DIST_CROWD_SPACING}, region });
+    return 1;
+  })()`;
+}
 const CROWD_PRELUDE = CROWD > 0
-  ? `__sdfGame.spawnCrowd('zombie', ${CROWD}, { spacing: ${CROWD_SPACING} })`
+  ? (SCENE === 'distance'
+    ? buildDistancePrelude()
+    : `__sdfGame.spawnCrowd('zombie', ${CROWD}, { spacing: ${CROWD_SPACING} })`)
   : '';
 // BENCH_CROWD_MAX — hard ceiling on BENCH_CROWD. The 24-body crowd path hung
 // the GPU for 330 s and corrupted the owner's display on 2026-09-14; this
@@ -359,6 +413,12 @@ const ALL_LEGS = {
   // boxes. 'crowd-on' above is kept as an alias of 'crowd-quad'.
   'crowd-quad': { setCrowd: true, setTiles: true, setCrowdDispatch: 'quad' },
   'crowd-boxes': { setCrowd: true, setTiles: true, setCrowdDispatch: 'boxes' },
+  // DISTANCE SCENE SCALE A/B (2026-09-14). Same quad dispatch at half the
+  // march scale, and the per-body baseline at the same scale, so the distance
+  // sweep can answer "does crowd-quad beat per-body at EVERY scale?" without
+  // a cross-run scale comparison. Pair with BENCH_SCENE=distance.
+  'crowd-quad-s05': { setCrowd: true, setTiles: true, setCrowdDispatch: 'quad', setSdfScale: 0.5 },
+  'baseline-s05': { setCrowd: false, setSdfScale: 0.5 },
   // GOO DENSITY LEVERS (pass attribution 2026-09-07: goo:density equals the
   // march once blood flies). Run with BENCH_PASSES=1 and read the
   // goo:density row. 'goo-density-off' is the diagnostic ceiling — a wrong
@@ -636,10 +696,18 @@ async function runLeg(name, room, mode) {
   // probe that times out or reads over BENCH_FRAME_CAP_MS aborts the leg and
   // SKIPS the long run — the honest early-out for the 24-body hang class.
   progress.phase = 'probe';
+  // The distance scene freezes the placed pose for the whole leg; the probe
+  // must too, or it would teleport the player and measure a different scene
+  // than the real run. It also runs UNARMED: the probe executes the whole
+  // scenario first, and its shots kill the crowd (at n=20 the measured run
+  // then started with 2 of 21 bodies). The guard only needs the walk scene's
+  // frame cost, which does not fire.
+  const holdOpt = SCENE === 'distance' ? ', holdPlayer: true' : '';
+  const probeNoShots = SCENE === 'distance' ? ', noShots: true' : '';
   let probe;
   try {
     probe = await evaluate(
-      `__sdfGame.bench({ room: ${room}, mode: "passes", warmup: 4, chunkFrames: 2, label: ${JSON.stringify(`${label}-probe`)} })`,
+      `__sdfGame.bench({ room: ${room}, mode: "passes", warmup: 4, chunkFrames: 2, label: ${JSON.stringify(`${label}-probe`)}${holdOpt}${probeNoShots} })`,
       30_000,
     );
   } catch (e) {
@@ -654,8 +722,8 @@ async function runLeg(name, room, mode) {
     };
   }
   const opts = mode === 'spike'
-    ? `{ room: ${room}, mode: "spike", warmup: ${WARMUP}, label: ${JSON.stringify(label)} }`
-    : `{ room: ${room}, mode: ${JSON.stringify(mode)}, warmup: ${WARMUP}, chunkFrames: ${CHUNK}, label: ${JSON.stringify(label)} }`;
+    ? `{ room: ${room}, mode: "spike", warmup: ${WARMUP}, label: ${JSON.stringify(label)}${holdOpt} }`
+    : `{ room: ${room}, mode: ${JSON.stringify(mode)}, warmup: ${WARMUP}, chunkFrames: ${CHUNK}, label: ${JSON.stringify(label)}${holdOpt} }`;
   progress.phase = 'bench';
   await evaluate(`__sdfGame.bench(${opts})`);
   progress.phase = 'collect';
@@ -902,6 +970,32 @@ lines.push('| leg | room | spawned | overall | walk | fire | gib | worst chunk |
 lines.push('| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |');
 for (const t of table) {
   lines.push(`| ${t.leg} | ${t.room} | ${t.bodies} | ${t.overallP50.toFixed(2)} | ${t.walkP50.toFixed(2)} | ${t.fireP50.toFixed(2)} | ${t.gibP50.toFixed(2)} | ${t.overallMax.toFixed(2)} |`);
+}
+lines.push('');
+lines.push('## Crowd census — per type (visible / meanDistance m / rectFrac / clampedTiles)');
+lines.push('');
+lines.push('`meanDistance` is the mean camera-to-body-centre distance over the DRAWN');
+lines.push('instances of the last sync (crowd-type info()). The distance scene reads it');
+lines.push('as its scene descriptor: a distant crowd should sit well above the 1-2 m of');
+lines.push('a close-up stack, and `rectFrac` says how much screen the quad covered.');
+lines.push('');
+lines.push('| leg | room | type | visible | meanDistance | rectFrac | clampedTiles |');
+lines.push('| --- | ---: | --- | ---: | ---: | ---: | ---: |');
+for (const t of table) {
+  const r = results.find((x) => x.leg === t.leg && x.room === t.room);
+  // Per-body legs turn the crowd OFF; their crowd type's last sync is stale
+  // (it was detached mid-rebuild), so its numbers are not the scene. Say so
+  // rather than print a misleading 1-body row.
+  const types = r?.crowdInfo?.on === true ? r.crowdInfo.types : null;
+  if (!types?.length) {
+    lines.push(`| ${t.leg} | ${t.room} | (per-body) | - | - | - | - |`);
+    continue;
+  }
+  for (const ty of types) {
+    const md = typeof ty.meanDistance === 'number' ? ty.meanDistance.toFixed(2) : '-';
+    const rf = typeof ty.rectFrac === 'number' ? ty.rectFrac.toFixed(2) : '-';
+    lines.push(`| ${t.leg} | ${t.room} | ${ty.name} | ${ty.visible} | ${md} | ${rf} | ${ty.clampedTiles} |`);
+  }
 }
 lines.push('');
 lines.push('## Repeatability — READ THIS BEFORE ANY DELTA');
