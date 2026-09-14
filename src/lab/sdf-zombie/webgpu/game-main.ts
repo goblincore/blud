@@ -9030,6 +9030,13 @@ function performBenchAction(a: BenchAction): void {
           proxyVisible: o.visible,
           crowdSlot: a.crowd?.slot ?? null,
           dist: Math.round(o.position.distanceTo(cam) * 100) / 100,
+          pos: [o.position.x, o.position.y, o.position.z].map((v) => Math.round(v * 100) / 100),
+          kit: (() => {
+            const k = a.character?.kit?.object;
+            if (!k) return null;
+            const w = k.getWorldPosition(new THREE.Vector3());
+            return { visible: k.visible, parent: k.parent?.name ?? k.parent?.type ?? null, world: [w.x, w.y, w.z].map((v) => Math.round(v * 100) / 100) };
+          })(),
           bakeEligible: a.corpseBakeEligible(),
           baked: soldierCorpses?.bakedState(a.id) ?? 'n/a',
           rev: a.damageRevision(),
