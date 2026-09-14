@@ -1185,3 +1185,27 @@ proven is correctness (section above), not a same-machine millisecond delta.
 Artifacts: `ng-fixed-rooms12/` (requested) and `ng-fd-rooms12/` (inconclusive
 companion), each `bench.{json,md}` + `passes.*` + `bench-progress.jsonl`.
 
+
+## Flip decision bench on the owner's recording (2026-09-14 evening)
+
+Instrument: `BENCH_DEMO=docs/dev-notes/demos/2026-09-14T21-02-05-669Z-room1.dem.json` (56 s, 3368 frames, 110 shots, room 1, free aim; replays 842/842 identical after 7e7d8eef). Legs `baseline` (crowd quad, default) vs `crowd-off` (per-body), `BENCH_PASSES=1`, segments = thirds t0/t1/t2. Census identical across legs and repeats (bodies 0→3→0→1, wounds 0→7→23→23, 256 splats). Outputs under `flip-demo-room1*/`.
+
+Two crowd bugs the recording exposed, both fixed on `merge/crowd-default-flip`:
+
+1. **Baked soldier corpses kept marching under their mesh** (87ca510c). The baker re-showed the crowd-hidden per-body proxy when a head survived (head drawn twice) and, headless, left the instance in the visible set. `soldierCorpses.bakedState()`; the crowd visible set drops headless-baked slots; the baker never touches a crowd-attached proxy.
+2. **Full-screen quad for a body no pixel can see** (dc4a7a4c). A body 1.3 m beside the camera survives the frustum cull by its sphere; its inflated box crosses the eye plane and `crowdScreenRect` answered with the full screen — 18 ms of march for the whole cleared-room third. The rect now clips the box against the near plane (parity PASS, hash unchanged). It still binds 63 % of the screen there because the blend reach (maxBlendK·4 + 0.09 m) pushes the box into view near the near plane; per-body rasterises the un-inflated box off-screen for 0.1 ms.
+
+`sdf:march` p50 per third, ms (both fixes; quiet-ish machine, repeat spread 20–36 %):
+
+| third | on screen | crowd quad (rep0 / rep1) | crowd boxes | per-body (+chunks) |
+| --- | --- | ---: | ---: | ---: |
+| t0 opening | 0→3 bodies, gibs | 19.7 / 23.3 | 16.1 | 25.3+10.7 / 29.3+16.0 |
+| t1 heavy fire | 3→0 bodies, 7→23 wounds, skeletons | 58.1 / 63.4 | 53.3 | 38.8 / 45.5 |
+| t2 cleared | 1 body beside the camera | 13.1 / 13.3 | 5.1 | 0.1 |
+| overall frame median | | 24.8 / 32.5 | 27.2 | 22.0 / 31.6 |
+
+Reading: crowd wins the opening (gibs + bodies), loses the fire-heavy third by ~15 ms, and still pays 5–13 ms in a cleared room. Overall it is a wash within noise on this real run — the stacked-crowd wins (room 1 close-up 11 vs 66) do not appear in ordinary few-body play. At frame 1600 the three visible types' quads cover 45 / 71 / 81 % of the screen each (rects overlap heavily), so per-pixel setup runs ~2× the screen while per-body's four boxes cover far less; that is the t1 mechanism to attack next (per-instance rects, or a shared-quad union across types).
+
+**Decision: HOLD the default flip.** Land everything else (determinism, hitch fixes, corpse + rect fixes) on main with per-body as the default and `?crowd=1` opt-in, until t1 ≤ per-body on this recording.
+
+Capture note: `presentedShot()` straight after `demoReplay` under hold can return a stale canvas; step two frames first (it caused a false "crowd draws a soldier per-body does not" alarm — both paths were identical at frames 1598–1602).
