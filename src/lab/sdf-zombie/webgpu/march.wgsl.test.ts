@@ -24,7 +24,7 @@ import {
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META, ROW_PRIM_SHAPE,
   ROW_PRIM_BEND, ROW_PRIM_SHELL, ROW_PRIM_WARP, ROW_PRIM_STRAND, ROW_PRIM_CLIP, NOISE_LOCAL, WOUND_MASK, WOUND_SHADOW, SD_SHELL,
   ROW_WOUND_CAP, APPLY_BONES, FOLD_BONE_RANGE, ROW_WOUND_FLAGS, TISSUE_RAMP, SD_ROUND_BOX, LEVEL_SHADOW,
-  CALC_NORMAL, INSTANCE_STATE, MARCH_BODY_PARAMS,
+  CALC_NORMAL, INSTANCE_STATE, MARCH_BODY_PARAMS, MARCH_TRACE_SETUP,
   FACE_MELT_SAG, FACE_MELT_STRETCH, FACE_MELT_FADE_LO, DEPTH_PREPASS_MARCH, DEPTH_PRE_FETCH, WOUND_STEP_MUL,
   soldierFaceDamageShadow,
 } from './march.wgsl';
@@ -84,6 +84,26 @@ describe('wgslFn parse contract', () => {
   it('declares no helper twice', () => {
     const names = HELPERS.map(declaredName);
     expect(new Set(names).size).toBe(names.length);
+  });
+
+  it('parses every runtime helper with the real wgslFn parser', () => {
+    // declaredName only checks the ^-anchor. three's own regexp also needs a
+    // resolvable RETURN TYPE after the parameter list: a source that starts
+    // with `fn` but has no `-> type` can still fail, and the failure is a
+    // silent "Function is not a WGSL code" whose downstream symptom is a
+    // blank march target. INSTANCE_STATE originally had no return type and
+    // only parsed because the loose regexp backtracked into a LATER helper in
+    // the same string; deleting tileHasSlot removed that crutch and blanked
+    // the page, which is why loadInstance now declares `-> void` and this
+    // test parses HELPERS exactly as buildEntryFn does.
+    for (const [i, src] of HELPERS.entries()) {
+      expect(() => new WGSLNodeFunction(src), `HELPERS[${i}]`).not.toThrow();
+    }
+    for (const [n, src] of [
+      ['MARCH_BODY', MARCH_BODY], ['CONE_MARCH', CONE_MARCH], ['DEPTH_PREPASS_MARCH', DEPTH_PREPASS_MARCH],
+    ] as const) {
+      expect(() => new WGSLNodeFunction(src), n).not.toThrow();
+    }
   });
 
 });
@@ -1024,7 +1044,10 @@ describe('tile-list fold path (raymarcher-perf task 5)', () => {
     expect(pre).toBeLessThan(MARCH_BODY.indexOf('let dres = mapBody('));
     // One read loop, bounded by the same cap the CPU binner clamps to.
     expect(MARCH_BODY).toContain(`for (var e = 0; e < ${TILE_MAX_ENTRIES}; e = e + 1) {`);
-    expect(MAP_BODY).toContain(`for (var e = 0; e < ${TILE_MAX_ENTRIES}; e = e + 1) {`);
+    // The per-pixel slot table (perf 7d) is built in SETUP, once, from that
+    // same preloaded, slot-sorted entry list.
+    expect(MARCH_TRACE_SETUP).toContain('gPixSlot[gPixN] = s;');
+    expect(MARCH_TRACE_SETUP).toContain('gPixEnd[gPixN - 1] = e + 1;');
     expect(MARCH_BODY).toContain('if (e >= i32(n)) { break; }');
   });
 
@@ -1043,9 +1066,14 @@ describe('tile-list fold path (raymarcher-perf task 5)', () => {
     expect(MARCH_BODY).toContain('let lin = (head.x + u32(e)) * 3u;');
   });
 
-  it('mapBody branches on gTileActive: tile list vs cluster walk, both through foldGroup', () => {
-    expect(MAP_BODY).toContain('if (gTileActive > 0.5) {');
-    expect(MAP_BODY).toContain('if (i32(gTileSlot[e]) != s) { continue; }');
+  it('mapBody walks the per-pixel slot table: tile range vs cluster walk, both through foldGroup', () => {
+    expect(MAP_BODY).toContain('let tiled = gTileActive > 0.5;');
+    expect(MAP_BODY).toContain('let nIter = select(nInst, gPixN, tiled);');
+    expect(MAP_BODY).toContain('let s = select(k, gPixSlot[k], tiled);');
+    // The range walk folds exactly this slot's contiguous entry run; the
+    // per-step slot scan is gone.
+    expect(MAP_BODY).toContain('for (var e = gPixFirst[k]; e < gPixEnd[k]; e = e + 1) {');
+    expect(MAP_BODY).not.toContain('tileHasSlot');
     expect(MAP_BODY).toContain('d = foldGroup(d, p, data, counts, band, gTileBounds[e], gTileGrp[e]);');
     expect(MAP_BODY).toContain('d = foldGroup(d, p, data, counts, band, bounds, range);');
   });
@@ -2529,6 +2557,6 @@ describe('crowd instance state', () => {
   it('bands the damage folds', () => {
     expect(APPLY_CARVES).toContain('fn applyCarves(dIn: f32, p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, band: i32)');
     expect(APPLY_WOUNDS).toContain('band: i32');
-    expect(MAP_BODY).toContain('for (var s = 0; s < ${MAX_CROWD_INSTANCES}; s = s + 1)'.replace('${MAX_CROWD_INSTANCES}', '64'));
+    expect(MAP_BODY).toContain('for (var k = 0; k < ${MAX_CROWD_INSTANCES}; k = k + 1)'.replace('${MAX_CROWD_INSTANCES}', '64'));
   });
 });

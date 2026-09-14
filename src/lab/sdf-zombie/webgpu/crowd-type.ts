@@ -21,8 +21,8 @@ import {
   createCrowdRecords, MAX_CROWD_INSTANCES, REC_VEC4S, REC_COUNTS, REC_WIND_ALIVE,
   type CrowdRecords,
 } from './crowd-records';
-import { createComputeTileBinding, type ComputeTileBinding } from './tile-bin-compute';
-import { type TileGroupInput } from './tile-cull';
+import { createComputeTileBinding, MAX_TILE_GROUPS, type ComputeTileBinding } from './tile-bin-compute';
+import { TileBinner, type TileGroupInput } from './tile-cull';
 import {
   createCrowdMaterial, type CrowdMaterialSources, type MarchUniforms, type ZombieGpuView,
 } from './zombie-gpu';
@@ -41,6 +41,39 @@ export function allocateSlot(free: Set<number>): number {
   for (const s of free) if (best < 0 || s < best) best = s;
   if (best >= 0) free.delete(best);
   return best;
+}
+
+/**
+ * The high-water mark of a set of occupied slots: max(slot) + 1, or 0 when
+ * empty. `instCfg.x` is stamped with this, not MAX_CROWD_INSTANCES: since
+ * allocateSlot always hands out the lowest free slot, it equals the drawn
+ * count except transiently after a mid-range detach, and free slots below it
+ * carry alive = 0 and are skipped by the per-step gate (one record read, no
+ * fold). This is the loop bound that made the 2-body crowd cost its capacity
+ * rather than its population (perf 7d).
+ */
+export function highWater(slots: Iterable<number>): number {
+  let hi = 0;
+  for (const s of slots) if (s + 1 > hi) hi = s + 1;
+  return hi;
+}
+
+/**
+ * Nearest-first group budget (perf 7d). `groupCounts` is the per-instance
+ * group count in distance order (nearest first); returns how many of the
+ * leading instances fit inside `cap`, and how many trailing ones are culled.
+ * A hard stop: once one instance does not fit, every farther instance is
+ * culled too — the list is only useful contiguous from the near end, and the
+ * old policy of accepting the overflow (and disabling the tile gate so every
+ * pixel walks every slot's cluster list) is what hung the GPU on 2026-09-14.
+ */
+export function budgetFit(groupCounts: number[], cap: number): { kept: number; culled: number } {
+  let used = 0;
+  for (let i = 0; i < groupCounts.length; i++) {
+    if (used + groupCounts[i]! > cap) return { kept: i, culled: groupCounts.length - i };
+    used += groupCounts[i]!;
+  }
+  return { kept: groupCounts.length, culled: 0 };
 }
 
 export interface InstanceAttrSource {
@@ -103,7 +136,10 @@ export interface CrowdType {
    *  slot-mask diagnostic feeds these to the CPU TileBinner — the bit-identical
    *  reference for the GPU binding — to learn each tile's distinct-slot set. */
   binInputs(): { groups: TileGroupInput[]; maxBlendK: number };
-  info(): { attached: number; visible: number; tileFallbacks: number };
+  info(): {
+    attached: number; visible: number; tileFallbacks: number;
+    culledByBudget: number; clampedTiles: number;
+  };
 }
 
 export function createCrowdType(
@@ -150,15 +186,31 @@ export function createCrowdType(
   for (let i = 0; i < MAX_CROWD_INSTANCES; i++) free.add(i);
   const slots: (ZombieGpuView | undefined)[] = new Array(MAX_CROWD_INSTANCES);
   let tileFallbacks = 0;
+  let culledByBudget = 0;
 
   const instOut = ib.array as Float32Array;
   // Reused per frame — the pack is CPU-side and the list is at most 64.
   const list: InstanceAttrSource[] = [];
+  // Live instances, snapshotted then sorted nearest-first before the group
+  // budget is applied. Reused; only its length changes.
+  const live: {
+    slot: number; centre: [number, number, number]; half: [number, number, number];
+    groups: TileGroupInput[]; blendK: number;
+  }[] = [];
+  const drawnSlots: number[] = [];
   const groups: TileGroupInput[] = [];
-  // Snapshot of the last binned inputs for the room-2 slot-mask diagnostic.
-  // Copied (not aliased) because `groups` is reused next frame.
+  // Snapshot of the last binned inputs for the room-2 slot-mask diagnostic
+  // and the on-demand clampedTiles count. Copied (not aliased) because
+  // `groups` is reused next frame.
   const lastBinGroups: TileGroupInput[] = [];
   let lastBinMaxBlendK = 0;
+  let lastCamera: THREE.PerspectiveCamera | null = null;
+  let lastGrid: { tilesX: number; tilesY: number; tilePx: number } | null = null;
+  // Diagnostic only: a CPU TileBinner over the last binned groups, built
+  // lazily the first time info() is asked for clampedTiles and reused. Never
+  // run per frame — the whole point of the compute binder is to keep the
+  // per-frame bin on the GPU.
+  let diagBinner: TileBinner | null = null;
 
   const levelShadowTex = (handles.material as unknown as {
     levelShadowTex: ReturnType<typeof texture>;
@@ -189,6 +241,8 @@ export function createCrowdType(
     sync(camera, grid) {
       groups.length = 0;
       list.length = 0;
+      live.length = 0;
+      drawnSlots.length = 0;
       let maxBlendK = 0;
       for (let s = 0; s < MAX_CROWD_INSTANCES; s++) {
         const v = slots[s];
@@ -199,41 +253,76 @@ export function createCrowdType(
         // draws the instance), so attach/detach is the visibility gate and
         // the packed instance is always visible.
         if (records.floats[s * REC_VEC4S * 4 + REC_WIND_ALIVE * 4 + 3]! < 0.5) continue;
-        for (const g of v.getTileGroups()) groups.push(g);
-        const bk = records.floats[s * REC_VEC4S * 4 + REC_COUNTS * 4 + 3]!;
-        if (bk > maxBlendK) maxBlendK = bk;
         const p = v.object.position;
         const h = v.uniforms.bodyHalf.value;
-        list.push({ slot: s, centre: [p.x, p.y, p.z], half: [h.x, h.y, h.z], visible: true });
+        live.push({
+          slot: s,
+          centre: [p.x, p.y, p.z],
+          half: [h.x, h.y, h.z],
+          groups: v.getTileGroups(),
+          blendK: records.floats[s * REC_VEC4S * 4 + REC_COUNTS * 4 + 3]!,
+        });
       }
 
-      // Bin ONCE for every instance of the type. Over the group budget the
-      // binding returns false; disable the tile gate for this frame and the
-      // per-slot loop in MAP_BODY walks every slot's cluster list instead —
-      // correct, just slower. Counted for the bench.
+      // NEAREST-FIRST BUDGET (perf 7d). Sort by distance from the camera,
+      // then cap the shared group list at MAX_TILE_GROUPS by dropping the
+      // FARTHEST instances — never by disabling the tile gate and walking
+      // every slot's full cluster list per step (the unbounded fallback that
+      // hung the GPU for 330 s on 2026-09-14). A dropped instance is not
+      // drawn this frame (visible: false) and its record's alive flag is left
+      // untouched.
+      const cam = camera.position;
+      live.sort((a, b) => {
+        const da = (a.centre[0] - cam.x) ** 2 + (a.centre[1] - cam.y) ** 2 + (a.centre[2] - cam.z) ** 2;
+        const db = (b.centre[0] - cam.x) ** 2 + (b.centre[1] - cam.y) ** 2 + (b.centre[2] - cam.z) ** 2;
+        return da - db;
+      });
+      const fit = budgetFit(live.map((i) => i.groups.length), MAX_TILE_GROUPS);
+      culledByBudget = fit.culled;
+      for (let i = 0; i < live.length; i++) {
+        const inst = live[i]!;
+        const visible = i < fit.kept;
+        if (visible) {
+          for (const g of inst.groups) groups.push(g);
+          if (inst.blendK > maxBlendK) maxBlendK = inst.blendK;
+          drawnSlots.push(inst.slot);
+        }
+        list.push({ slot: inst.slot, centre: inst.centre, half: inst.half, visible });
+      }
+
+      // Bin ONCE for every drawn instance of the type.
       lastBinGroups.length = 0;
       for (const g of groups) lastBinGroups.push(g);
       lastBinMaxBlendK = maxBlendK;
+      lastCamera = camera;
+      lastGrid = grid;
       const ok = tiles.bin(groups, camera, maxBlendK, {
         widthPx: grid.tilesX * grid.tilePx,
         heightPx: grid.tilesY * grid.tilePx,
       });
+
+      const n = packInstanceAttrs(list, instOut);
+      geo.instanceCount = n;
+      ib.needsUpdate = true;
+
       if (!ok) {
+        // The binder refused for a reason other than the group budget (which
+        // is capped above). ZERO the slot count for this frame: every pixel
+        // draws nothing rather than walking every slot's full cluster list
+        // per step. tileCfg.x is NOT touched — it follows the game's tile
+        // switch, not this frame's bin result.
         tileFallbacks++;
-        uniforms.tileCfg.value.x = 0;
+        instCfg.value.set(0, 1, 0, 0);
       } else {
         // Stamp the ACTIVE grid for the shader, exactly as wireViewTiles does.
         uniforms.tileCfg.value.set(
           uniforms.tileCfg.value.x, grid.tilesX, grid.tilePx, grid.tilesY,
         );
+        // x is the loop upper bound — the attached high-water mark of the
+        // DRAWN instances, not the capacity (free slots below it carry
+        // alive = 0 and are skipped); y = 1 marks the crowd material.
+        instCfg.value.set(highWater(drawnSlots), 1, 0, 0);
       }
-
-      const n = packInstanceAttrs(list, instOut);
-      geo.instanceCount = n;
-      ib.needsUpdate = true;
-      // x is the loop upper bound (the capacity; the alive flag skips free
-      // slots), y = 1 marks the crowd material for the box-entry select.
-      instCfg.value.set(MAX_CROWD_INSTANCES, 1, 0, 0);
 
       atlas.flush();
       records.flush();
@@ -251,7 +340,22 @@ export function createCrowdType(
         attached++;
         if (records.floats[s * REC_VEC4S * 4 + REC_WIND_ALIVE * 4 + 3]! > 0.5) visible++;
       }
-      return { attached, visible, tileFallbacks };
+      // clampedTiles is diagnostic-only and computed ON DEMAND: a CPU
+      // TileBinner over the last binned groups/camera (the same reference the
+      // GPU binding is pinned bit-identical to) reports how many entries the
+      // per-tile cap dropped. Doing it per frame would re-add the CPU binning
+      // cost the compute port exists to remove; info() is called by the bench
+      // after a run, not per frame.
+      let clampedTiles = 0;
+      if (lastCamera && lastGrid && lastBinGroups.length) {
+        const wPx = lastGrid.tilesX * lastGrid.tilePx;
+        const hPx = lastGrid.tilesY * lastGrid.tilePx;
+        if (!diagBinner || diagBinner.widthPx !== wPx || diagBinner.heightPx !== hPx) {
+          diagBinner = new TileBinner(wPx, hPx);
+        }
+        clampedTiles = diagBinner.bin(lastBinGroups, lastCamera, lastBinMaxBlendK).clampedTiles;
+      }
+      return { attached, visible, tileFallbacks, culledByBudget, clampedTiles };
     },
   };
 }

@@ -1435,11 +1435,23 @@ var<private> gSlot: i32 = 0;
 var<private> gBand: i32 = 0;
 var<private> gHitSlot: i32 = 0;
 var<private> gTileSlot: array<f32, ${TILE_MAX_ENTRIES}>;
+// Per-pixel slot table, built ONCE in MARCH_TRACE_SETUP from the sorted tile
+// entry list: distinct slots present in this pixel's tile and each slot's
+// entry range. The per-step loop walks gPixN slots, not MAX_CROWD_INSTANCES,
+// and each slot folds only its own contiguous entry run — the old per-step
+// slot-membership scan over the full entry list is gone.
+var<private> gPixN: i32 = 0;
+var<private> gPixSlot: array<i32, ${TILE_MAX_ENTRIES}>;
+var<private> gPixFirst: array<i32, ${TILE_MAX_ENTRIES}>;
+var<private> gPixEnd: array<i32, ${TILE_MAX_ENTRIES}>;
 var<private> gInstCounts: vec4<f32> = vec4<f32>(0.0);
 var<private> gInstCounts2: vec4<f32> = vec4<f32>(0.0);
 var<private> gInstWoundBound: vec4<f32> = vec4<f32>(0.0, 0.0, 0.0, 1e9);
 var<private> gInstAnchor: vec3<f32> = vec3<f32>(0.0);
 var<private> gInstWind: vec3<f32> = vec3<f32>(0.0);
+// The record's alive flag (REC_WIND_ALIVE.w), hoisted out of the wind read so
+// the per-step slot gate costs one storage read instead of two.
+var<private> gInstAlive: f32 = 0.0;
 var<private> gInstMelt: vec4<f32> = vec4<f32>(0.0);
 var<private> gInstFlash: vec4<f32> = vec4<f32>(0.0);
 var<private> gInstNoiseShift: vec3<f32> = vec3<f32>(0.0);
@@ -1464,7 +1476,7 @@ var<private> gInstRevision: f32 = 0.0;`;
 // post-hit sections reload it before they read the hit's material rows.
 // gTileSlot mirrors the tile entry's bodyIndex so the per-slot loop can fold
 // only the entries belonging to the slot it is evaluating.
-export const INSTANCE_STATE = /* wgsl */ `fn loadInstance(inst: ptr<storage, array<vec4<f32>>, read>, slot: i32) {
+export const INSTANCE_STATE = /* wgsl */ `fn loadInstance(inst: ptr<storage, array<vec4<f32>>, read>, slot: i32) -> void {
   let base = slot * ${REC_VEC4S};
   gSlot = slot;
   gInstCounts = (*inst)[base + ${REC_COUNTS}];
@@ -1473,7 +1485,9 @@ export const INSTANCE_STATE = /* wgsl */ `fn loadInstance(inst: ptr<storage, arr
   let ab = (*inst)[base + ${REC_ANCHOR_BAND}];
   gInstAnchor = ab.xyz;
   gBand = i32(ab.w);
-  gInstWind = (*inst)[base + ${REC_WIND_ALIVE}].xyz;
+  let wa = (*inst)[base + ${REC_WIND_ALIVE}];
+  gInstWind = wa.xyz;
+  gInstAlive = wa.w;
   gInstMelt = (*inst)[base + ${REC_MELT}];
   gInstFlash = (*inst)[base + ${REC_FLASH}];
   let ny = (*inst)[base + ${REC_NOISE_YAW}];
@@ -1491,13 +1505,6 @@ export const INSTANCE_STATE = /* wgsl */ `fn loadInstance(inst: ptr<storage, arr
   let hr = (*inst)[base + ${REC_HALF_REV}];
   gInstHalf = hr.xyz;
   gInstRevision = hr.w;
-}
-fn tileHasSlot(s: i32) -> bool {
-  for (var e = 0; e < ${TILE_MAX_ENTRIES}; e = e + 1) {
-    if (f32(e) >= gTileN) { break; }
-    if (i32(gTileSlot[e]) == s) { return true; }
-  }
-  return false;
 }
 `;
 
@@ -1659,14 +1666,24 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   var bestDistortU = 1.0;
   var nearWoundU = 0.0;
   var carvedU = 0.0;
+  // PER-STEP SLOT ITERATION. Tiles off: walk the capacity bound and take slot
+  // k directly (the pre-crowd one-slot case is k == 0). Tiles on: walk the
+  // per-pixel table built in MARCH_TRACE_SETUP — gPixN distinct slots, each
+  // with its contiguous entry run — instead of scanning all
+  // MAX_CROWD_INSTANCES slots and testing each for membership per step.
+  //
+  // BIT IDENTITY: with one instance and tiles off, tiled = false, nIter =
+  // nInst = 1, k = 0, s = 0, and the body below is the pre-change mapBody
+  // character for character. The alive read is the same value, now hoisted
+  // into gInstAlive by loadInstance.
   let nInst = i32(instCfg.x);
-  for (var s = 0; s < ${MAX_CROWD_INSTANCES}; s = s + 1) {
-    if (s >= nInst) { break; }
-    // Tile path: skip slots with no entry in this pixel's list. The binner
-    // sorts by slot, so a slot's entries are one contiguous run.
-    if (gTileActive > 0.5 && !tileHasSlot(s)) { continue; }
+  let tiled = gTileActive > 0.5;
+  let nIter = select(nInst, gPixN, tiled);
+  for (var k = 0; k < ${MAX_CROWD_INSTANCES}; k = k + 1) {
+    if (k >= nIter) { break; }
+    let s = select(k, gPixSlot[k], tiled);
     loadInstance(inst, s);
-    if ((*inst)[s * ${REC_VEC4S} + ${REC_WIND_ALIVE}].w < 0.5) { continue; }
+    if (gInstAlive < 0.5) { continue; }
     let counts = gInstCounts;
     let counts2 = gInstCounts2;
     let woundBound = gInstWoundBound;
@@ -1695,17 +1712,15 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   } else {
   let clusterCount = i32(counts.y);
   let primCount = i32(counts.x);
-  if (gTileActive > 0.5) {
-    // TILE-LIST PATH (perf task 5 step 2). MARCH_BODY preloaded this pixel's
-    // tile entries into gTile* ONCE, before any stepping; every march step
-    // folds exactly that list through the SAME foldGroup the cluster walk
-    // uses, so the two paths cannot drift. No per-step bound texel reads
-    // before the prim work — that is the whole economics argument (the
-    // flat-list lesson: per-step reads dominate; this list costs one read
-    // per pixel).
-    for (var e = 0; e < ${TILE_MAX_ENTRIES}; e = e + 1) {
-      if (f32(e) >= gTileN) { break; }
-      if (i32(gTileSlot[e]) != s) { continue; }
+  if (tiled) {
+    // TILE-LIST PATH (perf task 5 step 2, range-walked in 7d). MARCH_BODY
+    // preloaded this pixel's tile entries into gTile* ONCE, before any
+    // stepping, and MARCH_TRACE_SETUP collapsed them into the per-pixel slot
+    // table. Every march step folds exactly this slot's contiguous run
+    // through the SAME foldGroup the cluster walk uses, so the two paths
+    // cannot drift. No per-step bound texel reads before the prim work and
+    // no per-step slot scan — one table lookup plus the run's own fold.
+    for (var e = gPixFirst[k]; e < gPixEnd[k]; e = e + 1) {
       d = foldGroup(d, p, data, counts, band, gTileBounds[e], gTileGrp[e]);
     }
   } else {
@@ -2529,6 +2544,29 @@ export const MARCH_TRACE_SETUP = /* wgsl */ `  // FIRST STATEMENT, before anythi
       w = w + 1;
     }
     gTileN = f32(w);
+    // PER-PIXEL SLOT TABLE (perf 7d). The binder emits entries sorted by slot
+    // (groups are appended per slot in CrowdType.sync, and the ray-cull
+    // filter is a monotone subset), so a slot's entries are one contiguous
+    // run. Collapse that into (slot, first, end) triples HERE, once per
+    // pixel, and MAP_BODY's per-step loop walks gPixN slots with a bounded
+    // range fold instead of scanning all MAX_CROWD_INSTANCES slots.
+    gPixN = 0;
+    {
+      var prev = -1;
+      for (var e = 0; e < ${TILE_MAX_ENTRIES}; e = e + 1) {
+        if (f32(e) >= gTileN) { break; }
+        let s = i32(gTileSlot[e]);
+        if (s != prev) {
+          gPixSlot[gPixN] = s;
+          gPixFirst[gPixN] = e;
+          gPixEnd[gPixN] = e + 1;
+          gPixN = gPixN + 1;
+          prev = s;
+        } else {
+          gPixEnd[gPixN - 1] = e + 1;
+        }
+      }
+    }
   }
   // PER-RAY WOUND LIST (counts2.w gate, 2026-09-07). Built ONCE per pixel:
   // a wound whose REACH sphere the ray never enters cannot change this
