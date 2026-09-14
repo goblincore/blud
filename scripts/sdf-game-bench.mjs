@@ -345,7 +345,14 @@ const ALL_LEGS = {
   // baseline leg). `crowd-on` under a crowd=1 boot is already on, so
   // setCrowd(true) is a no-op and the BENCH_CROWD spawns (which run after these
   // overrides) attach to the crowd types.
-  'crowd-on': { setCrowd: true },
+  //
+  // TILES EXPLICIT ON 'crowd-on' (perf 7f, 2026-09-14). The ship-defaults block
+  // pins setTiles(false), so the boot's ?tiles-playtest is overridden before
+  // the leg runs — 'crowd-on' with no setTiles was therefore the SAME
+  // configuration as 'crowd-on-tiles-off' (verified on the page: boot enabled,
+  // setTiles(false) -> false, setCrowd(true) -> still false). The intended A/B
+  // is crowd tiles-on vs crowd tiles-off, so re-enable tiles here.
+  'crowd-on': { setCrowd: true, setTiles: true },
   'crowd-on-tiles-off': { setCrowd: true, setTiles: false },
   // GOO DENSITY LEVERS (pass attribution 2026-09-07: goo:density equals the
   // march once blood flies). Run with BENCH_PASSES=1 and read the
@@ -636,6 +643,9 @@ async function runLeg(name, room, mode) {
   // the tile-binding fallback count. Null on a per-body-only boot.
   const ci = await evaluate('typeof __sdfGame.crowdInfo === "function" ? JSON.stringify(__sdfGame.crowdInfo()) : "null"');
   r.crowdInfo = JSON.parse(ci);
+  // Tiles state as actually applied (perf 7f): the crowd tiles-on/off columns
+  // are only readable if each row states which mode it measured.
+  r.tilesOn = await evaluate('typeof __sdfGame.tiles === "function" ? __sdfGame.tiles().enabled : null');
   return r;
 }
 
