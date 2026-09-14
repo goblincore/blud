@@ -35,6 +35,31 @@ describe('upscale stage wiring', () => {
     s8.dispose();
   });
 
+  it('precompiles every pass in its own target, plus the sharpen pass even at sharpen 0', async () => {
+    const stage = createUpscaleStage({ model: 's16', layout: 'dc', inputs: 'rgb', seed: 2 }, new THREE.Texture(), uniform(1));
+    stage.setSize(400, 300, 800, 600);
+    const { renderer, raw } = fakeRenderer();
+    const seen: (THREE.RenderTarget | null)[] = [];
+    (raw as unknown as Record<string, unknown>).compileAsync = async () => { seen.push(raw.getRenderTarget()); };
+    const before = new THREE.RenderTarget(2, 2);
+    raw.setRenderTarget(before);
+    const quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 2);
+
+    const n = await stage.precompile(renderer, quadCam);
+
+    // Every pass, and the sharpen pass on top — the pass count is the
+    // network's passes + 1 even though sharpen is 0 and does not run.
+    expect(n).toBe(stage.passes.length + 1);
+    expect(seen).toHaveLength(stage.passes.length + 1);
+    // Each compile happened in the target that pass really writes, not the
+    // canvas: the pipeline cache key carries the attachment formats.
+    stage.passes.forEach((spec, k) => { expect(seen[k]).toBe(stage.targetFor(spec.name)); });
+    expect(seen[seen.length - 1]).toBe(stage.output);
+    expect(raw.getRenderTarget()).toBe(before);
+    stage.dispose();
+    before.dispose();
+  });
+
   it('renders every pass in order with autoClear off, then restores renderer state', () => {
     const stage = createUpscaleStage({ model: 's16', layout: 'dc', inputs: 'rgb', seed: 2 }, new THREE.Texture(), uniform(1));
     stage.setSize(400, 300, 800, 600);

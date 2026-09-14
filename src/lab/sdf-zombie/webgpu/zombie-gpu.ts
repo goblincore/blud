@@ -1020,6 +1020,9 @@ export type RefineUniforms = ReturnType<typeof createRefineUniforms>;
 /** The refine twin's bound sources — same shape as DepthPreSource. */
 export interface RefineSource {
   texture: THREE.Texture;
+  /** The march MRT's normal attachment. Run 5b: its alpha carries the per-body key the
+   *  twin's ownership early-out compares against (REFINE_LOOP `nk != myKey`). */
+  normalTexture: THREE.Texture;
   uniforms: RefineUniforms;
 }
 
@@ -2358,6 +2361,10 @@ export function createZombieGpuView(
           vec4(normalize(sub(positionWorld, cameraPosition)), 0.0)).z.negate(),
         nearFar: refineOpt.uniforms.nearFar,
         refineCfg: refineOpt.uniforms.cfg,
+        // Run 5b body-ownership early-out: the march's normal attachment, whose alpha is the
+        // per-body key. A tap on another body's texel contributes no weight, so `wsum < 0.5`
+        // discards this pixel before the first mapBody.
+        normalTex: texture(refineOpt.normalTexture),
       },
       // ONE level-shadow node across both materials. The per-frame rebind in the game
       // page assigns to the view's published node only; a twin with its own node would

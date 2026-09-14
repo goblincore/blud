@@ -131,6 +131,7 @@ export default defineConfig({
         humanoidSdfSpike: resolve(__dirname, 'humanoid-sdf-spike.html'),
         sdfHullSpike: resolve(__dirname, 'sdf-hull-spike.html'),
         sdfGame: resolve(__dirname, 'sdf-game.html'),
+        sdfBloodCompare: resolve(__dirname, 'sdf-blood-compare.html'),
         sdfDeferred: resolve(__dirname, 'sdf-deferred.html'),
       },
     },

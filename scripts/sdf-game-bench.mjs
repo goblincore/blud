@@ -458,10 +458,9 @@ const ALL_LEGS = {
   'upscale-s8': { setUpscale: { trained: 's8-rgb-best' } },
   'upscale-s32': { setUpscale: { trained: 's32-rgb-best' } },
   'upscale-s32-rgbd': { setUpscale: { trained: 's32-rgbd-best' } },
-  // SHIP TRUTH since 2026-09-12: the s32-rgbd stage + CAS sharpen 0.5 (same weights as the tracked
-  // asset public/assets/lab/upscale/s32-rgbd-best.json). Boot the page with BENCH_QUERY=upscale=0 so
-  // the default stage is not already on when the reset block runs.
-  'upscale-ship': { setUpscale: { trained: 's32-rgbd-best' }, setUpscaleSharpen: 0.5 },
+  // Ship truth 2026-09-12 → 2026-09-13 was s32-rgbd + CAS 0.5; kept as an A/B leg. `upscale-ship` (the
+  // current default, t16-rgb) is defined in the run-5b block below.
+  'upscale-ship-s32-rgbd': { setUpscale: { trained: 's32-rgbd-best' }, setUpscaleSharpen: 0.5 },
   'upscale-s64-rgb': { setUpscale: { trained: 'v3-s64-rgb-best' } },
   // Needs the normal attachment: BENCH_QUERY=upscale=0&upscalenormals=1 (which also puts the MRT on
   // every other leg in that run — compare against THAT run's baseline, not another run's).
@@ -473,6 +472,19 @@ const ALL_LEGS = {
   'refine-on': { setRefine: true },
   'upscale-r5-head': { setUpscale: { trained: 'r5-s32-rgbn-head-int2' } },
   'upscale-r5-headr': { setRefine: true, setUpscale: { trained: 'r5-s32-rgbn-headr-int2' } },
+  // RUN 5b (2026-09-13). Refine-band legs on the drop-trained headr model, plus the tracked
+  // default (loaded from an untracked copy so a leg can name it) and the no-normals/no-head
+  // default candidate for the "what ships" question.
+  // SHIP TRUTH since 2026-09-13: t16-rgb (v3.2) + CAS 0.5 is the tracked default
+  // (public/assets/lab/upscale/t16-rgb-v32.json); the untracked store carries the same export, which
+  // is what this leg loads. 'upscale-ship-high' is `?graphics=high`: the run-5b refine head, refine
+  // pass on, slim tail, boot-default medium band.
+  'upscale-ship': { setUpscale: { trained: 't16-rgb-v32' }, setUpscaleSharpen: 0.5 },
+  'upscale-ship-high': { setRefine: true, setRefineTail: 'slim', setUpscale: { trained: 'r5b-s32-rgbn-headr-drop-int2' }, setUpscaleSharpen: 0.5 },
+  'upscale-t16-rgb': { setUpscale: { trained: 't16-rgb-v32' } },
+  'upscale-r5b-headr': { setRefine: true, setRefineTail: 'slim', setUpscale: { trained: 'r5b-s32-rgbn-headr-drop-int2' } },          // band = boot default (medium)
+  'upscale-r5b-headr-full': { setRefine: true, setRefineTail: 'full', setUpscale: { trained: 'r5b-s32-rgbn-headr-drop-int2' } },
+  'upscale-r5b-headr-open': { setRefine: true, setRefineTail: 'slim', setRefineBand: { near: 0, far: 99 }, setUpscale: { trained: 'r5b-s32-rgbn-headr-drop-int2' } },  // every standing body refined
 };
 // BENCH_LEGS lets a validation pass run one leg without the whole matrix.
 const LEGS = process.env.BENCH_LEGS
@@ -606,6 +618,16 @@ async function runLeg(name, room, mode) {
     `refine: __sdfGame.refineInfo ? __sdfGame.refineInfo().on : null })`,
   );
   console.log(`  [${name}] upscaleInfo().on=${JSON.parse(infoNote).up} refineInfo().on=${JSON.parse(infoNote).refine}`);
+  // run 5b: bodies-refined count + band, for legs that touch setRefineBand/setRefineTail.
+  const legOverrides = LEGS[name] ?? ALL_LEGS[name] ?? {};
+  if (/refine/i.test(name) || legOverrides.setRefine || legOverrides.setRefineBand || legOverrides.setRefineTail) {
+    const bandNote = await evaluate(
+      `JSON.stringify({ bodies: __sdfGame.refineInfo ? __sdfGame.refineInfo().bodies : null, ` +
+      `band: __sdfGame.refineInfo ? __sdfGame.refineInfo().band : null, ` +
+      `tail: __sdfGame.refineInfo ? __sdfGame.refineInfo().tail : null })`,
+    );
+    console.log(`  [${name}] refineInfo().bodies=${bandNote}`);
+  }
   if (PRELUDE) { progress.phase = 'prelude'; await evaluate(PRELUDE); }
   const label = `${name}/room${room}/${mode}`;
   // FRAME GUARD (perf 7d). A tiny probe BEFORE the real run: the smallest

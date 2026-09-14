@@ -66,6 +66,10 @@ export function createSoldierCorpseBakes(scene: THREE.Object3D, material: () => 
     entry.actor.view.object.visible = true;
     entry.actor.view.coneObject.visible = true;
     if (entry.actor.view.depthPreObject) entry.actor.view.depthPreObject.visible = true;
+    // Run 5b: the refine twin follows the other twins. (The per-frame band gate
+    // in game-main also hides it for a settled body via refineEligible(); this
+    // keeps the twin consistent whenever the bake toggles.)
+    if (entry.actor.view.refineObject) entry.actor.view.refineObject.visible = true;
     entries.delete(entry.actor.id); quiet.delete(entry.actor.id);
   };
   const clear = () => { jobs.cancel(); for (const entry of [...entries.values()]) restore(entry); quiet.clear(); rejected.clear(); };
@@ -93,6 +97,7 @@ export function createSoldierCorpseBakes(scene: THREE.Object3D, material: () => 
             entry.actor.view.object.visible = hasHead;
             entry.actor.view.coneObject.visible = hasHead;
             if (entry.actor.view.depthPreObject) entry.actor.view.depthPreObject.visible = hasHead;
+            if (entry.actor.view.refineObject) entry.actor.view.refineObject.visible = hasHead;
           }
         }
       }

@@ -252,6 +252,9 @@ export function pickAvoidSide(
 export interface ZombieActor {
   readonly id: number;
   corpseBakeEligible(): boolean;
+  /** Run 5b: the refine twin is drawn only for a standing body inside the band —
+   *  collapsing, settled and baked bodies never refine. */
+  refineEligible(): boolean;
   damageRevision(): number;
   /** Diagnostic size of the persistent Soldier injury ledger. */
   injuryHistorySize(): number;
@@ -1172,6 +1175,7 @@ export function createZombieActor(opts: {
     committed: () => lastCommitted,
     step,
     corpseBakeEligible: () => soldierDamage && state.collapse.phase === 'settled',
+    refineEligible: () => state.collapse.phase === 'standing',
     damageRevision: () => damageRevision,
     injuryHistorySize: () => soldierWounds.length,
     pauseForBake: (paused: boolean) => { bakePaused = paused; },

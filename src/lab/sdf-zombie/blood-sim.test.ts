@@ -473,3 +473,52 @@ describe('gut droplets (entrails)', () => {
     expect(sim.droplets[0]!.pos[1]).toBeLessThan(1);
   });
 });
+
+describe('emitter stream provenance (blood-connections)', () => {
+  const countRng = (): { rng: () => number; calls: () => number } => {
+    let n = 0;
+    const rng = () => { n++; return 0.5; };
+    return { rng, calls: () => n };
+  };
+
+  it('spawnWoundDroplets stamps one stable stream on beads and mist', () => {
+    const sim = createBloodSim();
+    spawnWoundDroplets(sim, 'slug', 0, [0, 1, 0], [0, 1, 0], 1 / 60, 0.99, seeded(4), 42);
+    expect(sim.droplets.length).toBeGreaterThan(0);
+    for (const d of sim.droplets) expect(d.stream).toBe(42);
+  });
+
+  it('spawnImpactGout stamps the stream on every gout droplet', () => {
+    const sim = createBloodSim();
+    spawnImpactGout(sim, 'pellet', [0, 1, 0], [0, 0, -1], seeded(5), 7);
+    expect(sim.droplets.length).toBe(IMPACT_GOUT.pellet.count);
+    for (const d of sim.droplets) expect(d.stream).toBe(7);
+  });
+
+  it('emitTrails stamps the source stream', () => {
+    const sim = createBloodSim();
+    emitTrails(sim, [{ id: 3, pos: [0, 2, 0], vel: [0, 0, 0], stream: 99 }], 1.0, seeded(6));
+    expect(sim.droplets.length).toBeGreaterThan(0);
+    for (const d of sim.droplets) expect(d.stream).toBe(99);
+  });
+
+  it('leaves droplets untagged when no stream is supplied (lab path)', () => {
+    const sim = createBloodSim();
+    burst(sim, [0, 1, 0], seeded(1));
+    expect(sim.droplets.length).toBeGreaterThan(0);
+    expect(sim.droplets.every(d => d.stream === undefined)).toBe(true);
+  });
+
+  it('consumes no extra RNG when a stream tag is supplied', () => {
+    const plain = countRng();
+    const tagged = countRng();
+    spawnWoundDroplets(createBloodSim(), 'stump', 0, [0, 1, 0], [0, 1, 0], 1 / 60, 0.99, plain.rng);
+    spawnWoundDroplets(createBloodSim(), 'stump', 0, [0, 1, 0], [0, 1, 0], 1 / 60, 0.99, tagged.rng, 5);
+    expect(tagged.calls()).toBe(plain.calls());
+
+    const a = countRng(); const b = countRng();
+    spawnImpactGout(createBloodSim(), 'slug', [0, 1, 0], [0, 0, -1], a.rng);
+    spawnImpactGout(createBloodSim(), 'slug', [0, 1, 0], [0, 0, -1], b.rng, 5);
+    expect(b.calls()).toBe(a.calls());
+  });
+});

@@ -1,3 +1,4 @@
+import { impactSplashPresets, impactSplashProfiles, resolveImpactSplashProfile, type ImpactSplashProfile, type ImpactSplashWeapon } from './impact-splash-profiles';
 import { createEncounterNavigation } from './encounter-navigation';
 import { createEncounterDirector, clearSight, type EncounterAgent } from './encounter-director';
 import { createSoldierCorpseBakes } from './soldier-corpse-bake';
@@ -67,7 +68,7 @@ import { SegmentVolumeBinding, createSegmentAtlasTexture } from './skeleton-spik
 import { createPostAa } from './post-aa';
 import { type VhsPreset, type VhsTerms } from './post-vhs';
 import { type SscsTerms } from './post-sscs';
-import { type ZombieGpuView, defaultUniforms, blankFaceTexture, type MarchUniforms } from './zombie-gpu';
+import { type ZombieGpuView, type RefineTail, defaultUniforms, blankFaceTexture, type MarchUniforms } from './zombie-gpu';
 import { createCrowdType, type CrowdType } from './crowd-type';
 import { TILE_SIZE_PX } from './tile-cull';
 import { createOccluderHull, buildHullInstances, HULL_SHRINK, type HullInstance } from './occluder-hull';
@@ -140,7 +141,9 @@ import {
 } from '../entrails';
 import { shouldSpill, GUT_DROPLET_SIZE, SPILL_CHANCE } from '../entrails-spawn';
 import { createBloodView } from './blood-view-gpu';
-import { createGooLayer, type GooLayer } from './goo-layer';
+import { createGooLayer, type GooLayer, type GooReconstruction } from './goo-layer';
+import { connectionBlobsForSim } from './blood-connections';
+import { createImpactSplashLayer, type ImpactSplashLayer } from './impact-splash';
 import { createGooPanel, type GooPanel } from './goo-panel';
 import { createVhsPanel, type VhsPanel } from './vhs-panel';
 import {
@@ -195,6 +198,9 @@ const RES_RUNGS = {
   '640': { mode: 'fixed', width: 640, height: 480 },
 } as const satisfies Record<string, RenderCap>;
 type ResRung = keyof typeof RES_RUNGS;
+/** `?graphics=high` (owner 2026-09-13): which SHIPPED_UPSCALE entry the boot loads. A BOOT
+ *  decision — 'high' also allocates the march normal attachments and the refine twins/targets. */
+type GraphicsLevel = 'default' | 'high';
 const DEFAULT_RES: ResRung = '800';
 function resRungFromUrl(fallback: ResRung = DEFAULT_RES): ResRung {
   const v = new URLSearchParams(location.search).get('res');
@@ -360,6 +366,19 @@ async function main() {
    *  frames-since-entry rather than of how long the page happened to boot. */
   let demoSeedBase = 0;
   let actorCullEnabled = true;
+  /** Run 5b: the distance band the refine twins are drawn in — from
+   *  `scripts/lib/upscale-framing.mjs` DISTANCE_M.medium = [1.5, 3.5].
+   *  Owner: close bodies are most of the pixels and the least visible gain
+   *  (the march already resolves them), far bodies are cheap either way, so
+   *  the twin only earns its cost in the middle. Hysteresis keeps a body
+   *  walking along the edge from flickering. */
+  const refineBand = { near: 1.5, far: 3.5, hysteresis: 0.25 };
+  /** Run 5b: the twin lighting tail every view should be on — so a LATE SPAWN
+   *  does not fall back to the default while the rest of the room is on the
+   *  other tail (same idiom as boneCullMode). */
+  let refineTailWanted: RefineTail = 'slim';
+  /** Bodies whose refine twin was drawn this frame (reset each cull pass). */
+  let refinedBodies = 0;
   let visibleActors: ZombieActor[] = [];
   const cullCounts = { visible: 0, total: 0 };
   const coverage = { screenFrac: 0, nearestM: 0, biggestFrac: 0 };
@@ -749,6 +768,16 @@ async function main() {
   // DIRECT flash on bodies (march slot bodyFlash): intensity multiplier on
   // the flash lights before the shader's I*cos/d^2. 0 = off, bit-identical.
   let bodyFlashGain = 0.06;
+  /** Seconds since the last shot; >= FLASH.windowSec means no flash.
+   *
+   *  DECLARED HERE, not beside the weapon state it belongs to (it used to sit
+   *  ~2400 lines below, next to `gunReady`): the render callback set by
+   *  `handle.setDrawFn` reads it — `flashEnvelope(flashAge)` in the legacy
+   *  lighting branch, and `playerFlashLightIntensity()` just below — and the
+   *  loop is already armed while boot is still awaiting the upscale model, so
+   *  the later declaration threw `Cannot access 'flashAge' before
+   *  initialization` on every frame until boot passed it. */
+  let flashAge = Infinity;
   /** The player's muzzle flash as a LIGHT SOURCE for bodies and probes: a
    *  0.14 s burst shaped like the soldiers' (55 at the shot, (1-t)^2), so it
    *  survives the gather's one-frame lag. The sprite keeps its own envelope. */
@@ -824,10 +853,20 @@ async function main() {
   // Run 5: the refine twins + output-res refine targets (sdf-layer REFINE_LAYER) exist only when the
   // boot asks: `?refine=1`, or a trained model whose name contains 'headr' (run-5 exports). `?refine=0`
   // forces off. Refine implies the normal attachments.
+  //
+  // GRAPHICS LEVEL (owner 2026-09-13). `?graphics=high` swaps the shipped default upscaler for the
+  // run-5b refine head, which READS the normal attachments and REQUIRES the refine pass — both are
+  // boot allocations, which is why this is a URL parameter and not a live toggle. `?upscale=0` (the
+  // native march) still allocates nothing extra even at 'high': there is no stage to feed.
+  const graphics: GraphicsLevel =
+    new URLSearchParams(location.search).get('graphics') === 'high' ? 'high' : 'default';
+  const graphicsHighUpscale = graphics === 'high'
+    && new URLSearchParams(location.search).get('upscale') !== '0';
   const refineWanted = (() => {
     const q = new URLSearchParams(location.search);
     if (q.get('refine') === '1') return true;
     if (q.get('refine') === '0') return false;
+    if (graphicsHighUpscale) return true;
     return /headr(-|$)/.test(q.get('upscalemodel') ?? '');
   })();
   const marchNormalsWanted = refineWanted || (() => {
@@ -838,6 +877,15 @@ async function main() {
     const name = q.get('upscalemodel') ?? '';
     return /rgbd?n\b/.test(inputs) || /rgbd?n(-|$)/.test(name) || q.get('upscalehead') === '1';
   })();
+  // `?refineband=near,far` — the bench and the smoke widen or narrow the band.
+  {
+    const raw = new URLSearchParams(location.search).get('refineband');
+    if (raw) {
+      const parts = raw.split(',').map(Number);
+      const n = parts[0] ?? NaN, f = parts[1] ?? NaN;
+      if (Number.isFinite(n) && Number.isFinite(f) && f > n && n >= 0) { refineBand.near = n; refineBand.far = f; }
+    }
+  }
   const sdfLayer = createSdfLayer(handle.renderer, { marchNormals: marchNormalsWanted, refine: refineWanted });
   if (refineWanted) sdfLayer.setRefine(true);
   postAa.addSink(sdfLayer);
@@ -978,6 +1026,44 @@ async function main() {
   // so i dont have to toggle it on each time"). setGoo(false) stays the kill
   // switch; mode 'depth' vs 'overlay' stays a separate toggle.
   let gooEnabled = true;
+  // Smooth reconstruction at the full SDF grid is the game default.
+  // Boot flags are read where the goo defaults are applied:
+  //   ?goorecon=original  comparison fallback to the old reconstruction
+  //   ?gooconnections=1   tapered strands (sheets are a separate opt-in)
+  //   ?goosheets=1        experimental stream-grid sheets
+  //   ?impactsplash=1     SUPPLEMENTARY procedural impact crown on top of the
+  //                       existing slug gout (does not replace it)
+  // Live equivalents: __sdfGame.setGooCandidate, __sdfGame.setImpactSplash.
+  let gooReconstruction: GooReconstruction = 'smooth';
+  let gooConnectionsEnabled = false;
+  let gooStrandsEnabled = true;
+  // SHEETS OFF BY DEFAULT: the stream-local grid removed the world-position
+  // hole swimming, but whether a density patch reads as a sheet is still an
+  // open visual question. Opt in with ?goosheets=1 / setGooCandidate.
+  let gooSheetsEnabled = false;
+  // SUPPLEMENTARY IMPACT SPLASH (reference-directed slug splash, 2026-09-13).
+  // A separate procedural crown effect fired ON TOP of the existing slug gout;
+  // it mutates no shared table and does not replace the Current slug. OFF by
+  // default: opt in with ?impactsplash=1 or __sdfGame.setImpactSplash.
+  let impactSplashEnabled = false;
+  let impactSplashLayer: ImpactSplashLayer | null = null;
+
+  /** Create the splash layer on first enable only, sharing the flesh/goo
+   *  light uniform NODES so it is lit by the same rig. Returns silently if
+   *  there is no actor view yet (the same pre-condition the goo layer has). */
+  function ensureImpactSplashLayer(): void {
+    if (impactSplashLayer) return;
+    const v = actors[0]?.view;
+    if (!v) return;
+    impactSplashLayer = createImpactSplashLayer({
+      rig: {
+        lightDir: v.uniforms.lightDir,
+        keyColor: v.uniforms.keyColor,
+        lightCfg: v.uniforms.lightCfg,
+      },
+    });
+    scene.add(impactSplashLayer.object);
+  }
 
   function sizeSdfLayer() {
     const s = postAa.contentSize;
@@ -1139,7 +1225,34 @@ async function main() {
    *  main() finishes — the same TDZ rule chunkObjects obeys. */
   let lightClockFrozen = false;
   let flickerClockFrozenAt = 0;
+  /** Flashlight bounce spot gain (P4 step 1): 1 = the physically-derived disc
+   *  irradiance; ?bouncespot=0 pins the bit-identical path. Default 0 since the
+   *  GPU gather lights the level with the beam itself (P4 step 2);
+   *  ?bouncespot=1 or setBounceSpot brings the analytic disc back.
+   *
+   *  DECLARED HERE for the same TDZ rule as lightClockFrozen above: the legacy
+   *  lighting branch of the draw callback reads it, and the loop draws while
+   *  boot is still awaiting the upscale model. Measured, not guessed — with
+   *  `flashAge` hoisted this was the very next `Cannot access ... before
+   *  initialization` the page threw. */
+  const bounceSpotParam = new URLSearchParams(location.search).get('bouncespot');
+  let bounceSpotGain = bounceSpotParam === null ? 0 : Math.max(0, Number(bounceSpotParam) || 0);
+  /** THE BOOT-FRAME GATE. `handle.setDrawFn` arms this callback here, ~4700
+   *  lines before main() finishes, and boot then AWAITS (the upscale model
+   *  fetch, the weapon GLB, the arms GLB) — so the loop draws frames while
+   *  most of the state below this point is still in its temporal dead zone.
+   *  Every such frame threw `Cannot access '<x>' before initialization` and
+   *  drew nothing; the owner saw one at boot (`flashAge`), and behind it stood
+   *  `bounceSpotGain`, `player`, `roomProbes`, `bakedChunkMat`, `flashLight` —
+   *  measured one at a time, each surfacing only once the one before it was
+   *  fixed. Hoisting works for a `let`; `player` and `roomProbes` are `const`s
+   *  with real initializers and cannot move. So the gate: no frame draws until
+   *  main() has built everything the callback reads (set right before the
+   *  `window.__sdfGame` seam). Nothing is lost — those frames drew nothing
+   *  anyway — and the loader covers the canvas for all of it. */
+  let drawReady = false;
   handle.setDrawFn(() => {
+    if (!drawReady) return;
     // GPU PROBE GATHER dispatch (P3/P4). OUTSIDE the post-aa pass on purpose:
     // renderer.compute() inside a render callback broke the renderer's pass
     // state and stalled the loop after five frames (owner-observed HUD at
@@ -2134,13 +2247,29 @@ async function main() {
     }
     upscaleAb.mode = mode;
     updateUpscaleAbLabel();
+    // A stage built AFTER boot carries brand-new per-pass pipelines the boot
+    // warm-up never saw; without this they compile on the first frame the new
+    // stage runs, which is the same multi-second stall in miniature. Loop
+    // paused for the duration, exactly as warmPipelines does it.
+    if (booted && info.on) {
+      handle.setLoopRunning(false);
+      void sdfLayer.precompilePasses(scene, camera)
+        .then((n) => console.log(`[warm] upscale stage passes compiled (${n})`))
+        .catch((err) => console.warn('[warm] upscale stage precompile failed', err))
+        .finally(() => handle.setLoopRunning(true));
+    }
     return info;
   }
-  /** The SHIPPED upscaler (owner decision 2026-09-12): s32-rgbd, trained locally on dataset v2,
-   *  G3-verified, staged as a tracked asset. s64 was rejected — ~6x the compute for no visible gain. */
-  const SHIPPED_UPSCALE_URL = '/assets/lab/upscale/s32-rgbd-best.json';
-  const SHIPPED_UPSCALE_NAME = 'ship:s32-rgbd-best';
-  /** CAS-style post-sharpen strength shipped with it (UPSCALE_SHARPEN_WGSL, 'cas' mode). */
+  // SHIPPED UPSCALERS (owner 2026-09-13, after run 5b — see next-steps note §15):
+  //   default: t16-rgb (v3.2) — no normals, no head, the cheapest frame (19 ms vs 19.5–20.4 for s32-rgbd).
+  //   high:    the run-5b refine head — medium-band per-body refinement; needs the normal attachments + the
+  //            refine pass, so it is a BOOT decision (`?graphics=high`), not a live toggle.
+  // (The previous default, s32-rgbd-best.json, stays tracked for history / A-B.)
+  const SHIPPED_UPSCALE = {
+    default: { url: '/assets/lab/upscale/t16-rgb-v32.json', name: 'ship:t16-rgb-v32', refine: false },
+    high:    { url: '/assets/lab/upscale/r5b-s32-rgbn-headr-drop-int2.json', name: 'ship:r5b-s32-rgbn-headr-drop-int2', refine: true },
+  } as const;
+  /** CAS-style post-sharpen strength shipped with them (UPSCALE_SHARPEN_WGSL, 'cas' mode). */
   const SHIPPED_UPSCALE_SHARPEN = 0.5;
   async function enableTrainedUpscale(name: string, layout?: string, booted = true, url?: string): Promise<UpscaleInfo> {
     const r = await fetch(url ?? `/__lab/upscale-model/${encodeURIComponent(name)}`, { cache: 'no-store' });
@@ -2167,12 +2296,13 @@ async function main() {
         }
       }
     } else if (upRaw === null) {
-      // DEFAULT (owner 2026-09-12): the shipped s32-rgbd stage with CAS sharpen. `?upscale=0` is the
-      // native march (the pre-stage picture); the U key still cycles native / nearest / model.
-      // NOTE this displaces the 'bodies' field style default: the stage forces fields off
-      // (the fields+stage stack was tried and reverted the same day).
+      // DEFAULT (owner 2026-09-13): the shipped stage for this graphics level, with CAS sharpen.
+      // `?upscale=0` is the native march (the pre-stage picture); the U key still cycles
+      // native / nearest / model. NOTE this displaces the 'bodies' field style default: the stage
+      // forces fields off (the fields+stage stack was tried and reverted 2026-09-12).
+      const ship = SHIPPED_UPSCALE[graphics];
       try {
-        await enableTrainedUpscale(SHIPPED_UPSCALE_NAME, undefined, false, SHIPPED_UPSCALE_URL);
+        await enableTrainedUpscale(ship.name, undefined, false, ship.url);
         sdfLayer.upscaleStage?.setSharpen(SHIPPED_UPSCALE_SHARPEN);
       } catch (err) {
         console.error(`[upscale] shipped model not loaded — native march: ${String(err)}`);
@@ -2421,12 +2551,6 @@ async function main() {
   // is bit-identical) for the parity and bench drivers. The gain defaults to
   // each room's matched level — the level of today's P1 at ambientGain 4 —
   // so only the direction and hue of the ambient change, not its brightness.
-  // Flashlight bounce spot gain (P4 step 1): 1 = the physically-derived disc
-  // irradiance; ?bouncespot=0 pins the bit-identical path.
-  const bounceSpotParam = new URLSearchParams(location.search).get('bouncespot');
-  // Default 0 since the GPU gather lights the level with the beam itself
-  // (P4 step 2); ?bouncespot=1 or setBounceSpot brings the analytic disc back.
-  let bounceSpotGain = bounceSpotParam === null ? 0 : Math.max(0, Number(bounceSpotParam) || 0);
   const probesParam = new URLSearchParams(location.search).get('probes');
   const probesOff = probesParam === '0' || probesParam === 'off';
   const roomProbes = createRoomProbes({
@@ -2842,6 +2966,7 @@ async function main() {
     // flat bone fold while the rest of the room culls.
     if (crowdAttach) actor.crowd = crowdAttach;
     actor.view.setBoneCullMode(crowdAttach ? 'cluster' : boneCullMode);
+    actor.view.setRefineTail(refineTailWanted);
     // skeleton=mesh: contract sources at REST bind (before any tick steps
     // the rig — stepActorMotion rewrites restPose, which limb local frames
     // are derived from), then the field drops this actor's bone rows so
@@ -3352,8 +3477,6 @@ async function main() {
   let bobAmount = 0;
   let prevPlayerPos: Vec3 = [0, 0, 0];
   let reticleEl: HTMLDivElement | null = null;
-  /** Seconds since the last shot; >= FLASH.windowSec means no flash. */
-  let flashAge = Infinity;
   let gunReady = false;
   // LOADING SCREEN gate: resolved on BOTH paths below — a failed weapon load
   // still boots the game, and the loader must not hang on it.
@@ -3619,22 +3742,64 @@ async function main() {
     // ~100 frames unless the loop is paused. Pause; nothing needs to draw
     // while the loader is up.
     handle.setLoopRunning(false);
+    // LAYERS (owner's mid-game freeze, 2026-09-13): three's compileAsync walks
+    // _projectObject, which skips an object whose `layers.test(camera.layers)`
+    // is false — exactly like render. The camera carries only the layers the
+    // CANVAS pass uses, so every per-body twin on
+    // CONE/OCCLUDER/SHELL/SHELL_EXIT/DEPTH_PREPASS/REFINE is invisible here and
+    // got built synchronously mid-frame, seconds after load.
+    //
+    // `camera.layers.enableAll()` around this compile was tried FIRST and is
+    // WRONG twice over. It compiles the twins against the CANVAS render
+    // context, and the render context (attachment formats, MRT) is part of a
+    // pipeline's cache key — so the entry it builds is not the one the twin's
+    // real pass needs. Worse, it drags in twins whose pass is off, one of which
+    // (the shell hull) carries a stale `mapBody` argument list that fails at
+    // pipeline creation with `unresolved value 'woundBound'`: three's
+    // compileAsync then NEVER SETTLES, and the whole warm-up — and the loader
+    // gate behind it — hangs (measured: __warmDone never appeared in 100 s).
+    // The twins are warmed by sdfLayer.precompilePasses below instead, each in
+    // its own target and gated on the flag its pass is gated on.
+    // The count below is reporting only.
+    const previousMask = camera.layers.mask;
+    let layersCompiled = 0;
+    let passesCompiled = 0;
     try {
       scene.traverse((o) => {
         // Any invisible Object3D, not just meshes: a hidden GROUP (flash
         // group) hides visible children that compileAsync would otherwise
         // skip — the first-shot freeze survived for exactly those.
         if (!o.visible) { flipped.push(o); o.visible = true; }
+        if (o !== scene) layersCompiled |= o.layers.mask & ~previousMask;
       });
       await handle.renderer.compileAsync(scene, camera);
       if (gooLayer) await gooLayer.precompile(camera);
-      const done = { ms: Math.round(performance.now() - t0), flipped: flipped.length };
+      // The SDF layer's own passes: the twins in their real target/MRT context,
+      // the fullscreen passes (blit/accum/detail/refine-view/composite) that are
+      // in private scenes the traversal above cannot reach, and the upscale
+      // stage's per-layer passes. See SdfLayer.precompilePasses.
+      passesCompiled = await sdfLayer.precompilePasses(scene, camera);
+      let twinLayers = 0;
+      for (let b = 0; b < 32; b++) if (layersCompiled & (1 << b)) twinLayers++;
+      void twinLayers;
+      const done = {
+        ms: Math.round(performance.now() - t0),
+        flipped: flipped.length,
+        twinLayers,
+        passes: passesCompiled,
+      };
       (window as unknown as Record<string, unknown>).__warmDone = done;
-      console.log(`[warm] pipelines compiled in ${done.ms} ms (${done.flipped} hidden objects included)`);
+      console.log(`[warm] pipelines compiled in ${done.ms} ms (${done.flipped} hidden objects, ${twinLayers} twin layers, ${passesCompiled} stage/layer passes)`);
     } catch (err) {
       console.error('[warm] pipeline warm-up failed', err);
+      // A driver waiting on __warmDone must not wait forever because the
+      // warm-up threw: record the failure under the same key.
+      (window as unknown as Record<string, unknown>).__warmDone = {
+        ms: Math.round(performance.now() - t0), flipped: flipped.length, error: String(err),
+      };
     } finally {
       for (const o of flipped) o.visible = false;
+      camera.layers.mask = previousMask;
       handle.setLoopRunning(true);
     }
   };
@@ -4128,7 +4293,9 @@ async function main() {
       }, template);
     }
     if (bleedEnabled) {
-      spawnImpactGout(bloodSim, 'slug', at, [0, 1, 0], bleedRng);
+      // One-shot gib gout: a fresh emitter stream so it never fuses with a
+      // nearby wound's stream by proximity.
+      spawnImpactGout(bloodSim, 'slug', at, [0, 1, 0], bleedRng, nextEmitterStream++);
     }
   }
   // Now that the array exists, the frame draw can read it directly.
@@ -4214,6 +4381,29 @@ async function main() {
   const bleed = new BleedRegistry();
 
   // -----------------------------------------------------------------------
+  // STABLE EMITTER STREAM IDS (blood-connections provenance, 2026-09-13).
+  // blood-connections only ever fuses droplets that share a stream tag, so
+  // the tag must be a real emitter identity — never a proximity guess.
+  //
+  // A wound's id is ALLOCATED ONCE (WeakMap on the wound reference the
+  // registry stores) and reused by every per-frame droplet and its impact
+  // gout, so two adjacent wounds are always two streams. Trail droplets take
+  // a namespaced chunk id. Nothing here rolls an RNG and stepBlood never
+  // reads `stream`, so the shipped physics is bit-identical.
+  // -----------------------------------------------------------------------
+  let nextEmitterStream = 1;
+  const woundStreamIds = new WeakMap<Wound, number>();
+  function woundStreamId(wound: Wound): number {
+    let s = woundStreamIds.get(wound);
+    if (s === undefined) { s = nextEmitterStream++; woundStreamIds.set(wound, s); }
+    return s;
+  }
+  const TRAIL_STREAM_BASE = 0x40000000;
+  function trailStreamId(chunkId: number): number {
+    return TRAIL_STREAM_BASE + (chunkId >>> 0);
+  }
+
+  // -----------------------------------------------------------------------
   // GOO — screen-space metaball blood (X1.bleed-look round 2). The owner's
   // brief was "viscous and gooey and shiny blobbys and no hard edges ...
   // kinda like the metablob for the goo system", which is goo-layer.ts's own
@@ -4280,6 +4470,20 @@ async function main() {
     // wet stone the old floor was not enough to keep shadowed blood red.
     gooLayer.setShadowRed(0.19);
 
+    // Smooth full-grid goo is the accepted default. Connections and sheets
+    // remain opt-in; original reconstruction is available for comparison.
+    const gooCandidateBoot = new URLSearchParams(location.search);
+    gooReconstruction = gooCandidateBoot.get('goorecon') === 'original' ? 'original' : 'smooth';
+    gooLayer.setDensityScale(1);
+    gooConnectionsEnabled = gooCandidateBoot.get('gooconnections') === '1';
+    gooSheetsEnabled = gooCandidateBoot.get('goosheets') === '1';
+    gooLayer.setReconstruction(gooReconstruction);
+
+    // SUPPLEMENTARY IMPACT SPLASH boot flag. Read AFTER the shipping defaults
+    // so it can only ever add the new crown, never move a shipped value. It
+    // is independent of the goo candidates above.
+    impactSplashEnabled = gooCandidateBoot.get('impactsplash') === '1';
+    if (impactSplashEnabled) ensureImpactSplashLayer();
 
     // Live tuning panel (owner ask, 2026-08-31: "add a ui i can tune the goo
     // manually"). The look is a five-knob family found by sweeping two at a
@@ -4540,6 +4744,10 @@ async function main() {
           age: 0, life: Infinity,
           size: woundTuning.gutSize,
           kind: 'gut',
+          // The rope belongs to the wound that spilled it: reuse that wound's
+          // stable stream id so the gut nodes are attributed like every other
+          // emitter rather than falling through as untagged.
+          stream: woundStreamId(entry!.wound),
         }));
         for (const d of fresh) bloodSim.droplets.push(d);
         entry = { ...entry, droplets: fresh };
@@ -4564,7 +4772,11 @@ async function main() {
   /** Bleed's own sim clock — an accumulator, never wall time, so hand-
    *  stepped captures are deterministic. */
   let bleedClock = 0;
-  function registerBleed(a: ZombieActor, wound: Wound, kind: 'pellet' | 'slug' | 'stump'): void {
+  const lastSplashShot = new WeakMap<ZombieActor, number>();
+  function registerBleed(
+    a: ZombieActor, wound: Wound, kind: 'pellet' | 'slug' | 'stump',
+    contact?: { point: Vec3; incoming: Vec3 },
+  ): void {
     if (!bleedEnabled) return;
     bleed.register(a.id, wound, kind, bleedClock);
     // IMPACT GOUT (blood-viscosity spec §a) — the dense one-tick pulse, at
@@ -4576,8 +4788,35 @@ async function main() {
     const { anchor, normal } = woundEmitAnchorAndNormal(a.posed().prims, wound, a.pose().yaw);
     // The gout sprays back along the incoming shot; spawnImpactGout negates
     // what it is handed, and the wound normal already points OUT of the
-    // body, so pass the inward direction.
-    spawnImpactGout(bloodSim, kind, anchor, [-normal[0], -normal[1], -normal[2]], bleedRng);
+    // body, so pass the inward direction. The wound's stable stream id tags
+    // the gout so it fuses with this wound's per-frame droplets and no
+    // other emitter's.
+    const streamId = woundStreamId(wound);
+    spawnImpactGout(bloodSim, kind, anchor, [-normal[0], -normal[1], -normal[2]], bleedRng, streamId);
+    // SUPPLEMENTARY entry splash (opt-in, ?impactsplash=1). Projectile hits
+    // use the contact and incoming shot below; stumps use their outward
+    // wound normal. The seed is
+    // derived from the wound's stable stream id, NOT from bleedRng, so it
+    // draws no random numbers and leaves the shipped gout/bleed stream
+    // bit-identical.
+    const shotgunShot = wound.shot?.weapon === 'shotgun' ? wound.shot.shotId : undefined;
+    const repeatedPellet = shotgunShot !== undefined && lastSplashShot.get(a) === shotgunShot;
+    if (impactSplashEnabled && impactSplashLayer && !repeatedPellet) {
+      if (shotgunShot !== undefined) lastSplashShot.set(a, shotgunShot);
+      // An immediate entry splash belongs to the projectile's actual surface
+      // contact, not the wound's reconstructed/carved anchor. Send it back
+      // toward the incoming shot and start just outside the contacted skin.
+      // Stumps have no projectile contact and retain their wound-normal path.
+      const splashDirection: Vec3 = contact
+        ? [-contact.incoming[0], -contact.incoming[1], -contact.incoming[2]]
+        : normal;
+      const splashOrigin: Vec3 = contact
+        ? [contact.point[0] + splashDirection[0] * 0.035,
+           contact.point[1] + splashDirection[1] * 0.035,
+           contact.point[2] + splashDirection[2] * 0.035]
+        : anchor;
+      impactSplashLayer.emit(splashOrigin, splashDirection, (streamId * 2654435761) >>> 0, { profile: impactSplashProfiles[kind] });
+    }
     // Gut-rope decision for this stamped wound — placed BELOW the
     // !bleedEnabled guard on purpose: the roll spends bleedRng, and the
     // invariant above (OFF mid-stream = ON-stream-paused) only holds if
@@ -4694,12 +4933,44 @@ async function main() {
    *  consequence: while the render lock is engaged `tick` does not run, so the
    *  clock does not advance and nothing expires out of the dwell — a frozen
    *  scene stays frozen, which is what the lock means. */
+  /** Run 5b: the per-body refine gate, shared by both cull modes. `centre` is
+   *  the torso centre (null = no torso cluster: nothing to measure, so no
+   *  twin); `kept` is the cull's verdict (always true with the cull off).
+   *  Reads `sightA` for the camera. Rule: the twin is drawn only for a
+   *  STANDING body (dead never refines — in either mode) inside the medium
+   *  band, on screen, with hysteresis so an edge-walking body cannot flicker.
+   *  Returns whether the twin is drawn. */
+  function gateRefineTwin(a: ZombieActor, centre: Vec3 | null, kept: boolean): boolean {
+    const twin = a.view.refineObject;
+    if (!twin) return false;
+    if (!centre) { twin.visible = false; return false; }
+    const dx = centre[0] - sightA[0], dy = centre[1] - sightA[1], dz = centre[2] - sightA[2];
+    const d = Math.hypot(dx, dy, dz);
+    const wasOn = twin.visible;
+    const inBand = wasOn
+      ? d >= refineBand.near - refineBand.hysteresis && d <= refineBand.far + refineBand.hysteresis
+      : d >= refineBand.near && d <= refineBand.far;
+    const on = kept && sdfLayer.refine && a.refineEligible() && inBand;
+    twin.visible = on;
+    return on;
+  }
+
   function updateVisibleActors(): void {
     const now = simClockMs;
     cullCounts.total = actors.length;
     if (!actorCullEnabled) {
       visibleActors = actors;
       cullCounts.visible = actors.length;
+      // Cull off: the frustum/dwell work is skipped, but the refine gate is
+      // NOT — the spec's first rule (a dead body never refines) has to hold in
+      // both modes, so a body that collapses with the cull off still loses its
+      // twin. Same band + hysteresis, every actor, no visibility work.
+      sightA[0] = camera.position.x; sightA[1] = camera.position.y; sightA[2] = camera.position.z;
+      refinedBodies = 0;
+      for (const a of actors) {
+        const torso = a.posed().clusters.find(c => c.limb === 'torso');
+        if (gateRefineTwin(a, torso ? torso.center as Vec3 : null, true)) refinedBodies++;
+      }
       coverage.screenFrac = 0; coverage.nearestM = 0; coverage.biggestFrac = 0;
       return;
     }
@@ -4712,11 +4983,17 @@ async function main() {
     const halfHpx = th / 2;
     const tanHalfFov = Math.tan((camera.fov * Math.PI / 180) / 2);
     let area = 0, nearest = 0, biggest = 0;
+    refinedBodies = 0;
     for (const a of actors) {
       const torso = a.posed().clusters.find(c => c.limb === 'torso');
       // No torso cluster (mid-gib, exotic body): never cull what we cannot
-      // measure — fall back to drawing it.
-      if (!torso) { out.push(a); lastSeenMs.set(a.id, now); continue; }
+      // measure — fall back to drawing it. No distance to band-test either, so
+      // the refine twin stays off for it.
+      if (!torso) {
+        out.push(a); lastSeenMs.set(a.id, now);
+        gateRefineTwin(a, null, true);
+        continue;
+      }
       const c = torso.center;
       bodySphere.center.set(c[0], c[1], c[2]);
       let seen = frustum.intersectsSphere(bodySphere);
@@ -4728,7 +5005,11 @@ async function main() {
       }
       if (seen) lastSeenMs.set(a.id, now);
       const since = now - (lastSeenMs.get(a.id) ?? -Infinity);
-      if (seen || since < CULL_DWELL_MS) out.push(a);
+      const kept = seen || since < CULL_DWELL_MS;
+      if (kept) out.push(a);
+
+      // Run 5b: the per-body refine gate (see gateRefineTwin).
+      if (gateRefineTwin(a, c as Vec3, kept)) refinedBodies++;
 
       // Coverage estimate — only for bodies actually seen this frame, so a
       // body coasting on its dwell grace does not inflate the area.
@@ -5440,7 +5721,7 @@ async function main() {
               wound: stamped ? describeRecordedWound(hitActor, stamped) : null,
               woundCount: hitActor.wounds().length,
             });
-            if (stamped) registerBleed(hitActor, stamped, p.kind);
+            if (stamped) registerBleed(hitActor, stamped, p.kind, { point: hitPoint, incoming: dirN });
             dead = true;
           }
         }
@@ -5544,11 +5825,14 @@ async function main() {
           const { anchor, normal } = woundEmitAnchorAndNormal(a.posed().prims, e.wound, a.pose().yaw);
           e.acc = spawnWoundDroplets(
             bloodSim, e.kind, bleedClock - e.bornAt, anchor, normal, cdt, e.acc, bleedRng,
+            woundStreamId(e.wound),
           );
         }
         emitTrails(
           bloodSim,
-          liveChunks.map(c => ({ id: c.id, pos: c.state.pos, vel: c.state.vel })),
+          liveChunks.map(c => ({
+            id: c.id, pos: c.state.pos, vel: c.state.vel, stream: trailStreamId(c.id),
+          })),
           cdt, bleedRng,
         );
         stepBlood(bloodSim, cdt, bleedRng);
@@ -5557,6 +5841,9 @@ async function main() {
         bloodView.sync(bloodSim, camera);
       }
       telemetry.end('blood-simulation-and-sync', bloodTiming);
+      // The optional impact crown advances even with bleed off, so an event
+      // already in flight finishes instead of freezing mid-burst.
+      impactSplashLayer?.step(cdt);
     }
 
     const eye = eyeOf(player);
@@ -5568,6 +5855,11 @@ async function main() {
       eye[2] - Math.cos(player.yaw) * cp,
     );
     camera.updateMatrixWorld();
+
+    // Optional impact crown: rebuild from the current event times after the
+    // camera is final (its sync takes the camera for parity; geometry is
+    // world-space). No-op when the feature is off.
+    impactSplashLayer?.sync(camera);
 
     // GOO DENSITY QUADS — pose them from the same sim state, every frame,
     // AFTER the camera is final and before the drawFn composites. The lab
@@ -5587,6 +5879,16 @@ async function main() {
     // splats persist in the sim after bleed is switched off, and the goo
     // draws them. Gating this would freeze the pools mid-frame instead.
     const gooTiming = telemetry.begin();
+    // CANDIDATE connections: derived deterministically from the SAME droplet
+    // array the sim already owns (no new particles, no new RNG). Set BEFORE
+    // sync so the density instancer poses them in the same pass. When the
+    // feature is off this clears any stale extras, so the shipped frame is
+    // bit-identical again on the very next frame after disabling it.
+    gooLayer?.setExtraBlobs(gooConnectionsEnabled
+      ? connectionBlobsForSim(bloodSim.droplets, {
+        enableStrands: gooStrandsEnabled, enableSheets: gooSheetsEnabled,
+      })
+      : []);
     gooLayer?.sync(bloodSim, camera);
     telemetry.end('goo-sync', gooTiming);
   }
@@ -5953,6 +6255,9 @@ function performBenchAction(a: BenchAction): void {
   }
 }
 
+  // Everything the draw callback reads now exists — let frames draw. See the
+  // boot-frame gate's note at setDrawFn.
+  drawReady = true;
   (window as unknown as { __sdfGame: unknown }).__sdfGame = {
     telemetry: telemetryControls ? {
       start: () => telemetryControls.start(), stop: () => telemetryControls.stop(), mark: () => telemetryControls.mark(),
@@ -7161,6 +7466,14 @@ function performBenchAction(a: BenchAction): void {
           rim: gooLayer.rim,
           stretch: gooLayer.stretch,
           shadowRed: gooLayer.shadowRed,
+          candidate: {
+            reconstruction: gooLayer.reconstruction,
+            connections: gooConnectionsEnabled,
+            strands: gooStrandsEnabled,
+            sheets: gooSheetsEnabled,
+            extraBlobs: gooLayer.extraBlobCount,
+            density: gooLayer.densityDiagnostics,
+          },
           perf: {
             surfaceAtDensityRes: gooLayer.surfaceAtDensityRes,
             minTexelRadius: gooLayer.minTexelRadius,
@@ -7423,6 +7736,73 @@ function performBenchAction(a: BenchAction): void {
       };
     },
 
+    /**
+     * BLOOD-SURFACE CANDIDATES (2026-09-13). Deliberately NOT part of
+     * setGooTuning: those are look knobs the panel copies, while reconstruction
+     * and connections are architectural candidates that must be opted into by
+     * flag or explicitly here. The baseline is 'original' + connections off.
+     *
+     * `connections` derives extra density quads from the SAME droplet array —
+     * no new particles, no new RNG. `strands`/`sheets` switch each family
+     * independently for attribution; both default on while connections are on.
+     */
+    setGooCandidate(o: {
+      reconstruction?: GooReconstruction;
+      connections?: boolean;
+      strands?: boolean;
+      sheets?: boolean;
+    }) {
+      if (!gooLayer) return { unavailable: true };
+      if (o.reconstruction !== undefined) {
+        gooReconstruction = o.reconstruction;
+        gooLayer.setReconstruction(o.reconstruction);
+      }
+      if (o.connections !== undefined) gooConnectionsEnabled = o.connections;
+      if (o.strands !== undefined) gooStrandsEnabled = o.strands;
+      if (o.sheets !== undefined) gooSheetsEnabled = o.sheets;
+      return {
+        reconstruction: gooLayer.reconstruction,
+        connections: gooConnectionsEnabled,
+        strands: gooStrandsEnabled,
+        sheets: gooSheetsEnabled,
+        extraBlobs: gooLayer.extraBlobCount,
+      };
+    },
+
+    /**
+     * SUPPLEMENTARY IMPACT SPLASH (2026-09-13). A procedural crown fired ON
+     * TOP of the existing slug gout — it replaces nothing and mutates no
+     * shared constant, so the Current slug stays exactly as tuned. OFF unless
+     * this is called or ?impactsplash=1 is present; enabling it creates the
+     * layer on first use (sharing the flesh light rig) and adds it to the
+     * scene. Disabling keeps the layer but hides it, so toggling costs no
+     * rebuild.
+     */
+    setImpactSplash(o: { enabled?: boolean; weapon?: ImpactSplashWeapon; preset?: keyof typeof impactSplashPresets; profile?: Partial<ImpactSplashProfile> } = {}) {
+      const weapon = o.weapon ?? 'slug';
+      if ((o.profile || o.preset) && Object.hasOwn(impactSplashProfiles, weapon)) {
+        const base = o.preset && Object.hasOwn(impactSplashPresets, o.preset) ? impactSplashPresets[o.preset] : impactSplashProfiles[weapon];
+        impactSplashProfiles[weapon] = resolveImpactSplashProfile({ ...base, ...o.profile });
+      }
+      if (o.enabled !== undefined) impactSplashEnabled = o.enabled;
+      if (impactSplashEnabled) ensureImpactSplashLayer();
+      impactSplashLayer?.setVisible(impactSplashEnabled);
+      return {
+        enabled: impactSplashEnabled,
+        available: impactSplashLayer !== null,
+        profiles: structuredClone(impactSplashProfiles),
+        events: impactSplashLayer?.eventCount ?? 0,
+      };
+    },
+    get impactSplash() {
+      return {
+        enabled: impactSplashEnabled,
+        available: impactSplashLayer !== null,
+        profiles: structuredClone(impactSplashProfiles),
+        events: impactSplashLayer?.eventCount ?? 0,
+      };
+    },
+
     /** Sweep gout density/shape without a rebuild. Mutates the shared table,
      *  so it affects every later impact of that kind. */
     setGoutTuning(kind: 'pellet' | 'slug' | 'stump', o: Partial<ImpactGoutProfile>) {
@@ -7463,11 +7843,24 @@ function performBenchAction(a: BenchAction): void {
     /** Run 5b: the refine twins' lighting tail — 'slim' (default) drops scatter, the wound
      *  soft shadow, the ambient bounce and the probe gather from the twin only; 'full' is
      *  run 5's behaviour. Applies to every live actor view (chunks have no refine twin). */
-    setRefineTail: (tail: 'full' | 'slim') => {
+    setRefineTail: (tail: RefineTail) => {
+      refineTailWanted = tail;
       for (const a of actors) a.view.setRefineTail(tail);
       return actors[0]?.view.refineTail ?? tail;
     },
-    refineInfo: () => ({ allocated: sdfLayer.refineSource !== null, on: sdfLayer.refine, view: sdfLayer.refineView, cfg: sdfLayer.refineCfg, tail: actors[0]?.view.refineTail ?? 'slim' }),
+    /** Run 5b: the per-body distance band. Clamped: near >= 0, far > near, hysteresis >= 0. */
+    setRefineBand: (band: { near?: number; far?: number; hysteresis?: number }) => {
+      const near = Math.max(0, band.near ?? refineBand.near);
+      const far = Math.max(near + 1e-6, band.far ?? refineBand.far);
+      const hysteresis = Math.max(0, band.hysteresis ?? refineBand.hysteresis);
+      refineBand.near = near; refineBand.far = far; refineBand.hysteresis = hysteresis;
+      return { ...refineBand };
+    },
+    refineBand: () => ({ ...refineBand }),
+    refineInfo: () => ({ allocated: sdfLayer.refineSource !== null, on: sdfLayer.refine, view: sdfLayer.refineView, cfg: sdfLayer.refineCfg, tail: actors[0]?.view.refineTail ?? 'slim', bodies: refinedBodies, band: { ...refineBand } }),
+    /** The boot's graphics level (`?graphics=high`) — which SHIPPED_UPSCALE entry was loaded.
+     *  Not a setter: 'high' allocates the normal attachments + refine targets at boot. */
+    graphics: (): GraphicsLevel => graphics,
     setTemporalAccum: (on: boolean, alpha?: number) => sdfLayer.setTemporalAccum(on, alpha),
     resetTemporalAccum: () => sdfLayer.resetTemporalAccum(),
     /** NEURAL UPSCALE (spec 2026-09-11). Enabling also sets the march scale to 0.5
@@ -8560,6 +8953,17 @@ function performBenchAction(a: BenchAction): void {
             }
           }
           return { tilesX, tilesY, tilePx: TILE_SIZE_PX, mask: Array.from(mask) };
+        },
+        /** Run 5b: the march MRT's NORMAL attachment as { w, h, rgba32f } — same frozen frame and
+         *  de-pad as readMarchTarget. rgb = view-space normal, alpha = the per-body key the refine
+         *  twins compare against (march.wgsl.ts MARCH_BODY_LIGHT `bodyKey`). Null when the layer
+         *  allocated no normal attachment. */
+        async readMarchNormalTarget() {
+          if (!sdfLayer.marchNormalTexture) return null;
+          handle.setLoopRunning(false);
+          handle.step(0);
+          await handle.resolveGpu();
+          return packFloatTarget(sdfLayer.marchTarget, 1);
         },
         /** Run 4: the output-res detail field (sdf-layer detailTarget) as { w, h, rgba32f } — same
          *  de-pad as readMarchTarget. Null when the layer has no normal attachment. */

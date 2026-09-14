@@ -217,6 +217,9 @@ export const FIELD_MESH_LAYER = 8;
  */
 export const REFINE_LAYER = 9;
 
+/** Per-pass ceiling for precompilePasses (see the bounded race there). */
+const PRECOMPILE_PASS_TIMEOUT_MS = 8000;
+
 /** The depth prepass's linear downsample factor per axis. 4 → one coarse
  *  texel per 4x4 block of SDF pixels → ~1/16 of the march work. */
 export const DEPTH_PREPASS_DIV = 4;
@@ -749,6 +752,24 @@ export interface SdfLayer {
     scene: THREE.Scene,
     camera: THREE.PerspectiveCamera,
   ): Promise<void>;
+  /**
+   * Compiles EVERY pipeline this layer draws with, in the render-target context
+   * it really draws them in, and returns how many compiles ran.
+   *
+   * The page's boot `renderer.compileAsync(scene, camera)` cannot reach any of
+   * them: three's compileAsync walks `_projectObject`, which skips an object
+   * whose `layers.test(camera.layers)` is false exactly like `render` does, so
+   * the twins on CONE/OCCLUDER/SHELL/SHELL_EXIT/DEPTH_PREPASS/REFINE are never
+   * visited; and the layer's fullscreen passes (blit, accumulation, detail,
+   * refine-view, the composite quad) live in private scenes that are not in
+   * the page's scene graph at all. Before this existed every one of those
+   * pipelines was built synchronously on the first frame that needed it —
+   * the multi-second freezes the owner felt seconds AFTER the loader cleared.
+   *
+   * The render context is part of a pipeline's cache key (attachment formats,
+   * MRT), so each compile sets the same target and MRT the real pass sets.
+   */
+  precompilePasses(scene: THREE.Scene, camera: THREE.PerspectiveCamera): Promise<number>;
   /**
    * Redirects the two passes that normally go to the canvas (the polygonal
    * scene and the final composite) into this target instead; null restores
@@ -1714,6 +1735,86 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
         camera.layers.mask = previousMask;
       }
     },
+    async precompilePasses(scene, camera) {
+      const previousTarget = renderer.getRenderTarget();
+      const previousMask = camera.layers.mask;
+      let n = 0;
+      // One failure must not cost the rest: a warm-up is best-effort, and a
+      // pass whose pipeline cannot be built here will simply be built the way
+      // it always was.
+      const compile = async (
+        what: string,
+        s: THREE.Scene,
+        cam: THREE.Camera,
+        t: THREE.RenderTarget | null,
+        mrtNode: unknown = null,
+      ) => {
+        const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
+        try {
+          renderer.setRenderTarget(t);
+          if (mrtNode) renderer.setMRT(mrtNode as never);
+          try {
+            // BOUNDED. A compileAsync whose pipeline creation fails inside the
+            // backend can leave its promise unsettled — which would hold the
+            // warm-up (and the loader behind it) forever. A pass that does not
+            // settle here is simply left to compile the way it always did.
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            const timeout = new Promise<'timeout'>((r) => { timer = setTimeout(() => r('timeout'), PRECOMPILE_PASS_TIMEOUT_MS); });
+            const outcome = await Promise.race([renderer.compileAsync(s, cam).then(() => 'ok' as const), timeout]);
+            if (timer !== undefined) clearTimeout(timer);
+            if (outcome === 'timeout') { console.warn(`[sdf-layer] precompile ${what} did not settle in ${PRECOMPILE_PASS_TIMEOUT_MS} ms — skipped`); return; }
+          } finally { if (mrtNode) renderer.setMRT(null); }
+          n++;
+        } catch (err) {
+          console.warn(`[sdf-layer] precompile ${what} failed after ${Math.round((typeof performance !== 'undefined' ? performance.now() : 0) - t0)} ms`, err);
+        }
+      };
+      try {
+        // --- the marched twins, one layer at a time -------------------------
+        camera.layers.set(SDF_LAYER);
+        await compile('march', scene, camera, target, marchMrt);
+        // GATED BY THE SAME FLAG THE RENDER PATH READS. Warming a pass that is
+        // off is not free and not harmless: an off-by-default twin can carry a
+        // stale mapBody argument list that only fails at pipeline creation, and
+        // compiling it here would spend the warm-up's budget producing an error
+        // for a pass that never runs.
+        if (coneUniforms.enabled.value > 0.5) {
+          camera.layers.set(CONE_LAYER);
+          await compile('cone', scene, camera, coneCoarse);
+        }
+        if (occluderUniforms.enabled.value > 0.5) {
+          camera.layers.set(OCCLUDER_LAYER);
+          await compile('occluder', scene, camera, occluder);
+        }
+        if (shellUniforms.enabled.value > 0.5) {
+          camera.layers.set(SHELL_LAYER);
+          await compile('shell-entry', scene, camera, shellEntry);
+          camera.layers.set(SHELL_EXIT_LAYER);
+          await compile('shell-exit', scene, camera, shellExit);
+        }
+        if (depthPreUniforms.cfg.value.x > 0.5) {
+          camera.layers.set(DEPTH_PREPASS_LAYER);
+          await compile('depth-pre', scene, camera, depthPre);
+        }
+        if (refineTarget && refineMrt) {
+          camera.layers.set(REFINE_LAYER);
+          await compile('refine', scene, camera, refineTarget, refineMrt);
+        }
+        camera.layers.mask = previousMask;
+        // --- the layer's own fullscreen passes -------------------------------
+        await compile('prev-blit', blitScene, quadCam, prev);
+        if (accumOn) await compile('accum', accumScene, quadCam, accumNext);
+        if (detailScene) await compile('detail', detailScene, quadCam, detailTarget);
+        if (refineViewScene && refineViewTarget) await compile('refine-view', refineViewScene, quadCam, refineViewTarget);
+        await compile('composite', quadScene, quadCam, outputTarget);
+        // --- the upscale stage's passes --------------------------------------
+        if (upscale) n += await upscale.precompile(renderer, quadCam);
+      } finally {
+        renderer.setRenderTarget(previousTarget);
+        camera.layers.mask = previousMask;
+      }
+      return n;
+    },
     render(scene, camera) {
       const restore = camera.layers.mask;
 
@@ -2336,7 +2437,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     get upscaleInfo() { return upscaleInfoOf(upscale); },
     get upscaleStage() { return upscale; },
     get compositeSource() { return refineView ? 'refine-view' : upscale ? 'upscale' : accumOn ? 'accum' : 'march'; },
-    get refineSource() { return refineUniforms ? { texture: target.texture, uniforms: refineUniforms } : null; },
+    get refineSource() { return refineUniforms ? { texture: target.texture, normalTexture: target.textures[1]!, uniforms: refineUniforms } : null; },
     get refineTarget() { return refineTarget; },
     setRefine(on) {
       if (on && !refineUniforms) throw new Error('refine: boot with ?refine=1 so the layer allocates the refine targets');

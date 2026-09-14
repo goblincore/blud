@@ -18,7 +18,7 @@ function setup(parent?: THREE.Object3D, material?: THREE.Material) {
   let revision=0;
   const actor={ id:1, body, posed:()=>body, pose:()=>({yaw:0,pos:[0,0,0]}), wounds:()=>[],
     corpseBakeEligible:()=>true,damageRevision:()=>revision,pauseForBake:vi.fn(),
-    view:{object:new THREE.Object3D(),coneObject:new THREE.Object3D(),update:vi.fn(),uniforms:defaultUniforms(new THREE.Texture())} } as unknown as ZombieActor;
+    view:{object:new THREE.Object3D(),coneObject:new THREE.Object3D(),refineObject:new THREE.Object3D(),update:vi.fn(),uniforms:defaultUniforms(new THREE.Texture())} } as unknown as ZombieActor;
   const worker={onmessage:null as any,onerror:null as any,onmessageerror:null as any,postMessage:vi.fn(),terminate:vi.fn()};
   const scene=new THREE.Scene();
   const manager=createSoldierCorpseBakes(parent ?? scene,()=>material ?? new THREE.MeshBasicMaterial(),()=>worker as any);
@@ -40,9 +40,13 @@ describe('soldier corpse bake lifecycle',()=>{
     manager.update([actor],.6);expect(actor.pauseForBake).toHaveBeenLastCalledWith(true);
     worker.onmessage({data:{id:1,result}});manager.update([actor],0);
     expect(manager.stats().baked).toEqual([1]);expect(scene.children).toHaveLength(1);
+    // Run 5b: the refine twin is hidden with the other twins while the bake stands in
+    // (this body's head is gone in the fixture, so hasHead is false) and restored with them.
+    expect(actor.view.refineObject!.visible).toBe(actor.view.object.visible);
     expect(actor.view.update).toHaveBeenLastCalledWith(expect.objectContaining({clusters:expect.arrayContaining([expect.objectContaining({limb:'torso',alive:false})])}),actor.body);
     damage();manager.update([actor],0);
     expect(scene.children).toHaveLength(0);expect(actor.pauseForBake).toHaveBeenLastCalledWith(false);
+    expect(actor.view.refineObject!.visible).toBe(true);
     expect(actor.view.update).toHaveBeenLastCalledWith(actor.posed(),actor.body);
   });
   it('rejects an in-flight result after damage and cleans up on actor removal',()=>{

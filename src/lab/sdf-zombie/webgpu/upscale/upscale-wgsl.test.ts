@@ -57,6 +57,10 @@ describe('upscale pass plan', () => {
       expect(passes[0]!.run).toContain('textureLoad(normal, q4, 0).xyz * h4');
       expect(passes[1]!.params).not.toContain('normal');
       expect(passes[1]!.run).not.toContain('normal');
+      // Run 5b: the normal attachment's ALPHA is the per-body key, not a normal component.
+      // The stage must never read it — a `.w` here would feed the key into the net's input.
+      expect(passes[0]!.run).not.toMatch(/\bn\d+\.w\b/);
+      expect(passes[0]!.run).not.toMatch(/textureLoad\(normal[^)]*\)\s*\.w/);
     }
     // rgbdn: depth is the first channel of the second vec4, then the normal
     const dn = planUpscalePasses(createUpscaleModel('s8', 'rgbdn', 1), 'sp')[0]!.run;

@@ -63,15 +63,24 @@
   the best looking, especially at medium distance" — but frame +23 % (room 1) / +45 % (room 2); `sdf:refine` 6–11 ms.
   Staged `.upscale-models/r5-*` (`?upscale=trained&upscalemodel=r5-s32-rgbn-headr-int2`). Results §14 of the
   next-steps note. Gates: refine-smoke, refine-check, march-hash (fields-off canonical a8ab4efa), G3 9e-7.
-- [~] **RUN 5b — refine gating + graceful degradation + slim twin tail, IN FLIGHT 2026-09-13.** Spec
-  `docs/superpowers/specs/2026-09-13-neural-upscale-run5b-refine-gating-design.md`, plan
-  `docs/superpowers/plans/2026-09-13-neural-upscale-run5b-refine-gating.md`. A: `refine_drop` augmentation +
-  `val_norefine`/`val_normal_only` → retrain (after the `t16-rgb` v3.2 run in `.lab-tmp/grid-t16-rgb.log`);
-  B: slim twin tail via uniform overrides (no WGSL); C: per-body gating (standing bodies, medium band 1.5–3.5 m
-  with hysteresis, on screen; corpse bake hides the twin — a run-5 leak); D: bench within ~10 % of the control.
-- [ ] **DEFAULT-MODEL BENCH:** main still ships run-2's `s32-rgbd-best` (v2, no normals, no head). Candidates:
-  `t16-rgb` (training on v3.2 now — cheapest frame: single attachment, half MACs), `t16-rgbn-head`, run-5 control
-  `s32-rgbn-head` (v3.2). Bench frame p50 + quality, pick the new default, then use it as run 5b's baseline.
+- [x] **RUN 5b — refine gating + graceful degradation + slim twin tail — DONE 2026-09-13, GATE MET.** refine_drop
+  retrain 0.01118 (refine on) / 0.01511 (off); slim tail −7…14 % of the pass; band gating (standing bodies, 1.5–3.5 m,
+  hysteresis; dead never refines in either cull mode; corpse bake hides the twin); body-ownership early-out (key in
+  the normal attachment'"'"'s alpha). Clean bench: 5b slim+band 21.3/24.3 ms vs control 21.9/22.2 (−3 %/+9 %); open band
+  30 ms. §15. Owner: "at medium lgtm" → ships as the **high** graphics setting.
+- [x] **DEFAULT-MODEL BENCH — DONE:** t16-rgb (v3.2, 0.0154; no normals, no head) 19.0/18.7 ms vs ship s32-rgbd 19.5/20.4
+  vs r5-head 21.9/22.2. Owner: **t16-rgb is the new default**.
+- [~] **SHIP: t16-rgb default + `graphics=high` (5b refine head) — in flight.** Track both exports under
+  `public/assets/lab/upscale/`, boot by setting (`?graphics=high` / `__sdfGame.setGraphics`), keep CAS 0.5; bench
+  `upscale-ship` leg points at the new default. Then merge to main.
+- [x] **BOOT/MID-GAME FREEZE — FIXED 2026-09-13** (e71cee3d…3c1480f1): `SdfLayer.precompilePasses` compiles every
+  twin layer in its own target+MRT (gated on the pass's own enable flag; 8 s race per compile) plus the private
+  fullscreen passes, `UpscaleStage.precompile` every net pass incl. sharpen; `[warm]` log now counts them. First
+  refined frame 21 → 6 ms in the headless check. `flashAge`/`bounceSpotGain` hoisted; a `drawReady` gate closes the
+  rest of the TDZ class (the draw callback was armed ~4700 lines before boot finished). Boot warm-up 1.0 → 1.9 s.
+- [ ] **SHELL-HULL TWIN SHADER IS BROKEN** (pre-existing, found by the warm-up work): `unresolved value 'woundBound'`
+  in its `mapBody` call — turning the shell pass on yields a failed pipeline (and hung `compileAsync` before the
+  race). Own ticket; until fixed, off-at-boot passes are not warmed and would stall once if switched on mid-session.
 - [ ] **MERGED CROWD MARCH — HIGH PRIORITY AFTER RUN 5b (owner 2026-09-13: crowds are the game; gibs would
   otherwise be an explosion of marched instances).** One union field, one ray per pixel. Split by what varies:
   per TYPE (shared by all zombies): face sheet, segment-volume atlas, rest prim template, material/lighting knobs;

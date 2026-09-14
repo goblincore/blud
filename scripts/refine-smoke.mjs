@@ -79,15 +79,28 @@ await evaluate('(() => { __sdfGame.setSdfScale(0.5); return 1; })()');
 const info = await evaluate('(() => { __sdfGame.setRefine(true); return __sdfGame.refineInfo(); })()');
 if (!info || !info.allocated) fail(`refine not allocated by the boot: ${JSON.stringify(info)}`);
 if (!info.on) fail(`setRefine(true) did not take: ${JSON.stringify(info)}`);
+// Run 5b: the staged close-up sits at d ~ 0.7 m, OUTSIDE the medium band
+// [1.5, 3.5] the per-body gate ships with — this smoke checks the refine PASS,
+// not the gating policy, so open the band wide before the capture. (The policy
+// itself is exercised separately; see the run-5b plan, Task C.)
+await evaluate('__sdfGame.setRefineBand({ near: 0, far: 10 })');
 await evaluate('(() => { __sdfGame.step(6); return 1; })()');
 await evaluate('__sdfGame.resolveGpu()');
 
 const refine = await evaluate('__sdfGameDebug.readRefine()', 180_000);
 if (!refine) fail('readRefine() returned null — the layer allocated no refine target');
 const march = await evaluate('__sdfGameDebug.readMarchTarget()', 180_000);
+// Run 5b (body-ownership early-out): the march's normal attachment, whose alpha is the per-body
+// key. Every accepted refine pixel must sit over a march texel carrying ITS OWN body's key — one
+// body is staged here, so the set of distinct keys under the accepted pixels must be exactly one,
+// and it must be a real key (not the cleared 0, and not the old constant 1).
+const mnorm = await evaluate('__sdfGameDebug.readMarchNormalTarget()', 180_000);
+if (!mnorm) fail('readMarchNormalTarget() returned null — the boot allocated no normal attachment');
+if (mnorm.w !== march.w || mnorm.h !== march.h) fail(`normal attachment ${mnorm.w}x${mnorm.h} != march ${march.w}x${march.h}`);
 
 const { c, n } = refine;
-const cf = floats(c), nf = floats(n), mf = floats(march);
+const cf = floats(c), nf = floats(n), mf = floats(march), mnf = floats(mnorm);
+const ownerKeys = new Set();
 const w = c.w, h = c.h;
 if (n.w !== w || n.h !== h) fail(`refine attachments disagree: c ${w}x${h} vs n ${n.w}x${n.h}`);
 if (march.w * 2 !== w || march.h * 2 !== h) fail(`march target ${march.w}x${march.h} is not half of the refine target ${w}x${h} (fields on? sdfScale != 0.5?)`);
@@ -110,6 +123,7 @@ for (let y = 0; y < h; y++) {
     // exactly that rim is the point of the pass; what this check is for is
     // twins drawing in genuinely empty space, which is not one texel wide.
     const mx = x >> 1, my = y >> 1;
+    if (mf[(my * march.w + mx) * 4 + 3] < 1) ownerKeys.add(mnf[(my * march.w + mx) * 4 + 3]);
     if (!(mf[(my * march.w + mx) * 4 + 3] < 1)) {
       strictOutside++;
       let near = false;
@@ -144,12 +158,18 @@ await evaluate('(() => { __sdfGame.setRefineView(false); __sdfGame.step(2); retu
 await evaluate('__sdfGame.resolveGpu()');
 writeFileSync(`${OUT}/frame-shipped.png`, Buffer.from(await evaluate('__sdfGame.presentedShot()'), 'base64'));
 
-console.log(JSON.stringify({ staged, w, h, accepted, outsideHit, strictOutside, badNormal, nonFinite, out: OUT }));
+const after = await evaluate('__sdfGame.refineInfo()');
+const keys = [...ownerKeys];
+console.log(JSON.stringify({ staged, band: after.band, bodies: after.bodies, w, h, accepted, outsideHit, strictOutside, badNormal, nonFinite, ownerKeys: keys, out: OUT }));
 const problems = [];
 if (accepted === 0) problems.push('accepted === 0 — the refine pass wrote nothing');
 if (outsideHit > 0) problems.push(`${outsideHit} accepted texels sit outside a march hit`);
 if (badNormal > accepted * 0.001) problems.push(`${badNormal} non-unit accepted normals (> 0.1% of ${accepted})`);
 if (nonFinite > 0) problems.push(`${nonFinite} non-finite accepted colour components`);
+// Ownership: one body staged, so exactly one key under every accepted pixel, and a REAL key —
+// 0 is the cleared alpha and 1 is the pre-run-5b constant, either would mean the key never landed.
+if (keys.length !== 1) problems.push(`${keys.length} distinct march normal.w keys under accepted pixels (expected 1): ${JSON.stringify(keys)}`);
+else if (keys[0] === 0 || keys[0] === 1) problems.push(`march normal.w key is ${keys[0]} — the per-body key did not reach the attachment`);
 for (const p of problems) console.log(`PROBLEM: ${p}`);
 console.log(problems.length ? 'REFINE SMOKE: FAIL' : 'REFINE SMOKE: PASS');
 process.exit(problems.length ? 1 : 0);
