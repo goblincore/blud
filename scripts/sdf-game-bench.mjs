@@ -26,7 +26,7 @@
 // Exit code is non-zero if ANY leg-run failed, even though the reports are
 // still written — a partial matrix must never be mistaken for a clean one.
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { reportCensusDrift, reportFrameHashDrift } from './census-diff.mjs';
 
 const VITE = Number(process.argv[2] ?? 5277);
@@ -132,6 +132,19 @@ const PASSES = process.env.BENCH_PASSES === '1';
 // BENCH_QUERY — extra URL query appended to sdf-game.html, for levers gated
 // on a page flag (the tile-culling playtest needs `tiles-playtest`).
 const QUERY = process.env.BENCH_QUERY ?? '';
+// BENCH_DEMO — replay a recorded INPUT LOG instead of the scripted scenario
+// (deterministic demo recordings stage 3, 2026-09-14). Every leg then plays the
+// SAME fight, so a census difference between legs is a sim leak rather than two
+// different fights — which is the failure that stalled the crowd flip. The
+// recording supplies one `input` action per frame and the segments become equal
+// thirds (t0/t1/t2).
+const DEMO_PATH = process.env.BENCH_DEMO ?? '';
+const DEMO = DEMO_PATH ? JSON.parse(readFileSync(DEMO_PATH, 'utf8')) : null;
+const DEMO_JSON = DEMO ? JSON.stringify(DEMO) : '';
+// The replay page must boot with the RECORDING's seed: the cast is spawned
+// during boot, before demoReplay can reseed, so a different boot seed would
+// spawn a different world and the recording would replay into the wrong fight.
+const DEMO_SEED = DEMO && !/\bseed=/.test(QUERY) ? `seed=${DEMO.seed}` : '';
 // ---------------------------------------------------------------------------
 // FAILURE BUDGETS. Every wait in this script is bounded, because none of them
 // used to be: send() had no timeout and no reject path, and nothing rejected
@@ -307,7 +320,7 @@ await send('Emulation.setDeviceMetricsOverride', {
 // gate drifted in walk.droplets 0/18/19 and fire.wounds 25/31/32 with the loop
 // settling freely. `bench()` clears the lock and drives the scenario from the
 // spawn state, which is `(seed, inputs, fixed dt)` and nothing else.
-const url = `http://localhost:${VITE}/sdf-game.html?simidle=1${QUERY ? `&${QUERY}` : ''}`;
+const url = `http://localhost:${VITE}/sdf-game.html?simidle=1${QUERY ? `&${QUERY}` : ''}${DEMO_SEED ? `&${DEMO_SEED}` : ''}`;
 console.log(`bench ${url}  (${W}x${H}, repeats=${REPEATS}, rooms=${ROOM_IDS.join(',')}${PRELUDE ? `, prelude: ${PRELUDE}` : ''})`);
 
 /**
@@ -713,14 +726,19 @@ async function runLeg(name, room, mode) {
   // frame cost, which does not fire.
   const holdOpt = SCENE === 'distance' ? ', holdPlayer: true' : '';
   const probeNoShots = SCENE === 'distance' ? ', noShots: true' : '';
+  // The recording replaces the scenario for the probe AND the measured run, so
+  // the frame guard prices the fight that will actually be measured.
+  const demoOpt = DEMO ? `, demo: ${DEMO_JSON}` : '';
   let probe;
   try {
     probe = await evaluate(
-      `__sdfGame.bench({ room: ${room}, mode: "passes", warmup: 4, chunkFrames: 2, label: ${JSON.stringify(`${label}-probe`)}${holdOpt}${probeNoShots} })`,
-      30_000,
+      `__sdfGame.bench({ room: ${room}, mode: "passes", warmup: 4, chunkFrames: 2, label: ${JSON.stringify(`${label}-probe`)}${holdOpt}${probeNoShots}${demoOpt} })`,
+      // A demo probe replays the whole recording, not a 6-frame smoke test, so
+      // the 30 s scripted guard is far too tight.
+      DEMO ? 30 * 60_000 : 30_000,
     );
   } catch (e) {
-    return { aborted: 'frame-cap', probeP50: null, error: `probe evaluate failed after 30 s: ${e?.message ?? e}` };
+    return { aborted: 'frame-cap', probeP50: null, error: `probe evaluate failed: ${e?.message ?? e}` };
   }
   const probeP50 = Number(probe?.overall?.p50 ?? Infinity);
   if (!(probeP50 <= FRAME_CAP_MS)) {
@@ -730,11 +748,24 @@ async function runLeg(name, room, mode) {
       error: `probe frame p50 ${Number.isFinite(probeP50) ? `${probeP50.toFixed(2)} ms` : 'unavailable'} > BENCH_FRAME_CAP_MS=${FRAME_CAP_MS}`,
     };
   }
+  if (DEMO) {
+    // The probe replayed the whole recording and mutated the world. The
+    // measured run must start from a FRESH page, or it would measure a scene
+    // the probe already decimated — the exact failure the scripted probe's
+    // unarmed mode exists to avoid.
+    progress.phase = 'demo-reset';
+    await bootPage(2500);
+    await applyLeg(name);
+  }
+  // warmup 0 for a demo: the bench's warmup advances the sim through frame 0's
+  // action, which would shift the replay off the recording's timeline. The
+  // throwaway page above is the warmup instead.
+  const runWarmup = DEMO ? 0 : WARMUP;
   const opts = mode === 'spike'
-    ? `{ room: ${room}, mode: "spike", warmup: ${WARMUP}, label: ${JSON.stringify(label)}${holdOpt} }`
-    : `{ room: ${room}, mode: ${JSON.stringify(mode)}, warmup: ${WARMUP}, chunkFrames: ${CHUNK}, label: ${JSON.stringify(label)}${holdOpt} }`;
+    ? `{ room: ${room}, mode: "spike", warmup: ${runWarmup}, label: ${JSON.stringify(label)}${holdOpt}${demoOpt} }`
+    : `{ room: ${room}, mode: ${JSON.stringify(mode)}, warmup: ${runWarmup}, chunkFrames: ${CHUNK}, label: ${JSON.stringify(label)}${holdOpt}${demoOpt} }`;
   progress.phase = 'bench';
-  await evaluate(`__sdfGame.bench(${opts})`);
+  await evaluate(`__sdfGame.bench(${opts})`, DEMO ? 30 * 60_000 : undefined);
   progress.phase = 'collect';
   const raw = await evaluate('JSON.stringify(window.__gameBench)');
   const r = JSON.parse(raw);

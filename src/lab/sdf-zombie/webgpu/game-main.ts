@@ -112,7 +112,11 @@ import { createZombieActor, segmentHitsBox, type ZombieActor } from './game-acto
 import { separate, minPairDistance, type CrowdAgent } from '../crowd';
 import { arbitrate, RING_TUNING, type RingClaimant } from '../melee-ring';
 import { ATTACK_TUNING, type SwingVariant } from '../attack';
-import { buildFirefight, buildCloseup, validateScenario, actionsAt, type BenchAction, type Scenario } from './game-bench-scenario';
+import { buildFirefight, buildCloseup, validateScenario, actionsAt, type BenchAction, type Scenario, type ScenarioStep } from './game-bench-scenario';
+import {
+  createDemoRecorder, createDemoPlayer, DEMO_VERSION,
+  type DemoFile, type DemoFrame, type DemoRecorder,
+} from './demo-recorder';
 // TSL nodes for the texRoundTrip diagnostic (close-up task 1, question B).
 // Named with a Tsl suffix where the name collides with anything in this file.
 import {
@@ -153,7 +157,7 @@ import {
   type WoundPanel, type WoundTuningValues,
 } from './wound-panel';
 import { rngStreams, setRngSeed, seedFromUnit } from './rng';
-import { advance as advanceSimClock, simTimeMs } from './sim-clock';
+import { advance as advanceSimClock, simTimeMs, resetSimClock } from './sim-clock';
 import { chunkSettled, makeChunk, stepChunk } from '../gib-chunks';
 import { chunkBakeField } from '../chunk-bake-field';
 import { createChunkBakeJobs } from './chunk-bake-jobs';
@@ -3219,64 +3223,165 @@ async function main() {
   document.addEventListener('pointerlockchange', () => {
     hud.lockHint = document.pointerLockElement !== canvas;
   });
+
+  // -----------------------------------------------------------------------
+  // THE INPUT SEAM (deterministic demo recordings stage 3, 2026-09-14).
+  //
+  // The listeners no longer MUTATE anything. They accumulate the frame's raw
+  // input (held keys, mouse delta, fire/reload events) and one function,
+  // `readInputFrame()`, snapshots it at the tick boundary; `applyInputFrame()`
+  // then performs every state change the listeners used to make inline. The
+  // replay driver feeds the SAME `applyInputFrame` from a recorded frame, so
+  // live play and replay cannot take different code paths.
+  //
+  // WHY DEFER FIRE/RELOAD TO THE TICK. They are edge events, not held state,
+  // and an event that lands between two ticks has no frame index — a recording
+  // built from it would be one frame ambiguous. Moving them onto the tick gives
+  // every action exactly one frame, which is what makes `dt`-fixed replay
+  // possible at all. The cost is at most one 16 ms frame of latency in live
+  // play, and nothing about the game's feel depends on that.
+  // -----------------------------------------------------------------------
+  /** Accumulated mouse delta for the frame about to tick. Consumed (and
+   *  zeroed) by readInputFrame. */
+  let pendingDx = 0, pendingDy = 0;
+  /** Edge events for the frame about to tick: 0 = none, 1 = one barrel,
+   *  2 = both; `pendingReload` = a reload started this frame. */
+  let pendingFire: 0 | 1 | 2 = 0;
+  let pendingReload = false;
+  /** TRUE while a recording is being replayed. The listeners still fire but
+   *  inject nothing — the player owns the frame. */
+  let replayActive = false;
+  /** Frames consumed by the current replay (demoInfo().frame). */
+  let replayFrame = 0;
+  /** The input frame the next tick consumes. Live: readInputFrame(); replay:
+   *  the player's next(). */
+  let currentInputFrame: DemoFrame = { keys: [], dx: 0, dy: 0, fire: 0, reload: false, look: [0, 0] };
+  /** The previous frame's key set, so applyInputFrame can derive rising edges
+   *  (toggles like slug mode) from an absolute held-key snapshot. */
+  let prevInputKeys = new Set<string>();
+  /** The active recorder, or null. Pushed once per tick while recording. */
+  let recorder: DemoRecorder | null = null;
+
   document.addEventListener('mousemove', (e) => {
     if (document.pointerLockElement !== canvas) return;
+    if (replayActive) return; // the player owns the pose
+    pendingDx += e.movementX;
+    pendingDy += e.movementY;
+  });
+  window.addEventListener('keydown', (e) => {
+    if (replayActive) return;
+    keys.add(e.code);
+  });
+  window.addEventListener('keyup', (e) => keys.delete(e.code));
+  let parked = DEFAULT_PROBE_WEIGHT;
+
+  /** The mouse delta's effect, extracted so the live handler and the replay
+   *  apply the IDENTICAL maths. Free aim moves the reticle (the camera follows
+   *  from the tick); otherwise it turns the camera directly. */
+  function applyMouseDelta(dx: number, dy: number): void {
     if (freeAimOn) {
       // The mouse moves the RETICLE, not the camera. Turning is a consequence
       // of shoving the reticle past the dead zone, handled in the tick.
-      aim = moveAim(aim, e.movementX, e.movementY);
+      aim = moveAim(aim, dx, dy);
     } else {
-      player.yaw += e.movementX * 0.0022;
+      player.yaw += dx * 0.0022;
       player.pitch = Math.min(PLAYER.pitchLimit,
-        Math.max(-PLAYER.pitchLimit, player.pitch - e.movementY * 0.0022));
+        Math.max(-PLAYER.pitchLimit, player.pitch - dy * 0.0022));
     }
-  });
-  window.addEventListener('keydown', (e) => {
-    keys.add(e.code);
-    if (e.code === 'BracketLeft') pushProbeWeight(probeWeight - 0.05);
-    if (e.code === 'BracketRight') pushProbeWeight(probeWeight + 0.05);
-    if (e.code === 'KeyP') {
+  }
+
+  /** Every keydown side effect, as RISING EDGES over a held-key snapshot. The
+   *  listeners no longer do these inline: doing them here is what lets a
+   *  replayed key set toggle slug mode exactly as a live press did. */
+  function applyInputEdges(next: Set<string>): void {
+    const pressed = (code: string): boolean => next.has(code) && !prevInputKeys.has(code);
+    if (pressed('BracketLeft')) pushProbeWeight(probeWeight - 0.05);
+    if (pressed('BracketRight')) pushProbeWeight(probeWeight + 0.05);
+    if (pressed('KeyP')) {
       if (probeWeight > 0) { parked = probeWeight; pushProbeWeight(0); }
       else pushProbeWeight(parked);
     }
-    if (e.code === 'KeyE') { slugMode = !slugMode; updateHud(); }
-    // Neural upscale A/B (dev-only, P3): native -> nearest -> model while an upscale config is active.
-    if (e.code === 'KeyU' && !e.repeat && upscaleAb.config) {
+    if (pressed('KeyE')) { slugMode = !slugMode; updateHud(); }
+    // Neural upscale A/B (dev-only, P3): native -> nearest -> model while an
+    // upscale config is active. One toggle per rising edge, as before
+    // (the old handler's `!e.repeat` guard is the same thing here).
+    if (pressed('KeyU') && upscaleAb.config) {
       applyUpscaleAbMode(upscaleAb.mode === 'native' ? 'nearest' : upscaleAb.mode === 'nearest' ? 'model' : 'native');
     }
     // H hides/shows EVERY tuning panel together. They cover most of the
     // viewport, and until now the only way to dismiss them was to know the
     // console API -- which is no use to someone doing a look pass.
     // G toggles free aim, so the two schemes can be A/B'd back to back.
-    if (e.code === 'KeyG') {
+    if (pressed('KeyG')) {
       freeAimOn = !freeAimOn;
       aim = { x: 0, y: 0 };
       updateHud();
     }
-    if (e.code === 'KeyH') {
+    if (pressed('KeyH')) {
       panelsHidden = !panelsHidden;
       woundPanel?.setVisible(!panelsHidden);
       gooPanel?.setVisible(!panelsHidden);
       vhsPanel?.setVisible(!panelsHidden);
     }
-    if (e.code === 'KeyR' && shells < MAGAZINE_CAPACITY && reloadAge > RELOAD.totalSec) {
+    if (pressed('KeyR') && shells < MAGAZINE_CAPACITY && reloadAge > RELOAD.totalSec) {
       startReload();
     }
-    if (e.code === 'KeyT') {
+    if (pressed('KeyT')) {
       reloadSpeed = reloadSpeed === 1 ? 0.25 : reloadSpeed === 0.25 ? 0.1 : 1;
       updateHud();
     }
-  });
-  window.addEventListener('keyup', (e) => keys.delete(e.code));
-  let parked = DEFAULT_PROBE_WEIGHT;
+  }
+
+  /** Snapshot the listeners' accumulated input as the frame the next tick will
+   *  consume. Zeroes the accumulators: a delta belongs to exactly one frame. */
+  function readInputFrame(): DemoFrame {
+    const frame: DemoFrame = {
+      keys: [...keys],
+      dx: pendingDx,
+      dy: pendingDy,
+      fire: pendingFire,
+      reload: pendingReload,
+      look: [player.yaw, player.pitch],
+    };
+    pendingDx = 0;
+    pendingDy = 0;
+    pendingFire = 0;
+    pendingReload = false;
+    return frame;
+  }
+
+  /** Apply one frame of input. THE single mutation point for player input —
+   *  live play and replay both arrive here, so a replay is not a lookalike of
+   *  the live path, it IS the live path. `look` is re-pinned last so float
+   *  drift in the recorded deltas cannot compound down a run. */
+  function applyInputFrame(f: DemoFrame): void {
+    const next = new Set(f.keys);
+    applyInputEdges(next);
+    if (f.dx !== 0 || f.dy !== 0) applyMouseDelta(f.dx, f.dy);
+    // Anti-drift absolute pin. Skipped in free aim, where the pose is a
+    // consequence of the reticle rather than a thing the mouse set directly.
+    if (!freeAimOn) {
+      player.yaw = f.look[0];
+      player.pitch = f.look[1];
+    }
+    if (f.fire === 1) fire(1);
+    else if (f.fire === 2) fire(2);
+    // The KeyR edge above already covers a live press; this covers a recorded
+    // frame whose reload was folded into the flag rather than the keys.
+    if (f.reload && shells < MAGAZINE_CAPACITY && reloadAge > RELOAD.totalSec) startReload();
+    prevInputKeys = next;
+  }
 
   // GRAPESHOT INPUT. Left = one barrel, right = both. The first click only
   // locks the pointer; shots need lock so a stray desktop click cannot fire.
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   canvas.addEventListener('mousedown', (e) => {
     if (document.pointerLockElement !== canvas) return;
-    if (e.button === 0) fire(1);
-    else if (e.button === 2) fire(2);
+    if (replayActive) return; // the player owns the shot
+    // Deferred to the tick (see the input seam note): an edge event must land
+    // on exactly one frame or a recording cannot replay it.
+    if (e.button === 0) pendingFire = 1;
+    else if (e.button === 2) pendingFire = 2;
   });
 
   // The seam for the grapeshot dispatch: a view-model hangs off this group,
@@ -5136,12 +5241,31 @@ async function main() {
     advanceSimClock(dt);
     simFrame++;
     segMeshRenderer?.stepDebris(dt);
+    // ONE INPUT FRAME PER TICK (stage 3). Live, this snapshots the listeners'
+    // accumulated state; replaying, it is the player's next frame. Both go
+    // through applyInputFrame, so the input path is identical either way; and
+    // while recording, the frame the tick CONSUMED is what gets logged (not a
+    // re-read after the fact, which could see a later event).
+    const inputFrame = replayActive ? currentInputFrame : readInputFrame();
+    applyInputFrame(inputFrame);
+    if (replayActive) {
+      // A recorded frame is consumed by exactly ONE tick. Reset to a neutral
+      // frame (keeping the last look) so a repeated step — the bench's warmup,
+      // say — cannot re-fire the same shot.
+      currentInputFrame = neutralInput(inputFrame);
+      replayFrame++;
+    } else {
+      // The frame the tick CONSUMED, not a re-read after the fact: a live
+      // event that lands mid-tick must belong to the next frame, not this one.
+      recorder?.push(inputFrame);
+    }
+    const held = inputFrame.keys;
     let input: MoveInput = holdPlayerPose
       ? { x: 0, z: 0, jump: false }
       : {
-        x: (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0),
-        z: (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0),
-        jump: keys.has('Space'),
+        x: (held.includes('KeyD') ? 1 : 0) - (held.includes('KeyA') ? 1 : 0),
+        z: (held.includes('KeyW') ? 1 : 0) - (held.includes('KeyS') ? 1 : 0),
+        jump: held.includes('Space'),
       };
     if (autopilot && !holdPlayerPose) {
       const dx = autopilot.x - player.pos[0];
@@ -6292,9 +6416,363 @@ function performBenchAction(a: BenchAction): void {
       try { fire(1); } finally { slugMode = keep; }
       break;
     }
+    // RECORDED INPUT (stage 3): stage the frame; `tick` consumes it through
+    // applyInputFrame, exactly as the standalone replay driver does. Applying
+    // it here as well would double the shot. `replayActive` must be on (the
+    // bench's demo path sets it) or tick would overwrite this frame from the
+    // live listeners.
+    case 'input': currentInputFrame = a.frame; break;
   }
 }
 
+  // -------------------------------------------------------------------------
+  // DEMO RECORDER / PLAYER (deterministic demo recordings stage 3, 2026-09-14).
+  //
+  // The recording is an INPUT log: one DemoFrame per fixed-step tick. Live play
+  // builds each frame from the listeners (`readInputFrame`) and feeds it through
+  // `applyInputFrame`; a replay builds it from the file and feeds the SAME
+  // function. The recorder sits at that seam, so what it captures is exactly
+  // what the sim consumed — not a re-read that could see a later event.
+  // -------------------------------------------------------------------------
+  /** The bench census, as one function so the replay driver and the bench
+   *  script cannot disagree about what a census IS. */
+  function sceneCensus(): { bodies: number; wounds: number; chunks: number; droplets: number; splats: number; gooQuads: number } {
+    return {
+      bodies: bodiesOnScreen(),
+      wounds: actors.reduce((n, a) => n + a.wounds().length, 0),
+      chunks: liveChunks.length,
+      droplets: bloodSim.droplets.length,
+      splats: bloodSim.splats.length,
+      gooQuads: gooLayer?.liveCount ?? 0,
+    };
+  }
+
+  /** Apply the DEMO-BOOT flags a replay cares about — the ones that change the
+   *  SCENE, not the dev levers the caller pins. Only crowd and sdf scale today;
+   *  add a flag here the moment a recording depends on it, or a replay of a
+   *  crowd run would silently measure the per-body path. */
+  function applyDemoQuery(query: string): void {
+    const q = new URLSearchParams(query);
+    if (q.has('crowd')) {
+      const on = q.get('crowd') === '1';
+      if (on !== crowdOn) { crowdOn = on; rebuildCast(); }
+    }
+    if (q.has('scale')) {
+      const v = Number(q.get('scale'));
+      if (Number.isFinite(v) && v > 0) applySdfScale(v);
+    }
+  }
+
+  /** Put the player where the recording's frame 0 starts. meta.startPose wins:
+   *  the scripted standoff is computed from where the bodies happen to be and
+   *  cannot be re-derived from a room id. Room centre is the fallback. */
+  function placeFromDemo(file: DemoFile): void {
+    const sp = file.meta?.startPose as { x?: number; z?: number; yaw?: number; pitch?: number } | undefined;
+    if (sp && Number.isFinite(sp.x) && Number.isFinite(sp.z)) {
+      player.pos = [sp.x as number, 0, sp.z as number];
+      player.vel = [0, 0, 0];
+      player.yaw = Number.isFinite(sp.yaw) ? (sp.yaw as number) : 0;
+      player.pitch = Number.isFinite(sp.pitch) ? (sp.pitch as number) : 0;
+      player.grounded = true;
+      return;
+    }
+    const r = ROOMS.find(x => x.id === file.room);
+    if (r) {
+      player.pos = [(r.minX + r.maxX) / 2, 0, (r.minZ + r.maxZ) / 2];
+      player.vel = [0, 0, 0];
+      player.yaw = 0;
+      player.pitch = 0;
+      player.grounded = true;
+    }
+  }
+
+  /** Turn a recording into a bench Scenario: one `input` action per frame, and
+   *  equal thirds as segments (t0/t1/t2) because a live recording does not
+   *  carry the scripted walk/fire/gib boundaries. Feeding it through runBench
+   *  keeps the per-pass timers and the per-segment census identical to every
+   *  other bench row. */
+  function demoScenarioOf(file: DemoFile): Scenario {
+    const frames = file.frames.length;
+    const steps: ScenarioStep[] = [];
+    for (let f = 0; f < frames; f++) {
+      steps.push({ at: f, action: { kind: 'input', frame: file.frames[f]! } });
+    }
+    const a = Math.floor(frames / 3);
+    const b = Math.floor((2 * frames) / 3);
+    return {
+      frames,
+      steps,
+      segments: [
+        { name: 't0', from: 0, to: a },
+        { name: 't1', from: a, to: b },
+        { name: 't2', from: b, to: frames },
+      ],
+    };
+  }
+
+  /** A neutral frame for the tick after a recorded one is consumed: it keeps
+   *  the last look (so a repeat step cannot snap the camera) but drops every
+   *  event, so a warmup step cannot re-fire a shot. */
+  function neutralInput(prev: DemoFrame): DemoFrame {
+    return { keys: [], dx: 0, dy: 0, fire: 0, reload: false, look: [prev.look[0], prev.look[1]] };
+  }
+
+  /** The F7 HUD line, created lazily and parked above the telemetry controls. */
+  let demoHudEl: HTMLDivElement | null = null;
+  function updateDemoHud(): void {
+    if (!recorder) {
+      if (demoHudEl) demoHudEl.hidden = true;
+      return;
+    }
+    if (!demoHudEl) {
+      demoHudEl = document.createElement('div');
+      demoHudEl.id = 'demo-rec-status';
+      demoHudEl.setAttribute('style',
+        'position:fixed;bottom:52px;left:12px;z-index:10001;padding:4px 8px;'
+        + 'background:#2a0d0dee;color:#ffb4b4;font:12px monospace;border:1px solid #a04a4a;'
+        + 'border-radius:5px;pointer-events:none');
+      document.body.appendChild(demoHudEl);
+    }
+    demoHudEl.hidden = false;
+    demoHudEl.textContent = `REC \u25cf  frames: ${recorder.frames}`;
+  }
+
+  /** F7 / `__sdfGame.demoRecord('start')`. The header is snapshotted at START,
+   *  not stop: the seed and query must be the ones the run BEGAN under, or a
+   *  replay boots into a different world than the recording captured. */
+  function demoRecordStart(): boolean {
+    if (recorder) return false;
+    replayActive = false;
+    recorder = createDemoRecorder({
+      seed: demoSeed,
+      query: location.search.replace(/^\?/, ''),
+      room: playerRoomId(),
+      dt: 1 / 60,
+      meta: {
+        startPose: { x: player.pos[0], z: player.pos[2], yaw: player.yaw, pitch: player.pitch },
+        // Free-aim moves a RETICLE; mouselook turns the camera. Which one is
+        // live decides whether a replay pins `look` or integrates dx/dy, so it
+        // is part of the recording's state, not the view's.
+        freeAim: freeAimOn,
+        label: 'live',
+      },
+    });
+    updateDemoHud();
+    return true;
+  }
+
+  /** Stop and (optionally) save. Returns the file so a caller keeps it in
+   *  memory; the POST is best-effort — a failed save must not lose the run. */
+  async function demoRecordStop(save = true): Promise<DemoFile | null> {
+    if (!recorder) return null;
+    const file = recorder.stop();
+    recorder = null;
+    updateDemoHud();
+    if (save) {
+      try {
+        await fetch('/__lab/save-demo', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(file),
+          signal: AbortSignal.timeout(15000),
+        });
+      } catch { /* keep the file; the caller still has it */ }
+    }
+    return file;
+  }
+
+  /** THE REPLAY DRIVER. Owns the sim: stops the loop, resets the sim clock and
+   *  reseeds the streams, applies the scene flags and the start pose, then
+   *  steps one fixed frame per recorded frame through applyInputFrame. The
+   *  render lock is OFF (a replay mutates) and `demoHold` pins the render-side
+   *  clocks, exactly as `demoScenario` does for a recording.
+   *
+   *  `hash: true` additionally digests the march target and gather layers every
+   *  `every` frames — the surface scripts/sdf-demo-hash.mjs drives for
+   *  DEMO_HASH_DEM. */
+  async function runDemoReplay(file: DemoFile, opts: { hold?: boolean; hash?: boolean; every?: number; hashFrom?: number; label?: string } = {}) {
+    if (!file || file.version !== DEMO_VERSION) throw new Error(`demoReplay: version ${file?.version} is not ${DEMO_VERSION}`);
+    if (!Array.isArray(file.frames) || file.frames.length === 0) throw new Error('demoReplay: recording has no frames');
+    if (opts.hold !== false) demoHold = true;
+    handle.setLoopRunning(false);
+    const hadAdaptive = adaptiveEnabled; adaptiveEnabled = false;
+    const hadReplay = replayActive; replayActive = true;
+    const hadLock = simLocked;
+    // Render-side cadences reset + settled BEFORE the sim runs, exactly as the
+    // bench does under ?simidle. inert for a non-hash caller and REQUIRED for a
+    // hash: without it the frame parity and instance pack at frame 0 depend on
+    // how long the page happened to boot.
+    demoHold = true;
+    demoSeedBase = probeFrame;
+    postAa.setTimeFrozen(true);
+    sdfLayer.resetFieldPhase();
+    probeGatherTick = 0;
+    // AND the pack waiting to be dispatched. Without this the first replay draw
+    // dispatches a pack left over from boot, so the gather gets one extra
+    // dispatch in one run and not the other (measured: 301 vs 300), which moves
+    // the blended dynamic layer and makes the frame hash flap.
+    pendingGather = null;
+    probeGather?.reset();
+    simLocked = false;
+    const hadHoldPlayer = holdPlayerPose; holdPlayerPose = false;
+    // Free-aim vs mouselook is a SIM input mode: it decides whether `look` is
+    // pinned or dx/dy drives the reticle. The recording says which one it was
+    // captured in; an old file without the flag leaves the page as booted.
+    const hadFreeAim = freeAimOn;
+    if (typeof file.meta?.freeAim === 'boolean') freeAimOn = file.meta.freeAim;
+    const iter = createDemoPlayer(file);
+    const hashes: import('./frame-hash').FrameHash[] = [];
+    const parity: number[] = [];
+    const every = Math.max(1, Math.floor(opts.every ?? 4));
+    const hashFrom = Math.max(0, Math.floor(opts.hashFrom ?? 0));
+    const started = performance.now();
+    let frames = 0;
+    replayFrame = 0;
+    try {
+      // The replay starts from the SAME origin the synth/recorder did: sim
+      // clock zeroed and the named streams reseeded, so a recorded draw index
+      // means the same thing here as it did when captured.
+      resetSimClock();
+      setRngSeed(file.seed);
+      applyDemoQuery(file.query);
+      placeFromDemo(file);
+      simLocked = false;
+      prevInputKeys = new Set<string>();
+      currentInputFrame = { keys: [], dx: 0, dy: 0, fire: 0, reload: false, look: [player.yaw, player.pitch] };
+      for (let f = 0; ; f++) {
+        const frame = iter.next();
+        if (!frame) break;
+        currentInputFrame = frame;
+        handle.step(file.dt);
+        frames++;
+        // `hashFrom` skips the RENDER warm-up frames: the scripted recorder
+        // settles `warmup` frames before its first hash, and a replay gets the
+        // same treatment by not sampling its own first `hashFrom` frames. The
+        // SIM still advances through every frame — only the samples are skipped.
+        if (opts.hash && f >= hashFrom && (f % every === 0 || f === file.frames.length - 1)) {
+          await handle.resolveGpu();
+          hashes.push(await hashFrame(frameHashDeps, f));
+          parity.push(f % 2);
+        }
+      }
+    } finally {
+      replayActive = hadReplay;
+      simLocked = hadLock;
+      adaptiveEnabled = hadAdaptive;
+      holdPlayerPose = hadHoldPlayer;
+      freeAimOn = hadFreeAim;
+      currentInputFrame = neutralInput(currentInputFrame);
+    }
+    return {
+      frames,
+      census: sceneCensus(),
+      hashes,
+      parity,
+      every,
+      ms: Math.round(performance.now() - started),
+      dispatches: probeFrame - demoSeedBase,
+      label: opts.label ?? file.startedAt,
+    };
+  }
+
+  /** Build a SYNTHETIC recording by driving the scripted firefight through the
+   *  SAME input seam a live run uses. The executor cannot play by hand, so this
+   *  is the honest stand-in: it does not fabricate a fight, it records one the
+   *  scenario actually fights, as an input log. The slug shot is expressed the
+   *  way a player would — a KeyE press before, a second press after — so the
+   *  recording is self-contained and re-toggles cleanly on replay. */
+  async function demoSynthesize(o: { room?: number; walkFrames?: number; fireFrames?: number; gibFrames?: number; label?: string } = {}): Promise<DemoFile> {
+    const room = o.room ?? 2;
+    const scenario = buildFirefight({ room, walkFrames: o.walkFrames, fireFrames: o.fireFrames, gibFrames: o.gibFrames });
+    const problems = validateScenario(scenario);
+    if (problems.length) throw new Error(`demoSynthesize: bad scenario: ${problems.join('; ')}`);
+    handle.setLoopRunning(false);
+    const hadLock = simLocked; simLocked = false;
+    const hadAdaptive = adaptiveEnabled; adaptiveEnabled = false;
+    const hadReplay = replayActive; replayActive = true;
+    const hadHold = demoHold; demoHold = true;
+    const slugWas = slugMode;
+    // The scripted aim sets player.yaw/pitch directly, so the synthetic
+    // recording is captured in MOUSELOOK mode (freeAim=false) and records that
+    // as a precondition. Otherwise a replay would run the reticle path and
+    // ignore the recorded look.
+    const aimWas = freeAimOn;
+    freeAimOn = false;
+    let rec: DemoRecorder | null = null;
+    try {
+      // The scenario's frame-0 teleport is a PRECONDITION, not an input: its
+      // computed standoff is recorded as the start pose so a replay can put the
+      // player there without re-deriving it from a room id.
+      const tele = scenario.steps.find(s => s.at === 0 && s.action.kind === 'teleport');
+      if (tele) performBenchAction(tele.action);
+      resetSimClock();
+      setRngSeed(demoSeed);
+      slugMode = false;
+      currentInputFrame = { keys: [], dx: 0, dy: 0, fire: 0, reload: false, look: [player.yaw, player.pitch] };
+      rec = createDemoRecorder({
+        seed: demoSeed,
+        query: location.search.replace(/^\?/, ''),
+        room,
+        dt: 1 / 60,
+        meta: {
+          label: o.label ?? `synthetic-firefight-room${room}`,
+          script: 'firefight',
+          synthetic: true,
+          freeAim: false,
+          startPose: { x: player.pos[0], z: player.pos[2], yaw: player.yaw, pitch: player.pitch },
+        },
+      });
+      prevInputKeys = new Set<string>();
+      for (let f = 0; f < scenario.frames; f++) {
+        let fire: 0 | 1 | 2 = 0;
+        let toggleSlug = false;
+        for (const a of actionsAt(scenario, f)) {
+          if (a.kind === 'aimSurface') aimAtNearestSurface();
+          else if (a.kind === 'fire') fire = a.barrels;
+          else if (a.kind === 'fireSlug') { toggleSlug = true; fire = 1; }
+        }
+        const frame: DemoFrame = {
+          keys: toggleSlug ? ['KeyE'] : [], dx: 0, dy: 0, fire, reload: false,
+          look: [player.yaw, player.pitch],
+        };
+        // Stage, do NOT apply: `tick` consumes currentInputFrame through
+        // applyInputFrame, exactly as the bench's `input` action does. Applying
+        // it here too would fire every shot twice.
+        currentInputFrame = frame;
+        rec.push(frame);
+        handle.step(1 / 60);
+        if (toggleSlug) {
+          const off: DemoFrame = {
+            keys: ['KeyE'], dx: 0, dy: 0, fire: 0, reload: false,
+            look: [player.yaw, player.pitch],
+          };
+          currentInputFrame = off;
+          rec.push(off);
+          handle.step(1 / 60);
+        }
+      }
+    } finally {
+      slugMode = slugWas;
+      freeAimOn = aimWas;
+      replayActive = hadReplay;
+      simLocked = hadLock;
+      adaptiveEnabled = hadAdaptive;
+      demoHold = hadHold;
+      currentInputFrame = neutralInput(currentInputFrame);
+    }
+    if (!rec) throw new Error('demoSynthesize: recorder was never created');
+    return rec.stop();
+  }
+
+  // F7 toggles the input recorder. F8/F9 are telemetry (game-telemetry-controls).
+  window.addEventListener('keydown', (e) => {
+    if (e.code !== 'F7' || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+    e.preventDefault();
+    if (recorder) void demoRecordStop(true);
+    else demoRecordStart();
+  });
+
+  // -------------------------------------------------------------------------
   // Everything the draw callback reads now exists — let frames draw. See the
   // boot-frame gate's note at setDrawFn.
   drawReady = true;
@@ -6302,6 +6780,39 @@ function performBenchAction(a: BenchAction): void {
     /** The boot demo seed: `?seed=` when given, otherwise random. Reported so
      *  a recording/replay can pin it (stage 3 seam `demoInfo()`). */
     get demoSeed() { return demoSeed; },
+    /** STAGE-3 RECORDER SEAMS. `demoRecord('start')` begins logging the input
+     *  frames the tick consumes; `'stop'` returns the DemoFile and saves it via
+     *  POST /__lab/save-demo. F7 does the same toggle. */
+    demoRecord: (action: 'start' | 'stop') => (action === 'start' ? demoRecordStart() : demoRecordStop(true)),
+    /** What the recorder/player is doing right now. `frame` is frames recorded
+     *  (live) or frames replayed (replay) — never a wall-clock measure. */
+    demoInfo: () => ({
+      recording: !!recorder,
+      replaying: replayActive,
+      frame: replayActive ? replayFrame : (recorder?.frames ?? 0),
+      seed: demoSeed,
+      room: playerRoomId(),
+      demoHold,
+    }),
+    /** Replay a `.dem` (`file` object, or a path/URL to fetch) headlessly and
+     *  return `{ frames, census, ... }`. `hash: true` also digests the frame
+     *  every `every` steps — the surface scripts/sdf-demo-hash.mjs drives for
+     *  DEMO_HASH_DEM. The caller owns booting a page with the matching seed. */
+    demoReplay: (fileOrPath: DemoFile | string, opts: { hold?: boolean; hash?: boolean; every?: number; hashFrom?: number; label?: string } = {}) => {
+      if (typeof fileOrPath === 'string') {
+        return fetch(fileOrPath, { cache: 'no-store' })
+          .then((r) => {
+            if (!r.ok) throw new Error(`demoReplay: fetch ${fileOrPath} -> ${r.status}`);
+            return r.json() as Promise<DemoFile>;
+          })
+          .then((file) => runDemoReplay(file, opts));
+      }
+      return runDemoReplay(fileOrPath, opts);
+    },
+    /** The executor's stand-in for a hand-played run: drive the scripted
+     *  firefight through the input seam and return the recording. See
+     *  demoSynthesize's note — it records a fight that actually happened. */
+    demoSynthesize,
     telemetry: telemetryControls ? {
       start: () => telemetryControls.start(), stop: () => telemetryControls.stop(), mark: () => telemetryControls.mark(),
       get active() { return telemetry.active; }, lastCapture: () => telemetryControls.lastCapture(),
@@ -8723,15 +9234,24 @@ function performBenchAction(a: BenchAction): void {
        *  21 bodies. The probe only needs the walk scene's frame cost, so it
        *  runs unarmed. */
       noShots?: boolean;
+      /** REPLAY A RECORDING instead of the scripted scenario (stage 3). Every
+       *  leg then plays the SAME inputs, so a census difference between two
+       *  legs is a sim leak rather than two different fights. Segments become
+       *  equal thirds (t0/t1/t2); the timers and census machinery are
+       *  unchanged. The caller passes `warmup: 0` so the replay starts at the
+       *  recording's frame 0. */
+      demo?: DemoFile;
     } = {}) {
-      const scenario = o.kind === 'closeup'
-        ? buildCloseup({ frames: o.closeupFrames })
-        : buildFirefight({
-        room: o.room ?? 4,
-        walkFrames: o.walkFrames,
-        fireFrames: o.fireFrames,
-        gibFrames: o.gibFrames,
-      });
+      const scenario = o.demo
+        ? demoScenarioOf(o.demo)
+        : o.kind === 'closeup'
+          ? buildCloseup({ frames: o.closeupFrames })
+          : buildFirefight({
+            room: o.room ?? 4,
+            walkFrames: o.walkFrames,
+            fireFrames: o.fireFrames,
+            gibFrames: o.gibFrames,
+          });
       // HOLD THE PLAYER. Drop every action that writes the player's pose
       // (the firefight's teleport/look) and the frame-0 `freeze: false` (the
       // distance scene pre-froze the cast for a stable distance; letting the
@@ -8783,7 +9303,8 @@ function performBenchAction(a: BenchAction): void {
       // identical. Left ON (not restored): inter-run render frames must also see
       // it, or the gather re-rotates its rays between the probe and the run.
       // Sim-idle boots only — normal play and other bench callers are untouched.
-      if (new URLSearchParams(location.search).has('simidle')) {
+      const hasSimIdle = new URLSearchParams(location.search).has('simidle');
+      if (o.demo || hasSimIdle) {
         demoHold = true;
         demoSeedBase = probeFrame;
         postAa.setTimeFrozen(true);
@@ -8800,7 +9321,25 @@ function performBenchAction(a: BenchAction): void {
         // The dynamic layer blends each dispatch into the previous values, so it
         // is a function of the dispatch count too. Start every run from zero, or
         // the first page load and a warm one hash differently (measured).
+        // pendingGather too: a pack left over from boot would be dispatched on
+        // the first measured draw, giving one run an extra gather dispatch.
+        pendingGather = null;
         probeGather?.reset();
+      }
+      // A DEMO bench run IS a replay: the recording's frames are staged as
+      // `input` actions and consumed by tick through applyInputFrame, and the
+      // sim streams + clock reset to the recording's own origin so every leg
+      // and every repeat starts from the same draw index. Inert off the demo
+      // path, so normal play and every other bench call are untouched.
+      const hadReplay = replayActive;
+      const hadFreeAim = freeAimOn;
+      if (o.demo) {
+        replayActive = true;
+        replayFrame = 0;
+        resetSimClock();
+        setRngSeed(o.demo.seed);
+        if (typeof o.demo.meta?.freeAim === 'boolean') freeAimOn = o.demo.meta.freeAim;
+        prevInputKeys = new Set<string>();
       }
       const hadAdaptive = adaptiveEnabled;
       adaptiveEnabled = false;
@@ -8853,6 +9392,8 @@ function performBenchAction(a: BenchAction): void {
         return result;
       } finally {
         holdPlayerPose = hadHoldPlayer;
+        replayActive = hadReplay;
+        freeAimOn = hadFreeAim;
         restoreHeldPose();
         // Re-lock under `?simidle` so the frames the restarted loop renders
         // between runs cannot mutate the sim (see the capture at the top).

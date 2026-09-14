@@ -59,6 +59,13 @@ const ARGV = process.argv.slice(2).filter((a) => !/^\d+$/.test(a));
 const MODE = ARGV[0] ?? 'ab';
 const SPEC_ARG = ARGV[1] ?? '';
 const BASELINE = process.env.DEMO_HASH_BASELINE ?? ARGV[2] ?? '';
+// DEMO_HASH_DEM — hash a recorded INPUT LOG instead of the scripted scenario
+// (deterministic demo recordings stage 3, 2026-09-14). record/verify/ab then
+// compare replays of one recording, so the comparison covers the SIM as well as
+// the renderer. The page boots with the recording's own seed: the cast is
+// spawned during boot, before demoReplay can reseed, so a different boot seed
+// would replay the recording into a different fight.
+const DEMO_FILE = process.env.DEMO_HASH_DEM ? JSON.parse(readFileSync(process.env.DEMO_HASH_DEM, 'utf8')) : null;
 
 const W = 1280, H = 800;
 const fail = (msg) => { console.error(`FAIL: ${msg}`); process.exit(1); };
@@ -134,7 +141,13 @@ async function pinDefaults(evaluate, spec) {
 async function runOnce(conn, spec, label) {
   const { send, evaluate } = conn;
   await send('Page.bringToFront');
-  await bootCloseupPage({ send, evaluate, url: `http://localhost:${VITE}/sdf-game.html?frozen=1`, fail });
+  // A demo replay boots with ?simidle=1 (the sim is LOCKED through the settle,
+  // so the world is still at its spawn state when the replay starts) and the
+  // recording's seed. The scripted path keeps ?frozen=1.
+  const bootUrl = DEMO_FILE
+    ? `http://localhost:${VITE}/sdf-game.html?simidle=1&seed=${DEMO_FILE.seed}`
+    : `http://localhost:${VITE}/sdf-game.html?frozen=1`;
+  await bootCloseupPage({ send, evaluate, url: bootUrl, fail });
   await pinDefaults(evaluate, spec);
   // Pin the wall clock for the whole run. The frozen scene still ticks the fire
   // flicker off performance.now(), which jitters the frame at sub-LSB level
@@ -159,26 +172,35 @@ async function runOnce(conn, spec, label) {
     fail(`${label}: the static probe grid never finished baking (roomProbesReady stayed false for 2 min) — refusing to record a scene whose lighting is still settling`);
   }
   await evaluate('(() => { __sdfGame.setDemoHold(true); return __sdfGame.demoHold; })()');
-  if (spec.pose) {
-    const p = spec.pose;
-    await evaluate(`(() => { __sdfGame.setPose(${p.x}, ${p.z}, ${p.yaw}, ${p.pitch ?? 0}); return 1; })()`);
+  let record;
+  if (DEMO_FILE) {
+    // The replay owns the sim (start pose, seed, clock); a warmup step or a
+    // pose pin here would shift it off the recording's own timeline.
+    record = await evaluate(
+      `__sdfGame.demoReplay(${JSON.stringify(DEMO_FILE)}, ${JSON.stringify({ hash: true, every: spec.every, hashFrom: spec.warmup, hold: true })})`,
+      30 * 60_000,
+    );
+  } else {
+    if (spec.pose) {
+      const p = spec.pose;
+      await evaluate(`(() => { __sdfGame.setPose(${p.x}, ${p.z}, ${p.yaw}, ${p.pitch ?? 0}); return 1; })()`);
+    }
+    // Settle BEFORE the hold, with the sim live: a teleport excites head-bob and
+    // the weapon spring, and those transients decay over ~90 frames.
+    await evaluate(`(() => { __sdfGame.step(${spec.warmup}); return 1; })()`);
+    // Then FREEZE with the render lock, the way the close-up gates do: after
+    // this, step(n) is n pure advances from a settled state.
+    await evaluate('(() => { __sdfGame.setRenderLock(false); __sdfGame.freeze(true); return 1; })()');
+    record = await evaluate(
+      `__sdfGame.demoScenario(${JSON.stringify({
+        kind: spec.kind, room: spec.room, frames: spec.frames, every: spec.every,
+        sim: spec.sim === true,
+        repeat: spec.repeat ?? 0,
+        resample: spec.resample ?? 0,
+      })})`,
+      30 * 60_000,
+    );
   }
-  // Settle BEFORE the hold, with the sim live: a teleport excites head-bob and
-  // the weapon spring, and those transients decay over ~90 frames.
-  await evaluate(`(() => { __sdfGame.step(${spec.warmup}); return 1; })()`);
-  // Then FREEZE with the render lock, the way the close-up gates do: after
-  // this, step(n) is n pure advances from a settled state.
-  await evaluate('(() => { __sdfGame.setRenderLock(false); __sdfGame.freeze(true); return 1; })()');
-
-  const record = await evaluate(
-    `__sdfGame.demoScenario(${JSON.stringify({
-      kind: spec.kind, room: spec.room, frames: spec.frames, every: spec.every,
-      sim: spec.sim === true,
-      repeat: spec.repeat ?? 0,
-      resample: spec.resample ?? 0,
-    })})`,
-    30 * 60_000,
-  );
   if (!record || !Array.isArray(record.hashes) || !record.hashes.length) {
     // Report WHAT came back, not just that it was wrong. A silent seam is the
     // failure this tool exists to catch, so it must not be one itself.
@@ -279,6 +301,9 @@ function fingerprint(spec, march, record) {
     dispatches: record?.seedIdle ?? 0,
     kind: spec.kind, room: spec.room, frames: spec.frames, every: spec.every,
     warmup: spec.warmup, pose: spec.pose, prelude: spec.prelude, sim: spec.sim === true,
+    // A demo replay and the scripted scenario are different instruments; a
+    // stored recording must not be compared across them.
+    demo: DEMO_FILE ? (DEMO_FILE.startedAt ?? DEMO_FILE.meta?.label ?? 'demo') : '',
   };
 }
 
