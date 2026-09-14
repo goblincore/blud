@@ -106,3 +106,20 @@ The crowd-vs-per-body bench legs were shooting **different fights** because the
 scripted scenario's aim depends on where the wall-clock-advanced cast happened to
 be at the teleport. With `?seed=` + `simidle`, both legs now play the same fight,
 so a fire/gib delta measures the renderer and not the scenario.
+
+## Stage 3 — F7 recorder and replay (2026-09-14, D3, commit d755b689)
+
+Verified on main after the merge (scratch worktree, ports 5325/9325):
+
+- `tsc --noEmit` clean; `demo-recorder.test.ts` 3/3 pass.
+- `scripts/march-hash.mjs` crowd `a8ab4efac15fc0376c3e4e05420f13e34d1511bd`, `MARCH_HASH_PERBODY=1` identical — the input seam refactor (`readInputFrame` / `applyInputFrame`, edge-derived key handling) does not touch the shipped frozen frame.
+- `DEMO_HASH_DEM=docs/dev-notes/demos/synthetic-firefight-room2.dem.json node scripts/sdf-demo-hash.mjs ab`: 128/128 sampled frames identical across two fresh-page replays of the same recording (601 frames, 300 gather dispatches each).
+
+How to use it:
+
+- In play, press **F7** to start recording (HUD shows `REC ● frames: N`), F7 again to stop. The page POSTs the `.dem.json` to `/__lab/save-demo`; the dev server writes `docs/dev-notes/demos/<startedAt>-room<N>.dem.json` (never overwrites).
+- Replay + hash: `DEMO_HASH_DEM=<file> node scripts/sdf-demo-hash.mjs ab|record|verify`.
+- Bench on a recording: `BENCH_DEMO=<file> node scripts/sdf-game-bench.mjs <vite> <cdp>` — every leg replays the same fight; segments are equal thirds t0/t1/t2. The page boots with the recording's seed.
+- `scripts/sdf-demo-synth.mjs` makes a synthetic recording from the scripted firefight through the same input seam (determinism fixture, not a play-feel source).
+
+Not yet done: an equal-workload fire/gib crowd-vs-per-body bench on a recording (the flip is held on it), and a real owner recording.
