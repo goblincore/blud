@@ -83,8 +83,8 @@
   copy in Planning/). Design + stage (a) plan written 2026-09-13 (autonomous session; decisions D1–D10 need owner
   ratification): spec `docs/superpowers/specs/2026-09-13-merged-crowd-march-design.md`, plan
   `docs/superpowers/plans/2026-09-13-merged-crowd-march-stage-a.md` (8 tasks: baselines → records → one-slot
-  kernel [hash gate] → CrowdType → `?crowd=1` → parity + crowd bench → default flip). Next action: ratify D1/D5,
-  then execute Task 0.
+  kernel [hash gate] → CrowdType → `?crowd=1` → parity + crowd bench → default flip). D1–D10 ratified by owner
+  2026-09-13. Next action: execute Task 0 (needs lab servers + GPU).
 - [ ] **CORPSE BAKE FOR EVERY CHARACTER:** `corpseBakeEligible` is soldier-only (`profile.name === 'soldier'` +
   collapse settled), so dead zombies keep marching at full cost. Extending eligibility to any settled actor is
   mostly the flag (the bake rejects on overflow and falls back). Independent of the upscaler.
