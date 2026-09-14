@@ -46,11 +46,12 @@
 // Everything renderer-independent lives in fpv-mode.ts; this file only
 // draws what that module already decided.
 import * as THREE from 'three/webgpu';
-import { texture3D } from 'three/tsl';
+import { texture3D, uniform } from 'three/tsl';
 import {
   blankFaceTexture, createDataTexture, createMarchMaterial, defaultUniforms,
-  marchBody, writeWounds, type MarchUniforms,
+  marchBody, writeWounds, writeViewRecord, type MarchUniforms,
 } from './zombie-gpu';
+import { createCrowdRecords } from './crowd-records';
 import { createFallbackHandVolumeTexture, type HandVolume } from './hand-volume';
 import type { HandClipVolume } from './hand-volume-clip';
 import {
@@ -102,6 +103,9 @@ export interface HandsGpuView {
   /** The 3D texture currently bound to the volume slot: the view's own
    *  1-cubed fallback in primitive mode, the loaded volume in baked mode. */
   readonly volumeTexture: THREE.Texture;
+  /** Crowd stage a (task 7c): the one-slot record buffer the march reads.
+   *  Exposed so a test can prove the hand's per-instance state reaches it. */
+  readonly records: ReturnType<typeof createCrowdRecords>;
   /** Re-packs THIS hand's world-space prims + its wound ring for the frame.
    *  Wounds must already be rebased onto `prims` (fpv-mode's
    *  splitHandWounds does that). In volume mode the wound rows are still
@@ -345,10 +349,30 @@ export function createHandsGpuView(
     mesh.scale.set(maxX - minX + pad * 2, maxY - minY + pad * 2, maxZ - minZ + pad * 2);
   }
 
-  const material = createMarchMaterial(dataTex, volumeNode, u, marchBody);
+  // Crowd stage a (task 7c): the hands march ONE record slot of their own. The
+  // record buffer is what the kernel reads per instance now; without it the
+  // material falls back to the zero-filled `counts = 0` record and renders an
+  // empty field. instCfg.x = 1 (one instance), z = 0 (record slot 0).
+  const records = createCrowdRecords(1);
+  const instCfg = uniform(new THREE.Vector4(1, 0, 0, 0));
+  const material = createMarchMaterial(
+    dataTex, volumeNode, u, marchBody,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined,
+    { inst: records.node, instCfg },
+  );
   // Unit box; the true axis-aligned cover is applied per frame via scale.
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
   mesh.frustumCulled = false; // camera-anchored: culling flakes on near moves
+
+  /** Crowd stage a: push the per-instance uniforms into record slot 0. Called
+   *  after EVERY write to a record-backed uniform below (counts, wound count,
+   *  volume pose, head centre/quat) and once per frame in update(). */
+  function syncHandsRecord(): void {
+    writeViewRecord(records, 0, u, mesh.position);
+    records.flush();
+  }
 
   /** Packs this hand as a ONE-cluster field and sizes the proxy box. */
   function apply(prims: Primitive[]) {
@@ -390,6 +414,7 @@ export function createHandsGpuView(
     const pad = packed.maxBlendK * 2;
     mesh.position.set((minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2);
     mesh.scale.set(maxX - minX + pad, maxY - minY + pad, maxZ - minZ + pad);
+    syncHandsRecord();
   }
 
   apply([]);
@@ -400,6 +425,7 @@ export function createHandsGpuView(
     object: mesh,
     uniforms: u,
     get volumeTexture() { return volumeNode.value as THREE.Texture; },
+    records,
     setSheet(sheet) {
       if (!sheet) { u.faceCfg.value.x = 0; return; }
       u.faceTex.value = sheet.tex;
@@ -438,6 +464,7 @@ export function createHandsGpuView(
       basisM.makeBasis(bx, by, bz);
       projQ.setFromRotationMatrix(basisM);
       u.headQuat.value.set(projQ.x, projQ.y, projQ.z, projQ.w);
+      syncHandsRecord();
     },
     update(prims, wounds) {
       // Volume mode (X1.26): the wound ring still uploads (wounds are stamped
@@ -455,6 +482,7 @@ export function createHandsGpuView(
         );
         u.counts.value.set(0, 0, 0, 0);
         dataTex.needsUpdate = true;
+        syncHandsRecord();
         return;
       }
       apply(prims);
@@ -467,6 +495,7 @@ export function createHandsGpuView(
         wounds.map(w => WOUND_PROFILES[w.type].rimSplayScale),
         wounds.map(w => WOUND_PROFILES[w.type].rimOffsetScale),
       );
+      syncHandsRecord();
     },
     setField(field, vol) {
       if (field === 'volume') {
@@ -493,6 +522,7 @@ export function createHandsGpuView(
         u.woundCfg2.value.w = vol.maxVoxelPitch / 2; // hit eps >= half the largest pitch
         u.volumePose0.value.w = 1;
         fitVolumeProxy();
+        syncHandsRecord();
       } else {
         volume = null;
         u.volumePose0.value.w = 0;
@@ -500,6 +530,7 @@ export function createHandsGpuView(
         u.volumeClip.value.set(0, 0, 0, 1); // fallback frame semantics
         u.marchCfg.value.copy(primMarch.marchCfg);
         u.woundCfg2.value.copy(primMarch.woundCfg2);
+        syncHandsRecord();
         // The prim path refits the proxy on the next update().
       }
     },
@@ -530,6 +561,7 @@ export function createHandsGpuView(
       const s = p.warpEnabled && wl > 1e-9 ? Math.min(1, VOLUME_WARP_MARGIN_M / wl) : 0;
       u.volumeWarp.value.set(p.warpLocal[0] * s, p.warpLocal[1] * s, p.warpLocal[2] * s, 0);
       fitVolumeProxy();
+      syncHandsRecord();
     },
     setClay(on) {
       if (on === clay) return;

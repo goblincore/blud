@@ -1677,12 +1677,17 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   // character for character. The alive read is the same value, now hoisted
   // into gInstAlive by loadInstance.
   let nInst = i32(instCfg.x);
+  // BASE SLOT (crowd stage a, task 7c). A material drawing ONE field out of a
+  // SHARED record buffer (the chunk views) sets instCfg.z to its record slot
+  // and marches with tiles off, where the slot index is s = 0. Every existing
+  // caller passes z = 0, so base + s is s and the canonical march is untouched.
+  let base = i32(instCfg.z);
   let tiled = gTileActive > 0.5;
   let nIter = select(nInst, gPixN, tiled);
   for (var k = 0; k < ${MAX_CROWD_INSTANCES}; k = k + 1) {
     if (k >= nIter) { break; }
     let s = select(k, gPixSlot[k], tiled);
-    loadInstance(inst, s);
+    loadInstance(inst, base + s);
     if (gInstAlive < 0.5) { continue; }
     let counts = gInstCounts;
     let counts2 = gInstCounts2;
@@ -1865,7 +1870,7 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
     // one-slot entry returned it; POST's tissue-depth read is unchanged.
     if (dmgFinal < dUnion) {
       dUnion = dmgFinal;
-      bestSlot = s;
+      bestSlot = base + s;
       nearWoundU = nearWound;
       carvedU = carved;
       bestIdxU = gFoldBestIdx;
@@ -1990,7 +1995,7 @@ export const CONE_MARCH = /* wgsl */ `fn coneMarch(
   // wind is NOT like the noise: it moves the FIELD. A cone that marched the
   // no-wind surface would certify space the drifted cloth actually occupies
   // and the march would start inside it. Same uniform, same surface.
-  loadInstance(inst, 0);
+  loadInstance(inst, i32(instCfg.z));
   gWindDrift = gInstWind;
   gBodyAnchor = gInstAnchor;
   let rd = normalize(worldPos - camPos);
@@ -2144,7 +2149,7 @@ export const DEPTH_PREPASS_MARCH = /* wgsl */ `fn depthPrepassMarch(
   inst: ptr<storage, array<vec4<f32>>, read>,
   instCfg: vec4<f32>
 ) -> f32 {
-  loadInstance(inst, 0);
+  loadInstance(inst, i32(instCfg.z));
   gWindDrift = gInstWind;
   gBodyAnchor = gInstAnchor;
   let rd = normalize(worldPos - camPos);
@@ -2457,8 +2462,8 @@ export const MARCH_BODY_PARAMS = /* wgsl */ `(
   temporalCfg: vec4<f32>,
   // Instance record and config - crowd stage a - bound POSITIONALLY LAST in
   // the same commit as the kernel. instCfg x is the instance count, y is the
-  // crowd-material flag (1 = use instCentre/instHalf for the proxy box, 0 =
-  // use the record's bodyCentre/bodyHalf). NO PARENS and NO COLONS in this
+  // crowd-material flag - 1 = use instCentre/instHalf for the proxy box, 0 =
+  // use the record's bodyCentre/bodyHalf. NO PARENS and NO COLONS in this
   // comment either.
   inst: ptr<storage, array<vec4<f32>>, read>,
   instCfg: vec4<f32>,
@@ -2485,7 +2490,7 @@ export const MARCH_TRACE_SETUP = /* wgsl */ `  // FIRST STATEMENT, before anythi
   // invocation — the march steps, calcNormal, the AO and scatter probes. Set
   // it late and the normal would be taken against a different surface than
   // the one the march hit.
-  loadInstance(inst, 0);
+  loadInstance(inst, i32(instCfg.z));
   gWindDrift = gInstWind;
   gBodyAnchor = gInstAnchor;
   let rd = normalize(worldPos - camPos);

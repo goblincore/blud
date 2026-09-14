@@ -18,7 +18,7 @@ import * as THREE from 'three/webgpu';
 import { uniform, texture } from 'three/tsl';
 import { createCrowdPrimAtlas, type CrowdPrimAtlas } from './crowd-atlas';
 import {
-  createCrowdRecords, MAX_CROWD_INSTANCES, REC_VEC4S, REC_COUNTS, REC_WIND_ALIVE,
+  createCrowdRecords, allocateSlot, MAX_CROWD_INSTANCES, REC_VEC4S, REC_COUNTS, REC_WIND_ALIVE,
   type CrowdRecords,
 } from './crowd-records';
 import { createComputeTileBinding, MAX_TILE_GROUPS, type ComputeTileBinding } from './tile-bin-compute';
@@ -27,21 +27,14 @@ import {
   createCrowdMaterial, type CrowdMaterialSources, type MarchUniforms, type ZombieGpuView,
 } from './zombie-gpu';
 
+// Re-exported for the existing `./crowd-type` import sites; the function itself
+// now lives beside the record buffer it allocates from (task 7c), so
+// zombie-gpu.ts can reuse it without a circular import.
+export { allocateSlot };
+
 /** Floats per instance in the interleaved attribute buffer: iCentre.xyz,
  *  iHalf.xyz, iSlot. */
 export const INST_FLOATS = 7;
-
-/**
- * Lowest free slot, removed from `free`. -1 when the type is full. Linear in
- * the free-set size, and the set only ever holds free slots, so a full type
- * costs 64 checks — cheaper than a heap for this size and deterministic.
- */
-export function allocateSlot(free: Set<number>): number {
-  let best = -1;
-  for (const s of free) if (best < 0 || s < best) best = s;
-  if (best >= 0) free.delete(best);
-  return best;
-}
 
 /**
  * The high-water mark of a set of occupied slots: max(slot) + 1, or 0 when

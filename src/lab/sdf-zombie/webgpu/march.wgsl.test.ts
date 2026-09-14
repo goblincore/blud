@@ -1068,6 +1068,11 @@ describe('tile-list fold path (raymarcher-perf task 5)', () => {
 
   it('mapBody walks the per-pixel slot table: tile range vs cluster walk, both through foldGroup', () => {
     expect(MAP_BODY).toContain('let tiled = gTileActive > 0.5;');
+    // crowd stage a, task 7c: a shared-record single-field material offsets the
+    // slot index by its base record slot.
+    expect(MAP_BODY).toContain('let base = i32(instCfg.z);');
+    expect(MAP_BODY).toContain('loadInstance(inst, base + s);');
+    expect(MAP_BODY).toContain('bestSlot = base + s;');
     expect(MAP_BODY).toContain('let nIter = select(nInst, gPixN, tiled);');
     expect(MAP_BODY).toContain('let s = select(k, gPixSlot[k], tiled);');
     // The range walk folds exactly this slot's contiguous entry run; the

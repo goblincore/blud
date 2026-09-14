@@ -252,3 +252,88 @@ figure (the mandated Step-3 rule):
 
 Per-body canonical sha1 `a8ab4efac15fc0376c3e4e05420f13e34d1511bd` is
 unchanged (`scripts/march-hash.mjs`, run twice).
+
+## Task 7c — fallback-record views (2026-09-14)
+
+The Task 3+4 executor note left three views binding the zero-filled
+`fallbackCrowdRecords()` singleton (`counts = 0`) since `6d4bd2e3`, so they
+marched an EMPTY field: the FPV hands, the shared chunk material, and the
+hull refine. This task makes every `createMarchMaterial` call site bind a real
+record.
+
+### Kernel — base record slot
+
+`instCfg.z` is now the **base record slot**. `MAP_BODY` reads
+`let base = i32(instCfg.z);` and loads `base + s` (the winner is recorded as
+`bestSlot = base + s`, so `gHitSlot` is absolute); `MARCH_TRACE_SETUP` and the
+cone/depth-pre entry functions load `i32(instCfg.z)` instead of slot 0. Every
+pre-existing caller passes `z = 0`, so `base + s == s` and the canonical
+per-body march is bit-identical.
+
+### One record writer
+
+`writeViewRecord(records, slot, u, centre, band?)` (exported from
+`zombie-gpu.ts`, sourced from the per-body view's old `syncRecord` body) is now
+the single writer for the body, hands, hull and chunk views. `band` defaults to
+`slot * DATA_ROWS` (the banded-atlas case). **Chunks pass `band = 0`**: each
+chunk binds its OWN single-band `DataTexture` per draw and shares only the
+record buffer, so its slot indexes the record, not a band. `CrowdRecords.write`
+gained the matching optional `band` argument (the existing test's default-band
+assertion still holds). `allocateSlot` moved to `crowd-records.ts` (re-exported
+by `crowd-type.ts`) so the shared chunk material can reuse it without a
+circular import.
+
+### Views
+
+- **Hands (`fpv-view.ts`)** — owns `createCrowdRecords(1)` + `instCfg`
+  `(1,0,0,0)`; passes `{ inst, instCfg }` to `createMarchMaterial` (16
+  positional `undefined`s to reach the last parameter); `syncHandsRecord()`
+  runs after every record-backed uniform write, at construction, and in
+  `update()`/`setField`/`setVolumePose`/`setProjection`.
+- **Chunks (`zombie-gpu.ts`)** — `createSharedChunkGpuMaterial(options?)`
+  owns ONE `createCrowdRecords(maxChunks)` (default 64; game-main passes its
+  `MAX_CHUNKS = 12`) and `allocSlot()`/`freeSlot()`. Its per-draw `instCfgNode`
+  is rebound through `bindObjectValue` to the rendered object's cached
+  `(1, 0, slot, 0)`. `createChunkGpuView` allocates a slot, stores
+  `{ slot, records, instCfg }` in `ChunkMaterialState`, and calls
+  `syncChunkRecord()` (band 0) at the end of `reset()` and `update()` — chunks
+  move, so `bodyCentre` changes every frame. Isolated views (no shared
+  material) own a one-slot buffer at slot 0. `dispose()` frees the shared slot.
+- **Hull refine (`hull-refine-view.ts`)** — `HullInnerView` now requires
+  `records` + `instCfg` (both exposed on `ZombieGpuView` and `ChunkGpuView`);
+  the hull material binds the INNER view's record, so it marches the same body.
+
+### `scripts/views-smoke.mjs`
+
+Boots the standard close-up (same pins as `march-hash.mjs`), counts march-target
+hit pixels (`alpha < 1`), spawns one stationary test chunk at the staged body
+through the real `__sdfGame.spawnTestChunk` path, and counts again.
+
+| commit | `base` | `withHands` | `withChunk` |
+| --- | ---: | ---: | ---: |
+| Task 0 `909a58b2` (per-body truth) | 33344 | null | **33692** |
+| branch HEAD `e1aea628` (pre-fix) | 33344 | null | **33344** (empty field) |
+| this task (post-fix) | 33344 | null | **33692** |
+
+`withHands` is `null`: `sdf-game.html` has no SDF hands view — its first-person
+hands are the mesh `goblin-arm.glb` groups (`fpv-hand-grip`/`fpv-hand-fore`),
+while `createHandsGpuView` is lab-only (`lab-main.ts`). The script probes for a
+`setHandsVisible`/`showHands` seam and will measure it if one is ever added.
+The hands record is instead proved by `fpv-view.test.ts`'s new
+"inherits the hand's per-instance state into record slot 0 at band 0" test.
+
+### Gates
+
+- `npx tsc --noEmit -p .` clean.
+- `node scripts/march-hash.mjs` canonical `room1 = a8ab4e…` (x2, wounded
+  `da785297…`).
+- `node scripts/march-parity.mjs` **PASS** — every line identical to Task 7b.
+- `views-smoke.mjs` post-fix `withChunk 33692` matches Task 0 exactly; pre-fix
+  it read `33344 == base` (the empty-field bug reproduced).
+- Fixed a pre-existing `march-wound-list.test.ts` violation in the
+  `MARCH_BODY_PARAMS` `instCfg` comment (it contained `(...)`, which the
+  parameter-list "no parens" pin forbids) that had been failing since the crowd
+  parameters landed.
+
+Also fixed: `deferred-sdf.test.ts`'s "trace's first statement precedes the
+prologue" pin now matches `loadInstance(inst, i32(instCfg.z));`.

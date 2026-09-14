@@ -47,7 +47,7 @@ export interface CrowdRecords {
   /** Read-only storage node to bind as the kernel's `inst` param. */
   readonly node: CrowdRecordNode;
   dirty: boolean;
-  write(slot: number, src: RecordSource): void;
+  write(slot: number, src: RecordSource, band?: number): void;
   alive(slot: number, on: boolean): void;
   /** Flags the attribute for upload if dirty; call once per frame after all writes. */
   flush(): void;
@@ -64,12 +64,12 @@ export function createCrowdRecords(capacity = MAX_CROWD_INSTANCES): CrowdRecords
   };
   const rec: CrowdRecords = {
     capacity, floats, attribute, node, dirty: false,
-    write(slot, s) {
+    write(slot, s, band = slot * DATA_ROWS) {
       const b = slot * REC_VEC4S * 4;
       put4(b + REC_COUNTS * 4, s.counts);
       put4(b + REC_COUNTS2 * 4, s.counts2);
       put4(b + REC_WOUND_BOUND * 4, s.woundBound);
-      put4(b + REC_ANCHOR_BAND * 4, s.bodyAnchor, slot * DATA_ROWS);
+      put4(b + REC_ANCHOR_BAND * 4, s.bodyAnchor, band);
       put4(b + REC_WIND_ALIVE * 4, s.windDrift, 1);
       put4(b + REC_MELT * 4, s.meltCfg);
       put4(b + REC_FLASH * 4, s.bodyFlash);
@@ -96,4 +96,18 @@ let fallback: CrowdRecords | null = null;
 export function fallbackCrowdRecords(): CrowdRecords {
   if (!fallback) fallback = createCrowdRecords(1);
   return fallback;
+}
+
+/**
+ * Lowest free slot, removed from `free`. -1 when the set is full. Linear in
+ * the free-set size, and the set only ever holds free slots, so a full set
+ * costs its capacity checks — cheaper than a heap for this size and
+ * deterministic. Shared by the CrowdType slot pool and the shared chunk
+ * material's record-slot pool (task 7c), so both allocate lowest-first.
+ */
+export function allocateSlot(free: Set<number>): number {
+  let best = -1;
+  for (const s of free) if (best < 0 || s < best) best = s;
+  if (best >= 0) free.delete(best);
+  return best;
 }

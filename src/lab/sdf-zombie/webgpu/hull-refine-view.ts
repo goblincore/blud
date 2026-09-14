@@ -7,6 +7,7 @@
 import * as THREE from 'three/webgpu';
 import { cameraPosition, float, length, mul, normalize, positionWorld, sub, uniform, add } from 'three/tsl';
 import { createMarchMaterial, marchBody, type MarchUniforms } from './zombie-gpu';
+import type { CrowdRecords } from './crowd-records';
 import { createSurfaceNetsCompute, type SurfaceNetsCompute, type HullExtractStats } from './surface-nets-compute';
 
 export type HullRenderer = 'march' | 'hull';
@@ -30,6 +31,11 @@ export interface HullInnerView {
   uniforms: MarchUniforms;
   dataTexture: THREE.Texture;
   volumeTexture: THREE.Texture;
+  /** Crowd stage a: the inner view's record buffer + base-slot config. The
+   *  hull marches the SAME body as the inner view, so it must read the inner
+   *  view's record, not own a zero-filled fallback. */
+  records: CrowdRecords;
+  instCfg: ReturnType<typeof uniform>;
   dispose(): void;
   update?(...args: never[]): void;
   setWounds?(...args: never[]): void;
@@ -74,6 +80,9 @@ function defaultMaterial(inner: HullInnerView, hullMarchCfg: ReturnType<typeof u
     inner.dataTexture, inner.volumeTexture, inner.uniforms, marchBody,
     undefined, undefined, undefined, undefined, undefined, undefined,
     { worldPos: farPoint, startT: hullT, marchCfg: hullMarchCfg, side: THREE.FrontSide },
+    undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined,
+    { inst: inner.records.node, instCfg: inner.instCfg },
   );
 }
 

@@ -39,7 +39,7 @@ import {
   ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS,
 } from './march.wgsl';
 import { TEMPORAL_START_WGSL } from './temporal-start';
-import { createCrowdRecords, fallbackCrowdRecords, type CrowdRecords } from './crowd-records';
+import { createCrowdRecords, fallbackCrowdRecords, allocateSlot, MAX_CROWD_INSTANCES, type CrowdRecords } from './crowd-records';
 import { createCrowdPrimAtlas, type PrimSink } from './crowd-atlas';
 import { sdfSurfaceMarch, sdfSurfaceMrtNodes } from './deferred-sdf';
 import {
@@ -165,6 +165,9 @@ export interface ZombieGpuView {
   /** Crowd stage a: the per-instance record buffer this view writes through
    *  syncRecord(). Exposed so the frame-hash seam can cover pose/wound state. */
   records: CrowdRecords;
+  /** Crowd stage a: this view's base record slot + instance-count config. A
+   *  twin material (the hull refine) binds the SAME record and slot. */
+  instCfg: ReturnType<typeof uniform>;
   /** Copies every per-instance uniform into the record at this view's slot.
    *  Call after any setter that touches one of the record's fields. */
   syncRecord(): void;
@@ -1438,6 +1441,34 @@ export interface CrowdMaterialSources {
 }
 
 /**
+ * Crowd stage a (task 7c): copy every per-instance uniform into a record slot.
+ * ONE writer for every view that marches a record (the per-body view, the FPV
+ * hands, the hull refine through its inner view, and the shared chunk
+ * material), so the record layout cannot drift between them.
+ *
+ * `band` overrides the data-texture row band the record points at. The default
+ * (undefined -> slot * DATA_ROWS) is the banded-atlas case. Chunks bind their
+ * OWN single-band DataTexture per draw and share only the record buffer, so
+ * they pass band 0 — their slot indexes the record, not a band.
+ */
+export function writeViewRecord(
+  records: CrowdRecords, slot: number, u: MarchUniforms, centre: THREE.Vector3, band?: number,
+): void {
+  records.write(slot, {
+    counts: u.counts.value.toArray(), counts2: u.counts2.value.toArray(),
+    woundBound: u.woundBound.value.toArray(), bodyAnchor: u.bodyAnchor.value.toArray(),
+    windDrift: u.windDrift.value.toArray(), meltCfg: u.meltCfg.value.toArray(),
+    bodyFlash: u.bodyFlash.value.toArray(),
+    noiseShift: [u.faceCfg3.value.z, u.lodCfg.value.z, u.faceCfg3.value.w], bodyYaw: u.lodCfg.value.z,
+    headCentre: u.headCentre.value.toArray(), woundCount: u.woundCfg.value.x,
+    headQuat: u.headQuat.value.toArray(), volumePose0: u.volumePose0.value.toArray(),
+    volumePose1: u.volumePose1.value.toArray(),
+    bodyCentre: centre.toArray(), variantSeed: 0, bodyHalf: u.bodyHalf.value.toArray(),
+    damageRevision: 0,
+  }, band);
+}
+
+/**
  * Crowd stage a (Task 5): the ONE material pair a character type draws every
  * instance with. A thin wrapper around createMarchMaterial that
  *
@@ -1538,6 +1569,14 @@ interface ChunkMaterialState {
   dataTexture: THREE.Texture;
   volumeTexture: THREE.Texture;
   uniforms: MarchUniforms;
+  /** Crowd stage a (task 7c): the shared record slot this chunk writes its
+   *  per-instance state into. */
+  slot: number;
+  /** The record buffer the slot lives in (the shared material's, or a
+   *  private one-slot buffer for an isolated chunk view). */
+  records: CrowdRecords;
+  /** Per-draw base-slot config: x = 1 (one field), z = record slot. */
+  instCfg: THREE.Vector4;
 }
 
 const CHUNK_MATERIAL_STATE = '__sdfChunkMaterialState';
@@ -1577,8 +1616,17 @@ export interface SharedChunkGpuMaterial {
   dataNode: { value: THREE.Texture; update: (frame: { object: THREE.Object3D }) => void };
   /** The per-draw bound volume-texture node. */
   volumeNode: { value: THREE.Texture; update: (frame: { object: THREE.Object3D }) => void };
+  /** The per-draw bound base-slot node (x=1, z = the object's record slot). */
+  instCfgNode: { value: THREE.Vector4; update: (frame: { object: THREE.Object3D }) => void };
   /** The seed uniform NODES — every one rebinds its .value per draw. */
   uniformNodes: MarchUniforms;
+  /** Crowd stage a (task 7c): ONE record buffer shared by every chunk view;
+   *  each view owns a distinct slot (chunks share the material's `inst` node,
+   *  so they cannot own per-chunk buffers). */
+  records: CrowdRecords;
+  /** Lowest free record slot, or -1 when all `maxChunks` slots are taken. */
+  allocSlot(): number;
+  freeSlot(slot: number): void;
   dispose(): void;
 }
 
@@ -1593,16 +1641,28 @@ export function createSharedChunkGpuMaterial(
   const seedUniforms = defaultUniforms(seedFace);
   const { tex: seedData } = createDataTexture();
   const seedVolume = createFallbackHandVolumeTexture();
+  // Crowd stage a (task 7c): ONE record buffer for every chunk, each chunk at
+  // its own slot. Capacity defaults to the crowd maximum; the page passes its
+  // own view cap (MAX_CHUNKS) so the pool can never under-allocate.
+  const records = createCrowdRecords(options?.maxChunks ?? MAX_CROWD_INSTANCES);
+  const freeSlots = new Set<number>();
+  for (let i = 0; i < records.capacity; i++) freeSlots.add(i);
 
   for (const key of Object.keys(seedUniforms) as (keyof MarchUniforms)[]) {
     bindObjectValue(seedUniforms[key], state => state.uniforms[key].value);
   }
   const dataNode = bindObjectValue(texture(seedData), state => state.dataTexture);
   const volumeNode = bindObjectValue(texture3D(seedVolume), state => state.volumeTexture);
+  // Per-draw base slot. The chunk's own instCfg vector is returned (never a
+  // fresh allocation per draw) so the renderer's uniform write reads it.
+  const instCfgNode = uniform(new THREE.Vector4(1, 0, 0, 0));
+  bindObjectValue(instCfgNode, state => state.instCfg);
   const material = createMarchMaterial(
     dataNode, volumeNode, seedUniforms,
     undefined, undefined, undefined, undefined, undefined, prev,
     undefined, undefined, undefined, options?.output ?? 'lit', options?.shadowReceiver,
+    undefined, undefined, undefined, undefined, undefined, undefined,
+    { inst: records.node, instCfg: instCfgNode },
   );
 
   let disposed = false;
@@ -1610,7 +1670,13 @@ export function createSharedChunkGpuMaterial(
     material,
     dataNode: dataNode as unknown as SharedChunkGpuMaterial['dataNode'],
     volumeNode: volumeNode as unknown as SharedChunkGpuMaterial['volumeNode'],
+    instCfgNode: instCfgNode as unknown as SharedChunkGpuMaterial['instCfgNode'],
     uniformNodes: seedUniforms,
+    records,
+    allocSlot() { return allocateSlot(freeSlots); },
+    freeSlot(slot) {
+      if (slot >= 0 && slot < records.capacity) freeSlots.add(slot);
+    },
     dispose() {
       if (disposed) return;
       disposed = true;
@@ -2234,18 +2300,7 @@ export function createZombieGpuView(
    *  kernel reads. The uniform nodes stay authoritative for the per-TYPE
    *  block; this is the bridge for the per-INSTANCE half. */
   function syncRecord() {
-    records.write(slot, {
-      counts: u.counts.value.toArray(), counts2: u.counts2.value.toArray(),
-      woundBound: u.woundBound.value.toArray(), bodyAnchor: u.bodyAnchor.value.toArray(),
-      windDrift: u.windDrift.value.toArray(), meltCfg: u.meltCfg.value.toArray(),
-      bodyFlash: u.bodyFlash.value.toArray(),
-      noiseShift: [u.faceCfg3.value.z, u.lodCfg.value.z, u.faceCfg3.value.w], bodyYaw: u.lodCfg.value.z,
-      headCentre: u.headCentre.value.toArray(), woundCount: u.woundCfg.value.x,
-      headQuat: u.headQuat.value.toArray(), volumePose0: u.volumePose0.value.toArray(),
-      volumePose1: u.volumePose1.value.toArray(),
-      bodyCentre: mesh.position.toArray(), variantSeed: 0, bodyHalf: u.bodyHalf.value.toArray(),
-      damageRevision: 0,
-    });
+    writeViewRecord(records, slot, u, mesh.position);
     if (ownRecords) ownRecords.flush();
   }
 
@@ -2259,6 +2314,7 @@ export function createZombieGpuView(
     volumeTexture: volumeTex,
     dataTexture: dataTex,
     records,
+    instCfg,
     syncRecord,
     rebind(r) {
       sink = r.sink;
@@ -2421,6 +2477,11 @@ export interface ChunkGpuView {
   /** The packed prim DataTexture this view uploads to — the hull extraction
    *  kernel reads the same texture the march does. */
   dataTexture: THREE.Texture;
+  /** Crowd stage a (task 7c): this chunk's record buffer and base-slot node
+   *  (used by a hull-refine twin and the frame-hash seam). With a shared
+   *  material the buffer is the material's, and the node's z is the slot. */
+  records: CrowdRecords;
+  instCfg: ReturnType<typeof uniform>;
   /** Reuses this mesh/render-object slot for a newly spawned chunk. */
   reset(chunk: Chunk, prims: Primitive[], tornAt?: Vec3[], bones?: Primitive[]): void;
   update(chunk: Chunk): void;
@@ -2510,10 +2571,30 @@ export function createChunkGpuView(
   const volTex = volumeTex ?? createFallbackHandVolumeTexture();
 
   const ownsMaterial = !sharedMaterial;
+  // Crowd stage a (task 7c): chunks share ONE record buffer (the shared
+  // material binds a single `inst` node, so it cannot carry per-chunk
+  // buffers). Each view owns a distinct slot. An isolated view (no shared
+  // material, e.g. tests) owns a private one-slot buffer at slot 0.
+  const ownRecords = sharedMaterial ? null : createCrowdRecords(1);
+  let slot = 0;
+  if (sharedMaterial) {
+    slot = sharedMaterial.allocSlot();
+    if (slot < 0) throw new Error(`shared chunk material is full (${sharedMaterial.records.capacity} slots)`);
+  }
+  const records = sharedMaterial ? sharedMaterial.records : ownRecords!;
+  // The chunk binds its OWN single-band data texture per draw, so its record
+  // points at band 0 (NOT slot * DATA_ROWS); the slot indexes the record.
+  // instCfg.z = the base record slot, read by MAP_BODY. In the shared case the
+  // material's per-draw bound node carries this vector; an isolated view binds
+  // its own uniform node.
+  const instCfg = new THREE.Vector4(1, 0, slot, 0);
+  const ownInstCfgNode = uniform(instCfg.clone());
   const material = sharedMaterial?.material ?? createMarchMaterial(
     dataTex, volTex, u,
     undefined, undefined, undefined, undefined, undefined, undefined,
     undefined, undefined, undefined, options?.output ?? 'lit', options?.shadowReceiver,
+    undefined, undefined, undefined, undefined, undefined, undefined,
+    { inst: records.node, instCfg: ownInstCfgNode },
   );
   // A unit proxy lets reset() resize this exact mesh with scale instead of
   // replacing its geometry. Object identity is what bounds Three's
@@ -2523,8 +2604,20 @@ export function createChunkGpuView(
     dataTexture: dataTex,
     volumeTexture: volTex,
     uniforms: u,
+    slot,
+    records,
+    instCfg,
   } satisfies ChunkMaterialState;
   mesh.frustumCulled = false;
+
+  /** Crowd stage a (task 7c): push the chunk's per-instance uniforms into its
+   *  record slot at BAND 0 (the chunk's data texture is single-band and bound
+   *  per draw). Called once per frame from apply(), and at the end of reset()
+   *  after bodyHalf is written. */
+  function syncChunkRecord(): void {
+    writeViewRecord(records, slot, u, mesh.position, 0);
+    records.flush();
+  }
 
   let local: Primitive[] = [];
   /** The severed limb's BONE prims, recentred like `local` (gore r3
@@ -2779,6 +2872,7 @@ export function createChunkGpuView(
     // field, while squash remains in world axes.
     mesh.scale.set(proxySize * sx, proxySize * sy, proxySize * sz);
     u.bodyHalf.value.set(proxySize * sx / 2, proxySize * sy / 2, proxySize * sz / 2);
+    syncChunkRecord();
   }
 
   reset(chunk, prims, tornAt, bones);
@@ -2788,6 +2882,8 @@ export function createChunkGpuView(
     uniforms: u,
     volumeTexture: volTex,
     dataTexture: dataTex,
+    records,
+    instCfg: ownInstCfgNode,
     reset,
     setPackBones(on: boolean) {
       if (on === packBones) return;
@@ -2867,12 +2963,15 @@ export function createChunkGpuView(
       mesh.position.set(c.pos[0], c.pos[1], c.pos[2]);
       mesh.scale.set(proxySize * sx, proxySize * sy, proxySize * sz);
       u.bodyHalf.value.set(proxySize * sx / 2, proxySize * sy / 2, proxySize * sz / 2);
+      syncChunkRecord();
     },
     dispose() {
       mesh.geometry.dispose();
       if (ownsMaterial) material.dispose();
       dataTex.dispose();
       if (ownsVolume) volTex.dispose();
+      // Crowd stage a (task 7c): return the shared record slot to the pool.
+      sharedMaterial?.freeSlot(slot);
       delete mesh.userData[CHUNK_MATERIAL_STATE];
     },
   };

@@ -3962,7 +3962,9 @@ async function main() {
   // the legacy prev source is only bound in legacy mode.
   const chunkMaterial = createSharedChunkGpuMaterial(
     deferredMode ? undefined : sdfLayer.prev,
-    deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined,
+    deferredMode
+      ? { output: 'surface', shadowReceiver: 'level-only', maxChunks: MAX_CHUNKS }
+      : { maxChunks: MAX_CHUNKS },
   );
   const chunkViews: ChunkGpuView[] = [];
   const spareChunkViews: ChunkGpuView[] = [];

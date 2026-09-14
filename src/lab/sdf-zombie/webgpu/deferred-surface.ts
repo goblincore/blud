@@ -187,6 +187,11 @@ export interface SurfaceOutputOptions {
   /** Which flashlight shadow map this producer's surface samples. Default
    *  'full' (the existing opaque-mesh receiver category). */
   shadowReceiver?: ShadowReceiver;
+  /** Crowd stage a (task 7c): capacity of the shared chunk record buffer. A
+   *  chunk view allocates one record slot; the pool never exceeds the number
+   *  of simultaneously-live chunk views, so the page passes its own cap.
+   *  Default 64 (MAX_CROWD_INSTANCES). */
+  maxChunks?: number;
 }
 
 function assertClipDepth(value: number, label: string): void {

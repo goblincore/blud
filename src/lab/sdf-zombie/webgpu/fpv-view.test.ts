@@ -18,6 +18,7 @@ import {
   type HandVolume,
 } from './hand-volume';
 import { validateHandClipManifest, type HandClipVolume } from './hand-volume-clip';
+import { REC_ANCHOR_BAND, REC_COUNTS, REC_HEAD_WCOUNT } from './crowd-records';
 import type { Primitive, Vec3 } from '../types';
 import type { Wound } from '../damage';
 
@@ -72,6 +73,19 @@ describe('HandsGpuView field switching (X1.26 task B4)', () => {
     expect(view.volumeTexture).toBeInstanceOf(THREE.Data3DTexture);
     view.update(PRIMS, []);
     expect(view.uniforms.counts.value.x).toBe(PRIMS.length); // fold alive
+    view.dispose();
+  });
+
+  it('task 7c: the hand writes its per-instance state into record slot 0 at band 0', () => {
+    const view = createHandsGpuView(templateUniforms(), 'armR');
+    view.update(PRIMS, WOUNDS);
+    const f = view.records.floats;
+    // Primitive fold alive: counts = the packed prim count the uniform carries.
+    expect(f[REC_COUNTS * 4]).toBe(PRIMS.length);
+    // Single-band data texture: the record points at band 0.
+    expect(f[REC_ANCHOR_BAND * 4 + 3]).toBe(0);
+    // Wound count rides the head-centre record's .w.
+    expect(f[REC_HEAD_WCOUNT * 4 + 3]).toBe(WOUNDS.length);
     view.dispose();
   });
 

@@ -101,7 +101,7 @@ describe('the surface entry IS the production march, not a copy', () => {
     );
     // The prologue (output reset) must precede the trace's first statement.
     expect(MARCH_SURFACE.indexOf('_ = sdfSurfaceStateReset();'))
-      .toBeLessThan(MARCH_SURFACE.indexOf('loadInstance(inst, 0);'));
+      .toBeLessThan(MARCH_SURFACE.indexOf('loadInstance(inst, i32(instCfg.z));'));
   });
 
   it('runs the real material chain — tissue, char, face, painted prims, melt — not the flat-albedo seam', () => {
