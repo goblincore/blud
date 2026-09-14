@@ -335,6 +335,14 @@ export async function createLabRenderer(mount: HTMLElement, cap?: RenderCap): Pr
   // resolve has to keep up with the frames. One in-flight resolve at a time is
   // enough: it is async, and a reading every few frames is plenty for tuning.
   let resolving = false;
+  // The COMPUTE pool is separate from the render pool and three resolves
+  // neither on its own. The crowd path alone runs 24 compute passes per frame
+  // (6 types x 4 tile-bin kernels); unresolved, the compute pool's 2048-query
+  // capacity overflowed in ~85 frames and three's warnOnce fired mid-game
+  // ('THREE.WebGPUTimestampQueryPool [compute]: Maximum number of queries
+  // exceeded'). Both pools are drained here, each with its own in-flight
+  // guard (resolveQueriesAsync already coalesces concurrent calls per pool).
+  let resolvingCompute = false;
 
   const loop = () => {
     const now = performance.now();
@@ -378,6 +386,12 @@ export async function createLabRenderer(mount: HTMLElement, cap?: RenderCap): Pr
       renderer.resolveTimestampsAsync()
         .catch(() => {})
         .finally(() => { resolving = false; });
+    }
+    if (!resolvingCompute) {
+      resolvingCompute = true;
+      renderer.resolveTimestampsAsync(THREE.TimestampQuery.COMPUTE)
+        .catch(() => {})
+        .finally(() => { resolvingCompute = false; });
     }
   };
   renderer.setAnimationLoop(loop);
