@@ -91,6 +91,104 @@ Artifacts: `crowd24-perbody/bench.{json,md}`, `crowd24-perbody/passes.{json,md}`
 - `src/lab/sdf-zombie/webgpu/game-main.ts` — `__sdfGame.spawnCrowd(name, n)`
   next to `spawnDebugCharacter`, returning how many landed.
 
+## Task 7e — visible-only binning, behind-plane cull (2026-09-14)
+
+Removes the two confounds Task 7d identified: `?crowd=1` attached the WHOLE cast
+and the binners sent every behind-camera sphere into every tile. Two changes,
+both in `sync()`/the two binners; the per-body path is untouched.
+
+**Visible-only packing (`crowd-type.ts`, `game-main.ts`).**
+`CrowdType.sync(camera, grid, visibleSlots)` now `continue`s any slot outside
+`visibleSlots` (it stays attached and alive; the record keeps its band, so
+re-showing is a re-pack, not a re-attach). `info().visible` is the count actually
+packed. In `game-main.ts` the crowd sync moved AFTER `updateVisibleActors()` and
+builds one `Set` per type from that frame's `visibleActors`
+(`a.crowd?.type === t`). The A/B is therefore body-count-honest: at room 1 the
+crowd-on census (soldier 1 / zombie 2) exactly equals the per-body baseline's.
+
+**Behind-plane zero-tile rule (`tile-cull.ts` + `tile-bin-compute.ts`).** Both
+binners now test the sphere's FARTHEST point along the view axis
+(`farDist = -v.z + rBlend`) before the cover-all branch: a sphere whose far end
+is still behind the eye plane is reachable by no forward ray and touches no
+pixel, so it binds ZERO tiles. A sphere that CROSSES the plane
+(`nearDist <= 0 < farDist`) keeps the cover-every-tile rule. The empty range uses
+the binners' existing off-screen encoding (CPU `0..-1` / GPU `tx1 = ty1 = -1`).
+the JS range reimplementation inside `__sdfLab.tileAB` (lab-main.ts) was mirrored
+too, or every behind-camera group would have read as a phantom range mismatch.
+
+**Gates.** `npx tsc --noEmit -p .` clean. The named vitest files pass (258 tests
+across `crowd-type` 6, `tile-cull` 7, `tile-bin-compute` 17, `march.wgsl` 228);
+the crowd-type test builds a real `CrowdType` over a stub renderer and asserts
+`instanceCount 2` / `instCfg.x 3` / no slot-1 group for `visibleSlots {0,2}`.
+Canonical `node scripts/march-hash.mjs` = `a8ab4efac15fc0376c3e4e05420f13e34d1511bd`
+(×2; wounded `da785297…`) — the per-body tiles-off path is bit-identical, as it
+must be (it never had behind-camera hero groups). `node scripts/march-parity.mjs`
+**PASS**, tiles off and tiles on, with the SAME numbers as Task 7b
+(`maskDiff 0`, maxDz 1.379e-3 room 2, flat RGB 0 channels): the clamp fix did NOT
+move the gated crowd pixels.
+
+The real GPU bit-identity A/B (`scripts/tile-ab.mjs` against
+`__sdfLab.tileAB`) was **not run**: it drives `sdf-lab-webgpu.html` with a
+baked character blob, and this worktree has no baked blobs
+(`assets-source/humanoid-sdf/` holds only the source `.glb`; `public/assets`
+has no character dir), so the lab page cannot boot a subject. The CPU side is
+covered by the new fixture in `tile-bin-compute.test.ts` (a line-for-line
+`PROJECTION_BLOCK` transcription vs `TileBinner`, with the two new groups), and
+the live GPU binner was exercised end-to-end by `march-parity` under
+`?crowd=1&tiles-playtest` (its `compute:tile-bin` pass ran; no fallback).
+
+### Bench (repeats=1, `BENCH_PASSES=1`, `crowd=1&tiles-playtest`)
+
+Load average at the two runs: 3.79/4.06/4.00 (rooms 1–2) and 2.49/3.35/3.71
+(crowd 8) — 1-minute load under the 4 ceiling on entry, recorded per the rule.
+
+| run | room | leg | `sdf:march` p50 | fenced frame p50 |
+| --- | ---: | --- | ---: | ---: |
+| `7e-rooms12` | 1 | baseline | 50.70 | 54.15 |
+| `7e-rooms12` | 1 | crowd-on | 65.97 | 68.12 |
+| `7e-rooms12` | 2 | baseline | 26.40 | 32.45 |
+| `7e-rooms12` | 2 | crowd-on | 36.24 | 42.07 |
+| `7e-crowd8` | 1 | baseline | 54.87 overall | — |
+| `7e-crowd8` | 1 | crowd-on | probe aborted | — |
+| `7e-crowd24` | — | — | NOT RUN (stop rule) | — |
+
+`crowdInfo()` on the crowd-on legs: `tileFallbacks 0`, `culledByBudget 0`,
+`clampedTiles **0**` in both rooms (room-1 soldier 4 attached / 1 visible, zombie
+11 / 2; room-2 soldier 4 / 0, zombie 11 / 5). **The tens-of-thousands clamp is
+gone: 9533 → 0 (room 1 soldier), 18138 → 0 (room 1 zombie), 43779 → 0
+(room 2 zombie).** That is the acceptance bar and the mechanism the whole task
+exists for: with only the visible instances packed and the behind-camera tail
+omitted, no tile reaches the 64-entry cap.
+
+### Verdict against spec §5 a-3
+
+| comparison | Task 7d | Task 7e |
+| --- | ---: | ---: |
+| room 1 crowd-on / baseline march | 68.36 / 53.70 = 1.27× | 65.97 / 50.70 = **1.30×** |
+| room 2 crowd-on / baseline march | 72.99 / 39.00 = 1.87× | 36.24 / 26.40 = **1.37×** |
+| crowd-on visible (room 1, end of leg) | whole cast (4+11) | baseline census (1+2) |
+
+**Flat at 3–5 bodies: closer, not yet.** The premium is now 1.30–1.37× across
+2→5 visible bodies instead of 1.27→1.87×, i.e. the curve no longer climbs with
+the cast — but crowd-on is still ~1.3× the per-body march in the tiles-on
+close-up. That residual is the structural cost a-2-2 (per-tile screen quads)
+exists to remove; this task only removed the cast-proportional component.
+
+**Crowd 8: still a probe abort, and now confirmed reproducible.** With
+`BENCH_CROWD=8` the room-1 crowd-on probe never answered
+(`probe evaluate failed after 30 s: CDP Runtime.evaluate never answered in 60s`),
+exactly as Task 7d recorded; a second run of the crowd-on leg ALONE reproduced
+it (`7e-crowd8-confirm/`), so it is not the old hidden-frames flake. The baseline
+leg in the same process completed (54.87 ms overall), so the harness is fine.
+Per the stop rule the crowd 8 crowd-on march is therefore unmeasurable and
+**crowd 24 was NOT run** — the `≤ 2× room-1 crowd-on` precondition cannot be
+checked against a number that does not exist. Nothing hung: the frame-cap guard
+aborted the probe in-process, the driver logged the abort, and Chrome was killed
+by the lab-server trap. Recorded as an open limit, not a pass.
+
+Artifacts: `7e-rooms12/`, `7e-crowd8/`, `7e-crowd8-confirm/` (`bench.{json,md}` +
+`passes.{json,md}` each).
+
 ## Next
 
 Task 1 (`crowd-records.ts`) — the 16-vec4 instance record and the
