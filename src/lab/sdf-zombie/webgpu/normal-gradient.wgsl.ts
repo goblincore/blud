@@ -14,6 +14,13 @@ const NG_STATE = /* wgsl */ `fn ngReset() -> f32 {
   return 0.0;
 }
 var<private> gNgReason: i32;
+// TERM BISECT MASK (crowd diagnostics 2026-09-14), fed from normalGradientCfg.z
+// in MARCH_TRACE_POST. 0 = production. bit 1 skip ngWounds, bit 2 skip
+// ngBones/ngInternalLower, bit 4 skip the ngExcluded certificates, bit 8 skip
+// ngDetail (POST), bit 16 force the cluster walk even with tiles on. Each bit
+// removes exactly one analytic term so mode 12 (dot(analytic, FD)) can name a
+// slot-relative term; inert at 0.
+var<private> gNgDebugMask: u32;
 `;
 
 const NG_Q_ROT = /* wgsl */ `fn ngQRot(q: vec4<f32>, v: vec3<f32>) -> vec3<f32> {
@@ -186,6 +193,7 @@ export function buildNormalGradientFn(source: string): ReturnType<typeof wgslFn>
 // Game integration is registered AFTER the scalar helpers, only for march.
 // It has no writes to production gFold* owner/hit metadata.
 const NG_EXCLUDED = /* wgsl */ `fn ngExcluded(p: vec3<f32>, bounds: vec4<f32>, grp: vec4<f32>, data: texture_2d<f32>, band: i32) -> f32 {
+  if ((gNgDebugMask & 4u) != 0u) { return 1e9; }
   // The enclosing sphere minus R contains the entire stencil. OUTSIDE it,
   // each supported capsule's field is >= Euclidean exterior / distortion.
   // Inside an enclosing sphere no lower field bound follows from that sphere.
@@ -390,7 +398,13 @@ const NG_BONES = /* wgsl */ `fn ngBones(flesh: vec4<f32>, p: vec3<f32>, data: te
 }`;
 
 export const NG_BODY = /* wgsl */ `fn ngBody(p: vec3<f32>, data: texture_2d<f32>, noiseCfg: vec4<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, volumeTex: texture_3d<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>, perfCfg: vec4<f32>, inst: ptr<storage, array<vec4<f32>>, read>, instCfg: vec4<f32>) -> vec4<f32> {
-  loadInstance(inst, 0);
+  // CROWD (2026-09-14): DO NOT reload an instance here. The caller owns the
+  // band: MARCH_TRACE_POST loads the HIT slot (loadInstance(inst, gHitSlot))
+  // and pins it before calling, and ngBodyPoint loads its own base slot.
+  // ngBody used to start with loadInstance(inst, 0), which for every slot
+  // but the first silently replaced the hit instance's gBand/gInst* with
+  // slot 0's — so the analytic gradient was differentiated against the wrong
+  // body (probe: slot 0 dot 1.0, every other slot ~ -0.42).
   let resetMarker = ngReset();
   gNgBest = 1e9;
   gNgSecond = 1e9;
@@ -400,7 +414,8 @@ export const NG_BODY = /* wgsl */ `fn ngBody(p: vec3<f32>, data: texture_2d<f32>
   if (gInstVolPose0.w > 0.5) { gNgReason = 6; return d; }
   if (gInstCounts2.y > 0.5) { gNgReason = 1; return d; }
   let R = 0.002598076211;
-  if (gTileActive > 0.5) {
+  let useTiles = gTileActive > 0.5 && (gNgDebugMask & 16u) == 0u;
+  if (useTiles) {
     for (var e = 0; e < ${TILE_MAX_ENTRIES}; e = e + 1) {
       if (f32(e) >= gTileN) { break; }
       // CROWD (2026-09-14): the union field is a plain min over instances, so
@@ -425,7 +440,7 @@ export const NG_BODY = /* wgsl */ `fn ngBody(p: vec3<f32>, data: texture_2d<f32>
       let g = i32(gspan.x) + gi;
       let grp = textureLoad(data, vec2<i32>(g, ${ROW_GROUP_RANGE} + gBand), 0);
       let bounds = textureLoad(data, vec2<i32>(g, ${ROW_GROUP_BOUNDS} + gBand), 0);
-      if (gTileActive > 0.5) {
+      if (useTiles) {
         var listed = false;
         for (var e = 0; e < ${TILE_MAX_ENTRIES}; e = e + 1) {
           if (f32(e) >= gTileN) { break; }
@@ -471,9 +486,11 @@ export const NG_BODY = /* wgsl */ `fn ngBody(p: vec3<f32>, data: texture_2d<f32>
       }
     }
   }
-  d = ngWounds(d, p, data, woundCfg, woundCfg2, perfCfg, gInstWoundBound);
-  if (gNgReason != 0) { return d; }
-  if (gNgNear > 0.5 && gInstCounts2.x > 0.0) { d = ngBones(d, p, data, gInstCounts, gInstCounts2.x); }
+  if ((gNgDebugMask & 1u) == 0u) {
+    d = ngWounds(d, p, data, woundCfg, woundCfg2, perfCfg, gInstWoundBound);
+    if (gNgReason != 0) { return d; }
+  }
+  if ((gNgDebugMask & 2u) == 0u && gNgNear > 0.5 && gInstCounts2.x > 0.0) { d = ngBones(d, p, data, gInstCounts, gInstCounts2.x); }
   if (gNgReason != 0) { return d; }
   if (noiseCfg.x > 0.0 && gNgOwner < i32(gInstCounts.x) && (gNgSecond - gNgBest <= 2.0 * R || gNgExcluded <= gNgBest + R)) {
     gNgReason = 4;
@@ -518,6 +535,9 @@ export function buildNormalBodyPointFn(): ReturnType<typeof wgslFn> {
   if (cur.trim()) { names.push(cur.split(':')[0]!.trim()); }
   const args = names.join(', ');
   const source = `fn ngBodyPoint(${signature}, probeKind: f32) -> vec4<f32> {
+    // Standalone point entry: no trace has run, so seed the instance globals
+    // from this view's base slot. ngBody deliberately does not load one.
+    loadInstance(inst, i32(instCfg.z));
     gTileActive = 0.0;
     if (probeKind > 1.5 && probeKind < 2.5) { return mapBody(${args}); }
     let result = ngBody(${args});

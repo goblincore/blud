@@ -3411,21 +3411,22 @@ export const MARCH_TRACE_POST = /* wgsl */ `  if (!hit) { discard; }
   var ngValid = false;
   var ngReason = 7;
   var ngScalar = 0.0;
-  // CROWD (2026-09-14): the analytic gradient (ngBody) was written for one
-  // body per draw and, banded reads and per-owner anchoring notwithstanding,
-  // still returns a wrong normal for every instance but the first of a
-  // multi-slot draw (probe: dot(analytic, finite-difference) ~ -0.4 for
-  // slots >= 1, 1.0 for slot 0). Until it is recalibrated for instance
-  // bands, a multi-instance draw takes the finite-difference normal, which
-  // is exact for every slot. instCfg.x is the draw's slot count: 1 for a
-  // per-body view, so the canonical path is unchanged.
-  if (normalGradientCfg.x > 0.5 && instCfg.x < 1.5) {
+  // CROWD (2026-09-14): the analytic gradient runs for single- AND multi-slot
+  // draws. ngBody no longer reloads a hard-coded slot 0 — that clobbered the
+  // hit slot POST pins just above and returned slot 0's field for every other
+  // instance (probe: dot(analytic, FD) 1.0 for slot 0, ~ -0.42 otherwise). It
+  // now reads whatever slot the caller loaded, so the gradient is the hit
+  // instance's own. The finite-difference path below remains the fallback for
+  // unsupported fields and as the debug comparison.
+  gNgDebugMask = u32(max(normalGradientCfg.z, 0.0));
+  if (normalGradientCfg.x > 0.5) {
     let noiseAmplitude = marchCfg.z * (1.0 - max(gloss, metal));
     let ng = ngBody(p, data, vec4<f32>(noiseAmplitude, 0.0, 0.0, 0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg, inst, instCfg);
     ngReason = gNgReason;
     ngScalar = ng.x;
     if (ngReason == 0) {
-      let candidate = ng.yzw + ngDetail(p, data, gNgOwner, noiseShift, noiseAmplitude);
+      var candidate = ng.yzw;
+      if ((gNgDebugMask & 8u) == 0u) { candidate = candidate + ngDetail(p, data, gNgOwner, noiseShift, noiseAmplitude); }
       let magnitude2 = dot(candidate, candidate);
       // Comparisons reject NaN and infinity as well as a collapsed gradient.
       ngValid = magnitude2 > 1e-12 && magnitude2 < 1e12;
