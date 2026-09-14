@@ -3486,13 +3486,25 @@ async function main() {
     // ~100 frames unless the loop is paused. Pause; nothing needs to draw
     // while the loader is up.
     handle.setLoopRunning(false);
-    // LAYERS, not just visibility (owner's mid-game freeze, 2026-09-13): three's
-    // compileAsync walks _projectObject, which skips an object whose
-    // `layers.test(camera.layers)` is false — exactly like render. The camera
-    // carries only the layers the CANVAS pass uses, so every per-body twin on
-    // CONE/OCCLUDER/SHELL/SHELL_EXIT/DEPTH_PREPASS/REFINE was invisible to this
-    // compile and got built synchronously mid-frame, seconds after load.
-    // enableAll for the traversal, mask restored below.
+    // LAYERS (owner's mid-game freeze, 2026-09-13): three's compileAsync walks
+    // _projectObject, which skips an object whose `layers.test(camera.layers)`
+    // is false — exactly like render. The camera carries only the layers the
+    // CANVAS pass uses, so every per-body twin on
+    // CONE/OCCLUDER/SHELL/SHELL_EXIT/DEPTH_PREPASS/REFINE is invisible here and
+    // got built synchronously mid-frame, seconds after load.
+    //
+    // `camera.layers.enableAll()` around this compile was tried FIRST and is
+    // WRONG twice over. It compiles the twins against the CANVAS render
+    // context, and the render context (attachment formats, MRT) is part of a
+    // pipeline's cache key — so the entry it builds is not the one the twin's
+    // real pass needs. Worse, it drags in twins whose pass is off, one of which
+    // (the shell hull) carries a stale `mapBody` argument list that fails at
+    // pipeline creation with `unresolved value 'woundBound'`: three's
+    // compileAsync then NEVER SETTLES, and the whole warm-up — and the loader
+    // gate behind it — hangs (measured: __warmDone never appeared in 100 s).
+    // The twins are warmed by sdfLayer.precompilePasses below instead, each in
+    // its own target and gated on the flag its pass is gated on.
+    // The count below is reporting only.
     const previousMask = camera.layers.mask;
     let layersCompiled = 0;
     let passesCompiled = 0;
@@ -3504,9 +3516,7 @@ async function main() {
         if (!o.visible) { flipped.push(o); o.visible = true; }
         if (o !== scene) layersCompiled |= o.layers.mask & ~previousMask;
       });
-      camera.layers.enableAll();
       await handle.renderer.compileAsync(scene, camera);
-      camera.layers.mask = previousMask;
       if (gooLayer) await gooLayer.precompile(camera);
       // The SDF layer's own passes: the twins in their real target/MRT context,
       // the fullscreen passes (blit/accum/detail/refine-view/composite) that are
@@ -3515,6 +3525,7 @@ async function main() {
       passesCompiled = await sdfLayer.precompilePasses(scene, camera);
       let twinLayers = 0;
       for (let b = 0; b < 32; b++) if (layersCompiled & (1 << b)) twinLayers++;
+      void twinLayers;
       const done = {
         ms: Math.round(performance.now() - t0),
         flipped: flipped.length,
@@ -3525,6 +3536,11 @@ async function main() {
       console.log(`[warm] pipelines compiled in ${done.ms} ms (${done.flipped} hidden objects, ${twinLayers} twin layers, ${passesCompiled} stage/layer passes)`);
     } catch (err) {
       console.error('[warm] pipeline warm-up failed', err);
+      // A driver waiting on __warmDone must not wait forever because the
+      // warm-up threw: record the failure under the same key.
+      (window as unknown as Record<string, unknown>).__warmDone = {
+        ms: Math.round(performance.now() - t0), flipped: flipped.length, error: String(err),
+      };
     } finally {
       for (const o of flipped) o.visible = false;
       camera.layers.mask = previousMask;
