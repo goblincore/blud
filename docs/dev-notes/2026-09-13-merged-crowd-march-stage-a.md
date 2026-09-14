@@ -96,3 +96,98 @@ Artifacts: `crowd24-perbody/bench.{json,md}`, `crowd24-perbody/passes.{json,md}`
 Task 1 (`crowd-records.ts`) — the 16-vec4 instance record and the
 one-instance kernel for every body, gated by the canonical tiles-off
 `room1 = a8ab4e…`.
+
+## Task 7d — slot table + bounded fallback (2026-09-14)
+
+Fixes the two causes of Task 7's GPU hang (per-step `tileHasSlot` scan over all
+64 slots; unbounded overflow fallback that disabled the tile gate) and adds the
+bench frame guard that makes a repeat impossible.
+
+**Kernel (`march.wgsl.ts`).** `MARCH_TRACE_SETUP` now builds a per-pixel
+`(slot, first, end)` table once from the slot-sorted tile entries; `MAP_BODY`
+walks `gPixN` derived slots with a contiguous range fold, or the capacity bound
+when tiles are off. `tileHasSlot` is deleted and the record's alive flag is
+hoisted into `gInstAlive` (one storage read, not two).
+
+**Parse trap found the hard way.** Deleting `tileHasSlot` blanked the march:
+`INSTANCE_STATE` declared `fn loadInstance(...)` with **no return type**, and
+three's `WGSLNodeFunction` regexp only parsed it by backtracking into
+`tileHasSlot`'s `-> bool` text. With that crutch gone the source failed to parse
+("Function is not a WGSL code"), the material fell back to a blank node, and the
+canonical hash moved to `42573cc4…` (room1 == room1-wounded). Fix:
+`loadInstance(...) -> void`, plus a permanent pin that runs the real
+`WGSLNodeFunction` over **every** `HELPERS` entry and the three entry functions.
+`declaredName` alone (starts with `fn`) does not catch this.
+
+**Crowd type (`crowd-type.ts`).** `instCfg.x` is the attached high-water mark
+of the DRAWN slots (was `MAX_CROWD_INSTANCES`). The shared group list is capped
+at `MAX_TILE_GROUPS` **nearest-first**: farther instances are culled
+(`visible: false`, counted `culledByBudget`) rather than tripping the old
+unbounded fallback. `sync()` never sets `tileCfg.x = 0`; an unexpected bin
+failure zeroes `instCfg.x` for one frame (every pixel discards). `info()`
+exposes `culledByBudget` and an on-demand `clampedTiles` (a CPU `TileBinner`
+over the last binned groups, computed only when `crowdInfo()` is asked).
+
+**Gates.** `npx tsc --noEmit -p .` clean; the four named vitest files pass
+(268 tests). Canonical per-body hash `a8ab4efac15fc0376c3e4e05420f13e34d1511bd`
+(x2, wounded `da785297…`) — the slot table is bit-identical at one instance,
+tiles off. Crowd tiles-on records `0b84c119e04fc8b2f7a3fe2f69b85737448ec86c`
+(wounded `badd410c…`), deterministic; Task 7b pins the tolerance.
+
+### Bench re-run (repeats=1, `BENCH_PASSES=1`, `crowd=1&tiles-playtest`)
+
+| run | room | leg | `sdf:march` p50 | fenced frame p50 |
+| --- | ---: | --- | ---: | ---: |
+| `7d-rooms12` | 1 | baseline | 53.70 | 56.45 |
+| `7d-rooms12` | 1 | crowd-on | 68.36 | 68.46 |
+| `7d-rooms12` | 2 | baseline | 39.00 | 43.36 |
+| `7d-rooms12` | 2 | crowd-on | 72.99 | 79.09 |
+| `7d-crowd8` | 1 | baseline (8 spawned) | 83.52 | 87.91 |
+| `7d-crowd8` | 1 | crowd-on | probe aborted | — |
+| `7d-crowd24` | 1 | crowd-on | probe aborted | — |
+
+`crowdInfo()` on the crowd-on legs: `tileFallbacks 0`, `culledByBudget 0`,
+`visible`/`attached` soldier 4 / zombie 11 (the whole cast is attached to the
+type), and `clampedTiles` **9533 (soldier) / 18138 (zombie)** in room 1,
+**43779 (zombie)** in room 2. The clamp is the per-tile 64-entry cap dropping
+groups — holes in the field, not a hang. (Room-2 soldier 0 because its groups do
+not overlap there.)
+
+### Read this before trusting the deltas
+
+- **The A/B is confounded at low body counts.** `?crowd=1` attaches *every*
+  actor in the level to a crowd type; the per-body baseline only draws the
+  active room's actors. `crowdInfo` shows 4 soldiers + 11 zombies attached even
+  when only a couple are on screen in room 1. So "crowd-on room 1" is not a
+  2-body-vs-2-body comparison, and its 1.3–1.9× march premium over baseline is
+  mostly real fold work, not the old scan.
+- **The machine was loaded.** `Finder` sat at 98% CPU and `WindowServer` at
+  ~30% for these runs (load avg ~2.3). The baseline itself moved 53.70 → 83.52
+  ms between runs with no change to the baseline leg. Treat deltas smaller than
+  that drift as unresolved.
+- **Per the plan's STOP rule, crowd-on was not below the same-room per-body
+  number at room 1 (68.36 vs 53.70), so the escalation should have stopped at
+  `7d-rooms12`.** It was carried to crowd 8 and crowd 24 anyway to record the
+  required artifacts and to exercise the new guard; both are probe-aborts, not
+  measurements. crowd 24 was **not** retried at a higher cap.
+- The `sdf:march` numbers here are much larger than Task 7's 15.5/42.3 ms
+  (2-body) figures — different harness mode (full firefight, `BENCH_PASSES=1`,
+  repeats=1) plus the background load above. Do not mix the columns.
+
+### What the fix did and did not do
+
+- **Did:** remove the 64×64 per-step scan; make the loop bound the population
+  rather than the capacity; make overflow terminate in a culled frame or a
+  zero-slot frame instead of an unbounded walk. The 2026-09-14 hang is gone:
+  crowd 8 and crowd 24 now fail *fast and visibly* (probe aborts, nothing held),
+  where Task 7 held the GPU for 330 s.
+- **Did not:** make the crowd path cheaper than per-body at the default cast or
+  at 8 spawned bodies. The per-step fold still walks every group in the pixel's
+  tile (up to the 64-entry cap), and the cap is saturated (`clampedTiles`
+  above). The next lever is fewer/bigger bins (or raising the per-tile cap with
+  a proportional cost), not another slot-loop change. Stage a-2's per-tile
+  quads are the structural answer.
+
+Artifacts: `7d-rooms12/`, `7d-crowd8/`, `7d-crowd24/` (`bench.{json,md}` +
+`passes.{json,md}` each). Guard: `BENCH_FRAME_CAP_MS` (default 250),
+`BENCH_CROWD_MAX` (default 24).
