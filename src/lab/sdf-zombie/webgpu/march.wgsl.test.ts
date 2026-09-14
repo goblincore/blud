@@ -1698,7 +1698,7 @@ describe('per-primitive colour', () => {
   });
 
   it('reads the row at the HIT primitive and gates on the w sentinel', () => {
-    expect(MARCH_BODY).toContain(`vec2<i32>(hitBest, ${ROW_PRIM_COLOR})`);
+    expect(MARCH_BODY).toContain(`vec2<i32>(hitBest, ${ROW_PRIM_COLOR} + gBand)`);
     expect(MARCH_BODY).toContain('if (PC.w > 0.0)');
   });
 
@@ -2087,7 +2087,7 @@ describe('organ shading (organs r3)', () => {
     // "any hitBest read ending in .w": glow= legitimately reads ROW_PRIM_CLIP.w
     // at the same pixel (hard-surface task 3), which is a different row and a
     // different lane, not a duplicated hitMat.
-    expect((SHADE_BODY.match(new RegExp(`textureLoad\\(data, vec2<i32>\\(hitBest, ${ROW_PRIM_SCALE}\\), 0\\)\\.w`, 'g')) ?? []))
+    expect((SHADE_BODY.match(new RegExp(`textureLoad\\(data, vec2<i32>\\(hitBest, ${ROW_PRIM_SCALE} \\+ gBand\\), 0\\)\\.w`, 'g')) ?? []))
       .toHaveLength(1);
     expect(SHADE_BODY).toContain('isOrgan');
   });
@@ -2151,7 +2151,7 @@ describe("gloss suppresses the flesh's own noise (hard-surface task 1)", () => {
   // the look.
   const SHADE_BODY = MARCH_BODY;
   // The one ROW_PRIM_COLOR read (pack.ts writes w = 1 + gloss, w = 0 flesh).
-  const LOAD = `textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_COLOR}), 0)`;
+  const LOAD = `textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_COLOR} + gBand), 0)`;
   const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
   it('resolves gloss BEFORE the shading normal exists, off ONE load', () => {
@@ -2213,7 +2213,7 @@ describe('metal modifier (hard-surface task 2)', () => {
   // plates read as steel — is the render's job, not this suite's.
   const SHADE_BODY = MARCH_BODY;
   const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const SHAPE_LOAD = `textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_SHAPE}), 0)`;
+  const SHAPE_LOAD = `textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_SHAPE} + gBand), 0)`;
 
   it('reads the metal bit inside the ONE hoisted painted read, above calcNormal', () => {
     // Same hoist discipline as gloss (task 1): the value is needed by the
@@ -2298,7 +2298,7 @@ describe('per-prim glow= in primClip.w (hard-surface task 3)', () => {
   // from frames, not from strings).
   const SHADE_BODY = MARCH_BODY;
   const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const CLIP_LOAD = `textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_CLIP}), 0)`;
+  const CLIP_LOAD = `textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_CLIP} + gBand), 0)`;
 
   it('row 17 no longer documents w as spare', () => {
     // Done-when: leaving "w spare" in the row table is how the next person

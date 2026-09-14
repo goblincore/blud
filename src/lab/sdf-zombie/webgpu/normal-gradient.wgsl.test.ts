@@ -70,7 +70,7 @@ describe('normal-gradient WGSL registration', () => {
 // These guard structure; the intact phase is the actual shader/numeric gate.
 describe('final-hit helper isolation', () => {
   it('rejects analytic normals for scoped wounds before either cutter path', () => {
-    const load = `textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS}), 0).y`;
+    const load = `textureLoad(data, vec2<i32>(i, ${ROW_WOUND_FLAGS} + gBand), 0).y`;
     expect(NG_WOUNDS).toContain(load);
     expect(NG_WOUNDS).toContain('if (owner > 0.0) { gNgReason = 1; return d; }');
     expect(NG_WOUNDS.indexOf(load)).toBeGreaterThan(NG_WOUNDS.indexOf('if (r > reach) { continue; }'));

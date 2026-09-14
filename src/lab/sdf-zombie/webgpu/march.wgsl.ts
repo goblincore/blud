@@ -1444,6 +1444,16 @@ var<private> gWoundList: array<i32, 16>;
 var<private> gSlot: i32 = 0;
 var<private> gBand: i32 = 0;
 var<private> gHitSlot: i32 = 0;
+// PINNED SLOT (crowd fix 2026-09-14). Once the hit instance is loaded, every
+// later mapBody call in the invocation (calcNormal's four taps, the AO and
+// scatter probes, wound/level shadow marches) still walks all the slots in
+// this pixel's list and would leave the gInst*/gBand globals on the LAST slot
+// it touched — so the material rows, rest anchor, wounds and face after it
+// read ANOTHER instance's band (misaligned skin, or a free band's zeros: the
+// pale/white zombie). POST pins the hit slot; mapBody restores the pinned
+// instance on exit. -1 = unpinned (the march loop, where the winner is what
+// matters). A one-slot pixel never reloads: gSlot already equals the slot.
+var<private> gPinSlot: i32 = -1;
 var<private> gTileSlot: array<f32, ${TILE_MAX_ENTRIES}>;
 // Per-pixel slot table, built ONCE in MARCH_TRACE_SETUP from the sorted tile
 // entry list: distinct slots present in this pixel's tile and each slot's
@@ -1497,6 +1507,11 @@ export const INSTANCE_STATE = /* wgsl */ `fn loadInstance(inst: ptr<storage, arr
   gBand = i32(ab.w);
   let wa = (*inst)[base + ${REC_WIND_ALIVE}];
   gInstWind = wa.xyz;
+  // CROWD (2026-09-14): the field's noise anchor and shell wind are per
+  // instance too; keep them on the loaded slot so every slot folds its own
+  // field (and the analytic gradient, which anchors per owner prim, agrees).
+  gWindDrift = gInstWind;
+  gBodyAnchor = gInstAnchor;
   gInstAlive = wa.w;
   gInstMelt = (*inst)[base + ${REC_MELT}];
   gInstFlash = (*inst)[base + ${REC_FLASH}];
@@ -1892,6 +1907,10 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   gFoldBestIdx = bestIdxU;
   gFoldBestDistort = bestDistortU;
   gHitSlot = bestSlot;
+  // Leave the instance globals on the slot the caller expects: the pinned hit
+  // slot after the hit, else the union's winner. No-op for a one-slot pixel.
+  let wantSlot = select(bestSlot, gPinSlot, gPinSlot >= 0);
+  if (gSlot != wantSlot) { loadInstance(inst, wantSlot); }
   return vec4<f32>(dUnion, bestIdxU, nearWoundU, carvedU);
 }`;
 
@@ -2502,7 +2521,8 @@ export const MARCH_BODY_PARAMS = /* wgsl */ `(
  * surface entry reuses this text verbatim. The debug early-returns and the
  * miss discard are part of the trace and behave identically in both entries.
  */
-export const MARCH_TRACE_SETUP = /* wgsl */ `  // FIRST STATEMENT, before anything folds. gWindDrift is read inside
+export const MARCH_TRACE_SETUP = /* wgsl */ `  gPinSlot = -1;
+  // FIRST STATEMENT, before anything folds. gWindDrift is read inside
   // sdShell, which is reached from foldGroup on every mapBody call in this
   // invocation — the march steps, calcNormal, the AO and scatter probes. Set
   // it late and the normal would be taken against a different surface than
@@ -3294,6 +3314,9 @@ export const MARCH_TRACE_POST = /* wgsl */ `  if (!hit) { discard; }
   // Reload the slot whose field won the union fold. Every post-hit row read
   // below (material, rest anchor, face, wound masks) is the HIT instance's.
   loadInstance(inst, gHitSlot);
+  gPinSlot = gHitSlot;
+  // DEBUG MODE 11 (crowd diagnostics 2026-09-14): per-pixel slot / prim / distortion / band readout.
+  if (debugCfg.x > 10.5 && debugCfg.x < 11.5) { return vec4<f32>(f32(gHitSlot), gFoldBestDistort, f32(hitBest), f32(gBand)); }
   // FLAT-ALBEDO SEAM (close-up diagnostics task 1, 2026-09-04). Returns the
   // body's base albedo AT THE HIT and skips the entire post-hit chain —
   // calcNormal (4 field evals), the anchor, the micro-detail fbm, wound/char
@@ -3345,19 +3368,19 @@ export const MARCH_TRACE_POST = /* wgsl */ `  if (!hit) { discard; }
   var primGlow = 0.0;
   var primAlbedo = vec3<f32>(0.0);
   if (hitBest >= 0) {
-    let PC = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_COLOR}), 0);
+    let PC = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_COLOR} + gBand), 0);
     if (PC.w > 0.0) {
       primAlbedo = PC.xyz;
       gloss = clamp(PC.w - 1.0, 0.0, 1.0);
       painted = 1.0;
-      let PS = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_SHAPE}), 0);
+      let PS = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_SHAPE} + gBand), 0);
       if ((i32(PS.y) & 16) != 0) { metal = 1.0; }
       // GLOW (hard-surface task 3): primClip.w, the lane that was documented
       // spare until now. Loaded ONLY inside the painted branch — glow is
       // parse-gated on color=, so an unpainted pixel can never author one,
       // and this is the third texel a painted hit pixel pays for (colour,
       // shape, clip) and the last.
-      primGlow = clamp(textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_CLIP}), 0).w, 0.0, 1.0);
+      primGlow = clamp(textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_CLIP} + gBand), 0).w, 0.0, 1.0);
     }
   }
   // Silhouette noise into the normal, scaled by (1 - max(gloss, metal)) at
@@ -3388,7 +3411,15 @@ export const MARCH_TRACE_POST = /* wgsl */ `  if (!hit) { discard; }
   var ngValid = false;
   var ngReason = 7;
   var ngScalar = 0.0;
-  if (normalGradientCfg.x > 0.5) {
+  // CROWD (2026-09-14): the analytic gradient (ngBody) was written for one
+  // body per draw and, banded reads and per-owner anchoring notwithstanding,
+  // still returns a wrong normal for every instance but the first of a
+  // multi-slot draw (probe: dot(analytic, finite-difference) ~ -0.4 for
+  // slots >= 1, 1.0 for slot 0). Until it is recalibrated for instance
+  // bands, a multi-instance draw takes the finite-difference normal, which
+  // is exact for every slot. instCfg.x is the draw's slot count: 1 for a
+  // per-body view, so the canonical path is unchanged.
+  if (normalGradientCfg.x > 0.5 && instCfg.x < 1.5) {
     let noiseAmplitude = marchCfg.z * (1.0 - max(gloss, metal));
     let ng = ngBody(p, data, vec4<f32>(noiseAmplitude, 0.0, 0.0, 0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg, inst, instCfg);
     ngReason = gNgReason;
@@ -3403,6 +3434,11 @@ export const MARCH_TRACE_POST = /* wgsl */ `  if (!hit) { discard; }
   }
   if (!ngValid) {
     n = calcNormal(p, data, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);
+  }
+  // DEBUG MODE 12 (crowd diagnostics 2026-09-14): slot, analytic reason, dot(analytic n, finite-difference n).
+  if (debugCfg.x > 11.5 && debugCfg.x < 12.5) {
+    let nFD = calcNormal(p, data, vec4<f32>(marchCfg.z * (1.0 - max(gloss, metal)), 0.0, 0.0, 0.0), woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg);
+    return vec4<f32>(f32(gHitSlot), f32(ngReason), dot(n, nFD), t);
   }
   // Raw diagnostic RGB bypasses later detail/shading; outputNode still writes
   // the identical clip depth. Eligibility 0 is background, 1 is analytic.
@@ -3488,7 +3524,7 @@ export const MARCH_TRACE_POST = /* wgsl */ `  if (!hit) { discard; }
   // the wm gate alone would leave an exposed bone unidentified and it would
   // shade as meat — the exact pale-vs-red contrast the melt lives on lost.
   if ((wm > 0.0 || gInstMelt.x > 0.0) && hitBest >= 0) {
-    hitMat = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_SCALE}), 0).w;
+    hitMat = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_SCALE} + gBand), 0).w;
   }
   let isOrgan = hitMat > 4.5 && hitMat < 5.5;
   // W_BONE is 4 — the dominant row is a packed bone prim (bones still fold

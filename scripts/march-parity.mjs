@@ -91,6 +91,7 @@ function compare(a, b) {
   if (a.w !== b.w || a.h !== b.h) throw new Error(`size mismatch ${a.w}x${a.h} vs ${b.w}x${b.h}`);
   const A = a.data, B = b.data; const n = a.w * a.h;
   let hitA = 0, hitB = 0, maskDiff = 0, maxDz = 0, sumDz = 0, rgbDiff = 0, rgbMax = 0;
+  let lumA = 0, lumB = 0, dR = 0, dG = 0, dB = 0;
   for (let i = 0; i < n; i++) {
     const za = A[i * 4 + 3], zb = B[i * 4 + 3];
     const ha = za < 1, hb = zb < 1;
@@ -99,9 +100,10 @@ function compare(a, b) {
     if (!ha) continue;
     const dz = Math.abs(za - zb); if (dz > maxDz) maxDz = dz; sumDz += dz;
     for (let c = 0; c < 3; c++) { const d = Math.abs(A[i * 4 + c] - B[i * 4 + c]); if (d > 0) rgbDiff++; if (d > rgbMax) rgbMax = d; }
+    lumA += A[i*4]+A[i*4+1]+A[i*4+2]; lumB += B[i*4]+B[i*4+1]+B[i*4+2]; dR += B[i*4]-A[i*4]; dG += B[i*4+1]-A[i*4+1]; dB += B[i*4+2]-A[i*4+2];
   }
   const hits = Math.max(hitA, 1);
-  return { hitA, hitB, maskDiff, maskDiffFrac: maskDiff / hits, maxDz, meanDz: sumDz / hits, rgbDiffChannels: rgbDiff, rgbMax };
+  return { hitA, hitB, maskDiff, maskDiffFrac: maskDiff / hits, maxDz, meanDz: sumDz / hits, rgbDiffChannels: rgbDiff, rgbMax, meanLumA: lumA/(3*hits), meanLumB: lumB/(3*hits), meanDelta: [dR/hits, dG/hits, dB/hits] };
 }
 
 const { send, evaluate } = await connectGame({ vite: VITE, cdp: CDP, width: 1280, height: 800, onFail: fail });
@@ -127,11 +129,15 @@ async function bootAndCapture({ room, crowd }) {
   // type stores the dispatch it was created with. The per-body boot ignores it.
   await evaluate(`__sdfGame.setCrowdDispatch(${JSON.stringify(DISPATCH)})`);
   await evaluate(`__sdfGame.setCrowd(${crowd})`);
+  // Diagnostic hook: extra JS after the path is selected, before pins/stage (e.g. setLevelShadow(false)).
+  if (process.env.MARCH_PARITY_PRELUDE) await evaluate(process.env.MARCH_PARITY_PRELUDE);
   // Same pins march-hash.mjs uses: fields off (sdf-layer's private frame
   // counter makes fields-on bimodal), flicker clock frozen, probe afterglow a
   // pure per-frame estimate.
-  await evaluate('__sdfGame.setFieldStyle("off")');
-  await evaluate('(() => { __sdfGame.setLightClockFrozen(true); __sdfGame.setDemoHold(true); __sdfGame.setProbeBlend(1); __sdfGame.setProbeFall(1); return 1; })()');
+  const SKIP = (process.env.MARCH_PARITY_SKIP_PINS ?? '').split(',');
+  if (!SKIP.includes('field')) await evaluate('__sdfGame.setFieldStyle("off")');
+  if (!SKIP.includes('light')) await evaluate('(() => { __sdfGame.setLightClockFrozen(true); __sdfGame.setDemoHold(true); return 1; })()');
+  if (!SKIP.includes('probe')) await evaluate('(() => { __sdfGame.setProbeBlend(1); __sdfGame.setProbeFall(1); return 1; })()');
   await stageCloseUp(evaluate, { room }, fail);
   await evaluate('(() => { __sdfGame.setSdfScale(0.5); __sdfGame.step(6); return 1; })()');
   await evaluate('__sdfGame.resolveGpu()');
