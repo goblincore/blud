@@ -38,7 +38,7 @@
 
 **Files:** `sim-clock.ts`, `rng.ts`, `game-main.ts`, `rng.test.ts`, `census-diff.mjs` (gate)
 
-- [ ] **Step 1: Failing RNG test.** `rng.test.ts`:
+- [x] **Step 1: Failing RNG test.** `rng.test.ts`:
 
 ```ts
 import { describe, it, expect } from 'vitest';
@@ -57,15 +57,15 @@ describe('seeded rng streams', () => {
 });
 ```
 
-- [ ] **Step 2: `rng.ts`.** `mulberry32` is already in the codebase (grep `mulberry32`); build four streams from one seed by hashing the seed with a per-stream salt: `bleed = mulberry32(seed ^ 0x9e3779b9)`, `fx = mulberry32(seed ^ 0x85ebca6b)`, `reload = mulberry32(seed ^ 0xc2b2ae35)`, `misc = mulberry32(seed ^ 0x27d4eb2f)`. Export `createRngStreams(seed)` and a module-level `rngStreams` the game sets once at boot from `?seed=` (default: `Date.now() & 0x7fffffff`, logged, and reported in `demoInfo().seed`). Run the test: PASS.
+- [x] **Step 2: `rng.ts`.** `mulberry32` is already in the codebase (grep `mulberry32`); build four streams from one seed by hashing the seed with a per-stream salt: `bleed = mulberry32(seed ^ 0x9e3779b9)`, `fx = mulberry32(seed ^ 0x85ebca6b)`, `reload = mulberry32(seed ^ 0xc2b2ae35)`, `misc = mulberry32(seed ^ 0x27d4eb2f)`. Export `createRngStreams(seed)` and a module-level `rngStreams` the game sets once at boot from `?seed=` (default: `Date.now() & 0x7fffffff`, logged, and reported in `demoInfo().seed`). Run the test: PASS.
 
-- [ ] **Step 3: Replace gameplay `Math.random()`.** `grep -n "Math.random()" src/lab/sdf-zombie/webgpu/game-main.ts src/lab/sdf-zombie/webgpu/game-actor.ts src/lab/sdf-zombie/webgpu/game-weapon.ts src/lab/sdf-zombie/*.ts` — for each site decide: sim-affecting (reload seed when `pinnedReloadSeed` is absent → `rngStreams.reload()`; muzzle puff offsets that move light positions → `rngStreams.fx()`; anything in wander/AI → `misc`) or purely cosmetic and never fed back into the sim (may stay, but prefer `fx`). Existing `bleedRng` becomes `rngStreams.bleed`. Leave test files and the retired game alone.
+- [x] **Step 3: Replace gameplay `Math.random()`.** `grep -n "Math.random()" src/lab/sdf-zombie/webgpu/game-main.ts src/lab/sdf-zombie/webgpu/game-actor.ts src/lab/sdf-zombie/webgpu/game-weapon.ts src/lab/sdf-zombie/*.ts` — for each site decide: sim-affecting (reload seed when `pinnedReloadSeed` is absent → `rngStreams.reload()`; muzzle puff offsets that move light positions → `rngStreams.fx()`; anything in wander/AI → `misc`) or purely cosmetic and never fed back into the sim (may stay, but prefer `fx`). Existing `bleedRng` becomes `rngStreams.bleed`. Leave test files and the retired game alone.
 
-- [ ] **Step 4: Sim clock.** `sim-clock.ts` exports `{ simTimeMs, advance(dtSeconds) }`; `tick(dt)` calls `advance(dt)` first. In `updateVisibleActors` replace `performance.now()` with `simTimeMs` for `lastSeenMs` and the `CULL_DWELL_MS` comparison (grep all 26 `performance.now()` sites in game-main; only the ones that feed a decision the sim or the draw list depends on move to sim time: cull dwell, any cooldown/timer inside `tick`, `view.setTime(...)` animation phase). Telemetry, bench timing and UI stay on the wall clock.
+- [x] **Step 4: Sim clock.** `sim-clock.ts` exports `{ simTimeMs, advance(dtSeconds) }`; `tick(dt)` calls `advance(dt)` first. In `updateVisibleActors` replace `performance.now()` with `simTimeMs` for `lastSeenMs` and the `CULL_DWELL_MS` comparison (grep all 26 `performance.now()` sites in game-main; only the ones that feed a decision the sim or the draw list depends on move to sim time: cull dwell, any cooldown/timer inside `tick`, `view.setTime(...)` animation phase). Telemetry, bench timing and UI stay on the wall clock.
 
-- [ ] **Step 5: Bake swap on a frame index.** `soldier-corpse-bake.ts` / `corpse-bake.ts` completion: instead of swapping when the worker returns, queue the result and apply it in `tick` on the first frame `>= recordedFrame + 1` where `recordedFrame` = the frame index at submit — so a replay swaps on the same frame regardless of worker speed. Record the swap frame in `corpseInfo()`.
+- [x] **Step 5: Bake swap on a frame index.** `soldier-corpse-bake.ts` / `corpse-bake.ts` completion: instead of swapping when the worker returns, queue the result and apply it in `tick` on the first frame `>= recordedFrame + 1` where `recordedFrame` = the frame index at submit — so a replay swaps on the same frame regardless of worker speed. Record the swap frame in `corpseInfo()`.
 
-- [ ] **Step 6: The gate — identical census twice.** Inside lab-servers (own ports):
+- [x] **Step 6: The gate — identical census twice.** Inside lab-servers (own ports):
 
 ```bash
 BENCH_PASSES=1 BENCH_REPEATS=3 BENCH_ROOMS=2 BENCH_LEGS=baseline BENCH_QUERY='seed=4242' node scripts/sdf-game-bench.mjs <vite> <cdp>
@@ -74,7 +74,7 @@ node scripts/census-diff.mjs docs/dev-notes/<out>/bench.json
 
 Expected: `census-diff` exit 0 — every census field (`bodies`, `wounds`, `chunks`, `droplets`, `goo quads`) identical across the three repeats of the same leg. If a field still drifts, `git grep` its producer for the remaining wall-clock or unseeded read and fix it; do not accept a drifting field. Then the frozen gates: `node scripts/march-hash.mjs` twice unchanged.
 
-- [ ] **Step 7: Commit** — `feat(demo): stage 1 — sim time cull dwell, seeded rng streams, sim-time animation phase, frame-pinned bake swap; census identical across repeats`.
+- [x] **Step 7: Commit** — `feat(demo): stage 1 — sim time cull dwell, seeded rng streams, sim-time animation phase, frame-pinned bake swap; census identical across repeats`.
 
 ---
 

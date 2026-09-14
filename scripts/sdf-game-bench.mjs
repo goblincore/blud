@@ -298,7 +298,16 @@ await send('Emulation.setDeviceMetricsOverride', {
   width: W, height: H, deviceScaleFactor: 1, mobile: false,
 });
 
-const url = `http://localhost:${VITE}/sdf-game.html${QUERY ? `?${QUERY}` : ''}`;
+// SIM-IDLE BOOT (determinism stage 1, 2026-09-14). `simidle=1` boots with the
+// task-6 render lock on, so `tick()` mutates NOTHING while the page settles.
+// Without it, the page's own rAF loop wanders the cast for a wall-clock- and
+// machine-load-dependent number of frames before `bench()` takes over; the
+// probe then fires into a different scene each run and the census drifts for a
+// reason that is not the workload under test. Measured on 2026-09-14: the room-2
+// gate drifted in walk.droplets 0/18/19 and fire.wounds 25/31/32 with the loop
+// settling freely. `bench()` clears the lock and drives the scenario from the
+// spawn state, which is `(seed, inputs, fixed dt)` and nothing else.
+const url = `http://localhost:${VITE}/sdf-game.html?simidle=1${QUERY ? `&${QUERY}` : ''}`;
 console.log(`bench ${url}  (${W}x${H}, repeats=${REPEATS}, rooms=${ROOM_IDS.join(',')}${PRELUDE ? `, prelude: ${PRELUDE}` : ''})`);
 
 /**

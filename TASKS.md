@@ -119,6 +119,12 @@
   `tile-binning-submit < 1 ms` bar is untested (48 bodies at 0.9 m fit no region in this level; a
   longer-sightline space is future work). Plan
   `docs/superpowers/plans/2026-09-14-merged-crowd-march-stage-a2-tile-quads.md`.
+  **Determinism gate PASSES (2026-09-14, demo-recorder stage 1)** — the reason the fire/gib
+  crowd-vs-per-body verdict was held ("the two legs shot different fights") is fixed.
+  `BENCH_QUERY='seed=4242'` + the bench's `?simidle=1` boot make the scripted scenario play
+  the same fight every run: `census-diff.mjs` exit 0 across 3 repeats with the census AND the
+  frame hash identical, on a loaded machine. Re-run the flip's fire/gib legs with that query
+  before merging the flip. See `docs/dev-notes/2026-09-14-demo-recorder.md`.
 - [ ] **BAKED MESH LOD (plan 2026-09-14):** `docs/superpowers/plans/2026-09-14-baked-mesh-lod.md` — L1 textured bake (rest-anchor + aux vertex attrs, per-pixel detail/mottle/meat/gloss; the "untextured smooth corpse" fix), L2 corpse bake for every character, L3 distance LOD (per-type segment bake shared by all instances, posed per frame, hysteretic band; removes far bodies from the march). Owner 2026-09-14: distant crowds are the real crowd case.
 - [ ] **CORPSE BAKE FOR EVERY CHARACTER:** `corpseBakeEligible` is soldier-only (`profile.name === 'soldier'` +
   collapse settled), so dead zombies keep marching at full cost. Extending eligibility to any settled actor is
@@ -689,9 +695,10 @@ fallback, and it cannot be answered without a GPU round trip. Do NOT write the k
 before answering it: landing WGSL on an unverified binding mechanism is what caused
 the flesh regression earlier today (`43779459`).
 
-**NEXT, in order:** (1) the R1 binding-support probe, then R1 itself; (2) the census-diff demo repeatability
-gate (`docs/superpowers/plans/2026-09-10-deterministic-demo-recordings.md`) —
-three of six bench windows this session were unusable; (3) R1, widening the
+**NEXT, in order:** (1) the R1 binding-support probe, then R1 itself; (2) ~~the census-diff demo repeatability
+gate~~ **DONE 2026-09-14 (stage 1)** — `docs/dev-notes/2026-09-14-demo-recorder.md`; three of six bench
+windows this session were unusable, now the seeded+`simidle` bench is repeatable (census AND frame hash
+identical across repeats); (3) R1, widening the
 gather's 7-workgroup dispatch, now backed by the measured split; (4) far-body
 LOD, **re-aimed** — the step axis is dead, use per-pixel work.
 

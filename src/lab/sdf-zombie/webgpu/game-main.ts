@@ -128,7 +128,7 @@ import { createComputeTileBinding } from './tile-bin-compute';
 import { sdBody, smax } from '../validate';
 import { FISHEYE_DEFAULTS, clampFovDeg, reticleNdc, visibleFovDeg } from './fisheye';
 import {
-  GRAPESHOT, SLUG, expired, mulberry32, spawnPellets, spawnSlug,
+  GRAPESHOT, SLUG, expired, spawnPellets, spawnSlug,
   stepProjectiles, traceProjectile, woundFromPellet, woundFromSlug, type Projectile,
 } from './game-weapon';
 import { resolveExplosion, type ExplosionBody } from '../explosion-aoe';
@@ -152,6 +152,8 @@ import {
   createWoundPanel, defaultsFrom, WOUND_KEYS,
   type WoundPanel, type WoundTuningValues,
 } from './wound-panel';
+import { rngStreams, setRngSeed, seedFromUnit } from './rng';
+import { advance as advanceSimClock, simTimeMs } from './sim-clock';
 import { chunkSettled, makeChunk, stepChunk } from '../gib-chunks';
 import { chunkBakeField } from '../chunk-bake-field';
 import { createChunkBakeJobs } from './chunk-bake-jobs';
@@ -249,6 +251,18 @@ async function main() {
   const passTiming = installPassTiming(handle.renderer);
   const { scene, camera } = handle;
 
+  // DEMO SEED (determinism stage 1, 2026-09-14). ONE seed drives every named
+  // stream in rng.ts. `?seed=` is what makes a bench leg or a recording
+  // reproducible: with it, every repeat of a leg draws the same streams and
+  // can produce an identical census. Absent, a random seed keeps normal play
+  // as varied as the Math.random() this replaces. Logged, so a run whose
+  // numbers surprise can be reproduced from the console line.
+  const seedSearch = new URLSearchParams(location.search);
+  const demoSeed = parseIntParam(seedSearch.get('seed'), { min: 0, max: 0x7fffffff })
+    ?? (Date.now() & 0x7fffffff);
+  setRngSeed(demoSeed);
+  console.info(`[sdf-game] demo seed ${demoSeed}${seedSearch.has('seed') ? ' (?seed=)' : ' (random)'}`);
+
   // LOADING SCREEN (spike program). The boot compiles for seconds before the
   // game is playable — WebGPU init, the TSL graph, the weapon GLB, and since
   // the warm-up ~1.7 s of pipeline compilation — and the page used to drop
@@ -331,22 +345,20 @@ async function main() {
   const projScreen = new THREE.Matrix4();
   const bodySphere = new THREE.Sphere(new THREE.Vector3(), 1.1);
   const lastSeenMs = new Map<number, number>();
-  /** SIM CLOCK (2026-09-10, demo determinism stage 1). Millisecond accumulator
-   *  advanced only by `tick(dt)` — NEVER wall time, exactly like `bleedClock`
-   *  further down, and for the same reason: hand-stepped captures and replays
-   *  must be reproducible.
-   *
-   *  The cull dwell below used to read `performance.now()`, which made it a
-   *  WALL-CLOCK decision about which bodies get DRAWN. That is the most likely
-   *  source of the workload drift the bench census shows across otherwise
-   *  identical legs (room 4 fire: bodies 4->4 in one run, 4->2 in another), so
-   *  it is the first consumer moved onto this clock.
-   *
-   *  Declared HERE, with the rest of the cull state, for the hoisting reason
-   *  spelled out above: a `let` read by a hoisted function from a later
-   *  declaration threw "Cannot access ... before initialization" during boot
-   *  and silently disabled the whole cull. */
-  let simClockMs = 0;
+  /** SIM FRAME INDEX (determinism stage 1, 2026-09-14). Incremented once at the
+   *  top of every `tick(dt)`; the bake swap is pinned to a frame relative to
+   *  submit so its landing frame does not depend on WORKER SPEED (see
+   *  finishChunkBake). Reads only — the single writer is `tick`. */
+  let simFrame = 0;
+  /** THE SIM CLOCK now lives in `sim-clock.ts` (module state, so the demo
+   *  player can reset it). The cull dwell below reads `simTimeMs()` —
+   *  millisecond SIM time advanced only by `tick(dt)`, never wall time; see the
+   *  module header for why the dwell is on it. Deliberately NOT a local `let`
+   *  here: the hoisting trap documented above (a `let` read by a hoisted
+   *  function from a later declaration threw "Cannot access ... before
+   *  initialization" during boot and silently disabled the whole cull) cannot
+   *  happen to a module import, whose binding is initialised before this body
+   *  runs. */
   /** DEMO HOLD (2026-09-10, deterministic demo recordings stage 2). While ON,
    *  the render-side subsampling that is intentionally wall-clock or
    *  frame-counter driven is pinned to a value derived from the DEMO CLOCK, so
@@ -2959,11 +2971,10 @@ async function main() {
         onFire: ({ origin: muz, direction: dir }) => {
           if (!character.prop || character.prop.released) return;
           encounter.shot(zombieId);
-          nextSeed = (nextSeed * 1664525 + 1013904223) >>> 0;
           // ONE barrel: the double-barrel volley is the player's signature,
           // and the soldier throwing the same wall of lead reads as a second
           // player rather than an enemy.
-          soldierPellets.push(...spawnPellets(muz, dir, 1, nextSeed));
+          soldierPellets.push(...spawnPellets(muz, dir, 1, seedFromUnit(rngStreams.misc())));
         },
       } : {}),
       profile: characterEntry(name).profile,
@@ -4047,23 +4058,12 @@ async function main() {
   }
   const pelletViews: TracerView[] = [];
 
-  let nextSeed = 0x5df1;
-  /** Advance the demo seed stream (2026-09-10, determinism stage 1).
-   *
-   *  EVERY randomness consumer in the fire path draws from this one LCG —
-   *  pellets already did. The muzzle-flash and reload sites below used to call
-   *  `Math.random()`, which is the one thing that diverges silently under
-   *  replay: the values are visual only, but a divergent frame is a divergent
-   *  frame HASH, so the demo-parity gate would fail for no real reason.
-   *
-   *  `lcgNext` returns the raw 32-bit word (for modulo consumers); `lcgUnit`
-   *  the [0,1) draw. Do NOT reseed mid-run: the stream's value is that its
-   *  sequence is reproducible from the single boot constant above. */
-  function lcgNext(): number {
-    nextSeed = (nextSeed * 1664525 + 1013904223) >>> 0;
-    return nextSeed;
-  }
-  function lcgUnit(): number { return lcgNext() / 0x100000000; }
+  /** NOTE (determinism stage 1, 2026-09-14): the inline LCG and its `lcgNext` /
+   *  `lcgUnit` helpers are gone. The named streams in `rng.ts` replace them —
+   *  `rngStreams.reload` for the reload arc, `fx` for the muzzle flash/smoke,
+   *  `misc` for pellet seeds. The values change (a different seed derivation),
+   *  which is intended: the point is that a divergence is traceable to ONE
+   *  subsystem rather than to a single shared counter. Do NOT reseed mid-run. */
   let cooldown = 0;
   /** Shells in the gun. The reload animation only means something if running
    *  dry is a state the player can be in. */
@@ -4080,7 +4080,7 @@ async function main() {
   let reloadSpeed = 1;
   function startReload(): void {
     reloadAge = 0;
-    reloadSeed = pinnedReloadSeed ?? 1 + (lcgNext() % 1e6);
+    reloadSeed = pinnedReloadSeed ?? 1 + Math.floor(rngStreams.reload() * 1e6);
   }
   let recoilPitch = 0;
 
@@ -4111,8 +4111,8 @@ async function main() {
     if (flashGroup && flashMaterial) {
       // Fresh roll AND a fresh star per shot, so repeat fire never strobes an
       // identical silhouette.
-      flashGroup.rotation.z = lcgUnit() * Math.PI * 2;
-      const tex = flashTextures[Math.floor(lcgUnit() * flashTextures.length)];
+      flashGroup.rotation.z = rngStreams.fx() * Math.PI * 2;
+      const tex = flashTextures[Math.floor(rngStreams.fx() * flashTextures.length)];
       if (tex) { flashMaterial.map = tex; flashMaterial.needsUpdate = true; }
     }
     // Release a few smoke puffs at the muzzle. Both barrels make more smoke.
@@ -4123,16 +4123,16 @@ async function main() {
         if (released >= want) break;
         if (puff.age !== Infinity) continue;
         puff.age = 0;
-        puff.roll = lcgUnit() * Math.PI * 2;
+        puff.roll = rngStreams.fx() * Math.PI * 2;
         puff.mesh.position.set(
-          MUZZLE_VIEW.x + (lcgUnit() - 0.5) * 0.03,
-          MUZZLE_VIEW.y + (lcgUnit() - 0.5) * 0.03,
-          MUZZLE_VIEW.z - 0.02 - lcgUnit() * 0.05,
+          MUZZLE_VIEW.x + (rngStreams.fx() - 0.5) * 0.03,
+          MUZZLE_VIEW.y + (rngStreams.fx() - 0.5) * 0.03,
+          MUZZLE_VIEW.z - 0.02 - rngStreams.fx() * 0.05,
         );
         puff.vel.set(
-          (lcgUnit() - 0.5) * 0.25,
-          0.10 + lcgUnit() * 0.18,
-          -0.55 - lcgUnit() * 0.35,
+          (rngStreams.fx() - 0.5) * 0.25,
+          0.10 + rngStreams.fx() * 0.18,
+          -0.55 - rngStreams.fx() * 0.35,
         );
         puff.mesh.rotation.z = puff.roll;
         released++;
@@ -4141,14 +4141,13 @@ async function main() {
     if (slugMode) {
       // One lump down one known ray instead of a pellet volley.
       pellets.push(spawnSlug(muzzleWorld(), convergedDir(muzzleWorld())));
-      nextSeed = (nextSeed * 1664525 + 1013904223) >>> 0;
       return true;
     }
     const muz = muzzleWorld();
     const dir = convergedDir(muz);
     // spawnPellets spreads around `dir`; convergence just re-centres the cone.
-    pellets.push(...spawnPellets(muz, dir, barrels, nextSeed));
-    nextSeed = (nextSeed * 1664525 + 1013904223) >>> 0;
+    // One `misc` draw per volley is the pellet seed (mulberry32 inside).
+    pellets.push(...spawnPellets(muz, dir, barrels, seedFromUnit(rngStreams.misc())));
     return true;
   }
 
@@ -4208,6 +4207,10 @@ async function main() {
   let chunkBakeInput: ChunkBakeData | null = null;
   let lastBakeSwapMs = 0;
   let lastBakeRequestMs = 0;
+  /** The sim frame a bake job was submitted on (finishChunkBake waits for the
+   *  next one) and the frame a swap actually landed on (reported). */
+  let bakeSubmitFrame = -1;
+  let lastBakeSwapFrame = -1;
   const cancelChunkBake = () => {
     if (chunkBakeJobs.pendingId !== null) telemetry.event('chunk-bake-cancel', { chunk: chunkBakeJobs.pendingId });
     chunkBakeJobs.cancel(); chunkBakeInput = null;
@@ -4222,6 +4225,16 @@ async function main() {
    * colour and normal work ran in the worker; only wrap buffers and swap here.
    * Recycled IDs are never reused, so an old reply cannot hide a new piece. */
   function finishChunkBake(): void {
+    // FRAME PIN (determinism stage 1, 2026-09-14). The worker reply used to be
+    // applied on whichever frame it happened to arrive, so a fast worker swapped
+    // on the submit frame and a slow one a frame or two later — the swap is a
+    // sim-state change (`liveChunks` -> `bakedChunks`) and the census and any
+    // downstream pellet-vs-chunk interaction read it. Hold the result until the
+    // first frame AFTER the one the job was submitted on, so a replay swaps at
+    // the same frame regardless of worker speed. Do NOT call takeCompleted()
+    // before this check: consuming here would drop the result and the piece
+    // would never bake.
+    if (chunkBakeJobs.pendingId !== null && simFrame < bakeSubmitFrame + 1) return;
     const done = chunkBakeJobs.takeCompleted();
     if (!done) return;
     telemetry.event('chunk-bake-complete', { chunk: done.id });
@@ -4268,6 +4281,9 @@ async function main() {
       radius: baked.radius,
     };
     lastBakeSwapMs = performance.now() - t0;
+    // The frame this swap landed on — a recorded number, so a replay can assert
+    // the same landing frame (chunkStats().bakeSwapFrame).
+    lastBakeSwapFrame = simFrame;
     telemetry.end('chunk-bake-swap', swapTiming);
     telemetry.event('chunk-bake-swap', { chunk: entry.id, workerMs: baked.bakeMs, swapCpuMs: lastBakeSwapMs, vertices: baked.verts, triangles: baked.tris });
     if (baked.overflow || baked.droppedQuads > 0) {
@@ -4285,7 +4301,7 @@ async function main() {
     gibChunkMeat(b.template, at);
   }
   function gibChunkMeat(template: ChunkTemplate, at: Vec3): void {
-    const rng = mulberry32(nextSeed++);
+    const rng = rngStreams.misc;
     const gobs = 2 + (rng() < 0.5 ? 1 : 0);
     for (let i = 0; i < gobs; i++) {
       const theta = rng() * Math.PI * 2;
@@ -4306,7 +4322,7 @@ async function main() {
     if (bleedEnabled) {
       // One-shot gib gout: a fresh emitter stream so it never fuses with a
       // nearby wound's stream by proximity.
-      spawnImpactGout(bloodSim, 'slug', at, [0, 1, 0], bleedRng, nextEmitterStream++);
+      spawnImpactGout(bloodSim, 'slug', at, [0, 1, 0], rngStreams.bleed, nextEmitterStream++);
     }
   }
   // Now that the array exists, the frame draw can read it directly.
@@ -4328,7 +4344,7 @@ async function main() {
     template: { uniforms: import('./zombie-gpu').MarchUniforms; volumeTexture: THREE.Texture },
     initialVelocity?: Vec3,
   ) {
-    const rng = mulberry32(nextSeed++);
+    const rng = rngStreams.misc;
     const vel: Vec3 = [
       (rng() - 0.5) * 4.5,
       2.5 + rng() * 2.5,
@@ -4678,10 +4694,10 @@ async function main() {
     // 2026-09-01: "it should be default on tbh").
     gooPanel?.setVisible(true);
   }
-  // One seeded stream for EVERY bleed decision (spawns, trails, splat
-  // stamps) — advanced only while bleed is enabled, so setBleed(false)
-  // freezes the subsystem exactly (OFF mid-stream = ON-stream-paused).
-  const bleedRng = mulberry32(0x5eedb1e);
+  // The bleed stream is `rngStreams.bleed` (rng.ts): ONE seeded stream for
+  // EVERY bleed decision (spawns, trails, splat stamps) — advanced only while
+  // bleed is enabled, so setBleed(false) freezes the subsystem exactly (OFF
+  // mid-stream = ON-stream-paused).
   let bleedEnabled = true;
 
   // GUT ROPES — at most one per body (entrails-spawn.shouldSpill): the first
@@ -4697,7 +4713,7 @@ async function main() {
    *  this directly). Rolls bleedRng — see the freeze note on registerBleed. */
   function spillVerdict(a: ZombieActor, wound: Wound): void {
     const entry = gutRopes.get(a.id);
-    const verdict = shouldSpill(wound, entry !== undefined, bleedRng);
+    const verdict = shouldSpill(wound, entry !== undefined, rngStreams.bleed);
     if (verdict === 'none') return;
     if (verdict === 'tear') {
       // Keep the entry: the detached chain keeps falling/settling in
@@ -4803,7 +4819,7 @@ async function main() {
     // the gout so it fuses with this wound's per-frame droplets and no
     // other emitter's.
     const streamId = woundStreamId(wound);
-    spawnImpactGout(bloodSim, kind, anchor, [-normal[0], -normal[1], -normal[2]], bleedRng, streamId);
+    spawnImpactGout(bloodSim, kind, anchor, [-normal[0], -normal[1], -normal[2]], rngStreams.bleed, streamId);
     // SUPPLEMENTARY entry splash (opt-in, ?impactsplash=1). Projectile hits
     // use the contact and incoming shot below; stumps use their outward
     // wound normal. The seed is
@@ -4967,7 +4983,7 @@ async function main() {
   }
 
   function updateVisibleActors(): void {
-    const now = simClockMs;
+    const now = simTimeMs();
     cullCounts.total = actors.length;
     if (!actorCullEnabled) {
       visibleActors = actors;
@@ -5090,8 +5106,11 @@ async function main() {
    *  the WANDERERS, while stepPlayer/bob/weapon smoothing kept mutating the
    *  camera and view-model every tick — two "identical" renders drifted as
    *  the teleported player's head-bob decayed. Default OFF; only the gate
-   *  sets it, so legacy gameplay is untouched. */
-  let simLocked = false;
+   *  sets it, so legacy gameplay is untouched. `?simidle=1` boots straight into
+   *  the lock (the bench's boot): the page's own rAF loop must not wander the
+   *  cast during the settle, or the scenario it drives afterwards starts from a
+   *  wall-clock-dependent state. `bench()` clears it before running. */
+  let simLocked = new URLSearchParams(location.search).has('simidle');
   /** Whether the hulls have been built for the CURRENT frozen stretch — see
    *  the frozen-from-boot hull build in tick. */
   let frozenHullBuilt = false;
@@ -5114,7 +5133,8 @@ async function main() {
     // wall time. This is the single source of "how much simulated time has
     // passed", so every dwell/timer that reads it is reproducible under a
     // replay. See the declaration next to lastSeenMs for the why.
-    simClockMs += dt * 1000;
+    advanceSimClock(dt);
+    simFrame++;
     segMeshRenderer?.stepDebris(dt);
     let input: MoveInput = holdPlayerPose
       ? { x: 0, z: 0, jump: false }
@@ -5273,7 +5293,7 @@ async function main() {
       // not the scale, and is therefore invisible when it is off. Without this
       // the rig jiggle would differ between two runs of one recording and the
       // frame hash could never match. Pixel-only: nothing here feeds the sim.
-      const now = demoHold ? simClockMs / 1000 : performance.now() / 1000;
+      const now = demoHold ? simTimeMs() / 1000 : performance.now() / 1000;
       for (const a of actors) {
         a.view.setTime(now);
         // Face projection tracks the posed skull through the gait jiggle.
@@ -5824,6 +5844,7 @@ async function main() {
           // Bone-only pieces retain their original SDF path.
           if (data.flesh.length > 0 && chunkBakeJobs.submit(c.id, data)) {
             chunkBakeInput = data;
+            bakeSubmitFrame = simFrame;
             telemetry.event('chunk-bake-request', { chunk: c.id, flesh: data.flesh.length, bones: data.bones.length });
           }
           lastBakeRequestMs = performance.now() - t0;
@@ -5843,7 +5864,7 @@ async function main() {
           if (!a) { bleed.evictForBody(e.bodyId); continue; }
           const { anchor, normal } = woundEmitAnchorAndNormal(a.posed().prims, e.wound, a.pose().yaw);
           e.acc = spawnWoundDroplets(
-            bloodSim, e.kind, bleedClock - e.bornAt, anchor, normal, cdt, e.acc, bleedRng,
+            bloodSim, e.kind, bleedClock - e.bornAt, anchor, normal, cdt, e.acc, rngStreams.bleed,
             woundStreamId(e.wound),
           );
         }
@@ -5852,9 +5873,9 @@ async function main() {
           liveChunks.map(c => ({
             id: c.id, pos: c.state.pos, vel: c.state.vel, stream: trailStreamId(c.id),
           })),
-          cdt, bleedRng,
+          cdt, rngStreams.bleed,
         );
-        stepBlood(bloodSim, cdt, bleedRng);
+        stepBlood(bloodSim, cdt, rngStreams.bleed);
         // Re-pose every instance from sim state (billboards track the camera
         // even frozen — same contract as the lab's always-sync).
         bloodView.sync(bloodSim, camera);
@@ -6278,6 +6299,9 @@ function performBenchAction(a: BenchAction): void {
   // boot-frame gate's note at setDrawFn.
   drawReady = true;
   (window as unknown as { __sdfGame: unknown }).__sdfGame = {
+    /** The boot demo seed: `?seed=` when given, otherwise random. Reported so
+     *  a recording/replay can pin it (stage 3 seam `demoInfo()`). */
+    get demoSeed() { return demoSeed; },
     telemetry: telemetryControls ? {
       start: () => telemetryControls.start(), stop: () => telemetryControls.stop(), mark: () => telemetryControls.mark(),
       get active() { return telemetry.active; }, lastCapture: () => telemetryControls.lastCapture(),
@@ -8745,6 +8769,39 @@ function performBenchAction(a: BenchAction): void {
       holdPlayerPose = o.holdPlayer === true;
 
       handle.setLoopRunning(false);
+      // Clear the `?simidle=1` boot lock (see simLocked): the scenario this runs
+      // must start from the deterministic spawn state, not from a set of frames
+      // the boot loop happened to take. RESTORED in the finally — otherwise the
+      // rAF loop it restarts would tick the sim freely between the probe and the
+      // measured run, which is the same wall-clock divergence one layer up.
+      const hadSimLock = simLocked;
+      simLocked = false;
+      // Pin the RENDER-side clocks the frame hash reads, for the same reason: a
+      // repeated run must render the same frame. `demoHold` fixes the gather's
+      // per-dispatch `frameSeed` and drives `view.setTime` from the SIM clock;
+      // without it the hash drifts with the dispatch count even when the sim is
+      // identical. Left ON (not restored): inter-run render frames must also see
+      // it, or the gather re-rotates its rays between the probe and the run.
+      // Sim-idle boots only — normal play and other bench callers are untouched.
+      if (new URLSearchParams(location.search).has('simidle')) {
+        demoHold = true;
+        demoSeedBase = probeFrame;
+        postAa.setTimeFrozen(true);
+        // The interlaced field is a two-state function of an absolute render
+        // counter, so a single end-of-run hash only compares at a fixed phase.
+        sdfLayer.resetFieldPhase();
+        // And the gather is dispatched only every `probeGatherRate` ticks, so
+        // WHICH frame the packed instances/dynamic layer were last built on is
+        // a function of the absolute tick counter. Reset the cadence phase too,
+        // or the end-of-run `instances`/`probeDyn` hashes differ between a
+        // first page load and a warm one. Diagnostic only: `probeFrame`
+        // (dispatch count) and the demo seed are left alone.
+        probeGatherTick = 0;
+        // The dynamic layer blends each dispatch into the previous values, so it
+        // is a function of the dispatch count too. Start every run from zero, or
+        // the first page load and a warm one hash differently (measured).
+        probeGather?.reset();
+      }
       const hadAdaptive = adaptiveEnabled;
       adaptiveEnabled = false;
       const hadTelemetry = telemetry.active;
@@ -8797,6 +8854,9 @@ function performBenchAction(a: BenchAction): void {
       } finally {
         holdPlayerPose = hadHoldPlayer;
         restoreHeldPose();
+        // Re-lock under `?simidle` so the frames the restarted loop renders
+        // between runs cannot mutate the sim (see the capture at the top).
+        simLocked = hadSimLock;
         adaptiveEnabled = hadAdaptive;
         telemetry.active = hadTelemetry;
         adaptiveState = initialAdaptiveState(performance.now(), adaptiveState.rung);
@@ -9568,7 +9628,7 @@ function performBenchAction(a: BenchAction): void {
      *  is the same machinery at a testable size. */
     spawnTestChunk: (x: number, y: number, z: number, radius = 0.12, stationary = false) => {
       const prims: Primitive[] = [];
-      const rng = mulberry32(nextSeed++);
+      const rng = rngStreams.misc;
       for (let i = 0; i < 6; i++) {
         const th = rng() * Math.PI * 2;
         const ph = Math.acos(2 * rng() - 1);
@@ -9620,6 +9680,7 @@ function performBenchAction(a: BenchAction): void {
       totalBakes,
       lastBakeMs, // worker CPU time, NOT a main-thread span
       lastBakeSwapMs,
+      lastBakeSwapFrame,
       lastBakeRequestMs,
       bakeThread: 'worker',
       pendingBake: chunkBakeJobs.pendingId,

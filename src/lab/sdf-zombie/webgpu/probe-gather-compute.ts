@@ -64,6 +64,14 @@ export interface ProbeGatherBinding {
   readonly probeDynNode: unknown;
   /** The whole dynamic buffer, for tests and debug tooling. */
   readback(): Promise<Float32Array>;
+  /**
+   * ZERO THE ACCUMULATED DYNAMIC LAYER (bench determinism, 2026-09-14). The
+   * kernel blends each dispatch into the existing values (`blend`/`fall`), so
+   * the layer is a function of the DISPATCH COUNT as well as of the scene. A
+   * bench that compares an end-of-run hash needs a known start, or the first
+   * page load and a warm one hash differently for no real reason. Bench-only.
+   */
+  reset(): void;
   readonly caps: ProbeGatherCaps;
   dispose(): void;
 }
@@ -148,6 +156,11 @@ export function createProbeGatherBinding(renderer: THREE.WebGPURenderer, caps: P
     async readback() {
       if (disposed) throw new Error('probe gather binding disposed');
       return new Float32Array(await renderer.getArrayBufferAsync(dynAttr));
+    },
+    reset() {
+      if (disposed) throw new Error('probe gather binding disposed');
+      (dynAttr.array as Float32Array).fill(0);
+      dynAttr.needsUpdate = true;
     },
     dispose() {
       disposed = true;
