@@ -123,3 +123,12 @@ How to use it:
 - `scripts/sdf-demo-synth.mjs` makes a synthetic recording from the scripted firefight through the same input seam (determinism fixture, not a play-feel source).
 
 Not yet done: an equal-workload fire/gib crowd-vs-per-body bench on a recording (the flip is held on it), and a real owner recording.
+
+## Owner recording and the two fixes it forced (2026-09-14, commit 7e7d8eef)
+
+Reference recording: `docs/dev-notes/demos/2026-09-14T21-02-05-669Z-room1.dem.json` (56 s, 3368 frames, 110 shots, starts room 1, free aim). First two-replay comparison FAILED at the first sampled frame; the census was identical, so the sim agreed and the difference was render-side.
+
+1. **Bake swap landing frame.** The gib swap was pinned to submit+1 only if the worker had replied by then; the corpse swap was never pinned. A reply straddling a `resolveGpu` yield moved the swap by one sample. Fix: `chunkBakeJobs.settled()` (also exposed by the corpse baker); every hand-stepped driver awaits it before a step (`runDemoReplay`, `demoScenario`, `demoSynthesize`, and the bench through the new `BenchDeps.beforeStep`, whose wait is subtracted from the chunk's frame cost). Live play never waits.
+2. **First-yield contamination.** With hashing from frame 0 and no bakes at all, only the first sampled frame still differed. Whatever boot left in flight landed on the same yield that took the first hash. Fix: the replay drains `awaitBakes()` + one GPU fence before frame 0.
+
+Result: `DEMO_HASH_WARMUP=0 DEMO_HASH_DEM=<recording> node scripts/sdf-demo-hash.mjs ab` → 842/842 sampled frames identical across two fresh pages. March hash unchanged. Also fixed on the way: the REC HUD never refreshed its frame count (95dd13ac); the final-frame hash sample could land on the other interlace field for an even frame count (80addd35).
