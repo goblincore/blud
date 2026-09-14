@@ -5,7 +5,7 @@ import * as THREE from 'three/webgpu';
 // @ts-expect-error — deep three source import for the real wgslFn parser; no
 // public type declarations exist for three/src/* (same as march.wgsl.test.ts).
 import WGSLNodeFunction from 'three/src/renderers/webgpu/nodes/WGSLNodeFunction.js';
-import { createSdfLayer, isHoldFrame, rotateHeldCameras, sortFrontToBack, SDF_LAYER, FIELD_MESH_LAYER, COMPOSITE_WGSL, FIELD_INTERLEAVE_WGSL, TEMPORAL_ACCUM_WGSL, DEPTH_PREPASS_BLOCK_PX, DEPTH_PREPASS_DIV, depthPrepassSize } from './sdf-layer';
+import { createSdfLayer, isHoldFrame, rotateHeldCameras, sortFrontToBack, SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER, DEPTH_PREPASS_LAYER, FIELD_MESH_LAYER, COMPOSITE_WGSL, FIELD_INTERLEAVE_WGSL, TEMPORAL_ACCUM_WGSL, DEPTH_PREPASS_BLOCK_PX, DEPTH_PREPASS_DIV, depthPrepassSize } from './sdf-layer';
 import { createUpscaleModel } from './upscale/upscale-model';
 
 describe('depth prepass sizing (close-up task 3)', () => {
@@ -73,6 +73,51 @@ describe('SDF-layer material precompile', () => {
     const compiledTarget = targetDuringCompile as unknown as THREE.RenderTarget;
     expect(compiledTarget.texture.type).toBe(THREE.FloatType);
     expect(maskDuringCompile).toBe(1 << SDF_LAYER);
+    expect(currentTarget).toBe(previousTarget);
+    expect(camera.layers.mask).toBe(previousMask);
+
+    layer.dispose();
+    previousTarget.dispose();
+  });
+});
+
+describe('SDF-layer whole-pass precompile (mid-game shader stalls)', () => {
+  it('compiles each twin layer in its own target and every fullscreen pass, then restores state', async () => {
+    // three's compileAsync skips objects the camera's layer mask rejects, and
+    // the layer's fullscreen scenes are not in the page's scene graph at all —
+    // so nothing here is reachable from the boot compileAsync. This pins that
+    // the warm-up visits each of them with the right camera mask.
+    const previousTarget = new THREE.RenderTarget(2, 2);
+    let currentTarget: THREE.RenderTarget | null = previousTarget;
+    const camera = new THREE.PerspectiveCamera();
+    const seen: { mask: number; target: THREE.RenderTarget | null; scene: unknown }[] = [];
+    const compileAsync = vi.fn(async (sceneArg: unknown) => {
+      seen.push({ mask: camera.layers.mask, target: currentTarget, scene: sceneArg });
+    });
+    const renderer = {
+      getRenderTarget: () => currentTarget,
+      setRenderTarget: (t: THREE.RenderTarget | null) => { currentTarget = t; },
+      compileAsync,
+    } as unknown as THREE.WebGPURenderer;
+    const layer = createSdfLayer(renderer);
+    const scene = new THREE.Scene();
+    camera.layers.set(9);
+    const previousMask = camera.layers.mask;
+
+    const n = await layer.precompilePasses(scene, camera);
+
+    expect(n).toBe(seen.length);
+    // The marched twins: the page scene, once per layer that owns twin meshes.
+    const masksForScene = seen.filter((c) => c.scene === scene).map((c) => c.mask);
+    for (const l of [SDF_LAYER, CONE_LAYER, OCCLUDER_LAYER, SHELL_LAYER, SHELL_EXIT_LAYER, DEPTH_PREPASS_LAYER]) {
+      expect(masksForScene).toContain(1 << l);
+    }
+    // …and the fullscreen passes, which are private scenes of the layer.
+    expect(seen.some((c) => c.scene !== scene)).toBe(true);
+    // Every marched twin compiled into a real float target, never the canvas
+    // (the composite and the weave DO write the canvas — outputTarget is null
+    // until post-aa redirects them, and that is the context they really run in).
+    expect(seen.filter((c) => c.scene === scene).every((c) => c.target !== null)).toBe(true);
     expect(currentTarget).toBe(previousTarget);
     expect(camera.layers.mask).toBe(previousMask);
 

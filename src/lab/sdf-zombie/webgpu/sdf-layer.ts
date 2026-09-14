@@ -750,6 +750,24 @@ export interface SdfLayer {
     camera: THREE.PerspectiveCamera,
   ): Promise<void>;
   /**
+   * Compiles EVERY pipeline this layer draws with, in the render-target context
+   * it really draws them in, and returns how many compiles ran.
+   *
+   * The page's boot `renderer.compileAsync(scene, camera)` cannot reach any of
+   * them: three's compileAsync walks `_projectObject`, which skips an object
+   * whose `layers.test(camera.layers)` is false exactly like `render` does, so
+   * the twins on CONE/OCCLUDER/SHELL/SHELL_EXIT/DEPTH_PREPASS/REFINE are never
+   * visited; and the layer's fullscreen passes (blit, accumulation, detail,
+   * refine-view, the composite quad) live in private scenes that are not in
+   * the page's scene graph at all. Before this existed every one of those
+   * pipelines was built synchronously on the first frame that needed it —
+   * the multi-second freezes the owner felt seconds AFTER the loader cleared.
+   *
+   * The render context is part of a pipeline's cache key (attachment formats,
+   * MRT), so each compile sets the same target and MRT the real pass sets.
+   */
+  precompilePasses(scene: THREE.Scene, camera: THREE.PerspectiveCamera): Promise<number>;
+  /**
    * Redirects the two passes that normally go to the canvas (the polygonal
    * scene and the final composite) into this target instead; null restores
    * the canvas. post-aa uses this to capture the frame for its FXAA/smear
@@ -1701,6 +1719,66 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
         renderer.setRenderTarget(previousTarget);
         camera.layers.mask = previousMask;
       }
+    },
+    async precompilePasses(scene, camera) {
+      const previousTarget = renderer.getRenderTarget();
+      const previousMask = camera.layers.mask;
+      let n = 0;
+      // One failure must not cost the rest: a warm-up is best-effort, and a
+      // pass whose pipeline cannot be built here will simply be built the way
+      // it always was.
+      const compile = async (
+        what: string,
+        s: THREE.Scene,
+        cam: THREE.Camera,
+        t: THREE.RenderTarget | null,
+        mrtNode: unknown = null,
+      ) => {
+        try {
+          renderer.setRenderTarget(t);
+          if (mrtNode) renderer.setMRT(mrtNode as never);
+          try { await renderer.compileAsync(s, cam); } finally { if (mrtNode) renderer.setMRT(null); }
+          n++;
+        } catch (err) {
+          console.warn(`[sdf-layer] precompile ${what} failed`, err);
+        }
+      };
+      try {
+        // --- the marched twins, one layer at a time -------------------------
+        camera.layers.set(SDF_LAYER);
+        await compile('march', scene, camera, target, marchMrt);
+        camera.layers.set(CONE_LAYER);
+        await compile('cone', scene, camera, coneCoarse);
+        camera.layers.set(OCCLUDER_LAYER);
+        await compile('occluder', scene, camera, occluder);
+        camera.layers.set(SHELL_LAYER);
+        await compile('shell-entry', scene, camera, shellEntry);
+        camera.layers.set(SHELL_EXIT_LAYER);
+        await compile('shell-exit', scene, camera, shellExit);
+        camera.layers.set(DEPTH_PREPASS_LAYER);
+        await compile('depth-pre', scene, camera, depthPre);
+        if (refineTarget && refineMrt) {
+          camera.layers.set(REFINE_LAYER);
+          await compile('refine', scene, camera, refineTarget, refineMrt);
+        }
+        camera.layers.set(FIELD_MESH_LAYER);
+        await compile('field-mesh', scene, camera, fieldMesh);
+        camera.layers.mask = previousMask;
+        // --- the layer's own fullscreen passes -------------------------------
+        await compile('prev-blit', blitScene, quadCam, prev);
+        await compile('accum', accumScene, quadCam, accumNext);
+        if (detailScene) await compile('detail', detailScene, quadCam, detailTarget);
+        if (refineViewScene && refineViewTarget) await compile('refine-view', refineViewScene, quadCam, refineViewTarget);
+        await compile('composite', quadScene, quadCam, outputTarget);
+        await compile('field-interleave', fieldScene, quadCam, outputTarget);
+        await compile('field-mesh-weave', meshScene, quadCam, outputTarget);
+        // --- the upscale stage's passes --------------------------------------
+        if (upscale) n += await upscale.precompile(renderer, quadCam);
+      } finally {
+        renderer.setRenderTarget(previousTarget);
+        camera.layers.mask = previousMask;
+      }
+      return n;
     },
     render(scene, camera) {
       const restore = camera.layers.mask;

@@ -2042,6 +2042,17 @@ async function main() {
     }
     upscaleAb.mode = mode;
     updateUpscaleAbLabel();
+    // A stage built AFTER boot carries brand-new per-pass pipelines the boot
+    // warm-up never saw; without this they compile on the first frame the new
+    // stage runs, which is the same multi-second stall in miniature. Loop
+    // paused for the duration, exactly as warmPipelines does it.
+    if (booted && info.on) {
+      handle.setLoopRunning(false);
+      void sdfLayer.precompilePasses(scene, camera)
+        .then((n) => console.log(`[warm] upscale stage passes compiled (${n})`))
+        .catch((err) => console.warn('[warm] upscale stage precompile failed', err))
+        .finally(() => handle.setLoopRunning(true));
+    }
     return info;
   }
   /** The SHIPPED upscaler (owner decision 2026-09-12): s32-rgbd, trained locally on dataset v2,
@@ -3454,22 +3465,48 @@ async function main() {
     // ~100 frames unless the loop is paused. Pause; nothing needs to draw
     // while the loader is up.
     handle.setLoopRunning(false);
+    // LAYERS, not just visibility (owner's mid-game freeze, 2026-09-13): three's
+    // compileAsync walks _projectObject, which skips an object whose
+    // `layers.test(camera.layers)` is false — exactly like render. The camera
+    // carries only the layers the CANVAS pass uses, so every per-body twin on
+    // CONE/OCCLUDER/SHELL/SHELL_EXIT/DEPTH_PREPASS/REFINE was invisible to this
+    // compile and got built synchronously mid-frame, seconds after load.
+    // enableAll for the traversal, mask restored below.
+    const previousMask = camera.layers.mask;
+    let layersCompiled = 0;
+    let passesCompiled = 0;
     try {
       scene.traverse((o) => {
         // Any invisible Object3D, not just meshes: a hidden GROUP (flash
         // group) hides visible children that compileAsync would otherwise
         // skip — the first-shot freeze survived for exactly those.
         if (!o.visible) { flipped.push(o); o.visible = true; }
+        if (o !== scene) layersCompiled |= o.layers.mask & ~previousMask;
       });
+      camera.layers.enableAll();
       await handle.renderer.compileAsync(scene, camera);
+      camera.layers.mask = previousMask;
       if (gooLayer) await gooLayer.precompile(camera);
-      const done = { ms: Math.round(performance.now() - t0), flipped: flipped.length };
+      // The SDF layer's own passes: the twins in their real target/MRT context,
+      // the fullscreen passes (blit/accum/detail/refine-view/composite) that are
+      // in private scenes the traversal above cannot reach, and the upscale
+      // stage's per-layer passes. See SdfLayer.precompilePasses.
+      passesCompiled = await sdfLayer.precompilePasses(scene, camera);
+      let twinLayers = 0;
+      for (let b = 0; b < 32; b++) if (layersCompiled & (1 << b)) twinLayers++;
+      const done = {
+        ms: Math.round(performance.now() - t0),
+        flipped: flipped.length,
+        twinLayers,
+        passes: passesCompiled,
+      };
       (window as unknown as Record<string, unknown>).__warmDone = done;
-      console.log(`[warm] pipelines compiled in ${done.ms} ms (${done.flipped} hidden objects included)`);
+      console.log(`[warm] pipelines compiled in ${done.ms} ms (${done.flipped} hidden objects, ${twinLayers} twin layers, ${passesCompiled} stage/layer passes)`);
     } catch (err) {
       console.error('[warm] pipeline warm-up failed', err);
     } finally {
       for (const o of flipped) o.visible = false;
+      camera.layers.mask = previousMask;
       handle.setLoopRunning(true);
     }
   };

@@ -37,6 +37,19 @@ export interface UpscaleStage {
   readonly sharpenMode: 'cas' | 'unsharp';
   setSize(inW: number, inH: number, outW: number, outH: number): void;
   render(renderer: THREE.WebGPURenderer, quadCam: THREE.Camera, camera: THREE.Camera): void;
+  /**
+   * Compiles every pass's pipeline up front, in the render target each pass
+   * actually writes (the pipeline cache key carries the attachment formats, so
+   * compiling against the canvas would produce the wrong entry and the real one
+   * would still be built mid-frame).
+   *
+   * None of these scenes are reachable from the game scene, so the boot
+   * `renderer.compileAsync(scene, camera)` never sees them — before this
+   * existed they compiled synchronously on the first frame the stage ran,
+   * which is the multi-second mid-game freeze the owner felt seconds after
+   * load. Returns the number of passes compiled.
+   */
+  precompile(renderer: THREE.WebGPURenderer, quadCam: THREE.Camera): Promise<number>;
   dispose(): void;
 }
 
@@ -276,6 +289,26 @@ export function createUpscaleStage(
       }
       renderer.autoClear = prevAuto;
       renderer.setRenderTarget(previous);
+    },
+    async precompile(renderer, quadCam) {
+      const previous = renderer.getRenderTarget();
+      let n = 0;
+      try {
+        for (const b of built) {
+          renderer.setRenderTarget(b.target === output ? fullResTarget() : b.target);
+          await renderer.compileAsync(b.scene, quadCam);
+          n++;
+        }
+        // ALWAYS, even at sharpen 0 (the pass does not run then): the U-key A/B
+        // and setSharpen can turn it on mid-session, and that must not be the
+        // moment its pipeline is built.
+        renderer.setRenderTarget(output);
+        await renderer.compileAsync(sharpenScene, quadCam);
+        n++;
+      } finally {
+        renderer.setRenderTarget(previous);
+      }
+      return n;
     },
     dispose() {
       for (const b of built) {
