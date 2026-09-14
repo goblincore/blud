@@ -368,6 +368,139 @@ entry shifted from a box face to the nearest sphere, so the only mask flip is
 1 rim pixel in room 2 and flat albedo is bit-identical — the union field and
 material path are exact.
 
+## Stage a-2 (2) — knee, quad vs boxes (2026-09-14)
+
+The Task 7f knee re-run with both dispatches in the same matrix, room 1, one
+run per `n`:
+
+```bash
+BENCH_PASSES=1 BENCH_REPEATS=1 BENCH_ROOMS=1 \
+BENCH_LEGS=baseline,crowd-quad,crowd-boxes BENCH_CROWD=$n \
+BENCH_QUERY='crowd=1&tiles-playtest' \
+BENCH_OUT=docs/dev-notes/2026-09-13-merged-crowd-march-stage-a/a2-crowd$n \
+node scripts/sdf-game-bench.mjs 5323 9323 || true
+```
+
+`sdf:march` is the `passes.overall` p50. `visible` is the crowd packed count at
+end of run (**summed over soldier + zombie**); `bodies` is the baseline census
+max. `clamp/cull/fb` = crowd `clampedTiles` / `culledByBudget` /
+`tileFallbacks` — **all zero on every completed row of both dispatches**, and
+`crowdInfo().dispatch` reads back the leg's mode. Load was checked before each
+run and stayed below 4 throughout.
+
+| n | load 1-min | bodies base / visible quad / boxes | per-body march | crowd-quad march | crowd-boxes march | clamp/cull/fb | abort? |
+|---:|---:|---|---:|---:|---:|---|---|
+| 2 | 2.89 | 8 / 5 / 1 | 100.01 | 42.64 | 10.88 | 0/0/0 | no |
+| 4 | 3.17 | 10 / 9 / 7 | 122.00 | 69.32 | 82.56 | 0/0/0 | no |
+| 6 | 1.61 | 12 / 4 / 9 | 105.75 | 80.67 | 158.48 | 0/0/0 | no |
+| 8 | 1.44 | 15 / 13 / — | 123.59 | 92.99 | — | 0/0/0 | boxes |
+| 12 | 2.03 | 17 / 11 / — | 186.23 | 93.21 | — | 0/0/0 | boxes |
+| 16 | 1.36 | — / 17 / — | — | 124.06 | — | 0/0/0 | baseline + boxes |
+| 24 | 1.82 | — / — / — | — | — | — | — | **all three** |
+
+Per-segment `sdf:march` p50 (walk is the close-up; fire/gib drag the overall
+column):
+
+| n | leg | walk | fire | gib |
+|---:|---|---:|---:|---:|
+| 2 | per-body | 75.71 | 100.01 | 117.36 |
+| 2 | crowd-quad | 41.12 | 43.13 | 45.32 |
+| 2 | crowd-boxes | 12.26 | 11.24 | 9.67 |
+| 4 | per-body | 92.25 | 139.69 | 125.46 |
+| 4 | crowd-quad | 55.72 | 70.18 | 73.43 |
+| 4 | crowd-boxes | 83.51 | 135.99 | 78.59 |
+| 6 | per-body | 127.71 | 104.84 | 89.98 |
+| 6 | crowd-quad | 78.44 | 86.11 | 78.75 |
+| 6 | crowd-boxes | 106.62 | 166.33 | 199.42 |
+| 8 | per-body | 148.08 | 120.08 | 114.63 |
+| 8 | crowd-quad | 80.29 | 96.41 | 101.78 |
+| 12 | per-body | 152.20 | 206.56 | 187.76 |
+| 12 | crowd-quad | 96.32 | 98.44 | 85.44 |
+| 16 | crowd-quad | 114.08 | 157.76 | 121.48 |
+
+Derived. `cost/visible` = march / body count (per-body: `bodies`; crowd:
+`visible`). `premium` = crowd cost-per-visible / per-body cost-per-visible
+(the 7f metric).
+
+| n | quad march(2→n) | quad cost/visible | boxes cost/visible | premium quad | premium boxes | crowd/per-body |
+|---:|---:|---:|---:|---:|---:|---:|
+| 2 | 1.00 | 8.53 | 10.88 | 0.68 | 0.87 | 0.43 / 0.11 |
+| 4 | 1.63 | 7.70 | 11.79 | 0.63 | 0.97 | 0.57 / 0.68 |
+| 6 | 1.89 | 20.17 | 17.61 | 2.29 | 2.00 | 0.76 / 1.50 |
+| 8 | 2.18 | 7.15 | — | 0.87 | — | 0.75 / — |
+| 12 | 2.19 | 8.47 | — | 0.77 | — | 0.50 / — |
+| 16 | 2.91 | 7.30 | — | — | — | — / — |
+
+**The quad is flat in visible bodies; the boxes are not.** Quad cost per
+visible body sits at ~7–8.5 ms from 5 to 17 visible bodies (the n=6 point at
+20.2 is an end-of-run `visible` low-water of 4 against an 80.7 ms march — the
+one row the end-of-run census is unreliable; the walk column agrees), while the
+box path climbs 10.9 → 11.8 → 17.6 ms/visible at 2/4/6. The noise-free form of
+the same result: quad march grows **2.18x** from n=2 to n=8 (42.64 → 92.99)
+where Task 7f's boxes grew **13.68x** over the same span (10.24 → 140.06) and
+the per-body baseline grew 1.24x — the duplicate-trace hypothesis is confirmed.
+
+**But the quad pays a fixed full-screen cost, and it loses at two bodies.**
+The walk segment (the only same-scene leg: census 6→5 on both) is quad 41.12 vs
+boxes 12.26 ms at n=2 — **3.4x slower**. A confirmation run of the same command
+(`a2-confirm2/`) reproduced it: quad walk 46.38 vs boxes 14.61 (3.2x), and the
+end-of-run `visible` counts **swapped** (quad 1, boxes 5) with the verdict
+unchanged, so this is the dispatch and not the census. The quad's fragment is
+the whole tile-covered screen (it discards on an empty tile / missed sphere
+only *after* the per-pixel setup), while a box only shades its silhouette, so
+at low `n` the union-fold saving cannot pay for the extra fragments. The
+crossover is between 2 and 4 bodies: at n=4 quad walk 55.72 vs boxes 83.51
+(0.67x), n=6 78.44 vs 106.62 (0.74x).
+
+**At 8, only the quad finishes.** `crowd-boxes` aborts the frame guard
+(probe evaluate never answered in 60 s) at n=8, 12, 16 and 24; `crowd-quad`
+completes at 8 (92.99, walk 80.29), 12 (93.21) and 16 (124.06, walk 114.08)
+where the per-body baseline itself aborts at 16 (its 12-body march was already
+186.23). Crowd 24 was **earned** by the plan's rule (16's quad 124.06 ≤ 2x the
+8 number, 185.98) and attempted with the guard on; all three legs — including
+`crowd-quad` — aborted at 250 ms, so **24 is still unmeasured**, now as a
+fast visible probe abort rather than Task 7's 330 s hang.
+
+**Verdict.** (1) The quad premium **is flat in `n`** — ~7–8.5 ms per visible
+body across 5→17 visible, with a 2.18x total growth from 2→8 against the boxes'
+13.68x — so the duplicate-trace hypothesis is **confirmed**, with one caveat:
+the quad's flat cost is *higher* than the boxes' at the low end, 3.4x worse in
+the n=2 walk segment (reproduced), crossing below between 2 and 4 bodies.
+(2) At 8 bodies the comparison is one-sided: `crowd-boxes` aborts the frame
+guard while `crowd-quad` completes at 92.99 ms (1.24x its n=6 number, where the
+boxes' own overall rose 82.56 → 158.48 over the same step). (3) The highest `n`
+with a completed crowd-quad is **16** (124.06 ms, 1.33x the n=8 number, under
+the 2x bar); crowd **24 was earned and run but aborted on every leg**, so the
+a-3 bar "24 and 48 zombies grow with covered pixels, not bodies" is **not
+demonstrated** — the default flip (Task 8) stays blocked on (a) the quad's
+low-`n` fixed-screen regression and (b) a measurable 24-body crowd leg.
+
+**A/B honesty warnings.** Each leg is a fresh page, so an abort cannot cascade
+(confirmed: at n=16 the baseline aborted and crowd-quad still completed after
+it). `bodies` and `visible` are still different instruments (baseline census
+max over the whole run vs the crowd type's packed count on the final frame),
+and the two crowd legs' end-of-run `visible` counts differ with dispatch
+because the simulation advances in wall-clock time — the slower leg kills fewer
+zombies and stays busier. The `cost/visible` and `premium` columns are
+therefore noisier than 7f's; the walk segment (fixed 120-frame close-up, census
+matched) and the 2→8 growth factor are the load-bearing evidence. The a-2
+baselines are also heavier than 7f's (100.01 vs 69.56 at n=2), so the a-2 and
+7f absolute columns must not be mixed.
+
+### Gates
+
+- `npx tsc --noEmit -p .` clean.
+- `march.wgsl.test.ts` 231 + `deferred-sdf.test.ts` 21 + `crowd-type.test.ts` 7
+  + `crowd-spawn.test.ts` 5 = 264 pass.
+- `node scripts/march-hash.mjs` x2 =
+  `a8ab4efac15fc0376c3e4e05420f13e34d1511bd` (wounded `da785297…`) — the
+  canonical per-body path did not move (this task changes no source).
+- `node scripts/march-parity.mjs` **PASS** tiles off and `MARCH_PARITY_TILES=1`
+  tiles on; quad lines identical to Stage a-2 (1).
+
+Artifacts: `a2-crowd{2,4,6,8,12,16,24}/` (`bench.{json,md}` + `passes.*` +
+`bench-progress.jsonl`) and `a2-confirm2/`.
+
 ## Next
 
 Task 1 (`crowd-records.ts`) — the 16-vec4 instance record and the

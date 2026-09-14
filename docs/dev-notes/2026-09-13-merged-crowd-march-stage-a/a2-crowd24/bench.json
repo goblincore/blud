@@ -1,0 +1,50 @@
+{
+  "meta": {
+    "url": "http://localhost:5323/sdf-game.html?crowd=1&tiles-playtest",
+    "W": 1280,
+    "H": 800,
+    "repeats": 1,
+    "rooms": [
+      1
+    ],
+    "backend": "webgpu",
+    "prelude": "",
+    "when": "2026-09-14T07:23:57.616Z",
+    "complete": false,
+    "runsCompleted": 0,
+    "abandoned": null,
+    "failures": [],
+    "aborts": [
+      {
+        "rep": 0,
+        "leg": "baseline",
+        "room": 1,
+        "mode": "passes",
+        "aborted": "frame-cap",
+        "probeP50": null,
+        "error": "probe evaluate failed after 30 s: CDP Runtime.evaluate (id 18) never answered in 60s — rep0 baseline/room1/passes [probe]\n     params: {\"expression\":\"__sdfGame.bench({ room: 1, mode: \\\"passes\\\", warmup: 4, chunkFrames: 2, label: \\\"baseline/room1/passes-probe\\\" })\",\"awaitPromise\":true,\"returnByValue\":true,\"timeout\":30000}"
+      },
+      {
+        "rep": 0,
+        "leg": "crowd-quad",
+        "room": 1,
+        "mode": "passes",
+        "aborted": "frame-cap",
+        "probeP50": null,
+        "error": "probe evaluate failed after 30 s: CDP Runtime.evaluate (id 30) never answered in 60s — rep0 crowd-quad/room1/passes [probe]\n     params: {\"expression\":\"__sdfGame.bench({ room: 1, mode: \\\"passes\\\", warmup: 4, chunkFrames: 2, label: \\\"crowd-quad/room1/passes-probe\\\" })\",\"awaitPromise\":true,\"returnByValue\":true,\"timeout\":30000}"
+      },
+      {
+        "rep": 0,
+        "leg": "crowd-boxes",
+        "room": 1,
+        "mode": "passes",
+        "aborted": "frame-cap",
+        "probeP50": null,
+        "error": "probe evaluate failed after 30 s: CDP Runtime.evaluate (id 43) never answered in 60s — rep0 crowd-boxes/room1/passes [probe]\n     params: {\"expression\":\"__sdfGame.bench({ room: 1, mode: \\\"passes\\\", warmup: 4, chunkFrames: 2, label: \\\"crowd-boxes/room1/passes-probe\\\" })\",\"awaitPromise\":true,\"returnByValue\":true,\"timeout\":30000}"
+      }
+    ]
+  },
+  "results": [],
+  "table": [],
+  "spikes": []
+}

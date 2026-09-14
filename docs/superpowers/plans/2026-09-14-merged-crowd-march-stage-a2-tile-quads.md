@@ -154,7 +154,7 @@ Write `## Stage a-2 (1) — quad dispatch (2026-09-14)` in the dev note: the par
 
 **Files:** `docs/dev-notes/2026-09-13-merged-crowd-march-stage-a.md`, `TASKS.md`
 
-- [ ] **Step 1: Sweep.** Same as Task 7f Step 2 with the two crowd legs:
+- [x] **Step 1: Sweep.** Same as Task 7f Step 2 with the two crowd legs:
 
 ```bash
 for n in 2 4 6 8; do
@@ -164,9 +164,9 @@ done
 
 Load check before each. Then 12 and 16 if `crowd-quad` completed at 8; 24 only if 16 completes and its `crowd-quad` march ≤ 2× the 8 number. Record `crowdInfo()` (`dispatch`, `visible`, `clampedTiles`, `culledByBudget`, `tileFallbacks`) per crowd row.
 
-- [ ] **Step 2: Note and verdict.** `## Stage a-2 (2) — knee, quad vs boxes` with the 7f-format table plus a `crowd-quad` column, the per-visible-body premium for both dispatch modes, and a three-sentence verdict: (1) is the quad premium flat in `n` (the duplicate-trace hypothesis confirmed or refuted); (2) quad vs boxes at 8; (3) highest `n` completed and whether crowd 24 was earned. Update `TASKS.md`'s crowd entry with the a-2 result and the next action (default flip Task 8 if the a-3 bars in the spec hold, otherwise what blocks).
+- [x] **Step 2: Note and verdict.** `## Stage a-2 (2) — knee, quad vs boxes` with the 7f-format table plus a `crowd-quad` column, the per-visible-body premium for both dispatch modes, and a three-sentence verdict: (1) is the quad premium flat in `n` (the duplicate-trace hypothesis confirmed or refuted); (2) quad vs boxes at 8; (3) highest `n` completed and whether crowd 24 was earned. Update `TASKS.md`'s crowd entry with the a-2 result and the next action (default flip Task 8 if the a-3 bars in the spec hold, otherwise what blocks).
 
-- [ ] **Step 3: Commit** — `docs(crowd): stage a-2 knee — quad vs boxes, 2..8(+) bodies, verdict`.
+- [x] **Step 3: Commit** — `docs(crowd): stage a-2 knee — quad vs boxes, 2..8(+) bodies, verdict`.
 
 ## Self-review notes
 

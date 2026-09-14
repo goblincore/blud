@@ -1,0 +1,16 @@
+{
+  "meta": {
+    "url": "http://localhost:5323/sdf-game.html?crowd=1&tiles-playtest",
+    "W": 1280,
+    "H": 800,
+    "repeats": 1,
+    "rooms": [
+      1
+    ],
+    "backend": "webgpu",
+    "prelude": "",
+    "when": "2026-09-14T07:23:57.616Z"
+  },
+  "results": [],
+  "perSeg": {}
+}

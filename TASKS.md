@@ -84,7 +84,19 @@
   ratification): spec `docs/superpowers/specs/2026-09-13-merged-crowd-march-design.md`, plan
   `docs/superpowers/plans/2026-09-13-merged-crowd-march-stage-a.md` (8 tasks: baselines → records → one-slot
   kernel [hash gate] → CrowdType → `?crowd=1` → parity + crowd bench → default flip). D1–D10 ratified by owner
-  2026-09-13. Next action: execute Task 0 (needs lab servers + GPU).
+  2026-09-13. D1–D10 ratified by owner 2026-09-13. **Stage (a) 0–7f + stage a-2 landed** (a-1 records/one-slot kernel,
+  a-2 CrowdType/`?crowd=1`, 7b parity gate, 7d slot table + frame guard, 7f spread spawns; a-2 quad dispatch
+  `b3ee7742`: one full-screen quad per type, tile-sphere entry, empty-tile discard, `?crowddispatch=quad|boxes`,
+  default quad). Canonical per-body hash `a8ab4e…` unchanged; quad/boxes parity PASS. **Stage a-2 knee
+  (2026-09-14, `docs/dev-notes/2026-09-13-merged-crowd-march-stage-a.md` → `## Stage a-2 (2)`):** the quad
+  removes the duplicate-trace growth — cost per visible body is flat (~7–8.5 ms over 5→17 visible; total quad
+  march grows 2.18x 2→8 vs the boxes' 13.68x in 7f) — but it pays a fixed full-screen cost, so at 2 bodies the
+  boxes' walk leg (12.26 ms) beats the quad's (41.12 ms, 3.4x, reproduced), crossing at ~4 bodies; `crowd-quad`
+  completes at 16 (124.06 ms) where baseline and boxes abort, but **crowd 24 aborts the frame guard on all three
+  legs**, so the a-3 bar "24/48 zombies grow with covered pixels, not bodies" is not demonstrated. **Next action:
+  do NOT flip the default (Task 8).** Stage a-3 must (a) cut the quad's low-`n` fixed screen cost (tile-sized
+  quads / finer entry cull, not one full-screen quad) and (b) produce a measurable 24-body crowd leg. Plan
+  `docs/superpowers/plans/2026-09-14-merged-crowd-march-stage-a2-tile-quads.md`.
 - [ ] **CORPSE BAKE FOR EVERY CHARACTER:** `corpseBakeEligible` is soldier-only (`profile.name === 'soldier'` +
   collapse settled), so dead zombies keep marching at full cost. Extending eligibility to any settled actor is
   mostly the flag (the bake rejects on overflow and falls back). Independent of the upscaler.
