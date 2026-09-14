@@ -9015,6 +9015,27 @@ function performBenchAction(a: BenchAction): void {
     },
     /** Diagnostic: per crowd type, each attached actor's slot, alive flag, counts row, band, bone cull mode,
      *  wound count and whether it is the type's uniform source. */
+    /** Per-actor diagnostic (2026-09-14): who is in the cast, who the cull
+     *  kept, what the per-body proxy's visibility is, and the corpse bake
+     *  state — the fields a "why does this leg march / not march" question
+     *  needs, in one call. */
+    actorDump() {
+      const cam = camera.position;
+      return actors.map((a) => {
+        const o = a.view.object;
+        return {
+          id: a.id, room: a.room,
+          name: (a as unknown as { name?: string }).name ?? null,
+          visible: visibleActors.includes(a),
+          proxyVisible: o.visible,
+          crowdSlot: a.crowd?.slot ?? null,
+          dist: Math.round(o.position.distanceTo(cam) * 100) / 100,
+          bakeEligible: a.corpseBakeEligible(),
+          baked: soldierCorpses?.bakedState(a.id) ?? 'n/a',
+          rev: a.damageRevision(),
+        };
+      });
+    },
     crowdSlotDump() {
       const out: Record<string, unknown[]> = {};
       for (const [name, t] of crowdTypes) {

@@ -450,7 +450,8 @@ export function createCrowdType(
           (2 * TILE_SIZE_PX) / (grid.tilesX * grid.tilePx),
           (2 * TILE_SIZE_PX) / (grid.tilesY * grid.tilePx),
         ];
-        const rect = crowdScreenRect(rectList, viewProj, reach, marginNdc);
+        const rect = crowdScreenRect(rectList, viewProj, reach, marginNdc,
+          camera.coordinateSystem === THREE.WebGPUCoordinateSystem);
         lastRect = rect;
         lastRectFrac = rect ? ((rect[2] - rect[0]) * (rect[3] - rect[1])) / 4 : 0;
         if (rect) {

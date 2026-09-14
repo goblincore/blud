@@ -32,9 +32,38 @@ describe('crowdScreenRect', () => {
     expect(r![3]).toBeGreaterThan(0);
   });
 
-  it('returns the full screen when an inflated corner is behind the eye', () => {
+  it('returns null for a box entirely behind the camera', () => {
     const r = crowdScreenRect([{ centre: [0, 0, 4], half: [0.5, 0.5, 0.5] }], viewProj(), 0.1, MARGIN);
-    expect(r).toEqual([-1, -1, 1, 1]);
+    expect(r).toBeNull();
+  });
+
+  it('clips a box straddling the near plane ahead of the camera to a bounded on-screen rect', () => {
+    // Centre 0.3 m ahead, half-depth 0.5: the back face is behind the eye.
+    const r = crowdScreenRect([{ centre: [0, 0, -0.3], half: [0.2, 0.2, 0.5] }], viewProj(), 0.0, MARGIN);
+    expect(r).not.toBeNull();
+    expect(r![0]).toBeLessThan(0);
+    expect(r![2]).toBeGreaterThan(0);
+  });
+
+  it('returns null for a box straddling the near plane but beside the camera (the cleared-room case)', () => {
+    // 1.3 m to the right of a camera looking down -z, box reaching from
+    // z = -1.1 to z = +1.1: crosses the eye plane, never enters the view.
+    const r = crowdScreenRect([{ centre: [3, 0, 0], half: [0.4, 1, 0.4] }], viewProj(), 0.7, MARGIN);
+    expect(r).toBeNull();
+  });
+
+  it('accepts WebGPU [0,1] depth and gives the same answer', () => {
+    const camera = new THREE.PerspectiveCamera(90, 1, 0.01, 100);
+    camera.coordinateSystem = THREE.WebGPUCoordinateSystem;
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld();
+    camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
+    const vp = new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    const gl = crowdScreenRect([{ centre: [0, 0, -0.3], half: [0.2, 0.2, 0.5] }], viewProj(), 0.0, MARGIN);
+    const gpu = crowdScreenRect([{ centre: [0, 0, -0.3], half: [0.2, 0.2, 0.5] }], vp, 0.0, MARGIN, true);
+    expect(gpu).not.toBeNull();
+    for (let i = 0; i < 4; i++) expect(gpu![i]).toBeCloseTo(gl![i]!, 3);
+    expect(crowdScreenRect([{ centre: [3, 0, 0], half: [0.4, 1, 0.4] }], vp, 0.7, MARGIN, true)).toBeNull();
   });
 
   it('returns null for an instance entirely off-screen', () => {
