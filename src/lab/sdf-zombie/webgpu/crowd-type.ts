@@ -28,6 +28,7 @@ import { RAY_CULL_SLACK, QUAD_ENTRY_SLACK } from './march.wgsl';
 import {
   createCrowdMaterial, type CrowdMaterialSources, type MarchUniforms, type ZombieGpuView,
 } from './zombie-gpu';
+import type { GameTelemetry } from './game-telemetry';
 
 // Re-exported for the existing `./crowd-type` import sites; the function itself
 // now lives beside the record buffer it allocates from (task 7c), so
@@ -167,6 +168,12 @@ export interface CrowdType {
      *  this is what says whether the row measured a distant crowd or a
      *  close-up stack. */
     meanDistance: number;
+    /** Fire/gib profiling (2026-09-14): band uploads performed by sync()
+     *  (one per written band that draw) and whole-record-buffer flushes. */
+    atlasFlushes: number;
+    recordsFlushes: number;
+    /** setSkeletonVolume() calls that actually rebound the material pair. */
+    volumeRebinds: number;
   };
 }
 
@@ -177,7 +184,7 @@ export function createCrowdType(
   maxW: number,
   maxH: number,
   sources?: CrowdMaterialSources,
-  opts?: { dispatch?: CrowdDispatch },
+  opts?: { dispatch?: CrowdDispatch; telemetry?: Pick<GameTelemetry, 'begin' | 'end'> },
 ): CrowdType {
   // ONE shared prim atlas, ONE record buffer, ONE material pair, ONE tile
   // binding — the whole point of the type. The atlas is allocated at the
@@ -240,6 +247,11 @@ export function createCrowdType(
   // this, not the alive-record count: attached-but-hidden is a real state now
   // (the game attaches every actor at spawn and filters per frame).
   let packedCount = 0;
+  // Fire/gib profiling counters (2026-09-14): see info()'s atlasFlushes /
+  // recordsFlushes / volumeRebinds.
+  let atlasFlushes = 0;
+  let recordsFlushes = 0;
+  let volumeRebinds = 0;
 
   const instOut = ib.array as Float32Array;
   // Reused per frame — the pack is CPU-side and the list is at most 64.
@@ -460,13 +472,25 @@ export function createCrowdType(
         instCfg.value.set(highWater(drawnSlots), dispatch === 'quad' ? 2 : 1, 0, maxBlendK);
       }
 
+      // Fire/gib profiling (2026-09-14): the flush is where the atlas is
+      // re-uploaded. Timed here so the bench can attribute it separately from
+      // the bin/pack above.
+      const flushTiming = opts?.telemetry?.begin();
+      if (atlas.dirty) atlasFlushes++;
+      if (records.dirty) recordsFlushes++;
       atlas.flush();
       records.flush();
+      opts?.telemetry?.end('crowd-atlas-flush', flushTiming);
     },
 
     setSkeletonVolume(atlasTex, meta) {
+      // Fire/gib profiling (2026-09-14): count and time each actual rebind of
+      // the type's four texture nodes (lit + depth-pre, boxes + quad).
+      const rebindTiming = opts?.telemetry?.begin();
+      volumeRebinds++;
       handles.setSkeletonVolume(atlasTex, meta);
       quadHandles.setSkeletonVolume(atlasTex, meta);
+      opts?.telemetry?.end('crowd-volume-rebind', rebindTiming);
     },
 
     setDispatch(mode) {
@@ -508,7 +532,7 @@ export function createCrowdType(
       // stamped to 1 by the game's crowd sync (task 8: crowd mode requires the
       // tile list), so this reads the ACTUAL uniform rather than a guess.
       const tilesOn = uniforms.tileCfg.value.x > 0.5;
-      return { attached, visible, tileFallbacks, tilesOn, culledByBudget, clampedTiles, dispatch, rect: lastRect, rectFrac: lastRectFrac, meanDistance: lastMeanDistance };
+      return { attached, visible, tileFallbacks, tilesOn, culledByBudget, clampedTiles, dispatch, rect: lastRect, rectFrac: lastRectFrac, meanDistance: lastMeanDistance, atlasFlushes, recordsFlushes, volumeRebinds };
     },
   };
 }

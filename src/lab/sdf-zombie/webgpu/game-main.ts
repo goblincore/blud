@@ -1711,7 +1711,9 @@ async function main() {
       const vis = new Set<number>();
       for (const t of crowdTypes.values()) {
         const src = crowdSourceView.get(t);
+        const copyTiming = telemetry.begin();
         if (src) copyUniformValues(t.uniforms, src.uniforms);
+        telemetry.end('crowd-uniform-copy', copyTiming);
         // CROWD REQUIRES ITS TILE LIST (task 8). The per-body tile playtest
         // (`gameTiles`) gates only the per-body path; the crowd type owns its
         // own ComputeTileBinding and always bins it, so a ship-defaults
@@ -1729,17 +1731,33 @@ async function main() {
     }
     // Crowd stage a: one instanced mesh per type replaces its N hidden
     // per-body proxies; unattached (or crowd-off) actors keep their proxies.
+    // Fire/gib profiling (2026-09-14): label the two draw-fn spans that are
+    // NOT the per-type sync so the bench can attribute a cpu:draw climb.
+    const setBodiesTiming = telemetry.begin();
     sdfLayer.setBodies(
       crowdOn
         ? ([...crowdTypes.values()].map(t => t.mesh) as THREE.Object3D[])
             .concat(visibleActors.filter(a => !a.crowd).map(a => a.view.object))
         : visibleActors.map(a => a.view.object),
       chunkObjects());
+    telemetry.end('crowd-set-bodies', setBodiesTiming);
+    const sdfRenderTiming = telemetry.begin();
     if (gooEnabled && gooLayer) {
-      gooLayer.render(camera, () => sdfLayer.render(scene, camera));
+      // Fire/gib profiling: the goo layer's callback IS the SDF submit, so
+      // nest so the bench can tell a goo pass from the march submit.
+      const gooTiming = telemetry.begin();
+      gooLayer.render(camera, () => {
+        const inner = telemetry.begin();
+        sdfLayer.render(scene, camera);
+        telemetry.end('crowd-sdf-inner', inner);
+      });
+      telemetry.end('crowd-goo-outer', gooTiming);
     } else {
+      const inner = telemetry.begin();
       sdfLayer.render(scene, camera);
+      telemetry.end('crowd-sdf-inner', inner);
     }
+    telemetry.end('crowd-sdf-render', sdfRenderTiming);
     characterEffects.render(camera);
     });
   });
@@ -2743,7 +2761,7 @@ async function main() {
         lastFrame: sdfLayer.lastFrame,
         probeDyn: probeGather ? { node: probeGather.probeDynNode } : undefined,
       },
-      { dispatch: crowdDispatch },
+      { dispatch: crowdDispatch, telemetry },
     );
     t.mesh.layers.set(SDF_LAYER);
     t.depthPreMesh.layers.set(DEPTH_PREPASS_LAYER);
@@ -6351,7 +6369,18 @@ function performBenchAction(a: BenchAction): void {
       // with stale type uniforms cannot read true.
       tilesOn: crowdOn && [...crowdTypes.values()].some(t => t.info().tilesOn),
       dispatch: crowdDispatch,
-      types: [...crowdTypes].map(([n, t]) => ({ name: n, ...t.info() })),
+      // Fire/gib profiling (2026-09-14): aggregate counters over the live
+      // types, computed from ONE info() pass (info() runs the diagnostic
+      // tile binner on demand, so calling it repeatedly is not free).
+      ...(() => {
+        let atlasFlushes = 0, recordsFlushes = 0, volumeRebinds = 0;
+        const types = [...crowdTypes].map(([n, t]) => {
+          const i = t.info();
+          atlasFlushes += i.atlasFlushes; recordsFlushes += i.recordsFlushes; volumeRebinds += i.volumeRebinds;
+          return { name: n, ...i };
+        });
+        return { atlasFlushes, recordsFlushes, volumeRebinds, types };
+      })(),
     }),
     backend: handle.backend,
     /** Place the player at (x, z) with the given yaw/pitch and zero velocity
