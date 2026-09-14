@@ -1444,6 +1444,16 @@ var<private> gWoundList: array<i32, 16>;
 var<private> gSlot: i32 = 0;
 var<private> gBand: i32 = 0;
 var<private> gHitSlot: i32 = 0;
+// PINNED SLOT (crowd fix 2026-09-14). Once the hit instance is loaded, every
+// later mapBody call in the invocation (calcNormal's four taps, the AO and
+// scatter probes, wound/level shadow marches) still walks all the slots in
+// this pixel's list and would leave the gInst*/gBand globals on the LAST slot
+// it touched — so the material rows, rest anchor, wounds and face after it
+// read ANOTHER instance's band (misaligned skin, or a free band's zeros: the
+// pale/white zombie). POST pins the hit slot; mapBody restores the pinned
+// instance on exit. -1 = unpinned (the march loop, where the winner is what
+// matters). A one-slot pixel never reloads: gSlot already equals the slot.
+var<private> gPinSlot: i32 = -1;
 var<private> gTileSlot: array<f32, ${TILE_MAX_ENTRIES}>;
 // Per-pixel slot table, built ONCE in MARCH_TRACE_SETUP from the sorted tile
 // entry list: distinct slots present in this pixel's tile and each slot's
@@ -1892,6 +1902,10 @@ export const MAP_BODY = /* wgsl */ `fn mapBody(p: vec3<f32>, data: texture_2d<f3
   gFoldBestIdx = bestIdxU;
   gFoldBestDistort = bestDistortU;
   gHitSlot = bestSlot;
+  // Leave the instance globals on the slot the caller expects: the pinned hit
+  // slot after the hit, else the union's winner. No-op for a one-slot pixel.
+  let wantSlot = select(bestSlot, gPinSlot, gPinSlot >= 0);
+  if (gSlot != wantSlot) { loadInstance(inst, wantSlot); }
   return vec4<f32>(dUnion, bestIdxU, nearWoundU, carvedU);
 }`;
 
@@ -2502,7 +2516,8 @@ export const MARCH_BODY_PARAMS = /* wgsl */ `(
  * surface entry reuses this text verbatim. The debug early-returns and the
  * miss discard are part of the trace and behave identically in both entries.
  */
-export const MARCH_TRACE_SETUP = /* wgsl */ `  // FIRST STATEMENT, before anything folds. gWindDrift is read inside
+export const MARCH_TRACE_SETUP = /* wgsl */ `  gPinSlot = -1;
+  // FIRST STATEMENT, before anything folds. gWindDrift is read inside
   // sdShell, which is reached from foldGroup on every mapBody call in this
   // invocation — the march steps, calcNormal, the AO and scatter probes. Set
   // it late and the normal would be taken against a different surface than
@@ -3294,6 +3309,7 @@ export const MARCH_TRACE_POST = /* wgsl */ `  if (!hit) { discard; }
   // Reload the slot whose field won the union fold. Every post-hit row read
   // below (material, rest anchor, face, wound masks) is the HIT instance's.
   loadInstance(inst, gHitSlot);
+  gPinSlot = gHitSlot;
   // FLAT-ALBEDO SEAM (close-up diagnostics task 1, 2026-09-04). Returns the
   // body's base albedo AT THE HIT and skips the entire post-hit chain —
   // calcNormal (4 field evals), the anchor, the micro-detail fbm, wound/char
