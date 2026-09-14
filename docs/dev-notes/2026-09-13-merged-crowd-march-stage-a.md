@@ -1051,3 +1051,137 @@ multi-slot draw now takes the finite-difference normal (four field taps per hit 
 the analytic gradient, which is wrong for slots >= 1 until it is recalibrated for instance bands
 (`scripts/crowd-normal-probe.mjs`). **Flip held** until that task lands and room 2 re-benches at
 or below per-body. Artifacts: `flip-fd-rooms12/`, `flip-fd-room2x3/`.
+## Analytic normal for instance bands (2026-09-14)
+
+**The bug.** `ngBody` (`normal-gradient.wgsl.ts`) opened with a hard-coded
+`loadInstance(inst, 0)`. That line predates the crowd work (it was already there
+at `ec0bcdb1^`) and was invisible while every draw had one slot. `MARCH_TRACE_POST`
+now pins the HIT slot first (`loadInstance(inst, gHitSlot); gPinSlot = gHitSlot;`),
+but `ngBody` immediately overwrote `gBand`/`gInst*` with slot 0's record. For any
+hit on a slot != 0 the analytic gradient was therefore differentiated against
+**slot 0's body** — `dot(analytic, FD)` `1.0` for slot 0 and ~`-0.42` for every
+other slot, with `ngReason == 0` (the analytic path believed it was supported).
+The earlier banding work (every row read `+ gBand`, tile selection by `gTileBand`,
+per-slot anchor/wind, `ngDetail`'s `restPoint(..., gBand)`, the `gPinSlot` pin)
+was all correct and necessary; the `loadInstance(inst, 0)` clobber sat on top of
+it. `ec0bcdb1`'s gate (`instCfg.x < 1.5`) only hid the symptom for crowd draws.
+
+**Fix.** `ngBody` no longer loads an instance — the caller owns the band (POST
+pins the hit slot; the standalone `ngBodyPoint` diagnostic now loads its own
+`i32(instCfg.z)` base slot). The single-slot gate is removed: the analytic path
+runs for every draw.
+
+### Term bisect (mode 12; `normalGradientCfg.z` mask)
+
+A temporary `gNgDebugMask` (bit 1 skip `ngWounds`, 2 skip
+`ngBones`/`ngInternalLower`, 4 skip `ngExcluded` certificates, 8 skip `ngDetail`,
+16 force the cluster walk) was fed from the free `normalGradientCfg.z` lane via
+`__sdfGame.setUniformAll('normalGradientCfg', 2, mask)`, applied just after
+`spawnCrowd` (the crowd type is created there, so a pre-spawn write does not
+reach it). Room 4, 3 spawned zombies, hit slots 0 and 3 seen.
+
+**Pre-fix (`ngBody` still reloaded slot 0):**
+
+| mask | term disabled | slot 0 dotMean | slot 3 dotMean |
+| ---: | --- | ---: | ---: |
+| 0 | none (baseline) | 1.000 | -0.416 |
+| 1 | `ngWounds` | 1.000 | -0.416 |
+| 2 | `ngBones` / `ngInternalLower` | 1.000 | -0.417 |
+| 4 | `ngExcluded` certificates | 1.000 | -0.416 |
+| 8 | `ngDetail` (POST) | 0.982 | -0.471 |
+| 16 | tiles (force cluster walk) | 1.000 | -0.417 |
+| 31 | all of the above | 0.982 | -0.472 |
+
+**No term removal recovers slot 3.** Every mask leaves it at ~`-0.42` with
+`dotLow > 0`; mask 8/31 only nudge it (and already disturb slot 0). The fault is
+upstream of every analytic term — the band the whole fold reads — which is
+exactly what the `loadInstance(inst, 0)` clobber is.
+
+**Post-fix (the same masks):**
+
+| mask | slot 0 dotMean | slot 3 dotMean |
+| ---: | ---: | ---: |
+| 0 | 1.000 | 1.000 |
+| 1 | 1.000 | 1.000 |
+| 2 | 1.000 | 1.000 |
+| 4 | 1.000 | 1.000 |
+| 8 | 0.982 | 0.985 |
+| 16 | 1.000 | 1.000 |
+| 31 | 0.982 | 0.985 |
+
+Only intentionally removing `ngDetail` moves the number, and it moves **both
+slots equally** — `ngDetail` is slot-correct, not slot-relative. The mask is kept
+inert at `normalGradientCfg.z = 0` (production) as the diagnostic that produced
+this table.
+
+### Probe PASS (gate removed, analytic on for crowd draws)
+
+```
+ROOM=4 (spawnCrowd zombie x3, spacing 0.9)
+STATS slot0 {"n":14570,"reasons":{"0":12566,"1":561,"4":1443},"dotMean":1,"dotNeg":0,"dotLow":0}
+STATS slot3 {"n":4555,"reasons":{"0":4104,"4":451},"dotMean":1,"dotNeg":0,"dotLow":0}
+PASS
+ROOM=5 N=4
+STATS slot0 {"n":15283,"reasons":{"1":15283},"dotMean":1,"dotNeg":0,"dotLow":0}
+PASS
+```
+
+Room 4 is the discriminating scene: 12 566 slot-0 and 4 104 slot-3 pixels take
+the analytic path (`ngReason == 0`) and both slots agree with the finite
+difference to `dotMean 1.000`, `dotLow 0`. In room 5 every hit pixel returns
+`ngReason == 1` (unsupported field — the annex's soldiers/scoped characters), so
+the analytic path falls back to `calcNormal` and `dot == 1` by construction;
+room 5 passes but is not a discriminating test. This is unchanged by the fix.
+
+### Other gates
+
+- `npx tsc --noEmit -p .` clean; `march.wgsl.test.ts` 233 +
+  `normal-gradient.wgsl.test.ts` 11 + `deferred-sdf.test.ts` 21 = 265 pass. A
+  new pin asserts `MARCH_TRACE_POST` contains
+  `if (normalGradientCfg.x > 0.5) {` and NOT `instCfg.x < 1.5`.
+- `node scripts/march-hash.mjs` x2 =
+  `a8ab4efac15fc0376c3e4e05420f13e34d1511bd` (wounded `da785297…`) — the
+  canonical per-body path is unchanged (one band, so it cannot move).
+- `MARCH_PARITY_TILES=1 node scripts/march-parity.mjs` **PASS**.
+
+### Bench (load-checked, `BENCH_PASSES=1`, repeats=1, `crowd=1&tiles-playtest`)
+
+```bash
+BENCH_FRAME_CAP_MS=250 BENCH_PASSES=1 BENCH_REPEATS=1 BENCH_ROOMS=1,2 \
+  BENCH_LEGS=baseline,crowd-quad BENCH_QUERY='crowd=1&tiles-playtest' \
+  BENCH_OUT=docs/dev-notes/2026-09-13-merged-crowd-march-stage-a/ng-fixed-rooms12 \
+  node scripts/sdf-game-bench.mjs 5326 9326
+```
+
+`crowd-quad` `sdf:march` p50 ms (walk segment in parentheses):
+
+| run | room | baseline overall (walk) | crowd-quad overall (walk) | crowd census |
+| --- | ---: | ---: | ---: | --- |
+| `ng-fixed-rooms12` | 1 | 55.71 (39.98) | 10.13 (10.85) | soldier@1 5.35 m 0.13; zombie@2 7.51 m 0.06; zombie@4 10.81 m 0.04 |
+| `ng-fixed-rooms12` | 2 | 32.72 (30.51) | 32.28 (29.72) | soldier@1 3.17 m 0.33; zombie@2 1.37 m 1.00 |
+
+**The requested comparison to Stage a-2 (3)–`a23-rooms12` (room 1 40.85, room 2
+18.37 walk) is confounded and is NOT a win/loss.** (1) The scene changed: `a23`
+census is `soldier`/`zombie` **without** the `@room` suffix (that run predates
+`38d6d1e9`, per-room type keying), and its room 1 is a full-screen 3-zombie
+crowd (`rectFrac 1.00`, 40.85 ms) while this run's room 1 shows only distant
+bodies (`rectFrac 0.04–0.13`, 10.85 ms); conversely `a23`'s room-2 zombie is
+distant (`rectFrac 0.14`, 18.37 ms) while this run's room-2 zombie fills the
+screen (`rectFrac 1.00`, 29.72 ms). (2) `a23` ran on a ~1.9x busier machine
+(`a23` baseline room-1 walk 74.42 vs 39.98 here). Different workload, different
+machine — no delta is readable.
+
+A companion FD-fallback run was attempted (same command, gate temporarily
+restored, `ng-fd-rooms12`) to A/B analytic-vs-FD on one machine. It is **also
+not a valid A/B**: its room-2 census differs from `ng-fixed-rooms12`
+(`zombie@5` visible 2 / `rectFrac` 0.98 appears; `soldier@1` visible 0), because
+the crowd scene is not deterministic across separate bench invocations, and one
+leg (baseline room 1) aborted the frame guard on a CDP evaluate timeout. Its
+crowd-quad walks read room 1 11.01 (vs 10.85 analytic) and room 2 22.26 (vs 29.72
+analytic). Retained as raw data only; the harness needs a fixed scene seed before
+any cross-invocation crowd A/B can resolve the analytic win. The win that *is*
+proven is correctness (section above), not a same-machine millisecond delta.
+
+Artifacts: `ng-fixed-rooms12/` (requested) and `ng-fd-rooms12/` (inconclusive
+companion), each `bench.{json,md}` + `passes.*` + `bench-progress.jsonl`.
+

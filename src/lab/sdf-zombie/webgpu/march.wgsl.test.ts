@@ -24,7 +24,7 @@ import {
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_WOUND, ROW_WOUND_META, ROW_PRIM_SHAPE,
   ROW_PRIM_BEND, ROW_PRIM_SHELL, ROW_PRIM_WARP, ROW_PRIM_STRAND, ROW_PRIM_CLIP, NOISE_LOCAL, WOUND_MASK, WOUND_SHADOW, SD_SHELL,
   ROW_WOUND_CAP, APPLY_BONES, FOLD_BONE_RANGE, ROW_WOUND_FLAGS, TISSUE_RAMP, SD_ROUND_BOX, LEVEL_SHADOW,
-  CALC_NORMAL, INSTANCE_STATE, MARCH_BODY_PARAMS, MARCH_TRACE_SETUP,
+  CALC_NORMAL, INSTANCE_STATE, MARCH_BODY_PARAMS, MARCH_TRACE_SETUP, MARCH_TRACE_POST,
   FACE_MELT_SAG, FACE_MELT_STRETCH, FACE_MELT_FADE_LO, DEPTH_PREPASS_MARCH, DEPTH_PRE_FETCH, WOUND_STEP_MUL,
   soldierFaceDamageShadow,
 } from './march.wgsl';
@@ -2442,6 +2442,10 @@ describe('final-hit analytic normal integration', () => {
     expect(MARCH_BODY.indexOf('ngBody(')).toBeGreaterThan(MARCH_BODY.indexOf('let anchor = restPoint'));
     expect(MARCH_BODY).toContain('if (!ngValid)');
     expect(MARCH_BODY).toContain('normalGradientCfg.x > 0.5');
+    // Crowd fix (2026-09-14): the analytic path is ungated for every slot. The
+    // temporary single-slot mitigation (`instCfg.x < 1.5`) must not come back.
+    expect(MARCH_TRACE_POST).toContain('if (normalGradientCfg.x > 0.5) {');
+    expect(MARCH_TRACE_POST).not.toContain('instCfg.x < 1.5');
     expect((MARCH_BODY.match(/let detailAmp = surfCfg2.y/g) ?? []).length).toBe(1);
     for (const src of [MAP_BODY, CONE_MARCH, DEPTH_PREPASS_MARCH, WOUND_SHADOW]) expect(src).not.toContain('ngBody(');
   });
