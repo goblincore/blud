@@ -759,6 +759,16 @@ async function main() {
   // DIRECT flash on bodies (march slot bodyFlash): intensity multiplier on
   // the flash lights before the shader's I*cos/d^2. 0 = off, bit-identical.
   let bodyFlashGain = 0.06;
+  /** Seconds since the last shot; >= FLASH.windowSec means no flash.
+   *
+   *  DECLARED HERE, not beside the weapon state it belongs to (it used to sit
+   *  ~2400 lines below, next to `gunReady`): the render callback set by
+   *  `handle.setDrawFn` reads it — `flashEnvelope(flashAge)` in the legacy
+   *  lighting branch, and `playerFlashLightIntensity()` just below — and the
+   *  loop is already armed while boot is still awaiting the upscale model, so
+   *  the later declaration threw `Cannot access 'flashAge' before
+   *  initialization` on every frame until boot passed it. */
+  let flashAge = Infinity;
   /** The player's muzzle flash as a LIGHT SOURCE for bodies and probes: a
    *  0.14 s burst shaped like the soldiers' (55 at the shot, (1-t)^2), so it
    *  survives the gather's one-frame lag. The sprite keeps its own envelope. */
@@ -3179,8 +3189,6 @@ async function main() {
   let bobAmount = 0;
   let prevPlayerPos: Vec3 = [0, 0, 0];
   let reticleEl: HTMLDivElement | null = null;
-  /** Seconds since the last shot; >= FLASH.windowSec means no flash. */
-  let flashAge = Infinity;
   let gunReady = false;
   // LOADING SCREEN gate: resolved on BOTH paths below — a failed weapon load
   // still boots the game, and the loader must not hang on it.
