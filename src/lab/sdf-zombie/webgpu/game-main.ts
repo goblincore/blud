@@ -3903,68 +3903,96 @@ async function main() {
   // compiles a pipeline the first time a material+geometry pair renders —
   // MID-FRAME, which the owner has felt as a freeze on the first shot or
   // first gout of a session (cpu:draw spikes to 26-38 ms in the bench).
-  // compileAsync walks the same visibility-respecting traversal as render,
-  // so hidden-at-boot effects (smoke puffs, the flash group, tracer
-  // ember/streak) are flipped visible for the compile and restored after —
-  // no frame runs in between, so nothing renders warm. Fire-and-forget:
-  // compileAsync yields per pipeline, the loop keeps drawing while it runs.
+  //
+  // STARTUP-HITCH ATTRIBUTION (2026-09-14, probe in
+  // scripts/startup-hitch-probe.mjs): the 2026-09-13 shape — flip hidden
+  // objects, compileAsync(scene), precompilePasses — left three costs on the
+  // first LIVE frame, all measured there as one 780-1635 ms frame (the
+  // owner's 2360 ms [Violation] right after [warm]):
+  //
+  // 1. WRONG CONTEXT. compileAsync compiles against the CANVAS, but the live
+  //    draw renders the main scene into post-aa's HalfFloat sceneTarget
+  //    (attachment formats are part of three's pipeline cache key) — so every
+  //    main-pass pipeline re-created at the first presented frame (gun
+  //    'Steel'/plates, level, shadow pass, VHS chain: ~57-68 creations).
+  // 2. COMPUTE. The warm never dispatched compute: the first crowd sync
+  //    created all 24 tile-bin compute pipelines (6 types x 4 kernels)
+  //    mid-frame.
+  //
+  // The warm now pauses the loop (as before), lets the gun finish (its
+  // materials, the muzzle light and the level-shadow rig enter the scene with
+  // it), runs one empty-group tile-bin per crowd type, then draws ONE REAL
+  // FRAME via handle.drawOnce() — the full live draw path (scene into
+  // sceneTarget, sdf layer, goo, post chain incl. VHS) — so everything
+  // compiles in the context it will actually run in, behind the loader.
   const warmPipelines = async () => {
     const t0 = performance.now();
     const flipped: THREE.Object3D[] = [];
-    // Adversarial review 7e04e1e6: the render loop is ALREADY armed here
-    // (createLabRenderer starts it; the game drawFn replaced the default at
-    // setDrawFn) — the flip-visible compile renders the flipped meshes for
-    // ~100 frames unless the loop is paused. Pause; nothing needs to draw
-    // while the loader is up.
+    // The render loop is ALREADY armed here (createLabRenderer starts it; the
+    // game drawFn replaced the default at setDrawFn) — pause before anything
+    // compiles so nothing renders warm and nothing compiles mid-frame.
     handle.setLoopRunning(false);
-    // LAYERS (owner's mid-game freeze, 2026-09-13): three's compileAsync walks
-    // _projectObject, which skips an object whose `layers.test(camera.layers)`
-    // is false — exactly like render. The camera carries only the layers the
-    // CANVAS pass uses, so every per-body twin on
-    // CONE/OCCLUDER/SHELL/SHELL_EXIT/DEPTH_PREPASS/REFINE is invisible here and
-    // got built synchronously mid-frame, seconds after load.
-    //
-    // `camera.layers.enableAll()` around this compile was tried FIRST and is
-    // WRONG twice over. It compiles the twins against the CANVAS render
-    // context, and the render context (attachment formats, MRT) is part of a
-    // pipeline's cache key — so the entry it builds is not the one the twin's
-    // real pass needs. Worse, it drags in twins whose pass is off, one of which
-    // (the shell hull) carries a stale `mapBody` argument list that fails at
-    // pipeline creation with `unresolved value 'woundBound'`: three's
-    // compileAsync then NEVER SETTLES, and the whole warm-up — and the loader
-    // gate behind it — hangs (measured: __warmDone never appeared in 100 s).
-    // The twins are warmed by sdfLayer.precompilePasses below instead, each in
-    // its own target and gated on the flag its pass is gated on.
-    // The count below is reporting only.
-    const previousMask = camera.layers.mask;
-    let layersCompiled = 0;
+    // The gun load is awaited earlier in boot, so this has usually resolved
+    // already; awaiting it keeps the ordering explicit — the weapon's
+    // materials and the lights it registers must be in the scene before the
+    // compiles below run.
+    await gunReadyPromise;
     let passesCompiled = 0;
+    let computesWarmed = 0;
     try {
       scene.traverse((o) => {
         // Any invisible Object3D, not just meshes: a hidden GROUP (flash
-        // group) hides visible children that compileAsync would otherwise
+        // group) hides visible children that the compiles would otherwise
         // skip — the first-shot freeze survived for exactly those.
         if (!o.visible) { flipped.push(o); o.visible = true; }
-        if (o !== scene) layersCompiled |= o.layers.mask & ~previousMask;
       });
-      await handle.renderer.compileAsync(scene, camera);
+      // CROWD TILE-BIN COMPUTES (attribution 2 above). An empty-group bin
+      // dispatches the same four kernels with zero visible slots, so the
+      // pipelines are built here instead of in the first crowd sync.
+      camera.updateMatrixWorld();
+      camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
+      if (crowdOn) {
+        const warmGrid = {
+          widthPx: sdfLayer.targetSize.width,
+          heightPx: sdfLayer.targetSize.height,
+        };
+        for (const t of crowdTypes.values()) {
+          t.tiles.bin([], camera, 0, warmGrid);
+          computesWarmed++;
+        }
+      }
       if (gooLayer) await gooLayer.precompile(camera);
+      // ONE REAL FRAME (attribution 1 above). The previous warm-up ended here
+      // with a compileAsync(scene, camera) — canvas context — and every
+      // main-pass pipeline still had to be built the first time the live draw
+      // rendered into post-aa's HalfFloat target. drawFn IS the live draw
+      // path; running it once, loop paused and loader up, compiles the level,
+      // the weapon, the shadow map, the sprites and the post chain exactly
+      // where they will run.
+      //
+      // ORDERING (measured 2026-09-14): this MUST run before
+      // sdfLayer.precompilePasses. The march pass's compileAsync queues the
+      // crowd material's pipeline for ASYNC creation; a queued pipeline reads
+      // as not-ready, so the later real frame would SKIP the crowd march, and
+      // under load the queued creation settled up to 51 s late (the probe's
+      // slowest-creation record) — a boot window with no crowd at all. Drawn
+      // here FIRST, the crowd pipeline is created synchronously inside the
+      // march submit and precompilePasses below becomes a cache-hit
+      // confirmation pass.
+      handle.drawOnce();
       // The SDF layer's own passes: the twins in their real target/MRT context,
       // the fullscreen passes (blit/accum/detail/refine-view/composite) that are
       // in private scenes the traversal above cannot reach, and the upscale
       // stage's per-layer passes. See SdfLayer.precompilePasses.
       passesCompiled = await sdfLayer.precompilePasses(scene, camera);
-      let twinLayers = 0;
-      for (let b = 0; b < 32; b++) if (layersCompiled & (1 << b)) twinLayers++;
-      void twinLayers;
       const done = {
         ms: Math.round(performance.now() - t0),
         flipped: flipped.length,
-        twinLayers,
         passes: passesCompiled,
+        computes: computesWarmed,
       };
       (window as unknown as Record<string, unknown>).__warmDone = done;
-      console.log(`[warm] pipelines compiled in ${done.ms} ms (${done.flipped} hidden objects, ${twinLayers} twin layers, ${passesCompiled} stage/layer passes)`);
+      console.log(`[warm] pipelines compiled in ${done.ms} ms (${done.flipped} hidden objects, ${done.computes} crowd types, ${passesCompiled} stage/layer passes)`);
     } catch (err) {
       console.error('[warm] pipeline warm-up failed', err);
       // A driver waiting on __warmDone must not wait forever because the
@@ -3974,7 +4002,6 @@ async function main() {
       };
     } finally {
       for (const o of flipped) o.visible = false;
-      camera.layers.mask = previousMask;
       handle.setLoopRunning(true);
     }
   };
