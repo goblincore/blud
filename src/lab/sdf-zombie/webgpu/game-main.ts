@@ -2691,11 +2691,20 @@ async function main() {
    *  probeDyn) so a lone instance stays bit-identical; the per-TYPE uniform
    *  block is seeded by copyUniformValues from the first attached view.
    *  `?crowd=0` never calls this. */
-  function crowdTypeFor(name: string): CrowdType {
-    const existing = crowdTypes.get(name);
+  function crowdTypeFor(name: string, roomId: number): CrowdType {
+    // Keyed by character AND spawn room. The per-TYPE uniform block is seeded
+    // from the first attached view, and that block carries the ROOM's
+    // lighting environment (boxMin/boxMax, the six wall colours, the room
+    // probe texture, probeMin/probeCfg) which spawnEnemy stamps per actor for
+    // its spawn room and never changes afterwards. One type spanning rooms
+    // lit every instance with the first room's walls and probes — the pale,
+    // blotchy zombie (2026-09-14). A type per (character, room) keeps the
+    // block honest; rooms are frustum-culled, so few types draw per frame.
+    const key = `${name}@${roomId}`;
+    const existing = crowdTypes.get(key);
     if (existing) return existing;
     const t = createCrowdType(
-      handle.renderer, name, defaultUniforms(blankFaceTexture()),
+      handle.renderer, key, defaultUniforms(blankFaceTexture()),
       sdfLayer.maxWidth, sdfLayer.maxHeight,
       {
         occluder: sdfLayer.occluder,
@@ -2717,7 +2726,7 @@ async function main() {
     scene.add(t.depthPreMesh);
     deferredApi?.router.register(t.mesh, 'sdf');
     deferredApi?.router.register(t.depthPreMesh, 'exclude');
-    crowdTypes.set(name, t);
+    crowdTypes.set(key, t);
     return t;
   }
 
@@ -2889,7 +2898,7 @@ async function main() {
     // and record slot into the type's shared atlas/buffer.
     let crowdAttach: { type: CrowdType; slot: number } | null = null;
     if (crowdOn) {
-      const t = crowdTypeFor(name);
+      const t = crowdTypeFor(name, room.id);
       const slot = t.attach(view);
       if (slot < 0) console.warn('[crowd] type full', name);
       else {
@@ -8299,6 +8308,37 @@ function performBenchAction(a: BenchAction): void {
       const supportedBodies = actors.filter(a => classifyNormalSupport(a.posed()).commonFlesh).length;
       return { mode: normalGradientMode, diagnostic: normalGradientDebug,
         supportedBodies, legacyBodies: actors.length - supportedBodies };
+    },
+    /** Diagnostic: march debugCfg.x mode on every per-body view and crowd type (9 = normal output). */
+    /** Diagnostic: per crowd type, which per-TYPE uniform values differ between the type's block and
+     *  each attached actor's own view (per-instance/record-driven keys skipped). Textures compared by identity. */
+    crowdUniformDiff() {
+      const skip = new Set(['counts', 'counts2', 'woundBound', 'bodyCentre', 'bodyHalf', 'bodyAnchor', 'windDrift',
+        'meltCfg', 'bodyFlash', 'headCentre', 'headQuat', 'volumePose0', 'volumePose1', 'tileCfg', 'debugCfg']);
+      const out: Record<string, Record<string, string[]>> = {};
+      for (const [name, t] of crowdTypes) {
+        const per: Record<string, string[]> = {};
+        for (const a of actors) {
+          if (a.crowd?.type !== t) continue;
+          const diffs: string[] = [];
+          const tu = t.uniforms as unknown as Record<string, { value: unknown }>;
+          const vu = a.view.uniforms as unknown as Record<string, { value: unknown }>;
+          for (const k of Object.keys(tu)) {
+            if (skip.has(k) || !vu[k]) continue;
+            const x = tu[k]!.value, y = vu[k]!.value;
+            const sx = (x as { toArray?: () => number[] }).toArray ? JSON.stringify((x as { toArray: () => number[] }).toArray()) : (x instanceof THREE.Texture ? 'tex#' + x.id : String(x));
+            const sy = (y as { toArray?: () => number[] }).toArray ? JSON.stringify((y as { toArray: () => number[] }).toArray()) : (y instanceof THREE.Texture ? 'tex#' + y.id : String(y));
+            if (sx !== sy) diffs.push(`${k}: type=${sx} view=${sy}`);
+          }
+          per[`actor${a.id}${a.crowd ? '@' + a.crowd.slot : ''}`] = diffs;
+        }
+        out[name] = per;
+      }
+      return out;
+    },
+    setMarchDebugMode(x: number) {
+      for (const a of actors) a.view.uniforms.debugCfg.value.x = x;
+      for (const t of crowdTypes.values()) t.uniforms.debugCfg.value.x = x;
     },
     setFlatAlbedo(on: boolean) {
       const v = on ? 1 : 0;
