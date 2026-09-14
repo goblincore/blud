@@ -387,3 +387,7 @@ Retrain of the run-5 refine head with `refine_drop` 0.3 (the head sees the gate 
   native-march baseline's frame time and 1–2 ms under the shipped s32-rgbd — at 0.0154 on v3.2 (6 % behind the
   run-5 control head, which costs 3 ms more). Quality vs the shipped model on the same data is not measured
   (the ship export predates the v3 metric); decide by eye.
+
+- **Owner verdicts (2026-09-13):** the 5b band model "at medium lgtm"; **t16-rgb becomes the default**; the 5b
+  refine head becomes a selectable graphics **high** setting (allocates the refine pass, medium band, slim tail).
+  Another training pass is expected once the merged crowd march lands (the refine becomes a fullscreen pass).
