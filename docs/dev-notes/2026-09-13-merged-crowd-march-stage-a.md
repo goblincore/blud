@@ -874,7 +874,7 @@ here. A longer-sightline space is future work (out of scope for this task).
 **Seams added.** `__sdfGame.placePlayer({x,z,yaw,pitch})` (sets the pose fields
 `teleport()` writes and returns the enclosure key); `spawnCrowd(name, n, {region})`
 (centres the 7f grid on the region and fits its columns to the region span so an
-elongated region cannot clamp bodies into collisions); `crowdInfo()..meanDistance`
+elongated region cannot clamp bodies into collisions); `crowdInfo().meanDistance`
 (mean camera-to-drawn-centre distance over packed slots). `bench({holdPlayer})`
 strips the firefight's frame-0 teleport/look/freeze, zeroes the walk input and
 re-pins pos/vel each step so the camera cannot drift. The distance prelude also
