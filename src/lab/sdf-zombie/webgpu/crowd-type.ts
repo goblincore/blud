@@ -161,6 +161,12 @@ export interface CrowdType {
     rect: [number, number, number, number] | null;
     /** Fraction of the screen the quad rasterised last frame (rect area / 4). */
     rectFrac: number;
+    /** Mean camera-to-body-centre distance in metres over the DRAWN instances
+     *  of the last sync() (0 with no drawn instance or no camera yet). The
+     *  distance-crowd bench's scene descriptor: at the level's 11 m diagonal
+     *  this is what says whether the row measured a distant crowd or a
+     *  close-up stack. */
+    meanDistance: number;
   };
 }
 
@@ -248,6 +254,8 @@ export function createCrowdType(
   const groups: TileGroupInput[] = [];
   // Reused inputs for the quad's screen rect (the drawn instances).
   const rectList: { centre: ArrayLike<number>; half: ArrayLike<number> }[] = [];
+  // Mean camera-to-drawn-centre distance over the last sync (distance scene).
+  let lastMeanDistance = 0;
   const viewProj = new THREE.Matrix4();
   let lastRect: [number, number, number, number] | null = null;
   let lastRectFrac = 0;
@@ -358,6 +366,23 @@ export function createCrowdType(
         widthPx: grid.tilesX * grid.tilePx,
         heightPx: grid.tilesY * grid.tilePx,
       });
+
+      // MEAN CAMERA-TO-BODY DISTANCE over the DRAWN set (distance scene,
+      // 2026-09-14). `live` is nearest-first and holds every packed instance
+      // with its centre; `drawnSlots` is the subset the group budget kept, so
+      // this is the distance to what is actually rendered. Diagnostic-only:
+      // computed once per sync from data already in hand, no per-frame cost.
+      {
+        let sum = 0;
+        let count = 0;
+        for (const inst of live) {
+          if (!drawnSlots.includes(inst.slot)) continue;
+          const c = inst.centre;
+          sum += Math.hypot(c[0] - cam.x, c[1] - cam.y, c[2] - cam.z);
+          count++;
+        }
+        lastMeanDistance = count > 0 ? sum / count : 0;
+      }
 
       // QUAD RASTERISATION RECT (stage a-2 (3)). Bound the quad to the union
       // screen rect of the DRAWN instances so the material runs only over the
@@ -479,7 +504,7 @@ export function createCrowdType(
         }
         clampedTiles = diagBinner.bin(lastBinGroups, lastCamera, lastBinMaxBlendK).clampedTiles;
       }
-      return { attached, visible, tileFallbacks, culledByBudget, clampedTiles, dispatch, rect: lastRect, rectFrac: lastRectFrac };
+      return { attached, visible, tileFallbacks, culledByBudget, clampedTiles, dispatch, rect: lastRect, rectFrac: lastRectFrac, meanDistance: lastMeanDistance };
     },
   };
 }

@@ -89,7 +89,7 @@ import {
   enclosureKeyAt, enclosureOf, wanderBounds, spawnPoints, PLAYER_START,
   type RoomDef,
 } from './game-level';
-import { crowdGridPoints } from './crowd-spawn';
+import { crowdGridPoints, REGION_INSET_M, type FloorRect } from './crowd-spawn';
 import { stepPlayer, eyeOf, PLAYER, type PlayerState, type MoveInput } from './game-player';
 import { createRoomProbes, type ProbeWorkerLike } from './room-probes';
 import { computeBounceSpot } from '../flashlight-bounce';
@@ -5065,6 +5065,12 @@ async function main() {
   // captures that must be reproducible across boots (pixel parity, staged
   // benches) need the freeze to predate the first frame. Default unchanged.
   let wanderFrozen = new URLSearchParams(location.search).has('frozen');
+  /** The distance-crowd bench pins the player's POSE for the whole leg
+   *  (`bench({ holdPlayer: true })`). The firefight's frame-0 teleport would
+   *  overwrite the caller's placePlayer() framing, and the walk input (keys /
+   *  autopilot) would drift the camera; with this on, tick() forces the input
+   *  to zero. Ordinary play never sets it. */
+  let holdPlayerPose = false;
   /** TASK-6 DIAGNOSTIC RENDER LOCK. When true, tick(dt) returns BEFORE any
    *  simulation mutation (player step, bob, recoil, weapon smoothing, flash
    *  envelopes, smoke, chunks) — __sdfGame.step(n) becomes n pure re-renders
@@ -5099,12 +5105,14 @@ async function main() {
     // replay. See the declaration next to lastSeenMs for the why.
     simClockMs += dt * 1000;
     segMeshRenderer?.stepDebris(dt);
-    let input: MoveInput = {
-      x: (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0),
-      z: (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0),
-      jump: keys.has('Space'),
-    };
-    if (autopilot) {
+    let input: MoveInput = holdPlayerPose
+      ? { x: 0, z: 0, jump: false }
+      : {
+        x: (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0),
+        z: (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0),
+        jump: keys.has('Space'),
+      };
+    if (autopilot && !holdPlayerPose) {
       const dx = autopilot.x - player.pos[0];
       const dz = autopilot.z - player.pos[2];
       if (Math.hypot(dx, dz) < 0.25) {
@@ -6301,6 +6309,18 @@ function performBenchAction(a: BenchAction): void {
       types: [...crowdTypes].map(([n, t]) => ({ name: n, ...t.info() })),
     }),
     backend: handle.backend,
+    /** Place the player at (x, z) with the given yaw/pitch and zero velocity
+     *  (the distance-crowd bench's framing seam, 2026-09-14). Same fields
+     *  `teleport()` writes; returns the enclosure key under the feet so a
+     *  caller can assert the pose landed in the intended room. */
+    placePlayer(p: { x: number; z: number; yaw: number; pitch?: number }) {
+      player.pos = [p.x, 0, p.z];
+      player.vel = [0, 0, 0];
+      player.yaw = p.yaw;
+      player.pitch = p.pitch ?? 0;
+      player.grounded = true;
+      return enclosureKeyAt(p.x, p.z);
+    },
     /** Set the player pose. y defaults to 0 (feet on the floor). */
     setPose(x: number, z: number, yaw: number, pitch = 0, y = 0) {
       player.pos = [x, y, z];
@@ -8587,6 +8607,13 @@ function performBenchAction(a: BenchAction): void {
       closeupFrames?: number;
       walkFrames?: number; fireFrames?: number; gibFrames?: number;
       chunkFrames?: number; warmup?: number; label?: string;
+      /** Hold the player's placed pose (distance-crowd scene, 2026-09-14):
+       *  strips the scenario's frame-0 teleport and looks, zeroes the walk
+       *  input, and re-pins pos/vel after every step so a wandering body's
+       *  collision cannot shove the camera and move the measured distance.
+       *  The caller is responsible for having placed the player first
+       *  (`placePlayer`) — this only FREEZES the pose, it does not set it. */
+      holdPlayer?: boolean;
     } = {}) {
       const scenario = o.kind === 'closeup'
         ? buildCloseup({ frames: o.closeupFrames })
@@ -8596,8 +8623,31 @@ function performBenchAction(a: BenchAction): void {
         fireFrames: o.fireFrames,
         gibFrames: o.gibFrames,
       });
+      // HOLD THE PLAYER. Drop every action that writes the player's pose
+      // (the firefight's teleport/look); aim/fire/freeze stay, so the segments
+      // still run the scripted shots at the placed pose.
+      if (o.holdPlayer) {
+        scenario.steps = scenario.steps.filter(
+          s => s.action.kind !== 'teleport' && s.action.kind !== 'look',
+        );
+      }
       const problems = validateScenario(scenario);
       if (problems.length) throw new Error(`bad scenario: ${problems.join('; ')}`);
+
+      // Captured AFTER the caller's placePlayer(): the pose every step is
+      // restored to. pos/vel are copies, not aliases.
+      const held = o.holdPlayer
+        ? { pos: [...player.pos] as Vec3, yaw: player.yaw, pitch: player.pitch }
+        : null;
+      const restoreHeldPose = () => {
+        if (!held) return;
+        player.pos = [held.pos[0], held.pos[1], held.pos[2]];
+        player.vel = [0, 0, 0];
+        player.yaw = held.yaw;
+        player.pitch = held.pitch;
+      };
+      const hadHoldPlayer = holdPlayerPose;
+      holdPlayerPose = o.holdPlayer === true;
 
       handle.setLoopRunning(false);
       const hadAdaptive = adaptiveEnabled;
@@ -8606,7 +8656,7 @@ function performBenchAction(a: BenchAction): void {
       if (o.mode === 'passes') telemetry.active = true;
       try {
         const deps: BenchDeps = {
-          step: (dt) => { beginPassFrame(); handle.step(dt); },
+          step: (dt) => { beginPassFrame(); handle.step(dt); restoreHeldPose(); },
           // 'passes' mode: CPU tick/draw plus the telemetry phases the tick
           // already brackets (blood sim, goo sync, body step, ...). Telemetry
           // is switched active for the run so begin()/end() record; no frame
@@ -8615,6 +8665,7 @@ function performBenchAction(a: BenchAction): void {
             beginPassFrame();
             telemetry.drainPhases();
             const t = handle.stepTimed(dt);
+            restoreHeldPose();
             const out: Record<string, number> = { 'cpu:tick': t.tickMs, 'cpu:draw': t.drawMs };
             for (const [k, v] of Object.entries(telemetry.drainPhases())) out[`cpu:phase:${k}`] = v;
             return out;
@@ -8649,6 +8700,8 @@ function performBenchAction(a: BenchAction): void {
         (window as unknown as { __gameBench: unknown }).__gameBench = result;
         return result;
       } finally {
+        holdPlayerPose = hadHoldPlayer;
+        restoreHeldPose();
         adaptiveEnabled = hadAdaptive;
         telemetry.active = hadTelemetry;
         adaptiveState = initialAdaptiveState(performance.now(), adaptiveState.rung);
@@ -9608,18 +9661,39 @@ function performBenchAction(a: BenchAction): void {
       return { id: actor.id, room: room.id, errors: errs };
     },
     /** Spawn `n` copies of `name` into the player's room (bench/crowd seam),
-     *  spread on a square grid centred on the room's first spawn point so the
-     *  bench measures bodies-in-a-room, not N stacked on one spawn (perf 7f).
+     *  spread on a grid centred on the room's first spawn point so the bench
+     *  measures bodies-in-a-room, not N stacked on one spawn (perf 7f).
+     *
+     *  `opts.region` (distance scene, 2026-09-14) places the grid in an
+     *  explicit ground rect instead: centred on the region's centre, clamped
+     *  inside it, and with columns chosen to fit the region's span so an
+     *  elongated region does not clamp bodies into collisions. The room's
+     *  spawn point / bounds remain the default when `region` is omitted.
+     *
      *  `ring` is accepted for the seam but the measured layout is the grid.
      *  Stops at the first failure; returns how many landed and where. */
-    spawnCrowd: (name: string, n: number, opts?: { spacing?: number; ring?: boolean }) => {
+    spawnCrowd: (
+      name: string, n: number,
+      opts?: { spacing?: number; ring?: boolean; region?: FloorRect },
+    ) => {
       const room = ROOMS.find(r => r.id === playerRoomId()) ?? ROOMS[0]!;
-      const starts = spawnPoints(room);
-      const p0 = starts[0] ?? ([0, 0, 0] as Vec3);
       const spacing = opts?.spacing ?? 1.2;
-      const points = crowdGridPoints(p0, n, spacing, {
-        minX: room.minX, maxX: room.maxX, minZ: room.minZ, maxZ: room.maxZ,
-      });
+      let p0: Vec3;
+      let floor: FloorRect;
+      let gridOpts: { centre: [number, number]; inset: number } | undefined;
+      if (opts?.region) {
+        const r = opts.region;
+        const cxs = (r.minX + r.maxX) / 2;
+        const czs = (r.minZ + r.maxZ) / 2;
+        p0 = [cxs, 0, czs];
+        floor = r;
+        gridOpts = { centre: [cxs, czs], inset: REGION_INSET_M };
+      } else {
+        const starts = spawnPoints(room);
+        p0 = starts[0] ?? ([0, 0, 0] as Vec3);
+        floor = { minX: room.minX, maxX: room.maxX, minZ: room.minZ, maxZ: room.maxZ };
+      }
+      const points = crowdGridPoints(p0, n, spacing, floor, gridOpts);
       const placed: [number, number, number][] = [];
       let ok = 0;
       for (let i = 0; i < points.length; i++) {
