@@ -22,7 +22,9 @@ import {
   type CrowdRecords,
 } from './crowd-records';
 import { createComputeTileBinding, MAX_TILE_GROUPS, type ComputeTileBinding } from './tile-bin-compute';
-import { TileBinner, type TileGroupInput } from './tile-cull';
+import { TileBinner, TILE_SIZE_PX, type TileGroupInput } from './tile-cull';
+import { crowdScreenRect } from './crowd-rect';
+import { RAY_CULL_SLACK, QUAD_ENTRY_SLACK } from './march.wgsl';
 import {
   createCrowdMaterial, type CrowdMaterialSources, type MarchUniforms, type ZombieGpuView,
 } from './zombie-gpu';
@@ -126,6 +128,9 @@ export interface CrowdType {
   readonly tiles: ComputeTileBinding;
   /** x instance capacity, y 1 (crowd material flag). Written by sync(). */
   readonly instCfg: ReturnType<typeof uniform>;
+  /** The quad dispatch's NDC rasterisation rect, shared by the lit material
+   *  and its depth-pre twin. Set by sync() in quad mode. */
+  readonly quadRect: { value: THREE.Vector4 };
   /** Attaches a view to the lowest free slot; returns the slot, -1 when full.
    *  The view rebinds to this type's atlas band and record buffer. */
   attach(view: ZombieGpuView): number;
@@ -152,6 +157,10 @@ export interface CrowdType {
   info(): {
     attached: number; visible: number; tileFallbacks: number;
     culledByBudget: number; clampedTiles: number; dispatch: CrowdDispatch;
+    /** Last quad NDC rect (null in boxes mode or when nothing is visible). */
+    rect: [number, number, number, number] | null;
+    /** Fraction of the screen the quad rasterised last frame (rect area / 4). */
+    rectFrac: number;
   };
 }
 
@@ -205,6 +214,9 @@ export function createCrowdType(
     atlas.texture, uniforms, { inst: records.node, instCfg }, tiles, sources, 'quad',
     (handles.material as unknown as { levelShadowTex: ReturnType<typeof texture> }).levelShadowTex,
   );
+  // Quad dispatch's rasterisation rect; the lit and depth-pre materials share
+  // this one uniform (see crowdRayNodes).
+  const quadRect = quadHandles.quadRect as { value: THREE.Vector4 };
   let dispatch: CrowdDispatch = opts?.dispatch ?? 'boxes';
   const activeHandles = () => (dispatch === 'quad' ? quadHandles : handles);
   const activeGeometry = () => (dispatch === 'quad' ? quadGeo : geo);
@@ -234,6 +246,11 @@ export function createCrowdType(
   }[] = [];
   const drawnSlots: number[] = [];
   const groups: TileGroupInput[] = [];
+  // Reused inputs for the quad's screen rect (the drawn instances).
+  const rectList: { centre: ArrayLike<number>; half: ArrayLike<number> }[] = [];
+  const viewProj = new THREE.Matrix4();
+  let lastRect: [number, number, number, number] | null = null;
+  let lastRectFrac = 0;
   // Snapshot of the last binned inputs for the room-2 slot-mask diagnostic
   // and the on-demand clampedTiles count. Copied (not aliased) because
   // `groups` is reused next frame.
@@ -252,7 +269,7 @@ export function createCrowdType(
   }).levelShadowTex;
 
   return {
-    name, atlas, records, uniforms, mesh, depthPreMesh, levelShadowTex, tiles, instCfg,
+    name, atlas, records, uniforms, mesh, depthPreMesh, levelShadowTex, tiles, instCfg, quadRect,
     get dispatch() { return dispatch; },
 
     attach(view) {
@@ -342,6 +359,44 @@ export function createCrowdType(
         heightPx: grid.tilesY * grid.tilePx,
       });
 
+      // QUAD RASTERISATION RECT (stage a-2 (3)). Bound the quad to the union
+      // screen rect of the DRAWN instances so the material runs only over the
+      // pixels a body can occupy. The rect is conservative — the same inflated
+      // spheres the binner projects, plus one tile of NDC margin for its
+      // clamp-outward-to-whole-tiles rule — and the margin uses the LIT grid
+      // (the larger target), which keeps the quarter-res depth-pre twin inside
+      // it too. screenUV and the entry maths are untouched, so every pixel
+      // inside is bit-identical to the full-screen version.
+      if (dispatch === 'quad') {
+        rectList.length = 0;
+        for (const i of list) if (i.visible) rectList.push(i);
+        viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+        // Same reach the kernel's quad entry uses: maxBlendK * 4 + both slacks.
+        const reach = maxBlendK * 4 + Number(RAY_CULL_SLACK) + Number(QUAD_ENTRY_SLACK);
+        const marginNdc: [number, number] = [
+          (2 * TILE_SIZE_PX) / (grid.tilesX * grid.tilePx),
+          (2 * TILE_SIZE_PX) / (grid.tilesY * grid.tilePx),
+        ];
+        const rect = crowdScreenRect(rectList, viewProj, reach, marginNdc);
+        lastRect = rect;
+        lastRectFrac = rect ? ((rect[2] - rect[0]) * (rect[3] - rect[1])) / 4 : 0;
+        if (rect) {
+          quadRect.value.set(rect[0], rect[1], rect[2], rect[3]);
+          mesh.visible = true;
+          depthPreMesh.visible = true;
+        } else {
+          // No visible instance: skip both draws entirely. The atlas/record
+          // flush below still runs (other types share the buffer).
+          mesh.visible = false;
+          depthPreMesh.visible = false;
+        }
+      } else {
+        mesh.visible = true;
+        depthPreMesh.visible = true;
+        lastRect = null;
+        lastRectFrac = 0;
+      }
+
       // BOX DISPATCH: pack the live instances densely and draw that many proxy
       // boxes. QUAD DISPATCH: one non-instanced screen quad draws every pixel,
       // so there is no attribute pack and no instanceCount — but keep the box
@@ -424,7 +479,7 @@ export function createCrowdType(
         }
         clampedTiles = diagBinner.bin(lastBinGroups, lastCamera, lastBinMaxBlendK).clampedTiles;
       }
-      return { attached, visible, tileFallbacks, culledByBudget, clampedTiles, dispatch };
+      return { attached, visible, tileFallbacks, culledByBudget, clampedTiles, dispatch, rect: lastRect, rectFrac: lastRectFrac };
     },
   };
 }

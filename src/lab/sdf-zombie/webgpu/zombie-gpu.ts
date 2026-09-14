@@ -14,7 +14,7 @@ import {
   wgslFn, positionWorld, cameraPosition, vec4, uniform, texture, texture3D, float,
   cameraProjectionMatrix, cameraViewMatrix, cameraNear, cameraFar, modelWorldMatrix, normalize, sub, mul, add, screenUV,
   cameraProjectionMatrixInverse, cameraWorldMatrix,
-  storage, attribute, positionGeometry, vec3,
+  storage, attribute, positionGeometry, vec3, mix,
 } from 'three/tsl';
 import type { BuildResult } from '../build-body';
 import { packBody, PRIM_STRIDE, W_BONE, W_ORGAN } from '../pack';
@@ -1427,6 +1427,9 @@ export interface CrowdMaterialHandles {
   /** Rebinds the shared sampled-skeleton atlas/meta on BOTH materials — same
    *  drift hazard the per-body twins have (see createMarchMaterial's tail). */
   setSkeletonVolume(atlas: THREE.Texture, meta: THREE.Texture): void;
+  /** The quad dispatch's NDC rasterisation rect — the SAME uniform node the
+   *  lit material and its depth-pre twin read. Undefined on the box material. */
+  quadRect?: { value: THREE.Vector4 };
 }
 
 /** TSL's `attribute` factory is untyped at runtime; this names the node
@@ -1486,9 +1489,22 @@ export function writeViewRecord(
  * — so NDC.y = 1 - 2 uv.y, the same flip the tile binner uses (see
  * tile-cull.ts). `worldPos` is the true far-plane point, which makes the march's
  * `tMax = length(worldPos - camPos)` the pixel's actual far distance.
+ *
+ * Stage a-2 (3): the quad no longer spans the whole screen. `quadRect` is the
+ * union NDC rect of the type's visible instances (crowdScreenRect, CPU); the
+ * clip vertex maps the unit plane into it. The fragment's ray still comes from
+ * screenUV (the real pixel), so shrinking the quad only reduces the pixels the
+ * material runs for — every pixel inside is identical. The lit material and its
+ * depth-pre twin share this one uniform.
  */
 function crowdRayNodes() {
-  const clip = vec4(positionGeometry.xy, float(1.0), float(1.0));
+  const quadRect = uniform(new THREE.Vector4(-1, -1, 1, 1));
+  const uv2 = positionGeometry.xy.mul(0.5).add(0.5);
+  const clip = vec4(
+    mix(quadRect.x, quadRect.z, uv2.x),
+    mix(quadRect.y, quadRect.w, uv2.y),
+    float(1.0), float(1.0),
+  );
   const ndc = vec4(
     screenUV.x.mul(2).sub(1),
     float(1).sub(screenUV.y).mul(2).sub(1),
@@ -1497,7 +1513,7 @@ function crowdRayNodes() {
   const view = cameraProjectionMatrixInverse.mul(ndc);
   const viewFar = view.xyz.div(view.w);
   const farWorld = cameraWorldMatrix.mul(vec4(viewFar, float(1.0))).xyz;
-  return { clip, worldPos: farWorld, rayDir: normalize(farWorld.sub(cameraPosition)) };
+  return { clip, worldPos: farWorld, rayDir: normalize(farWorld.sub(cameraPosition)), quadRect };
 }
 
 /**
@@ -1616,6 +1632,9 @@ export function createCrowdMaterial(
   return {
     material,
     depthPreMaterial,
+    quadRect: quad
+      ? (quadNodes!.quadRect as unknown as { value: THREE.Vector4 })
+      : undefined,
     setSkeletonVolume(atlas, meta) {
       mainSegVolume.segVolumeAtlas.value = atlas;
       mainSegVolume.segVolumeMeta.value = meta;

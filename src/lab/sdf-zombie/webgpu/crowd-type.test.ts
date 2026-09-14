@@ -161,3 +161,44 @@ describe('crowd type dispatch switch (stage a-2)', () => {
     expect(t.mesh.geometry).toBe(boxGeo);
   });
 });
+
+describe('crowd type quad rasterisation rect (stage a-2 (3))', () => {
+  it('binds the visible-instance rect and reports rectFrac < 1', () => {
+    const renderer = { compute() { /* GPU dispatch stub */ } } as unknown as THREE.WebGPURenderer;
+    const t = createCrowdType(renderer, 'zombie', defaultUniforms(blankFaceTexture()), 256, 256, undefined, { dispatch: 'quad' });
+    expect(t.attach(stubView(0, [groupFor(0)]))).toBe(0);
+    const camera = new THREE.PerspectiveCamera(90, 1, 0.01, 100);
+    camera.updateMatrixWorld();
+    camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
+    const grid = { tilesX: 16, tilesY: 16, tilePx: TILE_SIZE_PX };
+
+    t.sync(camera, grid, new Set([0]));
+    const rect = t.info().rect!;
+    expect(rect).not.toBeNull();
+    expect(t.info().rectFrac).toBeGreaterThan(0);
+    expect(t.info().rectFrac).toBeLessThan(1);
+    // The uniform the lit material and its depth-pre twin share is the rect.
+    expect([t.quadRect.value.x, t.quadRect.value.y, t.quadRect.value.z, t.quadRect.value.w])
+      .toEqual(rect);
+    expect(rect).not.toEqual([-1, -1, 1, 1]);
+    expect(t.mesh.visible).toBe(true);
+    expect(t.depthPreMesh.visible).toBe(true);
+  });
+
+  it('hides both quad meshes when nothing is visible', () => {
+    const renderer = { compute() { /* GPU dispatch stub */ } } as unknown as THREE.WebGPURenderer;
+    const t = createCrowdType(renderer, 'zombie', defaultUniforms(blankFaceTexture()), 256, 256, undefined, { dispatch: 'quad' });
+    expect(t.attach(stubView(0, [groupFor(0)]))).toBe(0);
+    const camera = new THREE.PerspectiveCamera(90, 1, 0.01, 100);
+    camera.updateMatrixWorld();
+    camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
+    const grid = { tilesX: 16, tilesY: 16, tilePx: TILE_SIZE_PX };
+
+    t.sync(camera, grid, new Set());
+    expect(t.info().visible).toBe(0);
+    expect(t.info().rect).toBeNull();
+    expect(t.info().rectFrac).toBe(0);
+    expect(t.mesh.visible).toBe(false);
+    expect(t.depthPreMesh.visible).toBe(false);
+  });
+});
