@@ -25,6 +25,7 @@ import { createComputeTileBinding, MAX_TILE_GROUPS, type ComputeTileBinding } fr
 import { TileBinner, TILE_SIZE_PX, type TileGroupInput } from './tile-cull';
 import { crowdScreenRect } from './crowd-rect';
 import { RAY_CULL_SLACK, QUAD_ENTRY_SLACK } from './march.wgsl';
+import { MAX_PRIMS } from '../validate';
 import {
   createCrowdMaterial, type CrowdMaterialSources, type MarchUniforms, type ZombieGpuView,
 } from './zombie-gpu';
@@ -168,9 +169,11 @@ export interface CrowdType {
      *  this is what says whether the row measured a distant crowd or a
      *  close-up stack. */
     meanDistance: number;
-    /** Fire/gib profiling (2026-09-14): band uploads performed by sync()
-     *  (one per written band that draw) and whole-record-buffer flushes. */
+    /** Fire/gib profiling (2026-09-14): partial atlas uploads performed by
+     *  sync() (one queue write per drawn type with dirty bands), the rows those
+     *  uploads covered, and whole-record-buffer flushes. */
     atlasFlushes: number;
+    atlasRows: number;
     recordsFlushes: number;
     /** setSkeletonVolume() calls that actually rebound the material pair. */
     volumeRebinds: number;
@@ -189,7 +192,19 @@ export function createCrowdType(
   // ONE shared prim atlas, ONE record buffer, ONE material pair, ONE tile
   // binding — the whole point of the type. The atlas is allocated at the
   // instance capacity up front: a DataTexture cannot resize in place.
-  const atlas = createCrowdPrimAtlas(MAX_CROWD_INSTANCES);
+  const atlas = createCrowdPrimAtlas(MAX_CROWD_INSTANCES, (rows, data) => {
+    // Fire/gib fix (2026-09-14): ONE partial upload of the dirty prefix into
+    // the atlas's EXISTING GPU texture. `backend.updateTexture` accepts an
+    // image override and issues a single `queue.writeTexture` of `rows` rows
+    // (three's DataTexture path reads options.image, see WebGPUTextureUtils).
+    // The atlas texture itself is created full-size by the first render; from
+    // then on three's whole-atlas `needsUpdate` path is never used for it.
+    // Before the atlas exists (first frame) this is a no-op and the render
+    // uploads it once in full.
+    (renderer.backend as unknown as {
+      updateTexture(t: THREE.Texture, o: { image: { data: Float32Array; width: number; height: number } }): void;
+    }).updateTexture(atlas.texture, { image: { data, width: MAX_PRIMS, height: rows } });
+  });
   const records = createCrowdRecords();
   // y = 1 marks a crowd material (MARCH_TRACE_SETUP selects instCentre/
   // instHalf for the proxy box); x is the loop's instance-count upper bound.
@@ -250,6 +265,7 @@ export function createCrowdType(
   // Fire/gib profiling counters (2026-09-14): see info()'s atlasFlushes /
   // recordsFlushes / volumeRebinds.
   let atlasFlushes = 0;
+  let atlasRows = 0;
   let recordsFlushes = 0;
   let volumeRebinds = 0;
 
@@ -473,13 +489,20 @@ export function createCrowdType(
       }
 
       // Fire/gib profiling (2026-09-14): the flush is where the atlas is
-      // re-uploaded. Timed here so the bench can attribute it separately from
-      // the bin/pack above.
+      // re-uploaded, but only the bands written this frame — and only when the
+      // type will actually draw. A hidden type keeps its dirty flags so the
+      // first frame it draws uploads before drawing (nothing reads the atlas
+      // while `mesh.visible` is false).
       const flushTiming = opts?.telemetry?.begin();
-      if (atlas.dirty) atlasFlushes++;
-      if (records.dirty) recordsFlushes++;
-      atlas.flush();
-      records.flush();
+      if (drawnSlots.length > 0) {
+        // Cap the upload to the highest DRAWN band: bands written for hidden
+        // slots (every attached actor uploads each frame) need not go up.
+        let hiDrawn = -1;
+        for (const s of drawnSlots) if (s > hiDrawn) hiDrawn = s;
+        const rows = atlas.flush(hiDrawn);
+        if (rows > 0) { atlasFlushes++; atlasRows += rows; }
+        if (records.dirty) { recordsFlushes++; records.flush(); }
+      }
       opts?.telemetry?.end('crowd-atlas-flush', flushTiming);
     },
 
@@ -532,7 +555,7 @@ export function createCrowdType(
       // stamped to 1 by the game's crowd sync (task 8: crowd mode requires the
       // tile list), so this reads the ACTUAL uniform rather than a guess.
       const tilesOn = uniforms.tileCfg.value.x > 0.5;
-      return { attached, visible, tileFallbacks, tilesOn, culledByBudget, clampedTiles, dispatch, rect: lastRect, rectFrac: lastRectFrac, meanDistance: lastMeanDistance, atlasFlushes, recordsFlushes, volumeRebinds };
+      return { attached, visible, tileFallbacks, tilesOn, culledByBudget, clampedTiles, dispatch, rect: lastRect, rectFrac: lastRectFrac, meanDistance: lastMeanDistance, atlasFlushes, atlasRows, recordsFlushes, volumeRebinds };
     },
   };
 }

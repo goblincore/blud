@@ -6373,13 +6373,14 @@ function performBenchAction(a: BenchAction): void {
       // types, computed from ONE info() pass (info() runs the diagnostic
       // tile binner on demand, so calling it repeatedly is not free).
       ...(() => {
-        let atlasFlushes = 0, recordsFlushes = 0, volumeRebinds = 0;
+        let atlasFlushes = 0, atlasRows = 0, recordsFlushes = 0, volumeRebinds = 0;
         const types = [...crowdTypes].map(([n, t]) => {
           const i = t.info();
-          atlasFlushes += i.atlasFlushes; recordsFlushes += i.recordsFlushes; volumeRebinds += i.volumeRebinds;
+          atlasFlushes += i.atlasFlushes; atlasRows += i.atlasRows;
+          recordsFlushes += i.recordsFlushes; volumeRebinds += i.volumeRebinds;
           return { name: n, ...i };
         });
-        return { atlasFlushes, recordsFlushes, volumeRebinds, types };
+        return { atlasFlushes, atlasRows, recordsFlushes, volumeRebinds, types };
       })(),
     }),
     backend: handle.backend,
