@@ -56,6 +56,10 @@ const CROWD = Number(process.env.BENCH_CROWD ?? 0);
 // Perf 7f: copies spread on a floor grid centred on the room's spawn point so
 // the bench measures bodies-in-a-room, not N stacked on the single spawn.
 const CROWD_SPACING = Number(process.env.BENCH_CROWD_SPACING ?? 1.2);
+// The distance scene packs 24 bodies into a 3.5 x 7 m strip, which needs the
+// tighter 0.9 m pitch (the room scene's 1.2 m default caps at 18 there). This
+// is the ``BENCH_CROWD_SPACING ?? 0.9`` the distance-task spec names.
+const DIST_CROWD_SPACING = Number(process.env.BENCH_CROWD_SPACING ?? 0.9);
 // BENCH_SCENE — the scene the crowd prelude builds. Default = the 7f room
 // grid (bodies spread from the room's spawn point). `distance` (perf task,
 // 2026-09-14) is the realistic crowd the 24-body close-up could never be: the
@@ -75,6 +79,15 @@ const SCENE = process.env.BENCH_SCENE ?? '';
  *  quadrant caps at 16) — which is also the region the crowd-spawn test pins.
  *  The near corner is 0.6 m in from the two near walls; yaw points at the
  *  opposite corner (the page's forward is (sin yaw, -cos yaw)).
+ *
+ *  WANDERERS FROZEN. The firefight leaves the cast wandering on purpose; here
+ *  that is fatal to the measurement. A room-1 zombie walks the crowd anchor
+ *  down over the run, so the END-of-run crowdInfo (what the bench records) had
+ *  drifted from a 6.2 m mean to 4.3 m in the first smoke run. `holdPlayer`
+ *  pins the camera, and the freeze pins the bodies, so the meanDistance and
+ *  the pixel coverage describe one stable distant scene for the whole leg.
+ *  Both legs (quad and per-body) run the same frozen scene, so the A/B is
+ *  unaffected.
  */
 function buildDistancePrelude() {
   return `(() => {
@@ -84,13 +97,14 @@ function buildDistancePrelude() {
     const yaw = Math.atan2(b.maxX - px, -(b.maxZ - pz));
     __sdfGame.teleport(1);
     __sdfGame.placePlayer({ x: px, z: pz, yaw, pitch: 0 });
+    __sdfGame.freeze(true);
     const region = {
       minX: (b.minX + b.maxX) / 2,
       maxX: b.maxX - 0.5,
       minZ: b.minZ + 0.5,
       maxZ: b.maxZ - 0.5,
     };
-    __sdfGame.spawnCrowd('zombie', ${CROWD}, { spacing: ${CROWD_SPACING}, region });
+    __sdfGame.spawnCrowd('zombie', ${CROWD}, { spacing: ${DIST_CROWD_SPACING}, region });
     return 1;
   })()`;
 }
@@ -684,12 +698,16 @@ async function runLeg(name, room, mode) {
   progress.phase = 'probe';
   // The distance scene freezes the placed pose for the whole leg; the probe
   // must too, or it would teleport the player and measure a different scene
-  // than the real run.
+  // than the real run. It also runs UNARMED: the probe executes the whole
+  // scenario first, and its shots kill the crowd (at n=20 the measured run
+  // then started with 2 of 21 bodies). The guard only needs the walk scene's
+  // frame cost, which does not fire.
   const holdOpt = SCENE === 'distance' ? ', holdPlayer: true' : '';
+  const probeNoShots = SCENE === 'distance' ? ', noShots: true' : '';
   let probe;
   try {
     probe = await evaluate(
-      `__sdfGame.bench({ room: ${room}, mode: "passes", warmup: 4, chunkFrames: 2, label: ${JSON.stringify(`${label}-probe`)}${holdOpt} })`,
+      `__sdfGame.bench({ room: ${room}, mode: "passes", warmup: 4, chunkFrames: 2, label: ${JSON.stringify(`${label}-probe`)}${holdOpt}${probeNoShots} })`,
       30_000,
     );
   } catch (e) {
@@ -965,7 +983,10 @@ lines.push('| leg | room | type | visible | meanDistance | rectFrac | clampedTil
 lines.push('| --- | ---: | --- | ---: | ---: | ---: | ---: |');
 for (const t of table) {
   const r = results.find((x) => x.leg === t.leg && x.room === t.room);
-  const types = r?.crowdInfo?.types;
+  // Per-body legs turn the crowd OFF; their crowd type's last sync is stale
+  // (it was detached mid-rebuild), so its numbers are not the scene. Say so
+  // rather than print a misleading 1-body row.
+  const types = r?.crowdInfo?.on === true ? r.crowdInfo.types : null;
   if (!types?.length) {
     lines.push(`| ${t.leg} | ${t.room} | (per-body) | - | - | - | - |`);
     continue;

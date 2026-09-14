@@ -8614,6 +8614,13 @@ function performBenchAction(a: BenchAction): void {
        *  The caller is responsible for having placed the player first
        *  (`placePlayer`) — this only FREEZES the pose, it does not set it. */
       holdPlayer?: boolean;
+      /** Drop every fire/fireSlug step (the frame-guard PROBE only). The
+       *  probe runs the whole scenario before the measured run, so its
+       *  shots kill a large crowd and the real run then measures a decimated
+       *  scene — observed at n=20, where the walk segment started with 2 of
+       *  21 bodies. The probe only needs the walk scene's frame cost, so it
+       *  runs unarmed. */
+      noShots?: boolean;
     } = {}) {
       const scenario = o.kind === 'closeup'
         ? buildCloseup({ frames: o.closeupFrames })
@@ -8624,11 +8631,21 @@ function performBenchAction(a: BenchAction): void {
         gibFrames: o.gibFrames,
       });
       // HOLD THE PLAYER. Drop every action that writes the player's pose
-      // (the firefight's teleport/look); aim/fire/freeze stay, so the segments
-      // still run the scripted shots at the placed pose.
+      // (the firefight's teleport/look) and the frame-0 `freeze: false` (the
+      // distance scene pre-froze the cast for a stable distance; letting the
+      // scenario unfreeze would walk the crowd onto the camera again).
+      // aimSurface/fire/fireSlug stay, so the segments still run the scripted
+      // shots at the placed pose and frozen bodies.
       if (o.holdPlayer) {
         scenario.steps = scenario.steps.filter(
-          s => s.action.kind !== 'teleport' && s.action.kind !== 'look',
+          s => s.action.kind !== 'teleport'
+            && s.action.kind !== 'look'
+            && s.action.kind !== 'freeze',
+        );
+      }
+      if (o.noShots) {
+        scenario.steps = scenario.steps.filter(
+          s => s.action.kind !== 'fire' && s.action.kind !== 'fireSlug',
         );
       }
       const problems = validateScenario(scenario);
