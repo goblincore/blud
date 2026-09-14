@@ -263,6 +263,9 @@ export interface ZombieActor {
    *  test and spike call sites that build from a bare body + view. */
   readonly character: CharacterView | null;
   readonly view: ZombieGpuView;
+  /** Crowd stage a (?crowd=1): the type this body is attached to and its slot
+   *  in that type's shared atlas/record buffer. Undefined = the per-body path. */
+  crowd?: { type: import('./crowd-type').CrowdType; slot: number };
   /** Latest POSED body (world space) — what projectiles will raycast. */
   readonly posed: () => BuildResult;
   readonly boundRig: () => BoundRig;

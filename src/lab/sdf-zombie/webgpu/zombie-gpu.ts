@@ -1421,6 +1421,23 @@ export interface CrowdMaterialHandles {
 type Vec3Node = ReturnType<typeof vec3>;
 
 /**
+ * The sampled start/early-out sources a crowd material must bind to stay
+ * bit-identical to the per-body material it replaces. The per-body view binds
+ * every one of these (GpuViewOpts); a crowd material that omits them marches
+ * from a different start, so even a lone body stops matching. `levelShadow` is
+ * deliberately absent: the crowd material builds its own node and publishes it
+ * through CrowdMaterialHandles for the game's per-frame rebind.
+ */
+export interface CrowdMaterialSources {
+  occluder?: OccluderSource;
+  shell?: ShellSource;
+  prev?: PrevSource;
+  depthPre?: DepthPreSource;
+  lastFrame?: LastFrameSource;
+  probeDyn?: { node: unknown };
+}
+
+/**
  * Crowd stage a (Task 5): the ONE material pair a character type draws every
  * instance with. A thin wrapper around createMarchMaterial that
  *
@@ -1439,12 +1456,13 @@ export function createCrowdMaterial(
   u: MarchUniforms,
   crowd: { inst: CrowdRecords['node']; instCfg: ReturnType<typeof uniform> },
   tiles?: ComputeTileBinding,
-  depthPre?: DepthPreSource,
+  sources?: CrowdMaterialSources,
 ): CrowdMaterialHandles {
-  // The instanced proxy box: a unit BoxGeometry in [-0.5, 0.5]^3, scaled by
-  // the instance's half extents and moved to its centre. positionGeometry, not
-  // positionLocal: positionLocal IS what positionNode assigns, so referencing
-  // it here would be self-referential.
+  // The instanced proxy box: a [-1, 1]^3 BoxGeometry, scaled by the instance's
+  // half extents and moved to its centre. positionGeometry, not positionLocal:
+  // positionLocal IS what positionNode assigns, so referencing it here would be
+  // self-referential. (The geometry is 2-wide because iHalf is a HALF extent —
+  // pos * iHalf must span ±half, matching the bLo/bHi entry maths.)
   const instCentre = attribute('iCentre', 'vec3') as unknown as Vec3Node;
   const instHalf = attribute('iHalf', 'vec3') as unknown as Vec3Node;
   const positionNode = instCentre.add(positionGeometry.mul(instHalf));
@@ -1456,17 +1474,17 @@ export function createCrowdMaterial(
   const material = createMarchMaterial(
     dataTex, volumeTex, u,
     marchBody,
-    undefined, undefined,
+    undefined, sources?.occluder,
     tiles ? { header: tiles.headerNode, entries: tiles.entryNode } : undefined,
-    undefined, undefined, undefined,
-    undefined, undefined, 'lit', undefined,
-    undefined, undefined,
+    sources?.shell, sources?.prev, undefined,
+    undefined, sources?.depthPre, 'lit', undefined,
+    sources?.probeDyn?.node, sources?.lastFrame,
     undefined, undefined, undefined, undefined,
     { inst: crowd.inst, instCfg: crowd.instCfg, instCentre, instHalf },
   );
   material.positionNode = positionNode as never;
 
-  const depthPreCfg = depthPre ? depthPre.uniforms.cfg : createDepthPreUniforms().cfg;
+  const depthPreCfg = sources?.depthPre ? sources.depthPre.uniforms.cfg : createDepthPreUniforms().cfg;
   const depthPreT = depthPreMarch({
     worldPos: positionWorld,
     camPos: cameraPosition,

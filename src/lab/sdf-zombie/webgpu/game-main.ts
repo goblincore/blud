@@ -67,7 +67,9 @@ import { SegmentVolumeBinding, createSegmentAtlasTexture } from './skeleton-spik
 import { createPostAa } from './post-aa';
 import { type VhsPreset, type VhsTerms } from './post-vhs';
 import { type SscsTerms } from './post-sscs';
-import { type ZombieGpuView } from './zombie-gpu';
+import { type ZombieGpuView, defaultUniforms, blankFaceTexture, type MarchUniforms } from './zombie-gpu';
+import { createCrowdType, type CrowdType } from './crowd-type';
+import { TILE_SIZE_PX } from './tile-cull';
 import { createOccluderHull, buildHullInstances, HULL_SHRINK, type HullInstance } from './occluder-hull';
 import { type BuildResult } from '../build-body';
 import { parseBlob } from '../blob-parse';
@@ -1080,6 +1082,50 @@ async function main() {
   // indirection, assigned once liveChunks exists. Empty until then.
   let chunkObjects: () => THREE.Object3D[] = () => [];
   let refreshActorTiles = () => {};
+
+  // ---- CROWD STAGE A (?crowd=1) -------------------------------------------
+  // Declared ABOVE the draw callback for the same hoisting reason the cull
+  // state is (see the cullCounts comment): the callback closes over these, and
+  // a frame that renders before the boot reaches a later declaration throws
+  // "Cannot access before initialization" and silently skips the crowd path.
+  const crowdFlag = new URLSearchParams(location.search).get('crowd') === '1';
+  let crowdOn = crowdFlag;
+  /** One CrowdType per character registry name; lazily created on first spawn. */
+  const crowdTypes = new Map<string, CrowdType>();
+  /** The first attached view per type — the source of the per-frame per-TYPE
+   *  uniform values (lighting rig, spot, level shadow, probes). A same-name
+   *  view, so its per-type statics match; the FIRST attaches in room order and
+   *  pins the type's room uniforms for stage a (cross-room crowds are a known
+   *  gap — see the crowd dev note). */
+  const crowdSourceView = new Map<CrowdType, ZombieGpuView>();
+  /** Types whose shared segVolume atlas/meta were bound from the first actor. */
+  const crowdVolumeBound = new Set<CrowdType>();
+  let crowdSegMetaWarned = false;
+  let crowdRefineWarned = false;
+
+  /** Copy every uniform VALUE from a stamped per-body view into a type's own
+   *  nodes. The crowd material reads per-TYPE fields from these nodes and
+   *  every per-INSTANCE field from the record, so an exact copy of the view's
+   *  block is both correct and immune to a per-type stamp the wiring forgot to
+   *  list. Textures are shared by reference (they are per-type anyway);
+   *  vectors/colours/matrices copy through .copy(). */
+  function copyUniformValues(dst: MarchUniforms, src: MarchUniforms): void {
+    const d = dst as unknown as Record<string, { value: unknown }>;
+    const s = src as unknown as Record<string, { value: unknown }>;
+    for (const k of Object.keys(s)) {
+      const dn = d[k], sn = s[k];
+      if (!dn || !sn) continue;
+      const sv = sn.value;
+      const dv = dn.value;
+      if (sv !== null && typeof sv === 'object' && !(sv instanceof THREE.Texture)
+          && dv !== null && typeof dv === 'object'
+          && typeof (dv as { copy?: unknown }).copy === 'function') {
+        (dv as { copy: (o: unknown) => void }).copy(sv);
+      } else {
+        dn.value = sv;
+      }
+    }
+  }
   /** TASK-6 DIAGNOSTIC LIGHT CLOCK state — see setLightClockFrozen in the
    *  __sdfGame seam. Freezes the practical flicker phase at the freeze
    *  instant; default OFF, gate-only. DECLARED HERE (before setDrawFn)
@@ -1461,6 +1507,34 @@ async function main() {
         a.view.uniforms.levelShadowMatrix.value.copy(twin.shadow.matrix);
         a.view.uniforms.levelShadowCfg.value.x = lvlOn;
         if (map !== null) a.view.levelShadowTex.value = map;
+        // Crowd stage a: flush the per-instance record AFTER every setter and
+        // the loop's own bodyFlash write, so the type's shared buffer holds
+        // this frame's state before CrowdType.sync flushes it. Idempotent on
+        // the per-body path (the view's own material reads the same record).
+        a.view.syncRecord();
+      }
+      // CROWD STAGE A: one sync per type per frame, after every attached view
+      // has written its record. The per-frame globals (beam, level shadow,
+      // dynamic probes, time, probe weight) are copied from the type's source
+      // view, which the loop above just updated; tileCfg.x follows the game's
+      // tile switch exactly as a per-body view's does.
+      if (crowdOn && crowdTypes.size > 0) {
+        const csize = sdfLayer.targetSize;
+        const grid = {
+          tilesX: Math.ceil(Math.max(1, csize.width) / TILE_SIZE_PX),
+          tilesY: Math.ceil(Math.max(1, csize.height) / TILE_SIZE_PX),
+          tilePx: TILE_SIZE_PX,
+        };
+        const tilesOn = gameTiles.diagnostics().enabled;
+        const crowdTiming = telemetry.begin();
+        for (const t of crowdTypes.values()) {
+          const src = crowdSourceView.get(t);
+          if (src) copyUniformValues(t.uniforms, src.uniforms);
+          t.uniforms.tileCfg.value.x = tilesOn ? 1 : 0;
+          if (map !== null) t.levelShadowTex.value = map;
+          t.sync(camera, grid);
+        }
+        telemetry.end('crowd-sync', crowdTiming);
       }
       // Bone tubes take the SAME beam (bone-instancer's boneShade is the
       // march's own cone formula on these exact values).
@@ -1493,7 +1567,14 @@ async function main() {
     // LEGACY ONLY — the deferred mode's SDF producer pass is fed by the
     // router, not by sdf-layer's body list.
     updateVisibleActors();
-    sdfLayer.setBodies(visibleActors.map(a => a.view.object), chunkObjects());
+    // Crowd stage a: one instanced mesh per type replaces its N hidden
+    // per-body proxies; unattached (or crowd-off) actors keep their proxies.
+    sdfLayer.setBodies(
+      crowdOn
+        ? ([...crowdTypes.values()].map(t => t.mesh) as THREE.Object3D[])
+            .concat(visibleActors.filter(a => !a.crowd).map(a => a.view.object))
+        : visibleActors.map(a => a.view.object),
+      chunkObjects());
     if (gooEnabled && gooLayer) {
       gooLayer.render(camera, () => sdfLayer.render(scene, camera));
     } else {
@@ -1786,12 +1867,33 @@ async function main() {
     const { key, shared } = acquireVolumeAtlas(actor, state.sources);
     const binding = new SegmentVolumeBinding(shared, shared.texture, state.sources);
     actor.view.setSkeletonVolume(shared.texture, binding.metaTexture);
-    actor.view.setBoneCullMode('segment');
+    const crowd = actor.crowd;
+    if (crowd) {
+      // Per-instance segVolumeMeta is a stage-a gap: ONE meta per type means
+      // only the first instance's pose can drive 'segment' bone culling. The
+      // honest fallback for the rest is 'cluster', which needs no per-instance
+      // pose. The type binds the FIRST attached actor's shared atlas/meta (and
+      // re-binds it when that actor's own revision changes); a later actor's
+      // bind is ignored — its own view still holds the right pair.
+      actor.view.setBoneCullMode('cluster');
+      if (crowdSourceView.get(crowd.type) === actor.view || !crowdVolumeBound.has(crowd.type)) {
+        crowd.type.setSkeletonVolume(shared.texture, binding.metaTexture);
+        crowdVolumeBound.add(crowd.type);
+        if (!crowdSegMetaWarned) {
+          crowdSegMetaWarned = true;
+          console.warn('[crowd] segVolumeMeta is per-type from the first attached actor; '
+            + 'other instances fall back to cluster bone culling (stage-a gap)');
+        }
+      }
+    } else {
+      actor.view.setBoneCullMode('segment');
+    }
     // Analytic primitive gradients cannot represent a sampled field.
     actor.view.uniforms.normalGradientCfg.value.x = 0;
     skeletonVolumes.set(actor, { ...state, key, binding });
   };
   const releaseSkeletonActor = (actor: ZombieActor) => {
+    actor.crowd?.type.detach(actor.crowd.slot);
     skeletonSources.delete(actor);
     const volume = skeletonVolumes.get(actor);
     if (!volume) return;
@@ -2437,6 +2539,41 @@ async function main() {
     for (const nm of levelNodeMaterials) nm.needsUpdate = true;
   }
 
+  /** Lazily create the ONE CrowdType a character registry name draws through
+   *  (Task 5's createCrowdType). The material binds the same start/early-out
+   *  sources as a per-body view (temporal start, prev, shell, depthPre,
+   *  probeDyn) so a lone instance stays bit-identical; the per-TYPE uniform
+   *  block is seeded by copyUniformValues from the first attached view.
+   *  `?crowd=0` never calls this. */
+  function crowdTypeFor(name: string): CrowdType {
+    const existing = crowdTypes.get(name);
+    if (existing) return existing;
+    const t = createCrowdType(
+      handle.renderer, name, defaultUniforms(blankFaceTexture()),
+      sdfLayer.maxWidth, sdfLayer.maxHeight,
+      {
+        occluder: sdfLayer.occluder,
+        shell: {
+          entry: sdfLayer.shellEntry.texture,
+          exit: sdfLayer.shellExit.texture,
+          uniforms: sdfLayer.shellEntry.uniforms,
+        },
+        prev: sdfLayer.prev,
+        depthPre: sdfLayer.depthPre,
+        lastFrame: sdfLayer.lastFrame,
+        probeDyn: probeGather ? { node: probeGather.probeDynNode } : undefined,
+      },
+    );
+    t.mesh.layers.set(SDF_LAYER);
+    t.depthPreMesh.layers.set(DEPTH_PREPASS_LAYER);
+    scene.add(t.mesh);
+    scene.add(t.depthPreMesh);
+    deferredApi?.router.register(t.mesh, 'sdf');
+    deferredApi?.router.register(t.depthPreMesh, 'exclude');
+    crowdTypes.set(name, t);
+    return t;
+  }
+
   function spawnEnemy(name: string, room: RoomDef, start: Vec3, errs: string[]): ZombieActor {
     const enc = enclosureOf(room.name)!;
     const roomFurniture = FURNITURE
@@ -2599,6 +2736,36 @@ async function main() {
     view.uniforms.wallPosZ.value.setRGB(...enc.walls.posZ);
     view.uniforms.bounceCfg.value.set(probeWeight, 4, 1, 1);
     roomProbes.bind(view.uniforms, room.id);
+    // CROWD STAGE A: attach BEFORE the layers/registration block so the
+    // deferred router can skip the per-body producer, and before the actor
+    // exists (a slot is actor-independent). attach() rebinds the view's sink
+    // and record slot into the type's shared atlas/buffer.
+    let crowdAttach: { type: CrowdType; slot: number } | null = null;
+    if (crowdOn) {
+      const t = crowdTypeFor(name);
+      const slot = t.attach(view);
+      if (slot < 0) console.warn('[crowd] type full', name);
+      else {
+        crowdAttach = { type: t, slot };
+        if (!crowdSourceView.has(t)) crowdSourceView.set(t, view);
+        // attach/detach is the crowd's visibility gate, so the per-body proxy
+        // and its depth-pre twin stay in the scene but hidden (cheap to show
+        // again only via a rebuild — see setCrowd).
+        view.object.visible = false;
+        if (view.depthPreObject) view.depthPreObject.visible = false;
+        // Stage-a gap: one segVolumeMeta per type, so only the first instance
+        // can bone-cull in 'segment' pose mode. Cluster culling needs no
+        // per-instance pose and stays honest for every instance.
+        view.setBoneCullMode('cluster');
+        if (view.refineObject) {
+          view.refineObject.visible = false;
+          if (!crowdRefineWarned) {
+            crowdRefineWarned = true;
+            console.warn('[crowd] refine twins are not supported in crowd mode (stage 3)');
+          }
+        }
+      }
+    }
     view.object.layers.set(SDF_LAYER);
     view.coneObject.layers.set(CONE_LAYER);
     if (view.depthPreObject) {
@@ -2616,7 +2783,9 @@ async function main() {
     // deferred view opts omit it) are march helpers that must never reach a
     // G-buffer or forward pass; the kit/prop group is level-only tissue.
     if (deferredApi) {
-      deferredApi.router.register(view.object, 'sdf');
+      // A crowd-attached view is one instance of a shared type draw; its own
+      // producer material must NOT also feed the G-buffer.
+      if (!crowdAttach) deferredApi.router.register(view.object, 'sdf');
       deferredApi.router.register(view.coneObject, 'exclude');
       if (view.depthPreObject) deferredApi.router.register(view.depthPreObject, 'exclude');
       if (view.refineObject) deferredApi.router.register(view.refineObject, 'exclude');
@@ -2648,7 +2817,8 @@ async function main() {
     });
     // Ship default + any live toggle: a late spawn must not fall back to the
     // flat bone fold while the rest of the room culls.
-    actor.view.setBoneCullMode(boneCullMode);
+    if (crowdAttach) actor.crowd = crowdAttach;
+    actor.view.setBoneCullMode(crowdAttach ? 'cluster' : boneCullMode);
     // skeleton=mesh: contract sources at REST bind (before any tick steps
     // the rig — stepActorMotion rewrites restPose, which limb local frames
     // are derived from), then the field drops this actor's bone rows so
@@ -2782,6 +2952,9 @@ async function main() {
   function rebuildCast(): void {
     soldierCorpses?.dispose();
     encounter.clear(); encounterHomes.clear();
+    // The old source views are disposed below; refill from the rebuilt cast.
+    crowdSourceView.clear();
+    crowdVolumeBound.clear();
     for (const a of actors) {
       releaseSkeletonActor(a);
       scene.remove(a.view.object);
@@ -5770,6 +5943,23 @@ function performBenchAction(a: BenchAction): void {
      *  effect while tiles are on (tiles-playtest). */
     setTileRayCull: (on: boolean) => gameTiles.setRayCull(on),
     tiles: () => gameTiles.diagnostics(),
+    /** CROWD STAGE A: switch between the per-body path and one draw per
+     *  character type (?crowd=1 at boot). BOTH directions rebuild the cast:
+     *  view.rebind leaves a view's own material pointing at the crowd type's
+     *  record buffer, so a plain detach cannot restore the per-body path, and
+     *  a fresh spawn is the only honest way back (Task 5 note). `?crowd=0` is
+     *  the cheaper canonical opt-out — it never attaches at all. */
+    setCrowd(on: boolean) {
+      if (on === crowdOn) return;
+      crowdOn = on;
+      rebuildCast();
+    },
+    /** Crowd stage a census: the flag, and per type attached/live slots plus
+     *  tile-binding fallbacks (bench + hash diagnostics). */
+    crowdInfo: () => ({
+      on: crowdOn,
+      types: [...crowdTypes].map(([n, t]) => ({ name: n, ...t.info() })),
+    }),
     backend: handle.backend,
     /** Set the player pose. y defaults to 0 (feet on the floor). */
     setPose(x: number, z: number, yaw: number, pitch = 0, y = 0) {

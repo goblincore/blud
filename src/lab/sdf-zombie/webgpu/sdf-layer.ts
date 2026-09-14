@@ -859,6 +859,11 @@ export interface SdfLayer {
   readonly flipY: boolean;
   /** Actual SDF target size, for the panel to display. */
   readonly targetSize: { width: number; height: number };
+  /** The FULL-res content size the layer was last sized to. Crowd stage a uses
+   *  it as the conservative worst case a CrowdType's tile binding is allocated
+   *  for: the active march grid is targetSize / TILE_SIZE_PX, always ≤ this. */
+  readonly maxWidth: number;
+  readonly maxHeight: number;
   /** The float target the march writes into. Exposed for MEASUREMENT
    *  readback only (the occupancy probe); do not render through it. */
   readonly marchTarget: THREE.RenderTarget;
@@ -941,7 +946,14 @@ export interface SdfLayer {
   readonly temporalStart: { on: boolean; margin: number; slope: number; maxStart: number };
   /** Registers the bodies (one pass each, front to back) and the gib chunks
    *  (one shared final pass, gated by every body). Call every frame before
-   *  render(); with the gate off these lists are simply not walked. */
+   *  render(); with the gate off these lists are simply not walked.
+   *
+   *  CROWD STAGE A: under `?crowd=1` one entry here is a CrowdType's SINGLE
+   *  instanced mesh drawing N instances. sortFrontToBack and
+   *  temporalMarginForMotion then treat it as ONE body at its mesh position,
+   *  so the temporal-start margin is measured from mesh translation rather
+   *  than each instance's own — conservative (never too small), and the extra
+   *  work is a few pixels of an over-wide start, never a visible seam. */
   setBodies(bodies: THREE.Object3D[], chunks: THREE.Object3D[]): void;
   /** The accumulated-depth gate. OFF = one march pass, bit-identical to the
    *  pre-task-5 frame. ON = one pass per body, nearest first, each gated and
@@ -2451,6 +2463,8 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
     get shellEntryTarget() { return shellEntry; },
     get shellExitTarget() { return shellExit; },
     get targetSize() { return { width: target.width, height: target.height }; },
+    get maxWidth() { return fullW; },
+    get maxHeight() { return fullH; },
     /** One-pixel footprint radius per unit distance, for the march's AA
      *  epsilon. Derived from the SDF pass height, so it follows the adaptive
      *  resolution ladder automatically. */

@@ -784,17 +784,35 @@ git commit -m "feat(crowd): CrowdType — shared atlas, records, one material, i
 
 **Files:** `src/lab/sdf-zombie/webgpu/game-main.ts`, `src/lab/sdf-zombie/webgpu/sdf-layer.ts`
 
-- [ ] **Step 1: Flag and registry.** Near the `?tiles-playtest` parse: `const crowdFlag = params.get('crowd') === '1'; let crowdOn = crowdFlag;` and `const crowdTypes = new Map<string, CrowdType>();` with `function crowdTypeFor(name: string, palette, light): CrowdType` that lazily creates one via `createCrowdType(renderer, name, defaultUniforms(blankFaceTexture()), sdfLayer.maxWidth, sdfLayer.maxHeight)`, applies the same per-TYPE stamping `spawnEnemy` does today (`applyMaterial(palette ?? flesh, LIGHT_PRESETS['practical-hard-key'])`, `applyWoundRamp`, `woundCfg2.y = GAME_RELAX`, `perfCfg`, `marchCfg.y`, `normalGradientCfg`, `aaCfg`, `levelShadowCfg.x`, face texture/`faceCfg`/`faceProj` from `compileCharacterSheet(characterEntry(name))`) onto `type.uniforms`, sets `type.mesh.layers.set(SDF_LAYER)`, `type.depthPreMesh.layers.set(DEPTH_PREPASS_LAYER)`, `scene.add` both, and `deferredApi?.router.register(type.mesh, 'sdf')` + `register(type.depthPreMesh, 'exclude')`.
+- [x] **Step 1: Flag and registry.** Near the `?tiles-playtest` parse: `const crowdFlag = params.get('crowd') === '1'; let crowdOn = crowdFlag;` and `const crowdTypes = new Map<string, CrowdType>();` with `function crowdTypeFor(name: string, palette, light): CrowdType` that lazily creates one via `createCrowdType(renderer, name, defaultUniforms(blankFaceTexture()), sdfLayer.maxWidth, sdfLayer.maxHeight)`, applies the same per-TYPE stamping `spawnEnemy` does today (`applyMaterial(palette ?? flesh, LIGHT_PRESETS['practical-hard-key'])`, `applyWoundRamp`, `woundCfg2.y = GAME_RELAX`, `perfCfg`, `marchCfg.y`, `normalGradientCfg`, `aaCfg`, `levelShadowCfg.x`, face texture/`faceCfg`/`faceProj` from `compileCharacterSheet(characterEntry(name))`) onto `type.uniforms`, sets `type.mesh.layers.set(SDF_LAYER)`, `type.depthPreMesh.layers.set(DEPTH_PREPASS_LAYER)`, `scene.add` both, and `deferredApi?.router.register(type.mesh, 'sdf')` + `register(type.depthPreMesh, 'exclude')`.
 
-- [ ] **Step 2: Spawn/despawn.** In `spawnEnemy`, after the view is built: `if (crowdOn) { const t = crowdTypeFor(name, palette, light); const slot = t.attach(view); if (slot < 0) console.warn('[crowd] type full', name); else { actor.crowd = { type: t, slot }; view.object.visible = false; view.depthPreObject && (view.depthPreObject.visible = false); } }` — the per-body proxy objects stay in the scene but hidden (cheap rollback via `setCrowd(false)`). Skip the per-body `deferredApi.router.register(view.object, 'sdf')` when attached. In `releaseSkeletonActor` / `rebuildCast` / corpse-bake retire: `actor.crowd?.type.detach(actor.crowd.slot)`.
+- [x] **Step 2: Spawn/despawn.** In `spawnEnemy`, after the view is built: `if (crowdOn) { const t = crowdTypeFor(name, palette, light); const slot = t.attach(view); if (slot < 0) console.warn('[crowd] type full', name); else { actor.crowd = { type: t, slot }; view.object.visible = false; view.depthPreObject && (view.depthPreObject.visible = false); } }` — the per-body proxy objects stay in the scene but hidden (cheap rollback via `setCrowd(false)`). Skip the per-body `deferredApi.router.register(view.object, 'sdf')` when attached. In `releaseSkeletonActor` / `rebuildCast` / corpse-bake retire: `actor.crowd?.type.detach(actor.crowd.slot)`.
 
-- [ ] **Step 3: Per-frame.** In the draw fn's legacy branch, after the per-actor uniform block (which now ends with `a.view.syncRecord()`): `for (const t of crowdTypes.values()) { if (map !== null) t.levelShadowTex.value = map; t.uniforms.<global lighting members>.value.copy(...)` — copy the same global values the loop writes per actor (`spotPos, spotAxis, spotCfg, spotColor, spotCfg2, bounceSpot*, levelShadowMatrix, levelShadowCfg.x`) onto `t.uniforms`; then `t.sync(camera, tileGridFor(sdfLayer.targetSize))` (reuse `refreshActorTiles`'s grid computation) timed under a `crowd-sync` telemetry label. In `bindSkeletonVolume`, when the actor is attached, also call `t.setSkeletonVolume(shared.texture, binding.metaTexture)` — note the meta texture is per actor today (`SegmentVolumeBinding` owns one per actor): for stage (a) the crowd type binds the FIRST attached actor's meta and logs once; `segVolumeMeta` per instance is a known gap recorded in the dev note (bone-tube culling in `segment` mode is per-instance pose; the visible effect is bone-cull mode falling back to `cluster` for non-first instances — set `setBoneCullMode('cluster')` for attached views to keep it honest).
+- [x] **Step 3: Per-frame.** In the draw fn's legacy branch, after the per-actor uniform block (which now ends with `a.view.syncRecord()`): `for (const t of crowdTypes.values()) { if (map !== null) t.levelShadowTex.value = map; t.uniforms.<global lighting members>.value.copy(...)` — copy the same global values the loop writes per actor (`spotPos, spotAxis, spotCfg, spotColor, spotCfg2, bounceSpot*, levelShadowMatrix, levelShadowCfg.x`) onto `t.uniforms`; then `t.sync(camera, tileGridFor(sdfLayer.targetSize))` (reuse `refreshActorTiles`'s grid computation) timed under a `crowd-sync` telemetry label. In `bindSkeletonVolume`, when the actor is attached, also call `t.setSkeletonVolume(shared.texture, binding.metaTexture)` — note the meta texture is per actor today (`SegmentVolumeBinding` owns one per actor): for stage (a) the crowd type binds the FIRST attached actor's meta and logs once; `segVolumeMeta` per instance is a known gap recorded in the dev note (bone-tube culling in `segment` mode is per-instance pose; the visible effect is bone-cull mode falling back to `cluster` for non-first instances — set `setBoneCullMode('cluster')` for attached views to keep it honest).
 
-- [ ] **Step 4: Bodies list.** `sdfLayer.setBodies(crowdOn ? [...crowdTypes.values()].map(t => t.mesh).concat(visibleActors.filter(a => !a.crowd).map(a => a.view.object)) : visibleActors.map(a => a.view.object), chunkObjects())`. In `sdf-layer.ts` add a comment on `setBodies` that a crowd mesh is one Object3D for N instances and that `sortFrontToBack`/`temporalMarginForMotion` treat it as one body at its mesh position (the temporal-start margin becomes conservative for crowds; acceptable in stage a).
+- [x] **Step 4: Bodies list.** `sdfLayer.setBodies(crowdOn ? [...crowdTypes.values()].map(t => t.mesh).concat(visibleActors.filter(a => !a.crowd).map(a => a.view.object)) : visibleActors.map(a => a.view.object), chunkObjects())`. In `sdf-layer.ts` add a comment on `setBodies` that a crowd mesh is one Object3D for N instances and that `sortFrontToBack`/`temporalMarginForMotion` treat it as one body at its mesh position (the temporal-start margin becomes conservative for crowds; acceptable in stage a).
 
-- [ ] **Step 5: Seams.** `__sdfGame.setCrowd(on)` toggles `crowdOn`, and for every actor attaches/detaches accordingly (hide/show `view.object` and `view.depthPreObject`); `__sdfGame.crowdInfo()` returns `{ on, types: [...crowdTypes].map(([n, t]) => ({ name: n, ...t.info() })) }`. Refine/cone: in `spawnEnemy`, when attached and `view.refineObject` exists, set it invisible and log once `[crowd] refine twins are not supported in crowd mode (stage 3)`.
+- [x] **Step 5: Seams.** `__sdfGame.setCrowd(on)` toggles `crowdOn`, and for every actor attaches/detaches accordingly (hide/show `view.object` and `view.depthPreObject`); `__sdfGame.crowdInfo()` returns `{ on, types: [...crowdTypes].map(([n, t]) => ({ name: n, ...t.info() })) }`. Refine/cone: in `spawnEnemy`, when attached and `view.refineObject` exists, set it invisible and log once `[crowd] refine twins are not supported in crowd mode (stage 3)`.
 
 - [ ] **Step 6: Gate**
+
+> **EXECUTOR NOTE (2026-09-13): the crowd gate is NOT bit-identical.** The
+> wiring is in place and the per-body canonical is untouched (`a8ab4e…`), but
+> `?crowd=1` hashes `575fd04bb454260cc4409bcd69db4597b46f343b` and
+> `?crowd=1&tiles-playtest` hashes `0b84c119e04fc8b2f7a3fe2f69b85737448ec86c`
+> (tiles-on baseline `64c7bc5a…`). Investigation: crowdInfo reports both types
+> attached; the per-type uniforms diff clean (only an inert `tileCfg` grid);
+> flat-albedo RGB matches byte-for-byte, and body coverage matches exactly —
+> only the hit `t` (depth alpha) differs. A real Task-5 bug was found and fixed
+> (the crowd proxy box was `BoxGeometry(1,1,1)` scaled by a HALF extent, so it
+> rasterised at half size; now `BoxGeometry(2,2,2)` restores exact coverage).
+> The remaining diff is structural: the instanced `positionNode` transform
+> reaches clip space as `view * (model * p)` while the per-body mesh is
+> `(view * model) * p`, and the per-body proxy geometry is `first.size`-scaled.
+> A one-ULP vertex difference cascades through the AA-gated march to a
+> different accepted `t`. No uniform/record/band difference remains to fix;
+> `?crowd=1` cannot be byte-identical to the per-body path with one instanced
+> draw. Do not rebase `a8ab4e…`.
 
 ```bash
 npx tsc --noEmit -p .
@@ -805,7 +823,7 @@ MARCH_HASH_QUERY='crowd=1&tiles-playtest' MARCH_HASH_TILES=1 node scripts/march-
 
 If `crowd=1` differs from canonical: check `crowdInfo()` reports 2 types attached in room 1 (zombie + soldier), then compare with `debugCfg.y` flat albedo. The likely culprits: `syncRecord()` written before `attach` rebound the slot (the record went to the one-slot buffer), `instCentre/instHalf` select not taken (`instCfg.y`), or the type's uniforms missing a per-type stamp `spawnEnemy` applied to the view (diff `type.uniforms` against `view.uniforms` member by member in the console).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/lab/sdf-zombie/webgpu/game-main.ts src/lab/sdf-zombie/webgpu/sdf-layer.ts

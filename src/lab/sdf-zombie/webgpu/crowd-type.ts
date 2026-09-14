@@ -24,7 +24,7 @@ import {
 import { createComputeTileBinding, type ComputeTileBinding } from './tile-bin-compute';
 import { type TileGroupInput } from './tile-cull';
 import {
-  createCrowdMaterial, type DepthPreSource, type MarchUniforms, type ZombieGpuView,
+  createCrowdMaterial, type CrowdMaterialSources, type MarchUniforms, type ZombieGpuView,
 } from './zombie-gpu';
 
 /** Floats per instance in the interleaved attribute buffer: iCentre.xyz,
@@ -108,7 +108,7 @@ export function createCrowdType(
   uniforms: MarchUniforms,
   maxW: number,
   maxH: number,
-  depthPre?: DepthPreSource,
+  sources?: CrowdMaterialSources,
 ): CrowdType {
   // ONE shared prim atlas, ONE record buffer, ONE material pair, ONE tile
   // binding — the whole point of the type. The atlas is allocated at the
@@ -120,11 +120,12 @@ export function createCrowdType(
   const instCfg = uniform(new THREE.Vector4(0, 1, 0, 0));
   const tiles = createComputeTileBinding(renderer, maxW, maxH);
 
-  // Unit box, placed per instance by the material's positionNode. The
-  // interleaved buffer carries all three instance attributes so one upload
-  // covers the whole draw.
+  // Box in [-1, 1]^3, placed per instance by the material's positionNode.
+  // NOT [-0.5, 0.5]: iHalf is a HALF extents, so positionGeometry * iHalf must
+  // span ±half (the same box the fragment's bLo/bHi entry maths uses). A unit
+  // [-0.5, 0.5] box would rasterise a half-size proxy and clip every silhouette.
   const geo = new THREE.InstancedBufferGeometry().copy(
-    new THREE.BoxGeometry(1, 1, 1) as unknown as THREE.InstancedBufferGeometry,
+    new THREE.BoxGeometry(2, 2, 2) as unknown as THREE.InstancedBufferGeometry,
   );
   const ib = new THREE.InstancedInterleavedBuffer(
     new Float32Array(MAX_CROWD_INSTANCES * INST_FLOATS), INST_FLOATS,
@@ -135,7 +136,7 @@ export function createCrowdType(
   geo.setAttribute('iSlot', new THREE.InterleavedBufferAttribute(ib, 1, 6));
   geo.instanceCount = 0;
 
-  const handles = createCrowdMaterial(atlas.texture, uniforms, { inst: records.node, instCfg }, tiles, depthPre);
+  const handles = createCrowdMaterial(atlas.texture, uniforms, { inst: records.node, instCfg }, tiles, sources);
   const mesh = new THREE.Mesh(geo, handles.material);
   mesh.frustumCulled = false; // the box attributes ARE the bounds; no double cull
   const depthPreMesh = new THREE.Mesh(geo, handles.depthPreMaterial);
