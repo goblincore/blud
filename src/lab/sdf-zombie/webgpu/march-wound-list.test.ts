@@ -45,7 +45,7 @@ describe('per-ray wound list', () => {
   });
 
   it('MARCH_BODY sets the gate from counts2.w', () => {
-    expect(MARCH_BODY).toContain('gWoundListOn = select(0.0, 1.0, counts2.w > 0.5);');
+    expect(MARCH_BODY).toContain('gWoundListOn = select(0.0, 1.0, gInstCounts2.w > 0.5);');
   });
 
   it('pins the reach formula text in BOTH the fold and the preload (they cannot drift)', () => {

@@ -389,15 +389,16 @@ const NG_BONES = /* wgsl */ `fn ngBones(flesh: vec4<f32>, p: vec3<f32>, data: te
   return flesh;
 }`;
 
-export const NG_BODY = /* wgsl */ `fn ngBody(p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, counts2: vec4<f32>, noiseCfg: vec4<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, noiseShift: vec3<f32>, volumeTex: texture_3d<f32>, volumePose0: vec4<f32>, volumePose1: vec4<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>, perfCfg: vec4<f32>, woundBound: vec4<f32>) -> vec4<f32> {
+export const NG_BODY = /* wgsl */ `fn ngBody(p: vec3<f32>, data: texture_2d<f32>, noiseCfg: vec4<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, volumeTex: texture_3d<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>, perfCfg: vec4<f32>, inst: ptr<storage, array<vec4<f32>>, read>, instCfg: vec4<f32>) -> vec4<f32> {
+  loadInstance(inst, 0);
   let resetMarker = ngReset();
   gNgBest = 1e9;
   gNgSecond = 1e9;
   gNgOwner = -1;
   gNgExcluded = 1e9;
   var d = vec4<f32>(1e9, 0.0, 0.0, 0.0);
-  if (volumePose0.w > 0.5) { gNgReason = 6; return d; }
-  if (counts2.y > 0.5) { gNgReason = 1; return d; }
+  if (gInstVolPose0.w > 0.5) { gNgReason = 6; return d; }
+  if (gInstCounts2.y > 0.5) { gNgReason = 1; return d; }
   let R = 0.002598076211;
   if (gTileActive > 0.5) {
     for (var e = 0; e < ${TILE_MAX_ENTRIES}; e = e + 1) {
@@ -405,17 +406,17 @@ export const NG_BODY = /* wgsl */ `fn ngBody(p: vec3<f32>, data: texture_2d<f32>
       // The per-view field uses band zero. Foreign atlas entries require a
       // separate rest-frame/owner contract; do not silently mis-anchor them.
       if (gTileBand[e] != 0.0) { gNgReason = 1; return d; }
-      d = ngGroup(d, p, data, counts, 0, gTileBounds[e], gTileGrp[e]);
+      d = ngGroup(d, p, data, gInstCounts, 0, gTileBounds[e], gTileGrp[e]);
       if (gNgReason == 1) { return d; }
     }
   }
   for (var c = 0; c < 8; c = c + 1) {
-    if (c >= i32(counts.y)) { break; }
+    if (c >= i32(gInstCounts.y)) { break; }
     let crange = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_RANGE}), 0);
     if (crange.z < 0.5) { continue; }
     let cbounds = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_BOUNDS}), 0);
     let gspan = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_GROUPS}), 0);
-    let clusterSkipped = length(p - cbounds.xyz) - cbounds.w > (d.x + counts.w * 4.0) * gspan.z;
+    let clusterSkipped = length(p - cbounds.xyz) - cbounds.w > (d.x + gInstCounts.w * 4.0) * gspan.z;
     for (var gi = 0; gi < 64; gi = gi + 1) {
       if (gi >= i32(gspan.y)) { break; }
       let g = i32(gspan.x) + gi;
@@ -432,7 +433,7 @@ export const NG_BODY = /* wgsl */ `fn ngBody(p: vec3<f32>, data: texture_2d<f32>
         if (!listed) { let excluded = ngExcluded(p, bounds, grp, data, 0); }
       } else if (clusterSkipped) {
         let excluded = ngExcluded(p, bounds, grp, data, 0);
-      } else { d = ngGroup(d, p, data, counts, 0, bounds, grp); }
+      } else { d = ngGroup(d, p, data, gInstCounts, 0, bounds, grp); }
       // Unsupported is final throughout the group walk. Numerical reasons
       // may still be superseded by unsupported, so retain their diagnostic order.
       if (gNgReason == 1) { return d; }
@@ -442,15 +443,15 @@ export const NG_BODY = /* wgsl */ `fn ngBody(p: vec3<f32>, data: texture_2d<f32>
   if (gNgOwner < 0) { gNgReason = 7; return d; }
   // Preserve the production cluster/primitive carve order. Smooth max of
   // 1-Lipschitz capsule fields remains 1-Lipschitz.
-  if (counts.z > 0.5) {
+  if (gInstCounts.z > 0.5) {
     for (var c = 0; c < 8; c = c + 1) {
-      if (c >= i32(counts.y)) { break; }
+      if (c >= i32(gInstCounts.y)) { break; }
       let crange = textureLoad(data, vec2<i32>(c, ${ROW_CLUSTER_RANGE}), 0);
       if (crange.z < 0.5) { continue; }
       for (var i = 0; i < 64; i = i + 1) {
         if (i >= i32(crange.y)) { break; }
         let idx = i32(crange.x) + i;
-        if (idx >= i32(counts.x)) { break; }
+        if (idx >= i32(gInstCounts.x)) { break; }
         let S = textureLoad(data, vec2<i32>(idx, ${ROW_PRIM_SCALE}), 0);
         if (S.w < 0.5 || (S.w > 1.5 && S.w < 2.5)) { continue; }
         if (S.w >= 3.5) { continue; }
@@ -467,11 +468,11 @@ export const NG_BODY = /* wgsl */ `fn ngBody(p: vec3<f32>, data: texture_2d<f32>
       }
     }
   }
-  d = ngWounds(d, p, data, woundCfg, woundCfg2, perfCfg, woundBound);
+  d = ngWounds(d, p, data, woundCfg, woundCfg2, perfCfg, gInstWoundBound);
   if (gNgReason != 0) { return d; }
-  if (gNgNear > 0.5 && counts2.x > 0.0) { d = ngBones(d, p, data, counts, counts2.x); }
+  if (gNgNear > 0.5 && gInstCounts2.x > 0.0) { d = ngBones(d, p, data, gInstCounts, gInstCounts2.x); }
   if (gNgReason != 0) { return d; }
-  if (noiseCfg.x > 0.0 && gNgOwner < i32(counts.x) && (gNgSecond - gNgBest <= 2.0 * R || gNgExcluded <= gNgBest + R)) {
+  if (noiseCfg.x > 0.0 && gNgOwner < i32(gInstCounts.x) && (gNgSecond - gNgBest <= 2.0 * R || gNgExcluded <= gNgBest + R)) {
     gNgReason = 4;
   }
   return d;
@@ -488,10 +489,10 @@ const NG_DETAIL = /* wgsl */ `fn ngDetail(p: vec3<f32>, data: texture_2d<f32>, o
   let p3 = p + k3 * 0.0015;
   let p4 = p + k4 * 0.0015;
   // Match mapBody's frequency, multiplication order, owner frame and eps.
-  let h1 = fbm(restPoint(p1, data, owner, noiseLocal(p1, noiseShift)) * 3.0) * amplitude;
-  let h2 = fbm(restPoint(p2, data, owner, noiseLocal(p2, noiseShift)) * 3.0) * amplitude;
-  let h3 = fbm(restPoint(p3, data, owner, noiseLocal(p3, noiseShift)) * 3.0) * amplitude;
-  let h4 = fbm(restPoint(p4, data, owner, noiseLocal(p4, noiseShift)) * 3.0) * amplitude;
+  let h1 = fbm(restPoint(p1, data, owner, noiseLocal(p1, noiseShift), 0) * 3.0) * amplitude;
+  let h2 = fbm(restPoint(p2, data, owner, noiseLocal(p2, noiseShift), 0) * 3.0) * amplitude;
+  let h3 = fbm(restPoint(p3, data, owner, noiseLocal(p3, noiseShift), 0) * 3.0) * amplitude;
+  let h4 = fbm(restPoint(p4, data, owner, noiseLocal(p4, noiseShift), 0) * 3.0) * amplitude;
   return (k1 * h1 + k2 * h2 + k3 * h3 + k4 * h4) / (4.0 * 0.0015);
 }`;
 
@@ -501,14 +502,24 @@ export const NORMAL_GRADIENT_GAME_HELPERS = [NG_EXCLUDED, NG_GROUP, NG_WOUND_LIP
  * helper chains. It never runs in a game material or timed beauty pass. */
 export function buildNormalBodyPointFn(): ReturnType<typeof wgslFn> {
   const signature = NG_BODY.slice(NG_BODY.indexOf('(') + 1, NG_BODY.indexOf(') ->'));
-  const names = signature.split(', ').map(param => param.split(':')[0]);
+  // Bracket-aware split: `inst: ptr<storage, array<vec4<f32>>, read>` contains
+  // commas INSIDE its type, so a bare ', ' split would tear it into three
+  // phantom parameters and every binding after it would shift.
+  const names: string[] = [];
+  let depth = 0;
+  let cur = '';
+  for (const ch of signature) {
+    if (ch === '<') { depth += 1; } else if (ch === '>') { depth -= 1; }
+    if (ch === ',' && depth === 0) { names.push(cur.split(':')[0]!.trim()); cur = ''; } else { cur += ch; }
+  }
+  if (cur.trim()) { names.push(cur.split(':')[0]!.trim()); }
   const args = names.join(', ');
   const source = `fn ngBodyPoint(${signature}, probeKind: f32) -> vec4<f32> {
     gTileActive = 0.0;
     if (probeKind > 1.5 && probeKind < 2.5) { return mapBody(${args}); }
     let result = ngBody(${args});
-    if (probeKind > 3.5) { return vec4<f32>(0.0, ngDetail(p, data, gNgOwner, noiseShift, noiseCfg.x)); }
-    if (probeKind > 2.5) { return vec4<f32>(result.x, result.yzw + ngDetail(p, data, gNgOwner, noiseShift, noiseCfg.x)); }
+    if (probeKind > 3.5) { return vec4<f32>(0.0, ngDetail(p, data, gNgOwner, gInstNoiseShift, noiseCfg.x)); }
+    if (probeKind > 2.5) { return vec4<f32>(result.x, result.yzw + ngDetail(p, data, gNgOwner, gInstNoiseShift, noiseCfg.x)); }
     if (probeKind > 0.5) { return vec4<f32>(f32(gNgReason), f32(gNgOwner), gNgLip, gNgNear); }
     return result;
   }`;

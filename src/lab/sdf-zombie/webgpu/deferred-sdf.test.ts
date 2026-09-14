@@ -75,7 +75,10 @@ describe('surface-entry wgslFn parse contract', () => {
     const surface = new WGSLNodeFunction(MARCH_SURFACE).inputs.map((i: { name: string }) => i.name);
     // 84 + 5 probe grid + 4 bounce spot + 2 dynamic probe layer + 1 bodyFlash, positionally last.
     // +3 temporal reprojection start (lastTex, lastInvVp, temporalCfg) — plan 2026-09-10.
-    expect(legacy.length).toBe(100); // plus sampled-skeleton atlas and metadata textures; +1 meatCfg (2026-09-12)
+    // crowd stage a: 13 per-instance params moved into the record, +inst +instCfg
+    // (the plan wrote 88; the signature has 13 removable params, not 14 — the record
+    //   itself is 14 vec4s, but woundCfg/lodCfg/faceCfg3 stay as per-type vec4 params).
+    expect(legacy.length).toBe(89); // plus sampled-skeleton atlas and metadata textures; +1 meatCfg (2026-09-12)
     expect(legacy).toContain('faceGlowRedOnly');
     expect(surface).toEqual(legacy);
   });
@@ -97,7 +100,7 @@ describe('the surface entry IS the production march, not a copy', () => {
     );
     // The prologue (output reset) must precede the trace's first statement.
     expect(MARCH_SURFACE.indexOf('_ = sdfSurfaceStateReset();'))
-      .toBeLessThan(MARCH_SURFACE.indexOf('gWindDrift = windDrift;'));
+      .toBeLessThan(MARCH_SURFACE.indexOf('loadInstance(inst, 0);'));
   });
 
   it('runs the real material chain — tissue, char, face, painted prims, melt — not the flat-albedo seam', () => {

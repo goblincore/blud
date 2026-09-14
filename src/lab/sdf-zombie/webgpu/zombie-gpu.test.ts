@@ -212,7 +212,7 @@ describe('clip frame uniform (X1.27 task C3)', () => {
     expect(src).toMatch(/depthPreMaterial\.fog = false;/);
     // MARCH_BODY's depthPre inputs are bound POSITIONALLY LAST in the entry
     // literal — after windDrift, same commit as the WGSL inputs (meltCfg rule).
-    expect(src).toMatch(/windDrift: u\.windDrift,[\s\S]*?woundBound: u\.woundBound,[\s\S]*?\/\/ Quarter-res depth prepass/);
+    expect(src).toMatch(/perfCfg: u\.perfCfg,[\s\S]*?inst: records\.node as never,[\s\S]*?instCfg,[\s\S]*?\) as unknown as \{ div/);
     expect(src).toMatch(/depthPreTex: texture\(depthPre \? depthPre\.texture : fallbackDepthPreTexture\(\)\)/);
     // Without a source, cfg is the all-zero constant — the fetch's disabled
     // identity. The 1x1 fallback texture carries value 0 so even a stray

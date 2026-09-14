@@ -131,7 +131,7 @@ export const MARCH_SURFACE_TAIL = /* wgsl */ `
   let paramsFresB = surfCfg.z * (1.0 - wmRim) * mix(1.0, 2.5, gloss);
   var paramsAo = 1.0;
   if (lodCfg.x > 0.5) {
-    paramsAo = clamp(mapBody(p + n * 0.06, data, counts, counts2, noiseCfg, woundCfg, woundCfg2, noiseShift, volumeTex, volumePose0, volumePose1, volumeMin, volumeInvExtent, volumeWarp, volumeClip, perfCfg, woundBound).x / 0.06, 0.35, 1.0);
+    paramsAo = clamp(mapBody(p + n * 0.06, data, noiseCfg, woundCfg, woundCfg2, volumeTex, volumeMin, volumeInvExtent, volumeWarp, volumeClip, segVolumeAtlas, segVolumeMeta, perfCfg, inst, instCfg).x / 0.06, 0.35, 1.0);
   }
   let paramsP8 = round(clamp(paramsSpecA * wet / 3.5, 0.0, 1.0) * 255.0);
   let paramsQ8 = round(clamp(paramsFresB * wet / 5.0, 0.0, 1.0) * 255.0);

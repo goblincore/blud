@@ -87,8 +87,8 @@ describe('final-hit helper isolation', () => {
     expect(NG_BODY).toContain('gTileActive');
     expect(NG_BODY).toContain('if (!listed)');
     expect(NORMAL_GRADIENT_GAME_HELPERS.join('\n')).toContain('abs(r - reach) <= R');
-    expect(NG_BODY).toContain('volumePose0.w > 0.5');
-    expect(NG_BODY).toContain('counts2.y > 0.5');
+    expect(NG_BODY).toContain('gInstVolPose0.w > 0.5');
+    expect(NG_BODY).toContain('gInstCounts2.y > 0.5');
     expect(NG_BODY).toContain('d = ngSmax(d, -cutter, B.w)');
     expect(NG_BODY).toContain('ngWounds(d, p');
     expect(NG_BODY).toContain('ngBones(d, p');

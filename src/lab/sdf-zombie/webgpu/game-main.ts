@@ -8213,7 +8213,7 @@ function performBenchAction(a: BenchAction): void {
          * bytes before any composite, color conversion or antialias filtering. */
         normalCaptureState() {
           const pieces=[...actors.map(a=>({key:`body:${a.id}`,view:a.view})),...liveChunks.map(c=>({key:`chunk:${c.id}`,view:c.view}))];
-          return {camera:camera.matrixWorld.toArray(),projection:camera.projectionMatrix.toArray(),pieces:pieces.map(({key,view})=>({key,data:Array.from((view.dataTexture as THREE.DataTexture).image.data as Float32Array),uniforms:Object.fromEntries(Object.entries(view.uniforms).filter(([k])=>k!=='normalGradientCfg'&&k!=='debugCfg').map(([k,u])=>{const v=u.value;return [k,v&&typeof v==='object'&&'toArray' in v?(v as {toArray:()=>unknown}).toArray():v];}))}))};
+          return {camera:camera.matrixWorld.toArray(),projection:camera.projectionMatrix.toArray(),pieces:pieces.map(({key,view})=>({key,data:Array.from((view.dataTexture as THREE.DataTexture).image.data as Float32Array),records:Array.from((view as unknown as { records: { floats: Float32Array } }).records.floats),uniforms:Object.fromEntries(Object.entries(view.uniforms).filter(([k])=>k!=='normalGradientCfg'&&k!=='debugCfg').map(([k,u])=>{const v=u.value;return [k,v&&typeof v==='object'&&'toArray' in v?(v as {toArray:()=>unknown}).toArray():v];}))}))};
         },
         /** NEURAL UPSCALE P3: the supersampled 800x600 training target. Renders the CURRENT state
          *  grid*grid times with a centred sub-pixel march jitter and temporal ray start OFF (its
@@ -8289,7 +8289,7 @@ function performBenchAction(a: BenchAction): void {
           const view=typeof bodyId==='number'?actors.find(a=>a.id===bodyId)?.view:liveChunks.find(c=>`chunk:${c.id}`===bodyId)?.view;if(!view)throw new Error('missing probe piece');
           const u=view.uniforms,p=tslUniform(new THREE.Vector3()),kind=tslUniform(0),noise=tslUniform(new THREE.Vector4());
           const material=new THREE.MeshBasicNodeMaterial();
-          material.outputNode=buildNormalBodyPointFn()({p,data:tslTexture(view.dataTexture),counts:u.counts,counts2:u.counts2,noiseCfg:noise,woundCfg:u.woundCfg,woundCfg2:u.woundCfg2,noiseShift:tslUniform(new THREE.Vector3(u.faceCfg3.value.z,u.lodCfg.value.z,u.faceCfg3.value.w)),volumeTex:tslTexture3D(view.volumeTexture),volumePose0:u.volumePose0,volumePose1:u.volumePose1,volumeMin:u.volumeMin,volumeInvExtent:u.volumeInvExtent,volumeWarp:u.volumeWarp,volumeClip:u.volumeClip,perfCfg:u.perfCfg,woundBound:u.woundBound,probeKind:kind});
+          material.outputNode=buildNormalBodyPointFn()({p,data:tslTexture(view.dataTexture),noiseCfg:noise,woundCfg:u.woundCfg,woundCfg2:u.woundCfg2,volumeTex:tslTexture3D(view.volumeTexture),volumeMin:u.volumeMin,volumeInvExtent:u.volumeInvExtent,volumeWarp:u.volumeWarp,volumeClip:u.volumeClip,perfCfg:u.perfCfg,inst:(view as unknown as { records: { node: unknown } }).records.node,instCfg:tslUniform(new THREE.Vector4(1,0,0,0)),probeKind:kind});
           material.depthTest=false;material.depthWrite=false;material.blending=THREE.NoBlending;material.toneMapped=false;
           const scene=new THREE.Scene(),geometry=new THREE.PlaneGeometry(2,2),quad=new THREE.Mesh(geometry,material);quad.frustumCulled=false;scene.add(quad);
           const camera=new THREE.OrthographicCamera(-1,1,1,-1,0,1);

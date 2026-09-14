@@ -255,7 +255,7 @@ describe('march volume integration', () => {
     expect(APPLY_BONES).toContain('vec2<i32>(segId, 0)');
     expect(APPLY_BONES).toMatch(/if \(sampled\.y > 0\.5\)[\s\S]*min\(d, sampled\.x\)/);
     expect(APPLY_BONES).toMatch(/else[\s\S]*foldBoneRange\(d, p, data, i32\(sr\.x\), i32\(sr\.y\), band\)/);
-    expect(MAP_BODY).toContain('applyBones(dmg, p, data, counts, counts2.x, 0, segVolumeAtlas, segVolumeMeta)');
+    expect(MAP_BODY).toContain('applyBones(dmg, p, data, counts, counts2.x, band, segVolumeAtlas, segVolumeMeta)');
   });
 });
 

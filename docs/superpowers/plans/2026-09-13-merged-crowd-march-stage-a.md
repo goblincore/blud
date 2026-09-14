@@ -397,7 +397,7 @@ git commit -m "feat(crowd): banded prim atlas and PrimSink (crowd-atlas.ts)"
 
 This task changes WGSL text only; the material binding follows in Task 4. Between them the build is broken on purpose, so Tasks 3 and 4 are committed together at the end of Task 4 (one commit, per the signature rule). Run vitest string tests after each step.
 
-- [ ] **Step 1: Write the failing pin tests.** In `march.wgsl.test.ts` add:
+- [x] **Step 1: Write the failing pin tests.** In `march.wgsl.test.ts` add:
 
 ```ts
 import { INSTANCE_STATE, MARCH_BODY_PARAMS, MARCH_BODY, MAP_BODY, APPLY_CARVES, APPLY_WOUNDS } from './march.wgsl';
@@ -431,11 +431,11 @@ describe('crowd instance state', () => {
 
 Also update the existing pins: `deferred-sdf.test.ts` `expect(legacy.length).toBe(100)` → `toBe(88)` (100 − 14 + 2; `woundCfg` stays because `.yzw` are per type) with a comment `// crowd stage a: 14 per-instance params moved into the record, +inst +instCfg`. Keep the `surface` deep-equals `legacy` assertion.
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `npx vitest run src/lab/sdf-zombie/webgpu/march.wgsl.test.ts src/lab/sdf-zombie/webgpu/deferred-sdf.test.ts` — Expected: FAIL on the new tests and the 100-count pin.
 
-- [ ] **Step 3: Add `INSTANCE_STATE` to `march.wgsl.ts`** (export it; append it to `HELPERS` right after the tile globals block that declares `gTileActive`, so every entry chain gets it):
+- [x] **Step 3: Add `INSTANCE_STATE` to `march.wgsl.ts`** (export it; append it to `HELPERS` right after the tile globals block that declares `gTileActive`, so every entry chain gets it):
 
 ```ts
 import { REC_VEC4S, REC_COUNTS, REC_COUNTS2, REC_WOUND_BOUND, REC_ANCHOR_BAND, REC_WIND_ALIVE, REC_MELT,
@@ -497,9 +497,9 @@ fn loadInstance(inst: ptr<storage, array<vec4<f32>>, read>, slot: i32) {
 `;
 ```
 
-- [ ] **Step 4: Band the damage folds.** In `APPLY_CARVES` change the signature to `fn applyCarves(dIn: f32, p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, band: i32)` and every `textureLoad(data, vec2<i32>(X, ${ROW_*}), 0)` inside it to `vec2<i32>(X, ${ROW_*} + band)`. Same for `APPLY_WOUNDS` (add `band: i32` after `woundBound`; band all `ROW_WOUND*` loads) and for the per-ray wound list build in `MARCH_TRACE_SETUP` (uses `gBand`). Grep the file for every `textureLoad(data,` whose row constant is not already `+ band`: the hit-material and rest-anchor reads in `MARCH_TRACE_POST` (`ROW_PRIM_COLOR`, `ROW_REST_A/B`, `ROW_PRIM_A/B`, `ROW_PRIM_CLIP`, `ROW_PRIM_SHELL`…), the wound-owner re-fold's cluster/group reads in `MAP_BODY`, and `calcNormal`'s callers. Each becomes `+ gBand` (POST runs after the hit slot is loaded, Step 6).
+- [x] **Step 4: Band the damage folds.** In `APPLY_CARVES` change the signature to `fn applyCarves(dIn: f32, p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, band: i32)` and every `textureLoad(data, vec2<i32>(X, ${ROW_*}), 0)` inside it to `vec2<i32>(X, ${ROW_*} + band)`. Same for `APPLY_WOUNDS` (add `band: i32` after `woundBound`; band all `ROW_WOUND*` loads) and for the per-ray wound list build in `MARCH_TRACE_SETUP` (uses `gBand`). Grep the file for every `textureLoad(data,` whose row constant is not already `+ band`: the hit-material and rest-anchor reads in `MARCH_TRACE_POST` (`ROW_PRIM_COLOR`, `ROW_REST_A/B`, `ROW_PRIM_A/B`, `ROW_PRIM_CLIP`, `ROW_PRIM_SHELL`…), the wound-owner re-fold's cluster/group reads in `MAP_BODY`, and `calcNormal`'s callers. Each becomes `+ gBand` (POST runs after the hit slot is loaded, Step 6).
 
-- [ ] **Step 5: Rewrite `MAP_BODY` as a per-slot loop.** Replace the signature with `fn mapBody(p: vec3<f32>, data: texture_2d<f32>, noiseCfg: vec4<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, volumeTex: texture_3d<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>, segVolumeAtlas: texture_3d<f32>, segVolumeMeta: texture_2d<f32>, perfCfg: vec4<f32>, inst: ptr<storage, array<vec4<f32>>, read>, instCfg: vec4<f32>) -> vec4<f32>` and structure the body as:
+- [x] **Step 5: Rewrite `MAP_BODY` as a per-slot loop.** Replace the signature with `fn mapBody(p: vec3<f32>, data: texture_2d<f32>, noiseCfg: vec4<f32>, woundCfg: vec4<f32>, woundCfg2: vec4<f32>, volumeTex: texture_3d<f32>, volumeMin: vec3<f32>, volumeInvExtent: vec3<f32>, volumeWarp: vec4<f32>, volumeClip: vec4<f32>, segVolumeAtlas: texture_3d<f32>, segVolumeMeta: texture_2d<f32>, perfCfg: vec4<f32>, inst: ptr<storage, array<vec4<f32>>, read>, instCfg: vec4<f32>) -> vec4<f32>` and structure the body as:
 
 ```wgsl
   var dUnion = 1e9;
@@ -540,11 +540,11 @@ Add `var<private> gHitSlot: i32 = 0;` and `gTileSlot: array<f32, TILE_MAX_ENTRIE
 
 Single-instance bit-identity argument, written as a comment above the loop: with `nInst == 1` and `gTileActive == 0` the loop body is the pre-change `mapBody` verbatim with band 0; the trailing min against `1e9` and the global save/restore add no float ops to `d`.
 
-- [ ] **Step 6: Rename the parameter reads in the sections.** In `MARCH_TRACE_SETUP`, `MARCH_TRACE_LOOP`, `MARCH_TRACE_POST`, `MARCH_BODY_SURFACE_PREP`, `MARCH_BODY_LIGHT`, `REFINE_LOOP`, `MARCH_SURFACE_PROLOGUE/TAIL` (deferred-sdf.ts) replace reads of the removed params: `counts`→`gInstCounts`, `counts2`→`gInstCounts2`, `woundBound`→`gInstWoundBound`, `bodyCentre`→`gInstCentre`, `bodyHalf`→`gInstHalf`, `bodyAnchor`→`gInstAnchor`, `windDrift`→`gInstWind`, `meltCfg`→`gInstMelt`, `bodyFlash`→`gInstFlash`, `headCentre`→`gInstHeadCentre`, `headQuat`→`gInstHeadQuat`, `volumePose0/1`→`gInstVolPose0/1`, `woundCfg.x`→`gInstWoundCount`, `lodCfg.z`→`gInstYaw`, `faceCfg3.z`/`.w` (noise shift channels)→`gInstNoiseShift.x/.z` (mirror the existing `noiseShift` reconstruction exactly: today it is `vec3(faceCfg3.z, lodCfg.z, faceCfg3.w)` — keep that order in the record write). At the top of `MARCH_TRACE_SETUP` insert `loadInstance(inst, 0);` (so a one-instance body behaves as today and `gInstCentre/gInstHalf` are valid for the box entry); at the top of `MARCH_TRACE_POST`, right after `if (!hit) { discard; }`, insert `loadInstance(inst, gHitSlot);`. Use `sed`-style whole-word replacement and then read every diff hunk: `counts` also appears in comments and in `foldGroup`'s own parameter (leave function parameters named `counts` alone; only the section bodies change).
+- [x] **Step 6: Rename the parameter reads in the sections.** In `MARCH_TRACE_SETUP`, `MARCH_TRACE_LOOP`, `MARCH_TRACE_POST`, `MARCH_BODY_SURFACE_PREP`, `MARCH_BODY_LIGHT`, `REFINE_LOOP`, `MARCH_SURFACE_PROLOGUE/TAIL` (deferred-sdf.ts) replace reads of the removed params: `counts`→`gInstCounts`, `counts2`→`gInstCounts2`, `woundBound`→`gInstWoundBound`, `bodyCentre`→`gInstCentre`, `bodyHalf`→`gInstHalf`, `bodyAnchor`→`gInstAnchor`, `windDrift`→`gInstWind`, `meltCfg`→`gInstMelt`, `bodyFlash`→`gInstFlash`, `headCentre`→`gInstHeadCentre`, `headQuat`→`gInstHeadQuat`, `volumePose0/1`→`gInstVolPose0/1`, `woundCfg.x`→`gInstWoundCount`, `lodCfg.z`→`gInstYaw`, `faceCfg3.z`/`.w` (noise shift channels)→`gInstNoiseShift.x/.z` (mirror the existing `noiseShift` reconstruction exactly: today it is `vec3(faceCfg3.z, lodCfg.z, faceCfg3.w)` — keep that order in the record write). At the top of `MARCH_TRACE_SETUP` insert `loadInstance(inst, 0);` (so a one-instance body behaves as today and `gInstCentre/gInstHalf` are valid for the box entry); at the top of `MARCH_TRACE_POST`, right after `if (!hit) { discard; }`, insert `loadInstance(inst, gHitSlot);`. Use `sed`-style whole-word replacement and then read every diff hunk: `counts` also appears in comments and in `foldGroup`'s own parameter (leave function parameters named `counts` alone; only the section bodies change).
 
-- [ ] **Step 7: New `MARCH_BODY_PARAMS`.** Delete the 14 declarations listed in Step 1's test, append `, inst: ptr<storage, array<vec4<f32>>, read>, instCfg: vec4<f32>` before the closing `)`. `instCfg = (instanceCount, 0, 0, 0)`. Update `REFINE_PARAMS` (it truncates `MARCH_BODY_PARAMS` at the last `)` and appends four — verify the regex still lands after `instCfg`). Update `DEPTH_PREPASS_MARCH` and `CONE_MARCH` signatures the same way (they read `counts`, `bodyCentre`, `bodyHalf`, `volumePose*` today: same renames, `loadInstance(inst, 0)` at their top; cone is unsupported for crowd but must still compile for the per-body path).
+- [x] **Step 7: New `MARCH_BODY_PARAMS`.** Delete the 14 declarations listed in Step 1's test, append `, inst: ptr<storage, array<vec4<f32>>, read>, instCfg: vec4<f32>` before the closing `)`. `instCfg = (instanceCount, 0, 0, 0)`. Update `REFINE_PARAMS` (it truncates `MARCH_BODY_PARAMS` at the last `)` and appends four — verify the regex still lands after `instCfg`). Update `DEPTH_PREPASS_MARCH` and `CONE_MARCH` signatures the same way (they read `counts`, `bodyCentre`, `bodyHalf`, `volumePose*` today: same renames, `loadInstance(inst, 0)` at their top; cone is unsupported for crowd but must still compile for the per-body path).
 
-- [ ] **Step 8: Run the pin tests**
+- [x] **Step 8: Run the pin tests**
 
 Run: `npx vitest run src/lab/sdf-zombie/webgpu/march.wgsl.test.ts src/lab/sdf-zombie/webgpu/deferred-sdf.test.ts src/lab/sdf-zombie/webgpu/tile-cull.test.ts`
 Expected: PASS, including the "REFINE_LOOP declares every name the later sections read" scan and the reserved-word scan (no `meta`). The CPU/GPU parity fixtures that build `Float32Array(MAX_PRIMS*DATA_ROWS*4)` are unaffected (band 0).
@@ -557,7 +557,7 @@ Expected: PASS, including the "REFINE_LOOP declares every name the later section
 
 **Files:** `src/lab/sdf-zombie/webgpu/zombie-gpu.ts`, `src/lab/sdf-zombie/webgpu/deferred-sdf.ts` (call sites only), `src/lab/sdf-zombie/webgpu/game-main.ts` (frame-hash seam)
 
-- [ ] **Step 1: `createMarchMaterial` binds records.** Add two trailing optional parameters `crowd?: { inst: ReturnType<typeof storage>; instCfg: ReturnType<typeof uniform> }` (after `segVolumeMetaNodeIn`). In the binding object delete the keys `counts, counts2, woundBound, bodyCentre, bodyHalf, bodyAnchor, windDrift, meltCfg, bodyFlash, headCentre, headQuat, volumePose0, volumePose1` and append, last before `...(extra ?? {})`:
+- [x] **Step 1: `createMarchMaterial` binds records.** Add two trailing optional parameters `crowd?: { inst: ReturnType<typeof storage>; instCfg: ReturnType<typeof uniform> }` (after `segVolumeMetaNodeIn`). In the binding object delete the keys `counts, counts2, woundBound, bodyCentre, bodyHalf, bodyAnchor, windDrift, meltCfg, bodyFlash, headCentre, headQuat, volumePose0, volumePose1` and append, last before `...(extra ?? {})`:
 
 ```ts
 inst: (crowd?.inst ?? fallbackCrowdRecords().node) as never,
@@ -566,7 +566,7 @@ instCfg: crowd?.instCfg ?? fallbackInstCfg(),
 
 with `let fallbackInstCfgNode: ReturnType<typeof uniform> | null = null; function fallbackInstCfg() { return (fallbackInstCfgNode ??= uniform(new THREE.Vector4(1, 0, 0, 0))); }` next to `fallbackTileBindings`. Update the "tail order" comment to end `..., temporalCfg, inst, instCfg`. Do the same for the cone and depth-pre material literals in `createZombieGpuView` (they bind `counts`, `bodyCentre`, `bodyHalf`, `volumePose*` today).
 
-- [ ] **Step 2: The view owns a one-slot record and a one-band atlas.** In `createZombieGpuView`: replace `const dataTex = createDataTexture()` with
+- [x] **Step 2: The view owns a one-slot record and a one-band atlas.** In `createZombieGpuView`: replace `const dataTex = createDataTexture()` with
 
 ```ts
 const ownAtlas = opts.sink ? null : createCrowdPrimAtlas(1);
@@ -580,7 +580,7 @@ const instCfg = uniform(new THREE.Vector4(1, 0, 0, 0));
 
 (`opts.sink/sinkTexture/records/slot` are new optional `ZombieGpuViewOptions` fields, used by Task 5.) Replace the view's local `writeRow(row, src, count, col)` with `sink.writeRow(...)`; replace `dataTex.needsUpdate = true` at the end of `upload()` with `sink.markDirty()` and, for an owned atlas, `ownAtlas.flush()`; in `setWounds` pass `sink.texels` and `sink.woundLayout` to `writeWounds` and call `sink.markDirty()`. Set `lastGroups[].bodyIndex = slot`.
 
-- [ ] **Step 3: `syncRecord()`.** Add to the view:
+- [x] **Step 3: `syncRecord()`.** Add to the view:
 
 ```ts
 function syncRecord() {
@@ -602,9 +602,9 @@ function syncRecord() {
 
 Keep the uniform nodes in `MarchUniforms` for now (every setter in the game writes them); call `syncRecord()` at the end of `update()`, `setTime()`, `setWounds()`, `setMelt()`, `setRootShift()`, `setHeadShape()`, `setHeadRotation()`, `setWoundCull()`, and wherever `u.bodyFlash` is stamped from game-main (that is a direct uniform write in the draw fn: add `a.view.syncRecord()` after the per-actor uniform block there, and expose `syncRecord` on the view interface). Pass `{ inst: records.node, instCfg }` as the new `createMarchMaterial` argument for the main, refine, cone and depth-pre materials of the view.
 
-- [ ] **Step 4: Frame-hash seam.** In `game-main.ts` where the debug hash enumerates `view.uniforms` (excluding `normalGradientCfg`, `debugCfg`) and reads `view.dataTexture`, also hash `view.records.floats` (expose `records` on the view) so the seam still covers pose/wound state. `view.dataTexture` keeps pointing at the (one-band) atlas texture.
+- [x] **Step 4: Frame-hash seam.** In `game-main.ts` where the debug hash enumerates `view.uniforms` (excluding `normalGradientCfg`, `debugCfg`) and reads `view.dataTexture`, also hash `view.records.floats` (expose `records` on the view) so the seam still covers pose/wound state. `view.dataTexture` keeps pointing at the (one-band) atlas texture.
 
-- [ ] **Step 5: Build and gate**
+- [x] **Step 5: Build and gate**
 
 ```bash
 npx tsc --noEmit -p .
@@ -617,7 +617,7 @@ UPSCALE_SMOKE_REFINE=1 node scripts/upscale-smoke.mjs
 
 Expected: tsc clean; tests pass; both hash runs print `room1: a8ab4efac15fc0376c3e4e05420f13e34d1511bd`; refine-smoke PASS; upscale-smoke no `not found in Fn` lines. If the hash moved: bisect with `debugCfg.y` flat-albedo (field-only) to separate field from shading; the usual causes are a missed `+ gBand` (harmless at band 0), a missed rename (the shader then reads a zero — shows as a `not found in 'Fn()'` console line, check `read_console_messages`), or `syncRecord()` not called on a path the frozen frame uses.
 
-- [ ] **Step 6: Commit (Tasks 3 + 4 together)**
+- [x] **Step 6: Commit (Tasks 3 + 4 together)**
 
 ```bash
 git add src/lab/sdf-zombie/webgpu/march.wgsl.ts src/lab/sdf-zombie/webgpu/march.wgsl.test.ts src/lab/sdf-zombie/webgpu/deferred-sdf.test.ts src/lab/sdf-zombie/webgpu/deferred-sdf.ts src/lab/sdf-zombie/webgpu/zombie-gpu.ts src/lab/sdf-zombie/webgpu/game-main.ts
@@ -625,6 +625,19 @@ git commit -m "feat(crowd): per-instance march state lives in a storage record; 
 ```
 
 ---
+
+### Executor notes (2026-09-13, Tasks 3+4)
+
+- The plan's `deferred-sdf.test.ts` arithmetic said `100 − 14 + 2 = 88`. The signature has
+  **13** removable per-instance params (the 14th record row is `noiseShift`+yaw, which was never a
+  param), so the parser count is **89**. The pin is 89, with a comment recording the off-by-one.
+- Every view that calls `createMarchMaterial` now needs a record bound, not just the main body
+  view: the zero-filled fallback makes a shader with `instCfg.x = 1` march an empty field. The
+  main `createZombieGpuView` (main, refine, cone, depth-pre) is converted here. **Follow-up:**
+  `fpv-view.ts` (hands), `createChunkGpuView` (private + `createSharedChunkGpuMaterial`), and
+  `hull-refine-view.ts` still bind the fallback and will render empty until converted. The
+  shared chunk material needs a per-draw `records` node alongside `dataNode` (see
+  `bindObjectValue`/`CHUNK_MATERIAL_STATE`).
 
 ## Task 5: `CrowdType` — atlas, records, one material, instanced boxes, depth-pre twin, tile binding
 
