@@ -66,9 +66,11 @@ import { connectGame, applyShipDefaults, bootCloseupPage, stageCloseUp } from '.
 
 const VITE = Number(process.env.LAB_VITE_PORT ?? 5323);
 const CDP = Number(process.env.LAB_CDP_PORT ?? 9323);
-// CANONICAL VALUES after the task-8 default flip (2026-09-14):
-//   crowd (shipped default, quad dispatch, tiles on) = a350361d6a223946a4cb8aac9bc2a3a70ee15bfd
-//   per-body (?crowd=0, tiles off)                  = a8ab4efac15fc0376c3e4e05420f13e34d1511bd
+// CANONICAL VALUES (default reverted to per-body, 2026-09-14 evening):
+//   per-body (shipped default, tiles off)     = a8ab4efac15fc0376c3e4e05420f13e34d1511bd
+//   crowd (?crowd=1, quad dispatch, tiles on) = a350361d6a223946a4cb8aac9bc2a3a70ee15bfd
+// The crowd value stays reachable in one command:
+//   MARCH_HASH_CROWD=1 node scripts/march-hash.mjs
 // The per-body value stays reachable in one command:
 //   MARCH_HASH_PERBODY=1 node scripts/march-hash.mjs
 // (equivalently MARCH_HASH_QUERY='crowd=0' MARCH_HASH_TILES=0 node scripts/march-hash.mjs).
@@ -77,10 +79,14 @@ const PERBODY_HASH = 'a8ab4efac15fc0376c3e4e05420f13e34d1511bd';
 // with the tile list off and asserts the canonical per-body sha1, so the old
 // gate is still one self-checking command after the default flip.
 const PERBODY = process.env.MARCH_HASH_PERBODY === '1';
+// MARCH_HASH_CROWD — the crowd opt-in gate: boots `?crowd=1`, tiles on, and
+// pins the crowd canonical.
+const CROWD = process.env.MARCH_HASH_CROWD === '1';
+const CROWD_HASH = 'a350361d6a223946a4cb8aac9bc2a3a70ee15bfd';
 // MARCH_HASH_QUERY — extra query string appended to the boot URL, so a page
 // flag (e.g. `crowd=1`, `tiles-playtest`) can be hashed through this same gate.
 // MARCH_HASH_PERBODY forces `crowd=0` and wins over it.
-const EXTRA_QUERY = PERBODY ? '&crowd=0' : (process.env.MARCH_HASH_QUERY ? `&${process.env.MARCH_HASH_QUERY}` : '');
+const EXTRA_QUERY = PERBODY ? '&crowd=0' : CROWD ? '&crowd=1' : (process.env.MARCH_HASH_QUERY ? `&${process.env.MARCH_HASH_QUERY}` : '');
 // MARCH_HASH_ROOM — which room's fill-screen close-up to stage. Room 1 is the
 // canonical gate; room 2 is the crowd-parity diagnostic (more bodies per type).
 const ROOM = Number(process.env.MARCH_HASH_ROOM ?? 1);
@@ -177,6 +183,9 @@ const cap0 = await capture(maskInfo);
 const room1 = cap0.hash;
 if (PERBODY && room1 !== PERBODY_HASH) {
   fail(`per-body canonical moved: room1=${room1} expected ${PERBODY_HASH}`);
+}
+if (CROWD && room1 !== CROWD_HASH) {
+  fail(`crowd canonical moved: room1=${room1} expected ${CROWD_HASH}`);
 }
 
 await evaluate('(() => { __sdfGame.step(2); return 1; })()');

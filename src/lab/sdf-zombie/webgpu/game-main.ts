@@ -1212,7 +1212,12 @@ async function main() {
   // dispatch, which is the point of the stage.
   let crowdDispatch: 'boxes' | 'quad' = new URLSearchParams(location.search).get('crowddispatch') === 'boxes'
     ? 'boxes' : 'quad';
-  let crowdOn = crowdParam !== '0';
+  // DEFAULT REVERTED (2026-09-14 evening, `## Flip decision bench` in the
+  // stage-a dev note): on the owner's 56 s room-1 recording the crowd quad is
+  // a wash overall and loses the fire-heavy third by ~15 ms — its wins are
+  // real crowds (8..24 bodies), which ordinary rooms do not hold yet. Per-body
+  // ships; `?crowd=1` opts in; `?crowd=0` stays accepted.
+  let crowdOn = crowdParam === '1';
   // STAGE-3 COMPATIBILITY: the refine twins and the cone pass are unsupported
   // under the crowd march (they read per-body state the instance record does
   // not carry; stage 3 turns refine into a fullscreen record-reading pass). A
@@ -6970,8 +6975,8 @@ function performBenchAction(a: BenchAction): void {
       // default; `flag` echoes the opt-out so a script can distinguish "on
       // because default" from "on because ?crowd=1". `fallbackReason` is set
       // only when a stage-3-incompatible pass forced this boot per-body.
-      default: true,
-      flag: crowdParam === '0' ? 'crowd=0' : null,
+      default: false,
+      flag: crowdParam === '1' ? 'crowd=1' : crowdParam === '0' ? 'crowd=0' : null,
       fallbackReason: crowdFallbackReason,
       // The crowd march requires its tile list (see the draw-fn sync block):
       // true whenever the crowd is live. Gated on `on` so a crowd-off boot

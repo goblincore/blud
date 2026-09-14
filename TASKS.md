@@ -119,6 +119,15 @@
   `tile-binning-submit < 1 ms` bar is untested (48 bodies at 0.9 m fit no region in this level; a
   longer-sightline space is future work). Plan
   `docs/superpowers/plans/2026-09-14-merged-crowd-march-stage-a2-tile-quads.md`.
+  **DEFAULT REVERTED TO PER-BODY (2026-09-14 evening).** The equal-workload bench on the owner's 56 s
+  room-1 recording (`BENCH_DEMO`, both legs replay the same fight) is a wash overall and the crowd quad
+  loses the fire-heavy third by ~15 ms (three overlapping type quads cover 45–81 % of the screen each);
+  its wins are 8..24-body scenes that ordinary rooms do not hold yet. `?crowd=1` opts in; canonical
+  hashes: default per-body `a8ab4efa…`, `MARCH_HASH_CROWD=1` crowd `a350361d…`. Two crowd bugs fixed on
+  the way (baked corpses kept marching, 87ca510c; full-screen quad for a near-plane-straddling body,
+  dc4a7a4c). Next lever: per-instance rects / a shared union quad. See `## Flip decision bench` in
+  `docs/dev-notes/2026-09-13-merged-crowd-march-stage-a.md`.
+
   **TASK 8 DEFAULT FLIP LANDED (2026-09-14, task-8 commit `the merged crowd march is the default; ?crowd=0
   opts out`):** the merged crowd march (quad
   dispatch, tile list on) is the SHIPPED default — a flagless boot attaches every actor to its character type
