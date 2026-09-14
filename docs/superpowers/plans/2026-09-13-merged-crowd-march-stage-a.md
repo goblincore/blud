@@ -277,7 +277,7 @@ git commit -m "feat(crowd): instance record layout and storage buffer (crowd-rec
 
 **Files:** Create `src/lab/sdf-zombie/webgpu/crowd-atlas.ts`, `src/lab/sdf-zombie/webgpu/crowd-atlas.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import { describe, it, expect } from 'vitest';
@@ -310,11 +310,11 @@ describe('crowd prim atlas', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
-Run: `npx vitest run src/lab/sdf-zombie/webgpu/crowd-atlas.test.ts` — Expected: FAIL, module missing.
+Run: `npx vitest run src/lab/sdf-zombie/webgpu/crowd-atlas.test.ts` — Expected: FAIL, module missing. ✅ (`Failed to resolve import "./crowd-atlas"`)
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```ts
 // src/lab/sdf-zombie/webgpu/crowd-atlas.ts
@@ -380,9 +380,9 @@ export function createCrowdPrimAtlas(bands: number): CrowdPrimAtlas {
 
 Check `WriteWoundsLayout` in `zombie-gpu.ts` for the exact field names (`maxWounds/woundRow/metaRow/capRow/flagsRow/stride`) and match them; the test asserts `woundRow` only.
 
-- [ ] **Step 4: Run the test** — Expected: PASS (3 tests).
+- [x] **Step 4: Run the test** — Expected: PASS (3 tests). ✅ (3 passed)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/lab/sdf-zombie/webgpu/crowd-atlas.ts src/lab/sdf-zombie/webgpu/crowd-atlas.test.ts
