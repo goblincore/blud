@@ -126,6 +126,7 @@ import {
 import { runBench, type BenchDeps, type BenchMode } from './game-bench';
 import { installPassTiming, beginPassFrame, setPassLabel } from './gpu-pass-timing';
 import { GameTelemetry, type FrameTiming } from './game-telemetry';
+import { getPipelineLog, setPipelineLogEnabled } from './pipeline-log';
 import { createTelemetryControls } from './game-telemetry-controls';
 import { createGameTilePlaytest } from './game-tile-playtest';
 import { createComputeTileBinding } from './tile-bin-compute';
@@ -254,6 +255,12 @@ async function main() {
   // __sdfGame.bench({ mode: 'passes' }) or __sdfGame.passTimings().
   const passTiming = installPassTiming(handle.renderer);
   const { scene, camera } = handle;
+
+  // PIPELINE LOG (pipeline-log.ts). The wraps are already installed (the lab
+  // renderer does it right after init); ?pipelinelog=1 turns on per-creation
+  // recording from the very first frame, so the boot warm-up's creations are
+  // in the log too. Mid-session: __sdfGame.setPipelineLog(true).
+  if (new URLSearchParams(location.search).get('pipelinelog') === '1') setPipelineLogEnabled(true);
 
   // DEMO SEED (determinism stage 1, 2026-09-14). ONE seed drives every named
   // stream in rng.ts. `?seed=` is what makes a bench leg or a recording
@@ -6821,6 +6828,13 @@ function performBenchAction(a: BenchAction): void {
     /** The boot demo seed: `?seed=` when given, otherwise random. Reported so
      *  a recording/replay can pin it (stage 3 seam `demoInfo()`). */
     get demoSeed() { return demoSeed; },
+    /** PIPELINE-CREATION LOG (pipeline-log.ts, startup-hitch attribution).
+     *  `setPipelineLog(true)` starts recording per-creation entries (the
+     *  device wraps are installed at boot regardless); `pipelineLog()` reads
+     *  the long frames (>= 100 ms wall) with the pipelines created during
+     *  each, plus the totals and the renderer.compute() per-frame census. */
+    setPipelineLog: (on: boolean) => setPipelineLogEnabled(on),
+    pipelineLog: () => getPipelineLog(),
     /** STAGE-3 RECORDER SEAMS. `demoRecord('start')` begins logging the input
      *  frames the tick consumes; `'stop'` returns the DemoFile and saves it via
      *  POST /__lab/save-demo. F7 does the same toggle. */

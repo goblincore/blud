@@ -24,6 +24,7 @@
 import * as THREE from 'three/webgpu';
 import { WebGPURenderer } from 'three/webgpu';
 import type { FrameTiming } from './game-telemetry';
+import { installPipelineLog, noteFrameEnd } from './pipeline-log';
 
 export interface LabRendererHandle {
   renderer: WebGPURenderer;
@@ -273,6 +274,12 @@ export async function createLabRenderer(mount: HTMLElement, cap?: RenderCap): Pr
   // first frame silently does nothing.
   await renderer.init();
 
+  // PIPELINE-CREATION LOG (pipeline-log.ts, startup-hitch attribution). Must
+  // wrap before ANY pipeline exists — the first frame and the boot warm-up
+  // both create some — so this sits immediately after init produced the
+  // device. Recording itself is gated by ?pipelinelog=1 / setPipelineLog.
+  installPipelineLog(renderer);
+
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0x1a1116, 10, 60);
 
@@ -347,23 +354,25 @@ export async function createLabRenderer(mount: HTMLElement, cap?: RenderCap): Pr
 
     const dt = (now - lastTime) / 1000;
     lastTime = now;
+    const start = performance.now();
+    cb(dt);
+    const afterTick = performance.now();
+    drawFn();
+    const end = performance.now();
     if (frameObserver) {
-      const start = performance.now();
-      cb(dt);
-      const afterTick = performance.now();
-      drawFn();
-      const end = performance.now();
       frameObserver({ startMs: now, endMs: end, intervalMs: dt * 1000,
         tickCpuMs: afterTick - start, drawCpuMs: end - afterTick });
-    } else {
-      cb(dt);
-      drawFn();
     }
+    // Long-frame census (pipeline-log.ts): wall ms of the rAF handler, the
+    // same span the browser's '[Violation] requestAnimationFrame handler
+    // took Nms' measures, plus the frame's start so creations are
+    // attributed to the frame they started in.
+    noteFrameEnd(end - start, start);
 
-    // Drain the timestamp query pool. It has a fixed capacity and warns loudly
-    // once it fills, so the resolve has to keep up with the frames even though
-    // nothing reads its value any more (the per-frame number was unreliable
-    // with multiple passes per frame — see resolveGpu's note).
+    // Drain BOTH timestamp query pools. Fixed capacity, loud warnings once
+    // full, so the resolves have to keep up with the frames even though
+    // nothing reads the per-frame value any more (the per-frame number was
+    // unreliable with multiple passes per frame — see resolveGpu's note).
     if (!resolving) {
       resolving = true;
       renderer.resolveTimestampsAsync()
