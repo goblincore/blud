@@ -87,15 +87,20 @@
   2026-09-13. D1–D10 ratified by owner 2026-09-13. **Stage (a) 0–7f + stage a-2 landed** (a-1 records/one-slot kernel,
   a-2 CrowdType/`?crowd=1`, 7b parity gate, 7d slot table + frame guard, 7f spread spawns; a-2 quad dispatch
   `b3ee7742`: one full-screen quad per type, tile-sphere entry, empty-tile discard, `?crowddispatch=quad|boxes`,
-  default quad). Canonical per-body hash `a8ab4e…` unchanged; quad/boxes parity PASS. **Stage a-2 knee
-  (2026-09-14, `docs/dev-notes/2026-09-13-merged-crowd-march-stage-a.md` → `## Stage a-2 (2)`):** the quad
-  removes the duplicate-trace growth — cost per visible body is flat (~7–8.5 ms over 5→17 visible; total quad
-  march grows 2.18x 2→8 vs the boxes' 13.68x in 7f) — but it pays a fixed full-screen cost, so at 2 bodies the
-  boxes' walk leg (12.26 ms) beats the quad's (41.12 ms, 3.4x, reproduced), crossing at ~4 bodies; `crowd-quad`
-  completes at 16 (124.06 ms) where baseline and boxes abort, but **crowd 24 aborts the frame guard on all three
-  legs**, so the a-3 bar "24/48 zombies grow with covered pixels, not bodies" is not demonstrated. **Next action:
-  do NOT flip the default (Task 8).** Stage a-3 must (a) cut the quad's low-`n` fixed screen cost (tile-sized
-  quads / finer entry cull, not one full-screen quad) and (b) produce a measurable 24-body crowd leg. Plan
+  default quad). Canonical per-body hash `a8ab4e…` unchanged; quad/boxes parity PASS. **Stage a-2 (2) knee
+  (2026-09-14, `## Stage a-2 (2)`):** the quad removes the duplicate-trace growth (cost per visible body flat
+  ~7–8.5 ms over 5→17 visible; 2.18x total 2→8 vs the boxes' 13.68x in 7f) but paid a fixed full-screen cost —
+  at 2 bodies the boxes' walk (12.26 ms) beat the quad's (41.12 ms, 3.4x). **Stage a-2 (3) — union screen-rect
+  quad (2026-09-14, `## Stage a-2 (3)`, code `1c68162f`):** each type's quad now rasterises the CPU-computed
+  union NDC rect of its visible instances (`crowdScreenRect`, one LIT tile of margin; full screen if an inflated
+  corner is behind the eye; meshes hidden if none visible), shared by the lit material and its depth-pre twin;
+  `info()` reports `rect`/`rectFrac`. Parity quad+boxes PASS with every gated line identical to a-2 (1). The
+  low-`n` fixed cost is **gone**: n=2 walk quad 0.99–1.23× boxes (was 3.4×), quad ≤ per-body in rooms 1–2, n=8
+  overall 69.64 ≤ the a-2 (2) 92.99, 16 completes at 132.38. But `rectFrac` is already 1.00 from n=8 up (the
+  rect has nothing left to give at high `n` — the cost is the flat per-body slope over a screen-bound quad),
+  **n=20 aborts the frame guard (probe never answered in 60 s) and 24 was not attempted. Next action: do NOT
+  flip the default (Task 8).** The single blocker is a 24-body crowd leg that completes under the 250 ms guard
+  (plus the untested 48-body `tile-binning-submit < 1 ms` bar). Plan
   `docs/superpowers/plans/2026-09-14-merged-crowd-march-stage-a2-tile-quads.md`.
 - [ ] **CORPSE BAKE FOR EVERY CHARACTER:** `corpseBakeEligible` is soldier-only (`profile.name === 'soldier'` +
   collapse settled), so dead zombies keep marching at full cost. Extending eligibility to any settled actor is

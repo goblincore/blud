@@ -501,6 +501,107 @@ baselines are also heavier than 7f's (100.01 vs 69.56 at n=2), so the a-2 and
 Artifacts: `a2-crowd{2,4,6,8,12,16,24}/` (`bench.{json,md}` + `passes.*` +
 `bench-progress.jsonl`) and `a2-confirm2/`.
 
+## Stage a-2 (3) — union screen-rect quad (2026-09-14)
+
+**Mechanism.** A full-screen quad cannot skip the material's per-pixel INPUT
+setup — `coneFetch`, `occFetch`, the two `shellFetch`es, `prevFetch`,
+`depthPreFetch`, the temporal reads, the record load, the tile-header read and
+the MRT export — for any rasterised pixel, even though the empty-tile discard
+runs first inside the function body. The only lever is to rasterise fewer
+pixels. `crowd-rect.ts` computes, per type per `sync()`, the union NDC rect of
+the type's DRAWN instances: each body's box inflated by
+`maxBlendK * 4 + RAY_CULL_SLACK + QUAD_ENTRY_SLACK`, projected through
+`projectionMatrix × matrixWorldInverse`, plus one LIT tile of NDC margin for
+the binner's clamp-outward-to-whole-tiles rule. Any inflated corner behind the
+eye plane returns the full screen (unbounded projection); an empty visible set
+returns `null` and hides both the lit and depth-pre meshes. `crowdRayNodes`
+maps its plane into the rect (`clip = mix(quadRect.xy, quadRect.zw, uv)`) and
+returns the ONE `quadRect` uniform the lit material and its depth-pre twin
+share; the fragment ray is still reconstructed from the real `screenUV`, so the
+rect is a rasterisation bound only, never an exactitude change. `info()` adds
+`rect` and `rectFrac` (rect area / 4). The boxes dispatch ignores the rect.
+
+**Parity confirmation.** `MARCH_PARITY_TILES=1`, quad and boxes, rooms 1–2:
+**PASS**, and every gated number is IDENTICAL to Stage a-2 (1) — the rect cut no
+visible pixel. Quad raw lines:
+
+```
+{"room":1,"tiles":true,"dispatch":"quad","flat":false,"hitA":33344,"hitB":33344,"maskDiff":0,"maskDiffFrac":0,"maxDz":0.0009889602661132812,"meanDz":2.8566755854923297e-7,"rgbDiffChannels":95952,"rgbMax":0.294435515999794}
+{"room":1,"tiles":true,"dispatch":"quad","flat":true,"hitA":33344,"hitB":33344,"maskDiff":0,"maskDiffFrac":0,"maxDz":0.0009889602661132812,"meanDz":2.8566755854923297e-7,"rgbDiffChannels":0,"rgbMax":0}
+{"room":2,"tiles":true,"dispatch":"quad","flat":false,"hitA":30561,"hitB":30562,"maskDiff":1,"maskDiffFrac":0.000032721442361179283,"maxDz":0.0021837353706359863,"meanDz":0.0000014940928829297093,"rgbDiffChannels":91391,"rgbMax":0.1492014229297638}
+{"room":2,"tiles":true,"dispatch":"quad","flat":true,"hitA":30561,"hitB":30562,"maskDiff":1,"maskDiffFrac":0.000032721442361179283,"maxDz":0.0021837353706359863,"meanDz":0.0000014940928829297093,"rgbDiffChannels":0,"rgbMax":0}
+```
+
+Boxes lines unchanged (room1 maskDiff 0 / maxDz 9.8938e-4; room2 maskDiff 0 /
+maxDz 1.3788e-3).
+
+### Bench (load-checked; one run per command, `BENCH_PASSES=1`, repeats=1)
+
+`visible` = end-of-run packed count summed over soldier + zombie; `rectFrac` =
+soldier / zombie; `clamp/cull/fb` = `clampedTiles` / `culledByBudget` /
+`tileFallbacks` — **0/0/0 on every completed row of every type**. Numbers are
+`sdf:march` p50 overall (walk segment in parentheses). Load was < 4 before every
+run.
+
+| n (run) | load | visible s+z | rectFrac s/z | per-body | crowd-quad | crowd-boxes | abort? |
+|---:|---:|---|---:|---:|---:|---:|---|
+| 2 (`a23-crowd2`) | 3.33 | 5 (1+4) | 0.20 / 0.68 | 74.17 (w 59.00) | 18.87 (w 18.79) | 17.34 (w 18.91) | no |
+| 2 (`a23-confirm2`) | 2.83 | 5 (1+4) | 0.31 / 0.69 | 75.61 (w 57.92) | 21.14 (w 14.67) | 10.78 (w 11.92) | no |
+| room1 (`a23-rooms12`) | 2.52 | 4 (1+3) | 0.51 / 1.00 | 91.33 (w 63.37) | 55.64 (w 40.85) | — | no |
+| room2 (`a23-rooms12`) | 2.52 | 4 (3+1) | 0.35 / 0.14 | 48.79 (w 44.64) | 16.80 (w 18.37) | — | no |
+| 8 (`a23-crowd8`) | 3.04 | 6 (1+5) | 0.13 / 1.00 | 123.93 (w 130.31) | 69.64 (w 59.48) | — | no |
+| 16 (`a23-crowd16`) | 1.77 | 9 (0+9) | 0.00 / 1.00 | — | 132.38 (w 154.44) | — | no |
+| 20 (`a23-crowd20`) | 2.87 | — | — | — | probe abort (60 s) | — | **YES** |
+| 24 | — | — | — | — | not attempted (20 aborted) | — | — |
+
+The n=2 run was repeated because its boxes walk read 18.91 ms while every CPU
+pass in the same leg was flat vs `a2-crowd2` (`cpu:draw` 7.00→7.10) and parity
+says the box pixels are identical — a GPU-side stall, not a code change. The
+confirm run reproduced the a-2 (2) boxes number (11.92 vs 12.26) and the quad
+stayed low (14.67), so the ratio is read from the confirm and the first run is
+kept as the pessimistic bound.
+
+### Targets
+
+| # | target | result | verdict |
+|---|---|---|---|
+| 1 | n=2 walk quad within 1.5× of boxes (was 3.4×) | 0.99× (run1); **1.23×** (confirm) | **PASS** |
+| 2 | rooms 1–2 quad ≤ per-body | room1 40.85 ≤ 63.37; room2 18.37 ≤ 44.64 | **PASS** |
+| 3 | n=8 quad ≤ a-2 (2)'s 92.99 | 69.64 (0.75×) | **PASS** |
+| 4 | 16 completes | 132.38 (≤ 2× the 8-body 69.64 = 139.28) | **PASS** |
+| 5 | 24 completes under the guard | 20 aborts the probe (never answered in 60 s); 24 not attempted | **FAIL / unmeasured** |
+
+### Gates
+
+- `npx tsc --noEmit -p .` clean.
+- `crowd-rect.test.ts` 6 + `crowd-type.test.ts` 9 + `march.wgsl.test.ts` 231 =
+  246 pass.
+- `node scripts/march-hash.mjs` x2 =
+  `a8ab4efac15fc0376c3e4e05420f13e34d1511bd` (wounded `da785297…`) — the
+  canonical per-body path did not move.
+- `MARCH_PARITY_TILES=1 node scripts/march-parity.mjs` PASS (quad) and
+  `… MARCH_PARITY_DISPATCH=boxes …` PASS; every quad line identical to a-2 (1).
+
+**Verdict.** (1) The low-`n` fixed cost is **gone**: the n=2 walk segment is now
+0.99–1.23× the boxes (was 3.4×), and the quad beats the per-body path in both
+rooms 1–2, so the crossover below which the full-screen quad lost no longer
+exists on the measured points. (2) The highest completed `n` is **16** (132.38 ms,
+walk 154.44), and its `rectFrac` is **1.00** — from n=8 up the zombie rect is
+already the full screen, so at high `n` the rect has nothing left to give and
+the remaining cost is the flat per-body slope over a screen-bound quad; n=20
+aborts the frame guard and 24 is therefore not attempted, leaving the a-3 bar
+"24/48 zombies grow with covered pixels, not bodies" demonstrated by `rectFrac`
+(1.00 = fully screen-bound) rather than by a complete frame time. (3) Spec §5's
+a-3 bar 1 (flat at 3–5 bodies) holds on the a-2 n=4 pair (quad 55.72 vs boxes
+83.51) plus this task's n=2 ≤ boxes, but bars 2 and 3 need a measured 24/48
+crowd leg — so **Task 8 (the default flip) stays blocked on the single item "a
+24-body crowd leg that completes under the 250 ms guard"** (plus the untested
+48-body tile-binning-submit bar), not on the low-`n` cost the rect fixed.
+
+Artifacts: `a23-crowd2/`, `a23-confirm2/`, `a23-rooms12/`, `a23-crowd8/`,
+`a23-crowd16/`, `a23-crowd20/` (`bench.{json,md}` + `passes.*` +
+`bench-progress.jsonl`).
+
 ## Next
 
 Task 1 (`crowd-records.ts`) — the 16-vec4 instance record and the
