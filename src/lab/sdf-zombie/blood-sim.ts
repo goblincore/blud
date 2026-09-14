@@ -50,6 +50,20 @@ export interface Droplet {
    *  line — rendered as a ribbon it reads as a laser rod, not fluid. Only
    *  the slower bleed streams arc enough to read as liquid. */
   ribbon?: boolean;
+  /**
+   * STABLE EMITTER IDENTITY. Every droplet an emitter spawns carries the id
+   * of that emitter: one wound, one impact, one trail source. It is assigned
+   * by the CALLER (game-main / the comparison page), is never rolled, and is
+   * never read by the physics — stepBlood ignores it, so the baseline sim
+   * stays bit-identical.
+   *
+   * It exists for blood-connections.ts, whose whole rule is that only
+   * droplets from the SAME stream may fuse: a connection must never be
+   * invented from proximity between two unrelated wounds. Droplets with no
+   * stream (lab bursts, old fixtures) are explicitly UNTAGGED and are
+   * skipped by the connection builder rather than guessed at.
+   */
+  stream?: number;
 }
 
 // Scrap feel knobs (gobs-and-goo §1): scraps are the amorphous meat bits
@@ -85,8 +99,11 @@ function push(sim: BloodSim, d: Droplet): void {
   while (sim.droplets.length > MAX_DROPLETS) sim.droplets.shift();
 }
 
-/** FX_13-style radial spray at a gib/sever instant. */
-export function burst(sim: BloodSim, origin: Vec3, rng: () => number): void {
+/** FX_13-style radial spray at a gib/sever instant. `stream` is the caller's
+ *  stable emitter id (optional; untagged droplets are skipped by
+ *  blood-connections). It is written to every spawned droplet and does not
+ *  touch the RNG stream. */
+export function burst(sim: BloodSim, origin: Vec3, rng: () => number, stream?: number): void {
   for (let i = 0; i < GIB_BURST.count; i++) {
     const theta = rng() * Math.PI * 2;
     const speed = GIB_BURST.speedMin + rng() * (GIB_BURST.speedMax - GIB_BURST.speedMin);
@@ -100,6 +117,7 @@ export function burst(sim: BloodSim, origin: Vec3, rng: () => number): void {
       // read half-size vs the game's distances (playtest 2026-08-16).
       size: 0.03 + rng() * 0.03,
       kind: 'drop',
+      ...(stream !== undefined ? { stream } : {}),
     });
   }
 }
@@ -114,7 +132,7 @@ export interface ScrapSpawn { pos: Vec3; size: number }
  * into the spray rather than jetting like the mist.
  */
 export function addScraps(
-  sim: BloodSim, scraps: ScrapSpawn[], origin: Vec3, rng: () => number,
+  sim: BloodSim, scraps: ScrapSpawn[], origin: Vec3, rng: () => number, stream?: number,
 ): void {
   for (const s of scraps) {
     const dx = s.pos[0] - origin[0];
@@ -135,11 +153,20 @@ export function addScraps(
       life: SCRAP_TUNING.lifetimeSec,
       size: s.size,
       kind: 'scrap',
+      ...(stream !== undefined ? { stream } : {}),
     });
   }
 }
 
-export interface TrailSource { id: number; pos: Vec3; vel: Vec3 }
+export interface TrailSource {
+  id: number;
+  pos: Vec3;
+  vel: Vec3;
+  /** Stable stream id for this trail source (the chunk's own id, namespaced
+   *  by the caller). Optional; untagged trail droplets are skipped by the
+   *  connection builder. */
+  stream?: number;
+}
 
 /** FX_27-style droplet trails behind flying chunks: 20 Hz, 1/256 inheritance. */
 export function emitTrails(
@@ -166,6 +193,7 @@ export function emitTrails(
         life: BLOOD_TRAIL.lifetimeSec,
         size: BLOOD_TRAIL.size * (0.7 + rng() * 0.6),
         kind: 'drop',
+        ...(s.stream !== undefined ? { stream: s.stream } : {}),
       });
     }
     sim.clocks[s.id] = clock;
@@ -310,6 +338,7 @@ const WOUND_SPAWN_OFFSET = 0.02;
 export function spawnWoundDroplets(
   sim: BloodSim, kind: BleedKind, ageSec: number,
   anchor: Vec3, normal: Vec3, dt: number, acc: number, rng: () => number,
+  stream?: number,
 ): number {
   const p = WOUND_BLEED[kind];
   if (ageSec > p.lifetimeSec || dt <= 0) return acc;
@@ -340,6 +369,7 @@ export function spawnWoundDroplets(
       size,
       kind: 'drop',
       ribbon: true,
+      ...(stream !== undefined ? { stream } : {}),
     });
     // MIST — fine spray haze riding each bead (X1.bleed-look, owner ask):
     // spawned around the bead's own direction with a wider scatter, smaller,
@@ -359,6 +389,10 @@ export function spawnWoundDroplets(
         life: p.mistLifeSec,
         size: size * p.mistSizeScale,
         kind: 'mist',
+        // Mist is never a connection node, but it carries the tag so a
+        // consumer never has to guess which emitter a haze particle
+        // belonged to.
+        ...(stream !== undefined ? { stream } : {}),
       });
     }
   }
@@ -381,6 +415,7 @@ export function spawnWoundDroplets(
  */
 export function spawnImpactGout(
   sim: BloodSim, kind: BleedKind, anchor: Vec3, dirN: Vec3, rng: () => number,
+  stream?: number,
 ): void {
   const p = IMPACT_GOUT[kind];
   // Back along the shot. A zero/degenerate direction falls back to straight
@@ -410,6 +445,7 @@ export function spawnImpactGout(
       kind: 'drop',
       // NOT ribbon-eligible: at gout speeds a 0.15 s path history is a
       // straight metre of line, which renders as a laser rod, not fluid.
+      ...(stream !== undefined ? { stream } : {}),
     });
   }
 }

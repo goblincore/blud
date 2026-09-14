@@ -1,3 +1,4 @@
+import { impactSplashPresets, impactSplashProfiles, resolveImpactSplashProfile, type ImpactSplashProfile, type ImpactSplashWeapon } from './impact-splash-profiles';
 import { createEncounterNavigation } from './encounter-navigation';
 import { createEncounterDirector, clearSight, type EncounterAgent } from './encounter-director';
 import { createSoldierCorpseBakes } from './soldier-corpse-bake';
@@ -137,7 +138,9 @@ import {
 } from '../entrails';
 import { shouldSpill, GUT_DROPLET_SIZE, SPILL_CHANCE } from '../entrails-spawn';
 import { createBloodView } from './blood-view-gpu';
-import { createGooLayer, type GooLayer } from './goo-layer';
+import { createGooLayer, type GooLayer, type GooReconstruction } from './goo-layer';
+import { connectionBlobsForSim } from './blood-connections';
+import { createImpactSplashLayer, type ImpactSplashLayer } from './impact-splash';
 import { createGooPanel, type GooPanel } from './goo-panel';
 import { createVhsPanel, type VhsPanel } from './vhs-panel';
 import {
@@ -1020,6 +1023,44 @@ async function main() {
   // so i dont have to toggle it on each time"). setGoo(false) stays the kill
   // switch; mode 'depth' vs 'overlay' stays a separate toggle.
   let gooEnabled = true;
+  // Smooth reconstruction at the full SDF grid is the game default.
+  // Boot flags are read where the goo defaults are applied:
+  //   ?goorecon=original  comparison fallback to the old reconstruction
+  //   ?gooconnections=1   tapered strands (sheets are a separate opt-in)
+  //   ?goosheets=1        experimental stream-grid sheets
+  //   ?impactsplash=1     SUPPLEMENTARY procedural impact crown on top of the
+  //                       existing slug gout (does not replace it)
+  // Live equivalents: __sdfGame.setGooCandidate, __sdfGame.setImpactSplash.
+  let gooReconstruction: GooReconstruction = 'smooth';
+  let gooConnectionsEnabled = false;
+  let gooStrandsEnabled = true;
+  // SHEETS OFF BY DEFAULT: the stream-local grid removed the world-position
+  // hole swimming, but whether a density patch reads as a sheet is still an
+  // open visual question. Opt in with ?goosheets=1 / setGooCandidate.
+  let gooSheetsEnabled = false;
+  // SUPPLEMENTARY IMPACT SPLASH (reference-directed slug splash, 2026-09-13).
+  // A separate procedural crown effect fired ON TOP of the existing slug gout;
+  // it mutates no shared table and does not replace the Current slug. OFF by
+  // default: opt in with ?impactsplash=1 or __sdfGame.setImpactSplash.
+  let impactSplashEnabled = false;
+  let impactSplashLayer: ImpactSplashLayer | null = null;
+
+  /** Create the splash layer on first enable only, sharing the flesh/goo
+   *  light uniform NODES so it is lit by the same rig. Returns silently if
+   *  there is no actor view yet (the same pre-condition the goo layer has). */
+  function ensureImpactSplashLayer(): void {
+    if (impactSplashLayer) return;
+    const v = actors[0]?.view;
+    if (!v) return;
+    impactSplashLayer = createImpactSplashLayer({
+      rig: {
+        lightDir: v.uniforms.lightDir,
+        keyColor: v.uniforms.keyColor,
+        lightCfg: v.uniforms.lightCfg,
+      },
+    });
+    scene.add(impactSplashLayer.object);
+  }
 
   function sizeSdfLayer() {
     const s = postAa.contentSize;
@@ -4054,7 +4095,9 @@ async function main() {
       }, template);
     }
     if (bleedEnabled) {
-      spawnImpactGout(bloodSim, 'slug', at, [0, 1, 0], bleedRng);
+      // One-shot gib gout: a fresh emitter stream so it never fuses with a
+      // nearby wound's stream by proximity.
+      spawnImpactGout(bloodSim, 'slug', at, [0, 1, 0], bleedRng, nextEmitterStream++);
     }
   }
   // Now that the array exists, the frame draw can read it directly.
@@ -4140,6 +4183,29 @@ async function main() {
   const bleed = new BleedRegistry();
 
   // -----------------------------------------------------------------------
+  // STABLE EMITTER STREAM IDS (blood-connections provenance, 2026-09-13).
+  // blood-connections only ever fuses droplets that share a stream tag, so
+  // the tag must be a real emitter identity — never a proximity guess.
+  //
+  // A wound's id is ALLOCATED ONCE (WeakMap on the wound reference the
+  // registry stores) and reused by every per-frame droplet and its impact
+  // gout, so two adjacent wounds are always two streams. Trail droplets take
+  // a namespaced chunk id. Nothing here rolls an RNG and stepBlood never
+  // reads `stream`, so the shipped physics is bit-identical.
+  // -----------------------------------------------------------------------
+  let nextEmitterStream = 1;
+  const woundStreamIds = new WeakMap<Wound, number>();
+  function woundStreamId(wound: Wound): number {
+    let s = woundStreamIds.get(wound);
+    if (s === undefined) { s = nextEmitterStream++; woundStreamIds.set(wound, s); }
+    return s;
+  }
+  const TRAIL_STREAM_BASE = 0x40000000;
+  function trailStreamId(chunkId: number): number {
+    return TRAIL_STREAM_BASE + (chunkId >>> 0);
+  }
+
+  // -----------------------------------------------------------------------
   // GOO — screen-space metaball blood (X1.bleed-look round 2). The owner's
   // brief was "viscous and gooey and shiny blobbys and no hard edges ...
   // kinda like the metablob for the goo system", which is goo-layer.ts's own
@@ -4206,6 +4272,20 @@ async function main() {
     // wet stone the old floor was not enough to keep shadowed blood red.
     gooLayer.setShadowRed(0.19);
 
+    // Smooth full-grid goo is the accepted default. Connections and sheets
+    // remain opt-in; original reconstruction is available for comparison.
+    const gooCandidateBoot = new URLSearchParams(location.search);
+    gooReconstruction = gooCandidateBoot.get('goorecon') === 'original' ? 'original' : 'smooth';
+    gooLayer.setDensityScale(1);
+    gooConnectionsEnabled = gooCandidateBoot.get('gooconnections') === '1';
+    gooSheetsEnabled = gooCandidateBoot.get('goosheets') === '1';
+    gooLayer.setReconstruction(gooReconstruction);
+
+    // SUPPLEMENTARY IMPACT SPLASH boot flag. Read AFTER the shipping defaults
+    // so it can only ever add the new crown, never move a shipped value. It
+    // is independent of the goo candidates above.
+    impactSplashEnabled = gooCandidateBoot.get('impactsplash') === '1';
+    if (impactSplashEnabled) ensureImpactSplashLayer();
 
     // Live tuning panel (owner ask, 2026-08-31: "add a ui i can tune the goo
     // manually"). The look is a five-knob family found by sweeping two at a
@@ -4466,6 +4546,10 @@ async function main() {
           age: 0, life: Infinity,
           size: woundTuning.gutSize,
           kind: 'gut',
+          // The rope belongs to the wound that spilled it: reuse that wound's
+          // stable stream id so the gut nodes are attributed like every other
+          // emitter rather than falling through as untagged.
+          stream: woundStreamId(entry!.wound),
         }));
         for (const d of fresh) bloodSim.droplets.push(d);
         entry = { ...entry, droplets: fresh };
@@ -4490,7 +4574,11 @@ async function main() {
   /** Bleed's own sim clock — an accumulator, never wall time, so hand-
    *  stepped captures are deterministic. */
   let bleedClock = 0;
-  function registerBleed(a: ZombieActor, wound: Wound, kind: 'pellet' | 'slug' | 'stump'): void {
+  const lastSplashShot = new WeakMap<ZombieActor, number>();
+  function registerBleed(
+    a: ZombieActor, wound: Wound, kind: 'pellet' | 'slug' | 'stump',
+    contact?: { point: Vec3; incoming: Vec3 },
+  ): void {
     if (!bleedEnabled) return;
     bleed.register(a.id, wound, kind, bleedClock);
     // IMPACT GOUT (blood-viscosity spec §a) — the dense one-tick pulse, at
@@ -4502,8 +4590,35 @@ async function main() {
     const { anchor, normal } = woundEmitAnchorAndNormal(a.posed().prims, wound, a.pose().yaw);
     // The gout sprays back along the incoming shot; spawnImpactGout negates
     // what it is handed, and the wound normal already points OUT of the
-    // body, so pass the inward direction.
-    spawnImpactGout(bloodSim, kind, anchor, [-normal[0], -normal[1], -normal[2]], bleedRng);
+    // body, so pass the inward direction. The wound's stable stream id tags
+    // the gout so it fuses with this wound's per-frame droplets and no
+    // other emitter's.
+    const streamId = woundStreamId(wound);
+    spawnImpactGout(bloodSim, kind, anchor, [-normal[0], -normal[1], -normal[2]], bleedRng, streamId);
+    // SUPPLEMENTARY entry splash (opt-in, ?impactsplash=1). Projectile hits
+    // use the contact and incoming shot below; stumps use their outward
+    // wound normal. The seed is
+    // derived from the wound's stable stream id, NOT from bleedRng, so it
+    // draws no random numbers and leaves the shipped gout/bleed stream
+    // bit-identical.
+    const shotgunShot = wound.shot?.weapon === 'shotgun' ? wound.shot.shotId : undefined;
+    const repeatedPellet = shotgunShot !== undefined && lastSplashShot.get(a) === shotgunShot;
+    if (impactSplashEnabled && impactSplashLayer && !repeatedPellet) {
+      if (shotgunShot !== undefined) lastSplashShot.set(a, shotgunShot);
+      // An immediate entry splash belongs to the projectile's actual surface
+      // contact, not the wound's reconstructed/carved anchor. Send it back
+      // toward the incoming shot and start just outside the contacted skin.
+      // Stumps have no projectile contact and retain their wound-normal path.
+      const splashDirection: Vec3 = contact
+        ? [-contact.incoming[0], -contact.incoming[1], -contact.incoming[2]]
+        : normal;
+      const splashOrigin: Vec3 = contact
+        ? [contact.point[0] + splashDirection[0] * 0.035,
+           contact.point[1] + splashDirection[1] * 0.035,
+           contact.point[2] + splashDirection[2] * 0.035]
+        : anchor;
+      impactSplashLayer.emit(splashOrigin, splashDirection, (streamId * 2654435761) >>> 0, { profile: impactSplashProfiles[kind] });
+    }
     // Gut-rope decision for this stamped wound — placed BELOW the
     // !bleedEnabled guard on purpose: the roll spends bleedRng, and the
     // invariant above (OFF mid-stream = ON-stream-paused) only holds if
@@ -5408,7 +5523,7 @@ async function main() {
               wound: stamped ? describeRecordedWound(hitActor, stamped) : null,
               woundCount: hitActor.wounds().length,
             });
-            if (stamped) registerBleed(hitActor, stamped, p.kind);
+            if (stamped) registerBleed(hitActor, stamped, p.kind, { point: hitPoint, incoming: dirN });
             dead = true;
           }
         }
@@ -5512,11 +5627,14 @@ async function main() {
           const { anchor, normal } = woundEmitAnchorAndNormal(a.posed().prims, e.wound, a.pose().yaw);
           e.acc = spawnWoundDroplets(
             bloodSim, e.kind, bleedClock - e.bornAt, anchor, normal, cdt, e.acc, bleedRng,
+            woundStreamId(e.wound),
           );
         }
         emitTrails(
           bloodSim,
-          liveChunks.map(c => ({ id: c.id, pos: c.state.pos, vel: c.state.vel })),
+          liveChunks.map(c => ({
+            id: c.id, pos: c.state.pos, vel: c.state.vel, stream: trailStreamId(c.id),
+          })),
           cdt, bleedRng,
         );
         stepBlood(bloodSim, cdt, bleedRng);
@@ -5525,6 +5643,9 @@ async function main() {
         bloodView.sync(bloodSim, camera);
       }
       telemetry.end('blood-simulation-and-sync', bloodTiming);
+      // The optional impact crown advances even with bleed off, so an event
+      // already in flight finishes instead of freezing mid-burst.
+      impactSplashLayer?.step(cdt);
     }
 
     const eye = eyeOf(player);
@@ -5536,6 +5657,11 @@ async function main() {
       eye[2] - Math.cos(player.yaw) * cp,
     );
     camera.updateMatrixWorld();
+
+    // Optional impact crown: rebuild from the current event times after the
+    // camera is final (its sync takes the camera for parity; geometry is
+    // world-space). No-op when the feature is off.
+    impactSplashLayer?.sync(camera);
 
     // GOO DENSITY QUADS — pose them from the same sim state, every frame,
     // AFTER the camera is final and before the drawFn composites. The lab
@@ -5555,6 +5681,16 @@ async function main() {
     // splats persist in the sim after bleed is switched off, and the goo
     // draws them. Gating this would freeze the pools mid-frame instead.
     const gooTiming = telemetry.begin();
+    // CANDIDATE connections: derived deterministically from the SAME droplet
+    // array the sim already owns (no new particles, no new RNG). Set BEFORE
+    // sync so the density instancer poses them in the same pass. When the
+    // feature is off this clears any stale extras, so the shipped frame is
+    // bit-identical again on the very next frame after disabling it.
+    gooLayer?.setExtraBlobs(gooConnectionsEnabled
+      ? connectionBlobsForSim(bloodSim.droplets, {
+        enableStrands: gooStrandsEnabled, enableSheets: gooSheetsEnabled,
+      })
+      : []);
     gooLayer?.sync(bloodSim, camera);
     telemetry.end('goo-sync', gooTiming);
   }
@@ -7105,6 +7241,14 @@ function performBenchAction(a: BenchAction): void {
           rim: gooLayer.rim,
           stretch: gooLayer.stretch,
           shadowRed: gooLayer.shadowRed,
+          candidate: {
+            reconstruction: gooLayer.reconstruction,
+            connections: gooConnectionsEnabled,
+            strands: gooStrandsEnabled,
+            sheets: gooSheetsEnabled,
+            extraBlobs: gooLayer.extraBlobCount,
+            density: gooLayer.densityDiagnostics,
+          },
           perf: {
             surfaceAtDensityRes: gooLayer.surfaceAtDensityRes,
             minTexelRadius: gooLayer.minTexelRadius,
@@ -7364,6 +7508,73 @@ function performBenchAction(a: BenchAction): void {
         areaPriority: gooLayer.areaPriority,
         splatFadeTail: gooLayer.splatFadeTail,
         passGate: gooLayer.passGate,
+      };
+    },
+
+    /**
+     * BLOOD-SURFACE CANDIDATES (2026-09-13). Deliberately NOT part of
+     * setGooTuning: those are look knobs the panel copies, while reconstruction
+     * and connections are architectural candidates that must be opted into by
+     * flag or explicitly here. The baseline is 'original' + connections off.
+     *
+     * `connections` derives extra density quads from the SAME droplet array —
+     * no new particles, no new RNG. `strands`/`sheets` switch each family
+     * independently for attribution; both default on while connections are on.
+     */
+    setGooCandidate(o: {
+      reconstruction?: GooReconstruction;
+      connections?: boolean;
+      strands?: boolean;
+      sheets?: boolean;
+    }) {
+      if (!gooLayer) return { unavailable: true };
+      if (o.reconstruction !== undefined) {
+        gooReconstruction = o.reconstruction;
+        gooLayer.setReconstruction(o.reconstruction);
+      }
+      if (o.connections !== undefined) gooConnectionsEnabled = o.connections;
+      if (o.strands !== undefined) gooStrandsEnabled = o.strands;
+      if (o.sheets !== undefined) gooSheetsEnabled = o.sheets;
+      return {
+        reconstruction: gooLayer.reconstruction,
+        connections: gooConnectionsEnabled,
+        strands: gooStrandsEnabled,
+        sheets: gooSheetsEnabled,
+        extraBlobs: gooLayer.extraBlobCount,
+      };
+    },
+
+    /**
+     * SUPPLEMENTARY IMPACT SPLASH (2026-09-13). A procedural crown fired ON
+     * TOP of the existing slug gout — it replaces nothing and mutates no
+     * shared constant, so the Current slug stays exactly as tuned. OFF unless
+     * this is called or ?impactsplash=1 is present; enabling it creates the
+     * layer on first use (sharing the flesh light rig) and adds it to the
+     * scene. Disabling keeps the layer but hides it, so toggling costs no
+     * rebuild.
+     */
+    setImpactSplash(o: { enabled?: boolean; weapon?: ImpactSplashWeapon; preset?: keyof typeof impactSplashPresets; profile?: Partial<ImpactSplashProfile> } = {}) {
+      const weapon = o.weapon ?? 'slug';
+      if ((o.profile || o.preset) && Object.hasOwn(impactSplashProfiles, weapon)) {
+        const base = o.preset && Object.hasOwn(impactSplashPresets, o.preset) ? impactSplashPresets[o.preset] : impactSplashProfiles[weapon];
+        impactSplashProfiles[weapon] = resolveImpactSplashProfile({ ...base, ...o.profile });
+      }
+      if (o.enabled !== undefined) impactSplashEnabled = o.enabled;
+      if (impactSplashEnabled) ensureImpactSplashLayer();
+      impactSplashLayer?.setVisible(impactSplashEnabled);
+      return {
+        enabled: impactSplashEnabled,
+        available: impactSplashLayer !== null,
+        profiles: structuredClone(impactSplashProfiles),
+        events: impactSplashLayer?.eventCount ?? 0,
+      };
+    },
+    get impactSplash() {
+      return {
+        enabled: impactSplashEnabled,
+        available: impactSplashLayer !== null,
+        profiles: structuredClone(impactSplashProfiles),
+        events: impactSplashLayer?.eventCount ?? 0,
       };
     },
 
