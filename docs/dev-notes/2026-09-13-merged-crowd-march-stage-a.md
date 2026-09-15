@@ -1206,6 +1206,8 @@ Two crowd bugs the recording exposed, both fixed on `merge/crowd-default-flip`:
 
 Reading: crowd wins the opening (gibs + bodies), loses the fire-heavy third by ~15 ms, and still pays 5–13 ms in a cleared room. Overall it is a wash within noise on this real run — the stacked-crowd wins (room 1 close-up 11 vs 66) do not appear in ordinary few-body play. At frame 1600 the three visible types' quads cover 45 / 71 / 81 % of the screen each (rects overlap heavily), so per-pixel setup runs ~2× the screen while per-body's four boxes cover far less; that is the t1 mechanism to attack next (per-instance rects, or a shared-quad union across types).
 
+**Correction (2026-09-15):** the `crowd-off` leg in the table above toggled `setCrowd` mid-session, which respawns the cast with new seeds, so the two legs fought different fights; `scripts/sdf-game-bench.mjs` now boots each leg with its own crowd flag. Matched-fight numbers are in `docs/dev-notes/2026-09-14-crowd-firefight-cost.md` (t1 window: quad 46.3 / boxes 38.7 / per-body 34.8 ms). The direction is unchanged.
+
 **Decision: HOLD the default flip.** Land everything else (determinism, hitch fixes, corpse + rect fixes) on main with per-body as the default and `?crowd=1` opt-in, until t1 ≤ per-body on this recording.
 
 Capture note: `presentedShot()` straight after `demoReplay` under hold can return a stale canvas; step two frames first (it caused a false "crowd draws a soldier per-body does not" alarm — both paths were identical at frames 1598–1602).

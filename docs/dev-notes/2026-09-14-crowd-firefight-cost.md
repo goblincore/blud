@@ -499,3 +499,11 @@ plan's clamp was not kept, and the one hash-moving variant was rejected.**
   bench (HEAD). `t1-task3-after/` — variant (c) exact pre-cull (regression).
   `t1-task3-boundsphere/` — variant (d) bound-sphere clamp (noise).
 - `scripts/march-hash.mjs` — pin restored to `a350361d…`; no re-pin made.
+
+## Task 4 — per-instance raster rects: built, measured, **no-op on this fight** (2026-09-15, branch `dispatch/2026-09-14-crowd-t1-task45`, not merged)
+
+Per-instance clipped rects with a disjoint decomposition (so a pixel is shaded once per type; stencil cannot skip the fragment shader when the march writes depth). The probe reported `unionFrac == bboxFrac` on every sampled t1 frame: the instances' inflated rects overlap into one blob, so the union of per-instance rects IS the union bbox and the fragment count cannot fall. Bench before 39.15 vs after 38.92 ms frame p50 (within spread). Reverted; the branch keeps the code and outputs for reference. Task 5 (the full-recording bar) timed out before running.
+
+**Where the ~8 ms actually is.** After Task 2, discarded fragments sit in NON-empty tiles and discard on the entry test (`bodyEntry > 1e8`) or the miss, having already paid the occ/shell/prev fetches and the record load. The next exact lever is the same move as Task 2 for the entry miss: preload the tile list and run the per-ray sphere entry test before the per-pixel fetches, and discard there.
+
+**Caveat on the earlier flip table** (`## Flip decision bench` in the stage-a note): its `crowd-off` leg reached per-body by toggling `setCrowd` mid-session while the default was crowd, which respawns the cast with new seeds — the legs fought different fights. The matched-fight numbers here supersede it (t1 window: quad 46.3 / boxes 38.7 / per-body 34.8 ms of march before Task 2). The direction and the hold-the-flip decision stand.
