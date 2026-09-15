@@ -1552,8 +1552,11 @@ async function main() {
     // ahead of this draw; chunks repacked world-space there too — posed()
     // and posedBones() are always current). Both modes: in deferred mode the
     // instancer is a level-only G-buffer producer with the SAME packing.
-    if (boneMesh) {
-      {
+    // Bodies and CHUNKS are fed independently: `boneMesh` is the body switch,
+    // `gibBoneMesh` the detached-piece one. They were one flag, which is why gib
+    // bones could only be tubes if living skeletons became tubes as well.
+    if (boneMesh || gibBoneMesh) {
+      if (boneMesh) {
         const craters: { pos: Vec3; radius: number }[] = [];
         for (const a of actors) {
           const prims = a.posed().prims;
@@ -1562,8 +1565,10 @@ async function main() {
         boneInstancer.setWounds(craters);
       }
       boneInstancer.update([
-        ...actors.map(a => { const p = a.posed(); return { prims: p.bonePrims ?? [], alive: p.clusters.map(c => c.alive) }; }),
-        ...liveChunks.map(c => ({ prims: c.view.posedBones() })),
+        ...(boneMesh
+          ? actors.map(a => { const p = a.posed(); return { prims: p.bonePrims ?? [], alive: p.clusters.map(c => c.alive) }; })
+          : []),
+        ...(gibBoneMesh ? liveChunks.map(c => ({ prims: c.view.posedBones() })) : []),
       ]);
     }
     // skeleton=mesh: re-pose this frame's segment meshes + crater exposure.
@@ -1947,7 +1952,8 @@ async function main() {
       // own amplitude. The shipped value is the flesh preset's surfaceNoiseAmp
       // (0.06), which is deliberately subtle on a marched body and is therefore
       // hard to judge on a settled piece without sweeping it — so it sweeps.
-      const detailAmp = chunkDetailOverride ?? (liveSurf ? liveSurf.y : null);
+      const detailAmp = chunkDetailOverride
+        ?? (liveSurf ? Math.min(1, liveSurf.y * CHUNK_DETAIL_GAIN) : null);
       for (const lm of litChunkMaterials) {
         const bu = lm.uniforms;
         bu.spotPos.value.copy(flashlight.spot.position);
@@ -2251,11 +2257,35 @@ async function main() {
     // DEFERRED MODE: the tubes are a level-only G-buffer producer (tissue —
     // a body's own hull must not swallow their light).
     deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined);
+  let gibBoneMesh = new URLSearchParams(location.search).get('gibbonemesh') !== '0';
   boneInstancer.object.layers.set(0);
-  boneInstancer.object.visible = false;
+  // Visible when EITHER path draws through it — gib bones alone are enough.
+  boneInstancer.object.visible = gibBoneMesh;
   scene.add(boneInstancer.object);
   deferredApi?.router.register(boneInstancer.object, 'mesh', 'level-only');
   let boneMesh = false;
+  /**
+   * GIB BONES ARE MESH TUBES, not marched field rows (2026-09-15, owner's call:
+   * "we need to change it so the bone gibs are mesh").
+   *
+   * Its own flag rather than `boneMesh`, because `boneMesh` switches BODIES too
+   * and a living actor already wears a different skeleton entirely — extracted
+   * segment meshes, `resolveSkeletonMode` defaulting to 'mesh'. Only DETACHED
+   * pieces were still marched, and only because of this in `spawnChunkPiece`:
+   *
+   *     setPackBones(boneOnly ? true : !boneMesh)
+   *
+   * A bone-only chunk was forced to pack its bone rows whatever the tube mode
+   * was, because with packing off its flesh list is empty, it marches an empty
+   * field, and the skeleton is invisible. That guard is right when nothing else
+   * draws the piece — but the instancer has been fed `liveChunks.map(c =>
+   * c.view.posedBones())` all along, so with tubes on there IS something else
+   * drawing it, and the guard is what kept the bones marched.
+   *
+   * This also relieves the cost the `gibbones=core` default was aimed at: a bone
+   * piece never bakes, so as a marched chunk it holds a view slot for its whole
+   * life. As a tube it holds none.
+   */
   // Accepted actor skeleton default: extracted meshes in forward mode.
   // ?skeleton=procedural restores the reference; volume remains dev-only.
   // Deferred and detached chunks retain procedural bones.
@@ -2400,7 +2430,7 @@ async function main() {
   }
   function applyBoneMesh(on: boolean): void {
     boneMesh = on;
-    boneInstancer.object.visible = on;
+    boneInstancer.object.visible = on || gibBoneMesh;
     for (const a of actors) a.view.setPackBones(!on);
     for (const c of liveChunks) c.view.setPackBones(!on);
   }
@@ -4837,8 +4867,26 @@ async function main() {
   // pieces from the character"). `?gibcarvecells=2+` trades it back for gore.
   const gibCarveCells = parseIntParam(DYN_PARAMS.get('gibcarvecells'), { min: 1, max: 8 }) ?? 1;
   const gibCarveCellSize = parseFloatParam(DYN_PARAMS.get('gibcarvecell'), { min: 0.005, max: 0.05 }) ?? 0.01;
+  /**
+   * WHY A SETTLED PIECE NEEDS MORE MICRO-DETAIL THAN THE BODY IT CAME OFF.
+   *
+   * The creature's authored `surfaceNoiseAmp` is 0.06, and on a MARCHED body
+   * that is enough: the march perturbs a per-pixel analytic normal taken from
+   * the SDF gradient, and it has silhouette noise on top. A baked chunk has
+   * neither — its normal is an interpolated vertex normal across a 1 cm mesh,
+   * already smooth — so the identical amplitude reads as nothing at all.
+   *
+   * Measured on a FROZEN scene, one settled piece, same camera, same pixels:
+   * at 0 and at 0.06 the piece is a clean even gradient; at 0.9 it is visibly
+   * grainy; 0.35 is textured without reading as noise. 6x takes the authored
+   * 0.06 to 0.36, which lands in that band and keeps the value TRACKING the
+   * creature rather than replacing it — move the wound panel's slider and a
+   * settled piece still follows.
+   */
+  const CHUNK_DETAIL_GAIN = 6;
   /** Override for the settled piece's micro-detail amplitude; null = follow the
-   *  live creature's `surfCfg2.y`. See the per-frame push and `setChunkDetail`. */
+   *  live creature's `surfCfg2.y` through CHUNK_DETAIL_GAIN. See the per-frame
+   *  push and `setChunkDetail`. */
   let chunkDetailOverride: number | null =
     parseFloatParam(DYN_PARAMS.get('chunkdetail'), { min: 0, max: 1 }) ?? null;
   const gibSpriteLiveCap = parseIntParam(DYN_PARAMS.get('gibspritelive'), { min: 1, max: 512 })
@@ -4886,8 +4934,15 @@ async function main() {
   // flesh-only control. `bone.cage` alone is 31 bone prims in ONE chunk, so
   // this is the first knob to reach for if a blast's cost spikes.
   const gibBonesParam = DYN_PARAMS.get('gibbones');
+  // CORE BY DEFAULT (2026-09-15, owner's call). `all` releases the eleven rigid
+  // groups; `core` is the three torso masses plus the skull. Bones are the
+  // expensive half of a gib and they NEVER BAKE — a bone piece is a marched
+  // chunk for as long as it exists, while flesh retires to a static mesh a
+  // second or two after it lands — so the eight long bones are eight permanent
+  // marched chunks holding view slots the flesh could have used. `?gibbones=all`
+  // restores the full skeleton; `off` is the flesh-only control.
   let gibBones: GibBoneRelease =
-    gibBonesParam === 'off' ? 'off' : gibBonesParam === 'core' ? 'core' : 'all';
+    gibBonesParam === 'off' ? 'off' : gibBonesParam === 'all' ? 'all' : 'core';
   // THE STAGED RELEASE (dev-note §3a/b). Every piece spawns AT ITS CURRENT
   // POSED TRANSFORM WITH ZERO VELOCITY, so the frame the blast lands shows the
   // BODY's silhouette in place instead of a substitution, and the pieces then
@@ -5584,11 +5639,15 @@ async function main() {
       // organ rows only, so a chunk whose flesh list is empty packs NOTHING and
       // marches an empty field — an invisible skeleton, which is the exact
       // failure this whole piece set exists to end.
-      recycled.setPackBones(boneOnly ? true : !boneMesh);
+      recycled.setPackBones(boneOnly ? !gibBoneMesh : !boneMesh);
       applyChunkKindLook(recycled, kind);
       // May be arriving from a baked retirement; and a bone piece spawned while
       // the differential hides the skeleton must stay hidden.
-      recycled.object.visible = !chunksHidden && (kind !== 'bone' || bonesVisible);
+      // With `gibBoneMesh` the tubes draw this piece and its packed rows are
+      // gone, so the marched proxy has an EMPTY field: it would march and
+      // discard every pixel of its box for nothing. Hidden, not merely empty.
+      recycled.object.visible = !chunksHidden
+        && (kind !== 'bone' || (bonesVisible && !(boneOnly && gibBoneMesh)));
       liveChunks.push({ id: nextChunkId++, state, view: recycled, template, kind, boneOnly });
     } else {
       const view = createChunkGpuView(
@@ -5599,9 +5658,10 @@ async function main() {
         // shared material the material's mode wins; the view must agree).
         deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined,
       );
-      view.setPackBones(boneOnly ? true : !boneMesh);
+      view.setPackBones(boneOnly ? !gibBoneMesh : !boneMesh);
       applyChunkKindLook(view, kind);
-      view.object.visible = !chunksHidden && (kind !== 'bone' || bonesVisible);
+      view.object.visible = !chunksHidden
+        && (kind !== 'bone' || (bonesVisible && !(boneOnly && gibBoneMesh)));
       view.object.layers.set(SDF_LAYER);
       scene.add(view.object);
       deferredApi?.router.register(view.object, 'sdf');
@@ -10701,6 +10761,13 @@ function performBenchAction(a: BenchAction): void {
     boneTubes: () => ({
       count: boneInstancer.count,
       overflowed: boneInstancer.overflowed,
+      /** WHICH PATHS FEED THE TUBES, and whether the object is drawn at all.
+       *  With `gibBoneMesh` a bone gib packs no field rows and its marched proxy
+       *  is hidden, so the instancer is the ONLY thing drawing it — and from the
+       *  chunk census (which counts marched ROWS) "the skeleton is drawn as
+       *  tubes" and "the skeleton silently vanished" are indistinguishable.
+       *  These three make them distinguishable. */
+      gibBoneMesh, bodyBoneMesh: boneMesh, visible: boneInstancer.object.visible,
       /** TASK-6 DIAGNOSTIC (bounded): world endpoints (a, b) of up to 8
        *  posed bone prims — the SAME prim data boneInstancer.update() packs
        *  this frame — so the gate can anchor its tube-texel scan to real
@@ -12720,6 +12787,35 @@ function performBenchAction(a: BenchAction): void {
      *  a floor full of recycling gore cannot distinguish "the term does nothing"
      *  from "the term never arrived". */
     chunkDetailApplied: () => litChunkMaterials.map(m => m.uniforms.fleshDetail.value.x),
+    /** THE BAKED ALBEDO ITSELF, sampled off a settled piece's `bakeColor`
+     *  attribute — the vertex colour the shader composes from.
+     *
+     *  The whole question about a settled piece is whether it looks wrong
+     *  because of the ALBEDO or because of the LIGHT on it, and those two are
+     *  indistinguishable on screen. This reads the albedo directly: mean rgb,
+     *  its range, and the mean wound-mask alpha. Values are LINEAR, matching
+     *  the .blob palette (flesh baseColor is 0.68 0.44 0.40). */
+    bakedAlbedoStats: () => bakedChunks.map(b => {
+      const a = b.mesh.geometry.getAttribute('bakeColor');
+      if (!a) return { id: b.id, error: 'no bakeColor' };
+      const v = a.array as ArrayLike<number>;
+      const n = v.length / 4;
+      let r = 0, g = 0, bl = 0, wm = 0;
+      const mn = [9, 9, 9], mx = [-9, -9, -9];
+      for (let i = 0; i < v.length; i += 4) {
+        r += v[i]!; g += v[i + 1]!; bl += v[i + 2]!; wm += v[i + 3]!;
+        for (let k = 0; k < 3; k++) {
+          if (v[i + k]! < mn[k]!) mn[k] = v[i + k]!;
+          if (v[i + k]! > mx[k]!) mx[k] = v[i + k]!;
+        }
+      }
+      const f = (x: number) => Math.round(x * 1000) / 1000;
+      return {
+        id: b.id, verts: n,
+        mean: [f(r / n), f(g / n), f(bl / n)],
+        min: mn.map(f), max: mx.map(f), meanWoundMask: f(wm / n),
+      };
+    }),
     setChunkBake(on: boolean) {
       chunkBakeEnabled = on;
       if (!on) cancelChunkBake();
@@ -13293,7 +13389,13 @@ function performBenchAction(a: BenchAction): void {
           // A bone piece that lost its pale flag, or that has no rows packed at
           // all (the bone-tube path's packBones off would do both), shades as
           // MEAT — the skeleton is in the pile and cannot be seen.
-          else bonesShadingAsMeat++;
+          //
+          // UNLESS THE TUBES ARE DRAWING IT (2026-09-15). Under `gibBoneMesh` a
+          // bone piece packs no rows and marches nothing BY DESIGN — the
+          // instancer draws it from `posedBones()` and the proxy is hidden. The
+          // metric predates that path and would report all of them as a failure,
+          // which is the census crying wolf about the shipped configuration.
+          else if (!gibBoneMesh) bonesShadingAsMeat++;
         } else if (c.boneOnly) {
           // An ORGAN piece: deliberately NOT pale (it tints as viscera), and its
           // rows are organs. If it ever goes pale it renders as bare bone.
