@@ -12,11 +12,21 @@
 //
 // BRACKETING GUARANTEES (tightened after review, 2026-09-15):
 //   * A reported crossing always lies between two FINITE samples of opposite
-//     sign, and the bracket is forced to contract in SPACE every iteration
-//     (midpoint when the secant step lands in an outer quarter). Value `tol` is
-//     a stopping bonus, not the only contraction guarantee.
+//     sign, and refinement continues until the bracket's ACTUAL spatial width
+//     is <= `spatialTol`. Value `tol` never terminates refinement: a small
+//     residual at one sample does NOT bound the spatial error of an arbitrary
+//     field, so treating it as convergence fabricates certainty (a 400 mm
+//     location error can sit at |f| ~ 1e-10). The sole non-spatial early exit
+//     is an EXACT evaluated zero (`f === 0`), returned as an exact root with a
+//     vanishing bracket.
+//   * Exhausting `maxIters` before the width target THROWS `FieldContourError`
+//     (nonconvergence) rather than silently emitting a crossing that is not
+//     spatially pinned.
 //   * The reported residual is the field evaluated AT the returned crossing,
 //     never a stale bracket-endpoint value.
+//   * `maxEndpointJump` is |f(right) - f(left)| of the FINAL opposite-sign
+//     bracket samples, never the original grid-edge endpoints. An exact-root
+//     termination reports a vanishing jump rather than the initial distance.
 //   * A non-finite sample anywhere the reference depends on it (grid node,
 //     edge endpoint, refinement point) REJECTS the contour: `fieldContour`
 //     throws `FieldContourError` rather than emitting a crossing it cannot
@@ -104,11 +114,12 @@ export interface FieldContour {
   /** Max |field| AT the returned crossing (metres) — the residual quality. */
   readonly maxResidualAtCrossing: number;
   /**
-   * Max |f(right) - f(left)| of the two finite one-sided bracket samples at a
-   * crossing (every crossing, resolved or not). A large finite jump across a
-   * vanishing bracket is the one-sided evidence that the crossing sits on a
-   * sign boundary rather than a plain zero; it is recorded alongside the
-   * operator's own formula, never used as the sole proof of discontinuity.
+   * Max |f(right) - f(left)| of the FINAL opposite-sign bracket samples at a
+   * crossing (every crossing, resolved or not) — not the initial grid-edge
+   * endpoints. A large finite jump across a spatially pinned (~`spatialTol`)
+   * bracket is the one-sided evidence that the crossing sits on a sign
+   * boundary rather than a plain zero; it is recorded alongside the operator's
+   * own formula, never used as the sole proof of discontinuity.
    */
   readonly maxEndpointJump: number;
   /** Target upper bound on a crossing bracket's width, in metres. */
@@ -130,9 +141,12 @@ interface CrossingRefinement {
   readonly t: number;
   /** Field AT the returned point; never a stale bracket-endpoint value. */
   readonly fv: number;
-  /** Final bracket half-extent in metres (`(hi-lo) * |pb-pa|`). */
+  /** Final bracket width in metres (`(hi-lo) * |pb-pa|`); 0 only for an exact root. */
   readonly bracketWidth: number;
-  /** |f(pb) - f(pa)| of the finite one-sided bracket samples. */
+  /**
+   * |f(hi) - f(lo)| of the FINAL opposite-sign bracket samples. 0 when an
+   * exact zero was located (a vanishing bracket has no one-sided jump to report).
+   */
   readonly endpointJump: number;
 }
 
@@ -143,27 +157,38 @@ interface CrossingRefinement {
  * middle half of the bracket, otherwise a midpoint bisection is forced. Either
  * way the bracket contracts by at least 25% per iteration, so the returned
  * crossing is spatially pinned even when the secant step stalls or the field
- * jumps (a discontinuity). Stops on `spatialTol`, on `|f| <= tol`, or on
- * `maxIters`. The returned `fv` is evaluated at the returned point.
+ * jumps (a discontinuity).
+ *
+ * The ONLY stopping condition is the ACTUAL spatial width reaching
+ * `spatialTol`; an exact evaluated zero (`f === 0`) short-circuits as an exact
+ * root. `tol` does not stop anything — it is applied by the caller to classify
+ * the returned residual. Exhausting `maxIters` before the width target throws
+ * `FieldContourError` (this function must never claim a spatial guarantee it
+ * did not reach).
  *
  * Returns null (never a fabricated crossing) when an endpoint is non-finite,
  * the segment is not sign-bracketed, or a refinement sample is non-finite.
  */
 function refineCrossing(
   f: (p: Vec3) => number, pa: Vec3, pb: Vec3,
-  tol: number, spatialTol: number, maxIters: number,
+  spatialTol: number, maxIters: number,
 ): CrossingRefinement | null {
   const da = f(pa), db = f(pb);
   if (!Number.isFinite(da) || !Number.isFinite(db)) return null;
+  // An endpoint that is EXACTLY zero is an exact root, not a bracket collapse.
+  if (da === 0) return { t: 0, fv: 0, bracketWidth: 0, endpointJump: 0 };
+  if (db === 0) return { t: 1, fv: 0, bracketWidth: 0, endpointJump: 0 };
   if ((da < 0) === (db < 0)) return null;
   const len = Math.hypot(pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]);
   const pointAt = (t: number): Vec3 => [
     pa[0] + (pb[0] - pa[0]) * t, pa[1] + (pb[1] - pa[1]) * t, pa[2] + (pb[2] - pa[2]) * t,
   ];
   let lo = 0, hi = 1, flo = da, fhi = db;
+  let exactT: number | null = null;
+  let converged = false;
   for (let it = 0; it < maxIters; it++) {
     const w = hi - lo;
-    if (w * len <= spatialTol) break;
+    if (w * len <= spatialTol) { converged = true; break; }
     let t = lo + w * (flo / (flo - fhi)); // false position
     // Forced contraction: reject a secant step in an outer quarter, because it
     // can stall (discontinuity) or creep (badly conditioned) and never pin the
@@ -171,14 +196,25 @@ function refineCrossing(
     if (!Number.isFinite(t) || t <= lo + 0.25 * w || t >= hi - 0.25 * w) t = lo + 0.5 * w;
     const fm = f(pointAt(t));
     if (!Number.isFinite(fm)) return null;
-    if (Math.abs(fm) <= tol) { lo = t; hi = t; flo = fm; fhi = fm; break; }
+    // Exact zero: a genuine exact root, so stop with a vanishing bracket. This
+    // is NOT a value-tolerance stop — `tol` is never consulted here.
+    if (fm === 0) { exactT = t; converged = true; break; }
     if ((fm < 0) === (flo < 0)) { lo = t; flo = fm; } else { hi = t; fhi = fm; }
   }
+  if (!converged) {
+    throw new FieldContourError(
+      `fieldContour: crossing refinement exhausted maxIters=${maxIters} before reaching spatialTol=${spatialTol} m; refusing to report an unpinned crossing`,
+    );
+  }
+  // Exact root: report it as exact (residual 0). There is no one-sided jump to
+  // measure across a vanishing bracket, so `endpointJump` must not resurrect
+  // the original grid-edge distance.
+  if (exactT !== null) return { t: exactT, fv: 0, bracketWidth: 0, endpointJump: 0 };
   // The bracket now has width <= spatialTol, so every candidate below lies
-  // within the spatial tolerance of the sign boundary. Evaluate each and return
-  // the one closest to the zero set, so `fv` is a measurement AT the returned
-  // point (not a stale endpoint) and the returned point is the best available
-  // approximation of the crossing.
+  // within the spatial tolerance of the sign boundary. Evaluate the midpoint
+  // and return the candidate closest to the zero set, so `fv` is a measurement
+  // AT the returned point (not a stale endpoint). The reported jump is between
+  // the FINAL bracket samples, which are the actual one-sided values.
   const tm = 0.5 * (lo + hi);
   const fm = f(pointAt(tm));
   if (!Number.isFinite(fm)) return null;
@@ -186,14 +222,18 @@ function refineCrossing(
   for (const [t, v] of [[hi, fhi], [tm, fm]] as [number, number][]) {
     if (Number.isFinite(v) && Math.abs(v) < bestAbs) { bestAbs = Math.abs(v); bestT = t; bestF = v; }
   }
-  return { t: bestT, fv: bestF, bracketWidth: (hi - lo) * len, endpointJump: Math.abs(db - da) };
+  return { t: bestT, fv: bestF, bracketWidth: (hi - lo) * len, endpointJump: Math.abs(fhi - flo) };
 }
 
 /**
  * Dense marching-squares contour of `field(p) === 0` on the slice. Crossings
- * are refined by bisection to `tol` (default 1e-6 m); `resolution` is the
- * sample spacing. Ambiguous marching-squares cells are resolved by the
- * bilinear centre sign (the standard asymptotic-decider-free rule).
+ * are refined by safeguarded false-position/bisection until their bracket's
+ * ACTUAL width is <= `spatialTol` (default 1e-6 m); `resolution` is the sample
+ * spacing and `tol` only classifies the returned residual (`resolvedCrossings`),
+ * it never stops refinement. Exhausting `maxIters` before the width target
+ * throws `FieldContourError` rather than claiming an unpinned crossing.
+ * Ambiguous marching-squares cells are resolved by the bilinear centre sign
+ * (the standard asymptotic-decider-free rule).
  */
 export function fieldContour(
   field: ScalarField, plane: SlicePlane, window: SliceWindow, resolution: number,
@@ -201,9 +241,11 @@ export function fieldContour(
 ): FieldContour {
   if (resolution <= 0 || !Number.isFinite(resolution)) throw new Error(`fieldContour: resolution must be finite and positive (got ${resolution})`);
   const tol = opts.tol ?? 1e-6;
+  if (!Number.isFinite(tol) || tol < 0) throw new Error(`fieldContour: tol must be finite and non-negative (got ${tol})`);
   const spatialTol = opts.spatialTol ?? 1e-6;
   if (spatialTol <= 0 || !Number.isFinite(spatialTol)) throw new Error(`fieldContour: spatialTol must be finite and positive (got ${spatialTol})`);
   const maxIters = opts.maxIters ?? 80;
+  if (!Number.isInteger(maxIters) || maxIters <= 0) throw new Error(`fieldContour: maxIters must be a positive integer (got ${maxIters})`);
   const nu = Math.max(1, Math.ceil((window.uMax - window.uMin) / resolution));
   const nv = Math.max(1, Math.ceil((window.vMax - window.vMin) / resolution));
   const du = (window.uMax - window.uMin) / nu;
@@ -265,7 +307,7 @@ export function fieldContour(
     if (hit) return hit;
     const pa = planePoint(plane, uOf(i), vOf(j));
     const pb = planePoint(plane, uOf(i + 1), vOf(j));
-    const r = refineCrossing(field.field, pa, pb, tol, spatialTol, maxIters);
+    const r = refineCrossing(field.field, pa, pb, spatialTol, maxIters);
     if (!r) throw new FieldContourError(`fieldContour: refinement produced a non-finite/invalid crossing on h-edge (${i},${j}); rejecting the reference contour`);
     recordCrossing(r);
     const out: [number, number] = [uOf(i) + du * r.t, vOf(j)];
@@ -278,7 +320,7 @@ export function fieldContour(
     if (hit) return hit;
     const pa = planePoint(plane, uOf(i), vOf(j));
     const pb = planePoint(plane, uOf(i), vOf(j + 1));
-    const r = refineCrossing(field.field, pa, pb, tol, spatialTol, maxIters);
+    const r = refineCrossing(field.field, pa, pb, spatialTol, maxIters);
     if (!r) throw new FieldContourError(`fieldContour: refinement produced a non-finite/invalid crossing on v-edge (${i},${j}); rejecting the reference contour`);
     recordCrossing(r);
     const out: [number, number] = [uOf(i), vOf(j) + dv * r.t];

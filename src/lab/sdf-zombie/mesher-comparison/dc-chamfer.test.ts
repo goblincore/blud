@@ -104,6 +104,93 @@ describe('field-slice — bracketed ground truth', () => {
     expect(c.maxBracketWidth).toBeLessThanOrEqual(1e-7 + 1e-15);
   });
 
+  it('does NOT collapse the bracket on a small residual (Codex 400 mm repro)', () => {
+    // f changes by 1e-9 across the whole window, so BOTH grid endpoints already
+    // sit within the default value tol (1e-6). The old refinement collapsed
+    // lo=hi at the midpoint 0.5 and reported bracketWidth 0 — a 0.4 m location
+    // error sold as spatial certainty. Correct refinement must contract
+    // SPATIALLY and land on 0.9; a tiny residual is a classification, not a stop.
+    const f = fieldOf((p) => 1e-9 * (p[0] - 0.9));
+    const c = fieldContour(f, plane, { uMin: 0, uMax: 1, vMin: 0, vMax: 1 }, 1);
+    expect(c.crossings).toBeGreaterThan(0);
+    // Residual is tiny (so it classifies as resolved) but that is NOT why it stopped.
+    expect(c.resolvedCrossings).toBe(c.crossings);
+    expect(c.maxResidualAtCrossing).toBeLessThan(1e-9);
+    for (const s of c.segments) {
+      for (const p of [s.a, s.b]) expect(Math.abs(p[0] - 0.9)).toBeLessThan(1e-4);
+    }
+    // A real spatial interval was contracted to the target (or an exact zero
+    // was hit, which is a legitimate exact root — never a fabricated collapse).
+    expect(c.maxBracketWidth).toBeGreaterThanOrEqual(0);
+    expect(c.maxBracketWidth).toBeLessThanOrEqual(c.spatialTol + 1e-15);
+  });
+
+  it('throws on maxIters exhaustion instead of claiming a spatial guarantee', () => {
+    // Cubic root at 0.1 (not representable as a secant hit in one step); a
+    // single bisection leaves a 0.5-wide bracket, far from the 1e-9 target.
+    const f = fieldOf((p) => p[0] ** 3 - 1e-3);
+    const w = { uMin: 0, uMax: 1, vMin: 0, vMax: 1 };
+    expect(() => fieldContour(f, plane, w, 1, { spatialTol: 1e-9, maxIters: 1 })).toThrow(FieldContourError);
+    expect(() => fieldContour(f, plane, w, 1, { spatialTol: 1e-9, maxIters: 1 })).toThrow(/maxIters/);
+    // The same bracket converges (no throw) with enough iterations.
+    const c = fieldContour(f, plane, w, 1, { spatialTol: 1e-9 });
+    expect(c.unresolvedCrossings).toBe(0);
+  });
+
+  it('reports the FINAL bracket jump, not the original grid-edge difference', () => {
+    // Continuous monotone field: the grid edge spans f = -1e-3 -> +0.999 (a 1.0
+    // difference), but the refined bracket is ~1e-6 wide, so the final
+    // opposite-side samples differ by ~1e-6 * gradient. A stale initial-endpoint
+    // jump (abs(db - da)) would stay near 1.0 and fail this. The root is not hit
+    // exactly, so this exercises the final-bracket path, not the exact-zero path.
+    const f = fieldOf((p) => p[0] ** 3 - 1e-3);
+    const c = fieldContour(f, plane, { uMin: 0, uMax: 1, vMin: 0, vMax: 1 }, 1, { spatialTol: 1e-6 });
+    expect(c.maxEndpointJump).toBeGreaterThanOrEqual(0);
+    expect(c.maxEndpointJump).toBeLessThan(1e-4);
+    // This root is not hit exactly, so a positive spatial bracket was contracted.
+    expect(c.maxBracketWidth).toBeGreaterThan(0);
+    expect(c.maxBracketWidth).toBeLessThanOrEqual(c.spatialTol + 1e-15);
+  });
+
+  it('keeps a real one-sided jump when the final bracket straddles a step', () => {
+    // Contrast with the linear case: the jump is genuine, so the FINAL bracket
+    // samples must still differ by the full step (2.0).
+    const f = stepField(0.3);
+    const c = fieldContour(f, plane, { uMin: 0, uMax: 1, vMin: 0, vMax: 1 }, 1, { spatialTol: 1e-6 });
+    expect(c.maxEndpointJump).toBeCloseTo(2, 9);
+  });
+
+  it('pins a tiny-amplitude sign boundary (amplitude below the value tol)', () => {
+    // |f| = 1e-8 << tol everywhere, so ONLY spatial contraction can locate it.
+    const f = fieldOf((p) => (p[0] > 0.42 ? 1e-8 : -1e-8));
+    const c = fieldContour(f, plane, { uMin: 0, uMax: 1, vMin: 0, vMax: 1 }, 0.25, { spatialTol: 1e-7 });
+    for (const s of c.segments) {
+      for (const p of [s.a, s.b]) {
+        if (Math.abs(p[0] - 0.42) < 0.1) expect(Math.abs(p[0] - 0.42)).toBeLessThan(1e-6);
+      }
+    }
+    expect(c.maxEndpointJump).toBeCloseTo(2e-8, 12);
+  });
+
+  it('validates tol and maxIters instead of accepting nonsense options', () => {
+    const f = fieldOf(analyticDisc);
+    const w = { uMin: -1, uMax: 1, vMin: -1, vMax: 1 };
+    expect(() => fieldContour(f, plane, w, 0.5, { tol: -1 })).toThrow(/tol/);
+    expect(() => fieldContour(f, plane, w, 0.5, { tol: Infinity })).toThrow(/tol/);
+    expect(() => fieldContour(f, plane, w, 0.5, { maxIters: 0 })).toThrow(/maxIters/);
+    expect(() => fieldContour(f, plane, w, 0.5, { maxIters: 2.5 })).toThrow(/maxIters/);
+  });
+
+  it('handles an exact evaluated zero as an exact root with vanishing bracket', () => {
+    // f(0.5) === 0 exactly on a grid node edge; the crossing is exact, not approximate.
+    const f = fieldOf((p) => p[0] - 0.5);
+    const c = fieldContour(f, plane, { uMin: 0, uMax: 1, vMin: 0, vMax: 1 }, 1, { spatialTol: 1e-6 });
+    expect(c.maxResidualAtCrossing).toBe(0);
+    for (const s of c.segments) {
+      for (const p of [s.a, s.b]) expect(p[0]).toBeCloseTo(0.5, 12);
+    }
+  });
+
   it('rejects a field with non-finite grid samples instead of emitting NaN crossings', () => {
     // The exact review repro: p.x > 0 -> NaN. It must throw, not return
     // crossings with NaN endpoints.
