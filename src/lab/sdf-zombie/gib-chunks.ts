@@ -26,6 +26,11 @@ export const CHUNK_TUNING = {
   restitution: 0.55,
   /** Horizontal + angular velocity multiplier while in floor contact. */
   floorFriction: 0.72,
+  /** WALL contact (a chunk hitting a room wall or the ceiling): the same
+   *  restitution the floor uses, because a gib hitting a wall should read like
+   *  the same gib hitting the floor. Friction applies to the tangential
+   *  component the same way `floorFriction` does. */
+  wallRestitution: 0.55,
   airDrag: 0.006,
   /** Squash decays back to zero at this rate per second. */
   squashRelax: 5.5,
@@ -106,7 +111,95 @@ export function makeChunk(
   };
 }
 
-export function stepChunk(c: Chunk, dt: number): Chunk {
+/** A solid box a chunk bounces off. Structurally the level's own `Aabb`
+ *  (`game-level.ts` `levelColliders()`), declared here as a plain shape so this
+ *  module keeps no dependency on the WebGPU level. */
+export interface ChunkBox { min: Vec3; max: Vec3 }
+
+/** What a chunk collides with. BOTH fields are optional and absent by default,
+ *  so the lab's stepper and every existing test keep the exact behaviour they
+ *  had (a floor plane and nothing else). */
+export interface ChunkColliders {
+  /** Solid boxes — the level's colliders, which are the WALLS SPLIT AROUND THE
+   *  DOORWAYS, so a gib flies through a door and bounces off the wall beside
+   *  it. */
+  boxes?: readonly ChunkBox[];
+  /** Ceiling height (m) for the enclosure the chunk is in, if known. */
+  ceilingY?: number;
+}
+
+/**
+ * Push a chunk out of any box it overlaps and reflect its velocity.
+ *
+ * The owner, playing: *"it seems the gibs dont bounce off the walls/have
+ * collission"* — and they did not: `stepChunk` had a floor plane at y = radius
+ * and nothing else, so a piece thrown at a wall flew straight through it and out
+ * of the room. This is a sphere-vs-AABB resolve (closest point on the box, push
+ * out along the surface normal), which handles corners and edges without any
+ * special cases and does not care what the boxes MEAN.
+ *
+ * A chunk whose centre is INSIDE a box is pushed out along its shallowest
+ * penetration axis: the common cause is a fast piece tunnelling through a thin
+ * wall in one frame, where there is no surface normal to use.
+ */
+function resolveBoxes(
+  p: Vec3, v: Vec3, radius: number, boxes: readonly ChunkBox[],
+): { pos: Vec3; vel: Vec3; hit: boolean } {
+  let [x, y, z] = p;
+  let [vx, vy, vz] = v;
+  let hit = false;
+  for (const b of boxes) {
+    // Broad phase: a box further than (radius) from the centre on any axis
+    // cannot touch it.
+    if (x + radius < b.min[0] || x - radius > b.max[0]) continue;
+    if (y + radius < b.min[1] || y - radius > b.max[1]) continue;
+    if (z + radius < b.min[2] || z - radius > b.max[2]) continue;
+
+    const qx = Math.min(Math.max(x, b.min[0]), b.max[0]);
+    const qy = Math.min(Math.max(y, b.min[1]), b.max[1]);
+    const qz = Math.min(Math.max(z, b.min[2]), b.max[2]);
+    let nx = x - qx, ny = y - qy, nz = z - qz;
+    const d = Math.hypot(nx, ny, nz);
+    if (d >= radius) continue;
+    hit = true;
+    if (d > 1e-6) {
+      const inv = 1 / d;
+      nx *= inv; ny *= inv; nz *= inv;
+      const push = radius - d;
+      x += nx * push; y += ny * push; z += nz * push;
+    } else {
+      // Centre inside the box: push out along the shallowest axis.
+      const dxMin = x - b.min[0], dxMax = b.max[0] - x;
+      const dyMin = y - b.min[1], dyMax = b.max[1] - y;
+      const dzMin = z - b.min[2], dzMax = b.max[2] - z;
+      const m = Math.min(dxMin, dxMax, dyMin, dyMax, dzMin, dzMax);
+      nx = 0; ny = 0; nz = 0;
+      if (m === dxMin) { nx = -1; x = b.min[0] - radius; }
+      else if (m === dxMax) { nx = 1; x = b.max[0] + radius; }
+      else if (m === dyMin) { ny = -1; y = b.min[1] - radius; }
+      else if (m === dyMax) { ny = 1; y = b.max[1] + radius; }
+      else if (m === dzMin) { nz = -1; z = b.min[2] - radius; }
+      else { nz = 1; z = b.max[2] + radius; }
+    }
+    const vn = vx * nx + vy * ny + vz * nz;
+    if (vn < 0) {
+      // Reflect the NORMAL component with restitution, then damp the
+      // TANGENTIAL component by the floor's friction: a gib skids along a wall
+      // exactly like it skids along the floor. Decomposed rather than scaled
+      // per-axis, because the normal is not axis-aligned at a corner.
+      const j = -(1 + CHUNK_TUNING.wallRestitution) * vn;
+      vx += j * nx; vy += j * ny; vz += j * nz;
+      const vnAfter = vx * nx + vy * ny + vz * nz;
+      const tx = vx - vnAfter * nx, ty = vy - vnAfter * ny, tz = vz - vnAfter * nz;
+      vx = tx * FLOOR_FRICTION + vnAfter * nx;
+      vy = ty * FLOOR_FRICTION + vnAfter * ny;
+      vz = tz * FLOOR_FRICTION + vnAfter * nz;
+    }
+  }
+  return { pos: [x, y, z], vel: [vx, vy, vz], hit };
+}
+
+export function stepChunk(c: Chunk, dt: number, colliders?: ChunkColliders): Chunk {
   let [x, y, z] = c.pos;
   let [vx, vy, vz] = c.vel;
   let { squash } = c;
@@ -127,6 +220,23 @@ export function stepChunk(c: Chunk, dt: number): Chunk {
 
   // Airborne angular damping: the tumble DECAYS in flight (helicopter fix).
   angVel = scale(angVel, Math.max(0, 1 - CHUNK_TUNING.angularAirDamp * dt));
+
+  // WALLS AND CEILING, before the floor: the floor is a plane and should have
+  // the last word on y (a wall resolve can push a chunk downward).
+  if (colliders?.boxes?.length) {
+    const r = resolveBoxes([x, y, z], [vx, vy, vz], c.radius, colliders.boxes);
+    x = r.pos[0]; y = r.pos[1]; z = r.pos[2];
+    vx = r.vel[0]; vy = r.vel[1]; vz = r.vel[2];
+  }
+  // The ceiling is not one of `levelColliders()`' boxes (they are walls up to
+  // WALL_H), so it comes in as an explicit height for the enclosure the chunk is
+  // in. Without it a blast can throw a piece up through the room's roof.
+  const ceilingY = colliders?.ceilingY;
+  if (ceilingY !== undefined && y + c.radius > ceilingY) {
+    y = ceilingY - c.radius;
+    if (vy > 0) vy = -vy * CHUNK_TUNING.wallRestitution;
+    vx *= FLOOR_FRICTION; vz *= FLOOR_FRICTION;
+  }
 
   let grounded = false;
   if (y < c.radius) {

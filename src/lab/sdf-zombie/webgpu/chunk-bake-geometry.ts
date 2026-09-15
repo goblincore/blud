@@ -1,7 +1,7 @@
 // CPU extraction shared by the worker and deterministic tests. No renderer/DOM imports.
 import * as THREE from 'three';
 import { extractHullSoup, fitHullGrid } from './surface-nets-cpu';
-import { bakeChunkAlbedo, chunkBakeField, type ChunkFieldEvals, type ChunkLook, type ChunkBakeParts } from '../chunk-bake-field';
+import { bakeAoAt, bakeChunkAlbedo, chunkBakeField, type ChunkFieldEvals, type ChunkLook, type ChunkBakeParts } from '../chunk-bake-field';
 import { qRotate, type Quat } from '../vec';
 import { nearestPrim } from '../validate';
 import type { Primitive, Vec3 } from '../types';
@@ -70,6 +70,7 @@ export function bakeChunkGeometry(data: ChunkBakeData): BakedChunkResult {
   const index: number[] = [];
   const positions: number[] = [];
   const colors: number[] = [];
+  const aos: number[] = [];
   const weld = new Map<string, number>();
   const n = soup.vertCount;
   for (let i = 0; i < n; i++) {
@@ -84,6 +85,7 @@ export function bakeChunkGeometry(data: ChunkBakeData): BakedChunkResult {
       const [r, g, b, wm] = bakeChunkAlbedo(p, localOf(p), ev,
         painted ? { ...data.look, baseColor: painted } : data.look);
       colors.push(r, g, b, wm);
+      aos.push(bakeAoAt(q => ev.field(q), p, data.cellSize ?? BAKE_CELL));
     }
     index.push(id);
   }
@@ -91,6 +93,8 @@ export function bakeChunkGeometry(data: ChunkBakeData): BakedChunkResult {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geo.setAttribute('bakeColor', new THREE.Float32BufferAttribute(colors, 4));
+  // The occlusion `chunkShade` cannot compute at runtime — see bakeAoAt.
+  geo.setAttribute('bakeAo', new THREE.Float32BufferAttribute(aos, 1));
   geo.setIndex(index);
   geo.computeVertexNormals();
 

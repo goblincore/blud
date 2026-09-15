@@ -7,17 +7,17 @@
 import { describe, it, expect } from 'vitest';
 import {
   resolveExplosion, explosionRadiusM, linearFalloff, blastDamage,
-  concussionVelocity, EXPLOSION_TUNING,
+  concussionVelocity, EXPLOSION_TUNING, primLowerBoundM, segmentDistanceM,
 } from './explosion-aoe';
 import { buildBody, DEFAULT_BUILD_OPTS, type BuildResult } from './build-body';
 import { ZOMBIE } from './body';
 import { WOUND_PROFILES } from './damage';
-import { sdPrimitive } from './validate';
+import { sdBody, sdPrimitive } from './validate';
 import { cutChains, cutLimbs } from './connectivity';
 import { COLLAPSE_TUNING } from './collapse';
 import { HAND_PRIMS } from './hands';
 import type { ClusterInfo, Primitive, Vec3 } from './types';
-import { add } from './vec';
+import { add, len, sub } from './vec';
 import { rotateYaw } from './gait';
 import { woundWorldPos, worldHitToWound } from './damage';
 import {
@@ -133,6 +133,33 @@ describe('wound stamping', () => {
     expect(fx.perBody[0]!.chainCuts).toEqual([]);
   });
 
+  it('skips a gibbed body\u2019s wounds only when the caller says they are unread', () => {
+    // The default is the historical contract: every in-range body is stamped,
+    // gibbed or not, because the lab and the gates read `wounds` off the
+    // resolve result.
+    const torso = zombie.clusters.find(c => c.limb === 'torso')!;
+    const withWounds = resolveExplosion(torso.center, [{ id: 'z', body: zombie }]);
+    expect(withWounds.perBody[0]!.gibbed).toBe(true);
+    expect(withWounds.perBody[0]!.wounds.length).toBe(EXPLOSION_TUNING.maxWoundsPerBody);
+
+    // A caller that gibs instead of damaging (the active game) passes FALSE and
+    // gets none — a pure saving, since it never reads them. Everything else
+    // about the effect is untouched, including the shove the gib branch uses.
+    const skipped = resolveExplosion(torso.center, [{ id: 'z', body: zombie }], {
+      woundsOnGibbed: false,
+    });
+    const e = skipped.perBody[0]!;
+    expect(e.gibbed).toBe(true);
+    expect(e.wounds).toEqual([]);
+    expect(e.meterCredit).toBe(0);
+    expect(e.damage).toBeCloseTo(withWounds.perBody[0]!.damage, 12);
+    expect(e.falloff).toBeCloseTo(withWounds.perBody[0]!.falloff, 12);
+    expect(e.rigImpulse?.vel).toEqual(withWounds.perBody[0]!.rigImpulse?.vel);
+    // ...and the shove is a real one, so the skip cannot silently take it with
+    // it: a gibbed body still flies.
+    expect(e.rigImpulse?.vel.some(v => Math.abs(v) > 1)).toBe(true);
+  });
+
   it('a blast over the TORSO opens cavities; limb wounds never do (entrails)', () => {
     const torso = zombie.clusters.find(c => c.limb === 'torso')!;
     const fx = resolveExplosion(torso.center, [{ id: 'z', body: zombie }]);
@@ -246,6 +273,50 @@ describe('launch impulses', () => {
         expect(e.rigImpulse!.vel[1]).toBeGreaterThanOrEqual(EXPLOSION_LAUNCH.minUpKickMps - 1e-9);
       }
     }
+  });
+
+  // ——— THE FOCUS KNOBS (owner, 2026-09-11: "the area of effect should be abit
+  // more focused", plus a body at the far edge being thrown off screen). ——————
+  it('radiusScale focuses every distance-gated term together', () => {
+    // A ball whose SURFACE sits at 3 m: inside the reference 4.6875 m radius,
+    // outside a 0.5-scaled one (2.34 m).
+    const at: [number, number, number] = [0, 1, 0];
+    const body = () => [{ id: 'a', body: ballBody([3.3, 1, 0]) }]; // surface 3.0 m
+    const full = resolveExplosion(at, body());
+    expect(full.perBody).toHaveLength(1);
+    expect(full.radiusM).toBeCloseTo(R, 9);
+    expect(full.perBody[0]!.wounds.length).toBeGreaterThan(0);
+
+    const tight = resolveExplosion(at, body(), { radiusScale: 0.5 });
+    expect(tight.radiusM).toBeCloseTo(R / 2, 9);
+    expect(tight.perBody).toHaveLength(0); // out of the focused blast entirely
+
+    // ...and the FIREBALL DID NOT MOVE. The visual was tuned and judged on its
+    // own (`?fxsize`, explosion-vfx.ts); a gameplay-focus slider that silently
+    // resized it would invalidate that pass.
+    expect(tight.burst.heightM).toBeCloseTo(full.burst.heightM, 9);
+  });
+
+  it('launchFloor scales how hard the radius EDGE is flung', () => {
+    // Surface at R − 0.01 → falloff ~0 → launchFall is the floor exactly.
+    const near = () => [{ id: 'a', body: ballBody([R - 0.01 + 0.3, 1, 0]) }];
+    const withFloor = Math.hypot(...resolveExplosion([0, 1, 0], near()).perBody[0]!.rigImpulse!.vel);
+    const noFloor = Math.hypot(...resolveExplosion(
+      [0, 1, 0], near(), { launchFloor: 0 },
+    ).perBody[0]!.rigImpulse!.vel);
+    // 0.45 of point-blank by default (NotBlood's comic edge fling). With the
+    // floor at 0 the radial launch is gone entirely and only the VERTICAL kick
+    // floor survives — which is why this is a ~2x difference and not "no motion
+    // at all": minUpKickMps is documented as a guaranteed readable slapstick arc
+    // on EVERY concussion launch, and that contract is older than this knob.
+    expect(withFloor).toBeGreaterThan(noFloor * 1.5);
+    // 4 digits is too fine: the ball's surface sits at R − 0.01, not exactly R,
+    // so a sliver of radial launch survives the floor.
+    expect(noFloor).toBeCloseTo(EXPLOSION_LAUNCH.minUpKickMps, 2);
+    // The epicentre is unaffected by the floor: launchFall is 1 either way.
+    const point = () => [{ id: 'a', body: ballBody([0.3, 1, 0]) }];
+    expect(Math.hypot(...resolveExplosion([0, 1, 0], point(), { launchFloor: 0 })
+      .perBody[0]!.rigImpulse!.vel)).toBeCloseTo(pointBlankSpeed, 6);
   });
 
   it('chunks in radius get concussion velocity, chunks beyond get nothing', () => {
@@ -424,5 +495,177 @@ describe('a turned body (bodyYaw) resolves the same blast as the rest body', () 
     const torso = zombie.clusters.find(c => c.limb === 'torso')!;
     expect(fx.severedLimbs).toEqual(cutLimbs(zombie, fx.wounds, torso.center));
     expect(fx.chainCuts).toEqual(cutChains(zombie, fx.wounds));
+  });
+});
+
+// ——— The prune, and why it is a BODY-level one (2026-09-10) ————————————————
+// `resolveExplosion` is handed EVERY body the caller knows about and, before
+// this, sphere-traced every prim of every one of them — each trace step folding
+// every prim of that body. On the arena's 23 bodies that measured 81-122 ms per
+// detonation, ~95% of the entire blast: the owner's "noticeable pause when the
+// explosion and the gib happens".
+//
+// The first version of this optimisation pruned PRIMS, on the reasoning that a
+// prim whose own surface is outside the radius cannot contribute. THE TEST BELOW
+// FALSIFIED IT, and the failure is worth keeping: the resolver's per-prim hit is
+// the distance to the BODY's surface along the ray, so a prim behind other flesh
+// reports a near hit — measured, a bound of 0.668 m against a reported hit at
+// 0.598 m, and a prim that was "provably outside" reporting a hit 4.15 m INSIDE
+// the radius. Only whole bodies can be pruned soundly.
+
+/** The same sphere-trace `traceSurface` runs (128 steps, 2 mm epsilon), against
+ *  the whole body — so this is the sampler the resolver actually uses. */
+function marchToPrim(at: Vec3, prim: Primitive, body: BuildResult): Vec3 | null {
+  const mid: Vec3 = [
+    (prim.a[0] + prim.b[0]) / 2, (prim.a[1] + prim.b[1]) / 2, (prim.a[2] + prim.b[2]) / 2,
+  ];
+  const dir = sub(mid, at);
+  const maxDist = len(dir);
+  if (maxDist < 1e-6) return sdBody(at, body) < 0.002 ? at : null;
+  const u = [dir[0] / maxDist, dir[1] / maxDist, dir[2] / maxDist] as Vec3;
+  let t = 0;
+  for (let i = 0; i < 128 && t < maxDist; i++) {
+    const p: Vec3 = [at[0] + u[0] * t, at[1] + u[1] * t, at[2] + u[2] * t];
+    const d = sdBody(p, body);
+    if (d < 0.002) return p;
+    t += Math.max(d, 0.002);
+  }
+  return null;
+}
+
+/** The UNPRUNED hit set: every live prim traced, exactly as before the change.
+ *  The independent reference the pruned resolver is compared against. */
+function referenceHits(at: Vec3, body: BuildResult, radiusM: number) {
+  const hits: number[] = [];
+  for (const c of body.clusters) {
+    if (!c.alive) continue;
+    for (const prim of body.prims.slice(c.start, c.start + c.count)) {
+      if (prim.op === 'sub' || prim.dead) continue;
+      const p = marchToPrim(at, prim, body);
+      if (!p) continue;
+      const distM = len(sub(p, at));
+      if (linearFalloff(distM, radiusM) <= 0) continue;
+      hits.push(distM);
+    }
+  }
+  hits.sort((a, b) => a - b);
+  return hits;
+}
+
+describe('resolve prunes whole bodies it provably cannot reach', () => {
+  const R_ = explosionRadiusM();
+  const blasts: Vec3[] = [
+    [0, 1, 0], [0.6, 1.1, 0.3], [1.6, 0.9, -0.5], [2.6, 1.2, 0.7],
+    [-1.1, 0.5, 0.9], [3.9, 1.0, 0.0], [0.0, 0.2, 0.0], [0.3, 1.7, -0.2],
+    [R_ - 0.2, 1, 0], [R_ - 0.2, 1.3, 0.3], [-(R_ - 0.3), 1, 0], [R_ + 0.05, 0.9, 0.2],
+  ];
+
+  it('the bound is a true lower bound on the PRIM OWN surface distance', () => {
+    // The property the bound actually claims. Sampled against the prim's OWN
+    // field (sdPrimitive), because the union's surface is a different thing —
+    // see this block's header for the falsified prim-level prune.
+    let checked = 0;
+    for (const at of blasts) {
+      for (const prim of zombie.prims) {
+        if (prim.op === 'sub' || prim.dead) continue;
+        const bound = primLowerBoundM(at, prim);
+        // March toward the prim's midpoint against that prim alone.
+        const mid: Vec3 = [
+          (prim.a[0] + prim.b[0]) / 2, (prim.a[1] + prim.b[1]) / 2, (prim.a[2] + prim.b[2]) / 2,
+        ];
+        const d0 = sdPrimitive(at, prim);
+        if (d0 < 0.002) continue;                // inside this prim: no bound claim
+        const dir = sub(mid, at), maxDist = len(dir);
+        if (maxDist < 1e-6) continue;
+        const u = [dir[0] / maxDist, dir[1] / maxDist, dir[2] / maxDist] as Vec3;
+        let t = 0, surface: number | null = null;
+        for (let i = 0; i < 256 && t < maxDist; i++) {
+          const p: Vec3 = [at[0] + u[0] * t, at[1] + u[1] * t, at[2] + u[2] * t];
+          const d = sdPrimitive(p, prim);
+          if (d < 0.002) { surface = t; break; }
+          t += Math.max(d, 0.002);
+        }
+        if (surface === null) continue;
+        expect(bound, `bound ${bound} vs own surface ${surface}`).toBeLessThanOrEqual(surface + 1e-9);
+        checked++;
+      }
+    }
+    expect(checked).toBeGreaterThan(50);         // the test is doing real work
+  });
+
+  it('a blast BURIED in the flesh stamps the same wounds as before the prune', () => {
+    // Inside the body every live prim yields a distance-0, full-falloff hit, so
+    // the wound count is the ring cap and the damage is point-blank. A prune
+    // that skipped far prims here would have quietly reduced the wound count of
+    // the most lethal case in the game.
+    const inside = zombie.clusters.find(c => c.limb === 'torso')!.center;
+    const fx = resolveExplosion(inside, [{ id: 'z', body: zombie }]);
+    const e = fx.perBody[0]!;
+    expect(e.distM).toBe(0);
+    expect(e.falloff).toBe(1);
+    expect(e.damage).toBeCloseTo(FULL_DMG, 6);
+    expect(e.gibbed).toBe(true);
+    const live = zombie.prims.filter(p => p.op !== 'sub' && !p.dead).length;
+    expect(e.wounds.length).toBe(Math.min(live, EXPLOSION_TUNING.maxWoundsPerBody));
+  });
+
+  it('AGREES WITH THE UNPRUNED REFERENCE at every blast position', () => {
+    // The load-bearing test: for each position, the pruned resolver's nearest
+    // distance, damage, gib verdict and wound count must equal what tracing
+    // EVERY prim produces. This is the gate the prim-level prune failed.
+    for (const at of blasts) {
+      const fx = resolveExplosion(at, [{ id: 'z', body: zombie }]);
+      const ref = referenceHits(at, zombie, R_);
+      const e = fx.perBody[0];
+      const label = `at ${at.map(v => v.toFixed(2)).join(',')}`;
+      if (ref.length === 0) {
+        expect(e, `${label}: expected no entry`).toBeUndefined();
+        continue;
+      }
+      expect(e, `${label}: expected an entry`).toBeDefined();
+      expect(e!.distM, `${label} nearest`).toBeCloseTo(ref[0]!, 9);
+      expect(e!.damage, `${label} damage`).toBeCloseTo(blastDamage(ref[0]!, R_), 9);
+      expect(e!.gibbed, `${label} gib`).toBe(e!.damage >= GIB_THRESHOLD);
+      expect(e!.wounds.length, `${label} wounds`)
+        .toBe(Math.min(ref.length, EXPLOSION_TUNING.maxWoundsPerBody));
+      // The shove rides the nearest surface too, so a prune that moved the hit
+      // would move the impulse.
+      expect(len(sub(e!.rigImpulse!.at, at)), `${label} impulse anchor`)
+        .toBeCloseTo(ref[0]!, 9);
+    }
+  });
+
+  it('a body wholly out of range contributes no effect entry at all', () => {
+    const off = 60;
+    const far: BuildResult = {
+      ...zombie,
+      prims: zombie.prims.map(p => ({ ...p, a: add(p.a, [off, 0, 0]) as Vec3, b: add(p.b, [off, 0, 0]) as Vec3 })),
+      clusters: zombie.clusters.map(c => ({ ...c, center: add(c.center, [off, 0, 0]) as Vec3 })),
+    };
+    const both = resolveExplosion([0, 1, 0], [
+      { id: 'near', body: zombie }, { id: 'far', body: far },
+    ]);
+    expect(both.perBody.map(b => b.bodyId)).toEqual(['near']);
+  });
+
+  it('the prune does not fire for a body that is genuinely in range', () => {
+    // Guards the other direction: a bound that was too eager would silently drop
+    // in-range bodies, and the agreement test above would then compare against a
+    // reference that also found nothing. This asserts the near case still yields
+    // an entry with a real distance.
+    for (const at of blasts) {
+      if (referenceHits(at, zombie, R_).length === 0) continue;
+      const e = resolveExplosion(at, [{ id: 'z', body: zombie }]).perBody[0];
+      expect(e, `at ${at.join(',')}`).toBeDefined();
+    }
+  });
+
+  it('segmentDistanceM clamps to the endpoints, not the infinite line', () => {
+    expect(segmentDistanceM([0, 0, 0], [1, 0, 0], [2, 0, 0])).toBeCloseTo(1, 12);
+    expect(segmentDistanceM([0, 1, 0], [1, 0, 0], [2, 0, 0])).toBeCloseTo(Math.SQRT2, 12);
+    // Collinear beyond the far end: the extended line would say 0.
+    expect(segmentDistanceM([5, 0, 0], [1, 0, 0], [2, 0, 0])).toBeCloseTo(3, 12);
+    // Degenerate (a === b) is a point, not a NaN.
+    expect(segmentDistanceM([0, 3, 0], [0, 0, 0], [0, 0, 0])).toBeCloseTo(3, 12);
   });
 });

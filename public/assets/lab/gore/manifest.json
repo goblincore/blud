@@ -1,0 +1,2904 @@
+{
+  "version": 1,
+  "sheet": "sheet.png",
+  "sheetSize": [
+    512,
+    6262
+  ],
+  "source": {
+    "frames": 16,
+    "dir": "/tmp/gib-clean",
+    "cols": null,
+    "rows": null,
+    "cells": 16,
+    "sides": 5,
+    "piecePx": 128,
+    "polyScale": 1,
+    "keyTol": 10,
+    "seed": 12345,
+    "mask": "body-hidden-capture"
+  },
+  "frames": [
+    {
+      "picnum": 9000,
+      "x": 0,
+      "y": 0,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 0,
+      "origin": "clean",
+      "coverage": 0.958,
+      "meanRgb": [
+        228,
+        141,
+        141
+      ]
+    },
+    {
+      "picnum": 9001,
+      "x": 124,
+      "y": 0,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 0,
+      "origin": "clean",
+      "coverage": 0.619,
+      "meanRgb": [
+        151,
+        88,
+        88
+      ]
+    },
+    {
+      "picnum": 9002,
+      "x": 248,
+      "y": 0,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 0,
+      "origin": "clean",
+      "coverage": 0.918,
+      "meanRgb": [
+        171,
+        91,
+        91
+      ]
+    },
+    {
+      "picnum": 9003,
+      "x": 372,
+      "y": 0,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 0,
+      "origin": "clean",
+      "coverage": 0.718,
+      "meanRgb": [
+        179,
+        114,
+        114
+      ]
+    },
+    {
+      "picnum": 9004,
+      "x": 0,
+      "y": 130,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 0,
+      "origin": "clean",
+      "coverage": 0.616,
+      "meanRgb": [
+        171,
+        118,
+        118
+      ]
+    },
+    {
+      "picnum": 9005,
+      "x": 124,
+      "y": 130,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 0,
+      "origin": "clean",
+      "coverage": 0.925,
+      "meanRgb": [
+        159,
+        93,
+        93
+      ]
+    },
+    {
+      "picnum": 9006,
+      "x": 248,
+      "y": 130,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 0,
+      "origin": "clean",
+      "coverage": 0.771,
+      "meanRgb": [
+        197,
+        121,
+        121
+      ]
+    },
+    {
+      "picnum": 9007,
+      "x": 372,
+      "y": 130,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 0,
+      "origin": "clean",
+      "coverage": 0.889,
+      "meanRgb": [
+        163,
+        95,
+        95
+      ]
+    },
+    {
+      "picnum": 9008,
+      "x": 0,
+      "y": 260,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 0,
+      "origin": "clean",
+      "coverage": 0.788,
+      "meanRgb": [
+        202,
+        127,
+        127
+      ]
+    },
+    {
+      "picnum": 9009,
+      "x": 124,
+      "y": 260,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 135,
+      "origin": "clean",
+      "coverage": 0.601,
+      "meanRgb": [
+        138,
+        87,
+        87
+      ]
+    },
+    {
+      "picnum": 9010,
+      "x": 248,
+      "y": 260,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 135,
+      "origin": "clean",
+      "coverage": 0.862,
+      "meanRgb": [
+        79,
+        46,
+        46
+      ]
+    },
+    {
+      "picnum": 9011,
+      "x": 372,
+      "y": 260,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 135,
+      "origin": "clean",
+      "coverage": 0.633,
+      "meanRgb": [
+        112,
+        66,
+        66
+      ]
+    },
+    {
+      "picnum": 9012,
+      "x": 0,
+      "y": 390,
+      "w": 120,
+      "h": 128,
+      "yawDeg": 135,
+      "origin": "clean",
+      "coverage": 0.991,
+      "meanRgb": [
+        31,
+        13,
+        13
+      ]
+    },
+    {
+      "picnum": 9013,
+      "x": 122,
+      "y": 390,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 135,
+      "origin": "clean",
+      "coverage": 0.681,
+      "meanRgb": [
+        42,
+        24,
+        24
+      ]
+    },
+    {
+      "picnum": 9014,
+      "x": 246,
+      "y": 390,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 135,
+      "origin": "clean",
+      "coverage": 0.753,
+      "meanRgb": [
+        88,
+        52,
+        51
+      ]
+    },
+    {
+      "picnum": 9015,
+      "x": 372,
+      "y": 390,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 135,
+      "origin": "clean",
+      "coverage": 0.925,
+      "meanRgb": [
+        83,
+        48,
+        47
+      ]
+    },
+    {
+      "picnum": 9016,
+      "x": 0,
+      "y": 520,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 135,
+      "origin": "clean",
+      "coverage": 0.747,
+      "meanRgb": [
+        42,
+        22,
+        22
+      ]
+    },
+    {
+      "picnum": 9017,
+      "x": 126,
+      "y": 520,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 135,
+      "origin": "clean",
+      "coverage": 0.823,
+      "meanRgb": [
+        80,
+        49,
+        48
+      ]
+    },
+    {
+      "picnum": 9018,
+      "x": 250,
+      "y": 520,
+      "w": 120,
+      "h": 128,
+      "yawDeg": 135,
+      "origin": "clean",
+      "coverage": 0.961,
+      "meanRgb": [
+        41,
+        20,
+        21
+      ]
+    },
+    {
+      "picnum": 9019,
+      "x": 372,
+      "y": 520,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 135,
+      "origin": "clean",
+      "coverage": 0.806,
+      "meanRgb": [
+        46,
+        23,
+        23
+      ]
+    },
+    {
+      "picnum": 9020,
+      "x": 0,
+      "y": 650,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 135,
+      "origin": "clean",
+      "coverage": 0.966,
+      "meanRgb": [
+        60,
+        31,
+        31
+      ]
+    },
+    {
+      "picnum": 9021,
+      "x": 124,
+      "y": 650,
+      "w": 120,
+      "h": 128,
+      "yawDeg": 135,
+      "origin": "clean",
+      "coverage": 0.579,
+      "meanRgb": [
+        85,
+        50,
+        49
+      ]
+    },
+    {
+      "picnum": 9022,
+      "x": 246,
+      "y": 650,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 135,
+      "origin": "clean",
+      "coverage": 0.493,
+      "meanRgb": [
+        43,
+        23,
+        23
+      ]
+    },
+    {
+      "picnum": 9023,
+      "x": 370,
+      "y": 650,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 135,
+      "origin": "clean",
+      "coverage": 0.77,
+      "meanRgb": [
+        64,
+        35,
+        35
+      ]
+    },
+    {
+      "picnum": 9024,
+      "x": 0,
+      "y": 780,
+      "w": 121,
+      "h": 128,
+      "yawDeg": 180,
+      "origin": "clean",
+      "coverage": 0.612,
+      "meanRgb": [
+        67,
+        39,
+        39
+      ]
+    },
+    {
+      "picnum": 9025,
+      "x": 123,
+      "y": 780,
+      "w": 123,
+      "h": 128,
+      "yawDeg": 180,
+      "origin": "clean",
+      "coverage": 0.76,
+      "meanRgb": [
+        35,
+        17,
+        17
+      ]
+    },
+    {
+      "picnum": 9026,
+      "x": 248,
+      "y": 780,
+      "w": 121,
+      "h": 128,
+      "yawDeg": 180,
+      "origin": "clean",
+      "coverage": 0.833,
+      "meanRgb": [
+        41,
+        21,
+        21
+      ]
+    },
+    {
+      "picnum": 9027,
+      "x": 371,
+      "y": 780,
+      "w": 123,
+      "h": 128,
+      "yawDeg": 180,
+      "origin": "clean",
+      "coverage": 0.638,
+      "meanRgb": [
+        33,
+        13,
+        14
+      ]
+    },
+    {
+      "picnum": 9028,
+      "x": 0,
+      "y": 910,
+      "w": 123,
+      "h": 128,
+      "yawDeg": 180,
+      "origin": "clean",
+      "coverage": 0.494,
+      "meanRgb": [
+        42,
+        21,
+        22
+      ]
+    },
+    {
+      "picnum": 9029,
+      "x": 125,
+      "y": 910,
+      "w": 120,
+      "h": 128,
+      "yawDeg": 180,
+      "origin": "clean",
+      "coverage": 0.987,
+      "meanRgb": [
+        24,
+        8,
+        9
+      ]
+    },
+    {
+      "picnum": 9030,
+      "x": 247,
+      "y": 910,
+      "w": 121,
+      "h": 128,
+      "yawDeg": 180,
+      "origin": "clean",
+      "coverage": 0.907,
+      "meanRgb": [
+        35,
+        15,
+        16
+      ]
+    },
+    {
+      "picnum": 9031,
+      "x": 370,
+      "y": 910,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 180,
+      "origin": "clean",
+      "coverage": 0.719,
+      "meanRgb": [
+        34,
+        17,
+        17
+      ]
+    },
+    {
+      "picnum": 9032,
+      "x": 0,
+      "y": 1040,
+      "w": 123,
+      "h": 128,
+      "yawDeg": 180,
+      "origin": "clean",
+      "coverage": 0.99,
+      "meanRgb": [
+        35,
+        10,
+        11
+      ]
+    },
+    {
+      "picnum": 9033,
+      "x": 125,
+      "y": 1040,
+      "w": 123,
+      "h": 128,
+      "yawDeg": 180,
+      "origin": "clean",
+      "coverage": 0.738,
+      "meanRgb": [
+        40,
+        18,
+        19
+      ]
+    },
+    {
+      "picnum": 9034,
+      "x": 250,
+      "y": 1040,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "clean",
+      "coverage": 0.632,
+      "meanRgb": [
+        39,
+        20,
+        20
+      ]
+    },
+    {
+      "picnum": 9035,
+      "x": 374,
+      "y": 1040,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "clean",
+      "coverage": 0.905,
+      "meanRgb": [
+        40,
+        20,
+        20
+      ]
+    },
+    {
+      "picnum": 9036,
+      "x": 0,
+      "y": 1170,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "clean",
+      "coverage": 0.748,
+      "meanRgb": [
+        38,
+        22,
+        22
+      ]
+    },
+    {
+      "picnum": 9037,
+      "x": 124,
+      "y": 1170,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "clean",
+      "coverage": 0.973,
+      "meanRgb": [
+        25,
+        7,
+        8
+      ]
+    },
+    {
+      "picnum": 9038,
+      "x": 250,
+      "y": 1170,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "clean",
+      "coverage": 0.593,
+      "meanRgb": [
+        51,
+        31,
+        31
+      ]
+    },
+    {
+      "picnum": 9039,
+      "x": 376,
+      "y": 1170,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "clean",
+      "coverage": 0.978,
+      "meanRgb": [
+        26,
+        7,
+        8
+      ]
+    },
+    {
+      "picnum": 9040,
+      "x": 0,
+      "y": 1300,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "clean",
+      "coverage": 0.912,
+      "meanRgb": [
+        33,
+        16,
+        16
+      ]
+    },
+    {
+      "picnum": 9041,
+      "x": 124,
+      "y": 1300,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "clean",
+      "coverage": 0.594,
+      "meanRgb": [
+        52,
+        27,
+        27
+      ]
+    },
+    {
+      "picnum": 9042,
+      "x": 250,
+      "y": 1300,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "clean",
+      "coverage": 0.846,
+      "meanRgb": [
+        37,
+        14,
+        14
+      ]
+    },
+    {
+      "picnum": 9043,
+      "x": 376,
+      "y": 1300,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "clean",
+      "coverage": 0.701,
+      "meanRgb": [
+        38,
+        18,
+        19
+      ]
+    },
+    {
+      "picnum": 9044,
+      "x": 0,
+      "y": 1430,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "clean",
+      "coverage": 0.977,
+      "meanRgb": [
+        40,
+        14,
+        15
+      ]
+    },
+    {
+      "picnum": 9045,
+      "x": 126,
+      "y": 1430,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "clean",
+      "coverage": 0.487,
+      "meanRgb": [
+        37,
+        14,
+        15
+      ]
+    },
+    {
+      "picnum": 9046,
+      "x": 252,
+      "y": 1430,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "clean",
+      "coverage": 0.796,
+      "meanRgb": [
+        35,
+        15,
+        15
+      ]
+    },
+    {
+      "picnum": 9047,
+      "x": 376,
+      "y": 1430,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "clean",
+      "coverage": 0.664,
+      "meanRgb": [
+        40,
+        18,
+        19
+      ]
+    },
+    {
+      "picnum": 9048,
+      "x": 0,
+      "y": 1560,
+      "w": 120,
+      "h": 128,
+      "yawDeg": 270,
+      "origin": "clean",
+      "coverage": 0.85,
+      "meanRgb": [
+        29,
+        12,
+        12
+      ]
+    },
+    {
+      "picnum": 9049,
+      "x": 122,
+      "y": 1560,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 270,
+      "origin": "clean",
+      "coverage": 0.654,
+      "meanRgb": [
+        67,
+        41,
+        41
+      ]
+    },
+    {
+      "picnum": 9050,
+      "x": 246,
+      "y": 1560,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 270,
+      "origin": "clean",
+      "coverage": 0.67,
+      "meanRgb": [
+        89,
+        59,
+        59
+      ]
+    },
+    {
+      "picnum": 9051,
+      "x": 370,
+      "y": 1560,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 270,
+      "origin": "clean",
+      "coverage": 0.605,
+      "meanRgb": [
+        53,
+        31,
+        31
+      ]
+    },
+    {
+      "picnum": 9052,
+      "x": 0,
+      "y": 1690,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 270,
+      "origin": "clean",
+      "coverage": 0.705,
+      "meanRgb": [
+        99,
+        58,
+        58
+      ]
+    },
+    {
+      "picnum": 9053,
+      "x": 124,
+      "y": 1690,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 270,
+      "origin": "clean",
+      "coverage": 0.628,
+      "meanRgb": [
+        45,
+        23,
+        23
+      ]
+    },
+    {
+      "picnum": 9054,
+      "x": 250,
+      "y": 1690,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 270,
+      "origin": "clean",
+      "coverage": 0.911,
+      "meanRgb": [
+        38,
+        15,
+        15
+      ]
+    },
+    {
+      "picnum": 9055,
+      "x": 374,
+      "y": 1690,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 270,
+      "origin": "clean",
+      "coverage": 0.73,
+      "meanRgb": [
+        41,
+        17,
+        17
+      ]
+    },
+    {
+      "picnum": 9056,
+      "x": 0,
+      "y": 1820,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 270,
+      "origin": "clean",
+      "coverage": 0.501,
+      "meanRgb": [
+        49,
+        29,
+        29
+      ]
+    },
+    {
+      "picnum": 9057,
+      "x": 124,
+      "y": 1820,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 270,
+      "origin": "clean",
+      "coverage": 0.571,
+      "meanRgb": [
+        45,
+        21,
+        22
+      ]
+    },
+    {
+      "picnum": 9058,
+      "x": 248,
+      "y": 1820,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 270,
+      "origin": "clean",
+      "coverage": 0.551,
+      "meanRgb": [
+        46,
+        24,
+        24
+      ]
+    },
+    {
+      "picnum": 9059,
+      "x": 372,
+      "y": 1820,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 0,
+      "origin": "gib-wounded",
+      "coverage": 0.472,
+      "meanRgb": [
+        154,
+        95,
+        95
+      ]
+    },
+    {
+      "picnum": 9060,
+      "x": 0,
+      "y": 1950,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 0,
+      "origin": "gib-wounded",
+      "coverage": 0.524,
+      "meanRgb": [
+        163,
+        93,
+        93
+      ]
+    },
+    {
+      "picnum": 9061,
+      "x": 124,
+      "y": 1950,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 0,
+      "origin": "gib-wounded",
+      "coverage": 0.924,
+      "meanRgb": [
+        241,
+        158,
+        158
+      ]
+    },
+    {
+      "picnum": 9062,
+      "x": 248,
+      "y": 1950,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 0,
+      "origin": "gib-wounded",
+      "coverage": 0.66,
+      "meanRgb": [
+        222,
+        153,
+        153
+      ]
+    },
+    {
+      "picnum": 9063,
+      "x": 372,
+      "y": 1950,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 0,
+      "origin": "gib-wounded",
+      "coverage": 0.452,
+      "meanRgb": [
+        165,
+        92,
+        93
+      ]
+    },
+    {
+      "picnum": 9064,
+      "x": 0,
+      "y": 2080,
+      "w": 120,
+      "h": 128,
+      "yawDeg": 0,
+      "origin": "gib-wounded",
+      "coverage": 0.95,
+      "meanRgb": [
+        210,
+        120,
+        120
+      ]
+    },
+    {
+      "picnum": 9065,
+      "x": 122,
+      "y": 2080,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 0,
+      "origin": "gib-wounded",
+      "coverage": 0.536,
+      "meanRgb": [
+        141,
+        82,
+        81
+      ]
+    },
+    {
+      "picnum": 9066,
+      "x": 246,
+      "y": 2080,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 0,
+      "origin": "gib-wounded",
+      "coverage": 0.796,
+      "meanRgb": [
+        139,
+        80,
+        79
+      ]
+    },
+    {
+      "picnum": 9067,
+      "x": 370,
+      "y": 2080,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 0,
+      "origin": "gib-wounded",
+      "coverage": 0.845,
+      "meanRgb": [
+        132,
+        69,
+        69
+      ]
+    },
+    {
+      "picnum": 9068,
+      "x": 0,
+      "y": 2210,
+      "w": 120,
+      "h": 128,
+      "yawDeg": 0,
+      "origin": "gib-wounded",
+      "coverage": 0.453,
+      "meanRgb": [
+        180,
+        111,
+        110
+      ]
+    },
+    {
+      "picnum": 9069,
+      "x": 122,
+      "y": 2210,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 0,
+      "origin": "gib-wounded",
+      "coverage": 0.468,
+      "meanRgb": [
+        165,
+        96,
+        95
+      ]
+    },
+    {
+      "picnum": 9070,
+      "x": 246,
+      "y": 2210,
+      "w": 120,
+      "h": 128,
+      "yawDeg": 0,
+      "origin": "gib-wounded",
+      "coverage": 0.774,
+      "meanRgb": [
+        166,
+        100,
+        100
+      ]
+    },
+    {
+      "picnum": 9071,
+      "x": 368,
+      "y": 2210,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 0,
+      "origin": "gib-wounded",
+      "coverage": 0.657,
+      "meanRgb": [
+        189,
+        118,
+        117
+      ]
+    },
+    {
+      "picnum": 9072,
+      "x": 0,
+      "y": 2340,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 135,
+      "origin": "gib-wounded",
+      "coverage": 0.792,
+      "meanRgb": [
+        115,
+        69,
+        69
+      ]
+    },
+    {
+      "picnum": 9073,
+      "x": 126,
+      "y": 2340,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 135,
+      "origin": "gib-wounded",
+      "coverage": 0.888,
+      "meanRgb": [
+        96,
+        55,
+        55
+      ]
+    },
+    {
+      "picnum": 9074,
+      "x": 250,
+      "y": 2340,
+      "w": 120,
+      "h": 128,
+      "yawDeg": 135,
+      "origin": "gib-wounded",
+      "coverage": 0.641,
+      "meanRgb": [
+        126,
+        75,
+        75
+      ]
+    },
+    {
+      "picnum": 9075,
+      "x": 372,
+      "y": 2340,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 135,
+      "origin": "gib-wounded",
+      "coverage": 0.991,
+      "meanRgb": [
+        28,
+        11,
+        12
+      ]
+    },
+    {
+      "picnum": 9076,
+      "x": 0,
+      "y": 2470,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 135,
+      "origin": "gib-wounded",
+      "coverage": 0.864,
+      "meanRgb": [
+        38,
+        21,
+        22
+      ]
+    },
+    {
+      "picnum": 9077,
+      "x": 126,
+      "y": 2470,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 135,
+      "origin": "gib-wounded",
+      "coverage": 0.636,
+      "meanRgb": [
+        90,
+        53,
+        53
+      ]
+    },
+    {
+      "picnum": 9078,
+      "x": 252,
+      "y": 2470,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 135,
+      "origin": "gib-wounded",
+      "coverage": 0.994,
+      "meanRgb": [
+        37,
+        17,
+        18
+      ]
+    },
+    {
+      "picnum": 9079,
+      "x": 378,
+      "y": 2470,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 135,
+      "origin": "gib-wounded",
+      "coverage": 0.968,
+      "meanRgb": [
+        32,
+        16,
+        17
+      ]
+    },
+    {
+      "picnum": 9080,
+      "x": 0,
+      "y": 2600,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 135,
+      "origin": "gib-wounded",
+      "coverage": 0.836,
+      "meanRgb": [
+        60,
+        34,
+        33
+      ]
+    },
+    {
+      "picnum": 9081,
+      "x": 124,
+      "y": 2600,
+      "w": 120,
+      "h": 128,
+      "yawDeg": 135,
+      "origin": "gib-wounded",
+      "coverage": 0.955,
+      "meanRgb": [
+        52,
+        26,
+        26
+      ]
+    },
+    {
+      "picnum": 9082,
+      "x": 246,
+      "y": 2600,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 135,
+      "origin": "gib-wounded",
+      "coverage": 0.572,
+      "meanRgb": [
+        49,
+        28,
+        28
+      ]
+    },
+    {
+      "picnum": 9083,
+      "x": 372,
+      "y": 2600,
+      "w": 120,
+      "h": 128,
+      "yawDeg": 135,
+      "origin": "gib-wounded",
+      "coverage": 0.945,
+      "meanRgb": [
+        62,
+        33,
+        33
+      ]
+    },
+    {
+      "picnum": 9084,
+      "x": 0,
+      "y": 2730,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 135,
+      "origin": "gib-wounded",
+      "coverage": 0.557,
+      "meanRgb": [
+        43,
+        26,
+        26
+      ]
+    },
+    {
+      "picnum": 9085,
+      "x": 126,
+      "y": 2730,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 135,
+      "origin": "gib-wounded",
+      "coverage": 0.802,
+      "meanRgb": [
+        84,
+        48,
+        48
+      ]
+    },
+    {
+      "picnum": 9086,
+      "x": 250,
+      "y": 2730,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 135,
+      "origin": "gib-wounded",
+      "coverage": 0.647,
+      "meanRgb": [
+        70,
+        39,
+        39
+      ]
+    },
+    {
+      "picnum": 9087,
+      "x": 374,
+      "y": 2730,
+      "w": 120,
+      "h": 128,
+      "yawDeg": 180,
+      "origin": "gib-wounded",
+      "coverage": 0.539,
+      "meanRgb": [
+        62,
+        36,
+        36
+      ]
+    },
+    {
+      "picnum": 9088,
+      "x": 0,
+      "y": 2860,
+      "w": 121,
+      "h": 128,
+      "yawDeg": 180,
+      "origin": "gib-wounded",
+      "coverage": 0.523,
+      "meanRgb": [
+        47,
+        25,
+        25
+      ]
+    },
+    {
+      "picnum": 9089,
+      "x": 123,
+      "y": 2860,
+      "w": 121,
+      "h": 128,
+      "yawDeg": 180,
+      "origin": "gib-wounded",
+      "coverage": 0.978,
+      "meanRgb": [
+        23,
+        9,
+        9
+      ]
+    },
+    {
+      "picnum": 9090,
+      "x": 246,
+      "y": 2860,
+      "w": 121,
+      "h": 128,
+      "yawDeg": 180,
+      "origin": "gib-wounded",
+      "coverage": 0.569,
+      "meanRgb": [
+        32,
+        13,
+        13
+      ]
+    },
+    {
+      "picnum": 9091,
+      "x": 369,
+      "y": 2860,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 180,
+      "origin": "gib-wounded",
+      "coverage": 0.479,
+      "meanRgb": [
+        39,
+        20,
+        20
+      ]
+    },
+    {
+      "picnum": 9092,
+      "x": 0,
+      "y": 2990,
+      "w": 120,
+      "h": 128,
+      "yawDeg": 180,
+      "origin": "gib-wounded",
+      "coverage": 0.96,
+      "meanRgb": [
+        27,
+        10,
+        10
+      ]
+    },
+    {
+      "picnum": 9093,
+      "x": 122,
+      "y": 2990,
+      "w": 123,
+      "h": 128,
+      "yawDeg": 180,
+      "origin": "gib-wounded",
+      "coverage": 0.78,
+      "meanRgb": [
+        36,
+        17,
+        17
+      ]
+    },
+    {
+      "picnum": 9094,
+      "x": 247,
+      "y": 2990,
+      "w": 123,
+      "h": 128,
+      "yawDeg": 180,
+      "origin": "gib-wounded",
+      "coverage": 0.908,
+      "meanRgb": [
+        33,
+        11,
+        12
+      ]
+    },
+    {
+      "picnum": 9095,
+      "x": 372,
+      "y": 2990,
+      "w": 121,
+      "h": 128,
+      "yawDeg": 180,
+      "origin": "gib-wounded",
+      "coverage": 0.705,
+      "meanRgb": [
+        42,
+        19,
+        19
+      ]
+    },
+    {
+      "picnum": 9096,
+      "x": 0,
+      "y": 3120,
+      "w": 121,
+      "h": 128,
+      "yawDeg": 180,
+      "origin": "gib-wounded",
+      "coverage": 0.497,
+      "meanRgb": [
+        44,
+        23,
+        23
+      ]
+    },
+    {
+      "picnum": 9097,
+      "x": 123,
+      "y": 3120,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 180,
+      "origin": "gib-wounded",
+      "coverage": 0.746,
+      "meanRgb": [
+        37,
+        15,
+        16
+      ]
+    },
+    {
+      "picnum": 9098,
+      "x": 247,
+      "y": 3120,
+      "w": 123,
+      "h": 128,
+      "yawDeg": 180,
+      "origin": "gib-wounded",
+      "coverage": 0.703,
+      "meanRgb": [
+        47,
+        25,
+        25
+      ]
+    },
+    {
+      "picnum": 9099,
+      "x": 372,
+      "y": 3120,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "gib-wounded",
+      "coverage": 0.457,
+      "meanRgb": [
+        44,
+        25,
+        25
+      ]
+    },
+    {
+      "picnum": 9100,
+      "x": 0,
+      "y": 3250,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "gib-wounded",
+      "coverage": 0.457,
+      "meanRgb": [
+        73,
+        52,
+        51
+      ]
+    },
+    {
+      "picnum": 9101,
+      "x": 126,
+      "y": 3250,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "gib-wounded",
+      "coverage": 0.785,
+      "meanRgb": [
+        53,
+        28,
+        28
+      ]
+    },
+    {
+      "picnum": 9102,
+      "x": 252,
+      "y": 3250,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "gib-wounded",
+      "coverage": 0.512,
+      "meanRgb": [
+        48,
+        28,
+        28
+      ]
+    },
+    {
+      "picnum": 9103,
+      "x": 378,
+      "y": 3250,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "gib-wounded",
+      "coverage": 0.884,
+      "meanRgb": [
+        32,
+        15,
+        15
+      ]
+    },
+    {
+      "picnum": 9104,
+      "x": 0,
+      "y": 3380,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "gib-wounded",
+      "coverage": 0.981,
+      "meanRgb": [
+        26,
+        7,
+        8
+      ]
+    },
+    {
+      "picnum": 9105,
+      "x": 126,
+      "y": 3380,
+      "w": 126,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "gib-wounded",
+      "coverage": 0.581,
+      "meanRgb": [
+        38,
+        18,
+        19
+      ]
+    },
+    {
+      "picnum": 9106,
+      "x": 254,
+      "y": 3380,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "gib-wounded",
+      "coverage": 0.642,
+      "meanRgb": [
+        49,
+        31,
+        31
+      ]
+    },
+    {
+      "picnum": 9107,
+      "x": 380,
+      "y": 3380,
+      "w": 126,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "gib-wounded",
+      "coverage": 0.965,
+      "meanRgb": [
+        35,
+        16,
+        16
+      ]
+    },
+    {
+      "picnum": 9108,
+      "x": 0,
+      "y": 3510,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "gib-wounded",
+      "coverage": 0.834,
+      "meanRgb": [
+        37,
+        20,
+        20
+      ]
+    },
+    {
+      "picnum": 9109,
+      "x": 126,
+      "y": 3510,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "gib-wounded",
+      "coverage": 0.675,
+      "meanRgb": [
+        52,
+        26,
+        26
+      ]
+    },
+    {
+      "picnum": 9110,
+      "x": 252,
+      "y": 3510,
+      "w": 126,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "gib-wounded",
+      "coverage": 0.964,
+      "meanRgb": [
+        40,
+        15,
+        16
+      ]
+    },
+    {
+      "picnum": 9111,
+      "x": 380,
+      "y": 3510,
+      "w": 126,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "gib-wounded",
+      "coverage": 0.592,
+      "meanRgb": [
+        34,
+        17,
+        17
+      ]
+    },
+    {
+      "picnum": 9112,
+      "x": 0,
+      "y": 3640,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "gib-wounded",
+      "coverage": 0.625,
+      "meanRgb": [
+        42,
+        17,
+        17
+      ]
+    },
+    {
+      "picnum": 9113,
+      "x": 126,
+      "y": 3640,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "gib-wounded",
+      "coverage": 0.931,
+      "meanRgb": [
+        39,
+        14,
+        14
+      ]
+    },
+    {
+      "picnum": 9114,
+      "x": 252,
+      "y": 3640,
+      "w": 126,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "gib-wounded",
+      "coverage": 0.495,
+      "meanRgb": [
+        35,
+        13,
+        13
+      ]
+    },
+    {
+      "picnum": 9115,
+      "x": 380,
+      "y": 3640,
+      "w": 126,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "gib-wounded",
+      "coverage": 0.914,
+      "meanRgb": [
+        35,
+        13,
+        13
+      ]
+    },
+    {
+      "picnum": 9116,
+      "x": 0,
+      "y": 3770,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 225,
+      "origin": "gib-wounded",
+      "coverage": 0.652,
+      "meanRgb": [
+        40,
+        18,
+        18
+      ]
+    },
+    {
+      "picnum": 9117,
+      "x": 126,
+      "y": 3770,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 270,
+      "origin": "gib-wounded",
+      "coverage": 0.686,
+      "meanRgb": [
+        43,
+        24,
+        24
+      ]
+    },
+    {
+      "picnum": 9118,
+      "x": 252,
+      "y": 3770,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 270,
+      "origin": "gib-wounded",
+      "coverage": 0.582,
+      "meanRgb": [
+        64,
+        40,
+        40
+      ]
+    },
+    {
+      "picnum": 9119,
+      "x": 378,
+      "y": 3770,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 270,
+      "origin": "gib-wounded",
+      "coverage": 0.489,
+      "meanRgb": [
+        76,
+        49,
+        49
+      ]
+    },
+    {
+      "picnum": 9120,
+      "x": 0,
+      "y": 3900,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 270,
+      "origin": "gib-wounded",
+      "coverage": 0.587,
+      "meanRgb": [
+        56,
+        35,
+        35
+      ]
+    },
+    {
+      "picnum": 9121,
+      "x": 124,
+      "y": 3900,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 270,
+      "origin": "gib-wounded",
+      "coverage": 0.824,
+      "meanRgb": [
+        41,
+        19,
+        19
+      ]
+    },
+    {
+      "picnum": 9122,
+      "x": 250,
+      "y": 3900,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 270,
+      "origin": "gib-wounded",
+      "coverage": 0.485,
+      "meanRgb": [
+        88,
+        52,
+        51
+      ]
+    },
+    {
+      "picnum": 9123,
+      "x": 374,
+      "y": 3900,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 270,
+      "origin": "gib-wounded",
+      "coverage": 0.616,
+      "meanRgb": [
+        48,
+        24,
+        24
+      ]
+    },
+    {
+      "picnum": 9124,
+      "x": 0,
+      "y": 4030,
+      "w": 122,
+      "h": 128,
+      "yawDeg": 270,
+      "origin": "gib-wounded",
+      "coverage": 0.46,
+      "meanRgb": [
+        94,
+        55,
+        53
+      ]
+    },
+    {
+      "picnum": 9125,
+      "x": 124,
+      "y": 4030,
+      "w": 126,
+      "h": 128,
+      "yawDeg": 270,
+      "origin": "gib-wounded",
+      "coverage": 0.5,
+      "meanRgb": [
+        43,
+        18,
+        18
+      ]
+    },
+    {
+      "picnum": 9126,
+      "x": 252,
+      "y": 4030,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 270,
+      "origin": "gib-wounded",
+      "coverage": 0.478,
+      "meanRgb": [
+        70,
+        44,
+        44
+      ]
+    },
+    {
+      "picnum": 9127,
+      "x": 378,
+      "y": 4030,
+      "w": 124,
+      "h": 128,
+      "yawDeg": 270,
+      "origin": "gib-wounded",
+      "coverage": 0.599,
+      "meanRgb": [
+        52,
+        27,
+        28
+      ]
+    },
+    {
+      "picnum": 9128,
+      "x": 0,
+      "y": 4160,
+      "w": 128,
+      "h": 126,
+      "yawDeg": 90,
+      "origin": "clean",
+      "coverage": 0.579,
+      "meanRgb": [
+        136,
+        88,
+        88
+      ]
+    },
+    {
+      "picnum": 9129,
+      "x": 130,
+      "y": 4160,
+      "w": 128,
+      "h": 126,
+      "yawDeg": 90,
+      "origin": "clean",
+      "coverage": 0.607,
+      "meanRgb": [
+        209,
+        142,
+        142
+      ]
+    },
+    {
+      "picnum": 9130,
+      "x": 260,
+      "y": 4160,
+      "w": 128,
+      "h": 126,
+      "yawDeg": 90,
+      "origin": "gib-wounded",
+      "coverage": 0.509,
+      "meanRgb": [
+        219,
+        147,
+        145
+      ]
+    },
+    {
+      "picnum": 9131,
+      "x": 0,
+      "y": 4288,
+      "w": 128,
+      "h": 126,
+      "yawDeg": 90,
+      "origin": "gib-wounded",
+      "coverage": 0.591,
+      "meanRgb": [
+        150,
+        88,
+        88
+      ]
+    },
+    {
+      "picnum": 9132,
+      "x": 130,
+      "y": 4288,
+      "w": 128,
+      "h": 124,
+      "yawDeg": 90,
+      "origin": "clean",
+      "coverage": 0.741,
+      "meanRgb": [
+        156,
+        105,
+        105
+      ]
+    },
+    {
+      "picnum": 9133,
+      "x": 260,
+      "y": 4288,
+      "w": 128,
+      "h": 124,
+      "yawDeg": 90,
+      "origin": "clean",
+      "coverage": 0.957,
+      "meanRgb": [
+        131,
+        78,
+        78
+      ]
+    },
+    {
+      "picnum": 9134,
+      "x": 0,
+      "y": 4416,
+      "w": 128,
+      "h": 124,
+      "yawDeg": 90,
+      "origin": "clean",
+      "coverage": 0.628,
+      "meanRgb": [
+        144,
+        85,
+        85
+      ]
+    },
+    {
+      "picnum": 9135,
+      "x": 130,
+      "y": 4416,
+      "w": 128,
+      "h": 124,
+      "yawDeg": 90,
+      "origin": "gib-wounded",
+      "coverage": 0.497,
+      "meanRgb": [
+        244,
+        187,
+        187
+      ]
+    },
+    {
+      "picnum": 9136,
+      "x": 260,
+      "y": 4416,
+      "w": 128,
+      "h": 124,
+      "yawDeg": 90,
+      "origin": "gib-wounded",
+      "coverage": 0.579,
+      "meanRgb": [
+        105,
+        71,
+        70
+      ]
+    },
+    {
+      "picnum": 9137,
+      "x": 0,
+      "y": 4542,
+      "w": 128,
+      "h": 124,
+      "yawDeg": 90,
+      "origin": "gib-wounded",
+      "coverage": 0.547,
+      "meanRgb": [
+        53,
+        35,
+        34
+      ]
+    },
+    {
+      "picnum": 9138,
+      "x": 130,
+      "y": 4542,
+      "w": 128,
+      "h": 124,
+      "yawDeg": 90,
+      "origin": "gib-wounded",
+      "coverage": 0.588,
+      "meanRgb": [
+        87,
+        47,
+        46
+      ]
+    },
+    {
+      "picnum": 9139,
+      "x": 260,
+      "y": 4542,
+      "w": 128,
+      "h": 124,
+      "yawDeg": 90,
+      "origin": "gib-wounded",
+      "coverage": 0.69,
+      "meanRgb": [
+        93,
+        56,
+        55
+      ]
+    },
+    {
+      "picnum": 9140,
+      "x": 0,
+      "y": 4668,
+      "w": 128,
+      "h": 124,
+      "yawDeg": 90,
+      "origin": "gib-wounded",
+      "coverage": 0.543,
+      "meanRgb": [
+        189,
+        116,
+        115
+      ]
+    },
+    {
+      "picnum": 9141,
+      "x": 130,
+      "y": 4668,
+      "w": 128,
+      "h": 122,
+      "yawDeg": 315,
+      "origin": "clean",
+      "coverage": 0.753,
+      "meanRgb": [
+        116,
+        70,
+        70
+      ]
+    },
+    {
+      "picnum": 9142,
+      "x": 260,
+      "y": 4668,
+      "w": 128,
+      "h": 122,
+      "yawDeg": 45,
+      "origin": "gib-wounded",
+      "coverage": 0.599,
+      "meanRgb": [
+        187,
+        110,
+        109
+      ]
+    },
+    {
+      "picnum": 9143,
+      "x": 0,
+      "y": 4794,
+      "w": 128,
+      "h": 121,
+      "yawDeg": 45,
+      "origin": "clean",
+      "coverage": 0.768,
+      "meanRgb": [
+        215,
+        143,
+        142
+      ]
+    },
+    {
+      "picnum": 9144,
+      "x": 130,
+      "y": 4794,
+      "w": 128,
+      "h": 121,
+      "yawDeg": 45,
+      "origin": "clean",
+      "coverage": 0.635,
+      "meanRgb": [
+        229,
+        160,
+        160
+      ]
+    },
+    {
+      "picnum": 9145,
+      "x": 260,
+      "y": 4794,
+      "w": 128,
+      "h": 121,
+      "yawDeg": 45,
+      "origin": "clean",
+      "coverage": 0.964,
+      "meanRgb": [
+        215,
+        127,
+        127
+      ]
+    },
+    {
+      "picnum": 9146,
+      "x": 0,
+      "y": 4917,
+      "w": 128,
+      "h": 121,
+      "yawDeg": 45,
+      "origin": "clean",
+      "coverage": 0.699,
+      "meanRgb": [
+        165,
+        100,
+        99
+      ]
+    },
+    {
+      "picnum": 9147,
+      "x": 130,
+      "y": 4917,
+      "w": 128,
+      "h": 121,
+      "yawDeg": 45,
+      "origin": "clean",
+      "coverage": 0.48,
+      "meanRgb": [
+        213,
+        132,
+        132
+      ]
+    },
+    {
+      "picnum": 9148,
+      "x": 260,
+      "y": 4917,
+      "w": 128,
+      "h": 121,
+      "yawDeg": 90,
+      "origin": "clean",
+      "coverage": 0.908,
+      "meanRgb": [
+        151,
+        87,
+        87
+      ]
+    },
+    {
+      "picnum": 9149,
+      "x": 0,
+      "y": 5040,
+      "w": 128,
+      "h": 121,
+      "yawDeg": 90,
+      "origin": "clean",
+      "coverage": 0.659,
+      "meanRgb": [
+        240,
+        173,
+        173
+      ]
+    },
+    {
+      "picnum": 9150,
+      "x": 130,
+      "y": 5040,
+      "w": 128,
+      "h": 121,
+      "yawDeg": 90,
+      "origin": "clean",
+      "coverage": 0.716,
+      "meanRgb": [
+        107,
+        70,
+        69
+      ]
+    },
+    {
+      "picnum": 9151,
+      "x": 260,
+      "y": 5040,
+      "w": 128,
+      "h": 121,
+      "yawDeg": 90,
+      "origin": "clean",
+      "coverage": 0.854,
+      "meanRgb": [
+        90,
+        51,
+        51
+      ]
+    },
+    {
+      "picnum": 9152,
+      "x": 0,
+      "y": 5163,
+      "w": 128,
+      "h": 121,
+      "yawDeg": 90,
+      "origin": "clean",
+      "coverage": 0.538,
+      "meanRgb": [
+        193,
+        131,
+        130
+      ]
+    },
+    {
+      "picnum": 9153,
+      "x": 130,
+      "y": 5163,
+      "w": 128,
+      "h": 121,
+      "yawDeg": 90,
+      "origin": "clean",
+      "coverage": 0.693,
+      "meanRgb": [
+        82,
+        49,
+        48
+      ]
+    },
+    {
+      "picnum": 9154,
+      "x": 260,
+      "y": 5163,
+      "w": 128,
+      "h": 121,
+      "yawDeg": 315,
+      "origin": "clean",
+      "coverage": 0.8,
+      "meanRgb": [
+        135,
+        77,
+        77
+      ]
+    },
+    {
+      "picnum": 9155,
+      "x": 0,
+      "y": 5286,
+      "w": 128,
+      "h": 121,
+      "yawDeg": 315,
+      "origin": "clean",
+      "coverage": 0.863,
+      "meanRgb": [
+        190,
+        122,
+        122
+      ]
+    },
+    {
+      "picnum": 9156,
+      "x": 130,
+      "y": 5286,
+      "w": 128,
+      "h": 121,
+      "yawDeg": 45,
+      "origin": "gib-wounded",
+      "coverage": 0.849,
+      "meanRgb": [
+        230,
+        158,
+        158
+      ]
+    },
+    {
+      "picnum": 9157,
+      "x": 260,
+      "y": 5286,
+      "w": 128,
+      "h": 121,
+      "yawDeg": 45,
+      "origin": "gib-wounded",
+      "coverage": 0.982,
+      "meanRgb": [
+        210,
+        126,
+        125
+      ]
+    },
+    {
+      "picnum": 9158,
+      "x": 0,
+      "y": 5409,
+      "w": 128,
+      "h": 121,
+      "yawDeg": 45,
+      "origin": "gib-wounded",
+      "coverage": 0.621,
+      "meanRgb": [
+        206,
+        128,
+        128
+      ]
+    },
+    {
+      "picnum": 9159,
+      "x": 130,
+      "y": 5409,
+      "w": 128,
+      "h": 121,
+      "yawDeg": 45,
+      "origin": "gib-wounded",
+      "coverage": 0.489,
+      "meanRgb": [
+        209,
+        128,
+        127
+      ]
+    },
+    {
+      "picnum": 9160,
+      "x": 260,
+      "y": 5409,
+      "w": 128,
+      "h": 121,
+      "yawDeg": 90,
+      "origin": "gib-wounded",
+      "coverage": 0.628,
+      "meanRgb": [
+        220,
+        143,
+        144
+      ]
+    },
+    {
+      "picnum": 9161,
+      "x": 0,
+      "y": 5532,
+      "w": 128,
+      "h": 121,
+      "yawDeg": 90,
+      "origin": "gib-wounded",
+      "coverage": 0.759,
+      "meanRgb": [
+        157,
+        105,
+        105
+      ]
+    },
+    {
+      "picnum": 9162,
+      "x": 130,
+      "y": 5532,
+      "w": 128,
+      "h": 121,
+      "yawDeg": 90,
+      "origin": "gib-wounded",
+      "coverage": 0.735,
+      "meanRgb": [
+        182,
+        118,
+        117
+      ]
+    },
+    {
+      "picnum": 9163,
+      "x": 260,
+      "y": 5532,
+      "w": 128,
+      "h": 121,
+      "yawDeg": 315,
+      "origin": "gib-wounded",
+      "coverage": 0.513,
+      "meanRgb": [
+        227,
+        166,
+        166
+      ]
+    },
+    {
+      "picnum": 9164,
+      "x": 0,
+      "y": 5655,
+      "w": 128,
+      "h": 121,
+      "yawDeg": 315,
+      "origin": "gib-wounded",
+      "coverage": 0.931,
+      "meanRgb": [
+        109,
+        58,
+        58
+      ]
+    },
+    {
+      "picnum": 9165,
+      "x": 130,
+      "y": 5655,
+      "w": 128,
+      "h": 121,
+      "yawDeg": 315,
+      "origin": "gib-wounded",
+      "coverage": 0.572,
+      "meanRgb": [
+        135,
+        84,
+        83
+      ]
+    },
+    {
+      "picnum": 9166,
+      "x": 260,
+      "y": 5655,
+      "w": 128,
+      "h": 119,
+      "yawDeg": 45,
+      "origin": "clean",
+      "coverage": 0.747,
+      "meanRgb": [
+        209,
+        136,
+        136
+      ]
+    },
+    {
+      "picnum": 9167,
+      "x": 0,
+      "y": 5778,
+      "w": 128,
+      "h": 119,
+      "yawDeg": 45,
+      "origin": "clean",
+      "coverage": 0.744,
+      "meanRgb": [
+        202,
+        128,
+        128
+      ]
+    },
+    {
+      "picnum": 9168,
+      "x": 130,
+      "y": 5778,
+      "w": 128,
+      "h": 119,
+      "yawDeg": 45,
+      "origin": "clean",
+      "coverage": 0.483,
+      "meanRgb": [
+        201,
+        129,
+        128
+      ]
+    },
+    {
+      "picnum": 9169,
+      "x": 260,
+      "y": 5778,
+      "w": 128,
+      "h": 119,
+      "yawDeg": 315,
+      "origin": "clean",
+      "coverage": 0.89,
+      "meanRgb": [
+        96,
+        55,
+        55
+      ]
+    },
+    {
+      "picnum": 9170,
+      "x": 0,
+      "y": 5899,
+      "w": 128,
+      "h": 119,
+      "yawDeg": 315,
+      "origin": "clean",
+      "coverage": 0.699,
+      "meanRgb": [
+        147,
+        90,
+        90
+      ]
+    },
+    {
+      "picnum": 9171,
+      "x": 130,
+      "y": 5899,
+      "w": 128,
+      "h": 119,
+      "yawDeg": 315,
+      "origin": "clean",
+      "coverage": 0.768,
+      "meanRgb": [
+        96,
+        62,
+        62
+      ]
+    },
+    {
+      "picnum": 9172,
+      "x": 260,
+      "y": 5899,
+      "w": 128,
+      "h": 119,
+      "yawDeg": 315,
+      "origin": "clean",
+      "coverage": 0.747,
+      "meanRgb": [
+        95,
+        58,
+        57
+      ]
+    },
+    {
+      "picnum": 9173,
+      "x": 0,
+      "y": 6020,
+      "w": 128,
+      "h": 119,
+      "yawDeg": 45,
+      "origin": "gib-wounded",
+      "coverage": 0.84,
+      "meanRgb": [
+        170,
+        99,
+        99
+      ]
+    },
+    {
+      "picnum": 9174,
+      "x": 130,
+      "y": 6020,
+      "w": 128,
+      "h": 119,
+      "yawDeg": 45,
+      "origin": "gib-wounded",
+      "coverage": 0.512,
+      "meanRgb": [
+        185,
+        111,
+        111
+      ]
+    },
+    {
+      "picnum": 9175,
+      "x": 260,
+      "y": 6020,
+      "w": 128,
+      "h": 119,
+      "yawDeg": 315,
+      "origin": "gib-wounded",
+      "coverage": 0.87,
+      "meanRgb": [
+        142,
+        82,
+        82
+      ]
+    },
+    {
+      "picnum": 9176,
+      "x": 0,
+      "y": 6141,
+      "w": 128,
+      "h": 119,
+      "yawDeg": 315,
+      "origin": "gib-wounded",
+      "coverage": 0.724,
+      "meanRgb": [
+        101,
+        60,
+        59
+      ]
+    }
+  ],
+  "frameStats": [
+    {
+      "file": "frame-00.png",
+      "dir": "/tmp/gib-clean",
+      "origin": "clean",
+      "yawDeg": 0,
+      "bodyPx": 38256,
+      "body": {
+        "x0": 597,
+        "y0": 228,
+        "x1": 782,
+        "y1": 619
+      },
+      "pieces": 9
+    },
+    {
+      "file": "frame-01.png",
+      "dir": "/tmp/gib-clean",
+      "origin": "clean",
+      "yawDeg": 45,
+      "bodyPx": 34189,
+      "body": {
+        "x0": 615,
+        "y0": 231,
+        "x1": 754,
+        "y1": 625
+      },
+      "pieces": 8
+    },
+    {
+      "file": "frame-02.png",
+      "dir": "/tmp/gib-clean",
+      "origin": "clean",
+      "yawDeg": 90,
+      "bodyPx": 20612,
+      "body": {
+        "x0": 635,
+        "y0": 235,
+        "x1": 725,
+        "y1": 628
+      },
+      "pieces": 11
+    },
+    {
+      "file": "frame-03.png",
+      "dir": "/tmp/gib-clean",
+      "origin": "clean",
+      "yawDeg": 135,
+      "bodyPx": 32080,
+      "body": {
+        "x0": 604,
+        "y0": 240,
+        "x1": 740,
+        "y1": 623
+      },
+      "pieces": 15
+    },
+    {
+      "file": "frame-04.png",
+      "dir": "/tmp/gib-clean",
+      "origin": "clean",
+      "yawDeg": 180,
+      "bodyPx": 36018,
+      "body": {
+        "x0": 601,
+        "y0": 241,
+        "x1": 778,
+        "y1": 614
+      },
+      "pieces": 10
+    },
+    {
+      "file": "frame-05.png",
+      "dir": "/tmp/gib-clean",
+      "origin": "clean",
+      "yawDeg": 225,
+      "bodyPx": 31295,
+      "body": {
+        "x0": 636,
+        "y0": 240,
+        "x1": 773,
+        "y1": 623
+      },
+      "pieces": 14
+    },
+    {
+      "file": "frame-06.png",
+      "dir": "/tmp/gib-clean",
+      "origin": "clean",
+      "yawDeg": 270,
+      "bodyPx": 20871,
+      "body": {
+        "x0": 651,
+        "y0": 235,
+        "x1": 744,
+        "y1": 628
+      },
+      "pieces": 11
+    },
+    {
+      "file": "frame-07.png",
+      "dir": "/tmp/gib-clean",
+      "origin": "clean",
+      "yawDeg": 315,
+      "bodyPx": 33035,
+      "body": {
+        "x0": 625,
+        "y0": 231,
+        "x1": 764,
+        "y1": 625
+      },
+      "pieces": 7
+    },
+    {
+      "file": "frame-00.png",
+      "dir": "/tmp/gib-wounded",
+      "origin": "gib-wounded",
+      "yawDeg": 0,
+      "bodyPx": 38406,
+      "body": {
+        "x0": 597,
+        "y0": 228,
+        "x1": 782,
+        "y1": 619
+      },
+      "pieces": 13
+    },
+    {
+      "file": "frame-01.png",
+      "dir": "/tmp/gib-wounded",
+      "origin": "gib-wounded",
+      "yawDeg": 45,
+      "bodyPx": 34251,
+      "body": {
+        "x0": 615,
+        "y0": 231,
+        "x1": 754,
+        "y1": 625
+      },
+      "pieces": 7
+    },
+    {
+      "file": "frame-02.png",
+      "dir": "/tmp/gib-wounded",
+      "origin": "gib-wounded",
+      "yawDeg": 90,
+      "bodyPx": 20563,
+      "body": {
+        "x0": 635,
+        "y0": 235,
+        "x1": 725,
+        "y1": 628
+      },
+      "pieces": 11
+    },
+    {
+      "file": "frame-03.png",
+      "dir": "/tmp/gib-wounded",
+      "origin": "gib-wounded",
+      "yawDeg": 135,
+      "bodyPx": 32106,
+      "body": {
+        "x0": 604,
+        "y0": 240,
+        "x1": 740,
+        "y1": 623
+      },
+      "pieces": 15
+    },
+    {
+      "file": "frame-04.png",
+      "dir": "/tmp/gib-wounded",
+      "origin": "gib-wounded",
+      "yawDeg": 180,
+      "bodyPx": 35947,
+      "body": {
+        "x0": 601,
+        "y0": 241,
+        "x1": 778,
+        "y1": 614
+      },
+      "pieces": 12
+    },
+    {
+      "file": "frame-05.png",
+      "dir": "/tmp/gib-wounded",
+      "origin": "gib-wounded",
+      "yawDeg": 225,
+      "bodyPx": 31081,
+      "body": {
+        "x0": 636,
+        "y0": 240,
+        "x1": 775,
+        "y1": 623
+      },
+      "pieces": 18
+    },
+    {
+      "file": "frame-06.png",
+      "dir": "/tmp/gib-wounded",
+      "origin": "gib-wounded",
+      "yawDeg": 270,
+      "bodyPx": 20819,
+      "body": {
+        "x0": 651,
+        "y0": 235,
+        "x1": 744,
+        "y1": 626
+      },
+      "pieces": 11
+    },
+    {
+      "file": "frame-07.png",
+      "dir": "/tmp/gib-wounded",
+      "origin": "gib-wounded",
+      "yawDeg": 315,
+      "bodyPx": 33132,
+      "body": {
+        "x0": 625,
+        "y0": 231,
+        "x1": 764,
+        "y1": 625
+      },
+      "pieces": 5
+    }
+  ]
+}

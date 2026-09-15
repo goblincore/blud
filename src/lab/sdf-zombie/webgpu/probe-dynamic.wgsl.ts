@@ -22,6 +22,7 @@
 import {
   DYN_RAY_CAP,
   GOLDEN_ANGLE,
+  LIGHT_FILL_REF_M,
   PROBE_GATHER_WORKGROUP,
   TWO_PI,
 } from '../probe-dynamic';
@@ -171,7 +172,14 @@ export const K_PROBE_GATHER = /* wgsl */ `fn kProbeGather(
           cone = t * t;
           if (cone <= 0.0) { continue; }
         }
-        radiance = radiance + color * (intensity * ndl * cone / d2);
+        // Hard point term plus the SOFT room-fill term (CPU twin:
+        // probe-dynamic.ts LIGHT_FILL_REF_M). For a point light the third vec4's
+        // .w carries the fill fraction instead of cosInner, which is why the
+        // cone branch above tests cosOuter first. A detonation sets it so the
+        // blast lights the ROOM rather than a disc of floor at the crater.
+        let fill = select((*lights)[lb + 2u].w, 0.0, cosOuter > -1.5);
+        let soft = select(fill / (1.0 + d2 / (${LIGHT_FILL_REF_M} * ${LIGHT_FILL_REF_M})), 0.0, fill > 0.0);
+        radiance = radiance + color * (intensity * ndl * cone * (1.0 / d2 + soft));
       }
       radiance = radiance * bh.albedo;
     }

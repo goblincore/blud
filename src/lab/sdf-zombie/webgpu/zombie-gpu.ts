@@ -2743,6 +2743,16 @@ export function createChunkGpuView(
     records,
     instCfg,
   } satisfies ChunkMaterialState;
+  // FRUSTUM CULLING WAS TRIED HERE AND MEASURED TO BUY NOTHING (2026-09-11).
+  // The box IS the bound, so Three's test is exact and it was frame-hash
+  // verified — but it is not worth the risk: measured with 64 pieces in the
+  // arena, 55 of them OUT of frame, culling the off-screen ones saved a median
+  // of -0.3 ms (spread +-2), because a piece whose proxy box is off-screen has
+  // its fragments clipped anyway and cost only a draw call. The piece cost is
+  // per piece IN FRAME, and no cull can touch that. See the dev-note.
+  //
+  // `Proxy IS the bound; don't double-cull` — the shader's per-pixel box reject
+  // is the only cull this path needs.
   mesh.frustumCulled = false;
 
   /** Crowd stage a (task 7c): push the chunk's per-instance uniforms into its

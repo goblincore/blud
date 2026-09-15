@@ -136,8 +136,29 @@ import {
   GRAPESHOT, SLUG, expired, spawnPellets, spawnSlug,
   stepProjectiles, traceProjectile, woundFromPellet, woundFromSlug, type Projectile,
 } from './game-weapon';
-import { resolveExplosion, type ExplosionBody } from '../explosion-aoe';
-import { woundWorldPos, woundCarveNormal, type Wound } from '../damage';
+import {
+  concussionVelocity, explosionRadiusM, resolveExplosion, EXPLOSION_PROFILE,
+  type BurstVisual, type ExplosionBody,
+} from '../explosion-aoe';
+import { EXPLOSION_LAUNCH, EXPLOSION_STANDARD, EXPLOSION_VFX_HEIGHT_SCALE } from '../../../game/gibs/tuning';
+import { chargeFraction, stepCook, throwDirection, throwSpeedMps, type CookState, type CookSignal } from '../fpv';
+import {
+  detonated as flightDetonated, makeFlight, stepFlight,
+  FLIGHT_TUNING, type FlightState,
+} from '../dynamite-flight';
+import { gibAll, gibAllPieces, type ChunkGroup } from '../sever';
+import { gibParts, type GibBoneRelease, type GibPiece } from '../gib-parts';
+import { createBurstLayer, createStickProp, type BurstLayer, type StickProp } from './fpv-view';
+import { createExplosionVfx, type ExplosionVfx } from './explosion-vfx';
+import {
+  createDynamitePanel, defaultsFrom as dynamiteDefaults, GIB_BONES, GIB_MODES,
+  type DynamitePanel, type DynamiteTuningKey, type DynamiteTuningValues,
+} from './dynamite-panel';
+import {
+  WEAPON_SLOTS, makeWeaponSlotState, requestSlot, slotForKey, slotLowerAmount, slotReady,
+  stepWeaponSlot, type WeaponSlot, type WeaponSlotState,
+} from './game-weapon-slots';
+import { setCarveProbeCapEnabled, setProbeCapEnabled, woundWorldPos, woundCarveNormal, type Wound } from '../damage';
 import type { ImpactGoutProfile, Droplet } from '../blood-sim';
 import {
   createBloodSim, spawnWoundDroplets, spawnImpactGout, emitTrails, stepBlood, IMPACT_GOUT,
@@ -159,7 +180,21 @@ import {
 } from './wound-panel';
 import { rngStreams, setRngSeed, seedFromUnit } from './rng';
 import { advance as advanceSimClock, simTimeMs, resetSimClock } from './sim-clock';
-import { chunkSettled, makeChunk, stepChunk } from '../gib-chunks';
+import { chunkSettled, makeChunk, stepChunk, type ChunkBox } from '../gib-chunks';
+import { bonePartGeometry, meatPartGeometry } from './gore-part-geom';
+import {
+  billboardGib, loadGibSheet, loadGibSpriteAtlas, makeGibSprite, pickFrame, type GibSpriteAtlas,
+} from './gib-sprites';
+import {
+  GIB_SPRITE_TUNING, applyMeshPose, clearSpritePieces, makeSpritePieceSet,
+  setSpritePiecesVisible, spawnSpritePiece, spritePieceStates, stepSpritePieces,
+  type SpritePieceSet,
+} from './gib-sprite-pieces';
+import { carveBodyIntoPieces, type CarvedLibrary, type CarvedPiece } from './gib-carve';
+import { compileBlob } from '../blob-compile';
+import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
+import { BONE_VARIANTS, MEAT_VARIANTS } from '../gore-parts';
+import type { ChunkLook } from '../chunk-bake-field';
 import { chunkBakeField } from '../chunk-bake-field';
 import { createChunkBakeJobs } from './chunk-bake-jobs';
 import { unpackChunkBake } from './chunk-bake-buffers';
@@ -167,6 +202,7 @@ import type { ChunkBakeData } from './chunk-bake-geometry';
 import {
   createBakedChunkMaterial, type BakedChunkMaterial,
 } from './baked-chunks';
+import { boneChunkRadius } from '../melt-bones';
 import { chunkExtent } from '../extent';
 import { createChunkGpuView, createSharedChunkGpuMaterial, type ChunkGpuView, type GpuViewOpts } from './zombie-gpu';
 import {
@@ -334,6 +370,27 @@ async function main() {
   // The world: grey-box meshes from the same layout that feeds collision.
   // -----------------------------------------------------------------------
   const colliders = levelColliders();
+
+  /**
+   * WHAT A DETACHED PIECE COLLIDES WITH. The owner, playing: *"it seems the gibs
+   * dont bounce off the walls/have collission"* — correct, and the reason was
+   * that `stepChunk` only ever knew about a floor plane at y = radius, so a
+   * piece thrown at a wall flew straight through it and out of the level.
+   *
+   * The boxes are `levelColliders()` — the SAME walls the player and the wander
+   * clamp collide with, and they are split around every doorway and tunnel
+   * mouth, so a gib sails out of an open door and bounces off the wall beside
+   * it. That is why this is the level's collider list and not a box drawn around
+   * each room: a room box would have sealed the doors.
+   *
+   * The ceiling is NOT one of those boxes (they end at WALL_H), so it comes in
+   * separately through the page's existing per-enclosure `ceilingAt` — the same
+   * lookup the bundle's flight already uses, which is why a piece cannot sail
+   * out through the arena's 6 m roof while the 3 m rooms keep theirs.
+   */
+  function chunkCollidersAt(pos: Vec3): { boxes: readonly ChunkBox[]; ceilingY: number } {
+    return { boxes: colliders, ceilingY: ceilingAt(pos[0], pos[2]) };
+  }
   // ---- ACTOR VISIBILITY CULL STATE ---------------------------------------
   //
   // EVERY binding updateVisibleActors closes over lives here, above the draw
@@ -518,6 +575,35 @@ async function main() {
   // is watching.
   const accentGroup = new THREE.Group();
   accentGroup.name = 'accent-lights';
+  // ——— EXPLOSION LIGHT POOL (2026-09-10) ————————————————————————————————
+  // Owner: "the explosion should cast dynamic light such that the whole room
+  // lights up." Two separate lighting paths have to be fed, because the level
+  // and the bodies are lit by different machinery:
+  //
+  //   THE LEVEL (walls, floor, kit) is lit by THREE lights — the accents above.
+  //   These pool lights live in the SAME GROUP for that reason: they ride the
+  //   same mesh-side registration (`router.register(accentGroup, 'mesh')`) and
+  //   the same per-room light lists, so a detonation lights the room the way a
+  //   brazier does rather than through a second, special-cased path.
+  //
+  //   THE BODIES (SDF-marched flesh) are NOT lit by THREE lights at all — the
+  //   march has its own uniforms. They see light through the probe GATHER's
+  //   dynamic light list, which is where the explosion is also pushed (see
+  //   gatherLights). THAT path is single-room by construction: it lights the
+  //   player's enclosure, so a blast in the next room lights nothing. That is
+  //   the documented architecture, not a property of this effect.
+  //
+  // Allocated ONCE at intensity 0 and only ever modulated: adding or removing a
+  // light at runtime forces a TSL shader recompile (the muzzle flash's own
+  // note), which would hitch on every detonation.
+  const EXPLOSION_LIGHTS = 3;
+  const explosionLightPool: THREE.PointLight[] = [];
+  for (let i = 0; i < EXPLOSION_LIGHTS; i++) {
+    const pl = new THREE.PointLight(0xffb060, 0, 0, 2);
+    pl.visible = false;
+    accentGroup.add(pl);
+    explosionLightPool.push(pl);
+  }
   const flickerLights: { light: THREE.PointLight; base: number; phase: number }[] = [];
   for (const r of ROOMS) {
     for (const a of r.accents) {
@@ -811,10 +897,12 @@ async function main() {
    *  room's ground rect grown by `margin` — a body that wandered from the
    *  next room into this one, or stands in the tunnel mouth, is lit by this
    *  room's probes (which clamp to the grid edge). Spawn room is not it. */
-  const nearRoom = (a: { pose(): { pos: Vec3 } }, r: RoomDef, margin = 1.5) => {
-    const q = a.pose().pos;
-    return q[0] >= r.minX - margin && q[0] <= r.maxX + margin && q[2] >= r.minZ - margin && q[2] <= r.maxZ + margin;
-  };
+  const nearRoom = (a: { pose(): { pos: Vec3 } }, r: RoomDef, margin = 1.5) =>
+    nearRoomPoint(a.pose().pos, r, margin);
+  /** The same rule for a bare POINT — the explosion light is not an actor. */
+  const nearRoomPoint = (q: Vec3, r: RoomDef, margin = 1.5) =>
+    q[0] >= r.minX - margin && q[0] <= r.maxX + margin
+    && q[2] >= r.minZ - margin && q[2] <= r.maxZ + margin;
   const _flashWorld = new THREE.Vector3();
   let probeFrame = 0;
   let probeGatherErrors = 0;
@@ -1038,6 +1126,146 @@ async function main() {
    *  across reloads — a remembered state would make a capture reproduce
    *  differently machine to machine. */
   let woundPanel: WoundPanel | null = null;
+  /** The DYNAMITE / GIB panel (dynamite-panel.ts). Fourth slot (right:782px),
+   *  ships VISIBLE but COLLAPSED like the other three. */
+  let dynamitePanel: DynamitePanel | null = null;
+
+  /**
+   * THE PANEL'S SETTER — one entry point for every knob it owns, and the
+   * read-back source for its sliders. A knob that the panel can move but this
+   * function ignores is the "tuning that looked applied and was not" bug both
+   * the beam and goo panels shipped; `dynamite-panel.test.ts` pins the key
+   * union against this switch's cases.
+   */
+  function applyDynamiteTuning(patch: Partial<DynamiteTuningValues>): void {
+    for (const [k, raw] of Object.entries(patch)) {
+      if (raw === undefined || !Number.isFinite(raw)) continue;
+      switch (k as DynamiteTuningKey) {
+        case 'maxchunks':
+          maxChunks = Math.max(1, Math.min(MAX_CHUNK_BUDGET, Math.round(raw)));
+          break;
+        case 'mode':
+          gibMode = GIB_MODES[Math.max(0, Math.min(2, Math.round(raw)))]!;
+          break;
+        case 'bones':
+          gibBones = GIB_BONES[Math.max(0, Math.min(2, Math.round(raw)))]!;
+          break;
+        case 'stagger':
+          gibStaggerFrames = Math.max(1, Math.min(8, Math.round(raw)));
+          break;
+        case 'tearSec':
+          gibTearSec = Math.max(0, Math.min(0.4, raw));
+          break;
+        case 'tearAmp':
+          tearShape.amplitudeM = Math.max(0, Math.min(0.12, raw));
+          break;
+        case 'tearJiggle':
+          tearShape.jiggleAmp = Math.max(0, Math.min(1, raw));
+          break;
+        case 'gibvel':
+          gibVelScale = Math.max(0, Math.min(2, raw));
+          break;
+        // SETTLED-PIECE DETAIL. `chunkdetail` sets the OVERRIDE, so once the
+        // slider is touched the piece stops following the creature's own
+        // surfaceNoiseAmp — which is the point of a look lever. The per-frame
+        // push reads all three, so a settled piece already on the floor changes
+        // on the next frame; there is no rebake.
+        case 'chunkdetail':
+          chunkDetailOverride = Math.max(0, Math.min(1, raw));
+          break;
+        case 'chunkdetailfreq':
+          chunkDetailFreq = Math.max(0.5, Math.min(64, raw));
+          break;
+        case 'chunkdetailalbedo':
+          chunkDetailAlbedo = Math.max(0, Math.min(1.5, raw));
+          break;
+        // FUTURE settles only — already-baked pieces stay baked until shot or
+        // recycled. The panel row says so too.
+        case 'chunkbake':
+          chunkBakeEnabled = Math.round(raw) === 1;
+          break;
+        case 'aoesize':
+          aoeRadiusScale = Math.max(0.3, Math.min(1.5, raw));
+          break;
+        case 'edgekick':
+          aoeLaunchFloor = Math.max(0, Math.min(1, raw));
+          break;
+        case 'fxlight':
+          fxLightScale = Math.max(0, Math.min(4, raw));
+          break;
+        case 'fxspread':
+          fxSpread = Math.max(0, Math.min(3, raw));
+          break;
+        case 'fxsize':
+          fxSize = Math.max(0.1, Math.min(2, raw));
+          break;
+        // Everything below is the burst module's own tuning record.
+        default: {
+          const fxKey: Record<string, string> = {
+            fxsmoke: 'smokeOpacity', fxlife: 'lifeSec', fxgain: 'gain', plume: 'plumeMix',
+            capflat: 'capFlatten', neck: 'plumeNeckH', cap: 'plumeCapH',
+            ringreach: 'ringReachH', ringopacity: 'ringOpacity', emberspeed: 'emberSpeedPerH',
+          };
+          const target = fxKey[k];
+          if (!target) break;
+          explosionVfx?.setTuning({
+            [target]: raw,
+            // The FLATTEN has a second field for the FIRE cap; keep them equal
+            // so one slider cannot leave the two halves of the cap disagreeing.
+            ...(k === 'capflat' ? { capFireFlatten: Math.min(1, 0.5 + raw * 0.25) } : {}),
+            // ...and the plume A/B is four settings in the page's own wiring
+            // (see the boot block), so the slider mirrors it here too.
+            ...(k === 'plume'
+              ? { fireCapShare: raw, capFlatten: 1 - (1 - 0.55) * raw,
+                  capFireFlatten: 1 - (1 - 0.5) * raw }
+              : {}),
+          } as never);
+          break;
+        }
+      }
+    }
+    // The tear is per-ACTOR state, so a change has to be pushed to every body —
+    // and to any body that starts tearing later (`scheduleGib` re-applies it).
+    for (const a of actors) a.setTearTuning({ sec: gibTearSec, ...tearShape });
+    dynamitePanel?.refresh();
+  }
+
+  /** What the panel reads back. The BURST half is asked of the module rather
+   *  than mirrored here: a second copy of those numbers would be the drift this
+   *  panel exists to avoid. */
+  function dynamiteTuningValues(): DynamiteTuningValues {
+    const t = explosionVfx?.tuning;
+    return {
+      ...dynamiteDefaults(),
+      maxchunks: maxChunks,
+      mode: Math.max(0, GIB_MODES.indexOf(gibMode as typeof GIB_MODES[number])),
+      bones: Math.max(0, GIB_BONES.indexOf(gibBones as typeof GIB_BONES[number])),
+      stagger: gibStaggerFrames,
+      tearSec: gibTearSec,
+      tearAmp: tearShape.amplitudeM,
+      tearJiggle: tearShape.jiggleAmp,
+      gibvel: gibVelScale,
+      // The settled piece's detail. `chunkdetail` reports the EFFECTIVE
+      // amplitude — the override if one is set, otherwise the creature's own
+      // surfaceNoiseAmp through the gain — because that is what the slider
+      // should show on open, and what the shader is actually using.
+      chunkdetail: chunkDetailOverride
+        ?? Math.min(1, (actors[0]?.view.uniforms.surfCfg2.value.y ?? 0) * CHUNK_DETAIL_GAIN),
+      chunkdetailfreq: chunkDetailFreq,
+      chunkdetailalbedo: chunkDetailAlbedo,
+      chunkbake: chunkBakeEnabled ? 1 : 0,
+      aoesize: aoeRadiusScale,
+      edgekick: aoeLaunchFloor,
+      fxsize: fxSize,
+      fxlight: fxLightScale,
+      fxspread: fxSpread,
+      ...(t ? {
+        fxsmoke: t.smokeOpacity, fxlife: t.lifeSec, fxgain: t.gain, plume: t.plumeMix,
+        capflat: t.capFlatten, neck: t.plumeNeckH, cap: t.plumeCapH,
+        ringreach: t.ringReachH, ringopacity: t.ringOpacity, emberspeed: t.emberSpeedPerH,
+      } : {}),
+    };
+  }
   /** The VHS panel (vhs-panel.ts). Same contract as the other two: ships
    *  VISIBLE but COLLAPSED, at the third slot (right:524px) so all three
    *  title bars sit side by side. The shipped 'blud' preset IS a sweep made
@@ -1352,8 +1580,11 @@ async function main() {
     // ahead of this draw; chunks repacked world-space there too — posed()
     // and posedBones() are always current). Both modes: in deferred mode the
     // instancer is a level-only G-buffer producer with the SAME packing.
-    if (boneMesh) {
-      {
+    // Bodies and CHUNKS are fed independently: `boneMesh` is the body switch,
+    // `gibBoneMesh` the detached-piece one. They were one flag, which is why gib
+    // bones could only be tubes if living skeletons became tubes as well.
+    if (boneMesh || gibBoneMesh) {
+      if (boneMesh) {
         const craters: { pos: Vec3; radius: number }[] = [];
         for (const a of actors) {
           const prims = a.posed().prims;
@@ -1362,8 +1593,10 @@ async function main() {
         boneInstancer.setWounds(craters);
       }
       boneInstancer.update([
-        ...actors.map(a => { const p = a.posed(); return { prims: p.bonePrims ?? [], alive: p.clusters.map(c => c.alive) }; }),
-        ...liveChunks.map(c => ({ prims: c.view.posedBones() })),
+        ...(boneMesh
+          ? actors.map(a => { const p = a.posed(); return { prims: p.bonePrims ?? [], alive: p.clusters.map(c => c.alive) }; })
+          : []),
+        ...(gibBoneMesh ? liveChunks.map(c => ({ prims: c.view.posedBones() })) : []),
       ]);
     }
     // skeleton=mesh: re-pose this frame's segment meshes + crater exposure.
@@ -1582,6 +1815,28 @@ async function main() {
         // contribution at 2 slots bounds the packed count near the flashes
         // alone; __sdfGame.setTracerLightSlots restores more if the look
         // wants them.
+        // (3b) LIVE EXPLOSIONS. Placed BEFORE the tracers for the same reason
+        // the flashes are: a detonation is the brightest event in the game and
+        // it must not lose its slot to a bullet trail. `explosionLights` is the
+        // same list the mesh-side pool reads, so the walls and the bodies cannot
+        // disagree about where the blast was or how bright it is.
+        for (const e of explosionLights) {
+          const k = explosionLightEnv(e.age);
+          if (k <= 0.001) continue;
+          if (gatherLights.length >= 8) break;
+          // Needs to be near the gather's room to reach it at all: the layer is
+          // the PLAYER'S enclosure, so a blast in the next room is dropped here
+          // for the same reason a tracer is (tracer-lights.ts).
+          if (!nearRoomPoint(e.pos, dynRoom)) continue;
+          gatherLights.push({
+            pos: [e.pos[0], e.pos[1], e.pos[2]],
+            color: [1.0, 0.55, 0.24],
+            intensity: EXPLOSION_LIGHT.gatherPeak * k * fxLightScale,
+            // The blast is the one light in the game that has to fill a ROOM
+            // rather than pool around its own position — see `fxSpread`.
+            fill: fxSpread,
+          });
+        }
         const tracerSlots = Math.min(tracerLightSlots, 8 - gatherLights.length);
         if (tracerSlots > 0 && tracerLightGain > 0) {
           gatherLights.push(...tracerGatherLights(liveTracers?.() ?? [], {
@@ -1704,14 +1959,68 @@ async function main() {
         segMeshRenderer.uniforms.spotColor.value.copy(flashlight.spot.color);
         segMeshRenderer.uniforms.spotCfg2.value.set(beamTuning.gain, beamTuning.shoulder, beamTuning.keyFloor, 0);
       }
-      // Baked chunks ride the same beam — same values, same formula.
-      if (bakedChunkMat) {
-        const bu = bakedChunkMat.uniforms;
+      // Baked chunks ride the same beam — same values, same formula. EVERY
+      // registered instance, not just the shared one: the gore-parts bench and
+      // the carved library build their OWN instances (they need their own
+      // `goreCfg`), and an instance that misses this block is lit by the static
+      // defaults — a fixed 2.4 directional key with the flashlight OFF, which
+      // blows flesh albedo to white in a dark room. That was the owner's "pale …
+      // nothing even abit fleshy".
+      // ...and the same MICRO-DETAIL. A settled chunk stops being marched, and
+      // the bake drops every per-pixel term the march had — which is why the
+      // owner's read was that the pieces "turn into this baked smooth albedo"
+      // beside a living zombie that "is pink and has a noisy normal texture".
+      // `surfCfg2.y` IS that texture (surfaceNoiseAmp), so it is copied off a
+      // LIVE body rather than re-authored: a piece and the creature it came off
+      // cannot drift apart, and the wound panel's slider moves both at once.
+      // Falls through with the last value when the cast is empty, so a piece
+      // does not go smooth the moment its own body is the last one gibbed.
+      const liveSurf = actors[0]?.view.uniforms.surfCfg2.value;
+      // THE ROOM'S LIGHT, every frame — not just the beam.
+      //
+      // `seedBaked` copies lightDir/keyColor/lightCfg and derives an ambient from
+      // body 1's six wall colours ONCE, when the material is created. So a
+      // settled piece was frozen to whatever room the FIRST chunk happened to
+      // bake in: carry the gore next door and it keeps the old room's fill,
+      // while the marched bodies beside it track the new one. The owner:
+      // "it doesnt appeart they follow the ambient and other enviroment light".
+      //
+      // Re-derived here from the same live view the seed read, by the same
+      // formula, so the only thing that changes is WHEN it is sampled.
+      const liveView = actors[0]?.view.uniforms;
+      // `?chunkdetail=` / `__sdfGame.setChunkDetail(x)` overrides the creature's
+      // own amplitude. The shipped value is the flesh preset's surfaceNoiseAmp
+      // (0.06), which is deliberately subtle on a marched body and is therefore
+      // hard to judge on a settled piece without sweeping it — so it sweeps.
+      const detailAmp = chunkDetailOverride
+        ?? (liveSurf ? Math.min(1, liveSurf.y * CHUNK_DETAIL_GAIN) : null);
+      for (const lm of litChunkMaterials) {
+        const bu = lm.uniforms;
         bu.spotPos.value.copy(flashlight.spot.position);
         bu.spotAxis.value.copy(sAxis);
         bu.spotCfg.value.set(spotOn, cosInner, cosOuter, flashlight.spot.distance);
         bu.spotColor.value.copy(flashlight.spot.color);
         bu.spotCfg2.value.set(beamTuning.gain, beamTuning.shoulder, beamTuning.keyFloor, 0);
+        if (detailAmp !== null) {
+          bu.fleshDetail.value.set(
+            detailAmp, chunkDetailFreq, chunkDetailAlbedo, 0);
+        }
+        if (liveView) {
+          bu.lightDir.value.copy(liveView.lightDir.value);
+          bu.keyColor.value.copy(liveView.keyColor.value);
+          bu.lightCfg.value.copy(liveView.lightCfg.value);
+          const w = [liveView.wallNegX, liveView.wallPosX, liveView.wallNegY,
+            liveView.wallPosY, liveView.wallNegZ, liveView.wallPosZ];
+          let mr = 0, mg = 0, mb = 0;
+          for (const c of w) { mr += c.value.r / 6; mg += c.value.g / 6; mb += c.value.b / 6; }
+          const fill = liveView.lightCfg.value.y;
+          const key = liveView.keyColor.value;
+          const pw = liveView.bounceCfg.value.x;
+          bu.ambient.value.setRGB(
+            fill * key.r + pw * mr * 0.5,
+            fill * key.g + pw * mg * 0.5,
+            fill * key.b + pw * mb * 0.5);
+        }
       }
     }
     // Front-to-back per-body passes (perf round 2 task 5): register this
@@ -2007,11 +2316,35 @@ async function main() {
     // DEFERRED MODE: the tubes are a level-only G-buffer producer (tissue —
     // a body's own hull must not swallow their light).
     deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined);
+  let gibBoneMesh = new URLSearchParams(location.search).get('gibbonemesh') !== '0';
   boneInstancer.object.layers.set(0);
-  boneInstancer.object.visible = false;
+  // Visible when EITHER path draws through it — gib bones alone are enough.
+  boneInstancer.object.visible = gibBoneMesh;
   scene.add(boneInstancer.object);
   deferredApi?.router.register(boneInstancer.object, 'mesh', 'level-only');
   let boneMesh = false;
+  /**
+   * GIB BONES ARE MESH TUBES, not marched field rows (2026-09-15, owner's call:
+   * "we need to change it so the bone gibs are mesh").
+   *
+   * Its own flag rather than `boneMesh`, because `boneMesh` switches BODIES too
+   * and a living actor already wears a different skeleton entirely — extracted
+   * segment meshes, `resolveSkeletonMode` defaulting to 'mesh'. Only DETACHED
+   * pieces were still marched, and only because of this in `spawnChunkPiece`:
+   *
+   *     setPackBones(boneOnly ? true : !boneMesh)
+   *
+   * A bone-only chunk was forced to pack its bone rows whatever the tube mode
+   * was, because with packing off its flesh list is empty, it marches an empty
+   * field, and the skeleton is invisible. That guard is right when nothing else
+   * draws the piece — but the instancer has been fed `liveChunks.map(c =>
+   * c.view.posedBones())` all along, so with tubes on there IS something else
+   * drawing it, and the guard is what kept the bones marched.
+   *
+   * This also relieves the cost the `gibbones=core` default was aimed at: a bone
+   * piece never bakes, so as a marched chunk it holds a view slot for its whole
+   * life. As a tube it holds none.
+   */
   // Accepted actor skeleton default: extracted meshes in forward mode.
   // ?skeleton=procedural restores the reference; volume remains dev-only.
   // Deferred and detached chunks retain procedural bones.
@@ -2156,7 +2489,7 @@ async function main() {
   }
   function applyBoneMesh(on: boolean): void {
     boneMesh = on;
-    boneInstancer.object.visible = on;
+    boneInstancer.object.visible = on || gibBoneMesh;
     for (const a of actors) a.view.setPackBones(!on);
     for (const c of liveChunks) c.view.setPackBones(!on);
   }
@@ -3099,8 +3432,42 @@ async function main() {
   // STATE ONLY here — this must run BEFORE the bone-instancer light-seed
   // block below reads bakedChunkMat (declaration order is execution order
   // in this boot). The bake/gib/free functions live in the chunk section.
+  //
+  // OFF BY DEFAULT SINCE 2026-09-15, and the reason is worth stating because the
+  // verdict above was honest when it was made. "Nothing off from non baked" was
+  // 2026-09-05. What changed afterwards is that `litChunkMaterials` landed — the
+  // per-frame push of the flashlight and the room's light — and the settled-chunk
+  // material was never registered with it, so from that day a baked piece shaded
+  // on a STATIC phantom key with the beam off. The bake did not get worse; it
+  // stopped being lit. That is fixed now, but it is not the whole gap.
+  //
+  // THE WHOLE GAP IS STRUCTURAL. `chunkShade` is a reimplementation of the
+  // march's lighting, and it reproduces a SUBSET. Against the marched piece
+  // flying beside it, a baked piece has:
+  //   * NO ambient occlusion — `bakedAo` is passed only by the carve, so a
+  //     settled chunk shades at ao = 1.0 and nothing on it can ever be in shadow;
+  //   * NO backlit scatter, though flesh is authored `translucency 0.45`;
+  //   * NO wound shadow;
+  //   * and a FLAT 0.15 KEY FLOOR (`0.15 + 0.85 * ndl`) that the march does not
+  //     have, so a surface facing directly away from the light still takes 15%
+  //     of it.
+  // Those four together are exactly the owner's read: "way too light and dont
+  // follow the lighting". They are not a tuning miss; each is a term that is not
+  // there, and closing them means porting the march's lighting piece by piece
+  // into a second shader that then has to be kept in step with it forever.
+  //
+  // Not baking makes the difference vanish BY CONSTRUCTION rather than by
+  // approximation: a settled piece is then the same renderer as a flying one,
+  // because it IS one. Bone pieces have always worked this way — they never bake
+  // — and they have never been the ones that looked wrong.
+  //
+  // THE COST IS REAL AND IS NOT MEASURED HERE: every settled piece stays a
+  // marched chunk holding a view slot for its life, which is what the bake was
+  // built to avoid. `?chunkbake=1`, the panel's `settle bake` row, or
+  // `__sdfGame.setChunkBake(true)` put it back for an A/B.
   const GAME_CHUNK_BAKE: 0 | 1 = 1;
-  let chunkBakeEnabled = (GAME_CHUNK_BAKE as 0 | 1) === 1;
+  let chunkBakeEnabled = new URLSearchParams(location.search).get('chunkbake') !== '0'
+    && (GAME_CHUNK_BAKE as 0 | 1) === 1;
   interface ChunkTemplate { uniforms: import('./zombie-gpu').MarchUniforms; volumeTexture: THREE.Texture }
   interface BakedChunk {
     id: number;
@@ -3119,6 +3486,40 @@ async function main() {
   // uniforms are LIVE (refreshed per frame beside the bone instancer's);
   // albedo is per-vertex so sharing costs nothing.
   let bakedChunkMat: BakedChunkMaterial | null = null;
+  /**
+   * EVERY material instance that must ride the flashlight beam.
+   *
+   * Found from the owner's report that the carved pieces (and the gore-parts
+   * bench before them) look "pale, like gray offwhite … nothing even abit
+   * fleshy". The per-frame beam update touched ONLY `bakedChunkMat`, so any
+   * other instance made by `createBakedChunkMaterial` kept the STATIC defaults:
+   * a fixed directional key of `lightCfg.x = 2.4` with `spotCfg.x = 0`, i.e. the
+   * flashlight switched OFF. In a dark room that is a body lit by a lamp that is
+   * not there, at ~2.5x — and `albedo * 2.46` on flesh colours clips every
+   * channel to white, which is exactly "concrete meets marble".
+   *
+   * MEASURED after the fix, on the bench: mean part pixel **(66, 49, 44)**,
+   * saturation **36.6%**, **0.1%** of part pixels clipped to white. The BEFORE
+   * state is a code reading, not a capture — the block below touched only
+   * `bakedChunkMat`, and an unregistered instance keeps `spotCfg.x = 0` (beam
+   * off) with `lightCfg.x = 2.4` — so the only number claimed here is the AFTER
+   * one. (An earlier revision of this comment quoted a before/after pair that
+   * was never measured; it has been removed.)
+   *
+   * So instances register here and the frame update walks the list, rather than
+   * each new material silently depending on someone remembering to add a second
+   * copy of the same block.
+   */
+  const litChunkMaterials: BakedChunkMaterial[] = [];
+
+  /** Register a material instance to be lit by the frame's beam. Every
+   *  `createBakedChunkMaterial` that is DRAWN must go through this — an
+   *  unregistered instance is not merely dimmer, it is lit by a lamp that does
+   *  not exist (see the block above). */
+  function registerLitChunkMaterial<T extends BakedChunkMaterial>(m: T): T {
+    litChunkMaterials.push(m);
+    return m;
+  }
   let bakedChunkSeed: ((m: BakedChunkMaterial) => void) | null = null;
   let totalBakes = 0;
   let lastBakeMs = 0;
@@ -3272,10 +3673,21 @@ async function main() {
   // -----------------------------------------------------------------------
   // Player: pointer lock + WASD + gravity + capsule-vs-AABB.
   // -----------------------------------------------------------------------
+  // BOOT SELECT. `?room=6` (or any room id, or its name) starts the player at
+  // that room's centre facing +z — the tuning loop's entry point, so a reload
+  // with a different ?fxsize lands you straight in the arena instead of walking
+  // there. Absent = PLAYER_START, bit-identical to before this existed. The
+  // in-page equivalent is __sdfGame.teleport(id).
+  const bootRoomParam = new URLSearchParams(location.search).get('room');
+  const bootRoom = bootRoomParam === null ? null
+    : ROOMS.find(r => r.name === bootRoomParam
+      || r.id === Number(bootRoomParam)) ?? null;
   const player: PlayerState = {
-    pos: [PLAYER_START.x, 0, PLAYER_START.z],
+    pos: bootRoom
+      ? [(bootRoom.minX + bootRoom.maxX) / 2, 0, (bootRoom.minZ + bootRoom.maxZ) / 2]
+      : [PLAYER_START.x, 0, PLAYER_START.z],
     vel: [0, 0, 0],
-    yaw: PLAYER_START.yaw,
+    yaw: bootRoom ? 0 : PLAYER_START.yaw,
     pitch: PLAYER_START.pitch,
     grounded: true,
   };
@@ -3359,6 +3771,28 @@ async function main() {
    *  replayed key set toggle slug mode exactly as a live press did. */
   function applyInputEdges(next: Set<string>): void {
     const pressed = (code: string): boolean => next.has(code) && !prevInputKeys.has(code);
+    // WEAPON SLOTS. 1 = grapeshot, 2 = dynamite. Refused while a bundle is lit:
+    // a player holding a burning bundle cannot put it away, which is the game's
+    // own rule (Blood's dynamite FSM has no exit from the armed state) and the
+    // one thing that stops slot-mashing being a free overcook cancel.
+    //
+    // A RISING-EDGE SCAN, not a keydown listener (rebase onto the input-seam
+    // refactor, 2026-09-15): the slot switch has to go through the same snapshot
+    // every other edge does, or a replayed key set would not switch weapons and
+    // the recording would diverge from the live run at the first slot press.
+    for (const code of next) {
+      if (prevInputKeys.has(code)) continue;
+      const wantSlot = slotForKey(code);
+      if (wantSlot === null) continue;
+      if (cook.phase === 'cooking') {
+        telemetry.event('weapon-switch-refused', { slot: wantSlot, reason: 'cooking' });
+      } else {
+        const before = slotState;
+        slotState = requestSlot(slotState, wantSlot);
+        if (slotState !== before) telemetry.event('weapon-switch', { to: wantSlot });
+      }
+      updateHud();
+    }
     if (pressed('BracketLeft')) pushProbeWeight(probeWeight - 0.05);
     if (pressed('BracketRight')) pushProbeWeight(probeWeight + 0.05);
     if (pressed('KeyP')) {
@@ -3386,7 +3820,10 @@ async function main() {
       woundPanel?.setVisible(!panelsHidden);
       gooPanel?.setVisible(!panelsHidden);
       vhsPanel?.setVisible(!panelsHidden);
+      dynamitePanel?.setVisible(!panelsHidden);
     }
+    // Manual reload. Dead under unlimited ammo BY CONSTRUCTION (the magazine is
+    // never partial), which is why ?ammo=finite is the way to exercise it.
     if (pressed('KeyR') && shells < MAGAZINE_CAPACITY && reloadAge > RELOAD.totalSec) {
       startReload();
     }
@@ -3438,14 +3875,31 @@ async function main() {
 
   // GRAPESHOT INPUT. Left = one barrel, right = both. The first click only
   // locks the pointer; shots need lock so a stray desktop click cannot fire.
+  // DYNAMITE (slot 2) takes the same left button but as a HELD input: press
+  // lights the fuse, release throws (fpv.ts's cook machine). Right button stays
+  // a shotgun verb — a bundle has no second barrel.
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   canvas.addEventListener('mousedown', (e) => {
     if (document.pointerLockElement !== canvas) return;
     if (replayActive) return; // the player owns the shot
+    if (!slotReady(slotState)) return;            // mid-switch: no verbs at all
+    if (slotState.live === 'dynamite') {
+      if (e.button === 0) dynPress = true;        // light it
+      return;
+    }
     // Deferred to the tick (see the input seam note): an edge event must land
-    // on exactly one frame or a recording cannot replay it.
+    // on exactly one frame or a recording cannot replay it. The dynamite press
+    // above is already a flag the tick consumes, so it is on the same seam.
     if (e.button === 0) pendingFire = 1;
     else if (e.button === 2) pendingFire = 2;
+  });
+  // The release half of the cook. Without this the bundle could only ever cook
+  // to an overcook, which is not the weapon.
+  window.addEventListener('mouseup', (e) => {
+    if (e.button !== 0) return;
+    if (document.pointerLockElement !== canvas) return;
+    if (slotState.live !== 'dynamite') return;
+    dynRelease = true;
   });
 
   // The seam for the grapeshot dispatch: a view-model hangs off this group,
@@ -3467,6 +3921,16 @@ async function main() {
   aimRig = new THREE.Group();
   aimRig.name = 'aim-rig';
   viewModelAnchor.add(aimRig);
+  // WEAPON SLOT 1's own subtree. Everything the grapeshot owns — the gun, both
+  // orb hands, the muzzle flash, the smoke pool, the ejected/loaded cases and
+  // its point light — hangs off THIS rather than off aimRig directly, so a
+  // weapon switch is ONE transform (drop it out of frame) instead of a
+  // per-node flag list that would silently miss whatever gets added next.
+  // aimRig keeps the free-aim lean and the walk bob; gunRig carries only the
+  // holster travel.
+  const gunRig = new THREE.Group();
+  gunRig.name = 'gun-rig';
+  aimRig.add(gunRig);
   camera.add(viewModelAnchor);
   scene.add(camera);
 
@@ -3745,7 +4209,7 @@ async function main() {
     gunGroup.rotation.z = THREE.MathUtils.degToRad(GUN_REST.rollDeg);
     gunGroup.rotation.x = THREE.MathUtils.degToRad(GUN_REST.pitchDeg);
     gunGroup.position.copy(GUN_REST.pos);
-    (aimRig ?? viewModelAnchor).add(gunGroup);
+    gunRig.add(gunGroup);
     // DEFERRED G-BUFFER ROUTE (composition review fix): the shorty is an
     // OPAQUE first-person surface — it belongs in the mesh pass (level-only
     // receiver, like the kits) so the shared light stage shades it, not a
@@ -3798,7 +4262,7 @@ async function main() {
     foreHandGroup.name = 'fpv-hand-fore';
     gripHandGroup.position.copy(GRIP_HAND_REST);
     foreHandGroup.position.copy(FORE_HAND_REST);
-    (aimRig ?? viewModelAnchor).add(gripHandGroup, foreHandGroup);
+    gunRig.add(gripHandGroup, foreHandGroup);
     aimArms();
     // DEFERRED G-BUFFER ROUTE: the goblin arms are opaque Standard-material
     // surfaces (skin, bracer, watch screen — game-arms.ts) — same route as
@@ -3829,8 +4293,8 @@ async function main() {
       return g;
     }
     for (let i = 0; i < 2; i++) {
-      const e = makeShell(`shell-eject-${i}`); ejectedShells.push(e); (aimRig ?? viewModelAnchor).add(e);
-      const l = makeShell(`shell-load-${i}`); loadShells.push(l); (aimRig ?? viewModelAnchor).add(l);
+      const e = makeShell(`shell-eject-${i}`); ejectedShells.push(e); gunRig.add(e);
+      const l = makeShell(`shell-load-${i}`); loadShells.push(l); gunRig.add(l);
       // DEFERRED G-BUFFER ROUTE: the shells are OPAQUE Standard meshes (red
       // hull, brass head) — level-only like the rest of the viewmodel. They
       // fly and tumble through the forward-composited frame, so this route
@@ -3872,7 +4336,7 @@ async function main() {
     flashGroup.position.set(MUZZLE_VIEW.x, MUZZLE_VIEW.y, MUZZLE_VIEW.z - 0.035);
     flashGroup.renderOrder = 999;
     for (const c of flashGroup.children) c.renderOrder = 999;
-    (aimRig ?? viewModelAnchor).add(flashGroup);
+    gunRig.add(flashGroup);
     flashMaterial = flashMat;
 
     // SMOKE. A small pool of soft puffs released at the muzzle, drifting up and
@@ -3890,7 +4354,7 @@ async function main() {
       );
       m.visible = false;
       smokePuffs.push({ mesh: m, age: Infinity, vel: new THREE.Vector3(), roll: 0 });
-      (aimRig ?? viewModelAnchor).add(m);
+      gunRig.add(m);
     }
 
     // MUZZLE FLASH -- level half. Allocated ONCE at intensity 0 and only ever
@@ -3905,7 +4369,7 @@ async function main() {
     // A little AHEAD of the bores, so it throws light down the room instead of
     // mostly onto the gun's own barrels.
     flashLight.position.set(MUZZLE_VIEW.x, MUZZLE_VIEW.y, MUZZLE_VIEW.z - 0.10);
-    (aimRig ?? viewModelAnchor).add(flashLight);
+    gunRig.add(flashLight);
     // The level's light lists were built before this light existed.
     refreshLevelLights();
     gunReady = true;
@@ -4264,6 +4728,24 @@ async function main() {
   /** Shells in the gun. The reload animation only means something if running
    *  dry is a state the player can be in. */
   let shells = MAGAZINE_CAPACITY;
+  /** UNLIMITED AMMO — ON by default, 2026-09-10 (owner: "i noticed we have like
+   *  'ammo'? it should be unlimited for now to make testing easier").
+   *
+   *  The grapeshot holds two shells and then spends 1.30 s breaking open and
+   *  reloading, which is the right feel for the weapon and pure friction for a
+   *  gib/blast tuning pass — every second shot is a reload instead of a test.
+   *  So running the magazine down is OFF unless asked for:
+   *
+   *    ?ammo=finite   restores the two-shell magazine, the dry click and the
+   *                   reload — which is the ONLY way to exercise that animation,
+   *                   so the flag is the reload gate, not a legacy switch.
+   *    __sdfGame.setInfiniteAmmo(false)   same, at runtime.
+   *
+   *  The gun's own 0.45 s fire cooldown still applies, so this is unlimited
+   *  AMMO, not an unlimited rate of fire. The dynamite needs nothing: its prop
+   *  pool refills the hand after each throw's recovery beat, so it was already
+   *  unlimited. */
+  let infiniteAmmo = new URLSearchParams(location.search).get('ammo') !== 'finite';
   /** Seconds into the reload, or Infinity when not reloading. */
   let reloadAge = Infinity;
   /** Varies the eject arc per reload (owner: "they always eject the same").
@@ -4287,19 +4769,25 @@ async function main() {
   let slugMode = new URLSearchParams(location.search).has('slug');
 
   function fire(barrels: 1 | 2): boolean {
+    // SLOT GATE. The grapeshot only speaks while it is the live weapon and the
+    // switch has settled — __sdfGame.fire()/fireSlug() go through here too, so
+    // a driver cannot fire the shotgun through a lit bundle.
+    if (slotState.live !== 'shotgun' || !slotReady(slotState)) return false;
     if (!gunReady || cooldown > 0) return false;
     if (reloadAge <= RELOAD.totalSec) return false;   // busy breaking/loading
-    if (shells <= 0) { startReload(); return false; } // click -> start reloading
+    if (!infiniteAmmo && shells <= 0) { startReload(); return false; } // click -> start reloading
     // Gunfire in a room turns every head in it, cone or no cone. Placed after
     // the guards on purpose: a dry click or a shot during a reload must not
     // alert anything, or the flag fires on inputs that made no noise.
-    barrels = Math.min(shells, barrels) as 1 | 2;
+    barrels = (infiniteAmmo ? barrels : Math.min(shells, barrels)) as 1 | 2;
     telemetry.event('shot', { kind: slugMode ? 'slug' : 'pellet', barrels });
     shotAlert = true;
     cooldown = GRAPESHOT.fireCooldownSec;
     recoilPitch += GRAPESHOT.kickRadPerBarrel * barrels;
-    shells = magazineAfterFire(shells, barrels);
-    if (shells <= 0) startReload();
+    if (!infiniteAmmo) {
+      shells = magazineAfterFire(shells, barrels);
+      if (shells <= 0) startReload();
+    }
     updateHud();
     flashAge = 0;
     fireAge = 0;
@@ -4351,23 +4839,323 @@ async function main() {
   // SDF chunk path — the same pipeline the lab gibs with, capped and
   // recycled so a gore party cannot churn views unboundedly.
   const MAX_CHUNKS = 12;
+  /**
+   * THE CHUNK-VIEW CEILING — what the shared record pool must be sized for.
+   *
+   * `MAX_CHUNKS` above is the PRE-DYNAMITE constant (12). The view recycler
+   * deliberately does not use it: `?maxchunks` is a live knob because a full-body
+   * gib is 19-20 pieces, and the comment on `maxChunks` records what a 12-view
+   * pool looked like — pieces 13-20 stealing the views of pieces 1-8 inside one
+   * call, which the owner read as "a weird distortion of the SDF bodies like
+   * jumping into positions".
+   *
+   * Main's crowd march (stage a, task 7c) then gave every chunk a SLOT in one
+   * shared record buffer, and `createSharedChunkGpuMaterial` sizes that buffer
+   * from what the page passes: "the page passes its own view cap (MAX_CHUNKS) so
+   * the pool can never under-allocate". On this branch that call site was passing
+   * the stale 12 while the recycler allowed 64, so the 13th piece of any real gib
+   * hit `shared chunk material is full (12 slots)` — THROWN, inside `gibActor`,
+   * inside the tick. The throw landed after the body had already been spliced out
+   * of `pendingGibs`, so the gib vanished silently: `gibbed` incremented,
+   * `gibPieces` stayed 0, the actor was never retired, and nothing reached the
+   * console because the animation loop swallowed it.
+   *
+   * So the pool is sized from the knob's CEILING, not its current value: the
+   * material is built once at boot and `?maxchunks` / the tuning panel can raise
+   * the budget at any time afterwards. 96 records is 16 vec4s each — 24 KB.
+   */
+  const MAX_CHUNK_BUDGET = 96;
+  // ——— DYNAMITE TUNING KNOBS (2026-09-10) ————————————————————————————————
+  // The whole point of the slot-2 feature is to JUDGE the blast and the gib, so
+  // the numbers that decide both are live seams rather than constants:
+  //   ?maxchunks=N   the live chunk-view budget. A full-body gib wants far more
+  //                  pieces than a severed arm does, and the budget is what
+  //                  bounds the bake queue (ONE job in flight, one swap per
+  //                  frame) — which is precisely the cost this feature exists
+  //                  to measure, so it must be a knob and not a constant.
+  //   ?gib=pieces|clusters  gibAllPieces (one chunk per prim — Blood's "lots of
+  //                  small chunks") or gibAll (one per limb; cheaper, and what
+  //                  a 12-view budget can actually hold).
+  //   ?dynspeed=K    scales both ends of the charge→speed band.
+  const DYN_PARAMS = new URLSearchParams(location.search);
+  // 24, not MAX_CHUNKS' 12: a full-body gib is 19-20 pieces, and a 12-view pool
+  // means pieces 13-20 steal the views of pieces 1-8 IN THE SAME CALL — the
+  // piece placed at A is re-placed at B before a frame is drawn, which the owner
+  // read as "a weird distortion of the SDF bodies like jumping into positions".
+  // `reset()` mutates the view in place, so it is a visible rearrangement rather
+  // than an error. Raise it and one gib fits; `?maxchunks=12` restores the old
+  // budget for a cost A/B.
+  // LIVE, all of these: the panel that tunes the gib sits beside the frame, and
+  // a knob that needs a reload per attempt is a knob the owner cannot use. The
+  // boot params below set the STARTING values.
+  let maxChunks = parseIntParam(DYN_PARAMS.get('maxchunks'), { min: 1, max: MAX_CHUNK_BUDGET }) ?? 64;
+  // GIBS ARE NOT BODIES. The resolver's concussion launch is tuned for DUDES
+  // (EXPLOSION_LAUNCH.velocityScale 0.028 on impulse 900 = ~25 m/s point-blank,
+  // "a survivor crosses the room"), and firing CHUNKS at that speed threw them
+  // out of an 8-16 m room before a single frame could be read — owner: "i cannot
+  // see the gibs its like they are launched at such a high velocity i barely even
+  // see them... they are supposed to explode and rain down". Chunks are small and
+  // light; this scales the launch. The resolver's upwardBias and its 6 m/s
+  // vertical floor are kept, so a slow piece still POPS UP and falls back —
+  // which is what "rain down" means.
+  let gibVelScale = parseFloatParam(DYN_PARAMS.get('gibvel'), { min: 0, max: 2 }) ?? 0.35;
+  // CLUSTERS BY DEFAULT (2026-09-10, owner look pass). `pieces` (gibAllPieces)
+  // makes ONE CHUNK PER ADDITIVE PRIM and, by that function's own design, gives
+  // each one `bones: []` — a single-prim fragment has no bone that matches it
+  // without splitting the bone. So the default shipped as: 19-20 small blobs,
+  // no bones, and a 20-deep bake queue. The owner's read was exactly that —
+  // "when a zombie SDF body gibs it turns into like weird lil balls but it
+  // should keep the body part shapes... another thing is there are no bones".
+  //
+  // `clusters` (gibAll) is one chunk per LIMB, carrying that cluster's live BONE
+  // prims: arm, forearm, thigh, shin, head, torso — body-part shapes, with
+  // skeletons, at ~6 views instead of 20. It is both the better look and the
+  // cheaper one, which is rare enough to take. `?gib=pieces` keeps the fine
+  // confetti for comparison; the real answer for "lots of small chunks WITH
+  // shape and bones" is pre-baked part meshes (see the dev-note).
+  //
+  // `parts` IS THE DEFAULT SINCE 2026-09-11 (gib-parts.ts). BOTH modes above
+  // were rejected by the owner in one review — "it just breaks into like tubes
+  // (arms and legs) and orbs (torso) which doesnt really read as gibs" plus "i
+  // still dont see anything bone related like idk rib cage or something" — and
+  // the two modes ARE those two complaints: clusters is one tube per limb and
+  // one orb per torso; pieces is bone-free confetti. `parts` splits the torso
+  // three ways, every limb at its joint, and releases the authored skeleton as
+  // its own bone-only chunks. The old modes stay as A/B controls in the knobs
+  // (`?gib=clusters` is the cheap one, for a cost comparison).
+  const gibParam = DYN_PARAMS.get('gib');
+  let gibMode: 'pieces' | 'clusters' | 'parts' =
+    gibParam === 'pieces' || gibParam === 'clusters' ? gibParam : 'parts';
+  /**
+   * HOW A PIECE IS DRAWN — `?gibrender=sprite` swaps the marched SDF piece for a
+   * billboard cut from our own rendered zombie (`public/assets/lab/gore/`).
+   *
+   * ORTHOGONAL TO `?gib=` ON PURPOSE, and that is the whole design: `gibMode`
+   * chooses the piece SET (which chunks leave the body, from which module), and
+   * this chooses what each chunk looks like on screen. The two never have to
+   * agree, so every piece set stays available to compare against the sprites and
+   * the blast's shape logic is untouched — a sprite piece is the SAME `Chunk`
+   * state, stepped by the SAME `stepChunk`, with the same stagger, the same
+   * settle rule and the same impulse release.
+   *
+   * DEFAULT IS `march`: this ships OPT-IN. Nothing about the shipped look
+   * changes until the owner has seen the paired numbers and said so.
+   */
+  // `?gibrender=carve` is the third mode: pieces are REAL MESHES carved from the
+  // archetype's own body, cut on a nearest-bone-group Voronoi so the boundaries
+  // land at joints (see webgpu/gib-carve.ts) — not marched SDF and not
+  // billboards. NB the bones are NOT in that field: `sdBody` skips op 'bone'
+  // outright, so the skeleton shows on a cut as MATERIAL (goreKind), not as
+  // silhouette. An earlier version of this comment claimed otherwise.
+  const gibRenderParam = DYN_PARAMS.get('gibrender');
+  let gibRenderMode: 'march' | 'sprite' | 'carve' =
+    gibRenderParam === 'sprite' ? 'sprite' : gibRenderParam === 'carve' ? 'carve' : 'march';
+  /** Slabs per cluster for the carved library — the GRANULARITY dial. */
+  // 1 SINCE THE ANATOMICAL PARTITION (2026-09-11): `cells` used to mean slabs per
+  // CLUSTER, where 3 was the owner's "more granular" ask; it now means
+  // SUBDIVISIONS OF AN ANATOMICAL PART, and 1 is one piece per bone group — a
+  // forearm, a shin, a skull. Leaving it at 3 cut every part into three again and
+  // put back exactly the abstraction the partition was written to remove
+  // ("they read a little too abstract ... should at least somewhat resemble
+  // pieces from the character"). `?gibcarvecells=2+` trades it back for gore.
+  const gibCarveCells = parseIntParam(DYN_PARAMS.get('gibcarvecells'), { min: 1, max: 8 }) ?? 1;
+  const gibCarveCellSize = parseFloatParam(DYN_PARAMS.get('gibcarvecell'), { min: 0.005, max: 0.05 }) ?? 0.01;
+  /**
+   * WHY A SETTLED PIECE NEEDS MORE MICRO-DETAIL THAN THE BODY IT CAME OFF.
+   *
+   * The creature's authored `surfaceNoiseAmp` is 0.06, and on a MARCHED body
+   * that is enough: the march perturbs a per-pixel analytic normal taken from
+   * the SDF gradient, and it has silhouette noise on top. A baked chunk has
+   * neither — its normal is an interpolated vertex normal across a 1 cm mesh,
+   * already smooth — so the identical amplitude reads as nothing at all.
+   *
+   * Measured on a FROZEN scene, one settled piece, same camera, same pixels:
+   * at 0 and at 0.06 the piece is a clean even gradient; at 0.9 it is visibly
+   * grainy; 0.35 is textured without reading as noise. 6x takes the authored
+   * 0.06 to 0.36, which lands in that band and keeps the value TRACKING the
+   * creature rather than replacing it — move the wound panel's slider and a
+   * settled piece still follows.
+   */
+  const CHUNK_DETAIL_GAIN = 6;
+  /** Domain scale for the settled piece's detail noise — the march uses 22 and
+   *  that is WRONG HERE. `fbm` sums octaves at 4x and 9x, so 22 lands them at
+   *  1.1 cm and 5 mm; the bake's cells are 1 cm, so the fine octave is sub-facet
+   *  and aliases into speckle ("little dots ... like glitter"). At 7 the octaves
+   *  are 3.6 cm and 1.6 cm — the finest is still ~1.6 cells, which is the
+   *  smallest a vertex-normal mesh can carry without sparkling. */
+  const CHUNK_DETAIL_FREQ = 7;
+  /** How hard the same field pushes the ALBEDO, +/- this fraction. Normal
+   *  perturbation alone reads as low contrast on a mesh; the living skin's
+   *  contrast is mostly colour. */
+  const CHUNK_DETAIL_ALBEDO = 0.28;
+  /** Override for the settled piece's micro-detail amplitude; null = follow the
+   *  live creature's `surfCfg2.y` through CHUNK_DETAIL_GAIN. See the per-frame
+   *  push and `setChunkDetail`. */
+  let chunkDetailOverride: number | null =
+    parseFloatParam(DYN_PARAMS.get('chunkdetail'), { min: 0, max: 1 }) ?? null;
+  /** Live twins of CHUNK_DETAIL_FREQ / CHUNK_DETAIL_ALBEDO. Both are LOOK
+   *  judgements — how coarse the grain should be, and how much of the contrast
+   *  should be colour rather than relief — so both sweep without a reload. */
+  let chunkDetailFreq = parseFloatParam(DYN_PARAMS.get('chunkdetailfreq'), { min: 0.5, max: 64 })
+    ?? CHUNK_DETAIL_FREQ;
+  let chunkDetailAlbedo = parseFloatParam(DYN_PARAMS.get('chunkdetailalbedo'), { min: 0, max: 1.5 })
+    ?? CHUNK_DETAIL_ALBEDO;
+  const gibSpriteLiveCap = parseIntParam(DYN_PARAMS.get('gibspritelive'), { min: 1, max: 512 })
+    ?? GIB_SPRITE_TUNING.liveCap;
+  const gibSpriteRestCap = parseIntParam(DYN_PARAMS.get('gibspriterest'), { min: 0, max: 512 })
+    ?? GIB_SPRITE_TUNING.restCap;
+  const gibSpriteSizeScale = parseFloatParam(DYN_PARAMS.get('gibspritesize'), { min: 0.2, max: 3 })
+    ?? GIB_SPRITE_TUNING.sizeScale;
+
+  /**
+   * THE POOL A BLAST ALLOCATES FROM, per render mode.
+   *
+   * The marched path's budget is the view pool's free slots PLUS whatever older
+   * gore can be recycled — see the long note at its call site. The sprite path
+   * has no view pool to divide: a quad has no proxy box and no bake, so the only
+   * thing left worth bounding is the COUNT, and the count is its own cap. Note
+   * what this means for the owner's "tubes and orbs" report: a body only ever
+   * degraded because the marched pool could not afford its full set, so in
+   * sprite mode the ladder below has nothing to react to and never fires.
+   * RESTING pieces do not count against it either — they have already left the
+   * live list (`stepSpritePieces` parks them), so a pile of old gore on the
+   * floor never eats a new blast's budget.
+   */
+  const gibBudget = () => (gibRenderMode !== 'march'
+    ? gibSpriteLiveCap
+    : Math.max(1, liveChunks.length + Math.max(0, maxChunks - chunkViews.length)));
+
+  /** What one body may take this blast. Identical in both modes EXCEPT that the
+   *  sprite path reserves no tier floor: the floor exists to guarantee every
+   *  body in a blast can afford the cheapest SHAPE, and sprite mode has no
+   *  shapes to choose between. */
+  const gibAllowance = (remaining: number, condemnedLeft: number) => (gibRenderMode !== 'march'
+    ? Math.max(1, remaining)
+    : Math.max(GIB_TIER_FLOOR, remaining - GIB_TIER_FLOOR * Math.max(0, condemnedLeft - 1)));
+
+  /** And what that body actually spent. The marched path debits at least a
+   *  floor's worth whatever it made, because the floor's slots are reserved for
+   *  it either way; sprite mode debits exactly what it made. */
+  const gibDebit = (remaining: number, made: number) => (gibRenderMode !== 'march'
+    ? Math.max(0, remaining - made)
+    : Math.max(0, remaining - Math.max(made, GIB_TIER_FLOOR)));
+  // WHICH BONE GROUPS A BLAST RELEASES. `all` is the eleven rigid groups
+  // (skull, cage, pelvis, eight long bones); `core` is the three torso masses
+  // plus the skull — the A/B for what the skeleton costs; `off` is the
+  // flesh-only control. `bone.cage` alone is 31 bone prims in ONE chunk, so
+  // this is the first knob to reach for if a blast's cost spikes.
+  const gibBonesParam = DYN_PARAMS.get('gibbones');
+  // CORE BY DEFAULT (2026-09-15, owner's call). `all` releases the eleven rigid
+  // groups; `core` is the three torso masses plus the skull. Bones are the
+  // expensive half of a gib and they NEVER BAKE — a bone piece is a marched
+  // chunk for as long as it exists, while flesh retires to a static mesh a
+  // second or two after it lands — so the eight long bones are eight permanent
+  // marched chunks holding view slots the flesh could have used. `?gibbones=all`
+  // restores the full skeleton; `off` is the flesh-only control.
+  let gibBones: GibBoneRelease =
+    gibBonesParam === 'off' ? 'off' : gibBonesParam === 'all' ? 'all' : 'core';
+  // THE STAGED RELEASE (dev-note §3a/b). Every piece spawns AT ITS CURRENT
+  // POSED TRANSFORM WITH ZERO VELOCITY, so the frame the blast lands shows the
+  // BODY's silhouette in place instead of a substitution, and the pieces then
+  // go over this many frames, NEAREST THE BLAST FIRST — which is what reads as
+  // the blast ripping outward through the body rather than a swap. 1 disables
+  // the stagger (everything leaves on the blast frame) and is the A/B control.
+  let gibStaggerFrames = parseIntParam(DYN_PARAMS.get('gibstagger'), { min: 1, max: 8 }) ?? 3;
+  // DOES A BODY THIS BLAST IS ABOUT TO GIB GET THE 16 WOUNDS STAMPED ON IT?
+  //
+  // No. The gibbed branch below takes `gibActor` and `continue`s, so those
+  // wounds are stamped, carried through the meter arithmetic and never read —
+  // and measured in the arena the wound phase is the blast's dominant cost
+  // (18.1 of a 22.0 ms resolve with 5 bodies in range). `?gibwounds=1`
+  // restores the old behaviour as the A/B; `setGibWounds` is the live seam so
+  // the two arms can be alternated INSIDE ONE BOOT, which is the only way an
+  // A/B on this machine is a measurement at all.
+  let gibWounds = DYN_PARAMS.get('gibwounds') === '1';
+  // The carve probe's cap, the OTHER half of the wound cost: `?carvecap=0`
+  // restores the uncapped march. Separate from `?woundcap` (the rim probe's)
+  // because the two probes have different consumers — the rim's is thresholded
+  // and was capped in the first pass, the carve's feeds a continuous depth and
+  // is capped at the point where the shader's slab stops binding.
+  setCarveProbeCapEnabled(DYN_PARAMS.get('carvecap') !== '0');
+  // THE PRE-TEAR WINDOW (dev-note §3c, gib-tear.ts): seconds the body is bent by
+  // the blast before it becomes pieces. 0 restores the old behaviour — the body
+  // is swapped for debris in the very frame the bundle goes off — and is the
+  // A/B for whether the window reads. It is the owner's own idea and the last
+  // piece of the transition design that was not built.
+  let gibTearSec = parseFloatParam(DYN_PARAMS.get('gibtear'), { min: 0, max: 0.4 }) ?? 0.1;
+  /** The pre-tear window's SHAPE, page-level so the panel owns it and every
+   *  actor is pushed the same values (ZombieActor keeps its own copy, which is
+   *  what makes a capture reproducible per body). */
+  const tearShape = { amplitudeM: 0.035, jiggleAmp: 0.4 };
+  /** The cheapest tier's piece count — one chunk per limb cluster, i.e. the
+   *  shape a body falls back to when the pool cannot afford anything better.
+   *  Held back for every body still to come in a blast, so no body is left with
+   *  less than this and none of them simply disappears. */
+  // 7, ONE CHUNK PER LIMB PLUS THE RIBCAGE — see the ladder's `clusters+cage`
+  // rung. Not 6: a reserve of 6 lets a crowded blast spend every body's slots on
+  // the shape whose bones are BURIED, and measured in the arena a point-blank
+  // bundle gibs five bodies, so that is not an edge case — it is what the owner
+  // sees in the room he tests in. Measured after the change, below.
+  const GIB_TIER_FLOOR = 7;
+  const dynSpeedScale = parseFloatParam(DYN_PARAMS.get('dynspeed'), { min: 0.1, max: 4 }) ?? 1;
+  // ——— EXPLOSION SIZE (owner feedback, 2026-09-10) ————————————————————————
+  // "the explosion makes it impossible to see the gibs... its not really what im
+  // going for - the current one is kinda like a big round fireball but in the
+  // original its more like a little mushroom cloud". The gib is the thing being
+  // tuned, so the blast must not stand in front of it.
+  //
+  // `resolveExplosion` sizes the burst from the GAMEPLAY radius: radiusM 4.69 m
+  // x EXPLOSION_VFX_HEIGHT_SCALE 0.42 = a 1.97 m half-height, i.e. a ~4 m tall
+  // burst in an 8 x 8 m room. Every layer scales off that half-height (the fire
+  // billboards, the smoke that rises 2.2x it, the ring), so ONE multiplier on
+  // the visual is the whole fix — and it stays decoupled from the AOE, which is
+  // what EXPLOSION_VFX_HEIGHT_SCALE's own comment says the visual is for.
+  let fxSize = parseFloatParam(DYN_PARAMS.get('fxsize'), { min: 0.1, max: 2 }) ?? 0.42;
+  // ——— THE BLAST'S FOCUS (owner, 2026-09-11): "it seems the effective radius of
+  // the explosion is quite large … the area of effect should be abit more
+  // focused". Both default to the reference behaviour, so nothing about the
+  // shipped blast moves; they are the panel's two blast sliders.
+  let aoeRadiusScale = parseFloatParam(DYN_PARAMS.get('aoesize'), { min: 0.3, max: 1.5 }) ?? 1;
+  // 0.45 is EXPLOSION_LAUNCH.falloffFloor — the resolver's default, kept here so
+  // the panel's read-back shows the value the blast actually uses.
+  let aoeLaunchFloor = parseFloatParam(DYN_PARAMS.get('edgekick'), { min: 0, max: 1 }) ?? 0.45;
+  const fxSmoke = parseFloatParam(DYN_PARAMS.get('fxsmoke'), { min: 0, max: 2 }) ?? 0.38;
+  const fxLife = parseFloatParam(DYN_PARAMS.get('fxlife'), { min: 0.3, max: 3 }) ?? 1.15;
+  const fxGain = parseFloatParam(DYN_PARAMS.get('fxgain'), { min: 0, max: 4 }) ?? 1.25;
+  // THE PLUME A/B. 1 (default) is the mushroom — the neck converges, the cap
+  // rolls outward and flattens, the smoke spawns on a rim. 0 is the round
+  // fireball this effect was before, blended term by term so ONE boot can A/B
+  // the two on the same burst. Kept off the four size/colour knobs because it
+  // is a SHAPE switch, and because `?explosionfx=atlas` is the reference the
+  // shape is judged against: run 0, run 1, run atlas, in that order.
+  const fxPlume = parseFloatParam(DYN_PARAMS.get('fxplume'), { min: 0, max: 1 }) ?? 1;
   // DEFERRED MODE: the shared chunk material carries the surface mode for
   // every detached chunk (one graph per output mode — the task-2 contract);
   // the legacy prev source is only bound in legacy mode.
   const chunkMaterial = createSharedChunkGpuMaterial(
     deferredMode ? undefined : sdfLayer.prev,
     deferredMode
-      ? { output: 'surface', shadowReceiver: 'level-only', maxChunks: MAX_CHUNKS }
-      : { maxChunks: MAX_CHUNKS },
+      ? { output: 'surface', shadowReceiver: 'level-only', maxChunks: MAX_CHUNK_BUDGET }
+      : { maxChunks: MAX_CHUNK_BUDGET },
   );
   const chunkViews: ChunkGpuView[] = [];
   const spareChunkViews: ChunkGpuView[] = [];
-  const liveChunks: { id: number; state: ReturnType<typeof makeChunk>; view: ChunkGpuView; template: ChunkTemplate }[] = [];
+  const liveChunks: {
+    id: number; state: ReturnType<typeof makeChunk>; view: ChunkGpuView; template: ChunkTemplate;
+    /** WHAT THIS PIECE IS, as it was SPAWNED. The render state it implies can be
+     *  read back off the view's uniforms (a bone piece is the pale one, a
+     *  bone-only piece is the one with no flesh), but "kind 'bone'" and "kind
+     *  'limb' with no prims" (an ORGAN piece) are indistinguishable from those
+     *  uniforms alone — both pack rows and neither is meat. The bone census
+     *  needs the spawn's own word. */
+    kind: 'limb' | 'gob' | 'bone';
+    boneOnly: boolean;
+  }[] = [];
   // The bake STATE (seam, bakedChunks, material) is declared near the boot's
   // light-seed block; here live only the bake/gib/free functions.
   /** Free a baked piece's mesh and return its view to the ring. The view is
    *  NOT disposed — the ring recycles it in place via reset(), exactly as
-   *  it always has (the leak gate counts these: bounded by MAX_CHUNKS). */
+   *  it always has (the leak gate counts these: bounded by `maxChunks`). */
   function freeBaked(b: BakedChunk): ChunkGpuView {
     const i = bakedChunks.indexOf(b);
     if (i >= 0) bakedChunks.splice(i, 1);
@@ -4390,9 +5178,11 @@ async function main() {
     if (!bakedChunkMat) {
       // Whichever finishes first (corpse or detached chunk) must seed the
       // same mode-aware shared material.
-      bakedChunkMat = createBakedChunkMaterial(
-        deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined,
-      );
+      bakedChunkMat = registerLitChunkMaterial(createBakedChunkMaterial(
+        deferredMode
+          ? { output: 'surface', shadowReceiver: 'level-only', bakedAo: true }
+          : { bakedAo: true },
+      ));
       bakedChunkSeed?.(bakedChunkMat);
     }
     return bakedChunkMat.material;
@@ -4400,6 +5190,325 @@ async function main() {
   const disposeCorpses = () => soldierCorpses?.dispose();
   window.addEventListener('pagehide', disposeCorpses);
   import.meta.hot?.dispose(() => { disposeCorpses(); window.removeEventListener('pagehide',disposeCorpses); });
+  // ——— THE GORE-PART SHOWCASE ————————————————————————————————————————————
+  //
+  // The owner asked for gibs to become "chunky meaty textured and blood stained
+  // mesh parts" (see docs/dev-notes/2026-09-11-gibs-as-classic-gore-parts), and
+  // whether they READ that way is his judgement, not a measurement. So the parts
+  // get a bench he can walk up to before any of it is wired into a blast — the
+  // same courtesy `?explosionfx` gave the burst. `?goreparts=1` lays a grid of
+  // them out in front of the spawn; `__sdfGame.goreShowcase()` re-lays it
+  // wherever he is standing.
+  //
+  // It renders through the EXISTING mesh gore path — one shared
+  // `createBakedChunkMaterial`, the same `bakeColor` attribute, the same
+  // router registration — so what he looks at is what a gib will render, with no
+  // second material to drift.
+  let goreShowcase: THREE.Group | null = null;
+  let gorePartMat: BakedChunkMaterial | null = null;
+  /** (detailAmp, bumpAmp, bloodAmp, noiseScale) for the parts' procedural detail
+   *  layer. Live: `__sdfGame.goreDetail({detail, bump, blood, noise})` rewrites it
+   *  so the layer can be A/B'd in one boot rather than argued about across two.
+   *
+   *  THE FOURTH TERM IS THE ONE THAT MATTERED. The owner's report — "when i saw the
+   *  mesh they had no texture no nothing just albedo" — was measured to be the noise
+   *  DOMAIN, not the amplitudes: these parts are built at final size (0.075-0.115 m)
+   *  with no mesh scale, and the bump's frequencies are 6-43 per unit, so an entire
+   *  part spanned LESS THAN ONE NOISE CYCLE. The bump was a smooth ramp, and the
+   *  measurement said so outright: mean |difference to the neighbouring pixel|
+   *  17.095 with the layer on vs 17.083 with it off, a ratio of 1.001. Scaling the
+   *  domain is what produces actual per-pixel relief. */
+  const gorePartDetail = new THREE.Vector4(1, 1.6, 0.9, 12);
+  /** `look` for the gore materials — the bakedChunkUniforms default until
+   *  `__sdfGame.goreLook()` moves it. See that API for why it is tunable. */
+  const goreLookCfg = new THREE.Vector4(0.65, 0.5, 1.2, 0.6);
+  /** (burnAmp, wetGain, bloodDark, stainScale) — the STAIN half. Defaults chosen
+   *  from the owner's verdict that the blood was too pale and too dry to read as
+   *  blood and that there were no burn stains at all: near-black venous blood
+   *  (bloodDark 0.85), driven hard into the highlight so it out-speculars the
+   *  flesh (wetGain 1.0), a full char field (burnAmp 1.0), and stains at a much
+   *  broader DOMAIN than the bump (stainScale 2.5) so they read as patches rather
+   *  than speckle. */
+  const gorePartStain = new THREE.Vector4(1, 1, 0.85, 2.5);
+  function spawnGoreShowcase(): number {
+    const look = ((): ChunkLook | null => {
+      // The palette comes from a live actor's own view uniforms, so the parts
+      // are painted with the same flesh the bodies in this level use.
+      const a = actors[0];
+      if (!a) return null;
+      const u = a.view.uniforms;
+      const col = (v: { r: number; g: number; b: number }): Vec3 => [v.r, v.g, v.b];
+      return {
+        baseColor: col(u.baseColor.value), deepColor: col(u.deepColor.value),
+        fatColor: col(u.fatColor.value), mottleColor: col(u.mottleColor.value),
+        organColor: col(u.organColor.value), visceraColor: col(u.visceraColor.value),
+        woundDepthAmp: u.surfCfg3.value.x, fatDepth: u.surfCfg3.value.y,
+        muscleDepth: u.surfCfg3.value.z, visceraAmp: u.surfCfg3.value.w,
+        visceraDepth: u.visceraDepth.value, mottleAmp: u.surfCfg2.value.z,
+        mottleScale: u.surfCfg2.value.w, organAmp: u.organAmp.value, goreStrength: 1,
+      };
+    })();
+    if (!look) return 0;
+    if (!goreShowcase) {
+      goreShowcase = new THREE.Group();
+      goreShowcase.name = 'gore-showcase';
+      scene.add(goreShowcase);
+      deferredApi?.router.register(goreShowcase, 'mesh', 'level-only');
+    }
+    for (const child of [...goreShowcase.children]) {
+      goreShowcase.remove(child);
+      const m = child as THREE.Mesh;
+      m.geometry?.dispose();
+    }
+    // ITS OWN material instance WITH the procedural detail layer on: bump, blood
+    // decals and organ gloss are opt-in per instance (`goreCfg.x`), so the baked
+    // chunks keep exactly the shading they had while the parts get the per-pixel
+    // detail the owner asked for ("no bumps or normal maps no stains no blood
+    // decals"). Assigning it to `bakedChunkMat` instead would silently restyle
+    // every settled piece at the same time, which is a decision to take on its
+    // own evidence.
+    if (!gorePartMat) {
+      gorePartMat = registerLitChunkMaterial(createBakedChunkMaterial({ goreDetail: true }));
+      gorePartMat.uniforms.goreCfg.value.set(
+        gorePartDetail.x, gorePartDetail.y, gorePartDetail.z, gorePartDetail.w,
+      );
+      gorePartMat.uniforms.goreCfg2.value.set(
+        gorePartStain.x, gorePartStain.y, gorePartStain.z, gorePartStain.w,
+      );
+    }
+    const mat = gorePartMat;
+    // A grid 2.4 m ahead, 0.42 m apart, at chest height, so a full set fills the
+    // view without needing to walk around it.
+    const fwd: Vec3 = [Math.sin(player.yaw), 0, -Math.cos(player.yaw)];
+    const right: Vec3 = [Math.cos(player.yaw), 0, Math.sin(player.yaw)];
+    const rows: { geo: ReturnType<typeof meatPartGeometry>; bone: boolean }[] = [];
+    let seed = 1;
+    for (const v of MEAT_VARIANTS) {
+      for (const size of [0.075, 0.115]) {
+        rows.push({ geo: meatPartGeometry(v, size, seed++, look), bone: false });
+      }
+    }
+    for (const v of BONE_VARIANTS) {
+      rows.push({ geo: bonePartGeometry(v, 0.075, seed++, look), bone: true });
+      rows.push({ geo: bonePartGeometry(v, 0.115, seed++, look), bone: true });
+    }
+    const perRow = 6;
+    rows.forEach((row, i) => {
+      const col = i % perRow, line = Math.floor(i / perRow);
+      const along = 1.6 + line * 0.55;
+      const across = (col - (perRow - 1) / 2) * 0.34;
+      const mesh = new THREE.Mesh(row.geo.geometry, mat.material);
+      mesh.position.set(
+        player.pos[0] + fwd[0] * along + right[0] * across,
+        0.42 + (row.bone ? 0.05 : 0),
+        player.pos[2] + fwd[2] * along + right[2] * across,
+      );
+      // A deterministic tumble per slot, so every face of every part is visible
+      // from one spot instead of all of them axis-aligned.
+      mesh.rotation.set((i * 0.7) % Math.PI, (i * 1.31) % (Math.PI * 2), (i * 0.43) % Math.PI);
+      mesh.frustumCulled = true;
+      goreShowcase!.add(mesh);
+    });
+    return rows.length;
+  }
+  const goreShowcaseOn = bootSearch.get('goreparts') === '1';
+
+  // ——— THE SPRITE BENCH ————————————————————————————————————————————————
+  //
+  // The same bench, rendered the way the REFERENCE game does it: billboarded
+  // cut-out sprites instead of 3D parts. The owner asked for exactly this
+  // ("generate spritesheets ... cut those up randomly and use them in the gibs
+  // ... sure you trade 3d but its not important in this case"), and the point of
+  // this mode is to answer ONE question — does a billboard read as gore in this
+  // room? — before any generation work is spent.
+  //
+  // The atlas here is the DEV-ONLY Blood extract (public/assets/gibs-placeholder,
+  // gitignored: never commit, never ship). A generated sheet replaces it.
+  let gibAtlas: GibSpriteAtlas | null = null;
+  let spriteBenchGroup: THREE.Group | null = null;
+  const spriteBenchSprites: THREE.Mesh[] = [];
+  const GIB_ATLAS_URL = '/assets/gibs-placeholder/manifest.json';
+  /** The GENERATED sheet: own render, own resolution, committable. */
+  const GIB_SHEET_URL = '/assets/lab/gore/manifest.json';
+  /** Which atlas the bench is showing. `sheet` is the one that ships. */
+  let gibAtlasSource: 'placeholder' | 'sheet' = 'placeholder';
+
+  // THE BLAST'S OWN SPRITES. One set for the whole page, in its own group so a
+  // sprite piece is separable from the marched views in the scene graph, in the
+  // deferred router, and in a capture. Empty and unused until
+  // `?gibrender=sprite` puts something in it — the shipped path never touches it.
+  const spritePieces: SpritePieceSet = makeSpritePieceSet();
+  scene.add(spritePieces.group);
+  deferredApi?.router.register(spritePieces.group, 'mesh', 'level-only');
+  /** One warning, not one per body per blast. See `gibActor`'s fallback. */
+  let gibSpriteAtlasWarned = false;
+  /** Keeps sprite trail-emitter ids out of the chunk ids' range — `emitTrails`
+   *  keys its per-emitter clock by id and the two sequences both start at 1. */
+  const SPRITE_TRAIL_ID_BASE = 0x4000_0000;
+
+  /**
+   * THE CARVED GIB LIBRARY — one per archetype, built on FIRST USE and reused by
+   * every zombie for the rest of the session (the owner's own design: "all
+   * zombies use the same gib library").
+   *
+   * Built from the COMPILED archetype, not the TS fallback: `makeZombie()` carries
+   * no authored bones, so a library built from it would have no skeleton in it —
+   * and the skeleton is the thing the carve exists to put back.
+   *
+   * The palette is read off a live actor's view uniforms so the pieces match the
+   * bodies in THIS level, and a shared material is used for every piece: the
+   * carved meshes carry a baked albedo + wound mask per vertex, and the
+   * `goreDetail` layer supplies the per-pixel bump and blood on top, exactly as
+   * the gore-parts bench does.
+   */
+  let carvedLibrary: CarvedLibrary | null = null;
+  let carvedMaterial: BakedChunkMaterial | null = null;
+  let carvedBuildMs = 0;
+  let carvedWarned = false;
+
+  function ensureCarvedLibrary(): boolean {
+    if (carvedLibrary && carvedMaterial) return true;
+    if (carvedLibrary) return true;
+    const a = actors[0];
+    if (!a) return false;
+    try {
+      const look: ChunkLook = (() => {
+        const u = a.view.uniforms;
+        const col = (v: { r: number; g: number; b: number }): Vec3 => [v.r, v.g, v.b];
+        return {
+          baseColor: col(u.baseColor.value), deepColor: col(u.deepColor.value),
+          fatColor: col(u.fatColor.value), mottleColor: col(u.mottleColor.value),
+          organColor: col(u.organColor.value), visceraColor: col(u.visceraColor.value),
+          woundDepthAmp: u.surfCfg3.value.x, fatDepth: u.surfCfg3.value.y,
+          muscleDepth: u.surfCfg3.value.z, visceraAmp: u.surfCfg3.value.w,
+          visceraDepth: u.visceraDepth.value, mottleAmp: u.surfCfg2.value.z,
+          mottleScale: u.surfCfg2.value.w, organAmp: u.organAmp.value, goreStrength: 1,
+        };
+      })();
+      const t0 = performance.now();
+      const body = buildBody(compileBlob(parseBlob(zombieBlobSrc)), DEFAULT_BUILD_OPTS, {});
+      carvedLibrary = carveBodyIntoPieces({
+        archetype: 'zombie', body, look,
+        cells: gibCarveCells, cellSize: gibCarveCellSize,
+      });
+      carvedBuildMs = performance.now() - t0;
+      if (!carvedMaterial) {
+        carvedMaterial = registerLitChunkMaterial(createBakedChunkMaterial({ goreDetail: true, bakedAo: true }));
+        carvedMaterial.uniforms.goreCfg.value.set(
+          gorePartDetail.x, gorePartDetail.y, gorePartDetail.z, gorePartDetail.w,
+        );
+        carvedMaterial.uniforms.goreCfg2.value.set(
+          gorePartStain.x, gorePartStain.y, gorePartStain.z, gorePartStain.w,
+        );
+      }
+      console.log(`[gib-carve] zombie library: ${carvedLibrary.pieces.length} pieces, `
+        + `${carvedLibrary.totalVerts} verts, ${carvedLibrary.bonePrims} bone prims in the field, `
+        + `${carvedBuildMs.toFixed(0)} ms (cells ${gibCarveCells})`);
+      return true;
+    } catch (err) {
+      carvedLibrary = null;
+      if (!carvedWarned) {
+        carvedWarned = true;
+        console.warn(`[gib-carve] library build failed: ${String(err)} — `
+          + 'falling back to marched pieces for this session');
+      }
+      return false;
+    }
+  }
+
+  /**
+   * Spawn one carved mesh piece. The geometry is SHARED from the library and the
+   * material is the library's own instance, so a spawn allocates nothing but the
+   * Mesh and its `Chunk` state — which is why "bake at spawn" costs nothing once
+   * the library exists.
+   */
+  function spawnCarvedPiece(
+    piece: CarvedPiece, origin: Vec3, kind: 'limb' | 'gob' | 'bone',
+    impulseVel: Vec3 | null, impulseDelay: number,
+  ): boolean {
+    if (!ensureCarvedLibrary() || !carvedMaterial) return false;
+    const rng = rngStreams.misc;
+    const state = makeChunk(
+      piece.limb as never, origin, [0, 0, 0], piece.radius,
+      piece.longAxis as never, rng, kind,
+    );
+    spawnSpritePiece(spritePieces, {
+      state,
+      impulseDelay, impulseVel,
+      render: 'mesh', geometry: piece.geometry, material: carvedMaterial.material,
+    });
+    return true;
+  }
+
+  /** Lay the sprite bench out in front of the player, sized like real gibs. */
+  function laySpriteBench(): number {
+    if (!gibAtlas) return 0;
+    if (!spriteBenchGroup) {
+      spriteBenchGroup = new THREE.Group();
+      spriteBenchGroup.name = 'gib-sprite-bench';
+      scene.add(spriteBenchGroup);
+      deferredApi?.router.register(spriteBenchGroup, 'mesh', 'level-only');
+    }
+    for (const child of [...spriteBenchGroup.children]) {
+      spriteBenchGroup.remove(child);
+      const m = child as THREE.Mesh;
+      m.geometry?.dispose();
+      (m.material as THREE.Material)?.dispose();
+    }
+    spriteBenchSprites.length = 0;
+    const fwd: Vec3 = [Math.sin(player.yaw), 0, -Math.cos(player.yaw)];
+    const right: Vec3 = [Math.cos(player.yaw), 0, Math.sin(player.yaw)];
+    // EVERY frame once, then the whole set again a size down: a gib has to read
+    // at the size it will actually be thrown at, not just at bench scale.
+    const sizes = [0.34, 0.2];
+    let i = 0;
+    for (const size of sizes) {
+      for (const frame of gibAtlas.frames) {
+        const mesh = makeGibSprite(frame, size);
+        const col = i % 9, line = Math.floor(i / 9);
+        const along = 1.7 + line * 0.5;
+        const across = (col - 4) * 0.38;
+        mesh.position.set(
+          player.pos[0] + fwd[0] * along + right[0] * across,
+          0.45 + (line % 2) * 0.1,
+          player.pos[2] + fwd[2] * along + right[2] * across,
+        );
+        // Face the camera AT SPAWN as well as per frame: `tick` early-returns
+        // under the render lock, so a capture would otherwise photograph the
+        // bench edge-on — a plane facing +Z photographed from a player looking
+        // east is a line.
+        billboardGib(mesh, camera);
+        spriteBenchGroup.add(mesh);
+        spriteBenchSprites.push(mesh);
+        i++;
+      }
+    }
+    return spriteBenchSprites.length;
+  }
+
+  /** Load the dev-only atlas on demand. A missing one is reported, not hidden:
+   *  the bench is meaningless without it and a silent empty group reads as a bug
+   *  in the renderer. */
+  async function ensureGibAtlas(which: 'placeholder' | 'sheet' = gibAtlasSource): Promise<number> {
+    if (gibAtlas && gibAtlasSource === which) return gibAtlas.frames.length;
+    gibAtlas?.dispose();
+    gibAtlas = null;
+    gibAtlasSource = which;
+    const url = which === 'sheet' ? GIB_SHEET_URL : GIB_ATLAS_URL;
+    try {
+      gibAtlas = which === 'sheet' ? await loadGibSheet(url) : await loadGibSpriteAtlas(url);
+      console.log(`[gib-sprites] ${which} atlas: ${gibAtlas.frames.length} frames from ${url}`);
+    } catch (err) {
+      console.warn(`[gib-sprites] no ${which} atlas at ${url}`
+        + (which === 'placeholder'
+          ? ' — run scripts/link-dev-assets.sh (the Blood extracts are dev-only placeholders)'
+          : ' — generate it with: npm run blob:shot -- zombie (BLOB_MASK=1) then node scripts/gib-sheet.mjs')
+        + `: ${String(err)}`);
+      return 0;
+    }
+    return gibAtlas.frames.length;
+  }
+
   let chunkBakeInput: ChunkBakeData | null = null;
   let lastBakeSwapMs = 0;
   let lastBakeRequestMs = 0;
@@ -4412,6 +5521,7 @@ async function main() {
     chunkBakeJobs.cancel(); chunkBakeInput = null;
   };
   window.addEventListener('pagehide', cancelChunkBake);
+  window.addEventListener('pagehide', () => { pendingGibImpulses.length = 0; });
   import.meta.hot?.dispose(() => {
     cancelChunkBake();
     window.removeEventListener('pagehide', cancelChunkBake);
@@ -4444,11 +5554,33 @@ async function main() {
     const swapTiming = telemetry.begin();
     const baked = unpackChunkBake(done.result);
     if (!bakedChunkMat) {
-      bakedChunkMat = createBakedChunkMaterial(
+      // REGISTERED, like the corpse path's identical construction a few thousand
+      // lines up. It was not, and this is the site that WINS in normal play: the
+      // corpse bake only runs if a soldier corpse settles first, so in a plain
+      // dynamite gib THIS line created the shared baked-chunk material and left
+      // it out of `litChunkMaterials`.
+      //
+      // The registry is not cosmetic. Everything the per-frame block pushes went
+      // past this material: the FLASHLIGHT (so a settled piece kept the static
+      // defaults — `spotCfg.x = 0`, beam OFF, against a fixed 2.4 directional
+      // key, i.e. lit by a lamp that is not there at ~2.5x, which is what blows
+      // flesh albedo pale) and, since this session, `fleshDetail`. The registry
+      // exists BECAUSE of exactly this class of miss — its own docstring says
+      // "the per-frame beam update touched ONLY bakedChunkMat" — and then the
+      // settled-chunk path was left out of the fix.
+      //
+      // Caught by `__sdfGame.chunkDetailApplied()` reading `[]` while the census
+      // reported 12 baked pieces on screen.
+      bakedChunkMat = registerLitChunkMaterial(createBakedChunkMaterial(
         // DEFERRED MODE: baked chunks are static flesh — level-only receivers
         // with a surface G-buffer producer material.
-        deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined,
-      );
+        // `bakedAo`: the settled bake writes a `bakeAo` attribute now, and
+        // without reading it every piece shades at ao = 1.0 and can never be in
+        // shadow — half of "way too light and dont follow the lighting".
+        deferredMode
+          ? { output: 'surface', shadowReceiver: 'level-only', bakedAo: true }
+          : { bakedAo: true },
+      ));
       bakedChunkSeed?.(bakedChunkMat);
     }
     liveChunks.splice(index, 1);
@@ -4521,6 +5653,32 @@ async function main() {
       spawnImpactGout(bloodSim, 'slug', at, [0, 1, 0], rngStreams.bleed, nextEmitterStream++);
     }
   }
+  /**
+   * The two per-view uniforms a chunk's KIND decides, written on EVERY spawn.
+   *
+   * MEAT AND BONE DO NOT SHADE ALIKE. march.wgsl.ts's pale-bone branch only
+   * runs while `meltCfg.x > 0` (it was written for the melt, where the skeleton
+   * emerges from thinning flesh), and the chunk view's own torn-meat gore mask
+   * and face projection are decided in `reset` from whether the FLESH list is
+   * empty. A released ribcage left at meltCfg.x = 0 marches, folds and shades
+   * as a meat-coloured cage — the shape would finally be there and still not
+   * read as bone, which is half of what the owner asked for.
+   *
+   * BOTH ARE WRITTEN FOR EVERY KIND, not just for bone. Chunk views are
+   * RECYCLED at the maxChunks cap, so a view that was a ribcage last blast
+   * keeps meltCfg.x = 1 into its next life as an arm — and a flesh piece
+   * rendered through the melt ramp is a pale, matte, wrong-coloured limb. The
+   * lab's spawnChunk has carried the same "every spawn, not just bone ones"
+   * comment since the melt shipped; this is that rule, not a new one.
+   */
+  function applyChunkKindLook(view: ChunkGpuView, kind: 'limb' | 'gob' | 'bone'): void {
+    view.uniforms.meltCfg.value.x = kind === 'bone' ? 1 : 0;
+  }
+  /** Set by the measurement seam below: pieces exist, fly and bake exactly as
+   *  they would, and are simply not drawn. */
+  let chunksHidden = false;
+  /** Whether BONE pieces are drawn — see setBonePiecesVisible. */
+  let bonesVisible = true;
   // Now that the array exists, the frame draw can read it directly.
   chunkObjects = () => liveChunks.map(c => c.view.object);
   let nextChunkId = 1;
@@ -4535,8 +5693,17 @@ async function main() {
     }
     return bestLen < 1e-6 ? [0, 1, 0] : [best[0] / bestLen, best[1] / bestLen, best[2] / bestLen];
   }
+  /**
+   * Spawn one detached piece. `kind` is the piece's MATERIAL AND PHYSICS, not a
+   * label: 'bone' picks the CHUNK_TUNING thud (a ribcage that bounces like meat
+   * is a rubber skeleton), the bone-only extent recipe, and — below — the two
+   * per-view uniforms that make a bone chunk render at all.
+   */
   function spawnChunkPiece(
-    piece: { limb: string; origin: Vec3; prims: Primitive[]; tornAt: Vec3[]; bones: Primitive[] },
+    piece: {
+      limb: string; origin: Vec3; prims: Primitive[]; tornAt: Vec3[];
+      bones: Primitive[]; kind?: 'limb' | 'gob' | 'bone';
+    },
     template: { uniforms: import('./zombie-gpu').MarchUniforms; volumeTexture: THREE.Texture },
     initialVelocity?: Vec3,
   ) {
@@ -4546,17 +5713,31 @@ async function main() {
       2.5 + rng() * 2.5,
       (rng() - 0.5) * 4.5,
     ];
+    const kind = piece.kind ?? 'limb';
+    // A BONE-ONLY PIECE HAS NO FLESH TO MEASURE. `chunkExtent` over an empty
+    // prim list is 0, which would size the proxy box at 5 cm and cull the very
+    // ribcage it exists to draw; `boneChunkRadius` (melt-bones.ts) is the
+    // resting radius and is shared with the melt's released groups, which is
+    // also what keeps a released shin from coming to rest floating half its
+    // length above the floor.
+    const boneOnly = piece.prims.length === 0 && piece.bones.length > 0;
+    const extentSource = boneOnly ? piece.bones : piece.prims;
     const state = makeChunk(
       piece.limb as never, piece.origin, initialVelocity ?? vel,
-      chunkExtent(piece.prims, piece.origin), primsLongAxis(piece.prims, piece.origin),
-      rng, 'limb',
+      boneOnly ? boneChunkRadius(piece.bones) : chunkExtent(piece.prims, piece.origin),
+      primsLongAxis(extentSource, piece.origin),
+      rng, kind,
     );
     // View budget. Order matters with the bake on: a BAKED piece is the
     // oldest, least-relevant gore, so its view recycles FIRST; only when
     // every view is live-and-flying does the old oldest-live rule apply.
-    // Either way views stay bounded at MAX_CHUNKS — the leak gate.
+    // Either way views stay bounded at `maxChunks` — the leak gate. It reads the
+    // KNOB, not MAX_CHUNKS: the budget is raisable (?maxchunks) precisely
+    // because a full-body gib is 19-20 pieces, and a gate here that still
+    // recycled at the old constant would leave `cap: 24` reporting a pool that
+    // is actually 12 — which is what the dynamite gate's census caught.
     let recycled: ChunkGpuView | undefined = spareChunkViews.pop();
-    if (!recycled && chunkViews.length >= MAX_CHUNKS) {
+    if (!recycled && chunkViews.length >= maxChunks) {
       const oldestBaked = bakedChunks.shift();
       if (oldestBaked) {
         recycled = freeBaked(oldestBaked);
@@ -4571,9 +5752,21 @@ async function main() {
     if (recycled) {
       recycled.reset(state, piece.prims,
         piece.tornAt.length ? piece.tornAt : undefined, piece.bones);
-      recycled.setPackBones(!boneMesh);
-      recycled.object.visible = true; // may be arriving from a baked retirement
-      liveChunks.push({ id: nextChunkId++, state, view: recycled, template });
+      // A bone-only chunk needs its bone ROWS packed whatever the bone-tube
+      // mode is: with packBones off (the `?boneMesh` path) `reset` writes
+      // organ rows only, so a chunk whose flesh list is empty packs NOTHING and
+      // marches an empty field — an invisible skeleton, which is the exact
+      // failure this whole piece set exists to end.
+      recycled.setPackBones(boneOnly ? !gibBoneMesh : !boneMesh);
+      applyChunkKindLook(recycled, kind);
+      // May be arriving from a baked retirement; and a bone piece spawned while
+      // the differential hides the skeleton must stay hidden.
+      // With `gibBoneMesh` the tubes draw this piece and its packed rows are
+      // gone, so the marched proxy has an EMPTY field: it would march and
+      // discard every pixel of its box for nothing. Hidden, not merely empty.
+      recycled.object.visible = !chunksHidden
+        && (kind !== 'bone' || (bonesVisible && !(boneOnly && gibBoneMesh)));
+      liveChunks.push({ id: nextChunkId++, state, view: recycled, template, kind, boneOnly });
     } else {
       const view = createChunkGpuView(
         state, piece.prims, template.uniforms,
@@ -4583,12 +5776,1168 @@ async function main() {
         // shared material the material's mode wins; the view must agree).
         deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined,
       );
-      view.setPackBones(!boneMesh);
+      view.setPackBones(boneOnly ? !gibBoneMesh : !boneMesh);
+      applyChunkKindLook(view, kind);
+      view.object.visible = !chunksHidden
+        && (kind !== 'bone' || (bonesVisible && !(boneOnly && gibBoneMesh)));
       view.object.layers.set(SDF_LAYER);
       scene.add(view.object);
       deferredApi?.router.register(view.object, 'sdf');
       chunkViews.push(view);
-      liveChunks.push({ id: nextChunkId++, state, view, template });
+      liveChunks.push({ id: nextChunkId++, state, view, template, kind, boneOnly });
+    }
+  }
+
+  /**
+   * THE SPRITE PATH'S TWIN OF `spawnChunkPiece` — one detached piece, as a
+   * billboard instead of a marched view.
+   *
+   * The chunk-construction arithmetic is DELIBERATELY the same lines as above,
+   * because the two modes must not disagree about a piece's physics: the same
+   * `chunkExtent`/`boneChunkRadius` radius (so a piece settles at the same
+   * height off the floor and collides with the same walls), the same
+   * `primsLongAxis` (so it topples the same way), the same `makeChunk` seed
+   * discipline, and the same `kind` (so a bone piece THUDS in both).
+   *
+   * The DIFFERENCE is everything that is absent: no `template` (no SDF uniforms,
+   * no volume texture), no `ChunkGpuView`, no view budget, and no bake. What a
+   * sprite piece needs from the body is its own geometry's EXTENT and its limb's
+   * identity — nothing about how the body was marching.
+   *
+   * Returns false when there is no atlas to cut a frame from, which is the one
+   * way this can decline; the caller falls back to the marched path rather than
+   * dropping a body's gore.
+   */
+  function spawnSpriteGibPiece(
+    piece: {
+      limb: string; origin: Vec3; prims: Primitive[]; bones: Primitive[];
+      kind?: 'limb' | 'gob' | 'bone';
+    },
+    impulseVel: Vec3 | null,
+    impulseDelay: number,
+  ): boolean {
+    if (!gibAtlas) return false;
+    const rng = rngStreams.misc;
+    const kind = piece.kind ?? 'limb';
+    const boneOnly = piece.prims.length === 0 && piece.bones.length > 0;
+    const extentSource = boneOnly ? piece.bones : piece.prims;
+    const state = makeChunk(
+      piece.limb as never, piece.origin, [0, 0, 0],
+      boneOnly ? boneChunkRadius(piece.bones) : chunkExtent(piece.prims, piece.origin),
+      primsLongAxis(extentSource, piece.origin),
+      rng, kind,
+    );
+    spawnSpritePiece(spritePieces, {
+      state, frame: pickFrame(gibAtlas, rng()),
+      impulseDelay, impulseVel, sizeScale: gibSpriteSizeScale,
+    });
+    return true;
+  }
+
+  // -----------------------------------------------------------------------
+  // WEAPON SLOT 2 — DYNAMITE (2026-09-10).
+  //
+  // The purpose is TUNING: a bundle you can throw at zombies and soldiers so
+  // the blast radius, the gib decision and the cost of a full-body gib can be
+  // judged in play rather than argued about. So the wiring is deliberately thin
+  // and every number that matters is a seam (see DYN_PARAMS above).
+  //
+  // The pure modules do all the work: fpv.ts owns the COOK state machine and
+  // the charge→speed band, dynamite-flight.ts owns the ballistic arc — flown
+  // here against the REAL level (game-level.ts's levelColliders() plus the room
+  // ceiling), not the lab's arena rect — explosion-aoe.ts owns the AOE, and
+  // sever.ts owns the gib. This block only routes between them and the THREE
+  // scene, exactly as the lab's wiring does, with the one difference that here
+  // the bodies are ACTORS with GPU views, brains and collapse clocks.
+  // -----------------------------------------------------------------------
+
+  /** The bundle's contact radius in the body test, m: a zombie is ~0.45 m
+   *  across at the chest. The bundle's OWN 0.08 m radius lives in the flight
+   *  module, so this is the body half-width only. */
+  const BUNDLE_BODY_RADIUS_M = 0.45;
+  /** How many bundles may be in the air at once — and therefore how many prop
+   *  instances exist (1 held + the rest in flight). Small on purpose: this is a
+   *  tuning tool, not a grenade-spam simulator. */
+  const MAX_BUNDLES = 4;
+  /** Tallest ceiling in the level — the FALLBACK for a bundle outside every
+   *  enclosure. levelColliders() carries no ceiling box for the rooms, so
+   *  without a ceiling plane a full-charge lob leaves through the roof. Tunnel
+   *  lintels ARE boxes (2.2 → 3.0 m), so ceiling + boxes together reproduce the
+   *  level including its low mouths. */
+  const BUNDLE_CEIL_M = Math.max(...ROOMS.map(r => r.height));
+
+  /** The ceiling over a point, PER ENCLOSURE.
+   *
+   *  A single global plane stopped being correct the moment the arena added a
+   *  6 m room to a level whose cells are 3 m: resolving to the TALLEST ceiling
+   *  everywhere let a bundle sail out through the small rooms' roofs, and
+   *  resolving to the smallest would have clipped the arena at half its height.
+   *  Rooms and tunnels each carry their own height, so the plane is a lookup.
+   *  `BUNDLE_CEIL_M` remains the answer for a point inside neither (over a wall
+   *  or through a door frame mid-flight), which is the generous case and the one
+   *  the collider boxes are there to catch. */
+  function ceilingAt(x: number, z: number): number {
+    for (const t of TUNNELS) {
+      if (x >= t.minX && x <= t.maxX && z >= t.minZ && z <= t.maxZ) return t.height;
+    }
+    for (const r of ROOMS) {
+      if (x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ) return r.height;
+    }
+    return BUNDLE_CEIL_M;
+  }
+
+  let slotState: WeaponSlotState = makeWeaponSlotState('shotgun');
+  let cook: CookState = { phase: 'idle', phaseAt: 0, cookStart: 0 };
+  /** The cook clock in SIM seconds, advanced by tick(dt) — not a wall clock,
+   *  so a frozen/render-locked capture cannot advance the fuse behind its own
+   *  back. */
+  let dynNow = 0;
+  // One-frame input edges, consumed by the next tick.
+  let dynPress = false;
+  let dynRelease = false;
+  /** 0..1 charge of the live cook, for the HUD. */
+  let dynCharge = 0;
+
+  /** Prop pool. The HELD one is parented to `bundleRig` (inside aimRig, so it
+   *  rides the free-aim lean and the walk bob); a thrown one is moved to the
+   *  scene root and posed in WORLD space from its flight state. */
+  const bundleProps: StickProp[] = [];
+  const bundleRig = new THREE.Group();
+  bundleRig.name = 'bundle-rig';
+  /** Hold pose, rig space: low and off to one side, canted so the fuse end
+   *  reads against the dark. Which side is the off-hand side follows the
+   *  existing view-model convention (the shorty is yawed 180°, so its chambers
+   *  land screen-left and the rig's +x is what the player sees on the left). */
+  const BUNDLE_HOLD = {
+    pos: new THREE.Vector3(0.235, -0.245, -0.42),
+    rot: new THREE.Euler(
+      THREE.MathUtils.degToRad(-28), THREE.MathUtils.degToRad(18), THREE.MathUtils.degToRad(28),
+    ),
+  };
+  let bundleReady = false;
+  {
+    const errs: string[] = [];
+    for (let i = 0; i < MAX_BUNDLES; i++) {
+      try {
+        const p = createStickProp();
+        p.object.visible = false;
+        bundleProps.push(p);
+      } catch (e) { errs.push(String(e)); }
+    }
+    if (errs.length > 0) console.error('[sdf-game] dynamite prop pool:', errs.join(' | '));
+    bundleRig.position.copy(BUNDLE_HOLD.pos);
+    bundleRig.rotation.copy(BUNDLE_HOLD.rot);
+    (aimRig ?? viewModelAnchor).add(bundleRig);
+    bundleReady = bundleProps.length > 0;
+  }
+
+  /** The prop currently IN HAND, or null while the bundle it became is in the
+   *  air. This is deliberately NOT `bundleProps[0]`: after a throw that very
+   *  object belongs to the flight, and drawing it in the rig as well would put
+   *  a second bundle in the player's hand. */
+  let heldProp: StickProp | null = bundleProps[0] ?? null;
+  // `bundleRig.visible` is the gate for the whole in-hand model, so the prop's
+  // OWN flag must stay true: setting it false here made the held bundle
+  // invisible from boot until the first throw cycle happened to re-acquire one
+  // (owner report, 2026-09-10: "after like the first 2 throws i dont see the
+  // dynamite"). One gate, not two.
+  if (heldProp) { bundleRig.add(heldProp.object); heldProp.object.visible = true; }
+  /** Props not in hand and not in flight. */
+  const spareBundles: StickProp[] = bundleProps.slice(1);
+
+  /** A bundle in the air. `prop` is null when more bundles are flying than the
+   *  pool can draw — the SIM is never dropped, only the drawing of it. */
+  interface LiveBundle { state: FlightState; prop: StickProp | null }
+  const liveBundles: LiveBundle[] = [];
+  /**
+   * THE STAGED RELEASE'S QUEUE — the impulses a gib has NOT applied yet.
+   *
+   * A piece is born with ZERO velocity and sits at the body's own posed
+   * transform; its concussion velocity arrives `frame` frames later, and the
+   * frame is later the further the piece is from the blast. That is the whole
+   * mechanism behind dev-note §3(a)/(b): the frame the bundle goes off shows
+   * the BODY's silhouette in place — the pieces are co-located with it, so the
+   * substitution is invisible — and the body then comes apart outward from the
+   * epicentre over `gibStaggerFrames` frames instead of being replaced in one.
+   *
+   * It is a few frames of state, not new geometry, and it is drained in the
+   * same fixed step that integrates the chunks (see stepPendingGibImpulses). */
+  const pendingGibImpulses: { id: number; vel: Vec3; delay: number }[] = [];
+  /**
+   * BODIES IN THEIR PRE-TEAR WINDOW, waiting to become pieces. A gibbed body is
+   * NOT retired at the blast any more: it stays in the world, drawn bent, for
+   * `gibTearSec`, and the pieces are spawned when its own window closes. The
+   * actor owns that clock (see ZombieActor.beginTear); this queue only remembers
+   * what to do when it stops.
+   */
+  const pendingGibs: { actor: ZombieActor; at: Vec3; falloff: number }[] = [];
+  /**
+   * Apply every impulse whose delay has run out. A piece whose chunk was
+   * recycled out of the pool in the meantime is simply gone — the queue is
+   * keyed by chunk id, and ids are never reused.
+   *
+   * THE DELAY COUNTS DRAINS, NOT FRAMES, and that is deliberate. This drain
+   * runs LATER IN THE SAME TICK as the detonation that spawned the pieces
+   * (stepDynamite is before the chunk step in `tick`), so a frame-indexed
+   * queue either releases the first wave before the first frame is drawn — the
+   * explosion's opening frame shows pieces already moving, which is the
+   * substitution the staging exists to prevent — or needs an off-by-one
+   * "+2" that silently breaks the day someone reorders the tick. Counting
+   * drains, a delay of 0 still means "not in the tick the blast happened in",
+   * because the drain that could have fired it has already run and decremented.
+   */
+  function stepPendingGibImpulses(): void {
+    for (let i = pendingGibImpulses.length - 1; i >= 0; i--) {
+      const p = pendingGibImpulses[i]!;
+      if (p.delay > 0) { p.delay--; continue; }
+      const c = liveChunks.find(q => q.id === p.id);
+      if (c) c.state.vel = [p.vel[0], p.vel[1], p.vel[2]];
+      pendingGibImpulses.splice(i, 1);
+    }
+  }
+  /** Radians of view pitch per unit of the resolver's cameraKick magnitude. The
+   *  magnitude is ~4 at the epicentre, so this is ~3.4° of punch point-blank
+   *  and proportionally less with distance. */
+  const BLAST_KICK_RAD_PER_UNIT = 0.015;
+
+  /** THE EXPLOSION'S OWN LIGHT. A blast is the brightest thing in this game and
+   *  it has to READ as one: near-instant spike, then a fast fall — the same
+   *  shape the muzzle flash uses, scaled up and outlasted by the fireball. */
+  const EXPLOSION_LIGHT = {
+    /** Seconds of light, longer than the muzzle flash's 0.14 s by a lot: a
+     *  detonation is not an instantaneous event and the room has to have time to
+     *  visibly return to dark. */
+    lifeSec: 0.5,
+    /** Mesh-side peak, in the accents' units (a brazier is 9-13).
+     *
+     *  320 is measured, not chosen: at 26 the light was DETECTABLY on and
+     *  visually nothing — the arena's whole-frame mean rose +0.96 with it
+     *  against +0.10 without (the particles alone), i.e. about one level out of
+     *  255 spread over the room. A brazier sustains 9-13 and the eye adapts to
+     *  it; a half-second flash has to DOMINATE the room it is in to read as one,
+     *  so it starts an order of magnitude above the braziers rather than beside
+     *  them. `?fxlight=` scales this and the gather peak together. */
+    meshPeak: 320,
+    /** Gather-side peak. The muzzle flash pushes 35 x probeFlashBoost, and an
+     *  explosion is bigger and further away, so a comparable number lands it in
+     *  the same range as a firefight's flashes. */
+    gatherPeak: 220,
+    /** Attached this far above the detonation, so a ground burst lights the room
+     *  rather than a disc of floor. */
+    liftM: 0.5,
+  } as const;
+  // `?fxlight=K` scales BOTH peaks together — the owner tunes "how much does the
+  // room light up" as one number, and scaling only one side would let the walls
+  // and the bodies disagree about the blast's brightness.
+  let fxLightScale = parseFloatParam(DYN_PARAMS.get('fxlight'), { min: 0, max: 4 }) ?? 1;
+  /** How far the blast's light reaches (the soft room-fill component): see the
+   *  panel's `light reach` row and LIGHT_FILL_REF_M. 0 = the pure point light. */
+  let fxSpread = parseFloatParam(DYN_PARAMS.get('fxspread'), { min: 0, max: 3 }) ?? 1.2;
+  // ?woundcap=0 restores the uncapped flesh probe (see damage.ts probeFlesh):
+  // the A/B control for the wound-stamping cost, settable per boot so the two
+  // arms can be measured interleaved rather than across runs.
+  setProbeCapEnabled(DYN_PARAMS.get('woundcap') !== '0');
+  /** Live explosions lighting something, newest last. Bounded by the pool. */
+  const explosionLights: { pos: Vec3; age: number }[] = [];
+  /** Light a blast. Called by BOTH the real detonation and the capture seam —
+   *  a seam that drew the particles but not the light made the light look like
+   *  it did nothing at all in the differential capture (measured: 15.0% of frame
+   *  changed with the light "on" against 15.1% with ?fxlight=0). */
+  function igniteExplosionLight(at: Vec3): void {
+    explosionLights.push({ pos: [at[0], at[1] + EXPLOSION_LIGHT.liftM, at[2]], age: 0 });
+    while (explosionLights.length > EXPLOSION_LIGHTS) explosionLights.shift();
+  }
+
+  /** Spike-then-fall, 1 at ignition and 0 at lifeSec. */
+  function explosionLightEnv(age: number): number {
+    if (age < 0 || age >= EXPLOSION_LIGHT.lifeSec) return 0;
+    const u = age / EXPLOSION_LIGHT.lifeSec;
+    // A hard attack (the first frame is the brightest) then an exponential fall
+    // — a LINEAR fade reads as a lamp being switched off, not as a blast.
+    return Math.exp(-4.2 * u) * (1 - u * u * 0.35);
+  }
+
+  // Telemetry for the tuning pass — read back through __sdfGame.dynamite().
+  let dynThrown = 0;
+  let dynDetonations = 0;
+  let dynGibbed = 0;
+  let dynGibPieces = 0;
+  /** DIAGNOSTIC (temporary): what the pre-tear window's drain did, so a census
+   *  that disagrees with it says WHICH side is wrong. */
+  let dynScheduledGibBodies = 0;
+  let dynScheduledGibPieces = 0;
+  let dynLastBlastMs = 0;
+  /** THE RADIUS THE LAST BLAST ACTUALLY RESOLVED AT. The `detonate` seam used
+   *  to return `explosionRadiusM()` — the reference CONSTANT — so the radius a
+   *  rig read back could never move no matter what was tuned, and the new
+   *  `?aoesize` slider looked inert to every instrument in the repo while it
+   *  was in fact working. The gate caught it; this is the honest readback. */
+  let dynLastRadiusM = explosionRadiusM();
+  /** Pieces a gib had to leave OUT because the view pool was full — the number
+   *  that says whether ?maxchunks needs raising for what is on screen. */
+  let dynLastGibDropped = 0;
+  /** Which piece SHAPE the last body got (see gibActor's tiers) and how many
+   *  pieces it actually spawned — the two numbers the census cannot infer. */
+  let dynLastGibTier = 'parts';
+  /** EVERY body's tier for the last blast, in the order they were gibbed —
+   *  because "what did the owner actually see" is a question about ALL of them,
+   *  and a single last-body field answers it wrongly: a five-body blast in the
+   *  arena gives the first body `parts` and the rest the cheap rungs, and only
+   *  the log shows that. Cleared at the top of each detonation. */
+  let dynGibTierLog: string[] = [];
+  let dynLastGibSpawned = 0;
+  let dynLastGibParts: string[] = [];
+  let dynLastGibHeld = 0;
+  let dynBloodOrphans = 0;
+
+  /** World position of a prop, or the eye when there is none. */
+  const _propPos = new THREE.Vector3();
+  function propWorld(p: StickProp | null): Vec3 {
+    if (!p) return eyeOf(player);
+    p.object.getWorldPosition(_propPos);
+    return [_propPos.x, _propPos.y, _propPos.z];
+  }
+
+  /** Take a prop for a bundle that is leaving the hand: the held one if it is
+   *  there, else a spare, else the OLDEST flying bundle's (its state keeps
+   *  flying — only the drawing of it is recycled, so the sim never desyncs). */
+  function takePropForThrow(): StickProp | null {
+    if (heldProp) {
+      const p = heldProp;
+      heldProp = null;
+      bundleRig.remove(p.object);
+      scene.add(p.object);
+      return p;
+    }
+    const spare = spareBundles.pop();
+    if (spare) return spare;
+    const oldest = liveBundles.find(b => b.prop);
+    if (!oldest || !oldest.prop) return null;
+    const p = oldest.prop;
+    oldest.prop = null;
+    return p;
+  }
+
+  /** Give the hand a bundle again once the throw has RECOVERED.
+   *
+   *  `cook.phase` must be 'idle', not merely "not cooking": fpv.ts spends
+   *  throwRecoverSec (0.4 s) in 'cooldown' after every release, and that beat is
+   *  the throw animation — handing the player the next bundle the instant the
+   *  last one leaves would put a bundle back in a hand that is still visibly
+   *  mid-throw. An overcook returns straight to 'idle', so the replacement is
+   *  immediate there, which is right: nothing was thrown. */
+  function reacquireHeldProp(): void {
+    if (heldProp || !bundleReady) return;
+    if (cook.phase !== 'idle') return;
+    const p = spareBundles.pop() ?? (() => {
+      const oldest = liveBundles.find(b => b.prop);
+      if (!oldest || !oldest.prop) return null;
+      const q = oldest.prop;
+      oldest.prop = null;
+      return q;
+    })();
+    if (!p) return;
+    p.object.removeFromParent();
+    bundleRig.add(p.object);
+    // RESET THE LOCAL TRANSFORM, and this is the whole bug (owner report
+    // 2026-09-10: "after like the first 2 throws i dont see the dynamite").
+    //
+    // `pose({ mode: 'flight' })` writes the bundle's WORLD position and its
+    // tumble quaternion onto the object. Reparenting that object into the rig
+    // does not undo any of it, so a re-acquired bundle stayed exactly where it
+    // detonated — measured, `local [28.235, 0.097, -12.354]` in a rig that sits
+    // 0.42 m in front of the eye. Drawn metres off-screen: the player was
+    // holding a bundle they could not see, and the first two throws looked fine
+    // only because the first re-acquire happened to draw a prop that had never
+    // flown.
+    //
+    // The rig carries the hold pose (BUNDLE_HOLD), so the prop's own local
+    // transform must be the identity. One owner for the hold transform.
+    p.object.position.set(0, 0, 0);
+    p.object.quaternion.identity();
+    p.object.scale.setScalar(1);
+    p.object.visible = true;
+    heldProp = p;
+  }
+
+  /** True when a body is within the bundle's contact radius anywhere along the
+   *  sub-step's segment. Called at the FLIGHT's own 120 Hz, so a 28 m/s bundle
+   *  (0.23 m per sub-step) cannot tunnel through a 0.45 m target. */
+  function bundleHitsBody(from: Vec3, to: Vec3): ZombieActor | null {
+    const dx = to[0] - from[0], dy = to[1] - from[1], dz = to[2] - from[2];
+    const l2 = dx * dx + dy * dy + dz * dz || 1;
+    for (const a of actors) {
+      const p = a.pose();
+      const cx = p.pos[0], cy = p.pos[1] + 0.95, cz = p.pos[2];
+      const t = Math.max(0, Math.min(1,
+        ((cx - from[0]) * dx + (cy - from[1]) * dy + (cz - from[2]) * dz) / l2));
+      const qx = from[0] + dx * t - cx, qy = from[1] + dy * t - cy, qz = from[2] + dz * t - cz;
+      if (qx * qx + qy * qy + qz * qz <= BUNDLE_BODY_RADIUS_M * BUNDLE_BODY_RADIUS_M) return a;
+    }
+    return null;
+  }
+
+  /** Release a bundle from the hand along the aim. */
+  function throwBundle(speedMps: number): void {
+    if (!bundleReady) return;
+    // THE ORIGIN IS READ BEFORE THE REPARENT, and that order is load-bearing:
+    // the held prop's world transform IS the hold pose (it rides `bundleRig`,
+    // inside the camera), while `takePropForThrow` moves the object to the scene
+    // root and leaves its LOCAL transform behind. Reading the position after
+    // that hands the flight the scene ORIGIN — a point inside the level's solid
+    // centre block — so the bundle was born buried in geometry, pushed out
+    // downward, and left sliding along the floor. Caught by the slot gate.
+    const origin = propWorld(heldProp);
+    const prop = takePropForThrow();
+    // The reticle IS the aim under both schemes (aimDir handles free aim), and
+    // fpv.ts's throwDirection applies the game's upward lob on top — the same
+    // two rules the lab's throw uses, so a bundle thrown here lands where the
+    // lab's does. Deriving yaw/pitch from the aim vector keeps the lob maths
+    // in that one function instead of a second copy here.
+    const d = aimDir();
+    const yaw = Math.atan2(d[0], -d[2]);
+    const pitch = Math.asin(Math.max(-1, Math.min(1, d[1])));
+    const dir = throwDirection(yaw, pitch);
+    const speed = speedMps * dynSpeedScale;
+    const state = makeFlight(origin, [dir[0] * speed, dir[1] * speed, dir[2] * speed], { impactMode: true });
+    liveBundles.push({ state, prop });
+    prop?.pose({ mode: 'flight', pos: state.pos, spin: state.spin, fuseBurning: true });
+    dynThrown++;
+    telemetry.event('dynamite-throw', { speedMps: speed, x: origin[0], y: origin[1], z: origin[2] });
+  }
+
+  /** The bundle that never left the hand: an overcook, or a fuse that burned
+   *  out while held. Detonates AT the player. */
+  function overcookInHand(): void {
+    const at = propWorld(heldProp);
+    telemetry.event('dynamite-overcook', { x: at[0], y: at[1], z: at[2] });
+    detonateAt(at, true);
+  }
+
+  // -----------------------------------------------------------------------
+  // THE DETONATION — one blast, everything it does.
+  // -----------------------------------------------------------------------
+  /** Per-phase timings of the LAST detonation, ms. The blast is one frame of
+   *  work with four very different costs in it, and "the explosion pauses the
+   *  game" is not actionable until the split is known. */
+  function newBlastProfile() {
+    return { resolve: 0, gib: 0, wound: 0, blood: 0, chunksSpawned: 0, bodies: 0, total: 0 };
+  }
+  let dynBlastProfile = newBlastProfile();
+
+  function detonateAt(at: Vec3, inHand = false): void {
+    const t0 = performance.now();
+    dynGibTierLog = [];
+    const prof = newBlastProfile();
+    dynBlastProfile = prof;
+    EXPLOSION_PROFILE.traceMs = 0; EXPLOSION_PROFILE.woundMs = 0;
+    EXPLOSION_PROFILE.cutMs = 0; EXPLOSION_PROFILE.bodiesTraced = 0;
+    EXPLOSION_PROFILE.bodiesPruned = 0; EXPLOSION_PROFILE.prunedPrims = 0;
+    EXPLOSION_PROFILE.traces = 0;
+    dynDetonations++;
+    const bodies: ExplosionBody[] = actors.map(a => ({
+      id: String(a.id), body: a.posed(), bodyYaw: a.pose().yaw,
+    }));
+    const tResolve = performance.now();
+    const fx = resolveExplosion(at, bodies, {
+      eye: eyeOf(player),
+      // Floor distance IS the height above y = 0, this level's real floor, so
+      // the resolver's air-vs-ground burst choice is exact here without
+      // overriding its default.
+      floorDistM: Math.max(0, at[1]),
+      // A gibbed body's wounds are never read (see `gibWounds` above).
+      woundsOnGibbed: gibWounds,
+      // THE FOCUS KNOBS, live from the panel. Both are the resolver's own
+      // options and both default to the reference (scale 1, floor 0.45), so a
+      // page that never touches them resolves exactly as before.
+      radiusScale: aoeRadiusScale,
+      launchFloor: aoeLaunchFloor,
+      // The hand-splash flourish only makes sense for an in-hand detonation:
+      // the resolver measures the FPV hands, and this page's hands are meshes
+      // with no prim set to trace, so the band stays empty either way. Left
+      // unset rather than passed a fake prim list.
+      ...(inHand ? {} : {}),
+    });
+
+    prof.resolve = performance.now() - tResolve;
+    prof.bodies = fx.perBody.length;
+    let gibbed = 0, pieces = 0;
+    // THE POOL IS DIVIDED UP FRONT, ACROSS THE BODIES THIS BLAST TAKES. Asking
+    // each body in turn for "whatever is left" gives the first one everything
+    // and the rest nothing: the arena's 8-body horde ends a 3-body blast with
+    // one dramatic corpse and two silent disappearances. Nearest the blast
+    // first, so the body the player is looking at is the one that gets the full
+    // piece set; the rest degrade by tier inside gibActor.
+    const condemned = fx.perBody
+      .filter(pb => pb.gibbed && actors.some(q => String(q.id) === pb.bodyId))
+      .sort((x, y) => y.falloff - x.falloff);
+    // THE BLAST'S WHOLE BUDGET, not just the free slots. A gib may take views
+    // that OLDER gore is holding — that is what `spawnChunkPiece`'s
+    // oldest-first recycle has always done — so the budget is the pre-existing
+    // live pieces PLUS whatever views are still unallocated. Every spawn either
+    // recycles a pre-existing chunk or creates a view, so a blast kept inside
+    // this number can never recycle a piece it made itself, which is the
+    // "pieces jumping into new positions" bug the slice was added for.
+    //
+    // The budget must NOT be `maxChunks - liveChunks.length` (what it was):
+    // in a full pool that is zero, the split gives every body one piece, and a
+    // body with one piece is a body that vanished.
+    const blastBudget = gibBudget();
+    // GREEDY, NEAREST FIRST, WITH A FLOOR HELD BACK FOR THE REST. An even split
+    // spends the pool on equal shares that mostly fall below the cheapest tier,
+    // so three bodies in a 24-piece pool all get 8 and all degrade to the same
+    // six lumps; letting the nearest body take what it can while reserving one
+    // floor's worth per remaining body gives the body the player is looking at
+    // the split piece set and the ones behind it the cheap shape. `remaining` is
+    // debited by what a body ACTUALLY spawned, not by what it was allowed —
+    // tiers are discrete, and an allowance of 13 buys 12.
+    let remaining = blastBudget;
+    let condemnedLeft = condemned.length;
+    for (const pb of fx.perBody) {
+      const a = actors.find(q => String(q.id) === pb.bodyId);
+      if (!a) continue;
+      if (pb.gibbed) {
+        const tg = performance.now();
+        // SINGLE-HIT RULE: damage ≥ GIB_THRESHOLD skips death entirely. The
+        // resolver has already decided, and nothing severs a body that is
+        // about to stop existing.
+        if (gibTearSec > 0) {
+          // The window takes it from here: `spawnScheduledGibs` does the pool
+          // arithmetic when the body actually becomes pieces, so the budget
+          // below is deliberately not spent now.
+          scheduleGib(a, at, pb.falloff);
+          prof.gib += performance.now() - tg;
+          gibbed++;
+          continue;
+        }
+        const allowance = gibAllowance(remaining, condemnedLeft);
+        const made = gibActor(a, at, pb.falloff, allowance);
+        pieces += made;
+        remaining = gibDebit(remaining, made);
+        condemnedLeft = Math.max(0, condemnedLeft - 1);
+        prof.gib += performance.now() - tg;
+        gibbed++;
+        continue;
+      }
+      // Wounds, meter credit, shove and the sever tail — all owned by the
+      // actor's blast() (its doc block carries the meter contract).
+      const tw = performance.now();
+      a.blast({ wounds: pb.wounds, meterCredit: pb.meterCredit, impulse: pb.rigImpulse });
+      // Guts, on the same stamp-time rule the pellet path uses.
+      for (const w of pb.wounds) spillVerdict(a, w);
+      prof.wound += performance.now() - tw;
+    }
+    dynGibbed += gibbed;
+    dynGibPieces += pieces;
+
+    // Concussion on pieces that already existed (the resolver's list) and on
+    // the pieces this blast just made (spawnChunkPiece's ids, patched here).
+    for (const ci of fx.chunkImpulses) {
+      const c = liveChunks.find(q => q.id === ci.chunkId);
+      if (c) c.state.vel = [ci.vel[0], ci.vel[1], ci.vel[2]];
+    }
+    // ——— The camera kick. `cameraKick` is the game's quake→magnitude mapping
+    //     (quake/40 ≈ 4 at the epicentre, falling off linearly with distance) —
+    //     a MAGNITUDE, not radians, so it is scaled into the same `recoilPitch`
+    //     channel the gun kick uses and rides that channel's decay. One channel
+    //     on purpose: two independent pitch impulses would fight.
+    recoilPitch += fx.cameraKick * BLAST_KICK_RAD_PER_UNIT;
+    // The burst BILLBOARD. Stage 3 replaces this stand-in with the procedural
+    // fireball (webgpu/explosion-vfx.ts); until that lands the detonation still
+    // has to be VISIBLE, so the tuning pass is not blocked on the art.
+    // THE LIGHT, ignited here rather than in the VFX module: the module owns the
+    // particles, the wiring owns what the room sees. A blast at the far end of a
+    // corridor still gets a light (it does nothing useful, but consistency beats
+    // a distance gate nobody can see).
+    igniteExplosionLight(at);
+    const burst = scaleBurstVisual(fx.burst);
+    if (explosionVfx) explosionVfx.spawn(burst);
+    else if (burstLayer) burstLayer.spawn(burst);
+    // ...including the stand-in, which used to get the UNSCALED height and was
+    // therefore a third size convention in a three-way branch. It is the
+    // control arm of the A/B; a control at a different size compares nothing.
+    else spawnBurstStandIn(burst.at, burst.heightM, burst.kind);
+    prof.chunksSpawned = pieces;
+    dynLastRadiusM = fx.radiusM;
+    dynLastBlastMs = performance.now() - t0;
+    prof.total = dynLastBlastMs;
+    dynBloodOrphans += 0;
+    telemetry.event('dynamite-detonate', {
+      x: at[0], y: at[1], z: at[2], radiusM: fx.radiusM,
+      bodies: fx.perBody.length, gibbed, pieces, ms: dynLastBlastMs,
+    });
+  }
+
+  /**
+   * SCHEDULE A GIB — the pre-tear window's entry point (dev-note §3c).
+   *
+   * With `?gibtear=0` this IS the old path: the body becomes pieces in the frame
+   * the bundle goes off. With a window, the body is BENT by the shockwave for
+   * `gibTearSec` first and the pieces are spawned when the window closes, which
+   * is the owner's own description of what the transition should do — "the SDF
+   * flesh ... distort the flesh from the shockwave and jiggle and then rip
+   * away".
+   *
+   * A body already in the window is NOT scheduled twice: a second bundle landing
+   * on a doomed body inside 0.1 s finds it mid-tear and leaves it alone, which
+   * is also what keeps the piece census honest (one body, one gib).
+   */
+  function scheduleGib(a: ZombieActor, at: Vec3, falloff: number): void {
+    if (gibTearSec <= 0) return; // caller gibs immediately
+    if (a.tearing() || pendingGibs.some(q => q.actor === a)) return;
+    a.setTearTuning({ sec: gibTearSec, ...tearShape });
+    a.beginTear(at, falloff);
+    pendingGibs.push({ actor: a, at: [at[0], at[1], at[2]], falloff });
+  }
+
+  /**
+   * TURN EVERY BODY WHOSE WINDOW HAS CLOSED INTO PIECES. Runs once per tick,
+   * AFTER the actors have stepped, so `a.posed()` is the pose the body was last
+   * DRAWN in and the hand-off from bent body to pieces has nothing to hide.
+   *
+   * The pool is divided across this tick's ready bodies with the same greedy
+   * rule a blast uses (nearest first, one floor reserved for each body still to
+   * come), because a window that closes for three bodies at once is a blast's
+   * worth of pieces arriving at once.
+   */
+  function spawnScheduledGibs(dt: number): number {
+    if (pendingGibs.length === 0) return 0;
+    // THE WINDOW'S CLOCK LIVES HERE, not in the body's step: a frozen capture
+    // (`?frozen=1`) skips the whole body block, and a body whose clock stopped
+    // would never become pieces. Stepping it here also means the bent body is
+    // re-drawn on frames the body itself did not step.
+    for (const q of pendingGibs) q.actor.stepTear(dt);
+    const ready = pendingGibs.filter(q => !q.actor.tearing());
+    if (ready.length === 0) return 0;
+    let remaining = gibBudget();
+    let left = ready.length;
+    let spawned = 0;
+    for (const q of ready) {
+      const i = pendingGibs.indexOf(q);
+      if (i >= 0) pendingGibs.splice(i, 1);
+      const allowance = gibAllowance(remaining, left);
+      const made = gibActor(q.actor, q.at, q.falloff, allowance);
+      q.actor.endTear();
+      remaining = gibDebit(remaining, made);
+      left--;
+      spawned += made;
+    }
+    // The census counters live here rather than only in detonateAt: with a
+    // pre-tear window the pieces are born in the TICK, several frames after the
+    // blast that condemned the body, and a counter that only counted the blast
+    // frame reported zero pieces for a gib that plainly happened (the gate's
+    // live-view row showed 19 -> 24 chunks against "no pieces were spawned").
+    dynGibPieces += spawned;
+    for (const q of ready) dynScheduledGibBodies++;
+    dynScheduledGibPieces += spawned;
+    return spawned;
+  }
+
+  /**
+   * GIB A LIVE ACTOR — the thing the active game did not have.
+   *
+   * The lab gibs a body by calling sever.ts and spawning chunks; here the body
+   * belongs to an actor with a GPU view, a brain, a collapse clock and a room
+   * membership, so this is bookkeeping as much as it is gore:
+   *
+   *  1. `gibParts` (the default) on the POSED body — the split piece set with
+   *     the skeleton released as its own bone pieces. `?gib=clusters|pieces`
+   *     keeps sever.ts's two older shapes as A/B controls. Pieces come back in
+   *     WORLD space, which is exactly what spawnChunkPiece wants — the same
+   *     frame the existing sever path hands it.
+   *  2. **ZERO VELOCITY AT BIRTH, THEN THE BLAST.** Every piece is spawned
+   *     stationary at the transform the body is actually in, and its concussion
+   *     velocity is QUEUED for a later frame (`pendingGibImpulses`). Frame 0 is
+   *     therefore the body's own silhouette rather than a magic trick, and the
+   *     pieces come apart over `gibStaggerFrames` frames with the NEAREST the
+   *     blast going first — so the blast reads as ripping outward THROUGH the
+   *     body instead of the body being swapped for debris.
+   *  3. The actor is RETIRED: hidden, unregistered, dropped from `actors`. Its
+   *     GPU view is deliberately NOT disposed — every chunk's template borrows
+   *     that view's uniforms and volume texture (the sever path makes the same
+   *     borrow), so freeing it would take the gib's own geometry with it. That
+   *     is a bounded, deliberate leak: the roster is finite and the view is
+   *     small beside the geometry it seeds.
+   *
+   *     THE PRE-TEAR WINDOW OF THE DESIGN (dev-note §3c, the flesh pushed
+   *     outward and jiggled BEFORE it tears) IS NOT HERE, and it cannot be
+   *     until the body outlives this function: the cheapest mechanism for it is
+   *     pumping the struck actor's `woundCfg.z` (rim splay — the only existing
+   *     uniform that everts flesh outward, and it is not in the wound cull's
+   *     reach formula, so it is safe to animate), and that needs the resolver's
+   *     wounds stamped on a body that is still being marched. Today a gibbing
+   *     blast takes this branch, stamps nothing, and the actor is gone in the
+   *     same frame, so a rim pump here would be dead code. §3(a)/(b) — what
+   *     this function now does — are the prerequisite, which is the order the
+   *     design asks for them in anyway.
+   */
+  function gibActor(a: ZombieActor, at: Vec3, falloff: number, budget: number): number {
+    const posedBody = a.posed();
+    const torsoC = posedBody.clusters.find(c => c.limb === 'torso')?.center
+      ?? ([at[0], at[1], at[2]] as Vec3);
+    const clusters: GibPiece[] = (gibMode === 'pieces' ? gibAllPieces(posedBody, torsoC) : gibAll(posedBody))
+      .chunks.map(g => ({ ...g, part: g.limb, kind: 'limb' as const }));
+    const pieces: GibPiece[] = gibMode === 'parts' ? gibParts(posedBody, { bones: gibBones }) : clusters;
+    const template = { uniforms: a.view.uniforms, volumeTexture: a.view.volumeTexture };
+    // IS THIS BODY ACTUALLY GOING OUT AS SPRITES? Both halves matter: the mode
+    // has to be on AND there has to be an atlas to cut a frame from. Resolved
+    // ONCE per body and used for the tier decision AND the spawn loop, so a body
+    // can never take the sprite path's budget while spawning marched pieces.
+    const spriteMode = gibRenderMode === 'sprite' && gibAtlas !== null;
+    // CARVE IS THE THIRD RENDERER: real meshes from the archetype library. It
+    // resolves ONCE per body (mode on AND a library that built), so a body can
+    // never take the carve budget while spawning something else.
+    const carveMode = gibRenderMode === 'carve' && ensureCarvedLibrary() && carvedLibrary !== null;
+    if (gibRenderMode === 'sprite' && gibAtlas === null && !gibSpriteAtlasWarned) {
+      gibSpriteAtlasWarned = true;
+      console.warn('[gib-sprites] ?gibrender=sprite but no atlas is loaded — '
+        + 'falling back to marched pieces for this session');
+    }
+    const launchFall = EXPLOSION_LAUNCH.falloffFloor
+      + (1 - EXPLOSION_LAUNCH.falloffFloor) * falloff;
+    // NEAREST THE BLAST FIRST, and the sort is load-bearing twice over: it is
+    // what the stagger's order means, AND it is what decides which pieces
+    // survive the budget when even the cheapest shape does not fit. The old
+    // code sliced in cluster order, so which half of a body you got was an
+    // accident of the authoring order.
+    const dist = (p: Vec3) => (p[0] - at[0]) ** 2 + (p[1] - at[1]) ** 2 + (p[2] - at[2]) ** 2;
+    const byBlast = (list: GibPiece[]) => [...list].sort((x, y) => dist(x.origin) - dist(y.origin));
+
+    // ——— THE TIERS. A blast that takes three bodies at once wants ~72 pieces
+    // and the live pool holds 24; SOMETHING has to give, and what must NOT give
+    // is the body. A retired actor whose pieces were all dropped does not read
+    // as "the pool was full", it reads as a body that VANISHED with no gore at
+    // all — and three of the arena's eight zombies disappear at once. So the
+    // shape degrades before the count does: the full split set, then the same
+    // set without the skeleton (the bones are what the pool cannot afford
+    // first), then sever.ts's one-chunk-per-limb shape, and only if even THAT
+    // does not fit is anything dropped at all.
+    let chosen = byBlast(pieces);
+    let tier = gibMode === 'parts' ? 'parts' : gibMode;
+    // ——— SPRITE MODE HAS NO LADDER, AND THAT IS THE FEATURE ————————————————
+    // Everything below this branch exists to answer ONE question: "the pool
+    // cannot afford this body's full piece set, what shape do we take instead?"
+    // Every rung is a worse-looking body — `clusters` is the one-tube-per-limb
+    // shape the owner rejected by name ("it just breaks into like tubes (arms and
+    // legs) and orbs (torso) which doesnt really read as gibs"), and it is
+    // reached precisely when several bodies are gibbed at once, which is exactly
+    // what a bundle thrown into a crowd does. A quad cannot cost what a marched
+    // piece costs, so `gibBudget()` hands sprite mode its own cap and the
+    // condition that would degrade the shape never becomes true. The body comes
+    // apart completely, every time, which is what retired the owner's report.
+    if (carveMode) {
+      // NO LADDER, for the same reason as sprite mode and one more: the carved
+      // piece set IS the whole body by construction (every region of it), so
+      // there is no cheaper shape to degrade to — a degraded carve would just be
+      // a body with holes in it.
+      tier = 'carve';
+    } else if (spriteMode) {
+      tier = 'sprite';
+      // A blast bigger than the cap still slices — nearest-the-blast first, the
+      // same order the ladder's fallbacks use — but that is the CAP talking, not
+      // a shape compromise: the pieces that go are the ones the player is
+      // furthest from.
+      if (chosen.length > budget) chosen = chosen.slice(0, Math.max(1, budget));
+    } else if (chosen.length > budget) {
+      // The ladder is computed LAZILY — the cheapest shape is a second
+      // partition of the body, and a blast that fits the full set must not pay
+      // to build shapes it will not use.
+      //
+      // `parts-core` is the FIRST rung because the skeleton is the part of this
+      // the owner asked for BY NAME: the three torso masses and the skull are
+      // what make a pile read as a body rather than as meat, so dropping the
+      // eight long bones before dropping those is the right way round.
+      const coreOnly = () => gibParts(posedBody, { bones: 'core' })
+        .filter(p => p.kind === 'bone');
+      const core = () => byBlast(gibParts(posedBody, { bones: 'core' }));
+      // CLUSTERS + THE CORE SKELETON, which is the one tier that exists purely
+      // for the owner's headline complaint. The cheap shape below it is one
+      // chunk per LIMB, and those chunks carry their bones PACKED INSIDE the
+      // meat — the exact "i still dont see anything bone related like idk rib
+      // cage or something" the piece set was built to end. MEASURED with the
+      // bone census (`chunkCensus().bonePieces` / `.buriedBonePieces`): a
+      // two-body blast into a 24-piece pool read `bonePieces 3` (a visible
+      // ribcage, skull and pelvis on the first body) and `buriedBonePieces 6`
+      // (only the body the pool could not afford), against `bonePieces 22,
+      // buried 0` for the two bodies a 48-piece pool allows.
+      const clustersPlusCore = () => byBlast([...clusters, ...coreOnly()]);
+      // CLUSTERS + THE RIBCAGE ALONE, for a pool that can afford seven pieces
+      // per body and no more. `bone.cage` is the piece the owner asked for BY
+      // NAME ("idk rib cage or something") and it is the one that reads as a
+      // skeleton at a glance; of the eleven bone groups it is the one worth a
+      // slot when there is exactly one to spend.
+      const cageOnly = () => gibParts(posedBody, { bones: 'core' })
+        .filter(p => p.kind === 'bone' && p.part === 'bone.cage');
+      const clustersPlusCage = () => byBlast([...clusters, ...cageOnly()]);
+      // A FLESH-ONLY TIER (twelve split pieces, no skeleton at all) USED TO SIT
+      // HERE, between these two, and it has been REMOVED — measured, not
+      // tidied. In a tight pool it won the allocation on piece count and spent
+      // the body's whole allowance on meat: the blast then released twelve
+      // pieces with no bone anywhere in the pile, which is the owner's headline
+      // complaint reproduced by the fallback rather than by the piece set. The
+      // flesh-only shape is still reachable (`?gibbones=off` makes it the FIRST
+      // tier, so it needs no rung of its own), and the rung below buys the
+      // skull, ribcage and pelvis for the same three slots it costs.
+      for (const tierTry of [
+        { id: 'parts-core', size: core },
+        { id: 'clusters+core', size: clustersPlusCore },
+        { id: 'clusters+cage', size: clustersPlusCage },
+        { id: 'clusters', size: () => byBlast(clusters) },
+      ]) {
+        const candidate = tierTry.size();
+        if (candidate.length <= budget) { chosen = candidate; tier = tierTry.id; break; }
+      }
+      if (chosen.length > budget) { chosen = chosen.slice(0, Math.max(1, budget)); tier = 'slice'; }
+    }
+    const ordered = chosen;
+    const liveBefore = liveChunks.length;
+    const spawning = ordered;
+    const dropped = pieces.length - spawning.length;
+    // The stagger's shape: pieces per frame, so the whole body has come apart
+    // within `gibStaggerFrames` frames whatever the piece count is. A 24-piece
+    // body over 3 frames releases 8 a frame — a wavefront through the body,
+    // which is the read; a fixed 1-per-frame would take 8 frames on the one
+    // body and 2 on the next.
+    const perFrame = Math.max(1, Math.ceil(spawning.length / gibStaggerFrames));
+    const boneOnly = (g: GibPiece) => g.prims.length === 0 && g.bones.length > 0;
+    let spawned = 0, boneSpawned = 0;
+    // ——— CARVE: THE WHOLE BODY, FROM THE ARCHETYPE LIBRARY —————————————————
+    // The piece set here is NOT `spawning` (the body's authored split) but the
+    // library's carved regions, which cover the whole body including its
+    // skeleton. Placement is the one approximation this path makes: the library
+    // is baked in the archetype's REST pose, so a piece goes to
+    // `actorPos + rotateY(regionCentre, bodyYaw)`. A gib is anonymous meat a
+    // frame after the blast, so a rest-pose arm on a mid-stride body is the
+    // standard trade — and it is what makes ONE library serve every zombie.
+    if (carveMode && carvedLibrary && carvedMaterial) {
+      const lib = carvedLibrary.pieces;
+      const yaw = a.pose().yaw;
+      const cy = Math.cos(yaw), sy = Math.sin(yaw);
+      const base = a.pose().pos;
+      const perFrameCarve = Math.max(1, Math.ceil(lib.length / gibStaggerFrames));
+      for (let i = 0; i < lib.length; i++) {
+        const p = lib[i]!;
+        // Body space -> world: yaw about the vertical, then translate.
+        const wx = base[0] + (p.centre[0] * cy + p.centre[2] * sy);
+        const wy = base[1] + p.centre[1];
+        const wz = base[2] + (-p.centre[0] * sy + p.centre[2] * cy);
+        const o: Vec3 = [wx, wy, wz];
+        const vel = concussionVelocity(at, o, EXPLOSION_STANDARD.impulse * launchFall * gibVelScale);
+        const delay = 1 + Math.min(gibStaggerFrames - 1, Math.floor(i / perFrameCarve));
+        if (spawnCarvedPiece(p, o, 'limb', vel, delay)) spawned++;
+      }
+    }
+    for (let i = 0; i < spawning.length && !carveMode; i++) {
+      const g = spawning[i]!;
+      const vel = concussionVelocity(at, g.origin, EXPLOSION_STANDARD.impulse * launchFall * gibVelScale);
+      // + 1: every piece spends at least ONE FULL FRAME at rest, so the
+      // first frame drawn after the blast is the body's own silhouette in
+      // place. See stepPendingGibImpulses for why this counts drains. The
+      // sprite path passes it to `spawnSpritePiece` instead, and
+      // `stepSpritePieces` counts drains the same way.
+      const delay = 1 + Math.min(gibStaggerFrames - 1, Math.floor(i / perFrame));
+      if (spriteMode) {
+        // THE SAME PIECE, A DIFFERENT RENDERER. `g` carries the split (which
+        // prims, which bones, which limb) and the sprite path reads only its
+        // EXTENT and identity from it — the geometry itself never touches the
+        // GPU, which is the trade the owner accepted ("sure you trade 3d but its
+        // not important in this case").
+        if (spawnSpriteGibPiece(g, vel, delay)) {
+          spawned++;
+          if (boneOnly(g)) boneSpawned++;
+        }
+        continue;
+      }
+      spawnChunkPiece({
+        limb: g.limb, origin: g.origin, prims: g.prims, tornAt: g.tornAt, bones: g.bones, kind: g.kind,
+      }, template, [0, 0, 0]); // AT REST: see the doc block, point 2
+      const made = liveChunks[liveChunks.length - 1];
+      if (made) {
+        pendingGibImpulses.push({ id: made.id, vel, delay });
+        spawned++;
+        if (boneOnly(g)) boneSpawned++;
+      }
+    }
+    // Gore: the blast opens the body, so one gout at the epicentre. `spawnImpactGout`
+    // takes the SIM directly (its droplets are rendered by bloodView.sync), and
+    // 'slug' is the heaviest profile BleedKind has — there is no 'blast' one.
+    if (bleedEnabled) {
+      spawnImpactGout(bloodSim, 'slug', at, [0, 1, 0], rngStreams.bleed, nextEmitterStream++);
+    }
+    retireActor(a);
+    telemetry.event('dynamite-gib', {
+      actor: a.id, mode: gibMode, tier, pieces: spawned, dropped, bones: boneSpawned,
+      gibBones, gibStaggerFrames, gibVelScale, budget, liveBefore,
+    });
+    dynLastGibDropped = dropped;
+    dynLastGibTier = tier;
+    dynGibTierLog.push(`${tier}:${spawned}`);
+    dynLastGibSpawned = spawned;
+    // WHAT THE BODY BECAME, by name. A census of chunk counts cannot say
+    // whether the RIBCAGE is in the pile, and "is there a ribcage" is the
+    // owner's actual question — so the part ids ride the seam.
+    dynLastGibParts = spawning.map(g => g.part);
+    dynLastGibHeld = spawning.length - spawned;
+    return spawned;
+  }
+
+  /** Take a gibbed actor out of the world: hidden from every pass, out of the
+   *  router, out of the roster. The view is retained — see gibActor. */
+  function retireActor(a: ZombieActor): void {
+    const pi = pendingGibs.findIndex(q => q.actor === a);
+    if (pi >= 0) pendingGibs.splice(pi, 1);
+    a.view.object.visible = false;
+    a.view.coneObject.visible = false;
+    deferredApi?.router.unregister(a.view.object);
+    deferredApi?.router.unregister(a.view.coneObject);
+    a.view.object.removeFromParent();
+    a.view.coneObject.removeFromParent();
+    const i = actors.indexOf(a);
+    if (i >= 0) actors.splice(i, 1);
+  }
+
+  // -----------------------------------------------------------------------
+  // The burst stand-in (stage 3 replaces this with webgpu/explosion-vfx.ts).
+  // Additive cards in the effects overlay — the SAME routing the tracers use
+  // (character-effects.ts's header explains why: that scene is drawn after the
+  // SDF composite with the completed depth buffer, so the composite cannot
+  // erase the burst and bodies can still occlude it).
+  // -----------------------------------------------------------------------
+  const BURST_SLOTS = 6;
+  const burstTex = new THREE.DataTexture(flashPixels(64, 11), 64, 64);
+  burstTex.needsUpdate = true;
+  const smokeBurstTex = new THREE.DataTexture(smokePixels(64), 64, 64);
+  smokeBurstTex.needsUpdate = true;
+  interface BurstSlot {
+    core: THREE.Sprite; halo: THREE.Sprite; smoke: THREE.Sprite;
+    age: number; life: number; h: number;
+  }
+  const burstSlots: BurstSlot[] = [];
+  for (let i = 0; i < BURST_SLOTS; i++) {
+    const core = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: burstTex, color: new THREE.Color(7, 4.4, 1.9), transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthTest: true, depthWrite: false, toneMapped: false,
+    }));
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: burstTex, color: new THREE.Color(2.2, 0.62, 0.14), transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthTest: true, depthWrite: false, toneMapped: false,
+    }));
+    const smoke = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: smokeBurstTex, color: new THREE.Color(0.22, 0.20, 0.185), transparent: true, opacity: 0,
+      depthTest: true, depthWrite: false, toneMapped: false,
+    }));
+    for (const s of [core, halo, smoke]) { s.visible = false; characterEffects.scene.add(s); }
+    burstSlots.push({ core, halo, smoke, age: Infinity, life: 0.55, h: 1 });
+  }
+  let burstCursor = 0;
+  function spawnBurstStandIn(at: Vec3, heightM: number, kind: 'air' | 'ground'): void {
+    const s = burstSlots[burstCursor++ % BURST_SLOTS]!;
+    s.age = 0;
+    s.life = kind === 'ground' ? 0.62 : 0.5;
+    s.h = heightM;
+    // Ground bursts sit ON the floor and bloom up; air bursts centre.
+    const y = kind === 'ground' ? at[1] + heightM * 0.35 : at[1];
+    for (const m of [s.core, s.halo, s.smoke]) { m.position.set(at[0], y, at[2]); m.visible = true; }
+  }
+  function stepBursts(dt: number): void {
+    for (const s of burstSlots) {
+      if (s.age === Infinity) continue;
+      s.age += dt;
+      const u = s.age / s.life;
+      if (u >= 1) {
+        s.age = Infinity;
+        for (const m of [s.core, s.halo, s.smoke]) m.visible = false;
+        continue;
+      }
+      // A fast hot core, a slower halo, and a dark smoke card that outlives both.
+      const fade = 1 - u;
+      s.core.material.opacity = Math.pow(fade, 2.4);
+      s.halo.material.opacity = 0.75 * Math.pow(fade, 1.3);
+      s.smoke.material.opacity = 0.55 * Math.min(1, u * 2.2) * fade;
+      const grow = 0.35 + 1.25 * Math.sqrt(u);
+      s.core.scale.setScalar(s.h * 1.25 * grow);
+      s.halo.scale.setScalar(s.h * 2.1 * grow);
+      s.smoke.scale.setScalar(s.h * 2.6 * grow);
+      s.smoke.position.y += dt * s.h * 0.55;
+    }
+  }
+
+  /**
+   * One frame of the slot machine and the holster travel it drives.
+   *
+   * `slotLowerAmount` is TOTAL (see the module): the gun is at 1 whenever the
+   * dynamite is up and vice versa, so each model's transform is one multiply
+   * and neither needs to know which phase the switch is in.
+   */
+  // ——— THE PROCEDURAL EXPLOSION (stage 3) ————————————————————————————————
+  // The stand-in above draws an explosion that is merely VISIBLE; this is the
+  // real one: webgpu/explosion-vfx.ts's GPU fireball / smoke / ember / ring,
+  // whose look is generated in TSL node graphs rather than sampled from an
+  // atlas. Four draw calls in total however many bursts are live (each layer is
+  // one dynamic geometry refilled in world space), and it is routed into
+  // characterEffects.scene for the same reason the tracers are: that scene
+  // renders after the SDF composite against the finished depth buffer, so the
+  // composite cannot erase the burst while bodies still occlude it.
+  //
+  //   ?explosionfx=procedural (default) | standin
+  // so the two can be A/B'd without a rebuild and the stand-in keeps its job as
+  // the control it was written to be.
+  //   ?explosionfx=procedural (default) | atlas | standin
+  // `atlas` is the extracted Blood SEQ flipbook — the dev-placeholder art the
+  // OWNER asked to keep available while the procedural burst is still finding
+  // its shape ("we can also use the placeholder sprite animation for now if its
+  // an issue"). It is the authentic mushroom, and it is the reference the
+  // procedural path has to match. DEV ONLY: those tiles are gitignored, never
+  // committed and never shipped, and the layer falls back to the procedural
+  // discs when they are absent (a fresh clone without scripts/link-dev-assets.sh).
+  const fxMode = DYN_PARAMS.get('explosionfx') ?? 'procedural';
+  let explosionVfx: ExplosionVfx | null = null;
+  let burstLayer: BurstLayer | null = null;
+  if (fxMode === 'atlas') {
+    burstLayer = createBurstLayer(characterEffects.scene);
+  } else if (fxMode !== 'standin') {
+    try {
+      explosionVfx = createExplosionVfx();
+      // The owner's size/smoke calls, applied as DEFAULTS rather than left to a
+      // caller: a burst that hides the gib is the wrong default whatever the
+      // module's own taste is. Three of the four stay overridable (?fxsmoke
+      // ?fxlife ?fxgain) and live via __sdfGame.setExplosionFxTuning().
+      //
+      // `fireScale` IS DELIBERATELY NOT ONE OF THEM. It is the module's own
+      // multiplier on the burst's half-height, and `scaleBurstVisual` below
+      // already carries the owner's `?fxsize` into that same half-height — so
+      // setting both applied `fxSize` TWICE to the procedural path only
+      // (0.42 × 0.42 × heightM) while the atlas path took it once. At the
+      // shipped knobs that made the procedural burst 0.69 m tall against the
+      // atlas quad's 1.65 m: `?explosionfx=atlas` is the reference the plume is
+      // supposed to be matched against, and a 2.38x size mismatch is not a
+      // comparison. One multiplier, all three modes.
+      explosionVfx.setTuning({
+        smokeOpacity: fxSmoke, lifeSec: fxLife, gain: fxGain,
+        // THE SHAPE SWITCH IS FOUR SETTINGS, NOT ONE. `plumeMix` alone blends
+        // the envelope terms, and measured through the differential capture it
+        // barely moved the silhouette (cap/stem 20.6 against 21.8): the fire's
+        // CAP ROLE is what puts mass up top, and that is a separate knob. An
+        // A/B that does not move the number it exists to compare is not an A/B.
+        plumeMix: fxPlume,
+        fireCapShare: fxPlume,
+        capFlatten: 1 - (1 - 0.55) * fxPlume,
+        capFireFlatten: 1 - (1 - 0.5) * fxPlume,
+      });
+      characterEffects.scene.add(explosionVfx.object);
+    } catch (e) {
+      // Fail OPEN to the stand-in rather than take the page down: a node graph
+      // this GPU cannot compile is a look problem, not a reason to have no
+      // explosion at all.
+      console.error('[sdf-game] explosion-vfx unavailable, using the stand-in:', e);
+      explosionVfx = null;
+    }
+  }
+
+  /** The resolver's `BurstVisual` with the owner's size multiplier applied —
+   *  the ONE place `?fxsize` enters, for all three modes. The procedural module
+   *  reads the height it is handed times its own `fireScale`, which is left at
+   *  1.0 on this page precisely so this line is the only multiplier (see the
+   *  setTuning comment above: applying it in both places made the procedural
+   *  burst 2.38x smaller than the atlas it is the reference against). */
+  function scaleBurstVisual(visual: BurstVisual): BurstVisual {
+    return { ...visual, heightM: visual.heightM * fxSize };
+  }
+
+  function stepWeaponSlots(dt: number): void {
+    slotState = stepWeaponSlot(slotState, dt);
+
+    const gunLower = slotLowerAmount(slotState, 'shotgun');
+    // Drop out of frame AND dip the muzzles: that reads as putting a gun away,
+    // where a fade reads as a bug.
+    gunRig.position.set(0, -0.42 * gunLower, 0.06 * gunLower);
+    gunRig.rotation.set(THREE.MathUtils.degToRad(38) * gunLower, 0, 0);
+    gunRig.visible = gunLower < 0.999;
+
+    const bundleLower = slotLowerAmount(slotState, 'dynamite');
+    bundleRig.position.set(
+      BUNDLE_HOLD.pos.x,
+      BUNDLE_HOLD.pos.y - 0.34 * bundleLower,
+      BUNDLE_HOLD.pos.z,
+    );
+    // Only the LIVE weapon's model is drawn: during the drop the bundle is
+    // still holstered, and it appears the instant the frame changes hands.
+    bundleRig.visible = slotState.live === 'dynamite' && heldProp !== null;
+  }
+
+  /**
+   * One frame of dynamite: the cook machine, the flights, and the hand state.
+   *
+   * `stepCook` (fpv.ts) is the authority on WHEN a bundle leaves the hand and
+   * on the overcook — this only routes its one-shot signal to the throw or to
+   * the in-hand detonation, so the timing rules have exactly one home.
+   */
+  function stepDynamite(dt: number): void {
+    dynNow += dt;
+    const liveDyn = slotState.live === 'dynamite' && slotReady(slotState);
+    const { state: nextCook, signal } = stepCook(
+      cook, { press: dynPress && liveDyn, release: dynRelease && liveDyn }, dynNow,
+    );
+    cook = nextCook;
+    dynPress = false;
+    dynRelease = false;
+    const sig: CookSignal | null = signal;
+    if (sig?.kind === 'throw') throwBundle(sig.speedMps);
+    else if (sig?.kind === 'overcook') overcookInHand();
+    dynCharge = chargeFraction(dynNow - cook.cookStart) * (cook.phase === 'cooking' ? 1 : 0);
+    reacquireHeldProp();
+
+    // ——— The flights. Stepped at the flight module's own 120 Hz so the body
+    //     contact test is as fine as the bounces are; a bundle that hits a body
+    //     detonates there, which is what makes the thing aimable at all.
+    for (let i = liveBundles.length - 1; i >= 0; i--) {
+      const b = liveBundles[i]!;
+      // The ceiling is resolved per bundle PER FRAME, from where the bundle is:
+      // see ceilingAt. One frame of lag across a doorway is invisible (the wall
+      // boxes catch that frame), and a 5-entry lookup per bundle per frame is
+      // nothing next to getting the roof wrong.
+      const world = { colliders, ceilM: ceilingAt(b.state.pos[0], b.state.pos[2]) };
+      let remaining = Math.min(dt, 0.25);
+      let boom: Vec3 | null = null;
+      while (remaining > 1e-9 && !flightDetonated(b.state)) {
+        const sub = Math.min(remaining, FLIGHT_TUNING.subStepSec);
+        remaining -= sub;
+        const from = b.state.pos;
+        // bounds: null — the dungeon has no arena rect; `colliders` is its
+        // real solid geometry and `ceilM` its ceiling.
+        b.state = stepFlight(b.state, sub, null, world);
+        if (bundleHitsBody(from, b.state.pos)) { boom = b.state.pos; break; }
+      }
+      if (!boom && flightDetonated(b.state)) boom = b.state.pos;
+      if (boom) {
+        // Hand the prop back BEFORE the blast so the very next cook has one.
+        if (b.prop) { b.prop.object.visible = false; spareBundles.push(b.prop); }
+        liveBundles.splice(i, 1);
+        detonateAt(boom);
+        continue;
+      }
+      b.prop?.pose({ mode: 'flight', pos: b.state.pos, spin: b.state.spin, fuseBurning: true });
+    }
+    stepBursts(dt);
+    explosionVfx?.update(dt, camera);
+    burstLayer?.update(dt, camera);
+
+    // THE MESH-SIDE LIGHT. Aged and written every frame: the pool lights are
+    // allocated once and only ever modulated, and an idle slot is switched off
+    // rather than left at 0 intensity so it costs no shader work.
+    for (let i = explosionLights.length - 1; i >= 0; i--) {
+      const e = explosionLights[i]!;
+      e.age += dt;
+      if (e.age >= EXPLOSION_LIGHT.lifeSec) explosionLights.splice(i, 1);
+    }
+    for (let i = 0; i < explosionLightPool.length; i++) {
+      const pl = explosionLightPool[i]!;
+      const e = explosionLights[i];
+      if (!e) { pl.visible = false; pl.intensity = 0; continue; }
+      const k = explosionLightEnv(e.age);
+      pl.position.set(e.pos[0], e.pos[1], e.pos[2]);
+      pl.intensity = EXPLOSION_LIGHT.meshPeak * k * fxLightScale;
+      pl.visible = k > 0.001;
     }
   }
 
@@ -4830,6 +7179,58 @@ async function main() {
   // the knobs were there. `__sdfGame.woundPanel(false)` dismisses it, and
   // capture scripts already guard the seam typeof-style.
   woundPanel?.setVisible(true);
+
+  // `?goreparts=1` lays the gore-part bench out in front of the spawn (see
+  // spawnGoreShowcase). It needs a live actor for the palette, so it runs here
+  // rather than at the top of boot, and it is idempotent: the seam re-lays it
+  // wherever the player is standing.
+  if (goreShowcaseOn) {
+    const n = spawnGoreShowcase();
+    console.log(`[gore-parts] showcase: ${n} parts in front of the spawn`);
+  }
+  // `?gibparts=sprite` (or `?gibsprites=1`) lays the SPRITE bench instead — the
+  // reference look, for judging the approach.
+  const gibPartsMode = bootSearch.get('gibparts');
+  if (gibPartsMode === 'sprite' || gibPartsMode === 'sheet' || bootSearch.get('gibsprites') === '1') {
+    void ensureGibAtlas(gibPartsMode === 'sheet' ? 'sheet' : 'placeholder').then(() => {
+      const n = laySpriteBench();
+      console.log(`[gib-sprites] bench: ${n} billboards in front of the spawn`);
+    });
+  }
+  // `?gibrender=sprite` needs the GENERATED sheet loaded BEFORE the first
+  // detonation, because a blast is synchronous and cannot await a fetch. This is
+  // the only preload in the path; a player who detonates before it resolves gets
+  // marched pieces for that one blast (and a warning), never a body with no gore.
+  // `?gibrender=carve` builds the archetype library at BOOT, not on the first
+  // blast: the carve is ~2 s of CPU (18 pieces x surface nets), and paying that
+  // inside a detonation would be a two-second freeze at the worst possible
+  // moment. Once built it is reused for every zombie in the session.
+  if (gibRenderMode === 'carve') {
+    setTimeout(() => { ensureCarvedLibrary(); }, 0);
+  }
+  if (gibRenderMode === 'sprite') {
+    void ensureGibAtlas('sheet').then((n) => {
+      console.log(`[gib-sprites] blast render mode: sprite, ${n} frames, `
+        + `live cap ${gibSpriteLiveCap}, rest cap ${gibSpriteRestCap}, size x${gibSpriteSizeScale}`);
+    });
+  }
+
+  // DYNAMITE / GIB (dynamite-panel.ts). Same contract as the other three: ships
+  // VISIBLE but COLLAPSED at the fourth slot, so its title bar is findable while
+  // it covers nothing. The two presets are the comparison the owner asked for —
+  // the split piece set with a pool wide enough not to degrade it, and the
+  // one-chunk-per-limb shape he rejected, one click apart.
+  dynamitePanel = createDynamitePanel({
+    get: dynamiteTuningValues,
+    set: (key, v) => applyDynamiteTuning({ [key]: v } as Partial<DynamiteTuningValues>),
+    presets: [
+      { label: 'split', values: { mode: 2, bones: 2, maxchunks: 64, tearSec: 0.1 } },
+      { label: 'tubes (old)', values: { mode: 0, bones: 0, maxchunks: 24 } },
+      { label: 'plume', values: { plume: 1, capflat: 0.55, ringreach: 1.4 } },
+      { label: 'ball (old)', values: { plume: 0 } },
+    ],
+  });
+  dynamitePanel.setVisible(true);
 
   // VHS tuning panel. The rows are derived from VHS_TERM_RANGES and every
   // emitted call is keyed by a `keyof VhsTerms`, so unlike the setBeam bug the
@@ -5260,10 +7661,20 @@ async function main() {
   function updateHud() {
     if (!hudEl) return;
     const where = enclosureKeyAt(player.pos[0], player.pos[2]);
+    const slot = slotState.phase !== 'up'
+      ? `switching ${slotState.target}`
+      : slotState.live === 'dynamite'
+        ? `2 DYNAMITE ${cook.phase === 'cooking'
+          ? `${(dynCharge * 100).toFixed(0)}% LIT`
+          : `${liveBundles.length} out`}`
+        : '1 GRAPESHOT';
     hudEl.textContent =
       `${frameEma.toFixed(1)} ms · bodies ${bodiesOnScreen()}/${actors.length}` +
       ` · ${where} · probe ${probeWeight.toFixed(2)}` +
-      ` · shells ${shells}/${MAGAZINE_CAPACITY}` +
+      ` · [${slot}]` +
+      (slotState.live === 'shotgun'
+        ? infiniteAmmo ? ' · shells ∞' : ` · shells ${shells}/${MAGAZINE_CAPACITY}`
+        : '') +
       (slugMode ? ' · ● SLUG (E to switch back)' : ' · PELLETS (E = slug)') +
       (sdfLayer.halfRate
         ? ` · HALF30 ${sdfLayer.halfRateMode === 1 ? 'reproj' : 'hold'}`
@@ -5331,6 +7742,9 @@ async function main() {
     // replay. See the declaration next to lastSeenMs for the why.
     advanceSimClock(dt);
     simFrame++;
+    // Billboard the gib sprites. Cheap (a handful of quads) and it has to be per
+    // frame: a piece that stops facing the camera vanishes edge-on.
+    for (const s of spriteBenchSprites) billboardGib(s, camera);
     segMeshRenderer?.stepDebris(dt);
     // ONE INPUT FRAME PER TICK (stage 3). Live, this snapshots the listeners'
     // accumulated state; replaying, it is the player's next frame. Both go
@@ -5638,6 +8052,12 @@ async function main() {
       // The rig just moved; the shoulders did not. Re-aim the arms at them.
       aimArms();
     }
+    // Weapon slots + the dynamite, AFTER the rig has been placed for this frame
+    // (the holster travel is a local transform on gunRig/bundleRig, so it does
+    // not care where the rig is — but the burst sprites the dynamite spawns are
+    // world-space and want the frame's final camera).
+    stepWeaponSlots(dt);
+    stepDynamite(dt);
     if (reticleEl) {
       reticleEl.style.display = freeAimOn ? 'block' : 'none';
       if (freeAimOn) {
@@ -6042,6 +8462,15 @@ async function main() {
       // GUT ROPES first, so stepBlood's skip of 'gut' droplets this frame
       // sees this frame's chain positions (see stepGutRopes).
       stepGutRopes(cdt);
+      // Bodies whose pre-tear window has closed become pieces HERE — after the
+      // actors stepped above (so the pieces take the pose the body was drawn
+      // in) and before the chunk step (so their impulses are released in the
+      // same frame they are born).
+      spawnScheduledGibs(dt);
+      // The staged release's due impulses, BEFORE the chunk step, so a piece
+      // that goes this frame integrates at its launch velocity for the whole
+      // frame rather than a frame late.
+      stepPendingGibImpulses();
       finishChunkBake();
       for (let ci = liveChunks.length - 1; ci >= 0; ci--) {
         const c = liveChunks[ci]!;
@@ -6051,7 +8480,7 @@ async function main() {
           c.view.update(c.state); // repair view resets (e.g. bone-mode changes) without moving the snapshot
           continue;
         }
-        c.state = stepChunk(c.state, cdt);
+        c.state = stepChunk(c.state, cdt, chunkCollidersAt(c.state.pos));
         c.view.update(c.state);
         if (chunkBakeEnabled && chunkBakeJobs.pendingId === null && !chunkBakeJobs.error && chunkSettled(c.state)) {
           const t0 = performance.now();
@@ -6064,6 +8493,21 @@ async function main() {
           }
           lastBakeRequestMs = performance.now() - t0;
         }
+      }
+      // SPRITE PIECES, on the same clock and in the same block as the marched
+      // ones — deliberately, because they are the same physics: `stepSpritePieces`
+      // calls the same `stepChunk` with the same `chunkCollidersAt`, so a sprite
+      // gib and a marched gib cannot disagree about where the wall is. What it
+      // does NOT do is any of the bake: a settled sprite is parked, not retired
+      // through a worker. Costs a loop over an empty array when the mode is off.
+      if (spritePieces.live.length > 0 || spritePieces.rest.length > 0) {
+        stepSpritePieces(spritePieces, {
+          dt: cdt,
+          cameraQuat: camera.quaternion,
+          collidersAt: chunkCollidersAt,
+          liveCap: gibSpriteLiveCap,
+          restCap: gibSpriteRestCap,
+        });
       }
       telemetry.end('chunks-and-guts', chunkTiming);
       const bloodTiming = telemetry.begin();
@@ -6083,11 +8527,41 @@ async function main() {
             woundStreamId(e.wound),
           );
         }
+        // EVERY FLYING PIECE IS AN EMITTER, IN EITHER RENDER MODE. The owner,
+        // playing the sprite mode: "there are no blood trails — the blood trails
+        // should be in there as before." They were not: this call took only
+        // `liveChunks`, which is EMPTY by construction in sprite mode (a sprite
+        // piece has no marched view), so a sprite blast threw gore that trailed
+        // nothing. The trail is a property of the PIECE, not of how it is drawn,
+        // so both lists feed it.
+        //
+        // THE TWO ID SPACES ARE OFFSET, and that is load-bearing rather than
+        // tidiness: `emitTrails` keys its per-emitter emission clock by id
+        // (`sim.clocks[s.id]`), and chunk ids and sprite ids are INDEPENDENT
+        // sequences that both start at 1. Merged raw, chunk 3 and sprite 3 would
+        // share one clock, so a page that gibbed in one mode and then the other
+        // would have the two pieces stealing each other's emission phase —
+        // trails appearing and vanishing on the wrong bodies.
         emitTrails(
           bloodSim,
-          liveChunks.map(c => ({
-            id: c.id, pos: c.state.pos, vel: c.state.vel, stream: trailStreamId(c.id),
-          })),
+          [
+            ...liveChunks.map(c => ({
+              id: c.id, pos: c.state.pos, vel: c.state.vel, stream: trailStreamId(c.id),
+            })),
+            // LIVE ONLY, not `rest`: the marched path's equivalent of a parked
+            // sprite is a BAKED piece, and a baked piece is out of `liveChunks`
+            // and therefore no longer trails. A stationary emitter would just
+            // stack drops on one spot forever.
+            //
+            // The id is offset by SPRITE_TRAIL_ID_BASE so the two id sequences —
+            // both of which start at 1 — cannot collide; `trailStreamId` is then
+            // given the OFFSET id, so a sprite piece and a chunk never share an
+            // emission stream either (the same separation, one layer down).
+            ...spritePieces.live.map(p => ({
+              id: SPRITE_TRAIL_ID_BASE + p.id, pos: p.state.pos, vel: p.state.vel,
+              stream: trailStreamId(SPRITE_TRAIL_ID_BASE + p.id),
+            })),
+          ],
           cdt, rngStreams.bleed,
         );
         stepBlood(bloodSim, cdt, rngStreams.bleed);
@@ -7622,6 +10096,17 @@ function performBenchAction(a: BenchAction): void {
       };
     },
     get shells() { return shells; },
+    /** Unlimited ammo (the shipped default; ?ammo=finite turns it off). */
+    get infiniteAmmo() { return infiniteAmmo; },
+    setInfiniteAmmo: (on: boolean) => {
+      infiniteAmmo = on;
+      // Turning it OFF with 0 shells in the gun must not leave the player
+      // holding a weapon that can only click: refill so the first dry state is
+      // one the player creates by firing.
+      if (!on) shells = MAGAZINE_CAPACITY;
+      updateHud();
+      return infiniteAmmo;
+    },
     get hingeOpenRad() { return hingePivot?.rotation.x ?? 0; },
     /** The reload's total length, seconds. Exposed so hand-stepping gates can
      *  DERIVE their wait budget instead of hardcoding a tick count: the shorty
@@ -8284,6 +10769,25 @@ function performBenchAction(a: BenchAction): void {
       gooPanel?.setCollapsed(on);
       return gooPanel?.collapsed ?? true;
     },
+    /** Show/hide the DYNAMITE / GIB tuning panel (dynamite-panel.ts). Same
+     *  shape as the other three so a capture script can dismiss them all. */
+    dynamitePanel(on: boolean) {
+      dynamitePanel?.setVisible(on);
+      return dynamitePanel?.visible ?? false;
+    },
+    /** Expand or re-collapse the DYNAMITE / GIB panel. */
+    dynamitePanelCollapsed(on: boolean) {
+      dynamitePanel?.setCollapsed(on);
+      return dynamitePanel?.collapsed ?? true;
+    },
+    /** THE PANEL'S OWN SETTER, from the console: the same keys the sliders use
+     *  (see dynamite-panel.ts's table, which is the one source for both), plus
+     *  the read-back. `__sdfGame.setDynamiteTuning({ maxchunks: 64 })`. */
+    setDynamiteTuning(patch: Partial<DynamiteTuningValues>) {
+      applyDynamiteTuning(patch);
+      return dynamiteTuningValues();
+    },
+    dynamiteTuning: () => dynamiteTuningValues(),
     woundPanelCollapsed(on: boolean) {
       woundPanel?.setCollapsed(on);
       return woundPanel?.collapsed ?? true;
@@ -8375,6 +10879,13 @@ function performBenchAction(a: BenchAction): void {
     boneTubes: () => ({
       count: boneInstancer.count,
       overflowed: boneInstancer.overflowed,
+      /** WHICH PATHS FEED THE TUBES, and whether the object is drawn at all.
+       *  With `gibBoneMesh` a bone gib packs no field rows and its marched proxy
+       *  is hidden, so the instancer is the ONLY thing drawing it — and from the
+       *  chunk census (which counts marched ROWS) "the skeleton is drawn as
+       *  tubes" and "the skeleton silently vanished" are indistinguishable.
+       *  These three make them distinguishable. */
+      gibBoneMesh, bodyBoneMesh: boneMesh, visible: boneInstancer.object.visible,
       /** TASK-6 DIAGNOSTIC (bounded): world endpoints (a, b) of up to 8
        *  posed bone prims — the SAME prim data boneInstancer.update() packs
        *  this frame — so the gate can anchor its tube-texel scan to real
@@ -10376,6 +12887,73 @@ function performBenchAction(a: BenchAction): void {
      *  settles — baked pieces stay baked until shot or recycled. */
     soldierCorpseBake: () => soldierCorpses?.stats(),
     setSoldierCorpseBake(on: boolean) { soldierCorpses?.setEnabled(on); },
+    /** Micro-detail amplitude on every settled/baked piece — the march's
+     *  `surfaceNoiseAmp`, which the bake used to drop entirely. `null` follows
+     *  the live creature (the shipped behaviour); a number overrides it, which
+     *  is how to judge a term whose authored value is 0.06. Live: no rebake,
+     *  the pieces already on the floor change on the next frame. */
+    setChunkDetail(x: number | null, o?: { freq?: number; albedo?: number }) {
+      chunkDetailOverride = x === null ? null : Math.max(0, Math.min(1, x));
+      if (o?.freq !== undefined) chunkDetailFreq = Math.max(0.5, Math.min(64, o.freq));
+      if (o?.albedo !== undefined) chunkDetailAlbedo = Math.max(0, Math.min(1.5, o.albedo));
+      return { amp: chunkDetailOverride, freq: chunkDetailFreq, albedo: chunkDetailAlbedo };
+    },
+    get chunkDetail() {
+      return { amp: chunkDetailOverride, freq: chunkDetailFreq, albedo: chunkDetailAlbedo };
+    },
+    /** WHAT THE MATERIALS ACTUALLY HOLD, not what was requested. `chunkDetail`
+     *  is the override; this is the value the per-frame push last wrote into
+     *  each registered material's `fleshDetail.x`, which is what the shader
+     *  reads. They differ whenever the push is not reaching a material — the
+     *  exact failure this getter exists to make visible, because a look A/B on
+     *  a floor full of recycling gore cannot distinguish "the term does nothing"
+     *  from "the term never arrived". */
+    chunkDetailApplied: () => litChunkMaterials.map(m => {
+      const d = m.uniforms.fleshDetail.value;
+      return { amp: d.x, freq: d.y, albedo: d.z, ambient: m.uniforms.ambient.value.getHex() };
+    }),
+    /** THE BAKED ALBEDO ITSELF, sampled off a settled piece's `bakeColor`
+     *  attribute — the vertex colour the shader composes from.
+     *
+     *  The whole question about a settled piece is whether it looks wrong
+     *  because of the ALBEDO or because of the LIGHT on it, and those two are
+     *  indistinguishable on screen. This reads the albedo directly: mean rgb,
+     *  its range, and the mean wound-mask alpha. Values are LINEAR, matching
+     *  the .blob palette (flesh baseColor is 0.68 0.44 0.40). */
+    bakedAlbedoStats: () => bakedChunks.map(b => {
+      const a = b.mesh.geometry.getAttribute('bakeColor');
+      if (!a) return { id: b.id, error: 'no bakeColor' };
+      const v = a.array as ArrayLike<number>;
+      const n = v.length / 4;
+      let r = 0, g = 0, bl = 0, wm = 0;
+      const mn = [9, 9, 9], mx = [-9, -9, -9];
+      for (let i = 0; i < v.length; i += 4) {
+        r += v[i]!; g += v[i + 1]!; bl += v[i + 2]!; wm += v[i + 3]!;
+        for (let k = 0; k < 3; k++) {
+          if (v[i + k]! < mn[k]!) mn[k] = v[i + k]!;
+          if (v[i + k]! > mx[k]!) mx[k] = v[i + k]!;
+        }
+      }
+      const f = (x: number) => Math.round(x * 1000) / 1000;
+      return {
+        id: b.id, verts: n,
+        mean: [f(r / n), f(g / n), f(bl / n)],
+        min: mn.map(f), max: mx.map(f), meanWoundMask: f(wm / n),
+        // AO: mean and range. A flat 1.0 means the attribute is absent or the
+        // bake is not writing it, which is indistinguishable from "the piece is
+        // simply unoccluded" on screen.
+        ao: (() => {
+          const g2 = b.mesh.geometry.getAttribute('bakeAo');
+          if (!g2) return 'absent';
+          const v2 = g2.array as ArrayLike<number>;
+          let sum = 0, lo = 9, hi = -9;
+          for (let i = 0; i < v2.length; i++) {
+            sum += v2[i]!; if (v2[i]! < lo) lo = v2[i]!; if (v2[i]! > hi) hi = v2[i]!;
+          }
+          return { mean: f(sum / v2.length), min: f(lo), max: f(hi) };
+        })(),
+      };
+    }),
     setChunkBake(on: boolean) {
       chunkBakeEnabled = on;
       if (!on) cancelChunkBake();
@@ -10512,6 +13090,473 @@ function performBenchAction(a: BenchAction): void {
         totalWounds += pb.wounds.length;
       }
       return { radiusM: fx.radiusM, bodiesHit: fx.perBody.length, totalWounds };
+    },
+    // ——— DYNAMITE (slot 2) ————————————————————————————————————————————————
+    /** The REAL detonation — the same call a thrown bundle makes, gibs and all.
+     *  `explode` above stays the wound-only capture twin: this one displaces
+     *  bodies and destroys them, so a still frame of it is not reproducible. */
+    detonate: (x: number, y: number, z: number) => {
+      const before = { actors: actors.length, chunks: liveChunks.length };
+      detonateAt([x, y, z]);
+      return {
+        // `dynLastRadiusM`, NOT `explosionRadiusM()`: see that field's block —
+        // the constant made every radius knob invisible to every rig.
+        radiusM: dynLastRadiusM,
+        actorsBefore: before.actors,
+        actorsAfter: actors.length,
+        chunksBefore: before.chunks,
+        chunksAfter: liveChunks.length,
+        gibbed: dynGibbed,
+        gibPieces: dynGibPieces,
+        lastBlastMs: dynLastBlastMs,
+      };
+    },
+    /** Live slot/cook/flight state — the tuning readout and a gate's oracle. */
+    dynamite: () => ({
+      live: slotState.live,
+      target: slotState.target,
+      phase: slotState.phase,
+      ready: slotReady(slotState),
+      gunLower: slotLowerAmount(slotState, 'shotgun'),
+      bundleLower: slotLowerAmount(slotState, 'dynamite'),
+      cookPhase: cook.phase,
+      charge: dynCharge,
+      inHand: heldProp !== null,
+      inFlight: liveBundles.length,
+      flights: liveBundles.map(b => ({
+        pos: b.state.pos, vel: b.state.vel, fuse: b.state.fuse,
+        resting: b.state.resting, detonated: b.state.detonated,
+        drawn: b.prop !== null,
+      })),
+      // PROP-POOL ACCOUNTING. The pool is where a "the dynamite vanished" bug
+      // lives, and none of it is visible from the outside without these.
+      props: bundleProps.length,
+      spares: spareBundles.length,
+      heldVisible: heldProp ? heldProp.object.visible : null,
+      heldParent: heldProp ? (heldProp.object.parent === bundleRig ? 'rig' : 'other') : null,
+      heldLocal: heldProp
+        ? [heldProp.object.position.x, heldProp.object.position.y, heldProp.object.position.z]
+          .map(v => Number(v.toFixed(3)))
+        : null,
+      drawnBundles: liveBundles.filter(b => b.prop !== null).length,
+      thrown: dynThrown, detonations: dynDetonations,
+      gibbed: dynGibbed, gibPieces: dynGibPieces, lastBlastMs: dynLastBlastMs,
+      gibMode, gibBones, gibStaggerFrames, maxChunks, dynSpeedScale, gibVelScale,
+      aoeRadiusScale, aoeLaunchFloor,
+      ceilM: BUNDLE_CEIL_M,
+      // THE STAGED RELEASE, as numbers a gate can assert on: how many pieces are
+      // still waiting for their blast impulse, and how far that queue's oldest
+      // entry is from firing. `?gibstagger=1` must empty the queue on the blast
+      // frame; the default must NOT.
+      pendingPieceImpulses: pendingGibImpulses.length,
+      pendingPieceFrames: pendingGibImpulses.reduce((m, p) => Math.max(m, p.delay), 0),
+      // NB there is deliberately NO "pieces at rest" counter: `stepChunk`
+      // applies gravity to every chunk, so a piece held for the stagger is at
+      // rest for exactly the frame it was born and for none after. The queue
+      // length is the honest signal that the blast has not gone off yet.
+      pendingPieceDelays: pendingGibImpulses.map(p => p.delay),
+      fxLightScale, lights: explosionLights.length,
+      // What the ROOM is actually being lit with right now, and the age of the
+      // newest burst's light — the two numbers a light measurement needs.
+      meshIntensity: explosionLightPool.map(pl => Number(pl.intensity.toFixed(1))),
+      lightAges: explosionLights.map(e => Number(e.age.toFixed(3))),
+      lastBlastRadiusM: dynLastRadiusM,
+      lastGibDropped: dynLastGibDropped,
+      lastGibTier: dynLastGibTier, lastGibSpawned: dynLastGibSpawned, gibWounds,
+      gibTierLog: dynGibTierLog,
+      gibTearSec,
+      // THE PRE-TEAR WINDOW, live: how many bodies are bending right now, how
+      // far into their window the oldest is, and how many are waiting for it to
+      // close. A rig asserts the sequence from these rather than from a feeling
+      // about the frames.
+      tearing: actors.filter(x => x.tearing()).length,
+      tearAge: actors.reduce((m, x) => Math.max(m, x.tearAge()), 0),
+      pendingGibs: pendingGibs.length,
+      scheduledGibBodies: dynScheduledGibBodies, scheduledGibPieces: dynScheduledGibPieces,
+      lastGibParts: dynLastGibParts, lastGibHeld: dynLastGibHeld,
+      blastProfile: dynBlastProfile,
+      // The resolver's own split for the LAST blast. Reset in detonateAt, not
+      // here: a getter with a side effect is a trap, and reading this after
+      // `blastProfile` (which shares this object) silently consumed the data.
+      resolveProfile: { ...EXPLOSION_PROFILE },
+    }),
+    /** AUTOMATION: select a slot without synthesising a key event. */
+    selectSlot: (slot: WeaponSlot) => {
+      if (cook.phase === 'cooking') return { ok: false, reason: 'cooking' };
+      // VALIDATED, because a bad argument here does not fail — it POISONS.
+      // `WeaponSlot` is the string union 'shotgun' | 'dynamite' and the slot
+      // machine only ever compares against those, so a caller passing the
+      // NUMBER 2 (the obvious mistake for a driving script: the key is 2, the
+      // HUD says 2) gets a state whose `live`/`target` are 2 — the switch runs,
+      // reports `phase: 'up'`, makes NOTHING live, and every later press is
+      // dropped by `liveDyn` with no error anywhere. That cost a soak rig an
+      // hour of "the throws never detonate". A refusal is cheap; a silently
+      // inert weapon slot is not.
+      if (!WEAPON_SLOTS.includes(slot)) {
+        return { ok: false, reason: `unknown-slot:${String(slot)}` };
+      }
+      slotState = requestSlot(slotState, slot);
+      updateHud();
+      return { ok: true, live: slotState.live, target: slotState.target, phase: slotState.phase };
+    },
+    /** A/B seam: stamp the 16 wounds on bodies this blast gibs (the old
+     *  behaviour) or skip them (the shipped one). See `gibWounds`. */
+    setGibWounds: (on: boolean) => { gibWounds = !!on; return gibWounds; },
+    /** AUTOMATION: light the fuse / let it go, the two edges a mouse provides.
+     *  Kept as edges rather than a cooked-to-order throw so a gate drives the
+     *  SAME path a player does. */
+    dynamitePress: () => { dynPress = true; return { ok: true }; },
+    dynamiteRelease: () => { dynRelease = true; return { ok: true }; },
+    /** AUTOMATION: the in-hand overcook, without waiting out the fuse. */
+    overcook: () => { overcookInHand(); return { ok: true }; },
+    /** Which explosion renderer is live and what it holds. `mode` is
+     *  'procedural' (the GPU fireball) or 'standin' (the additive cards). */
+    explosionFx: () => ({
+      mode: explosionVfx ? 'procedural' : burstLayer ? 'atlas' : 'standin',
+      usingAtlas: burstLayer?.usingAtlas ?? null,
+      size: fxSize, smoke: fxSmoke, life: fxLife, gain: fxGain, plume: fxPlume,
+      liveBursts: explosionVfx?.activeBursts ?? 0,
+      lightIntensity: explosionVfx?.lightIntensity ?? 0,
+      tuning: explosionVfx?.tuning ?? null,
+      // THE BURST'S OWN SHAPE, in metres, per layer — the measurement the frame
+      // differential cannot make (the ring dominates the changed area, and the
+      // changed region's bounding box is re-cut by one stray pixel). Read it
+      // straight after a `step`, with `?frozen=1` and the loop stopped.
+      layerExtents: explosionVfx?.layerExtents ?? null,
+      burstHalfHeightM: explosionVfx?.burstHalfHeightM ?? null,
+    }),
+    /** Live tuning for the procedural burst (see ExplosionVfxTuning). */
+    setExplosionFxTuning: (t: Record<string, number>) => {
+      explosionVfx?.setTuning(t as never);
+      return explosionVfx?.tuning ?? null;
+    },
+    /** Force a burst at a point, for a capture that must not wait for a throw. */
+    spawnExplosionFx: (x: number, y: number, z: number, heightM = 2, kind: 'air' | 'ground' = 'ground') => {
+      const visual = { kind, at: [x, y, z] as Vec3, heightM };
+      const scaled = scaleBurstVisual(visual);
+      igniteExplosionLight(visual.at);
+      if (explosionVfx) explosionVfx.spawn(scaled);
+      else if (burstLayer) burstLayer.spawn(scaled);
+      else spawnBurstStandIn(scaled.at, scaled.heightM, scaled.kind);
+      return { mode: explosionVfx ? 'procedural' : burstLayer ? 'atlas' : 'standin' };
+    },
+    /** The live roster in world terms — what a blast gate needs to pick a
+     *  target and to count what a detonation removed. Read-only scalars only:
+     *  id, kind, room, ground position, yaw, collapse phase. No GPU state, so
+     *  this is safe to poll between stepped frames. */
+    actorList: () => actors.map(a => {
+      const p = a.pose();
+      const d = a.debug();
+      return {
+        id: a.id, kind: a.kind, room: a.room,
+        pos: [p.pos[0], p.pos[1], p.pos[2]] as Vec3, yaw: p.yaw,
+        phase: d.phase, meter: d.meter,
+      };
+    }),
+    /** Chunk census: live (flying/being marched) vs baked (settled meshes). A
+     *  gib reads here as live rising, then baked following as the bake queue
+     *  drains — which is the cost the ?maxchunks knob exists to bound. */
+    /**
+     * MEASUREMENT SEAM: hide every detached piece (marched proxy AND baked
+     * mesh) without spawning or destroying anything.
+     *
+     * WHY IT EXISTS. The piece cost is the one number that would justify a
+     * per-archetype mesh pre-bake, and `sdf:march` cannot price it as things
+     * stand: the SAME state in ONE boot measured 2.61, 3.82 and 18.79 ms across
+     * four-sample groups, a 7x spread that swamps any delta read from two
+     * different states. Alternating pieces-hidden/pieces-shown at a FIXED piece
+     * count is an A/B the machine can actually answer.
+     */
+    /**
+     * SHOW/HIDE THE SKELETON. A differential seam for one claim the bone census
+     * cannot make: the census reports that a bone piece is FLAGGED to render as
+     * bone (pale, with rows packed), and "the skeleton is on screen" is a
+     * different statement about pixels. Hiding the bone pieces and diffing the
+     * frame is how that gets measured rather than argued — the same trick the
+     * explosion rig uses on whole layers. Applies to pieces already live and to
+     * any spawned while it is off.
+     */
+    setBonePiecesVisible: (on: boolean) => {
+      bonesVisible = !!on;
+      for (const c of liveChunks) if (c.kind === 'bone') c.view.object.visible = bonesVisible;
+      return bonesVisible;
+    },
+    setChunksVisible: (on: boolean) => {
+      chunksHidden = !on;
+      for (const c of liveChunks) {
+        c.view.object.visible = !chunksHidden && (c.kind !== 'bone' || bonesVisible);
+      }
+      for (const b of bakedChunks) b.mesh.visible = !chunksHidden;
+      // SPRITE PIECES COUNT AS PIECES HERE. This seam is the "pieces shown vs
+      // hidden" arm every cost rig and differential uses, and a rig that had to
+      // know which render mode was on would be a rig that silently measured
+      // nothing the day the mode changed. The sprite mode's OWN control is
+      // `setSpritePiecesVisible` below; this one moves both.
+      setSpritePiecesVisible(spritePieces, on);
+      return !chunksHidden;
+    },
+    chunksVisible: () => !chunksHidden,
+    /** THE RENDER MODE BESIDE THE PIECE MODE — live, no reload.
+     *
+     *  This exists as a SETTER, not only as a boot param, for the reason every
+     *  A/B on this project does: single-run comparisons on this machine are
+     *  worthless (the same claim has read +7.6 ms and -1.4 ms), so a paired
+     *  measurement has to alternate the two arms INSIDE ONE BOOT, against the
+     *  same room, the same bodies and the same camera. Switching does not
+     *  disturb pieces already in flight — they keep the renderer they were born
+     *  with, which is what makes the switch itself cheap and safe.
+     *
+     *  Turning it ON loads the sheet if it is not loaded yet and reports what
+     *  happened, so a caller can tell "the mode is on" from "the mode is on and
+     *  armed". */
+    setGibRenderMode: async (mode: 'march' | 'sprite' | 'carve' = 'march') => {
+      gibRenderMode = mode === 'sprite' ? 'sprite' : mode === 'carve' ? 'carve' : 'march';
+      if (gibRenderMode === 'carve') ensureCarvedLibrary();
+      if (gibRenderMode === 'sprite') await ensureGibAtlas('sheet');
+      return { mode: gibRenderMode, frames: gibAtlas?.frames.length ?? 0, ready: gibAtlas !== null };
+    },
+    gibRenderMode: () => ({
+      mode: gibRenderMode,
+      // `ready` is per mode: the sprite path needs its ATLAS, the carve path its
+      // LIBRARY, and conflating them would report one mode armed because the
+      // other's asset loaded.
+      ready: gibRenderMode === 'carve' ? (carvedLibrary !== null) : gibAtlas !== null,
+      frames: gibAtlas?.frames.length ?? 0, atlas: gibAtlasSource,
+      liveCap: gibSpriteLiveCap, restCap: gibSpriteRestCap, sizeScale: gibSpriteSizeScale,
+      carve: carvedLibrary ? {
+        pieces: carvedLibrary.pieces.length,
+        verts: carvedLibrary.totalVerts,
+        tris: carvedLibrary.totalTris,
+        bonePrims: carvedLibrary.bonePrims,
+        fleshPrims: carvedLibrary.fleshPrims,
+        cells: carvedLibrary.cells,
+        cellSize: carvedLibrary.cellSize,
+        buildMs: carvedBuildMs,
+        skipped: carvedLibrary.skipped.length,
+        piecesWithBones: carvedLibrary.pieces.filter(x => x.bonesNear > 0).length,
+      } : null,
+    }),
+    /** The carved library's per-piece breakdown — the seam a rig uses to check
+     *  that the ribcage is actually in a chest slice rather than merely assumed. */
+    gibCarveLibrary: () => (carvedLibrary ? carvedLibrary.pieces.map(p => ({
+      part: p.part, limb: p.limb, verts: p.verts, tris: p.tris, radius: p.radius,
+      bonesNear: p.bonesNear, centre: p.centre,
+    })) : []),
+    /** Hide/show the blast's sprite pieces without destroying them — the sprite
+     *  twin of `setChunksVisible`, and how a capture proves a DETONATION's
+     *  sprites are drawn rather than merely in the scene graph. */
+    setSpritePiecesVisible: (on: boolean) => setSpritePiecesVisible(spritePieces, !!on),
+    /** WHERE EVERY SPRITE PIECE IS — the sprite twin of `chunkStates()`, live and
+     *  parked, so a rig watching a gib fly does not care which mode made it. */
+    spritePieceStates: () => spritePieceStates(spritePieces),
+    spriteCensus: () => ({
+      live: spritePieces.live.length,
+      rest: spritePieces.rest.length,
+      meshes: spritePieces.group.children.length,
+      geometries: spritePieces.assets.unitPlane ? 1 : 0,
+      materials: spritePieces.assets.material.size,
+      liveCap: gibSpriteLiveCap,
+      restCap: gibSpriteRestCap,
+      hidden: spritePieces.hidden,
+    }),
+    /** Drop every sprite piece (both lists) — the reset a paired rig wants
+     *  between arms, so an earlier blast's pile is not in the frame. */
+    clearSpritePieces: () => clearSpritePieces(spritePieces),
+    /** RELAY THE GORE-PART BENCH in front of the player: meat chunks and classic
+     *  bones, rendered through the real gib mesh path. Returns how many parts. */
+    goreShowcase: () => spawnGoreShowcase(),
+    /** LAY THE SPRITE GIB BENCH in front of the player (loads the dev-only atlas
+     *  on first use). Returns the number of billboards. */
+    gibSpriteBench: async (which: 'placeholder' | 'sheet' = gibAtlasSource) => {
+      await ensureGibAtlas(which);
+      return laySpriteBench();
+    },
+    /** Show/hide the sprite bench without destroying it — the same A/B the mesh
+     *  bench has, so a capture can prove the sprites are DRAWN. */
+    gibSpriteBenchVisible: (on: boolean) => {
+      if (spriteBenchGroup) spriteBenchGroup.visible = on;
+      return spriteBenchGroup?.visible ?? false;
+    },
+    /** THE PARTS' PROCEDURAL DETAIL, live: `{detail, bump, blood, noise}` plus the
+     *  STAIN terms `{burn, wet, dark, stainScale}`. `detail: 0` turns the whole
+     *  layer off, which is the A/B control for whether the bumps and the decals are
+     *  doing anything at all.
+     *
+     *  `noise` scales the bump's noise DOMAIN: it is the term that decides whether
+     *  the bump is surface texture or a smooth tilt, and the measurement to re-run
+     *  when changing it is the neighbouring-pixel roughness in
+     *  `scripts/gore-detail-ab.mjs`.
+     *
+     *  The stain half answers the owner's next note — "still look like rocks -
+     *  there no dark blood or burn stains … the blood is more specular and wet
+     *  looking": `dark` pushes blood toward near-black, `wet` drives it into the
+     *  highlight, `burn` is the charred field (matte, near-black — the contrast
+     *  against wet blood), and `stainScale` is the stains' own broader domain. */
+    /**
+     * THE GORE MATERIAL'S LIGHT RESPONSE — `look` = (stain, wetTint, specGain,
+     * fresGain) on every detail-layer chunk material.
+     *
+     * Exposed because the carve changed the regime these defaults were tuned in.
+     * `chunkShade`'s specular is ADDITIVE and is NOT multiplied by albedo:
+     *
+     *     specular = keyC * wetTint * (shine * specGain * keyI + fres * (0.5 + 0.5 * keyI))
+     *
+     * and both terms are scaled by the wound mask (`fres *= 1 + wm * 1.5`). On a
+     * settled chunk wm is a LOCAL halo round a torn end, so the defaults (1.2,
+     * 0.6) never had to behave at wm = 1 over a large area. A carved piece is a
+     * third cut face, all of it at wm = 1, under a 4x flashlight beam — measured
+     * 8-11% of piece pixels blown to white against 0.0% on the marched body it is
+     * supposed to match. That is the "white / concrete" read.
+     */
+    goreLook: (o: { spec?: number; fres?: number; wetTint?: number; stain?: number } = {}) => {
+      if (o.stain !== undefined) goreLookCfg.x = o.stain;
+      if (o.wetTint !== undefined) goreLookCfg.y = o.wetTint;
+      if (o.spec !== undefined) goreLookCfg.z = o.spec;
+      if (o.fres !== undefined) goreLookCfg.w = o.fres;
+      for (const m of [gorePartMat, carvedMaterial]) {
+        m?.uniforms.look.value.set(goreLookCfg.x, goreLookCfg.y, goreLookCfg.z, goreLookCfg.w);
+      }
+      return { stain: goreLookCfg.x, wetTint: goreLookCfg.y, spec: goreLookCfg.z, fres: goreLookCfg.w };
+    },
+    goreDetail: (
+      o: {
+        detail?: number; bump?: number; blood?: number; noise?: number;
+        burn?: number; wet?: number; dark?: number; stainScale?: number;
+      } = {},
+    ) => {
+      if (o.detail !== undefined) gorePartDetail.x = o.detail;
+      if (o.bump !== undefined) gorePartDetail.y = o.bump;
+      if (o.blood !== undefined) gorePartDetail.z = o.blood;
+      if (o.noise !== undefined) gorePartDetail.w = Math.max(1, o.noise);
+      if (o.burn !== undefined) gorePartStain.x = Math.max(0, o.burn);
+      if (o.wet !== undefined) gorePartStain.y = Math.max(0, o.wet);
+      if (o.dark !== undefined) gorePartStain.z = Math.min(1, Math.max(0, o.dark));
+      if (o.stainScale !== undefined) gorePartStain.w = Math.max(0.25, o.stainScale);
+      // EVERY material that opted into the detail layer, not just the bench's.
+      // `carvedMaterial` is a SECOND `createBakedChunkMaterial({goreDetail:true})`
+      // instance with its own uniform set (it has to be — a material instance
+      // owns one goreCfg), so a writer that names only `gorePartMat` tunes the
+      // bench and leaves ?gibrender=carve on its boot values. That is the same
+      // shape of bug as the flashlight's: see `litChunkMaterials`, which exists
+      // because the per-frame beam update had exactly this omission.
+      for (const m of [gorePartMat, carvedMaterial]) {
+        m?.uniforms.goreCfg.value.set(
+          gorePartDetail.x, gorePartDetail.y, gorePartDetail.z, gorePartDetail.w,
+        );
+        m?.uniforms.goreCfg2.value.set(
+          gorePartStain.x, gorePartStain.y, gorePartStain.z, gorePartStain.w,
+        );
+      }
+      return {
+        detail: gorePartDetail.x, bump: gorePartDetail.y,
+        blood: gorePartDetail.z, noise: gorePartDetail.w,
+        burn: gorePartStain.x, wet: gorePartStain.y,
+        dark: gorePartStain.z, stainScale: gorePartStain.w,
+      };
+    },
+    /** Show/hide the bench WITHOUT destroying it, which is how a capture proves
+     *  the parts are actually drawn rather than merely in the scene graph. */
+    goreShowcaseVisible: (on: boolean) => {
+      if (goreShowcase) goreShowcase.visible = on;
+      return goreShowcase?.visible ?? false;
+    },
+    /** WHERE EVERY LIVE PIECE IS, and what it is doing — the seam a rig needs to
+     *  watch a gib fly. Added for the wall-collision check: "do the pieces stay
+     *  in the room" is a question about POSITIONS over time, and the only other
+     *  way to read them was a telemetry snapshot (F9). */
+    chunkStates: () => [
+      ...liveChunks.map(c => ({
+        id: c.id, limb: c.state.limb, kind: c.state.kind,
+        pos: c.state.pos, vel: c.state.vel, radius: c.state.radius,
+        settled: chunkSettled(c.state),
+        render: 'march' as const,
+      })),
+      // SPRITE PIECES ARE PIECES. A rig that asks "where is every piece and is
+      // it inside a room" must get the same answer in either render mode, or the
+      // wall/ceiling guarantees would silently go unverified the moment someone
+      // flips `?gibrender=sprite`. `rest` distinguishes a parked quad from one
+      // still flying; the other fields are the marched row's own shape.
+      ...spritePieceStates(spritePieces).map(p => ({ ...p, render: 'sprite' as const })),
+    ],
+    /** THE ENCLOSURE A POINT IS IN, in metres: the same box the probe gather and
+     *  the bundle's ceiling resolve against. A rig that wants to assert "this
+     *  piece stayed in the room" needs the room's rectangle, and hard-coding it
+     *  in the rig would let the level move out from under the assertion. */
+    enclosureBoxAt: (x: number, z: number) => {
+      const key = enclosureKeyAt(x, z);
+      const enc = enclosureOf(key);
+      return enc ? { key, min: enc.box.min, max: enc.box.max } : null;
+    },
+    chunkCensus: () => {
+      // HOW MANY PIECES ARE EVEN IN THE FRAME — the ceiling on what frustum
+      // culling can save, so a cost A/B can be read against it rather than
+      // against a feeling about where the camera was pointing.
+      const frustum = new THREE.Frustum().setFromProjectionMatrix(
+        new THREE.Matrix4().multiplyMatrices(
+          camera.projectionMatrix, camera.matrixWorldInverse,
+        ),
+      );
+      let inFrustum = 0;
+      for (const c of liveChunks) if (frustum.intersectsObject(c.view.object)) inFrustum++;
+      // ——— IS THE SKELETON ACTUALLY DRAWN AS BONE? ————————————————————————
+      // The owner's complaint was "i still dont see anything bone related like
+      // idk rib cage or something", and there are two separate claims in
+      // answering it. `gib-parts.test.ts` proves the FIRST: the ribcage leaves
+      // the body as a bone-only chunk. These counters are the second, and they
+      // are what a page can see:
+      //
+      //   * a bone piece renders pale only while its view carries
+      //     `meltCfg.x = 1` — the pale matte branch in the melt ramp is the
+      //     ONLY thing in the shader that paints bone as bone (`isBone` alone
+      //     shades it as meat);
+      //   * and it only has bone to paint if its rows are PACKED
+      //     (`counts2.x` = packed bone count), which `packBones = true` is what
+      //     guarantees: with the bone-tube path's packBones off, a bone-only
+      //     chunk packs NOTHING and marches an empty field.
+      //
+      // `staleBoneFlags` counts the failure mode the lab's own comment warns
+      // about: chunk views are RECYCLED, so a flesh piece inheriting a
+      // ribcage's meltCfg.x would render pale and matte — a bone-coloured arm.
+      let bonePieces = 0, boneRows = 0, organPieces = 0, buriedBonePieces = 0;
+      let bonesShadingAsMeat = 0, organsShadingAsBone = 0;
+      for (const c of liveChunks) {
+        const pale = c.view.uniforms.meltCfg.value.x > 0;
+        const rows = c.view.uniforms.counts2.value.x;
+        if (c.kind === 'bone') {
+          if (pale && rows > 0) { bonePieces++; boneRows += rows; }
+          // A bone piece that lost its pale flag, or that has no rows packed at
+          // all (the bone-tube path's packBones off would do both), shades as
+          // MEAT — the skeleton is in the pile and cannot be seen.
+          //
+          // UNLESS THE TUBES ARE DRAWING IT (2026-09-15). Under `gibBoneMesh` a
+          // bone piece packs no rows and marches nothing BY DESIGN — the
+          // instancer draws it from `posedBones()` and the proxy is hidden. The
+          // metric predates that path and would report all of them as a failure,
+          // which is the census crying wolf about the shipped configuration.
+          else if (!gibBoneMesh) bonesShadingAsMeat++;
+        } else if (c.boneOnly) {
+          // An ORGAN piece: deliberately NOT pale (it tints as viscera), and its
+          // rows are organs. If it ever goes pale it renders as bare bone.
+          organPieces++;
+          if (pale) organsShadingAsBone++;
+        } else if (rows > 0) {
+          // THE BURIED CASE, which is the one the owner described: a FLESH piece
+          // whose bones are packed INSIDE its own field as more capsules unioned
+          // with the meat enclosing them. It draws as a solid tube with an
+          // invisible femur in it. The cheap `clusters` tier does exactly this,
+          // so this counter is how a degraded blast says so out loud.
+          buriedBonePieces++;
+        }
+      }
+      return {
+      inFrustum, ofPieces: liveChunks.length,
+      bonePieces, boneRows, organPieces, buriedBonePieces,
+      bonesShadingAsMeat, organsShadingAsBone,
+      live: liveChunks.length, baked: bakedChunks.length,
+      views: chunkViews.length, spare: spareChunkViews.length,
+      bakePending: chunkBakeJobs.pendingId !== null,
+      cap: maxChunks,
+      };
     },
     /** CAPTURE SEAM (M2 task 5): spawn one extra REGISTRY character in the
      *  player's current room through THE SAME spawnEnemy path as boot (so
