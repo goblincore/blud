@@ -139,12 +139,49 @@ const QUERY = process.env.BENCH_QUERY ?? '';
 // recording supplies one `input` action per frame and the segments become equal
 // thirds (t0/t1/t2).
 const DEMO_PATH = process.env.BENCH_DEMO ?? '';
-const DEMO = DEMO_PATH ? JSON.parse(readFileSync(DEMO_PATH, 'utf8')) : null;
+const DEMO_FULL = DEMO_PATH ? JSON.parse(readFileSync(DEMO_PATH, 'utf8')) : null;
+// BENCH_DEMO_FRAMES=a:b — time ONLY the recording's frames [a,b) (crowd-t1
+// attribution, 2026-09-14). The window is STATE-PRESERVING: the harness first
+// replays frames [0,a) with `__sdfGame.demoReplay` (the same driver the hash
+// gate uses), then hands the page the [a,b) slice as the bench scenario.
+//
+// WHY NOT JUST SLICE. A recorded frame is RELATIVE input (dx/dy mouse deltas),
+// and the owner's room-1 recording was captured in free aim, where the camera
+// yaw is integrated from those deltas and the absolute `look` pin is skipped
+// (game-main applyInputFrame). Replaying [a,b) from the recording's frame-0
+// start pose therefore aims the camera somewhere the player never looked — the
+// window would measure a different room state than the fire-heavy third it is
+// named after. Pre-replaying [0,a) puts the sim in the state frame `a` really
+// starts from (same seed, same start pose, same inputs), so the window's
+// census matches the probe's replay-to-N census.
+const DEMO_WINDOW = (() => {
+  const s = (process.env.BENCH_DEMO_FRAMES ?? '').trim();
+  if (!s) return null;
+  const m = /^(\d+):(\d+)$/.exec(s);
+  if (!m) fail(`BENCH_DEMO_FRAMES must be a:b (framestart:framestop), got "${s}"`);
+  const a = Number(m[1]);
+  const b = Number(m[2]);
+  if (!(b > a)) fail(`BENCH_DEMO_FRAMES=${s}: stop must exceed start`);
+  return { a, b };
+})();
+if (DEMO_WINDOW && !DEMO_FULL) fail('BENCH_DEMO_FRAMES needs BENCH_DEMO (a recording to window)');
+if (DEMO_WINDOW && DEMO_WINDOW.b > DEMO_FULL.frames.length) {
+  fail(`BENCH_DEMO_FRAMES stop ${DEMO_WINDOW.b} is past the recording's ${DEMO_FULL.frames.length} frames`);
+}
+// The MEASURED window: the bench sees only these frames and makes thirds of them.
+const DEMO = DEMO_FULL && DEMO_WINDOW
+  ? { ...DEMO_FULL, frames: DEMO_FULL.frames.slice(DEMO_WINDOW.a, DEMO_WINDOW.b) }
+  : DEMO_FULL;
+// The PRELUDE the harness replays first to reach frame `a`. Empty at a=0 (the
+// slice already starts at the recording origin).
+const DEMO_PRE_JSON = DEMO_FULL && DEMO_WINDOW && DEMO_WINDOW.a > 0
+  ? JSON.stringify({ ...DEMO_FULL, frames: DEMO_FULL.frames.slice(0, DEMO_WINDOW.a) })
+  : '';
 const DEMO_JSON = DEMO ? JSON.stringify(DEMO) : '';
 // The replay page must boot with the RECORDING's seed: the cast is spawned
 // during boot, before demoReplay can reseed, so a different boot seed would
 // spawn a different world and the recording would replay into the wrong fight.
-const DEMO_SEED = DEMO && !/\bseed=/.test(QUERY) ? `seed=${DEMO.seed}` : '';
+const DEMO_SEED = DEMO_FULL && !/\bseed=/.test(QUERY) ? `seed=${DEMO_FULL.seed}` : '';
 // ---------------------------------------------------------------------------
 // FAILURE BUDGETS. Every wait in this script is bounded, because none of them
 // used to be: send() had no timeout and no reject path, and nothing rejected
@@ -324,6 +361,31 @@ const url = `http://localhost:${VITE}/sdf-game.html?simidle=1${QUERY ? `&${QUERY
 console.log(`bench ${url}  (${W}x${H}, repeats=${REPEATS}, rooms=${ROOM_IDS.join(',')}${PRELUDE ? `, prelude: ${PRELUDE}` : ''})`);
 
 /**
+ * THE LEG'S BOOT URL — and why it must carry the crowd flag.
+ *
+ * CROWD TOGGLING IS NOT SIM-NEUTRAL (measured 2026-09-14, crowd-t1 attribution).
+ * `setCrowd()` calls rebuildCast(), which RESPAWNS every body. `spawnAll` seeds
+ * each actor from the global spawn counter (`seed: 1337 + nextId * 101`,
+ * game-main.ts), and rebuildCast does NOT reset that counter — so a mid-session
+ * toggle gives every body a NEW seed, a different wander, and a DIFFERENT
+ * FIGHT. Measured on the owner's recording: per-body (boot cast, ids 1-15) read
+ * `wounds 7` at frame 1300 while a crowd leg that toggled mid-session (ids
+ * 16-30) read `wounds 10` and had 5 bodies on screen instead of 3. An A/B across
+ * that toggle compares two fights, which is exactly the confound the recording
+ * bench exists to remove.
+ *
+ * Booting with the leg's own flag spawns that leg's cast directly from the
+ * recording's own spawn state (ids 1-15, same positions — verified for
+ * `?crowd=0` vs `?crowd=1`), so the leg's `setCrowd()` override is a no-op and
+ * every leg replays the SAME fight. Non-crowd legs keep the bare URL, so no
+ * historical leg's boot changes.
+ */
+function legUrl(name) {
+  const on = (LEGS[name] ?? ALL_LEGS[name] ?? {}).setCrowd;
+  return on === undefined ? url : `${url}&crowd=${on ? 1 : 0}`;
+}
+
+/**
  * Load the page fresh.
  *
  * CALLED BEFORE EVERY RUN, and that is not paranoia — it is the fix for the
@@ -337,11 +399,13 @@ console.log(`bench ${url}  (${W}x${H}, repeats=${REPEATS}, rooms=${ROOM_IDS.join
  * A reload costs ~10 s. Sharing one page across 76 runs costs the whole
  * measurement.
  */
-async function bootPage(settleMs = 5000) {
+async function bootPage(settleMs = 5000, legName = null) {
   progress.phase = 'boot:navigate';
+  const pageUrl = legName ? legUrl(legName) : url;
+  if (legName) console.log(`  [${legName}] boot ${pageUrl}`);
   await send('Page.navigate', { url: 'about:blank' });
   await sleep(200);
-  await send('Page.navigate', { url });
+  await send('Page.navigate', { url: pageUrl });
   progress.phase = 'boot:wait-for-__sdfGame';
   let backend = null;
   for (let i = 0; i < 240; i++) {
@@ -681,6 +745,21 @@ async function applyLeg(name) {
   if (CROWD_PRELUDE) { progress.phase = 'crowd-prelude'; await evaluate(CROWD_PRELUDE); }
 }
 
+/**
+ * BENCH_DEMO_FRAMES pre-replay. Advances the sim from the recording's frame 0
+ * to the window's first frame `a` through the same replay driver the hash gate
+ * uses, so the window bench starts from the state frame `a` really has rather
+ * than from the recording's start pose. No-op without BENCH_DEMO_FRAMES (or at
+ * a=0), so every existing bench invocation is bit-for-bit unchanged.
+ */
+async function applyDemoPrelude() {
+  if (!DEMO_PRE_JSON) return;
+  progress.phase = 'demo-prelude';
+  const t0 = Date.now();
+  await evaluate(`__sdfGame.demoReplay(${DEMO_PRE_JSON}, { hold: true, label: 'window-prelude' })`, 10 * 60_000);
+  console.log(`  [${progress.leg}] demo prelude replayed frames [0,${DEMO_WINDOW.a}) in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+}
+
 // Warmup is deliberately long. Switching a leg reallocates render targets
 // (a scale change) and rebuilds pipelines, and 40 frames does not absorb it —
 // the first smoke run put that cost squarely in the walk segment and made
@@ -694,8 +773,10 @@ const CHUNK = Number(process.env.BENCH_CHUNK ?? 10);
 async function runLeg(name, room, mode) {
   progress.leg = name; progress.room = room; progress.mode = mode;
   // Fresh page per run — see bootPage. Damage does not survive a reload,
-  // which is the entire point.
-  await bootPage(2500);
+  // which is the entire point. The leg name selects the crowd BOOT flag (see
+  // legUrl): booting the leg's own dispatch keeps its setCrowd() override a
+  // no-op, so no leg rebuilds the cast out from under the shared recording.
+  await bootPage(2500, name);
   await applyLeg(name);
   // Verification note: what the page actually loaded, not what the leg asked for
   // (a missing/failed model load leaves the stage OFF and silently measures the
@@ -715,6 +796,7 @@ async function runLeg(name, room, mode) {
     );
     console.log(`  [${name}] refineInfo().bodies=${bandNote}`);
   }
+  if (DEMO_PRE_JSON) await applyDemoPrelude();
   if (PRELUDE) { progress.phase = 'prelude'; await evaluate(PRELUDE); }
   const label = `${name}/room${room}/${mode}`;
   // FRAME GUARD (perf 7d). A tiny probe BEFORE the real run: the smallest
@@ -759,8 +841,9 @@ async function runLeg(name, room, mode) {
     // the probe already decimated — the exact failure the scripted probe's
     // unarmed mode exists to avoid.
     progress.phase = 'demo-reset';
-    await bootPage(2500);
+    await bootPage(2500, name);
     await applyLeg(name);
+    if (DEMO_PRE_JSON) await applyDemoPrelude();
   }
   // warmup 0 for a demo: the bench's warmup advances the sim through frame 0's
   // action, which would shift the replay off the recording's timeline. The
