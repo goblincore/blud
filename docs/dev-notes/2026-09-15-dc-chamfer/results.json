@@ -1,8 +1,8 @@
 {
-  "commit": "7f7cc9dc7df0ee64c4fbdd8b653b9b7b658f72c4",
-  "dirty": "M scripts/blob-mesh-compare.ts\n M src/lab/sdf-zombie/mesher-comparison/dual-contouring.ts\n M src/lab/sdf-zombie/mesher-comparison/types.ts\n?? docs/dev-notes/2026-09-15-dc-chamfer/\n?? scripts/dc-chamfer-probe.test.ts\n?? scripts/dc-chamfer-probe.ts\n?? src/lab/sdf-zombie/mesher-comparison/dc-chamfer.test.ts\n?? src/lab/sdf-zombie/mesher-comparison/dc-chamfer.ts\n?? src/lab/sdf-zombie/mesher-comparison/dc-variants.ts\n?? src/lab/sdf-zombie/mesher-comparison/field-slice.ts",
+  "commit": "e901a051e08b37f4173ec0eeb70a391ecde67ed3",
+  "dirty": "D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-dc-baseline-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-dc-baseline-20mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-dc-baseline-5mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-dc-eps-candidate-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-dc-eps-candidate-20mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-dc-eps-candidate-5mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-marching-cubes-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/character-head-dc-baseline-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/character-head-dc-eps-candidate-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/control-sharp-box-dc-baseline-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/control-sharp-box-dc-eps-candidate-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/control-sharp-box-marching-cubes-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/torn-chunk-dc-baseline-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/torn-chunk-dc-eps-candidate-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__10mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__10mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__10mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__20mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__20mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__20mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__5mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__5mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__5mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__closeup-notch-wire.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__closeup-notch.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__closeup-seam-wire.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__closeup-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__20mm__main.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__20mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__20mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__20mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__5mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__5mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__5mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__closeup-notch-wire.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__closeup-notch.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__closeup-seam-wire.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__closeup-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__20mm__main.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__20mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__20mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__20mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__5mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__5mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__5mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__closeup-notch-wire.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__closeup-notch.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__closeup-seam-wire.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__closeup-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__20mm__main.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__20mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__20mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__20mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__5mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__5mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__5mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__10mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__10mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__10mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__20mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__20mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__20mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__5mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__5mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__5mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/control-sharp-box__dc-baseline__10mm__closeup-corner.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/control-sharp-box__dc-eps-candidate__10mm__closeup-corner.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/control-sharp-box__marching-cubes__10mm__closeup-corner.png\n D docs/dev-notes/2026-09-15-dc-chamfer/preview.html\n D docs/dev-notes/2026-09-15-dc-chamfer/results.json\n M scripts/dc-chamfer-probe.test.ts\n M scripts/dc-chamfer-probe.ts",
   "codeFingerprint": "ce0317adbbe06438:07dd327c",
-  "generatedAt": "2026-09-15T22:16:50.240Z",
+  "generatedAt": "2026-09-15T22:18:50.515Z",
   "environment": {
     "node": "v22.22.1",
     "platform": "darwin",
@@ -2990,7 +2990,7 @@
   "panels": [
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "dc-baseline",
       "cell": 0.02,
       "view": "slice-seam",
       "file": "chamfer-groove__dc-baseline__20mm__slice-seam.png",
@@ -2999,7 +2999,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "dc-eps-candidate",
       "cell": 0.02,
       "view": "slice-seam",
       "file": "chamfer-groove__dc-eps-candidate__20mm__slice-seam.png",
@@ -3008,7 +3008,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "marching-cubes",
       "cell": 0.02,
       "view": "slice-seam",
       "file": "chamfer-groove__marching-cubes__20mm__slice-seam.png",
@@ -3017,7 +3017,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "surface-nets",
       "cell": 0.02,
       "view": "slice-seam",
       "file": "chamfer-groove__surface-nets__20mm__slice-seam.png",
@@ -3026,7 +3026,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "compare",
       "cell": 0.02,
       "view": "slice-seam",
       "file": "chamfer-groove__compare__20mm__slice-seam.png",
@@ -3035,7 +3035,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "dc-baseline",
       "cell": 0.02,
       "view": "slice-notch-plus-z",
       "file": "chamfer-groove__dc-baseline__20mm__slice-notch-plus-z.png",
@@ -3044,7 +3044,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "dc-eps-candidate",
       "cell": 0.02,
       "view": "slice-notch-plus-z",
       "file": "chamfer-groove__dc-eps-candidate__20mm__slice-notch-plus-z.png",
@@ -3053,7 +3053,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "marching-cubes",
       "cell": 0.02,
       "view": "slice-notch-plus-z",
       "file": "chamfer-groove__marching-cubes__20mm__slice-notch-plus-z.png",
@@ -3062,7 +3062,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "surface-nets",
       "cell": 0.02,
       "view": "slice-notch-plus-z",
       "file": "chamfer-groove__surface-nets__20mm__slice-notch-plus-z.png",
@@ -3071,7 +3071,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "compare",
       "cell": 0.02,
       "view": "slice-notch-plus-z",
       "file": "chamfer-groove__compare__20mm__slice-notch-plus-z.png",
@@ -3080,7 +3080,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "dc-baseline",
       "cell": 0.02,
       "view": "slice-notch-minus-z",
       "file": "chamfer-groove__dc-baseline__20mm__slice-notch-minus-z.png",
@@ -3089,7 +3089,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "dc-eps-candidate",
       "cell": 0.02,
       "view": "slice-notch-minus-z",
       "file": "chamfer-groove__dc-eps-candidate__20mm__slice-notch-minus-z.png",
@@ -3098,7 +3098,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "marching-cubes",
       "cell": 0.02,
       "view": "slice-notch-minus-z",
       "file": "chamfer-groove__marching-cubes__20mm__slice-notch-minus-z.png",
@@ -3107,7 +3107,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "surface-nets",
       "cell": 0.02,
       "view": "slice-notch-minus-z",
       "file": "chamfer-groove__surface-nets__20mm__slice-notch-minus-z.png",
@@ -3116,7 +3116,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "compare",
       "cell": 0.02,
       "view": "slice-notch-minus-z",
       "file": "chamfer-groove__compare__20mm__slice-notch-minus-z.png",
@@ -3125,7 +3125,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "dc-baseline",
       "cell": 0.01,
       "view": "slice-seam",
       "file": "chamfer-groove__dc-baseline__10mm__slice-seam.png",
@@ -3134,7 +3134,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "dc-eps-candidate",
       "cell": 0.01,
       "view": "slice-seam",
       "file": "chamfer-groove__dc-eps-candidate__10mm__slice-seam.png",
@@ -3143,7 +3143,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "marching-cubes",
       "cell": 0.01,
       "view": "slice-seam",
       "file": "chamfer-groove__marching-cubes__10mm__slice-seam.png",
@@ -3152,7 +3152,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "surface-nets",
       "cell": 0.01,
       "view": "slice-seam",
       "file": "chamfer-groove__surface-nets__10mm__slice-seam.png",
@@ -3161,7 +3161,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "compare",
       "cell": 0.01,
       "view": "slice-seam",
       "file": "chamfer-groove__compare__10mm__slice-seam.png",
@@ -3170,7 +3170,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "dc-baseline",
       "cell": 0.01,
       "view": "slice-notch-plus-z",
       "file": "chamfer-groove__dc-baseline__10mm__slice-notch-plus-z.png",
@@ -3179,7 +3179,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "dc-eps-candidate",
       "cell": 0.01,
       "view": "slice-notch-plus-z",
       "file": "chamfer-groove__dc-eps-candidate__10mm__slice-notch-plus-z.png",
@@ -3188,7 +3188,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "marching-cubes",
       "cell": 0.01,
       "view": "slice-notch-plus-z",
       "file": "chamfer-groove__marching-cubes__10mm__slice-notch-plus-z.png",
@@ -3197,7 +3197,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "surface-nets",
       "cell": 0.01,
       "view": "slice-notch-plus-z",
       "file": "chamfer-groove__surface-nets__10mm__slice-notch-plus-z.png",
@@ -3206,7 +3206,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "compare",
       "cell": 0.01,
       "view": "slice-notch-plus-z",
       "file": "chamfer-groove__compare__10mm__slice-notch-plus-z.png",
@@ -3215,7 +3215,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "dc-baseline",
       "cell": 0.01,
       "view": "slice-notch-minus-z",
       "file": "chamfer-groove__dc-baseline__10mm__slice-notch-minus-z.png",
@@ -3224,7 +3224,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "dc-eps-candidate",
       "cell": 0.01,
       "view": "slice-notch-minus-z",
       "file": "chamfer-groove__dc-eps-candidate__10mm__slice-notch-minus-z.png",
@@ -3233,7 +3233,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "marching-cubes",
       "cell": 0.01,
       "view": "slice-notch-minus-z",
       "file": "chamfer-groove__marching-cubes__10mm__slice-notch-minus-z.png",
@@ -3242,7 +3242,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "surface-nets",
       "cell": 0.01,
       "view": "slice-notch-minus-z",
       "file": "chamfer-groove__surface-nets__10mm__slice-notch-minus-z.png",
@@ -3251,7 +3251,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "compare",
       "cell": 0.01,
       "view": "slice-notch-minus-z",
       "file": "chamfer-groove__compare__10mm__slice-notch-minus-z.png",
@@ -3260,7 +3260,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "dc-baseline",
       "cell": 0.005,
       "view": "slice-seam",
       "file": "chamfer-groove__dc-baseline__5mm__slice-seam.png",
@@ -3269,7 +3269,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "dc-eps-candidate",
       "cell": 0.005,
       "view": "slice-seam",
       "file": "chamfer-groove__dc-eps-candidate__5mm__slice-seam.png",
@@ -3278,7 +3278,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "marching-cubes",
       "cell": 0.005,
       "view": "slice-seam",
       "file": "chamfer-groove__marching-cubes__5mm__slice-seam.png",
@@ -3287,7 +3287,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "surface-nets",
       "cell": 0.005,
       "view": "slice-seam",
       "file": "chamfer-groove__surface-nets__5mm__slice-seam.png",
@@ -3296,7 +3296,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "compare",
       "cell": 0.005,
       "view": "slice-seam",
       "file": "chamfer-groove__compare__5mm__slice-seam.png",
@@ -3305,7 +3305,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "dc-baseline",
       "cell": 0.005,
       "view": "slice-notch-plus-z",
       "file": "chamfer-groove__dc-baseline__5mm__slice-notch-plus-z.png",
@@ -3314,7 +3314,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "dc-eps-candidate",
       "cell": 0.005,
       "view": "slice-notch-plus-z",
       "file": "chamfer-groove__dc-eps-candidate__5mm__slice-notch-plus-z.png",
@@ -3323,7 +3323,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "marching-cubes",
       "cell": 0.005,
       "view": "slice-notch-plus-z",
       "file": "chamfer-groove__marching-cubes__5mm__slice-notch-plus-z.png",
@@ -3332,7 +3332,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "surface-nets",
       "cell": 0.005,
       "view": "slice-notch-plus-z",
       "file": "chamfer-groove__surface-nets__5mm__slice-notch-plus-z.png",
@@ -3341,7 +3341,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "compare",
       "cell": 0.005,
       "view": "slice-notch-plus-z",
       "file": "chamfer-groove__compare__5mm__slice-notch-plus-z.png",
@@ -3350,7 +3350,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "dc-baseline",
       "cell": 0.005,
       "view": "slice-notch-minus-z",
       "file": "chamfer-groove__dc-baseline__5mm__slice-notch-minus-z.png",
@@ -3359,7 +3359,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "dc-eps-candidate",
       "cell": 0.005,
       "view": "slice-notch-minus-z",
       "file": "chamfer-groove__dc-eps-candidate__5mm__slice-notch-minus-z.png",
@@ -3368,7 +3368,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "marching-cubes",
       "cell": 0.005,
       "view": "slice-notch-minus-z",
       "file": "chamfer-groove__marching-cubes__5mm__slice-notch-minus-z.png",
@@ -3377,7 +3377,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "surface-nets",
       "cell": 0.005,
       "view": "slice-notch-minus-z",
       "file": "chamfer-groove__surface-nets__5mm__slice-notch-minus-z.png",
@@ -3386,7 +3386,7 @@
     },
     {
       "fixture": "chamfer-groove",
-      "method": "slice",
+      "method": "compare",
       "cell": 0.005,
       "view": "slice-notch-minus-z",
       "file": "chamfer-groove__compare__5mm__slice-notch-minus-z.png",

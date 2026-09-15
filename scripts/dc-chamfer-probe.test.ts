@@ -42,7 +42,7 @@ describe('dc-chamfer-probe preview', () => {
       { fixture: 'chamfer-groove', method: 'dc-baseline', cell: 0.01, view: 'slice-notch-plus-z', file: 'a.png', tris: 0 },
       { fixture: 'chamfer-groove', method: 'dc-eps-candidate', cell: 0.01, view: 'slice-notch-plus-z', file: 'b.png', tris: 0 },
       { fixture: 'chamfer-groove', method: 'marching-cubes', cell: 0.01, view: 'slice-notch-plus-z', file: 'c.png', tris: 0 },
-      { fixture: 'chamfer-groove', method: 'slice', cell: 0.01, view: 'slice-notch-plus-z', file: 'd.png', tris: 0 },
+      { fixture: 'chamfer-groove', method: 'compare', cell: 0.01, view: 'slice-notch-plus-z', file: 'd.png', tris: 0 },
       { fixture: 'chamfer-groove', method: 'surface-nets', cell: 0.01, view: 'slice-notch-plus-z', file: 'e.png', tris: 0 },
     ]);
     for (const f of ['a.png', 'b.png', 'c.png', 'd.png', 'e.png']) expect(html).toContain(`panels/${f}`);

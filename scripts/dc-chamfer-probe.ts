@@ -177,22 +177,22 @@ function main(): void {
       const region = CHAMFER_REGIONS[ri]!;
       const ref = references[ri]!;
       const layerFor = (m: VariantMetrics): Segment[] => meshSliceSegments(m.mesh, region.plane, region.window);
-      const mk = (layers: { segments: Segment[]; color: readonly [number, number, number] }[], name: string): void => {
+      const mk = (layers: { segments: Segment[]; color: readonly [number, number, number] }[], name: string, method: string): void => {
         const img = renderSlice(region, layers, 480, 400, ref.reference.segments);
         addPanel(name, img.rgba, img.width, img.height);
-        panels.push({ fixture: 'chamfer-groove', method: 'slice', cell, view: `slice-${region.id}`, file: name, tris: 0, note: region.note });
+        panels.push({ fixture: 'chamfer-groove', method, cell, view: `slice-${region.id}`, file: name, tris: 0, note: region.note });
       };
       const base = variants.find(v => v.id === DC_BASELINE.id)!;
       const cand = variants.find(v => v.id === DC_CANDIDATE.id)!;
-      mk([{ segments: layerFor(base), color: colorOf['dc-baseline']! }], `chamfer-groove__dc-baseline__${mm(cell)}mm__slice-${region.id}.png`);
-      mk([{ segments: layerFor(cand), color: colorOf['dc-eps-candidate']! }], `chamfer-groove__dc-eps-candidate__${mm(cell)}mm__slice-${region.id}.png`);
-      mk([{ segments: layerFor(mc), color: colorOf['marching-cubes']! }], `chamfer-groove__marching-cubes__${mm(cell)}mm__slice-${region.id}.png`);
-      mk([{ segments: layerFor(sn), color: colorOf['surface-nets']! }], `chamfer-groove__surface-nets__${mm(cell)}mm__slice-${region.id}.png`);
+      mk([{ segments: layerFor(base), color: colorOf['dc-baseline']! }], `chamfer-groove__dc-baseline__${mm(cell)}mm__slice-${region.id}.png`, DC_BASELINE.id);
+      mk([{ segments: layerFor(cand), color: colorOf['dc-eps-candidate']! }], `chamfer-groove__dc-eps-candidate__${mm(cell)}mm__slice-${region.id}.png`, DC_CANDIDATE.id);
+      mk([{ segments: layerFor(mc), color: colorOf['marching-cubes']! }], `chamfer-groove__marching-cubes__${mm(cell)}mm__slice-${region.id}.png`, 'marching-cubes');
+      mk([{ segments: layerFor(sn), color: colorOf['surface-nets']! }], `chamfer-groove__surface-nets__${mm(cell)}mm__slice-${region.id}.png`, 'surface-nets');
       mk([
         { segments: layerFor(mc), color: colorOf['marching-cubes']! },
         { segments: layerFor(base), color: colorOf['dc-baseline']! },
         { segments: layerFor(cand), color: colorOf['dc-eps-candidate']! },
-      ], `chamfer-groove__compare__${mm(cell)}mm__slice-${region.id}.png`);
+      ], `chamfer-groove__compare__${mm(cell)}mm__slice-${region.id}.png`, 'compare');
     }
   }
 
@@ -411,8 +411,8 @@ function previewHtml(panels: PanelRec[]): string {
     for (const region of regions) {
       const view = `slice-${region}`;
       p.push(`<h3>${region} — field contour vs mesh slice</h3><div class="row">`);
-      for (const [method, label] of [['dc-baseline', 'old DC'], ['dc-eps-candidate', 'new DC'], ['marching-cubes', 'MC'], ['surface-nets', 'SN'], ['slice', 'compare (MC+old+new)']] as [string, string][]) {
-        const f = file('chamfer-groove', method === 'slice' ? 'slice' : method, cell, view);
+      for (const [method, label] of [['dc-baseline', 'old DC'], ['dc-eps-candidate', 'new DC'], ['marching-cubes', 'MC'], ['surface-nets', 'SN'], ['compare', 'compare (MC+old+new)']] as [string, string][]) {
+        const f = file('chamfer-groove', method, cell, view);
         if (!f) continue;
         p.push(`<figure><img src="panels/${f}" loading="lazy"><figcaption>${label}</figcaption></figure>`);
       }
