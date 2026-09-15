@@ -119,6 +119,15 @@
   `tile-binning-submit < 1 ms` bar is untested (48 bodies at 0.9 m fit no region in this level; a
   longer-sightline space is future work). Plan
   `docs/superpowers/plans/2026-09-14-merged-crowd-march-stage-a2-tile-quads.md`.
+  **DEFAULT = CROWD MARCH, BOXES DISPATCH (2026-09-15).** The revert below rested on a bench whose legs
+  fought different fights (`setCrowd` mid-session respawns the cast; fixed in `sdf-game-bench.mjs`). On matched
+  fights the crowd march with the instanced-box dispatch beats per-body on the owner's real room-1 recording
+  (frame p50 17.3/15.4 vs 19.8/19.2 ms) and keeps the 8..24-body wins; the one-screen quad does not (20.3/20.2)
+  because of raster footprint no exact lever removed (`docs/dev-notes/2026-09-14-crowd-firefight-cost.md`).
+  `?crowd=0` opts out; `?crowddispatch=quad` keeps the quad reachable. Canonical hashes: default (boxes)
+  `0b84c119…`, `MARCH_HASH_CROWD=1` quad `a350361d…`, `MARCH_HASH_PERBODY=1` `a8ab4efa…`. Next test of the
+  crowd: the owner's WIP branch with dynamite and an 8–10 zombie room.
+
   **DEFAULT REVERTED TO PER-BODY (2026-09-14 evening).** The equal-workload bench on the owner's 56 s
   room-1 recording (`BENCH_DEMO`, both legs replay the same fight) is a wash overall and the crowd quad
   loses the fire-heavy third by ~15 ms (three overlapping type quads cover 45–81 % of the screen each);

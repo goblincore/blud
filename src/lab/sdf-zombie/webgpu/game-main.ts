@@ -1210,14 +1210,21 @@ async function main() {
   // Stage a-2 dispatch: `?crowddispatch=boxes` restores the stage-a instanced
   // proxy boxes; anything else (including absent) uses the one-screen-quad
   // dispatch, which is the point of the stage.
-  let crowdDispatch: 'boxes' | 'quad' = new URLSearchParams(location.search).get('crowddispatch') === 'boxes'
-    ? 'boxes' : 'quad';
-  // DEFAULT REVERTED (2026-09-14 evening, `## Flip decision bench` in the
-  // stage-a dev note): on the owner's 56 s room-1 recording the crowd quad is
-  // a wash overall and loses the fire-heavy third by ~15 ms — its wins are
-  // real crowds (8..24 bodies), which ordinary rooms do not hold yet. Per-body
-  // ships; `?crowd=1` opts in; `?crowd=0` stays accepted.
-  let crowdOn = crowdParam === '1';
+  // DEFAULT DISPATCH = BOXES (2026-09-15). On the owner's 56 s room-1 recording
+  // with matched fights the instanced proxy boxes beat per-body overall
+  // (17.3/15.4 vs 19.8/19.2 ms frame p50) while the one-screen-quad did not
+  // (20.3/20.2): the quad's remaining cost is raster footprint the boxes never
+  // rasterise (`docs/dev-notes/2026-09-14-crowd-firefight-cost.md`, Task 5).
+  // `?crowddispatch=quad` keeps the quad reachable; it may still win specific
+  // scenes (many bodies stacked in few tiles) and is worth revisiting.
+  let crowdDispatch: 'boxes' | 'quad' = new URLSearchParams(location.search).get('crowddispatch') === 'quad'
+    ? 'quad' : 'boxes';
+  // DEFAULT = CROWD, BOXES DISPATCH (2026-09-15). The 2026-09-14 revert to
+  // per-body rested on a bench whose legs fought different fights (the
+  // `setCrowd` respawn confound, fixed in sdf-game-bench.mjs). On matched
+  // fights the crowd march with boxes beats per-body on the owner's real
+  // room-1 run and keeps its 8..24-body wins. `?crowd=0` opts out.
+  let crowdOn = crowdParam !== '0';
   // STAGE-3 COMPATIBILITY: the refine twins and the cone pass are unsupported
   // under the crowd march (they read per-body state the instance record does
   // not carry; stage 3 turns refine into a fullscreen record-reading pass). A
@@ -6975,7 +6982,7 @@ function performBenchAction(a: BenchAction): void {
       // default; `flag` echoes the opt-out so a script can distinguish "on
       // because default" from "on because ?crowd=1". `fallbackReason` is set
       // only when a stage-3-incompatible pass forced this boot per-body.
-      default: false,
+      default: true,
       flag: crowdParam === '1' ? 'crowd=1' : crowdParam === '0' ? 'crowd=0' : null,
       fallbackReason: crowdFallbackReason,
       // The crowd march requires its tile list (see the draw-fn sync block):

@@ -66,11 +66,14 @@ import { connectGame, applyShipDefaults, bootCloseupPage, stageCloseUp } from '.
 
 const VITE = Number(process.env.LAB_VITE_PORT ?? 5323);
 const CDP = Number(process.env.LAB_CDP_PORT ?? 9323);
-// CANONICAL VALUES (default reverted to per-body, 2026-09-14 evening):
-//   per-body (shipped default, tiles off)     = a8ab4efac15fc0376c3e4e05420f13e34d1511bd
-//   crowd (?crowd=1, quad dispatch, tiles on) = a350361d6a223946a4cb8aac9bc2a3a70ee15bfd
-// The crowd value stays reachable in one command:
-//   MARCH_HASH_CROWD=1 node scripts/march-hash.mjs
+// CANONICAL VALUES (default = crowd, BOXES dispatch, 2026-09-15):
+//   shipped default (crowd, boxes, tiles on)        = 0b84c119e04fc8b2f7a3fe2f69b85737448ec86c
+//   crowd quad (?crowddispatch=quad, tiles on)      = a350361d6a223946a4cb8aac9bc2a3a70ee15bfd
+//   per-body (?crowd=0, tiles off)                  = a8ab4efac15fc0376c3e4e05420f13e34d1511bd
+// Each stays reachable in one command:
+//   node scripts/march-hash.mjs                       (default, pinned)
+//   MARCH_HASH_CROWD=1 node scripts/march-hash.mjs    (quad, pinned)
+//   MARCH_HASH_PERBODY=1 node scripts/march-hash.mjs  (per-body, pinned)
 // The per-body value stays reachable in one command:
 //   MARCH_HASH_PERBODY=1 node scripts/march-hash.mjs
 // (equivalently MARCH_HASH_QUERY='crowd=0' MARCH_HASH_TILES=0 node scripts/march-hash.mjs).
@@ -79,14 +82,16 @@ const PERBODY_HASH = 'a8ab4efac15fc0376c3e4e05420f13e34d1511bd';
 // with the tile list off and asserts the canonical per-body sha1, so the old
 // gate is still one self-checking command after the default flip.
 const PERBODY = process.env.MARCH_HASH_PERBODY === '1';
-// MARCH_HASH_CROWD — the crowd opt-in gate: boots `?crowd=1`, tiles on, and
-// pins the crowd canonical.
+// MARCH_HASH_CROWD — the QUAD-dispatch gate: boots `?crowd=1&crowddispatch=quad`,
+// tiles on, and pins the quad canonical. The shipped default (boxes) is pinned
+// by DEFAULT_HASH whenever neither override is set and no extra query is given.
 const CROWD = process.env.MARCH_HASH_CROWD === '1';
 const CROWD_HASH = 'a350361d6a223946a4cb8aac9bc2a3a70ee15bfd';
+const DEFAULT_HASH = '0b84c119e04fc8b2f7a3fe2f69b85737448ec86c';
 // MARCH_HASH_QUERY — extra query string appended to the boot URL, so a page
 // flag (e.g. `crowd=1`, `tiles-playtest`) can be hashed through this same gate.
 // MARCH_HASH_PERBODY forces `crowd=0` and wins over it.
-const EXTRA_QUERY = PERBODY ? '&crowd=0' : CROWD ? '&crowd=1' : (process.env.MARCH_HASH_QUERY ? `&${process.env.MARCH_HASH_QUERY}` : '');
+const EXTRA_QUERY = PERBODY ? '&crowd=0' : CROWD ? '&crowd=1&crowddispatch=quad' : (process.env.MARCH_HASH_QUERY ? `&${process.env.MARCH_HASH_QUERY}` : '');
 // MARCH_HASH_ROOM — which room's fill-screen close-up to stage. Room 1 is the
 // canonical gate; room 2 is the crowd-parity diagnostic (more bodies per type).
 const ROOM = Number(process.env.MARCH_HASH_ROOM ?? 1);
@@ -186,6 +191,9 @@ if (PERBODY && room1 !== PERBODY_HASH) {
 }
 if (CROWD && room1 !== CROWD_HASH) {
   fail(`crowd canonical moved: room1=${room1} expected ${CROWD_HASH}`);
+}
+if (!PERBODY && !CROWD && !process.env.MARCH_HASH_QUERY && process.env.MARCH_HASH_TILES !== '0' && room1 !== DEFAULT_HASH) {
+  fail(`shipped-default canonical moved: room1=${room1} expected ${DEFAULT_HASH}`);
 }
 
 await evaluate('(() => { __sdfGame.step(2); return 1; })()');
