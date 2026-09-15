@@ -16,6 +16,7 @@
     "blob:shot": "scripts/blob-shot.sh",
     "blob:silview": "tsx scripts/blob-silview.ts",
     "blob:inspect": "tsx scripts/blob-inspect.ts",
+    "mesh:compare": "tsx scripts/blob-mesh-compare.ts",
     "melt:shot": "scripts/melt-shot.sh",
     "blob:render-check": "scripts/blob-render-check.sh",
     "test:watch": "vitest",

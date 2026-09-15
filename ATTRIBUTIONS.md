@@ -168,3 +168,35 @@ licence compliance.
   a fantasy silhouette that predates this reference and is unchanged by it.
 - Its rigged arms, hand skeleton and dual-wield arrangement are unused; Blud's
   weapon is single, held in two goblin hands built from `characters/goblin.blob`.
+
+---
+
+## ALICE-SDF — mesher comparison tables and dual-contouring port (MIT OR Apache-2.0)
+
+**Licence:** [MIT OR Apache-2.0](https://github.com/ext-sakamoro/ALICE-SDF).
+Core ALICE-SDF is distributed under those two licenses only. Its repository
+also carries separate editor/integration distribution channels (VRChat,
+Unreal, Unity, mobile) under other terms — **none of those were consulted or
+imported**, and no code from them is present here.
+
+- **Author:** Moroya Sakamoto — https://github.com/ext-sakamoro/ALICE-SDF
+- **Pinned revision:** `1e85ab3591600bd316e3ceaa33df8dbd06cb3219` (v1.12.0)
+- **Files consulted:** `src/mesh/sdf_to_mesh.rs`, `src/mesh/dual_contouring.rs`,
+  `src/mesh/manifold.rs` (MIT OR Apache-2.0). The sibling `alice-view` project
+  (MIT, `a05c803fc8440a07186179e9f1c74baf14b9e85a`) was inspected for its
+  OBJ/GLB export entry point; no code or text was copied from it.
+
+### What in this repo derives from it
+
+1. **`src/lab/sdf-zombie/mesher-comparison/marching-cubes-tables.ts`** — the
+   classic 256-entry marching-cubes `EDGE_TABLE` / `TRI_TABLE`, mechanically
+   transcribed from `sdf_to_mesh.rs`. (These are the Lorensen & Cline (1987)
+   tables as popularised by Paul Bourke; ALICE-SDF is the pinned source the
+   transcription was taken from.)
+2. **`src/lab/sdf-zombie/mesher-comparison/dual-contouring.ts`** — a TypeScript
+   port of the QEF solve, edge refinement and dual connectivity in
+   `dual_contouring.rs`, adapted to sample Blud fields. Departures from
+   upstream are recorded in the file header.
+
+Both are **experiment-only**: they live under `mesher-comparison/`, are not
+imported by production meshers/renderers, and are not shipped in the game.
