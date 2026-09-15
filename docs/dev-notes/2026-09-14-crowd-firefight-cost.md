@@ -521,3 +521,171 @@ Per-instance clipped rects with a disjoint decomposition (so a pixel is shaded o
 Bar (t1 ≤ per-body, overall ≤, t2 ≤ 5 ms): **quad** fails t1 (rep0) and t2 (11.5 ms — the blend-reach rect beside the camera); **boxes** meets overall (wins by 2–4 ms of frame) and t2, and is within repeat spread on t1. So the crowd march with the *boxes* dispatch is already at parity-or-better with per-body on this real run, and the quad's remaining deficit is the raster footprint the box dispatch does not have. Task 6 (entry-miss discard before setup) targets exactly that; if it lands, quad ≈ boxes and the default choice becomes crowd (either dispatch) vs per-body on the many-body scenes, not this one.
 
 Note the earlier confounded table showed per-body with a 10–16 ms `sdf:march-chunks` pass in t0 (gibs). The matched fight has no gibs, so per-body's chunk cost is absent here; a gib-heavy recording would tilt further toward crowd.
+
+## Task 6 — entry-miss discard before the per-pixel setup: investigated, **rejected** (2026-09-15)
+
+**Verdict: the entry-miss hoist is implementable and semantically exact, but it
+MOVES the byte-exact crowd canonical `a350361d…` to `fb09bda0…` by GPU
+floating-point scheduling, and its t1 gain is inside repeat noise. Following
+Task 3, no code is kept and the canonical is not re-pinned. The kernel tree is
+byte-identical to Task 2/3.**
+
+Task 2 bought ~1.4 ms by hoisting the *empty-tile* discard (pure integer) ahead
+of the fetches; Task 1 priced the whole setup-on-discard term at ~9 ms, so
+~8 ms was expected to sit in NON-empty tiles that discard later on the entry
+test. Task 6 was to do for the entry miss what Task 2 did for the empty tile.
+
+### What was tried
+
+Two implementations, both guarded to the quad crowd material only.
+
+1. **Second copy (rejected immediately).** A pure `quadEntryMiss` predicate
+   duplicating the preload's ray-vs-inflated-sphere loop, called from the
+   material gate after `quadTileEmpty`. This is the shape the plan allows only
+   "if the reorder is impossible"; it was measured to prove the mechanism and
+   then dropped. Liveness was proven (`return true` → all-discard hash
+   `b6422b41…`). With the real condition the canonical moved to `fb09bda0…`.
+
+2. **The reorder (the plan's preferred form).** `TILE_PRELOAD_WGSL` /
+   `quadTilePreload` moves the ACTUAL preload out of `MARCH_TRACE_SETUP` into
+   a function the material gate calls BEFORE the occ/shell/prev fetches, the
+   record load and the wound list. It writes the existing `gTile*`/`gPix*`
+   globals and `gTileEntryT`, sets a new `gTilePreloaded` flag, and returns
+   `entryT > 1e8` — the trace's own discard bound. `MARCH_TRACE_SETUP`'s
+   preload is wrapped in `if (gTilePreloaded < 0.5)`, so per-body, box and
+   refine callers (which never call the gate) run it exactly as before. This
+   introduces NO new march arithmetic and no duplicated loop: the FP work is
+   relocated, not repeated. The generated WGSL was dumped and inspected:
+   `quadTilePreload(&NodeBuffer_1882, &NodeBuffer_1883, …)` runs before
+   `marchBody(...)`, and the trace's copy is inside
+   `if (gTilePreloaded < 0.5)`.
+
+### Why it is exact in hit-set but not byte-exact
+
+Liveness (both forms): replacing the return with a literal `true` moves the
+crowd hash to the all-discard `b6422b41…`, so the gate is wired and discards.
+
+Parity is unchanged: `MARCH_PARITY_TILES=1` PASS with the same metrics as the
+Task-2 baseline (room1 maskDiff 0 maxDz 0.00098896; room2 maskDiff 1
+maskDiffFrac 3.27e-5 maxDz 0.00218374). Reading the raw march target with the
+hoist vs the un-hoisted tree and decoding both float buffers in Node gives:
+
+| metric | hoist vs no-gate |
+| --- | ---: |
+| differing pixels | 5918 / 480000 |
+| hit mask difference | **0** (hitA = hitB = 33344) |
+| max \|Δdepth\| | 0.0008773 |
+| max \|Δrgb\| | 0.01095 |
+
+So the hoist discards only pixels the trace already discarded — the hit SET is
+identical. The hash moves because adding the gate's FP (the sphere tests, and
+even a relocated copy of them) changes how the GPU compiler schedules /
+contracts the march's own FP: ~1 % of pixels shift by a few ULPs (the first
+one differs only in the last mantissa bit, with identical alpha). It is not an
+over-discard and not a semantics bug.
+
+Controls that pin the mechanism (each a full crowd-hash run):
+
+- A pure-integer gate function in the same position (`return head.y < 1u`,
+  `return false`, a coin-flip look using only `tileEnt[0].x`) leaves the
+  canonical `a350361d…` UNMOVED — integer/pointer work does not perturb it.
+- Any version whose gate body contains the FP sphere loop moves it, even with
+  the return forced false (`var entryT = 0.0;`) and even with the rayCull and
+  sphere reach neutralised (`reach = 1000`, `rayCull = false`).
+- Passing the ray directly (`rd`) instead of recomputing
+  `normalize(worldPos - camPos)` in the gate does NOT help (`fb09bda0…`). The
+  duplicate normalize is not the cause; the relocated FP is.
+- The generated shader text for the `fb09bda0` tree differs from the
+  `a350361d` tree by exactly the gate function and its call — the march body is
+  byte-identical. The move is a scheduling perturbation, not a code change.
+
+**This is why the plan insists the preload be MOVED and not copied, and why
+even moving it does not clear a byte gate here: the byte-exact hash is
+sensitive to FP instruction scheduling, not only to correct arithmetic. Task 2
+survived only because the empty-tile gate is integer-only.**
+
+### t1 window bench (frames 1123:2245, 2 repeats)
+
+```
+BENCH_DEMO=<rec> BENCH_DEMO_FRAMES=1123:2245 BENCH_ROOMS=1 \
+BENCH_LEGS=crowd-off,crowd-quad BENCH_PASSES=1 BENCH_REPEATS=2 \
+BENCH_FRAME_CAP_MS=250 BENCH_OUT=…/t1-task6-after \
+node scripts/sdf-game-bench.mjs 5333 9333
+```
+
+(Ports: this chain's plan ports 5323/9323 were held by the concurrent
+`2026-09-14-crowd-t1-task45` lab for the whole run — a stale/again-live vite
+serving a different worktree, which would have silently answered the gates
+against the wrong tree — so every task-6 gate and bench here used 5333/9333
+with `LAB_TMP=.lab-tmp`.)
+
+`sdf:march` p50 (ms) per repeat, from `bench.json`:
+
+| run | leg | rep0 | rep1 | mean | mean quad − off |
+| --- | --- | ---: | ---: | ---: | ---: |
+| before (Task-3 HEAD, `t1-task3-before/`) | `crowd-off` | 28.28 | 28.36 | 28.32 | — |
+| before | `crowd-quad` | 37.69 | 36.75 | 36.59 | **8.27** |
+| after (hoist, `t1-task6-after/`) | `crowd-off` | 28.02 | 28.49 | 28.25 | — |
+| after | `crowd-quad` | **35.56** | 39.82 | 37.69 | **9.44** |
+
+Census and frame hashes are identical across repeats in both runs. The quad's
+own repeat spread is 12 % (35.56 vs 39.82), larger than the ~1 ms the hoist
+could have bought: the quad − per-body gap is **unresolved** (rep0 improved
+2.1 ms, rep1 regressed 3.2 ms). Machine load ~1.9 at run time.
+
+### The bar
+
+**Not met, and the hoist cannot meet it.**
+
+- t1 `sdf:march` crowd-quad (35.56–39.82) is far above per-body (28.0–28.5);
+  the gap is 7.5–11.6 ms, not ≤ 0.
+- overall, the earlier flip-decision bench already had quad above per-body
+  (44.7 vs 39.2 frame p50), so the overall bar fails too.
+- t2 is the cleared room; there the quad's union walk is not the binding term
+  but per-body is near-free, so the "t2 ≤ 5 ms" bar is likewise not met.
+
+The full-recording bench was **not run**: the t1 window is the binding third,
+it already refutes the within-run bar (quad > per-body), and the tree is
+reverted — a full-recording run of a rejected, uncommitted change would not add
+information. Stated plainly rather than papered over.
+
+### Gates on the final tree (code reverted to Task 2/3 HEAD)
+
+```
+$ MARCH_HASH_CROWD=1 MARCH_HASH_TILES=1 node scripts/march-hash.mjs
+{"room1":"a350361d6a223946a4cb8aac9bc2a3a70ee15bfd","room1-repeat":"a350361d6a223946a4cb8aac9bc2a3a70ee15bfd","room1-wounded":"07f60ecfd4e1e1cac9e26b8527d50abc74894e95"}
+crowd_exit=0
+
+$ node scripts/march-hash.mjs        # default per-body
+{"room1":"a8ab4efac15fc0376c3e4e05420f13e34d1511bd","room1-repeat":"a8ab4efac15fc0376c3e4e05420f13e34d1511bd","room1-wounded":"da785297dcc3f677320c563501ca861bac22d6d6"}
+perbody_exit=0
+
+$ MARCH_PARITY_TILES=1 node scripts/march-parity.mjs
+room1 tiles=1 dispatch=quad flat=0: hitA 33344 hitB 33344 maskDiff 0 maxDz 0.0009889602661132812
+room2 tiles=1 dispatch=quad flat=0: hitA 30561 hitB 30562 maskDiff 1 maxDz 0.0021837353706359863
+PASS
+
+$ npx vitest run march.wgsl.test.ts deferred-sdf.test.ts crowd-type.test.ts zombie-gpu.test.ts
+Test Files  4 passed (4) / Tests  295 passed (295)
+```
+
+Crowd `a350361d…`, per-body `a8ab4efa…` and the parity gate are all unmoved:
+the committed kernel is byte-identical to Task 2. **No re-pin was made: the
+hash-moving form was rejected, exactly as in Task 3.**
+
+### Consequence for the chain
+
+Task 2 (empty tile, integer) is the last exact, committed win; the entry-miss
+term is not addressable through this gate without moving a byte-exact hash, and
+even a perfect entry-miss discard would leave the t1 gap (the fetches Task 2
+already skips for empty tiles are not where the remaining ~7 ms lives). The
+default stays per-body; the quad dispatch's remaining t1 cost needs a different
+lever (fewer/cheaper per-pixel fetches, not a better entry test).
+
+### Files (task 6 — none kept)
+
+- `docs/dev-notes/2026-09-14-crowd-firefight-cost/t1-task6-after/` — the t1
+  window bench of the attempted reorder (before = `t1-task3-before/`).
+- The reorder implementation (`TILE_PRELOAD_WGSL`, `quadTilePreload`,
+  `gTilePreloaded`, the material gate) was built, dumped, gated and measured,
+  then reverted; it is described above and can be reconstructed from this note.
