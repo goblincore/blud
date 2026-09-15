@@ -596,8 +596,14 @@ survived only because the empty-tile gate is integer-only.**
 BENCH_DEMO=<rec> BENCH_DEMO_FRAMES=1123:2245 BENCH_ROOMS=1 \
 BENCH_LEGS=crowd-off,crowd-quad BENCH_PASSES=1 BENCH_REPEATS=2 \
 BENCH_FRAME_CAP_MS=250 BENCH_OUT=…/t1-task6-after \
-node scripts/sdf-game-bench.mjs 5333 9323
+node scripts/sdf-game-bench.mjs 5333 9333
 ```
+
+(Ports: this chain's plan ports 5323/9323 were held by the concurrent
+`2026-09-14-crowd-t1-task45` lab for the whole run — a stale/again-live vite
+serving a different worktree, which would have silently answered the gates
+against the wrong tree — so every task-6 gate and bench here used 5333/9333
+with `LAB_TMP=.lab-tmp`.)
 
 `sdf:march` p50 (ms) per repeat, from `bench.json`:
 
