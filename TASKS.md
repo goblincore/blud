@@ -297,6 +297,103 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 > stone"* and *"i dont think the texture is right either it doesnt look like the
 > zombie skin texture at all."*
 >
+> ## 2026-09-15 — REBASED ONTO THE CROWD MARCH, AND THREE MORE FIXES
+>
+> The branch is on main as [PR #8](https://github.com/goblincore/blud/pull/8)
+> (draft). 47 commits squashed to one integration commit — a commit-by-commit
+> rebase needed ~26 separate integrations of `game-main.ts` and most intermediate
+> commits would not have compiled, so they could not have been verified. Full
+> history kept at `backup/pre-rebase-2026-09-15`. Six conflicts, all in
+> `game-main.ts`; the two that needed judgement were main's replay-determinism
+> refactor (weapon slots had to become a RISING-EDGE scan inside
+> `applyInputEdges`, and mousedown had to keep the tick deferral).
+>
+> **THE WHOLE SUITE PASSED WHILE THE FEATURE WAS DEAD IN THE BROWSER.** Three
+> runtime-only faults, none of which a test could see:
+>
+> 1. `createChunkGpuView` THREW "shared chunk material is full (12 slots)" from
+>    inside the tick, where the animation loop swallowed it — after the body was
+>    spliced out of `pendingGibs` and before `retireActor`, so a gib vanished
+>    silently (`gibbed: 1, gibPieces: 0`, body never retired, nothing logged).
+>    Main's crowd march sizes one shared record buffer from what the page passes,
+>    and the page passed the PRE-DYNAMITE `MAX_CHUNKS` of 12 while the recycler
+>    allowed 64. Now one ceiling: `MAX_CHUNK_BUDGET = 96`. Measured 0 -> 19 pieces.
+> 2. A settled piece had no per-pixel detail at all. The bake drops it on purpose
+>    ("the baked surface is the clean field") and this shader's header claimed the
+>    march's fbm "has no mesh-side equivalent and does not need one" — it does.
+>    The march's OWN `HASH13`/`NOISE3`/`FBM` source strings are now wgslFn
+>    includes, so parity is structural. Amplitude follows the live creature's
+>    `surfCfg2.y`; `?chunkdetail=` / `__sdfGame.setChunkDetail(x)` overrides it.
+> 3. **THE SETTLED-CHUNK MATERIAL WAS NEVER REGISTERED.**
+>    `createBakedChunkMaterial` is built in two places and only the corpse path
+>    wrapped it in `registerLitChunkMaterial` — but the CHUNK BAKE path is the one
+>    that wins in normal play. So every per-frame push went past it, including the
+>    FLASHLIGHT: settled pieces kept `spotCfg.x = 0` (beam off) against a fixed
+>    2.4 directional key — a body lit by a lamp that is not there, at ~2.5x, which
+>    is what blows flesh pale. `litChunkMaterials` was added to fix exactly this
+>    class of miss and this path was left out of the fix.
+>
+> **The instrument that caught (3) is kept.** A look A/B could not tell "the term
+> does nothing" from "the term never arrived" — sweeping `setChunkDetail` 0.06 ->
+> 0.9 changed nothing on screen. `__sdfGame.chunkDetailApplied()` reports what the
+> MATERIALS hold rather than what was requested; it read `[]` against 12 baked
+> pieces on screen. After the fix, `[0.06]`.
+>
+> **BONES: MESH ON A BODY, MARCHED IN A GIB — by design.**
+> `resolveSkeletonMode` returns `'mesh'` by default (only deferred mode or
+> `?skeleton=procedural` forces otherwise), so a living actor wears extracted
+> segment meshes. A DETACHED chunk does not: `spawnChunkPiece` calls
+> `setPackBones(boneOnly ? true : !boneMesh)`, so a bone-only gib piece always
+> packs its bone rows into the marched field — without that it would march an
+> empty field and the skeleton would be invisible. Measured after a gib: the 7
+> remaining live chunks are all `kind: "bone", render: "march"` and settled; the
+> 12 that BAKE are the flesh. So the pale capsules in a settled pile are the
+> skeleton, pale by design (`boneColor`), and bones never bake.
+>
+> **STILL UNJUDGED: the look.** Nothing above is an owner view-test. The harness
+> available here throttles `requestAnimationFrame` whenever its pane is hidden
+> (it reported 1030 ms/frame with zero gibs), and a floor of recycling gore will
+> not hold still for an A/B — so no frame-time or appearance claim from it is
+> trustworthy. What is established is mechanical: the uniforms now arrive.
+>
+> **ALSO IN THE SQUASHED COMMIT, and not described anywhere below** (these
+> landed after the 2026-09-11 banner was written):
+>
+> - **The carve cuts at JOINTS now.** Pieces were even slabs of each cluster's
+>   bounding box (`armL.0/1/2`), which the owner read as "too abstract ... should
+>   at least somewhat resemble pieces from the character". They are cut on a
+>   NEAREST-BONE-GROUP VORONOI over melt-bones.ts's eleven groups, so a boundary
+>   falls where two groups' bones are equidistant — on a limb, the joint. Eleven
+>   pieces: skull, cage, pelvis, upper arms, forearms, thighs, shins. `cells` now
+>   SUBDIVIDES an anatomical part rather than defining one, and defaults to 1.
+> - **Baked per-vertex AO**, because a mesh fragment shader cannot sample the
+>   field the way the march's cheap AO does. iq's five-tap against the piece's own
+>   clipped field (not the whole body's — a gib flies away from the body, so
+>   occlusion by a torso it is no longer attached to would be a shadow from
+>   nothing). Opt-in via `bakedAo`, with the same attribute discipline `goreKind`
+>   taught.
+> - **The tissue ramp no longer runs off the end of its range.** Its knees
+>   describe layers under skin and are authored for a crater a centimetre deep; a
+>   slab cut is 100 mm deep across its face. 21.2% of vertices were landing on
+>   VISCERA and 0.0% on fat — a butcher's cross-section ("beef chunks I get from
+>   the Piggly Wiggly"). The depth the albedo sees now saturates at the clot knee,
+>   and viscera is gated off plain cuts (the march gates it on the CAVITY mask;
+>   the bake had collapsed that to `wm > 0`).
+> - **CORRECTION — bones were never in the carved geometry.** The module header
+>   claimed "one field over flesh AND its 68 authored bone prims", and that was
+>   the headline justification for the carve over the per-piece bake. `sdBody`
+>   skips `op === 'bone'` in BOTH folds and says so: "the CPU field never shows
+>   it". The test that "proved" it only counted bone prims whose BOUNDING BOX
+>   overlapped a region, never a vertex. The skeleton is real on a cut, but as
+>   MATERIAL: `makeKindAt` tags the vertices a cut drove INSIDE a bone. Header and
+>   test both corrected.
+>
+> > **Known regression:** the carve library build is ~19.7 s at boot
+> (`?gibrender=carve` only, measured idle; was 3-5 s before the anatomical
+> partition). The default `march` path is unaffected.
+>
+> ---
+>
 > **FOUR causes, all fixed (2026-09-11, second session). Needs an owner view-test.**
 > The plaid-texture theory in the row below was a RED HERRING: the blowout survived
 > turning that layer fully off, and turning it off made it WORSE (10.9% vs 7.7%).
