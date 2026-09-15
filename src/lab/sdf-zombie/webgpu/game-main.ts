@@ -5386,11 +5386,28 @@ async function main() {
     const swapTiming = telemetry.begin();
     const baked = unpackChunkBake(done.result);
     if (!bakedChunkMat) {
-      bakedChunkMat = createBakedChunkMaterial(
+      // REGISTERED, like the corpse path's identical construction a few thousand
+      // lines up. It was not, and this is the site that WINS in normal play: the
+      // corpse bake only runs if a soldier corpse settles first, so in a plain
+      // dynamite gib THIS line created the shared baked-chunk material and left
+      // it out of `litChunkMaterials`.
+      //
+      // The registry is not cosmetic. Everything the per-frame block pushes went
+      // past this material: the FLASHLIGHT (so a settled piece kept the static
+      // defaults — `spotCfg.x = 0`, beam OFF, against a fixed 2.4 directional
+      // key, i.e. lit by a lamp that is not there at ~2.5x, which is what blows
+      // flesh albedo pale) and, since this session, `fleshDetail`. The registry
+      // exists BECAUSE of exactly this class of miss — its own docstring says
+      // "the per-frame beam update touched ONLY bakedChunkMat" — and then the
+      // settled-chunk path was left out of the fix.
+      //
+      // Caught by `__sdfGame.chunkDetailApplied()` reading `[]` while the census
+      // reported 12 baked pieces on screen.
+      bakedChunkMat = registerLitChunkMaterial(createBakedChunkMaterial(
         // DEFERRED MODE: baked chunks are static flesh — level-only receivers
         // with a surface G-buffer producer material.
         deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined,
-      );
+      ));
       bakedChunkSeed?.(bakedChunkMat);
     }
     liveChunks.splice(index, 1);
@@ -12695,6 +12712,14 @@ function performBenchAction(a: BenchAction): void {
       return chunkDetailOverride;
     },
     get chunkDetail() { return chunkDetailOverride; },
+    /** WHAT THE MATERIALS ACTUALLY HOLD, not what was requested. `chunkDetail`
+     *  is the override; this is the value the per-frame push last wrote into
+     *  each registered material's `fleshDetail.x`, which is what the shader
+     *  reads. They differ whenever the push is not reaching a material — the
+     *  exact failure this getter exists to make visible, because a look A/B on
+     *  a floor full of recycling gore cannot distinguish "the term does nothing"
+     *  from "the term never arrived". */
+    chunkDetailApplied: () => litChunkMaterials.map(m => m.uniforms.fleshDetail.value.x),
     setChunkBake(on: boolean) {
       chunkBakeEnabled = on;
       if (!on) cancelChunkBake();
