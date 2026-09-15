@@ -33,6 +33,10 @@ import {
 import { len } from '../vec';
 import type { Vec3 } from '../types';
 import { encodeSurfaceClass, SURFACE_CLASS_MESH, type SurfaceOutputOptions } from './deferred-surface';
+// The march's OWN noise source strings, included verbatim as wgslFn
+// dependencies rather than re-derived here. Parity is then structural: if the
+// creature's micro-detail changes, a settled piece of it changes with it.
+import { HASH13, NOISE3, FBM } from './march.wgsl';
 
 /**
  * Live lighting for every baked chunk. Same uniform names and semantics as
@@ -74,6 +78,20 @@ const bakedChunkUniforms = () => ({
    *  Zero by default for the same reason as `goreCfg`: every existing user of
    *  this material is bit-identical until it opts in. */
   goreCfg2: uniform(new THREE.Vector4(0, 0, 0, 0)),
+  /** THE LIVE FLESH'S OWN MICRO-DETAIL, mirrored onto the settled piece:
+   *  (surfaceNoiseAmp, spare, spare, spare) — the march's `surfCfg2.x`.
+   *
+   *  A settled chunk stops being marched and becomes a static mesh, and the
+   *  bake deliberately drops the march's per-PIXEL terms: chunk-bake-field.ts
+   *  says "the baked surface is the clean field", and this shader's own header
+   *  used to say "NO noise here ... the march's per-pixel fbm has no mesh-side
+   *  equivalent and does not need one". It does need one. The owner's read of
+   *  the result: the pieces "turn into this baked smooth albedo", against a
+   *  living zombie that "is pink and has a noisy normal texture".
+   *
+   *  Zero by default, so every existing user of this material is unchanged
+   *  until the page pushes the view's real value. */
+  fleshDetail: uniform(new THREE.Vector4(0, 0, 0, 0)),
 });
 export type BakedChunkUniforms = ReturnType<typeof bakedChunkUniforms>;
 
@@ -130,7 +148,7 @@ export type BakedChunkUniforms = ReturnType<typeof bakedChunkUniforms>;
  * next to one — but it is a visible change beyond the path that motivated it,
  * and it has not been through an owner view-test.
  */
-export const CHUNK_SHADE_WGSL = /* wgsl */ `fn chunkShade(p: vec3<f32>, n: vec3<f32>, camPos: vec3<f32>, albedo: vec4<f32>, ao: f32, deepColor: vec3<f32>, ambient: vec3<f32>, look: vec4<f32>, lightDir: vec3<f32>, keyColor: vec3<f32>, lightCfg: vec2<f32>, spotPos: vec3<f32>, spotAxis: vec3<f32>, spotCfg: vec4<f32>, spotCfg2: vec4<f32>, spotColor: vec3<f32>, gloss: f32, pl: vec3<f32>, kind: f32, goreCfg: vec4<f32>, goreCfg2: vec4<f32>) -> vec3<f32> {
+export const CHUNK_SHADE_WGSL = /* wgsl */ `fn chunkShade(p: vec3<f32>, n: vec3<f32>, camPos: vec3<f32>, albedo: vec4<f32>, ao: f32, deepColor: vec3<f32>, ambient: vec3<f32>, look: vec4<f32>, lightDir: vec3<f32>, keyColor: vec3<f32>, lightCfg: vec2<f32>, spotPos: vec3<f32>, spotAxis: vec3<f32>, spotCfg: vec4<f32>, spotCfg2: vec4<f32>, spotColor: vec3<f32>, gloss: f32, pl: vec3<f32>, kind: f32, goreCfg: vec4<f32>, goreCfg2: vec4<f32>, anchor: vec3<f32>, fleshDetail: vec4<f32>) -> vec3<f32> {
   var a = albedo;
   var nrm = n;
   var gloss2 = gloss;
@@ -174,6 +192,11 @@ export const CHUNK_SHADE_WGSL = /* wgsl */ `fn chunkShade(p: vec3<f32>, n: vec3<
         gloss2 = 90.0;
       }
     }
+  }
+  if (fleshDetail.x > 0.0) {
+    let detailNoise = vec3<f32>(
+      fbm(anchor * 22.0), fbm(anchor * 22.0 + 5.0), fbm(anchor * 22.0 + 11.0));
+    nrm = normalize(nrm + detailNoise * fleshDetail.x);
   }
   var L = normalize(lightDir);
   var keyC = keyColor;
@@ -317,7 +340,16 @@ export function createBakedChunkMaterial(options?: GoreMaterialOptions): BakedCh
     (material as unknown as { surfaceKind: number }).surfaceKind = kind;
     surfaceKind = kind;
   } else {
-    const shade = wgslFn(CHUNK_SHADE_WGSL);
+    // Dependency-ordered includes, the repo's reduce idiom (bone-instancer.ts,
+    // zombie-gpu.ts buildMarchFn): hash13 -> noise3 -> fbm -> chunkShade, as
+    // WGSL requires a callee to be declared before its caller. These are the
+    // MARCH'S OWN source strings, so a settled piece samples the identical
+    // field the living body does — the previous attempt at this passed TSL
+    // noise NODES as wgslFn arguments and measurably delivered nothing.
+    const [, , , shade] = [HASH13, NOISE3, FBM, CHUNK_SHADE_WGSL]
+      .reduce<ReturnType<typeof wgslFn>[]>(
+        (acc, src) => [...acc, wgslFn(src, acc.slice(-1))], [],
+      );
     // ONE shader, two call sites. With `goreDetail` the procedural layer runs
     // from `goreCfg` and the part's own `goreKind`; without it `goreCfg.x` is 0
     // (its uniform default) so the layer is skipped and a baked chunk shades
@@ -337,6 +369,12 @@ export function createBakedChunkMaterial(options?: GoreMaterialOptions): BakedCh
       kind: options?.goreDetail ? attribute('goreKind', 'float') : float(0.0),
       goreCfg: u.goreCfg,
       goreCfg2: u.goreCfg2,
+      // ALWAYS the piece-local point, whatever `pl` is: the micro-detail has to
+      // ride the piece through its tumble. Sampled in world space it would swim
+      // across the surface as the chunk spins, which is the same reason the
+      // march anchors its own detail in the body's rest frame.
+      anchor: positionLocal,
+      fleshDetail: u.fleshDetail,
     }) as never, float(1.0));
   }
   material.depthWrite = true;

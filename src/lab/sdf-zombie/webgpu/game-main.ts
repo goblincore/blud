@@ -1933,6 +1933,21 @@ async function main() {
       // defaults — a fixed 2.4 directional key with the flashlight OFF, which
       // blows flesh albedo to white in a dark room. That was the owner's "pale …
       // nothing even abit fleshy".
+      // ...and the same MICRO-DETAIL. A settled chunk stops being marched, and
+      // the bake drops every per-pixel term the march had — which is why the
+      // owner's read was that the pieces "turn into this baked smooth albedo"
+      // beside a living zombie that "is pink and has a noisy normal texture".
+      // `surfCfg2.y` IS that texture (surfaceNoiseAmp), so it is copied off a
+      // LIVE body rather than re-authored: a piece and the creature it came off
+      // cannot drift apart, and the wound panel's slider moves both at once.
+      // Falls through with the last value when the cast is empty, so a piece
+      // does not go smooth the moment its own body is the last one gibbed.
+      const liveSurf = actors[0]?.view.uniforms.surfCfg2.value;
+      // `?chunkdetail=` / `__sdfGame.setChunkDetail(x)` overrides the creature's
+      // own amplitude. The shipped value is the flesh preset's surfaceNoiseAmp
+      // (0.06), which is deliberately subtle on a marched body and is therefore
+      // hard to judge on a settled piece without sweeping it — so it sweeps.
+      const detailAmp = chunkDetailOverride ?? (liveSurf ? liveSurf.y : null);
       for (const lm of litChunkMaterials) {
         const bu = lm.uniforms;
         bu.spotPos.value.copy(flashlight.spot.position);
@@ -1940,6 +1955,7 @@ async function main() {
         bu.spotCfg.value.set(spotOn, cosInner, cosOuter, flashlight.spot.distance);
         bu.spotColor.value.copy(flashlight.spot.color);
         bu.spotCfg2.value.set(beamTuning.gain, beamTuning.shoulder, beamTuning.keyFloor, 0);
+        if (detailAmp !== null) bu.fleshDetail.value.x = detailAmp;
       }
     }
     // Front-to-back per-body passes (perf round 2 task 5): register this
@@ -4821,6 +4837,10 @@ async function main() {
   // pieces from the character"). `?gibcarvecells=2+` trades it back for gore.
   const gibCarveCells = parseIntParam(DYN_PARAMS.get('gibcarvecells'), { min: 1, max: 8 }) ?? 1;
   const gibCarveCellSize = parseFloatParam(DYN_PARAMS.get('gibcarvecell'), { min: 0.005, max: 0.05 }) ?? 0.01;
+  /** Override for the settled piece's micro-detail amplitude; null = follow the
+   *  live creature's `surfCfg2.y`. See the per-frame push and `setChunkDetail`. */
+  let chunkDetailOverride: number | null =
+    parseFloatParam(DYN_PARAMS.get('chunkdetail'), { min: 0, max: 1 }) ?? null;
   const gibSpriteLiveCap = parseIntParam(DYN_PARAMS.get('gibspritelive'), { min: 1, max: 512 })
     ?? GIB_SPRITE_TUNING.liveCap;
   const gibSpriteRestCap = parseIntParam(DYN_PARAMS.get('gibspriterest'), { min: 0, max: 512 })
@@ -12665,6 +12685,16 @@ function performBenchAction(a: BenchAction): void {
      *  settles — baked pieces stay baked until shot or recycled. */
     soldierCorpseBake: () => soldierCorpses?.stats(),
     setSoldierCorpseBake(on: boolean) { soldierCorpses?.setEnabled(on); },
+    /** Micro-detail amplitude on every settled/baked piece — the march's
+     *  `surfaceNoiseAmp`, which the bake used to drop entirely. `null` follows
+     *  the live creature (the shipped behaviour); a number overrides it, which
+     *  is how to judge a term whose authored value is 0.06. Live: no rebake,
+     *  the pieces already on the floor change on the next frame. */
+    setChunkDetail(x: number | null) {
+      chunkDetailOverride = x === null ? null : Math.max(0, Math.min(1, x));
+      return chunkDetailOverride;
+    },
+    get chunkDetail() { return chunkDetailOverride; },
     setChunkBake(on: boolean) {
       chunkBakeEnabled = on;
       if (!on) cancelChunkBake();
