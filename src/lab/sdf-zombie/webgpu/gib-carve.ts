@@ -55,7 +55,7 @@ import type { Primitive } from '../types';
 import type { Quat } from '../vec';
 import type { BuildResult } from '../build-body';
 import type { ChunkLook, ChunkFieldEvals } from '../chunk-bake-field';
-import { bakeChunkAlbedo, chunkBakeField } from '../chunk-bake-field';
+import { bakeAoAt, bakeChunkAlbedo, chunkBakeField } from '../chunk-bake-field';
 import { sdPrimitive } from '../validate';
 import { BONE_GROUPS, groupOf, type BoneGroup } from '../melt-bones';
 import { extractHullSoup, fitHullGrid, type HullSoup } from './surface-nets-cpu';
@@ -449,44 +449,6 @@ function anatomicalRegions(body: BuildResult): Region[] {
 function allPrims(body: BuildResult): { prims: Primitive[]; boneCount: number } {
   const bones = (body.bonePrims ?? []) as Primitive[];
   return { prims: [...body.prims, ...bones], boneCount: bones.length };
-}
-
-/**
- * BAKED AMBIENT OCCLUSION — the flatness the mesh path could not otherwise fix.
- *
- * The march has "cheap AO from the field, so creases and the insides of joints
- * stay dark", and calls it a LOD lever rather than a free win. `chunkShade` has
- * no such term and cannot have the march's: a mesh fragment shader has no field
- * to sample. Measured side by side at one exposure, that is most of why a carved
- * piece reads paler and flatter than the body it came off.
- *
- * So it is BAKED, which is what this module does with everything else it can
- * precompute. iq's five-tap occlusion along the surface normal, against the
- * PIECE'S OWN clipped field rather than the whole body's — a gib flies away from
- * the body, so occlusion by a torso it is no longer attached to would be a
- * shadow from nothing. Cut faces come out unoccluded, which is correct: a flat
- * plane occludes nothing.
- *
- * The normal is the field's own gradient by central differences, because
- * `computeVertexNormals` has not run yet at this point and the gradient is the
- * better normal anyway (it is the surface's, not the triangulation's).
- */
-function bakeAoAt(field: (p: Vec3) => number, p: Vec3, cell: number): number {
-  const e = cell * 0.5;
-  const gx = field([p[0] + e, p[1], p[2]]) - field([p[0] - e, p[1], p[2]]);
-  const gy = field([p[0], p[1] + e, p[2]]) - field([p[0], p[1] - e, p[2]]);
-  const gz = field([p[0], p[1], p[2] + e]) - field([p[0], p[1], p[2] - e]);
-  const gl = Math.hypot(gx, gy, gz) || 1;
-  const n: Vec3 = [gx / gl, gy / gl, gz / gl];
-  let occ = 0;
-  let sca = 1;
-  for (let i = 1; i <= 5; i++) {
-    const h = 0.01 + 0.11 * (i / 5);
-    const d = field([p[0] + n[0] * h, p[1] + n[1] * h, p[2] + n[2] * h]);
-    occ += (h - d) * sca;
-    sca *= 0.92;
-  }
-  return Math.max(0, Math.min(1, 1 - 2.4 * occ));
 }
 
 /**

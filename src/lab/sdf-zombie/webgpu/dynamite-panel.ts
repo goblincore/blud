@@ -52,6 +52,7 @@ export type DynamiteTuningKey =
   //     comes to rest and becomes a static mesh; these three are the only
   //     per-pixel detail that mesh has.
   | 'chunkdetail' | 'chunkdetailfreq' | 'chunkdetailalbedo'
+  | 'chunkbake'
   // ——— the BLAST (its own group: these are what the blast DOES to the world,
   //     as opposed to what it looks like — see the owner's report in the table)
   | 'aoesize' | 'edgekick'
@@ -68,6 +69,10 @@ export type DynamiteTuningValues = Record<DynamiteTuningKey, number>;
  *  NUMBER→NAME mapping as well as on the key. */
 export const GIB_MODES = ['clusters', 'pieces', 'parts'] as const;
 export const GIB_BONES = ['off', 'core', 'all'] as const;
+/** `settle bake` off = a landed piece stays marched and looks exactly like one
+ *  still in the air; on = it becomes a static mesh and shades through a second,
+ *  partial lighting model. */
+export const CHUNK_BAKE_MODES = ['marched', 'baked'] as const;
 
 const _DYNAMITE_KEYS = [
   // ——— THE GIB. `maxchunks` is first on purpose: measured, the pool is what
@@ -107,6 +112,18 @@ const _DYNAMITE_KEYS = [
   { key: 'chunkdetail', label: 'grain', min: 0, max: 1, step: 0.01, value: 0.36 },
   { key: 'chunkdetailfreq', label: 'grain size', min: 0.5, max: 32, step: 0.5, value: 7 },
   { key: 'chunkdetailalbedo', label: 'grain tint', min: 0, max: 1.5, step: 0.02, value: 0.28 },
+  // THE SEAM ITSELF. A settled piece can either stay MARCHED — identical to the
+  // one still in the air, because it is the same renderer — or bake to a static
+  // mesh shaded by `chunkShade`, which reproduces a SUBSET of the march's
+  // lighting (no AO, no scatter, no wound shadow, and a flat key floor the march
+  // does not have). Off is the default since 2026-09-15; on is the cost saving,
+  // because a marched piece holds a view slot for its whole life.
+  //
+  // Toggling affects FUTURE settles only — pieces already baked stay baked until
+  // they are shot or recycled, which is the trap every driver of this seam has
+  // hit. Blow up a fresh body after moving it.
+  { key: 'chunkbake', label: 'settle bake', min: 0, max: 1, step: 1, value: 0,
+    labels: CHUNK_BAKE_MODES },
   // ——— THE BLAST ITSELF, first because it is the first thing to reach for. The
   // owner, playing this: "it seems the effective radius of the explosion is
   // quite large … the area of effect should be abit more focused", AND a body

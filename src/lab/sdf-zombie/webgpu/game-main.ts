@@ -1179,6 +1179,11 @@ async function main() {
         case 'chunkdetailalbedo':
           chunkDetailAlbedo = Math.max(0, Math.min(1.5, raw));
           break;
+        // FUTURE settles only — already-baked pieces stay baked until shot or
+        // recycled. The panel row says so too.
+        case 'chunkbake':
+          chunkBakeEnabled = Math.round(raw) === 1;
+          break;
         case 'aoesize':
           aoeRadiusScale = Math.max(0.3, Math.min(1.5, raw));
           break;
@@ -1248,6 +1253,7 @@ async function main() {
         ?? Math.min(1, (actors[0]?.view.uniforms.surfCfg2.value.y ?? 0) * CHUNK_DETAIL_GAIN),
       chunkdetailfreq: chunkDetailFreq,
       chunkdetailalbedo: chunkDetailAlbedo,
+      chunkbake: chunkBakeEnabled ? 1 : 0,
       aoesize: aoeRadiusScale,
       edgekick: aoeLaunchFloor,
       fxsize: fxSize,
@@ -3426,8 +3432,42 @@ async function main() {
   // STATE ONLY here — this must run BEFORE the bone-instancer light-seed
   // block below reads bakedChunkMat (declaration order is execution order
   // in this boot). The bake/gib/free functions live in the chunk section.
+  //
+  // OFF BY DEFAULT SINCE 2026-09-15, and the reason is worth stating because the
+  // verdict above was honest when it was made. "Nothing off from non baked" was
+  // 2026-09-05. What changed afterwards is that `litChunkMaterials` landed — the
+  // per-frame push of the flashlight and the room's light — and the settled-chunk
+  // material was never registered with it, so from that day a baked piece shaded
+  // on a STATIC phantom key with the beam off. The bake did not get worse; it
+  // stopped being lit. That is fixed now, but it is not the whole gap.
+  //
+  // THE WHOLE GAP IS STRUCTURAL. `chunkShade` is a reimplementation of the
+  // march's lighting, and it reproduces a SUBSET. Against the marched piece
+  // flying beside it, a baked piece has:
+  //   * NO ambient occlusion — `bakedAo` is passed only by the carve, so a
+  //     settled chunk shades at ao = 1.0 and nothing on it can ever be in shadow;
+  //   * NO backlit scatter, though flesh is authored `translucency 0.45`;
+  //   * NO wound shadow;
+  //   * and a FLAT 0.15 KEY FLOOR (`0.15 + 0.85 * ndl`) that the march does not
+  //     have, so a surface facing directly away from the light still takes 15%
+  //     of it.
+  // Those four together are exactly the owner's read: "way too light and dont
+  // follow the lighting". They are not a tuning miss; each is a term that is not
+  // there, and closing them means porting the march's lighting piece by piece
+  // into a second shader that then has to be kept in step with it forever.
+  //
+  // Not baking makes the difference vanish BY CONSTRUCTION rather than by
+  // approximation: a settled piece is then the same renderer as a flying one,
+  // because it IS one. Bone pieces have always worked this way — they never bake
+  // — and they have never been the ones that looked wrong.
+  //
+  // THE COST IS REAL AND IS NOT MEASURED HERE: every settled piece stays a
+  // marched chunk holding a view slot for its life, which is what the bake was
+  // built to avoid. `?chunkbake=1`, the panel's `settle bake` row, or
+  // `__sdfGame.setChunkBake(true)` put it back for an A/B.
   const GAME_CHUNK_BAKE: 0 | 1 = 1;
-  let chunkBakeEnabled = (GAME_CHUNK_BAKE as 0 | 1) === 1;
+  let chunkBakeEnabled = new URLSearchParams(location.search).get('chunkbake') !== '0'
+    && (GAME_CHUNK_BAKE as 0 | 1) === 1;
   interface ChunkTemplate { uniforms: import('./zombie-gpu').MarchUniforms; volumeTexture: THREE.Texture }
   interface BakedChunk {
     id: number;
@@ -5139,7 +5179,9 @@ async function main() {
       // Whichever finishes first (corpse or detached chunk) must seed the
       // same mode-aware shared material.
       bakedChunkMat = registerLitChunkMaterial(createBakedChunkMaterial(
-        deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined,
+        deferredMode
+          ? { output: 'surface', shadowReceiver: 'level-only', bakedAo: true }
+          : { bakedAo: true },
       ));
       bakedChunkSeed?.(bakedChunkMat);
     }
@@ -5532,7 +5574,12 @@ async function main() {
       bakedChunkMat = registerLitChunkMaterial(createBakedChunkMaterial(
         // DEFERRED MODE: baked chunks are static flesh — level-only receivers
         // with a surface G-buffer producer material.
-        deferredMode ? { output: 'surface', shadowReceiver: 'level-only' } : undefined,
+        // `bakedAo`: the settled bake writes a `bakeAo` attribute now, and
+        // without reading it every piece shades at ao = 1.0 and can never be in
+        // shadow — half of "way too light and dont follow the lighting".
+        deferredMode
+          ? { output: 'surface', shadowReceiver: 'level-only', bakedAo: true }
+          : { bakedAo: true },
       ));
       bakedChunkSeed?.(bakedChunkMat);
     }
@@ -12892,6 +12939,19 @@ function performBenchAction(a: BenchAction): void {
         id: b.id, verts: n,
         mean: [f(r / n), f(g / n), f(bl / n)],
         min: mn.map(f), max: mx.map(f), meanWoundMask: f(wm / n),
+        // AO: mean and range. A flat 1.0 means the attribute is absent or the
+        // bake is not writing it, which is indistinguishable from "the piece is
+        // simply unoccluded" on screen.
+        ao: (() => {
+          const g2 = b.mesh.geometry.getAttribute('bakeAo');
+          if (!g2) return 'absent';
+          const v2 = g2.array as ArrayLike<number>;
+          let sum = 0, lo = 9, hi = -9;
+          for (let i = 0; i < v2.length; i++) {
+            sum += v2[i]!; if (v2[i]! < lo) lo = v2[i]!; if (v2[i]! > hi) hi = v2[i]!;
+          }
+          return { mean: f(sum / v2.length), min: f(lo), max: f(hi) };
+        })(),
       };
     }),
     setChunkBake(on: boolean) {

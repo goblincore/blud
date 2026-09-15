@@ -42,12 +42,24 @@ import { HASH13, NOISE3, FBM } from './march.wgsl';
  * Live lighting for every baked chunk. Same uniform names and semantics as
  * the bone instancer's set (the page updates both from the same flashlight
  * block), minus woundTex: the wound proximity is baked per-vertex instead.
- * look = (stain [unused, albedo carries it], wetTint, specGain, fresGain).
+ * look = (keyFloor, wetTint, specGain, fresGain).
+ *
+ * `look.x` WAS "stain [unused, albedo carries it]" — a dead slot. It now carries
+ * the DIFFUSE KEY FLOOR, which is the term that made settled gore impossible to
+ * darken: the compose read `0.15 + 0.85 * ndl`, so a surface facing directly
+ * away from the light still took 15% of it. The march has no such floor. At 0
+ * this is plain `ndl` and a piece can actually be in shadow.
  */
 const bakedChunkUniforms = () => ({
   deepColor: uniform(new THREE.Color(0.45, 0.06, 0.05)),
   ambient: uniform(new THREE.Color(0.06, 0.06, 0.06)),
-  look: uniform(new THREE.Vector4(0.65, 0.5, 1.2, 0.6)),
+  /** (keyFloor, wetTint, specGain, fresGain). The last two are DELIBERATELY
+   *  below the live creature's: a gib is a small tumbling lump seen against a
+   *  dark floor, and at the body's fresnel every one of them wears a bright rim
+   *  — the owner's "edge glow around them". Grazing angles dominate a small
+   *  convex piece, so the same number that reads as a wet sheen on a torso reads
+   *  as an outline on a gib. */
+  look: uniform(new THREE.Vector4(0.04, 0.5, 0.9, 0.18)),
   lightDir: uniform(new THREE.Vector3(0.3, 0.8, 0.5)),
   keyColor: uniform(new THREE.Color(1, 0.95, 0.9)),
   lightCfg: uniform(new THREE.Vector2(2.4, 0.06)),
@@ -241,7 +253,8 @@ export const CHUNK_SHADE_WGSL = /* wgsl */ `fn chunkShade(p: vec3<f32>, n: vec3<
   let shine = pow(max(dot(nrm, H), 0.0), max(gloss2, 2.0));
   let fres = pow(1.0 - max(dot(nrm, V), 0.0), 4.0) * look.w * (1.0 - wm);
   let wetTint = mix(vec3<f32>(1.0), deepColor, look.y * wm);
-  let diffuse = a.rgb * (ambient + keyI * keyC * (0.15 + 0.85 * ndl)) * ao;
+  let floorK = clamp(look.x, 0.0, 1.0);
+  let diffuse = a.rgb * (ambient + keyI * keyC * (floorK + (1.0 - floorK) * ndl)) * ao;
   let specular = keyC * wetTint * (shine * look.z * keyI + fres * (0.5 + 0.5 * keyI));
   var out = diffuse + specular;
   if (spotCfg.x > 0.0 && spotCfg2.y > 0.0) {

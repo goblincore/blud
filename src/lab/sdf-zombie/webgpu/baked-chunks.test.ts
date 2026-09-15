@@ -40,7 +40,10 @@ describe('createBakedChunkMaterial — default lit path (M1 behavior)', () => {
     // so every other user of this shader composes identically.
     for (const present of [
       'if (spotCfg.x > 0.0)',
-      'let diffuse = a.rgb * (ambient + keyI * keyC * (0.15 + 0.85 * ndl)) * ao;',
+      // The 0.15 constant became `look.x` (2026-09-15): a DIFFUSE KEY FLOOR the
+      // march does not have, which is why a settled piece could never be in
+      // shadow. It defaults to 0.04, and at 0 the term is plain `ndl`.
+      'let diffuse = a.rgb * (ambient + keyI * keyC * (floorK + (1.0 - floorK) * ndl)) * ao;',
       'let wm = clamp(a.a, 0.0, 1.0);',
       'let specular = keyC * wetTint',
     ]) {
