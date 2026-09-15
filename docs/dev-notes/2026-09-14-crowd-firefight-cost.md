@@ -507,3 +507,17 @@ Per-instance clipped rects with a disjoint decomposition (so a pixel is shaded o
 **Where the ~8 ms actually is.** After Task 2, discarded fragments sit in NON-empty tiles and discard on the entry test (`bodyEntry > 1e8`) or the miss, having already paid the occ/shell/prev fetches and the record load. The next exact lever is the same move as Task 2 for the entry miss: preload the tile list and run the per-ray sphere entry test before the per-pixel fetches, and discard there.
 
 **Caveat on the earlier flip table** (`## Flip decision bench` in the stage-a note): its `crowd-off` leg reached per-body by toggling `setCrowd` mid-session while the default was crowd, which respawns the cast with new seeds — the legs fought different fights. The matched-fight numbers here supersede it (t1 window: quad 46.3 / boxes 38.7 / per-body 34.8 ms of march before Task 2). The direction and the hold-the-flip decision stand.
+
+## Task 5 — the bar on the full recording, matched fights (2026-09-15, main at 773af1e1, Task 2 in)
+
+`BENCH_DEMO=<rec> BENCH_ROOMS=1 BENCH_LEGS=crowd-off,crowd-quad,crowd-boxes BENCH_PASSES=1 BENCH_REPEATS=2 BENCH_FRAME_CAP_MS=250`, ports 5325/9325, `LAB_TMP` OUTSIDE the worktree (a profile under `.lab-tmp` inside the worktree made vite reload the page mid-bench and all three legs failed). Census identical across legs and repeats (bodies 0→3→0→1, wounds 0→7→23→23, no gibs in this fight); frame hash identical across repeats; worst spread 12 %.
+
+| leg | frame p50 (rep0 / rep1) | `sdf:march` t0 | t1 | t2 | overall march |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `crowd-off` (per-body) | 19.8 / 19.2 | 16.3 / 16.1 | 39.5 / 39.1 | 3.9 / 4.6 | 12.0 / 12.2 |
+| `crowd-quad` | 20.3 / 20.2 | 19.4 / 17.3 | 46.9 / 39.2 | 11.6 / 11.3 | 20.3 / 19.5 |
+| `crowd-boxes` | **17.3 / 15.4** | **12.5 / 12.2** | 48.2 / 40.1 | 4.2 / 4.3 | 13.4 / 14.0 |
+
+Bar (t1 ≤ per-body, overall ≤, t2 ≤ 5 ms): **quad** fails t1 (rep0) and t2 (11.5 ms — the blend-reach rect beside the camera); **boxes** meets overall (wins by 2–4 ms of frame) and t2, and is within repeat spread on t1. So the crowd march with the *boxes* dispatch is already at parity-or-better with per-body on this real run, and the quad's remaining deficit is the raster footprint the box dispatch does not have. Task 6 (entry-miss discard before setup) targets exactly that; if it lands, quad ≈ boxes and the default choice becomes crowd (either dispatch) vs per-body on the many-body scenes, not this one.
+
+Note the earlier confounded table showed per-body with a 10–16 ms `sdf:march-chunks` pass in t0 (gibs). The matched fight has no gibs, so per-body's chunk cost is absent here; a gib-heavy recording would tilt further toward crowd.
