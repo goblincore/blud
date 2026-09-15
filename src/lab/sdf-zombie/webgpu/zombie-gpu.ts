@@ -14,7 +14,7 @@ import {
   wgslFn, positionWorld, cameraPosition, vec4, uniform, texture, texture3D, float,
   cameraProjectionMatrix, cameraViewMatrix, cameraNear, cameraFar, modelWorldMatrix, normalize, sub, mul, add, screenUV,
   cameraProjectionMatrixInverse, cameraWorldMatrix,
-  storage, attribute, positionGeometry, vec3, mix,
+  storage, attribute, positionGeometry, vec3, mix, Fn, If, Discard,
 } from 'three/tsl';
 import type { BuildResult } from '../build-body';
 import { packBody, PRIM_STRIDE, W_BONE, W_ORGAN } from '../pack';
@@ -38,6 +38,7 @@ import {
   ROW_PRIM_BEND, ROW_PRIM_COLOR, ROW_PRIM_SHELL, ROW_PRIM_WARP, ROW_PRIM_STRAND, ROW_PRIM_CLIP,
   ROW_CLUSTER_BOUNDS, ROW_CLUSTER_RANGE, ROW_GROUP_BOUNDS, ROW_GROUP_RANGE, ROW_CLUSTER_GROUPS,
   ROW_WOUND, ROW_WOUND_META, ROW_WOUND_CAP, ROW_WOUND_FLAGS,
+  QUAD_TILE_EMPTY_WGSL,
 } from './march.wgsl';
 import { TEMPORAL_START_WGSL } from './temporal-start';
 import { createCrowdRecords, fallbackCrowdRecords, allocateSlot, MAX_CROWD_INSTANCES, type CrowdRecords } from './crowd-records';
@@ -898,6 +899,16 @@ const PREV_FETCH_WGSL = /* wgsl */ `fn prevFetch(prevTex: texture_2d<f32>, scree
 }`;
 export const prevFetchNode = wgslFn(PREV_FETCH_WGSL);
 
+/**
+ * QUAD empty-tile gate (crowd firefight task 2). `createMarchMaterial` wraps
+ * the quad crowd material's march in a TSL Fn whose first statement calls
+ * this and discards on a true result, so an empty-tile fragment never
+ * evaluates the occ/shell/prev/temporal/depth-pre fetches, the record load or
+ * the march. Only the quad crowd material uses it (see the `rays.rayDir`
+ * guard); per-body and box materials are byte-identical.
+ */
+export const quadTileEmptyNode = wgslFn(QUAD_TILE_EMPTY_WGSL);
+
 /** Last FRESH frame's final layer (RGBA, NDC depth in .a, >= 1 = nothing)
  *  plus the inverse view-projection that made it — the temporal
  *  reprojection start's source (plan 2026-09-10). Bound unconditionally;
@@ -1176,7 +1187,7 @@ export function createMarchMaterial(
       ? (levelShadow.light.shadow.map?.depthTexture ?? fallbackLevelShadowTexture())
       : fallbackLevelShadowTexture(),
   );
-  const marched = (output === 'surface' ? sdfSurfaceMarch : march)({
+  const callMarch = () => (output === 'surface' ? sdfSurfaceMarch : march)({
     worldPos: (rays?.worldPos ?? positionWorld) as never,
     camPos: cameraPosition,
     data: dataNode,
@@ -1345,6 +1356,38 @@ export function createMarchMaterial(
     instHalf: (crowd?.instHalf ?? fallbackInstHalf()) as never,
     ...(extra ?? {}),
   }) as unknown as Swizzled;
+
+  // QUAD EMPTY-TILE GATE (crowd firefight cost, task 2). The quad crowd
+  // material rasterises the union rect and discards on an empty tile, but
+  // INSIDE MARCH_TRACE_SETUP that discard runs after the material's
+  // occ/shell/prev/temporal/depth-pre fetches have evaluated (they are call
+  // arguments) and after the record load. Wrapping the whole march in a TSL
+  // Fn whose FIRST statement reads this pixel's tile header and discards
+  // moves the gate ahead of every one of them; the existing `gTileN < 0.5`
+  // discard inside the trace stays and still covers tiles-off callers. Only
+  // the quad crowd material (the sole caller with an explicit `rays.rayDir`)
+  // takes this path — per-body and box materials generate byte-identical
+  // source.
+  let marched: Swizzled;
+  if (rays?.rayDir !== undefined && tiles) {
+    const gateInstCfg = (crowd?.instCfg ?? fallbackInstCfg()) as unknown as {
+      y: { greaterThan: (v: number) => { and: (b: unknown) => { and: (c: unknown) => unknown } } };
+    };
+    const tileEmpty = quadTileEmptyNode({
+      tileHdr: tiles.header as never,
+      tileCfg: u.tileCfg as never,
+      screenUV,
+    });
+    marched = Fn(() => {
+      If(
+        (gateInstCfg.y.greaterThan(1.5).and(u.tileCfg.x.greaterThan(0.5)).and(tileEmpty as never)) as never,
+        () => { Discard(); },
+      );
+      return callMarch();
+    })() as unknown as Swizzled;
+  } else {
+    marched = callMarch();
+  }
 
   const material = new MeshBasicNodeMaterial();
   material.side = rays?.side ?? THREE.BackSide;

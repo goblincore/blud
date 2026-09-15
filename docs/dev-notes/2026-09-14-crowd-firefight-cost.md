@@ -250,10 +250,100 @@ Crowd canonical `a350361d…` and per-body canonical `a8ab4efa…` are both
 unmoved, and `MARCH_PARITY_TILES=1` PASSes. Only scripts changed, so this is the
 expected result; it is recorded rather than assumed.
 
+## Task 2 — empty-tile discard ahead of the per-pixel input setup (2026-09-14)
+
+**What changed.** The quad crowd material rasterises the union rect, and the
+only discard that ran before the march was on the *post-cull* `gTileN`, inside
+`MARCH_TRACE_SETUP` — after the material had already evaluated its
+`occFetch` / two `shellFetch`es / `prevFetch` / temporal / depth-pre call
+arguments and after `loadInstance`'s record load. Task 2 hoists the gate ahead
+of all of them:
+
+- `march.wgsl.ts` exports `QUAD_TILE_EMPTY_WGSL` (`quadTileEmpty`), the
+  tile-header read keyed by the SAME `gx`/`gy`/`floored-screenUV`/clamp index
+  formula the preload uses. A test pins the three index lines in both texts.
+- `zombie-gpu.ts` `createMarchMaterial` wraps the whole march call in a TSL
+  `Fn` for the quad crowd material only (guarded by an explicit `rays.rayDir`,
+  which the hull-refine twin does not set — it passes `rays` but no `tiles`),
+  whose FIRST statement is
+  `If(instCfg.y > 1.5 && tileCfg.x > 0.5 && quadTileEmpty(...)) { Discard(); }`.
+  Because the fetches are argument nodes of the wrapped `marchBody` call, they
+  are generated after the gate — an empty-tile fragment discards before any of
+  them, and before the record load and the wound list. The existing
+  `gTileN < 0.5` discard stays and still covers tiles-off callers. Per-body and
+  box materials generate byte-identical source (the guard is false).
+
+**Why it is exact.** The gate fires only when the header count is 0, i.e. the
+tile can hold no surface; discarding such a fragment writes nothing. Proven
+three ways, not argued:
+
+1. **Liveness.** Temporarily replacing the condition with a literal `true` and
+   re-running the crowd hash FAILs with `room1=b6422b4193e56385a0f2df5ec4c8f3c1cbaf1f2c`
+   — the gate is wired into the output and does discard pixels. Reverted.
+2. **Non-interference.** With the real condition the crowd canonical is
+   unmoved (`a350361d…`), so it discards only tiles that were empty.
+3. **Parity.** `MARCH_PARITY_TILES=1` PASS, lines identical to Task 1.
+
+### Gates (after the change)
+
+```
+$ MARCH_HASH_CROWD=1 MARCH_HASH_TILES=1 node scripts/march-hash.mjs
+{"room1":"a350361d6a223946a4cb8aac9bc2a3a70ee15bfd","room1-repeat":"a350361d6a223946a4cb8aac9bc2a3a70ee15bfd","room1-wounded":"07f60ecfd4e1e1cac9e26b8527d50abc74894e95"}
+exit=0
+
+$ MARCH_PARITY_TILES=1 node scripts/march-parity.mjs
+{"room":1,"tiles":true,"dispatch":"quad","flat":false,"hitA":33344,"hitB":33344,"maskDiff":0,...,"maxDz":0.0009889602661132812,...}
+{"room":2,"tiles":true,"dispatch":"quad","flat":false,"hitA":30561,"hitB":30562,"maskDiff":1,"maskDiffFrac":0.000032721442361179283,"maxDz":0.0021837353706359863,...}
+PASS
+exit=0
+
+$ node scripts/march-hash.mjs        # default = per-body
+{"room1":"a8ab4efac15fc0376c3e4e05420f13e34d1511bd","room1-repeat":"a8ab4efac15fc0376c3e4e05420f13e34d1511bd","room1-wounded":"da785297dcc3f677320c563501ca861bac22d6d6"}
+exit=0
+
+$ npx vitest run march.wgsl.test.ts deferred-sdf.test.ts crowd-type.test.ts zombie-gpu.test.ts
+Test Files  4 passed (4) / Tests  295 passed (295)
+```
+
+### t1 bench, before vs after (`sdf:march` p50 ms, 2 repeats)
+
+```
+BENCH_DEMO=<rec> BENCH_DEMO_FRAMES=1123:2245 BENCH_ROOMS=1 \
+BENCH_LEGS=crowd-off,crowd-quad BENCH_PASSES=1 BENCH_REPEATS=2 \
+BENCH_FRAME_CAP_MS=250 BENCH_OUT=<dir> node scripts/sdf-game-bench.mjs 5323 9323
+```
+
+Machine load 2.6 (before) / 2.25 (after); both runs report identical census and
+frame hashes across repeats.
+
+| run | leg | rep0 | rep1 | mean |
+| --- | --- | ---: | ---: | ---: |
+| before | `crowd-off` | 28.28 | 28.36 | 28.32 |
+| before | `crowd-quad` | 37.69 | 37.77 | **37.73** |
+| after | `crowd-off` | 28.99 | 28.61 | 28.80 |
+| after | `crowd-quad` | 36.75 | 36.82 | **36.79** |
+
+Raw quad delta **−0.95 ms**; the control leg drifted **+0.48 ms** slower, so the
+machine-relative saving is **≈1.4 ms** (quad − off: 9.41 → 7.99 ms).
+
+**Reading.** The gate is exact and helps, but only ~1.4 ms — much less than the
+~9 ms Task 1 attributed to "setup on discarded pixels". So the empty-tile
+fraction of the quad's raster is small: the union rect is clamped to whole tiles
+plus one lit-tile margin, so most discarded fragments sit in NON-empty tiles and
+discard later on the entry test (`bodyEntry > 1e8`) or the miss. The remaining
+lever for that ~8 ms is Task 4 (per-instance raster rects) — Task 2 does not close
+the t1 gap, and the default still cannot flip. This is the empty-tile vs
+entry-miss split Task 1 said was the missing number: empty-tile ≈ 1.4 ms of it.
+
 ## Files
 
 - `scripts/sdf-game-bench.mjs` — `BENCH_DEMO_FRAMES=a:b` (state-preserving
   window), per-leg crowd boot flag (`legUrl`), `applyDemoPrelude`.
 - `scripts/crowd-t1-probe.mjs` — new; the per-leg/frame counter probe.
+- `src/lab/sdf-zombie/webgpu/march.wgsl.ts` — `QUAD_TILE_EMPTY_WGSL`.
+- `src/lab/sdf-zombie/webgpu/zombie-gpu.ts` — quad-only TSL `Fn` gate in
+  `createMarchMaterial` (`quadTileEmptyNode`).
+- `src/lab/sdf-zombie/webgpu/march.wgsl.test.ts` — tile-index text pin.
 - `docs/dev-notes/2026-09-14-crowd-firefight-cost/t1/`, `t1-step1/`,
-  `t1-confound-repro/` — bench outputs; `probe.json` — probe outputs.
+  `t1-confound-repro/`, `t1-task2-before/`, `t1-task2-after/` — bench outputs;
+  `probe.json` — probe outputs.

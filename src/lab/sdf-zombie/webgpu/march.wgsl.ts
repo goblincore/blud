@@ -18,6 +18,26 @@ export const RAY_CULL_SLACK = '0.07';
  *  outward bulge so a ray that just grazes a body still enters before its
  *  surface. It widens `t` only — a conservative lower bound, never a miss. */
 export const QUAD_ENTRY_SLACK = '0.02';
+/**
+ * QUAD EMPTY-TILE GATE (crowd firefight task 2, 2026-09-14). True when this
+ * pixel's tile header carries no entries, i.e. no instance can have a surface
+ * on any ray through the tile. The quad material calls this BEFORE the
+ * occ/shell/prev fetches and the march, so an empty-tile fragment discards
+ * without paying the per-pixel input setup. The index formula is the SAME one
+ * MARCH_TRACE_SETUP uses for its tile preload (gx/gy, floored screenUV,
+ * clamp-to-grid, row-major tid.y * gx + tid.x) — march.wgsl.test.ts pins the
+ * two texts together so they cannot drift.
+ */
+export const QUAD_TILE_EMPTY_WGSL = /* wgsl */ `fn quadTileEmpty(
+  tileHdr: ptr<storage, array<vec2<u32>>, read>,
+  tileCfg: vec4<f32>,
+  screenUV: vec2<f32>
+) -> bool {
+  let gx = max(1, i32(tileCfg.y));
+  let gy = max(1, i32(tileCfg.w));
+  let tid = clamp(vec2<i32>(floor(screenUV * vec2<f32>(f32(gx), f32(gy)))), vec2<i32>(0, 0), vec2<i32>(gx - 1, gy - 1));
+  return (*tileHdr)[tid.y * gx + tid.x].y < 1u;
+}`;
 // src/lab/sdf-zombie/webgpu/march.wgsl.ts
 //
 // WGSL port of march.glsl.ts. Kept as a near line-for-line translation on

@@ -26,6 +26,7 @@ import {
   ROW_WOUND_CAP, APPLY_BONES, FOLD_BONE_RANGE, ROW_WOUND_FLAGS, TISSUE_RAMP, SD_ROUND_BOX, LEVEL_SHADOW,
   CALC_NORMAL, INSTANCE_STATE, MARCH_BODY_PARAMS, MARCH_TRACE_SETUP, MARCH_TRACE_POST,
   FACE_MELT_SAG, FACE_MELT_STRETCH, FACE_MELT_FADE_LO, DEPTH_PREPASS_MARCH, DEPTH_PRE_FETCH, WOUND_STEP_MUL,
+  QUAD_TILE_EMPTY_WGSL,
   soldierFaceDamageShadow,
 } from './march.wgsl';
 import { MAX_WOUNDS } from '../damage';
@@ -2603,5 +2604,20 @@ describe('crowd quad dispatch (stage a-2)', () => {
     expect(MARCH_TRACE_SETUP).toContain('let reach = select(gInstCounts.w, instCfg.w, quadMode) * 4.0 +');
     expect(MARCH_TRACE_SETUP).toContain('gTileEntryT = entryT;');
     expect(MARCH_TRACE_SETUP).toContain('if (max(shellIn, bodyEntry) > prevT) { discard; return vec4<f32>(0.0, 0.0, 0.0, 0.0); }');
+  });
+
+  it('keeps the material-side empty-tile gate on the SAME tile index formula as the preload', () => {
+    // The gate (QUAD_TILE_EMPTY_WGSL, called from createMarchMaterial before
+    // the march) must address the SAME tile the preload does, or it would
+    // discard a pixel whose real tile is non-empty. Pin the three lines that
+    // define the mapping in both texts.
+    for (const line of [
+      'let gx = max(1, i32(tileCfg.y));',
+      'let gy = max(1, i32(tileCfg.w));',
+      'let tid = clamp(vec2<i32>(floor(screenUV * vec2<f32>(f32(gx), f32(gy)))), vec2<i32>(0, 0), vec2<i32>(gx - 1, gy - 1));',
+    ]) {
+      expect(MARCH_TRACE_SETUP).toContain(line);
+      expect(QUAD_TILE_EMPTY_WGSL).toContain(line);
+    }
   });
 });
