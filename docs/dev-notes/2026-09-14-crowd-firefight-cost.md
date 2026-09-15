@@ -335,6 +335,147 @@ lever for that ~8 ms is Task 4 (per-instance raster rects) — Task 2 does not c
 the t1 gap, and the default still cannot flip. This is the empty-tile vs
 entry-miss split Task 1 said was the missing number: empty-tile ≈ 1.4 ms of it.
 
+## Task 3 — per-step slot sphere skip: investigated, **rejected** (2026-09-14)
+
+**Verdict: the plan's clamp cannot be made sound, and the sound exact forms do
+not pay. The kernel is unchanged; `sdf:march` on the t1 window is not improved
+by any variant tried. Do not retry Task 3; Task 4 is the remaining lever.**
+
+Task 1 priced the union/step term at only ~2.3 ms of the ~11.5 ms quad gap
+(cutting the whole 96-step budget to 1 buys 3.08 ms on the quad), so this was
+never going to close the gap — but four variants were built and measured to
+settle it. All four touched only `MAP_BODY`'s tiled per-slot fold, gated to the
+quad dispatch (`instCfg.y > 1.5`); per-body (cluster walk) and the box dispatch
+were left byte-identical.
+
+### (a) The plan's literal clamp — unsound, parity FAIL
+
+`ds = length(p - centre) - (b.w + reach * max(g.z, 1) + slack)` (the inflated
+clearance), skip the fold when `ds > 0`, `d = min(d, ds)`.
+
+Root cause of the failure: **`d` is both the step length and the hit test**
+(`if (d < hitEps) { hit; }` in `MARCH_TRACE_LOOP`). The inflated sphere sits
+`reach * distort + slack` OUTSIDE the body's bound sphere, so the clamp reads
+~0 there — a virtual surface in empty space. Every grazing ray inside an
+inflated sphere but outside the body reports a hit.
+
+```
+$ MARCH_HASH_CROWD=1 MARCH_HASH_TILES=1 node scripts/march-hash.mjs
+{"room1":"6efd9d9f5b824d57b4a0cf6167916a28933e6369","room1-repeat":"6efd9d9f5b824d57b4a0cf6167916a28933e6369","room1-wounded":"8b18b690f42ba037267317331a0b5e1d6a1e1e2a"}   # deterministic
+
+$ MARCH_PARITY_TILES=1 node scripts/march-parity.mjs
+room1 maxDz 0.0458, maskDiffFrac 0.1419 (hitA 33344 / hitB 38077)
+room2 maxDz 0.0863, maskDiffFrac 0.1893 (hitA 30561 / hitB 36345)
+FAIL (18): maskDiffFrac(hard) > 0.005 and maxDz(hard) > 0.02 on both rooms
+exit=1
+```
+
+14–19 % **phantom hits** (flat-albedo RGB still 0 channels — extra surfaces, not
+material changes). Hash and parity were both reverted; the pin was never kept.
+
+### (b) A field-units clamp — still flips rim pixels
+
+`ds = (length(p - centre) - b.w) / max(g.z, 1) - reach`, applied only above
+`RAY_CULL_SLACK`. This is the correct *field* lower bound (reported sd under-
+reports Euclid by the distortion factor), but it still tends to 0 at the
+inflated boundary, so it stays a soft virtual surface. Room 1 passed; room 2
+flipped 28 rim pixels — `maskDiffFrac 0.0009162` against the ratified `7e-5`
+(≈2 px); `maxDz 0.00237` was inside `4e-3`. Reverted.
+
+### (c) Exact pre-cull against the running union min — correct, but slower
+
+A construction that cannot change the field: use `foldGroup`'s own cull
+(`sphereDist > (d + counts.w * 4.0) * grp.z`) but evaluate it against the
+running union `dUnion` instead of the per-slot `1e9`. A group that fails it
+cannot beat `dUnion`, so skipping it leaves the union, the winning slot and the
+argmin bit-identical. Confirmed exact:
+
+```
+$ MARCH_HASH_CROWD=1 MARCH_HASH_TILES=1 node scripts/march-hash.mjs
+{"room1":"a350361d6a223946a4cb8aac9bc2a3a70ee15bfd","room1-repeat":"a350361d6a223946a4cb8aac9bc2a3a70ee15bfd",...}
+
+$ MARCH_PARITY_TILES=1 node scripts/march-parity.mjs
+PASS   # byte-identical metrics to the Task-2 baseline
+```
+
+The crowd canonical did **not** move (no re-pin needed) — and the bench says
+why that is not a win: `foldGroup`'s cull needs a small `d`, so skipping the
+first group of a slot just makes the *second* group the first and it folds from
+`1e9` anyway. The union tax is mostly **live** folds, not dead slots.
+
+| run | `crowd-off` (mean) | `crowd-quad` (mean) | quad − off |
+| --- | ---: | ---: | ---: |
+| before (HEAD, Task 2) | 28.32 | 36.59 | **8.27** |
+| (c) exact pre-cull | 28.02 | 37.30 | **9.28** |
+
+Regression ≈ **+1.0 ms** machine-relative (`t1-task3-before/`,
+`t1-task3-after/`). Reverted.
+
+### (d) Bound-sphere clearance — parity PASS, effect unresolved
+
+`sd = length(p - centre) - b.w` (clearance to the **bound** sphere, which
+contains the prims), skip when `sd > reach * max(g.z, 1) + QUAD_ENTRY_SLACK`,
+`d = min(d, sd)`. Unlike (a)/(b), the injected value is `≥ reach + slack` at the
+skip boundary — far above any `hitEps` — so no virtual surface; and `sd` is a
+lower bound of the Euclid clearance, so `min` over groups stays under the union
+clearance and cannot overshoot, while `sd` is often a larger step than the
+folded (distortion-under-reported) field.
+
+```
+$ MARCH_PARITY_TILES=1 node scripts/march-parity.mjs
+PASS   # room1 maskDiff 0 maxDz 0.0009889602661132812; room2 maskDiff 1 maxDz 0.0021837353706359863
+
+$ MARCH_HASH_QUERY=crowd=1 MARCH_HASH_TILES=1 node scripts/march-hash.mjs
+{"room1":"127ccc0e43377be84825f3f20312aea3fcb4d2dd","room1-repeat":"127ccc0e43377be84825f3f20312aea3fcb4d2dd",...}
+```
+
+Parity passed with the *same* metrics as the baseline, but the canonical moved
+(step lengths changed), so this variant would need a re-pin. The bench does not
+justify one: `t1-task3-boundsphere/` (2 repeats) reads `crowd-off` 28.39 /
+30.09 and `crowd-quad` 36.16 / 38.64 — the control drifted 1.7 ms between
+identical repeats (6 %), i.e. larger than the ~0.5 ms best-case delta
+(quad − off 7.77 / 8.55 vs baseline 8.27). **Unresolved, not a win.** Reverted
+rather than re-pin the crowd canonical for noise.
+
+### Why this is the end of the line for Task 3
+
+- The addressable term is ~2.3 ms of an ~8 ms post-Task-2 gap; even a perfect
+  union-fold removal cannot flip the default.
+- The only sound field-preserving form (c) makes things worse, because the
+  per-slot fold's cost is dominated by genuine live folds, which Task 1 already
+  saw as "steps × slots" (≤27 % of the original gap).
+- The only form that both skipped work and lengthened steps (d) is within
+  measurement noise on this machine and would churn the crowd canonical for it.
+
+**Next:** Task 4 — per-instance raster rects for the ~5.8 ms of entry-miss
+setup-on-discard. Task 1's bar for starting it (setup on discarded pixels ≥3 ms)
+is met.
+
+### Gates on the final (reverted) tree
+
+```
+$ MARCH_HASH_CROWD=1 MARCH_HASH_TILES=1 node scripts/march-hash.mjs
+{"room1":"a350361d6a223946a4cb8aac9bc2a3a70ee15bfd","room1-repeat":"a350361d6a223946a4cb8aac9bc2a3a70ee15bfd","room1-wounded":"07f60ecfd4e1e1cac9e26b8527d50abc74894e95"}
+exit=0
+
+$ node scripts/march-hash.mjs        # default per-body
+{"room1":"a8ab4efac15fc0376c3e4e05420f13e34d1511bd","room1-repeat":"a8ab4efac15fc0376c3e4e05420f13e34d1511bd","room1-wounded":"da785297dcc3f677320c563501ca861bac22d6d6"}
+exit=0
+
+$ MARCH_PARITY_TILES=1 node scripts/march-parity.mjs
+room1 tiles=1 dispatch=quad flat=0: hitA 33344 hitB 33344 maskDiff 0 maxDz 0.0009889602661132812 rgbMax 0.294435515999794
+room2 tiles=1 dispatch=quad flat=0: hitA 30561 hitB 30562 maskDiff 1 maxDz 0.0021837353706359863 rgbMax 0.1492014229297638
+PASS
+exit=0
+
+$ npx vitest run march.wgsl.test.ts deferred-sdf.test.ts crowd-type.test.ts zombie-gpu.test.ts
+Test Files  4 passed (4) / Tests  295 passed (295)
+```
+
+Crowd canonical `a350361d…` and per-body `a8ab4efa…` are both unmoved — the
+committed kernel is byte-identical to Task 2. **No hash re-pin was made: the
+plan's clamp was not kept, and the one hash-moving variant was rejected.**
+
 ## Files
 
 - `scripts/sdf-game-bench.mjs` — `BENCH_DEMO_FRAMES=a:b` (state-preserving
@@ -347,3 +488,14 @@ entry-miss split Task 1 said was the missing number: empty-tile ≈ 1.4 ms of it
 - `docs/dev-notes/2026-09-14-crowd-firefight-cost/t1/`, `t1-step1/`,
   `t1-confound-repro/`, `t1-task2-before/`, `t1-task2-after/` — bench outputs;
   `probe.json` — probe outputs.
+
+### Task 3 (rejected — no code kept)
+
+- `src/lab/sdf-zombie/webgpu/march.wgsl.ts` — four per-step fold variants built
+  and measured, all reverted; the file is byte-identical to Task 2. The
+  variants and their parity/bench numbers are recorded in the Task 3 section
+  above so they are not retried.
+- `docs/dev-notes/2026-09-14-crowd-firefight-cost/t1-task3-before/` — t1 baseline
+  bench (HEAD). `t1-task3-after/` — variant (c) exact pre-cull (regression).
+  `t1-task3-boundsphere/` — variant (d) bound-sphere clamp (noise).
+- `scripts/march-hash.mjs` — pin restored to `a350361d…`; no re-pin made.
