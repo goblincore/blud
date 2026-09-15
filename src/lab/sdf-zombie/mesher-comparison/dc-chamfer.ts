@@ -16,11 +16,19 @@
 //     capsule caps at |z| ~ 0.13 m, where it removes two side lobes and leaves
 //     a central pillar. The intended recess is therefore an ANNULAR PIT with a
 //     central tab, not a square channel.
-//   * `sdGroove`'s band gate makes the groove rim a field DISCONTINUITY: just
-//     outside the band the field equals the body `a`; just inside it the field
-//     is `>= 0`. A contour crossing that rim is bracketed correctly but the
-//     field does not go to zero there, so `maxResidualAtCrossing` is large.
-//     That is a property of the operator, reported, never smoothed away.
+//   * `sdGroove`'s band gate makes the groove rim a SIGN BOUNDARY: just outside
+//     the band the field equals the body `a` (≈ −14 mm here); just inside it the
+//     value is `max(a, min(a + depth, inBand))`, which approaches 0 as the band
+//     edge is approached. The field is therefore discontinuous at the gate,
+//     yet the boundary is still spatially resolvable: with correct bracketing
+//     the refined crossing residual is small (≤0.001 mm at the 0.2 mm
+//     reference). The gate's formula plus the one-sided bracket samples
+//     (`maxEndpointJump` ≈ 14 mm here) are what establish the discontinuity;
+//     the residual is a separate, weaker signal. A crossing is counted as
+//     `unresolvedCrossings` only when its returned-point residual exceeds
+//     `tol` (e.g. a true hard step with no nearby zero) — never merely because
+//     the field jumps. A signed jump is not by itself an irreducible geometric
+//     error.
 //
 // A mesh is only ever SLICED here; the finite-difference-free density and the
 // bracketing are the field's, so no mesher's silhouette defines the target.
@@ -83,8 +91,12 @@ export interface SliceRegionResult {
   readonly region: SliceRegion;
   /** Dense field contour on this slice — the reference shape. */
   readonly reference: FieldContour;
-  /** Bracketed crossings whose field value did not reach zero (a rim discontinuity). */
-  readonly discontinuityCrossings: number;
+  /**
+   * Bracketed crossings whose field value stayed above the reference `tol`.
+   * Conservative: a residual this large is a sign-boundary OR an ill-conditioned
+   * continuous field; it is not by itself a discontinuity classification.
+   */
+  readonly unresolvedCrossings: number;
   readonly testedToRef: { samples: number; median: number; p95: number; max: number };
   readonly refToTested: { samples: number; median: number; p95: number; max: number };
 }
@@ -168,7 +180,7 @@ function finishVariant(
     return {
       region: r.region,
       reference: r.reference,
-      discontinuityCrossings: r.discontinuityCrossings,
+      unresolvedCrossings: r.unresolvedCrossings,
       testedToRef: st.testedToRef,
       refToTested: st.refToTested,
     };
@@ -203,7 +215,7 @@ export function buildRegionReferences(field: ScalarField, resolution = 0.0002): 
     const reference = fieldContour(field, region.plane, region.window, resolution);
     return {
       region, reference,
-      discontinuityCrossings: reference.jumpCrossings,
+      unresolvedCrossings: reference.unresolvedCrossings,
       testedToRef: { samples: 0, median: NaN, p95: NaN, max: NaN },
       refToTested: { samples: 0, median: NaN, p95: NaN, max: NaN },
     };

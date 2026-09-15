@@ -49,4 +49,44 @@ describe('dc-chamfer-probe preview', () => {
     expect(html).toContain('ground truth');
     expect(html).toContain('notch-plus-z');
   });
+
+  it('renders both shaded AND wireframe closeups for every method (exact filename match)', () => {
+    const methods = ['dc-baseline', 'dc-eps-candidate', 'marching-cubes'];
+    const panels = methods.flatMap(method => [false, true].map(wire => ({
+      fixture: 'chamfer-groove', method, cell: 0.01, view: 'closeup-notch', tris: 0,
+      file: `chamfer-groove__${method}__10mm__closeup-notch${wire ? '-wire' : ''}.png`,
+    })));
+    const html = previewHtml(panels);
+    for (const method of methods) {
+      expect(html).toContain(`panels/chamfer-groove__${method}__10mm__closeup-notch.png`);
+      expect(html).toContain(`panels/chamfer-groove__${method}__10mm__closeup-notch-wire.png`);
+    }
+    expect(html).toContain('shaded');
+    expect(html).toContain('wire');
+  });
+
+  it('renders the candidate rotation and reference-convergence tables when supplied', () => {
+    const html = previewHtml([], {
+      candidateSensitivity: [{
+        cell: 0.02,
+        rows: [{
+          cell: 0.02, rotationDeg: 20, phaseCells: [0, 0, 0],
+          dc: {
+            'dc-baseline': { surfaceMm: 3.084904334, normalEpsilonMm: 10 },
+            'dc-eps-candidate': { surfaceMm: 0.132158912, normalEpsilonMm: 2 },
+          },
+        }],
+      }],
+      referenceConvergence: [{
+        id: 'notch-plus-z', coarseResolutionMm: 0.2, fineResolutionMm: 0.1,
+        baseline: { coarse: { r2tP95Mm: 6.764 }, fine: { r2tP95Mm: 6.700 } },
+        candidate: { coarse: { r2tP95Mm: 2.319 }, fine: { r2tP95Mm: 2.300 } },
+        candidateOverBaseline: { coarseR2tP95: 0.34, fineR2tP95: 0.34 },
+      }],
+    });
+    expect(html).toContain('candidate sensitivity');
+    expect(html).toContain('3.085');
+    expect(html).toContain('notch-plus-z');
+    expect(html).toContain('0.34x');
+  });
 });

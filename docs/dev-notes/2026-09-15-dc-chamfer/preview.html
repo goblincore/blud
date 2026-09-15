@@ -76,23 +76,56 @@ code{color:#e1e1e8}</style></head><body>
 </div>
 <h2>tight 3-D closeups @ 10 mm (shaded + wireframe)</h2>
 <h3>closeup-notch</h3><div class="row cu">
-<figure><img src="panels/chamfer-groove__dc-baseline__10mm__closeup-notch.png" loading="lazy"><figcaption>dc-baseline</figcaption></figure>
+<figure><img src="panels/chamfer-groove__dc-baseline__10mm__closeup-notch.png" loading="lazy"><figcaption>dc-baseline shaded</figcaption></figure>
 <figure><img src="panels/chamfer-groove__dc-baseline__10mm__closeup-notch-wire.png" loading="lazy"><figcaption>dc-baseline wire</figcaption></figure>
-<figure><img src="panels/chamfer-groove__dc-eps-candidate__10mm__closeup-notch.png" loading="lazy"><figcaption>dc-eps-candidate</figcaption></figure>
+<figure><img src="panels/chamfer-groove__dc-eps-candidate__10mm__closeup-notch.png" loading="lazy"><figcaption>dc-eps-candidate shaded</figcaption></figure>
 <figure><img src="panels/chamfer-groove__dc-eps-candidate__10mm__closeup-notch-wire.png" loading="lazy"><figcaption>dc-eps-candidate wire</figcaption></figure>
-<figure><img src="panels/chamfer-groove__marching-cubes__10mm__closeup-notch.png" loading="lazy"><figcaption>marching-cubes</figcaption></figure>
+<figure><img src="panels/chamfer-groove__marching-cubes__10mm__closeup-notch.png" loading="lazy"><figcaption>marching-cubes shaded</figcaption></figure>
 <figure><img src="panels/chamfer-groove__marching-cubes__10mm__closeup-notch-wire.png" loading="lazy"><figcaption>marching-cubes wire</figcaption></figure>
 </div>
 <h3>closeup-seam</h3><div class="row cu">
-<figure><img src="panels/chamfer-groove__dc-baseline__10mm__closeup-seam.png" loading="lazy"><figcaption>dc-baseline</figcaption></figure>
+<figure><img src="panels/chamfer-groove__dc-baseline__10mm__closeup-seam.png" loading="lazy"><figcaption>dc-baseline shaded</figcaption></figure>
 <figure><img src="panels/chamfer-groove__dc-baseline__10mm__closeup-seam-wire.png" loading="lazy"><figcaption>dc-baseline wire</figcaption></figure>
-<figure><img src="panels/chamfer-groove__dc-eps-candidate__10mm__closeup-seam.png" loading="lazy"><figcaption>dc-eps-candidate</figcaption></figure>
+<figure><img src="panels/chamfer-groove__dc-eps-candidate__10mm__closeup-seam.png" loading="lazy"><figcaption>dc-eps-candidate shaded</figcaption></figure>
 <figure><img src="panels/chamfer-groove__dc-eps-candidate__10mm__closeup-seam-wire.png" loading="lazy"><figcaption>dc-eps-candidate wire</figcaption></figure>
-<figure><img src="panels/chamfer-groove__marching-cubes__10mm__closeup-seam.png" loading="lazy"><figcaption>marching-cubes</figcaption></figure>
+<figure><img src="panels/chamfer-groove__marching-cubes__10mm__closeup-seam.png" loading="lazy"><figcaption>marching-cubes shaded</figcaption></figure>
 <figure><img src="panels/chamfer-groove__marching-cubes__10mm__closeup-seam-wire.png" loading="lazy"><figcaption>marching-cubes wire</figcaption></figure>
 </div>
 <h2>calibration @ 10 mm: sharp box corner</h2><div class="row">
 <figure><img src="panels/control-sharp-box__dc-baseline__10mm__closeup-corner.png" loading="lazy"><figcaption>dc-baseline</figcaption></figure>
 <figure><img src="panels/control-sharp-box__dc-eps-candidate__10mm__closeup-corner.png" loading="lazy"><figcaption>dc-eps-candidate</figcaption></figure>
 <figure><img src="panels/control-sharp-box__marching-cubes__10mm__closeup-corner.png" loading="lazy"><figcaption>marching-cubes</figcaption></figure>
-</div></body></html>
+</div>
+<h2>sharp-box candidate sensitivity — the normal step matters under rotation</h2>
+<p>Nearest TRIANGLE SURFACE distance from the true box corner (mm). Axis-aligned phases are step-insensitive (three orthogonal planes); the 20&deg; rotated row is where a normal-step change moves the answer, so it is measured per variant, not inferred from the axis-aligned results.</p>
+<table style="border-collapse:collapse;font:12px/1.4 monospace"><tr><th style="padding:2px 8px">cell mm</th><th>phase</th><th>rot&deg;</th><th>baseline surf mm</th><th>candidate surf mm</th><th>baseline eps mm</th><th>candidate eps mm</th></tr>
+<tr><td style="padding:2px 8px">20</td><td>[0,0,0]</td><td>0</td><td>0.229</td><td>0.229</td><td>10.00</td><td>2.00</td></tr>
+<tr><td style="padding:2px 8px">20</td><td>[0.23,0,0]</td><td>0</td><td>0.213</td><td>0.213</td><td>10.00</td><td>2.00</td></tr>
+<tr><td style="padding:2px 8px">20</td><td>[0,0.23,0]</td><td>0</td><td>0.213</td><td>0.213</td><td>10.00</td><td>2.00</td></tr>
+<tr><td style="padding:2px 8px">20</td><td>[0,0,0.23]</td><td>0</td><td>0.213</td><td>0.213</td><td>10.00</td><td>2.00</td></tr>
+<tr><td style="padding:2px 8px">20</td><td>[0.5,0.5,0.5]</td><td>0</td><td>0.114</td><td>0.114</td><td>10.00</td><td>2.00</td></tr>
+<tr><td style="padding:2px 8px">20</td><td>[0.25,0.25,0.25]</td><td>0</td><td>0.171</td><td>0.171</td><td>10.00</td><td>2.00</td></tr>
+<tr><td style="padding:2px 8px">20</td><td>[0,0,0]</td><td>20</td><td>3.085</td><td>0.132</td><td>10.00</td><td>2.00</td></tr>
+<tr><td style="padding:2px 8px">10</td><td>[0,0,0]</td><td>0</td><td>0.114</td><td>0.114</td><td>5.00</td><td>1.00</td></tr>
+<tr><td style="padding:2px 8px">10</td><td>[0.23,0,0]</td><td>0</td><td>0.106</td><td>0.106</td><td>5.00</td><td>1.00</td></tr>
+<tr><td style="padding:2px 8px">10</td><td>[0,0.23,0]</td><td>0</td><td>0.106</td><td>0.106</td><td>5.00</td><td>1.00</td></tr>
+<tr><td style="padding:2px 8px">10</td><td>[0,0,0.23]</td><td>0</td><td>0.106</td><td>0.106</td><td>5.00</td><td>1.00</td></tr>
+<tr><td style="padding:2px 8px">10</td><td>[0.5,0.5,0.5]</td><td>0</td><td>0.057</td><td>0.057</td><td>5.00</td><td>1.00</td></tr>
+<tr><td style="padding:2px 8px">10</td><td>[0.25,0.25,0.25]</td><td>0</td><td>0.086</td><td>0.086</td><td>5.00</td><td>1.00</td></tr>
+<tr><td style="padding:2px 8px">10</td><td>[0,0,0]</td><td>20</td><td>0.930</td><td>0.034</td><td>5.00</td><td>1.00</td></tr>
+<tr><td style="padding:2px 8px">5</td><td>[0,0,0]</td><td>0</td><td>0.057</td><td>0.057</td><td>2.50</td><td>0.50</td></tr>
+<tr><td style="padding:2px 8px">5</td><td>[0.23,0,0]</td><td>0</td><td>0.053</td><td>0.053</td><td>2.50</td><td>0.50</td></tr>
+<tr><td style="padding:2px 8px">5</td><td>[0,0.23,0]</td><td>0</td><td>0.053</td><td>0.053</td><td>2.50</td><td>0.50</td></tr>
+<tr><td style="padding:2px 8px">5</td><td>[0,0,0.23]</td><td>0</td><td>0.053</td><td>0.053</td><td>2.50</td><td>0.50</td></tr>
+<tr><td style="padding:2px 8px">5</td><td>[0.5,0.5,0.5]</td><td>0</td><td>0.029</td><td>0.029</td><td>2.50</td><td>0.50</td></tr>
+<tr><td style="padding:2px 8px">5</td><td>[0.25,0.25,0.25]</td><td>0</td><td>0.043</td><td>0.043</td><td>2.50</td><td>0.50</td></tr>
+<tr><td style="padding:2px 8px">5</td><td>[0,0,0]</td><td>20</td><td>0.711</td><td>0.063</td><td>2.50</td><td>0.50</td></tr>
+</table>
+<h2>reference-resolution convergence @ 10 mm (pit metrics)</h2>
+<p>r2t p95 (mm) with the 0.2&nbsp;mm reference vs a finer 0.1&nbsp;mm reference. A stable candidate/baseline ratio is what lets the improvement be quoted.</p>
+<table style="border-collapse:collapse;font:12px/1.4 monospace"><tr><th style="padding:2px 8px">region</th><th>baseline 0.2</th><th>baseline 0.1</th><th>candidate 0.2</th><th>candidate 0.1</th><th>ratio 0.2</th><th>ratio 0.1</th></tr>
+<tr><td style="padding:2px 8px">seam</td><td>0.087</td><td>0.089</td><td>0.087</td><td>0.089</td><td>1.00x</td><td>0.99x</td></tr>
+<tr><td style="padding:2px 8px">notch-plus-z</td><td>6.785</td><td>6.841</td><td>2.323</td><td>2.344</td><td>0.34x</td><td>0.34x</td></tr>
+<tr><td style="padding:2px 8px">notch-minus-z</td><td>6.785</td><td>6.841</td><td>2.323</td><td>2.344</td><td>0.34x</td><td>0.34x</td></tr>
+</table>
+</body></html>

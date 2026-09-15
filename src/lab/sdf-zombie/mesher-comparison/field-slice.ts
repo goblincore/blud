@@ -5,19 +5,38 @@
 // The point of this module is to stop judging the intended chamfer/groove shape
 // by whichever mesher's silhouette looks nicer. It samples the SAME
 // `ScalarField` closure the meshers sample, on a dense 2-D slice, and extracts
-// the zero set with an explicitly BRACKETED bisection (marching squares finds
-// the crossing cell edge, bisection then pins the crossing). The dense field
-// contour is the reference; a mesh is only ever sliced for comparison against
-// it.
+// the zero set with an explicitly BRACKETED refinement (marching squares finds
+// the crossing cell edge; a safeguarded false-position/bisection hybrid then
+// pins the crossing). The dense field contour is the reference; a mesh is only
+// ever sliced for comparison against it.
+//
+// BRACKETING GUARANTEES (tightened after review, 2026-09-15):
+//   * A reported crossing always lies between two FINITE samples of opposite
+//     sign, and the bracket is forced to contract in SPACE every iteration
+//     (midpoint when the secant step lands in an outer quarter). Value `tol` is
+//     a stopping bonus, not the only contraction guarantee.
+//   * The reported residual is the field evaluated AT the returned crossing,
+//     never a stale bracket-endpoint value.
+//   * A non-finite sample anywhere the reference depends on it (grid node,
+//     edge endpoint, refinement point) REJECTS the contour: `fieldContour`
+//     throws `FieldContourError` rather than emitting a crossing it cannot
+//     vouch for.
+//   * `unresolvedCrossings` is deliberately conservative. A crossing whose
+//     field value could not be driven below `tol` may be a genuine sign
+//     boundary (a discontinuity, where no zero exists) OR a continuous but
+//     badly conditioned field. Residual alone does NOT prove a discontinuity;
+//     the `sdGroove` rim is established by that operator's band-gate formula
+//     plus the one-sided bracket samples recorded here (`maxEndpointJump`).
 //
 // ACCURACY LIMITS (stated so a slice cannot be read as exact):
 //   * The field is NOT a Euclidean distance (Blud's composed fields under-report
 //     where prims are anisotropic or blends are wide), so the zero set is the
 //     only thing this module treats as meaningful; field |values| are residuals.
-//   * The contour is a piecewise-LINEAR connection of bisected edge crossings,
+//   * The contour is a piecewise-LINEAR connection of refined edge crossings,
 //     so between crossings it is a chord. Sub-sample the polygon, not the field.
 //   * The reference is only as good as its `resolution`; it is far finer than
-//     any tested cell but is still an approximation of the true curve.
+//     any tested cell but is still an approximation of the true curve. It is a
+//     fixed, documented resolution per evidence run, not an adaptive solver.
 //   * A mesh slice cuts triangles with a plane and yields straight segments; it
 //     is the mesh's own geometry, not a corrected version of it.
 
@@ -50,21 +69,52 @@ export interface Segment {
   readonly b: readonly [number, number];
 }
 
+/**
+ * Thrown when a non-finite field sample would otherwise be baked into the
+ * reference contour. The reference must never accept a NaN/Infinity sample as
+ * ground truth, so this is a hard rejection, not a flag.
+ */
+export class FieldContourError extends Error {
+  readonly nonFiniteSamples: number;
+  constructor(message: string, nonFiniteSamples = 0) {
+    super(message);
+    this.name = 'FieldContourError';
+    this.nonFiniteSamples = nonFiniteSamples;
+  }
+}
+
 export interface FieldContour {
   readonly segments: readonly Segment[];
   readonly resolution: number;
   readonly samples: number;
-  /** Number of bisection-refined edge crossings (the bracketed zero set). */
+  /** Number of refined edge crossings (the bracketed zero set). */
   readonly crossings: number;
+  /** Crossings whose |field| AT THE RETURNED POINT was driven to <= `tol`. */
+  readonly resolvedCrossings: number;
   /**
-   * Crossings the bisection could not drive to |f| < `tol`: the field jumps
-   * across zero (e.g. `sdGroove`'s band gate). The LOCATION is still bracketed
-   * correctly; only the field value is non-zero there.
+   * Crossings whose |field| at the returned point stayed above `tol`.
+   *
+   * CONSERVATIVE: this counts an unresolved residual, which may be a true
+   * sign-boundary (discontinuity) or a continuous but ill-conditioned field.
+   * It is not, on its own, a discontinuity classification. The location is
+   * still bracketed to `spatialTol`; only the field value is non-zero there.
    */
-  readonly jumpCrossings: number;
+  readonly unresolvedCrossings: number;
   readonly window: SliceWindow;
-  /** Max |field| at a refined crossing (metres) — the bracketing quality. */
+  /** Max |field| AT the returned crossing (metres) — the residual quality. */
   readonly maxResidualAtCrossing: number;
+  /**
+   * Max |f(right) - f(left)| of the two finite one-sided bracket samples at a
+   * crossing (every crossing, resolved or not). A large finite jump across a
+   * vanishing bracket is the one-sided evidence that the crossing sits on a
+   * sign boundary rather than a plain zero; it is recorded alongside the
+   * operator's own formula, never used as the sole proof of discontinuity.
+   */
+  readonly maxEndpointJump: number;
+  /** Target upper bound on a crossing bracket's width, in metres. */
+  readonly spatialTol: number;
+  /** Largest bracket width actually achieved at a crossing, in metres. */
+  readonly maxBracketWidth: number;
 }
 
 export function planePoint(plane: SlicePlane, u: number, v: number): Vec3 {
@@ -75,25 +125,68 @@ export function planePoint(plane: SlicePlane, u: number, v: number): Vec3 {
   return p;
 }
 
+interface CrossingRefinement {
+  /** Parameter in [0,1] along pa->pb of the returned crossing. */
+  readonly t: number;
+  /** Field AT the returned point; never a stale bracket-endpoint value. */
+  readonly fv: number;
+  /** Final bracket half-extent in metres (`(hi-lo) * |pb-pa|`). */
+  readonly bracketWidth: number;
+  /** |f(pb) - f(pa)| of the finite one-sided bracket samples. */
+  readonly endpointJump: number;
+}
+
 /**
- * Bisect a sign change on the segment pa->pb to `tol` in the field value (or
- * `maxIters`), returning the interpolated parameter t in [0,1]. This is the
- * bracketing step: every reported crossing is bracketed by two finite samples
- * of opposite sign.
+ * Refine a bracketed sign change on the segment pa->pb.
+ *
+ * Safeguarded false-position: a secant step is taken only when it lands in the
+ * middle half of the bracket, otherwise a midpoint bisection is forced. Either
+ * way the bracket contracts by at least 25% per iteration, so the returned
+ * crossing is spatially pinned even when the secant step stalls or the field
+ * jumps (a discontinuity). Stops on `spatialTol`, on `|f| <= tol`, or on
+ * `maxIters`. The returned `fv` is evaluated at the returned point.
+ *
+ * Returns null (never a fabricated crossing) when an endpoint is non-finite,
+ * the segment is not sign-bracketed, or a refinement sample is non-finite.
  */
-function bisectT(f: (p: Vec3) => number, pa: Vec3, pb: Vec3, tol: number, maxIters: number): { t: number; fv: number } {
-  let da = f(pa), db = f(pb);
-  if ((da < 0) === (db < 0)) return { t: 0.5, fv: (da + db) / 2 };
-  let lo = 0, hi = 1;
+function refineCrossing(
+  f: (p: Vec3) => number, pa: Vec3, pb: Vec3,
+  tol: number, spatialTol: number, maxIters: number,
+): CrossingRefinement | null {
+  const da = f(pa), db = f(pb);
+  if (!Number.isFinite(da) || !Number.isFinite(db)) return null;
+  if ((da < 0) === (db < 0)) return null;
+  const len = Math.hypot(pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]);
+  const pointAt = (t: number): Vec3 => [
+    pa[0] + (pb[0] - pa[0]) * t, pa[1] + (pb[1] - pa[1]) * t, pa[2] + (pb[2] - pa[2]) * t,
+  ];
+  let lo = 0, hi = 1, flo = da, fhi = db;
   for (let it = 0; it < maxIters; it++) {
-    const t = lo + (hi - lo) * (da / (da - db));
-    const m: Vec3 = [pa[0] + (pb[0] - pa[0]) * t, pa[1] + (pb[1] - pa[1]) * t, pa[2] + (pb[2] - pa[2]) * t];
-    const dm = f(m);
-    if (!Number.isFinite(dm)) break;
-    if (Math.abs(dm) < tol) return { t, fv: dm };
-    if ((dm < 0) === (da < 0)) { lo = t; da = dm; } else { hi = t; db = dm; }
+    const w = hi - lo;
+    if (w * len <= spatialTol) break;
+    let t = lo + w * (flo / (flo - fhi)); // false position
+    // Forced contraction: reject a secant step in an outer quarter, because it
+    // can stall (discontinuity) or creep (badly conditioned) and never pin the
+    // crossing. A midpoint step halves the bracket unconditionally.
+    if (!Number.isFinite(t) || t <= lo + 0.25 * w || t >= hi - 0.25 * w) t = lo + 0.5 * w;
+    const fm = f(pointAt(t));
+    if (!Number.isFinite(fm)) return null;
+    if (Math.abs(fm) <= tol) { lo = t; hi = t; flo = fm; fhi = fm; break; }
+    if ((fm < 0) === (flo < 0)) { lo = t; flo = fm; } else { hi = t; fhi = fm; }
   }
-  return { t: lo + (hi - lo) * (da / (da - db)), fv: da };
+  // The bracket now has width <= spatialTol, so every candidate below lies
+  // within the spatial tolerance of the sign boundary. Evaluate each and return
+  // the one closest to the zero set, so `fv` is a measurement AT the returned
+  // point (not a stale endpoint) and the returned point is the best available
+  // approximation of the crossing.
+  const tm = 0.5 * (lo + hi);
+  const fm = f(pointAt(tm));
+  if (!Number.isFinite(fm)) return null;
+  let bestT = lo, bestF = flo, bestAbs = Math.abs(flo);
+  for (const [t, v] of [[hi, fhi], [tm, fm]] as [number, number][]) {
+    if (Number.isFinite(v) && Math.abs(v) < bestAbs) { bestAbs = Math.abs(v); bestT = t; bestF = v; }
+  }
+  return { t: bestT, fv: bestF, bracketWidth: (hi - lo) * len, endpointJump: Math.abs(db - da) };
 }
 
 /**
@@ -104,11 +197,13 @@ function bisectT(f: (p: Vec3) => number, pa: Vec3, pb: Vec3, tol: number, maxIte
  */
 export function fieldContour(
   field: ScalarField, plane: SlicePlane, window: SliceWindow, resolution: number,
-  opts: { tol?: number; maxIters?: number } = {},
+  opts: { tol?: number; spatialTol?: number; maxIters?: number } = {},
 ): FieldContour {
   if (resolution <= 0 || !Number.isFinite(resolution)) throw new Error(`fieldContour: resolution must be finite and positive (got ${resolution})`);
   const tol = opts.tol ?? 1e-6;
-  const maxIters = opts.maxIters ?? 60;
+  const spatialTol = opts.spatialTol ?? 1e-6;
+  if (spatialTol <= 0 || !Number.isFinite(spatialTol)) throw new Error(`fieldContour: spatialTol must be finite and positive (got ${spatialTol})`);
+  const maxIters = opts.maxIters ?? 80;
   const nu = Math.max(1, Math.ceil((window.uMax - window.uMin) / resolution));
   const nv = Math.max(1, Math.ceil((window.vMax - window.vMin) / resolution));
   const du = (window.uMax - window.uMin) / nu;
@@ -116,28 +211,49 @@ export function fieldContour(
 
   const values = new Float64Array((nu + 1) * (nv + 1));
   let samples = 0;
+  let nonFiniteSamples = 0;
   for (let j = 0; j <= nv; j++) {
     const v = window.vMin + dv * j;
     for (let i = 0; i <= nu; i++) {
       const u = window.uMin + du * i;
-      values[j * (nu + 1) + i] = field.field(planePoint(plane, u, v));
+      const fv = field.field(planePoint(plane, u, v));
+      if (!Number.isFinite(fv)) nonFiniteSamples++;
+      values[j * (nu + 1) + i] = fv;
       samples++;
     }
+  }
+  if (nonFiniteSamples > 0) {
+    throw new FieldContourError(
+      `fieldContour: field returned ${nonFiniteSamples} non-finite sample(s) on the reference grid; refusing to emit ground truth`, nonFiniteSamples,
+    );
   }
   const at = (i: number, j: number): number => values[j * (nu + 1) + i]!;
   const uOf = (i: number): number => window.uMin + du * i;
   const vOf = (j: number): number => window.vMin + dv * j;
 
   let crossings = 0;
-  let jumpCrossings = 0;
+  let resolvedCrossings = 0;
+  let unresolvedCrossings = 0;
   let maxResidualAtCrossing = 0;
+  let maxEndpointJump = 0;
+  let maxBracketWidth = 0;
   const segments: Segment[] = [];
 
-  const recordCrossing = (fv: number): void => {
+  const recordCrossing = (r: CrossingRefinement): void => {
     crossings++;
-    if (!Number.isFinite(fv)) return;
-    maxResidualAtCrossing = Math.max(maxResidualAtCrossing, Math.abs(fv));
-    if (Math.abs(fv) > tol) jumpCrossings++;
+    maxResidualAtCrossing = Math.max(maxResidualAtCrossing, Math.abs(r.fv));
+    maxBracketWidth = Math.max(maxBracketWidth, r.bracketWidth);
+    // The one-sided jump is recorded for EVERY crossing, not just unresolved
+    // ones: a sign-boundary (sdGroove's gate) can still be spatially resolved
+    // to a near-zero value while its two bracket samples differ by the whole
+    // gate jump. The jump plus the operator's formula is the discontinuity
+    // evidence; the residual is a separate, weaker signal.
+    maxEndpointJump = Math.max(maxEndpointJump, r.endpointJump);
+    if (Math.abs(r.fv) <= tol) {
+      resolvedCrossings++;
+    } else {
+      unresolvedCrossings++;
+    }
   };
 
   // Cache an edge crossing by its lower grid endpoint + orientation (h/v).
@@ -149,8 +265,9 @@ export function fieldContour(
     if (hit) return hit;
     const pa = planePoint(plane, uOf(i), vOf(j));
     const pb = planePoint(plane, uOf(i + 1), vOf(j));
-    const r = bisectT(field.field, pa, pb, tol, maxIters);
-    recordCrossing(r.fv);
+    const r = refineCrossing(field.field, pa, pb, tol, spatialTol, maxIters);
+    if (!r) throw new FieldContourError(`fieldContour: refinement produced a non-finite/invalid crossing on h-edge (${i},${j}); rejecting the reference contour`);
+    recordCrossing(r);
     const out: [number, number] = [uOf(i) + du * r.t, vOf(j)];
     hCache.set(key, out);
     return out;
@@ -161,8 +278,9 @@ export function fieldContour(
     if (hit) return hit;
     const pa = planePoint(plane, uOf(i), vOf(j));
     const pb = planePoint(plane, uOf(i), vOf(j + 1));
-    const r = bisectT(field.field, pa, pb, tol, maxIters);
-    recordCrossing(r.fv);
+    const r = refineCrossing(field.field, pa, pb, tol, spatialTol, maxIters);
+    if (!r) throw new FieldContourError(`fieldContour: refinement produced a non-finite/invalid crossing on v-edge (${i},${j}); rejecting the reference contour`);
+    recordCrossing(r);
     const out: [number, number] = [uOf(i), vOf(j) + dv * r.t];
     vCache.set(key, out);
     return out;
@@ -202,7 +320,11 @@ export function fieldContour(
       }
     }
   }
-  return { segments, resolution: Math.min(du, dv), samples, crossings, jumpCrossings, window, maxResidualAtCrossing };
+  return {
+    segments, resolution: Math.min(du, dv), samples,
+    crossings, resolvedCrossings, unresolvedCrossings, window,
+    maxResidualAtCrossing, maxEndpointJump, spatialTol, maxBracketWidth,
+  };
 }
 
 /** Intersect one mesh with the slice plane, returning world-space (u,v) segments. */

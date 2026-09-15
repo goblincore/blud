@@ -27,7 +27,7 @@ import {
   codeFingerprint, jsonText, prepareOwnedDir, resolveWithinRoot,
 } from './blob-mesh-compare';
 import { FIXTURES, GOBLIN_HEAD_REGION } from '../src/lab/sdf-zombie/mesher-comparison/fixtures';
-import { CHAMFER_REGIONS, buildRegionReferences, evaluateChamferCell, renderSlice, type VariantMetrics } from '../src/lab/sdf-zombie/mesher-comparison/dc-chamfer';
+import { CHAMFER_REGIONS, buildRegionReferences, evaluateChamferCell, evaluateVariant, renderSlice, type VariantMetrics } from '../src/lab/sdf-zombie/mesher-comparison/dc-chamfer';
 import { DC_BASELINE, DC_CANDIDATE, DC_VARIANTS, dcOptionsFor, dcVariantById, type DcVariant } from '../src/lab/sdf-zombie/mesher-comparison/dc-variants';
 import { marchingCubes } from '../src/lab/sdf-zombie/mesher-comparison/marching-cubes';
 import { dualContouring } from '../src/lab/sdf-zombie/mesher-comparison/dual-contouring';
@@ -36,7 +36,7 @@ import { analyzeMesh, buildReferenceMesh, SHARP_PROBES, type MethodAnalysis } fr
 import { meshSliceSegments, type Segment } from '../src/lab/sdf-zombie/mesher-comparison/field-slice';
 import { meshToGlb, meshToObj } from '../src/lab/sdf-zombie/mesher-comparison/export';
 import { renderMesh, defaultCamera, meshBounds, unionBounds, type CameraSpec } from '../src/lab/sdf-zombie/mesher-comparison/render';
-import { sharpBoxSensitivity } from '../src/lab/sdf-zombie/mesher-comparison/sensitivity';
+import { sharpBoxSensitivity, sharpBoxSensitivityVariants } from '../src/lab/sdf-zombie/mesher-comparison/sensitivity';
 import type { IndexedMesh, ScalarField } from '../src/lab/sdf-zombie/mesher-comparison/types';
 import type { Vec3 } from '../src/lab/sdf-zombie/types';
 
@@ -122,7 +122,7 @@ function main(): void {
   console.log('building dense field references (ground truth)…');
   const references = buildRegionReferences(chamfer, 0.0002);
   for (const r of references) {
-    console.log(`  ${r.region.id.padEnd(14)} crossings=${String(r.reference.crossings).padStart(5)} jumps=${String(r.reference.jumpCrossings).padStart(4)} max|f|@crossing=${mmv(r.reference.maxResidualAtCrossing)}mm`);
+    console.log(`  ${r.region.id.padEnd(14)} crossings=${String(r.reference.crossings).padStart(5)} unresolved=${String(r.reference.unresolvedCrossings).padStart(4)} max|f|@crossing=${mmv(r.reference.maxResidualAtCrossing)}mm maxBracket=${mmv(r.reference.maxBracketWidth)}mm`);
   }
 
   // ---- mutations after all inputs are built ------------------------------
@@ -195,6 +195,50 @@ function main(): void {
       ], `chamfer-groove__compare__${mm(cell)}mm__slice-${region.id}.png`, 'compare');
     }
   }
+
+  // ---- 1b. reference-resolution convergence at the focus cell -------------
+  // The ~2-3x pit conclusion must not rest on one arbitrary contour spacing.
+  // Re-run the 10 mm baseline/candidate against a FINER dense field contour
+  // (0.1 mm vs the 0.2 mm reference) and confirm the ratio is stable. The
+  // reference is a fixed, documented spacing per evidence run, not adaptive;
+  // this bracket shows the conclusion is not an artifact of that choice.
+  // Skipped in --smoke, which only runs the 20 mm cell.
+  const c10res = cellResults.find(c => c.cell === HEAD_10);
+  const referenceConvergence = (() => {
+    if (!c10res) return [];
+    console.log('reference convergence @10mm (finer field contour)…');
+    const refsFine = buildRegionReferences(chamfer, 0.0001);
+    const convBase = evaluateVariant(chamfer, 'chamfer-groove', HEAD_10, DC_BASELINE, refsFine);
+    const convCand = evaluateVariant(chamfer, 'chamfer-groove', HEAD_10, DC_CANDIDATE, refsFine);
+    const regionOf = (v: VariantMetrics, id: string) => v.regions.find(r => r.region.id === id)!;
+    return CHAMFER_REGIONS.map(region => {
+      const b = regionOf(c10res.variants.find(v => v.id === DC_BASELINE.id)!, region.id);
+      const c = regionOf(c10res.variants.find(v => v.id === DC_CANDIDATE.id)!, region.id);
+      const bf = regionOf(convBase, region.id);
+      const cf = regionOf(convCand, region.id);
+      const ratio = (a: number, z: number): number => z > 0 ? a / z : NaN;
+      return {
+        id: region.id,
+        coarseResolutionMm: b.reference.resolution * 1000,
+        fineResolutionMm: bf.reference.resolution * 1000,
+        coarseCrossings: b.reference.crossings, fineCrossings: bf.reference.crossings,
+        baseline: {
+          coarse: { t2rP95Mm: b.testedToRef.p95 * 1000, t2rMaxMm: b.testedToRef.max * 1000, r2tP95Mm: b.refToTested.p95 * 1000, r2tMaxMm: b.refToTested.max * 1000 },
+          fine: { t2rP95Mm: bf.testedToRef.p95 * 1000, t2rMaxMm: bf.testedToRef.max * 1000, r2tP95Mm: bf.refToTested.p95 * 1000, r2tMaxMm: bf.refToTested.max * 1000 },
+        },
+        candidate: {
+          coarse: { t2rP95Mm: c.testedToRef.p95 * 1000, t2rMaxMm: c.testedToRef.max * 1000, r2tP95Mm: c.refToTested.p95 * 1000, r2tMaxMm: c.refToTested.max * 1000 },
+          fine: { t2rP95Mm: cf.testedToRef.p95 * 1000, t2rMaxMm: cf.testedToRef.max * 1000, r2tP95Mm: cf.refToTested.p95 * 1000, r2tMaxMm: cf.refToTested.max * 1000 },
+        },
+        candidateOverBaseline: {
+          coarseT2rP95: ratio(c.testedToRef.p95, b.testedToRef.p95),
+          fineT2rP95: ratio(cf.testedToRef.p95, bf.testedToRef.p95),
+          coarseR2tP95: ratio(c.refToTested.p95, b.refToTested.p95),
+          fineR2tP95: ratio(cf.refToTested.p95, bf.refToTested.p95),
+        },
+      };
+    });
+  })();
 
   // ---- 2. shaded / wireframe closeups at 10 mm ---------------------------
   console.log('rendering closeups…');
@@ -277,7 +321,7 @@ function main(): void {
 
   // ---- 4. regression: goblin head + torn chunk at 10 mm ------------------
   console.log('regressions: head + torn chunk @10mm…');
-  interface RegRow { fixture: string; method: string; verts: number; tris: number; residualMedianMm: number; surfMedianMm: number; refMedMm: number | null; refP95Mm: number | null; boundaryEdges: number; nonManifoldEdges: number; invalid: boolean }
+  interface RegRow { fixture: string; method: string; verts: number; tris: number; residualMedianMm: number; surfMedianMm: number; meshToRefMedMm: number | null; meshToRefP95Mm: number | null; refToMeshMedMm: number | null; refToMeshP95Mm: number | null; boundaryEdges: number; nonManifoldEdges: number; invalid: boolean }
   const regressions: RegRow[] = [];
   for (const [fid, fx, refCell] of [['character-head', head, 0.005], ['torn-chunk', torn, 0.005]] as [string, ScalarField, number][]) {
     const grid = gridFor(fx, HEAD_10);
@@ -288,11 +332,16 @@ function main(): void {
       ['marching-cubes', marchingCubes(fx, { cell: HEAD_10, grid })],
     ] as [string, IndexedMesh][]) {
       const an = analyzeMesh('dual-contouring', mesh, fx, fid, { timesMs: [], medianMs: 0, minMs: 0, maxMs: 0 }, ref);
+      // `analyzeMesh` calls `bidirectionalDistance(mesh, reference)`, so
+      // aToB = MESH -> reference and bToA = reference -> MESH. Store both
+      // directions explicitly and label them by their real direction.
       regressions.push({
         fixture: fid, method: name, verts: an.verts, tris: an.tris,
         residualMedianMm: an.normalizedResidual.median * 1000, surfMedianMm: an.surfaceResidual.median * 1000,
-        refMedMm: an.reference ? an.reference.aToB.median * 1000 : null,
-        refP95Mm: an.reference ? an.reference.aToB.p95 * 1000 : null,
+        meshToRefMedMm: an.reference ? an.reference.aToB.median * 1000 : null,
+        meshToRefP95Mm: an.reference ? an.reference.aToB.p95 * 1000 : null,
+        refToMeshMedMm: an.reference ? an.reference.bToA.median * 1000 : null,
+        refToMeshP95Mm: an.reference ? an.reference.bToA.p95 * 1000 : null,
         boundaryEdges: an.topology.boundaryEdges, nonManifoldEdges: an.topology.nonManifoldEdges, invalid: an.invalid,
       });
     }
@@ -301,7 +350,14 @@ function main(): void {
   }
 
   // ---- 5. box sensitivity (phase/rotation) -------------------------------
+  // The original API is re-emitted UNCHANGED for continuity; the candidate is
+  // measured separately because a rotated frame is exactly where a normal-step
+  // change can move the answer, and the axis-aligned rows cannot show that.
   const sensitivity = cells.map(cell => ({ cell, rows: sharpBoxSensitivity(cell) }));
+  const candidateSensitivity = cells.map(cell => ({
+    cell,
+    rows: sharpBoxSensitivityVariants(cell, [DC_BASELINE, DC_CANDIDATE]),
+  }));
 
   // ---- 6. serialize ------------------------------------------------------
   const commit = git(root, ['rev-parse', 'HEAD']);
@@ -325,8 +381,11 @@ function main(): void {
     regions: v.regions.map(r => ({
       id: r.region.id,
       reference: {
-        crossings: r.reference.crossings, jumpCrossings: r.reference.jumpCrossings,
+        crossings: r.reference.crossings, resolvedCrossings: r.reference.resolvedCrossings,
+        unresolvedCrossings: r.reference.unresolvedCrossings,
         resolutionMm: r.reference.resolution * 1000, maxResidualAtCrossingMm: r.reference.maxResidualAtCrossing * 1000,
+        maxEndpointJumpMm: r.reference.maxEndpointJump * 1000,
+        spatialTolMm: r.reference.spatialTol * 1000, maxBracketWidthMm: r.reference.maxBracketWidth * 1000,
       },
       testedToRefMm: mmStats(r.testedToRef), refToTestedMm: mmStats(r.refToTested),
     })),
@@ -338,17 +397,25 @@ function main(): void {
     environment: { node: process.version, platform: platform(), release: release(), cpus: String(cpus().length) },
     groundTruth: {
       fixture: 'chamfer-groove',
-      summary: 'The chamfer fold inflates the solid into a broad bevel (top near y=+0.14, lobes reach ~0.085); the groove cutter is buried mid-span and only reaches the surface near its ±z caps, producing annular pits with a central pillar. The groove rim is a field discontinuity.',
+      summary: 'The chamfer fold inflates the solid into a broad bevel (top near y=+0.14, lobes reach ~0.085); the groove cutter is buried mid-span and only reaches the surface near its ±z caps, producing annular pits with a central pillar. The groove rim is a sign boundary of the sdGroove band gate: the two one-sided bracket samples differ by ~14 mm, yet the refined crossing residual is small (the boundary is spatially resolvable). Discontinuity is established by that formula plus the one-sided samples, never by residual alone.',
       regions: references.map(r => ({
         id: r.region.id, label: r.region.label, note: r.region.note,
         plane: r.region.plane, window: r.region.window, core: r.region.core,
-        crossings: r.reference.crossings, jumpCrossings: r.reference.jumpCrossings,
+        crossings: r.reference.crossings, resolvedCrossings: r.reference.resolvedCrossings,
+        unresolvedCrossings: r.reference.unresolvedCrossings,
         resolutionMm: r.reference.resolution * 1000, maxResidualAtCrossingMm: r.reference.maxResidualAtCrossing * 1000,
+        maxEndpointJumpMm: r.reference.maxEndpointJump * 1000,
+        spatialTolMm: r.reference.spatialTol * 1000, maxBracketWidthMm: r.reference.maxBracketWidth * 1000,
       })),
     },
     slices: cellResults.map(c => ({ cell: c.cell, baseline: variantJson(c.variants.find(v => v.id === DC_BASELINE.id)!), candidate: variantJson(c.variants.find(v => v.id === DC_CANDIDATE.id)!), context: { marchingCubes: variantJson(c.mc), surfaceNets: variantJson(c.sn) }, sweep: c.variants.filter(v => v.id !== DC_BASELINE.id && v.id !== DC_CANDIDATE.id).map(variantJson) })),
     variants: DC_VARIANTS.map(v => ({ id: v.id, label: v.label, note: v.note, normalEpsilonAt10mmMm: v.normalEpsilon(HEAD_10) === null ? 5 : v.normalEpsilon(HEAD_10)! * 1000, clampToCell: v.clampToCell })),
-    calibration: { sharpBox: calibration, sphere: sphereRows, sensitivity: sensitivity.map(s => ({ cell: s.cell, rows: s.rows })) },
+    calibration: {
+      sharpBox: calibration, sphere: sphereRows,
+      sensitivity: sensitivity.map(s => ({ cell: s.cell, rows: s.rows })),
+      candidateSensitivity: candidateSensitivity.map(s => ({ cell: s.cell, rows: s.rows })),
+    },
+    referenceConvergence,
     regressions,
     panels,
     evidencePlan: plan.map(p => p.rel),
@@ -357,7 +424,7 @@ function main(): void {
   // ---- 7. write + copy evidence ------------------------------------------
   runFiles.add('results.json'); runFiles.add('preview.html');
   writeFileSync(join(outDir, 'results.json'), jsonText(results));
-  const preview = previewHtml(panels);
+  const preview = previewHtml(panels, { candidateSensitivity, referenceConvergence });
   writeFileSync(join(outDir, 'preview.html'), preview);
 
   if (evidenceDir && cleanup) {
@@ -383,7 +450,28 @@ function git(root: string, args: string[]): string {
   try { return execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim(); } catch { return ''; }
 }
 
-function previewHtml(panels: PanelRec[]): string {
+interface PreviewCandidateSensitivityRow {
+  readonly cell: number;
+  readonly rotationDeg: number;
+  readonly phaseCells: readonly [number, number, number];
+  readonly dc: Readonly<Record<string, { surfaceMm: number; normalEpsilonMm: number }>>;
+}
+
+interface PreviewConvergenceRow {
+  readonly id: string;
+  readonly coarseResolutionMm: number;
+  readonly fineResolutionMm: number;
+  readonly baseline: { readonly coarse: { readonly r2tP95Mm: number }; readonly fine: { readonly r2tP95Mm: number } };
+  readonly candidate: { readonly coarse: { readonly r2tP95Mm: number }; readonly fine: { readonly r2tP95Mm: number } };
+  readonly candidateOverBaseline: { readonly coarseR2tP95: number; readonly fineR2tP95: number };
+}
+
+export interface PreviewExtras {
+  readonly candidateSensitivity?: readonly { readonly cell: number; readonly rows: readonly PreviewCandidateSensitivityRow[] }[];
+  readonly referenceConvergence?: readonly PreviewConvergenceRow[];
+}
+
+function previewHtml(panels: PanelRec[], extras: PreviewExtras = {}): string {
   const regions = ['seam', 'notch-plus-z', 'notch-minus-z'];
   const cells = [...new Set(panels.filter(p => p.view.startsWith('slice-')).map(p => p.cell))].sort((a, b) => b - a);
   const legend = `<p style="font:13px/1.6 monospace">` +
@@ -424,8 +512,11 @@ function previewHtml(panels: PanelRec[]): string {
     p.push(`<h3>${view}</h3><div class="row cu">`);
     for (const method of ['dc-baseline', 'dc-eps-candidate', 'marching-cubes']) {
       for (const wire of [false, true]) {
-        const f = panels.find(x => x.view === view && x.method === method && (x.file.includes('-wire') === wire))?.file;
-        if (f) p.push(`<figure><img src="panels/${f}" loading="lazy"><figcaption>${method}${wire ? ' wire' : ''}</figcaption></figure>`);
+        // Match the generator's EXACT filename, so a shaded panel can never be
+        // mistaken for a wireframe panel (or vice versa) by a loose lookup.
+        const expected = `chamfer-groove__${method}__10mm__${view}${wire ? '-wire' : ''}.png`;
+        const rec = panels.find(x => x.file === expected);
+        if (rec) p.push(`<figure><img src="panels/${rec.file}" loading="lazy"><figcaption>${method}${wire ? ' wire' : ' shaded'}</figcaption></figure>`);
       }
     }
     p.push('</div>');
@@ -435,7 +526,30 @@ function previewHtml(panels: PanelRec[]): string {
     const f = panels.find(x => x.fixture === 'control-sharp-box' && x.method === method)?.file;
     if (f) p.push(`<figure><img src="panels/${f}" loading="lazy"><figcaption>${method}</figcaption></figure>`);
   }
-  p.push('</div></body></html>');
+  p.push('</div>');
+
+  if (extras.candidateSensitivity && extras.candidateSensitivity.length > 0) {
+    p.push('<h2>sharp-box candidate sensitivity — the normal step matters under rotation</h2>');
+    p.push('<p>Nearest TRIANGLE SURFACE distance from the true box corner (mm). Axis-aligned phases are step-insensitive (three orthogonal planes); the 20&deg; rotated row is where a normal-step change moves the answer, so it is measured per variant, not inferred from the axis-aligned results.</p>');
+    p.push('<table style="border-collapse:collapse;font:12px/1.4 monospace"><tr><th style="padding:2px 8px">cell mm</th><th>phase</th><th>rot&deg;</th><th>baseline surf mm</th><th>candidate surf mm</th><th>baseline eps mm</th><th>candidate eps mm</th></tr>');
+    for (const cell of extras.candidateSensitivity) {
+      for (const r of cell.rows) {
+        const b = r.dc['dc-baseline']; const c = r.dc['dc-eps-candidate'];
+        p.push(`<tr><td style="padding:2px 8px">${mm(cell.cell)}</td><td>${JSON.stringify(r.phaseCells)}</td><td>${r.rotationDeg}</td><td>${b ? b.surfaceMm.toFixed(3) : '&mdash;'}</td><td>${c ? c.surfaceMm.toFixed(3) : '&mdash;'}</td><td>${b ? b.normalEpsilonMm.toFixed(2) : '&mdash;'}</td><td>${c ? c.normalEpsilonMm.toFixed(2) : '&mdash;'}</td></tr>`);
+      }
+    }
+    p.push('</table>');
+  }
+  if (extras.referenceConvergence && extras.referenceConvergence.length > 0) {
+    p.push('<h2>reference-resolution convergence @ 10 mm (pit metrics)</h2>');
+    p.push('<p>r2t p95 (mm) with the 0.2&nbsp;mm reference vs a finer 0.1&nbsp;mm reference. A stable candidate/baseline ratio is what lets the improvement be quoted.</p>');
+    p.push('<table style="border-collapse:collapse;font:12px/1.4 monospace"><tr><th style="padding:2px 8px">region</th><th>baseline 0.2</th><th>baseline 0.1</th><th>candidate 0.2</th><th>candidate 0.1</th><th>ratio 0.2</th><th>ratio 0.1</th></tr>');
+    for (const r of extras.referenceConvergence) {
+      p.push(`<tr><td style="padding:2px 8px">${r.id}</td><td>${r.baseline.coarse.r2tP95Mm.toFixed(3)}</td><td>${r.baseline.fine.r2tP95Mm.toFixed(3)}</td><td>${r.candidate.coarse.r2tP95Mm.toFixed(3)}</td><td>${r.candidate.fine.r2tP95Mm.toFixed(3)}</td><td>${r.candidateOverBaseline.coarseR2tP95.toFixed(2)}x</td><td>${r.candidateOverBaseline.fineR2tP95.toFixed(2)}x</td></tr>`);
+    }
+    p.push('</table>');
+  }
+  p.push('</body></html>');
   return p.join('\n');
 }
 

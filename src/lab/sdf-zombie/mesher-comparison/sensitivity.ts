@@ -16,6 +16,7 @@ import { controlSharpBox } from './fixtures';
 import { dualContouring } from './dual-contouring';
 import { marchingCubes } from './marching-cubes';
 import { surfaceNets } from './surface-nets-adapter';
+import { dcOptionsFor, type DcVariant } from './dc-variants';
 import { TriBvh } from './metrics';
 import { gridFor } from './runner';
 import type { GridSpec, IndexedMesh, MethodOptions, ScalarField } from './types';
@@ -34,6 +35,29 @@ export interface SensitivityRow {
   readonly snVertexMm: number;
   readonly mcVertexMm: number;
   readonly dcVertexMm: number;
+}
+
+/** One DC variant's sharp-corner error in a `VariantSensitivityRow`. */
+export interface VariantSensitivityEntry {
+  readonly surfaceMm: number;
+  readonly vertexMm: number;
+  /** The step the mesh ACTUALLY used (from the variant's resolver). */
+  readonly normalEpsilonMm: number;
+  readonly clampToCell: boolean;
+}
+
+/**
+ * Sharp-corner error per named DC variant, over the same grid phases and
+ * rotated frame as `sharpBoxSensitivity`. The original function is left
+ * untouched for the accepted comparison evidence; this one exists because a
+ * rotation is exactly where a normal-step change can move the answer, so the
+ * candidate must be measured, not assumed from the axis-aligned rows.
+ */
+export interface VariantSensitivityRow {
+  readonly phaseCells: readonly [number, number, number];
+  readonly rotationDeg: number;
+  readonly corner: Vec3;
+  readonly dc: Readonly<Record<string, VariantSensitivityEntry>>;
 }
 
 /** Rotate `p` about the (1,1,0) axis by `deg` (right-handed). */
@@ -140,5 +164,46 @@ export function sharpBoxSensitivity(cell: number): SensitivityRow[] {
   const rotBase = gridFor(rot, cell);
   const rotRow = cornerDistances(rot, cell, rotBase, rotCorner);
   rows.push({ ...rotRow, phaseCells: [0, 0, 0], rotationDeg: deg, corner: rotCorner });
+  return rows;
+}
+
+/** One DC variant's corner error, measured as in `cornerDistances`. */
+function variantCornerEntry(field: ScalarField, cell: number, grid: GridSpec, corner: Vec3, variant: DcVariant): VariantSensitivityEntry {
+  const m = dualContouring(field, dcOptionsFor(variant, cell, grid));
+  const bvh = new TriBvh(m);
+  const surfaceMm = Math.sqrt(bvh.nearestDist2(corner)) * 1000;
+  let best = Infinity;
+  for (let i = 0; i < m.positions.length / 3; i++) {
+    const d = Math.hypot(m.positions[i * 3]! - corner[0], m.positions[i * 3 + 1]! - corner[1], m.positions[i * 3 + 2]! - corner[2]);
+    if (d < best) best = d;
+  }
+  return {
+    surfaceMm, vertexMm: best * 1000,
+    normalEpsilonMm: (variant.normalEpsilon(cell) ?? cell * 0.5) * 1000,
+    clampToCell: variant.clampToCell,
+  };
+}
+
+/**
+ * Phase/rotation sensitivity for named DC variants. The axis-aligned rows are
+ * expected to be insensitive to the normal step (three orthogonal planes); the
+ * 20 deg rotated row is the one that must be MEASURED, because a rotated frame
+ * no longer aligns the QEF planes with the box faces. Preserves the original
+ * `sharpBoxSensitivity` contract: same phases, same rotated frame, same probe.
+ */
+export function sharpBoxSensitivityVariants(cell: number, variants: readonly DcVariant[]): VariantSensitivityRow[] {
+  const field = controlSharpBox();
+  const base = gridFor(field, cell);
+  const mk = (phase: readonly [number, number, number], grid: GridSpec, f: ScalarField, corner: Vec3, rotationDeg: number): VariantSensitivityRow => {
+    const dc: Record<string, VariantSensitivityEntry> = {};
+    for (const v of variants) dc[v.id] = variantCornerEntry(f, cell, grid, corner, v);
+    return { phaseCells: phase, rotationDeg, corner, dc };
+  };
+  const rows: VariantSensitivityRow[] = PHASES.map(phase => mk(phase, phasedGrid(base, phase), field, CORNER, 0));
+
+  const deg = 20;
+  const rot = rotatedSharpBox(deg);
+  const rotCorner = rotateAbout110(CORNER, deg);
+  rows.push(mk([0, 0, 0], gridFor(rot, cell), rot, rotCorner, deg));
   return rows;
 }

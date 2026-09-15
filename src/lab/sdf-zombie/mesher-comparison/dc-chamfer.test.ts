@@ -18,8 +18,9 @@ import { DC_BASELINE, DC_CANDIDATE, DC_VARIANTS, dcOptionsFor, dcVariantById } f
 import {
   CHAMFER_REGIONS, buildRegionReferences, evaluateVariant, renderSlice, type SliceRegionResult,
 } from './dc-chamfer';
-import { fieldContour, meshSliceSegments, sliceSymDistance, type SlicePlane } from './field-slice';
+import { fieldContour, meshSliceSegments, sliceSymDistance, FieldContourError, type SlicePlane } from './field-slice';
 import { analyzeMesh } from './analysis';
+import { sharpBoxSensitivityVariants } from './sensitivity';
 import type { ScalarField } from './types';
 import type { Vec3 } from '../types';
 
@@ -27,14 +28,6 @@ const T = { timesMs: [], medianMs: 0, minMs: 0, maxMs: 0 };
 
 function analyticDisc(p: Vec3): number {
   return Math.hypot(p[0], p[1]) - 0.2;
-}
-
-/** A field with an sdGroove-like band discontinuity along a vertical line. */
-function discontinuousField(p: Vec3): number {
-  // Inside a disc, but outside a 4 mm band around x=0: a hard step at |x|=0.002.
-  const disc = Math.hypot(p[0], p[1]) - 0.2;
-  if (Math.abs(p[0]) < 0.002) return Math.max(disc, 0.01);
-  return disc;
 }
 
 const fieldOf = (f: (p: Vec3) => number): ScalarField => ({
@@ -52,31 +45,85 @@ function grooveBodies(): { withGroove: ReturnType<typeof bodyOf>; without: Retur
 }
 
 describe('field-slice — bracketed ground truth', () => {
+  const plane: SlicePlane = { fixedAxis: 2, fixedValue: 0, uAxis: 0, vAxis: 1 };
+  const window = { uMin: -0.3, uMax: 0.3, vMin: -0.3, vMax: 0.3 };
+  const stepField = (x0: number): ScalarField => fieldOf((p) => (p[0] > x0 ? 1 : -1));
+
   it('pins an analytic circle crossing to the true zero set', () => {
     const field = fieldOf(analyticDisc);
-    const plane: SlicePlane = { fixedAxis: 2, fixedValue: 0, uAxis: 0, vAxis: 1 };
-    const c = fieldContour(field, plane, { uMin: -0.3, uMax: 0.3, vMin: -0.3, vMax: 0.3 }, 0.005);
+    const c = fieldContour(field, plane, window, 0.005);
     expect(c.crossings).toBeGreaterThan(20);
-    expect(c.jumpCrossings).toBe(0);
+    expect(c.unresolvedCrossings).toBe(0);
+    expect(c.resolvedCrossings).toBe(c.crossings);
     expect(c.maxResidualAtCrossing).toBeLessThan(1e-4);
+    // Spatial bracket is explicit and honoured, independent of the value tol.
+    expect(c.maxBracketWidth).toBeLessThanOrEqual(c.spatialTol + 1e-15);
     // Every crossing lies on |r| = 0.2.
     for (const s of c.segments) {
       for (const p of [s.a, s.b]) expect(Math.abs(Math.hypot(p[0], p[1]) - 0.2)).toBeLessThan(2e-3);
     }
   });
 
-  it('rejects a non-positive resolution', () => {
-    const field = fieldOf(analyticDisc);
-    expect(() => fieldContour(field, { fixedAxis: 2, fixedValue: 0, uAxis: 0, vAxis: 1 }, { uMin: -1, uMax: 1, vMin: -1, vMax: 1 }, 0)).toThrow(/resolution/);
+  it('reports a residual that equals the field evaluated at the returned crossing', () => {
+    // Every returned crossing is a segment endpoint, so the max |field| over
+    // endpoints must equal the reported max residual: no stale endpoint value.
+    for (const f of [fieldOf(analyticDisc), fieldOf((p) => p[0] ** 3 - 1e-3), stepField(0.037)]) {
+      const c = fieldContour(f, plane, window, 0.01);
+      let maxAtEndpoints = 0;
+      for (const s of c.segments) {
+        for (const p of [s.a, s.b]) maxAtEndpoints = Math.max(maxAtEndpoints, Math.abs(f.field([p[0], p[1], 0] as Vec3)));
+      }
+      expect(c.maxResidualAtCrossing).toBeCloseTo(maxAtEndpoints, 9);
+    }
   });
 
-  it('brackets a field discontinuity and flags it as a jump', () => {
-    const field = fieldOf(discontinuousField);
-    const plane: SlicePlane = { fixedAxis: 2, fixedValue: 0, uAxis: 0, vAxis: 1 };
-    const c = fieldContour(field, plane, { uMin: -0.3, uMax: 0.3, vMin: -0.3, vMax: 0.3 }, 0.004);
-    // The rim at |x|=0.002 is a sign change the field never drives to zero.
-    expect(c.jumpCrossings).toBeGreaterThan(0);
-    expect(c.maxResidualAtCrossing).toBeGreaterThan(1e-3);
+  it('pins an asymmetric, badly-scaled continuous root to the spatial tolerance', () => {
+    // x^3 = 1e-3  ->  root at x = 0.1, continuous but very flat/steep near it.
+    const f = fieldOf((p) => p[0] ** 3 - 1e-3);
+    const c = fieldContour(f, plane, window, 0.02, { spatialTol: 1e-9, tol: 1e-9 });
+    expect(c.unresolvedCrossings).toBe(0);
+    expect(c.maxBracketWidth).toBeLessThanOrEqual(1e-9 + 1e-15);
+    for (const s of c.segments) {
+      for (const p of [s.a, s.b]) expect(Math.abs(p[0] - 0.1)).toBeLessThan(1e-6);
+    }
+  });
+
+  it('brackets a known sign boundary with a positional bound and one-sided jump', () => {
+    const x0 = 0.037;
+    const f = stepField(x0);
+    const c = fieldContour(f, plane, window, 0.01, { spatialTol: 1e-7 });
+    expect(c.unresolvedCrossings).toBeGreaterThan(0);
+    // The location is pinned even though the field never reaches zero: every
+    // crossing near the boundary is within the spatial bracket tolerance.
+    for (const s of c.segments) {
+      for (const p of [s.a, s.b]) {
+        if (Math.abs(p[0] - x0) < 0.05) expect(Math.abs(p[0] - x0)).toBeLessThan(1e-6);
+      }
+    }
+    expect(c.maxEndpointJump).toBe(2);
+    expect(c.maxBracketWidth).toBeLessThanOrEqual(1e-7 + 1e-15);
+  });
+
+  it('rejects a field with non-finite grid samples instead of emitting NaN crossings', () => {
+    // The exact review repro: p.x > 0 -> NaN. It must throw, not return
+    // crossings with NaN endpoints.
+    const field = fieldOf((p) => (p[0] > 0 ? NaN : -1));
+    expect(() => fieldContour(field, plane, { uMin: -1, uMax: 1, vMin: -1, vMax: 1 }, 0.5)).toThrow(FieldContourError);
+    const inf = fieldOf((p) => (Math.abs(p[0]) < 1e-9 ? Infinity : p[0] - 0.5));
+    expect(() => fieldContour(inf, plane, { uMin: -1, uMax: 1, vMin: -1, vMax: 1 }, 0.5)).toThrow(FieldContourError);
+  });
+
+  it('rejects a refinement-only non-finite sample (grid nodes are finite)', () => {
+    // Nodes at u = 0.0/0.1 are finite; the refinement point at 0.05 is NaN.
+    const field = fieldOf((p) => (Math.abs(p[0] - 0.05) < 0.02 ? NaN : p[0] - 0.05));
+    expect(field.field([0, 0, 0])).toBeLessThan(0);
+    expect(field.field([0.1, 0, 0])).toBeGreaterThan(0);
+    expect(() => fieldContour(field, plane, { uMin: -1, uMax: 1, vMin: -1, vMax: 1 }, 0.1)).toThrow(FieldContourError);
+  });
+
+  it('rejects a non-positive resolution', () => {
+    const field = fieldOf(analyticDisc);
+    expect(() => fieldContour(field, plane, { uMin: -1, uMax: 1, vMin: -1, vMax: 1 }, 0)).toThrow(/resolution/);
   });
 
   it('slice distance is zero for identical curves and reports a shift', () => {
@@ -117,13 +164,20 @@ describe('chamfer-groove ground truth (from the field, not a mesher)', () => {
     expect(field.field(p)).toBeGreaterThan(sdBody(p, without) + 1e-3);
   });
 
-  it('classifies the seam as smooth and the pits as discontinuous', () => {
+  it('classifies the seam as smooth and the pit rim as a one-sided sign boundary', () => {
     const refs = buildRegionReferences(field, 0.001);
     const seam = refs.find(r => r.region.id === 'seam')!;
     const pit = refs.find(r => r.region.id === 'notch-plus-z')!;
-    expect(seam.reference.jumpCrossings).toBe(0);
-    expect(pit.reference.jumpCrossings).toBeGreaterThan(10);
-    expect(pit.reference.maxResidualAtCrossing).toBeGreaterThan(0.005);
+    expect(seam.reference.unresolvedCrossings).toBe(0);
+    // The rim is a sign boundary: its two one-sided bracket samples differ by
+    // the whole sdGroove gate jump. But with correct bracketing that boundary is
+    // still resolvable to a near-zero residual, so the pit is NOT an
+    // irreducible geometric error. The operator formula + the one-sided jump is
+    // the discontinuity evidence; the residual is a separate, weaker signal.
+    expect(pit.reference.maxEndpointJump).toBeGreaterThan(0.005);
+    expect(pit.reference.maxEndpointJump).toBeGreaterThan(seam.reference.maxEndpointJump);
+    expect(pit.reference.maxResidualAtCrossing).toBeLessThan(1e-4);
+    expect(pit.reference.maxBracketWidth).toBeLessThanOrEqual(pit.reference.spatialTol + 1e-15);
   });
 });
 
@@ -136,6 +190,31 @@ describe('DC candidate vs explicit baseline', () => {
     expect(dcOptionsFor(DC_BASELINE, 0.01, gridFor(field, 0.01)).normalEpsilon).toBeUndefined();
     expect(dcOptionsFor(DC_CANDIDATE, 0.01, gridFor(field, 0.01)).normalEpsilon).toBeCloseTo(0.001, 12);
     expect(dcOptionsFor(DC_BASELINE, 0.01, gridFor(field, 0.01)).clampToCell).toBe(true);
+  });
+
+  it('both DC paths actually build with their named Hermite step', () => {
+    const cell = 0.01;
+    const grid = gridFor(field, cell);
+    const base = dualContouring(field, dcOptionsFor(DC_BASELINE, cell, grid));
+    const cand = dualContouring(field, dcOptionsFor(DC_CANDIDATE, cell, grid));
+    expect(base.detail?.normalEpsilon).toBeCloseTo(0.005, 12); // cell * 0.5
+    expect(cand.detail?.normalEpsilon).toBeCloseTo(0.001, 12); // clamp(0.1*cell,...)
+  });
+
+  it('measures the candidate under rotation instead of assuming axis-aligned results extend', () => {
+    // Axis-aligned rows are step-insensitive (three orthogonal QEF planes), but
+    // a rotated frame is not — so the candidate is measured explicitly here.
+    const rows = sharpBoxSensitivityVariants(0.02, [DC_BASELINE, DC_CANDIDATE]);
+    const rot = rows.find(r => r.rotationDeg === 20)!;
+    const b = rot.dc[DC_BASELINE.id]!;
+    const c = rot.dc[DC_CANDIDATE.id]!;
+    expect(b.normalEpsilonMm).toBeCloseTo(10, 9); // cell * 0.5
+    expect(c.normalEpsilonMm).toBeCloseTo(2, 9);   // clamp(0.1*20mm, 0.1, 2)
+    expect(b.surfaceMm).toBeGreaterThan(1);        // ~3.08 mm
+    expect(c.surfaceMm).toBeLessThan(b.surfaceMm / 10);
+    // Axis-aligned (unrotated) rows stay exactly equal for both variants.
+    const axis = rows.find(r => r.rotationDeg === 0 && JSON.stringify(r.phaseCells) === '[0,0,0]')!;
+    expect(axis.dc[DC_CANDIDATE.id]!.surfaceMm).toBeCloseTo(axis.dc[DC_BASELINE.id]!.surfaceMm, 9);
   });
 
   it('rejects an unknown variant instead of guessing', () => {

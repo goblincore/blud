@@ -1,8 +1,8 @@
 {
-  "commit": "e901a051e08b37f4173ec0eeb70a391ecde67ed3",
-  "dirty": "D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-dc-baseline-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-dc-baseline-20mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-dc-baseline-5mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-dc-eps-candidate-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-dc-eps-candidate-20mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-dc-eps-candidate-5mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-marching-cubes-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/character-head-dc-baseline-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/character-head-dc-eps-candidate-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/control-sharp-box-dc-baseline-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/control-sharp-box-dc-eps-candidate-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/control-sharp-box-marching-cubes-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/torn-chunk-dc-baseline-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/torn-chunk-dc-eps-candidate-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__10mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__10mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__10mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__20mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__20mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__20mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__5mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__5mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__5mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__closeup-notch-wire.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__closeup-notch.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__closeup-seam-wire.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__closeup-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__20mm__main.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__20mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__20mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__20mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__5mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__5mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__5mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__closeup-notch-wire.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__closeup-notch.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__closeup-seam-wire.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__closeup-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__20mm__main.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__20mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__20mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__20mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__5mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__5mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__5mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__closeup-notch-wire.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__closeup-notch.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__closeup-seam-wire.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__closeup-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__20mm__main.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__20mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__20mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__20mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__5mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__5mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__5mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__10mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__10mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__10mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__20mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__20mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__20mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__5mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__5mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__5mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/control-sharp-box__dc-baseline__10mm__closeup-corner.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/control-sharp-box__dc-eps-candidate__10mm__closeup-corner.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/control-sharp-box__marching-cubes__10mm__closeup-corner.png\n D docs/dev-notes/2026-09-15-dc-chamfer/preview.html\n D docs/dev-notes/2026-09-15-dc-chamfer/results.json\n M scripts/dc-chamfer-probe.test.ts\n M scripts/dc-chamfer-probe.ts",
-  "codeFingerprint": "ce0317adbbe06438:07dd327c",
-  "generatedAt": "2026-09-15T22:18:50.515Z",
+  "commit": "767b4aa89c6c883f93f44061b5d2de49d472cddf",
+  "dirty": "M docs/dev-notes/2026-09-15-dc-chamfer/README.md\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-dc-baseline-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-dc-baseline-20mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-dc-baseline-5mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-dc-eps-candidate-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-dc-eps-candidate-20mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-dc-eps-candidate-5mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-marching-cubes-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/character-head-dc-baseline-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/character-head-dc-eps-candidate-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/control-sharp-box-dc-baseline-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/control-sharp-box-dc-eps-candidate-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/control-sharp-box-marching-cubes-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/torn-chunk-dc-baseline-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/torn-chunk-dc-eps-candidate-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__10mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__10mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__10mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__20mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__20mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__20mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__5mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__5mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__5mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__closeup-notch-wire.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__closeup-notch.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__closeup-seam-wire.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__closeup-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__20mm__main.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__20mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__20mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__20mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__5mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__5mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__5mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__closeup-notch-wire.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__closeup-notch.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__closeup-seam-wire.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__closeup-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__20mm__main.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__20mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__20mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__20mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__5mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__5mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__5mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__closeup-notch-wire.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__closeup-notch.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__closeup-seam-wire.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__closeup-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__20mm__main.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__20mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__20mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__20mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__5mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__5mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__5mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__10mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__10mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__10mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__20mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__20mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__20mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__5mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__5mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__5mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/control-sharp-box__dc-baseline__10mm__closeup-corner.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/control-sharp-box__dc-eps-candidate__10mm__closeup-corner.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/control-sharp-box__marching-cubes__10mm__closeup-corner.png\n D docs/dev-notes/2026-09-15-dc-chamfer/preview.html\n D docs/dev-notes/2026-09-15-dc-chamfer/results.json\n M scripts/dc-chamfer-probe.test.ts\n M scripts/dc-chamfer-probe.ts\n M src/lab/sdf-zombie/mesher-comparison/dc-chamfer.test.ts\n M src/lab/sdf-zombie/mesher-comparison/dc-chamfer.ts\n M src/lab/sdf-zombie/mesher-comparison/field-slice.ts\n M src/lab/sdf-zombie/mesher-comparison/sensitivity.ts",
+  "codeFingerprint": "2de7f092179f10b9:66446e75",
+  "generatedAt": "2026-09-15T22:35:12.634Z",
   "environment": {
     "node": "v22.22.1",
     "platform": "darwin",
@@ -11,7 +11,7 @@
   },
   "groundTruth": {
     "fixture": "chamfer-groove",
-    "summary": "The chamfer fold inflates the solid into a broad bevel (top near y=+0.14, lobes reach ~0.085); the groove cutter is buried mid-span and only reaches the surface near its ±z caps, producing annular pits with a central pillar. The groove rim is a field discontinuity.",
+    "summary": "The chamfer fold inflates the solid into a broad bevel (top near y=+0.14, lobes reach ~0.085); the groove cutter is buried mid-span and only reaches the surface near its ±z caps, producing annular pits with a central pillar. The groove rim is a sign boundary of the sdGroove band gate: the two one-sided bracket samples differ by ~14 mm, yet the refined crossing residual is small (the boundary is spatially resolvable). Discontinuity is established by that formula plus the one-sided samples, never by residual alone.",
     "regions": [
       {
         "id": "seam",
@@ -36,9 +36,13 @@
           "vMax": 0.16
         },
         "crossings": 1608,
-        "jumpCrossings": 0,
+        "resolvedCrossings": 1608,
+        "unresolvedCrossings": 0,
         "resolutionMm": 0.19955654101995568,
-        "maxResidualAtCrossingMm": 0.0002384952889438743
+        "maxResidualAtCrossingMm": 0.0009909589477583973,
+        "maxEndpointJumpMm": 0.2803371113448758,
+        "spatialTolMm": 0.001,
+        "maxBracketWidthMm": 0
       },
       {
         "id": "notch-plus-z",
@@ -63,9 +67,13 @@
           "vMax": 0.16
         },
         "crossings": 732,
-        "jumpCrossings": 206,
+        "resolvedCrossings": 732,
+        "unresolvedCrossings": 0,
         "resolutionMm": 0.19950124688279305,
-        "maxResidualAtCrossingMm": 13.965757319268766
+        "maxResidualAtCrossingMm": 0.0009955019260564357,
+        "maxEndpointJumpMm": 14.0492775341226,
+        "spatialTolMm": 0.001,
+        "maxBracketWidthMm": 0
       },
       {
         "id": "notch-minus-z",
@@ -90,9 +98,13 @@
           "vMax": -0.105
         },
         "crossings": 732,
-        "jumpCrossings": 206,
+        "resolvedCrossings": 732,
+        "unresolvedCrossings": 0,
         "resolutionMm": 0.19950124688279305,
-        "maxResidualAtCrossingMm": 13.965757319268766
+        "maxResidualAtCrossingMm": 0.0009955019260564357,
+        "maxEndpointJumpMm": 14.0492775341226,
+        "spatialTolMm": 0.001,
+        "maxBracketWidthMm": 0
       }
     ]
   },
@@ -142,36 +154,44 @@
             "id": "seam",
             "reference": {
               "crossings": 1608,
-              "jumpCrossings": 0,
+              "resolvedCrossings": 1608,
+              "unresolvedCrossings": 0,
               "resolutionMm": 0.19955654101995568,
-              "maxResidualAtCrossingMm": 0.0002384952889438743
+              "maxResidualAtCrossingMm": 0.0009909589477583973,
+              "maxEndpointJumpMm": 0.2803371113448758,
+              "spatialTolMm": 0.001,
+              "maxBracketWidthMm": 0
             },
             "testedToRefMm": {
               "samples": 240,
-              "median": 0.046948857080176355,
+              "median": 0.04694826649332502,
               "p95": 0.338551613470819,
-              "max": 0.5735698055569172
+              "max": 0.5735675640867046
             },
             "refToTestedMm": {
               "samples": 2488,
-              "median": 0.047148975062174074,
-              "p95": 0.2969944261502996,
-              "max": 0.5675925766268458
+              "median": 0.04714565248781482,
+              "p95": 0.2969844006002647,
+              "max": 0.5675897660212671
             }
           },
           {
             "id": "notch-plus-z",
             "reference": {
               "crossings": 732,
-              "jumpCrossings": 206,
+              "resolvedCrossings": 732,
+              "unresolvedCrossings": 0,
               "resolutionMm": 0.19950124688279305,
-              "maxResidualAtCrossingMm": 13.965757319268766
+              "maxResidualAtCrossingMm": 0.0009955019260564357,
+              "maxEndpointJumpMm": 14.0492775341226,
+              "spatialTolMm": 0.001,
+              "maxBracketWidthMm": 0
             },
             "testedToRefMm": {
               "samples": 89,
               "median": 3.0743805983684607,
-              "p95": 9.139413463332744,
-              "max": 10.881091995396208
+              "p95": 9.139413365851937,
+              "max": 10.88109197052882
             },
             "refToTestedMm": {
               "samples": 1290,
@@ -184,15 +204,19 @@
             "id": "notch-minus-z",
             "reference": {
               "crossings": 732,
-              "jumpCrossings": 206,
+              "resolvedCrossings": 732,
+              "unresolvedCrossings": 0,
               "resolutionMm": 0.19950124688279305,
-              "maxResidualAtCrossingMm": 13.965757319268766
+              "maxResidualAtCrossingMm": 0.0009955019260564357,
+              "maxEndpointJumpMm": 14.0492775341226,
+              "spatialTolMm": 0.001,
+              "maxBracketWidthMm": 0
             },
             "testedToRefMm": {
               "samples": 89,
               "median": 3.0743805983684607,
-              "p95": 9.13941346333275,
-              "max": 10.881091995396234
+              "p95": 9.139413365851937,
+              "max": 10.881091970528848
             },
             "refToTestedMm": {
               "samples": 1290,
@@ -246,40 +270,48 @@
             "id": "seam",
             "reference": {
               "crossings": 1608,
-              "jumpCrossings": 0,
+              "resolvedCrossings": 1608,
+              "unresolvedCrossings": 0,
               "resolutionMm": 0.19955654101995568,
-              "maxResidualAtCrossingMm": 0.0002384952889438743
+              "maxResidualAtCrossingMm": 0.0009909589477583973,
+              "maxEndpointJumpMm": 0.2803371113448758,
+              "spatialTolMm": 0.001,
+              "maxBracketWidthMm": 0
             },
             "testedToRefMm": {
               "samples": 239,
               "median": 0.04326277049227612,
               "p95": 0.35610789675449994,
-              "max": 0.5722392981657658
+              "max": 0.5722375309110707
             },
             "refToTestedMm": {
               "samples": 2488,
               "median": 0.043542664264315134,
-              "p95": 0.30258078359072255,
-              "max": 0.5596765856745662
+              "p95": 0.30257665035628917,
+              "max": 0.55967357640557
             }
           },
           {
             "id": "notch-plus-z",
             "reference": {
               "crossings": 732,
-              "jumpCrossings": 206,
+              "resolvedCrossings": 732,
+              "unresolvedCrossings": 0,
               "resolutionMm": 0.19950124688279305,
-              "maxResidualAtCrossingMm": 13.965757319268766
+              "maxResidualAtCrossingMm": 0.0009955019260564357,
+              "maxEndpointJumpMm": 14.0492775341226,
+              "spatialTolMm": 0.001,
+              "maxBracketWidthMm": 0
             },
             "testedToRefMm": {
               "samples": 88,
               "median": 0.9837661407606556,
-              "p95": 6.690647420138238,
+              "p95": 6.59895134668265,
               "max": 7.618693474688466
             },
             "refToTestedMm": {
               "samples": 1290,
-              "median": 2.4874148091082624,
+              "median": 2.4873428344751067,
               "p95": 9.832287746124072,
               "max": 9.846566340047842
             }
@@ -288,19 +320,23 @@
             "id": "notch-minus-z",
             "reference": {
               "crossings": 732,
-              "jumpCrossings": 206,
+              "resolvedCrossings": 732,
+              "unresolvedCrossings": 0,
               "resolutionMm": 0.19950124688279305,
-              "maxResidualAtCrossingMm": 13.965757319268766
+              "maxResidualAtCrossingMm": 0.0009955019260564357,
+              "maxEndpointJumpMm": 14.0492775341226,
+              "spatialTolMm": 0.001,
+              "maxBracketWidthMm": 0
             },
             "testedToRefMm": {
               "samples": 88,
               "median": 0.983766140760657,
-              "p95": 6.690647420138232,
+              "p95": 6.598951346682643,
               "max": 7.618693474688476
             },
             "refToTestedMm": {
               "samples": 1290,
-              "median": 2.4874148091082624,
+              "median": 2.4873428344751067,
               "p95": 9.832287746124072,
               "max": 9.846566340047813
             }
@@ -343,15 +379,19 @@
               "id": "seam",
               "reference": {
                 "crossings": 1608,
-                "jumpCrossings": 0,
+                "resolvedCrossings": 1608,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19955654101995568,
-                "maxResidualAtCrossingMm": 0.0002384952889438743
+                "maxResidualAtCrossingMm": 0.0009909589477583973,
+                "maxEndpointJumpMm": 0.2803371113448758,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 219,
-                "median": 0.1677152229788249,
-                "p95": 0.5691412401395887,
-                "max": 0.6547771508460183
+                "median": 0.16771901029343936,
+                "p95": 0.5691417382686985,
+                "max": 0.6547788904019739
               },
               "refToTestedMm": {
                 "samples": 2488,
@@ -364,19 +404,23 @@
               "id": "notch-plus-z",
               "reference": {
                 "crossings": 732,
-                "jumpCrossings": 206,
+                "resolvedCrossings": 732,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 13.965757319268766
+                "maxResidualAtCrossingMm": 0.0009955019260564357,
+                "maxEndpointJumpMm": 14.0492775341226,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 90,
-                "median": 2.8706060534366467,
-                "p95": 4.389050074127548,
+                "median": 2.818962722745816,
+                "p95": 4.453764956376765,
                 "max": 4.981261657466698
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 3.595311975787686,
+                "median": 3.603407427356919,
                 "p95": 5.391733838158399,
                 "max": 6.206701562811114
               }
@@ -385,19 +429,23 @@
               "id": "notch-minus-z",
               "reference": {
                 "crossings": 732,
-                "jumpCrossings": 206,
+                "resolvedCrossings": 732,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 13.965757319268766
+                "maxResidualAtCrossingMm": 0.0009955019260564357,
+                "maxEndpointJumpMm": 14.0492775341226,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 90,
-                "median": 2.8706060534366467,
-                "p95": 4.389050074127566,
+                "median": 2.818962722745816,
+                "p95": 4.453764956376765,
                 "max": 4.981261657466737
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 3.5953119757876717,
+                "median": 3.6034074273569474,
                 "p95": 5.391733838158399,
                 "max": 6.206701562811114
               }
@@ -439,20 +487,24 @@
               "id": "seam",
               "reference": {
                 "crossings": 1608,
-                "jumpCrossings": 0,
+                "resolvedCrossings": 1608,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19955654101995568,
-                "maxResidualAtCrossingMm": 0.0002384952889438743
+                "maxResidualAtCrossingMm": 0.0009909589477583973,
+                "maxEndpointJumpMm": 0.2803371113448758,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 238,
-                "median": 0.6642269210858028,
+                "median": 0.6642271246475682,
                 "p95": 1.403517260275827,
                 "max": 1.5387144682204412
               },
               "refToTestedMm": {
                 "samples": 2488,
                 "median": 0.6620828940795468,
-                "p95": 1.4265040132947344,
+                "p95": 1.4265083422309761,
                 "max": 1.539513015652647
               }
             },
@@ -460,19 +512,23 @@
               "id": "notch-plus-z",
               "reference": {
                 "crossings": 732,
-                "jumpCrossings": 206,
+                "resolvedCrossings": 732,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 13.965757319268766
+                "maxResidualAtCrossingMm": 0.0009955019260564357,
+                "maxEndpointJumpMm": 14.0492775341226,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 91,
-                "median": 2.011227591623071,
-                "p95": 5.264323736058075,
-                "max": 7.188579188587224
+                "median": 1.9531620671613266,
+                "p95": 5.119302665217554,
+                "max": 7.041816716633726
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 3.4352933777398493,
+                "median": 3.4352947236586013,
                 "p95": 10.793904412378554,
                 "max": 10.80848186420938
               }
@@ -481,19 +537,23 @@
               "id": "notch-minus-z",
               "reference": {
                 "crossings": 732,
-                "jumpCrossings": 206,
+                "resolvedCrossings": 732,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 13.965757319268766
+                "maxResidualAtCrossingMm": 0.0009955019260564357,
+                "maxEndpointJumpMm": 14.0492775341226,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 91,
-                "median": 2.011227591623071,
-                "p95": 5.264323736058078,
-                "max": 7.188579188587227
+                "median": 1.953162067161323,
+                "p95": 5.119302665217556,
+                "max": 7.041816716633729
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 3.435293377739822,
+                "median": 3.435294723658573,
                 "p95": 10.793904412378554,
                 "max": 10.80848186420938
               }
@@ -545,41 +605,49 @@
               "id": "seam",
               "reference": {
                 "crossings": 1608,
-                "jumpCrossings": 0,
+                "resolvedCrossings": 1608,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19955654101995568,
-                "maxResidualAtCrossingMm": 0.0002384952889438743
+                "maxResidualAtCrossingMm": 0.0009909589477583973,
+                "maxEndpointJumpMm": 0.2803371113448758,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 239,
                 "median": 0.0432652409149248,
                 "p95": 0.3563032808799842,
-                "max": 0.5721795390575501
+                "max": 0.5721778326621247
               },
               "refToTestedMm": {
                 "samples": 2488,
                 "median": 0.043493196807955256,
                 "p95": 0.30256093285933855,
-                "max": 0.5591465636573962
+                "max": 0.559143554420265
               }
             },
             {
               "id": "notch-plus-z",
               "reference": {
                 "crossings": 732,
-                "jumpCrossings": 206,
+                "resolvedCrossings": 732,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 13.965757319268766
+                "maxResidualAtCrossingMm": 0.0009955019260564357,
+                "maxEndpointJumpMm": 14.0492775341226,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 85,
-                "median": 0.7916337179966023,
+                "median": 0.8302469837364392,
                 "p95": 6.752663949707714,
-                "max": 7.901323288282788
+                "max": 7.901324596662215
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 2.6666250295913354,
-                "p95": 9.835668404010438,
+                "median": 2.679562142687719,
+                "p95": 9.835668935560461,
                 "max": 9.850483289046393
               }
             },
@@ -587,20 +655,24 @@
               "id": "notch-minus-z",
               "reference": {
                 "crossings": 732,
-                "jumpCrossings": 206,
+                "resolvedCrossings": 732,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 13.965757319268766
+                "maxResidualAtCrossingMm": 0.0009955019260564357,
+                "maxEndpointJumpMm": 14.0492775341226,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 85,
-                "median": 0.7916337179966023,
+                "median": 0.8302469837364392,
                 "p95": 6.75266394970773,
-                "max": 7.901323288282794
+                "max": 7.901324596662215
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 2.666625029591336,
-                "p95": 9.835668404010466,
+                "median": 2.6795621426877196,
+                "p95": 9.83566893556049,
                 "max": 9.850483289046394
               }
             }
@@ -649,41 +721,49 @@
               "id": "seam",
               "reference": {
                 "crossings": 1608,
-                "jumpCrossings": 0,
+                "resolvedCrossings": 1608,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19955654101995568,
-                "maxResidualAtCrossingMm": 0.0002384952889438743
+                "maxResidualAtCrossingMm": 0.0009909589477583973,
+                "maxEndpointJumpMm": 0.2803371113448758,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 239,
                 "median": 0.04326507978608724,
                 "p95": 0.3562596963717978,
-                "max": 0.5721899937911054
+                "max": 0.5721882740534
               },
               "refToTestedMm": {
                 "samples": 2488,
                 "median": 0.043508751963303595,
                 "p95": 0.30264329424737096,
-                "max": 0.5592601134898546
+                "max": 0.5592571042458118
               }
             },
             {
               "id": "notch-plus-z",
               "reference": {
                 "crossings": 732,
-                "jumpCrossings": 206,
+                "resolvedCrossings": 732,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 13.965757319268766
+                "maxResidualAtCrossingMm": 0.0009955019260564357,
+                "maxEndpointJumpMm": 14.0492775341226,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 85,
                 "median": 0.8321937613448274,
                 "p95": 6.641354692036081,
-                "max": 7.901340212857095
+                "max": 7.901341518056255
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 2.663316274800026,
-                "p95": 9.835704499857291,
+                "median": 2.677026853581268,
+                "p95": 9.835705031407441,
                 "max": 9.85051413054412
               }
             },
@@ -691,20 +771,24 @@
               "id": "notch-minus-z",
               "reference": {
                 "crossings": 732,
-                "jumpCrossings": 206,
+                "resolvedCrossings": 732,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 13.965757319268766
+                "maxResidualAtCrossingMm": 0.0009955019260564357,
+                "maxEndpointJumpMm": 14.0492775341226,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 85,
                 "median": 0.8321937613448274,
                 "p95": 6.64135469203607,
-                "max": 7.901340212857126
+                "max": 7.901341518056257
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 2.6633162748000263,
-                "p95": 9.83570449985732,
+                "median": 2.677026853581268,
+                "p95": 9.83570503140747,
                 "max": 9.85051413054412
               }
             }
@@ -753,63 +837,75 @@
               "id": "seam",
               "reference": {
                 "crossings": 1608,
-                "jumpCrossings": 0,
+                "resolvedCrossings": 1608,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19955654101995568,
-                "maxResidualAtCrossingMm": 0.0002384952889438743
+                "maxResidualAtCrossingMm": 0.0009909589477583973,
+                "maxEndpointJumpMm": 0.2803371113448758,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 240,
-                "median": 0.046948857080176355,
+                "median": 0.04694826649332502,
                 "p95": 0.338551613470819,
-                "max": 0.5735698055569172
+                "max": 0.5735675640867046
               },
               "refToTestedMm": {
                 "samples": 2488,
-                "median": 0.047148975062174074,
-                "p95": 0.2969944261502996,
-                "max": 0.5675925766268458
+                "median": 0.04714565248781482,
+                "p95": 0.2969844006002647,
+                "max": 0.5675897660212671
               }
             },
             {
               "id": "notch-plus-z",
               "reference": {
                 "crossings": 732,
-                "jumpCrossings": 206,
+                "resolvedCrossings": 732,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 13.965757319268766
+                "maxResidualAtCrossingMm": 0.0009955019260564357,
+                "maxEndpointJumpMm": 14.0492775341226,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 98,
-                "median": 2.8734947058343248,
-                "p95": 8.874104748659391,
+                "median": 2.9179707443026706,
+                "p95": 8.874104676262965,
                 "max": 10.580132542904973
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 5.344203413299409,
+                "median": 5.3211536151155014,
                 "p95": 11.130920445020982,
-                "max": 12.17538503537382
+                "max": 12.175384214566389
               }
             },
             {
               "id": "notch-minus-z",
               "reference": {
                 "crossings": 732,
-                "jumpCrossings": 206,
+                "resolvedCrossings": 732,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 13.965757319268766
+                "maxResidualAtCrossingMm": 0.0009955019260564357,
+                "maxEndpointJumpMm": 14.0492775341226,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 98,
-                "median": 2.8734947058343248,
-                "p95": 8.874104748659404,
+                "median": 2.9179707443026706,
+                "p95": 8.87410467626297,
                 "max": 10.580132542905002
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 5.344203413299409,
+                "median": 5.3211536151155014,
                 "p95": 11.130920445020985,
-                "max": 12.175385035373848
+                "max": 12.175384214566389
               }
             }
           ]
@@ -861,41 +957,49 @@
             "id": "seam",
             "reference": {
               "crossings": 1608,
-              "jumpCrossings": 0,
+              "resolvedCrossings": 1608,
+              "unresolvedCrossings": 0,
               "resolutionMm": 0.19955654101995568,
-              "maxResidualAtCrossingMm": 0.0002384952889438743
+              "maxResidualAtCrossingMm": 0.0009909589477583973,
+              "maxEndpointJumpMm": 0.2803371113448758,
+              "spatialTolMm": 0.001,
+              "maxBracketWidthMm": 0
             },
             "testedToRefMm": {
               "samples": 478,
-              "median": 0.012417382625040583,
-              "p95": 0.09592101019321302,
-              "max": 0.15579048636531984
+              "median": 0.012415962860657444,
+              "p95": 0.09592061095663364,
+              "max": 0.15578771315990717
             },
             "refToTestedMm": {
               "samples": 2488,
               "median": 0.012419495118329148,
               "p95": 0.08720109310159606,
-              "max": 0.14945055514084946
+              "max": 0.14944527863126109
             }
           },
           {
             "id": "notch-plus-z",
             "reference": {
               "crossings": 732,
-              "jumpCrossings": 206,
+              "resolvedCrossings": 732,
+              "unresolvedCrossings": 0,
               "resolutionMm": 0.19950124688279305,
-              "maxResidualAtCrossingMm": 13.965757319268766
+              "maxResidualAtCrossingMm": 0.0009955019260564357,
+              "maxEndpointJumpMm": 14.0492775341226,
+              "spatialTolMm": 0.001,
+              "maxBracketWidthMm": 0
             },
             "testedToRefMm": {
               "samples": 247,
-              "median": 0.2735101055699581,
+              "median": 0.27528570560842947,
               "p95": 3.937832686888041,
-              "max": 5.689949470671606
+              "max": 5.689949245480405
             },
             "refToTestedMm": {
               "samples": 1290,
-              "median": 0.3692822106935749,
-              "p95": 6.7643506054102875,
+              "median": 0.3883766372193142,
+              "p95": 6.784941999813051,
               "max": 8.700945640500574
             }
           },
@@ -903,20 +1007,24 @@
             "id": "notch-minus-z",
             "reference": {
               "crossings": 732,
-              "jumpCrossings": 206,
+              "resolvedCrossings": 732,
+              "unresolvedCrossings": 0,
               "resolutionMm": 0.19950124688279305,
-              "maxResidualAtCrossingMm": 13.965757319268766
+              "maxResidualAtCrossingMm": 0.0009955019260564357,
+              "maxEndpointJumpMm": 14.0492775341226,
+              "spatialTolMm": 0.001,
+              "maxBracketWidthMm": 0
             },
             "testedToRefMm": {
               "samples": 247,
-              "median": 0.27351010556996147,
+              "median": 0.27528570560842947,
               "p95": 3.937832686888041,
-              "max": 5.689949470671606
+              "max": 5.689949245480405
             },
             "refToTestedMm": {
               "samples": 1290,
-              "median": 0.36928221069360345,
-              "p95": 6.7643506054102875,
+              "median": 0.3883766372193142,
+              "p95": 6.784941999813036,
               "max": 8.700945640500588
             }
           }
@@ -965,41 +1073,49 @@
             "id": "seam",
             "reference": {
               "crossings": 1608,
-              "jumpCrossings": 0,
+              "resolvedCrossings": 1608,
+              "unresolvedCrossings": 0,
               "resolutionMm": 0.19955654101995568,
-              "maxResidualAtCrossingMm": 0.0002384952889438743
+              "maxResidualAtCrossingMm": 0.0009909589477583973,
+              "maxEndpointJumpMm": 0.2803371113448758,
+              "spatialTolMm": 0.001,
+              "maxBracketWidthMm": 0
             },
             "testedToRefMm": {
               "samples": 477,
-              "median": 0.012199722401689329,
+              "median": 0.012199441595423773,
               "p95": 0.09577203410997151,
-              "max": 0.15545011950212842
+              "max": 0.1554470236827797
             },
             "refToTestedMm": {
               "samples": 2488,
-              "median": 0.012304609671522188,
+              "median": 0.012303854068008678,
               "p95": 0.08702727272858317,
-              "max": 0.14984284116120916
+              "max": 0.1498375648367921
             }
           },
           {
             "id": "notch-plus-z",
             "reference": {
               "crossings": 732,
-              "jumpCrossings": 206,
+              "resolvedCrossings": 732,
+              "unresolvedCrossings": 0,
               "resolutionMm": 0.19950124688279305,
-              "maxResidualAtCrossingMm": 13.965757319268766
+              "maxResidualAtCrossingMm": 0.0009955019260564357,
+              "maxEndpointJumpMm": 14.0492775341226,
+              "spatialTolMm": 0.001,
+              "maxBracketWidthMm": 0
             },
             "testedToRefMm": {
               "samples": 258,
-              "median": 0.0941967764716359,
-              "p95": 1.8732466379097221,
-              "max": 2.353797386522444
+              "median": 0.0416871156681776,
+              "p95": 1.873246421888274,
+              "max": 2.3599282960461188
             },
             "refToTestedMm": {
               "samples": 1290,
-              "median": 0.09617950146270146,
-              "p95": 2.318544420562011,
+              "median": 0.04435968449788771,
+              "p95": 2.3225065322457055,
               "max": 2.91405400083518
             }
           },
@@ -1007,20 +1123,24 @@
             "id": "notch-minus-z",
             "reference": {
               "crossings": 732,
-              "jumpCrossings": 206,
+              "resolvedCrossings": 732,
+              "unresolvedCrossings": 0,
               "resolutionMm": 0.19950124688279305,
-              "maxResidualAtCrossingMm": 13.965757319268766
+              "maxResidualAtCrossingMm": 0.0009955019260564357,
+              "maxEndpointJumpMm": 14.0492775341226,
+              "spatialTolMm": 0.001,
+              "maxBracketWidthMm": 0
             },
             "testedToRefMm": {
               "samples": 258,
-              "median": 0.0941967764716359,
-              "p95": 1.8732466379097221,
-              "max": 2.353797386522444
+              "median": 0.0416871156681776,
+              "p95": 1.873246421888274,
+              "max": 2.3599282960461223
             },
             "refToTestedMm": {
               "samples": 1290,
-              "median": 0.09617950146270146,
-              "p95": 2.318544420562011,
+              "median": 0.04435968449788771,
+              "p95": 2.3225065322456917,
               "max": 2.914054000835193
             }
           }
@@ -1062,20 +1182,24 @@
               "id": "seam",
               "reference": {
                 "crossings": 1608,
-                "jumpCrossings": 0,
+                "resolvedCrossings": 1608,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19955654101995568,
-                "maxResidualAtCrossingMm": 0.0002384952889438743
+                "maxResidualAtCrossingMm": 0.0009909589477583973,
+                "maxEndpointJumpMm": 0.2803371113448758,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 441,
-                "median": 0.040007036936631046,
+                "median": 0.04000706379094887,
                 "p95": 0.14193991106447057,
-                "max": 0.18214478596301228
+                "max": 0.18214514099631
               },
               "refToTestedMm": {
                 "samples": 2488,
                 "median": 0.041899090275658184,
-                "p95": 0.14392507795160592,
+                "p95": 0.14392599824251065,
                 "max": 0.18216302114146352
               }
             },
@@ -1083,42 +1207,50 @@
               "id": "notch-plus-z",
               "reference": {
                 "crossings": 732,
-                "jumpCrossings": 206,
+                "resolvedCrossings": 732,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 13.965757319268766
+                "maxResidualAtCrossingMm": 0.0009955019260564357,
+                "maxEndpointJumpMm": 14.0492775341226,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 220,
-                "median": 0.7023953283240661,
-                "p95": 3.533723589271531,
-                "max": 4.478653889506784
+                "median": 0.6517897935584012,
+                "p95": 3.5921322629540176,
+                "max": 4.4786538539529
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 1.3661034480103975,
-                "p95": 5.720766314994398,
-                "max": 7.352733289827838
+                "median": 1.3712421154210923,
+                "p95": 5.791542938273231,
+                "max": 7.407713539583541
               }
             },
             {
               "id": "notch-minus-z",
               "reference": {
                 "crossings": 732,
-                "jumpCrossings": 206,
+                "resolvedCrossings": 732,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 13.965757319268766
+                "maxResidualAtCrossingMm": 0.0009955019260564357,
+                "maxEndpointJumpMm": 14.0492775341226,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 222,
-                "median": 0.7087250513565309,
-                "p95": 3.462594957012038,
-                "max": 4.478654060166937
+                "median": 0.7023949234088446,
+                "p95": 3.529782470066991,
+                "max": 4.478654024613696
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 1.3661034480103975,
-                "p95": 5.720766316338029,
-                "max": 7.352733288914626
+                "median": 1.371242116764724,
+                "p95": 5.791542939616864,
+                "max": 7.407713538670313
               }
             }
           ]
@@ -1158,19 +1290,23 @@
               "id": "seam",
               "reference": {
                 "crossings": 1608,
-                "jumpCrossings": 0,
+                "resolvedCrossings": 1608,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19955654101995568,
-                "maxResidualAtCrossingMm": 0.0002384952889438743
+                "maxResidualAtCrossingMm": 0.0009909589477583973,
+                "maxEndpointJumpMm": 0.2803371113448758,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 481,
-                "median": 0.1571248540566961,
+                "median": 0.15712709284383708,
                 "p95": 0.35815446522855926,
-                "max": 0.41854947090522016
+                "max": 0.4185498604859107
               },
               "refToTestedMm": {
                 "samples": 2488,
-                "median": 0.15723899982173667,
+                "median": 0.1572393402665653,
                 "p95": 0.3592430852344723,
                 "max": 0.41867246619867377
               }
@@ -1179,20 +1315,24 @@
               "id": "notch-plus-z",
               "reference": {
                 "crossings": 732,
-                "jumpCrossings": 206,
+                "resolvedCrossings": 732,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 13.965757319268766
+                "maxResidualAtCrossingMm": 0.0009955019260564357,
+                "maxEndpointJumpMm": 14.0492775341226,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 222,
-                "median": 0.46650120624691094,
-                "p95": 4.166858931497948,
-                "max": 4.584306305539993
+                "median": 0.49444842718665216,
+                "p95": 4.103926001131765,
+                "max": 4.5223785960939855
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 0.9754616516848212,
-                "p95": 5.288793619670015,
+                "median": 0.9831553915009802,
+                "p95": 5.281192818340812,
                 "max": 6.883125830567545
               }
             },
@@ -1200,20 +1340,24 @@
               "id": "notch-minus-z",
               "reference": {
                 "crossings": 732,
-                "jumpCrossings": 206,
+                "resolvedCrossings": 732,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 13.965757319268766
+                "maxResidualAtCrossingMm": 0.0009955019260564357,
+                "maxEndpointJumpMm": 14.0492775341226,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 223,
-                "median": 0.44663961249187745,
-                "p95": 4.161521520129429,
-                "max": 4.584306305539993
+                "median": 0.44663843778962414,
+                "p95": 4.098685016650848,
+                "max": 4.5223785960939855
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 0.9314460753866887,
-                "p95": 5.288793619670015,
+                "median": 0.9422197639095015,
+                "p95": 5.281192818340812,
                 "max": 6.883125830567545
               }
             }
@@ -1264,40 +1408,48 @@
               "id": "seam",
               "reference": {
                 "crossings": 1608,
-                "jumpCrossings": 0,
+                "resolvedCrossings": 1608,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19955654101995568,
-                "maxResidualAtCrossingMm": 0.0002384952889438743
+                "maxResidualAtCrossingMm": 0.0009909589477583973,
+                "maxEndpointJumpMm": 0.2803371113448758,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 477,
-                "median": 0.012200412164324633,
+                "median": 0.012200131097899128,
                 "p95": 0.09576178730232361,
-                "max": 0.1554324826191559
+                "max": 0.15542937402417265
               },
               "refToTestedMm": {
                 "samples": 2488,
-                "median": 0.012300836397407562,
+                "median": 0.012300080794170479,
                 "p95": 0.08706631703268992,
-                "max": 0.1498542968839989
+                "max": 0.14984902056577756
               }
             },
             {
               "id": "notch-plus-z",
               "reference": {
                 "crossings": 732,
-                "jumpCrossings": 206,
+                "resolvedCrossings": 732,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 13.965757319268766
+                "maxResidualAtCrossingMm": 0.0009955019260564357,
+                "maxEndpointJumpMm": 14.0492775341226,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 264,
-                "median": 0.0706706743144576,
-                "p95": 1.7810276486267413,
-                "max": 2.2112537484400216
+                "median": 0.03660352169720157,
+                "p95": 1.7810251361647667,
+                "max": 2.211249651321146
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 0.07301200316618317,
+                "median": 0.03853558082600233,
                 "p95": 2.0325299204423275,
                 "max": 2.461187774315783
               }
@@ -1306,19 +1458,23 @@
               "id": "notch-minus-z",
               "reference": {
                 "crossings": 732,
-                "jumpCrossings": 206,
+                "resolvedCrossings": 732,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 13.965757319268766
+                "maxResidualAtCrossingMm": 0.0009955019260564357,
+                "maxEndpointJumpMm": 14.0492775341226,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 264,
-                "median": 0.0706706743144576,
-                "p95": 1.7810276486267413,
-                "max": 2.2112537484400123
+                "median": 0.03660352169720157,
+                "p95": 1.7810251361647667,
+                "max": 2.211249651321145
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 0.07301200316618317,
+                "median": 0.038535580826002086,
                 "p95": 2.0325299204423413,
                 "max": 2.461187774315797
               }
@@ -1368,41 +1524,49 @@
               "id": "seam",
               "reference": {
                 "crossings": 1608,
-                "jumpCrossings": 0,
+                "resolvedCrossings": 1608,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19955654101995568,
-                "maxResidualAtCrossingMm": 0.0002384952889438743
+                "maxResidualAtCrossingMm": 0.0009909589477583973,
+                "maxEndpointJumpMm": 0.2803371113448758,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 477,
-                "median": 0.012199722401689329,
+                "median": 0.012199441595423773,
                 "p95": 0.09577203410997151,
-                "max": 0.15545011950212842
+                "max": 0.1554470236827797
               },
               "refToTestedMm": {
                 "samples": 2488,
-                "median": 0.012304609671522188,
+                "median": 0.012303854068008678,
                 "p95": 0.08702727272858317,
-                "max": 0.14984284116120916
+                "max": 0.1498375648367921
               }
             },
             {
               "id": "notch-plus-z",
               "reference": {
                 "crossings": 732,
-                "jumpCrossings": 206,
+                "resolvedCrossings": 732,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 13.965757319268766
+                "maxResidualAtCrossingMm": 0.0009955019260564357,
+                "maxEndpointJumpMm": 14.0492775341226,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 258,
-                "median": 0.0941967764716359,
-                "p95": 1.8732466379097221,
-                "max": 2.353797386522444
+                "median": 0.0416871156681776,
+                "p95": 1.873246421888274,
+                "max": 2.3599282960461188
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 0.09617950146270146,
-                "p95": 2.318544420562011,
+                "median": 0.04435968449788771,
+                "p95": 2.3225065322457055,
                 "max": 2.91405400083518
               }
             },
@@ -1410,20 +1574,24 @@
               "id": "notch-minus-z",
               "reference": {
                 "crossings": 732,
-                "jumpCrossings": 206,
+                "resolvedCrossings": 732,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 13.965757319268766
+                "maxResidualAtCrossingMm": 0.0009955019260564357,
+                "maxEndpointJumpMm": 14.0492775341226,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 258,
-                "median": 0.0941967764716359,
-                "p95": 1.8732466379097221,
-                "max": 2.353797386522444
+                "median": 0.0416871156681776,
+                "p95": 1.873246421888274,
+                "max": 2.3599282960461223
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 0.09617950146270146,
-                "p95": 2.318544420562011,
+                "median": 0.04435968449788771,
+                "p95": 2.3225065322456917,
                 "max": 2.914054000835193
               }
             }
@@ -1472,63 +1640,75 @@
               "id": "seam",
               "reference": {
                 "crossings": 1608,
-                "jumpCrossings": 0,
+                "resolvedCrossings": 1608,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19955654101995568,
-                "maxResidualAtCrossingMm": 0.0002384952889438743
+                "maxResidualAtCrossingMm": 0.0009909589477583973,
+                "maxEndpointJumpMm": 0.2803371113448758,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 478,
-                "median": 0.012417382625040583,
-                "p95": 0.09592101019321302,
-                "max": 0.15579048636531984
+                "median": 0.012415962860657444,
+                "p95": 0.09592061095663364,
+                "max": 0.15578771315990717
               },
               "refToTestedMm": {
                 "samples": 2488,
                 "median": 0.012419495118329148,
                 "p95": 0.08720109310159606,
-                "max": 0.14945055514084946
+                "max": 0.14944527863126109
               }
             },
             {
               "id": "notch-plus-z",
               "reference": {
                 "crossings": 732,
-                "jumpCrossings": 206,
+                "resolvedCrossings": 732,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 13.965757319268766
+                "maxResidualAtCrossingMm": 0.0009955019260564357,
+                "maxEndpointJumpMm": 14.0492775341226,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 253,
-                "median": 0.2768946607784745,
-                "p95": 4.2068942228945225,
-                "max": 5.788754276010561
+                "median": 0.28842628954302457,
+                "p95": 4.2510489360006805,
+                "max": 5.78875399485898
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 0.3949480949367669,
-                "p95": 6.9944729730628215,
-                "max": 8.885108256490454
+                "median": 0.40821111893784906,
+                "p95": 7.008788954733517,
+                "max": 8.900240630712322
               }
             },
             {
               "id": "notch-minus-z",
               "reference": {
                 "crossings": 732,
-                "jumpCrossings": 206,
+                "resolvedCrossings": 732,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 13.965757319268766
+                "maxResidualAtCrossingMm": 0.0009955019260564357,
+                "maxEndpointJumpMm": 14.0492775341226,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 253,
-                "median": 0.2768946607784783,
-                "p95": 4.2068942228945225,
-                "max": 5.788754276010561
+                "median": 0.28842628954302546,
+                "p95": 4.2510489360006805,
+                "max": 5.78875399485898
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 0.3949480949367669,
-                "p95": 6.9944729730628215,
-                "max": 8.885108256490467
+                "median": 0.40821111893784906,
+                "p95": 7.008788954733517,
+                "max": 8.900240630712322
               }
             }
           ]
@@ -1580,19 +1760,23 @@
             "id": "seam",
             "reference": {
               "crossings": 1608,
-              "jumpCrossings": 0,
+              "resolvedCrossings": 1608,
+              "unresolvedCrossings": 0,
               "resolutionMm": 0.19955654101995568,
-              "maxResidualAtCrossingMm": 0.0002384952889438743
+              "maxResidualAtCrossingMm": 0.0009909589477583973,
+              "maxEndpointJumpMm": 0.2803371113448758,
+              "spatialTolMm": 0.001,
+              "maxBracketWidthMm": 0
             },
             "testedToRefMm": {
               "samples": 962,
               "median": 0.002243486292713323,
-              "p95": 0.022708187582372277,
+              "p95": 0.022706132435981054,
               "max": 0.03965433650637335
             },
             "refToTestedMm": {
               "samples": 2488,
-              "median": 0.002217019374617781,
+              "median": 0.0022225423730908005,
               "p95": 0.021462573927358074,
               "max": 0.03902180069256318
             }
@@ -1601,42 +1785,50 @@
             "id": "notch-plus-z",
             "reference": {
               "crossings": 732,
-              "jumpCrossings": 206,
+              "resolvedCrossings": 732,
+              "unresolvedCrossings": 0,
               "resolutionMm": 0.19950124688279305,
-              "maxResidualAtCrossingMm": 13.965757319268766
+              "maxResidualAtCrossingMm": 0.0009955019260564357,
+              "maxEndpointJumpMm": 14.0492775341226,
+              "spatialTolMm": 0.001,
+              "maxBracketWidthMm": 0
             },
             "testedToRefMm": {
               "samples": 533,
-              "median": 0.021798011669487957,
-              "p95": 0.5059039363770452,
-              "max": 1.0384696802660567
+              "median": 0.021823478624161882,
+              "p95": 0.5848465304016766,
+              "max": 1.0726217741939459
             },
             "refToTestedMm": {
               "samples": 1290,
-              "median": 0.021671832817714433,
-              "p95": 0.5737241801430634,
-              "max": 1.261394503985457
+              "median": 0.021670250089621132,
+              "p95": 0.6575760625482171,
+              "max": 1.3915798535854818
             }
           },
           {
             "id": "notch-minus-z",
             "reference": {
               "crossings": 732,
-              "jumpCrossings": 206,
+              "resolvedCrossings": 732,
+              "unresolvedCrossings": 0,
               "resolutionMm": 0.19950124688279305,
-              "maxResidualAtCrossingMm": 13.965757319268766
+              "maxResidualAtCrossingMm": 0.0009955019260564357,
+              "maxEndpointJumpMm": 14.0492775341226,
+              "spatialTolMm": 0.001,
+              "maxBracketWidthMm": 0
             },
             "testedToRefMm": {
               "samples": 533,
-              "median": 0.021798011669487957,
-              "p95": 0.5059039363770452,
-              "max": 1.0384696802660567
+              "median": 0.021823478624161882,
+              "p95": 0.5848465304016766,
+              "max": 1.0726217741939459
             },
             "refToTestedMm": {
               "samples": 1290,
-              "median": 0.021671832817728737,
-              "p95": 0.5737241801430634,
-              "max": 1.261394503985457
+              "median": 0.021670250089635437,
+              "p95": 0.6575760625482171,
+              "max": 1.3915798535854818
             }
           }
         ]
@@ -1684,20 +1876,24 @@
             "id": "seam",
             "reference": {
               "crossings": 1608,
-              "jumpCrossings": 0,
+              "resolvedCrossings": 1608,
+              "unresolvedCrossings": 0,
               "resolutionMm": 0.19955654101995568,
-              "maxResidualAtCrossingMm": 0.0002384952889438743
+              "maxResidualAtCrossingMm": 0.0009909589477583973,
+              "maxEndpointJumpMm": 0.2803371113448758,
+              "spatialTolMm": 0.001,
+              "maxBracketWidthMm": 0
             },
             "testedToRefMm": {
               "samples": 963,
               "median": 0.002247625246010707,
-              "p95": 0.02276075610064468,
+              "p95": 0.022760521648938985,
               "max": 0.039627089439184866
             },
             "refToTestedMm": {
               "samples": 2488,
-              "median": 0.002215365332606604,
-              "p95": 0.02161014143214415,
+              "median": 0.002230544630343403,
+              "p95": 0.021604571901363688,
               "max": 0.03903071228812451
             }
           },
@@ -1705,42 +1901,50 @@
             "id": "notch-plus-z",
             "reference": {
               "crossings": 732,
-              "jumpCrossings": 206,
+              "resolvedCrossings": 732,
+              "unresolvedCrossings": 0,
               "resolutionMm": 0.19950124688279305,
-              "maxResidualAtCrossingMm": 13.965757319268766
+              "maxResidualAtCrossingMm": 0.0009955019260564357,
+              "maxEndpointJumpMm": 14.0492775341226,
+              "spatialTolMm": 0.001,
+              "maxBracketWidthMm": 0
             },
             "testedToRefMm": {
               "samples": 545,
-              "median": 0.01774378069272162,
-              "p95": 0.40246502940834505,
-              "max": 0.6410975226911708
+              "median": 0.018537055082054263,
+              "p95": 0.49085490025657996,
+              "max": 0.742951097541928
             },
             "refToTestedMm": {
               "samples": 1290,
-              "median": 0.01671956542942406,
-              "p95": 0.40866693518983915,
-              "max": 0.6881715769596556
+              "median": 0.01724289671336474,
+              "p95": 0.5003019759240344,
+              "max": 0.7934739577711187
             }
           },
           {
             "id": "notch-minus-z",
             "reference": {
               "crossings": 732,
-              "jumpCrossings": 206,
+              "resolvedCrossings": 732,
+              "unresolvedCrossings": 0,
               "resolutionMm": 0.19950124688279305,
-              "maxResidualAtCrossingMm": 13.965757319268766
+              "maxResidualAtCrossingMm": 0.0009955019260564357,
+              "maxEndpointJumpMm": 14.0492775341226,
+              "spatialTolMm": 0.001,
+              "maxBracketWidthMm": 0
             },
             "testedToRefMm": {
               "samples": 545,
-              "median": 0.01774378069272162,
-              "p95": 0.40246502940834505,
-              "max": 0.6410975226911708
+              "median": 0.018537055082054263,
+              "p95": 0.49085490025657996,
+              "max": 0.742951097541928
             },
             "refToTestedMm": {
               "samples": 1290,
-              "median": 0.016719565429451574,
-              "p95": 0.40866693518983915,
-              "max": 0.6881715769596556
+              "median": 0.017242896713379044,
+              "p95": 0.5003019759240344,
+              "max": 0.7934739577711187
             }
           }
         ]
@@ -1781,20 +1985,24 @@
               "id": "seam",
               "reference": {
                 "crossings": 1608,
-                "jumpCrossings": 0,
+                "resolvedCrossings": 1608,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19955654101995568,
-                "maxResidualAtCrossingMm": 0.0002384952889438743
+                "maxResidualAtCrossingMm": 0.0009909589477583973,
+                "maxEndpointJumpMm": 0.2803371113448758,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 885,
-                "median": 0.009825750275037085,
-                "p95": 0.0355471317622417,
+                "median": 0.009804583901120342,
+                "p95": 0.03554835443071907,
                 "max": 0.04771625652299593
               },
               "refToTestedMm": {
                 "samples": 2488,
                 "median": 0.010201265962001547,
-                "p95": 0.03585460851113029,
+                "p95": 0.035859679723977,
                 "max": 0.0477921513865852
               }
             },
@@ -1802,42 +2010,50 @@
               "id": "notch-plus-z",
               "reference": {
                 "crossings": 732,
-                "jumpCrossings": 206,
+                "resolvedCrossings": 732,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 13.965757319268766
+                "maxResidualAtCrossingMm": 0.0009955019260564357,
+                "maxEndpointJumpMm": 14.0492775341226,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 498,
-                "median": 0.03791841952123002,
-                "p95": 2.141155734982577,
-                "max": 2.7169907404306555
+                "median": 0.0367321863301698,
+                "p95": 2.2116785507708228,
+                "max": 2.805381881982927
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 0.10744825325498693,
-                "p95": 2.923253728369164,
-                "max": 3.973195333870814
+                "median": 0.10678893598936529,
+                "p95": 2.9434750021934057,
+                "max": 4.075282402037939
               }
             },
             {
               "id": "notch-minus-z",
               "reference": {
                 "crossings": 732,
-                "jumpCrossings": 206,
+                "resolvedCrossings": 732,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 13.965757319268766
+                "maxResidualAtCrossingMm": 0.0009955019260564357,
+                "maxEndpointJumpMm": 14.0492775341226,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 500,
-                "median": 0.038664645588274184,
-                "p95": 2.1411556190747523,
-                "max": 2.7169906236711467
+                "median": 0.038649120236803176,
+                "p95": 2.211678550770823,
+                "max": 2.8053817620998442
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 0.10744825325498758,
-                "p95": 2.923253745043403,
-                "max": 3.9731953505450632
+                "median": 0.10678893598933749,
+                "p95": 2.943475020149794,
+                "max": 4.075282418712187
               }
             }
           ]
@@ -1877,41 +2093,49 @@
               "id": "seam",
               "reference": {
                 "crossings": 1608,
-                "jumpCrossings": 0,
+                "resolvedCrossings": 1608,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19955654101995568,
-                "maxResidualAtCrossingMm": 0.0002384952889438743
+                "maxResidualAtCrossingMm": 0.0009909589477583973,
+                "maxEndpointJumpMm": 0.2803371113448758,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 965,
-                "median": 0.03826207379234549,
-                "p95": 0.08988185375815265,
-                "max": 0.10120728316414301
+                "median": 0.038262222216486695,
+                "p95": 0.08979386626659464,
+                "max": 0.10120815797865326
               },
               "refToTestedMm": {
                 "samples": 2488,
                 "median": 0.03808279569684353,
-                "p95": 0.08950704306282048,
-                "max": 0.10121367472944993
+                "p95": 0.0894813718500126,
+                "max": 0.10121860784660046
               }
             },
             {
               "id": "notch-plus-z",
               "reference": {
                 "crossings": 732,
-                "jumpCrossings": 206,
+                "resolvedCrossings": 732,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 13.965757319268766
+                "maxResidualAtCrossingMm": 0.0009955019260564357,
+                "maxEndpointJumpMm": 14.0492775341226,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 505,
-                "median": 0.11599617898165805,
-                "p95": 1.0712057563464679,
-                "max": 1.4136696034675085
+                "median": 0.18706353738648027,
+                "p95": 1.1179040611346853,
+                "max": 1.4099886162556248
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 0.21059036324454306,
-                "p95": 1.4051031968539769,
+                "median": 0.22500965620791138,
+                "p95": 1.414059697565902,
                 "max": 2.0219203359126876
               }
             },
@@ -1919,20 +2143,24 @@
               "id": "notch-minus-z",
               "reference": {
                 "crossings": 732,
-                "jumpCrossings": 206,
+                "resolvedCrossings": 732,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 13.965757319268766
+                "maxResidualAtCrossingMm": 0.0009955019260564357,
+                "maxEndpointJumpMm": 14.0492775341226,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 504,
-                "median": 0.1112515615413983,
-                "p95": 1.0562703204688113,
-                "max": 1.4136696034675085
+                "median": 0.18382283036516567,
+                "p95": 1.0651333803160317,
+                "max": 1.409988616255601
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 0.18456396660943383,
-                "p95": 1.37466064428078,
+                "median": 0.1988996342158586,
+                "p95": 1.3927656038573193,
                 "max": 2.0219203359126876
               }
             }
@@ -1983,20 +2211,24 @@
               "id": "seam",
               "reference": {
                 "crossings": 1608,
-                "jumpCrossings": 0,
+                "resolvedCrossings": 1608,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19955654101995568,
-                "maxResidualAtCrossingMm": 0.0002384952889438743
+                "maxResidualAtCrossingMm": 0.0009909589477583973,
+                "maxEndpointJumpMm": 0.2803371113448758,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 963,
                 "median": 0.002247625245980053,
-                "p95": 0.022760318430993545,
+                "p95": 0.022760083976837396,
                 "max": 0.039635200352961836
               },
               "refToTestedMm": {
                 "samples": 2488,
-                "median": 0.002215365332619101,
-                "p95": 0.021615774148162487,
+                "median": 0.002230631419426497,
+                "p95": 0.021610204635935847,
                 "max": 0.03904004428282116
               }
             },
@@ -2004,42 +2236,50 @@
               "id": "notch-plus-z",
               "reference": {
                 "crossings": 732,
-                "jumpCrossings": 206,
+                "resolvedCrossings": 732,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 13.965757319268766
+                "maxResidualAtCrossingMm": 0.0009955019260564357,
+                "maxEndpointJumpMm": 14.0492775341226,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 546,
-                "median": 0.01819834969023529,
-                "p95": 0.3750641112406764,
-                "max": 0.6455097451264756
+                "median": 0.019694206075423333,
+                "p95": 0.43334849396322106,
+                "max": 0.747405934958003
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 0.01632375165057721,
-                "p95": 0.38076163929000295,
-                "max": 0.6885977705621553
+                "median": 0.0167472733324715,
+                "p95": 0.4359337712574233,
+                "max": 0.7939436912266082
               }
             },
             {
               "id": "notch-minus-z",
               "reference": {
                 "crossings": 732,
-                "jumpCrossings": 206,
+                "resolvedCrossings": 732,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 13.965757319268766
+                "maxResidualAtCrossingMm": 0.0009955019260564357,
+                "maxEndpointJumpMm": 14.0492775341226,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 546,
-                "median": 0.01819834969023513,
-                "p95": 0.3750641112406764,
-                "max": 0.6455097451264756
+                "median": 0.019694206075423333,
+                "p95": 0.43334849396322106,
+                "max": 0.747405934958003
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 0.01632375165057721,
-                "p95": 0.38076163929000295,
-                "max": 0.6885977705621553
+                "median": 0.016747273332499465,
+                "p95": 0.4359337712574233,
+                "max": 0.7939436912266082
               }
             }
           ]
@@ -2087,20 +2327,24 @@
               "id": "seam",
               "reference": {
                 "crossings": 1608,
-                "jumpCrossings": 0,
+                "resolvedCrossings": 1608,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19955654101995568,
-                "maxResidualAtCrossingMm": 0.0002384952889438743
+                "maxResidualAtCrossingMm": 0.0009909589477583973,
+                "maxEndpointJumpMm": 0.2803371113448758,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 963,
                 "median": 0.002245557973388467,
-                "p95": 0.02276065288378811,
+                "p95": 0.02276041843913859,
                 "max": 0.03962898549866606
               },
               "refToTestedMm": {
                 "samples": 2488,
-                "median": 0.0022132473110176186,
-                "p95": 0.021619627921503688,
+                "median": 0.002226131232294553,
+                "p95": 0.021614058718036608,
                 "max": 0.03902819729408041
               }
             },
@@ -2108,42 +2352,50 @@
               "id": "notch-plus-z",
               "reference": {
                 "crossings": 732,
-                "jumpCrossings": 206,
+                "resolvedCrossings": 732,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 13.965757319268766
+                "maxResidualAtCrossingMm": 0.0009955019260564357,
+                "maxEndpointJumpMm": 14.0492775341226,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 542,
-                "median": 0.01896669359761705,
-                "p95": 0.42392803182288413,
-                "max": 0.7854587139985878
+                "median": 0.019959729062975985,
+                "p95": 0.5009854609645086,
+                "max": 0.8859276929026674
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 0.01791541435882998,
-                "p95": 0.45007499577742394,
-                "max": 0.814423463463813
+                "median": 0.01877121909362176,
+                "p95": 0.5112525695506149,
+                "max": 0.9199736273926965
               }
             },
             {
               "id": "notch-minus-z",
               "reference": {
                 "crossings": 732,
-                "jumpCrossings": 206,
+                "resolvedCrossings": 732,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 13.965757319268766
+                "maxResidualAtCrossingMm": 0.0009955019260564357,
+                "maxEndpointJumpMm": 14.0492775341226,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 542,
-                "median": 0.01896669359764536,
-                "p95": 0.42392803182288413,
-                "max": 0.7854587139985878
+                "median": 0.019959729063003417,
+                "p95": 0.5009854609645086,
+                "max": 0.8859276929026674
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 0.017915414358844285,
-                "p95": 0.45007499577742394,
-                "max": 0.814423463463813
+                "median": 0.01877121909364973,
+                "p95": 0.5112525695506149,
+                "max": 0.9199736273926965
               }
             }
           ]
@@ -2191,19 +2443,23 @@
               "id": "seam",
               "reference": {
                 "crossings": 1608,
-                "jumpCrossings": 0,
+                "resolvedCrossings": 1608,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19955654101995568,
-                "maxResidualAtCrossingMm": 0.0002384952889438743
+                "maxResidualAtCrossingMm": 0.0009909589477583973,
+                "maxEndpointJumpMm": 0.2803371113448758,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 962,
                 "median": 0.002243486292713323,
-                "p95": 0.022708187582372277,
+                "p95": 0.022706132435981054,
                 "max": 0.03965433650637335
               },
               "refToTestedMm": {
                 "samples": 2488,
-                "median": 0.002217019374617781,
+                "median": 0.0022225423730908005,
                 "p95": 0.021462573927358074,
                 "max": 0.03902180069256318
               }
@@ -2212,42 +2468,50 @@
               "id": "notch-plus-z",
               "reference": {
                 "crossings": 732,
-                "jumpCrossings": 206,
+                "resolvedCrossings": 732,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 13.965757319268766
+                "maxResidualAtCrossingMm": 0.0009955019260564357,
+                "maxEndpointJumpMm": 14.0492775341226,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 533,
-                "median": 0.019307329577361587,
-                "p95": 0.5059039363770452,
-                "max": 1.0384696802660567
+                "median": 0.01930709825906463,
+                "p95": 0.5848465304016766,
+                "max": 1.0726217741939459
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 0.018881636977604303,
-                "p95": 0.5737241801430634,
-                "max": 1.261394503985457
+                "median": 0.01883766500928028,
+                "p95": 0.6575760625482171,
+                "max": 1.3915798535854818
               }
             },
             {
               "id": "notch-minus-z",
               "reference": {
                 "crossings": 732,
-                "jumpCrossings": 206,
+                "resolvedCrossings": 732,
+                "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 13.965757319268766
+                "maxResidualAtCrossingMm": 0.0009955019260564357,
+                "maxEndpointJumpMm": 14.0492775341226,
+                "spatialTolMm": 0.001,
+                "maxBracketWidthMm": 0
               },
               "testedToRefMm": {
                 "samples": 533,
-                "median": 0.019307329577362618,
-                "p95": 0.5059039363770452,
-                "max": 1.0384696802660567
+                "median": 0.01930709825906566,
+                "p95": 0.5848465304016766,
+                "max": 1.0726217741939459
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 0.018881636977632395,
-                "p95": 0.5737241801430634,
-                "max": 1.261394503985457
+                "median": 0.01883766500928028,
+                "p95": 0.6575760625482171,
+                "max": 1.3915798535854818
               }
             }
           ]
@@ -2905,8 +3169,717 @@
           }
         ]
       }
+    ],
+    "candidateSensitivity": [
+      {
+        "cell": 0.02,
+        "rows": [
+          {
+            "phaseCells": [
+              0,
+              0,
+              0
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "dc": {
+              "dc-baseline": {
+                "surfaceMm": 0.2286624511292067,
+                "vertexMm": 0.2286624511292067,
+                "normalEpsilonMm": 10,
+                "clampToCell": true
+              },
+              "dc-eps-candidate": {
+                "surfaceMm": 0.2286624511292067,
+                "vertexMm": 0.2286624511292067,
+                "normalEpsilonMm": 2,
+                "clampToCell": true
+              }
+            }
+          },
+          {
+            "phaseCells": [
+              0.23,
+              0,
+              0
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "dc": {
+              "dc-baseline": {
+                "surfaceMm": 0.21258022404796706,
+                "vertexMm": 0.21258022404796703,
+                "normalEpsilonMm": 10,
+                "clampToCell": true
+              },
+              "dc-eps-candidate": {
+                "surfaceMm": 0.21258022404796706,
+                "vertexMm": 0.21258022404796703,
+                "normalEpsilonMm": 2,
+                "clampToCell": true
+              }
+            }
+          },
+          {
+            "phaseCells": [
+              0,
+              0.23,
+              0
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "dc": {
+              "dc-baseline": {
+                "surfaceMm": 0.21258022404796706,
+                "vertexMm": 0.21258022404796703,
+                "normalEpsilonMm": 10,
+                "clampToCell": true
+              },
+              "dc-eps-candidate": {
+                "surfaceMm": 0.21258022404796706,
+                "vertexMm": 0.21258022404796703,
+                "normalEpsilonMm": 2,
+                "clampToCell": true
+              }
+            }
+          },
+          {
+            "phaseCells": [
+              0,
+              0,
+              0.23
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "dc": {
+              "dc-baseline": {
+                "surfaceMm": 0.21258022404796706,
+                "vertexMm": 0.21258022404796703,
+                "normalEpsilonMm": 10,
+                "clampToCell": true
+              },
+              "dc-eps-candidate": {
+                "surfaceMm": 0.21258022404796706,
+                "vertexMm": 0.21258022404796703,
+                "normalEpsilonMm": 2,
+                "clampToCell": true
+              }
+            }
+          },
+          {
+            "phaseCells": [
+              0.5,
+              0.5,
+              0.5
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "dc": {
+              "dc-baseline": {
+                "surfaceMm": 0.11432606365094265,
+                "vertexMm": 0.11432606365094265,
+                "normalEpsilonMm": 10,
+                "clampToCell": true
+              },
+              "dc-eps-candidate": {
+                "surfaceMm": 0.11432606365094265,
+                "vertexMm": 0.11432606365094265,
+                "normalEpsilonMm": 2,
+                "clampToCell": true
+              }
+            }
+          },
+          {
+            "phaseCells": [
+              0.25,
+              0.25,
+              0.25
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "dc": {
+              "dc-baseline": {
+                "surfaceMm": 0.17149425739007468,
+                "vertexMm": 0.17149425739007468,
+                "normalEpsilonMm": 10,
+                "clampToCell": true
+              },
+              "dc-eps-candidate": {
+                "surfaceMm": 0.17149425739007468,
+                "vertexMm": 0.17149425739007468,
+                "normalEpsilonMm": 2,
+                "clampToCell": true
+              }
+            }
+          },
+          {
+            "phaseCells": [
+              0,
+              0,
+              0
+            ],
+            "rotationDeg": 20,
+            "corner": [
+              0.18627671439719629,
+              0.1137232856028037,
+              0.14095389311788625
+            ],
+            "dc": {
+              "dc-baseline": {
+                "surfaceMm": 3.084904333994303,
+                "vertexMm": 3.3655465795094224,
+                "normalEpsilonMm": 10,
+                "clampToCell": true
+              },
+              "dc-eps-candidate": {
+                "surfaceMm": 0.1321589115763513,
+                "vertexMm": 0.13215891157635126,
+                "normalEpsilonMm": 2,
+                "clampToCell": true
+              }
+            }
+          }
+        ]
+      },
+      {
+        "cell": 0.01,
+        "rows": [
+          {
+            "phaseCells": [
+              0,
+              0,
+              0
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "dc": {
+              "dc-baseline": {
+                "surfaceMm": 0.11432606365094265,
+                "vertexMm": 0.11432606365094265,
+                "normalEpsilonMm": 5,
+                "clampToCell": true
+              },
+              "dc-eps-candidate": {
+                "surfaceMm": 0.11432606365094265,
+                "vertexMm": 0.11432606365094265,
+                "normalEpsilonMm": 1,
+                "clampToCell": true
+              }
+            }
+          },
+          {
+            "phaseCells": [
+              0.23,
+              0,
+              0
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "dc": {
+              "dc-baseline": {
+                "surfaceMm": 0.10628498534725964,
+                "vertexMm": 0.10628498534725964,
+                "normalEpsilonMm": 5,
+                "clampToCell": true
+              },
+              "dc-eps-candidate": {
+                "surfaceMm": 0.10628498534725964,
+                "vertexMm": 0.10628498534725964,
+                "normalEpsilonMm": 1,
+                "clampToCell": true
+              }
+            }
+          },
+          {
+            "phaseCells": [
+              0,
+              0.23,
+              0
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "dc": {
+              "dc-baseline": {
+                "surfaceMm": 0.10628498534725964,
+                "vertexMm": 0.10628498534725964,
+                "normalEpsilonMm": 5,
+                "clampToCell": true
+              },
+              "dc-eps-candidate": {
+                "surfaceMm": 0.10628498534725964,
+                "vertexMm": 0.10628498534725964,
+                "normalEpsilonMm": 1,
+                "clampToCell": true
+              }
+            }
+          },
+          {
+            "phaseCells": [
+              0,
+              0,
+              0.23
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "dc": {
+              "dc-baseline": {
+                "surfaceMm": 0.10628498534725964,
+                "vertexMm": 0.10628498534725964,
+                "normalEpsilonMm": 5,
+                "clampToCell": true
+              },
+              "dc-eps-candidate": {
+                "surfaceMm": 0.10628498534725964,
+                "vertexMm": 0.10628498534725964,
+                "normalEpsilonMm": 1,
+                "clampToCell": true
+              }
+            }
+          },
+          {
+            "phaseCells": [
+              0.5,
+              0.5,
+              0.5
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "dc": {
+              "dc-baseline": {
+                "surfaceMm": 0.05715786991181061,
+                "vertexMm": 0.05715786991181061,
+                "normalEpsilonMm": 5,
+                "clampToCell": true
+              },
+              "dc-eps-candidate": {
+                "surfaceMm": 0.05715786991181061,
+                "vertexMm": 0.05715786991181061,
+                "normalEpsilonMm": 1,
+                "clampToCell": true
+              }
+            }
+          },
+          {
+            "phaseCells": [
+              0.25,
+              0.25,
+              0.25
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "dc": {
+              "dc-baseline": {
+                "surfaceMm": 0.0857548715655164,
+                "vertexMm": 0.08575487156551638,
+                "normalEpsilonMm": 5,
+                "clampToCell": true
+              },
+              "dc-eps-candidate": {
+                "surfaceMm": 0.0857548715655164,
+                "vertexMm": 0.08575487156551638,
+                "normalEpsilonMm": 1,
+                "clampToCell": true
+              }
+            }
+          },
+          {
+            "phaseCells": [
+              0,
+              0,
+              0
+            ],
+            "rotationDeg": 20,
+            "corner": [
+              0.18627671439719629,
+              0.1137232856028037,
+              0.14095389311788625
+            ],
+            "dc": {
+              "dc-baseline": {
+                "surfaceMm": 0.9295424551927922,
+                "vertexMm": 0.9295424551927923,
+                "normalEpsilonMm": 5,
+                "clampToCell": true
+              },
+              "dc-eps-candidate": {
+                "surfaceMm": 0.03426221389343136,
+                "vertexMm": 0.0736407807003611,
+                "normalEpsilonMm": 1,
+                "clampToCell": true
+              }
+            }
+          }
+        ]
+      },
+      {
+        "cell": 0.005,
+        "rows": [
+          {
+            "phaseCells": [
+              0,
+              0,
+              0
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "dc": {
+              "dc-baseline": {
+                "surfaceMm": 0.05715786991181061,
+                "vertexMm": 0.05715786991181061,
+                "normalEpsilonMm": 2.5,
+                "clampToCell": true
+              },
+              "dc-eps-candidate": {
+                "surfaceMm": 0.05715786991181061,
+                "vertexMm": 0.05715786991181061,
+                "normalEpsilonMm": 0.5,
+                "clampToCell": true
+              }
+            }
+          },
+          {
+            "phaseCells": [
+              0.23,
+              0,
+              0
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "dc": {
+              "dc-baseline": {
+                "surfaceMm": 0.053140928947469024,
+                "vertexMm": 0.053140928947469024,
+                "normalEpsilonMm": 2.5,
+                "clampToCell": true
+              },
+              "dc-eps-candidate": {
+                "surfaceMm": 0.053140928947469024,
+                "vertexMm": 0.053140928947469024,
+                "normalEpsilonMm": 0.5,
+                "clampToCell": true
+              }
+            }
+          },
+          {
+            "phaseCells": [
+              0,
+              0.23,
+              0
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "dc": {
+              "dc-baseline": {
+                "surfaceMm": 0.053140928947469024,
+                "vertexMm": 0.053140928947469024,
+                "normalEpsilonMm": 2.5,
+                "clampToCell": true
+              },
+              "dc-eps-candidate": {
+                "surfaceMm": 0.053140928947469024,
+                "vertexMm": 0.053140928947469024,
+                "normalEpsilonMm": 0.5,
+                "clampToCell": true
+              }
+            }
+          },
+          {
+            "phaseCells": [
+              0,
+              0,
+              0.23
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "dc": {
+              "dc-baseline": {
+                "surfaceMm": 0.053140928947469024,
+                "vertexMm": 0.053140928947469024,
+                "normalEpsilonMm": 2.5,
+                "clampToCell": true
+              },
+              "dc-eps-candidate": {
+                "surfaceMm": 0.053140928947469024,
+                "vertexMm": 0.053140928947469024,
+                "normalEpsilonMm": 0.5,
+                "clampToCell": true
+              }
+            }
+          },
+          {
+            "phaseCells": [
+              0.5,
+              0.5,
+              0.5
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "dc": {
+              "dc-baseline": {
+                "surfaceMm": 0.028586677826384358,
+                "vertexMm": 0.028586677826384355,
+                "normalEpsilonMm": 2.5,
+                "clampToCell": true
+              },
+              "dc-eps-candidate": {
+                "surfaceMm": 0.028586677826384358,
+                "vertexMm": 0.028586677826384355,
+                "normalEpsilonMm": 0.5,
+                "clampToCell": true
+              }
+            }
+          },
+          {
+            "phaseCells": [
+              0.25,
+              0.25,
+              0.25
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "dc": {
+              "dc-baseline": {
+                "surfaceMm": 0.042885178653237245,
+                "vertexMm": 0.04288517865323724,
+                "normalEpsilonMm": 2.5,
+                "clampToCell": true
+              },
+              "dc-eps-candidate": {
+                "surfaceMm": 0.042885178653237245,
+                "vertexMm": 0.04288517865323724,
+                "normalEpsilonMm": 0.5,
+                "clampToCell": true
+              }
+            }
+          },
+          {
+            "phaseCells": [
+              0,
+              0,
+              0
+            ],
+            "rotationDeg": 20,
+            "corner": [
+              0.18627671439719629,
+              0.1137232856028037,
+              0.14095389311788625
+            ],
+            "dc": {
+              "dc-baseline": {
+                "surfaceMm": 0.7105325078373406,
+                "vertexMm": 0.757465421713015,
+                "normalEpsilonMm": 2.5,
+                "clampToCell": true
+              },
+              "dc-eps-candidate": {
+                "surfaceMm": 0.06298470291201179,
+                "vertexMm": 0.06455788724376582,
+                "normalEpsilonMm": 0.5,
+                "clampToCell": true
+              }
+            }
+          }
+        ]
+      }
     ]
   },
+  "referenceConvergence": [
+    {
+      "id": "seam",
+      "coarseResolutionMm": 0.19955654101995568,
+      "fineResolutionMm": 0.09988901220865706,
+      "coarseCrossings": 1608,
+      "fineCrossings": 3214,
+      "baseline": {
+        "coarse": {
+          "t2rP95Mm": 0.09592061095663364,
+          "t2rMaxMm": 0.15578771315990717,
+          "r2tP95Mm": 0.08720109310159606,
+          "r2tMaxMm": 0.14944527863126109
+        },
+        "fine": {
+          "t2rP95Mm": 0.0959104339646057,
+          "t2rMaxMm": 0.15571815922253127,
+          "r2tP95Mm": 0.08936340159463986,
+          "r2tMaxMm": 0.15534681999169123
+        }
+      },
+      "candidate": {
+        "coarse": {
+          "t2rP95Mm": 0.09577203410997151,
+          "t2rMaxMm": 0.1554470236827797,
+          "r2tP95Mm": 0.08702727272858317,
+          "r2tMaxMm": 0.1498375648367921
+        },
+        "fine": {
+          "t2rP95Mm": 0.09575689486957488,
+          "t2rMaxMm": 0.15538364336739469,
+          "r2tP95Mm": 0.08870409265895933,
+          "r2tMaxMm": 0.1542683096193188
+        }
+      },
+      "candidateOverBaseline": {
+        "coarseT2rP95": 0.9984510435746776,
+        "fineT2rP95": 0.9983991408579438,
+        "coarseR2tP95": 0.9980066720859752,
+        "fineR2tP95": 0.9926221593637269
+      }
+    },
+    {
+      "id": "notch-plus-z",
+      "coarseResolutionMm": 0.19950124688279305,
+      "fineResolutionMm": 0.09987515605493134,
+      "coarseCrossings": 732,
+      "fineCrossings": 1465,
+      "baseline": {
+        "coarse": {
+          "t2rP95Mm": 3.937832686888041,
+          "t2rMaxMm": 5.689949245480405,
+          "r2tP95Mm": 6.784941999813051,
+          "r2tMaxMm": 8.700945640500574
+        },
+        "fine": {
+          "t2rP95Mm": 3.937816362641921,
+          "t2rMaxMm": 5.689938424864969,
+          "r2tP95Mm": 6.8406947419747555,
+          "r2tMaxMm": 8.757932446863455
+        }
+      },
+      "candidate": {
+        "coarse": {
+          "t2rP95Mm": 1.873246421888274,
+          "t2rMaxMm": 2.3599282960461188,
+          "r2tP95Mm": 2.3225065322457055,
+          "r2tMaxMm": 2.91405400083518
+        },
+        "fine": {
+          "t2rP95Mm": 1.8732388667891535,
+          "t2rMaxMm": 2.3599282960461223,
+          "r2tP95Mm": 2.344081293234478,
+          "r2tMaxMm": 2.9644375715825495
+        }
+      },
+      "candidateOverBaseline": {
+        "coarseT2rP95": 0.47570492980204504,
+        "fineT2rP95": 0.4757049832390809,
+        "coarseR2tP95": 0.3423030782443975,
+        "fineR2tP95": 0.3426671385950185
+      }
+    },
+    {
+      "id": "notch-minus-z",
+      "coarseResolutionMm": 0.19950124688279305,
+      "fineResolutionMm": 0.09987515605493134,
+      "coarseCrossings": 732,
+      "fineCrossings": 1465,
+      "baseline": {
+        "coarse": {
+          "t2rP95Mm": 3.937832686888041,
+          "t2rMaxMm": 5.689949245480405,
+          "r2tP95Mm": 6.784941999813036,
+          "r2tMaxMm": 8.700945640500588
+        },
+        "fine": {
+          "t2rP95Mm": 3.937816362641921,
+          "t2rMaxMm": 5.689938424864969,
+          "r2tP95Mm": 6.84069474197477,
+          "r2tMaxMm": 8.75793244686347
+        }
+      },
+      "candidate": {
+        "coarse": {
+          "t2rP95Mm": 1.873246421888274,
+          "t2rMaxMm": 2.3599282960461223,
+          "r2tP95Mm": 2.3225065322456917,
+          "r2tMaxMm": 2.914054000835193
+        },
+        "fine": {
+          "t2rP95Mm": 1.8732388667891668,
+          "t2rMaxMm": 2.359928296046126,
+          "r2tP95Mm": 2.3440812932344923,
+          "r2tMaxMm": 2.964437571582563
+        }
+      },
+      "candidateOverBaseline": {
+        "coarseT2rP95": 0.47570492980204504,
+        "fineT2rP95": 0.4757049832390843,
+        "coarseR2tP95": 0.34230307824439626,
+        "fineR2tP95": 0.3426671385950199
+      }
+    }
+  ],
   "regressions": [
     {
       "fixture": "character-head",
@@ -2915,8 +3888,10 @@
       "tris": 8992,
       "residualMedianMm": 0.18544642199279504,
       "surfMedianMm": 0.05984128211543706,
-      "refMedMm": 0.11934651346023471,
-      "refP95Mm": 0.6372221965714104,
+      "meshToRefMedMm": 0.11934651346023471,
+      "meshToRefP95Mm": 0.6372221965714104,
+      "refToMeshMedMm": 0.12465945192941227,
+      "refToMeshP95Mm": 0.6635751536977926,
       "boundaryEdges": 106,
       "nonManifoldEdges": 0,
       "invalid": false
@@ -2928,8 +3903,10 @@
       "tris": 8992,
       "residualMedianMm": 0.19393560784177485,
       "surfMedianMm": 0.060236769053209384,
-      "refMedMm": 0.12471483624841101,
-      "refP95Mm": 0.7538679555529949,
+      "meshToRefMedMm": 0.12471483624841101,
+      "meshToRefP95Mm": 0.7538679555529949,
+      "refToMeshMedMm": 0.12908002163290042,
+      "refToMeshP95Mm": 0.7241776001607216,
       "boundaryEdges": 106,
       "nonManifoldEdges": 0,
       "invalid": false
@@ -2941,8 +3918,10 @@
       "tris": 9096,
       "residualMedianMm": 0.0430683571225444,
       "surfMedianMm": 0.12539483759569842,
-      "refMedMm": 0.1091715093197631,
-      "refP95Mm": 0.7430279109269138,
+      "meshToRefMedMm": 0.1091715093197631,
+      "meshToRefP95Mm": 0.7430279109269138,
+      "refToMeshMedMm": 0.16339224921535034,
+      "refToMeshP95Mm": 0.9464608826129595,
       "boundaryEdges": 106,
       "nonManifoldEdges": 0,
       "invalid": false
@@ -2954,8 +3933,10 @@
       "tris": 1308,
       "residualMedianMm": 0.3517956389846001,
       "surfMedianMm": 0.07830666742362352,
-      "refMedMm": 0.2039632937781401,
-      "refP95Mm": 0.7583060847734546,
+      "meshToRefMedMm": 0.2039632937781401,
+      "meshToRefP95Mm": 0.7583060847734546,
+      "refToMeshMedMm": 0.1997644279345194,
+      "refToMeshP95Mm": 0.5556155822626317,
       "boundaryEdges": 0,
       "nonManifoldEdges": 0,
       "invalid": false
@@ -2967,8 +3948,10 @@
       "tris": 1308,
       "residualMedianMm": 0.33238065176348713,
       "surfMedianMm": 0.07559053768952956,
-      "refMedMm": 0.20390636409133397,
-      "refP95Mm": 0.783510393150373,
+      "meshToRefMedMm": 0.20390636409133397,
+      "meshToRefP95Mm": 0.783510393150373,
+      "refToMeshMedMm": 0.19580980057021138,
+      "refToMeshP95Mm": 0.5768465594946338,
       "boundaryEdges": 0,
       "nonManifoldEdges": 0,
       "invalid": false
@@ -2980,8 +3963,10 @@
       "tris": 1304,
       "residualMedianMm": 0.08974340724574997,
       "surfMedianMm": 0.26323571231204496,
-      "refMedMm": 0.211113745362394,
-      "refP95Mm": 0.7457337710742251,
+      "meshToRefMedMm": 0.211113745362394,
+      "meshToRefP95Mm": 0.7457337710742251,
+      "refToMeshMedMm": 0.285597200624705,
+      "refToMeshP95Mm": 0.8646416093842285,
       "boundaryEdges": 0,
       "nonManifoldEdges": 0,
       "invalid": false
