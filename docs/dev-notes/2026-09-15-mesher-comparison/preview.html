@@ -5,10 +5,10 @@ h1{font-size:20px} h2{font-size:16px;margin-top:28px;border-bottom:1px solid #2a
 figure{margin:0;background:#1b1e24;border:1px solid #2a2e36;border-radius:6px;overflow:hidden}
 figure img{display:block;width:100%;height:auto} figcaption{padding:4px 8px;font-size:12px;color:#aab2c0}
 .viewlabel{color:#8c95a4;font-size:12px;margin:14px 0 2px} .bad{color:#ff8a8a}</style></head><body>
-<h1>Blobforge mesher comparison</h1><p>commit <code>2b396068b9e33ab24bf94e55f294f0ebc6f1323a</code> — 41 CPU-rendered panels, identical camera per row, one neutral material. Static posed geometry.</p>
+<h1>Blobforge mesher comparison</h1><p>commit <code>c9258e211a3ea0d62f0475424972d7db3f7cbc4d</code> — 61 CPU-rendered panels, identical camera per row, one neutral material. Static posed geometry.</p>
 <p>cells: 20, 10, 5 mm; panels at 20 mm.</p>
 <h2>control-sphere</h2>
-<div class="viewlabel">main (0.366 m half-extent)</div>
+<div class="viewlabel">main @ 20 mm (0.366 m half-extent)</div>
 <div class="row">
 <figure><img src="panels/control-sphere__surface-nets__20mm__main.png" loading="lazy"><figcaption>surface-nets — 3732 tris</figcaption></figure>
 <figure><img src="panels/control-sphere__marching-cubes__20mm__main.png" loading="lazy"><figcaption>marching-cubes — 3728 tris</figcaption></figure>
@@ -16,74 +16,112 @@ figure img{display:block;width:100%;height:auto} figcaption{padding:4px 8px;font
 <figure><img src="panels/control-sphere__surface-nets__20mm__main-wire.png" loading="lazy"><figcaption>surface-nets (wireframe) — 3732 tris</figcaption></figure>
 </div>
 <h2>control-sharp-box</h2>
-<div class="viewlabel">main (0.472 m half-extent)</div>
+<div class="viewlabel">main @ 20 mm (0.472 m half-extent)</div>
 <div class="row">
 <figure><img src="panels/control-sharp-box__surface-nets__20mm__main.png" loading="lazy"><figcaption>surface-nets — 2352 tris</figcaption></figure>
 <figure><img src="panels/control-sharp-box__marching-cubes__20mm__main.png" loading="lazy"><figcaption>marching-cubes — 2348 tris</figcaption></figure>
 <figure><img src="panels/control-sharp-box__dual-contouring__20mm__main.png" loading="lazy"><figcaption>dual-contouring — 2352 tris</figcaption></figure>
 <figure><img src="panels/control-sharp-box__surface-nets__20mm__main-wire.png" loading="lazy"><figcaption>surface-nets (wireframe) — 2352 tris</figcaption></figure>
 </div>
-<div class="viewlabel">closeup-corner-+++ (0.073 m half-extent)</div>
+<div class="viewlabel">closeup-corner-+++ @ 20 mm (0.073 m half-extent)</div>
 <div class="row">
 <figure><img src="panels/control-sharp-box__surface-nets__20mm__closeup-corner-+++.png" loading="lazy"><figcaption>surface-nets — 2352 tris</figcaption></figure>
 <figure><img src="panels/control-sharp-box__marching-cubes__20mm__closeup-corner-+++.png" loading="lazy"><figcaption>marching-cubes — 2348 tris</figcaption></figure>
 <figure><img src="panels/control-sharp-box__dual-contouring__20mm__closeup-corner-+++.png" loading="lazy"><figcaption>dual-contouring — 2352 tris</figcaption></figure>
 </div>
-<div class="viewlabel">closeup-face-+x (0.061 m half-extent)</div>
+<div class="viewlabel">closeup-face-+x @ 20 mm (0.061 m half-extent)</div>
 <div class="row">
 <figure><img src="panels/control-sharp-box__surface-nets__20mm__closeup-face-+x.png" loading="lazy"><figcaption>surface-nets — 2352 tris</figcaption></figure>
 <figure><img src="panels/control-sharp-box__marching-cubes__20mm__closeup-face-+x.png" loading="lazy"><figcaption>marching-cubes — 2348 tris</figcaption></figure>
 <figure><img src="panels/control-sharp-box__dual-contouring__20mm__closeup-face-+x.png" loading="lazy"><figcaption>dual-contouring — 2352 tris</figcaption></figure>
 </div>
+<div class="viewlabel">main @ 10 mm (0.472 m half-extent)</div>
+<div class="row">
+<figure><img src="panels/control-sharp-box__surface-nets__10mm__main.png" loading="lazy"><figcaption>surface-nets — 10092 tris</figcaption></figure>
+<figure><img src="panels/control-sharp-box__marching-cubes__10mm__main.png" loading="lazy"><figcaption>marching-cubes — 10088 tris</figcaption></figure>
+<figure><img src="panels/control-sharp-box__dual-contouring__10mm__main.png" loading="lazy"><figcaption>dual-contouring — 10092 tris</figcaption></figure>
+<figure><img src="panels/control-sharp-box__surface-nets__10mm__main-wire.png" loading="lazy"><figcaption>surface-nets (wireframe) — 10092 tris</figcaption></figure>
+</div>
+<div class="viewlabel">closeup-corner-+++ @ 10 mm (0.073 m half-extent)</div>
+<div class="row">
+<figure><img src="panels/control-sharp-box__surface-nets__10mm__closeup-corner-+++.png" loading="lazy"><figcaption>surface-nets — 10092 tris</figcaption></figure>
+<figure><img src="panels/control-sharp-box__marching-cubes__10mm__closeup-corner-+++.png" loading="lazy"><figcaption>marching-cubes — 10088 tris</figcaption></figure>
+<figure><img src="panels/control-sharp-box__dual-contouring__10mm__closeup-corner-+++.png" loading="lazy"><figcaption>dual-contouring — 10092 tris</figcaption></figure>
+</div>
+<div class="viewlabel">closeup-face-+x @ 10 mm (0.061 m half-extent)</div>
+<div class="row">
+<figure><img src="panels/control-sharp-box__surface-nets__10mm__closeup-face-+x.png" loading="lazy"><figcaption>surface-nets — 10092 tris</figcaption></figure>
+<figure><img src="panels/control-sharp-box__marching-cubes__10mm__closeup-face-+x.png" loading="lazy"><figcaption>marching-cubes — 10088 tris</figcaption></figure>
+<figure><img src="panels/control-sharp-box__dual-contouring__10mm__closeup-face-+x.png" loading="lazy"><figcaption>dual-contouring — 10092 tris</figcaption></figure>
+</div>
 <h2>chamfer-groove</h2>
-<div class="viewlabel">main (0.298 m half-extent)</div>
+<div class="viewlabel">main @ 20 mm (0.298 m half-extent)</div>
 <div class="row">
 <figure><img src="panels/chamfer-groove__surface-nets__20mm__main.png" loading="lazy"><figcaption>surface-nets — 1932 tris</figcaption></figure>
 <figure><img src="panels/chamfer-groove__marching-cubes__20mm__main.png" loading="lazy"><figcaption>marching-cubes — 1928 tris</figcaption></figure>
 <figure><img src="panels/chamfer-groove__dual-contouring__20mm__main.png" loading="lazy"><figcaption>dual-contouring — 1932 tris</figcaption></figure>
 <figure><img src="panels/chamfer-groove__surface-nets__20mm__main-wire.png" loading="lazy"><figcaption>surface-nets (wireframe) — 1932 tris</figcaption></figure>
 </div>
-<div class="viewlabel">closeup-chamfer-seam (0.208 m half-extent)</div>
+<div class="viewlabel">closeup-chamfer-seam @ 20 mm (0.208 m half-extent)</div>
 <div class="row">
 <figure><img src="panels/chamfer-groove__surface-nets__20mm__closeup-chamfer-seam.png" loading="lazy"><figcaption>surface-nets — 1932 tris</figcaption></figure>
 <figure><img src="panels/chamfer-groove__marching-cubes__20mm__closeup-chamfer-seam.png" loading="lazy"><figcaption>marching-cubes — 1928 tris</figcaption></figure>
 <figure><img src="panels/chamfer-groove__dual-contouring__20mm__closeup-chamfer-seam.png" loading="lazy"><figcaption>dual-contouring — 1932 tris</figcaption></figure>
 </div>
-<div class="viewlabel">closeup-groove-channel (0.184 m half-extent)</div>
+<div class="viewlabel">closeup-groove-channel @ 20 mm (0.184 m half-extent)</div>
 <div class="row">
 <figure><img src="panels/chamfer-groove__surface-nets__20mm__closeup-groove-channel.png" loading="lazy"><figcaption>surface-nets — 1932 tris</figcaption></figure>
 <figure><img src="panels/chamfer-groove__marching-cubes__20mm__closeup-groove-channel.png" loading="lazy"><figcaption>marching-cubes — 1928 tris</figcaption></figure>
 <figure><img src="panels/chamfer-groove__dual-contouring__20mm__closeup-groove-channel.png" loading="lazy"><figcaption>dual-contouring — 1932 tris</figcaption></figure>
 </div>
+<div class="viewlabel">main @ 10 mm (0.297 m half-extent)</div>
+<div class="row">
+<figure><img src="panels/chamfer-groove__surface-nets__10mm__main.png" loading="lazy"><figcaption>surface-nets — 7824 tris</figcaption></figure>
+<figure><img src="panels/chamfer-groove__marching-cubes__10mm__main.png" loading="lazy"><figcaption>marching-cubes — 7820 tris</figcaption></figure>
+<figure><img src="panels/chamfer-groove__dual-contouring__10mm__main.png" loading="lazy"><figcaption>dual-contouring — 7824 tris</figcaption></figure>
+<figure><img src="panels/chamfer-groove__surface-nets__10mm__main-wire.png" loading="lazy"><figcaption>surface-nets (wireframe) — 7824 tris</figcaption></figure>
+</div>
+<div class="viewlabel">closeup-chamfer-seam @ 10 mm (0.208 m half-extent)</div>
+<div class="row">
+<figure><img src="panels/chamfer-groove__surface-nets__10mm__closeup-chamfer-seam.png" loading="lazy"><figcaption>surface-nets — 7824 tris</figcaption></figure>
+<figure><img src="panels/chamfer-groove__marching-cubes__10mm__closeup-chamfer-seam.png" loading="lazy"><figcaption>marching-cubes — 7820 tris</figcaption></figure>
+<figure><img src="panels/chamfer-groove__dual-contouring__10mm__closeup-chamfer-seam.png" loading="lazy"><figcaption>dual-contouring — 7824 tris</figcaption></figure>
+</div>
+<div class="viewlabel">closeup-groove-channel @ 10 mm (0.184 m half-extent)</div>
+<div class="row">
+<figure><img src="panels/chamfer-groove__surface-nets__10mm__closeup-groove-channel.png" loading="lazy"><figcaption>surface-nets — 7824 tris</figcaption></figure>
+<figure><img src="panels/chamfer-groove__marching-cubes__10mm__closeup-groove-channel.png" loading="lazy"><figcaption>marching-cubes — 7820 tris</figcaption></figure>
+<figure><img src="panels/chamfer-groove__dual-contouring__10mm__closeup-groove-channel.png" loading="lazy"><figcaption>dual-contouring — 7824 tris</figcaption></figure>
+</div>
 <h2>character-head</h2>
-<div class="viewlabel">main (0.523 m half-extent)</div>
+<div class="viewlabel">main @ 20 mm (0.523 m half-extent)</div>
 <div class="row">
 <figure><img src="panels/character-head__surface-nets__20mm__main.png" loading="lazy"><figcaption>surface-nets — 2176 tris</figcaption></figure>
 <figure><img src="panels/character-head__marching-cubes__20mm__main.png" loading="lazy"><figcaption>marching-cubes — 2226 tris</figcaption></figure>
 <figure><img src="panels/character-head__dual-contouring__20mm__main.png" loading="lazy"><figcaption>dual-contouring — 2176 tris</figcaption></figure>
 <figure><img src="panels/character-head__surface-nets__20mm__main-wire.png" loading="lazy"><figcaption>surface-nets (wireframe) — 2176 tris</figcaption></figure>
 </div>
-<div class="viewlabel">closeup-ear-l (0.143 m half-extent)</div>
+<div class="viewlabel">closeup-ear-l @ 20 mm (0.143 m half-extent)</div>
 <div class="row">
 <figure><img src="panels/character-head__surface-nets__20mm__closeup-ear-l.png" loading="lazy"><figcaption>surface-nets — 2176 tris</figcaption></figure>
 <figure><img src="panels/character-head__marching-cubes__20mm__closeup-ear-l.png" loading="lazy"><figcaption>marching-cubes — 2226 tris</figcaption></figure>
 <figure><img src="panels/character-head__dual-contouring__20mm__closeup-ear-l.png" loading="lazy"><figcaption>dual-contouring — 2176 tris</figcaption></figure>
 </div>
-<div class="viewlabel">closeup-ear-r (0.143 m half-extent)</div>
+<div class="viewlabel">closeup-ear-r @ 20 mm (0.143 m half-extent)</div>
 <div class="row">
 <figure><img src="panels/character-head__surface-nets__20mm__closeup-ear-r.png" loading="lazy"><figcaption>surface-nets — 2176 tris</figcaption></figure>
 <figure><img src="panels/character-head__marching-cubes__20mm__closeup-ear-r.png" loading="lazy"><figcaption>marching-cubes — 2226 tris</figcaption></figure>
 <figure><img src="panels/character-head__dual-contouring__20mm__closeup-ear-r.png" loading="lazy"><figcaption>dual-contouring — 2176 tris</figcaption></figure>
 </div>
 <h2>torn-chunk</h2>
-<div class="viewlabel">main (0.168 m half-extent)</div>
+<div class="viewlabel">main @ 20 mm (0.168 m half-extent)</div>
 <div class="row">
 <figure><img src="panels/torn-chunk__surface-nets__20mm__main.png" loading="lazy"><figcaption>surface-nets — 364 tris</figcaption></figure>
 <figure><img src="panels/torn-chunk__marching-cubes__20mm__main.png" loading="lazy"><figcaption>marching-cubes — 360 tris</figcaption></figure>
 <figure><img src="panels/torn-chunk__dual-contouring__20mm__main.png" loading="lazy"><figcaption>dual-contouring — 364 tris</figcaption></figure>
 <figure><img src="panels/torn-chunk__surface-nets__20mm__main-wire.png" loading="lazy"><figcaption>surface-nets (wireframe) — 364 tris</figcaption></figure>
 </div>
-<div class="viewlabel">closeup-crater-rim (0.112 m half-extent)</div>
+<div class="viewlabel">closeup-crater-rim @ 20 mm (0.112 m half-extent)</div>
 <div class="row">
 <figure><img src="panels/torn-chunk__surface-nets__20mm__closeup-crater-rim.png" loading="lazy"><figcaption>surface-nets — 364 tris</figcaption></figure>
 <figure><img src="panels/torn-chunk__marching-cubes__20mm__closeup-crater-rim.png" loading="lazy"><figcaption>marching-cubes — 360 tris</figcaption></figure>

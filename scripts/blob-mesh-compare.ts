@@ -13,9 +13,10 @@
 // Production meshers/renderers are untouched.
 
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { platform, release, cpus } from 'node:os';
-import { join } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 
@@ -23,11 +24,27 @@ import { FIXTURES, GOBLIN_HEAD_REGION, type FixtureDef } from '../src/lab/sdf-zo
 import { gridFor, LADDERS, optionsFor, runMesher, timeMeshers, type RunId } from '../src/lab/sdf-zombie/mesher-comparison/runner';
 import { analyzeMesh, buildReferenceMesh, FEATURE_REGIONS, type MethodAnalysis } from '../src/lab/sdf-zombie/mesher-comparison/analysis';
 import { meshToObj, meshToGlb, readBackObj, inspectGlb } from '../src/lab/sdf-zombie/mesher-comparison/export';
-import { defaultCamera, meshBounds, renderMesh, unionBounds } from '../src/lab/sdf-zombie/mesher-comparison/render';
-import type { IndexedMesh, MethodId, ScalarField } from '../src/lab/sdf-zombie/mesher-comparison/types';
+import { defaultCamera, renderMesh, unionBounds } from '../src/lab/sdf-zombie/mesher-comparison/render';
+import { gridCellCount, gridCornerCount, meshRankable, type IndexedMesh, type ScalarField } from '../src/lab/sdf-zombie/mesher-comparison/types';
 import type { Vec3 } from '../src/lab/sdf-zombie/types';
+import { sharpBoxSensitivity } from '../src/lab/sdf-zombie/mesher-comparison/sensitivity';
 
+const ALL_RUN_IDS: readonly RunId[] = ['surface-nets', 'marching-cubes', 'dual-contouring', 'surface-nets-unpruned'];
 const DEFAULT_METHODS: readonly RunId[] = ['surface-nets', 'marching-cubes', 'dual-contouring'];
+
+/**
+ * Ownership + budget guards. The output directory is task-owned scratch; we
+ * only ever delete a directory that either is empty or carries our marker,
+ * and we validate the grid size BEFORE any large allocation.
+ */
+export const RUN_MARKER = '.blob-mesh-compare-run';
+export const RUN_MARKER_MAGIC = 'blob-mesh-compare run dir v1';
+export const EVIDENCE_MANIFEST = '.blob-mesh-compare-manifest.json';
+/** Known task-owned generated names inside an evidence dir (never human notes). */
+export const EVIDENCE_GENERATED = ['meshes', 'panels', 'results.json', 'summary.md', 'preview.html', 'sensitivity.json', 'sensitivity.md'] as const;
+/** Conservative pre-allocation budget for one extraction grid. */
+export const MAX_GRID_CELLS = 20_000_000;
+export const MAX_GRID_CORNERS = 25_000_000;
 
 interface Args {
   fixtures: string[];
@@ -38,11 +55,12 @@ interface Args {
   repeats: number;
   warmups: number;
   panelsCellMm: number;
+  panelsExtraMm: number[];
   unpruned: boolean;
   help: boolean;
 }
 
-function parseArgs(argv: string[]): Args {
+export function parseArgs(argv: string[]): Args {
   const a: Args = {
     fixtures: FIXTURES.map(f => f.id),
     methods: [...DEFAULT_METHODS],
@@ -52,6 +70,7 @@ function parseArgs(argv: string[]): Args {
     repeats: 3,
     warmups: 1,
     panelsCellMm: 20,
+    panelsExtraMm: [],
     unpruned: false,
     help: false,
   };
@@ -72,6 +91,7 @@ function parseArgs(argv: string[]): Args {
       case '--repeats': a.repeats = Number(next()); break;
       case '--warmups': a.warmups = Number(next()); break;
       case '--panels-cell': a.panelsCellMm = Number(next()); break;
+      case '--panels-extra': a.panelsExtraMm = next().split(',').map(s => Number(s.trim())); break;
       case '--unpruned': a.unpruned = true; break;
       case '--smoke':
         a.cells = [...LADDERS.smoke]; a.repeats = 1; a.warmups = 0; break;
@@ -79,6 +99,146 @@ function parseArgs(argv: string[]): Args {
     }
   }
   return a;
+}
+
+// ---------------------------------------------------------------------------
+// Argument validation + path/budget safety
+// ---------------------------------------------------------------------------
+
+/** Resolve a CLI path against the repo root and refuse anything unsafe. */
+export function resolveWithinRoot(rootReal: string, argPath: string, label: string): string {
+  const abs = resolve(rootReal, argPath);
+  const rel = relative(rootReal, abs);
+  if (rel === '') throw new Error(`${label}: refusing to use the repository root (${abs})`);
+  if (rel.startsWith('..') || isAbsolute(rel)) {
+    throw new Error(`${label}: must stay inside the repository; ${abs} is outside ${rootReal}`);
+  }
+  const first = rel.split(sep)[0]!;
+  if (first === 'node_modules' || first === '.git' || first === 'src' || first === 'public' || first === 'assets-source') {
+    throw new Error(`${label}: refusing to write or delete inside '${first}' (${abs})`);
+  }
+  // Walking the existing prefix catches a symlinked component that escapes.
+  let cur = rootReal;
+  for (const seg of rel.split(sep)) {
+    cur = join(cur, seg);
+    if (!existsSync(cur)) break;
+    const st = lstatSync(cur);
+    if (st.isSymbolicLink()) {
+      const real = realpathSync(cur);
+      const rrel = relative(rootReal, real);
+      if (rrel.startsWith('..') || isAbsolute(rrel)) throw new Error(`${label}: symlink ${cur} escapes the repository`);
+    }
+    if (!st.isDirectory() && cur !== abs) throw new Error(`${label}: ${cur} is not a directory`);
+  }
+  return abs;
+}
+
+/** Throw unless `a` and `b` are disjoint (neither contains the other). */
+export function assertDisjoint(a: string, b: string, aLabel: string, bLabel: string): void {
+  const ab = relative(a, b);
+  const ba = relative(b, a);
+  if (ab === '' || (!ab.startsWith('..') && !isAbsolute(ab))) {
+    throw new Error(`${aLabel} (${a}) overlaps ${bLabel} (${b})`);
+  }
+  if (!ba.startsWith('..') && !isAbsolute(ba)) {
+    throw new Error(`${bLabel} (${b}) overlaps ${aLabel} (${a})`);
+  }
+}
+
+/**
+ * Prepare a task-owned run directory for reuse. Deletion is allowed ONLY when
+ * the existing directory is empty or contains just known generated names; a
+ * populated unrelated directory raises instead of being erased.
+ */
+export function prepareOwnedDir(abs: string, allowed: readonly string[], label: string): void {
+  if (existsSync(abs)) {
+    const st = lstatSync(abs);
+    if (st.isSymbolicLink()) throw new Error(`${label}: refusing to delete symlinked directory ${abs}`);
+    if (!st.isDirectory()) throw new Error(`${label}: ${abs} exists and is not a directory`);
+    const allowedSet = new Set(allowed);
+    const unknown = readdirSync(abs).filter(n => !allowedSet.has(n));
+    if (unknown.length > 0) {
+      throw new Error(`${label}: ${abs} contains unexpected entries (${unknown.slice(0, 5).join(', ')}); refusing to delete it`);
+    }
+    rmSync(abs, { recursive: true, force: true });
+  }
+  mkdirSync(abs, { recursive: true });
+  writeFileSync(join(abs, RUN_MARKER), RUN_MARKER_MAGIC + '\n');
+}
+
+/**
+ * Clear the generated names inside a shared evidence dir while preserving
+ * human notes (README.md etc.). Only fixed generated names and files listed
+ * in a prior task manifest are removed; everything else is left untouched.
+ */
+export function cleanEvidenceDir(evidenceDir: string): void {
+  mkdirSync(evidenceDir, { recursive: true });
+  const manifestPath = join(evidenceDir, EVIDENCE_MANIFEST);
+  const toDelete = new Set<string>(EVIDENCE_GENERATED);
+  if (existsSync(manifestPath)) {
+    try {
+      const prior = JSON.parse(readFileSync(manifestPath, 'utf8')) as { generated?: string[] };
+      for (const rel of prior.generated ?? []) {
+        if (rel && !rel.includes('..') && !isAbsolute(rel)) toDelete.add(rel.split('/')[0]!);
+      }
+    } catch { /* a corrupt manifest must not block a clean regeneration */ }
+  }
+  for (const name of toDelete) {
+    rmSync(join(evidenceDir, name), { recursive: true, force: true });
+  }
+  mkdirSync(join(evidenceDir, 'meshes'), { recursive: true });
+  mkdirSync(join(evidenceDir, 'panels'), { recursive: true });
+}
+
+/** Validate every user-supplied name and numeric bound. Throws on the first problem. */
+export function validateArgs(args: Args): void {
+  const knownFixtures = FIXTURES.map(f => f.id);
+  if (args.fixtures.length === 0) throw new Error(`no fixtures selected; known: ${knownFixtures.join(', ')}`);
+  for (const f of args.fixtures) {
+    if (!knownFixtures.includes(f)) throw new Error(`unknown fixture '${f}'; known: ${knownFixtures.join(', ')}`);
+  }
+  if (args.methods.length === 0) throw new Error(`no methods selected; known: ${ALL_RUN_IDS.join(', ')}`);
+  for (const m of args.methods) {
+    if (!ALL_RUN_IDS.includes(m)) throw new Error(`unknown method '${m}'; known: ${ALL_RUN_IDS.join(', ')}`);
+  }
+  if (args.cells.length === 0) throw new Error('no cell sizes selected');
+  for (const c of args.cells) {
+    if (!Number.isFinite(c) || c <= 0) throw new Error(`cell size must be a finite positive number of metres (got ${c})`);
+  }
+  if (!Number.isInteger(args.repeats) || args.repeats <= 0) throw new Error(`--repeats must be a positive integer (got ${args.repeats})`);
+  if (!Number.isInteger(args.warmups) || args.warmups < 0) throw new Error(`--warmups must be a nonnegative integer (got ${args.warmups})`);
+  if (!Number.isFinite(args.panelsCellMm) || args.panelsCellMm <= 0) throw new Error(`--panels-cell must be a finite positive number of mm (got ${args.panelsCellMm})`);
+  for (const m of args.panelsExtraMm) {
+    if (!Number.isFinite(m) || m <= 0) throw new Error(`--panels-extra entries must be finite positive mm (got ${m})`);
+  }
+  for (const def of FIXTURES.filter(f => args.fixtures.includes(f.id))) {
+    for (const cell of args.cells) {
+      if (cell < def.minCell) {
+        throw new Error(`fixture ${def.id} requires cell >= ${(def.minCell * 1000).toFixed(3)} mm (got ${(cell * 1000).toFixed(3)} mm)`);
+      }
+    }
+  }
+}
+
+/** Throw before allocating if a grid exceeds the conservative memory budget. */
+export function assertGridBudget(field: ScalarField, cell: number, label: string): void {
+  const g = gridFor(field, cell);
+  const cells = gridCellCount(g);
+  const corners = gridCornerCount(g);
+  if (cells > MAX_GRID_CELLS || corners > MAX_GRID_CORNERS) {
+    throw new Error(
+      `${label}: ${g.dims.join('x')} cells at ${(cell * 1000).toFixed(3)} mm needs ${cells} cells / ${corners} corners, ` +
+      `over the budget (${MAX_GRID_CELLS} cells / ${MAX_GRID_CORNERS} corners)`);
+  }
+}
+
+/** Serialize JSON without turning NaN/Infinity into an innocuous `null`. */
+export function writeJson(path: string, value: unknown): void {
+  const text = JSON.stringify(value, (_k, v) =>
+    typeof v === 'number' && !Number.isFinite(v)
+      ? (Number.isNaN(v) ? 'NaN' : v > 0 ? 'Infinity' : '-Infinity')
+      : v, 2);
+  writeFileSync(path, text + '\n');
 }
 
 const HELP = `Blobforge mesher comparison — surface nets vs marching cubes vs dual contouring
@@ -93,6 +253,7 @@ Usage: npx tsx scripts/blob-mesh-compare.ts [options]
   --repeats N      measured repeats per method (default 3)
   --warmups N      warmup passes (default 1)
   --panels-cell N  cell size (mm) for the rendered panels (default 20)
+  --panels-extra a,b  additional panel cells (mm) for sharp/concave fixtures
   --unpruned       add the labelled surface-nets-unpruned control
   --smoke          one coarse cell, one repeat (fast end-to-end check)
   -h, --help       this text
@@ -203,41 +364,66 @@ function main(): void {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) { console.log(HELP); return; }
 
-  const root = process.cwd();
-  const outDir = join(root, args.out);
-  const meshDir = join(outDir, 'meshes');
-  const panelDir = join(outDir, 'panels');
-  rmSync(outDir, { recursive: true, force: true });
-  mkdirSync(meshDir, { recursive: true });
-  mkdirSync(panelDir, { recursive: true });
-  const evidenceDir = args.evidence ? join(root, args.evidence) : null;
-  const evidenceMeshDir = evidenceDir ? join(evidenceDir, 'meshes') : null;
-  const evidencePanelDir = evidenceDir ? join(evidenceDir, 'panels') : null;
-  // Clear the committed sub-dirs so a re-run cannot leave stale artifacts
-  // behind (results.json / summary.md / preview.html are overwritten).
-  if (evidenceMeshDir) { rmSync(evidenceMeshDir, { recursive: true, force: true }); mkdirSync(evidenceMeshDir, { recursive: true }); }
-  if (evidencePanelDir) { rmSync(evidencePanelDir, { recursive: true, force: true }); mkdirSync(evidencePanelDir, { recursive: true }); }
-
-  const blobSource = readFileSync(join(root, 'src/lab/sdf-zombie/characters/goblin.blob'), 'utf8');
-  let commit = 'unknown';
-  try { commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(); } catch { /* not a repo */ }
-
-  const selected = FIXTURES.filter(f => args.fixtures.includes(f.id));
-  if (selected.length === 0) throw new Error(`no fixtures selected; known: ${FIXTURES.map(f => f.id).join(', ')}`);
-
+  const root = realpathSync(process.cwd());
+  // Validate every name and numeric bound BEFORE touching the filesystem.
+  validateArgs(args);
   const methods: RunId[] = [...args.methods];
   if (args.unpruned && !methods.includes('surface-nets-unpruned')) methods.push('surface-nets-unpruned');
+  const selected = FIXTURES.filter(f => args.fixtures.includes(f.id));
 
+  // Resolve and cross-check paths before any mutation. An absolute or `..`
+  // `--out`/`--evidence` that escapes the repo, or an overlap between them,
+  // fails here rather than deleting anything.
+  const outDir = resolveWithinRoot(root, args.out, '--out');
+  const evidenceDir = args.evidence ? resolveWithinRoot(root, args.evidence, '--evidence') : null;
+  if (evidenceDir) assertDisjoint(outDir, evidenceDir, '--out', '--evidence');
+
+  // Build the shared fields (cheap, non-destructive) and reject an
+  // over-budget grid BEFORE any large allocation. The .blob source is only
+  // read when the character fixture is actually selected.
+  const blobSource = selected.some(d => d.id === GOBLIN_HEAD_REGION.id)
+    ? readFileSync(join(root, 'src/lab/sdf-zombie/characters/goblin.blob'), 'utf8')
+    : '';
+  const fields = selected.map(def => ({ def, field: buildFixture(def, blobSource) }));
+  const panelCell = args.panelsCellMm / 1000;
+  for (const { def, field } of fields) {
+    for (const cell of args.cells) {
+      assertGridBudget(field, cell, `${def.id}@${mmOf(cell)}mm`);
+      const refCell = Math.max(cell / 2, 0.005);
+      if (refCell < cell) assertGridBudget(field, refCell, `${def.id}@${mmOf(cell)}mm reference`);
+    }
+    assertGridBudget(field, panelCell, `${def.id}@${args.panelsCellMm}mm panels`);
+  }
+
+  let commit = 'unknown';
+  try { commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(); } catch { /* not a repo */ }
+  let dirty = '';
+  try { dirty = execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }).trim(); } catch { /* not a repo */ }
+  const fingerprint = codeFingerprint(root);
+
+  // ---- mutations begin only after all validation passed ------------------
+  prepareOwnedDir(outDir, [...EVIDENCE_GENERATED, RUN_MARKER], '--out');
+  const meshDir = join(outDir, 'meshes');
+  const panelDir = join(outDir, 'panels');
+  mkdirSync(meshDir, { recursive: true });
+  mkdirSync(panelDir, { recursive: true });
+  if (evidenceDir) cleanEvidenceDir(evidenceDir);
+  const evidenceMeshDir = evidenceDir ? join(evidenceDir, 'meshes') : null;
+  const evidencePanelDir = evidenceDir ? join(evidenceDir, 'panels') : null;
+
+  const evidenceFiles = new Set<string>();
+  const invalidRuns: string[] = [];
   const results: unknown[] = [];
   const exports: unknown[] = [];
   const panels: PanelRecord[] = [];
 
   console.log(`mesher comparison: ${selected.length} fixtures x ${args.cells.map(mmOf).join('/')}mm x ${methods.join(', ')}`);
-  for (const def of selected) {
-    const field = buildFixture(def, blobSource);
+  for (const { def, field } of fields) {
     for (const cell of args.cells) {
-      const ref = buildReferenceMesh(field, cell);
       const timing = timeMeshers(field, cell, methods, args.warmups, args.repeats);
+      // Only build the (expensive) reference surface when at least one method
+      // produced a rankable mesh; invalid rows never get compared.
+      const ref = methods.some(id => meshRankable(timing[id]!.mesh)) ? buildReferenceMesh(field, cell) : null;
       const analyses: MethodAnalysis[] = [];
       const built: Partial<Record<string, IndexedMesh>> = {};
       for (const id of methods) {
@@ -245,17 +431,25 @@ function main(): void {
         built[id] = t.mesh;
         const analysis = analyzeMesh(id, t.mesh, field, def.id, t, ref);
         analyses.push(analysis);
-        const base = `${def.id}-${id}-${mmOf(cell)}mm`;
-        const wrote = writeMeshPair(meshDir, base, t.mesh);
-        exports.push({ fixture: def.id, method: id, cell, base, ...wrote });
-        if (evidenceMeshDir) {
-          // Commit only the representative (coarsest) cell, and only GLB for
-          // every fixture plus OBJ for the two most inspectable ones, to keep
-          // the committed evidence compact.
-          if (cell === args.cells[0]) {
-            if (id !== 'surface-nets-unpruned') writeFileSync(join(evidenceMeshDir, `${base}.glb`), meshToGlb(t.mesh));
+        if (!meshRankable(t.mesh)) {
+          invalidRuns.push(`${def.id}@${mmOf(cell)}mm / ${id}: ${t.mesh.invalidReason ?? 'invalid'}`);
+        } else {
+          const base = `${def.id}-${id}-${mmOf(cell)}mm`;
+          const wrote = writeMeshPair(meshDir, base, t.mesh);
+          exports.push({ fixture: def.id, method: id, cell, base, ...wrote });
+          if (evidenceMeshDir && cell === args.cells[0]) {
+            // Commit only the representative (coarsest) cell, and only GLB for
+            // every fixture plus OBJ for the two most inspectable ones, to keep
+            // the committed evidence compact.
+            if (id !== 'surface-nets-unpruned') {
+              const f = `${base}.glb`;
+              writeFileSync(join(evidenceMeshDir, f), meshToGlb(t.mesh));
+              evidenceFiles.add(`meshes/${f}`);
+            }
             if (def.id === 'character-head' || def.id === 'control-sharp-box') {
-              writeFileSync(join(evidenceMeshDir, `${base}.obj`), meshToObj(t.mesh, `${def.id} / ${id} / ${mmOf(cell)}mm`));
+              const f = `${base}.obj`;
+              writeFileSync(join(evidenceMeshDir, f), meshToObj(t.mesh, `${def.id} / ${id} / ${mmOf(cell)}mm`));
+              evidenceFiles.add(`meshes/${f}`);
             }
           }
         }
@@ -277,16 +471,17 @@ function main(): void {
   }
 
   // ---- panels at the representative cell ---------------------------------
-  const panelCell = args.panelsCellMm / 1000;
-  {
-    for (const def of selected) {
-      const field = buildFixture(def, blobSource);
+  // ---- panels at the representative cell (plus extra sharp-feature cells) --
+  const extraPanelFixtures = new Set(['control-sharp-box', 'chamfer-groove']);
+  for (const { def, field } of fields) {
+    const cells = [panelCell, ...(extraPanelFixtures.has(def.id) ? args.panelsExtraMm.map(mm => mm / 1000) : [])];
+    for (const pcell of cells) {
       const built: Partial<Record<string, IndexedMesh>> = {};
       for (const id of methods) {
         if (id === 'surface-nets-unpruned') continue;
-        const grid = gridFor(field, panelCell);
-        // Re-run at the panel cell (cheap at 20 mm) so the render owns a clean mesh.
-        built[id] = runMesher(id, field, optionsFor(id, panelCell, grid));
+        const grid = gridFor(field, pcell);
+        // Re-run at the panel cell (cheap) so the render owns a clean mesh.
+        built[id] = runMesher(id, field, optionsFor(id, pcell, grid));
       }
       const meshes = Object.values(built).filter((m): m is IndexedMesh => !!m && !m.invalid);
       if (meshes.length === 0) continue;
@@ -295,12 +490,12 @@ function main(): void {
       for (const id of methods) {
         const mesh = built[id];
         if (!mesh || mesh.invalid) continue;
-        panels.push(renderPanel(panelDir, def.id, id, panelCell, 'main', mesh, camAll, 'shaded'));
+        panels.push(renderPanel(panelDir, def.id, id, pcell, 'main', mesh, camAll, 'shaded'));
       }
       // Wireframe on the first method only, same framing.
       const wireId = methods.find(id => id !== 'surface-nets-unpruned');
       if (wireId && built[wireId] && !built[wireId]!.invalid) {
-        panels.push(renderPanel(panelDir, def.id, wireId, panelCell, 'main', built[wireId]!, camAll, 'wireframe'));
+        panels.push(renderPanel(panelDir, def.id, wireId, pcell, 'main', built[wireId]!, camAll, 'wireframe'));
       }
       // Closeups on the fixture's designated feature regions.
       const regions = FEATURE_REGIONS[def.id] ?? [];
@@ -311,29 +506,40 @@ function main(): void {
         for (const id of methods) {
           const mesh = built[id];
           if (!mesh || mesh.invalid) continue;
-          panels.push(renderPanel(panelDir, def.id, id, panelCell, `closeup-${region.name}`, mesh, cam, 'shaded'));
+          panels.push(renderPanel(panelDir, def.id, id, pcell, `closeup-${region.name}`, mesh, cam, 'shaded'));
         }
       }
     }
   }
 
   // ---- evidence copies ---------------------------------------------------
-  const summary = buildSummary(results as ResultRow[], args, commit);
+  const summary = buildSummary(results as ResultRow[], args, commit, dirty, fingerprint);
   if (evidenceDir) {
     for (const p of panels) {
       const src = join(panelDir, p.file);
       writeFileSync(join(evidencePanelDir!, p.file), readFileSync(src));
+      evidenceFiles.add(`panels/${p.file}`);
     }
-    writeFileSync(join(evidenceDir, 'results.json'), JSON.stringify({ commit, generatedAt: new Date().toISOString(), environment: ENV(), args: { ...args }, results, exports: compactExports(exports), panels }, null, 2));
+    writeJson(join(evidenceDir, 'results.json'), { commit, dirty: dirty || null, codeFingerprint: fingerprint, generatedAt: new Date().toISOString(), environment: ENV(), args: { ...args }, results, exports: compactExports(exports), panels });
     writeFileSync(join(evidenceDir, 'summary.md'), summary);
+    writeFileSync(join(evidenceDir, 'preview.html'), previewHtml('panels', panels, args, commit));
+    evidenceFiles.add('results.json');
+    evidenceFiles.add('summary.md');
+    evidenceFiles.add('preview.html');
+    for (const f of writeSensitivityEvidence(evidenceDir, args.cells)) evidenceFiles.add(f);
+    writeFileSync(join(evidenceDir, EVIDENCE_MANIFEST), JSON.stringify({ generated: [...evidenceFiles].sort() }, null, 2) + '\n');
   }
-  writeFileSync(join(outDir, 'results.json'), JSON.stringify({ commit, generatedAt: new Date().toISOString(), environment: ENV(), args: { ...args }, results, exports, panels }, null, 2));
+  writeJson(join(outDir, 'results.json'), { commit, dirty: dirty || null, codeFingerprint: fingerprint, generatedAt: new Date().toISOString(), environment: ENV(), args: { ...args }, results, exports, panels });
   writeFileSync(join(outDir, 'summary.md'), summary);
   writeFileSync(join(outDir, 'preview.html'), previewHtml('panels', panels, args, commit));
-  if (evidenceDir) writeFileSync(join(evidenceDir, 'preview.html'), previewHtml('panels', panels, args, commit));
 
   console.log(`\nwrote ${outDir}`);
   if (evidenceDir) console.log(`wrote compact evidence ${evidenceDir}`);
+  if (invalidRuns.length > 0) {
+    console.error(`\n${invalidRuns.length} INVALID mesher result(s) — comparison INCOMPLETE; diagnostics were written but invalid meshes were not ranked or exported:`);
+    for (const line of invalidRuns) console.error(`  - ${line}`);
+    process.exitCode = 1;
+  }
 }
 
 /** Static import at module scope would be circular-free; this keeps the panel
@@ -353,24 +559,69 @@ const ENV = (): Record<string, string> => ({
   cpus: String(cpus().length),
 });
 
-function buildSummary(rows: ResultRow[], args: Args, commit: string): string {
+/**
+ * Content hash of the comparison sources that produced the evidence, so a
+ * results file cannot be mistaken for a bare-base-commit run. Includes the
+ * shared modules and this CLI.
+ */
+export function codeFingerprint(root: string): string {
+  const h = createHash('sha256');
+  const dir = join(root, 'src/lab/sdf-zombie/mesher-comparison');
+  for (const f of readdirSync(dir).filter(n => n.endsWith('.ts')).sort()) {
+    h.update(f);
+    h.update(readFileSync(join(dir, f)));
+  }
+  h.update('scripts/blob-mesh-compare.ts');
+  h.update(readFileSync(join(root, 'scripts/blob-mesh-compare.ts')));
+  return h.digest('hex').slice(0, 16);
+}
+
+function sensitivityMarkdown(cell: number, rows: ReturnType<typeof sharpBoxSensitivity>): string {
+  const lines: string[] = [];
+  lines.push(`## cell ${mmOf(cell)} mm\n`);
+  lines.push('| phase (cells) | rot deg | SN surf mm | MC surf mm | DC surf mm | SN vert mm | MC vert mm | DC vert mm |');
+  lines.push('| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |');
+  for (const r of rows) {
+    lines.push(`| ${JSON.stringify(r.phaseCells)} | ${r.rotationDeg} | ${r.snSurfaceMm.toFixed(3)} | ${r.mcSurfaceMm.toFixed(3)} | ${r.dcSurfaceMm.toFixed(3)} | ${r.snVertexMm.toFixed(3)} | ${r.mcVertexMm.toFixed(3)} | ${r.dcVertexMm.toFixed(3)} |`);
+  }
+  lines.push('');
+  return lines.join('\n');
+}
+
+/**
+ * Write the sharp-box phase/rotation sensitivity evidence. Returns the names
+ * of the files created (relative to the evidence dir) for the manifest.
+ */
+export function writeSensitivityEvidence(evidenceDir: string, cells: readonly number[]): string[] {
+  const byCell = cells.map(cell => ({ cell, rows: sharpBoxSensitivity(cell) }));
+  const md: string[] = [];
+  md.push('# Sharp-box phase/rotation sensitivity\n');
+  md.push('Nearest TRIANGLE SURFACE distance from the true box corner to each mesh (mm). `phase` shifts the grid origin by that fraction of a cell; `rot` rotates the analytic box by degrees about (1,1,0). The direction (DC closest) is phase-robust; the absolute SN/MC error is alignment-specific, so these are fixture numbers, not a universal guarantee.\n');
+  for (const { cell, rows } of byCell) md.push(sensitivityMarkdown(cell, rows));
+  writeFileSync(join(evidenceDir, 'sensitivity.md'), md.join('\n'));
+  writeJson(join(evidenceDir, 'sensitivity.json'), byCell.map(({ cell, rows }) => ({ cell, rows })));
+  return ['sensitivity.md', 'sensitivity.json'];
+}
+
+function buildSummary(rows: ResultRow[], args: Args, commit: string, dirty = '', fingerprint = ''): string {
   const lines: string[] = [];
   lines.push('# Mesher comparison — measured summary\n');
-  lines.push(`commit \`${commit}\`, ${new Date().toISOString()}, node ${process.version}`);
+  lines.push(`worktree HEAD \`${commit}\`${dirty ? ' (DIRTY WORKING TREE)' : ' (clean)'}${fingerprint ? `, comparison source fingerprint \`${fingerprint}\`` : ''}, ${new Date().toISOString()}, node ${process.version}`);
   lines.push(`cells (mm): ${args.cells.map(mmOf).join(', ')}; repeats: ${args.repeats}; warmups: ${args.warmups}\n`);
-  lines.push('`med` = median extraction ms; `resid` = median |field|/|grad| (metres, first-order); `off>10%` = vertices more than 0.1 cell from the field zero set.\n');
+  lines.push('`med` = median extraction ms; `resid` = median |field|/|grad| over mesh VERTICES (first-order, metres); `surf resid` = median |field| sampled at vertices + triangle centroids (exact distance only where the fixture is analytic); `off>10%` = vertices more than 0.1 cell from the field zero set; `fallbacks` = benign finite fallbacks (e.g. singular QEF); `dropped` = unconnected intended geometry (nonzero + not explained by a clipped domain -> invalid).\n');
+  lines.push('Residuals are vertex/surface-sampling diagnostics: dividing by |grad| does not remove sampling bias or account for triangle-interior error. Cross-method reference distances are sampled and approximate; because the reference resolution varies per ladder step, matched-ERROR extraction cost is NOT established.\n');
   for (const row of rows) {
     lines.push(`## ${row.fixture} @ ${mmOf(row.cell)} mm\n`);
-    lines.push('| method | verts | tris | bnd edges | non-mf edges | comps | closed | vol sign | resid mm (med/p95/max) | in/out | off>10% | evals | med ms (min–max) | invalid |');
-    lines.push('| --- | ---: | ---: | ---: | ---: | ---: | :--: | :--: | ---: | ---: | ---: | :--: |');
+    lines.push('| method | status | verts | tris | bnd edges | non-mf edges | comps | closed | vol sign | resid mm (med/p95/max) | surf resid mm (med) | in/out | off>10% | fallbacks | dropped | evals | med ms (min–max) | invalid reason |');
+    lines.push('| --- | :--: | ---: | ---: | ---: | ---: | ---: | :--: | :--: | ---: | ---: | ---: | ---: | ---: | ---: | :--: | ---: |');
     for (const m of row.methods) {
       const r = m.normalizedResidual;
       const volSign = Number.isFinite(m.topology.signedVolume) ? (m.topology.signedVolume > 0 ? '+' : '−') : 'n/a';
-      lines.push(`| ${m.run} | ${m.verts} | ${m.tris} | ${m.topology.boundaryEdges} | ${m.topology.nonManifoldEdges} | ${m.topology.connectedComponents} | ${m.topology.closed ? 'yes' : 'no'} | ${volSign} | ${fmtMm(r.median)}/${fmtMm(r.p95)}/${fmtMm(r.max)} | ${m.topology.vertsInsideField}/${m.topology.vertsOutsideField} | ${m.verticesOffSurface} | ${m.fieldEvals} | ${m.medianMs.toFixed(0)} (${m.minMs.toFixed(0)}–${m.maxMs.toFixed(0)}) | ${m.invalid ? m.invalidReason ?? 'yes' : ''} |`);
+      lines.push(`| ${m.run} | ${m.rankable ? 'ok' : '**INVALID**'} | ${m.verts} | ${m.tris} | ${m.topology.boundaryEdges} | ${m.topology.nonManifoldEdges} | ${m.topology.connectedComponents} | ${m.topology.closed ? 'yes' : 'no'} | ${volSign} | ${fmtMm(r.median)}/${fmtMm(r.p95)}/${fmtMm(r.max)} | ${fmtMm(m.surfaceResidual.median)} | ${m.topology.vertsInsideField}/${m.topology.vertsOutsideField} | ${m.verticesOffSurface} | ${m.fallbacks} | ${m.droppedCells} | ${m.fieldEvals} | ${m.medianMs.toFixed(0)} (${m.minMs.toFixed(0)}–${m.maxMs.toFixed(0)}) | ${m.invalid ? m.invalidReason ?? 'yes' : ''} |`);
     }
     const withRef = row.methods.find(m => m.reference);
     if (withRef?.reference) {
-      lines.push(`\nReference: ${withRef.reference.method} @ ${mmOf(withRef.reference.cell)} mm (approximate), tolerance ${fmtMm(withRef.reference.tolerance)} mm.`);
+      lines.push(`\nReference: ${withRef.reference.method} @ ${mmOf(withRef.reference.cell)} mm (approximate; resolution varies by ladder step), tolerance ${fmtMm(withRef.reference.tolerance)} mm.`);
       lines.push('| method | mesh→ref med/p95/max mm | ref→mesh med/p95/max mm | coverage mesh→ref |');
       lines.push('| --- | ---: | ---: | ---: |');
       for (const m of row.methods) {
@@ -395,13 +646,14 @@ function buildSummary(rows: ResultRow[], args: Args, commit: string): string {
     }
     const sharp = row.methods.find(m => m.sharpProbes.length)?.sharpProbes ?? [];
     if (sharp.length) {
-      lines.push('\nSharp crease probes (nearest mesh vertex to the designated point, mm):');
+      lines.push('\nSharp crease probes — nearest TRIANGLE SURFACE distance to the designated point (mm; vertex-only distance in parentheses):');
       lines.push('| probe | ' + row.methods.map(m => m.run).join(' | ') + ' |');
       lines.push('| --- | ' + row.methods.map(() => '---:').join(' | ') + ' |');
       for (const sp of sharp) {
         lines.push(`| ${sp.name} | ` + row.methods.map(m => {
           const x = m.sharpProbes.find(y => y.name === sp.name);
-          return x ? fmtMm(x.minVertexDistance) : '—';
+          if (!x) return '—';
+          return `${fmtMm(x.minSurfaceDistance)} (${fmtMm(x.minVertexDistance)})`;
         }).join(' | ') + ' |');
       }
     }
@@ -431,11 +683,14 @@ function previewHtml(panelDirRel: string, panels: PanelRecord[], args: Args, com
   parts.push(`<p>cells: ${args.cells.map(mmOf).join(', ')} mm; panels at ${args.panelsCellMm} mm.</p>`);
   for (const [fixture, list] of byFixture) {
     parts.push(`<h2>${fixture}</h2>`);
-    const views = [...new Set(list.map(p => p.view))];
-    for (const view of views) {
-      parts.push(`<div class="viewlabel">${view} (${list.find(p => p.view === view)?.camera.halfSize.toFixed(3)} m half-extent)</div>`);
+    const keys = [...new Set(list.map(p => `${p.view}\u0000${p.cell}`))];
+    for (const key of keys) {
+      const [view, cellStr] = key.split('\u0000');
+      const cell = Number(cellStr);
+      const group = list.filter(p => p.view === view && p.cell === cell);
+      parts.push(`<div class="viewlabel">${view} @ ${mmOf(cell)} mm (${group[0]?.camera.halfSize.toFixed(3)} m half-extent)</div>`);
       parts.push('<div class="row">');
-      for (const p of list.filter(x => x.view === view)) {
+      for (const p of group) {
         const wire = p.file.includes('-wire');
         parts.push(`<figure><img src="${panelDirRel}/${p.file}" loading="lazy"><figcaption>${p.method}${wire ? ' (wireframe)' : ''} — ${p.tris} tris</figcaption></figure>`);
       }
@@ -446,4 +701,11 @@ function previewHtml(panelDirRel: string, panels: PanelRecord[], args: Args, com
   return parts.join('\n');
 }
 
-main();
+// Only run when invoked as a script; importing this module (e.g. from a test
+// that exercises path/budget validation) must not start a comparison.
+const invokedDirectly = (() => {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  try { return realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url)); } catch { return false; }
+})();
+if (invokedDirectly) main();

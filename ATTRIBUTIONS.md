@@ -177,7 +177,11 @@ licence compliance.
 Core ALICE-SDF is distributed under those two licenses only. Its repository
 also carries separate editor/integration distribution channels (VRChat,
 Unreal, Unity, mobile) under other terms — **none of those were consulted or
-imported**, and no code from them is present here.
+imported**, and no code from them is present here. The transcribed
+marching-cubes tables and the dual-contouring port in this repo are used
+under the **MIT** option. The complete upstream MIT permission notice
+(Copyright (c) 2025-2026 Moroya Sakamoto) is reproduced verbatim in
+[`src/lab/sdf-zombie/mesher-comparison/LICENSE-ALICE-SDF-MIT.txt`](src/lab/sdf-zombie/mesher-comparison/LICENSE-ALICE-SDF-MIT.txt).
 
 - **Author:** Moroya Sakamoto — https://github.com/ext-sakamoro/ALICE-SDF
 - **Pinned revision:** `1e85ab3591600bd316e3ceaa33df8dbd06cb3219` (v1.12.0)

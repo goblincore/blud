@@ -21,8 +21,9 @@ import {
   bidirectionalDistance, computeMeshStats, pointTriangleDist2, TriBvh, vertexToMeshDistance,
 } from './metrics';
 import { inspectGlb, meshToGlb, meshToObj, readBackObj } from './export';
+import { sharpBoxSensitivity } from './sensitivity';
 import { meshBounds, renderMesh, defaultCamera } from './render';
-import type { IndexedMesh } from './types';
+import { meshRankable, type IndexedMesh } from './types';
 import type { Vec3 } from '../types';
 
 const ALL: readonly RunId[] = ['surface-nets', 'marching-cubes', 'dual-contouring'];
@@ -361,6 +362,101 @@ describe('fixtures — preconditions', () => {
     expect(stats.signedVolume).toBeGreaterThan(0);
     const feats = featurePresence('chamfer-groove', mesh, null, cell, {});
     expect(feats.every(f => f.meshVerts > 0)).toBe(true);
+  });
+});
+
+describe('invalid-output contract', () => {
+  const cell = 0.04;
+
+  it('marks all three methods invalid on a partial-NaN field even when geometry is finite', () => {
+    const base = controlSphere();
+    const broken = { ...base, field: (p: Vec3) => (p[0] > 0.05 ? NaN : base.field(p)) };
+    const grid = gridFor(broken, cell);
+    const sn = surfaceNets(broken, optionsFor('surface-nets', cell, grid));
+    const mc = marchingCubes(broken, { cell, grid });
+    const dc = dualContouring(broken, { cell, grid });
+    for (const m of [sn, mc, dc]) {
+      expect(meshRankable(m)).toBe(false);
+      expect(m.invalidReason).toMatch(/non-finite/);
+    }
+    // Surface nets still emitted finite geometry; that is exactly why the
+    // non-finite counter, not a finite geometry check, must decide validity.
+    expect(sn.positions.length).toBeGreaterThan(0);
+    // DC's finite QEF fallbacks are diagnostics, not dropped geometry.
+    expect(dc.dropped).toBe(0);
+    expect(dc.fallbacks!).toBeGreaterThan(0);
+  });
+
+  it('marks all three methods invalid on an Infinite field', () => {
+    const base = controlSphere();
+    const broken = { ...base, field: (p: Vec3) => (p[0] > 0.05 ? Number.POSITIVE_INFINITY : base.field(p)) };
+    const grid = gridFor(broken, cell);
+    for (const m of [
+      surfaceNets(broken, optionsFor('surface-nets', cell, grid)),
+      marchingCubes(broken, { cell, grid }),
+      dualContouring(broken, { cell, grid }),
+    ]) {
+      expect(meshRankable(m)).toBe(false);
+      expect(m.invalidReason).toMatch(/non-finite/);
+    }
+  });
+
+  it('keeps legitimate finite QEF fallbacks valid (diagnostics, not failure)', () => {
+    const r = qefSolve({ points: [], normals: [] }, [-1, -1, -1], [1, 1, 1], true);
+    expect(r.fellBack).toBe(true);
+    expect(r.point.every(Number.isFinite)).toBe(true);
+
+    const field = controlSphere();
+    const dc = dualContouring(field, { cell, grid: gridFor(field, cell) });
+    // Simulate a run whose only anomaly is benign fallbacks: it must stay
+    // rankable and report the count.
+    const withFallbacks = { ...dc, fallbacks: 7 };
+    const a = analyzeMesh('dual-contouring', withFallbacks, field, 'control-sphere',
+      { timesMs: [1], medianMs: 1, minMs: 1, maxMs: 1 }, null);
+    expect(a.rankable).toBe(true);
+    expect(a.fallbacks).toBe(7);
+  });
+
+  it('never references, probes, ranks or exports an invalid mesh', () => {
+    const base = controlSphere();
+    const broken = { ...base, field: (p: Vec3) => (p[0] > 0.05 ? NaN : base.field(p)) };
+    const grid = gridFor(broken, cell);
+    const dc = dualContouring(broken, { cell, grid });
+    const ref = buildReferenceMesh(base, cell); // a genuine reference for the valid field
+    expect(ref).not.toBeNull();
+    const a = analyzeMesh('dual-contouring', dc, broken, 'control-sphere',
+      { timesMs: [1], medianMs: 1, minMs: 1, maxMs: 1 }, ref);
+    expect(a.rankable).toBe(false);
+    expect(a.reference).toBeNull();
+    expect(a.features).toEqual([]);
+    expect(a.sharpProbes).toEqual([]);
+    expect(meshRankable(dc)).toBe(false);
+  });
+
+  it('measures sharp-corner error on the triangle surface, not just vertices', () => {
+    const field = controlSharpBox();
+    const dc = dualContouring(field, { cell, grid: gridFor(field, cell) });
+    const a = analyzeMesh('dual-contouring', dc, field, 'control-sharp-box',
+      { timesMs: [1], medianMs: 1, minMs: 1, maxMs: 1 }, null);
+    expect(a.sharpProbes.length).toBeGreaterThan(0);
+    for (const p of a.sharpProbes) {
+      // The triangle surface is a superset of the vertices, so surface
+      // distance can never exceed vertex distance.
+      expect(p.minSurfaceDistance).toBeLessThanOrEqual(p.minVertexDistance + 1e-9);
+    }
+  });
+
+  it('sharp-box DC advantage is phase-robust but the absolute error is alignment-specific', () => {
+    const rows = sharpBoxSensitivity(0.02);
+    expect(rows.length).toBeGreaterThanOrEqual(5);
+    for (const r of rows) {
+      expect(r.dcSurfaceMm).toBeLessThan(r.snSurfaceMm);
+      expect(r.dcSurfaceMm).toBeLessThan(r.mcSurfaceMm);
+    }
+    // SN/MC error swings by several mm just from a sub-cell grid shift, so the
+    // 20 mm headline must not be quoted as a universal constant.
+    const axisAligned = rows.filter(r => r.rotationDeg === 0).map(r => r.snSurfaceMm);
+    expect(Math.max(...axisAligned) - Math.min(...axisAligned)).toBeGreaterThan(5);
   });
 });
 

@@ -23,8 +23,9 @@
 // `normalSource: 'field-gradient'` choice is explicit rather than implied.
 
 import { extractHullSoup, BLOCK } from '../webgpu/surface-nets-cpu';
-import { countedField, type GridSpec, type IndexedMesh, type MethodOptions, type ScalarField } from './types';
+import { countedField, nonFiniteReason, type GridSpec, type IndexedMesh, type MethodOptions, type ScalarField } from './types';
 import { fieldNormal } from './marching-cubes';
+import { countBoundaryCrossings } from './metrics';
 
 export interface SurfaceNetsExtra {
   blocksLive: number;
@@ -82,8 +83,25 @@ export function estimateCellVertexCap(grid: GridSpec): number {
   return Math.min(Math.max(est, 65536), 2_000_000);
 }
 
+/**
+ * Per-field memo for the boundary-crossing probe. It is only needed to
+ * classify surface-nets drops on a CLIPPED domain, so it runs at most once
+ * per (field, grid) instead of once per timed repeat.
+ */
+const boundaryCrossingCache = new WeakMap<ScalarField, { sig: string; value: number }>();
+
+function cachedBoundaryCrossings(field: ScalarField, grid: GridSpec): number {
+  const sig = `${grid.min.join(',')}|${grid.cell}|${grid.dims.join('x')}`;
+  const hit = boundaryCrossingCache.get(field);
+  if (hit && hit.sig === sig) return hit.value;
+  const value = countBoundaryCrossings(field, grid);
+  boundaryCrossingCache.set(field, { sig, value });
+  return value;
+}
+
 export function surfaceNets(fieldIn: ScalarField, opts: MethodOptions): SurfaceNetsMesh {
-  const { field, count } = countedField(fieldIn);
+  const tracked = countedField(fieldIn);
+  const { field, count } = tracked;
   const cell = opts.cell;
   const band = opts.band ?? 0;
   const distort = opts.distort ?? 1;
@@ -113,10 +131,30 @@ export function surfaceNets(fieldIn: ScalarField, opts: MethodOptions): SurfaceN
 
   let invalid = false;
   let invalidReason: string | undefined;
-  if (vertCount === 0 || welded.indices.length === 0) {
+  const nonFinite = nonFiniteReason(tracked);
+  // Does the fixture's own surface intersect the extraction-domain boundary?
+  // If so the domain deliberately CLIPS the solid (e.g. the character-head
+  // neck cut) and surface nets cannot connect quads across that clip; those
+  // drops are a fixture property, not a mesher defect. A closed, interior
+  // surface (boundaryCrossings === 0) must have zero drops. Skipped entirely
+  // when there are no drops, so it cannot inflate the timed hot path.
+  const boundaryCrossings = soup.droppedQuads > 0 ? cachedBoundaryCrossings(fieldIn, grid) : 0;
+  const droppedAtBoundary = boundaryCrossings > 0 ? soup.droppedQuads : 0;
+  if (nonFinite) {
+    invalid = true; invalidReason = nonFinite;
+  } else if (vertCount === 0 || welded.indices.length === 0) {
     invalid = true; invalidReason = 'empty surface-nets output';
   } else if (soup.overflow) {
     invalid = true; invalidReason = 'cell-vertex table overflow';
+  } else if (soup.droppedQuads > droppedAtBoundary) {
+    // Closed/interior surface, or drops beyond what the clip can explain:
+    // a quad over a sign-changing cell edge with a missing interior vertex is
+    // an internal omission and must not rank as a success.
+    const interior = soup.droppedQuads - droppedAtBoundary;
+    invalid = true;
+    invalidReason = interior > 0
+      ? `surface nets dropped ${interior} interior quad(s) with no cell vertex (internal omission)`
+      : `surface nets dropped ${soup.droppedQuads} quad(s) with no cell vertex (internal omission)`;
   } else {
     for (let i = 0; i < welded.positions.length; i++) {
       if (!Number.isFinite(welded.positions[i]!)) { invalid = true; invalidReason = 'non-finite position'; break; }
@@ -133,12 +171,17 @@ export function surfaceNets(fieldIn: ScalarField, opts: MethodOptions): SurfaceN
     invalid,
     invalidReason,
     overflow: soup.overflow,
+    // DROPPED GEOMETRY only; surface nets has no benign fallback counter.
     dropped: soup.droppedQuads,
+    fallbacks: 0,
     detail: {
       blocksLive: soup.blocksLive,
       blocksTotal: soup.blocksTotal,
       cellVerts: soup.cellVerts,
       droppedQuads: soup.droppedQuads,
+      droppedAtBoundary,
+      boundaryCrossings,
+      nonFiniteSamples: tracked.nonFinite(),
       distort: Number.isFinite(distort) ? distort : -1,
     },
     surfaceNets: {

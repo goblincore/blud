@@ -1,22 +1,35 @@
 # Blobforge mesher comparison — surface nets vs marching cubes vs dual contouring
 
 **Date:** 2026-09-15 · **Dispatch task:** `2026-09-15-blud-mesher-comparison-task-1`
+**Review fix-up:** Codex review `c9258e21` corrections in
+`2026-09-15-blud-mesher-comparison-fix1` (this branch).
 **Question:** does marching cubes (MC) or ALICE-inspired dual contouring (DC)
 offer a useful geometry-quality / extraction-cost improvement over Blud's
 CURRENT surface nets (SN) for Blobforge export and baked geometry?
 
-**Answer (short):** no single winner. Keep surface nets as the runtime/bake
-default — it is 3–5× cheaper and adequate on organic flesh. For **static
-export and baked geometry with authored sharp creases**, selectively use **dual
-contouring**: it is the only method that preserves a crease (≈100× smaller
-corner error than SN at the same cell), at a one-time 3–5× extraction cost.
-Marching cubes improves smooth-surface accuracy ~2× over SN at matched cell for
-~1.5–3.5× the cost, but rounds creases as badly as SN, so it is not the tool for
-the sharp-feature case.
+**Answer (short, measured):** no universal winner, and the honest result is
+narrower than a first pass suggested. Keep surface nets as the runtime/bake
+default. For **static export and baked geometry with authored sharp creases on
+this fixture set**, dual contouring is the only method that puts geometry at a
+true box corner; on a 20 mm cell its triangle-surface corner error is
+**0.229 mm** vs **23.09 mm** for both SN and MC. That direction survives grid
+phase shifts and a 20° rotated frame, but the absolute advantage is
+**fixture- and alignment-specific** (see §4.2), not a universal 100×. MC is
+~2× more accurate than SN on smooth surfaces at matched cell and is often the
+cheapest of the two high-accuracy methods, but it rounds creases just as SN
+does.
 
 This note is the human-readable report. The numbers are regenerated into
-[`summary.md`](summary.md) and [`results.json`](results.json); panels are in
+[`summary.md`](summary.md) and [`results.json`](results.json); phase/rotation
+evidence is in [`sensitivity.md`](sensitivity.md); panels are in
 [`panels/`](panels) and the preview page is [`preview.html`](preview.html).
+
+> **Evidence provenance.** Every number below comes from the current
+> `summary.md`/`results.json`, generated on this fix branch. The summary header
+> records the worktree HEAD, whether the tree was dirty at generation time, and
+> a content fingerprint of the comparison sources. The earlier `c9258e21` run
+> used the same fixtures but a different timing pass and the pre-fix (incorrect)
+> vertex-only sharp probe; its numbers are superseded and are not reused here.
 
 ---
 
@@ -30,42 +43,90 @@ methods all sample the same `ScalarField.field(p)` closure on the same
 
 | file | role |
 | --- | --- |
-| `types.ts` | `ScalarField`, `IndexedMesh`, shared `GridSpec`, eval counting |
-| `marching-cubes-tables.ts` | classic 256-entry `EDGE_TABLE`/`TRI_TABLE` (provenance in header) |
-| `marching-cubes.ts` | table-based MC, canonical global-edge vertex caching, integral winding |
+| `types.ts` | `ScalarField`, `IndexedMesh`, shared `GridSpec`, eval + non-finite counting |
+| `marching-cubes-tables.ts` | classic 256-entry `EDGE_TABLE`/`TRI_TABLE` (MIT notice in `LICENSE-ALICE-SDF-MIT.txt`) |
+| `marching-cubes.ts` | table-based MC, canonical global-edge vertex caching, fixed winding |
 | `dual-contouring.ts` | port of ALICE-SDF DC: QEF + Tikhonov, edge refinement, dual connectivity |
 | `surface-nets-adapter.ts` | untouched `extractHullSoup` (band 0, distort 1) + correct soup weld |
 | `fixtures.ts` | 2 analytic controls, 1 Blud chamfer/groove control, real goblin head region, torn chunk |
 | `metrics.ts` | topology, field residual + gradient-normalised residual, point-triangle BVH, sampled bidirectional distance |
-| `analysis.ts` | reference build, feature-region presence, sharp-crease probes |
+| `analysis.ts` | reference build, feature-region presence, triangle-surface sharp probes |
+| `sensitivity.ts` | sharp-box grid-phase and rotated-frame sensitivity |
 | `render.ts` | tiny z-buffered CPU rasteriser (identical camera/shading panels) |
 | `export.ts` | OBJ + GLB writers and read-back/inspect helpers |
 | `runner.ts` | method dispatch, shared-grid harness, warmup/repeat timing with rotated order |
-| `mesher-comparison.test.ts` | 29 focused tests |
+| `mesher-comparison.test.ts` | 35 focused tests |
+| `LICENSE-ALICE-SDF-MIT.txt` | verbatim upstream MIT permission notice for the ported tables/DC |
+
+### 1.1 Invalid-output contract (review fix 1)
+
+The shared field wrapper (`countedField`) counts **every** evaluation,
+including grid corners, DC edge refinement and per-vertex normals, and counts
+how many returned non-finite. Any non-finite sample marks **all** of the
+affected meshers invalid even when fallback geometry is finite, because
+fallback geometry must not be ranked as a success. `IndexedMesh.dropped` now
+means **dropped intended geometry**; benign finite fallbacks (e.g. a singular
+QEF falling back to its mass point) are reported separately as `fallbacks`.
+DC connectivity that cannot find a dual vertex for a sign-changing interior
+grid edge is an internal omission and invalidates; intentionally clipped
+domain boundaries are classified separately for surface nets via a
+boundary-crossing probe. Invalid rows keep their diagnostics but get no
+reference comparison, feature probes or export, and the CLI exits **non-zero**
+when a requested comparison is incomplete. JSON is written with an explicit
+`NaN`/`Infinity` replacer so nothing silently becomes `null`.
+
+### 1.2 CLI path + input safety (review fix 2)
+
+`scripts/blob-mesh-compare.ts` validates fixture/method names, finite positive
+cell sizes, positive-integer repeats, non-negative-integer warmups, panel cell
+sizes and per-fixture `minCell` **before** any mutation. It rejects an output
+path that is the repo root, an ancestor/escape, a source tree, a symlink
+escape, or that overlaps the evidence dir. A run directory is only deleted when
+it contains just known generated names; an evidence dir is cleaned by removing
+only known generated names (its README/human notes are preserved). Grid cell
+and corner counts are checked against a conservative budget before any large
+allocation. `scripts/blob-mesh-compare.test.ts` proves each of these against
+throwaway `mkdtemp` sandboxes with sentinel files.
 
 ## 2. How the numbers are measured (and what they are not)
 
 - **`|field(v)|` is a field residual, not a Euclidean error.** Blud fields are
   not true distances (`march-step-soundness.test.ts`; anisotropic prim scales,
   smooth-min fillets).
-- **`resid` = `|field(v)| / |grad field(v)|`** is the primary per-vertex
+- **`resid` = `|field(v)| / |grad field(v)|`** is a per-vertex first-order
   geometric estimate. It needs only the field and the mesh, so it cannot favour
-  a mesher. It is first-order.
+  a mesher, but it is a **vertex-sampling diagnostic**: each mesher distributes
+  vertices differently (DC concentrates them at creases), so it is not a uniform
+  surface sample and dividing by `|grad|` does not remove that bias or account
+  for triangle-interior error.
+- **`surf resid`** adds **triangle-centroid** samples to the vertices. For the
+  analytic controls the field is exact distance, so these samples are exact
+  distances at those points; for Blud-composed fields it is still a residual.
 - **`mesh→ref` / `ref→mesh`** is a **sampled bidirectional point-to-triangle
-  distance** to a fine reference (marching cubes at `cell/2`, capped at 5 mm).
-  It is approximate, is never called Hausdorff distance, and is omitted (not
-  faked) where the tested cell is already 5 mm. The reference is a mesher, so it
-  is itself approximate; the method-independent `resid` is the backstop.
-- **`resid` alone cannot see a rounded corner**: MC reports `resid = 0` on the
-  sharp box (its vertices lie *on* the box zero set) while its corners are
-  rounded by ~1.4 cells. That is why every result is paired with the reference
-  distance and the **sharp-crease probe** below.
+  distance** to a reference (marching cubes at `cell/2`, capped at 5 mm). It is
+  approximate, is never called Hausdorff distance, and is omitted (not faked)
+  where the tested cell is already 5 mm.
+- **Matched-error cost is NOT established.** The reference resolution differs
+  per ladder step (20→10 mm, 10→5 mm), so comparing a method's cost at one
+  error level against another's at a different error level is not supported by
+  this data. Only equal-cell-size cost/geometry comparisons are made.
+- **Sharp-crease probes now use nearest TRIANGLE SURFACE distance** (via the
+  same `TriBvh`) as the headline; nearest-vertex distance is kept in
+  parentheses because it is biased by each mesher's vertex layout.
 - **Field evaluations** count every call through the shared counting wrapper,
   including normals and refinement. Extraction time is median of ≥3 measured
   runs after ≥1 warmup, with method order rotated per repeat.
-- `|field|` on the controls is exact distance (flagged `exactDistance: true`).
-- Memory is reported as working-set buffer sizes where named; no process-peak
-  claim is made.
+- **Normals differ by method and are not a comparison target.** MC and SN
+  evaluate a central-difference field gradient at the final vertex; DC averages
+  the Hermite normals gathered from its refined edge intersections. The CPU
+  panels shade with **face normals** from the exported triangles, so the panels
+  are consistent across methods despite the exported per-vertex normal
+  differences.
+- **DC departs from upstream's normal gradient epsilon.** This port uses
+  `cell * 0.5` (so the gradient step scales with resolution); upstream defaults
+  to a fixed `0.001 m`. This is a deliberate departure recorded in
+  `dual-contouring.ts`, not a faithful native-runtime reproduction. Native
+  ALICE timings are out of scope.
 
 ## 3. Fixtures
 
@@ -79,116 +140,156 @@ methods). The `torn-chunk` fixture is built through the production
 
 ## 4. Headline results
 
-### 4.1 Sharp creases — the decisive difference
+### 4.1 Sharp creases — the one clear, fixture-specific difference
 
-Nearest mesh vertex to the true box corner (`control-sharp-box`, exact analytic
-field). Lower is better; cell size in mm.
+Nearest **triangle-surface** distance from the true box corner on
+`control-sharp-box` (exact analytic field), mm. Vertex-only distance in
+parentheses. Lower is better.
 
 | cell | surface nets | marching cubes | dual contouring |
 | ---: | ---: | ---: | ---: |
-| 20 mm | 23.09 mm | 28.28 mm | **0.229 mm** |
-| 10 mm | 11.55 mm | 14.14 mm | **0.114 mm** |
-| 5 mm | 5.77 mm | 7.07 mm | **0.057 mm** |
+| 20 mm | 23.094 (23.094) | 23.094 (28.284) | **0.229** |
+| 10 mm | 11.547 (11.547) | 11.547 (14.142) | **0.114** |
+| 5 mm | 5.774 (5.774) | 5.774 (7.071) | **0.057** |
 
-SN/MC round the corner by ~1.2–1.4 cells (they place no vertex off a grid edge);
-DC places a QEF vertex essentially at the corner (~0.011 cell). This is the
-same effect the `chamfer-groove` control shows for a Blud `chamfer` fold and
-`groove` channel: the crease is present in all three, but only DC keeps it
-sharp.
+Reading: both SN and MC round the corner by roughly a cell; the vertex-only
+probe previously used in `c9258e21` understated MC (28.28 mm) because MC's
+nearest vertex is further away even though its surface passes closer. On the
+triangle surface SN and MC are identical here, and only DC places geometry at
+the corner. The same qualitative effect appears on the synthetic
+`chamfer-groove` Blud control (a `sminChamfer` fold and a `groove` channel):
+the crease exists in all three, but only DC keeps it sharp.
 
-### 4.2 Smooth-surface accuracy at matched cell (sampled mesh→reference median, mm)
+### 4.2 Sharp-box phase/rotation sensitivity — fixture-specific, not universal
 
-| fixture | cell | SN | MC | DC |
-| --- | ---: | ---: | ---: | ---: |
-| control-sphere | 20 | 0.597 | 0.244 | **0.200** |
-| control-sphere | 10 | 0.150 | 0.062 | **0.049** |
-| chamfer-groove | 20 | 0.756 | **0.258** | 0.274 |
-| chamfer-groove | 10 | 0.538 | **0.286** | 0.325 |
-| character-head | 20 | 1.02 | **0.373** | 0.448 |
-| character-head | 10 | 0.271 | 0.109 | **0.119** |
-| torn-chunk | 20 | 1.92 | **0.727** | 0.840 |
-| torn-chunk | 10 | 0.521 | 0.211 | 0.204 |
+Re-running the analytic box with the grid origin shifted by a fraction of a
+cell and with a rotated sampling frame (`sensitivity.md`, `sensitivity.json`).
+Triangle-surface corner error, mm:
 
-SN is ~1.4–2.6× worse than MC/DC at matched cell on smooth surfaces; MC and DC
-are close, each winning some rows.
+| 20 mm variant | SN | MC | DC |
+| --- | ---: | ---: | ---: |
+| phase (0,0,0) | 23.094 | 23.094 | 0.229 |
+| phase (+0.23,0,0) | 21.470 | 20.833 | 0.213 |
+| phase (+0.5,+0.5,+0.5) | 11.547 | 11.547 | 0.114 |
+| phase (+0.25,+0.25,+0.25) | 17.321 | 17.321 | 0.171 |
+| rotated 20° about (1,1,0) | 14.691 | 12.326 | 3.085 |
+
+The **direction** (DC closest) is robust across all of these, but the
+**absolute** SN/MC error swings from ~11.5 to ~23 mm on a sub-cell shift, and
+in the rotated frame DC's error rises to ~3.1 mm — a ~5× rather than ~100×
+advantage. No "100× better" claim generalises beyond this axis-aligned box
+fixture; treat §4.1 as a measured property of this box at these alignments.
+
+### 4.3 Smooth-surface accuracy at matched cell (sampled mesh→reference median, mm)
+
+| fixture | cell | SN | MC | DC | winner (median) |
+| --- | ---: | ---: | ---: | ---: | --- |
+| control-sphere | 20 | 0.597 | 0.244 | **0.200** | DC |
+| control-sphere | 10 | 0.150 | 0.062 | **0.049** | DC |
+| chamfer-groove | 20 | 0.756 | **0.258** | 0.274 | MC |
+| chamfer-groove | 10 | 0.179 | **0.062** | 0.073 | MC |
+| character-head | 20 | 1.025 | **0.373** | 0.448 | MC |
+| character-head | 10 | 0.271 | **0.109** | 0.119 | MC |
+| torn-chunk | 20 | 1.918 | **0.727** | 0.840 | MC |
+| torn-chunk | 10 | 0.521 | 0.211 | **0.204** | DC |
+
+SN is ~1.4–2.6× worse than MC/DC at matched cell on smooth surfaces. MC and DC
+trade rows: on `character-head` at 10 mm MC has the lower median (0.109 vs
+0.119) but DC has the lower p95 (0.637 vs 0.743) and lower `surf resid` median
+(0.060 vs 0.125 mm). There is no clean aggregate winner between MC and DC on
+smooth organic geometry.
 
 **Mechanism, measured:** SN vertices sit systematically **inside** the surface
 (e.g. sphere 20 mm: 1856 of 1868 vertices have `field < 0`; DC is the opposite —
 24 inside / 1844 outside), because `extractHullSoup`'s Newton pull targets
 `field = band*0.6 = 0` and breaks immediately when the value is already ≤ the
 target inside. At band 0 the pull therefore does not project inside-starting
-vertices. The sphere volume error at 20 mm is −1.15 % (SN), −0.60 % (MC),
-+0.24 % (DC) — a real quality gap, not a measurement artefact.
+vertices. This is a real quality gap, not a measurement artefact.
 
-### 4.3 Extraction cost (median ms; identical grids; node v22.22.1)
+### 4.4 Extraction cost (median ms; identical grids; node v22.22.1)
 
-| fixture | cell | SN | MC | DC | SN field evals | MC | DC |
+| fixture | cell | SN | MC | DC | SN evals | MC | DC |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| character-head | 20 mm | **150** | 177 | 396 | 22 249 | 26 937 | 60 609 |
-| character-head | 10 mm | **534** | 1051 | 1923 | 80 448 | 160 165 | 287 593 |
-| character-head | 5 mm | **2059** | 6914 | 10 298 | 307 441 | 1 069 713 | 1 563 017 |
-| control-sharp-box | 10 mm | **27** | 32 | 55 | 94 395 | 179 153 | 290 165 |
-| chamfer-groove | 5 mm | **74** | 136 | 233 | 208 344 | 599 469 | 1 009 189 |
-| torn-chunk | 5 mm | **24** | 73 | 105 | 43 078 | 181 785 | 253 293 |
+| character-head | 20 mm | **150** | 178 | 400 | 22 249 | 26 937 | 60 609 |
+| character-head | 10 mm | **542** | 1060 | 1910 | 80 448 | 160 165 | 287 593 |
+| character-head | 5 mm | **2078** | 7091 | 10 344 | 307 441 | 1 069 713 | 1 563 017 |
+| chamfer-groove | 10 mm | **31** | 42 | 91 | 51 452 | 92 393 | 200 025 |
+| torn-chunk | 10 mm | **6** | 11 | 19 | 11 713 | 27 049 | 45 853 |
+| control-sphere | 20 mm | 13 | **3** | 10 | 27 734 | 47 133 | 98 841 |
+| control-sharp-box | 10 mm | 31 | 41 | 67 | 94 395 | 179 153 | 290 165 |
 
-SN is ~3.4× faster than MC and ~5× faster than DC on the head at 5 mm. DC's
-extra cost is the per-cell Hermite gather (up to 12 refined intersections +
-normal samples) plus the QEF solve.
+On the character meshes SN is ~3.4× faster than MC and ~5× faster than DC at
+5 mm. It is **not universally cheapest**: on the small analytic controls MC is
+often faster than SN (sphere 20 mm: 3 ms vs 13 ms; the sub-10 ms rows are noisy
+run-to-run). DC's extra cost is the
+per-cell Hermite gather (up to 12 refined intersections + normal samples) plus
+the QEF solve. These are single-process TypeScript timings on one machine, not
+a GPU or FPS claim.
 
-### 4.4 Topology
+### 4.5 Topology
 
 All three produce **closed, manifold, single-component, positive-volume** meshes
 on every closed fixture (0 boundary edges, 0 non-manifold edges, 0 degenerate
 triangles, 0 orientation flips at every cell tested). No method produced an
-invalid, empty, truncated or non-finite mesh. On `character-head` all three
-report the identical **boundary edge count from the neck cut** (52 / 106 / 230 at
-20 / 10 / 5 mm), confirming that the open boundary is the fixture, not a mesher.
+invalid, empty, truncated or non-finite mesh on the shipped fixtures. On
+`character-head` all three report the identical **boundary edge count from the
+neck cut** (52 / 106 / 230 at 20 / 10 / 5 mm), confirming the open boundary is
+the fixture, not a mesher. Surface nets reports 52/106/230 dropped quads on the
+head; these are the same boundary clip and are classified as boundary drops, not
+internal omissions.
 
-### 4.5 The baseline is not handicapped by block pruning
+### 4.6 The baseline is not handicapped by block pruning
 
-A labelled **unpruned control** (`distort: Infinity`, production is `distort: 1`)
-was run at 20/10 mm on every fixture: vertex counts, triangle counts, boundary
-edges and non-manifold edges are **identical** to the pruned baseline, while the
-unpruned run costs up to ~2× more. Block-live pruning culls no surface on these
-fixtures.
+A fresh labelled **unpruned control** (`distort: Infinity`, production is
+`distort: 1`) was run at 20/10 mm on every fixture (`.scratch/mesher-unpruned-fix1`):
+vertex counts, triangle counts, boundary edges and non-manifold edges are
+**identical** to the pruned baseline. Block-live pruning culls no surface on
+these fixtures.
 
 ## 5. Visual evidence
 
 `panels/*.png` are CPU-rendered with the **same camera per row and one neutral
-material** (`render.ts`): a main shaded view per method, a wireframe view for
-surface nets, and closeups of the thin ears, the box corner, the chamfer seam,
-the groove and the crater rim. `preview.html` lays them out with labels and the
-tris per panel. These resolve geometry, not baked chunk material parity —
-material/albedo is out of scope.
+material** (`render.ts`), shaded with **face normals** so the three methods are
+consistent: a main shaded view per method, a wireframe view for surface nets,
+and closeups of the thin ears, the box corner, the chamfer seam, the groove and
+the crater rim. Panels are rendered at 20 mm for every fixture and additionally
+at **10 mm for the sharp/concave fixtures** (`control-sharp-box`,
+`chamfer-groove`) via `--panels-extra 10`. `preview.html` lays them out with
+labels, cell size and tris per panel. These resolve geometry, not baked chunk
+material parity — material/albedo is out of scope.
 
 ## 6. Verdict
 
-The three axes are separated deliberately:
+The axes are separated deliberately:
 
 - **Implementation correctness:** all three are genuine, vetted implementations
   (table-based MC with interpolated edge vertices and shared-edge welding; a
   faithful DC port with regularized QEF and robust singular/non-finite fallback;
-  the untouched production SN extractor). Evidence: §4.4 topology, §4.5 unpruned
-  control, and 29 focused tests.
-- **Geometric quality:** MC/DC beat SN by ~2× on smooth surfaces; DC is
-  essentially alone on sharp creases (§4.1). But DC has a measured weakness at
-  **coarse cells on concave features**: on `chamfer-groove` at 20 mm its
-  residual max is 12.9 mm (worse than SN 6.3 / MC 6.4) and its reference max
-  8.3 mm, because a clamped QEF vertex can sit a full cell from a concave
-  channel. At 10 mm and below DC is comparable. Use DC at ≤10 mm when a
-  concave channel matters.
-- **CPU extraction cost:** SN ≪ MC < DC (roughly 1 : 3.4 : 5 on the head at
-  5 mm).
+  the untouched production SN extractor). The invalid-output contract (§1.1)
+  was added so incomplete/fabricated meshes cannot rank as successes.
+- **Geometric quality:** MC is ~2× more accurate than SN on smooth surfaces at
+  matched cell; MC and DC trade wins there. On sharp creases **on this box
+  fixture**, DC is essentially alone (§4.1), but the magnitude is
+  alignment-specific (§4.2). DC also has a measured weakness at **coarse cells
+  on the synthetic concave `chamfer-groove` control**: at 20 mm its `resid` max
+  is 12.87 mm (worse than SN 6.33 / MC 6.42) and its reference max 8.31 mm,
+  because a clamped QEF vertex can sit a full cell from a concave channel. At
+  10 mm DC is comparable on that fixture.
+- **CPU extraction cost:** SN is fastest on the character/chamfer/torn
+  fixtures (~1 : 3.4 : 5 at head 5 mm), but not on the small analytic controls
+  where MC is often fastest.
 - **Visual confidence:** panels are consistent with the numbers, but they are
   static CPU renders, not gameplay.
 
-**Recommendation.** Keep surface nets for runtime marching and for bakes where
-only smooth flesh is involved. Add dual contouring as a **selective** path for
-Blobforge static export and baked geometry that carries authored sharp features
-(`chamfer` folds, `groove` channels, box parts, panel lines), invoked at ≤10 mm.
-Do not adopt MC as a general replacement: it is ~2× more accurate than SN on
-smooth surfaces but ~3.4× the cost and rounds creases exactly as SN does. There
-is no universal winner; the value in DC is confined to sharp features.
+**Recommendation (bounded).** Keep surface nets for runtime marching and for
+bakes where only smooth flesh is involved. Consider dual contouring as a
+**selective, still-tentative** candidate for Blobforge static export and baked
+geometry that carries authored sharp features (`chamfer` folds, `groove`
+channels, box parts, panel lines) at ≤10 mm; its sharp-crease benefit is real
+on this fixture, but the review-scale magnitude needs a real `.blob` character
+with authored creases before adoption. Do not adopt MC as a general
+replacement: it is ~2× more accurate than SN on smooth surfaces but ~3.4× the
+cost and rounds creases like SN. There is no universal winner.
 
 ## 7. Limitations / not established
 
@@ -196,29 +297,36 @@ is no universal winner; the value in DC is confined to sharp features.
 - The reference surface is a marching-cubes mesh; distances to it are sampled,
   approximate and labelled. No exact Hausdorff distance is claimed.
 - At 5 mm the reference would not be finer than the tested mesh, so reference
-  distances are **not established** there; only `resid` and the sharp probes are
-  reported at 5 mm.
-- Timings are single-process TS on one machine (node v22.22.1); they are not a
-  GPU or FPS claim, and native ALICE/Rust timings are explicitly out of scope.
-- DC's concave-channel behaviour at coarse cells is measured but not tuned;
-  the QEF is upstream's (λ = 0.01, clamp to cell), not a re-optimisation.
-- The chamfer-groove fixture uses a synthetic Blud body (documented primitives),
-  not a shipped `.blob`.
+  distances are **not established** there; only `resid`, `surf resid` and the
+  sharp probes are reported at 5 mm.
+- **Matched-error extraction cost is not established** (reference resolution
+  varies per ladder step).
+- Sharp-crease magnitude is fixture/alignment-specific; §4.1 is a box-control
+  number, not a universal guarantee.
+- `resid`/`surf resid` remain sampling diagnostics; they do not bound
+  triangle-interior error for non-analytic fields.
+- Timings are single-process TS on one machine (node v22.22.1); native
+  ALICE/Rust timings are explicitly out of scope.
+- DC's concave-channel behaviour at coarse cells and its `cell*0.5` gradient
+  epsilon are measured/documented, not tuned.
+- The chamfer-groove fixture uses a synthetic Blud body, not a shipped `.blob`.
 
 ## 8. Reproduce
 
 ```
-# focused tests + the production tests the comparison leans on
-npx vitest run src/lab/sdf-zombie/mesher-comparison/mesher-comparison.test.ts
+# focused tests (comparison + CLI safety) and the production tests it leans on
+npx vitest run src/lab/sdf-zombie/mesher-comparison/mesher-comparison.test.ts \
+               scripts/blob-mesh-compare.test.ts
 npx vitest run src/lab/sdf-zombie/webgpu/surface-nets-cpu.test.ts \
                 src/lab/sdf-zombie/chunk-bake-field.test.ts \
                 src/lab/sdf-zombie/webgpu/chunk-bake-buffers.test.ts \
                 src/lab/sdf-zombie/webgpu/chunk-bake-jobs.test.ts
 npx tsc --noEmit
 
-# smoke, then the bounded ladder + committed evidence
+# smoke, then the bounded ladder + committed evidence (incl. 10 mm sharp panels)
 npx tsx scripts/blob-mesh-compare.ts --smoke
 npx tsx scripts/blob-mesh-compare.ts --cells 20,10,5 --repeats 3 --warmups 1 \
+    --panels-cell 20 --panels-extra 10 \
     --out .scratch/mesher-comparison \
     --evidence docs/dev-notes/2026-09-15-mesher-comparison
 
@@ -228,10 +336,11 @@ npx tsx scripts/blob-mesh-compare.ts --methods surface-nets,surface-nets-unprune
 ```
 
 `npx tsx scripts/blob-mesh-compare.ts --help` documents all options. Large
-generated data (full ladder meshes at 20/10/5 mm) lives in the gitignored
-`.scratch/mesher-comparison/`; only the compact representative set is committed
-here (GLB for every fixture/method at 20 mm, OBJ for the head and box, plus the
-panels, `results.json` and `summary.md`).
+generated data lives in the gitignored `.scratch/mesher-comparison/`; the
+committed evidence dir holds the compact representative set (GLB for every
+fixture/method at 20 mm, OBJ for the head and box, panels including the 10 mm
+sharp/concave set, `sensitivity.*`, `results.json`, `summary.md`,
+`preview.html`) plus a manifest of the generated names.
 
 ## 9. Upstream provenance and licensing
 
@@ -239,8 +348,11 @@ panels, `results.json` and `summary.md`).
   MIT OR Apache-2.0, © 2025-2026 Moroya Sakamoto — source of the marching-cubes
   tables (`src/mesh/sdf_to_mesh.rs`) and the dual-contouring algorithm
   (`src/mesh/dual_contouring.rs`). `src/mesh/manifold.rs` was inspected for the
-  manifold/watertightness vocabulary. Copied/translated code carries the
-  notice, and `ATTRIBUTIONS.md` records the derivation.
+  manifold/watertightness vocabulary. The transcribed tables and DC port are
+  used under the **MIT** option; the complete upstream MIT permission notice is
+  reproduced verbatim in
+  [`src/lab/sdf-zombie/mesher-comparison/LICENSE-ALICE-SDF-MIT.txt`](../../../src/lab/sdf-zombie/mesher-comparison/LICENSE-ALICE-SDF-MIT.txt)
+  and recorded in `ATTRIBUTIONS.md`.
 - **alice-view**, pinned `a05c803fc8440a07186179e9f1c74baf14b9e85a`, MIT,
   © 2024-2026 Moroya Sakamoto — `src/ui/export.rs` was inspected for the
   OBJ/GLB export entry point only; no code or text was copied from it.
@@ -250,6 +362,8 @@ panels, `results.json` and `summary.md`).
 
 ## 10. Handoff
 
-- Branch: `codex/dispatch/2026-09-15-blud-mesher-comparison` (isolated
+- Branch: `codex/dispatch/2026-09-15-blud-mesher-comparison-fix1` (isolated
   worktree). Not merged or pushed.
-- Codex review: rerun §8 and inspect `summary.md` / `results.json` / panels.
+- Codex review: rerun §8 and inspect `summary.md` / `sensitivity.md` /
+  `results.json` / panels. The evidence header records the worktree HEAD,
+  dirty state and source fingerprint.

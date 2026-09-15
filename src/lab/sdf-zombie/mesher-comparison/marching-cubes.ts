@@ -22,12 +22,15 @@
 // it; production fields can, and the metrics row reports non-manifold and
 // boundary edge counts rather than claiming a general watertight guarantee.
 //
-// TABLE PROVENANCE: `marching-cubes-tables.ts`, transcribed from ALICE-SDF
-// (MIT OR Apache-2.0) at pinned revision 1e85ab3591600bd316e3ceaa33df8dbd06cb3219,
-// `src/mesh/sdf_to_mesh.rs`. Corner/edge convention below.
+// TABLE PROVENANCE: `marching-cubes-tables.ts`, transcribed from ALICE-SDF at
+// pinned revision 1e85ab3591600bd316e3ceaa33df8dbd06cb3219,
+// `src/mesh/sdf_to_mesh.rs`, and used under ALICE-SDF's MIT option. The
+// complete upstream MIT permission notice (Copyright (c) 2025-2026 Moroya
+// Sakamoto) is reproduced verbatim in `LICENSE-ALICE-SDF-MIT.txt` beside this
+// file and is recorded in ATTRIBUTIONS.md. Corner/edge convention below.
 
 import {
-  countedField, fitGrid, gridCornerCount, gridPoint, type GridSpec,
+  countedField, fitGrid, gridCornerCount, gridPoint, nonFiniteReason, type GridSpec,
   type IndexedMesh, type MethodOptions, type ScalarField,
 } from './types';
 import { EDGE_TABLE, TRI_TABLE } from './marching-cubes-tables';
@@ -69,7 +72,8 @@ const cornerIndex = (grid: GridSpec, i: number, j: number, k: number): number =>
  * closure (not a grid finite difference).
  */
 export function marchingCubes(fieldIn: ScalarField, opts: MethodOptions): IndexedMesh {
-  const { field, count } = countedField(fieldIn);
+  const tracked = countedField(fieldIn);
+  const { field, count } = tracked;
   const cell = opts.cell;
   const grid = opts.grid ?? fitGrid(field, cell);
   const [nx, ny, nz] = grid.dims;
@@ -189,7 +193,11 @@ export function marchingCubes(fieldIn: ScalarField, opts: MethodOptions): Indexe
   }
 
   const vertCount = positions.length / 3;
-  if (vertCount === 0) {
+  const nonFinite = nonFiniteReason(tracked);
+  if (nonFinite) {
+    invalid = true;
+    invalidReason = nonFinite;
+  } else if (vertCount === 0) {
     invalid = true;
     invalidReason = invalidReason ?? 'empty mesh (no sign changes in domain)';
   } else if (indices.length === 0) {
@@ -215,6 +223,8 @@ export function marchingCubes(fieldIn: ScalarField, opts: MethodOptions): Indexe
     invalidReason,
     overflow: false,
     dropped,
+    fallbacks: 0,
+    detail: { nonFiniteSamples: tracked.nonFinite() },
   };
 }
 

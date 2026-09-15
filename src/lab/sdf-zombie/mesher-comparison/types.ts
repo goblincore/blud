@@ -56,19 +56,47 @@ export interface ScalarField {
   readonly meta: Readonly<Record<string, string | number | boolean | null>>;
 }
 
-/** A field wrapper that counts every sample. */
+/** A field wrapper that counts every sample AND every non-finite result. */
 export interface CountedField {
   readonly field: ScalarField;
   readonly count: () => number;
+  /** Number of field evaluations that returned NaN or ±Infinity. */
+  readonly nonFinite: () => number;
+  /** First position whose field value was non-finite, or null. */
+  readonly firstNonFinite: () => Vec3 | null;
 }
 
 export function countedField(field: ScalarField): CountedField {
   let n = 0;
+  let bad = 0;
+  let firstBad: Vec3 | null = null;
   const wrapped: ScalarField = {
     ...field,
-    field(p: Vec3): number { n++; return field.field(p); },
+    field(p: Vec3): number {
+      n++;
+      const v = field.field(p);
+      if (!Number.isFinite(v)) {
+        bad++;
+        if (firstBad === null) firstBad = [p[0], p[1], p[2]];
+      }
+      return v;
+    },
   };
-  return { field: wrapped, count: () => n };
+  return { field: wrapped, count: () => n, nonFinite: () => bad, firstNonFinite: () => firstBad };
+}
+
+/**
+ * Build an invalid-reason string for a run whose shared field returned
+ * non-finite samples. Returns undefined when every sample was finite.
+ * Centralised so all three methods report the same wording and the first
+ * offending position.
+ */
+export function nonFiniteReason(c: CountedField): string | undefined {
+  const n = c.nonFinite();
+  if (n === 0) return undefined;
+  const p = c.firstNonFinite();
+  const at = p ? ` first at [${p.map(v => v.toFixed(4)).join(', ')}]` : '';
+  return `non-finite field samples (${n})${at}`;
 }
 
 export interface GridSpec {
@@ -102,8 +130,18 @@ export interface IndexedMesh {
   invalidReason?: string;
   /** Fixed-size buffer overflow (surface nets cell-vertex table). */
   overflow: boolean;
-  /** Quads/cells the method could not connect (surface nets drops, DC holes). */
+  /**
+   * Quads/cells of INTENDED surface the method could not connect (surface
+   * nets drops, DC missing dual vertices). This is DROPPED GEOMETRY, not a
+   * benign fallback: a nonzero value marks the mesh invalid unless the method
+   * documents a legitimate cause.
+   */
   dropped: number;
+  /**
+   * Benign per-cell fallbacks that produced FINITE geometry (e.g. a singular
+   * QEF falling back to its mass point). Diagnostic only; does NOT invalidate.
+   */
+  fallbacks?: number;
   /** Method-specific extra counters (block stats, QEF fallbacks, ...). */
   detail?: Readonly<Record<string, number>>;
 }
@@ -178,4 +216,13 @@ export function gridCornerCount(grid: GridSpec): number {
 
 export function gridCellCount(grid: GridSpec): number {
   return grid.dims[0] * grid.dims[1] * grid.dims[2];
+}
+
+/**
+ * True only when a mesh may be ranked, compared or exported as a successful
+ * run. Invalid meshes (non-finite samples, overflow, dropped geometry, empty
+ * output) must still be reported as diagnostics but never as a result.
+ */
+export function meshRankable(mesh: IndexedMesh): boolean {
+  return !mesh.invalid;
 }

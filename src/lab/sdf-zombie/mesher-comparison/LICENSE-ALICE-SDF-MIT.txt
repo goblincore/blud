@@ -1,0 +1,43 @@
+Third-party license notice for code copied into / transcribed from ALICE-SDF.
+
+Source:  https://github.com/ext-sakamoro/ALICE-SDF
+Pinned:  1e85ab3591600bd316e3ceaa33df8dbd06cb3219 (v1.12.0)
+Upstream: "MIT OR Apache-2.0". Nothing in this repository imports ALICE-SDF's
+separate editor/integration licensing categories (VRChat, Unreal, Unity,
+mobile); only the MIT option is relied on here.
+
+The files below are used under the MIT license reproduced verbatim below:
+
+  - src/lab/sdf-zombie/mesher-comparison/marching-cubes-tables.ts
+    (the classic 256-entry EDGE_TABLE / TRI_TABLE, mechanically transcribed
+     from ALICE-SDF `src/mesh/sdf_to_mesh.rs`)
+  - src/lab/sdf-zombie/mesher-comparison/dual-contouring.ts
+    (a TypeScript port of the QEF solve, edge refinement and dual
+     connectivity from ALICE-SDF `src/mesh/dual_contouring.rs`)
+
+These files are EXPERIMENT-ONLY: they live under `mesher-comparison/`, are
+not imported by production meshers/renderers, and are not shipped in the game.
+
+--------------------------------------------------------------------------
+MIT License
+
+Copyright (c) 2025-2026 Moroya Sakamoto
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+--------------------------------------------------------------------------

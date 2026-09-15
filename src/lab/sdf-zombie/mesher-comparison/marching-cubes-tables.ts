@@ -2,8 +2,10 @@
 //   1e85ab3591600bd316e3ceaa33df8dbd06cb3219
 //   file: src/mesh/sdf_to_mesh.rs
 //
-// License: MIT OR Apache-2.0, Copyright (c) 2025-2026 Moroya Sakamoto
-//   (core ALICE-SDF; see ATTRIBUTIONS.md). These are the classic
+// License: MIT OR Apache-2.0, Copyright (c) 2025-2026 Moroya Sakamoto.
+//   Used under the MIT option: the complete upstream MIT permission notice
+//   is reproduced verbatim in `LICENSE-ALICE-SDF-MIT.txt` beside this file
+//   and is also recorded in ATTRIBUTIONS.md. These are the classic
 //   Lorensen & Cline (1987) / Paul Bourke triangulation tables as
 //   published upstream. See the file header for corner/edge conventions.
 

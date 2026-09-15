@@ -34,8 +34,15 @@
 //     function. This port always uses a central difference of the shared field
 //     closure, so all three methods in the comparison see one evaluator.
 //   * Names/memory layout are TypeScript idioms; the math is unchanged.
+//
+// LICENSE: the upstream code this ports is ALICE-SDF (MIT OR Apache-2.0,
+// Copyright (c) 2025-2026 Moroya Sakamoto) at pinned revision
+// 1e85ab3591600bd316e3ceaa33df8dbd06cb3219, `src/mesh/dual_contouring.rs`.
+// This port is used under the MIT option; the complete upstream MIT
+// permission notice is reproduced verbatim in `LICENSE-ALICE-SDF-MIT.txt`
+// beside this file and is recorded in ATTRIBUTIONS.md.
 
-import { countedField, fitGrid, gridPoint, type GridSpec, type IndexedMesh, type MethodOptions, type ScalarField } from './types';
+import { countedField, fitGrid, gridPoint, nonFiniteReason, type GridSpec, type IndexedMesh, type MethodOptions, type ScalarField } from './types';
 import { fieldNormal } from './marching-cubes';
 import type { Vec3 } from '../types';
 
@@ -170,7 +177,8 @@ export function refineEdge(
  * `opts.clampToCell` defaults to true (upstream default).
  */
 export function dualContouring(fieldIn: ScalarField, opts: MethodOptions): IndexedMesh {
-  const { field, count } = countedField(fieldIn);
+  const tracked = countedField(fieldIn);
+  const { field, count } = tracked;
   const cell = opts.cell;
   const bisectIters = opts.bisectionIterations ?? 6;
   const clamp = opts.clampToCell ?? true;
@@ -239,6 +247,7 @@ export function dualContouring(fieldIn: ScalarField, opts: MethodOptions): Index
 
   // ---- connectivity: one quad per sign-changing grid edge ----------------
   const indices: number[] = [];
+  let droppedQuads = 0;
   const vertexFor = (cx: number, cy: number, cz: number): number =>
     cellVertex[(cz * ny + cy) * nx + cx]!;
 
@@ -274,7 +283,7 @@ export function dualContouring(fieldIn: ScalarField, opts: MethodOptions): Index
     const q: [number, number, number, number] = [
       vertexFor(x, y - 1, z - 1), vertexFor(x, y, z - 1), vertexFor(x, y, z), vertexFor(x, y - 1, z),
     ];
-    if (q.includes(-1)) continue;
+    if (q.includes(-1)) { droppedQuads++; continue; }
     emitQuad(d0 < 0 ? q : [q[0], q[3], q[2], q[1]]);
   }
   // Y edges: base (x,y,z) -> (x,y+1,z); cells (x-1|x, y, z-1|z).
@@ -284,7 +293,7 @@ export function dualContouring(fieldIn: ScalarField, opts: MethodOptions): Index
     const q: [number, number, number, number] = [
       vertexFor(x - 1, y, z - 1), vertexFor(x, y, z - 1), vertexFor(x, y, z), vertexFor(x - 1, y, z),
     ];
-    if (q.includes(-1)) continue;
+    if (q.includes(-1)) { droppedQuads++; continue; }
     emitQuad(d0 < 0 ? [q[0], q[3], q[2], q[1]] : q);
   }
   // Z edges: base (x,y,z) -> (x,y,z+1); cells (x-1|x, y-1|y, z).
@@ -299,9 +308,21 @@ export function dualContouring(fieldIn: ScalarField, opts: MethodOptions): Index
   }
 
   const vertCount = positions.length / 3;
-  if (vertCount === 0) { invalid = true; invalidReason = invalidReason ?? 'empty mesh (no cells crossed)'; }
-  else if (indices.length === 0) { invalid = true; invalidReason = invalidReason ?? 'no triangles emitted'; }
-  else {
+  const nonFinite = nonFiniteReason(tracked);
+  if (nonFinite) {
+    invalid = true;
+    invalidReason = nonFinite;
+  } else if (vertCount === 0) {
+    invalid = true; invalidReason = invalidReason ?? 'empty mesh (no cells crossed)';
+  } else if (indices.length === 0) {
+    invalid = true; invalidReason = invalidReason ?? 'no triangles emitted';
+  } else if (droppedQuads > 0) {
+    // A sign-changing interior grid edge always implies all four adjacent
+    // cells own a vertex. A missing one is an internal omission, NOT a
+    // benign fallback, so the output must not rank as a success.
+    invalid = true;
+    invalidReason = `dual connectivity dropped ${droppedQuads} quad(s) with no cell vertex (internal omission)`;
+  } else {
     for (let i = 0; i < positions.length; i++) if (!Number.isFinite(positions[i]!)) { invalid = true; invalidReason = 'non-finite position'; break; }
     if (!invalid) for (let i = 0; i < normals.length; i++) if (!Number.isFinite(normals[i]!)) { invalid = true; invalidReason = 'non-finite normal'; break; }
   }
@@ -316,6 +337,13 @@ export function dualContouring(fieldIn: ScalarField, opts: MethodOptions): Index
     invalid,
     invalidReason,
     overflow: false,
-    dropped: qefFallbacks, // reported as singular-QEF fallbacks, not lost geometry
+    // DROPPED GEOMETRY only. Singular/finite QEF fallbacks are diagnostics.
+    dropped: droppedQuads,
+    fallbacks: qefFallbacks,
+    detail: {
+      qefFallbacks,
+      droppedQuads,
+      nonFiniteSamples: tracked.nonFinite(),
+    },
   };
 }

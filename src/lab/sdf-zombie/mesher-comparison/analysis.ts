@@ -75,6 +75,9 @@ export const SHARP_PROBES: Record<string, readonly SharpProbe[]> = {
 export interface SharpProbeResult {
   readonly name: string;
   readonly point: Vec3;
+  /** Headline: nearest distance to the mesh TRIANGLE SURFACE (mm when printed). */
+  readonly minSurfaceDistance: number;
+  /** Secondary, vertex-only proximity; biased by each mesher's vertex layout. */
   readonly minVertexDistance: number;
   readonly note: string;
 }
@@ -108,7 +111,16 @@ export interface MethodAnalysis {
   readonly invalid: boolean;
   readonly invalidReason?: string;
   readonly overflow: boolean;
+  /**
+   * True only when this row may be ranked/compared/exported as a success.
+   * False for invalid meshes: their reference/feature/probe metrics are not
+   * computed and the CLI must not write them as geometry.
+   */
+  readonly rankable: boolean;
+  /** DROPPED GEOMETRY (unconnected intended surface); not benign fallbacks. */
   readonly droppedCells: number;
+  /** Benign finite fallbacks (e.g. singular QEF -> mass point). Diagnostics only. */
+  readonly fallbacks: number;
   readonly cell: number;
   readonly grid: readonly [number, number, number];
   readonly verts: number;
@@ -119,6 +131,14 @@ export interface MethodAnalysis {
   readonly fieldResidual: DistStats;
   /** |field(v)| / |grad| — primary first-order geometric estimate. */
   readonly normalizedResidual: DistStats;
+  /**
+   * |field| sampled at TRIANGLE SURFACE points (vertices + triangle
+   * centroids). For `exactDistance` fixtures this is an actual distance at
+   * those samples; otherwise it is a residual and NOT millimetres of error.
+   */
+  readonly surfaceResidual: DistStats;
+  /** True when surfaceResidual is an exact distance (analytic controls only). */
+  readonly surfaceSampleExact: boolean;
   /** Exact only when the fixture is analytic; else identical caveat to normalized. */
   readonly exactDistance: boolean;
   /** Vertices further than 10% of the cell from the field zero set (gradient projection). */
@@ -152,6 +172,7 @@ export function featurePresence(
   fixtureId: string, mesh: IndexedMesh, reference: IndexedMesh | null, cell: number, opts: AnalysisOptions,
 ): FeaturePresence[] {
   const regions = FEATURE_REGIONS[fixtureId] ?? [];
+  if (regions.length === 0) return [];
   const dil = cell * (opts.featureDilationCells ?? 0.5);
   const tol = cell * (opts.coverageTolCells ?? 1.0);
   const refBvh = reference ? new TriBvh(reference) : null;
@@ -202,17 +223,20 @@ export function analyzeMesh(
   const stats = computeMeshStats(mesh, { field, grid: mesh.grid });
   const cell = mesh.grid?.cell ?? 0;
   const tol = cell * (opts.coverageTolCells ?? 1.0);
+  const rankable = !mesh.invalid;
 
-  // Reference distance, only when the reference is genuinely finer.
+  // Reference distance, only when the reference is genuinely finer. Skipped
+  // entirely for an invalid mesh: a fabricated/truncated output must not be
+  // compared or ranked as if it were a real surface.
   let reference2: ReferenceRecord | null = null;
-  if (reference && reference.cell < cell) {
+  if (rankable && reference && reference.cell < cell) {
     const r = bidirectionalDistance(mesh, reference.mesh, 4000, tol, opts.seed ?? 4242);
     reference2 = {
       method: reference.mesh.method, cell: reference.cell,
       aToB: r.aToB, bToA: r.bToA,
       coverageAinB: r.coverageAinB, coverageBinA: r.coverageBinA,
       samples: r.sampleCount, tolerance: r.tolerance,
-      caveat: 'sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff.',
+      caveat: 'sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff. Reference resolution differs per ladder step, so matched-ERROR cost is NOT established.',
     };
   }
 
@@ -237,7 +261,9 @@ export function analyzeMesh(
     invalid: mesh.invalid,
     invalidReason: mesh.invalidReason,
     overflow: mesh.overflow,
+    rankable,
     droppedCells: mesh.dropped,
+    fallbacks: mesh.fallbacks ?? 0,
     cell: mesh.grid?.cell ?? 0,
     grid: mesh.grid ? [mesh.grid.dims[0], mesh.grid.dims[1], mesh.grid.dims[2]] : [0, 0, 0],
     verts: mesh.positions.length / 3,
@@ -246,19 +272,60 @@ export function analyzeMesh(
     topology: stats,
     fieldResidual: stats.fieldResidual,
     normalizedResidual: stats.normalizedResidual,
+    surfaceResidual: surfaceSampleResidual(mesh, field),
+    surfaceSampleExact: field.analyticDistance,
     exactDistance: field.analyticDistance,
     verticesOffSurface: off,
     reference: reference2,
-    features: featurePresence(fixtureId, mesh, reference?.mesh ?? null, cell, opts),
-    sharpProbes: (SHARP_PROBES[fixtureId] ?? []).map(p => ({
-      name: p.name, point: p.point, note: p.note,
-      minVertexDistance: minVertexDistanceTo(mesh, p.point),
-    })),
+    features: rankable ? featurePresence(fixtureId, mesh, reference?.mesh ?? null, cell, opts) : [],
+    sharpProbes: rankable ? sharpProbes(fixtureId, mesh) : [],
     timingsMs: timing.timesMs,
     medianMs: timing.medianMs,
     minMs: timing.minMs,
     maxMs: timing.maxMs,
   };
+}
+
+/**
+ * |field| sampled at mesh VERTICES and TRIANGLE CENTROIDS. Vertex-only
+ * residuals depend on each mesher's vertex distribution (DC concentrates
+ * vertices at creases, so its vertex set is not a uniform surface sample),
+ * which is exactly why this adds triangle interiors. For `exactDistance`
+ * fields the value is the true distance to the analytic surface at those
+ * sample points; for Blud-composed fields it is a residual, not millimetres
+ * of geometric error.
+ */
+export function surfaceSampleResidual(mesh: IndexedMesh, field: ScalarField, maxTris = 200_000): DistStats {
+  const values: number[] = [];
+  const verts = mesh.positions.length / 3;
+  for (let i = 0; i < verts; i++) {
+    values.push(Math.abs(field.field([mesh.positions[i * 3]!, mesh.positions[i * 3 + 1]!, mesh.positions[i * 3 + 2]!])));
+  }
+  const tris = mesh.indices.length / 3;
+  const stride = Math.max(1, Math.ceil(tris / maxTris));
+  for (let t = 0; t < tris; t += stride) {
+    const a = mesh.indices[t * 3]!, b = mesh.indices[t * 3 + 1]!, c = mesh.indices[t * 3 + 2]!;
+    const p: Vec3 = [
+      (mesh.positions[a * 3]! + mesh.positions[b * 3]! + mesh.positions[c * 3]!) / 3,
+      (mesh.positions[a * 3 + 1]! + mesh.positions[b * 3 + 1]! + mesh.positions[c * 3 + 1]!) / 3,
+      (mesh.positions[a * 3 + 2]! + mesh.positions[b * 3 + 2]! + mesh.positions[c * 3 + 2]!) / 3,
+    ];
+    values.push(Math.abs(field.field(p)));
+  }
+  return distStats(values);
+}
+
+function sharpProbes(fixtureId: string, mesh: IndexedMesh): SharpProbeResult[] {
+  const probes = SHARP_PROBES[fixtureId] ?? [];
+  if (probes.length === 0) return [];
+  const bvh = new TriBvh(mesh);
+  return probes.map(p => ({
+    name: p.name,
+    point: p.point,
+    minSurfaceDistance: Math.sqrt(bvh.nearestDist2(p.point)),
+    minVertexDistance: minVertexDistanceTo(mesh, p.point),
+    note: p.note,
+  }));
 }
 
 function minVertexDistanceTo(mesh: IndexedMesh, point: Vec3): number {

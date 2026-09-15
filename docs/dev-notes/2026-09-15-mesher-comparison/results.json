@@ -1,6 +1,8 @@
 {
-  "commit": "2b396068b9e33ab24bf94e55f294f0ebc6f1323a",
-  "generatedAt": "2026-09-15T16:36:43.768Z",
+  "commit": "c9258e211a3ea0d62f0475424972d7db3f7cbc4d",
+  "dirty": "M ATTRIBUTIONS.md\n M docs/dev-notes/2026-09-15-mesher-comparison/README.md\n M docs/dev-notes/2026-09-15-mesher-comparison/preview.html\n M docs/dev-notes/2026-09-15-mesher-comparison/results.json\n M docs/dev-notes/2026-09-15-mesher-comparison/summary.md\n M scripts/blob-mesh-compare.ts\n M src/lab/sdf-zombie/mesher-comparison/analysis.ts\n M src/lab/sdf-zombie/mesher-comparison/dual-contouring.ts\n M src/lab/sdf-zombie/mesher-comparison/marching-cubes-tables.ts\n M src/lab/sdf-zombie/mesher-comparison/marching-cubes.ts\n M src/lab/sdf-zombie/mesher-comparison/mesher-comparison.test.ts\n M src/lab/sdf-zombie/mesher-comparison/surface-nets-adapter.ts\n M src/lab/sdf-zombie/mesher-comparison/types.ts\n?? docs/dev-notes/2026-09-15-mesher-comparison/.blob-mesh-compare-manifest.json\n?? docs/dev-notes/2026-09-15-mesher-comparison/panels/chamfer-groove__dual-contouring__10mm__closeup-chamfer-seam.png\n?? docs/dev-notes/2026-09-15-mesher-comparison/panels/chamfer-groove__dual-contouring__10mm__closeup-groove-channel.png\n?? docs/dev-notes/2026-09-15-mesher-comparison/panels/chamfer-groove__dual-contouring__10mm__main.png\n?? docs/dev-notes/2026-09-15-mesher-comparison/panels/chamfer-groove__marching-cubes__10mm__closeup-chamfer-seam.png\n?? docs/dev-notes/2026-09-15-mesher-comparison/panels/chamfer-groove__marching-cubes__10mm__closeup-groove-channel.png\n?? docs/dev-notes/2026-09-15-mesher-comparison/panels/chamfer-groove__marching-cubes__10mm__main.png\n?? docs/dev-notes/2026-09-15-mesher-comparison/panels/chamfer-groove__surface-nets__10mm__closeup-chamfer-seam.png\n?? docs/dev-notes/2026-09-15-mesher-comparison/panels/chamfer-groove__surface-nets__10mm__closeup-groove-channel.png\n?? docs/dev-notes/2026-09-15-mesher-comparison/panels/chamfer-groove__surface-nets__10mm__main-wire.png\n?? docs/dev-notes/2026-09-15-mesher-comparison/panels/chamfer-groove__surface-nets__10mm__main.png\n?? docs/dev-notes/2026-09-15-mesher-comparison/panels/control-sharp-box__dual-contouring__10mm__closeup-corner-+++.png\n?? docs/dev-notes/2026-09-15-mesher-comparison/panels/control-sharp-box__dual-contouring__10mm__closeup-face-+x.png\n?? docs/dev-notes/2026-09-15-mesher-comparison/panels/control-sharp-box__dual-contouring__10mm__main.png\n?? docs/dev-notes/2026-09-15-mesher-comparison/panels/control-sharp-box__marching-cubes__10mm__closeup-corner-+++.png\n?? docs/dev-notes/2026-09-15-mesher-comparison/panels/control-sharp-box__marching-cubes__10mm__closeup-face-+x.png\n?? docs/dev-notes/2026-09-15-mesher-comparison/panels/control-sharp-box__marching-cubes__10mm__main.png\n?? docs/dev-notes/2026-09-15-mesher-comparison/panels/control-sharp-box__surface-nets__10mm__closeup-corner-+++.png\n?? docs/dev-notes/2026-09-15-mesher-comparison/panels/control-sharp-box__surface-nets__10mm__closeup-face-+x.png\n?? docs/dev-notes/2026-09-15-mesher-comparison/panels/control-sharp-box__surface-nets__10mm__main-wire.png\n?? docs/dev-notes/2026-09-15-mesher-comparison/panels/control-sharp-box__surface-nets__10mm__main.png\n?? docs/dev-notes/2026-09-15-mesher-comparison/sensitivity.json\n?? docs/dev-notes/2026-09-15-mesher-comparison/sensitivity.md\n?? scripts/blob-mesh-compare.test.ts\n?? src/lab/sdf-zombie/mesher-comparison/LICENSE-ALICE-SDF-MIT.txt\n?? src/lab/sdf-zombie/mesher-comparison/sensitivity.ts",
+  "codeFingerprint": "998abe46e618d2d7",
+  "generatedAt": "2026-09-15T17:07:53.006Z",
   "environment": {
     "node": "v22.22.1",
     "platform": "darwin",
@@ -30,6 +32,9 @@
     "repeats": 3,
     "warmups": 1,
     "panelsCellMm": 20,
+    "panelsExtraMm": [
+      10
+    ],
     "unpruned": false,
     "help": false
   },
@@ -81,7 +86,9 @@
           "method": "surface-nets",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.02,
           "grid": [
             32,
@@ -147,6 +154,14 @@
             "max": 0.0007170939158952851,
             "mean": 0.0004479556430612608
           },
+          "surfaceResidual": {
+            "count": 5600,
+            "median": 0.0006879785340972167,
+            "p95": 0.0010262624156190947,
+            "max": 0.0011712730607989774,
+            "mean": 0.0006800730724922954
+          },
+          "surfaceSampleExact": true,
           "exactDistance": true,
           "verticesOffSurface": 0,
           "reference": {
@@ -170,25 +185,27 @@
             "coverageBinA": 1,
             "samples": 4000,
             "tolerance": 0.02,
-            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff."
+            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff. Reference resolution differs per ladder step, so matched-ERROR cost is NOT established."
           },
           "features": [],
           "sharpProbes": [],
           "timingsMs": [
-            12.943500000000029,
-            13.07654199999996,
-            7.243832999999995
+            13.114542000000029,
+            13.31162500000005,
+            7.14183300000002
           ],
-          "medianMs": 12.943500000000029,
-          "minMs": 7.243832999999995,
-          "maxMs": 13.07654199999996
+          "medianMs": 13.114542000000029,
+          "minMs": 7.14183300000002,
+          "maxMs": 13.31162500000005
         },
         {
           "run": "marching-cubes",
           "method": "marching-cubes",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.02,
           "grid": [
             32,
@@ -254,6 +271,14 @@
             "max": 0.00021804525082653973,
             "mean": 0.00007497573766823543
           },
+          "surfaceResidual": {
+            "count": 5594,
+            "median": 0.00036025747459123014,
+            "p95": 0.000616869887451077,
+            "max": 0.0006728721147374606,
+            "mean": 0.00031650046658138144
+          },
+          "surfaceSampleExact": true,
           "exactDistance": true,
           "verticesOffSurface": 0,
           "reference": {
@@ -277,25 +302,27 @@
             "coverageBinA": 1,
             "samples": 4000,
             "tolerance": 0.02,
-            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff."
+            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff. Reference resolution differs per ladder step, so matched-ERROR cost is NOT established."
           },
           "features": [],
           "sharpProbes": [],
           "timingsMs": [
-            10.982166000000007,
-            6.311874999999986,
-            10.964832999999999
+            12.62645800000007,
+            3.2047919999999976,
+            3.494583999999918
           ],
-          "medianMs": 10.964832999999999,
-          "minMs": 6.311874999999986,
-          "maxMs": 10.982166000000007
+          "medianMs": 3.494583999999918,
+          "minMs": 3.2047919999999976,
+          "maxMs": 12.62645800000007
         },
         {
           "run": "dual-contouring",
           "method": "dual-contouring",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.02,
           "grid": [
             32,
@@ -361,6 +388,14 @@
             "max": 0.0006880443152710664,
             "mean": 0.0003724232416399932
           },
+          "surfaceResidual": {
+            "count": 5600,
+            "median": 0.00009378960137548797,
+            "p95": 0.0005633014279853299,
+            "max": 0.000687624159509348,
+            "mean": 0.00017915494855240676
+          },
+          "surfaceSampleExact": true,
           "exactDistance": true,
           "verticesOffSurface": 0,
           "reference": {
@@ -384,18 +419,18 @@
             "coverageBinA": 1,
             "samples": 4000,
             "tolerance": 0.02,
-            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff."
+            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff. Reference resolution differs per ladder step, so matched-ERROR cost is NOT established."
           },
           "features": [],
           "sharpProbes": [],
           "timingsMs": [
-            23.179749999999956,
-            10.154042000000004,
-            9.646208000000001
+            23.840374999999995,
+            10.345500000000015,
+            9.983249999999998
           ],
-          "medianMs": 10.154042000000004,
-          "minMs": 9.646208000000001,
-          "maxMs": 23.179749999999956
+          "medianMs": 10.345500000000015,
+          "minMs": 9.983249999999998,
+          "maxMs": 23.840374999999995
         }
       ]
     },
@@ -446,7 +481,9 @@
           "method": "surface-nets",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.01,
           "grid": [
             60,
@@ -512,6 +549,14 @@
             "max": 0.00018044464959929277,
             "mean": 0.00011305249539933457
           },
+          "surfaceResidual": {
+            "count": 22520,
+            "median": 0.0001706785098809227,
+            "p95": 0.00025532357082097556,
+            "max": 0.00028647647250876207,
+            "mean": 0.00017093123094769926
+          },
+          "surfaceSampleExact": true,
           "exactDistance": true,
           "verticesOffSurface": 0,
           "reference": {
@@ -535,25 +580,27 @@
             "coverageBinA": 1,
             "samples": 4000,
             "tolerance": 0.01,
-            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff."
+            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff. Reference resolution differs per ladder step, so matched-ERROR cost is NOT established."
           },
           "features": [],
           "sharpProbes": [],
           "timingsMs": [
-            22.659167000000025,
-            20.73116600000003,
-            20.712541999999985
+            20.712958999999955,
+            21.407500000000027,
+            20.506624999999985
           ],
-          "medianMs": 20.73116600000003,
-          "minMs": 20.712541999999985,
-          "maxMs": 22.659167000000025
+          "medianMs": 20.712958999999955,
+          "minMs": 20.506624999999985,
+          "maxMs": 21.407500000000027
         },
         {
           "run": "marching-cubes",
           "method": "marching-cubes",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.01,
           "grid": [
             60,
@@ -619,6 +666,14 @@
             "max": 0.00005939736667846019,
             "mean": 0.000021467718191732108
           },
+          "surfaceResidual": {
+            "count": 22514,
+            "median": 0.00009212487443227557,
+            "p95": 0.00014996177315787507,
+            "max": 0.00017075977723929325,
+            "mean": 0.00008036703046469416
+          },
+          "surfaceSampleExact": true,
           "exactDistance": true,
           "verticesOffSurface": 0,
           "reference": {
@@ -642,25 +697,27 @@
             "coverageBinA": 1,
             "samples": 4000,
             "tolerance": 0.01,
-            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff."
+            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff. Reference resolution differs per ladder step, so matched-ERROR cost is NOT established."
           },
           "features": [],
           "sharpProbes": [],
           "timingsMs": [
-            18.62916599999994,
-            17.319790999999896,
-            18.341125000000147
+            17.101208000000042,
+            16.817999999999984,
+            17.647666000000072
           ],
-          "medianMs": 18.341125000000147,
-          "minMs": 17.319790999999896,
-          "maxMs": 18.62916599999994
+          "medianMs": 17.101208000000042,
+          "minMs": 16.817999999999984,
+          "maxMs": 17.647666000000072
         },
         {
           "run": "dual-contouring",
           "method": "dual-contouring",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.01,
           "grid": [
             60,
@@ -726,6 +783,14 @@
             "max": 0.00016551365088345325,
             "mean": 0.00009078178689117301
           },
+          "surfaceResidual": {
+            "count": 22520,
+            "median": 0.000022333307657745882,
+            "p95": 0.00013514468246508815,
+            "max": 0.00016548870052740527,
+            "mean": 0.00004269104250790032
+          },
+          "surfaceSampleExact": true,
           "exactDistance": true,
           "verticesOffSurface": 0,
           "reference": {
@@ -749,18 +814,18 @@
             "coverageBinA": 1,
             "samples": 4000,
             "tolerance": 0.01,
-            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff."
+            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff. Reference resolution differs per ladder step, so matched-ERROR cost is NOT established."
           },
           "features": [],
           "sharpProbes": [],
           "timingsMs": [
-            35.13983299999995,
-            31.827958999999964,
-            31.82945800000016
+            31.373874999999998,
+            31.339208999999983,
+            34.64300000000003
           ],
-          "medianMs": 31.82945800000016,
-          "minMs": 31.827958999999964,
-          "maxMs": 35.13983299999995
+          "medianMs": 31.373874999999998,
+          "minMs": 31.339208999999983,
+          "maxMs": 34.64300000000003
         }
       ]
     },
@@ -806,7 +871,9 @@
           "method": "surface-nets",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.005,
           "grid": [
             120,
@@ -872,26 +939,36 @@
             "max": 0.00004496004730105393,
             "mean": 0.000028230068222601
           },
+          "surfaceResidual": {
+            "count": 90344,
+            "median": 0.00004283162536741769,
+            "p95": 0.000063886893553744,
+            "max": 0.00007365136673173622,
+            "mean": 0.00004266154507285148
+          },
+          "surfaceSampleExact": true,
           "exactDistance": true,
           "verticesOffSurface": 0,
           "reference": null,
           "features": [],
           "sharpProbes": [],
           "timingsMs": [
-            96.9694169999998,
-            90.15058399999998,
-            90.30525000000034
+            90.79304100000036,
+            90.64141699999982,
+            88.81333399999949
           ],
-          "medianMs": 90.30525000000034,
-          "minMs": 90.15058399999998,
-          "maxMs": 96.9694169999998
+          "medianMs": 90.64141699999982,
+          "minMs": 88.81333399999949,
+          "maxMs": 90.79304100000036
         },
         {
           "run": "marching-cubes",
           "method": "marching-cubes",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.005,
           "grid": [
             120,
@@ -957,26 +1034,36 @@
             "max": 0.000015212913408247102,
             "mean": 0.000005239330588341196
           },
+          "surfaceResidual": {
+            "count": 90338,
+            "median": 0.00002305490520776443,
+            "p95": 0.00003709553063144244,
+            "max": 0.000042581261139984505,
+            "mean": 0.000020013970342437473
+          },
+          "surfaceSampleExact": true,
           "exactDistance": true,
           "verticesOffSurface": 0,
           "reference": null,
           "features": [],
           "sharpProbes": [],
           "timingsMs": [
-            130.65079200000037,
-            123.76550000000043,
-            123.99191700000029
+            121.875,
+            122.05124999999998,
+            121.68691599999966
           ],
-          "medianMs": 123.99191700000029,
-          "minMs": 123.76550000000043,
-          "maxMs": 130.65079200000037
+          "medianMs": 121.875,
+          "minMs": 121.68691599999966,
+          "maxMs": 122.05124999999998
         },
         {
           "run": "dual-contouring",
           "method": "dual-contouring",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.005,
           "grid": [
             120,
@@ -1042,19 +1129,27 @@
             "max": 0.00004060632312649389,
             "mean": 0.000022700354920942983
           },
+          "surfaceResidual": {
+            "count": 90344,
+            "median": 0.000005785319791173915,
+            "p95": 0.000033916814950490926,
+            "max": 0.000040604820782746964,
+            "mean": 0.000010722214664250334
+          },
+          "surfaceSampleExact": true,
           "exactDistance": true,
           "verticesOffSurface": 0,
           "reference": null,
           "features": [],
           "sharpProbes": [],
           "timingsMs": [
-            200.66041700000005,
-            200.0297499999997,
-            199.26845800000046
+            196.7852909999997,
+            196.27170800000022,
+            197.07683299999917
           ],
-          "medianMs": 200.0297499999997,
-          "minMs": 199.26845800000046,
-          "maxMs": 200.66041700000005
+          "medianMs": 196.7852909999997,
+          "minMs": 196.27170800000022,
+          "maxMs": 197.07683299999917
         }
       ]
     },
@@ -1106,7 +1201,9 @@
           "method": "surface-nets",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.02,
           "grid": [
             28,
@@ -1172,6 +1269,14 @@
             "max": 0.015396002819440691,
             "mean": 0.001977374441655663
           },
+          "surfaceResidual": {
+            "count": 3530,
+            "median": 5.960464483090178e-9,
+            "p95": 0.007777774333953852,
+            "max": 0.013333329558372492,
+            "mean": 0.0014013260248362531
+          },
+          "surfaceSampleExact": true,
           "exactDistance": true,
           "verticesOffSurface": 164,
           "reference": {
@@ -1195,7 +1300,7 @@
             "coverageBinA": 1,
             "samples": 3530,
             "tolerance": 0.02,
-            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff."
+            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff. Reference resolution differs per ladder step, so matched-ERROR cost is NOT established."
           },
           "features": [
             {
@@ -1247,8 +1352,9 @@
                 0.15,
                 0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.023094004229161056
+              "minSurfaceDistance": 0.023094004229161056,
+              "minVertexDistance": 0.023094004229161056,
+              "note": "convex box corner"
             },
             {
               "name": "corner-+--",
@@ -1257,8 +1363,9 @@
                 -0.15,
                 -0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.023094004229161056
+              "minSurfaceDistance": 0.023094004229161056,
+              "minVertexDistance": 0.023094004229161056,
+              "note": "convex box corner"
             },
             {
               "name": "corner--+-",
@@ -1267,8 +1374,9 @@
                 0.15,
                 -0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.023094004229161056
+              "minSurfaceDistance": 0.023094004229161056,
+              "minVertexDistance": 0.023094004229161056,
+              "note": "convex box corner"
             },
             {
               "name": "corner---+",
@@ -1277,25 +1385,28 @@
                 -0.15,
                 0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.023094004229161056
+              "minSurfaceDistance": 0.023094004229161056,
+              "minVertexDistance": 0.023094004229161056,
+              "note": "convex box corner"
             }
           ],
           "timingsMs": [
-            7.441834000000199,
-            6.748208999999406,
-            6.812750000000051
+            8.196165999999721,
+            7.747875000000022,
+            7.6797080000005735
           ],
-          "medianMs": 6.812750000000051,
-          "minMs": 6.748208999999406,
-          "maxMs": 7.441834000000199
+          "medianMs": 7.747875000000022,
+          "minMs": 7.6797080000005735,
+          "maxMs": 8.196165999999721
         },
         {
           "run": "marching-cubes",
           "method": "marching-cubes",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.02,
           "grid": [
             28,
@@ -1361,6 +1472,14 @@
             "max": 5.960464483090173e-9,
             "mean": 5.960464483090177e-9
           },
+          "surfaceResidual": {
+            "count": 3524,
+            "median": 5.960464483090178e-9,
+            "p95": 0.006666664282480861,
+            "max": 0.013333334525426233,
+            "mean": 0.0006205122104613054
+          },
+          "surfaceSampleExact": true,
           "exactDistance": true,
           "verticesOffSurface": 0,
           "reference": {
@@ -1384,7 +1503,7 @@
             "coverageBinA": 1,
             "samples": 3524,
             "tolerance": 0.02,
-            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff."
+            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff. Reference resolution differs per ladder step, so matched-ERROR cost is NOT established."
           },
           "features": [
             {
@@ -1436,8 +1555,9 @@
                 0.15,
                 0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.028284277990958284
+              "minSurfaceDistance": 0.023094012832350484,
+              "minVertexDistance": 0.028284277990958284,
+              "note": "convex box corner"
             },
             {
               "name": "corner-+--",
@@ -1446,8 +1566,9 @@
                 -0.15,
                 -0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.028284277990958284
+              "minSurfaceDistance": 0.023094012832350484,
+              "minVertexDistance": 0.028284277990958284,
+              "note": "convex box corner"
             },
             {
               "name": "corner--+-",
@@ -1456,8 +1577,9 @@
                 0.15,
                 -0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.028284277990958284
+              "minSurfaceDistance": 0.023094012832350484,
+              "minVertexDistance": 0.028284277990958284,
+              "note": "convex box corner"
             },
             {
               "name": "corner---+",
@@ -1466,25 +1588,28 @@
                 -0.15,
                 0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.028284277990958284
+              "minSurfaceDistance": 0.023094012832350484,
+              "minVertexDistance": 0.028284277990958284,
+              "note": "convex box corner"
             }
           ],
           "timingsMs": [
-            5.82495900000049,
-            5.828042000000096,
-            5.584665999999743
+            8.569707999999991,
+            7.8816659999993135,
+            7.153707999999824
           ],
-          "medianMs": 5.82495900000049,
-          "minMs": 5.584665999999743,
-          "maxMs": 5.828042000000096
+          "medianMs": 7.8816659999993135,
+          "minMs": 7.153707999999824,
+          "maxMs": 8.569707999999991
         },
         {
           "run": "dual-contouring",
           "method": "dual-contouring",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.02,
           "grid": [
             28,
@@ -1550,6 +1675,14 @@
             "max": 0.0001524416340861377,
             "mean": 0.000010357446113645553
           },
+          "surfaceResidual": {
+            "count": 3530,
+            "median": 5.960464483090178e-9,
+            "p95": 0.000049749016761774234,
+            "max": 0.00013201832771300714,
+            "mean": 0.00000738456634219222
+          },
+          "surfaceSampleExact": true,
           "exactDistance": true,
           "verticesOffSurface": 0,
           "reference": {
@@ -1573,7 +1706,7 @@
             "coverageBinA": 1,
             "samples": 3530,
             "tolerance": 0.02,
-            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff."
+            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff. Reference resolution differs per ladder step, so matched-ERROR cost is NOT established."
           },
           "features": [
             {
@@ -1625,8 +1758,9 @@
                 0.15,
                 0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.0002286624511292067
+              "minSurfaceDistance": 0.0002286624511292067,
+              "minVertexDistance": 0.0002286624511292067,
+              "note": "convex box corner"
             },
             {
               "name": "corner-+--",
@@ -1635,8 +1769,9 @@
                 -0.15,
                 -0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.0002286624511292067
+              "minSurfaceDistance": 0.0002286624511292067,
+              "minVertexDistance": 0.0002286624511292067,
+              "note": "convex box corner"
             },
             {
               "name": "corner--+-",
@@ -1645,8 +1780,9 @@
                 0.15,
                 -0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.0002286624511292067
+              "minSurfaceDistance": 0.0002286624511292067,
+              "minVertexDistance": 0.0002286624511292067,
+              "note": "convex box corner"
             },
             {
               "name": "corner---+",
@@ -1655,18 +1791,19 @@
                 -0.15,
                 0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.0002286624511292067
+              "minSurfaceDistance": 0.0002286624511292067,
+              "minVertexDistance": 0.0002286624511292067,
+              "note": "convex box corner"
             }
           ],
           "timingsMs": [
-            12.200749999999971,
-            10.640292000000045,
-            10.353291999999783
+            14.540040999999292,
+            13.300500000000284,
+            13.226458000000093
           ],
-          "medianMs": 10.640292000000045,
-          "minMs": 10.353291999999783,
-          "maxMs": 12.200749999999971
+          "medianMs": 13.300500000000284,
+          "minMs": 13.226458000000093,
+          "maxMs": 14.540040999999292
         }
       ]
     },
@@ -1718,7 +1855,9 @@
           "method": "surface-nets",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.01,
           "grid": [
             52,
@@ -1784,6 +1923,14 @@
             "max": 0.007698006571633998,
             "mean": 0.00048286308596920575
           },
+          "surfaceResidual": {
+            "count": 15140,
+            "median": 5.960464483090178e-9,
+            "p95": 0.0033333341280619155,
+            "max": 0.006666669249534601,
+            "mean": 0.0003417050090459769
+          },
+          "surfaceSampleExact": true,
           "exactDistance": true,
           "verticesOffSurface": 344,
           "reference": {
@@ -1807,7 +1954,7 @@
             "coverageBinA": 1,
             "samples": 4000,
             "tolerance": 0.01,
-            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff."
+            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff. Reference resolution differs per ladder step, so matched-ERROR cost is NOT established."
           },
           "features": [
             {
@@ -1859,8 +2006,9 @@
                 0.15,
                 0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.011547009857451006
+              "minSurfaceDistance": 0.011547009857451008,
+              "minVertexDistance": 0.011547009857451006,
+              "note": "convex box corner"
             },
             {
               "name": "corner-+--",
@@ -1869,8 +2017,9 @@
                 -0.15,
                 -0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.011547009857451006
+              "minSurfaceDistance": 0.011547009857451008,
+              "minVertexDistance": 0.011547009857451006,
+              "note": "convex box corner"
             },
             {
               "name": "corner--+-",
@@ -1879,8 +2028,9 @@
                 0.15,
                 -0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.011547009857451006
+              "minSurfaceDistance": 0.011547009857451008,
+              "minVertexDistance": 0.011547009857451006,
+              "note": "convex box corner"
             },
             {
               "name": "corner---+",
@@ -1889,25 +2039,28 @@
                 -0.15,
                 0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.011547009857451006
+              "minSurfaceDistance": 0.011547009857451008,
+              "minVertexDistance": 0.011547009857451006,
+              "note": "convex box corner"
             }
           ],
           "timingsMs": [
-            32.579124999999294,
-            28.74316699999963,
-            25.300042000000758
+            30.994042000000263,
+            30.8922079999993,
+            31.335667000000285
           ],
-          "medianMs": 28.74316699999963,
-          "minMs": 25.300042000000758,
-          "maxMs": 32.579124999999294
+          "medianMs": 30.994042000000263,
+          "minMs": 30.8922079999993,
+          "maxMs": 31.335667000000285
         },
         {
           "run": "marching-cubes",
           "method": "marching-cubes",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.01,
           "grid": [
             52,
@@ -1973,6 +2126,14 @@
             "max": 5.960464483090173e-9,
             "mean": 5.960464483090177e-9
           },
+          "surfaceResidual": {
+            "count": 15134,
+            "median": 5.960464483090178e-9,
+            "p95": 5.960464483090178e-9,
+            "max": 0.006666664282480861,
+            "mean": 0.00015154068078571597
+          },
+          "surfaceSampleExact": true,
           "exactDistance": true,
           "verticesOffSurface": 0,
           "reference": {
@@ -1996,7 +2157,7 @@
             "coverageBinA": 1,
             "samples": 4000,
             "tolerance": 0.01,
-            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff."
+            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff. Reference resolution differs per ladder step, so matched-ERROR cost is NOT established."
           },
           "features": [
             {
@@ -2048,8 +2209,9 @@
                 0.15,
                 0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.014142134780795228
+              "minSurfaceDistance": 0.011547001254261582,
+              "minVertexDistance": 0.014142134780795228,
+              "note": "convex box corner"
             },
             {
               "name": "corner-+--",
@@ -2058,8 +2220,9 @@
                 -0.15,
                 -0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.014142134780795228
+              "minSurfaceDistance": 0.011547001254261582,
+              "minVertexDistance": 0.014142134780795228,
+              "note": "convex box corner"
             },
             {
               "name": "corner--+-",
@@ -2068,8 +2231,9 @@
                 0.15,
                 -0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.014142134780795228
+              "minSurfaceDistance": 0.011547001254261582,
+              "minVertexDistance": 0.014142134780795228,
+              "note": "convex box corner"
             },
             {
               "name": "corner---+",
@@ -2078,25 +2242,28 @@
                 -0.15,
                 0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.014142134780795228
+              "minSurfaceDistance": 0.011547001254261582,
+              "minVertexDistance": 0.014142134780795228,
+              "note": "convex box corner"
             }
           ],
           "timingsMs": [
-            33.76666599999953,
-            32.88587499999994,
-            32.308250000000044
+            41.391874999999345,
+            40.21270800000002,
+            41.88887500000055
           ],
-          "medianMs": 32.88587499999994,
-          "minMs": 32.308250000000044,
-          "maxMs": 33.76666599999953
+          "medianMs": 41.391874999999345,
+          "minMs": 40.21270800000002,
+          "maxMs": 41.88887500000055
         },
         {
           "run": "dual-contouring",
           "method": "dual-contouring",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.01,
           "grid": [
             52,
@@ -2162,6 +2329,14 @@
             "max": 0.00007621737576729504,
             "mean": 0.000002468237833015207
           },
+          "surfaceResidual": {
+            "count": 15140,
+            "median": 5.960464483090178e-9,
+            "p95": 0.000016583998998009886,
+            "max": 0.00006600618362426203,
+            "mean": 0.0000017529292969640018
+          },
+          "surfaceSampleExact": true,
           "exactDistance": true,
           "verticesOffSurface": 0,
           "reference": {
@@ -2185,7 +2360,7 @@
             "coverageBinA": 1,
             "samples": 4000,
             "tolerance": 0.01,
-            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff."
+            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff. Reference resolution differs per ladder step, so matched-ERROR cost is NOT established."
           },
           "features": [
             {
@@ -2237,8 +2412,9 @@
                 0.15,
                 0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.00011432606365094265
+              "minSurfaceDistance": 0.00011432606365094265,
+              "minVertexDistance": 0.00011432606365094265,
+              "note": "convex box corner"
             },
             {
               "name": "corner-+--",
@@ -2247,8 +2423,9 @@
                 -0.15,
                 -0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.00011432606365094265
+              "minSurfaceDistance": 0.00011432606365094265,
+              "minVertexDistance": 0.00011432606365094265,
+              "note": "convex box corner"
             },
             {
               "name": "corner--+-",
@@ -2257,8 +2434,9 @@
                 0.15,
                 -0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.00011432606365094265
+              "minSurfaceDistance": 0.00011432606365094265,
+              "minVertexDistance": 0.00011432606365094265,
+              "note": "convex box corner"
             },
             {
               "name": "corner---+",
@@ -2267,18 +2445,19 @@
                 -0.15,
                 0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.00011432606365094265
+              "minSurfaceDistance": 0.00011432606365094265,
+              "minVertexDistance": 0.00011432606365094265,
+              "note": "convex box corner"
             }
           ],
           "timingsMs": [
-            56.490333000000646,
-            52.90858299999945,
-            55.31279199999972
+            67.04895899999974,
+            71.14829099999952,
+            66.62254200000007
           ],
-          "medianMs": 55.31279199999972,
-          "minMs": 52.90858299999945,
-          "maxMs": 56.490333000000646
+          "medianMs": 67.04895899999974,
+          "minMs": 66.62254200000007,
+          "maxMs": 71.14829099999952
         }
       ]
     },
@@ -2325,7 +2504,9 @@
           "method": "surface-nets",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.005,
           "grid": [
             100,
@@ -2391,6 +2572,14 @@
             "max": 0.003849008447730652,
             "mean": 0.0001192862134072964
           },
+          "surfaceResidual": {
+            "count": 62660,
+            "median": 5.960464483090178e-9,
+            "p95": 0.0008333315451939938,
+            "max": 0.003333339095115656,
+            "mean": 0.00008437639545260983
+          },
+          "surfaceSampleExact": true,
           "exactDistance": true,
           "verticesOffSurface": 704,
           "reference": null,
@@ -2413,7 +2602,7 @@
               "meshVerts": 397,
               "referenceCovered": 0,
               "referenceTotal": 0,
-              "coverage": null
+              "coverage": "NaN"
             },
             {
               "region": {
@@ -2433,7 +2622,7 @@
               "meshVerts": 256,
               "referenceCovered": 0,
               "referenceTotal": 0,
-              "coverage": null
+              "coverage": "NaN"
             }
           ],
           "sharpProbes": [
@@ -2444,8 +2633,9 @@
                 0.15,
                 0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.0057735126715959826
+              "minSurfaceDistance": 0.0057735126715959826,
+              "minVertexDistance": 0.0057735126715959826,
+              "note": "convex box corner"
             },
             {
               "name": "corner-+--",
@@ -2454,8 +2644,9 @@
                 -0.15,
                 -0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.0057735126715959826
+              "minSurfaceDistance": 0.0057735126715959826,
+              "minVertexDistance": 0.0057735126715959826,
+              "note": "convex box corner"
             },
             {
               "name": "corner--+-",
@@ -2464,8 +2655,9 @@
                 0.15,
                 -0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.0057735126715959826
+              "minSurfaceDistance": 0.0057735126715959826,
+              "minVertexDistance": 0.0057735126715959826,
+              "note": "convex box corner"
             },
             {
               "name": "corner---+",
@@ -2474,25 +2666,28 @@
                 -0.15,
                 0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.0057735126715959826
+              "minSurfaceDistance": 0.0057735126715959826,
+              "minVertexDistance": 0.0057735126715959826,
+              "note": "convex box corner"
             }
           ],
           "timingsMs": [
-            103.67170900000019,
-            104.94537500000115,
-            104.11304200000086
+            121.42824999999903,
+            121.71629200000098,
+            121.60241700000006
           ],
-          "medianMs": 104.11304200000086,
-          "minMs": 103.67170900000019,
-          "maxMs": 104.94537500000115
+          "medianMs": 121.60241700000006,
+          "minMs": 121.42824999999903,
+          "maxMs": 121.71629200000098
         },
         {
           "run": "marching-cubes",
           "method": "marching-cubes",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.005,
           "grid": [
             100,
@@ -2558,6 +2753,14 @@
             "max": 5.960464483090173e-9,
             "mean": 5.960464483090176e-9
           },
+          "surfaceResidual": {
+            "count": 62654,
+            "median": 5.960464483090178e-9,
+            "p95": 5.960464483090178e-9,
+            "max": 0.0033333341280619155,
+            "mean": 0.00003746014907210767
+          },
+          "surfaceSampleExact": true,
           "exactDistance": true,
           "verticesOffSurface": 0,
           "reference": null,
@@ -2580,7 +2783,7 @@
               "meshVerts": 432,
               "referenceCovered": 0,
               "referenceTotal": 0,
-              "coverage": null
+              "coverage": "NaN"
             },
             {
               "region": {
@@ -2600,7 +2803,7 @@
               "meshVerts": 289,
               "referenceCovered": 0,
               "referenceTotal": 0,
-              "coverage": null
+              "coverage": "NaN"
             }
           ],
           "sharpProbes": [
@@ -2611,8 +2814,9 @@
                 0.15,
                 0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.007071073712426771
+              "minSurfaceDistance": 0.005773504068406556,
+              "minVertexDistance": 0.007071073712426771,
+              "note": "convex box corner"
             },
             {
               "name": "corner-+--",
@@ -2621,8 +2825,9 @@
                 -0.15,
                 -0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.007071073712426771
+              "minSurfaceDistance": 0.005773504068406556,
+              "minVertexDistance": 0.007071073712426771,
+              "note": "convex box corner"
             },
             {
               "name": "corner--+-",
@@ -2631,8 +2836,9 @@
                 0.15,
                 -0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.007071073712426771
+              "minSurfaceDistance": 0.005773504068406556,
+              "minVertexDistance": 0.007071073712426771,
+              "note": "convex box corner"
             },
             {
               "name": "corner---+",
@@ -2641,25 +2847,28 @@
                 -0.15,
                 0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.007071073712426771
+              "minSurfaceDistance": 0.005773504068406556,
+              "minVertexDistance": 0.007071073712426771,
+              "note": "convex box corner"
             }
           ],
           "timingsMs": [
-            202.31233299999985,
-            201.78087500000038,
-            217.80483300000014
+            263.8640839999989,
+            265.6130410000005,
+            265.7091249999994
           ],
-          "medianMs": 202.31233299999985,
-          "minMs": 201.78087500000038,
-          "maxMs": 217.80483300000014
+          "medianMs": 265.6130410000005,
+          "minMs": 263.8640839999989,
+          "maxMs": 265.7091249999994
         },
         {
           "run": "dual-contouring",
           "method": "dual-contouring",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.005,
           "grid": [
             100,
@@ -2725,6 +2934,14 @@
             "max": 0.00003810524660787371,
             "mean": 6.063918224323671e-7
           },
+          "surfaceResidual": {
+            "count": 62660,
+            "median": 5.960464483090178e-9,
+            "p95": 0.000004141529401147093,
+            "max": 0.00003300011157988947,
+            "mean": 4.309668846922359e-7
+          },
+          "surfaceSampleExact": true,
           "exactDistance": true,
           "verticesOffSurface": 0,
           "reference": null,
@@ -2747,7 +2964,7 @@
               "meshVerts": 397,
               "referenceCovered": 0,
               "referenceTotal": 0,
-              "coverage": null
+              "coverage": "NaN"
             },
             {
               "region": {
@@ -2767,7 +2984,7 @@
               "meshVerts": 256,
               "referenceCovered": 0,
               "referenceTotal": 0,
-              "coverage": null
+              "coverage": "NaN"
             }
           ],
           "sharpProbes": [
@@ -2778,8 +2995,9 @@
                 0.15,
                 0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.00005715786991181061
+              "minSurfaceDistance": 0.00005715786991181061,
+              "minVertexDistance": 0.00005715786991181061,
+              "note": "convex box corner"
             },
             {
               "name": "corner-+--",
@@ -2788,8 +3006,9 @@
                 -0.15,
                 -0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.00005715786991181061
+              "minSurfaceDistance": 0.00005715786991181061,
+              "minVertexDistance": 0.00005715786991181061,
+              "note": "convex box corner"
             },
             {
               "name": "corner--+-",
@@ -2798,8 +3017,9 @@
                 0.15,
                 -0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.00005715786991181061
+              "minSurfaceDistance": 0.00005715786991181061,
+              "minVertexDistance": 0.00005715786991181061,
+              "note": "convex box corner"
             },
             {
               "name": "corner---+",
@@ -2808,18 +3028,19 @@
                 -0.15,
                 0.15
               ],
-              "note": "convex box corner",
-              "minVertexDistance": 0.00005715786991181061
+              "minSurfaceDistance": 0.00005715786991181061,
+              "minVertexDistance": 0.00005715786991181061,
+              "note": "convex box corner"
             }
           ],
           "timingsMs": [
-            296.6906249999993,
-            302.54941599999984,
-            297.07687500000065
+            381.39670900000056,
+            380.31479200000103,
+            381.0595420000009
           ],
-          "medianMs": 297.07687500000065,
-          "minMs": 296.6906249999993,
-          "maxMs": 302.54941599999984
+          "medianMs": 381.0595420000009,
+          "minMs": 380.31479200000103,
+          "maxMs": 381.39670900000056
         }
       ]
     },
@@ -2872,7 +3093,9 @@
           "method": "surface-nets",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.02,
           "grid": [
             20,
@@ -2938,6 +3161,14 @@
             "max": 0.00633008839235795,
             "mean": 0.0007067271512807919
           },
+          "surfaceResidual": {
+            "count": 2900,
+            "median": 0.0011758278845583644,
+            "p95": 0.0029858686938705344,
+            "max": 0.014984536501338708,
+            "mean": 0.0013892577887632265
+          },
+          "surfaceSampleExact": false,
           "exactDistance": false,
           "verticesOffSurface": 32,
           "reference": {
@@ -2961,7 +3192,7 @@
             "coverageBinA": 1,
             "samples": 2900,
             "tolerance": 0.02,
-            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff."
+            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff. Reference resolution differs per ladder step, so matched-ERROR cost is NOT established."
           },
           "features": [
             {
@@ -3007,20 +3238,22 @@
           ],
           "sharpProbes": [],
           "timingsMs": [
-            7.955041999999594,
-            4.529958000000988,
-            4.633125000000291
+            8.00383299999885,
+            7.553291000000172,
+            7.697791000000507
           ],
-          "medianMs": 4.633125000000291,
-          "minMs": 4.529958000000988,
-          "maxMs": 7.955041999999594
+          "medianMs": 7.697791000000507,
+          "minMs": 7.553291000000172,
+          "maxMs": 8.00383299999885
         },
         {
           "run": "marching-cubes",
           "method": "marching-cubes",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.02,
           "grid": [
             20,
@@ -3086,6 +3319,14 @@
             "max": 0.006416394203287734,
             "mean": 0.00021319287223062842
           },
+          "surfaceResidual": {
+            "count": 2894,
+            "median": 0.0004647807497195665,
+            "p95": 0.0020677653343234748,
+            "max": 0.008872408118408403,
+            "mean": 0.0007278652956926611
+          },
+          "surfaceSampleExact": false,
           "exactDistance": false,
           "verticesOffSurface": 12,
           "reference": {
@@ -3109,7 +3350,7 @@
             "coverageBinA": 1,
             "samples": 2894,
             "tolerance": 0.02,
-            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff."
+            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff. Reference resolution differs per ladder step, so matched-ERROR cost is NOT established."
           },
           "features": [
             {
@@ -3155,20 +3396,22 @@
           ],
           "sharpProbes": [],
           "timingsMs": [
-            3.6433340000003227,
-            3.645291000000725,
-            3.4819169999991573
+            7.128832999998849,
+            7.026208000001134,
+            6.97479100000055
           ],
-          "medianMs": 3.6433340000003227,
-          "minMs": 3.4819169999991573,
-          "maxMs": 3.645291000000725
+          "medianMs": 7.026208000001134,
+          "minMs": 6.97479100000055,
+          "maxMs": 7.128832999998849
         },
         {
           "run": "dual-contouring",
           "method": "dual-contouring",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.02,
           "grid": [
             20,
@@ -3234,6 +3477,14 @@
             "max": 0.01287413022830806,
             "mean": 0.0005693090101739759
           },
+          "surfaceResidual": {
+            "count": 2900,
+            "median": 0.00015407481481051355,
+            "p95": 0.0012567637906286478,
+            "max": 0.009467837329357808,
+            "mean": 0.0003659433531530967
+          },
+          "surfaceSampleExact": false,
           "exactDistance": false,
           "verticesOffSurface": 12,
           "reference": {
@@ -3257,7 +3508,7 @@
             "coverageBinA": 1,
             "samples": 2900,
             "tolerance": 0.02,
-            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff."
+            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff. Reference resolution differs per ladder step, so matched-ERROR cost is NOT established."
           },
           "features": [
             {
@@ -3303,13 +3554,13 @@
           ],
           "sharpProbes": [],
           "timingsMs": [
-            10.359542000000147,
-            9.811125000000175,
-            9.790749999998297
+            20.512124999999287,
+            19.804958000000624,
+            19.735791999999492
           ],
-          "medianMs": 9.811125000000175,
-          "minMs": 9.790749999998297,
-          "maxMs": 10.359542000000147
+          "medianMs": 19.804958000000624,
+          "minMs": 19.735791999999492,
+          "maxMs": 20.512124999999287
         }
       ]
     },
@@ -3362,7 +3613,9 @@
           "method": "surface-nets",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.01,
           "grid": [
             40,
@@ -3428,6 +3681,14 @@
             "max": 0.003947260921569008,
             "mean": 0.0001876869764228074
           },
+          "surfaceResidual": {
+            "count": 11738,
+            "median": 0.00028237325127122923,
+            "p95": 0.0008222312897436884,
+            "max": 0.01120557855856606,
+            "mean": 0.0003920384417570986
+          },
+          "surfaceSampleExact": false,
           "exactDistance": false,
           "verticesOffSurface": 42,
           "reference": {
@@ -3451,7 +3712,7 @@
             "coverageBinA": 1,
             "samples": 4000,
             "tolerance": 0.01,
-            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff."
+            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff. Reference resolution differs per ladder step, so matched-ERROR cost is NOT established."
           },
           "features": [
             {
@@ -3497,20 +3758,22 @@
           ],
           "sharpProbes": [],
           "timingsMs": [
-            17.270250000001397,
-            17.09679199999846,
-            19.60712500000045
+            29.046667000000525,
+            31.556040999999823,
+            31.420666999998502
           ],
-          "medianMs": 17.270250000001397,
-          "minMs": 17.09679199999846,
-          "maxMs": 19.60712500000045
+          "medianMs": 31.420666999998502,
+          "minMs": 29.046667000000525,
+          "maxMs": 31.556040999999823
         },
         {
           "run": "marching-cubes",
           "method": "marching-cubes",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.01,
           "grid": [
             40,
@@ -3576,6 +3839,14 @@
             "max": 0.004330601798623068,
             "mean": 0.000056288583137254996
           },
+          "surfaceResidual": {
+            "count": 11732,
+            "median": 0.00011269030262149608,
+            "p95": 0.0004834383705684916,
+            "max": 0.012430063924000305,
+            "mean": 0.00021649993111642362
+          },
+          "surfaceSampleExact": false,
           "exactDistance": false,
           "verticesOffSurface": 30,
           "reference": {
@@ -3599,7 +3870,7 @@
             "coverageBinA": 1,
             "samples": 4000,
             "tolerance": 0.01,
-            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff."
+            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff. Reference resolution differs per ladder step, so matched-ERROR cost is NOT established."
           },
           "features": [
             {
@@ -3645,20 +3916,22 @@
           ],
           "sharpProbes": [],
           "timingsMs": [
-            20.916584000000512,
-            21.494582999999693,
-            21.77141699999993
+            42.04554100000132,
+            42.13604200000009,
+            42.830541999999696
           ],
-          "medianMs": 21.494582999999693,
-          "minMs": 20.916584000000512,
-          "maxMs": 21.77141699999993
+          "medianMs": 42.13604200000009,
+          "minMs": 42.04554100000132,
+          "maxMs": 42.830541999999696
         },
         {
           "run": "dual-contouring",
           "method": "dual-contouring",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.01,
           "grid": [
             40,
@@ -3724,6 +3997,14 @@
             "max": 0.006975862798352709,
             "mean": 0.0001451371674355051
           },
+          "surfaceResidual": {
+            "count": 11738,
+            "median": 0.000045304762387899067,
+            "p95": 0.00034317971129710687,
+            "max": 0.013185593702221405,
+            "mean": 0.00011827618030297785
+          },
+          "surfaceSampleExact": false,
           "exactDistance": false,
           "verticesOffSurface": 20,
           "reference": {
@@ -3747,7 +4028,7 @@
             "coverageBinA": 1,
             "samples": 4000,
             "tolerance": 0.01,
-            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff."
+            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff. Reference resolution differs per ladder step, so matched-ERROR cost is NOT established."
           },
           "features": [
             {
@@ -3793,13 +4074,13 @@
           ],
           "sharpProbes": [],
           "timingsMs": [
-            45.88274999999885,
-            45.317792000001646,
-            45.55987499999901
+            91.14279199999874,
+            91.40924999999879,
+            93.7275840000002
           ],
-          "medianMs": 45.55987499999901,
-          "minMs": 45.317792000001646,
-          "maxMs": 45.88274999999885
+          "medianMs": 91.40924999999879,
+          "minMs": 91.14279199999874,
+          "maxMs": 93.7275840000002
         }
       ]
     },
@@ -3847,7 +4128,9 @@
           "method": "surface-nets",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.005,
           "grid": [
             80,
@@ -3913,6 +4196,14 @@
             "max": 0.00245525355781752,
             "mean": 0.0000488822714882418
           },
+          "surfaceResidual": {
+            "count": 47138,
+            "median": 0.00006822481846379881,
+            "p95": 0.00020447090268218082,
+            "max": 0.011726661562883413,
+            "mean": 0.0001201601845401319
+          },
+          "surfaceSampleExact": false,
           "exactDistance": false,
           "verticesOffSurface": 86,
           "reference": null,
@@ -3935,7 +4226,7 @@
               "meshVerts": 2334,
               "referenceCovered": 0,
               "referenceTotal": 0,
-              "coverage": null
+              "coverage": "NaN"
             },
             {
               "region": {
@@ -3955,25 +4246,27 @@
               "meshVerts": 778,
               "referenceCovered": 0,
               "referenceTotal": 0,
-              "coverage": null
+              "coverage": "NaN"
             }
           ],
           "sharpProbes": [],
           "timingsMs": [
-            73.54470799999945,
-            74.5992499999993,
-            73.00966699999844
+            123.75537500000064,
+            122.30904200000077,
+            122.80358400000114
           ],
-          "medianMs": 73.54470799999945,
-          "minMs": 73.00966699999844,
-          "maxMs": 74.5992499999993
+          "medianMs": 122.80358400000114,
+          "minMs": 122.30904200000077,
+          "maxMs": 123.75537500000064
         },
         {
           "run": "marching-cubes",
           "method": "marching-cubes",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.005,
           "grid": [
             80,
@@ -4039,6 +4332,14 @@
             "max": 0.0034905590020695423,
             "mean": 0.000021332253991741574
           },
+          "surfaceResidual": {
+            "count": 47132,
+            "median": 0.000028236356391671046,
+            "p95": 0.00012193066656786832,
+            "max": 0.006928061369874387,
+            "mean": 0.00006538273103953975
+          },
+          "surfaceSampleExact": false,
           "exactDistance": false,
           "verticesOffSurface": 132,
           "reference": null,
@@ -4061,7 +4362,7 @@
               "meshVerts": 2458,
               "referenceCovered": 0,
               "referenceTotal": 0,
-              "coverage": null
+              "coverage": "NaN"
             },
             {
               "region": {
@@ -4081,25 +4382,27 @@
               "meshVerts": 840,
               "referenceCovered": 0,
               "referenceTotal": 0,
-              "coverage": null
+              "coverage": "NaN"
             }
           ],
           "sharpProbes": [],
           "timingsMs": [
-            136.7251669999987,
-            138.47445900000093,
-            136.7101249999996
+            270.9930409999997,
+            273.1494160000002,
+            271.56637500000215
           ],
-          "medianMs": 136.7251669999987,
-          "minMs": 136.7101249999996,
-          "maxMs": 138.47445900000093
+          "medianMs": 271.56637500000215,
+          "minMs": 270.9930409999997,
+          "maxMs": 273.1494160000002
         },
         {
           "run": "dual-contouring",
           "method": "dual-contouring",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.005,
           "grid": [
             80,
@@ -4165,6 +4468,14 @@
             "max": 0.002844604612855362,
             "mean": 0.00003857064958081357
           },
+          "surfaceResidual": {
+            "count": 47138,
+            "median": 0.000011322348149643537,
+            "p95": 0.0000869942306053053,
+            "max": 0.01203278010363305,
+            "mean": 0.000032036009022589495
+          },
+          "surfaceSampleExact": false,
           "exactDistance": false,
           "verticesOffSurface": 68,
           "reference": null,
@@ -4187,7 +4498,7 @@
               "meshVerts": 2336,
               "referenceCovered": 0,
               "referenceTotal": 0,
-              "coverage": null
+              "coverage": "NaN"
             },
             {
               "region": {
@@ -4207,18 +4518,18 @@
               "meshVerts": 778,
               "referenceCovered": 0,
               "referenceTotal": 0,
-              "coverage": null
+              "coverage": "NaN"
             }
           ],
           "sharpProbes": [],
           "timingsMs": [
-            232.97091600000022,
-            237.1954999999998,
-            234.6742919999997
+            462.97383399999853,
+            463.57766699999775,
+            459.15570800000205
           ],
-          "medianMs": 234.6742919999997,
-          "minMs": 232.97091600000022,
-          "maxMs": 237.1954999999998
+          "medianMs": 462.97383399999853,
+          "minMs": 459.15570800000205,
+          "maxMs": 463.57766699999775
         }
       ]
     },
@@ -4271,7 +4582,9 @@
           "method": "surface-nets",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 52,
+          "fallbacks": 0,
           "cell": 0.02,
           "grid": [
             28,
@@ -4337,6 +4650,14 @@
             "max": 0.03280579680581859,
             "mean": 0.0011064468236694311
           },
+          "surfaceResidual": {
+            "count": 3291,
+            "median": 0.0009524026167449899,
+            "p95": 0.0034110109922039777,
+            "max": 0.007483083651775679,
+            "mean": 0.0012232541477463627
+          },
+          "surfaceSampleExact": false,
           "exactDistance": false,
           "verticesOffSurface": 138,
           "reference": {
@@ -4360,7 +4681,7 @@
             "coverageBinA": 0.9985,
             "samples": 3291,
             "tolerance": 0.02,
-            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff."
+            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff. Reference resolution differs per ladder step, so matched-ERROR cost is NOT established."
           },
           "features": [
             {
@@ -4426,20 +4747,22 @@
           ],
           "sharpProbes": [],
           "timingsMs": [
-            148.49720800000068,
-            149.3995410000025,
-            147.841124999999
+            153.5772079999988,
+            149.78125,
+            149.7913750000007
           ],
-          "medianMs": 148.49720800000068,
-          "minMs": 147.841124999999,
-          "maxMs": 149.3995410000025
+          "medianMs": 149.7913750000007,
+          "minMs": 149.78125,
+          "maxMs": 153.5772079999988
         },
         {
           "run": "marching-cubes",
           "method": "marching-cubes",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.02,
           "grid": [
             28,
@@ -4505,6 +4828,14 @@
             "max": 0.01261203580006633,
             "mean": 0.0004319764965864473
           },
+          "surfaceResidual": {
+            "count": 3366,
+            "median": 0.0004382980933842677,
+            "p95": 0.0021705730406109177,
+            "max": 0.007649881048964033,
+            "mean": 0.0007062439112738889
+          },
+          "surfaceSampleExact": false,
           "exactDistance": false,
           "verticesOffSurface": 42,
           "reference": {
@@ -4528,7 +4859,7 @@
             "coverageBinA": 0.9985,
             "samples": 3366,
             "tolerance": 0.02,
-            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff."
+            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff. Reference resolution differs per ladder step, so matched-ERROR cost is NOT established."
           },
           "features": [
             {
@@ -4594,20 +4925,22 @@
           ],
           "sharpProbes": [],
           "timingsMs": [
-            173.5916670000006,
-            175.51941699999952,
-            175.1202090000006
+            179.4232090000005,
+            177.7805840000001,
+            178.367374999998
           ],
-          "medianMs": 175.1202090000006,
-          "minMs": 173.5916670000006,
-          "maxMs": 175.51941699999952
+          "medianMs": 178.367374999998,
+          "minMs": 177.7805840000001,
+          "maxMs": 179.4232090000005
         },
         {
           "run": "dual-contouring",
           "method": "dual-contouring",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.02,
           "grid": [
             28,
@@ -4673,6 +5006,14 @@
             "max": 0.016683005570619826,
             "mean": 0.0009749351135809161
           },
+          "surfaceResidual": {
+            "count": 3291,
+            "median": 0.0002693568079175585,
+            "p95": 0.0016777574235858875,
+            "max": 0.007639732398468699,
+            "mean": 0.00047503479630270286
+          },
+          "surfaceSampleExact": false,
           "exactDistance": false,
           "verticesOffSurface": 117,
           "reference": {
@@ -4696,7 +5037,7 @@
             "coverageBinA": 1,
             "samples": 3291,
             "tolerance": 0.02,
-            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff."
+            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff. Reference resolution differs per ladder step, so matched-ERROR cost is NOT established."
           },
           "features": [
             {
@@ -4762,13 +5103,13 @@
           ],
           "sharpProbes": [],
           "timingsMs": [
-            407.88595799999894,
-            405.8142919999991,
-            393.20137500000055
+            401.48987500000294,
+            399.9242919999997,
+            399.71920899999895
           ],
-          "medianMs": 405.8142919999991,
-          "minMs": 393.20137500000055,
-          "maxMs": 407.88595799999894
+          "medianMs": 399.9242919999997,
+          "minMs": 399.71920899999895,
+          "maxMs": 401.48987500000294
         }
       ]
     },
@@ -4821,7 +5162,9 @@
           "method": "surface-nets",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 106,
+          "fallbacks": 0,
           "cell": 0.01,
           "grid": [
             52,
@@ -4887,6 +5230,14 @@
             "max": 0.008069567138924654,
             "mean": 0.00029229593194042146
           },
+          "surfaceResidual": {
+            "count": 13542,
+            "median": 0.0002642918793453273,
+            "p95": 0.0009627811419919375,
+            "max": 0.003970660165547056,
+            "mean": 0.0003588372229546117
+          },
+          "surfaceSampleExact": false,
           "exactDistance": false,
           "verticesOffSurface": 184,
           "reference": {
@@ -4910,7 +5261,7 @@
             "coverageBinA": 0.9995,
             "samples": 4000,
             "tolerance": 0.01,
-            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff."
+            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff. Reference resolution differs per ladder step, so matched-ERROR cost is NOT established."
           },
           "features": [
             {
@@ -4976,20 +5327,22 @@
           ],
           "sharpProbes": [],
           "timingsMs": [
-            536.3526669999992,
-            528.1465409999946,
-            530.0293749999983
+            540.3760829999992,
+            557.6556670000064,
+            541.7024999999994
           ],
-          "medianMs": 530.0293749999983,
-          "minMs": 528.1465409999946,
-          "maxMs": 536.3526669999992
+          "medianMs": 541.7024999999994,
+          "minMs": 540.3760829999992,
+          "maxMs": 557.6556670000064
         },
         {
           "run": "marching-cubes",
           "method": "marching-cubes",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.01,
           "grid": [
             52,
@@ -5055,6 +5408,14 @@
             "max": 0.008599933940139309,
             "mean": 0.00012313006386877146
           },
+          "surfaceResidual": {
+            "count": 13698,
+            "median": 0.00012539483759569842,
+            "p95": 0.0006370738234337917,
+            "max": 0.0034807586453820313,
+            "mean": 0.00021203334566332908
+          },
+          "surfaceSampleExact": false,
           "exactDistance": false,
           "verticesOffSurface": 104,
           "reference": {
@@ -5078,7 +5439,7 @@
             "coverageBinA": 0.99925,
             "samples": 4000,
             "tolerance": 0.01,
-            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff."
+            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff. Reference resolution differs per ladder step, so matched-ERROR cost is NOT established."
           },
           "features": [
             {
@@ -5144,20 +5505,22 @@
           ],
           "sharpProbes": [],
           "timingsMs": [
-            1035.5541669999984,
-            1037.618957999999,
-            1035.0204169999997
+            1062.2227090000015,
+            1060.0187910000022,
+            1058.752916999998
           ],
-          "medianMs": 1035.5541669999984,
-          "minMs": 1035.0204169999997,
-          "maxMs": 1037.618957999999
+          "medianMs": 1060.0187910000022,
+          "minMs": 1058.752916999998,
+          "maxMs": 1062.2227090000015
         },
         {
           "run": "dual-contouring",
           "method": "dual-contouring",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.01,
           "grid": [
             52,
@@ -5223,6 +5586,14 @@
             "max": 0.010891172670230714,
             "mean": 0.00025964067712474706
           },
+          "surfaceResidual": {
+            "count": 13542,
+            "median": 0.00005984128211543706,
+            "p95": 0.0004671614321478677,
+            "max": 0.002981627947802222,
+            "mean": 0.00013056036590578516
+          },
+          "surfaceSampleExact": false,
           "exactDistance": false,
           "verticesOffSurface": 112,
           "reference": {
@@ -5246,7 +5617,7 @@
             "coverageBinA": 0.9995,
             "samples": 4000,
             "tolerance": 0.01,
-            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff."
+            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff. Reference resolution differs per ladder step, so matched-ERROR cost is NOT established."
           },
           "features": [
             {
@@ -5312,13 +5683,13 @@
           ],
           "sharpProbes": [],
           "timingsMs": [
-            1876.0993750000052,
-            1896.5431669999962,
-            1896.7790000000023
+            1909.6968329999982,
+            1922.6085420000018,
+            1905.6024160000015
           ],
-          "medianMs": 1896.5431669999962,
-          "minMs": 1876.0993750000052,
-          "maxMs": 1896.7790000000023
+          "medianMs": 1909.6968329999982,
+          "minMs": 1905.6024160000015,
+          "maxMs": 1922.6085420000018
         }
       ]
     },
@@ -5366,7 +5737,9 @@
           "method": "surface-nets",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 230,
+          "fallbacks": 0,
           "cell": 0.005,
           "grid": [
             100,
@@ -5432,6 +5805,14 @@
             "max": 0.003457623394268474,
             "mean": 0.00008196904974230466
           },
+          "surfaceResidual": {
+            "count": 55692,
+            "median": 0.00007043509983658105,
+            "p95": 0.0002495346988677302,
+            "max": 0.0032946108880525246,
+            "mean": 0.00010231487317519836
+          },
+          "surfaceSampleExact": false,
           "exactDistance": false,
           "verticesOffSurface": 260,
           "reference": null,
@@ -5454,7 +5835,7 @@
               "meshVerts": 1243,
               "referenceCovered": 0,
               "referenceTotal": 0,
-              "coverage": null
+              "coverage": "NaN"
             },
             {
               "region": {
@@ -5474,7 +5855,7 @@
               "meshVerts": 1243,
               "referenceCovered": 0,
               "referenceTotal": 0,
-              "coverage": null
+              "coverage": "NaN"
             },
             {
               "region": {
@@ -5494,25 +5875,27 @@
               "meshVerts": 1008,
               "referenceCovered": 0,
               "referenceTotal": 0,
-              "coverage": null
+              "coverage": "NaN"
             }
           ],
           "sharpProbes": [],
           "timingsMs": [
-            2068.6429999999964,
-            2058.7933750000084,
-            2034.3131250000006
+            2071.638500000001,
+            2078.2588749999995,
+            2099.0947079999896
           ],
-          "medianMs": 2058.7933750000084,
-          "minMs": 2034.3131250000006,
-          "maxMs": 2068.6429999999964
+          "medianMs": 2078.2588749999995,
+          "minMs": 2071.638500000001,
+          "maxMs": 2099.0947079999896
         },
         {
           "run": "marching-cubes",
           "method": "marching-cubes",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.005,
           "grid": [
             100,
@@ -5578,6 +5961,14 @@
             "max": 0.005743478970115569,
             "mean": 0.00003315683945310834
           },
+          "surfaceResidual": {
+            "count": 56040,
+            "median": 0.00003259081921065867,
+            "p95": 0.00016528663996048305,
+            "max": 0.002478142386599374,
+            "mean": 0.000060256348956549326
+          },
+          "surfaceSampleExact": false,
           "exactDistance": false,
           "verticesOffSurface": 205,
           "reference": null,
@@ -5600,7 +5991,7 @@
               "meshVerts": 1245,
               "referenceCovered": 0,
               "referenceTotal": 0,
-              "coverage": null
+              "coverage": "NaN"
             },
             {
               "region": {
@@ -5620,7 +6011,7 @@
               "meshVerts": 1245,
               "referenceCovered": 0,
               "referenceTotal": 0,
-              "coverage": null
+              "coverage": "NaN"
             },
             {
               "region": {
@@ -5640,25 +6031,27 @@
               "meshVerts": 1109,
               "referenceCovered": 0,
               "referenceTotal": 0,
-              "coverage": null
+              "coverage": "NaN"
             }
           ],
           "sharpProbes": [],
           "timingsMs": [
-            6893.9732499999955,
-            7047.016208999994,
-            6914.2492499999935
+            7048.838833000002,
+            7090.689417000001,
+            7129.378500000006
           ],
-          "medianMs": 6914.2492499999935,
-          "minMs": 6893.9732499999955,
-          "maxMs": 7047.016208999994
+          "medianMs": 7090.689417000001,
+          "minMs": 7048.838833000002,
+          "maxMs": 7129.378500000006
         },
         {
           "run": "dual-contouring",
           "method": "dual-contouring",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.005,
           "grid": [
             100,
@@ -5724,6 +6117,14 @@
             "max": 0.007240277176876869,
             "mean": 0.00007659803339313323
           },
+          "surfaceResidual": {
+            "count": 55692,
+            "median": 0.000014739914960577513,
+            "p95": 0.00011876672650600051,
+            "max": 0.0042114270066149805,
+            "mean": 0.000037662457135385934
+          },
+          "surfaceSampleExact": false,
           "exactDistance": false,
           "verticesOffSurface": 256,
           "reference": null,
@@ -5746,7 +6147,7 @@
               "meshVerts": 1243,
               "referenceCovered": 0,
               "referenceTotal": 0,
-              "coverage": null
+              "coverage": "NaN"
             },
             {
               "region": {
@@ -5766,7 +6167,7 @@
               "meshVerts": 1243,
               "referenceCovered": 0,
               "referenceTotal": 0,
-              "coverage": null
+              "coverage": "NaN"
             },
             {
               "region": {
@@ -5786,18 +6187,18 @@
               "meshVerts": 1008,
               "referenceCovered": 0,
               "referenceTotal": 0,
-              "coverage": null
+              "coverage": "NaN"
             }
           ],
           "sharpProbes": [],
           "timingsMs": [
-            10297.679208000001,
-            10369.628750000003,
-            10109.221625000006
+            10344.151541,
+            10361.576916999999,
+            10312.650875000007
           ],
-          "medianMs": 10297.679208000001,
-          "minMs": 10109.221625000006,
-          "maxMs": 10369.628750000003
+          "medianMs": 10344.151541,
+          "minMs": 10312.650875000007,
+          "maxMs": 10361.576916999999
         }
       ]
     },
@@ -5849,7 +6250,9 @@
           "method": "surface-nets",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.02,
           "grid": [
             20,
@@ -5915,6 +6318,14 @@
             "max": 0.007496178502714072,
             "mean": 0.001737277744458236
           },
+          "surfaceResidual": {
+            "count": 548,
+            "median": 0.002182851751951046,
+            "p95": 0.004464587901593996,
+            "max": 0.007577832805640619,
+            "mean": 0.002173805509420894
+          },
+          "surfaceSampleExact": false,
           "exactDistance": false,
           "verticesOffSurface": 64,
           "reference": {
@@ -5938,7 +6349,7 @@
             "coverageBinA": 1,
             "samples": 548,
             "tolerance": 0.02,
-            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff."
+            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff. Reference resolution differs per ladder step, so matched-ERROR cost is NOT established."
           },
           "features": [
             {
@@ -5964,20 +6375,22 @@
           ],
           "sharpProbes": [],
           "timingsMs": [
-            2.202000000019325,
-            2.208875000011176,
-            2.2170829999959096
+            2.3514580000191927,
+            2.0995419999817386,
+            2.1263749999925494
           ],
-          "medianMs": 2.208875000011176,
-          "minMs": 2.202000000019325,
-          "maxMs": 2.2170829999959096
+          "medianMs": 2.1263749999925494,
+          "minMs": 2.0995419999817386,
+          "maxMs": 2.3514580000191927
         },
         {
           "run": "marching-cubes",
           "method": "marching-cubes",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.02,
           "grid": [
             20,
@@ -6043,6 +6456,14 @@
             "max": 0.00527555771128799,
             "mean": 0.00040041121629347004
           },
+          "surfaceResidual": {
+            "count": 542,
+            "median": 0.0009369142901045763,
+            "p95": 0.0027361390486059737,
+            "max": 0.005071796178972115,
+            "mean": 0.0010792851069770064
+          },
+          "surfaceSampleExact": false,
           "exactDistance": false,
           "verticesOffSurface": 4,
           "reference": {
@@ -6066,7 +6487,7 @@
             "coverageBinA": 1,
             "samples": 542,
             "tolerance": 0.02,
-            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff."
+            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff. Reference resolution differs per ladder step, so matched-ERROR cost is NOT established."
           },
           "features": [
             {
@@ -6092,20 +6513,22 @@
           ],
           "sharpProbes": [],
           "timingsMs": [
-            1.9268750000046566,
-            1.8112079999991693,
-            1.8413330000184942
+            1.8827089999977034,
+            2.00637500002631,
+            1.8975830000126734
           ],
-          "medianMs": 1.8413330000184942,
-          "minMs": 1.8112079999991693,
-          "maxMs": 1.9268750000046566
+          "medianMs": 1.8975830000126734,
+          "minMs": 1.8827089999977034,
+          "maxMs": 2.00637500002631
         },
         {
           "run": "dual-contouring",
           "method": "dual-contouring",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.02,
           "grid": [
             20,
@@ -6171,6 +6594,14 @@
             "max": 0.00690830672063315,
             "mean": 0.0014431352158731333
           },
+          "surfaceResidual": {
+            "count": 548,
+            "median": 0.00035068472244728177,
+            "p95": 0.00262431976278319,
+            "max": 0.006271344093540215,
+            "mean": 0.0006951627105707223
+          },
+          "surfaceSampleExact": false,
           "exactDistance": false,
           "verticesOffSurface": 44,
           "reference": {
@@ -6194,7 +6625,7 @@
             "coverageBinA": 1,
             "samples": 548,
             "tolerance": 0.02,
-            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff."
+            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff. Reference resolution differs per ladder step, so matched-ERROR cost is NOT established."
           },
           "features": [
             {
@@ -6220,13 +6651,13 @@
           ],
           "sharpProbes": [],
           "timingsMs": [
-            4.559124999999767,
-            4.551665999984834,
-            4.309124999999767
+            4.599709000001894,
+            4.483166999998502,
+            4.563457999989623
           ],
-          "medianMs": 4.551665999984834,
-          "minMs": 4.309124999999767,
-          "maxMs": 4.559124999999767
+          "medianMs": 4.563457999989623,
+          "minMs": 4.483166999998502,
+          "maxMs": 4.599709000001894
         }
       ]
     },
@@ -6278,7 +6709,9 @@
           "method": "surface-nets",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.01,
           "grid": [
             36,
@@ -6344,6 +6777,14 @@
             "max": 0.0038448607204252484,
             "mean": 0.000488104190106507
           },
+          "surfaceResidual": {
+            "count": 1964,
+            "median": 0.0005720183461001976,
+            "p95": 0.0011979732601545925,
+            "max": 0.004132174229485483,
+            "mean": 0.0006342231662451975
+          },
+          "surfaceSampleExact": false,
           "exactDistance": false,
           "verticesOffSurface": 56,
           "reference": {
@@ -6367,7 +6808,7 @@
             "coverageBinA": 1,
             "samples": 1964,
             "tolerance": 0.01,
-            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff."
+            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff. Reference resolution differs per ladder step, so matched-ERROR cost is NOT established."
           },
           "features": [
             {
@@ -6393,20 +6834,22 @@
           ],
           "sharpProbes": [],
           "timingsMs": [
-            6.311291999998502,
-            7.88758300000336,
-            6.828833999985363
+            6.304291000007652,
+            6.02058300000499,
+            5.95274999999674
           ],
-          "medianMs": 6.828833999985363,
-          "minMs": 6.311291999998502,
-          "maxMs": 7.88758300000336
+          "medianMs": 6.02058300000499,
+          "minMs": 5.95274999999674,
+          "maxMs": 6.304291000007652
         },
         {
           "run": "marching-cubes",
           "method": "marching-cubes",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.01,
           "grid": [
             36,
@@ -6472,6 +6915,14 @@
             "max": 0.0023487955951789013,
             "mean": 0.00016043691091689302
           },
+          "surfaceResidual": {
+            "count": 1958,
+            "median": 0.00026323571231204497,
+            "p95": 0.0008582126671937019,
+            "max": 0.0031413935995522647,
+            "mean": 0.00033886970459871027
+          },
+          "surfaceSampleExact": false,
           "exactDistance": false,
           "verticesOffSurface": 8,
           "reference": {
@@ -6495,7 +6946,7 @@
             "coverageBinA": 1,
             "samples": 1958,
             "tolerance": 0.01,
-            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff."
+            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff. Reference resolution differs per ladder step, so matched-ERROR cost is NOT established."
           },
           "features": [
             {
@@ -6521,20 +6972,22 @@
           ],
           "sharpProbes": [],
           "timingsMs": [
-            10.825000000011642,
-            10.831666999991285,
-            11.16679099999601
+            10.782833999983268,
+            10.714500000001863,
+            10.802750000002561
           ],
-          "medianMs": 10.831666999991285,
-          "minMs": 10.825000000011642,
-          "maxMs": 11.16679099999601
+          "medianMs": 10.782833999983268,
+          "minMs": 10.714500000001863,
+          "maxMs": 10.802750000002561
         },
         {
           "run": "dual-contouring",
           "method": "dual-contouring",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.01,
           "grid": [
             36,
@@ -6600,6 +7053,14 @@
             "max": 0.002757178485864102,
             "mean": 0.00037182778403693436
           },
+          "surfaceResidual": {
+            "count": 1964,
+            "median": 0.00007830666742362352,
+            "p95": 0.0005685126202343428,
+            "max": 0.0026533680655839356,
+            "mean": 0.00015941362458538207
+          },
+          "surfaceSampleExact": false,
           "exactDistance": false,
           "verticesOffSurface": 4,
           "reference": {
@@ -6623,7 +7084,7 @@
             "coverageBinA": 1,
             "samples": 1964,
             "tolerance": 0.01,
-            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff."
+            "caveat": "sampled bidirectional point-to-triangle distance; reference is marching cubes at cell/2 (capped at 5 mm) and is itself approximate. Not Hausdorff. Reference resolution differs per ladder step, so matched-ERROR cost is NOT established."
           },
           "features": [
             {
@@ -6649,13 +7110,13 @@
           ],
           "sharpProbes": [],
           "timingsMs": [
-            18.703791000007186,
-            18.74504199999501,
-            19.761333000002196
+            18.58895800000755,
+            18.50229199999012,
+            18.41804200000479
           ],
-          "medianMs": 18.74504199999501,
-          "minMs": 18.703791000007186,
-          "maxMs": 19.761333000002196
+          "medianMs": 18.50229199999012,
+          "minMs": 18.41804200000479,
+          "maxMs": 18.58895800000755
         }
       ]
     },
@@ -6702,7 +7163,9 @@
           "method": "surface-nets",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.005,
           "grid": [
             68,
@@ -6768,6 +7231,14 @@
             "max": 0.0007661566046179899,
             "mean": 0.0001180516044991603
           },
+          "surfaceResidual": {
+            "count": 8060,
+            "median": 0.00014060371843085728,
+            "p95": 0.0003078006671851071,
+            "max": 0.001167138100733628,
+            "mean": 0.00015926138738386406
+          },
+          "surfaceSampleExact": false,
           "exactDistance": false,
           "verticesOffSurface": 28,
           "reference": null,
@@ -6790,25 +7261,27 @@
               "meshVerts": 144,
               "referenceCovered": 0,
               "referenceTotal": 0,
-              "coverage": null
+              "coverage": "NaN"
             }
           ],
           "sharpProbes": [],
           "timingsMs": [
-            22.849416999990353,
-            25.833125000004657,
-            24.6547080000164
+            24.095999999990454,
+            23.883832999999868,
+            24.251332999992883
           ],
-          "medianMs": 24.6547080000164,
-          "minMs": 22.849416999990353,
-          "maxMs": 25.833125000004657
+          "medianMs": 24.095999999990454,
+          "minMs": 23.883832999999868,
+          "maxMs": 24.251332999992883
         },
         {
           "run": "marching-cubes",
           "method": "marching-cubes",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.005,
           "grid": [
             68,
@@ -6874,6 +7347,14 @@
             "max": 0.00043708908685001095,
             "mean": 0.000029329194307869196
           },
+          "surfaceResidual": {
+            "count": 8054,
+            "median": 0.00006259475562296472,
+            "p95": 0.00017978237075153697,
+            "max": 0.0012447861343053111,
+            "mean": 0.00008209536797284533
+          },
+          "surfaceSampleExact": false,
           "exactDistance": false,
           "verticesOffSurface": 0,
           "reference": null,
@@ -6896,25 +7377,27 @@
               "meshVerts": 153,
               "referenceCovered": 0,
               "referenceTotal": 0,
-              "coverage": null
+              "coverage": "NaN"
             }
           ],
           "sharpProbes": [],
           "timingsMs": [
-            72.8504580000008,
-            73.35187500002212,
-            73.4273749999993
+            71.34749999997439,
+            71.3947089999856,
+            72.63925000000745
           ],
-          "medianMs": 73.35187500002212,
-          "minMs": 72.8504580000008,
-          "maxMs": 73.4273749999993
+          "medianMs": 71.3947089999856,
+          "minMs": 71.34749999997439,
+          "maxMs": 72.63925000000745
         },
         {
           "run": "dual-contouring",
           "method": "dual-contouring",
           "invalid": false,
           "overflow": false,
+          "rankable": true,
           "droppedCells": 0,
+          "fallbacks": 0,
           "cell": 0.005,
           "grid": [
             68,
@@ -6980,6 +7463,14 @@
             "max": 0.000695997259165084,
             "mean": 0.00009107919363889676
           },
+          "surfaceResidual": {
+            "count": 8060,
+            "median": 0.000018893319337832948,
+            "p95": 0.00014064933466068769,
+            "max": 0.0006884177869954187,
+            "mean": 0.00003979678531881863
+          },
+          "surfaceSampleExact": false,
           "exactDistance": false,
           "verticesOffSurface": 20,
           "reference": null,
@@ -7002,18 +7493,18 @@
               "meshVerts": 144,
               "referenceCovered": 0,
               "referenceTotal": 0,
-              "coverage": null
+              "coverage": "NaN"
             }
           ],
           "sharpProbes": [],
           "timingsMs": [
-            105.16587500000605,
-            104.25708300000406,
-            106.85329099997762
+            102.15087500002119,
+            106.27170799998567,
+            101.98970799997915
           ],
-          "medianMs": 105.16587500000605,
-          "minMs": 104.25708300000406,
-          "maxMs": 106.85329099997762
+          "medianMs": 102.15087500002119,
+          "minMs": 101.98970799997915,
+          "maxMs": 106.27170799998567
         }
       ]
     }
@@ -7024,8 +7515,8 @@
       "method": "surface-nets",
       "cell": 0.02,
       "base": "control-sphere-surface-nets-20mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sphere-surface-nets-20mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sphere-surface-nets-20mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sphere-surface-nets-20mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sphere-surface-nets-20mm.glb",
       "readback": {
         "vertices": 1868,
         "normals": 1868,
@@ -7040,8 +7531,8 @@
       "method": "marching-cubes",
       "cell": 0.02,
       "base": "control-sphere-marching-cubes-20mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sphere-marching-cubes-20mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sphere-marching-cubes-20mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sphere-marching-cubes-20mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sphere-marching-cubes-20mm.glb",
       "readback": {
         "vertices": 1866,
         "normals": 1866,
@@ -7056,8 +7547,8 @@
       "method": "dual-contouring",
       "cell": 0.02,
       "base": "control-sphere-dual-contouring-20mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sphere-dual-contouring-20mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sphere-dual-contouring-20mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sphere-dual-contouring-20mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sphere-dual-contouring-20mm.glb",
       "readback": {
         "vertices": 1868,
         "normals": 1868,
@@ -7072,8 +7563,8 @@
       "method": "surface-nets",
       "cell": 0.01,
       "base": "control-sphere-surface-nets-10mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sphere-surface-nets-10mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sphere-surface-nets-10mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sphere-surface-nets-10mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sphere-surface-nets-10mm.glb",
       "readback": {
         "vertices": 7508,
         "normals": 7508,
@@ -7088,8 +7579,8 @@
       "method": "marching-cubes",
       "cell": 0.01,
       "base": "control-sphere-marching-cubes-10mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sphere-marching-cubes-10mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sphere-marching-cubes-10mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sphere-marching-cubes-10mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sphere-marching-cubes-10mm.glb",
       "readback": {
         "vertices": 7506,
         "normals": 7506,
@@ -7104,8 +7595,8 @@
       "method": "dual-contouring",
       "cell": 0.01,
       "base": "control-sphere-dual-contouring-10mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sphere-dual-contouring-10mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sphere-dual-contouring-10mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sphere-dual-contouring-10mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sphere-dual-contouring-10mm.glb",
       "readback": {
         "vertices": 7508,
         "normals": 7508,
@@ -7120,8 +7611,8 @@
       "method": "surface-nets",
       "cell": 0.005,
       "base": "control-sphere-surface-nets-5mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sphere-surface-nets-5mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sphere-surface-nets-5mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sphere-surface-nets-5mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sphere-surface-nets-5mm.glb",
       "readback": {
         "vertices": 30116,
         "normals": 30116,
@@ -7136,8 +7627,8 @@
       "method": "marching-cubes",
       "cell": 0.005,
       "base": "control-sphere-marching-cubes-5mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sphere-marching-cubes-5mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sphere-marching-cubes-5mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sphere-marching-cubes-5mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sphere-marching-cubes-5mm.glb",
       "readback": {
         "vertices": 30114,
         "normals": 30114,
@@ -7152,8 +7643,8 @@
       "method": "dual-contouring",
       "cell": 0.005,
       "base": "control-sphere-dual-contouring-5mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sphere-dual-contouring-5mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sphere-dual-contouring-5mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sphere-dual-contouring-5mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sphere-dual-contouring-5mm.glb",
       "readback": {
         "vertices": 30116,
         "normals": 30116,
@@ -7168,8 +7659,8 @@
       "method": "surface-nets",
       "cell": 0.02,
       "base": "control-sharp-box-surface-nets-20mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sharp-box-surface-nets-20mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sharp-box-surface-nets-20mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sharp-box-surface-nets-20mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sharp-box-surface-nets-20mm.glb",
       "readback": {
         "vertices": 1178,
         "normals": 1178,
@@ -7184,8 +7675,8 @@
       "method": "marching-cubes",
       "cell": 0.02,
       "base": "control-sharp-box-marching-cubes-20mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sharp-box-marching-cubes-20mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sharp-box-marching-cubes-20mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sharp-box-marching-cubes-20mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sharp-box-marching-cubes-20mm.glb",
       "readback": {
         "vertices": 1176,
         "normals": 1176,
@@ -7200,8 +7691,8 @@
       "method": "dual-contouring",
       "cell": 0.02,
       "base": "control-sharp-box-dual-contouring-20mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sharp-box-dual-contouring-20mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sharp-box-dual-contouring-20mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sharp-box-dual-contouring-20mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sharp-box-dual-contouring-20mm.glb",
       "readback": {
         "vertices": 1178,
         "normals": 1178,
@@ -7216,8 +7707,8 @@
       "method": "surface-nets",
       "cell": 0.01,
       "base": "control-sharp-box-surface-nets-10mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sharp-box-surface-nets-10mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sharp-box-surface-nets-10mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sharp-box-surface-nets-10mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sharp-box-surface-nets-10mm.glb",
       "readback": {
         "vertices": 5048,
         "normals": 5048,
@@ -7232,8 +7723,8 @@
       "method": "marching-cubes",
       "cell": 0.01,
       "base": "control-sharp-box-marching-cubes-10mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sharp-box-marching-cubes-10mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sharp-box-marching-cubes-10mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sharp-box-marching-cubes-10mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sharp-box-marching-cubes-10mm.glb",
       "readback": {
         "vertices": 5046,
         "normals": 5046,
@@ -7248,8 +7739,8 @@
       "method": "dual-contouring",
       "cell": 0.01,
       "base": "control-sharp-box-dual-contouring-10mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sharp-box-dual-contouring-10mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sharp-box-dual-contouring-10mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sharp-box-dual-contouring-10mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sharp-box-dual-contouring-10mm.glb",
       "readback": {
         "vertices": 5048,
         "normals": 5048,
@@ -7264,8 +7755,8 @@
       "method": "surface-nets",
       "cell": 0.005,
       "base": "control-sharp-box-surface-nets-5mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sharp-box-surface-nets-5mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sharp-box-surface-nets-5mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sharp-box-surface-nets-5mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sharp-box-surface-nets-5mm.glb",
       "readback": {
         "vertices": 20888,
         "normals": 20888,
@@ -7280,8 +7771,8 @@
       "method": "marching-cubes",
       "cell": 0.005,
       "base": "control-sharp-box-marching-cubes-5mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sharp-box-marching-cubes-5mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sharp-box-marching-cubes-5mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sharp-box-marching-cubes-5mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sharp-box-marching-cubes-5mm.glb",
       "readback": {
         "vertices": 20886,
         "normals": 20886,
@@ -7296,8 +7787,8 @@
       "method": "dual-contouring",
       "cell": 0.005,
       "base": "control-sharp-box-dual-contouring-5mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sharp-box-dual-contouring-5mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/control-sharp-box-dual-contouring-5mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sharp-box-dual-contouring-5mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/control-sharp-box-dual-contouring-5mm.glb",
       "readback": {
         "vertices": 20888,
         "normals": 20888,
@@ -7312,8 +7803,8 @@
       "method": "surface-nets",
       "cell": 0.02,
       "base": "chamfer-groove-surface-nets-20mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/chamfer-groove-surface-nets-20mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/chamfer-groove-surface-nets-20mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/chamfer-groove-surface-nets-20mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/chamfer-groove-surface-nets-20mm.glb",
       "readback": {
         "vertices": 968,
         "normals": 968,
@@ -7328,8 +7819,8 @@
       "method": "marching-cubes",
       "cell": 0.02,
       "base": "chamfer-groove-marching-cubes-20mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/chamfer-groove-marching-cubes-20mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/chamfer-groove-marching-cubes-20mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/chamfer-groove-marching-cubes-20mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/chamfer-groove-marching-cubes-20mm.glb",
       "readback": {
         "vertices": 966,
         "normals": 966,
@@ -7344,8 +7835,8 @@
       "method": "dual-contouring",
       "cell": 0.02,
       "base": "chamfer-groove-dual-contouring-20mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/chamfer-groove-dual-contouring-20mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/chamfer-groove-dual-contouring-20mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/chamfer-groove-dual-contouring-20mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/chamfer-groove-dual-contouring-20mm.glb",
       "readback": {
         "vertices": 968,
         "normals": 968,
@@ -7360,8 +7851,8 @@
       "method": "surface-nets",
       "cell": 0.01,
       "base": "chamfer-groove-surface-nets-10mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/chamfer-groove-surface-nets-10mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/chamfer-groove-surface-nets-10mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/chamfer-groove-surface-nets-10mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/chamfer-groove-surface-nets-10mm.glb",
       "readback": {
         "vertices": 3914,
         "normals": 3914,
@@ -7376,8 +7867,8 @@
       "method": "marching-cubes",
       "cell": 0.01,
       "base": "chamfer-groove-marching-cubes-10mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/chamfer-groove-marching-cubes-10mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/chamfer-groove-marching-cubes-10mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/chamfer-groove-marching-cubes-10mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/chamfer-groove-marching-cubes-10mm.glb",
       "readback": {
         "vertices": 3912,
         "normals": 3912,
@@ -7392,8 +7883,8 @@
       "method": "dual-contouring",
       "cell": 0.01,
       "base": "chamfer-groove-dual-contouring-10mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/chamfer-groove-dual-contouring-10mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/chamfer-groove-dual-contouring-10mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/chamfer-groove-dual-contouring-10mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/chamfer-groove-dual-contouring-10mm.glb",
       "readback": {
         "vertices": 3914,
         "normals": 3914,
@@ -7408,8 +7899,8 @@
       "method": "surface-nets",
       "cell": 0.005,
       "base": "chamfer-groove-surface-nets-5mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/chamfer-groove-surface-nets-5mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/chamfer-groove-surface-nets-5mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/chamfer-groove-surface-nets-5mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/chamfer-groove-surface-nets-5mm.glb",
       "readback": {
         "vertices": 15714,
         "normals": 15714,
@@ -7424,8 +7915,8 @@
       "method": "marching-cubes",
       "cell": 0.005,
       "base": "chamfer-groove-marching-cubes-5mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/chamfer-groove-marching-cubes-5mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/chamfer-groove-marching-cubes-5mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/chamfer-groove-marching-cubes-5mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/chamfer-groove-marching-cubes-5mm.glb",
       "readback": {
         "vertices": 15712,
         "normals": 15712,
@@ -7440,8 +7931,8 @@
       "method": "dual-contouring",
       "cell": 0.005,
       "base": "chamfer-groove-dual-contouring-5mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/chamfer-groove-dual-contouring-5mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/chamfer-groove-dual-contouring-5mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/chamfer-groove-dual-contouring-5mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/chamfer-groove-dual-contouring-5mm.glb",
       "readback": {
         "vertices": 15714,
         "normals": 15714,
@@ -7456,8 +7947,8 @@
       "method": "surface-nets",
       "cell": 0.02,
       "base": "character-head-surface-nets-20mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/character-head-surface-nets-20mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/character-head-surface-nets-20mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/character-head-surface-nets-20mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/character-head-surface-nets-20mm.glb",
       "readback": {
         "vertices": 1115,
         "normals": 1115,
@@ -7472,8 +7963,8 @@
       "method": "marching-cubes",
       "cell": 0.02,
       "base": "character-head-marching-cubes-20mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/character-head-marching-cubes-20mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/character-head-marching-cubes-20mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/character-head-marching-cubes-20mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/character-head-marching-cubes-20mm.glb",
       "readback": {
         "vertices": 1140,
         "normals": 1140,
@@ -7488,8 +7979,8 @@
       "method": "dual-contouring",
       "cell": 0.02,
       "base": "character-head-dual-contouring-20mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/character-head-dual-contouring-20mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/character-head-dual-contouring-20mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/character-head-dual-contouring-20mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/character-head-dual-contouring-20mm.glb",
       "readback": {
         "vertices": 1115,
         "normals": 1115,
@@ -7504,8 +7995,8 @@
       "method": "surface-nets",
       "cell": 0.01,
       "base": "character-head-surface-nets-10mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/character-head-surface-nets-10mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/character-head-surface-nets-10mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/character-head-surface-nets-10mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/character-head-surface-nets-10mm.glb",
       "readback": {
         "vertices": 4550,
         "normals": 4550,
@@ -7520,8 +8011,8 @@
       "method": "marching-cubes",
       "cell": 0.01,
       "base": "character-head-marching-cubes-10mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/character-head-marching-cubes-10mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/character-head-marching-cubes-10mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/character-head-marching-cubes-10mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/character-head-marching-cubes-10mm.glb",
       "readback": {
         "vertices": 4602,
         "normals": 4602,
@@ -7536,8 +8027,8 @@
       "method": "dual-contouring",
       "cell": 0.01,
       "base": "character-head-dual-contouring-10mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/character-head-dual-contouring-10mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/character-head-dual-contouring-10mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/character-head-dual-contouring-10mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/character-head-dual-contouring-10mm.glb",
       "readback": {
         "vertices": 4550,
         "normals": 4550,
@@ -7552,8 +8043,8 @@
       "method": "surface-nets",
       "cell": 0.005,
       "base": "character-head-surface-nets-5mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/character-head-surface-nets-5mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/character-head-surface-nets-5mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/character-head-surface-nets-5mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/character-head-surface-nets-5mm.glb",
       "readback": {
         "vertices": 18640,
         "normals": 18640,
@@ -7568,8 +8059,8 @@
       "method": "marching-cubes",
       "cell": 0.005,
       "base": "character-head-marching-cubes-5mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/character-head-marching-cubes-5mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/character-head-marching-cubes-5mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/character-head-marching-cubes-5mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/character-head-marching-cubes-5mm.glb",
       "readback": {
         "vertices": 18756,
         "normals": 18756,
@@ -7584,8 +8075,8 @@
       "method": "dual-contouring",
       "cell": 0.005,
       "base": "character-head-dual-contouring-5mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/character-head-dual-contouring-5mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/character-head-dual-contouring-5mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/character-head-dual-contouring-5mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/character-head-dual-contouring-5mm.glb",
       "readback": {
         "vertices": 18640,
         "normals": 18640,
@@ -7600,8 +8091,8 @@
       "method": "surface-nets",
       "cell": 0.02,
       "base": "torn-chunk-surface-nets-20mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/torn-chunk-surface-nets-20mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/torn-chunk-surface-nets-20mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/torn-chunk-surface-nets-20mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/torn-chunk-surface-nets-20mm.glb",
       "readback": {
         "vertices": 184,
         "normals": 184,
@@ -7616,8 +8107,8 @@
       "method": "marching-cubes",
       "cell": 0.02,
       "base": "torn-chunk-marching-cubes-20mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/torn-chunk-marching-cubes-20mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/torn-chunk-marching-cubes-20mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/torn-chunk-marching-cubes-20mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/torn-chunk-marching-cubes-20mm.glb",
       "readback": {
         "vertices": 182,
         "normals": 182,
@@ -7632,8 +8123,8 @@
       "method": "dual-contouring",
       "cell": 0.02,
       "base": "torn-chunk-dual-contouring-20mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/torn-chunk-dual-contouring-20mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/torn-chunk-dual-contouring-20mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/torn-chunk-dual-contouring-20mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/torn-chunk-dual-contouring-20mm.glb",
       "readback": {
         "vertices": 184,
         "normals": 184,
@@ -7648,8 +8139,8 @@
       "method": "surface-nets",
       "cell": 0.01,
       "base": "torn-chunk-surface-nets-10mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/torn-chunk-surface-nets-10mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/torn-chunk-surface-nets-10mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/torn-chunk-surface-nets-10mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/torn-chunk-surface-nets-10mm.glb",
       "readback": {
         "vertices": 656,
         "normals": 656,
@@ -7664,8 +8155,8 @@
       "method": "marching-cubes",
       "cell": 0.01,
       "base": "torn-chunk-marching-cubes-10mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/torn-chunk-marching-cubes-10mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/torn-chunk-marching-cubes-10mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/torn-chunk-marching-cubes-10mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/torn-chunk-marching-cubes-10mm.glb",
       "readback": {
         "vertices": 654,
         "normals": 654,
@@ -7680,8 +8171,8 @@
       "method": "dual-contouring",
       "cell": 0.01,
       "base": "torn-chunk-dual-contouring-10mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/torn-chunk-dual-contouring-10mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/torn-chunk-dual-contouring-10mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/torn-chunk-dual-contouring-10mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/torn-chunk-dual-contouring-10mm.glb",
       "readback": {
         "vertices": 656,
         "normals": 656,
@@ -7696,8 +8187,8 @@
       "method": "surface-nets",
       "cell": 0.005,
       "base": "torn-chunk-surface-nets-5mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/torn-chunk-surface-nets-5mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/torn-chunk-surface-nets-5mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/torn-chunk-surface-nets-5mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/torn-chunk-surface-nets-5mm.glb",
       "readback": {
         "vertices": 2688,
         "normals": 2688,
@@ -7712,8 +8203,8 @@
       "method": "marching-cubes",
       "cell": 0.005,
       "base": "torn-chunk-marching-cubes-5mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/torn-chunk-marching-cubes-5mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/torn-chunk-marching-cubes-5mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/torn-chunk-marching-cubes-5mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/torn-chunk-marching-cubes-5mm.glb",
       "readback": {
         "vertices": 2686,
         "normals": 2686,
@@ -7728,8 +8219,8 @@
       "method": "dual-contouring",
       "cell": 0.005,
       "base": "torn-chunk-dual-contouring-5mm",
-      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/torn-chunk-dual-contouring-5mm.obj",
-      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-task-1/.scratch/mesher-comparison/meshes/torn-chunk-dual-contouring-5mm.glb",
+      "obj": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/torn-chunk-dual-contouring-5mm.obj",
+      "glb": "/Users/donny/.claude/dispatch/worktrees/2026-09-15-blud-mesher-comparison-fix1/.scratch/mesher-comparison/meshes/torn-chunk-dual-contouring-5mm.glb",
       "readback": {
         "vertices": 2688,
         "normals": 2688,
@@ -8022,6 +8513,206 @@
       }
     },
     {
+      "fixture": "control-sharp-box",
+      "method": "surface-nets",
+      "cell": 0.01,
+      "view": "main",
+      "file": "control-sharp-box__surface-nets__10mm__main.png",
+      "tris": 10092,
+      "camera": {
+        "yaw": 0.6,
+        "pitch": 0.25,
+        "centre": [
+          0,
+          0,
+          0
+        ],
+        "halfSize": 0.47229208052158356,
+        "width": 420,
+        "height": 420
+      }
+    },
+    {
+      "fixture": "control-sharp-box",
+      "method": "marching-cubes",
+      "cell": 0.01,
+      "view": "main",
+      "file": "control-sharp-box__marching-cubes__10mm__main.png",
+      "tris": 10088,
+      "camera": {
+        "yaw": 0.6,
+        "pitch": 0.25,
+        "centre": [
+          0,
+          0,
+          0
+        ],
+        "halfSize": 0.47229208052158356,
+        "width": 420,
+        "height": 420
+      }
+    },
+    {
+      "fixture": "control-sharp-box",
+      "method": "dual-contouring",
+      "cell": 0.01,
+      "view": "main",
+      "file": "control-sharp-box__dual-contouring__10mm__main.png",
+      "tris": 10092,
+      "camera": {
+        "yaw": 0.6,
+        "pitch": 0.25,
+        "centre": [
+          0,
+          0,
+          0
+        ],
+        "halfSize": 0.47229208052158356,
+        "width": 420,
+        "height": 420
+      }
+    },
+    {
+      "fixture": "control-sharp-box",
+      "method": "surface-nets",
+      "cell": 0.01,
+      "view": "main",
+      "file": "control-sharp-box__surface-nets__10mm__main-wire.png",
+      "tris": 10092,
+      "camera": {
+        "yaw": 0.6,
+        "pitch": 0.25,
+        "centre": [
+          0,
+          0,
+          0
+        ],
+        "halfSize": 0.47229208052158356,
+        "width": 420,
+        "height": 420
+      }
+    },
+    {
+      "fixture": "control-sharp-box",
+      "method": "surface-nets",
+      "cell": 0.01,
+      "view": "closeup-corner-+++",
+      "file": "control-sharp-box__surface-nets__10mm__closeup-corner-+++.png",
+      "tris": 10092,
+      "camera": {
+        "yaw": 0.6,
+        "pitch": 0.25,
+        "centre": [
+          0.13,
+          0.13,
+          0.13
+        ],
+        "halfSize": 0.07274613391789286,
+        "width": 420,
+        "height": 420
+      }
+    },
+    {
+      "fixture": "control-sharp-box",
+      "method": "marching-cubes",
+      "cell": 0.01,
+      "view": "closeup-corner-+++",
+      "file": "control-sharp-box__marching-cubes__10mm__closeup-corner-+++.png",
+      "tris": 10088,
+      "camera": {
+        "yaw": 0.6,
+        "pitch": 0.25,
+        "centre": [
+          0.13,
+          0.13,
+          0.13
+        ],
+        "halfSize": 0.07274613391789286,
+        "width": 420,
+        "height": 420
+      }
+    },
+    {
+      "fixture": "control-sharp-box",
+      "method": "dual-contouring",
+      "cell": 0.01,
+      "view": "closeup-corner-+++",
+      "file": "control-sharp-box__dual-contouring__10mm__closeup-corner-+++.png",
+      "tris": 10092,
+      "camera": {
+        "yaw": 0.6,
+        "pitch": 0.25,
+        "centre": [
+          0.13,
+          0.13,
+          0.13
+        ],
+        "halfSize": 0.07274613391789286,
+        "width": 420,
+        "height": 420
+      }
+    },
+    {
+      "fixture": "control-sharp-box",
+      "method": "surface-nets",
+      "cell": 0.01,
+      "view": "closeup-face-+x",
+      "file": "control-sharp-box__surface-nets__10mm__closeup-face-+x.png",
+      "tris": 10092,
+      "camera": {
+        "yaw": 0.6,
+        "pitch": 0.25,
+        "centre": [
+          0.15500000000000003,
+          0,
+          0
+        ],
+        "halfSize": 0.06144967453127804,
+        "width": 420,
+        "height": 420
+      }
+    },
+    {
+      "fixture": "control-sharp-box",
+      "method": "marching-cubes",
+      "cell": 0.01,
+      "view": "closeup-face-+x",
+      "file": "control-sharp-box__marching-cubes__10mm__closeup-face-+x.png",
+      "tris": 10088,
+      "camera": {
+        "yaw": 0.6,
+        "pitch": 0.25,
+        "centre": [
+          0.15500000000000003,
+          0,
+          0
+        ],
+        "halfSize": 0.06144967453127804,
+        "width": 420,
+        "height": 420
+      }
+    },
+    {
+      "fixture": "control-sharp-box",
+      "method": "dual-contouring",
+      "cell": 0.01,
+      "view": "closeup-face-+x",
+      "file": "control-sharp-box__dual-contouring__10mm__closeup-face-+x.png",
+      "tris": 10092,
+      "camera": {
+        "yaw": 0.6,
+        "pitch": 0.25,
+        "centre": [
+          0.15500000000000003,
+          0,
+          0
+        ],
+        "halfSize": 0.06144967453127804,
+        "width": 420,
+        "height": 420
+      }
+    },
+    {
       "fixture": "chamfer-groove",
       "method": "surface-nets",
       "cell": 0.02,
@@ -8208,6 +8899,206 @@
       "view": "closeup-groove-channel",
       "file": "chamfer-groove__dual-contouring__20mm__closeup-groove-channel.png",
       "tris": 1932,
+      "camera": {
+        "yaw": 0.6,
+        "pitch": 0.25,
+        "centre": [
+          0,
+          0.024999999999999998,
+          0
+        ],
+        "halfSize": 0.18404975550106012,
+        "width": 420,
+        "height": 420
+      }
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "surface-nets",
+      "cell": 0.01,
+      "view": "main",
+      "file": "chamfer-groove__surface-nets__10mm__main.png",
+      "tris": 7824,
+      "camera": {
+        "yaw": 0.6,
+        "pitch": 0.25,
+        "centre": [
+          0.007500514388084412,
+          0.004988491535186768,
+          0
+        ],
+        "halfSize": 0.29669922474762106,
+        "width": 420,
+        "height": 420
+      }
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "marching-cubes",
+      "cell": 0.01,
+      "view": "main",
+      "file": "chamfer-groove__marching-cubes__10mm__main.png",
+      "tris": 7820,
+      "camera": {
+        "yaw": 0.6,
+        "pitch": 0.25,
+        "centre": [
+          0.007500514388084412,
+          0.004988491535186768,
+          0
+        ],
+        "halfSize": 0.29669922474762106,
+        "width": 420,
+        "height": 420
+      }
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "dual-contouring",
+      "cell": 0.01,
+      "view": "main",
+      "file": "chamfer-groove__dual-contouring__10mm__main.png",
+      "tris": 7824,
+      "camera": {
+        "yaw": 0.6,
+        "pitch": 0.25,
+        "centre": [
+          0.007500514388084412,
+          0.004988491535186768,
+          0
+        ],
+        "halfSize": 0.29669922474762106,
+        "width": 420,
+        "height": 420
+      }
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "surface-nets",
+      "cell": 0.01,
+      "view": "main",
+      "file": "chamfer-groove__surface-nets__10mm__main-wire.png",
+      "tris": 7824,
+      "camera": {
+        "yaw": 0.6,
+        "pitch": 0.25,
+        "centre": [
+          0.007500514388084412,
+          0.004988491535186768,
+          0
+        ],
+        "halfSize": 0.29669922474762106,
+        "width": 420,
+        "height": 420
+      }
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "surface-nets",
+      "cell": 0.01,
+      "view": "closeup-chamfer-seam",
+      "file": "chamfer-groove__surface-nets__10mm__closeup-chamfer-seam.png",
+      "tris": 7824,
+      "camera": {
+        "yaw": 0.6,
+        "pitch": 0.25,
+        "centre": [
+          0.019999999999999997,
+          0.009999999999999995,
+          0
+        ],
+        "halfSize": 0.2081543898167896,
+        "width": 420,
+        "height": 420
+      }
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "marching-cubes",
+      "cell": 0.01,
+      "view": "closeup-chamfer-seam",
+      "file": "chamfer-groove__marching-cubes__10mm__closeup-chamfer-seam.png",
+      "tris": 7820,
+      "camera": {
+        "yaw": 0.6,
+        "pitch": 0.25,
+        "centre": [
+          0.019999999999999997,
+          0.009999999999999995,
+          0
+        ],
+        "halfSize": 0.2081543898167896,
+        "width": 420,
+        "height": 420
+      }
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "dual-contouring",
+      "cell": 0.01,
+      "view": "closeup-chamfer-seam",
+      "file": "chamfer-groove__dual-contouring__10mm__closeup-chamfer-seam.png",
+      "tris": 7824,
+      "camera": {
+        "yaw": 0.6,
+        "pitch": 0.25,
+        "centre": [
+          0.019999999999999997,
+          0.009999999999999995,
+          0
+        ],
+        "halfSize": 0.2081543898167896,
+        "width": 420,
+        "height": 420
+      }
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "surface-nets",
+      "cell": 0.01,
+      "view": "closeup-groove-channel",
+      "file": "chamfer-groove__surface-nets__10mm__closeup-groove-channel.png",
+      "tris": 7824,
+      "camera": {
+        "yaw": 0.6,
+        "pitch": 0.25,
+        "centre": [
+          0,
+          0.024999999999999998,
+          0
+        ],
+        "halfSize": 0.18404975550106012,
+        "width": 420,
+        "height": 420
+      }
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "marching-cubes",
+      "cell": 0.01,
+      "view": "closeup-groove-channel",
+      "file": "chamfer-groove__marching-cubes__10mm__closeup-groove-channel.png",
+      "tris": 7820,
+      "camera": {
+        "yaw": 0.6,
+        "pitch": 0.25,
+        "centre": [
+          0,
+          0.024999999999999998,
+          0
+        ],
+        "halfSize": 0.18404975550106012,
+        "width": 420,
+        "height": 420
+      }
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "dual-contouring",
+      "cell": 0.01,
+      "view": "closeup-groove-channel",
+      "file": "chamfer-groove__dual-contouring__10mm__closeup-groove-channel.png",
+      "tris": 7824,
       "camera": {
         "yaw": 0.6,
         "pitch": 0.25,

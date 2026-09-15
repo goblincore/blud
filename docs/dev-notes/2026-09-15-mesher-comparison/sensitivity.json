@@ -1,0 +1,416 @@
+[
+  {
+    "cell": 0.02,
+    "rows": [
+      {
+        "phaseCells": [
+          0,
+          0,
+          0
+        ],
+        "rotationDeg": 0,
+        "corner": [
+          0.15,
+          0.15,
+          0.15
+        ],
+        "snSurfaceMm": 23.094004229161055,
+        "mcSurfaceMm": 23.094012832350483,
+        "dcSurfaceMm": 0.2286624511292067,
+        "snVertexMm": 23.094004229161055,
+        "mcVertexMm": 28.284277990958284,
+        "dcVertexMm": 0.2286624511292067
+      },
+      {
+        "phaseCells": [
+          0.23,
+          0,
+          0
+        ],
+        "rotationDeg": 0,
+        "corner": [
+          0.15,
+          0.15,
+          0.15
+        ],
+        "snSurfaceMm": 21.469976225386112,
+        "mcSurfaceMm": 20.83269778284702,
+        "dcSurfaceMm": 0.21258022404796706,
+        "snVertexMm": 21.469976225386116,
+        "mcVertexMm": 25.242033080961352,
+        "dcVertexMm": 0.21258022404796703
+      },
+      {
+        "phaseCells": [
+          0,
+          0.23,
+          0
+        ],
+        "rotationDeg": 0,
+        "corner": [
+          0.15,
+          0.15,
+          0.15
+        ],
+        "snSurfaceMm": 21.469976225386112,
+        "mcSurfaceMm": 20.83269778284702,
+        "dcSurfaceMm": 0.21258022404796706,
+        "snVertexMm": 21.469976225386116,
+        "mcVertexMm": 25.242033080961352,
+        "dcVertexMm": 0.21258022404796703
+      },
+      {
+        "phaseCells": [
+          0,
+          0,
+          0.23
+        ],
+        "rotationDeg": 0,
+        "corner": [
+          0.15,
+          0.15,
+          0.15
+        ],
+        "snSurfaceMm": 21.469976225386112,
+        "mcSurfaceMm": 20.832697782847024,
+        "dcSurfaceMm": 0.21258022404796706,
+        "snVertexMm": 21.469976225386116,
+        "mcVertexMm": 25.242033080961352,
+        "dcVertexMm": 0.21258022404796703
+      },
+      {
+        "phaseCells": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "rotationDeg": 0,
+        "corner": [
+          0.15,
+          0.15,
+          0.15
+        ],
+        "snSurfaceMm": 11.547009857451009,
+        "mcSurfaceMm": 11.547001254261582,
+        "dcSurfaceMm": 0.11432606365094265,
+        "snVertexMm": 11.547009857451007,
+        "mcVertexMm": 14.142134780795228,
+        "dcVertexMm": 0.11432606365094265
+      },
+      {
+        "phaseCells": [
+          0.25,
+          0.25,
+          0.25
+        ],
+        "rotationDeg": 0,
+        "corner": [
+          0.15,
+          0.15,
+          0.15
+        ],
+        "snSurfaceMm": 17.32050704330603,
+        "mcSurfaceMm": 17.320498440116605,
+        "dcSurfaceMm": 0.17149425739007468,
+        "snVertexMm": 17.32050704330603,
+        "mcVertexMm": 21.213195849164524,
+        "dcVertexMm": 0.17149425739007468
+      },
+      {
+        "phaseCells": [
+          0,
+          0,
+          0
+        ],
+        "rotationDeg": 20,
+        "corner": [
+          0.18627671439719629,
+          0.1137232856028037,
+          0.14095389311788625
+        ],
+        "snSurfaceMm": 14.690640102140927,
+        "mcSurfaceMm": 12.325754381705295,
+        "dcSurfaceMm": 3.084904333994303,
+        "snVertexMm": 14.776183615797285,
+        "mcVertexMm": 12.945932822655662,
+        "dcVertexMm": 3.3655465795094224
+      }
+    ]
+  },
+  {
+    "cell": 0.01,
+    "rows": [
+      {
+        "phaseCells": [
+          0,
+          0,
+          0
+        ],
+        "rotationDeg": 0,
+        "corner": [
+          0.15,
+          0.15,
+          0.15
+        ],
+        "snSurfaceMm": 11.547009857451009,
+        "mcSurfaceMm": 11.547001254261582,
+        "dcSurfaceMm": 0.11432606365094265,
+        "snVertexMm": 11.547009857451007,
+        "mcVertexMm": 14.142134780795228,
+        "dcVertexMm": 0.11432606365094265
+      },
+      {
+        "phaseCells": [
+          0.23,
+          0,
+          0
+        ],
+        "rotationDeg": 0,
+        "corner": [
+          0.15,
+          0.15,
+          0.15
+        ],
+        "snSurfaceMm": 10.734995802727212,
+        "mcSurfaceMm": 10.41634838241704,
+        "dcSurfaceMm": 0.10628498534725964,
+        "snVertexMm": 10.734995802727212,
+        "mcVertexMm": 12.621016906487935,
+        "dcVertexMm": 0.10628498534725964
+      },
+      {
+        "phaseCells": [
+          0,
+          0.23,
+          0
+        ],
+        "rotationDeg": 0,
+        "corner": [
+          0.15,
+          0.15,
+          0.15
+        ],
+        "snSurfaceMm": 10.734995802727212,
+        "mcSurfaceMm": 10.41634838241704,
+        "dcSurfaceMm": 0.10628498534725964,
+        "snVertexMm": 10.734995802727212,
+        "mcVertexMm": 12.621016906487935,
+        "dcVertexMm": 0.10628498534725964
+      },
+      {
+        "phaseCells": [
+          0,
+          0,
+          0.23
+        ],
+        "rotationDeg": 0,
+        "corner": [
+          0.15,
+          0.15,
+          0.15
+        ],
+        "snSurfaceMm": 10.734995802727214,
+        "mcSurfaceMm": 10.41634838241704,
+        "dcSurfaceMm": 0.10628498534725964,
+        "snVertexMm": 10.734995802727212,
+        "mcVertexMm": 12.621016906487935,
+        "dcVertexMm": 0.10628498534725964
+      },
+      {
+        "phaseCells": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "rotationDeg": 0,
+        "corner": [
+          0.15,
+          0.15,
+          0.15
+        ],
+        "snSurfaceMm": 5.773512671595983,
+        "mcSurfaceMm": 5.773504068406556,
+        "dcSurfaceMm": 0.05715786991181061,
+        "snVertexMm": 5.773512671595983,
+        "mcVertexMm": 7.071073712426771,
+        "dcVertexMm": 0.05715786991181061
+      },
+      {
+        "phaseCells": [
+          0.25,
+          0.25,
+          0.25
+        ],
+        "rotationDeg": 0,
+        "corner": [
+          0.15,
+          0.15,
+          0.15
+        ],
+        "snSurfaceMm": 8.660261264523497,
+        "mcSurfaceMm": 8.660252661334068,
+        "dcSurfaceMm": 0.0857548715655164,
+        "snVertexMm": 8.660261264523495,
+        "mcVertexMm": 10.60660424661079,
+        "dcVertexMm": 0.08575487156551638
+      },
+      {
+        "phaseCells": [
+          0,
+          0,
+          0
+        ],
+        "rotationDeg": 20,
+        "corner": [
+          0.18627671439719629,
+          0.1137232856028037,
+          0.14095389311788625
+        ],
+        "snSurfaceMm": 6.087386872344903,
+        "mcSurfaceMm": 5.163319171720741,
+        "dcSurfaceMm": 0.9295424551927922,
+        "snVertexMm": 6.143814268217253,
+        "mcVertexMm": 5.16331917172074,
+        "dcVertexMm": 0.9295424551927923
+      }
+    ]
+  },
+  {
+    "cell": 0.005,
+    "rows": [
+      {
+        "phaseCells": [
+          0,
+          0,
+          0
+        ],
+        "rotationDeg": 0,
+        "corner": [
+          0.15,
+          0.15,
+          0.15
+        ],
+        "snSurfaceMm": 5.773512671595983,
+        "mcSurfaceMm": 5.773504068406556,
+        "dcSurfaceMm": 0.05715786991181061,
+        "snVertexMm": 5.773512671595983,
+        "mcVertexMm": 7.071073712426771,
+        "dcVertexMm": 0.05715786991181061
+      },
+      {
+        "phaseCells": [
+          0.23,
+          0,
+          0
+        ],
+        "rotationDeg": 0,
+        "corner": [
+          0.15,
+          0.15,
+          0.15
+        ],
+        "snSurfaceMm": 5.367498465864059,
+        "mcSurfaceMm": 5.208177892441361,
+        "dcSurfaceMm": 0.053140928947469024,
+        "snVertexMm": 5.367498465864059,
+        "mcVertexMm": 6.310514722565548,
+        "dcVertexMm": 0.053140928947469024
+      },
+      {
+        "phaseCells": [
+          0,
+          0.23,
+          0
+        ],
+        "rotationDeg": 0,
+        "corner": [
+          0.15,
+          0.15,
+          0.15
+        ],
+        "snSurfaceMm": 5.367498465864059,
+        "mcSurfaceMm": 5.208177892441361,
+        "dcSurfaceMm": 0.053140928947469024,
+        "snVertexMm": 5.367498465864059,
+        "mcVertexMm": 6.310514722565548,
+        "dcVertexMm": 0.053140928947469024
+      },
+      {
+        "phaseCells": [
+          0,
+          0,
+          0.23
+        ],
+        "rotationDeg": 0,
+        "corner": [
+          0.15,
+          0.15,
+          0.15
+        ],
+        "snSurfaceMm": 5.367498465864058,
+        "mcSurfaceMm": 5.208177892441362,
+        "dcSurfaceMm": 0.053140928947469024,
+        "snVertexMm": 5.367498465864059,
+        "mcVertexMm": 6.310514722565548,
+        "dcVertexMm": 0.053140928947469024
+      },
+      {
+        "phaseCells": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "rotationDeg": 0,
+        "corner": [
+          0.15,
+          0.15,
+          0.15
+        ],
+        "snSurfaceMm": 2.8867640786684707,
+        "mcSurfaceMm": 2.886755475479044,
+        "dcSurfaceMm": 0.028586677826384358,
+        "snVertexMm": 2.8867640786684703,
+        "mcVertexMm": 3.5355431782444264,
+        "dcVertexMm": 0.028586677826384355
+      },
+      {
+        "phaseCells": [
+          0.25,
+          0.25,
+          0.25
+        ],
+        "rotationDeg": 0,
+        "corner": [
+          0.15,
+          0.15,
+          0.15
+        ],
+        "snSurfaceMm": 4.330138375132227,
+        "mcSurfaceMm": 4.3301297719428,
+        "dcSurfaceMm": 0.042885178653237245,
+        "snVertexMm": 4.330138375132226,
+        "mcVertexMm": 5.30330844533518,
+        "dcVertexMm": 0.04288517865323724
+      },
+      {
+        "phaseCells": [
+          0,
+          0,
+          0
+        ],
+        "rotationDeg": 20,
+        "corner": [
+          0.18627671439719629,
+          0.1137232856028037,
+          0.14095389311788625
+        ],
+        "snSurfaceMm": 3.5963433193781924,
+        "mcSurfaceMm": 2.9877992847639927,
+        "dcSurfaceMm": 0.7105325078373406,
+        "snVertexMm": 3.6194540313556454,
+        "mcVertexMm": 2.9877992847639927,
+        "dcVertexMm": 0.757465421713015
+      }
+    ]
+  }
+]
