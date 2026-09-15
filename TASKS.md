@@ -297,6 +297,43 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 > stone"* and *"i dont think the texture is right either it doesnt look like the
 > zombie skin texture at all."*
 >
+> ## 2026-09-15 (later) — THE SETTLED GIB STILL DOES NOT MATCH THE MARCHED ONE
+>
+> **READ [`docs/dev-notes/2026-09-15-gib-baked-vs-marched/HANDOFF.md`](docs/dev-notes/2026-09-15-gib-baked-vs-marched/HANDOFF.md) FIRST.**
+>
+> The goal is the owner's: *"the idea was to optimize it so htey arent marched
+> but keep the same look"*. KEEP the bake, MAKE IT MATCH. A reference exists and
+> is one flag — `?chunkbake=0` (or the panel's `settle bake` row) leaves a landed
+> piece marched, which he confirmed is the target: *"thats wahat i want"*. Diff
+> against it; do not ship it.
+>
+> **After a full lighting pass his verdict was "still looks the same".** Not
+> better — the same. So the remaining gap is probably NOT lighting.
+>
+> **PRIME SUSPECT — the albedo, and it is a known bug class.** Every baked piece
+> measures (`__sdfGame.bakedAlbedoStats()`) mean rgb (0.487, 0.334, 0.265) with a
+> total range of 0.09 and **`meanWoundMask: 0`**. The wound mask is dead, so
+> `mix(baseColor, tissue, wm)` discards the whole tissue ramp and the piece is ONE
+> COLOUR. Cause is upstream: pieces reach the baker with `torn: []`
+> (`lastBakeInfo.torn: 0`) — trace `bakeData()` → `tornLocals` → `piece.tornAt`.
+> **`gib-carve.ts` had the identical bug and it is already fixed there**
+> (`cutAwareField`); the settled path has real torn ends that simply are not
+> arriving. Do this before touching the shader again.
+>
+> Fixed this session and verified: the 12-slot record pool throwing inside the
+> tick; the settled-chunk material never registered with `litChunkMaterials` (so
+> it had NO flashlight and NO room light — a regression that landed AFTER the
+> owner approved the bake on 2026-09-05); per-pixel micro-detail from the march's
+> own noise source strings as wgslFn includes; baked per-vertex AO through the
+> worker; the 0.15 key floor; a gib-specific fresnel (0.6 → 0.18) for the edge
+> glow; `gibbones=core` default; gib bones as MESH tubes. Three panel sliders and
+> a `settle bake` toggle.
+>
+> Still absent from `chunkShade`: backlit scatter (flesh authored `translucency
+> 0.45`) and wound shadow.
+>
+> ---
+>
 > ## 2026-09-15 — REBASED ONTO THE CROWD MARCH, AND THREE MORE FIXES
 >
 > The branch is on main as [PR #8](https://github.com/goblincore/blud/pull/8)
