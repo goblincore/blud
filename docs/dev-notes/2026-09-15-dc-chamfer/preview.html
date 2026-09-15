@@ -1,0 +1,62 @@
+<!doctype html><html><head><meta charset="utf-8"><title>DC chamfer follow-up</title>
+<style>body{background:#14161a;color:#dfe3ea;font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;margin:24px}
+h1{font-size:20px} h2{font-size:16px;margin-top:26px;border-bottom:1px solid #2a2e36;padding-bottom:6px} h3{font-size:14px;color:#aab2c0;margin:16px 0 4px}
+.row{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin:8px 0} .row.cu{grid-template-columns:repeat(6,minmax(0,1fr))}
+figure{margin:0;background:#1b1e24;border:1px solid #2a2e36;border-radius:6px;overflow:hidden}
+figure img{display:block;width:100%;height:auto} figcaption{padding:3px 6px;font-size:11px;color:#aab2c0}
+code{color:#e1e1e8}</style></head><body>
+<h1>DC chamfer / groove follow-up — slice evidence</h1>
+<p>Static CPU renders. Slice panels draw the <b>dense field contour</b> (ground truth) under the mesh slice; shading is absent so a defect cannot hide behind it. Core rectangle = the window the distance metrics use.</p>
+<p style="font:13px/1.6 monospace"><span style="color:#f07850">■</span> DC baseline (cell*0.5 normals) &nbsp;<span style="color:#5ac8eb">■</span> DC candidate (0.1*cell bounded) &nbsp;<span style="color:#78dc78">■</span> marching cubes &nbsp;<span style="color:#c8a0e6">■</span> surface nets &nbsp;<span style="color:#e1e1e8">■</span> dense field contour (ground truth) &nbsp;<span style="color:#464c58">▢</span> core metric window</p>
+<h2>chamfer-groove @ 20 mm</h2>
+<h3>seam — field contour vs mesh slice</h3><div class="row">
+<figure><img src="panels/chamfer-groove__dc-baseline__20mm__slice-seam.png" loading="lazy"><figcaption>compare (MC+old+new)</figcaption></figure>
+</div>
+<h3>notch-plus-z — field contour vs mesh slice</h3><div class="row">
+<figure><img src="panels/chamfer-groove__dc-baseline__20mm__slice-notch-plus-z.png" loading="lazy"><figcaption>compare (MC+old+new)</figcaption></figure>
+</div>
+<h3>notch-minus-z — field contour vs mesh slice</h3><div class="row">
+<figure><img src="panels/chamfer-groove__dc-baseline__20mm__slice-notch-minus-z.png" loading="lazy"><figcaption>compare (MC+old+new)</figcaption></figure>
+</div>
+<h2>chamfer-groove @ 10 mm</h2>
+<h3>seam — field contour vs mesh slice</h3><div class="row">
+<figure><img src="panels/chamfer-groove__dc-baseline__10mm__slice-seam.png" loading="lazy"><figcaption>compare (MC+old+new)</figcaption></figure>
+</div>
+<h3>notch-plus-z — field contour vs mesh slice</h3><div class="row">
+<figure><img src="panels/chamfer-groove__dc-baseline__10mm__slice-notch-plus-z.png" loading="lazy"><figcaption>compare (MC+old+new)</figcaption></figure>
+</div>
+<h3>notch-minus-z — field contour vs mesh slice</h3><div class="row">
+<figure><img src="panels/chamfer-groove__dc-baseline__10mm__slice-notch-minus-z.png" loading="lazy"><figcaption>compare (MC+old+new)</figcaption></figure>
+</div>
+<h2>chamfer-groove @ 5 mm</h2>
+<h3>seam — field contour vs mesh slice</h3><div class="row">
+<figure><img src="panels/chamfer-groove__dc-baseline__5mm__slice-seam.png" loading="lazy"><figcaption>compare (MC+old+new)</figcaption></figure>
+</div>
+<h3>notch-plus-z — field contour vs mesh slice</h3><div class="row">
+<figure><img src="panels/chamfer-groove__dc-baseline__5mm__slice-notch-plus-z.png" loading="lazy"><figcaption>compare (MC+old+new)</figcaption></figure>
+</div>
+<h3>notch-minus-z — field contour vs mesh slice</h3><div class="row">
+<figure><img src="panels/chamfer-groove__dc-baseline__5mm__slice-notch-minus-z.png" loading="lazy"><figcaption>compare (MC+old+new)</figcaption></figure>
+</div>
+<h2>tight 3-D closeups @ 10 mm (shaded + wireframe)</h2>
+<h3>closeup-notch</h3><div class="row cu">
+<figure><img src="panels/chamfer-groove__dc-baseline__10mm__closeup-notch.png" loading="lazy"><figcaption>dc-baseline</figcaption></figure>
+<figure><img src="panels/chamfer-groove__dc-baseline__10mm__closeup-notch-wire.png" loading="lazy"><figcaption>dc-baseline wire</figcaption></figure>
+<figure><img src="panels/chamfer-groove__dc-eps-candidate__10mm__closeup-notch.png" loading="lazy"><figcaption>dc-eps-candidate</figcaption></figure>
+<figure><img src="panels/chamfer-groove__dc-eps-candidate__10mm__closeup-notch-wire.png" loading="lazy"><figcaption>dc-eps-candidate wire</figcaption></figure>
+<figure><img src="panels/chamfer-groove__marching-cubes__10mm__closeup-notch.png" loading="lazy"><figcaption>marching-cubes</figcaption></figure>
+<figure><img src="panels/chamfer-groove__marching-cubes__10mm__closeup-notch-wire.png" loading="lazy"><figcaption>marching-cubes wire</figcaption></figure>
+</div>
+<h3>closeup-seam</h3><div class="row cu">
+<figure><img src="panels/chamfer-groove__dc-baseline__10mm__closeup-seam.png" loading="lazy"><figcaption>dc-baseline</figcaption></figure>
+<figure><img src="panels/chamfer-groove__dc-baseline__10mm__closeup-seam-wire.png" loading="lazy"><figcaption>dc-baseline wire</figcaption></figure>
+<figure><img src="panels/chamfer-groove__dc-eps-candidate__10mm__closeup-seam.png" loading="lazy"><figcaption>dc-eps-candidate</figcaption></figure>
+<figure><img src="panels/chamfer-groove__dc-eps-candidate__10mm__closeup-seam-wire.png" loading="lazy"><figcaption>dc-eps-candidate wire</figcaption></figure>
+<figure><img src="panels/chamfer-groove__marching-cubes__10mm__closeup-seam.png" loading="lazy"><figcaption>marching-cubes</figcaption></figure>
+<figure><img src="panels/chamfer-groove__marching-cubes__10mm__closeup-seam-wire.png" loading="lazy"><figcaption>marching-cubes wire</figcaption></figure>
+</div>
+<h2>calibration @ 10 mm: sharp box corner</h2><div class="row">
+<figure><img src="panels/control-sharp-box__dc-baseline__10mm__closeup-corner.png" loading="lazy"><figcaption>dc-baseline</figcaption></figure>
+<figure><img src="panels/control-sharp-box__dc-eps-candidate__10mm__closeup-corner.png" loading="lazy"><figcaption>dc-eps-candidate</figcaption></figure>
+<figure><img src="panels/control-sharp-box__marching-cubes__10mm__closeup-corner.png" loading="lazy"><figcaption>marching-cubes</figcaption></figure>
+</div></body></html>

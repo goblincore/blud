@@ -169,6 +169,28 @@ export interface MethodOptions {
   /** Dual contouring: clamp the QEF vertex into its cell AABB. Default true. */
   readonly clampToCell?: boolean;
   /**
+   * Dual contouring: central-difference step (metres) used for each Hermite
+   * sample's normal. Default is `cell * 0.5` (the historical port behaviour).
+   * Upstream ALICE-SDF uses a FIXED `0.001 m`; exposing the step lets the
+   * experiment separate normal-accuracy from one-vertex-per-cell resolution
+   * without changing the default. Non-finite or non-positive values are
+   * ignored (the default is used).
+   */
+  readonly normalEpsilon?: number;
+  /**
+   * Dual contouring: optional per-crossed-cell diagnostic. Used by the
+   * chamfer follow-up to tally QEF clamps/fallbacks INSIDE a region, since
+   * aggregate counts alone cannot say whether a clamp sits on the feature
+   * being diagnosed. Pure observation; it cannot change the mesh.
+   */
+  readonly dcCellDiagnostic?: (d: {
+    readonly cellMin: Vec3;
+    readonly cellMax: Vec3;
+    readonly clamped: boolean;
+    readonly fellBack: boolean;
+    readonly rmsPlaneDistance: number;
+  }) => void;
+  /**
    * Surface nets: max cells that may own a vertex. Defaults to an area-based
    * estimate (see the adapter); exceeding it flags the mesh invalid rather
    * than silently truncating.

@@ -1,0 +1,3638 @@
+{
+  "commit": "7f7cc9dc7df0ee64c4fbdd8b653b9b7b658f72c4",
+  "dirty": "M scripts/blob-mesh-compare.ts\n M src/lab/sdf-zombie/mesher-comparison/dual-contouring.ts\n M src/lab/sdf-zombie/mesher-comparison/types.ts\n?? docs/dev-notes/2026-09-15-dc-chamfer/\n?? scripts/dc-chamfer-probe.test.ts\n?? scripts/dc-chamfer-probe.ts\n?? src/lab/sdf-zombie/mesher-comparison/dc-chamfer.test.ts\n?? src/lab/sdf-zombie/mesher-comparison/dc-chamfer.ts\n?? src/lab/sdf-zombie/mesher-comparison/dc-variants.ts\n?? src/lab/sdf-zombie/mesher-comparison/field-slice.ts",
+  "codeFingerprint": "ce0317adbbe06438:07dd327c",
+  "generatedAt": "2026-09-15T22:16:50.240Z",
+  "environment": {
+    "node": "v22.22.1",
+    "platform": "darwin",
+    "release": "25.3.0",
+    "cpus": "8"
+  },
+  "groundTruth": {
+    "fixture": "chamfer-groove",
+    "summary": "The chamfer fold inflates the solid into a broad bevel (top near y=+0.14, lobes reach ~0.085); the groove cutter is buried mid-span and only reaches the surface near its ±z caps, producing annular pits with a central pillar. The groove rim is a field discontinuity.",
+    "regions": [
+      {
+        "id": "seam",
+        "label": "chamfer bevel, z = 0 (x-y)",
+        "note": "sminChamfer flat bevel. Smooth here (the buried cutter does not reach z=0).",
+        "plane": {
+          "fixedAxis": 2,
+          "fixedValue": 0,
+          "uAxis": 0,
+          "vAxis": 1
+        },
+        "window": {
+          "uMin": -0.09,
+          "uMax": 0.15,
+          "vMin": 0.08,
+          "vMax": 0.17
+        },
+        "core": {
+          "uMin": -0.07,
+          "uMax": 0.13,
+          "vMin": 0.1,
+          "vMax": 0.16
+        },
+        "crossings": 1608,
+        "jumpCrossings": 0,
+        "resolutionMm": 0.19955654101995568,
+        "maxResidualAtCrossingMm": 0.0002384952889438743
+      },
+      {
+        "id": "notch-plus-z",
+        "label": "groove pit, y = 0.02, +z cap (x-z)",
+        "note": "sdGroove band clipping the +z surface: two side pits with a central pillar. Field rim is discontinuous.",
+        "plane": {
+          "fixedAxis": 1,
+          "fixedValue": 0.02,
+          "uAxis": 0,
+          "vAxis": 2
+        },
+        "window": {
+          "uMin": -0.045,
+          "uMax": 0.045,
+          "vMin": 0.09,
+          "vMax": 0.17
+        },
+        "core": {
+          "uMin": -0.038,
+          "uMax": 0.038,
+          "vMin": 0.105,
+          "vMax": 0.16
+        },
+        "crossings": 732,
+        "jumpCrossings": 206,
+        "resolutionMm": 0.19950124688279305,
+        "maxResidualAtCrossingMm": 13.965757319268766
+      },
+      {
+        "id": "notch-minus-z",
+        "label": "groove pit, y = 0.02, -z cap (x-z)",
+        "note": "Mirror of the +z pit at the other capsule cap.",
+        "plane": {
+          "fixedAxis": 1,
+          "fixedValue": 0.02,
+          "uAxis": 0,
+          "vAxis": 2
+        },
+        "window": {
+          "uMin": -0.045,
+          "uMax": 0.045,
+          "vMin": -0.17,
+          "vMax": -0.09
+        },
+        "core": {
+          "uMin": -0.038,
+          "uMax": 0.038,
+          "vMin": -0.16,
+          "vMax": -0.105
+        },
+        "crossings": 732,
+        "jumpCrossings": 206,
+        "resolutionMm": 0.19950124688279305,
+        "maxResidualAtCrossingMm": 13.965757319268766
+      }
+    ]
+  },
+  "slices": [
+    {
+      "cell": 0.02,
+      "baseline": {
+        "id": "dc-baseline",
+        "label": "DC baseline (cell*0.5 normals, clamp)",
+        "note": "Exact port default. Reproduces the original comparison result.",
+        "normalEpsilonMm": 10,
+        "clampToCell": true,
+        "verts": 968,
+        "tris": 1932,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "connectedComponents": 1,
+        "closed": true,
+        "signedVolume": 0.013176319270985124,
+        "degenerateTris": 0,
+        "duplicateFaces": 0,
+        "nonManifoldVertices": 0,
+        "boundaryCrossings": 0,
+        "orientationFlips": 0,
+        "residualMedianMm": 0.39339727934125573,
+        "residualP95Mm": 1.2120589979263539,
+        "residualMaxMm": 12.87413022830806,
+        "surfaceResidualMedianMm": 0.15407481481051355,
+        "qefClamped": 16,
+        "qefFallbacks": 0,
+        "qefResidualMeanMm": 0.12428851334198152,
+        "qefResidualMaxMm": 6.653777703158589,
+        "clampedInRegion": {
+          "seam": 0,
+          "notch-plus-z": 2,
+          "notch-minus-z": 2
+        },
+        "cellsInRegion": {
+          "seam": 28,
+          "notch-plus-z": 4,
+          "notch-minus-z": 4
+        },
+        "invalid": false,
+        "invalidReason": null,
+        "regions": [
+          {
+            "id": "seam",
+            "reference": {
+              "crossings": 1608,
+              "jumpCrossings": 0,
+              "resolutionMm": 0.19955654101995568,
+              "maxResidualAtCrossingMm": 0.0002384952889438743
+            },
+            "testedToRefMm": {
+              "samples": 240,
+              "median": 0.046948857080176355,
+              "p95": 0.338551613470819,
+              "max": 0.5735698055569172
+            },
+            "refToTestedMm": {
+              "samples": 2488,
+              "median": 0.047148975062174074,
+              "p95": 0.2969944261502996,
+              "max": 0.5675925766268458
+            }
+          },
+          {
+            "id": "notch-plus-z",
+            "reference": {
+              "crossings": 732,
+              "jumpCrossings": 206,
+              "resolutionMm": 0.19950124688279305,
+              "maxResidualAtCrossingMm": 13.965757319268766
+            },
+            "testedToRefMm": {
+              "samples": 89,
+              "median": 3.0743805983684607,
+              "p95": 9.139413463332744,
+              "max": 10.881091995396208
+            },
+            "refToTestedMm": {
+              "samples": 1290,
+              "median": 4.384687877245823,
+              "p95": 10.758810543395894,
+              "max": 11.284920627434207
+            }
+          },
+          {
+            "id": "notch-minus-z",
+            "reference": {
+              "crossings": 732,
+              "jumpCrossings": 206,
+              "resolutionMm": 0.19950124688279305,
+              "maxResidualAtCrossingMm": 13.965757319268766
+            },
+            "testedToRefMm": {
+              "samples": 89,
+              "median": 3.0743805983684607,
+              "p95": 9.13941346333275,
+              "max": 10.881091995396234
+            },
+            "refToTestedMm": {
+              "samples": 1290,
+              "median": 4.384687877245823,
+              "p95": 10.758810543395894,
+              "max": 11.284920627434207
+            }
+          }
+        ]
+      },
+      "candidate": {
+        "id": "dc-eps-candidate",
+        "label": "DC candidate (clamp(0.1*cell, 0.1mm, 2mm))",
+        "note": "5x finer than the port step; 1 mm at the 10 mm focus cell, bounded to [0.1 mm, 2 mm]. Keeps the cell-relative scaling.",
+        "normalEpsilonMm": 2,
+        "clampToCell": true,
+        "verts": 968,
+        "tris": 1932,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "connectedComponents": 1,
+        "closed": true,
+        "signedVolume": 0.013129918491313208,
+        "degenerateTris": 0,
+        "duplicateFaces": 0,
+        "nonManifoldVertices": 0,
+        "boundaryCrossings": 0,
+        "orientationFlips": 0,
+        "residualMedianMm": 0.3964850872848375,
+        "residualP95Mm": 1.2818840186569578,
+        "residualMaxMm": 7.750654346919814,
+        "surfaceResidualMedianMm": 0.15913831509789106,
+        "qefClamped": 18,
+        "qefFallbacks": 0,
+        "qefResidualMeanMm": 0.1617801572811304,
+        "qefResidualMaxMm": 5.733203295242587,
+        "clampedInRegion": {
+          "seam": 0,
+          "notch-plus-z": 2,
+          "notch-minus-z": 2
+        },
+        "cellsInRegion": {
+          "seam": 28,
+          "notch-plus-z": 4,
+          "notch-minus-z": 4
+        },
+        "invalid": false,
+        "invalidReason": null,
+        "regions": [
+          {
+            "id": "seam",
+            "reference": {
+              "crossings": 1608,
+              "jumpCrossings": 0,
+              "resolutionMm": 0.19955654101995568,
+              "maxResidualAtCrossingMm": 0.0002384952889438743
+            },
+            "testedToRefMm": {
+              "samples": 239,
+              "median": 0.04326277049227612,
+              "p95": 0.35610789675449994,
+              "max": 0.5722392981657658
+            },
+            "refToTestedMm": {
+              "samples": 2488,
+              "median": 0.043542664264315134,
+              "p95": 0.30258078359072255,
+              "max": 0.5596765856745662
+            }
+          },
+          {
+            "id": "notch-plus-z",
+            "reference": {
+              "crossings": 732,
+              "jumpCrossings": 206,
+              "resolutionMm": 0.19950124688279305,
+              "maxResidualAtCrossingMm": 13.965757319268766
+            },
+            "testedToRefMm": {
+              "samples": 88,
+              "median": 0.9837661407606556,
+              "p95": 6.690647420138238,
+              "max": 7.618693474688466
+            },
+            "refToTestedMm": {
+              "samples": 1290,
+              "median": 2.4874148091082624,
+              "p95": 9.832287746124072,
+              "max": 9.846566340047842
+            }
+          },
+          {
+            "id": "notch-minus-z",
+            "reference": {
+              "crossings": 732,
+              "jumpCrossings": 206,
+              "resolutionMm": 0.19950124688279305,
+              "maxResidualAtCrossingMm": 13.965757319268766
+            },
+            "testedToRefMm": {
+              "samples": 88,
+              "median": 0.983766140760657,
+              "p95": 6.690647420138232,
+              "max": 7.618693474688476
+            },
+            "refToTestedMm": {
+              "samples": 1290,
+              "median": 2.4874148091082624,
+              "p95": 9.832287746124072,
+              "max": 9.846566340047813
+            }
+          }
+        ]
+      },
+      "context": {
+        "marchingCubes": {
+          "id": "marching-cubes",
+          "label": "marching cubes (context)",
+          "note": "Context only; no QEF.",
+          "normalEpsilonMm": 0,
+          "clampToCell": false,
+          "verts": 966,
+          "tris": 1928,
+          "boundaryEdges": 0,
+          "nonManifoldEdges": 0,
+          "connectedComponents": 1,
+          "closed": true,
+          "signedVolume": 0.012951535473055454,
+          "degenerateTris": 0,
+          "duplicateFaces": 0,
+          "nonManifoldVertices": 0,
+          "boundaryCrossings": 0,
+          "orientationFlips": 0,
+          "residualMedianMm": 0.08780675262551921,
+          "residualP95Mm": 0.7763354776540773,
+          "residualMaxMm": 6.416394203287734,
+          "surfaceResidualMedianMm": 0.4647807497195665,
+          "qefClamped": 0,
+          "qefFallbacks": 0,
+          "qefResidualMeanMm": 0,
+          "qefResidualMaxMm": 0,
+          "clampedInRegion": {},
+          "cellsInRegion": {},
+          "invalid": false,
+          "invalidReason": null,
+          "regions": [
+            {
+              "id": "seam",
+              "reference": {
+                "crossings": 1608,
+                "jumpCrossings": 0,
+                "resolutionMm": 0.19955654101995568,
+                "maxResidualAtCrossingMm": 0.0002384952889438743
+              },
+              "testedToRefMm": {
+                "samples": 219,
+                "median": 0.1677152229788249,
+                "p95": 0.5691412401395887,
+                "max": 0.6547771508460183
+              },
+              "refToTestedMm": {
+                "samples": 2488,
+                "median": 0.17384528826237414,
+                "p95": 0.571619368817034,
+                "max": 0.6552245155148468
+              }
+            },
+            {
+              "id": "notch-plus-z",
+              "reference": {
+                "crossings": 732,
+                "jumpCrossings": 206,
+                "resolutionMm": 0.19950124688279305,
+                "maxResidualAtCrossingMm": 13.965757319268766
+              },
+              "testedToRefMm": {
+                "samples": 90,
+                "median": 2.8706060534366467,
+                "p95": 4.389050074127548,
+                "max": 4.981261657466698
+              },
+              "refToTestedMm": {
+                "samples": 1290,
+                "median": 3.595311975787686,
+                "p95": 5.391733838158399,
+                "max": 6.206701562811114
+              }
+            },
+            {
+              "id": "notch-minus-z",
+              "reference": {
+                "crossings": 732,
+                "jumpCrossings": 206,
+                "resolutionMm": 0.19950124688279305,
+                "maxResidualAtCrossingMm": 13.965757319268766
+              },
+              "testedToRefMm": {
+                "samples": 90,
+                "median": 2.8706060534366467,
+                "p95": 4.389050074127566,
+                "max": 4.981261657466737
+              },
+              "refToTestedMm": {
+                "samples": 1290,
+                "median": 3.5953119757876717,
+                "p95": 5.391733838158399,
+                "max": 6.206701562811114
+              }
+            }
+          ]
+        },
+        "surfaceNets": {
+          "id": "surface-nets",
+          "label": "surface nets (context)",
+          "note": "Context only; no QEF.",
+          "normalEpsilonMm": 0,
+          "clampToCell": false,
+          "verts": 968,
+          "tris": 1932,
+          "boundaryEdges": 0,
+          "nonManifoldEdges": 0,
+          "connectedComponents": 1,
+          "closed": true,
+          "signedVolume": 0.012786876535891225,
+          "degenerateTris": 0,
+          "duplicateFaces": 0,
+          "nonManifoldVertices": 0,
+          "boundaryCrossings": 0,
+          "orientationFlips": 0,
+          "residualMedianMm": 0.5522693971084234,
+          "residualP95Mm": 1.7974417949016048,
+          "residualMaxMm": 6.3300883923579505,
+          "surfaceResidualMedianMm": 1.1758278845583645,
+          "qefClamped": 0,
+          "qefFallbacks": 0,
+          "qefResidualMeanMm": 0,
+          "qefResidualMaxMm": 0,
+          "clampedInRegion": {},
+          "cellsInRegion": {},
+          "invalid": false,
+          "invalidReason": null,
+          "regions": [
+            {
+              "id": "seam",
+              "reference": {
+                "crossings": 1608,
+                "jumpCrossings": 0,
+                "resolutionMm": 0.19955654101995568,
+                "maxResidualAtCrossingMm": 0.0002384952889438743
+              },
+              "testedToRefMm": {
+                "samples": 238,
+                "median": 0.6642269210858028,
+                "p95": 1.403517260275827,
+                "max": 1.5387144682204412
+              },
+              "refToTestedMm": {
+                "samples": 2488,
+                "median": 0.6620828940795468,
+                "p95": 1.4265040132947344,
+                "max": 1.539513015652647
+              }
+            },
+            {
+              "id": "notch-plus-z",
+              "reference": {
+                "crossings": 732,
+                "jumpCrossings": 206,
+                "resolutionMm": 0.19950124688279305,
+                "maxResidualAtCrossingMm": 13.965757319268766
+              },
+              "testedToRefMm": {
+                "samples": 91,
+                "median": 2.011227591623071,
+                "p95": 5.264323736058075,
+                "max": 7.188579188587224
+              },
+              "refToTestedMm": {
+                "samples": 1290,
+                "median": 3.4352933777398493,
+                "p95": 10.793904412378554,
+                "max": 10.80848186420938
+              }
+            },
+            {
+              "id": "notch-minus-z",
+              "reference": {
+                "crossings": 732,
+                "jumpCrossings": 206,
+                "resolutionMm": 0.19950124688279305,
+                "maxResidualAtCrossingMm": 13.965757319268766
+              },
+              "testedToRefMm": {
+                "samples": 91,
+                "median": 2.011227591623071,
+                "p95": 5.264323736058078,
+                "max": 7.188579188587227
+              },
+              "refToTestedMm": {
+                "samples": 1290,
+                "median": 3.435293377739822,
+                "p95": 10.793904412378554,
+                "max": 10.80848186420938
+              }
+            }
+          ]
+        }
+      },
+      "sweep": [
+        {
+          "id": "dc-eps-002cell",
+          "label": "DC eps 0.02*cell",
+          "note": "Sweep: very fine cell-relative Hermite step (0.2 mm at 10 mm).",
+          "normalEpsilonMm": 0.4,
+          "clampToCell": true,
+          "verts": 968,
+          "tris": 1932,
+          "boundaryEdges": 0,
+          "nonManifoldEdges": 0,
+          "connectedComponents": 1,
+          "closed": true,
+          "signedVolume": 0.013103877615687034,
+          "degenerateTris": 0,
+          "duplicateFaces": 0,
+          "nonManifoldVertices": 0,
+          "boundaryCrossings": 0,
+          "orientationFlips": 0,
+          "residualMedianMm": 0.3911243441933359,
+          "residualP95Mm": 1.277892841611578,
+          "residualMaxMm": 9.091605184310358,
+          "surfaceResidualMedianMm": 0.15783453569283282,
+          "qefClamped": 24,
+          "qefFallbacks": 0,
+          "qefResidualMeanMm": 0.17071467958367353,
+          "qefResidualMaxMm": 6.824591153879146,
+          "clampedInRegion": {
+            "seam": 0,
+            "notch-plus-z": 2,
+            "notch-minus-z": 2
+          },
+          "cellsInRegion": {
+            "seam": 28,
+            "notch-plus-z": 4,
+            "notch-minus-z": 4
+          },
+          "invalid": false,
+          "invalidReason": null,
+          "regions": [
+            {
+              "id": "seam",
+              "reference": {
+                "crossings": 1608,
+                "jumpCrossings": 0,
+                "resolutionMm": 0.19955654101995568,
+                "maxResidualAtCrossingMm": 0.0002384952889438743
+              },
+              "testedToRefMm": {
+                "samples": 239,
+                "median": 0.0432652409149248,
+                "p95": 0.3563032808799842,
+                "max": 0.5721795390575501
+              },
+              "refToTestedMm": {
+                "samples": 2488,
+                "median": 0.043493196807955256,
+                "p95": 0.30256093285933855,
+                "max": 0.5591465636573962
+              }
+            },
+            {
+              "id": "notch-plus-z",
+              "reference": {
+                "crossings": 732,
+                "jumpCrossings": 206,
+                "resolutionMm": 0.19950124688279305,
+                "maxResidualAtCrossingMm": 13.965757319268766
+              },
+              "testedToRefMm": {
+                "samples": 85,
+                "median": 0.7916337179966023,
+                "p95": 6.752663949707714,
+                "max": 7.901323288282788
+              },
+              "refToTestedMm": {
+                "samples": 1290,
+                "median": 2.6666250295913354,
+                "p95": 9.835668404010438,
+                "max": 9.850483289046393
+              }
+            },
+            {
+              "id": "notch-minus-z",
+              "reference": {
+                "crossings": 732,
+                "jumpCrossings": 206,
+                "resolutionMm": 0.19950124688279305,
+                "maxResidualAtCrossingMm": 13.965757319268766
+              },
+              "testedToRefMm": {
+                "samples": 85,
+                "median": 0.7916337179966023,
+                "p95": 6.75266394970773,
+                "max": 7.901323288282794
+              },
+              "refToTestedMm": {
+                "samples": 1290,
+                "median": 2.666625029591336,
+                "p95": 9.835668404010466,
+                "max": 9.850483289046394
+              }
+            }
+          ]
+        },
+        {
+          "id": "dc-eps-1mm",
+          "label": "DC eps 1 mm (upstream-like)",
+          "note": "Sweep: upstream ALICE-SDF fixed 1 mm step.",
+          "normalEpsilonMm": 1,
+          "clampToCell": true,
+          "verts": 968,
+          "tris": 1932,
+          "boundaryEdges": 0,
+          "nonManifoldEdges": 0,
+          "connectedComponents": 1,
+          "closed": true,
+          "signedVolume": 0.01311292706654602,
+          "degenerateTris": 0,
+          "duplicateFaces": 0,
+          "nonManifoldVertices": 0,
+          "boundaryCrossings": 0,
+          "orientationFlips": 0,
+          "residualMedianMm": 0.39396305254556546,
+          "residualP95Mm": 1.278957776432451,
+          "residualMaxMm": 7.75066655298004,
+          "surfaceResidualMedianMm": 0.1580798606693379,
+          "qefClamped": 24,
+          "qefFallbacks": 0,
+          "qefResidualMeanMm": 0.16283681930446256,
+          "qefResidualMaxMm": 5.733245280651582,
+          "clampedInRegion": {
+            "seam": 0,
+            "notch-plus-z": 2,
+            "notch-minus-z": 2
+          },
+          "cellsInRegion": {
+            "seam": 28,
+            "notch-plus-z": 4,
+            "notch-minus-z": 4
+          },
+          "invalid": false,
+          "invalidReason": null,
+          "regions": [
+            {
+              "id": "seam",
+              "reference": {
+                "crossings": 1608,
+                "jumpCrossings": 0,
+                "resolutionMm": 0.19955654101995568,
+                "maxResidualAtCrossingMm": 0.0002384952889438743
+              },
+              "testedToRefMm": {
+                "samples": 239,
+                "median": 0.04326507978608724,
+                "p95": 0.3562596963717978,
+                "max": 0.5721899937911054
+              },
+              "refToTestedMm": {
+                "samples": 2488,
+                "median": 0.043508751963303595,
+                "p95": 0.30264329424737096,
+                "max": 0.5592601134898546
+              }
+            },
+            {
+              "id": "notch-plus-z",
+              "reference": {
+                "crossings": 732,
+                "jumpCrossings": 206,
+                "resolutionMm": 0.19950124688279305,
+                "maxResidualAtCrossingMm": 13.965757319268766
+              },
+              "testedToRefMm": {
+                "samples": 85,
+                "median": 0.8321937613448274,
+                "p95": 6.641354692036081,
+                "max": 7.901340212857095
+              },
+              "refToTestedMm": {
+                "samples": 1290,
+                "median": 2.663316274800026,
+                "p95": 9.835704499857291,
+                "max": 9.85051413054412
+              }
+            },
+            {
+              "id": "notch-minus-z",
+              "reference": {
+                "crossings": 732,
+                "jumpCrossings": 206,
+                "resolutionMm": 0.19950124688279305,
+                "maxResidualAtCrossingMm": 13.965757319268766
+              },
+              "testedToRefMm": {
+                "samples": 85,
+                "median": 0.8321937613448274,
+                "p95": 6.64135469203607,
+                "max": 7.901340212857126
+              },
+              "refToTestedMm": {
+                "samples": 1290,
+                "median": 2.6633162748000263,
+                "p95": 9.83570449985732,
+                "max": 9.85051413054412
+              }
+            }
+          ]
+        },
+        {
+          "id": "dc-baseline-noclamp",
+          "label": "DC baseline, no clamp",
+          "note": "Diagnostic: post-solve component clamp disabled at the port step.",
+          "normalEpsilonMm": 10,
+          "clampToCell": false,
+          "verts": 968,
+          "tris": 1932,
+          "boundaryEdges": 0,
+          "nonManifoldEdges": 0,
+          "connectedComponents": 1,
+          "closed": true,
+          "signedVolume": 0.013177358458187977,
+          "degenerateTris": 0,
+          "duplicateFaces": 0,
+          "nonManifoldVertices": 0,
+          "boundaryCrossings": 0,
+          "orientationFlips": 4,
+          "residualMedianMm": 0.39339727934125573,
+          "residualP95Mm": 1.2011714007867988,
+          "residualMaxMm": 8.077121876708615,
+          "surfaceResidualMedianMm": 0.1563860167495516,
+          "qefClamped": 0,
+          "qefFallbacks": 0,
+          "qefResidualMeanMm": 0.08858494137816068,
+          "qefResidualMaxMm": 2.4912520563457194,
+          "clampedInRegion": {
+            "seam": 0,
+            "notch-plus-z": 0,
+            "notch-minus-z": 0
+          },
+          "cellsInRegion": {
+            "seam": 28,
+            "notch-plus-z": 4,
+            "notch-minus-z": 4
+          },
+          "invalid": false,
+          "invalidReason": null,
+          "regions": [
+            {
+              "id": "seam",
+              "reference": {
+                "crossings": 1608,
+                "jumpCrossings": 0,
+                "resolutionMm": 0.19955654101995568,
+                "maxResidualAtCrossingMm": 0.0002384952889438743
+              },
+              "testedToRefMm": {
+                "samples": 240,
+                "median": 0.046948857080176355,
+                "p95": 0.338551613470819,
+                "max": 0.5735698055569172
+              },
+              "refToTestedMm": {
+                "samples": 2488,
+                "median": 0.047148975062174074,
+                "p95": 0.2969944261502996,
+                "max": 0.5675925766268458
+              }
+            },
+            {
+              "id": "notch-plus-z",
+              "reference": {
+                "crossings": 732,
+                "jumpCrossings": 206,
+                "resolutionMm": 0.19950124688279305,
+                "maxResidualAtCrossingMm": 13.965757319268766
+              },
+              "testedToRefMm": {
+                "samples": 98,
+                "median": 2.8734947058343248,
+                "p95": 8.874104748659391,
+                "max": 10.580132542904973
+              },
+              "refToTestedMm": {
+                "samples": 1290,
+                "median": 5.344203413299409,
+                "p95": 11.130920445020982,
+                "max": 12.17538503537382
+              }
+            },
+            {
+              "id": "notch-minus-z",
+              "reference": {
+                "crossings": 732,
+                "jumpCrossings": 206,
+                "resolutionMm": 0.19950124688279305,
+                "maxResidualAtCrossingMm": 13.965757319268766
+              },
+              "testedToRefMm": {
+                "samples": 98,
+                "median": 2.8734947058343248,
+                "p95": 8.874104748659404,
+                "max": 10.580132542905002
+              },
+              "refToTestedMm": {
+                "samples": 1290,
+                "median": 5.344203413299409,
+                "p95": 11.130920445020985,
+                "max": 12.175385035373848
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "cell": 0.01,
+      "baseline": {
+        "id": "dc-baseline",
+        "label": "DC baseline (cell*0.5 normals, clamp)",
+        "note": "Exact port default. Reproduces the original comparison result.",
+        "normalEpsilonMm": 5,
+        "clampToCell": true,
+        "verts": 3914,
+        "tris": 7824,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "connectedComponents": 1,
+        "closed": true,
+        "signedVolume": 0.013112839789979142,
+        "degenerateTris": 2,
+        "duplicateFaces": 0,
+        "nonManifoldVertices": 0,
+        "boundaryCrossings": 0,
+        "orientationFlips": 8,
+        "residualMedianMm": 0.10053829642278178,
+        "residualP95Mm": 0.3287194188085198,
+        "residualMaxMm": 6.975862798352709,
+        "surfaceResidualMedianMm": 0.045304762387899065,
+        "qefClamped": 72,
+        "qefFallbacks": 0,
+        "qefResidualMeanMm": 0.041836047801000704,
+        "qefResidualMaxMm": 3.983118771177967,
+        "clampedInRegion": {
+          "seam": 0,
+          "notch-plus-z": 10,
+          "notch-minus-z": 10
+        },
+        "cellsInRegion": {
+          "seam": 52,
+          "notch-plus-z": 26,
+          "notch-minus-z": 26
+        },
+        "invalid": false,
+        "invalidReason": null,
+        "regions": [
+          {
+            "id": "seam",
+            "reference": {
+              "crossings": 1608,
+              "jumpCrossings": 0,
+              "resolutionMm": 0.19955654101995568,
+              "maxResidualAtCrossingMm": 0.0002384952889438743
+            },
+            "testedToRefMm": {
+              "samples": 478,
+              "median": 0.012417382625040583,
+              "p95": 0.09592101019321302,
+              "max": 0.15579048636531984
+            },
+            "refToTestedMm": {
+              "samples": 2488,
+              "median": 0.012419495118329148,
+              "p95": 0.08720109310159606,
+              "max": 0.14945055514084946
+            }
+          },
+          {
+            "id": "notch-plus-z",
+            "reference": {
+              "crossings": 732,
+              "jumpCrossings": 206,
+              "resolutionMm": 0.19950124688279305,
+              "maxResidualAtCrossingMm": 13.965757319268766
+            },
+            "testedToRefMm": {
+              "samples": 247,
+              "median": 0.2735101055699581,
+              "p95": 3.937832686888041,
+              "max": 5.689949470671606
+            },
+            "refToTestedMm": {
+              "samples": 1290,
+              "median": 0.3692822106935749,
+              "p95": 6.7643506054102875,
+              "max": 8.700945640500574
+            }
+          },
+          {
+            "id": "notch-minus-z",
+            "reference": {
+              "crossings": 732,
+              "jumpCrossings": 206,
+              "resolutionMm": 0.19950124688279305,
+              "maxResidualAtCrossingMm": 13.965757319268766
+            },
+            "testedToRefMm": {
+              "samples": 247,
+              "median": 0.27351010556996147,
+              "p95": 3.937832686888041,
+              "max": 5.689949470671606
+            },
+            "refToTestedMm": {
+              "samples": 1290,
+              "median": 0.36928221069360345,
+              "p95": 6.7643506054102875,
+              "max": 8.700945640500588
+            }
+          }
+        ]
+      },
+      "candidate": {
+        "id": "dc-eps-candidate",
+        "label": "DC candidate (clamp(0.1*cell, 0.1mm, 2mm))",
+        "note": "5x finer than the port step; 1 mm at the 10 mm focus cell, bounded to [0.1 mm, 2 mm]. Keeps the cell-relative scaling.",
+        "normalEpsilonMm": 1,
+        "clampToCell": true,
+        "verts": 3914,
+        "tris": 7824,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "connectedComponents": 1,
+        "closed": true,
+        "signedVolume": 0.013109565218920186,
+        "degenerateTris": 2,
+        "duplicateFaces": 0,
+        "nonManifoldVertices": 0,
+        "boundaryCrossings": 0,
+        "orientationFlips": 0,
+        "residualMedianMm": 0.09452628065456868,
+        "residualP95Mm": 0.3285045226348769,
+        "residualMaxMm": 7.72439932700927,
+        "surfaceResidualMedianMm": 0.04229388125247275,
+        "qefClamped": 32,
+        "qefFallbacks": 0,
+        "qefResidualMeanMm": 0.03765161686233436,
+        "qefResidualMaxMm": 4.521021235476655,
+        "clampedInRegion": {
+          "seam": 0,
+          "notch-plus-z": 3,
+          "notch-minus-z": 3
+        },
+        "cellsInRegion": {
+          "seam": 52,
+          "notch-plus-z": 26,
+          "notch-minus-z": 26
+        },
+        "invalid": false,
+        "invalidReason": null,
+        "regions": [
+          {
+            "id": "seam",
+            "reference": {
+              "crossings": 1608,
+              "jumpCrossings": 0,
+              "resolutionMm": 0.19955654101995568,
+              "maxResidualAtCrossingMm": 0.0002384952889438743
+            },
+            "testedToRefMm": {
+              "samples": 477,
+              "median": 0.012199722401689329,
+              "p95": 0.09577203410997151,
+              "max": 0.15545011950212842
+            },
+            "refToTestedMm": {
+              "samples": 2488,
+              "median": 0.012304609671522188,
+              "p95": 0.08702727272858317,
+              "max": 0.14984284116120916
+            }
+          },
+          {
+            "id": "notch-plus-z",
+            "reference": {
+              "crossings": 732,
+              "jumpCrossings": 206,
+              "resolutionMm": 0.19950124688279305,
+              "maxResidualAtCrossingMm": 13.965757319268766
+            },
+            "testedToRefMm": {
+              "samples": 258,
+              "median": 0.0941967764716359,
+              "p95": 1.8732466379097221,
+              "max": 2.353797386522444
+            },
+            "refToTestedMm": {
+              "samples": 1290,
+              "median": 0.09617950146270146,
+              "p95": 2.318544420562011,
+              "max": 2.91405400083518
+            }
+          },
+          {
+            "id": "notch-minus-z",
+            "reference": {
+              "crossings": 732,
+              "jumpCrossings": 206,
+              "resolutionMm": 0.19950124688279305,
+              "maxResidualAtCrossingMm": 13.965757319268766
+            },
+            "testedToRefMm": {
+              "samples": 258,
+              "median": 0.0941967764716359,
+              "p95": 1.8732466379097221,
+              "max": 2.353797386522444
+            },
+            "refToTestedMm": {
+              "samples": 1290,
+              "median": 0.09617950146270146,
+              "p95": 2.318544420562011,
+              "max": 2.914054000835193
+            }
+          }
+        ]
+      },
+      "context": {
+        "marchingCubes": {
+          "id": "marching-cubes",
+          "label": "marching cubes (context)",
+          "note": "Context only; no QEF.",
+          "normalEpsilonMm": 0,
+          "clampToCell": false,
+          "verts": 3912,
+          "tris": 7820,
+          "boundaryEdges": 0,
+          "nonManifoldEdges": 0,
+          "connectedComponents": 1,
+          "closed": true,
+          "signedVolume": 0.013058846641981968,
+          "degenerateTris": 30,
+          "duplicateFaces": 0,
+          "nonManifoldVertices": 0,
+          "boundaryCrossings": 0,
+          "orientationFlips": 0,
+          "residualMedianMm": 0.02188315694091076,
+          "residualP95Mm": 0.144907313829298,
+          "residualMaxMm": 4.330601798623068,
+          "surfaceResidualMedianMm": 0.11269030262149608,
+          "qefClamped": 0,
+          "qefFallbacks": 0,
+          "qefResidualMeanMm": 0,
+          "qefResidualMaxMm": 0,
+          "clampedInRegion": {},
+          "cellsInRegion": {},
+          "invalid": false,
+          "invalidReason": null,
+          "regions": [
+            {
+              "id": "seam",
+              "reference": {
+                "crossings": 1608,
+                "jumpCrossings": 0,
+                "resolutionMm": 0.19955654101995568,
+                "maxResidualAtCrossingMm": 0.0002384952889438743
+              },
+              "testedToRefMm": {
+                "samples": 441,
+                "median": 0.040007036936631046,
+                "p95": 0.14193991106447057,
+                "max": 0.18214478596301228
+              },
+              "refToTestedMm": {
+                "samples": 2488,
+                "median": 0.041899090275658184,
+                "p95": 0.14392507795160592,
+                "max": 0.18216302114146352
+              }
+            },
+            {
+              "id": "notch-plus-z",
+              "reference": {
+                "crossings": 732,
+                "jumpCrossings": 206,
+                "resolutionMm": 0.19950124688279305,
+                "maxResidualAtCrossingMm": 13.965757319268766
+              },
+              "testedToRefMm": {
+                "samples": 220,
+                "median": 0.7023953283240661,
+                "p95": 3.533723589271531,
+                "max": 4.478653889506784
+              },
+              "refToTestedMm": {
+                "samples": 1290,
+                "median": 1.3661034480103975,
+                "p95": 5.720766314994398,
+                "max": 7.352733289827838
+              }
+            },
+            {
+              "id": "notch-minus-z",
+              "reference": {
+                "crossings": 732,
+                "jumpCrossings": 206,
+                "resolutionMm": 0.19950124688279305,
+                "maxResidualAtCrossingMm": 13.965757319268766
+              },
+              "testedToRefMm": {
+                "samples": 222,
+                "median": 0.7087250513565309,
+                "p95": 3.462594957012038,
+                "max": 4.478654060166937
+              },
+              "refToTestedMm": {
+                "samples": 1290,
+                "median": 1.3661034480103975,
+                "p95": 5.720766316338029,
+                "max": 7.352733288914626
+              }
+            }
+          ]
+        },
+        "surfaceNets": {
+          "id": "surface-nets",
+          "label": "surface nets (context)",
+          "note": "Context only; no QEF.",
+          "normalEpsilonMm": 0,
+          "clampToCell": false,
+          "verts": 3914,
+          "tris": 7824,
+          "boundaryEdges": 0,
+          "nonManifoldEdges": 0,
+          "connectedComponents": 1,
+          "closed": true,
+          "signedVolume": 0.013014827875809884,
+          "degenerateTris": 2,
+          "duplicateFaces": 0,
+          "nonManifoldVertices": 0,
+          "boundaryCrossings": 0,
+          "orientationFlips": 0,
+          "residualMedianMm": 0.128723823337229,
+          "residualP95Mm": 0.40440954664580037,
+          "residualMaxMm": 3.9472609215690078,
+          "surfaceResidualMedianMm": 0.28237325127122925,
+          "qefClamped": 0,
+          "qefFallbacks": 0,
+          "qefResidualMeanMm": 0,
+          "qefResidualMaxMm": 0,
+          "clampedInRegion": {},
+          "cellsInRegion": {},
+          "invalid": false,
+          "invalidReason": null,
+          "regions": [
+            {
+              "id": "seam",
+              "reference": {
+                "crossings": 1608,
+                "jumpCrossings": 0,
+                "resolutionMm": 0.19955654101995568,
+                "maxResidualAtCrossingMm": 0.0002384952889438743
+              },
+              "testedToRefMm": {
+                "samples": 481,
+                "median": 0.1571248540566961,
+                "p95": 0.35815446522855926,
+                "max": 0.41854947090522016
+              },
+              "refToTestedMm": {
+                "samples": 2488,
+                "median": 0.15723899982173667,
+                "p95": 0.3592430852344723,
+                "max": 0.41867246619867377
+              }
+            },
+            {
+              "id": "notch-plus-z",
+              "reference": {
+                "crossings": 732,
+                "jumpCrossings": 206,
+                "resolutionMm": 0.19950124688279305,
+                "maxResidualAtCrossingMm": 13.965757319268766
+              },
+              "testedToRefMm": {
+                "samples": 222,
+                "median": 0.46650120624691094,
+                "p95": 4.166858931497948,
+                "max": 4.584306305539993
+              },
+              "refToTestedMm": {
+                "samples": 1290,
+                "median": 0.9754616516848212,
+                "p95": 5.288793619670015,
+                "max": 6.883125830567545
+              }
+            },
+            {
+              "id": "notch-minus-z",
+              "reference": {
+                "crossings": 732,
+                "jumpCrossings": 206,
+                "resolutionMm": 0.19950124688279305,
+                "maxResidualAtCrossingMm": 13.965757319268766
+              },
+              "testedToRefMm": {
+                "samples": 223,
+                "median": 0.44663961249187745,
+                "p95": 4.161521520129429,
+                "max": 4.584306305539993
+              },
+              "refToTestedMm": {
+                "samples": 1290,
+                "median": 0.9314460753866887,
+                "p95": 5.288793619670015,
+                "max": 6.883125830567545
+              }
+            }
+          ]
+        }
+      },
+      "sweep": [
+        {
+          "id": "dc-eps-002cell",
+          "label": "DC eps 0.02*cell",
+          "note": "Sweep: very fine cell-relative Hermite step (0.2 mm at 10 mm).",
+          "normalEpsilonMm": 0.2,
+          "clampToCell": true,
+          "verts": 3914,
+          "tris": 7824,
+          "boundaryEdges": 0,
+          "nonManifoldEdges": 0,
+          "connectedComponents": 1,
+          "closed": true,
+          "signedVolume": 0.013105625221544055,
+          "degenerateTris": 2,
+          "duplicateFaces": 0,
+          "nonManifoldVertices": 0,
+          "boundaryCrossings": 0,
+          "orientationFlips": 4,
+          "residualMedianMm": 0.09419028448787993,
+          "residualP95Mm": 0.32772333712175794,
+          "residualMaxMm": 8.099794312022862,
+          "surfaceResidualMedianMm": 0.042429439898402775,
+          "qefClamped": 24,
+          "qefFallbacks": 0,
+          "qefResidualMeanMm": 0.03885079184595662,
+          "qefResidualMaxMm": 5.651060650205576,
+          "clampedInRegion": {
+            "seam": 0,
+            "notch-plus-z": 1,
+            "notch-minus-z": 1
+          },
+          "cellsInRegion": {
+            "seam": 52,
+            "notch-plus-z": 26,
+            "notch-minus-z": 26
+          },
+          "invalid": false,
+          "invalidReason": null,
+          "regions": [
+            {
+              "id": "seam",
+              "reference": {
+                "crossings": 1608,
+                "jumpCrossings": 0,
+                "resolutionMm": 0.19955654101995568,
+                "maxResidualAtCrossingMm": 0.0002384952889438743
+              },
+              "testedToRefMm": {
+                "samples": 477,
+                "median": 0.012200412164324633,
+                "p95": 0.09576178730232361,
+                "max": 0.1554324826191559
+              },
+              "refToTestedMm": {
+                "samples": 2488,
+                "median": 0.012300836397407562,
+                "p95": 0.08706631703268992,
+                "max": 0.1498542968839989
+              }
+            },
+            {
+              "id": "notch-plus-z",
+              "reference": {
+                "crossings": 732,
+                "jumpCrossings": 206,
+                "resolutionMm": 0.19950124688279305,
+                "maxResidualAtCrossingMm": 13.965757319268766
+              },
+              "testedToRefMm": {
+                "samples": 264,
+                "median": 0.0706706743144576,
+                "p95": 1.7810276486267413,
+                "max": 2.2112537484400216
+              },
+              "refToTestedMm": {
+                "samples": 1290,
+                "median": 0.07301200316618317,
+                "p95": 2.0325299204423275,
+                "max": 2.461187774315783
+              }
+            },
+            {
+              "id": "notch-minus-z",
+              "reference": {
+                "crossings": 732,
+                "jumpCrossings": 206,
+                "resolutionMm": 0.19950124688279305,
+                "maxResidualAtCrossingMm": 13.965757319268766
+              },
+              "testedToRefMm": {
+                "samples": 264,
+                "median": 0.0706706743144576,
+                "p95": 1.7810276486267413,
+                "max": 2.2112537484400123
+              },
+              "refToTestedMm": {
+                "samples": 1290,
+                "median": 0.07301200316618317,
+                "p95": 2.0325299204423413,
+                "max": 2.461187774315797
+              }
+            }
+          ]
+        },
+        {
+          "id": "dc-eps-1mm",
+          "label": "DC eps 1 mm (upstream-like)",
+          "note": "Sweep: upstream ALICE-SDF fixed 1 mm step.",
+          "normalEpsilonMm": 1,
+          "clampToCell": true,
+          "verts": 3914,
+          "tris": 7824,
+          "boundaryEdges": 0,
+          "nonManifoldEdges": 0,
+          "connectedComponents": 1,
+          "closed": true,
+          "signedVolume": 0.013109565218920186,
+          "degenerateTris": 2,
+          "duplicateFaces": 0,
+          "nonManifoldVertices": 0,
+          "boundaryCrossings": 0,
+          "orientationFlips": 0,
+          "residualMedianMm": 0.09452628065456868,
+          "residualP95Mm": 0.3285045226348769,
+          "residualMaxMm": 7.72439932700927,
+          "surfaceResidualMedianMm": 0.04229388125247275,
+          "qefClamped": 32,
+          "qefFallbacks": 0,
+          "qefResidualMeanMm": 0.03765161686233436,
+          "qefResidualMaxMm": 4.521021235476655,
+          "clampedInRegion": {
+            "seam": 0,
+            "notch-plus-z": 3,
+            "notch-minus-z": 3
+          },
+          "cellsInRegion": {
+            "seam": 52,
+            "notch-plus-z": 26,
+            "notch-minus-z": 26
+          },
+          "invalid": false,
+          "invalidReason": null,
+          "regions": [
+            {
+              "id": "seam",
+              "reference": {
+                "crossings": 1608,
+                "jumpCrossings": 0,
+                "resolutionMm": 0.19955654101995568,
+                "maxResidualAtCrossingMm": 0.0002384952889438743
+              },
+              "testedToRefMm": {
+                "samples": 477,
+                "median": 0.012199722401689329,
+                "p95": 0.09577203410997151,
+                "max": 0.15545011950212842
+              },
+              "refToTestedMm": {
+                "samples": 2488,
+                "median": 0.012304609671522188,
+                "p95": 0.08702727272858317,
+                "max": 0.14984284116120916
+              }
+            },
+            {
+              "id": "notch-plus-z",
+              "reference": {
+                "crossings": 732,
+                "jumpCrossings": 206,
+                "resolutionMm": 0.19950124688279305,
+                "maxResidualAtCrossingMm": 13.965757319268766
+              },
+              "testedToRefMm": {
+                "samples": 258,
+                "median": 0.0941967764716359,
+                "p95": 1.8732466379097221,
+                "max": 2.353797386522444
+              },
+              "refToTestedMm": {
+                "samples": 1290,
+                "median": 0.09617950146270146,
+                "p95": 2.318544420562011,
+                "max": 2.91405400083518
+              }
+            },
+            {
+              "id": "notch-minus-z",
+              "reference": {
+                "crossings": 732,
+                "jumpCrossings": 206,
+                "resolutionMm": 0.19950124688279305,
+                "maxResidualAtCrossingMm": 13.965757319268766
+              },
+              "testedToRefMm": {
+                "samples": 258,
+                "median": 0.0941967764716359,
+                "p95": 1.8732466379097221,
+                "max": 2.353797386522444
+              },
+              "refToTestedMm": {
+                "samples": 1290,
+                "median": 0.09617950146270146,
+                "p95": 2.318544420562011,
+                "max": 2.914054000835193
+              }
+            }
+          ]
+        },
+        {
+          "id": "dc-baseline-noclamp",
+          "label": "DC baseline, no clamp",
+          "note": "Diagnostic: post-solve component clamp disabled at the port step.",
+          "normalEpsilonMm": 5,
+          "clampToCell": false,
+          "verts": 3914,
+          "tris": 7824,
+          "boundaryEdges": 0,
+          "nonManifoldEdges": 0,
+          "connectedComponents": 1,
+          "closed": true,
+          "signedVolume": 0.013113022738556196,
+          "degenerateTris": 2,
+          "duplicateFaces": 0,
+          "nonManifoldVertices": 0,
+          "boundaryCrossings": 0,
+          "orientationFlips": 24,
+          "residualMedianMm": 0.1011527096869041,
+          "residualP95Mm": 0.32591678456826084,
+          "residualMaxMm": 6.948597044545434,
+          "surfaceResidualMedianMm": 0.045270410289045784,
+          "qefClamped": 0,
+          "qefFallbacks": 0,
+          "qefResidualMeanMm": 0.03779274642041537,
+          "qefResidualMaxMm": 3.748532456248099,
+          "clampedInRegion": {
+            "seam": 0,
+            "notch-plus-z": 0,
+            "notch-minus-z": 0
+          },
+          "cellsInRegion": {
+            "seam": 52,
+            "notch-plus-z": 26,
+            "notch-minus-z": 26
+          },
+          "invalid": false,
+          "invalidReason": null,
+          "regions": [
+            {
+              "id": "seam",
+              "reference": {
+                "crossings": 1608,
+                "jumpCrossings": 0,
+                "resolutionMm": 0.19955654101995568,
+                "maxResidualAtCrossingMm": 0.0002384952889438743
+              },
+              "testedToRefMm": {
+                "samples": 478,
+                "median": 0.012417382625040583,
+                "p95": 0.09592101019321302,
+                "max": 0.15579048636531984
+              },
+              "refToTestedMm": {
+                "samples": 2488,
+                "median": 0.012419495118329148,
+                "p95": 0.08720109310159606,
+                "max": 0.14945055514084946
+              }
+            },
+            {
+              "id": "notch-plus-z",
+              "reference": {
+                "crossings": 732,
+                "jumpCrossings": 206,
+                "resolutionMm": 0.19950124688279305,
+                "maxResidualAtCrossingMm": 13.965757319268766
+              },
+              "testedToRefMm": {
+                "samples": 253,
+                "median": 0.2768946607784745,
+                "p95": 4.2068942228945225,
+                "max": 5.788754276010561
+              },
+              "refToTestedMm": {
+                "samples": 1290,
+                "median": 0.3949480949367669,
+                "p95": 6.9944729730628215,
+                "max": 8.885108256490454
+              }
+            },
+            {
+              "id": "notch-minus-z",
+              "reference": {
+                "crossings": 732,
+                "jumpCrossings": 206,
+                "resolutionMm": 0.19950124688279305,
+                "maxResidualAtCrossingMm": 13.965757319268766
+              },
+              "testedToRefMm": {
+                "samples": 253,
+                "median": 0.2768946607784783,
+                "p95": 4.2068942228945225,
+                "max": 5.788754276010561
+              },
+              "refToTestedMm": {
+                "samples": 1290,
+                "median": 0.3949480949367669,
+                "p95": 6.9944729730628215,
+                "max": 8.885108256490467
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "cell": 0.005,
+      "baseline": {
+        "id": "dc-baseline",
+        "label": "DC baseline (cell*0.5 normals, clamp)",
+        "note": "Exact port default. Reproduces the original comparison result.",
+        "normalEpsilonMm": 2.5,
+        "clampToCell": true,
+        "verts": 15714,
+        "tris": 31424,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "connectedComponents": 1,
+        "closed": true,
+        "signedVolume": 0.013098509114127277,
+        "degenerateTris": 6,
+        "duplicateFaces": 0,
+        "nonManifoldVertices": 0,
+        "boundaryCrossings": 0,
+        "orientationFlips": 16,
+        "residualMedianMm": 0.02262906516907365,
+        "residualP95Mm": 0.08385848110256695,
+        "residualMaxMm": 2.844604612855362,
+        "surfaceResidualMedianMm": 0.011322348149643537,
+        "qefClamped": 148,
+        "qefFallbacks": 0,
+        "qefResidualMeanMm": 0.012631717574167922,
+        "qefResidualMaxMm": 1.2562878514752676,
+        "clampedInRegion": {
+          "seam": 0,
+          "notch-plus-z": 8,
+          "notch-minus-z": 8
+        },
+        "cellsInRegion": {
+          "seam": 98,
+          "notch-plus-z": 60,
+          "notch-minus-z": 60
+        },
+        "invalid": false,
+        "invalidReason": null,
+        "regions": [
+          {
+            "id": "seam",
+            "reference": {
+              "crossings": 1608,
+              "jumpCrossings": 0,
+              "resolutionMm": 0.19955654101995568,
+              "maxResidualAtCrossingMm": 0.0002384952889438743
+            },
+            "testedToRefMm": {
+              "samples": 962,
+              "median": 0.002243486292713323,
+              "p95": 0.022708187582372277,
+              "max": 0.03965433650637335
+            },
+            "refToTestedMm": {
+              "samples": 2488,
+              "median": 0.002217019374617781,
+              "p95": 0.021462573927358074,
+              "max": 0.03902180069256318
+            }
+          },
+          {
+            "id": "notch-plus-z",
+            "reference": {
+              "crossings": 732,
+              "jumpCrossings": 206,
+              "resolutionMm": 0.19950124688279305,
+              "maxResidualAtCrossingMm": 13.965757319268766
+            },
+            "testedToRefMm": {
+              "samples": 533,
+              "median": 0.021798011669487957,
+              "p95": 0.5059039363770452,
+              "max": 1.0384696802660567
+            },
+            "refToTestedMm": {
+              "samples": 1290,
+              "median": 0.021671832817714433,
+              "p95": 0.5737241801430634,
+              "max": 1.261394503985457
+            }
+          },
+          {
+            "id": "notch-minus-z",
+            "reference": {
+              "crossings": 732,
+              "jumpCrossings": 206,
+              "resolutionMm": 0.19950124688279305,
+              "maxResidualAtCrossingMm": 13.965757319268766
+            },
+            "testedToRefMm": {
+              "samples": 533,
+              "median": 0.021798011669487957,
+              "p95": 0.5059039363770452,
+              "max": 1.0384696802660567
+            },
+            "refToTestedMm": {
+              "samples": 1290,
+              "median": 0.021671832817728737,
+              "p95": 0.5737241801430634,
+              "max": 1.261394503985457
+            }
+          }
+        ]
+      },
+      "candidate": {
+        "id": "dc-eps-candidate",
+        "label": "DC candidate (clamp(0.1*cell, 0.1mm, 2mm))",
+        "note": "5x finer than the port step; 1 mm at the 10 mm focus cell, bounded to [0.1 mm, 2 mm]. Keeps the cell-relative scaling.",
+        "normalEpsilonMm": 0.5,
+        "clampToCell": true,
+        "verts": 15714,
+        "tris": 31424,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "connectedComponents": 1,
+        "closed": true,
+        "signedVolume": 0.01309762256693474,
+        "degenerateTris": 6,
+        "duplicateFaces": 0,
+        "nonManifoldVertices": 0,
+        "boundaryCrossings": 0,
+        "orientationFlips": 0,
+        "residualMedianMm": 0.02241851910849459,
+        "residualP95Mm": 0.082146274542497,
+        "residualMaxMm": 3.6244405897495193,
+        "surfaceResidualMedianMm": 0.01098247426730105,
+        "qefClamped": 88,
+        "qefFallbacks": 0,
+        "qefResidualMeanMm": 0.010155447286611507,
+        "qefResidualMaxMm": 0.9608628142885187,
+        "clampedInRegion": {
+          "seam": 0,
+          "notch-plus-z": 6,
+          "notch-minus-z": 6
+        },
+        "cellsInRegion": {
+          "seam": 98,
+          "notch-plus-z": 60,
+          "notch-minus-z": 60
+        },
+        "invalid": false,
+        "invalidReason": null,
+        "regions": [
+          {
+            "id": "seam",
+            "reference": {
+              "crossings": 1608,
+              "jumpCrossings": 0,
+              "resolutionMm": 0.19955654101995568,
+              "maxResidualAtCrossingMm": 0.0002384952889438743
+            },
+            "testedToRefMm": {
+              "samples": 963,
+              "median": 0.002247625246010707,
+              "p95": 0.02276075610064468,
+              "max": 0.039627089439184866
+            },
+            "refToTestedMm": {
+              "samples": 2488,
+              "median": 0.002215365332606604,
+              "p95": 0.02161014143214415,
+              "max": 0.03903071228812451
+            }
+          },
+          {
+            "id": "notch-plus-z",
+            "reference": {
+              "crossings": 732,
+              "jumpCrossings": 206,
+              "resolutionMm": 0.19950124688279305,
+              "maxResidualAtCrossingMm": 13.965757319268766
+            },
+            "testedToRefMm": {
+              "samples": 545,
+              "median": 0.01774378069272162,
+              "p95": 0.40246502940834505,
+              "max": 0.6410975226911708
+            },
+            "refToTestedMm": {
+              "samples": 1290,
+              "median": 0.01671956542942406,
+              "p95": 0.40866693518983915,
+              "max": 0.6881715769596556
+            }
+          },
+          {
+            "id": "notch-minus-z",
+            "reference": {
+              "crossings": 732,
+              "jumpCrossings": 206,
+              "resolutionMm": 0.19950124688279305,
+              "maxResidualAtCrossingMm": 13.965757319268766
+            },
+            "testedToRefMm": {
+              "samples": 545,
+              "median": 0.01774378069272162,
+              "p95": 0.40246502940834505,
+              "max": 0.6410975226911708
+            },
+            "refToTestedMm": {
+              "samples": 1290,
+              "median": 0.016719565429451574,
+              "p95": 0.40866693518983915,
+              "max": 0.6881715769596556
+            }
+          }
+        ]
+      },
+      "context": {
+        "marchingCubes": {
+          "id": "marching-cubes",
+          "label": "marching cubes (context)",
+          "note": "Context only; no QEF.",
+          "normalEpsilonMm": 0,
+          "clampToCell": false,
+          "verts": 15712,
+          "tris": 31420,
+          "boundaryEdges": 0,
+          "nonManifoldEdges": 0,
+          "connectedComponents": 1,
+          "closed": true,
+          "signedVolume": 0.013088185887437577,
+          "degenerateTris": 180,
+          "duplicateFaces": 0,
+          "nonManifoldVertices": 0,
+          "boundaryCrossings": 0,
+          "orientationFlips": 0,
+          "residualMedianMm": 0.005432746692474151,
+          "residualP95Mm": 0.03340937345187324,
+          "residualMaxMm": 3.4905590020695425,
+          "surfaceResidualMedianMm": 0.028236356391671047,
+          "qefClamped": 0,
+          "qefFallbacks": 0,
+          "qefResidualMeanMm": 0,
+          "qefResidualMaxMm": 0,
+          "clampedInRegion": {},
+          "cellsInRegion": {},
+          "invalid": false,
+          "invalidReason": null,
+          "regions": [
+            {
+              "id": "seam",
+              "reference": {
+                "crossings": 1608,
+                "jumpCrossings": 0,
+                "resolutionMm": 0.19955654101995568,
+                "maxResidualAtCrossingMm": 0.0002384952889438743
+              },
+              "testedToRefMm": {
+                "samples": 885,
+                "median": 0.009825750275037085,
+                "p95": 0.0355471317622417,
+                "max": 0.04771625652299593
+              },
+              "refToTestedMm": {
+                "samples": 2488,
+                "median": 0.010201265962001547,
+                "p95": 0.03585460851113029,
+                "max": 0.0477921513865852
+              }
+            },
+            {
+              "id": "notch-plus-z",
+              "reference": {
+                "crossings": 732,
+                "jumpCrossings": 206,
+                "resolutionMm": 0.19950124688279305,
+                "maxResidualAtCrossingMm": 13.965757319268766
+              },
+              "testedToRefMm": {
+                "samples": 498,
+                "median": 0.03791841952123002,
+                "p95": 2.141155734982577,
+                "max": 2.7169907404306555
+              },
+              "refToTestedMm": {
+                "samples": 1290,
+                "median": 0.10744825325498693,
+                "p95": 2.923253728369164,
+                "max": 3.973195333870814
+              }
+            },
+            {
+              "id": "notch-minus-z",
+              "reference": {
+                "crossings": 732,
+                "jumpCrossings": 206,
+                "resolutionMm": 0.19950124688279305,
+                "maxResidualAtCrossingMm": 13.965757319268766
+              },
+              "testedToRefMm": {
+                "samples": 500,
+                "median": 0.038664645588274184,
+                "p95": 2.1411556190747523,
+                "max": 2.7169906236711467
+              },
+              "refToTestedMm": {
+                "samples": 1290,
+                "median": 0.10744825325498758,
+                "p95": 2.923253745043403,
+                "max": 3.9731953505450632
+              }
+            }
+          ]
+        },
+        "surfaceNets": {
+          "id": "surface-nets",
+          "label": "surface nets (context)",
+          "note": "Context only; no QEF.",
+          "normalEpsilonMm": 0,
+          "clampToCell": false,
+          "verts": 15714,
+          "tris": 31424,
+          "boundaryEdges": 0,
+          "nonManifoldEdges": 0,
+          "connectedComponents": 1,
+          "closed": true,
+          "signedVolume": 0.01307337428237046,
+          "degenerateTris": 6,
+          "duplicateFaces": 0,
+          "nonManifoldVertices": 0,
+          "boundaryCrossings": 0,
+          "orientationFlips": 0,
+          "residualMedianMm": 0.030611498667135587,
+          "residualP95Mm": 0.09881912085864067,
+          "residualMaxMm": 2.45525355781752,
+          "surfaceResidualMedianMm": 0.06822481846379881,
+          "qefClamped": 0,
+          "qefFallbacks": 0,
+          "qefResidualMeanMm": 0,
+          "qefResidualMaxMm": 0,
+          "clampedInRegion": {},
+          "cellsInRegion": {},
+          "invalid": false,
+          "invalidReason": null,
+          "regions": [
+            {
+              "id": "seam",
+              "reference": {
+                "crossings": 1608,
+                "jumpCrossings": 0,
+                "resolutionMm": 0.19955654101995568,
+                "maxResidualAtCrossingMm": 0.0002384952889438743
+              },
+              "testedToRefMm": {
+                "samples": 965,
+                "median": 0.03826207379234549,
+                "p95": 0.08988185375815265,
+                "max": 0.10120728316414301
+              },
+              "refToTestedMm": {
+                "samples": 2488,
+                "median": 0.03808279569684353,
+                "p95": 0.08950704306282048,
+                "max": 0.10121367472944993
+              }
+            },
+            {
+              "id": "notch-plus-z",
+              "reference": {
+                "crossings": 732,
+                "jumpCrossings": 206,
+                "resolutionMm": 0.19950124688279305,
+                "maxResidualAtCrossingMm": 13.965757319268766
+              },
+              "testedToRefMm": {
+                "samples": 505,
+                "median": 0.11599617898165805,
+                "p95": 1.0712057563464679,
+                "max": 1.4136696034675085
+              },
+              "refToTestedMm": {
+                "samples": 1290,
+                "median": 0.21059036324454306,
+                "p95": 1.4051031968539769,
+                "max": 2.0219203359126876
+              }
+            },
+            {
+              "id": "notch-minus-z",
+              "reference": {
+                "crossings": 732,
+                "jumpCrossings": 206,
+                "resolutionMm": 0.19950124688279305,
+                "maxResidualAtCrossingMm": 13.965757319268766
+              },
+              "testedToRefMm": {
+                "samples": 504,
+                "median": 0.1112515615413983,
+                "p95": 1.0562703204688113,
+                "max": 1.4136696034675085
+              },
+              "refToTestedMm": {
+                "samples": 1290,
+                "median": 0.18456396660943383,
+                "p95": 1.37466064428078,
+                "max": 2.0219203359126876
+              }
+            }
+          ]
+        }
+      },
+      "sweep": [
+        {
+          "id": "dc-eps-002cell",
+          "label": "DC eps 0.02*cell",
+          "note": "Sweep: very fine cell-relative Hermite step (0.2 mm at 10 mm).",
+          "normalEpsilonMm": 0.1,
+          "clampToCell": true,
+          "verts": 15714,
+          "tris": 31424,
+          "boundaryEdges": 0,
+          "nonManifoldEdges": 0,
+          "connectedComponents": 1,
+          "closed": true,
+          "signedVolume": 0.013097584257908376,
+          "degenerateTris": 6,
+          "duplicateFaces": 0,
+          "nonManifoldVertices": 0,
+          "boundaryCrossings": 0,
+          "orientationFlips": 0,
+          "residualMedianMm": 0.02239525732069829,
+          "residualP95Mm": 0.08152363751668619,
+          "residualMaxMm": 3.520821260912344,
+          "surfaceResidualMedianMm": 0.010909801955513389,
+          "qefClamped": 92,
+          "qefFallbacks": 0,
+          "qefResidualMeanMm": 0.009577017527206577,
+          "qefResidualMaxMm": 0.8757325702152865,
+          "clampedInRegion": {
+            "seam": 0,
+            "notch-plus-z": 5,
+            "notch-minus-z": 5
+          },
+          "cellsInRegion": {
+            "seam": 98,
+            "notch-plus-z": 60,
+            "notch-minus-z": 60
+          },
+          "invalid": false,
+          "invalidReason": null,
+          "regions": [
+            {
+              "id": "seam",
+              "reference": {
+                "crossings": 1608,
+                "jumpCrossings": 0,
+                "resolutionMm": 0.19955654101995568,
+                "maxResidualAtCrossingMm": 0.0002384952889438743
+              },
+              "testedToRefMm": {
+                "samples": 963,
+                "median": 0.002247625245980053,
+                "p95": 0.022760318430993545,
+                "max": 0.039635200352961836
+              },
+              "refToTestedMm": {
+                "samples": 2488,
+                "median": 0.002215365332619101,
+                "p95": 0.021615774148162487,
+                "max": 0.03904004428282116
+              }
+            },
+            {
+              "id": "notch-plus-z",
+              "reference": {
+                "crossings": 732,
+                "jumpCrossings": 206,
+                "resolutionMm": 0.19950124688279305,
+                "maxResidualAtCrossingMm": 13.965757319268766
+              },
+              "testedToRefMm": {
+                "samples": 546,
+                "median": 0.01819834969023529,
+                "p95": 0.3750641112406764,
+                "max": 0.6455097451264756
+              },
+              "refToTestedMm": {
+                "samples": 1290,
+                "median": 0.01632375165057721,
+                "p95": 0.38076163929000295,
+                "max": 0.6885977705621553
+              }
+            },
+            {
+              "id": "notch-minus-z",
+              "reference": {
+                "crossings": 732,
+                "jumpCrossings": 206,
+                "resolutionMm": 0.19950124688279305,
+                "maxResidualAtCrossingMm": 13.965757319268766
+              },
+              "testedToRefMm": {
+                "samples": 546,
+                "median": 0.01819834969023513,
+                "p95": 0.3750641112406764,
+                "max": 0.6455097451264756
+              },
+              "refToTestedMm": {
+                "samples": 1290,
+                "median": 0.01632375165057721,
+                "p95": 0.38076163929000295,
+                "max": 0.6885977705621553
+              }
+            }
+          ]
+        },
+        {
+          "id": "dc-eps-1mm",
+          "label": "DC eps 1 mm (upstream-like)",
+          "note": "Sweep: upstream ALICE-SDF fixed 1 mm step.",
+          "normalEpsilonMm": 1,
+          "clampToCell": true,
+          "verts": 15714,
+          "tris": 31424,
+          "boundaryEdges": 0,
+          "nonManifoldEdges": 0,
+          "connectedComponents": 1,
+          "closed": true,
+          "signedVolume": 0.013097612811798637,
+          "degenerateTris": 6,
+          "duplicateFaces": 0,
+          "nonManifoldVertices": 0,
+          "boundaryCrossings": 0,
+          "orientationFlips": 4,
+          "residualMedianMm": 0.02246820793694573,
+          "residualP95Mm": 0.08268856541304022,
+          "residualMaxMm": 3.6245308885259213,
+          "surfaceResidualMedianMm": 0.010999969160336798,
+          "qefClamped": 106,
+          "qefFallbacks": 0,
+          "qefResidualMeanMm": 0.010898658898112304,
+          "qefResidualMaxMm": 0.9603294791175635,
+          "clampedInRegion": {
+            "seam": 0,
+            "notch-plus-z": 9,
+            "notch-minus-z": 9
+          },
+          "cellsInRegion": {
+            "seam": 98,
+            "notch-plus-z": 60,
+            "notch-minus-z": 60
+          },
+          "invalid": false,
+          "invalidReason": null,
+          "regions": [
+            {
+              "id": "seam",
+              "reference": {
+                "crossings": 1608,
+                "jumpCrossings": 0,
+                "resolutionMm": 0.19955654101995568,
+                "maxResidualAtCrossingMm": 0.0002384952889438743
+              },
+              "testedToRefMm": {
+                "samples": 963,
+                "median": 0.002245557973388467,
+                "p95": 0.02276065288378811,
+                "max": 0.03962898549866606
+              },
+              "refToTestedMm": {
+                "samples": 2488,
+                "median": 0.0022132473110176186,
+                "p95": 0.021619627921503688,
+                "max": 0.03902819729408041
+              }
+            },
+            {
+              "id": "notch-plus-z",
+              "reference": {
+                "crossings": 732,
+                "jumpCrossings": 206,
+                "resolutionMm": 0.19950124688279305,
+                "maxResidualAtCrossingMm": 13.965757319268766
+              },
+              "testedToRefMm": {
+                "samples": 542,
+                "median": 0.01896669359761705,
+                "p95": 0.42392803182288413,
+                "max": 0.7854587139985878
+              },
+              "refToTestedMm": {
+                "samples": 1290,
+                "median": 0.01791541435882998,
+                "p95": 0.45007499577742394,
+                "max": 0.814423463463813
+              }
+            },
+            {
+              "id": "notch-minus-z",
+              "reference": {
+                "crossings": 732,
+                "jumpCrossings": 206,
+                "resolutionMm": 0.19950124688279305,
+                "maxResidualAtCrossingMm": 13.965757319268766
+              },
+              "testedToRefMm": {
+                "samples": 542,
+                "median": 0.01896669359764536,
+                "p95": 0.42392803182288413,
+                "max": 0.7854587139985878
+              },
+              "refToTestedMm": {
+                "samples": 1290,
+                "median": 0.017915414358844285,
+                "p95": 0.45007499577742394,
+                "max": 0.814423463463813
+              }
+            }
+          ]
+        },
+        {
+          "id": "dc-baseline-noclamp",
+          "label": "DC baseline, no clamp",
+          "note": "Diagnostic: post-solve component clamp disabled at the port step.",
+          "normalEpsilonMm": 2.5,
+          "clampToCell": false,
+          "verts": 15714,
+          "tris": 31424,
+          "boundaryEdges": 0,
+          "nonManifoldEdges": 0,
+          "connectedComponents": 1,
+          "closed": true,
+          "signedVolume": 0.013098466124781565,
+          "degenerateTris": 6,
+          "duplicateFaces": 0,
+          "nonManifoldVertices": 0,
+          "boundaryCrossings": 0,
+          "orientationFlips": 44,
+          "residualMedianMm": 0.022653848076988514,
+          "residualP95Mm": 0.08377423228219853,
+          "residualMaxMm": 2.9190757410174597,
+          "surfaceResidualMedianMm": 0.01129670232698153,
+          "qefClamped": 0,
+          "qefFallbacks": 0,
+          "qefResidualMeanMm": 0.011990965718158133,
+          "qefResidualMaxMm": 1.1178156578296947,
+          "clampedInRegion": {
+            "seam": 0,
+            "notch-plus-z": 0,
+            "notch-minus-z": 0
+          },
+          "cellsInRegion": {
+            "seam": 98,
+            "notch-plus-z": 60,
+            "notch-minus-z": 60
+          },
+          "invalid": false,
+          "invalidReason": null,
+          "regions": [
+            {
+              "id": "seam",
+              "reference": {
+                "crossings": 1608,
+                "jumpCrossings": 0,
+                "resolutionMm": 0.19955654101995568,
+                "maxResidualAtCrossingMm": 0.0002384952889438743
+              },
+              "testedToRefMm": {
+                "samples": 962,
+                "median": 0.002243486292713323,
+                "p95": 0.022708187582372277,
+                "max": 0.03965433650637335
+              },
+              "refToTestedMm": {
+                "samples": 2488,
+                "median": 0.002217019374617781,
+                "p95": 0.021462573927358074,
+                "max": 0.03902180069256318
+              }
+            },
+            {
+              "id": "notch-plus-z",
+              "reference": {
+                "crossings": 732,
+                "jumpCrossings": 206,
+                "resolutionMm": 0.19950124688279305,
+                "maxResidualAtCrossingMm": 13.965757319268766
+              },
+              "testedToRefMm": {
+                "samples": 533,
+                "median": 0.019307329577361587,
+                "p95": 0.5059039363770452,
+                "max": 1.0384696802660567
+              },
+              "refToTestedMm": {
+                "samples": 1290,
+                "median": 0.018881636977604303,
+                "p95": 0.5737241801430634,
+                "max": 1.261394503985457
+              }
+            },
+            {
+              "id": "notch-minus-z",
+              "reference": {
+                "crossings": 732,
+                "jumpCrossings": 206,
+                "resolutionMm": 0.19950124688279305,
+                "maxResidualAtCrossingMm": 13.965757319268766
+              },
+              "testedToRefMm": {
+                "samples": 533,
+                "median": 0.019307329577362618,
+                "p95": 0.5059039363770452,
+                "max": 1.0384696802660567
+              },
+              "refToTestedMm": {
+                "samples": 1290,
+                "median": 0.018881636977632395,
+                "p95": 0.5737241801430634,
+                "max": 1.261394503985457
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variants": [
+    {
+      "id": "dc-baseline",
+      "label": "DC baseline (cell*0.5 normals, clamp)",
+      "note": "Exact port default. Reproduces the original comparison result.",
+      "normalEpsilonAt10mmMm": 5,
+      "clampToCell": true
+    },
+    {
+      "id": "dc-eps-002cell",
+      "label": "DC eps 0.02*cell",
+      "note": "Sweep: very fine cell-relative Hermite step (0.2 mm at 10 mm).",
+      "normalEpsilonAt10mmMm": 0.2,
+      "clampToCell": true
+    },
+    {
+      "id": "dc-eps-1mm",
+      "label": "DC eps 1 mm (upstream-like)",
+      "note": "Sweep: upstream ALICE-SDF fixed 1 mm step.",
+      "normalEpsilonAt10mmMm": 1,
+      "clampToCell": true
+    },
+    {
+      "id": "dc-eps-candidate",
+      "label": "DC candidate (clamp(0.1*cell, 0.1mm, 2mm))",
+      "note": "5x finer than the port step; 1 mm at the 10 mm focus cell, bounded to [0.1 mm, 2 mm]. Keeps the cell-relative scaling.",
+      "normalEpsilonAt10mmMm": 1,
+      "clampToCell": true
+    },
+    {
+      "id": "dc-baseline-noclamp",
+      "label": "DC baseline, no clamp",
+      "note": "Diagnostic: post-solve component clamp disabled at the port step.",
+      "normalEpsilonAt10mmMm": 5,
+      "clampToCell": false
+    },
+    {
+      "id": "dc-candidate-noclamp",
+      "label": "DC candidate, no clamp",
+      "note": "Diagnostic: is the clamp still load-bearing once the step is finer?",
+      "normalEpsilonAt10mmMm": 1,
+      "clampToCell": false
+    }
+  ],
+  "calibration": {
+    "sharpBox": [
+      {
+        "cell": 0.02,
+        "method": "dc-baseline",
+        "worstCornerMm": 0.2286624511292067,
+        "cornerMm": [
+          0.2286624511292067,
+          0.2286624511292067,
+          0.2286624511292067,
+          0.2286624511292067
+        ],
+        "closed": true,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0
+      },
+      {
+        "cell": 0.02,
+        "method": "dc-eps-candidate",
+        "worstCornerMm": 0.2286624511292067,
+        "cornerMm": [
+          0.2286624511292067,
+          0.2286624511292067,
+          0.2286624511292067,
+          0.2286624511292067
+        ],
+        "closed": true,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0
+      },
+      {
+        "cell": 0.02,
+        "method": "marching-cubes",
+        "worstCornerMm": 23.094012832350483,
+        "cornerMm": [
+          23.094012832350483,
+          23.094012832350483,
+          23.094012832350483,
+          23.094012832350483
+        ],
+        "closed": true,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0
+      },
+      {
+        "cell": 0.01,
+        "method": "dc-baseline",
+        "worstCornerMm": 0.11432606365094265,
+        "cornerMm": [
+          0.11432606365094265,
+          0.11432606365094265,
+          0.11432606365094265,
+          0.11432606365094265
+        ],
+        "closed": true,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0
+      },
+      {
+        "cell": 0.01,
+        "method": "dc-eps-candidate",
+        "worstCornerMm": 0.11432606365094265,
+        "cornerMm": [
+          0.11432606365094265,
+          0.11432606365094265,
+          0.11432606365094265,
+          0.11432606365094265
+        ],
+        "closed": true,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0
+      },
+      {
+        "cell": 0.01,
+        "method": "marching-cubes",
+        "worstCornerMm": 11.547001254261582,
+        "cornerMm": [
+          11.547001254261582,
+          11.547001254261582,
+          11.547001254261582,
+          11.547001254261582
+        ],
+        "closed": true,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0
+      },
+      {
+        "cell": 0.005,
+        "method": "dc-baseline",
+        "worstCornerMm": 0.05715786991181061,
+        "cornerMm": [
+          0.05715786991181061,
+          0.05715786991181061,
+          0.05715786991181061,
+          0.05715786991181061
+        ],
+        "closed": true,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0
+      },
+      {
+        "cell": 0.005,
+        "method": "dc-eps-candidate",
+        "worstCornerMm": 0.05715786991181061,
+        "cornerMm": [
+          0.05715786991181061,
+          0.05715786991181061,
+          0.05715786991181061,
+          0.05715786991181061
+        ],
+        "closed": true,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0
+      },
+      {
+        "cell": 0.005,
+        "method": "marching-cubes",
+        "worstCornerMm": 5.773504068406556,
+        "cornerMm": [
+          5.773504068406556,
+          5.773504068406556,
+          5.773504068406556,
+          5.773504068406556
+        ],
+        "closed": true,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0
+      }
+    ],
+    "sphere": [
+      {
+        "cell": 0.02,
+        "method": "dc-baseline",
+        "residualMedianMm": 0.4697559381745717,
+        "residualP95Mm": 0.5989435515084922,
+        "closed": true,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "signedVolumePositive": true
+      },
+      {
+        "cell": 0.02,
+        "method": "dc-eps-candidate",
+        "residualMedianMm": 0.4697533275849363,
+        "residualP95Mm": 0.5982931717915742,
+        "closed": true,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "signedVolumePositive": true
+      },
+      {
+        "cell": 0.01,
+        "method": "dc-baseline",
+        "residualMedianMm": 0.1030635453664494,
+        "residualP95Mm": 0.1466865053660231,
+        "closed": true,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "signedVolumePositive": true
+      },
+      {
+        "cell": 0.01,
+        "method": "dc-eps-candidate",
+        "residualMedianMm": 0.10305054083817483,
+        "residualP95Mm": 0.14667740733685264,
+        "closed": true,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "signedVolumePositive": true
+      },
+      {
+        "cell": 0.005,
+        "method": "dc-baseline",
+        "residualMedianMm": 0.02600990759225032,
+        "residualP95Mm": 0.036210159861843776,
+        "closed": true,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "signedVolumePositive": true
+      },
+      {
+        "cell": 0.005,
+        "method": "dc-eps-candidate",
+        "residualMedianMm": 0.02600350348547997,
+        "residualP95Mm": 0.03620536477622066,
+        "closed": true,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "signedVolumePositive": true
+      }
+    ],
+    "sensitivity": [
+      {
+        "cell": 0.02,
+        "rows": [
+          {
+            "phaseCells": [
+              0,
+              0,
+              0
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "snSurfaceMm": 23.094004229161055,
+            "mcSurfaceMm": 23.094012832350483,
+            "dcSurfaceMm": 0.2286624511292067,
+            "snVertexMm": 23.094004229161055,
+            "mcVertexMm": 28.284277990958284,
+            "dcVertexMm": 0.2286624511292067
+          },
+          {
+            "phaseCells": [
+              0.23,
+              0,
+              0
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "snSurfaceMm": 21.469976225386112,
+            "mcSurfaceMm": 20.83269778284702,
+            "dcSurfaceMm": 0.21258022404796706,
+            "snVertexMm": 21.469976225386116,
+            "mcVertexMm": 25.242033080961352,
+            "dcVertexMm": 0.21258022404796703
+          },
+          {
+            "phaseCells": [
+              0,
+              0.23,
+              0
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "snSurfaceMm": 21.469976225386112,
+            "mcSurfaceMm": 20.83269778284702,
+            "dcSurfaceMm": 0.21258022404796706,
+            "snVertexMm": 21.469976225386116,
+            "mcVertexMm": 25.242033080961352,
+            "dcVertexMm": 0.21258022404796703
+          },
+          {
+            "phaseCells": [
+              0,
+              0,
+              0.23
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "snSurfaceMm": 21.469976225386112,
+            "mcSurfaceMm": 20.832697782847024,
+            "dcSurfaceMm": 0.21258022404796706,
+            "snVertexMm": 21.469976225386116,
+            "mcVertexMm": 25.242033080961352,
+            "dcVertexMm": 0.21258022404796703
+          },
+          {
+            "phaseCells": [
+              0.5,
+              0.5,
+              0.5
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "snSurfaceMm": 11.547009857451009,
+            "mcSurfaceMm": 11.547001254261582,
+            "dcSurfaceMm": 0.11432606365094265,
+            "snVertexMm": 11.547009857451007,
+            "mcVertexMm": 14.142134780795228,
+            "dcVertexMm": 0.11432606365094265
+          },
+          {
+            "phaseCells": [
+              0.25,
+              0.25,
+              0.25
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "snSurfaceMm": 17.32050704330603,
+            "mcSurfaceMm": 17.320498440116605,
+            "dcSurfaceMm": 0.17149425739007468,
+            "snVertexMm": 17.32050704330603,
+            "mcVertexMm": 21.213195849164524,
+            "dcVertexMm": 0.17149425739007468
+          },
+          {
+            "phaseCells": [
+              0,
+              0,
+              0
+            ],
+            "rotationDeg": 20,
+            "corner": [
+              0.18627671439719629,
+              0.1137232856028037,
+              0.14095389311788625
+            ],
+            "snSurfaceMm": 14.690640102140927,
+            "mcSurfaceMm": 12.325754381705295,
+            "dcSurfaceMm": 3.084904333994303,
+            "snVertexMm": 14.776183615797285,
+            "mcVertexMm": 12.945932822655662,
+            "dcVertexMm": 3.3655465795094224
+          }
+        ]
+      },
+      {
+        "cell": 0.01,
+        "rows": [
+          {
+            "phaseCells": [
+              0,
+              0,
+              0
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "snSurfaceMm": 11.547009857451009,
+            "mcSurfaceMm": 11.547001254261582,
+            "dcSurfaceMm": 0.11432606365094265,
+            "snVertexMm": 11.547009857451007,
+            "mcVertexMm": 14.142134780795228,
+            "dcVertexMm": 0.11432606365094265
+          },
+          {
+            "phaseCells": [
+              0.23,
+              0,
+              0
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "snSurfaceMm": 10.734995802727212,
+            "mcSurfaceMm": 10.41634838241704,
+            "dcSurfaceMm": 0.10628498534725964,
+            "snVertexMm": 10.734995802727212,
+            "mcVertexMm": 12.621016906487935,
+            "dcVertexMm": 0.10628498534725964
+          },
+          {
+            "phaseCells": [
+              0,
+              0.23,
+              0
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "snSurfaceMm": 10.734995802727212,
+            "mcSurfaceMm": 10.41634838241704,
+            "dcSurfaceMm": 0.10628498534725964,
+            "snVertexMm": 10.734995802727212,
+            "mcVertexMm": 12.621016906487935,
+            "dcVertexMm": 0.10628498534725964
+          },
+          {
+            "phaseCells": [
+              0,
+              0,
+              0.23
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "snSurfaceMm": 10.734995802727214,
+            "mcSurfaceMm": 10.41634838241704,
+            "dcSurfaceMm": 0.10628498534725964,
+            "snVertexMm": 10.734995802727212,
+            "mcVertexMm": 12.621016906487935,
+            "dcVertexMm": 0.10628498534725964
+          },
+          {
+            "phaseCells": [
+              0.5,
+              0.5,
+              0.5
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "snSurfaceMm": 5.773512671595983,
+            "mcSurfaceMm": 5.773504068406556,
+            "dcSurfaceMm": 0.05715786991181061,
+            "snVertexMm": 5.773512671595983,
+            "mcVertexMm": 7.071073712426771,
+            "dcVertexMm": 0.05715786991181061
+          },
+          {
+            "phaseCells": [
+              0.25,
+              0.25,
+              0.25
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "snSurfaceMm": 8.660261264523497,
+            "mcSurfaceMm": 8.660252661334068,
+            "dcSurfaceMm": 0.0857548715655164,
+            "snVertexMm": 8.660261264523495,
+            "mcVertexMm": 10.60660424661079,
+            "dcVertexMm": 0.08575487156551638
+          },
+          {
+            "phaseCells": [
+              0,
+              0,
+              0
+            ],
+            "rotationDeg": 20,
+            "corner": [
+              0.18627671439719629,
+              0.1137232856028037,
+              0.14095389311788625
+            ],
+            "snSurfaceMm": 6.087386872344903,
+            "mcSurfaceMm": 5.163319171720741,
+            "dcSurfaceMm": 0.9295424551927922,
+            "snVertexMm": 6.143814268217253,
+            "mcVertexMm": 5.16331917172074,
+            "dcVertexMm": 0.9295424551927923
+          }
+        ]
+      },
+      {
+        "cell": 0.005,
+        "rows": [
+          {
+            "phaseCells": [
+              0,
+              0,
+              0
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "snSurfaceMm": 5.773512671595983,
+            "mcSurfaceMm": 5.773504068406556,
+            "dcSurfaceMm": 0.05715786991181061,
+            "snVertexMm": 5.773512671595983,
+            "mcVertexMm": 7.071073712426771,
+            "dcVertexMm": 0.05715786991181061
+          },
+          {
+            "phaseCells": [
+              0.23,
+              0,
+              0
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "snSurfaceMm": 5.367498465864059,
+            "mcSurfaceMm": 5.208177892441361,
+            "dcSurfaceMm": 0.053140928947469024,
+            "snVertexMm": 5.367498465864059,
+            "mcVertexMm": 6.310514722565548,
+            "dcVertexMm": 0.053140928947469024
+          },
+          {
+            "phaseCells": [
+              0,
+              0.23,
+              0
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "snSurfaceMm": 5.367498465864059,
+            "mcSurfaceMm": 5.208177892441361,
+            "dcSurfaceMm": 0.053140928947469024,
+            "snVertexMm": 5.367498465864059,
+            "mcVertexMm": 6.310514722565548,
+            "dcVertexMm": 0.053140928947469024
+          },
+          {
+            "phaseCells": [
+              0,
+              0,
+              0.23
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "snSurfaceMm": 5.367498465864058,
+            "mcSurfaceMm": 5.208177892441362,
+            "dcSurfaceMm": 0.053140928947469024,
+            "snVertexMm": 5.367498465864059,
+            "mcVertexMm": 6.310514722565548,
+            "dcVertexMm": 0.053140928947469024
+          },
+          {
+            "phaseCells": [
+              0.5,
+              0.5,
+              0.5
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "snSurfaceMm": 2.8867640786684707,
+            "mcSurfaceMm": 2.886755475479044,
+            "dcSurfaceMm": 0.028586677826384358,
+            "snVertexMm": 2.8867640786684703,
+            "mcVertexMm": 3.5355431782444264,
+            "dcVertexMm": 0.028586677826384355
+          },
+          {
+            "phaseCells": [
+              0.25,
+              0.25,
+              0.25
+            ],
+            "rotationDeg": 0,
+            "corner": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "snSurfaceMm": 4.330138375132227,
+            "mcSurfaceMm": 4.3301297719428,
+            "dcSurfaceMm": 0.042885178653237245,
+            "snVertexMm": 4.330138375132226,
+            "mcVertexMm": 5.30330844533518,
+            "dcVertexMm": 0.04288517865323724
+          },
+          {
+            "phaseCells": [
+              0,
+              0,
+              0
+            ],
+            "rotationDeg": 20,
+            "corner": [
+              0.18627671439719629,
+              0.1137232856028037,
+              0.14095389311788625
+            ],
+            "snSurfaceMm": 3.5963433193781924,
+            "mcSurfaceMm": 2.9877992847639927,
+            "dcSurfaceMm": 0.7105325078373406,
+            "snVertexMm": 3.6194540313556454,
+            "mcVertexMm": 2.9877992847639927,
+            "dcVertexMm": 0.757465421713015
+          }
+        ]
+      }
+    ]
+  },
+  "regressions": [
+    {
+      "fixture": "character-head",
+      "method": "dc-baseline",
+      "verts": 4550,
+      "tris": 8992,
+      "residualMedianMm": 0.18544642199279504,
+      "surfMedianMm": 0.05984128211543706,
+      "refMedMm": 0.11934651346023471,
+      "refP95Mm": 0.6372221965714104,
+      "boundaryEdges": 106,
+      "nonManifoldEdges": 0,
+      "invalid": false
+    },
+    {
+      "fixture": "character-head",
+      "method": "dc-eps-candidate",
+      "verts": 4550,
+      "tris": 8992,
+      "residualMedianMm": 0.19393560784177485,
+      "surfMedianMm": 0.060236769053209384,
+      "refMedMm": 0.12471483624841101,
+      "refP95Mm": 0.7538679555529949,
+      "boundaryEdges": 106,
+      "nonManifoldEdges": 0,
+      "invalid": false
+    },
+    {
+      "fixture": "character-head",
+      "method": "marching-cubes",
+      "verts": 4602,
+      "tris": 9096,
+      "residualMedianMm": 0.0430683571225444,
+      "surfMedianMm": 0.12539483759569842,
+      "refMedMm": 0.1091715093197631,
+      "refP95Mm": 0.7430279109269138,
+      "boundaryEdges": 106,
+      "nonManifoldEdges": 0,
+      "invalid": false
+    },
+    {
+      "fixture": "torn-chunk",
+      "method": "dc-baseline",
+      "verts": 656,
+      "tris": 1308,
+      "residualMedianMm": 0.3517956389846001,
+      "surfMedianMm": 0.07830666742362352,
+      "refMedMm": 0.2039632937781401,
+      "refP95Mm": 0.7583060847734546,
+      "boundaryEdges": 0,
+      "nonManifoldEdges": 0,
+      "invalid": false
+    },
+    {
+      "fixture": "torn-chunk",
+      "method": "dc-eps-candidate",
+      "verts": 656,
+      "tris": 1308,
+      "residualMedianMm": 0.33238065176348713,
+      "surfMedianMm": 0.07559053768952956,
+      "refMedMm": 0.20390636409133397,
+      "refP95Mm": 0.783510393150373,
+      "boundaryEdges": 0,
+      "nonManifoldEdges": 0,
+      "invalid": false
+    },
+    {
+      "fixture": "torn-chunk",
+      "method": "marching-cubes",
+      "verts": 654,
+      "tris": 1304,
+      "residualMedianMm": 0.08974340724574997,
+      "surfMedianMm": 0.26323571231204496,
+      "refMedMm": 0.211113745362394,
+      "refP95Mm": 0.7457337710742251,
+      "boundaryEdges": 0,
+      "nonManifoldEdges": 0,
+      "invalid": false
+    }
+  ],
+  "panels": [
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.02,
+      "view": "slice-seam",
+      "file": "chamfer-groove__dc-baseline__20mm__slice-seam.png",
+      "tris": 0,
+      "note": "sminChamfer flat bevel. Smooth here (the buried cutter does not reach z=0)."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.02,
+      "view": "slice-seam",
+      "file": "chamfer-groove__dc-eps-candidate__20mm__slice-seam.png",
+      "tris": 0,
+      "note": "sminChamfer flat bevel. Smooth here (the buried cutter does not reach z=0)."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.02,
+      "view": "slice-seam",
+      "file": "chamfer-groove__marching-cubes__20mm__slice-seam.png",
+      "tris": 0,
+      "note": "sminChamfer flat bevel. Smooth here (the buried cutter does not reach z=0)."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.02,
+      "view": "slice-seam",
+      "file": "chamfer-groove__surface-nets__20mm__slice-seam.png",
+      "tris": 0,
+      "note": "sminChamfer flat bevel. Smooth here (the buried cutter does not reach z=0)."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.02,
+      "view": "slice-seam",
+      "file": "chamfer-groove__compare__20mm__slice-seam.png",
+      "tris": 0,
+      "note": "sminChamfer flat bevel. Smooth here (the buried cutter does not reach z=0)."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.02,
+      "view": "slice-notch-plus-z",
+      "file": "chamfer-groove__dc-baseline__20mm__slice-notch-plus-z.png",
+      "tris": 0,
+      "note": "sdGroove band clipping the +z surface: two side pits with a central pillar. Field rim is discontinuous."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.02,
+      "view": "slice-notch-plus-z",
+      "file": "chamfer-groove__dc-eps-candidate__20mm__slice-notch-plus-z.png",
+      "tris": 0,
+      "note": "sdGroove band clipping the +z surface: two side pits with a central pillar. Field rim is discontinuous."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.02,
+      "view": "slice-notch-plus-z",
+      "file": "chamfer-groove__marching-cubes__20mm__slice-notch-plus-z.png",
+      "tris": 0,
+      "note": "sdGroove band clipping the +z surface: two side pits with a central pillar. Field rim is discontinuous."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.02,
+      "view": "slice-notch-plus-z",
+      "file": "chamfer-groove__surface-nets__20mm__slice-notch-plus-z.png",
+      "tris": 0,
+      "note": "sdGroove band clipping the +z surface: two side pits with a central pillar. Field rim is discontinuous."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.02,
+      "view": "slice-notch-plus-z",
+      "file": "chamfer-groove__compare__20mm__slice-notch-plus-z.png",
+      "tris": 0,
+      "note": "sdGroove band clipping the +z surface: two side pits with a central pillar. Field rim is discontinuous."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.02,
+      "view": "slice-notch-minus-z",
+      "file": "chamfer-groove__dc-baseline__20mm__slice-notch-minus-z.png",
+      "tris": 0,
+      "note": "Mirror of the +z pit at the other capsule cap."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.02,
+      "view": "slice-notch-minus-z",
+      "file": "chamfer-groove__dc-eps-candidate__20mm__slice-notch-minus-z.png",
+      "tris": 0,
+      "note": "Mirror of the +z pit at the other capsule cap."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.02,
+      "view": "slice-notch-minus-z",
+      "file": "chamfer-groove__marching-cubes__20mm__slice-notch-minus-z.png",
+      "tris": 0,
+      "note": "Mirror of the +z pit at the other capsule cap."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.02,
+      "view": "slice-notch-minus-z",
+      "file": "chamfer-groove__surface-nets__20mm__slice-notch-minus-z.png",
+      "tris": 0,
+      "note": "Mirror of the +z pit at the other capsule cap."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.02,
+      "view": "slice-notch-minus-z",
+      "file": "chamfer-groove__compare__20mm__slice-notch-minus-z.png",
+      "tris": 0,
+      "note": "Mirror of the +z pit at the other capsule cap."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.01,
+      "view": "slice-seam",
+      "file": "chamfer-groove__dc-baseline__10mm__slice-seam.png",
+      "tris": 0,
+      "note": "sminChamfer flat bevel. Smooth here (the buried cutter does not reach z=0)."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.01,
+      "view": "slice-seam",
+      "file": "chamfer-groove__dc-eps-candidate__10mm__slice-seam.png",
+      "tris": 0,
+      "note": "sminChamfer flat bevel. Smooth here (the buried cutter does not reach z=0)."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.01,
+      "view": "slice-seam",
+      "file": "chamfer-groove__marching-cubes__10mm__slice-seam.png",
+      "tris": 0,
+      "note": "sminChamfer flat bevel. Smooth here (the buried cutter does not reach z=0)."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.01,
+      "view": "slice-seam",
+      "file": "chamfer-groove__surface-nets__10mm__slice-seam.png",
+      "tris": 0,
+      "note": "sminChamfer flat bevel. Smooth here (the buried cutter does not reach z=0)."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.01,
+      "view": "slice-seam",
+      "file": "chamfer-groove__compare__10mm__slice-seam.png",
+      "tris": 0,
+      "note": "sminChamfer flat bevel. Smooth here (the buried cutter does not reach z=0)."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.01,
+      "view": "slice-notch-plus-z",
+      "file": "chamfer-groove__dc-baseline__10mm__slice-notch-plus-z.png",
+      "tris": 0,
+      "note": "sdGroove band clipping the +z surface: two side pits with a central pillar. Field rim is discontinuous."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.01,
+      "view": "slice-notch-plus-z",
+      "file": "chamfer-groove__dc-eps-candidate__10mm__slice-notch-plus-z.png",
+      "tris": 0,
+      "note": "sdGroove band clipping the +z surface: two side pits with a central pillar. Field rim is discontinuous."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.01,
+      "view": "slice-notch-plus-z",
+      "file": "chamfer-groove__marching-cubes__10mm__slice-notch-plus-z.png",
+      "tris": 0,
+      "note": "sdGroove band clipping the +z surface: two side pits with a central pillar. Field rim is discontinuous."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.01,
+      "view": "slice-notch-plus-z",
+      "file": "chamfer-groove__surface-nets__10mm__slice-notch-plus-z.png",
+      "tris": 0,
+      "note": "sdGroove band clipping the +z surface: two side pits with a central pillar. Field rim is discontinuous."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.01,
+      "view": "slice-notch-plus-z",
+      "file": "chamfer-groove__compare__10mm__slice-notch-plus-z.png",
+      "tris": 0,
+      "note": "sdGroove band clipping the +z surface: two side pits with a central pillar. Field rim is discontinuous."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.01,
+      "view": "slice-notch-minus-z",
+      "file": "chamfer-groove__dc-baseline__10mm__slice-notch-minus-z.png",
+      "tris": 0,
+      "note": "Mirror of the +z pit at the other capsule cap."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.01,
+      "view": "slice-notch-minus-z",
+      "file": "chamfer-groove__dc-eps-candidate__10mm__slice-notch-minus-z.png",
+      "tris": 0,
+      "note": "Mirror of the +z pit at the other capsule cap."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.01,
+      "view": "slice-notch-minus-z",
+      "file": "chamfer-groove__marching-cubes__10mm__slice-notch-minus-z.png",
+      "tris": 0,
+      "note": "Mirror of the +z pit at the other capsule cap."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.01,
+      "view": "slice-notch-minus-z",
+      "file": "chamfer-groove__surface-nets__10mm__slice-notch-minus-z.png",
+      "tris": 0,
+      "note": "Mirror of the +z pit at the other capsule cap."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.01,
+      "view": "slice-notch-minus-z",
+      "file": "chamfer-groove__compare__10mm__slice-notch-minus-z.png",
+      "tris": 0,
+      "note": "Mirror of the +z pit at the other capsule cap."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.005,
+      "view": "slice-seam",
+      "file": "chamfer-groove__dc-baseline__5mm__slice-seam.png",
+      "tris": 0,
+      "note": "sminChamfer flat bevel. Smooth here (the buried cutter does not reach z=0)."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.005,
+      "view": "slice-seam",
+      "file": "chamfer-groove__dc-eps-candidate__5mm__slice-seam.png",
+      "tris": 0,
+      "note": "sminChamfer flat bevel. Smooth here (the buried cutter does not reach z=0)."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.005,
+      "view": "slice-seam",
+      "file": "chamfer-groove__marching-cubes__5mm__slice-seam.png",
+      "tris": 0,
+      "note": "sminChamfer flat bevel. Smooth here (the buried cutter does not reach z=0)."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.005,
+      "view": "slice-seam",
+      "file": "chamfer-groove__surface-nets__5mm__slice-seam.png",
+      "tris": 0,
+      "note": "sminChamfer flat bevel. Smooth here (the buried cutter does not reach z=0)."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.005,
+      "view": "slice-seam",
+      "file": "chamfer-groove__compare__5mm__slice-seam.png",
+      "tris": 0,
+      "note": "sminChamfer flat bevel. Smooth here (the buried cutter does not reach z=0)."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.005,
+      "view": "slice-notch-plus-z",
+      "file": "chamfer-groove__dc-baseline__5mm__slice-notch-plus-z.png",
+      "tris": 0,
+      "note": "sdGroove band clipping the +z surface: two side pits with a central pillar. Field rim is discontinuous."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.005,
+      "view": "slice-notch-plus-z",
+      "file": "chamfer-groove__dc-eps-candidate__5mm__slice-notch-plus-z.png",
+      "tris": 0,
+      "note": "sdGroove band clipping the +z surface: two side pits with a central pillar. Field rim is discontinuous."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.005,
+      "view": "slice-notch-plus-z",
+      "file": "chamfer-groove__marching-cubes__5mm__slice-notch-plus-z.png",
+      "tris": 0,
+      "note": "sdGroove band clipping the +z surface: two side pits with a central pillar. Field rim is discontinuous."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.005,
+      "view": "slice-notch-plus-z",
+      "file": "chamfer-groove__surface-nets__5mm__slice-notch-plus-z.png",
+      "tris": 0,
+      "note": "sdGroove band clipping the +z surface: two side pits with a central pillar. Field rim is discontinuous."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.005,
+      "view": "slice-notch-plus-z",
+      "file": "chamfer-groove__compare__5mm__slice-notch-plus-z.png",
+      "tris": 0,
+      "note": "sdGroove band clipping the +z surface: two side pits with a central pillar. Field rim is discontinuous."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.005,
+      "view": "slice-notch-minus-z",
+      "file": "chamfer-groove__dc-baseline__5mm__slice-notch-minus-z.png",
+      "tris": 0,
+      "note": "Mirror of the +z pit at the other capsule cap."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.005,
+      "view": "slice-notch-minus-z",
+      "file": "chamfer-groove__dc-eps-candidate__5mm__slice-notch-minus-z.png",
+      "tris": 0,
+      "note": "Mirror of the +z pit at the other capsule cap."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.005,
+      "view": "slice-notch-minus-z",
+      "file": "chamfer-groove__marching-cubes__5mm__slice-notch-minus-z.png",
+      "tris": 0,
+      "note": "Mirror of the +z pit at the other capsule cap."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.005,
+      "view": "slice-notch-minus-z",
+      "file": "chamfer-groove__surface-nets__5mm__slice-notch-minus-z.png",
+      "tris": 0,
+      "note": "Mirror of the +z pit at the other capsule cap."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "slice",
+      "cell": 0.005,
+      "view": "slice-notch-minus-z",
+      "file": "chamfer-groove__compare__5mm__slice-notch-minus-z.png",
+      "tris": 0,
+      "note": "Mirror of the +z pit at the other capsule cap."
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "dc-baseline",
+      "cell": 0.01,
+      "view": "closeup-notch",
+      "file": "chamfer-groove__dc-baseline__10mm__closeup-notch.png",
+      "tris": 7824,
+      "note": "the +z groove pit (x-z), tight"
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "dc-baseline",
+      "cell": 0.01,
+      "view": "closeup-notch",
+      "file": "chamfer-groove__dc-baseline__10mm__closeup-notch-wire.png",
+      "tris": 7824,
+      "note": "the +z groove pit (x-z), tight"
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "dc-eps-candidate",
+      "cell": 0.01,
+      "view": "closeup-notch",
+      "file": "chamfer-groove__dc-eps-candidate__10mm__closeup-notch.png",
+      "tris": 7824,
+      "note": "the +z groove pit (x-z), tight"
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "dc-eps-candidate",
+      "cell": 0.01,
+      "view": "closeup-notch",
+      "file": "chamfer-groove__dc-eps-candidate__10mm__closeup-notch-wire.png",
+      "tris": 7824,
+      "note": "the +z groove pit (x-z), tight"
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "marching-cubes",
+      "cell": 0.01,
+      "view": "closeup-notch",
+      "file": "chamfer-groove__marching-cubes__10mm__closeup-notch.png",
+      "tris": 7820,
+      "note": "the +z groove pit (x-z), tight"
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "marching-cubes",
+      "cell": 0.01,
+      "view": "closeup-notch",
+      "file": "chamfer-groove__marching-cubes__10mm__closeup-notch-wire.png",
+      "tris": 7820,
+      "note": "the +z groove pit (x-z), tight"
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "dc-baseline",
+      "cell": 0.01,
+      "view": "closeup-seam",
+      "file": "chamfer-groove__dc-baseline__10mm__closeup-seam.png",
+      "tris": 7824,
+      "note": "the chamfer bevel (x-y), tight"
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "dc-baseline",
+      "cell": 0.01,
+      "view": "closeup-seam",
+      "file": "chamfer-groove__dc-baseline__10mm__closeup-seam-wire.png",
+      "tris": 7824,
+      "note": "the chamfer bevel (x-y), tight"
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "dc-eps-candidate",
+      "cell": 0.01,
+      "view": "closeup-seam",
+      "file": "chamfer-groove__dc-eps-candidate__10mm__closeup-seam.png",
+      "tris": 7824,
+      "note": "the chamfer bevel (x-y), tight"
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "dc-eps-candidate",
+      "cell": 0.01,
+      "view": "closeup-seam",
+      "file": "chamfer-groove__dc-eps-candidate__10mm__closeup-seam-wire.png",
+      "tris": 7824,
+      "note": "the chamfer bevel (x-y), tight"
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "marching-cubes",
+      "cell": 0.01,
+      "view": "closeup-seam",
+      "file": "chamfer-groove__marching-cubes__10mm__closeup-seam.png",
+      "tris": 7820,
+      "note": "the chamfer bevel (x-y), tight"
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "marching-cubes",
+      "cell": 0.01,
+      "view": "closeup-seam",
+      "file": "chamfer-groove__marching-cubes__10mm__closeup-seam-wire.png",
+      "tris": 7820,
+      "note": "the chamfer bevel (x-y), tight"
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "dc-baseline",
+      "cell": 0.02,
+      "view": "main",
+      "file": "chamfer-groove__dc-baseline__20mm__main.png",
+      "tris": 1932,
+      "note": "whole fixture overview"
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "dc-eps-candidate",
+      "cell": 0.02,
+      "view": "main",
+      "file": "chamfer-groove__dc-eps-candidate__20mm__main.png",
+      "tris": 1932,
+      "note": "whole fixture overview"
+    },
+    {
+      "fixture": "chamfer-groove",
+      "method": "marching-cubes",
+      "cell": 0.02,
+      "view": "main",
+      "file": "chamfer-groove__marching-cubes__20mm__main.png",
+      "tris": 1928,
+      "note": "whole fixture overview"
+    },
+    {
+      "fixture": "control-sharp-box",
+      "method": "dc-baseline",
+      "cell": 0.01,
+      "view": "closeup-corner",
+      "file": "control-sharp-box__dc-baseline__10mm__closeup-corner.png",
+      "tris": 10092,
+      "note": "convex corner, tight"
+    },
+    {
+      "fixture": "control-sharp-box",
+      "method": "dc-eps-candidate",
+      "cell": 0.01,
+      "view": "closeup-corner",
+      "file": "control-sharp-box__dc-eps-candidate__10mm__closeup-corner.png",
+      "tris": 10092,
+      "note": "convex corner, tight"
+    },
+    {
+      "fixture": "control-sharp-box",
+      "method": "marching-cubes",
+      "cell": 0.01,
+      "view": "closeup-corner",
+      "file": "control-sharp-box__marching-cubes__10mm__closeup-corner.png",
+      "tris": 10088,
+      "note": "convex corner, tight"
+    }
+  ],
+  "evidencePlan": [
+    "meshes/chamfer-groove-dc-baseline-20mm.glb",
+    "meshes/chamfer-groove-dc-eps-candidate-20mm.glb",
+    "panels/chamfer-groove__dc-baseline__20mm__slice-seam.png",
+    "panels/chamfer-groove__dc-eps-candidate__20mm__slice-seam.png",
+    "panels/chamfer-groove__marching-cubes__20mm__slice-seam.png",
+    "panels/chamfer-groove__surface-nets__20mm__slice-seam.png",
+    "panels/chamfer-groove__compare__20mm__slice-seam.png",
+    "panels/chamfer-groove__dc-baseline__20mm__slice-notch-plus-z.png",
+    "panels/chamfer-groove__dc-eps-candidate__20mm__slice-notch-plus-z.png",
+    "panels/chamfer-groove__marching-cubes__20mm__slice-notch-plus-z.png",
+    "panels/chamfer-groove__surface-nets__20mm__slice-notch-plus-z.png",
+    "panels/chamfer-groove__compare__20mm__slice-notch-plus-z.png",
+    "panels/chamfer-groove__dc-baseline__20mm__slice-notch-minus-z.png",
+    "panels/chamfer-groove__dc-eps-candidate__20mm__slice-notch-minus-z.png",
+    "panels/chamfer-groove__marching-cubes__20mm__slice-notch-minus-z.png",
+    "panels/chamfer-groove__surface-nets__20mm__slice-notch-minus-z.png",
+    "panels/chamfer-groove__compare__20mm__slice-notch-minus-z.png",
+    "meshes/chamfer-groove-dc-baseline-10mm.glb",
+    "meshes/chamfer-groove-dc-eps-candidate-10mm.glb",
+    "meshes/chamfer-groove-marching-cubes-10mm.glb",
+    "panels/chamfer-groove__dc-baseline__10mm__slice-seam.png",
+    "panels/chamfer-groove__dc-eps-candidate__10mm__slice-seam.png",
+    "panels/chamfer-groove__marching-cubes__10mm__slice-seam.png",
+    "panels/chamfer-groove__surface-nets__10mm__slice-seam.png",
+    "panels/chamfer-groove__compare__10mm__slice-seam.png",
+    "panels/chamfer-groove__dc-baseline__10mm__slice-notch-plus-z.png",
+    "panels/chamfer-groove__dc-eps-candidate__10mm__slice-notch-plus-z.png",
+    "panels/chamfer-groove__marching-cubes__10mm__slice-notch-plus-z.png",
+    "panels/chamfer-groove__surface-nets__10mm__slice-notch-plus-z.png",
+    "panels/chamfer-groove__compare__10mm__slice-notch-plus-z.png",
+    "panels/chamfer-groove__dc-baseline__10mm__slice-notch-minus-z.png",
+    "panels/chamfer-groove__dc-eps-candidate__10mm__slice-notch-minus-z.png",
+    "panels/chamfer-groove__marching-cubes__10mm__slice-notch-minus-z.png",
+    "panels/chamfer-groove__surface-nets__10mm__slice-notch-minus-z.png",
+    "panels/chamfer-groove__compare__10mm__slice-notch-minus-z.png",
+    "meshes/chamfer-groove-dc-baseline-5mm.glb",
+    "meshes/chamfer-groove-dc-eps-candidate-5mm.glb",
+    "panels/chamfer-groove__dc-baseline__5mm__slice-seam.png",
+    "panels/chamfer-groove__dc-eps-candidate__5mm__slice-seam.png",
+    "panels/chamfer-groove__marching-cubes__5mm__slice-seam.png",
+    "panels/chamfer-groove__surface-nets__5mm__slice-seam.png",
+    "panels/chamfer-groove__compare__5mm__slice-seam.png",
+    "panels/chamfer-groove__dc-baseline__5mm__slice-notch-plus-z.png",
+    "panels/chamfer-groove__dc-eps-candidate__5mm__slice-notch-plus-z.png",
+    "panels/chamfer-groove__marching-cubes__5mm__slice-notch-plus-z.png",
+    "panels/chamfer-groove__surface-nets__5mm__slice-notch-plus-z.png",
+    "panels/chamfer-groove__compare__5mm__slice-notch-plus-z.png",
+    "panels/chamfer-groove__dc-baseline__5mm__slice-notch-minus-z.png",
+    "panels/chamfer-groove__dc-eps-candidate__5mm__slice-notch-minus-z.png",
+    "panels/chamfer-groove__marching-cubes__5mm__slice-notch-minus-z.png",
+    "panels/chamfer-groove__surface-nets__5mm__slice-notch-minus-z.png",
+    "panels/chamfer-groove__compare__5mm__slice-notch-minus-z.png",
+    "panels/chamfer-groove__dc-baseline__10mm__closeup-notch.png",
+    "panels/chamfer-groove__dc-baseline__10mm__closeup-notch-wire.png",
+    "panels/chamfer-groove__dc-eps-candidate__10mm__closeup-notch.png",
+    "panels/chamfer-groove__dc-eps-candidate__10mm__closeup-notch-wire.png",
+    "panels/chamfer-groove__marching-cubes__10mm__closeup-notch.png",
+    "panels/chamfer-groove__marching-cubes__10mm__closeup-notch-wire.png",
+    "panels/chamfer-groove__dc-baseline__10mm__closeup-seam.png",
+    "panels/chamfer-groove__dc-baseline__10mm__closeup-seam-wire.png",
+    "panels/chamfer-groove__dc-eps-candidate__10mm__closeup-seam.png",
+    "panels/chamfer-groove__dc-eps-candidate__10mm__closeup-seam-wire.png",
+    "panels/chamfer-groove__marching-cubes__10mm__closeup-seam.png",
+    "panels/chamfer-groove__marching-cubes__10mm__closeup-seam-wire.png",
+    "panels/chamfer-groove__dc-baseline__20mm__main.png",
+    "panels/chamfer-groove__dc-eps-candidate__20mm__main.png",
+    "panels/chamfer-groove__marching-cubes__20mm__main.png",
+    "panels/control-sharp-box__dc-baseline__10mm__closeup-corner.png",
+    "meshes/control-sharp-box-dc-baseline-10mm.glb",
+    "panels/control-sharp-box__dc-eps-candidate__10mm__closeup-corner.png",
+    "meshes/control-sharp-box-dc-eps-candidate-10mm.glb",
+    "panels/control-sharp-box__marching-cubes__10mm__closeup-corner.png",
+    "meshes/control-sharp-box-marching-cubes-10mm.glb",
+    "meshes/character-head-dc-baseline-10mm.glb",
+    "meshes/character-head-dc-eps-candidate-10mm.glb",
+    "meshes/torn-chunk-dc-baseline-10mm.glb",
+    "meshes/torn-chunk-dc-eps-candidate-10mm.glb"
+  ]
+}

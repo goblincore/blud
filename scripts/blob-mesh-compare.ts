@@ -536,7 +536,7 @@ function chunk(type: string, data: Uint8Array): Buffer {
   return out;
 }
 
-function encodePng(rgba: Uint8Array, width: number, height: number): Buffer {
+export function encodePng(rgba: Uint8Array, width: number, height: number): Buffer {
   const stride = width * 4;
   const raw = Buffer.alloc((stride + 1) * height);
   for (let y = 0; y < height; y++) {

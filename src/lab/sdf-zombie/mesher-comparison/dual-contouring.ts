@@ -80,17 +80,17 @@ export function solve3x3(a: number[][], b: number[]): [number, number, number] |
 /** See `qef_solve` upstream. */
 export function qefSolve(
   hermite: QefHermite, cellMin: Vec3, cellMax: Vec3, clamp: boolean,
-): { point: Vec3; fellBack: boolean } {
+): { point: Vec3; fellBack: boolean; clamped: boolean; rmsPlaneDistance: number } {
   const n = hermite.points.length;
   if (n === 0) {
-    return { point: [(cellMin[0] + cellMax[0]) / 2, (cellMin[1] + cellMax[1]) / 2, (cellMin[2] + cellMax[2]) / 2], fellBack: true };
+    return { point: [(cellMin[0] + cellMax[0]) / 2, (cellMin[1] + cellMax[1]) / 2, (cellMin[2] + cellMax[2]) / 2], fellBack: true, clamped: false, rmsPlaneDistance: 0 };
   }
   const mass: [number, number, number] = [0, 0, 0];
   for (const p of hermite.points) { mass[0] += p[0]; mass[1] += p[1]; mass[2] += p[2]; }
   mass[0] /= n; mass[1] /= n; mass[2] /= n;
   const cellCentre: Vec3 = [(cellMin[0] + cellMax[0]) / 2, (cellMin[1] + cellMax[1]) / 2, (cellMin[2] + cellMax[2]) / 2];
   if (!Number.isFinite(mass[0]) || !Number.isFinite(mass[1]) || !Number.isFinite(mass[2])) {
-    return { point: cellCentre, fellBack: true };
+    return { point: cellCentre, fellBack: true, clamped: false, rmsPlaneDistance: 0 };
   }
 
   const ata = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
@@ -121,7 +121,16 @@ export function qefSolve(
         Math.min(cellMax[2], Math.max(cellMin[2], out[2])),
       ]
     : out;
-  return { point, fellBack };
+  const clamped = point[0] !== out[0] || point[1] !== out[1] || point[2] !== out[2];
+  // Data-term RMS plane distance at the FINAL vertex, a QEF residual (metres).
+  // It is a field-plane diagnostic, NOT a Euclidean surface error.
+  let sum = 0;
+  for (let k = 0; k < n; k++) {
+    const nrm = hermite.normals[k]!, pt = hermite.points[k]!;
+    const d = nrm[0] * (point[0] - pt[0]) + nrm[1] * (point[1] - pt[1]) + nrm[2] * (point[2] - pt[2]);
+    sum += d * d;
+  }
+  return { point, fellBack, clamped, rmsPlaneDistance: Math.sqrt(sum / n) };
 }
 
 /** Averaged unit normal of the Hermite samples; +Y when degenerate. */
@@ -182,6 +191,9 @@ export function dualContouring(fieldIn: ScalarField, opts: MethodOptions): Index
   const cell = opts.cell;
   const bisectIters = opts.bisectionIterations ?? 6;
   const clamp = opts.clampToCell ?? true;
+  const normalEpsilon = opts.normalEpsilon && Number.isFinite(opts.normalEpsilon) && opts.normalEpsilon > 0
+    ? opts.normalEpsilon
+    : cell * 0.5;
   const grid = opts.grid ?? fitGrid(field, cell);
   const [nx, ny, nz] = grid.dims;
   const cxm = nx + 1, cym = ny + 1, czm = nz + 1;
@@ -198,6 +210,10 @@ export function dualContouring(fieldIn: ScalarField, opts: MethodOptions): Index
   let invalid = false;
   let invalidReason: string | undefined;
   let qefFallbacks = 0;
+  let qefClamped = 0;
+  let qefResidualMax = 0;
+  let qefResidualSum = 0;
+  let cellsCrossed = 0;
 
   const valueAt = (i: number, j: number, k: number): number => values[(k * cym + j) * cxm + i]!;
 
@@ -226,14 +242,21 @@ export function dualContouring(fieldIn: ScalarField, opts: MethodOptions): Index
           const pb = gridPoint(grid, cx + o1[0], cy + o1[1], cz + o1[2]);
           const hit = refineEdge(field.field, pa, pb, da, db, bisectIters);
           pts.push(hit);
-          nrms.push(fieldNormal(field.field, hit, cell * 0.5));
+          nrms.push(fieldNormal(field.field, hit, normalEpsilon));
         }
         if (pts.length === 0) continue;
+        cellsCrossed++;
 
         const cellMin = gridPoint(grid, cx, cy, cz);
         const cellMax = gridPoint(grid, cx + 1, cy + 1, cz + 1);
         const solved = qefSolve({ points: pts, normals: nrms }, cellMin, cellMax, clamp);
         if (solved.fellBack) qefFallbacks++;
+        if (solved.clamped) qefClamped++;
+        opts.dcCellDiagnostic?.({ cellMin, cellMax, clamped: solved.clamped, fellBack: solved.fellBack, rmsPlaneDistance: solved.rmsPlaneDistance });
+        if (Number.isFinite(solved.rmsPlaneDistance)) {
+          qefResidualSum += solved.rmsPlaneDistance;
+          if (solved.rmsPlaneDistance > qefResidualMax) qefResidualMax = solved.rmsPlaneDistance;
+        }
         if (positions.length / 3 >= DC_MAX_VERTS) {
           invalid = true; invalidReason = `vertex cap ${DC_MAX_VERTS} exceeded`; break;
         }
@@ -342,6 +365,11 @@ export function dualContouring(fieldIn: ScalarField, opts: MethodOptions): Index
     fallbacks: qefFallbacks,
     detail: {
       qefFallbacks,
+      qefClamped,
+      cellsCrossed,
+      normalEpsilon,
+      qefResidualMean: cellsCrossed > 0 ? qefResidualSum / cellsCrossed : 0,
+      qefResidualMax,
       droppedQuads,
       nonFiniteSamples: tracked.nonFinite(),
     },
