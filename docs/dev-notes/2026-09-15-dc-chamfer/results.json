@@ -1,8 +1,8 @@
 {
-  "commit": "767b4aa89c6c883f93f44061b5d2de49d472cddf",
-  "dirty": "M docs/dev-notes/2026-09-15-dc-chamfer/README.md\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-dc-baseline-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-dc-baseline-20mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-dc-baseline-5mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-dc-eps-candidate-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-dc-eps-candidate-20mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-dc-eps-candidate-5mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-marching-cubes-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/character-head-dc-baseline-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/character-head-dc-eps-candidate-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/control-sharp-box-dc-baseline-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/control-sharp-box-dc-eps-candidate-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/control-sharp-box-marching-cubes-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/torn-chunk-dc-baseline-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/torn-chunk-dc-eps-candidate-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__10mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__10mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__10mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__20mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__20mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__20mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__5mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__5mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__5mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__closeup-notch-wire.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__closeup-notch.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__closeup-seam-wire.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__closeup-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__20mm__main.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__20mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__20mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__20mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__5mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__5mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__5mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__closeup-notch-wire.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__closeup-notch.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__closeup-seam-wire.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__closeup-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__20mm__main.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__20mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__20mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__20mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__5mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__5mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__5mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__closeup-notch-wire.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__closeup-notch.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__closeup-seam-wire.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__closeup-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__20mm__main.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__20mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__20mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__20mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__5mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__5mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__5mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__10mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__10mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__10mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__20mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__20mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__20mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__5mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__5mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__5mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/control-sharp-box__dc-baseline__10mm__closeup-corner.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/control-sharp-box__dc-eps-candidate__10mm__closeup-corner.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/control-sharp-box__marching-cubes__10mm__closeup-corner.png\n D docs/dev-notes/2026-09-15-dc-chamfer/preview.html\n D docs/dev-notes/2026-09-15-dc-chamfer/results.json\n M scripts/dc-chamfer-probe.test.ts\n M scripts/dc-chamfer-probe.ts\n M src/lab/sdf-zombie/mesher-comparison/dc-chamfer.test.ts\n M src/lab/sdf-zombie/mesher-comparison/dc-chamfer.ts\n M src/lab/sdf-zombie/mesher-comparison/field-slice.ts\n M src/lab/sdf-zombie/mesher-comparison/sensitivity.ts",
-  "codeFingerprint": "2de7f092179f10b9:66446e75",
-  "generatedAt": "2026-09-15T22:35:12.634Z",
+  "commit": "893c78fef8180302d8bbd538e2b3e6c306b84d15",
+  "dirty": "D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-dc-baseline-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-dc-baseline-20mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-dc-baseline-5mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-dc-eps-candidate-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-dc-eps-candidate-20mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-dc-eps-candidate-5mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/chamfer-groove-marching-cubes-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/character-head-dc-baseline-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/character-head-dc-eps-candidate-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/control-sharp-box-dc-baseline-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/control-sharp-box-dc-eps-candidate-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/control-sharp-box-marching-cubes-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/torn-chunk-dc-baseline-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/meshes/torn-chunk-dc-eps-candidate-10mm.glb\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__10mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__10mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__10mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__20mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__20mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__20mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__5mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__5mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__compare__5mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__closeup-notch-wire.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__closeup-notch.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__closeup-seam-wire.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__closeup-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__10mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__20mm__main.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__20mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__20mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__20mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__5mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__5mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-baseline__5mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__closeup-notch-wire.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__closeup-notch.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__closeup-seam-wire.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__closeup-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__10mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__20mm__main.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__20mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__20mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__20mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__5mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__5mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__dc-eps-candidate__5mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__closeup-notch-wire.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__closeup-notch.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__closeup-seam-wire.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__closeup-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__10mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__20mm__main.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__20mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__20mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__20mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__5mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__5mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__marching-cubes__5mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__10mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__10mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__10mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__20mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__20mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__20mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__5mm__slice-notch-minus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__5mm__slice-notch-plus-z.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/chamfer-groove__surface-nets__5mm__slice-seam.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/control-sharp-box__dc-baseline__10mm__closeup-corner.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/control-sharp-box__dc-eps-candidate__10mm__closeup-corner.png\n D docs/dev-notes/2026-09-15-dc-chamfer/panels/control-sharp-box__marching-cubes__10mm__closeup-corner.png\n D docs/dev-notes/2026-09-15-dc-chamfer/preview.html\n D docs/dev-notes/2026-09-15-dc-chamfer/results.json",
+  "codeFingerprint": "7118f04ae0925328:12ba5bb3",
+  "generatedAt": "2026-09-15T22:45:40.022Z",
   "environment": {
     "node": "v22.22.1",
     "platform": "darwin",
@@ -39,10 +39,10 @@
         "resolvedCrossings": 1608,
         "unresolvedCrossings": 0,
         "resolutionMm": 0.19955654101995568,
-        "maxResidualAtCrossingMm": 0.0009909589477583973,
-        "maxEndpointJumpMm": 0.2803371113448758,
+        "maxResidualAtCrossingMm": 0.0002335606212251186,
+        "maxEndpointJumpMm": 0.0014015808118863836,
         "spatialTolMm": 0.001,
-        "maxBracketWidthMm": 0
+        "maxBracketWidthMm": 0.0009990732544797108
       },
       {
         "id": "notch-plus-z",
@@ -70,10 +70,10 @@
         "resolvedCrossings": 732,
         "unresolvedCrossings": 0,
         "resolutionMm": 0.19950124688279305,
-        "maxResidualAtCrossingMm": 0.0009955019260564357,
-        "maxEndpointJumpMm": 14.0492775341226,
+        "maxResidualAtCrossingMm": 0.0004977509630264831,
+        "maxEndpointJumpMm": 13.966538569268767,
         "spatialTolMm": 0.001,
-        "maxBracketWidthMm": 0
+        "maxBracketWidthMm": 0.0009998892149268531
       },
       {
         "id": "notch-minus-z",
@@ -101,10 +101,10 @@
         "resolvedCrossings": 732,
         "unresolvedCrossings": 0,
         "resolutionMm": 0.19950124688279305,
-        "maxResidualAtCrossingMm": 0.0009955019260564357,
-        "maxEndpointJumpMm": 14.0492775341226,
+        "maxResidualAtCrossingMm": 0.0004977509630264831,
+        "maxEndpointJumpMm": 13.966538569268767,
         "spatialTolMm": 0.001,
-        "maxBracketWidthMm": 0
+        "maxBracketWidthMm": 0.0009998892149268585
       }
     ]
   },
@@ -157,10 +157,10 @@
               "resolvedCrossings": 1608,
               "unresolvedCrossings": 0,
               "resolutionMm": 0.19955654101995568,
-              "maxResidualAtCrossingMm": 0.0009909589477583973,
-              "maxEndpointJumpMm": 0.2803371113448758,
+              "maxResidualAtCrossingMm": 0.0002335606212251186,
+              "maxEndpointJumpMm": 0.0014015808118863836,
               "spatialTolMm": 0.001,
-              "maxBracketWidthMm": 0
+              "maxBracketWidthMm": 0.0009990732544797108
             },
             "testedToRefMm": {
               "samples": 240,
@@ -182,10 +182,10 @@
               "resolvedCrossings": 732,
               "unresolvedCrossings": 0,
               "resolutionMm": 0.19950124688279305,
-              "maxResidualAtCrossingMm": 0.0009955019260564357,
-              "maxEndpointJumpMm": 14.0492775341226,
+              "maxResidualAtCrossingMm": 0.0004977509630264831,
+              "maxEndpointJumpMm": 13.966538569268767,
               "spatialTolMm": 0.001,
-              "maxBracketWidthMm": 0
+              "maxBracketWidthMm": 0.0009998892149268531
             },
             "testedToRefMm": {
               "samples": 89,
@@ -207,10 +207,10 @@
               "resolvedCrossings": 732,
               "unresolvedCrossings": 0,
               "resolutionMm": 0.19950124688279305,
-              "maxResidualAtCrossingMm": 0.0009955019260564357,
-              "maxEndpointJumpMm": 14.0492775341226,
+              "maxResidualAtCrossingMm": 0.0004977509630264831,
+              "maxEndpointJumpMm": 13.966538569268767,
               "spatialTolMm": 0.001,
-              "maxBracketWidthMm": 0
+              "maxBracketWidthMm": 0.0009998892149268585
             },
             "testedToRefMm": {
               "samples": 89,
@@ -273,10 +273,10 @@
               "resolvedCrossings": 1608,
               "unresolvedCrossings": 0,
               "resolutionMm": 0.19955654101995568,
-              "maxResidualAtCrossingMm": 0.0009909589477583973,
-              "maxEndpointJumpMm": 0.2803371113448758,
+              "maxResidualAtCrossingMm": 0.0002335606212251186,
+              "maxEndpointJumpMm": 0.0014015808118863836,
               "spatialTolMm": 0.001,
-              "maxBracketWidthMm": 0
+              "maxBracketWidthMm": 0.0009990732544797108
             },
             "testedToRefMm": {
               "samples": 239,
@@ -298,20 +298,20 @@
               "resolvedCrossings": 732,
               "unresolvedCrossings": 0,
               "resolutionMm": 0.19950124688279305,
-              "maxResidualAtCrossingMm": 0.0009955019260564357,
-              "maxEndpointJumpMm": 14.0492775341226,
+              "maxResidualAtCrossingMm": 0.0004977509630264831,
+              "maxEndpointJumpMm": 13.966538569268767,
               "spatialTolMm": 0.001,
-              "maxBracketWidthMm": 0
+              "maxBracketWidthMm": 0.0009998892149268531
             },
             "testedToRefMm": {
               "samples": 88,
               "median": 0.9837661407606556,
-              "p95": 6.59895134668265,
+              "p95": 6.598644672432139,
               "max": 7.618693474688466
             },
             "refToTestedMm": {
               "samples": 1290,
-              "median": 2.4873428344751067,
+              "median": 2.487281986962067,
               "p95": 9.832287746124072,
               "max": 9.846566340047842
             }
@@ -323,20 +323,20 @@
               "resolvedCrossings": 732,
               "unresolvedCrossings": 0,
               "resolutionMm": 0.19950124688279305,
-              "maxResidualAtCrossingMm": 0.0009955019260564357,
-              "maxEndpointJumpMm": 14.0492775341226,
+              "maxResidualAtCrossingMm": 0.0004977509630264831,
+              "maxEndpointJumpMm": 13.966538569268767,
               "spatialTolMm": 0.001,
-              "maxBracketWidthMm": 0
+              "maxBracketWidthMm": 0.0009998892149268585
             },
             "testedToRefMm": {
               "samples": 88,
               "median": 0.983766140760657,
-              "p95": 6.598951346682643,
+              "p95": 6.598644672432139,
               "max": 7.618693474688476
             },
             "refToTestedMm": {
               "samples": 1290,
-              "median": 2.4873428344751067,
+              "median": 2.487281986962067,
               "p95": 9.832287746124072,
               "max": 9.846566340047813
             }
@@ -382,10 +382,10 @@
                 "resolvedCrossings": 1608,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19955654101995568,
-                "maxResidualAtCrossingMm": 0.0009909589477583973,
-                "maxEndpointJumpMm": 0.2803371113448758,
+                "maxResidualAtCrossingMm": 0.0002335606212251186,
+                "maxEndpointJumpMm": 0.0014015808118863836,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009990732544797108
               },
               "testedToRefMm": {
                 "samples": 219,
@@ -407,15 +407,15 @@
                 "resolvedCrossings": 732,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 0.0009955019260564357,
-                "maxEndpointJumpMm": 14.0492775341226,
+                "maxResidualAtCrossingMm": 0.0004977509630264831,
+                "maxEndpointJumpMm": 13.966538569268767,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009998892149268531
               },
               "testedToRefMm": {
                 "samples": 90,
-                "median": 2.818962722745816,
-                "p95": 4.453764956376765,
+                "median": 2.818572097745817,
+                "p95": 4.454155581376767,
                 "max": 4.981261657466698
               },
               "refToTestedMm": {
@@ -432,15 +432,15 @@
                 "resolvedCrossings": 732,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 0.0009955019260564357,
-                "maxEndpointJumpMm": 14.0492775341226,
+                "maxResidualAtCrossingMm": 0.0004977509630264831,
+                "maxEndpointJumpMm": 13.966538569268767,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009998892149268585
               },
               "testedToRefMm": {
                 "samples": 90,
-                "median": 2.818962722745816,
-                "p95": 4.453764956376765,
+                "median": 2.818572097745817,
+                "p95": 4.454155581376767,
                 "max": 4.981261657466737
               },
               "refToTestedMm": {
@@ -490,10 +490,10 @@
                 "resolvedCrossings": 1608,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19955654101995568,
-                "maxResidualAtCrossingMm": 0.0009909589477583973,
-                "maxEndpointJumpMm": 0.2803371113448758,
+                "maxResidualAtCrossingMm": 0.0002335606212251186,
+                "maxEndpointJumpMm": 0.0014015808118863836,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009990732544797108
               },
               "testedToRefMm": {
                 "samples": 238,
@@ -515,16 +515,16 @@
                 "resolvedCrossings": 732,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 0.0009955019260564357,
-                "maxEndpointJumpMm": 14.0492775341226,
+                "maxResidualAtCrossingMm": 0.0004977509630264831,
+                "maxEndpointJumpMm": 13.966538569268767,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009998892149268531
               },
               "testedToRefMm": {
                 "samples": 91,
-                "median": 1.9531620671613266,
-                "p95": 5.119302665217554,
-                "max": 7.041816716633726
+                "median": 1.9527714421613274,
+                "p95": 5.118928689348571,
+                "max": 7.041438022872781
               },
               "refToTestedMm": {
                 "samples": 1290,
@@ -540,16 +540,16 @@
                 "resolvedCrossings": 732,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 0.0009955019260564357,
-                "maxEndpointJumpMm": 14.0492775341226,
+                "maxResidualAtCrossingMm": 0.0004977509630264831,
+                "maxEndpointJumpMm": 13.966538569268767,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009998892149268585
               },
               "testedToRefMm": {
                 "samples": 91,
-                "median": 1.953162067161323,
-                "p95": 5.119302665217556,
-                "max": 7.041816716633729
+                "median": 1.9527714421613238,
+                "p95": 5.118928689348573,
+                "max": 7.041438022872785
               },
               "refToTestedMm": {
                 "samples": 1290,
@@ -608,10 +608,10 @@
                 "resolvedCrossings": 1608,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19955654101995568,
-                "maxResidualAtCrossingMm": 0.0009909589477583973,
-                "maxEndpointJumpMm": 0.2803371113448758,
+                "maxResidualAtCrossingMm": 0.0002335606212251186,
+                "maxEndpointJumpMm": 0.0014015808118863836,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009990732544797108
               },
               "testedToRefMm": {
                 "samples": 239,
@@ -633,20 +633,20 @@
                 "resolvedCrossings": 732,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 0.0009955019260564357,
-                "maxEndpointJumpMm": 14.0492775341226,
+                "maxResidualAtCrossingMm": 0.0004977509630264831,
+                "maxEndpointJumpMm": 13.966538569268767,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009998892149268531
               },
               "testedToRefMm": {
                 "samples": 85,
-                "median": 0.8302469837364392,
+                "median": 0.8306376087364384,
                 "p95": 6.752663949707714,
                 "max": 7.901324596662215
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 2.679562142687719,
+                "median": 2.679625171302832,
                 "p95": 9.835668935560461,
                 "max": 9.850483289046393
               }
@@ -658,20 +658,20 @@
                 "resolvedCrossings": 732,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 0.0009955019260564357,
-                "maxEndpointJumpMm": 14.0492775341226,
+                "maxResidualAtCrossingMm": 0.0004977509630264831,
+                "maxEndpointJumpMm": 13.966538569268767,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009998892149268585
               },
               "testedToRefMm": {
                 "samples": 85,
-                "median": 0.8302469837364392,
+                "median": 0.8306376087364384,
                 "p95": 6.75266394970773,
                 "max": 7.901324596662215
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 2.6795621426877196,
+                "median": 2.679625171302832,
                 "p95": 9.83566893556049,
                 "max": 9.850483289046394
               }
@@ -724,10 +724,10 @@
                 "resolvedCrossings": 1608,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19955654101995568,
-                "maxResidualAtCrossingMm": 0.0009909589477583973,
-                "maxEndpointJumpMm": 0.2803371113448758,
+                "maxResidualAtCrossingMm": 0.0002335606212251186,
+                "maxEndpointJumpMm": 0.0014015808118863836,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009990732544797108
               },
               "testedToRefMm": {
                 "samples": 239,
@@ -749,10 +749,10 @@
                 "resolvedCrossings": 732,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 0.0009955019260564357,
-                "maxEndpointJumpMm": 14.0492775341226,
+                "maxResidualAtCrossingMm": 0.0004977509630264831,
+                "maxEndpointJumpMm": 13.966538569268767,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009998892149268531
               },
               "testedToRefMm": {
                 "samples": 85,
@@ -762,7 +762,7 @@
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 2.677026853581268,
+                "median": 2.67708762689026,
                 "p95": 9.835705031407441,
                 "max": 9.85051413054412
               }
@@ -774,10 +774,10 @@
                 "resolvedCrossings": 732,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 0.0009955019260564357,
-                "maxEndpointJumpMm": 14.0492775341226,
+                "maxResidualAtCrossingMm": 0.0004977509630264831,
+                "maxEndpointJumpMm": 13.966538569268767,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009998892149268585
               },
               "testedToRefMm": {
                 "samples": 85,
@@ -787,7 +787,7 @@
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 2.677026853581268,
+                "median": 2.6770876268902604,
                 "p95": 9.83570503140747,
                 "max": 9.85051413054412
               }
@@ -840,10 +840,10 @@
                 "resolvedCrossings": 1608,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19955654101995568,
-                "maxResidualAtCrossingMm": 0.0009909589477583973,
-                "maxEndpointJumpMm": 0.2803371113448758,
+                "maxResidualAtCrossingMm": 0.0002335606212251186,
+                "maxEndpointJumpMm": 0.0014015808118863836,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009990732544797108
               },
               "testedToRefMm": {
                 "samples": 240,
@@ -865,20 +865,20 @@
                 "resolvedCrossings": 732,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 0.0009955019260564357,
-                "maxEndpointJumpMm": 14.0492775341226,
+                "maxResidualAtCrossingMm": 0.0004977509630264831,
+                "maxEndpointJumpMm": 13.966538569268767,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009998892149268531
               },
               "testedToRefMm": {
                 "samples": 98,
-                "median": 2.9179707443026706,
+                "median": 2.9183613693026698,
                 "p95": 8.874104676262965,
                 "max": 10.580132542904973
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 5.3211536151155014,
+                "median": 5.32106097627349,
                 "p95": 11.130920445020982,
                 "max": 12.175384214566389
               }
@@ -890,20 +890,20 @@
                 "resolvedCrossings": 732,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 0.0009955019260564357,
-                "maxEndpointJumpMm": 14.0492775341226,
+                "maxResidualAtCrossingMm": 0.0004977509630264831,
+                "maxEndpointJumpMm": 13.966538569268767,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009998892149268585
               },
               "testedToRefMm": {
                 "samples": 98,
-                "median": 2.9179707443026706,
+                "median": 2.9183613693026698,
                 "p95": 8.87410467626297,
                 "max": 10.580132542905002
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 5.3211536151155014,
+                "median": 5.32106097627349,
                 "p95": 11.130920445020985,
                 "max": 12.175384214566389
               }
@@ -960,10 +960,10 @@
               "resolvedCrossings": 1608,
               "unresolvedCrossings": 0,
               "resolutionMm": 0.19955654101995568,
-              "maxResidualAtCrossingMm": 0.0009909589477583973,
-              "maxEndpointJumpMm": 0.2803371113448758,
+              "maxResidualAtCrossingMm": 0.0002335606212251186,
+              "maxEndpointJumpMm": 0.0014015808118863836,
               "spatialTolMm": 0.001,
-              "maxBracketWidthMm": 0
+              "maxBracketWidthMm": 0.0009990732544797108
             },
             "testedToRefMm": {
               "samples": 478,
@@ -985,20 +985,20 @@
               "resolvedCrossings": 732,
               "unresolvedCrossings": 0,
               "resolutionMm": 0.19950124688279305,
-              "maxResidualAtCrossingMm": 0.0009955019260564357,
-              "maxEndpointJumpMm": 14.0492775341226,
+              "maxResidualAtCrossingMm": 0.0004977509630264831,
+              "maxEndpointJumpMm": 13.966538569268767,
               "spatialTolMm": 0.001,
-              "maxBracketWidthMm": 0
+              "maxBracketWidthMm": 0.0009998892149268531
             },
             "testedToRefMm": {
               "samples": 247,
-              "median": 0.27528570560842947,
+              "median": 0.2748950806084269,
               "p95": 3.937832686888041,
               "max": 5.689949245480405
             },
             "refToTestedMm": {
               "samples": 1290,
-              "median": 0.3883766372193142,
+              "median": 0.3887648631773899,
               "p95": 6.784941999813051,
               "max": 8.700945640500574
             }
@@ -1010,20 +1010,20 @@
               "resolvedCrossings": 732,
               "unresolvedCrossings": 0,
               "resolutionMm": 0.19950124688279305,
-              "maxResidualAtCrossingMm": 0.0009955019260564357,
-              "maxEndpointJumpMm": 14.0492775341226,
+              "maxResidualAtCrossingMm": 0.0004977509630264831,
+              "maxEndpointJumpMm": 13.966538569268767,
               "spatialTolMm": 0.001,
-              "maxBracketWidthMm": 0
+              "maxBracketWidthMm": 0.0009998892149268585
             },
             "testedToRefMm": {
               "samples": 247,
-              "median": 0.27528570560842947,
+              "median": 0.2748950806084269,
               "p95": 3.937832686888041,
               "max": 5.689949245480405
             },
             "refToTestedMm": {
               "samples": 1290,
-              "median": 0.3883766372193142,
+              "median": 0.3887648631773899,
               "p95": 6.784941999813036,
               "max": 8.700945640500588
             }
@@ -1076,10 +1076,10 @@
               "resolvedCrossings": 1608,
               "unresolvedCrossings": 0,
               "resolutionMm": 0.19955654101995568,
-              "maxResidualAtCrossingMm": 0.0009909589477583973,
-              "maxEndpointJumpMm": 0.2803371113448758,
+              "maxResidualAtCrossingMm": 0.0002335606212251186,
+              "maxEndpointJumpMm": 0.0014015808118863836,
               "spatialTolMm": 0.001,
-              "maxBracketWidthMm": 0
+              "maxBracketWidthMm": 0.0009990732544797108
             },
             "testedToRefMm": {
               "samples": 477,
@@ -1101,20 +1101,20 @@
               "resolvedCrossings": 732,
               "unresolvedCrossings": 0,
               "resolutionMm": 0.19950124688279305,
-              "maxResidualAtCrossingMm": 0.0009955019260564357,
-              "maxEndpointJumpMm": 14.0492775341226,
+              "maxResidualAtCrossingMm": 0.0004977509630264831,
+              "maxEndpointJumpMm": 13.966538569268767,
               "spatialTolMm": 0.001,
-              "maxBracketWidthMm": 0
+              "maxBracketWidthMm": 0.0009998892149268531
             },
             "testedToRefMm": {
               "samples": 258,
               "median": 0.0416871156681776,
               "p95": 1.873246421888274,
-              "max": 2.3599282960461188
+              "max": 2.360318921046118
             },
             "refToTestedMm": {
               "samples": 1290,
-              "median": 0.04435968449788771,
+              "median": 0.04396906217119857,
               "p95": 2.3225065322457055,
               "max": 2.91405400083518
             }
@@ -1126,20 +1126,20 @@
               "resolvedCrossings": 732,
               "unresolvedCrossings": 0,
               "resolutionMm": 0.19950124688279305,
-              "maxResidualAtCrossingMm": 0.0009955019260564357,
-              "maxEndpointJumpMm": 14.0492775341226,
+              "maxResidualAtCrossingMm": 0.0004977509630264831,
+              "maxEndpointJumpMm": 13.966538569268767,
               "spatialTolMm": 0.001,
-              "maxBracketWidthMm": 0
+              "maxBracketWidthMm": 0.0009998892149268585
             },
             "testedToRefMm": {
               "samples": 258,
               "median": 0.0416871156681776,
               "p95": 1.873246421888274,
-              "max": 2.3599282960461223
+              "max": 2.3603189210461215
             },
             "refToTestedMm": {
               "samples": 1290,
-              "median": 0.04435968449788771,
+              "median": 0.04396906217119857,
               "p95": 2.3225065322456917,
               "max": 2.914054000835193
             }
@@ -1185,10 +1185,10 @@
                 "resolvedCrossings": 1608,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19955654101995568,
-                "maxResidualAtCrossingMm": 0.0009909589477583973,
-                "maxEndpointJumpMm": 0.2803371113448758,
+                "maxResidualAtCrossingMm": 0.0002335606212251186,
+                "maxEndpointJumpMm": 0.0014015808118863836,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009990732544797108
               },
               "testedToRefMm": {
                 "samples": 441,
@@ -1210,22 +1210,22 @@
                 "resolvedCrossings": 732,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 0.0009955019260564357,
-                "maxEndpointJumpMm": 14.0492775341226,
+                "maxResidualAtCrossingMm": 0.0004977509630264831,
+                "maxEndpointJumpMm": 13.966538569268767,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009998892149268531
               },
               "testedToRefMm": {
                 "samples": 220,
-                "median": 0.6517897935584012,
-                "p95": 3.5921322629540176,
+                "median": 0.6513991685584012,
+                "p95": 3.5925228879540168,
                 "max": 4.4786538539529
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 1.3712421154210923,
-                "p95": 5.791542938273231,
-                "max": 7.407713539583541
+                "median": 1.3715153170857413,
+                "p95": 5.79181613993788,
+                "max": 7.407956538973113
               }
             },
             {
@@ -1235,22 +1235,22 @@
                 "resolvedCrossings": 732,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 0.0009955019260564357,
-                "maxEndpointJumpMm": 14.0492775341226,
+                "maxResidualAtCrossingMm": 0.0004977509630264831,
+                "maxEndpointJumpMm": 13.966538569268767,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009998892149268585
               },
               "testedToRefMm": {
                 "samples": 222,
                 "median": 0.7023949234088446,
-                "p95": 3.529782470066991,
+                "p95": 3.5301730950669934,
                 "max": 4.478654024613696
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 1.371242116764724,
-                "p95": 5.791542939616864,
-                "max": 7.407713538670313
+                "median": 1.3715153184293756,
+                "p95": 5.791816141281495,
+                "max": 7.407956538059885
               }
             }
           ]
@@ -1293,10 +1293,10 @@
                 "resolvedCrossings": 1608,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19955654101995568,
-                "maxResidualAtCrossingMm": 0.0009909589477583973,
-                "maxEndpointJumpMm": 0.2803371113448758,
+                "maxResidualAtCrossingMm": 0.0002335606212251186,
+                "maxEndpointJumpMm": 0.0014015808118863836,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009990732544797108
               },
               "testedToRefMm": {
                 "samples": 481,
@@ -1318,21 +1318,21 @@
                 "resolvedCrossings": 732,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 0.0009955019260564357,
-                "maxEndpointJumpMm": 14.0492775341226,
+                "maxResidualAtCrossingMm": 0.0004977509630264831,
+                "maxEndpointJumpMm": 13.966538569268767,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009998892149268531
               },
               "testedToRefMm": {
                 "samples": 222,
-                "median": 0.49444842718665216,
-                "p95": 4.103926001131765,
+                "median": 0.49405780218665307,
+                "p95": 4.1035353761317666,
                 "max": 4.5223785960939855
               },
               "refToTestedMm": {
                 "samples": 1290,
                 "median": 0.9831553915009802,
-                "p95": 5.281192818340812,
+                "p95": 5.280859166234616,
                 "max": 6.883125830567545
               }
             },
@@ -1343,10 +1343,10 @@
                 "resolvedCrossings": 732,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 0.0009955019260564357,
-                "maxEndpointJumpMm": 14.0492775341226,
+                "maxResidualAtCrossingMm": 0.0004977509630264831,
+                "maxEndpointJumpMm": 13.966538569268767,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009998892149268585
               },
               "testedToRefMm": {
                 "samples": 223,
@@ -1357,7 +1357,7 @@
               "refToTestedMm": {
                 "samples": 1290,
                 "median": 0.9422197639095015,
-                "p95": 5.281192818340812,
+                "p95": 5.280859166234616,
                 "max": 6.883125830567545
               }
             }
@@ -1411,10 +1411,10 @@
                 "resolvedCrossings": 1608,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19955654101995568,
-                "maxResidualAtCrossingMm": 0.0009909589477583973,
-                "maxEndpointJumpMm": 0.2803371113448758,
+                "maxResidualAtCrossingMm": 0.0002335606212251186,
+                "maxEndpointJumpMm": 0.0014015808118863836,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009990732544797108
               },
               "testedToRefMm": {
                 "samples": 477,
@@ -1436,20 +1436,20 @@
                 "resolvedCrossings": 732,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 0.0009955019260564357,
-                "maxEndpointJumpMm": 14.0492775341226,
+                "maxResidualAtCrossingMm": 0.0004977509630264831,
+                "maxEndpointJumpMm": 13.966538569268767,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009998892149268531
               },
               "testedToRefMm": {
                 "samples": 264,
-                "median": 0.03660352169720157,
+                "median": 0.03621289669720161,
                 "p95": 1.7810251361647667,
                 "max": 2.211249651321146
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 0.03853558082600233,
+                "median": 0.03846059222001072,
                 "p95": 2.0325299204423275,
                 "max": 2.461187774315783
               }
@@ -1461,20 +1461,20 @@
                 "resolvedCrossings": 732,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 0.0009955019260564357,
-                "maxEndpointJumpMm": 14.0492775341226,
+                "maxResidualAtCrossingMm": 0.0004977509630264831,
+                "maxEndpointJumpMm": 13.966538569268767,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009998892149268585
               },
               "testedToRefMm": {
                 "samples": 264,
-                "median": 0.03660352169720157,
+                "median": 0.03621289669720161,
                 "p95": 1.7810251361647667,
                 "max": 2.211249651321145
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 0.038535580826002086,
+                "median": 0.03846059222001072,
                 "p95": 2.0325299204423413,
                 "max": 2.461187774315797
               }
@@ -1527,10 +1527,10 @@
                 "resolvedCrossings": 1608,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19955654101995568,
-                "maxResidualAtCrossingMm": 0.0009909589477583973,
-                "maxEndpointJumpMm": 0.2803371113448758,
+                "maxResidualAtCrossingMm": 0.0002335606212251186,
+                "maxEndpointJumpMm": 0.0014015808118863836,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009990732544797108
               },
               "testedToRefMm": {
                 "samples": 477,
@@ -1552,20 +1552,20 @@
                 "resolvedCrossings": 732,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 0.0009955019260564357,
-                "maxEndpointJumpMm": 14.0492775341226,
+                "maxResidualAtCrossingMm": 0.0004977509630264831,
+                "maxEndpointJumpMm": 13.966538569268767,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009998892149268531
               },
               "testedToRefMm": {
                 "samples": 258,
                 "median": 0.0416871156681776,
                 "p95": 1.873246421888274,
-                "max": 2.3599282960461188
+                "max": 2.360318921046118
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 0.04435968449788771,
+                "median": 0.04396906217119857,
                 "p95": 2.3225065322457055,
                 "max": 2.91405400083518
               }
@@ -1577,20 +1577,20 @@
                 "resolvedCrossings": 732,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 0.0009955019260564357,
-                "maxEndpointJumpMm": 14.0492775341226,
+                "maxResidualAtCrossingMm": 0.0004977509630264831,
+                "maxEndpointJumpMm": 13.966538569268767,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009998892149268585
               },
               "testedToRefMm": {
                 "samples": 258,
                 "median": 0.0416871156681776,
                 "p95": 1.873246421888274,
-                "max": 2.3599282960461223
+                "max": 2.3603189210461215
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 0.04435968449788771,
+                "median": 0.04396906217119857,
                 "p95": 2.3225065322456917,
                 "max": 2.914054000835193
               }
@@ -1643,10 +1643,10 @@
                 "resolvedCrossings": 1608,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19955654101995568,
-                "maxResidualAtCrossingMm": 0.0009909589477583973,
-                "maxEndpointJumpMm": 0.2803371113448758,
+                "maxResidualAtCrossingMm": 0.0002335606212251186,
+                "maxEndpointJumpMm": 0.0014015808118863836,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009990732544797108
               },
               "testedToRefMm": {
                 "samples": 478,
@@ -1668,22 +1668,22 @@
                 "resolvedCrossings": 732,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 0.0009955019260564357,
-                "maxEndpointJumpMm": 14.0492775341226,
+                "maxResidualAtCrossingMm": 0.0004977509630264831,
+                "maxEndpointJumpMm": 13.966538569268767,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009998892149268531
               },
               "testedToRefMm": {
                 "samples": 253,
-                "median": 0.28842628954302457,
-                "p95": 4.2510489360006805,
+                "median": 0.28881691454302455,
+                "p95": 4.251439561000679,
                 "max": 5.78875399485898
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 0.40821111893784906,
-                "p95": 7.008788954733517,
-                "max": 8.900240630712322
+                "median": 0.40859987386580754,
+                "p95": 7.008830560710498,
+                "max": 8.900427212732632
               }
             },
             {
@@ -1693,22 +1693,22 @@
                 "resolvedCrossings": 732,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 0.0009955019260564357,
-                "maxEndpointJumpMm": 14.0492775341226,
+                "maxResidualAtCrossingMm": 0.0004977509630264831,
+                "maxEndpointJumpMm": 13.966538569268767,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009998892149268585
               },
               "testedToRefMm": {
                 "samples": 253,
-                "median": 0.28842628954302546,
-                "p95": 4.2510489360006805,
+                "median": 0.2888169145430254,
+                "p95": 4.251439561000679,
                 "max": 5.78875399485898
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 0.40821111893784906,
-                "p95": 7.008788954733517,
-                "max": 8.900240630712322
+                "median": 0.40859987386580754,
+                "p95": 7.008830560710499,
+                "max": 8.900427212732632
               }
             }
           ]
@@ -1763,20 +1763,20 @@
               "resolvedCrossings": 1608,
               "unresolvedCrossings": 0,
               "resolutionMm": 0.19955654101995568,
-              "maxResidualAtCrossingMm": 0.0009909589477583973,
-              "maxEndpointJumpMm": 0.2803371113448758,
+              "maxResidualAtCrossingMm": 0.0002335606212251186,
+              "maxEndpointJumpMm": 0.0014015808118863836,
               "spatialTolMm": 0.001,
-              "maxBracketWidthMm": 0
+              "maxBracketWidthMm": 0.0009990732544797108
             },
             "testedToRefMm": {
               "samples": 962,
-              "median": 0.002243486292713323,
+              "median": 0.002240398348286572,
               "p95": 0.022706132435981054,
               "max": 0.03965433650637335
             },
             "refToTestedMm": {
               "samples": 2488,
-              "median": 0.0022225423730908005,
+              "median": 0.002217019374617781,
               "p95": 0.021462573927358074,
               "max": 0.03902180069256318
             }
@@ -1788,22 +1788,22 @@
               "resolvedCrossings": 732,
               "unresolvedCrossings": 0,
               "resolutionMm": 0.19950124688279305,
-              "maxResidualAtCrossingMm": 0.0009955019260564357,
-              "maxEndpointJumpMm": 14.0492775341226,
+              "maxResidualAtCrossingMm": 0.0004977509630264831,
+              "maxEndpointJumpMm": 13.966538569268767,
               "spatialTolMm": 0.001,
-              "maxBracketWidthMm": 0
+              "maxBracketWidthMm": 0.0009998892149268531
             },
             "testedToRefMm": {
               "samples": 533,
               "median": 0.021823478624161882,
-              "p95": 0.5848465304016766,
+              "p95": 0.5852371554016765,
               "max": 1.0726217741939459
             },
             "refToTestedMm": {
               "samples": 1290,
               "median": 0.021670250089621132,
-              "p95": 0.6575760625482171,
-              "max": 1.3915798535854818
+              "p95": 0.6579652718722646,
+              "max": 1.3919359648058145
             }
           },
           {
@@ -1813,22 +1813,22 @@
               "resolvedCrossings": 732,
               "unresolvedCrossings": 0,
               "resolutionMm": 0.19950124688279305,
-              "maxResidualAtCrossingMm": 0.0009955019260564357,
-              "maxEndpointJumpMm": 14.0492775341226,
+              "maxResidualAtCrossingMm": 0.0004977509630264831,
+              "maxEndpointJumpMm": 13.966538569268767,
               "spatialTolMm": 0.001,
-              "maxBracketWidthMm": 0
+              "maxBracketWidthMm": 0.0009998892149268585
             },
             "testedToRefMm": {
               "samples": 533,
               "median": 0.021823478624161882,
-              "p95": 0.5848465304016766,
+              "p95": 0.5852371554016765,
               "max": 1.0726217741939459
             },
             "refToTestedMm": {
               "samples": 1290,
               "median": 0.021670250089635437,
-              "p95": 0.6575760625482171,
-              "max": 1.3915798535854818
+              "p95": 0.6579652718722646,
+              "max": 1.3919359648058145
             }
           }
         ]
@@ -1879,20 +1879,20 @@
               "resolvedCrossings": 1608,
               "unresolvedCrossings": 0,
               "resolutionMm": 0.19955654101995568,
-              "maxResidualAtCrossingMm": 0.0009909589477583973,
-              "maxEndpointJumpMm": 0.2803371113448758,
+              "maxResidualAtCrossingMm": 0.0002335606212251186,
+              "maxEndpointJumpMm": 0.0014015808118863836,
               "spatialTolMm": 0.001,
-              "maxBracketWidthMm": 0
+              "maxBracketWidthMm": 0.0009990732544797108
             },
             "testedToRefMm": {
               "samples": 963,
-              "median": 0.002247625246010707,
+              "median": 0.0022395361538380056,
               "p95": 0.022760521648938985,
               "max": 0.039627089439184866
             },
             "refToTestedMm": {
               "samples": 2488,
-              "median": 0.002230544630343403,
+              "median": 0.00222498535490316,
               "p95": 0.021604571901363688,
               "max": 0.03903071228812451
             }
@@ -1904,22 +1904,22 @@
               "resolvedCrossings": 732,
               "unresolvedCrossings": 0,
               "resolutionMm": 0.19950124688279305,
-              "maxResidualAtCrossingMm": 0.0009955019260564357,
-              "maxEndpointJumpMm": 14.0492775341226,
+              "maxResidualAtCrossingMm": 0.0004977509630264831,
+              "maxEndpointJumpMm": 13.966538569268767,
               "spatialTolMm": 0.001,
-              "maxBracketWidthMm": 0
+              "maxBracketWidthMm": 0.0009998892149268531
             },
             "testedToRefMm": {
               "samples": 545,
-              "median": 0.018537055082054263,
-              "p95": 0.49085490025657996,
-              "max": 0.742951097541928
+              "median": 0.01891683188449046,
+              "p95": 0.49124552525657905,
+              "max": 0.7433417225419305
             },
             "refToTestedMm": {
               "samples": 1290,
               "median": 0.01724289671336474,
-              "p95": 0.5003019759240344,
-              "max": 0.7934739577711187
+              "p95": 0.5006925389132522,
+              "max": 0.7938633964275001
             }
           },
           {
@@ -1929,22 +1929,22 @@
               "resolvedCrossings": 732,
               "unresolvedCrossings": 0,
               "resolutionMm": 0.19950124688279305,
-              "maxResidualAtCrossingMm": 0.0009955019260564357,
-              "maxEndpointJumpMm": 14.0492775341226,
+              "maxResidualAtCrossingMm": 0.0004977509630264831,
+              "maxEndpointJumpMm": 13.966538569268767,
               "spatialTolMm": 0.001,
-              "maxBracketWidthMm": 0
+              "maxBracketWidthMm": 0.0009998892149268585
             },
             "testedToRefMm": {
               "samples": 545,
-              "median": 0.018537055082054263,
-              "p95": 0.49085490025657996,
-              "max": 0.742951097541928
+              "median": 0.018916831884462366,
+              "p95": 0.49124552525657905,
+              "max": 0.7433417225419305
             },
             "refToTestedMm": {
               "samples": 1290,
               "median": 0.017242896713379044,
-              "p95": 0.5003019759240344,
-              "max": 0.7934739577711187
+              "p95": 0.5006925389132522,
+              "max": 0.7938633964275001
             }
           }
         ]
@@ -1988,20 +1988,20 @@
                 "resolvedCrossings": 1608,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19955654101995568,
-                "maxResidualAtCrossingMm": 0.0009909589477583973,
-                "maxEndpointJumpMm": 0.2803371113448758,
+                "maxResidualAtCrossingMm": 0.0002335606212251186,
+                "maxEndpointJumpMm": 0.0014015808118863836,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009990732544797108
               },
               "testedToRefMm": {
                 "samples": 885,
-                "median": 0.009804583901120342,
+                "median": 0.009826642175701023,
                 "p95": 0.03554835443071907,
                 "max": 0.04771625652299593
               },
               "refToTestedMm": {
                 "samples": 2488,
-                "median": 0.010201265962001547,
+                "median": 0.010211293863472248,
                 "p95": 0.035859679723977,
                 "max": 0.0477921513865852
               }
@@ -2013,22 +2013,22 @@
                 "resolvedCrossings": 732,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 0.0009955019260564357,
-                "maxEndpointJumpMm": 14.0492775341226,
+                "maxResidualAtCrossingMm": 0.0004977509630264831,
+                "maxEndpointJumpMm": 13.966538569268767,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009998892149268531
               },
               "testedToRefMm": {
                 "samples": 498,
                 "median": 0.0367321863301698,
                 "p95": 2.2116785507708228,
-                "max": 2.805381881982927
+                "max": 2.8057725069829296
               },
               "refToTestedMm": {
                 "samples": 1290,
                 "median": 0.10678893598936529,
-                "p95": 2.9434750021934057,
-                "max": 4.075282402037939
+                "p95": 2.9438480862865064,
+                "max": 4.075632435579001
               }
             },
             {
@@ -2038,22 +2038,22 @@
                 "resolvedCrossings": 732,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 0.0009955019260564357,
-                "maxEndpointJumpMm": 14.0492775341226,
+                "maxResidualAtCrossingMm": 0.0004977509630264831,
+                "maxEndpointJumpMm": 13.966538569268767,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009998892149268585
               },
               "testedToRefMm": {
                 "samples": 500,
                 "median": 0.038649120236803176,
                 "p95": 2.211678550770823,
-                "max": 2.8053817620998442
+                "max": 2.8057723870998466
               },
               "refToTestedMm": {
                 "samples": 1290,
                 "median": 0.10678893598933749,
-                "p95": 2.943475020149794,
-                "max": 4.075282418712187
+                "p95": 2.943848104242887,
+                "max": 4.07563245225325
               }
             }
           ]
@@ -2096,21 +2096,21 @@
                 "resolvedCrossings": 1608,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19955654101995568,
-                "maxResidualAtCrossingMm": 0.0009909589477583973,
-                "maxEndpointJumpMm": 0.2803371113448758,
+                "maxResidualAtCrossingMm": 0.0002335606212251186,
+                "maxEndpointJumpMm": 0.0014015808118863836,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009990732544797108
               },
               "testedToRefMm": {
                 "samples": 965,
                 "median": 0.038262222216486695,
-                "p95": 0.08979386626659464,
+                "p95": 0.08988185375815265,
                 "max": 0.10120815797865326
               },
               "refToTestedMm": {
                 "samples": 2488,
                 "median": 0.03808279569684353,
-                "p95": 0.0894813718500126,
+                "p95": 0.08950704306282048,
                 "max": 0.10121860784660046
               }
             },
@@ -2121,14 +2121,14 @@
                 "resolvedCrossings": 732,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 0.0009955019260564357,
-                "maxEndpointJumpMm": 14.0492775341226,
+                "maxResidualAtCrossingMm": 0.0004977509630264831,
+                "maxEndpointJumpMm": 13.966538569268767,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009998892149268531
               },
               "testedToRefMm": {
                 "samples": 505,
-                "median": 0.18706353738648027,
+                "median": 0.18745416238647936,
                 "p95": 1.1179040611346853,
                 "max": 1.4099886162556248
               },
@@ -2146,21 +2146,21 @@
                 "resolvedCrossings": 732,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 0.0009955019260564357,
-                "maxEndpointJumpMm": 14.0492775341226,
+                "maxResidualAtCrossingMm": 0.0004977509630264831,
+                "maxEndpointJumpMm": 13.966538569268767,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009998892149268585
               },
               "testedToRefMm": {
                 "samples": 504,
-                "median": 0.18382283036516567,
+                "median": 0.18421345536516476,
                 "p95": 1.0651333803160317,
                 "max": 1.409988616255601
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 0.1988996342158586,
-                "p95": 1.3927656038573193,
+                "median": 0.19895324395140668,
+                "p95": 1.3923909708015685,
                 "max": 2.0219203359126876
               }
             }
@@ -2214,20 +2214,20 @@
                 "resolvedCrossings": 1608,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19955654101995568,
-                "maxResidualAtCrossingMm": 0.0009909589477583973,
-                "maxEndpointJumpMm": 0.2803371113448758,
+                "maxResidualAtCrossingMm": 0.0002335606212251186,
+                "maxEndpointJumpMm": 0.0014015808118863836,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009990732544797108
               },
               "testedToRefMm": {
                 "samples": 963,
-                "median": 0.002247625245980053,
+                "median": 0.002240035844902156,
                 "p95": 0.022760083976837396,
                 "max": 0.039635200352961836
               },
               "refToTestedMm": {
                 "samples": 2488,
-                "median": 0.002230631419426497,
+                "median": 0.0022242396194211626,
                 "p95": 0.021610204635935847,
                 "max": 0.03904004428282116
               }
@@ -2239,22 +2239,22 @@
                 "resolvedCrossings": 732,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 0.0009955019260564357,
-                "maxEndpointJumpMm": 14.0492775341226,
+                "maxResidualAtCrossingMm": 0.0004977509630264831,
+                "maxEndpointJumpMm": 13.966538569268767,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009998892149268531
               },
               "testedToRefMm": {
                 "samples": 546,
                 "median": 0.019694206075423333,
-                "p95": 0.43334849396322106,
-                "max": 0.747405934958003
+                "p95": 0.43373911896322365,
+                "max": 0.7477965599580055
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 0.0167472733324715,
-                "p95": 0.4359337712574233,
-                "max": 0.7939436912266082
+                "median": 0.016795426371633306,
+                "p95": 0.4363242043357254,
+                "max": 0.7943332909059556
               }
             },
             {
@@ -2264,22 +2264,22 @@
                 "resolvedCrossings": 732,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 0.0009955019260564357,
-                "maxEndpointJumpMm": 14.0492775341226,
+                "maxResidualAtCrossingMm": 0.0004977509630264831,
+                "maxEndpointJumpMm": 13.966538569268767,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009998892149268585
               },
               "testedToRefMm": {
                 "samples": 546,
                 "median": 0.019694206075423333,
-                "p95": 0.43334849396322106,
-                "max": 0.747405934958003
+                "p95": 0.43373911896322365,
+                "max": 0.7477965599580055
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 0.016747273332499465,
-                "p95": 0.4359337712574233,
-                "max": 0.7939436912266082
+                "median": 0.016795426371633306,
+                "p95": 0.4363242043357254,
+                "max": 0.7943332909059556
               }
             }
           ]
@@ -2330,20 +2330,20 @@
                 "resolvedCrossings": 1608,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19955654101995568,
-                "maxResidualAtCrossingMm": 0.0009909589477583973,
-                "maxEndpointJumpMm": 0.2803371113448758,
+                "maxResidualAtCrossingMm": 0.0002335606212251186,
+                "maxEndpointJumpMm": 0.0014015808118863836,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009990732544797108
               },
               "testedToRefMm": {
                 "samples": 963,
-                "median": 0.002245557973388467,
+                "median": 0.002238078854345262,
                 "p95": 0.02276041843913859,
                 "max": 0.03962898549866606
               },
               "refToTestedMm": {
                 "samples": 2488,
-                "median": 0.002226131232294553,
+                "median": 0.002219785963761285,
                 "p95": 0.021614058718036608,
                 "max": 0.03902819729408041
               }
@@ -2355,22 +2355,22 @@
                 "resolvedCrossings": 732,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 0.0009955019260564357,
-                "maxEndpointJumpMm": 14.0492775341226,
+                "maxResidualAtCrossingMm": 0.0004977509630264831,
+                "maxEndpointJumpMm": 13.966538569268767,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009998892149268531
               },
               "testedToRefMm": {
                 "samples": 542,
                 "median": 0.019959729062975985,
-                "p95": 0.5009854609645086,
-                "max": 0.8859276929026674
+                "p95": 0.5013760859645077,
+                "max": 0.88631831790267
               },
               "refToTestedMm": {
                 "samples": 1290,
                 "median": 0.01877121909362176,
-                "p95": 0.5112525695506149,
-                "max": 0.9199736273926965
+                "p95": 0.5116414290107748,
+                "max": 0.9203639824227047
               }
             },
             {
@@ -2380,22 +2380,22 @@
                 "resolvedCrossings": 732,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 0.0009955019260564357,
-                "maxEndpointJumpMm": 14.0492775341226,
+                "maxResidualAtCrossingMm": 0.0004977509630264831,
+                "maxEndpointJumpMm": 13.966538569268767,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009998892149268585
               },
               "testedToRefMm": {
                 "samples": 542,
                 "median": 0.019959729063003417,
-                "p95": 0.5009854609645086,
-                "max": 0.8859276929026674
+                "p95": 0.5013760859645077,
+                "max": 0.88631831790267
               },
               "refToTestedMm": {
                 "samples": 1290,
                 "median": 0.01877121909364973,
-                "p95": 0.5112525695506149,
-                "max": 0.9199736273926965
+                "p95": 0.5116414290107748,
+                "max": 0.9203639824227047
               }
             }
           ]
@@ -2446,20 +2446,20 @@
                 "resolvedCrossings": 1608,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19955654101995568,
-                "maxResidualAtCrossingMm": 0.0009909589477583973,
-                "maxEndpointJumpMm": 0.2803371113448758,
+                "maxResidualAtCrossingMm": 0.0002335606212251186,
+                "maxEndpointJumpMm": 0.0014015808118863836,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009990732544797108
               },
               "testedToRefMm": {
                 "samples": 962,
-                "median": 0.002243486292713323,
+                "median": 0.002240398348286572,
                 "p95": 0.022706132435981054,
                 "max": 0.03965433650637335
               },
               "refToTestedMm": {
                 "samples": 2488,
-                "median": 0.0022225423730908005,
+                "median": 0.002217019374617781,
                 "p95": 0.021462573927358074,
                 "max": 0.03902180069256318
               }
@@ -2471,22 +2471,22 @@
                 "resolvedCrossings": 732,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 0.0009955019260564357,
-                "maxEndpointJumpMm": 14.0492775341226,
+                "maxResidualAtCrossingMm": 0.0004977509630264831,
+                "maxEndpointJumpMm": 13.966538569268767,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009998892149268531
               },
               "testedToRefMm": {
                 "samples": 533,
                 "median": 0.01930709825906463,
-                "p95": 0.5848465304016766,
+                "p95": 0.5852371554016765,
                 "max": 1.0726217741939459
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 0.01883766500928028,
-                "p95": 0.6575760625482171,
-                "max": 1.3915798535854818
+                "median": 0.018908197534552713,
+                "p95": 0.6579652718722646,
+                "max": 1.3919359648058145
               }
             },
             {
@@ -2496,22 +2496,22 @@
                 "resolvedCrossings": 732,
                 "unresolvedCrossings": 0,
                 "resolutionMm": 0.19950124688279305,
-                "maxResidualAtCrossingMm": 0.0009955019260564357,
-                "maxEndpointJumpMm": 14.0492775341226,
+                "maxResidualAtCrossingMm": 0.0004977509630264831,
+                "maxEndpointJumpMm": 13.966538569268767,
                 "spatialTolMm": 0.001,
-                "maxBracketWidthMm": 0
+                "maxBracketWidthMm": 0.0009998892149268585
               },
               "testedToRefMm": {
                 "samples": 533,
                 "median": 0.01930709825906566,
-                "p95": 0.5848465304016766,
+                "p95": 0.5852371554016765,
                 "max": 1.0726217741939459
               },
               "refToTestedMm": {
                 "samples": 1290,
-                "median": 0.01883766500928028,
-                "p95": 0.6575760625482171,
-                "max": 1.3915798535854818
+                "median": 0.018908197534552713,
+                "p95": 0.6579652718722646,
+                "max": 1.3919359648058145
               }
             }
           ]
@@ -3820,13 +3820,13 @@
       "candidate": {
         "coarse": {
           "t2rP95Mm": 1.873246421888274,
-          "t2rMaxMm": 2.3599282960461188,
+          "t2rMaxMm": 2.360318921046118,
           "r2tP95Mm": 2.3225065322457055,
           "r2tMaxMm": 2.91405400083518
         },
         "fine": {
           "t2rP95Mm": 1.8732388667891535,
-          "t2rMaxMm": 2.3599282960461223,
+          "t2rMaxMm": 2.3603189210461215,
           "r2tP95Mm": 2.344081293234478,
           "r2tMaxMm": 2.9644375715825495
         }
@@ -3861,13 +3861,13 @@
       "candidate": {
         "coarse": {
           "t2rP95Mm": 1.873246421888274,
-          "t2rMaxMm": 2.3599282960461223,
+          "t2rMaxMm": 2.3603189210461215,
           "r2tP95Mm": 2.3225065322456917,
           "r2tMaxMm": 2.914054000835193
         },
         "fine": {
           "t2rP95Mm": 1.8732388667891668,
-          "t2rMaxMm": 2.359928296046126,
+          "t2rMaxMm": 2.360318921046125,
           "r2tP95Mm": 2.3440812932344923,
           "r2tMaxMm": 2.964437571582563
         }

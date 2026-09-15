@@ -2,10 +2,11 @@
 
 **Date:** 2026-09-15 · **Follow-up to:**
 [`../2026-09-15-mesher-comparison/`](../2026-09-15-mesher-comparison/README.md)
-**Branch:** `codex/dispatch/2026-09-15-blud-dc-chamfer-fix1` (review corrections)
+**Branch:** `codex/dispatch/2026-09-15-blud-dc-chamfer-fix2` (final review
+corrections)
 **Base:** accepted comparison at `7f7cc9dc` (branch
 `codex/dispatch/2026-09-15-blud-mesher-comparison-fix3`)
-**Evidence fingerprint:** `2de7f092179f10b9:66446e75` (also recorded in
+**Evidence fingerprint:** `7118f04ae0925328:12ba5bb3` (also recorded in
 [`results.json`](results.json))
 **Preview:** open [`preview.html`](preview.html) — slice panels put the old DC,
 new DC, MC/SN context and the **dense field contour** side by side, plus tight
@@ -17,9 +18,10 @@ shaded/wireframe closeups.
 > evidence, or the existing CLI. The candidate is an experimental DC option,
 > not a promoted default.
 
-> **Corrections in this revision (Codex review, 2026-09-15).** The original
-> follow-up had six correctness problems, all fixed here; the original
-> comparison evidence is untouched.
+> **Corrections in this revision (Codex review, 2026-09-15).** The first review
+> had six correctness problems (fixed in `…-fix1`); the final narrow review
+> added a seventh (fixed in `…-fix2`). The original comparison evidence is
+> untouched.
 > 1. `fieldContour` was false-position mislabelled as bisection and returned a
 >    **stale endpoint residual**, so its "jump" classification measured the
 >    wrong point. It is now safeguarded false-position/bisection with forced
@@ -39,8 +41,17 @@ shaded/wireframe closeups.
 > 6. The head-increase "field error" explanation and the "irreducible operator
 >    component" in the pit were unproved causal claims; the first is now
 >    labelled speculation, the second is withdrawn (§1.1, §5).
-> Also: the base branch is `…-fix3` (not `-fix2`), and the candidate-vs-`0.02·cell`
-> selection rationale is stated in §2 without implying global optimality.
+> 7. (fix2) `refineCrossing` treated `|f| <= tol` as convergence and collapsed
+>    `lo = hi`. A small residual does **not** bound spatial error for an
+>    arbitrary field, so this fabricated a zero-width bracket — the Codex repro
+>    (`f = 1e-9·(x − 0.9)` over a 1 m edge) reported x = 0.5 with
+>    `maxBracketWidth` 0, a 0.4 m location error sold as 1 µm certainty.
+>    Refinement now stops only on the **actual** bracket width (`spatialTol`),
+>    `maxIters` exhaustion **throws**, and `maxEndpointJump` uses the **final**
+>    one-sided samples. The repro is a regression test in `dc-chamfer.test.ts`.
+> Also: the base is the accepted comparison branch `…-blud-mesher-comparison-fix3`,
+> and the candidate-vs-`0.02·cell` selection rationale is stated in §2 without
+> implying global optimality.
 
 ---
 
@@ -80,15 +91,16 @@ bisection bracketing and an explicit `spatialTol`,
   so just outside the band the field equals the body `a` (here ≈ −14 mm),
   while just inside it the value is `max(a, min(a + depth, inBand))` and
   approaches `0` as `inBand → 0`. The two one-sided bracket samples therefore
-  differ by **14.05 mm** even though the refined crossing is spatially
+  differ by **13.97 mm** even though the refined crossing is spatially
   resolvable. With correct bracketing the reference drives every crossing
   residual to **≤ 0.001 mm** (0 unresolved of 1608 seam / 732 pit crossings),
   and the bracket is pinned to the 1 µm `spatialTol`. The earlier follow-up
   reported "206 of 732 jumps, max |f| ≈ 13.97 mm": that was a bug — the old
-  refinement returned a **stale bracket-endpoint value** for `fv`, so the
-  reported residual did not measure the returned point. It is corrected here;
-  the rim still needs the operator's band-gate formula plus the one-sided
-  jump to be *classified*, but it is **not** an irreducible geometric error.
+  refinement returned a **stale bracket-endpoint value** for `fv`, so its
+  reported residual was in fact close to the one-sided jump (≈ 13.97 mm) and
+  did not measure the returned point. It is corrected here; the rim still needs
+  the operator's band-gate formula plus the one-sided jump to be *classified*,
+  but it is **not** an irreducible geometric error.
   A true no-zero jump (a hard step) is a different case, tested separately in
   [`dc-chamfer.test.ts`](../../../src/lab/sdf-zombie/mesher-comparison/dc-chamfer.test.ts).
 
@@ -134,10 +146,10 @@ with the corrected 0.2 mm reference contour):
 
 | notch-plus-z @ 10 mm (mm) | t2r med/p95/max | r2t med/p95/max | QEF clamps | clamps in region |
 | --- | --- | --- | ---: | ---: |
-| DC baseline | 0.275 / 3.938 / 5.690 | 0.388 / 6.785 / 8.701 | 72 | 10 / 26 |
+| DC baseline | 0.275 / 3.938 / 5.690 | 0.389 / 6.785 / 8.701 | 72 | 10 / 26 |
 | **DC candidate** | **0.042 / 1.873 / 2.360** | **0.044 / 2.323 / 2.914** | 32 | 3 / 26 |
-| DC eps 0.02·cell | 0.037 / 1.781 / 2.211 | 0.039 / 2.033 / 2.461 | 24 | 1 / 26 |
-| DC baseline, no clamp | 0.288 / 4.251 / 5.789 | 0.408 / 7.009 / 8.900 | 0 | 0 / 26 |
+| DC eps 0.02·cell | 0.036 / 1.781 / 2.211 | 0.038 / 2.033 / 2.461 | 24 | 1 / 26 |
+| DC baseline, no clamp | 0.289 / 4.251 / 5.789 | 0.409 / 7.009 / 8.900 | 0 | 0 / 26 |
 | marching cubes (context) | 0.652 / 3.592 / 4.479 | 1.371 / 5.792 / 7.408 | — | — |
 | surface nets (context) | 0.494 / 4.104 / 4.522 | 0.983 / 5.281 / 6.883 | — | — |
 
@@ -162,7 +174,7 @@ clamp is worse" does not rule it out.
 
 **Why the bounded `0.1·cell` candidate and not the better-scoring `0.02·cell`.**
 `dc-eps-002cell` does score better in the pit at 10 mm (`r2t` p95 2.033 vs
-2.323) and 5 mm (0.436 vs 0.500), and ties at 20 mm (9.836 vs 9.832). It was
+2.323) and 5 mm (0.436 vs 0.501), and ties at 20 mm (9.836 vs 9.832). It was
 not selected because it is a 5× finer, **unbounded** relative step with no
 independent calibration, while `clamp(0.1·cell, 0.1 mm, 2 mm)` reproduces
 upstream ALICE-SDF's fixed 1 mm exactly at the 10 mm focus cell, keeps the
@@ -180,8 +192,8 @@ rounding. Refining the cell fixes it for both DC variants:
 | --- | --- | --- | --- | --- |
 | | **DC baseline** | **DC candidate** | MC | SN |
 | 20 mm | 4.385 / 10.759 / 11.285 | 2.487 / 9.832 / 9.847 | 3.603 / 5.392 / 6.207 | 3.435 / 10.794 / 10.808 |
-| 10 mm | 0.388 / 6.785 / 8.701 | **0.044 / 2.323 / 2.914** | 1.371 / 5.792 / 7.408 | 0.983 / 5.281 / 6.883 |
-| 5 mm | 0.022 / 0.658 / 1.392 | **0.017 / 0.500 / 0.793** | 0.107 / 2.943 / 4.075 | 0.225 / 1.414 / 2.022 |
+| 10 mm | 0.389 / 6.785 / 8.701 | **0.044 / 2.323 / 2.914** | 1.372 / 5.792 / 7.408 | 0.983 / 5.281 / 6.883 |
+| 5 mm | 0.022 / 0.658 / 1.392 | **0.017 / 0.501 / 0.794** | 0.107 / 2.944 / 4.076 | 0.225 / 1.414 / 2.022 |
 
 So the honest verdict is two-part: **the pit error is dominated by resolution
 and by the operator's one-sided rim, which a finer cell fixes; within that
@@ -192,11 +204,10 @@ limit the finer Hermite step is a real, safe, local improvement.**
 ## 3. Calibration and regressions (no trade on the sharp-feature win)
 
 All DC variants on the synthetic fixtures (`chamfer-groove`, `control-sharp-box`,
-`control-sphere`) are closed, manifold meshes with 0 boundary edges, 0
-non-manifold edges, 0 orientation flips and no invalidity. That is a
-*closed-edge incidence* result on those fixtures: it does **not** establish full
-manifoldness or freedom from self-intersection, and it excludes the real head,
-whose fixture-level neck cut leaves **106 boundary edges for every method**.
+`control-sphere`) **pass the closed-edge-incidence checks**: 0 boundary edges,
+0 non-manifold edges, 0 orientation flips and no invalidity. This is the edge
+incidence result only; it excludes the real head, whose fixture-level neck cut
+leaves **106 boundary edges for every method**.
 
 **Sharp box (`control-sharp-box`, exact analytic field).** Worst
 triangle-surface distance from the four true corners (mm):
@@ -297,10 +308,11 @@ panels are unshaded geometry against the field contour.
   no Hausdorff or global surface error is claimed. It is a fixed **0.2 mm**
   spacing; a 0.1 mm re-run reproduces the pit ratios (see §2).
 - The `sdGroove` rim is a **one-sided sign boundary** (the two bracket samples
-  differ by ~14.05 mm), but the refined crossing residual is ≤0.001 mm, so the
+  differ by ~13.97 mm), but the refined crossing residual is ≤0.001 mm, so the
   pit numbers here do **not** include an irreducible operator component. A true
-  hard-step discontinuity (no zero) is tested separately and is rejected as a
-  resolvable crossing with a positional bound.
+  hard-step discontinuity (no zero) is a separate tested case: it is still
+  spatially bracketed to `spatialTol`, but its returned residual stays above
+  `tol`, so it is reported as `unresolvedCrossings`, never as a resolved zero.
 - A signed field jump is **not** by itself evidence of irreducible geometric
   error: the boundary can still be approximated to the reference's spatial
   precision.
