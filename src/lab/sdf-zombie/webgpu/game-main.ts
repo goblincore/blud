@@ -1142,7 +1142,7 @@ async function main() {
       if (raw === undefined || !Number.isFinite(raw)) continue;
       switch (k as DynamiteTuningKey) {
         case 'maxchunks':
-          maxChunks = Math.max(1, Math.min(96, Math.round(raw)));
+          maxChunks = Math.max(1, Math.min(MAX_CHUNK_BUDGET, Math.round(raw)));
           break;
         case 'mode':
           gibMode = GIB_MODES[Math.max(0, Math.min(2, Math.round(raw)))]!;
@@ -4700,6 +4700,32 @@ async function main() {
   // SDF chunk path — the same pipeline the lab gibs with, capped and
   // recycled so a gore party cannot churn views unboundedly.
   const MAX_CHUNKS = 12;
+  /**
+   * THE CHUNK-VIEW CEILING — what the shared record pool must be sized for.
+   *
+   * `MAX_CHUNKS` above is the PRE-DYNAMITE constant (12). The view recycler
+   * deliberately does not use it: `?maxchunks` is a live knob because a full-body
+   * gib is 19-20 pieces, and the comment on `maxChunks` records what a 12-view
+   * pool looked like — pieces 13-20 stealing the views of pieces 1-8 inside one
+   * call, which the owner read as "a weird distortion of the SDF bodies like
+   * jumping into positions".
+   *
+   * Main's crowd march (stage a, task 7c) then gave every chunk a SLOT in one
+   * shared record buffer, and `createSharedChunkGpuMaterial` sizes that buffer
+   * from what the page passes: "the page passes its own view cap (MAX_CHUNKS) so
+   * the pool can never under-allocate". On this branch that call site was passing
+   * the stale 12 while the recycler allowed 64, so the 13th piece of any real gib
+   * hit `shared chunk material is full (12 slots)` — THROWN, inside `gibActor`,
+   * inside the tick. The throw landed after the body had already been spliced out
+   * of `pendingGibs`, so the gib vanished silently: `gibbed` incremented,
+   * `gibPieces` stayed 0, the actor was never retired, and nothing reached the
+   * console because the animation loop swallowed it.
+   *
+   * So the pool is sized from the knob's CEILING, not its current value: the
+   * material is built once at boot and `?maxchunks` / the tuning panel can raise
+   * the budget at any time afterwards. 96 records is 16 vec4s each — 24 KB.
+   */
+  const MAX_CHUNK_BUDGET = 96;
   // ——— DYNAMITE TUNING KNOBS (2026-09-10) ————————————————————————————————
   // The whole point of the slot-2 feature is to JUDGE the blast and the gib, so
   // the numbers that decide both are live seams rather than constants:
@@ -4723,7 +4749,7 @@ async function main() {
   // LIVE, all of these: the panel that tunes the gib sits beside the frame, and
   // a knob that needs a reload per attempt is a knob the owner cannot use. The
   // boot params below set the STARTING values.
-  let maxChunks = parseIntParam(DYN_PARAMS.get('maxchunks'), { min: 1, max: 96 }) ?? 64;
+  let maxChunks = parseIntParam(DYN_PARAMS.get('maxchunks'), { min: 1, max: MAX_CHUNK_BUDGET }) ?? 64;
   // GIBS ARE NOT BODIES. The resolver's concussion launch is tuned for DUDES
   // (EXPLOSION_LAUNCH.velocityScale 0.028 on impulse 900 = ~25 m/s point-blank,
   // "a survivor crosses the room"), and firing CHUNKS at that speed threw them
@@ -4923,8 +4949,8 @@ async function main() {
   const chunkMaterial = createSharedChunkGpuMaterial(
     deferredMode ? undefined : sdfLayer.prev,
     deferredMode
-      ? { output: 'surface', shadowReceiver: 'level-only', maxChunks: MAX_CHUNKS }
-      : { maxChunks: MAX_CHUNKS },
+      ? { output: 'surface', shadowReceiver: 'level-only', maxChunks: MAX_CHUNK_BUDGET }
+      : { maxChunks: MAX_CHUNK_BUDGET },
   );
   const chunkViews: ChunkGpuView[] = [];
   const spareChunkViews: ChunkGpuView[] = [];
