@@ -201,13 +201,18 @@ export function isGeneratedRelPath(rel: string, kind: 'run' | 'evidence'): boole
 /** Read + validate an exact-file manifest; throws (deleting nothing) on corruption or an unsafe entry. */
 export function readGeneratedManifest(dir: string, manifestName: string, kind: 'run' | 'evidence', label: string): string[] {
   const manifestPath = join(dir, manifestName);
-  let parsed: { generated?: unknown };
+  let parsed: unknown;
   try {
-    parsed = JSON.parse(readFileSync(manifestPath, 'utf8')) as { generated?: unknown };
+    parsed = JSON.parse(readFileSync(manifestPath, 'utf8'));
   } catch {
     throw new Error(`${label}: manifest ${manifestPath} is missing or not valid JSON; refusing to delete anything`);
   }
-  const generated = parsed.generated;
+  // A malformed top-level shape (null / array / scalar) must fail with an
+  // explicit message, not an accidental TypeError on property access.
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`${label}: manifest ${manifestPath} has no 'generated' array; refusing to delete anything`);
+  }
+  const generated = (parsed as { generated?: unknown }).generated;
   if (!Array.isArray(generated)) {
     throw new Error(`${label}: manifest ${manifestPath} has no 'generated' array; refusing to delete anything`);
   }
@@ -296,6 +301,38 @@ function collectEvidenceEntries(base: string): Set<string> {
 }
 
 /**
+ * lstat the final path component without following it. Returns null only when
+ * the name genuinely does not exist, so a dangling symlink is observed (as a
+ * symlink) instead of being mistaken for "absent" the way `existsSync` would.
+ */
+function lstatOrNull(p: string): ReturnType<typeof lstatSync> | null {
+  try {
+    return lstatSync(p);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw err;
+  }
+}
+
+/**
+ * Ownership metadata (run marker / run manifest / evidence manifest) must be a
+ * real regular file. Reject symlinks — including dangling ones — and any other
+ * non-regular type before we read, delete, or overwrite. Returns 'missing' so
+ * each caller can phrase its own "required" error.
+ */
+function classifyMetadataFile(p: string, label: string, what: string): 'regular' | 'missing' {
+  const st = lstatOrNull(p);
+  if (st === null) return 'missing';
+  if (st.isSymbolicLink()) {
+    throw new Error(`${label}: ${what} ${p} is a symlink; refusing to follow it — replace it with a regular file or use a fresh output directory`);
+  }
+  if (!st.isFile()) {
+    throw new Error(`${label}: ${what} ${p} is not a regular file; refusing to use it — use a fresh output directory`);
+  }
+  return 'regular';
+}
+
+/**
  * Prepare a task-owned run directory for reuse. An empty or nonexistent target
  * is fine. A populated target is touched only when it carries our ownership
  * marker AND an exact-file manifest; only the manifest's files are deleted and
@@ -303,21 +340,25 @@ function collectEvidenceEntries(base: string): Set<string> {
  * Any other populated directory is rejected untouched.
  */
 export function prepareOwnedDir(abs: string, label: string): void {
-  if (!existsSync(abs)) {
+  const dirStat = lstatOrNull(abs);
+  if (dirStat === null) {
     mkdirSync(abs, { recursive: true });
   } else {
-    const st = lstatSync(abs);
-    if (st.isSymbolicLink()) throw new Error(`${label}: refusing to use symlinked directory ${abs}`);
-    if (!st.isDirectory()) throw new Error(`${label}: ${abs} exists and is not a directory`);
+    if (dirStat.isSymbolicLink()) throw new Error(`${label}: refusing to use symlinked directory ${abs}`);
+    if (!dirStat.isDirectory()) throw new Error(`${label}: ${abs} exists and is not a directory`);
     if (readdirSync(abs).length > 0) {
       const markerPath = join(abs, RUN_MARKER);
-      if (!existsSync(markerPath)) {
+      const manifestPath = join(abs, RUN_MANIFEST);
+      // Validate BOTH ownership metadata names at entry, before reading or
+      // deleting anything: a symlinked marker/manifest could otherwise be read
+      // through and later overwritten (the manifest is written at run end).
+      if (classifyMetadataFile(markerPath, label, 'ownership marker') === 'missing') {
         throw new Error(`${label}: ${abs} is a populated directory without the tool ownership marker (${RUN_MARKER}); refusing to delete it — use a fresh output directory`);
       }
       if (readFileSync(markerPath, 'utf8').trim() !== RUN_MARKER_MAGIC) {
         throw new Error(`${label}: ${abs} has a corrupt ownership marker; refusing to delete it — use a fresh output directory`);
       }
-      if (!existsSync(join(abs, RUN_MANIFEST))) {
+      if (classifyMetadataFile(manifestPath, label, 'generated-file manifest') === 'missing') {
         throw new Error(`${label}: ${abs} carries a marker but no generated-file manifest (${RUN_MANIFEST}); refusing to delete it — use a fresh output directory`);
       }
       const owned = readGeneratedManifest(abs, RUN_MANIFEST, 'run', label);
@@ -347,9 +388,13 @@ export interface EvidenceCleanup {
  * nothing is deleted (a fresh evidence dir is written directly).
  */
 export function cleanEvidenceDir(evidenceDir: string, label = '--evidence'): EvidenceCleanup {
+  // Validate the ownership manifest name before mkdir/cleanup: a symlinked
+  // manifest must never be followed for a read or a later overwrite.
+  const manifestPath = join(evidenceDir, EVIDENCE_MANIFEST);
+  const manifestKind = classifyMetadataFile(manifestPath, label, 'evidence manifest');
   mkdirSync(evidenceDir, { recursive: true });
   const owned = new Set<string>();
-  if (existsSync(join(evidenceDir, EVIDENCE_MANIFEST))) {
+  if (manifestKind === 'regular') {
     for (const rel of readGeneratedManifest(evidenceDir, EVIDENCE_MANIFEST, 'evidence', label)) owned.add(rel);
   }
   const before = collectEvidenceEntries(evidenceDir);

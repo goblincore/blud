@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 import {
-  EVIDENCE_MANIFEST, MAX_GRID_CELLS, RUN_MARKER, RUN_MANIFEST,
+  EVIDENCE_MANIFEST, MAX_GRID_CELLS, RUN_MARKER, RUN_MARKER_MAGIC, RUN_MANIFEST,
   assertDisjoint, assertEvidencePlan, assertGridBudget, cleanEvidenceDir, isGeneratedRelPath,
   parseArgs, prepareOwnedDir, resolveWithinRoot, validateArgs, writeJson,
 } from './blob-mesh-compare';
@@ -213,6 +213,9 @@ describe('CLI output ownership', () => {
       JSON.stringify({ generated: ['/abs.glb'] }),
       JSON.stringify({ generated: ['meshes/../../src/x.glb'] }),
       JSON.stringify({ generated: ['meshes/x.glb', 'human.txt'] }),
+      'null',
+      '[]',
+      '[1,2]',
     ];
     for (const body of bad) {
       const root = sandbox();
@@ -255,6 +258,64 @@ describe('CLI output ownership', () => {
     expect(isGeneratedRelPath('notes.txt', 'evidence')).toBe(false);
     expect(isGeneratedRelPath('/etc/passwd', 'evidence')).toBe(false);
     expect(isGeneratedRelPath('meshes/a.glb/extra', 'run')).toBe(false);
+  });
+
+  it('rejects a symlinked or dangling ownership marker, keeping the target and owned output', () => {
+    for (const linkKind of ['regular', 'dangling'] as const) {
+      const root = sandbox();
+      const owned = join(root, 'owned');
+      mkdirSync(owned, { recursive: true });
+      writeFileSync(join(owned, RUN_MANIFEST), JSON.stringify({ generated: ['results.json'] }));
+      writeFileSync(join(owned, 'results.json'), 'owned-output');
+      const sentinel = join(root, 'unrelated.json');
+      const target = linkKind === 'regular' ? sentinel : join(root, 'never-created.json');
+      if (linkKind === 'regular') writeFileSync(sentinel, `${RUN_MARKER_MAGIC}\nSENTINEL`);
+      symlinkSync(target, join(owned, RUN_MARKER));
+      expect(() => prepareOwnedDir(owned, '--out')).toThrow(/symlink/);
+      expect(readFileSync(join(owned, 'results.json'), 'utf8')).toBe('owned-output');
+      if (linkKind === 'regular') expect(readFileSync(sentinel, 'utf8')).toBe(`${RUN_MARKER_MAGIC}\nSENTINEL`);
+      else expect(existsSync(target)).toBe(false);
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a symlinked or dangling run manifest, keeping the target and owned output', () => {
+    for (const linkKind of ['regular', 'dangling'] as const) {
+      const root = sandbox();
+      const owned = join(root, 'owned');
+      mkdirSync(owned, { recursive: true });
+      writeFileSync(join(owned, RUN_MARKER), `${RUN_MARKER_MAGIC}\n`);
+      writeFileSync(join(owned, 'results.json'), 'owned-output');
+      const sentinel = join(root, 'unrelated.json');
+      const target = linkKind === 'regular' ? sentinel : join(root, 'never-created.json');
+      if (linkKind === 'regular') writeFileSync(sentinel, '{"generated":[]}');
+      symlinkSync(target, join(owned, RUN_MANIFEST));
+      expect(() => prepareOwnedDir(owned, '--out')).toThrow(/symlink/);
+      expect(readFileSync(join(owned, 'results.json'), 'utf8')).toBe('owned-output');
+      if (linkKind === 'regular') expect(readFileSync(sentinel, 'utf8')).toBe('{"generated":[]}');
+      else expect(existsSync(target)).toBe(false);
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a symlinked or dangling evidence manifest, keeping the target and owned output', () => {
+    for (const linkKind of ['regular', 'dangling'] as const) {
+      const root = sandbox();
+      const ev = join(root, 'evidence');
+      mkdirSync(join(ev, 'meshes'), { recursive: true });
+      writeFileSync(join(ev, 'meshes', 'owned.glb'), 'owned-output');
+      writeFileSync(join(ev, 'README.md'), 'human notes');
+      const sentinel = join(root, 'unrelated.json');
+      const target = linkKind === 'regular' ? sentinel : join(root, 'never-created.json');
+      if (linkKind === 'regular') writeFileSync(sentinel, JSON.stringify({ generated: ['meshes/owned.glb'] }));
+      symlinkSync(target, join(ev, EVIDENCE_MANIFEST));
+      expect(() => cleanEvidenceDir(ev)).toThrow(/symlink/);
+      expect(readFileSync(join(ev, 'meshes', 'owned.glb'), 'utf8')).toBe('owned-output');
+      expect(readFileSync(join(ev, 'README.md'), 'utf8')).toBe('human notes');
+      if (linkKind === 'regular') expect(readFileSync(sentinel, 'utf8')).toBe(JSON.stringify({ generated: ['meshes/owned.glb'] }));
+      else expect(existsSync(target)).toBe(false);
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 
