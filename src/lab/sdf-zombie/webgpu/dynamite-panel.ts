@@ -48,6 +48,10 @@ export type DynamiteTuningKey =
   // ——— the gib
   | 'maxchunks' | 'mode' | 'bones' | 'stagger' | 'tearSec' | 'tearAmp'
   | 'tearJiggle' | 'gibvel'
+  // ——— what a SETTLED piece looks like. A chunk stops being marched when it
+  //     comes to rest and becomes a static mesh; these three are the only
+  //     per-pixel detail that mesh has.
+  | 'chunkdetail' | 'chunkdetailfreq' | 'chunkdetailalbedo'
   // ——— the BLAST (its own group: these are what the blast DOES to the world,
   //     as opposed to what it looks like — see the owner's report in the table)
   | 'aoesize' | 'edgekick'
@@ -83,6 +87,26 @@ const _DYNAMITE_KEYS = [
   { key: 'tearAmp', label: 'tear bulge (m)', min: 0, max: 0.12, step: 0.005, value: 0.035 },
   { key: 'tearJiggle', label: 'tear jiggle', min: 0, max: 1, step: 0.05, value: 0.4 },
   { key: 'gibvel', label: 'piece launch', min: 0, max: 2, step: 0.05, value: 0.35 },
+  // ——— SETTLED-PIECE DETAIL. A marched chunk carries the march's per-pixel
+  // micro-detail; the moment it settles it bakes to a static mesh and loses it,
+  // which is the owner's "after a second or two after landing they turn into the
+  // white smooth albedo". These put it back, and they are SLIDERS rather than
+  // constants because every one of them is a look call:
+  //
+  //   grain     amplitude. The creature's own authored value is 0.06 and that
+  //             is invisible on a mesh — the march applies it to a per-pixel
+  //             analytic normal, a baked chunk to an interpolated vertex normal.
+  //             The page multiplies the creature's value by a gain and this
+  //             slider overrides the result outright.
+  //   grain size  the noise DOMAIN. Lower is coarser. The march's 22 aliases
+  //             here: fbm sums octaves at 4x and 9x, so 22 lands the fine one at
+  //             5 mm against 1 cm cells — "little dots ... like glitter".
+  //   grain tint  how much of the contrast is COLOUR rather than relief. The
+  //             living skin's texture is mostly colour; a baked chunk carries
+  //             that per-VERTEX only, which at 1 cm spacing is a blotch.
+  { key: 'chunkdetail', label: 'grain', min: 0, max: 1, step: 0.01, value: 0.36 },
+  { key: 'chunkdetailfreq', label: 'grain size', min: 0.5, max: 32, step: 0.5, value: 7 },
+  { key: 'chunkdetailalbedo', label: 'grain tint', min: 0, max: 1.5, step: 0.02, value: 0.28 },
   // ——— THE BLAST ITSELF, first because it is the first thing to reach for. The
   // owner, playing this: "it seems the effective radius of the explosion is
   // quite large … the area of effect should be abit more focused", AND a body

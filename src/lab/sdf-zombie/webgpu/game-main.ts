@@ -1165,6 +1165,20 @@ async function main() {
         case 'gibvel':
           gibVelScale = Math.max(0, Math.min(2, raw));
           break;
+        // SETTLED-PIECE DETAIL. `chunkdetail` sets the OVERRIDE, so once the
+        // slider is touched the piece stops following the creature's own
+        // surfaceNoiseAmp — which is the point of a look lever. The per-frame
+        // push reads all three, so a settled piece already on the floor changes
+        // on the next frame; there is no rebake.
+        case 'chunkdetail':
+          chunkDetailOverride = Math.max(0, Math.min(1, raw));
+          break;
+        case 'chunkdetailfreq':
+          chunkDetailFreq = Math.max(0.5, Math.min(64, raw));
+          break;
+        case 'chunkdetailalbedo':
+          chunkDetailAlbedo = Math.max(0, Math.min(1.5, raw));
+          break;
         case 'aoesize':
           aoeRadiusScale = Math.max(0.3, Math.min(1.5, raw));
           break;
@@ -1226,6 +1240,14 @@ async function main() {
       tearAmp: tearShape.amplitudeM,
       tearJiggle: tearShape.jiggleAmp,
       gibvel: gibVelScale,
+      // The settled piece's detail. `chunkdetail` reports the EFFECTIVE
+      // amplitude — the override if one is set, otherwise the creature's own
+      // surfaceNoiseAmp through the gain — because that is what the slider
+      // should show on open, and what the shader is actually using.
+      chunkdetail: chunkDetailOverride
+        ?? Math.min(1, (actors[0]?.view.uniforms.surfCfg2.value.y ?? 0) * CHUNK_DETAIL_GAIN),
+      chunkdetailfreq: chunkDetailFreq,
+      chunkdetailalbedo: chunkDetailAlbedo,
       aoesize: aoeRadiusScale,
       edgekick: aoeLaunchFloor,
       fxsize: fxSize,
@@ -1948,6 +1970,18 @@ async function main() {
       // Falls through with the last value when the cast is empty, so a piece
       // does not go smooth the moment its own body is the last one gibbed.
       const liveSurf = actors[0]?.view.uniforms.surfCfg2.value;
+      // THE ROOM'S LIGHT, every frame — not just the beam.
+      //
+      // `seedBaked` copies lightDir/keyColor/lightCfg and derives an ambient from
+      // body 1's six wall colours ONCE, when the material is created. So a
+      // settled piece was frozen to whatever room the FIRST chunk happened to
+      // bake in: carry the gore next door and it keeps the old room's fill,
+      // while the marched bodies beside it track the new one. The owner:
+      // "it doesnt appeart they follow the ambient and other enviroment light".
+      //
+      // Re-derived here from the same live view the seed read, by the same
+      // formula, so the only thing that changes is WHEN it is sampled.
+      const liveView = actors[0]?.view.uniforms;
       // `?chunkdetail=` / `__sdfGame.setChunkDetail(x)` overrides the creature's
       // own amplitude. The shipped value is the flesh preset's surfaceNoiseAmp
       // (0.06), which is deliberately subtle on a marched body and is therefore
@@ -1961,7 +1995,26 @@ async function main() {
         bu.spotCfg.value.set(spotOn, cosInner, cosOuter, flashlight.spot.distance);
         bu.spotColor.value.copy(flashlight.spot.color);
         bu.spotCfg2.value.set(beamTuning.gain, beamTuning.shoulder, beamTuning.keyFloor, 0);
-        if (detailAmp !== null) bu.fleshDetail.value.x = detailAmp;
+        if (detailAmp !== null) {
+          bu.fleshDetail.value.set(
+            detailAmp, chunkDetailFreq, chunkDetailAlbedo, 0);
+        }
+        if (liveView) {
+          bu.lightDir.value.copy(liveView.lightDir.value);
+          bu.keyColor.value.copy(liveView.keyColor.value);
+          bu.lightCfg.value.copy(liveView.lightCfg.value);
+          const w = [liveView.wallNegX, liveView.wallPosX, liveView.wallNegY,
+            liveView.wallPosY, liveView.wallNegZ, liveView.wallPosZ];
+          let mr = 0, mg = 0, mb = 0;
+          for (const c of w) { mr += c.value.r / 6; mg += c.value.g / 6; mb += c.value.b / 6; }
+          const fill = liveView.lightCfg.value.y;
+          const key = liveView.keyColor.value;
+          const pw = liveView.bounceCfg.value.x;
+          bu.ambient.value.setRGB(
+            fill * key.r + pw * mr * 0.5,
+            fill * key.g + pw * mg * 0.5,
+            fill * key.b + pw * mb * 0.5);
+        }
       }
     }
     // Front-to-back per-body passes (perf round 2 task 5): register this
@@ -4884,11 +4937,29 @@ async function main() {
    * settled piece still follows.
    */
   const CHUNK_DETAIL_GAIN = 6;
+  /** Domain scale for the settled piece's detail noise — the march uses 22 and
+   *  that is WRONG HERE. `fbm` sums octaves at 4x and 9x, so 22 lands them at
+   *  1.1 cm and 5 mm; the bake's cells are 1 cm, so the fine octave is sub-facet
+   *  and aliases into speckle ("little dots ... like glitter"). At 7 the octaves
+   *  are 3.6 cm and 1.6 cm — the finest is still ~1.6 cells, which is the
+   *  smallest a vertex-normal mesh can carry without sparkling. */
+  const CHUNK_DETAIL_FREQ = 7;
+  /** How hard the same field pushes the ALBEDO, +/- this fraction. Normal
+   *  perturbation alone reads as low contrast on a mesh; the living skin's
+   *  contrast is mostly colour. */
+  const CHUNK_DETAIL_ALBEDO = 0.28;
   /** Override for the settled piece's micro-detail amplitude; null = follow the
    *  live creature's `surfCfg2.y` through CHUNK_DETAIL_GAIN. See the per-frame
    *  push and `setChunkDetail`. */
   let chunkDetailOverride: number | null =
     parseFloatParam(DYN_PARAMS.get('chunkdetail'), { min: 0, max: 1 }) ?? null;
+  /** Live twins of CHUNK_DETAIL_FREQ / CHUNK_DETAIL_ALBEDO. Both are LOOK
+   *  judgements — how coarse the grain should be, and how much of the contrast
+   *  should be colour rather than relief — so both sweep without a reload. */
+  let chunkDetailFreq = parseFloatParam(DYN_PARAMS.get('chunkdetailfreq'), { min: 0.5, max: 64 })
+    ?? CHUNK_DETAIL_FREQ;
+  let chunkDetailAlbedo = parseFloatParam(DYN_PARAMS.get('chunkdetailalbedo'), { min: 0, max: 1.5 })
+    ?? CHUNK_DETAIL_ALBEDO;
   const gibSpriteLiveCap = parseIntParam(DYN_PARAMS.get('gibspritelive'), { min: 1, max: 512 })
     ?? GIB_SPRITE_TUNING.liveCap;
   const gibSpriteRestCap = parseIntParam(DYN_PARAMS.get('gibspriterest'), { min: 0, max: 512 })
@@ -12774,11 +12845,15 @@ function performBenchAction(a: BenchAction): void {
      *  the live creature (the shipped behaviour); a number overrides it, which
      *  is how to judge a term whose authored value is 0.06. Live: no rebake,
      *  the pieces already on the floor change on the next frame. */
-    setChunkDetail(x: number | null) {
+    setChunkDetail(x: number | null, o?: { freq?: number; albedo?: number }) {
       chunkDetailOverride = x === null ? null : Math.max(0, Math.min(1, x));
-      return chunkDetailOverride;
+      if (o?.freq !== undefined) chunkDetailFreq = Math.max(0.5, Math.min(64, o.freq));
+      if (o?.albedo !== undefined) chunkDetailAlbedo = Math.max(0, Math.min(1.5, o.albedo));
+      return { amp: chunkDetailOverride, freq: chunkDetailFreq, albedo: chunkDetailAlbedo };
     },
-    get chunkDetail() { return chunkDetailOverride; },
+    get chunkDetail() {
+      return { amp: chunkDetailOverride, freq: chunkDetailFreq, albedo: chunkDetailAlbedo };
+    },
     /** WHAT THE MATERIALS ACTUALLY HOLD, not what was requested. `chunkDetail`
      *  is the override; this is the value the per-frame push last wrote into
      *  each registered material's `fleshDetail.x`, which is what the shader
@@ -12786,7 +12861,10 @@ function performBenchAction(a: BenchAction): void {
      *  exact failure this getter exists to make visible, because a look A/B on
      *  a floor full of recycling gore cannot distinguish "the term does nothing"
      *  from "the term never arrived". */
-    chunkDetailApplied: () => litChunkMaterials.map(m => m.uniforms.fleshDetail.value.x),
+    chunkDetailApplied: () => litChunkMaterials.map(m => {
+      const d = m.uniforms.fleshDetail.value;
+      return { amp: d.x, freq: d.y, albedo: d.z, ambient: m.uniforms.ambient.value.getHex() };
+    }),
     /** THE BAKED ALBEDO ITSELF, sampled off a settled piece's `bakeColor`
      *  attribute — the vertex colour the shader composes from.
      *

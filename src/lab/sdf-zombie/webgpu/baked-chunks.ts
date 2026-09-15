@@ -79,7 +79,23 @@ const bakedChunkUniforms = () => ({
    *  this material is bit-identical until it opts in. */
   goreCfg2: uniform(new THREE.Vector4(0, 0, 0, 0)),
   /** THE LIVE FLESH'S OWN MICRO-DETAIL, mirrored onto the settled piece:
-   *  (surfaceNoiseAmp, spare, spare, spare) — the march's `surfCfg2.x`.
+   *  (amp, freq, albedoAmp, spare).
+   *
+   *  `freq` is NOT the march's 22. `fbm` is `noise3(p*4)*0.6 + noise3(p*9)*0.3`,
+   *  so a domain scale of 22 puts its octaves at 1.1 cm and 5 mm features. The
+   *  march samples those per PIXEL against a smooth analytic normal from the SDF
+   *  gradient and they read as skin; a baked chunk is a 1 cm mesh with an
+   *  interpolated vertex normal, so the 5 mm octave is sub-facet and aliases —
+   *  the owner's read was "much finer like little dots ... looks kinda like
+   *  glitter". Lower it until the finest octave is a couple of cells across.
+   *
+   *  `albedoAmp` exists because normal perturbation alone is LOW CONTRAST on a
+   *  mesh ("the contrast on the detail is also very low compared to the skin of
+   *  the actual character"). Most of the living skin's read is COLOUR — the
+   *  march's mottle and gore mask — and a baked chunk carries those per-VERTEX
+   *  only, which at 1 cm spacing is a broad blotch and not texture. This darkens
+   *  and lightens the albedo per PIXEL off the same field, so the detail
+   *  survives at the distance a normal perturbation washes out at.
    *
    *  A settled chunk stops being marched and becomes a static mesh, and the
    *  bake deliberately drops the march's per-PIXEL terms: chunk-bake-field.ts
@@ -194,9 +210,14 @@ export const CHUNK_SHADE_WGSL = /* wgsl */ `fn chunkShade(p: vec3<f32>, n: vec3<
     }
   }
   if (fleshDetail.x > 0.0) {
-    let detailNoise = vec3<f32>(
-      fbm(anchor * 22.0), fbm(anchor * 22.0 + 5.0), fbm(anchor * 22.0 + 11.0));
+    let df = max(fleshDetail.y, 0.5);
+    let dp = anchor * df;
+    let detailNoise = vec3<f32>(fbm(dp), fbm(dp + 5.0), fbm(dp + 11.0));
     nrm = normalize(nrm + detailNoise * fleshDetail.x);
+    if (fleshDetail.z > 0.0) {
+      let shade = (detailNoise.x + detailNoise.y + detailNoise.z) * 0.3333;
+      a = vec4<f32>(a.rgb * clamp(1.0 + shade * fleshDetail.z, 0.35, 1.65), a.a);
+    }
   }
   var L = normalize(lightDir);
   var keyC = keyColor;
