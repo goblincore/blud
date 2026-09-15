@@ -12,9 +12,9 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 import {
-  EVIDENCE_GENERATED, EVIDENCE_MANIFEST, MAX_GRID_CELLS, RUN_MARKER,
-  assertDisjoint, assertGridBudget, cleanEvidenceDir, parseArgs, prepareOwnedDir,
-  resolveWithinRoot, validateArgs, writeJson,
+  EVIDENCE_MANIFEST, MAX_GRID_CELLS, RUN_MARKER, RUN_MANIFEST,
+  assertDisjoint, assertEvidencePlan, assertGridBudget, cleanEvidenceDir, isGeneratedRelPath,
+  parseArgs, prepareOwnedDir, resolveWithinRoot, validateArgs, writeJson,
 } from './blob-mesh-compare';
 import { controlSphere } from '../src/lab/sdf-zombie/mesher-comparison/fixtures';
 
@@ -80,56 +80,181 @@ describe('CLI path safety', () => {
       symlinkSync(outside, join(root, 'link'));
       expect(() => resolveWithinRoot(root, 'link/sub', '--out')).toThrow(/escapes the repository/);
     } finally { rmSync(outside, { recursive: true, force: true }); }
+    // A within-repo symlink that aliases a protected tree is refused too.
+    symlinkSync(join(root, 'src'), join(root, 'srclink'));
+    expect(() => resolveWithinRoot(root, 'srclink/out', '--out')).toThrow(/aliases protected 'src'/);
     // A normal scratch path is accepted.
     expect(resolveWithinRoot(root, '.scratch/run', '--out')).toBe(join(root, '.scratch/run'));
     rmSync(root, { recursive: true, force: true });
   });
 
-  it('rejects overlapping out/evidence directories', () => {
+  it('rejects overlapping out/evidence directories, including symlink aliases', () => {
     const root = sandbox();
     expect(() => assertDisjoint(join(root, 'a'), join(root, 'a', 'b'), 'out', 'ev')).toThrow(/overlaps/);
     expect(() => assertDisjoint(join(root, 'a'), join(root, 'a'), 'out', 'ev')).toThrow(/overlaps/);
     expect(() => assertDisjoint(join(root, 'a'), join(root, 'b'), 'out', 'ev')).not.toThrow();
+    const shared = join(root, 'shared');
+    mkdirSync(shared, { recursive: true });
+    symlinkSync(shared, join(root, 'alias'));
+    expect(() => assertDisjoint(shared, join(root, 'alias', 'x'), 'out', 'ev')).toThrow(/overlaps/);
     rmSync(root, { recursive: true, force: true });
   });
+});
 
-  it('erases only task-owned output, and refuses a populated unrelated directory', () => {
+describe('CLI output ownership', () => {
+  it('preserves an unowned evidence file whose name looks generated (exact sentinel repro #1)', () => {
     const root = sandbox();
-    const allowed = [...EVIDENCE_GENERATED, RUN_MARKER];
-    // Task-owned: known generated names only -> safe to replace.
-    const owned = join(root, 'owned');
-    mkdirSync(join(owned, 'meshes'), { recursive: true });
-    writeFileSync(join(owned, 'results.json'), '{}');
-    prepareOwnedDir(owned, allowed, '--out');
-    expect(existsSync(join(owned, RUN_MARKER))).toBe(true);
-    expect(existsSync(join(owned, 'results.json'))).toBe(false);
-
-    // Unrelated: a sentinel file must survive and the call must throw.
-    const unrelated = join(root, 'unrelated');
-    mkdirSync(unrelated, { recursive: true });
-    writeFileSync(join(unrelated, 'IMPORTANT.txt'), 'do not delete');
-    expect(() => prepareOwnedDir(unrelated, allowed, '--out')).toThrow(/unexpected entries/);
-    expect(readFileSync(join(unrelated, 'IMPORTANT.txt'), 'utf8')).toBe('do not delete');
+    const ev = join(root, 'evidence');
+    mkdirSync(join(ev, 'meshes'), { recursive: true });
+    writeFileSync(join(ev, 'meshes', 'human-authored.obj'), 'sentinel');
+    const cleanup = cleanEvidenceDir(ev);
+    expect(readFileSync(join(ev, 'meshes', 'human-authored.obj'), 'utf8')).toBe('sentinel');
+    expect(cleanup.remaining.has('meshes/human-authored.obj')).toBe(true);
+    // Writing an artifact at that same name is rejected before any mutation.
+    expect(() => assertEvidencePlan([{ rel: 'meshes/human-authored.obj', data: 'x' }], cleanup)).toThrow(/not tool-owned/);
+    expect(readFileSync(join(ev, 'meshes', 'human-authored.obj'), 'utf8')).toBe('sentinel');
     rmSync(root, { recursive: true, force: true });
   });
 
-  it('cleans generated evidence but preserves human notes and stray files', () => {
+  it('rejects a populated unowned run dir and keeps nested files (exact sentinel repro #2)', () => {
+    const root = sandbox();
+    const unrelated = join(root, 'unrelated');
+    mkdirSync(join(unrelated, 'meshes'), { recursive: true });
+    writeFileSync(join(unrelated, 'meshes', 'keep.txt'), 'do not delete');
+    expect(() => prepareOwnedDir(unrelated, '--out')).toThrow(/without the tool ownership marker/);
+    expect(readFileSync(join(unrelated, 'meshes', 'keep.txt'), 'utf8')).toBe('do not delete');
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('deletes only manifest-listed files and rejects an unknown nested file in an owned meshes dir', () => {
+    const root = sandbox();
+    const owned = join(root, 'owned');
+    prepareOwnedDir(owned, '--out');
+    mkdirSync(join(owned, 'meshes'), { recursive: true });
+    writeFileSync(join(owned, 'meshes', 'a.glb'), 'old');
+    writeFileSync(join(owned, 'results.json'), '{}');
+    writeFileSync(join(owned, RUN_MANIFEST), JSON.stringify({ generated: ['meshes/a.glb', 'results.json'] }));
+    writeFileSync(join(owned, 'meshes', 'human.txt'), 'keep');
+    expect(() => prepareOwnedDir(owned, '--out')).toThrow(/not recorded in the run manifest/);
+    expect(readFileSync(join(owned, 'meshes', 'human.txt'), 'utf8')).toBe('keep');
+    expect(readFileSync(join(owned, 'meshes', 'a.glb'), 'utf8')).toBe('old');
+    rmSync(join(owned, 'meshes', 'human.txt'));
+    prepareOwnedDir(owned, '--out');
+    expect(existsSync(join(owned, RUN_MARKER))).toBe(true);
+    expect(existsSync(join(owned, 'meshes', 'a.glb'))).toBe(false);
+    expect(existsSync(join(owned, 'results.json'))).toBe(false);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('rejects a corrupt marker or a marker without a manifest, deleting nothing', () => {
+    const root = sandbox();
+    const noManifest = join(root, 'no-manifest');
+    mkdirSync(noManifest, { recursive: true });
+    writeFileSync(join(noManifest, RUN_MARKER), 'blob-mesh-compare run dir v1\n');
+    writeFileSync(join(noManifest, 'results.json'), '{}');
+    expect(() => prepareOwnedDir(noManifest, '--out')).toThrow(/no generated-file manifest/);
+    expect(readFileSync(join(noManifest, 'results.json'), 'utf8')).toBe('{}');
+    const corrupt = join(root, 'corrupt');
+    mkdirSync(corrupt, { recursive: true });
+    writeFileSync(join(corrupt, RUN_MARKER), 'something else');
+    writeFileSync(join(corrupt, 'results.json'), '{}');
+    expect(() => prepareOwnedDir(corrupt, '--out')).toThrow(/corrupt ownership marker/);
+    expect(readFileSync(join(corrupt, 'results.json'), 'utf8')).toBe('{}');
+    const badManifest = join(root, 'bad-manifest');
+    prepareOwnedDir(badManifest, '--out');
+    writeFileSync(join(badManifest, 'results.json'), '{}');
+    writeFileSync(join(badManifest, RUN_MANIFEST), 'not json');
+    expect(() => prepareOwnedDir(badManifest, '--out')).toThrow(/not valid JSON/);
+    expect(readFileSync(join(badManifest, 'results.json'), 'utf8')).toBe('{}');
+    writeFileSync(join(badManifest, RUN_MANIFEST), JSON.stringify({ generated: ['../escape.glb'] }));
+    expect(() => prepareOwnedDir(badManifest, '--out')).toThrow(/not a safe generated path/);
+    expect(readFileSync(join(badManifest, 'results.json'), 'utf8')).toBe('{}');
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('supports repeat generation into the same owned run dir', () => {
+    const root = sandbox();
+    const owned = join(root, 'owned');
+    for (let i = 0; i < 3; i++) {
+      prepareOwnedDir(owned, '--out');
+      mkdirSync(join(owned, 'meshes'), { recursive: true });
+      writeFileSync(join(owned, 'meshes', 'a.glb'), `run${i}`);
+      writeFileSync(join(owned, 'results.json'), '{}');
+      writeFileSync(join(owned, RUN_MANIFEST), JSON.stringify({ generated: ['meshes/a.glb', 'results.json'] }));
+      expect(readFileSync(join(owned, 'meshes', 'a.glb'), 'utf8')).toBe(`run${i}`);
+    }
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('preserves README and stray evidence files while replacing manifest-owned output', () => {
     const root = sandbox();
     const ev = join(root, 'evidence');
     mkdirSync(join(ev, 'meshes'), { recursive: true });
     mkdirSync(join(ev, 'panels'), { recursive: true });
     writeFileSync(join(ev, 'README.md'), '# human notes');
     writeFileSync(join(ev, 'NOTES.txt'), 'keep me');
-    writeFileSync(join(ev, 'results.json'), '{}');
-    writeFileSync(join(ev, 'summary.md'), 'stale');
-    writeFileSync(join(ev, EVIDENCE_MANIFEST), JSON.stringify({ generated: ['meshes/old.glb', 'summary.md'] }));
-    cleanEvidenceDir(ev);
+    writeFileSync(join(ev, 'results.json'), 'stale');
+    writeFileSync(join(ev, 'meshes', 'old.glb'), 'owned');
+    writeFileSync(join(ev, EVIDENCE_MANIFEST), JSON.stringify({ generated: ['meshes/old.glb', 'results.json'] }));
+    const cleanup = cleanEvidenceDir(ev);
     expect(readFileSync(join(ev, 'README.md'), 'utf8')).toBe('# human notes');
     expect(readFileSync(join(ev, 'NOTES.txt'), 'utf8')).toBe('keep me');
     expect(existsSync(join(ev, 'results.json'))).toBe(false);
-    expect(readdirSync(join(ev, 'meshes'))).toEqual([]);
-    expect(existsSync(join(ev, 'panels'))).toBe(true);
+    expect(existsSync(join(ev, 'meshes', 'old.glb'))).toBe(false);
+    expect([...cleanup.removed].sort()).toEqual(['meshes/old.glb', 'results.json']);
     rmSync(root, { recursive: true, force: true });
+  });
+
+  it('rejects a malformed or escaping manifest without deleting data', () => {
+    const bad = [
+      'not json',
+      JSON.stringify({ nope: 1 }),
+      JSON.stringify({ generated: ['../evil.glb'] }),
+      JSON.stringify({ generated: ['/abs.glb'] }),
+      JSON.stringify({ generated: ['meshes/../../src/x.glb'] }),
+      JSON.stringify({ generated: ['meshes/x.glb', 'human.txt'] }),
+    ];
+    for (const body of bad) {
+      const root = sandbox();
+      const ev = join(root, 'evidence');
+      mkdirSync(join(ev, 'meshes'), { recursive: true });
+      writeFileSync(join(ev, 'meshes', 'x.glb'), 'owned');
+      writeFileSync(join(ev, 'README.md'), 'human');
+      writeFileSync(join(ev, EVIDENCE_MANIFEST), body);
+      expect(() => cleanEvidenceDir(ev)).toThrow(/manifest/);
+      expect(readFileSync(join(ev, 'meshes', 'x.glb'), 'utf8')).toBe('owned');
+      expect(readFileSync(join(ev, 'README.md'), 'utf8')).toBe('human');
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a symlinked generated subtree instead of deleting through it', () => {
+    const root = sandbox();
+    const owned = join(root, 'owned');
+    prepareOwnedDir(owned, '--out');
+    const outside = sandbox();
+    mkdirSync(join(outside, 'meshes'), { recursive: true });
+    writeFileSync(join(outside, 'meshes', 'keep.glb'), 'keep');
+    symlinkSync(join(outside, 'meshes'), join(owned, 'meshes'));
+    writeFileSync(join(owned, RUN_MANIFEST), JSON.stringify({ generated: ['meshes/keep.glb'] }));
+    expect(() => prepareOwnedDir(owned, '--out')).toThrow(/symlink/);
+    expect(readFileSync(join(outside, 'meshes', 'keep.glb'), 'utf8')).toBe('keep');
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  });
+
+  it('validates the generated-path grammar strictly', () => {
+    expect(isGeneratedRelPath('meshes/a.glb', 'run')).toBe(true);
+    expect(isGeneratedRelPath('panels/a-+-b.png', 'evidence')).toBe(true);
+    expect(isGeneratedRelPath('results.json', 'run')).toBe(true);
+    expect(isGeneratedRelPath('sensitivity.json', 'run')).toBe(false);
+    expect(isGeneratedRelPath('sensitivity.json', 'evidence')).toBe(true);
+    expect(isGeneratedRelPath('../a.glb', 'run')).toBe(false);
+    expect(isGeneratedRelPath('meshes/../a.glb', 'run')).toBe(false);
+    expect(isGeneratedRelPath('meshes/a.txt', 'run')).toBe(false);
+    expect(isGeneratedRelPath('notes.txt', 'evidence')).toBe(false);
+    expect(isGeneratedRelPath('/etc/passwd', 'evidence')).toBe(false);
+    expect(isGeneratedRelPath('meshes/a.glb/extra', 'run')).toBe(false);
   });
 });
 
@@ -171,4 +296,30 @@ describe('CLI invalid-run regression', () => {
       rmSync(out, { recursive: true, force: true });
     }
   }, 60000);
+});
+
+describe('CLI run-dir regeneration', () => {
+  it('runs a fresh smoke dir, then reruns into the same owned dir', () => {
+    const repoRoot = process.cwd();
+    const relOut = `.scratch/cli-rerun-${process.pid}-${Date.now()}`;
+    const out = join(repoRoot, relOut);
+    const args = ['tsx', 'scripts/blob-mesh-compare.ts', '--fixtures', 'control-sphere', '--methods', 'surface-nets', '--smoke', '--out', relOut];
+    try {
+      const first = spawnSync('npx', args, { cwd: repoRoot, encoding: 'utf8' });
+      expect(first.status, `${first.stdout}\n${first.stderr}`).toBe(0);
+      expect(existsSync(join(out, RUN_MARKER))).toBe(true);
+      expect(existsSync(join(out, RUN_MANIFEST))).toBe(true);
+      const firstManifest = JSON.parse(readFileSync(join(out, RUN_MANIFEST), 'utf8')) as { generated: string[] };
+      expect(firstManifest.generated).toContain('results.json');
+      expect(existsSync(join(out, 'meshes', 'control-sphere-surface-nets-40mm.glb'))).toBe(true);
+
+      const second = spawnSync('npx', args, { cwd: repoRoot, encoding: 'utf8' });
+      expect(second.status, `${second.stdout}\n${second.stderr}`).toBe(0);
+      const secondManifest = JSON.parse(readFileSync(join(out, RUN_MANIFEST), 'utf8')) as { generated: string[] };
+      expect(secondManifest.generated.sort()).toEqual(firstManifest.generated.sort());
+      expect(existsSync(join(out, 'meshes', 'control-sphere-surface-nets-40mm.glb'))).toBe(true);
+    } finally {
+      rmSync(out, { recursive: true, force: true });
+    }
+  }, 120000);
 });

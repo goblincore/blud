@@ -2,7 +2,8 @@
 
 **Date:** 2026-09-15 · **Dispatch task:** `2026-09-15-blud-mesher-comparison-task-1`
 **Review fix-up:** Codex review `c9258e21` corrections in
-`2026-09-15-blud-mesher-comparison-fix1` (this branch).
+`2026-09-15-blud-mesher-comparison-fix1`, plus the final CLI/output-ownership
+corrections in `2026-09-15-blud-mesher-comparison-fix2` (this branch).
 **Question:** does marching cubes (MC) or ALICE-inspired dual contouring (DC)
 offer a useful geometry-quality / extraction-cost improvement over Blud's
 CURRENT surface nets (SN) for Blobforge export and baked geometry?
@@ -75,18 +76,55 @@ reference comparison, feature probes or export, and the CLI exits **non-zero**
 when a requested comparison is incomplete. JSON is written with an explicit
 `NaN`/`Infinity` replacer so nothing silently becomes `null`.
 
-### 1.2 CLI path + input safety (review fix 2)
+### 1.2 CLI path + input safety (review fixes 2 and 3)
 
 `scripts/blob-mesh-compare.ts` validates fixture/method names, finite positive
 cell sizes, positive-integer repeats, non-negative-integer warmups, panel cell
-sizes and per-fixture `minCell` **before** any mutation. It rejects an output
-path that is the repo root, an ancestor/escape, a source tree, a symlink
-escape, or that overlaps the evidence dir. A run directory is only deleted when
-it contains just known generated names; an evidence dir is cleaned by removing
-only known generated names (its README/human notes are preserved). Grid cell
-and corner counts are checked against a conservative budget before any large
-allocation. `scripts/blob-mesh-compare.test.ts` proves each of these against
-throwaway `mkdtemp` sandboxes with sentinel files.
+sizes and per-fixture `minCell` **before** any mutation. Grid cell and corner
+counts are checked against a conservative budget before any large allocation.
+
+**Output ownership contract.** The CLI never recursively deletes a directory
+and never infers ownership from a directory *name* (`meshes` is not proof of
+anything).
+
+- **Run output (`--out`)** must be empty/nonexistent for a fresh run. To reuse
+  a run dir it must carry the tool marker `.blob-mesh-compare-run` **and** the
+  exact-file manifest `.blob-mesh-compare-generated.json` written by a previous
+  run. Only the regular files named in that manifest are deleted (exact paths,
+  no globbing, no first-component collapsing), then the `meshes`/`panels`
+  directories are removed **only if now empty**. A populated dir without a
+  valid marker+manifest, a corrupt marker, or a dir containing files the
+  manifest does not list is rejected untouched with a message telling you to
+  use a fresh output directory. Human files are therefore never collateral.
+- **Shared evidence (`--evidence`)** is cleaned using the exact-file manifest
+  `.blob-mesh-compare-manifest.json` (the committed folder's tracked manifest
+  enumerates its current generated files). Only manifest entries that also
+  match the allowed generated grammar (`meshes/*.obj|glb`, `panels/*.png`,
+  `results.json`, `summary.md`, `preview.html`, `sensitivity.json`,
+  `sensitivity.md`) are removed. `README.md`, stray files and any unowned file
+  survive. A corrupt manifest or an entry that is absolute, contains `..`, or
+  names a non-generated file aborts the cleanup **without deleting anything**.
+  Before writing, a generated filename that already exists but is not
+  tool-owned is treated as a collision and rejected.
+- **Paths** are resolved canonically and must stay inside the repository, avoid
+  the root/ancestors and the protected source trees, and the `--out` and
+  `--evidence` canonical paths must be disjoint. Symlinked path components are
+  refused — including an in-repo alias whose target is a protected tree, and a
+  symlinked `meshes`/`panels` inside an otherwise-owned dir — so deletion can
+  never escape through a link.
+
+Every run writes an exact-file run manifest for the next regeneration.
+`scripts/blob-mesh-compare.test.ts` proves all of the above against throwaway
+`mkdtemp` sandboxes with sentinel files, including both reported sentinel
+reproductions (an unowned `meshes/human-authored.obj` with no manifest, and an
+unowned populated run dir), an unknown nested file inside a genuinely owned
+`meshes` dir, README preservation, symlink escape/alias, malformed manifests,
+repeated generation, output/evidence overlap and a generated-name collision.
+
+> **Fingerprint note.** These ownership changes are CLI-only and postdate the
+extraction fingerprint recorded in `summary.md`/`results.json`. The mesher
+algorithms, fixtures and measured geometry/timing numbers are unchanged, so the
+committed evidence was **not** regenerated.
 
 ## 2. How the numbers are measured (and what they are not)
 
@@ -94,11 +132,12 @@ throwaway `mkdtemp` sandboxes with sentinel files.
   not true distances (`march-step-soundness.test.ts`; anisotropic prim scales,
   smooth-min fillets).
 - **`resid` = `|field(v)| / |grad field(v)|`** is a per-vertex first-order
-  geometric estimate. It needs only the field and the mesh, so it cannot favour
-  a mesher, but it is a **vertex-sampling diagnostic**: each mesher distributes
-  vertices differently (DC concentrates them at creases), so it is not a uniform
-  surface sample and dividing by `|grad|` does not remove that bias or account
-  for triangle-interior error.
+  geometric estimate. It needs only the field and the mesh, so it is a
+  **field-based** estimate rather than a method-specific one, but it is
+  **vertex-distribution-biased**: each mesher distributes vertices differently
+  (DC concentrates them at creases), so it is not a uniform surface sample and
+  dividing by `|grad|` does not remove that bias or account for
+  triangle-interior error.
 - **`surf resid`** adds **triangle-centroid** samples to the vertices. For the
   analytic controls the field is exact distance, so these samples are exact
   distances at those points; for Blud-composed fields it is still a residual.
@@ -336,11 +375,16 @@ npx tsx scripts/blob-mesh-compare.ts --methods surface-nets,surface-nets-unprune
 ```
 
 `npx tsx scripts/blob-mesh-compare.ts --help` documents all options. Large
-generated data lives in the gitignored `.scratch/mesher-comparison/`; the
-committed evidence dir holds the compact representative set (GLB for every
-fixture/method at 20 mm, OBJ for the head and box, panels including the 10 mm
-sharp/concave set, `sensitivity.*`, `results.json`, `summary.md`,
-`preview.html`) plus a manifest of the generated names.
+generated data lives in the gitignored `.scratch/mesher-comparison/`; rerunning
+into that path is safe because each run writes the marker + exact-file run
+manifest, and only those files are replaced. A `.scratch` dir left by a
+pre-manifest (legacy) run is rejected — point `--out` at a fresh directory for
+that first rerun. The committed evidence dir holds the compact representative
+set (GLB for every fixture/method at 20 mm, OBJ for the head and box, panels
+including the 10 mm sharp/concave set, `sensitivity.*`, `results.json`,
+`summary.md`, `preview.html`) plus the exact-file manifest
+`.blob-mesh-compare-manifest.json`; `README.md` and any unowned file survive
+regeneration.
 
 ## 9. Upstream provenance and licensing
 
@@ -362,7 +406,7 @@ sharp/concave set, `sensitivity.*`, `results.json`, `summary.md`,
 
 ## 10. Handoff
 
-- Branch: `codex/dispatch/2026-09-15-blud-mesher-comparison-fix1` (isolated
+- Branch: `codex/dispatch/2026-09-15-blud-mesher-comparison-fix2` (isolated
   worktree). Not merged or pushed.
 - Codex review: rerun §8 and inspect `summary.md` / `sensitivity.md` /
   `results.json` / panels. The evidence header records the worktree HEAD,

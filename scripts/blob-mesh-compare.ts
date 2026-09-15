@@ -13,9 +13,9 @@
 // Production meshers/renderers are untouched.
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmdirSync, rmSync, writeFileSync } from 'node:fs';
 import { platform, release, cpus } from 'node:os';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
@@ -39,9 +39,20 @@ const DEFAULT_METHODS: readonly RunId[] = ['surface-nets', 'marching-cubes', 'du
  */
 export const RUN_MARKER = '.blob-mesh-compare-run';
 export const RUN_MARKER_MAGIC = 'blob-mesh-compare run dir v1';
+/** Exact-file manifest written into an owned run dir, next to the marker. */
+export const RUN_MANIFEST = '.blob-mesh-compare-generated.json';
+/** Exact-file manifest for the shared evidence dir (tracked in git). */
 export const EVIDENCE_MANIFEST = '.blob-mesh-compare-manifest.json';
-/** Known task-owned generated names inside an evidence dir (never human notes). */
-export const EVIDENCE_GENERATED = ['meshes', 'panels', 'results.json', 'summary.md', 'preview.html', 'sensitivity.json', 'sensitivity.md'] as const;
+/** Generated top-level files inside an owned run dir (never human notes). */
+export const RUN_TOP_LEVEL = ['results.json', 'summary.md', 'preview.html'] as const;
+/** Generated top-level files the CLI may own inside a shared evidence dir. */
+export const EVIDENCE_TOP_LEVEL = ['results.json', 'summary.md', 'preview.html', 'sensitivity.json', 'sensitivity.md'] as const;
+/** The only subdirectories the CLI ever creates/removes, and only when empty. */
+export const GENERATED_SUBDIRS = ['meshes', 'panels'] as const;
+/** Generated mesh filenames (`+` appears in panel/closeup names). */
+export const MESH_FILE_RE = /^[A-Za-z0-9][A-Za-z0-9._+-]*\.(obj|glb)$/;
+/** Generated panel filenames (`+` appears e.g. in `closeup-corner-+++`). */
+export const PANEL_FILE_RE = /^[A-Za-z0-9][A-Za-z0-9._+-]*\.png$/;
 /** Conservative pre-allocation budget for one extraction grid. */
 export const MAX_GRID_CELLS = 20_000_000;
 export const MAX_GRID_CORNERS = 25_000_000;
@@ -105,6 +116,9 @@ export function parseArgs(argv: string[]): Args {
 // Argument validation + path/budget safety
 // ---------------------------------------------------------------------------
 
+/** Path segments the CLI must never write into or delete through. */
+const PROTECTED_SEGMENTS = new Set(['node_modules', '.git', 'src', 'public', 'assets-source']);
+
 /** Resolve a CLI path against the repo root and refuse anything unsafe. */
 export function resolveWithinRoot(rootReal: string, argPath: string, label: string): string {
   const abs = resolve(rootReal, argPath);
@@ -114,10 +128,12 @@ export function resolveWithinRoot(rootReal: string, argPath: string, label: stri
     throw new Error(`${label}: must stay inside the repository; ${abs} is outside ${rootReal}`);
   }
   const first = rel.split(sep)[0]!;
-  if (first === 'node_modules' || first === '.git' || first === 'src' || first === 'public' || first === 'assets-source') {
+  if (PROTECTED_SEGMENTS.has(first)) {
     throw new Error(`${label}: refusing to write or delete inside '${first}' (${abs})`);
   }
-  // Walking the existing prefix catches a symlinked component that escapes.
+  // Walking the existing prefix catches a symlinked component that escapes or
+  // aliases a protected tree. Deletion through a symlink must never happen.
+  const rootCanon = existsSync(rootReal) ? realpathSync(rootReal) : rootReal;
   let cur = rootReal;
   for (const seg of rel.split(sep)) {
     cur = join(cur, seg);
@@ -125,16 +141,37 @@ export function resolveWithinRoot(rootReal: string, argPath: string, label: stri
     const st = lstatSync(cur);
     if (st.isSymbolicLink()) {
       const real = realpathSync(cur);
-      const rrel = relative(rootReal, real);
+      const rrel = relative(rootCanon, real);
       if (rrel.startsWith('..') || isAbsolute(rrel)) throw new Error(`${label}: symlink ${cur} escapes the repository`);
+      const rfirst = rrel.split(sep)[0]!;
+      if (PROTECTED_SEGMENTS.has(rfirst)) {
+        throw new Error(`${label}: symlink ${cur} aliases protected '${rfirst}' (${real})`);
+      }
+      throw new Error(`${label}: refusing to use symlinked path component ${cur} (alias of ${real})`);
     }
     if (!st.isDirectory() && cur !== abs) throw new Error(`${label}: ${cur} is not a directory`);
   }
   return abs;
 }
 
-/** Throw unless `a` and `b` are disjoint (neither contains the other). */
-export function assertDisjoint(a: string, b: string, aLabel: string, bLabel: string): void {
+/** Canonicalise a path against its deepest existing prefix (follows symlinks). */
+export function canonicalPath(p: string): string {
+  let cur = resolve(p);
+  const tail: string[] = [];
+  while (!existsSync(cur)) {
+    tail.unshift(basename(cur));
+    const parent = dirname(cur);
+    if (parent === cur) break;
+    cur = parent;
+  }
+  const real = existsSync(cur) ? realpathSync(cur) : cur;
+  return tail.length ? join(real, ...tail) : real;
+}
+
+/** Throw unless `a` and `b` are disjoint (neither contains the other) after canonicalisation. */
+export function assertDisjoint(aPath: string, bPath: string, aLabel: string, bLabel: string): void {
+  const a = canonicalPath(aPath);
+  const b = canonicalPath(bPath);
   const ab = relative(a, b);
   const ba = relative(b, a);
   if (ab === '' || (!ab.startsWith('..') && !isAbsolute(ab))) {
@@ -145,49 +182,209 @@ export function assertDisjoint(a: string, b: string, aLabel: string, bLabel: str
   }
 }
 
-/**
- * Prepare a task-owned run directory for reuse. Deletion is allowed ONLY when
- * the existing directory is empty or contains just known generated names; a
- * populated unrelated directory raises instead of being erased.
- */
-export function prepareOwnedDir(abs: string, allowed: readonly string[], label: string): void {
-  if (existsSync(abs)) {
-    const st = lstatSync(abs);
-    if (st.isSymbolicLink()) throw new Error(`${label}: refusing to delete symlinked directory ${abs}`);
-    if (!st.isDirectory()) throw new Error(`${label}: ${abs} exists and is not a directory`);
-    const allowedSet = new Set(allowed);
-    const unknown = readdirSync(abs).filter(n => !allowedSet.has(n));
-    if (unknown.length > 0) {
-      throw new Error(`${label}: ${abs} contains unexpected entries (${unknown.slice(0, 5).join(', ')}); refusing to delete it`);
-    }
-    rmSync(abs, { recursive: true, force: true });
+/** Validate a manifest entry as a safe relative path in the allowed generated structure. */
+export function isGeneratedRelPath(rel: string, kind: 'run' | 'evidence'): boolean {
+  if (typeof rel !== 'string' || rel.length === 0) return false;
+  if (rel.includes('\\') || rel.includes('\0')) return false;
+  if (rel.startsWith('/') || isAbsolute(rel)) return false;
+  const segs = rel.split('/');
+  if (segs.some(s => s === '' || s === '.' || s === '..')) return false;
+  if (segs.length === 1) {
+    const top: readonly string[] = kind === 'evidence' ? EVIDENCE_TOP_LEVEL : RUN_TOP_LEVEL;
+    return top.includes(segs[0]!);
   }
-  mkdirSync(abs, { recursive: true });
-  writeFileSync(join(abs, RUN_MARKER), RUN_MARKER_MAGIC + '\n');
+  if (segs.length === 2 && segs[0] === 'meshes') return MESH_FILE_RE.test(segs[1]!);
+  if (segs.length === 2 && segs[0] === 'panels') return PANEL_FILE_RE.test(segs[1]!);
+  return false;
+}
+
+/** Read + validate an exact-file manifest; throws (deleting nothing) on corruption or an unsafe entry. */
+export function readGeneratedManifest(dir: string, manifestName: string, kind: 'run' | 'evidence', label: string): string[] {
+  const manifestPath = join(dir, manifestName);
+  let parsed: { generated?: unknown };
+  try {
+    parsed = JSON.parse(readFileSync(manifestPath, 'utf8')) as { generated?: unknown };
+  } catch {
+    throw new Error(`${label}: manifest ${manifestPath} is missing or not valid JSON; refusing to delete anything`);
+  }
+  const generated = parsed.generated;
+  if (!Array.isArray(generated)) {
+    throw new Error(`${label}: manifest ${manifestPath} has no 'generated' array; refusing to delete anything`);
+  }
+  const out: string[] = [];
+  for (const entry of generated as unknown[]) {
+    if (typeof entry !== 'string' || !isGeneratedRelPath(entry, kind)) {
+      throw new Error(`${label}: manifest ${manifestPath} entry ${JSON.stringify(entry)} is not a safe generated path; refusing to delete anything`);
+    }
+    if (!out.includes(entry)) out.push(entry);
+  }
+  return out;
+}
+
+/** Delete exactly these owned regular files; refuse symlinks and non-regular targets. */
+function removeOwnedFiles(base: string, rels: readonly string[], label: string): void {
+  for (const rel of rels) {
+    const segs = rel.split('/');
+    let gone = false;
+    let cur = base;
+    for (let i = 0; i < segs.length - 1; i++) {
+      cur = join(cur, segs[i]!);
+      if (!existsSync(cur)) { gone = true; break; }
+      const st = lstatSync(cur);
+      if (st.isSymbolicLink()) throw new Error(`${label}: owned path ${rel} crosses symlink ${cur}; refusing to delete`);
+      if (!st.isDirectory()) throw new Error(`${label}: owned path ${rel} crosses non-directory ${cur}; refusing to delete`);
+    }
+    if (gone) continue;
+    const target = join(base, rel);
+    if (!existsSync(target)) continue;
+    const st = lstatSync(target);
+    if (st.isSymbolicLink()) throw new Error(`${label}: ${target} is a symlink; refusing to delete`);
+    if (!st.isFile()) throw new Error(`${label}: ${target} is not a regular file; refusing to delete`);
+    rmSync(target);
+  }
+}
+
+/** Remove the CLI's meshes/panels dirs, and only when they are real and empty. */
+function removeEmptyGeneratedDirs(base: string, label: string): void {
+  for (const name of GENERATED_SUBDIRS) {
+    const p = join(base, name);
+    if (!existsSync(p)) continue;
+    const st = lstatSync(p);
+    if (st.isSymbolicLink()) throw new Error(`${label}: ${p} is a symlink; refusing to delete`);
+    if (!st.isDirectory()) throw new Error(`${label}: ${p} is not a directory; refusing to delete`);
+    if (readdirSync(p).length === 0) rmdirSync(p);
+  }
+}
+
+/** Entries that are neither the ownership files nor the exact owned manifest paths. */
+function auditOwnedDir(base: string, owned: ReadonlySet<string>, exempt: ReadonlySet<string>, label: string): string[] {
+  const unknown: string[] = [];
+  const walk = (dir: string, prefix: string): void => {
+    for (const name of readdirSync(dir)) {
+      if (prefix === '' && exempt.has(name)) continue;
+      const rel = prefix ? `${prefix}/${name}` : name;
+      const p = join(dir, name);
+      const st = lstatSync(p);
+      if (st.isSymbolicLink()) throw new Error(`${label}: ${p} is a symlink; refusing to operate on it`);
+      if (st.isDirectory()) {
+        if (prefix === '' && (GENERATED_SUBDIRS as readonly string[]).includes(name)) walk(p, rel);
+        else unknown.push(rel);
+      } else if (!owned.has(rel)) {
+        unknown.push(rel);
+      }
+    }
+  };
+  walk(base, '');
+  return unknown;
+}
+
+/** Regular files (and symlinks, recorded as blockers) under the evidence dir. */
+function collectEvidenceEntries(base: string): Set<string> {
+  const files = new Set<string>();
+  const walk = (dir: string, prefix: string): void => {
+    for (const name of readdirSync(dir)) {
+      const rel = prefix ? `${prefix}/${name}` : name;
+      const p = join(dir, name);
+      const st = lstatSync(p);
+      if (st.isSymbolicLink()) { files.add(rel); continue; }
+      if (st.isDirectory()) walk(p, rel);
+      else files.add(rel);
+    }
+  };
+  walk(base, '');
+  return files;
 }
 
 /**
- * Clear the generated names inside a shared evidence dir while preserving
- * human notes (README.md etc.). Only fixed generated names and files listed
- * in a prior task manifest are removed; everything else is left untouched.
+ * Prepare a task-owned run directory for reuse. An empty or nonexistent target
+ * is fine. A populated target is touched only when it carries our ownership
+ * marker AND an exact-file manifest; only the manifest's files are deleted and
+ * only now-empty meshes/panels dirs are removed (never a recursive delete).
+ * Any other populated directory is rejected untouched.
  */
-export function cleanEvidenceDir(evidenceDir: string): void {
-  mkdirSync(evidenceDir, { recursive: true });
-  const manifestPath = join(evidenceDir, EVIDENCE_MANIFEST);
-  const toDelete = new Set<string>(EVIDENCE_GENERATED);
-  if (existsSync(manifestPath)) {
-    try {
-      const prior = JSON.parse(readFileSync(manifestPath, 'utf8')) as { generated?: string[] };
-      for (const rel of prior.generated ?? []) {
-        if (rel && !rel.includes('..') && !isAbsolute(rel)) toDelete.add(rel.split('/')[0]!);
+export function prepareOwnedDir(abs: string, label: string): void {
+  if (!existsSync(abs)) {
+    mkdirSync(abs, { recursive: true });
+  } else {
+    const st = lstatSync(abs);
+    if (st.isSymbolicLink()) throw new Error(`${label}: refusing to use symlinked directory ${abs}`);
+    if (!st.isDirectory()) throw new Error(`${label}: ${abs} exists and is not a directory`);
+    if (readdirSync(abs).length > 0) {
+      const markerPath = join(abs, RUN_MARKER);
+      if (!existsSync(markerPath)) {
+        throw new Error(`${label}: ${abs} is a populated directory without the tool ownership marker (${RUN_MARKER}); refusing to delete it — use a fresh output directory`);
       }
-    } catch { /* a corrupt manifest must not block a clean regeneration */ }
+      if (readFileSync(markerPath, 'utf8').trim() !== RUN_MARKER_MAGIC) {
+        throw new Error(`${label}: ${abs} has a corrupt ownership marker; refusing to delete it — use a fresh output directory`);
+      }
+      if (!existsSync(join(abs, RUN_MANIFEST))) {
+        throw new Error(`${label}: ${abs} carries a marker but no generated-file manifest (${RUN_MANIFEST}); refusing to delete it — use a fresh output directory`);
+      }
+      const owned = readGeneratedManifest(abs, RUN_MANIFEST, 'run', label);
+      const unknown = auditOwnedDir(abs, new Set(owned), new Set([RUN_MARKER, RUN_MANIFEST]), label);
+      if (unknown.length > 0) {
+        throw new Error(`${label}: ${abs} contains entries not recorded in the run manifest (${unknown.slice(0, 5).join(', ')}); refusing to delete it`);
+      }
+      removeOwnedFiles(abs, owned, label);
+      removeEmptyGeneratedDirs(abs, label);
+    }
   }
-  for (const name of toDelete) {
-    rmSync(join(evidenceDir, name), { recursive: true, force: true });
+  writeFileSync(join(abs, RUN_MARKER), RUN_MARKER_MAGIC + '\n');
+}
+
+export interface EvidenceCleanup {
+  /** Exact evidence-relative paths the valid manifest claims as tool output. */
+  readonly owned: ReadonlySet<string>;
+  /** Paths still present after cleanup (owned files were removed). */
+  readonly remaining: ReadonlySet<string>;
+  readonly removed: readonly string[];
+}
+
+/**
+ * Remove only files the prior evidence manifest claims as tool output, then
+ * drop empty meshes/panels dirs. Human notes and unowned files survive. A
+ * corrupt/unsafe manifest throws without deleting anything; with no manifest
+ * nothing is deleted (a fresh evidence dir is written directly).
+ */
+export function cleanEvidenceDir(evidenceDir: string, label = '--evidence'): EvidenceCleanup {
+  mkdirSync(evidenceDir, { recursive: true });
+  const owned = new Set<string>();
+  if (existsSync(join(evidenceDir, EVIDENCE_MANIFEST))) {
+    for (const rel of readGeneratedManifest(evidenceDir, EVIDENCE_MANIFEST, 'evidence', label)) owned.add(rel);
   }
-  mkdirSync(join(evidenceDir, 'meshes'), { recursive: true });
-  mkdirSync(join(evidenceDir, 'panels'), { recursive: true });
+  const before = collectEvidenceEntries(evidenceDir);
+  removeOwnedFiles(evidenceDir, owned, label);
+  removeEmptyGeneratedDirs(evidenceDir, label);
+  const after = collectEvidenceEntries(evidenceDir);
+  const removed = [...before].filter(rel => owned.has(rel) && !after.has(rel));
+  return { owned, remaining: after, removed };
+}
+
+export interface EvidenceWrite {
+  readonly rel: string;
+  readonly srcPath?: string;
+  readonly data?: string | Uint8Array;
+}
+
+/**
+ * Validate a complete evidence write plan BEFORE any evidence mutation: every
+ * path must be an allowed generated path and must not collide with a file that
+ * survived cleanup (i.e. an unowned or human file).
+ */
+export function assertEvidencePlan(plan: readonly EvidenceWrite[], cleanup: EvidenceCleanup, label = '--evidence'): void {
+  const seen = new Set<string>();
+  for (const w of plan) {
+    if (!isGeneratedRelPath(w.rel, 'evidence')) throw new Error(`${label}: refusing to write non-generated path ${JSON.stringify(w.rel)}`);
+    if (seen.has(w.rel)) throw new Error(`${label}: duplicate generated path ${w.rel}`);
+    seen.add(w.rel);
+    if (cleanup.remaining.has(w.rel)) {
+      throw new Error(`${label}: ${w.rel} already exists and is not tool-owned; refusing to overwrite it`);
+    }
+    const parent = w.rel.includes('/') ? w.rel.slice(0, w.rel.lastIndexOf('/')) : '';
+    if (parent && cleanup.remaining.has(parent)) {
+      throw new Error(`${label}: ${parent} is not a real directory; refusing to write ${w.rel}`);
+    }
+  }
 }
 
 /** Validate every user-supplied name and numeric bound. Throws on the first problem. */
@@ -233,12 +430,15 @@ export function assertGridBudget(field: ScalarField, cell: number, label: string
 }
 
 /** Serialize JSON without turning NaN/Infinity into an innocuous `null`. */
-export function writeJson(path: string, value: unknown): void {
-  const text = JSON.stringify(value, (_k, v) =>
+export function jsonText(value: unknown): string {
+  return JSON.stringify(value, (_k, v) =>
     typeof v === 'number' && !Number.isFinite(v)
       ? (Number.isNaN(v) ? 'NaN' : v > 0 ? 'Infinity' : '-Infinity')
-      : v, 2);
-  writeFileSync(path, text + '\n');
+      : v, 2) + '\n';
+}
+
+export function writeJson(path: string, value: unknown): void {
+  writeFileSync(path, jsonText(value));
 }
 
 const HELP = `Blobforge mesher comparison — surface nets vs marching cubes vs dual contouring
@@ -402,16 +602,15 @@ function main(): void {
   const fingerprint = codeFingerprint(root);
 
   // ---- mutations begin only after all validation passed ------------------
-  prepareOwnedDir(outDir, [...EVIDENCE_GENERATED, RUN_MARKER], '--out');
+  prepareOwnedDir(outDir, '--out');
   const meshDir = join(outDir, 'meshes');
   const panelDir = join(outDir, 'panels');
   mkdirSync(meshDir, { recursive: true });
   mkdirSync(panelDir, { recursive: true });
-  if (evidenceDir) cleanEvidenceDir(evidenceDir);
-  const evidenceMeshDir = evidenceDir ? join(evidenceDir, 'meshes') : null;
-  const evidencePanelDir = evidenceDir ? join(evidenceDir, 'panels') : null;
+  const evidenceCleanup = evidenceDir ? cleanEvidenceDir(evidenceDir) : null;
 
-  const evidenceFiles = new Set<string>();
+  const runFiles = new Set<string>();
+  const evidencePlan: EvidenceWrite[] = [];
   const invalidRuns: string[] = [];
   const results: unknown[] = [];
   const exports: unknown[] = [];
@@ -436,20 +635,21 @@ function main(): void {
         } else {
           const base = `${def.id}-${id}-${mmOf(cell)}mm`;
           const wrote = writeMeshPair(meshDir, base, t.mesh);
+          runFiles.add(`meshes/${base}.obj`);
+          runFiles.add(`meshes/${base}.glb`);
           exports.push({ fixture: def.id, method: id, cell, base, ...wrote });
-          if (evidenceMeshDir && cell === args.cells[0]) {
+          if (evidenceDir && cell === args.cells[0]) {
             // Commit only the representative (coarsest) cell, and only GLB for
             // every fixture plus OBJ for the two most inspectable ones, to keep
-            // the committed evidence compact.
+            // the committed evidence compact. Writes are deferred so the whole
+            // evidence plan can be collision-checked before any mutation.
             if (id !== 'surface-nets-unpruned') {
               const f = `${base}.glb`;
-              writeFileSync(join(evidenceMeshDir, f), meshToGlb(t.mesh));
-              evidenceFiles.add(`meshes/${f}`);
+              evidencePlan.push({ rel: `meshes/${f}`, data: meshToGlb(t.mesh) });
             }
             if (def.id === 'character-head' || def.id === 'control-sharp-box') {
               const f = `${base}.obj`;
-              writeFileSync(join(evidenceMeshDir, f), meshToObj(t.mesh, `${def.id} / ${id} / ${mmOf(cell)}mm`));
-              evidenceFiles.add(`meshes/${f}`);
+              evidencePlan.push({ rel: `meshes/${f}`, data: meshToObj(t.mesh, `${def.id} / ${id} / ${mmOf(cell)}mm`) });
             }
           }
         }
@@ -514,24 +714,31 @@ function main(): void {
 
   // ---- evidence copies ---------------------------------------------------
   const summary = buildSummary(results as ResultRow[], args, commit, dirty, fingerprint);
-  if (evidenceDir) {
-    for (const p of panels) {
-      const src = join(panelDir, p.file);
-      writeFileSync(join(evidencePanelDir!, p.file), readFileSync(src));
-      evidenceFiles.add(`panels/${p.file}`);
+  for (const p of panels) runFiles.add(`panels/${p.file}`);
+  if (evidenceDir && evidenceCleanup) {
+    for (const p of panels) evidencePlan.push({ rel: `panels/${p.file}`, srcPath: join(panelDir, p.file) });
+    evidencePlan.push({ rel: 'results.json', data: jsonText({ commit, dirty: dirty || null, codeFingerprint: fingerprint, generatedAt: new Date().toISOString(), environment: ENV(), args: { ...args }, results, exports: compactExports(exports), panels }) });
+    evidencePlan.push({ rel: 'summary.md', data: summary });
+    evidencePlan.push({ rel: 'preview.html', data: previewHtml('panels', panels, args, commit) });
+    for (const w of buildSensitivityEvidence(args.cells)) evidencePlan.push(w);
+    // Reject any accidental overwrite of a human/unowned file BEFORE writing.
+    assertEvidencePlan(evidencePlan, evidenceCleanup);
+    for (const w of evidencePlan) {
+      const target = join(evidenceDir, w.rel);
+      mkdirSync(dirname(target), { recursive: true });
+      if (w.srcPath) writeFileSync(target, readFileSync(w.srcPath));
+      else writeFileSync(target, w.data!);
     }
-    writeJson(join(evidenceDir, 'results.json'), { commit, dirty: dirty || null, codeFingerprint: fingerprint, generatedAt: new Date().toISOString(), environment: ENV(), args: { ...args }, results, exports: compactExports(exports), panels });
-    writeFileSync(join(evidenceDir, 'summary.md'), summary);
-    writeFileSync(join(evidenceDir, 'preview.html'), previewHtml('panels', panels, args, commit));
-    evidenceFiles.add('results.json');
-    evidenceFiles.add('summary.md');
-    evidenceFiles.add('preview.html');
-    for (const f of writeSensitivityEvidence(evidenceDir, args.cells)) evidenceFiles.add(f);
-    writeFileSync(join(evidenceDir, EVIDENCE_MANIFEST), JSON.stringify({ generated: [...evidenceFiles].sort() }, null, 2) + '\n');
+    writeFileSync(join(evidenceDir, EVIDENCE_MANIFEST), JSON.stringify({ generated: evidencePlan.map(w => w.rel).sort() }, null, 2) + '\n');
   }
-  writeJson(join(outDir, 'results.json'), { commit, dirty: dirty || null, codeFingerprint: fingerprint, generatedAt: new Date().toISOString(), environment: ENV(), args: { ...args }, results, exports, panels });
+  const outResults = { commit, dirty: dirty || null, codeFingerprint: fingerprint, generatedAt: new Date().toISOString(), environment: ENV(), args: { ...args }, results, exports, panels };
+  runFiles.add('results.json');
+  runFiles.add('summary.md');
+  runFiles.add('preview.html');
+  writeJson(join(outDir, 'results.json'), outResults);
   writeFileSync(join(outDir, 'summary.md'), summary);
   writeFileSync(join(outDir, 'preview.html'), previewHtml('panels', panels, args, commit));
+  writeFileSync(join(outDir, RUN_MANIFEST), JSON.stringify({ generated: [...runFiles].sort() }, null, 2) + '\n');
 
   console.log(`\nwrote ${outDir}`);
   if (evidenceDir) console.log(`wrote compact evidence ${evidenceDir}`);
@@ -589,18 +796,19 @@ function sensitivityMarkdown(cell: number, rows: ReturnType<typeof sharpBoxSensi
 }
 
 /**
- * Write the sharp-box phase/rotation sensitivity evidence. Returns the names
- * of the files created (relative to the evidence dir) for the manifest.
+ * Build the sharp-box phase/rotation sensitivity evidence (no filesystem writes)
+ * so the whole evidence plan can be collision-checked before any mutation.
  */
-export function writeSensitivityEvidence(evidenceDir: string, cells: readonly number[]): string[] {
+export function buildSensitivityEvidence(cells: readonly number[]): EvidenceWrite[] {
   const byCell = cells.map(cell => ({ cell, rows: sharpBoxSensitivity(cell) }));
   const md: string[] = [];
   md.push('# Sharp-box phase/rotation sensitivity\n');
   md.push('Nearest TRIANGLE SURFACE distance from the true box corner to each mesh (mm). `phase` shifts the grid origin by that fraction of a cell; `rot` rotates the analytic box by degrees about (1,1,0). The direction (DC closest) is phase-robust; the absolute SN/MC error is alignment-specific, so these are fixture numbers, not a universal guarantee.\n');
   for (const { cell, rows } of byCell) md.push(sensitivityMarkdown(cell, rows));
-  writeFileSync(join(evidenceDir, 'sensitivity.md'), md.join('\n'));
-  writeJson(join(evidenceDir, 'sensitivity.json'), byCell.map(({ cell, rows }) => ({ cell, rows })));
-  return ['sensitivity.md', 'sensitivity.json'];
+  return [
+    { rel: 'sensitivity.md', data: md.join('\n') },
+    { rel: 'sensitivity.json', data: jsonText(byCell.map(({ cell, rows }) => ({ cell, rows }))) },
+  ];
 }
 
 function buildSummary(rows: ResultRow[], args: Args, commit: string, dirty = '', fingerprint = ''): string {
