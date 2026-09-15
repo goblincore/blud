@@ -24,6 +24,16 @@
 // direction in the signal must therefore also be body-local: rotate the
 // world ray direction with rotateYaw(dir, -heading) before passing it in.
 //
+// ...AND IT MUST BE A UNIT VECTOR. Every amplitude in this module is a
+// displacement in METRES (lurchAmp 0.26, flinchAmp 0.085), and `dir` is
+// multiplied straight into them, so a non-unit direction silently scales the
+// whole reaction by its length. This is not hypothetical: the blast path passed
+// the resolver's concussion VELOCITY (up to 25.2) as `dirWorld`, which turned a
+// 0.26 m lurch into an 8.5 m chest-and-neck offset — the body tore in half for
+// five frames and the rest-pose pull reeled it back, reported by the owner as
+// "the upper torso/arms/head fly off leaving just the legs and then they
+// rubberband back to the body". See `unitOrZero` in webgpu/game-actor.ts.
+//
 // Two signals the wiring consumes:
 //   - staggered: true while a hit reaction is active.
 //   - phaseKnock: a gait-clock TIME offset (s) to add to gait state.time

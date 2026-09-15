@@ -51,10 +51,14 @@
 // BLOB_POSE=walk|run|hip (and BLOB_POSE_FRAMES, default 90) shoot a held
 // motion pose instead of the rest pose — see the pose block below.
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { decodePng } from './lib/demo-presented.mjs';
+import { writePng } from './lib/png-write.mjs';
 import { inflateSync } from 'node:zlib';
 import { execFileSync } from 'node:child_process';
 
 const VITE = Number(process.argv[2] ?? 5233);
+// BLOB_OUT lets one run write beside another, which is what an A/B needs: a
+// wounded capture is only meaningful measured against a clean one.
 const OUT = process.argv[3] ?? '/tmp/turntable';
 const FRAMES = Number(process.argv[4] ?? 8);
 const CDP = Number(process.argv[5] ?? 9223);
@@ -302,6 +306,33 @@ const frameStats = [];
 // Each frame advances by the vector, so frame i sits at i * BLOB_WIND metres.
 const WIND = (process.env.BLOB_WIND ?? '').split(',').map(Number).filter(n => Number.isFinite(n));
 const WIND_SWEEP = WIND.length === 3 && WIND.some(n => n !== 0);
+/**
+ * The body's silhouette, from the difference between the normal frame and the
+ * same frame with the body hidden. White where the body is, transparent where the
+ * background is, with a small tolerance so capture noise does not speckle it.
+ *
+ * Returns null when the two captures are the same size (they always are) but the
+ * difference is empty, which would mean the hide did nothing — a silent failure
+ * that would otherwise produce an all-background mask and a sheet of nothing.
+ */
+function maskFrom(withBody, without) {
+  const a = decodePng(withBody);
+  const b = decodePng(without);
+  if (a.w !== b.w || a.h !== b.h) throw new Error('mask: frame sizes differ');
+  const out = new Uint8Array(a.w * a.h * 4);
+  let hits = 0;
+  for (let i = 0; i < a.w * a.h; i++) {
+    const d = Math.abs(a.data[i * a.ch] - b.data[i * b.ch])
+      + Math.abs(a.data[i * a.ch + 1] - b.data[i * b.ch + 1])
+      + Math.abs(a.data[i * a.ch + 2] - b.data[i * b.ch + 2]);
+    const on = d > 12 ? 255 : 0;
+    if (on) hits++;
+    out[i * 4] = 255; out[i * 4 + 1] = 255; out[i * 4 + 2] = 255; out[i * 4 + 3] = on;
+  }
+  console.log(`  mask: ${hits} body px (${(100 * hits / (a.w * a.h)).toFixed(1)}% of frame)`);
+  return hits > 0 ? writePng(a.w, a.h, out) : null;
+}
+
 // BODY-FRAME SWEEP. BLOB_ANCHOR=<degrees> holds the camera AND the body
 // still and turns only the anchor, frame by frame. If the folds are anchored
 // to the body they rotate on the cloth with it; if they are world-anchored
@@ -309,6 +340,64 @@ const WIND_SWEEP = WIND.length === 3 && WIND.some(n => n !== 0);
 // apart, because a turntable orbits the camera and a statue never yaws.
 const ANCHOR_DEG = Number(process.env.BLOB_ANCHOR ?? 0);
 const ANCHOR_SWEEP = Number.isFinite(ANCHOR_DEG) && ANCHOR_DEG !== 0;
+
+// PRE-WOUNDING, for gore baked into the sprites. The owner: "it would be cool to
+// like precapture like blood and wounds like you could make the zombie wounded and
+// then capture sprites from it that way would be cheap way to get some gore
+// effects baked in". Cheap is right: the wound stack already exists and the lab
+// already responds to real clicks (see sdf-lab-stagger-seq.mjs, which shift-clicks
+// the hero to blast it), so this dispatches REAL shots at the body before the
+// sweep and every yaw afterwards carries the same craters.
+//
+// Wounds are applied ONCE, before the sweep, deliberately: eight views of the SAME
+// wounded body are coherent, where a different wound set per angle would make one
+// "piece" a different piece in every frame.
+//
+// ⚠ NOT WORKING YET, and the measurement says so rather than the code: with the aim
+// point verified from the mask (the body's bbox centre is 690,424 and the clicks
+// land inside it) and the loop confirmed running, six shots move the body's pixel
+// count at yaw 0 from 38183 (clean) to 38340 — +0.4%, i.e. no craters appeared.
+// Two traps were found on the way and are fixed here: the aim must come from the
+// MASK (a guessed screen point misses a body whose bbox is 186x392 in a 1380x820
+// frame), and pausing the loop before/after the shots freezes the render so every
+// later setCam captures a byte-identical stale frame (measured: frames 00 and 01
+// both 54925 bytes, body-hidden difference 0 px). What is still unknown is whether
+// this camera mode accepts click-shoot at all — lab-main says the click-shoot
+// pipeline "stays god-only" — so the next step is to find the input path that
+// actually wounds (the seam `woundRing.stampBundle` is reachable through
+// `gorePort.stampWounds`, which would be a direct seam rather than a synthetic
+// click).
+const WOUNDS = Number(process.env.BLOB_WOUNDS ?? 0);
+if (WOUNDS > 0) {
+  console.log(`wounding the body with ${WOUNDS} wound(s) before the sweep`);
+  // THE LOOP MUST BE RUNNING. First attempt measured NO effect (body pixels
+  // 20977 vs 20863 clean) with the aim point verified correct — the mask puts the
+  // body's centre at 690,424 and the clicks landed inside that box. The working
+  // example, sdf-lab-stagger-seq.mjs, calls `pauseLoop(false)` before its click;
+  // this rig freezes the loop for a reproducible pose, and a frozen lab never
+  // processes the pending shot.
+  // A DIRECT SEAM, not a synthetic click: `__sdfLab.wound(n, seed, type)` is
+  // deterministic, aim-free, and returns how many craters landed — which is what
+  // lets a rig ASSERT the wounding happened instead of inferring it from pixels.
+  // The click path measured 0.4% and could never have worked here (lab-main: the
+  // click-shoot pipeline "stays god-only", and this rig freezes the rig).
+  const seed = Number(process.env.BLOB_WOUND_SEED ?? 7);
+  const type = process.env.BLOB_WOUND_TYPE ?? 'pellet';
+  const stamped = await evaluate(`__sdfLab.wound(${WOUNDS}, ${seed}, '${type}')`);
+  console.log(`  ${stamped} of ${WOUNDS} wound(s) landed; body now carries `
+    + `${await evaluate('__sdfLab.woundCount()')}`);
+  const woundedPx = await evaluate(`(() => {
+    const w = window.__sdfLab.heroPosed ? 1 : 0; return w;
+  })()`);
+  void woundedPx;
+  // Let the flesh settle and the blood sim spread, then freeze again for the
+  // sweep so the pose is reproducible.
+  await sleep(1200);
+  // ...and DO NOT re-pause. MEASURED: pauseLoop(true) here freezes the render, so
+  // every subsequent setCam captures the SAME stale frame (frames 00 and 01 came
+  // back byte-identical, 54925 bytes, and the body-hidden difference found 0 px).
+  // The sweep needs the loop running.
+}
 
 for (let i = 0; i < FRAMES; i++) {
   const yaw = (WIND_SWEEP || ANCHOR_SWEEP) ? 0 : (i / FRAMES) * Math.PI * 2;
@@ -325,6 +414,24 @@ for (let i = 0; i < FRAMES; i++) {
   const buf = Buffer.from(shot.result.data, 'base64');
   const file = `${OUT}/frame-${String(i).padStart(2, '0')}.png`;
   writeFileSync(file, buf);
+  // BLOB_MASK=1 also writes a BODY MASK for this angle, by capturing the same
+  // frame with the body hidden and diffing. That is exact where keying the
+  // background is not: the lab's background is a fogged, DITHERED gradient (see
+  // gib-sheet.mjs's header for the three key attempts that failed on it), whereas
+  // hiding `__sdfLab.body` changes only the body's own pixels — the lab has a
+  // directional light with NO shadow map, so the body casts nothing to catch in
+  // the difference. 2 captures per angle, no renderer change.
+  if (process.env.BLOB_MASK === '1') {
+    await evaluate(`(() => { window.__sdfLab.body.visible = false; return true; })()`);
+    await sleep(250);
+    const bare = await send('Page.captureScreenshot', { format: 'png' });
+    const bareBuf = Buffer.from(bare.result.data, 'base64');
+    writeFileSync(`${OUT}/bare-${String(i).padStart(2, '0')}.png`, bareBuf);
+    const mask = maskFrom(buf, bareBuf);
+    if (mask) writeFileSync(`${OUT}/mask-${String(i).padStart(2, '0')}.png`, mask);
+    await evaluate(`(() => { window.__sdfLab.body.visible = true; return true; })()`);
+    await sleep(250);
+  }
   const stats = pngStats(buf);
   frameStats.push({ i, yaw, file, bytes: buf.length, stats });
   console.log(

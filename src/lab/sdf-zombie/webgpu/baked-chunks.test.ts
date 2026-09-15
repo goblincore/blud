@@ -29,14 +29,37 @@ describe('createBakedChunkMaterial — default lit path (M1 behavior)', () => {
   });
 
   it('chunkShade keeps the light compose: beam, diffuse, wet specular from the baked mask', () => {
+    // The compose now reads the LOCAL albedo/normal/wetness (`a`, `nrm`, `wm`)
+    // rather than the parameters directly, because the procedural detail layer
+    // modifies them before the light sees them — see CHUNK_SHADE_WGSL's header.
+    // What must not change is the compose itself.
+    //
+    // The diffuse term gained a trailing `* ao` (2026-09-11): a BAKED per-vertex
+    // occlusion, multiplying the lit term exactly where the march multiplies its
+    // own cheap field AO. It is 1.0 unless the material opts in via `bakedAo`,
+    // so every other user of this shader composes identically.
     for (const present of [
       'if (spotCfg.x > 0.0)',
-      'let diffuse = albedo.rgb * (ambient + keyI * keyC * (0.15 + 0.85 * ndl));',
-      'let wm = clamp(albedo.a, 0.0, 1.0);',
+      'let diffuse = a.rgb * (ambient + keyI * keyC * (0.15 + 0.85 * ndl)) * ao;',
+      'let wm = clamp(a.a, 0.0, 1.0);',
       'let specular = keyC * wetTint',
     ]) {
       expect(CHUNK_SHADE_WGSL).toContain(present);
     }
+  });
+
+  it('the detail layer is GATED, so every existing user is unchanged', () => {
+    // The detail (bump, blood decals, organ gloss) sits behind `goreCfg.x > 0`,
+    // whose uniform default is 0 — so a baked chunk that never opts in shades as
+    // it always did. If this gate is ever removed, every settled piece in the
+    // game changes appearance without anybody choosing it.
+    expect(CHUNK_SHADE_WGSL).toContain('if (goreCfg.x > 0.0) {');
+    const mat = createBakedChunkMaterial();
+    expect(mat.uniforms.goreCfg.value.x).toBe(0);
+    // ...and the opt-in path is what turns it on.
+    expect(createBakedChunkMaterial({ goreDetail: true }).uniforms.goreCfg.value.x)
+      .toBe(0);   // the FLAG still needs the page to set the amp
+
   });
 });
 

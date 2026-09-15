@@ -1,0 +1,508 @@
+// src/lab/sdf-zombie/gib-parts.ts
+//
+// THE PIECE SET — what a body actually becomes when a blast takes it apart.
+//
+// WHY THIS EXISTS (owner, 2026-09-10): *"when the SDF body is gibbed it just
+// breaks into like tubes (arms and legs) and orbs (torso) which doesnt really
+// read as gibs"* and *"i still dont see anything bone related like idk rib cage
+// or something"*. Both complaints are about WHAT the pieces are, not how they
+// are drawn:
+//
+//   - `gibAll` (sever.ts) is ONE CHUNK PER CLUSTER, and a cluster is a whole
+//     limb (arm, forearm, thigh, shin, head, torso). One arm = one tube, the
+//     whole torso = one orb. That is literally the shape the owner rejected.
+//   - Every cluster chunk CARRIES its bone prims (`bones: cBones`) and packs
+//     them as more capsules UNIONED into the same marched field, so the femur
+//     is inside the meat and no bone is ever visible. `?boneMesh` does not fix
+//     it either — its crater exposure is fed from ACTOR wounds only, so a
+//     detached chunk's own bones never surface.
+//
+// So this module produces a piece set with the owner's decisions applied
+// (docs/dev-notes/2026-09-10-gib-quality-and-transition/README.md §2, all four
+// taken 2026-09-10):
+//
+//   torso SPLIT into chest / abdomen / pelvis   (decision: "Split it.")
+//   limbs NOT kept whole: upper / lower per limb (decision: "Do NOT keep them
+//                                                 whole.")
+//   head stays whole                             (its face carves and skull
+//                                                 sphere do not survive a split)
+//   the skeleton released as its OWN bone pieces (the answer to "no bones")
+//
+// CUT PLANES ARE CAPPED, AND THE NEIGHBOURS STILL MEET. Cutting a limb between
+// two capsules leaves their rounded ends a centimetre or two apart, and a gap
+// at the joint is exactly the "it doesnt read that the body was torn apart"
+// problem in reverse — at the frame of release the pieces must still add up to
+// the body. Two mechanisms, both here:
+//
+//   1. SEAL: each side's boundary prim is extended ALONG ITS OWN AXIS to the
+//      cut plane (capsule ends are round; extending one to a plane lands its
+//      centre line on the plane, so the two pieces touch).
+//   2. CAP: each side gets a `sub` blob on the far side of its own cut plane.
+//      A sphere of radius R centred R beyond the plane removes everything past
+//      the plane within about t²/2R of it — flat to a few millimetres over any
+//      piece this game has, and the two sides' carve spheres are complementary,
+//      so they cut at the SAME plane. That is what turns a rounded tube end
+//      into a slab of meat, which is the difference between "a tube" and "a
+//      gib". `sub` prims are skipped by chunkExtent (extent.ts), so the carve
+//      sphere costs no proxy-box volume however large R is.
+//
+// BONES ARE BONE-ONLY CHUNKS, NOT PRIMS ON A FLESH CHUNK. `melt-bones.ts`
+// already partitions a body's bone prims into the ELEVEN rigid groups a
+// skeleton actually moves in (skull, cage, pelvis, and the eight long bones) —
+// the melt releases them exactly that way, and `ChunkGpuView` already carries
+// every special case a bone-only chunk needs (counts2.y bareBones, lodCfg.w off
+// for the torn-meat mask, and the caller's meltCfg.x = 1 for the PALE bone
+// albedo instead of the meat one — see game-main's spawnChunkPiece). A bone
+// group is passed as `bones` with `prims: []`, which is what makes it a
+// bone-only chunk rather than a chunk with bones buried in it.
+//
+// PURE, LIKE THE REST OF THE GIB PATH: no Date.now, no Math.random, no DOM. The
+// caller's rng seeds the chunk tumble; nothing here reads it.
+import type { BuildResult } from './build-body';
+import type { ChunkKind } from './gib-chunks';
+import type { LimbId, Primitive, Vec3 } from './types';
+import { BONE_GROUPS, groupCentroid, limbOfGroup, partitionBones, type BoneGroup } from './melt-bones';
+import { add, dot, len, normalize, scale, sub } from './vec';
+
+/** Cut-plane geometry, all in metres. */
+export const GIB_CUT = {
+  /**
+   * Cut-sphere radius as a multiple of the PIECE's own reach. The carve is
+   * only flat to about t²/2R across the face (t = distance from the piece's
+   * axis), so R must clear the piece by a good margin: at 12x a 0.15 m piece
+   * cuts flat to 1 mm. Large R is free — a `sub` prim never enters an extent.
+   */
+  radiusK: 12,
+  /** Never smaller than this, so a tiny piece still cuts on a flat-enough arc. */
+  minRadius: 0.6,
+  /** smax fillet where the cut meets the skin. Sub-centimetre: a razor edge
+   *  reads as a cut, not a chamfer. */
+  blendK: 0.003,
+  /** Overhang (see GibCut) as a multiple of the cut's own blend radius. */
+  overhangK: 2,
+} as const;
+
+/** How the skeleton is released. `core` is the cost A/B against `all`. */
+export type GibBoneRelease = 'all' | 'core' | 'off';
+
+/** The bone groups `core` releases: the three torso masses plus the skull —
+ *  the pieces that make a pile read as a skeleton rather than as meat. */
+export const CORE_BONE_GROUPS: readonly BoneGroup[] = ['skull', 'cage', 'pelvis'];
+
+/** A cut between two pieces of the SAME body. `n` is the unit normal pointing
+ *  from the piece that keeps the `-n` side toward the one that keeps `+n`. */
+export interface GibCut {
+  at: Vec3;
+  n: Vec3;
+  /**
+   * How far each side may keep material PAST the plane, in metres — the
+   * smooth-min fillet the cut is about to delete.
+   *
+   * A cut at exactly the plane under-covers the body by the blend radius. The
+   * body's surface between two prims is the smin fillet, which belongs to
+   * NEITHER prim: cut both sides on the plane and the fillet is gone, so the
+   * union comes back up to a couple of centimetres thin at the flank — measured
+   * at 2.2 cm on the torso, which is a visible waistline pinch at the frame the
+   * body comes apart. Each side carving `blendK` past the plane puts the fillet
+   * back (doubled, which is invisible, and gone the instant the pieces move).
+   */
+  overhang: number;
+}
+
+/** One piece of a gibbed body, in WORLD space (the same frame `gibAll` hands
+ *  back), ready for `spawnChunkPiece`. */
+export interface GibPiece {
+  limb: LimbId;
+  /** Stable label for telemetry and tests: 'torso.chest', 'legL.lower',
+   *  'bone.cage'. Not read by the renderer. */
+  part: string;
+  /** 'bone' for a released skeleton group — picks the chunk's physics and its
+   *  material (see spawnChunkPiece). */
+  kind: ChunkKind;
+  /** Flesh prims. EMPTY on a bone-only piece, which is what makes it one. */
+  prims: Primitive[];
+  /** Bone/organ rows. On a flesh piece this is empty: the skeleton is released
+   *  as its own pieces, so nothing is left buried inside the meat. */
+  bones: Primitive[];
+  origin: Vec3;
+  /** Where this piece tore away. Empty: the cut is a CAPPED PLANE (see the
+   *  header), and a torn-end crater at the same point would eat the cap and
+   *  open the gap the cap exists to close. */
+  tornAt: Vec3[];
+}
+
+export interface GibPartsOptions {
+  /** Skeleton release. Default 'all'. */
+  bones?: GibBoneRelease;
+  /** Release the gut coil as its own piece. Default true. */
+  organs?: boolean;
+}
+
+/**
+ * Split a posed body into its gib pieces.
+ *
+ * ALIVE FLAGS ARE RESPECTED, NOT RE-DERIVED: a cluster that is not alive, or a
+ * prim flagged dead, is simply not here — so a body that lost an arm to a slug
+ * earlier does not emit that arm's pieces. Same mechanism `gibAll` uses. This
+ * function deliberately does NOT hand back a mutated body: the only caller
+ * retires the actor outright, and a second "already gibbed" state to keep in
+ * sync is the kind of duplication that drifts.
+ */
+export function gibParts(body: BuildResult, opts: GibPartsOptions = {}): GibPiece[] {
+  const boneRelease: GibBoneRelease = opts.bones ?? 'all';
+  const up = bodyUp(body);
+  const out: GibPiece[] = [];
+
+  for (const c of body.clusters) {
+    if (!c.alive) continue;
+    const prims = body.prims.slice(c.start, c.start + c.count).filter(p => !p.dead);
+    if (prims.length === 0) continue;
+
+    if (c.limb === 'head') {
+      // WHOLE. An intact head is a Blood signature and this one's face carves
+      // and skull sphere are baked against the head's own axes — splitting it
+      // gives two half-faces, which reads as a bug rather than as gore.
+      out.push(piece(c.limb, 'head', prims, c.center, []));
+      continue;
+    }
+
+    const groups = c.limb === 'torso'
+      ? splitTorso(prims, up, c.center)
+      : splitLimb(prims);
+    for (const g of groups) out.push(g);
+  }
+
+  if (boneRelease !== 'off') {
+    for (const g of bonePieces(body, boneRelease)) out.push(g);
+  }
+  if (opts.organs ?? true) {
+    const organs = body.bonePrims.filter(p => p.op === 'organ' && !p.dead);
+    if (organs.length > 0) {
+      out.push({
+        limb: 'torso', part: 'organ.gut', kind: 'limb',
+        prims: [], bones: organs, origin: groupCentroid(organs), tornAt: [],
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * The body's own cranial axis, from the torso's centre to the head's. Used to
+ * split the torso into cranial/caudal halves and NOT world Y: a blasted actor
+ * may be collapsed, crawling, or already toppled by the meter, and a world-Y
+ * split would then slice a lying body into head-end and feet-end slabs and call
+ * the slab nearest the sky a "chest".
+ */
+function bodyUp(body: BuildResult): Vec3 {
+  const torso = body.clusters.find(c => c.limb === 'torso');
+  const head = body.clusters.find(c => c.limb === 'head');
+  if (!torso || !head) return [0, 1, 0];
+  const d = sub(head.center, torso.center);
+  return len(d) < 1e-4 ? [0, 1, 0] : normalize(d);
+}
+
+/** Midpoint of a prim's endpoints — its centre for banding purposes. Bend is
+ *  deliberately ignored: only the ORDER of pieces along the axis matters, and a
+ *  bent prim's chord orders the same as its curve. */
+function primCentre(p: Primitive): Vec3 {
+  return [(p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2];
+}
+
+/** The authored bone name in the form every rule here matches on. The cast is
+ *  not consistent (`upperArm` on the zombie, `upperarm` on the soldier), so
+ *  every comparison is case-folded — a rule that matched only one spelling
+ *  would silently leave that character's arm whole again. */
+function boneKey(p: Primitive): string {
+  return (p.bone ?? '').toLowerCase();
+}
+
+/** Bone names that belong to the DISTAL half of a limb. */
+function isDistalBone(key: string): boolean {
+  return key.startsWith('forearm') || key.startsWith('hand')
+    || key.startsWith('shin') || key.startsWith('foot');
+}
+
+/** Bone names that are the pelvic mass of the torso. */
+function isPelvicBone(key: string): boolean {
+  return key === 'pelvis' || key === 'hips';
+}
+
+/**
+ * CHEST / ABDOMEN / PELVIS.
+ *
+ * The pelvic prims are the ones authored on the pelvis bone. What is left rides
+ * the spine, and is split at the MIDDLE OF ITS OWN AXIAL RANGE rather than at a
+ * fixed height: the zombie's three spine blobs (ribcage, mid-chest, gut) come
+ * out 2 + 1, and a character with a longer spine still comes out as an upper
+ * and a lower half instead of as one piece and a crumb.
+ */
+function splitTorso(prims: Primitive[], up: Vec3, centre: Vec3): GibPiece[] {
+  const pelvic = prims.filter(p => isPelvicBone(boneKey(p)));
+  const axial = prims.filter(p => !isPelvicBone(boneKey(p)));
+  if (axial.length === 0) return [piece('torso', 'torso.pelvis', prims, centre, [])];
+
+  const proj = (p: Primitive) => dot(sub(primCentre(p), centre), up);
+  const sorted = [...axial].sort((a, b) => proj(b) - proj(a));
+  const hi = proj(sorted[0]!);
+  const lo = proj(sorted[sorted.length - 1]!);
+  const mid = (hi + lo) / 2;
+  // A mid-line exactly on a prim's centre would otherwise fall to one side by
+  // float noise; `<=` puts it in the abdominal half, which is the smaller of
+  // the two on every character here and so the one that can afford it.
+  const cranial = sorted.filter(p => proj(p) > mid);
+  const caudal = sorted.filter(p => proj(p) <= mid);
+
+  const parts: { id: string; prims: Primitive[] }[] = [];
+  if (cranial.length === 0) parts.push({ id: 'torso.abdomen', prims: [...caudal, ...cranial] });
+  else {
+    if (cranial.length > 0) parts.push({ id: 'torso.chest', prims: cranial });
+    if (caudal.length > 0) parts.push({ id: 'torso.abdomen', prims: caudal });
+  }
+  if (pelvic.length > 0) parts.push({ id: 'torso.pelvis', prims: pelvic });
+
+  return assemble(parts, up, 'torso');
+}
+
+/**
+ * UPPER / LOWER per limb, by the authored bone name. `isDistalBone` is the
+ * whole rule: the elbow and the knee are where the prim authoring changes bone,
+ * and using the names means a character with an extra segment (the soldier's
+ * separate `hand` and `foot`) still splits at the joint it actually has.
+ */
+function splitLimb(prims: Primitive[]): GibPiece[] {
+  const lower = prims.filter(p => isDistalBone(boneKey(p)));
+  const upper = prims.filter(p => !isDistalBone(boneKey(p)));
+  const limb = prims[0]!.limb;
+  // A limb whose prims are all on one side of the joint — a one-prim foot, or a
+  // character with no forearm authored — is NOT split. Emitting an empty piece
+  // would put a zero-volume chunk in the pool and a phantom in the census.
+  if (upper.length === 0 || lower.length === 0) {
+    return [piece(limb, `${limb}.whole`, prims, centroid(prims), [])];
+  }
+  return assemble([
+    { id: `${limb}.upper`, prims: upper },
+    { id: `${limb}.lower`, prims: lower },
+  ], null, limb);
+}
+
+/**
+ * Order the groups along the cut axis, SEAL and CAP every cut between adjacent
+ * ones, and emit the pieces. `axis` is the body's cranial direction for the
+ * torso (the groups are already in cranial-to-caudal order) and null for a
+ * limb, where the cut direction comes from the two prims' own endpoints.
+ */
+function assemble(
+  parts: { id: string; prims: Primitive[] }[],
+  axis: Vec3 | null,
+  limb: LimbId,
+): GibPiece[] {
+  const cuts: GibCut[] = [];
+  for (let i = 0; i + 1 < parts.length; i++) {
+    const cut = cutBetween(parts[i]!.prims, parts[i + 1]!.prims, axis);
+    if (cut) cuts.push(cut);
+  }
+
+  const out: GibPiece[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    const own = parts[i]!;
+    const centre = centroid(own.prims);
+    // Radius from THIS PIECE's own reach, and only its own: the cut sphere has
+    // to clear the face being cut, not the whole cluster's span. Both sides of
+    // a cut measure differently and that is fine — each sphere's surface passes
+    // through the plane at its own centre whatever its radius, so the two sides
+    // still meet; only the shallowness of the arc differs.
+    const radius = Math.max(GIB_CUT.minRadius, extentOf(own.prims, centre) * GIB_CUT.radiusK);
+    // The cut BELOW this piece (this piece keeps the -n side) and the cut ABOVE
+    // it (keeps the +n side). Only the cuts this piece actually has a side of,
+    // which is why they are tracked by index rather than by "all cuts".
+    const below = i - 1 >= 0 ? cuts[i - 1] : undefined;
+    const above = i < cuts.length ? cuts[i] : undefined;
+    let prims = own.prims.map(p => ({ ...p }));
+    if (above) prims = capAt(prims, above, -1, radius);
+    if (below) prims = capAt(prims, below, +1, radius);
+    out.push({
+      limb, part: own.id, kind: 'limb',
+      prims, bones: [], origin: centre, tornAt: [],
+    });
+  }
+  return out;
+}
+
+/**
+ * The cut plane between two adjacent groups: through the MIDPOINT of the
+ * closest endpoint pair (those two capsule ends are what has to meet), with the
+ * normal running from the first group to the second. A limb supplies its own
+ * direction this way; the torso, whose blobs are single points sharing no
+ * endpoint, uses the body's cranial axis instead.
+ */
+function cutBetween(a: Primitive[], b: Primitive[], axis: Vec3 | null): GibCut | null {
+  let best = Infinity;
+  let pa: Vec3 | null = null;
+  let pb: Vec3 | null = null;
+  let blend = 0;
+  for (const p of a) for (const q of b) for (const ea of [p.a, p.b]) for (const eb of [q.a, q.b]) {
+    const d = len(sub(ea, eb));
+    if (d < best) { best = d; pa = ea; pb = eb; blend = Math.max(p.blendK, q.blendK); }
+  }
+  if (!pa || !pb) return null;
+  const at: Vec3 = [(pa[0] + pb[0]) / 2, (pa[1] + pb[1]) / 2, (pa[2] + pb[2]) / 2];
+  const raw = sub(pb, pa);
+  const n = len(raw) > 1e-5 ? normalize(raw) : (axis ?? [0, 1, 0]);
+  return { at, n, overhang: blend * GIB_CUT.overhangK };
+}
+
+/**
+ * Everything this piece keeps is on the `keep` side of the cut: seal the
+ * boundary across to the plane, then cap it.
+ *
+ * SEAL — extend the one prim whose endpoint is nearest the plane along its own
+ * axis until it reaches the plane. Along the axis, not straight at the plane:
+ * a capsule extended sideways turns into a bulge, and what is wanted here is
+ * the same tube, longer. Near-parallel prims (a rib authored almost in the
+ * plane) fall back to a straight move, because `-d/dot(dir, n)` walks to
+ * infinity as the axis turns parallel to the plane.
+ *
+ * CAP — one `sub` blob centred `radius` past the plane on the side being
+ * removed. It is a sphere, so its carve of the flat face is a very shallow
+ * concave arc (t²/2R), which is also what keeps the two neighbours from
+ * z-fighting at exactly the same plane.
+ */
+function capAt(prims: Primitive[], cut: GibCut, keep: 1 | -1, radius: number): Primitive[] {
+  // `n` runs from group i toward group i+1. keep = -1 means this piece is group
+  // i (it keeps the -n side) — so its carve sits on the +n side and the
+  // endpoint it seals is the one with the SMALLEST shortfall on the keep side.
+  const s = keep;
+  // Both the seal and the carve work against the plane pushed `overhang` past
+  // the nominal cut, so they agree on where the material ends.
+  const plane: GibCut = {
+    at: add(cut.at, scale(cut.n, -s * cut.overhang)),
+    n: cut.n, overhang: cut.overhang,
+  };
+  // `short > 0` means "on this piece's own side of the plane, that far short of
+  // it"; negative means the endpoint is already through and the cap cuts it.
+  // Taking the MINIMUM positive shortfall picks the endpoint nearest the plane.
+  // (Taking the MAXIMUM seals the endpoint deepest inside the piece — which
+  // drags the far end of an arm bar up to the plane and deletes the bar. It
+  // cost 21% of the body's interior on the first build of this file.)
+  let bestIdx = -1;
+  let bestEnd: 'a' | 'b' = 'a';
+  let bestShort = Infinity;
+  for (let i = 0; i < prims.length; i++) {
+    const p = prims[i]!;
+    if (p.op === 'sub') continue;
+    for (const e of ['a', 'b'] as const) {
+      const short = dot(sub(p[e], plane.at), cut.n) * s;
+      if (short > 0 && short < bestShort) { bestShort = short; bestIdx = i; bestEnd = e; }
+    }
+  }
+  const out = prims.map(p => ({ ...p }));
+  if (bestIdx >= 0) {
+    out[bestIdx] = extendToPlane(out[bestIdx]!, bestEnd, plane);
+  }
+  const centre = add(plane.at, scale(cut.n, -s * radius));
+  out.push({
+    limb: prims[0]?.limb ?? 'torso',
+    cluster: prims[0]?.cluster ?? 0,
+    op: 'sub',
+    a: centre, b: centre,
+    radius,
+    scale: [1, 1, 1],
+    blendK: GIB_CUT.blendK,
+  });
+  return out;
+}
+
+/**
+ * Slide one endpoint of a prim onto the cut plane, along the prim's axis.
+ *
+ * SIDE-BLIND ON PURPOSE: the endpoint's signed distance to the plane may be
+ * either sign — the piece above the cut reaches it from -n, the piece below
+ * from +n — and both want the same thing, the endpoint AT the plane. Solving
+ * `d + t·dot(axis, n) = 0` does that for either sign, so there is no branch to
+ * get backwards. (There WAS one, and it was: the +n side's endpoint reads as
+ * "already past the plane" by raw sign while actually being 15 mm short of it,
+ * which left every joint in the body open by exactly that much.)
+ *
+ * PERPENDICULAR FALLBACK when the axis runs parallel to the plane: a point prim
+ * (a == b — every torso blob) has no axis at all, and `-d / dot(axis, n)` walks
+ * to infinity as the axis turns parallel. Moving the endpoint straight at the
+ * plane turns such a blob into a stubby capsule reaching the cut, which is the
+ * same shape the extend was for.
+ */
+function extendToPlane(p: Primitive, end: 'a' | 'b', cut: GibCut): Primitive {
+  const e = p[end];
+  const d = dot(sub(e, cut.at), cut.n);
+  const axis = sub(p.b, p.a);
+  const axisLen = len(axis);
+  const dn = axisLen < 1e-6 ? 0 : dot(scale(axis, 1 / axisLen), cut.n);
+  const moved: Vec3 = Math.abs(dn) > 0.25
+    ? add(e, scale(axis, -d / (dn * axisLen)))
+    : add(e, scale(cut.n, -d));
+  return end === 'a' ? { ...p, a: moved } : { ...p, b: moved };
+}
+
+/** Reach of a prim set from `centre` — `chunkExtent`'s recipe, kept local so
+ *  this module stays free of the renderer's imports. Carves are skipped there
+ *  and skipped here: the cap spheres are enormous on purpose. */
+function extentOf(prims: Primitive[], centre: Vec3): number {
+  let r = 0;
+  for (const p of prims) {
+    if (p.op === 'sub') continue;
+    const ms = Math.max(p.scale[0], p.scale[1], p.scale[2]);
+    const rMax = Math.max(p.radius, p.radiusB ?? p.radius) * ms;
+    for (const e of [p.a, p.b]) r = Math.max(r, len(sub(e, centre)) + rMax);
+  }
+  return r;
+}
+
+/** Mean of every endpoint — the same centre `cluster.center` uses, so a piece's
+ *  physics seed and its spawn origin agree with the body's own bookkeeping. */
+function centroid(prims: Primitive[]): Vec3 {
+  let x = 0, y = 0, z = 0, n = 0;
+  for (const p of prims) for (const e of [p.a, p.b]) { x += e[0]; y += e[1]; z += e[2]; n++; }
+  return n > 0 ? [x / n, y / n, z / n] : [0, 0, 0];
+}
+
+function piece(limb: LimbId, part: string, prims: Primitive[], origin: Vec3, tornAt: Vec3[]): GibPiece {
+  return { limb, part, kind: 'limb', prims: prims.map(p => ({ ...p })), bones: [], origin, tornAt };
+}
+
+/**
+ * THE SKELETON, AS ITS OWN PIECES.
+ *
+ * `partitionBones` groups the authored bone prims into the eleven rigid groups
+ * a skeleton moves in and `groupCentroid` seeds each with its own centre of
+ * mass, so this is a thin adapter over machinery the melt has used since
+ * 2026-09-03 — and it inherits the melt's one trap: ORGANS RIDE THE SAME ARRAY
+ * and are not bones (a rigid gut coil is not a thing), so they are filtered out
+ * here exactly as `partitionBones` does.
+ *
+ * `limbOfGroup` decides the chunk's LIMB ID, which is not cosmetic: the chunk
+ * view switches its face projection on for a 'head' limb, and a bare pale skull
+ * wearing the zombie's painted eyes is worse than no skull at all. It maps the
+ * skull group to 'torso' for that reason.
+ */
+function bonePieces(body: BuildResult, release: GibBoneRelease): GibPiece[] {
+  const parts = partitionBones(body.bonePrims);
+  const out: GibPiece[] = [];
+  // Emitted in BONE_GROUPS order (not Map order) so the census and the tests
+  // read the same sequence on every run — `partitionBones` builds its Map from
+  // first-seen order, which is stable today and would not be the day authoring
+  // moves a line.
+  for (const group of BONE_GROUPS) {
+    const prims = parts.get(group);
+    if (!prims || prims.length === 0) continue;
+    if (release === 'core' && !CORE_BONE_GROUPS.includes(group)) continue;
+    out.push({
+      limb: limbOfGroup(group),
+      part: `bone.${group}`,
+      kind: 'bone',
+      prims: [],
+      bones: prims.filter(p => !p.dead),
+      origin: groupCentroid(prims),
+      tornAt: [],
+    });
+  }
+  return out;
+}

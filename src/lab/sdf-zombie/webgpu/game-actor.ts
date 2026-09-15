@@ -21,6 +21,9 @@ import type { EncounterOrder } from './encounter-director';
 
 import type { BuildResult } from '../build-body';
 import { bindRig, applyRig, headQuatOf, impulseAt, type BoundRig } from '../rig-bind';
+import {
+  TEAR_TUNING, tearPosed, type TearState, type TearTuning,
+} from '../gib-tear';
 import { constrainRigBends, stepRig } from '../rig';
 import { relaxRopeConstraints } from '../collapse';
 import {
@@ -95,6 +98,35 @@ const SLUG_GAIN = 1.3;
  *  per second. ∫ v0·e^(−kt) ≈ v0/k metres of total travel. */
 const BLAST_KNOCK_MPS = 1.2;
 const BLAST_KNOCK_DECAY = 7;
+
+/**
+ * THE BLAST SIGNAL'S DIRECTION MUST BE A UNIT VECTOR, and handing it a VELOCITY
+ * is what tore bodies in half.
+ *
+ * `stagger.ts` turns the shot signal into a pose reaction by SCALING its `dir`
+ * by metre-valued amplitudes (`lurchAmp` 0.26 m, `flinchAmp` 0.085 m) and
+ * writing the result into `rootOffset` plus `offsets.chest`/`offsets.neck`/the
+ * shoulders. Every one of those is a METRE offset, so `dir` has to be unit —
+ * the module's own header calls it "the shot direction".
+ *
+ * `blast()` passed `impulse.vel` — the resolver's concussion VELOCITY, 2.0 m/s
+ * at the launch floor and 25.2 point-blank — so the lurch became
+ * `0.26 x 25.2 x 1.3(gain) = 8.5 m` of chest and neck offset. MEASURED
+ * intra-body chest-to-foot span after a point-blank blast: 0.667 m -> **8.23 m**
+ * in five frames, easing back to 0.67 m over the next half second. That is the
+ * owner's "the upper torso/arms/head fly off leaving just the legs and then they
+ * rubberband back to the body", to the metre — and it is also the same defect
+ * behind the earlier "teleported outside the screen then animated backwards",
+ * of which the `impulseAt` unit bug was the smaller half.
+ *
+ * The two facts are separate and both are needed: the DIRECTION of the reaction
+ * (unit) and HOW HARD (a velocity, which only the root knock uses, and which
+ * never displaces a joint relative to its neighbours).
+ */
+function unitOrZero(v: Vec3): Vec3 {
+  const l = Math.hypot(v[0], v[1], v[2]);
+  return l > 1e-6 ? [v[0] / l, v[1] / l, v[2] / l] : [0, 0, 0];
+}
 
 /** A detached piece, placed in WORLD space where the rendered limb hung.
  *  game-main turns this into a ballistic chunk + SDF view. */
@@ -272,6 +304,31 @@ export interface ZombieActor {
   /** Latest POSED body (world space) — what projectiles will raycast. */
   readonly posed: () => BuildResult;
   readonly boundRig: () => BoundRig;
+  /**
+   * BEGIN THE PRE-TEAR WINDOW (gib-tear.ts): for `sec` seconds the march draws
+   * the flesh pushed outward from `at` and shuddering, and `posed()` stays
+   * clean. The caller gibs the body when `tearing()` goes false — that is the
+   * whole hand-off, and it is why the actor owns the clock rather than the
+   * wiring: the window has to end on a frame the actor has already stepped, or
+   * the pieces spawn from a pose the body was never drawn in.
+   */
+  beginTear(at: Vec3, falloff: number): void;
+  /**
+   * ADVANCE THE WINDOW BY `dt` AND RE-DRAW THE BENT BODY. The CALLER owns this
+   * clock (game-main steps it for the bodies it has queued to gib) rather than
+   * the body's own step, because the step is skippable — `?frozen=1`, and any
+   * future distance/room culling of bodies — and a window whose clock stops is
+   * a body that never becomes pieces.
+   */
+  stepTear(dt: number): void;
+  /** Is the window still running? False before it starts AND after it ends. */
+  readonly tearing: () => boolean;
+  /** Seconds into the window (0 when not tearing) — the capture rig's clock. */
+  readonly tearAge: () => number;
+  /** Drop the window immediately without gibbing (a reset, a bake pause). */
+  endTear(): void;
+  /** Retune the window for this actor (the page's `?gibtear*` knobs). */
+  setTearTuning(t: Partial<TearTuning>): void;
   /** Current ground position + facing. */
   readonly pose: () => { pos: Vec3; yaw: number };
   /** Ground-plane shove from crowd separation (crowd.ts), bounds- and
@@ -379,6 +436,31 @@ export interface ZombieActor {
    * upload the pellet path uses.
    */
   stampBlast(wounds: readonly Wound[]): void;
+  /**
+   * A RESOLVED EXPLOSION's full effect on this body — the dynamite path.
+   * Stamps the blast wounds (geometry + carves), credits the collapse meter
+   * with the resolver's `meterCredit` DIRECTLY (never through `freshWounds` —
+   * see the implementation's doc block and the X1.23 contract), raises the
+   * blast reaction (flinch/stagger/knock), shoves the rig once at the nearest
+   * surface, and runs the sever tail.
+   *
+   * The caller checks `BodyExplosionEffect.gibbed` FIRST and gibs the actor
+   * instead of calling this — a gibbed body wants no sever claims.
+   *
+   * `wounds` must have been resolved against THIS actor's posed body with
+   * `bodyYaw: pose().yaw`, exactly as `stampBlast` requires.
+   */
+  blast(effect: ActorBlastEffect): void;
+}
+
+/** The slice of explosion-aoe.ts's `BodyExplosionEffect` the actor needs. */
+export interface ActorBlastEffect {
+  wounds: readonly Wound[];
+  /** Σ wound radii × COLLAPSE_TUNING.meterRadiusWeight, falloff-scaled. */
+  meterCredit: number;
+  /** Concussion shove at the nearest surface point, or null. `vel` is the
+   *  world-space velocity; its direction also anchors the reaction. */
+  impulse: { at: Vec3; vel: Vec3 } | null;
 }
 
 export function createZombieActor(opts: {
@@ -445,6 +527,22 @@ export function createZombieActor(opts: {
   // BuildResult with alive flags moved (prims are never removed/reordered).
   let current = body;
   let posed = body;
+  /**
+   * THE PRE-TEAR WINDOW (gib-tear.ts). While this is set the march draws a BENT
+   * copy of the posed body — the shockwave pushing the flesh outward from the
+   * blast, shuddering — and `posed` itself stays the CLEAN body, so the
+   * resolver, the wound ring and the gib's own piece set all still see the body
+   * as it is. Null on every frame of ordinary play.
+   */
+  let tear: TearState | null = null;
+  /** Per-actor copy of the window's shape, so a live seam can retune it. */
+  let tearTuning: TearTuning = TEAR_TUNING;
+  /**
+   * THE BODY THE MARCH SHOULD DRAW THIS FRAME: the posed body, bent by the tear
+   * window when one is running. EVERY view upload goes through here, so the
+   * distortion cannot appear on one path and be missing on another.
+   */
+  const drawnPose = (): BuildResult => (tear ? tearPosed(posed, tear, tearTuning) : posed);
   let bodyYaw = 0;
   const soldierDamage = opts.profile?.name === 'soldier';
   let soldierFatal = false;
@@ -942,7 +1040,7 @@ export function createZombieActor(opts: {
       woundRing.set(woundRing.all().map(w => ({ ...w, ageSec: w.ageSec + dt })));
     }
     posed = applyRig(current, bound, bodyYaw);
-    view.update(posed, current);
+    view.update(drawnPose(), current);
     view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
     refreshWounds();
     const d = lastFrame;
@@ -1018,9 +1116,105 @@ export function createZombieActor(opts: {
     for (const w of blastWounds) pendingWounds.push(w);
     if (blastWounds.length === 0) return;
     posed = applyRig(current, bound, bodyYaw);
-    view.update(posed, current);
+    view.update(drawnPose(), current);
     view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
     refreshWounds();
+  }
+
+  /**
+   * A RESOLVED EXPLOSION lands on this body — the dynamite path, and the one
+   * place a blast does more than crater geometry.
+   *
+   * Four things, in this order, and the ORDER IS THE CONTRACT:
+   *
+   *  1. WOUNDS go into the ring + the carve upload (rendering) exactly as
+   *     stampBlast does, including the Soldier injury ledger.
+   *  2. THE COLLAPSE METER IS CREDITED WITH `meterCredit` DIRECTLY, and the
+   *     wounds are deliberately NOT pushed through `pendingWounds`. That array
+   *     is motion's `freshWounds` channel, and stepCollapse weights each entry
+   *     by WOUND_PROFILES[type].radius — the PROFILE'S radius, not the
+   *     wound's own. A 16-wound blast would therefore debit 16 × 0.13 = 2.08
+   *     meter whatever the actual falloff, collapsing a body from a single
+   *     grazing edge-of-radius hit. The resolver already scaled each wound by
+   *     its own falloff and summed them into meterCredit, so that sum is the
+   *     only honest number. (This is the X1.23 wiring contract.)
+   *  3. THE REACTION still happens: a blast-class shot signal (flinch +
+   *     Soldier stagger) and the zombie's root knock, so the body visibly
+   *     takes it even though it is not "wounded" in the meter sense twice.
+   *  4. THE SHOVE — one impulse at the nearest surface point — then the sever
+   *     tail, which re-derives cuts from the ring the actor now holds. The
+   *     resolver's severedLimbs/chainCuts need not be passed: runSeverChecks
+   *     is the module that owns that bookkeeping and already reports
+   *     detachments through onSever.
+   *
+   * GIB IS NOT HERE. The caller checks `effect.gibbed` FIRST and runs the gib
+   * path instead — the game's single-hit rule (damage ≥ GIB_THRESHOLD skips
+   * death and gibs outright), which also means no sever claims are wanted.
+   */
+  function blast(effect: ActorBlastEffect): void {
+    damageRevision++; bakePaused = false;
+    const { wounds: blastWounds, meterCredit, impulse } = effect;
+
+    for (const w of blastWounds) if (w.shot?.weapon === 'explosion') recordSoldierInjury(w);
+    woundRing.stampBundle(blastWounds);
+    if (torsoWounds) for (const w of blastWounds) torsoWounds.record(w, current);
+
+    // (2) The meter, credited directly — see the doc block.
+    if (meterCredit > 0 && state.collapse.phase === 'standing') {
+      state = {
+        ...state,
+        collapse: { ...state.collapse, meter: Math.min(1, state.collapse.meter + meterCredit) },
+      };
+    }
+
+    // (3) The reaction: the same blast-class signal applyProjectileHit raises,
+    //     minus the wound stamp it already did for us.
+    //
+    //     `unitOrZero`, NOT the raw velocity: the signal's direction is scaled by
+    //     metre amplitudes downstream, so passing 25.2 m/s here put 8.5 m of
+    //     lurch into the chest and neck. See `unitOrZero`'s block.
+    const at: Vec3 = impulse ? impulse.at : bodyCentreWorld();
+    const dirWorld: Vec3 = impulse ? unitOrZero(impulse.vel) : [0, 0, 0];
+    selectPendingShot({
+      type: 'blast',
+      dirWorld: [...dirWorld] as Vec3,
+      woundWorld: [...at] as Vec3,
+      torso: true,
+      ...(soldierDamage ? { soldierLevel: 'medium' as const } : {}),
+      gain: SLUG_GAIN,
+    });
+    if (soldierDamage) {
+      mind.stagger(soldierStaggerDuration('medium'));
+    } else {
+      const l = Math.hypot(dirWorld[0], dirWorld[2]);
+      if (l > 1e-6) {
+        knockV = Math.max(knockV, BLAST_KNOCK_MPS);
+        knockDir = [dirWorld[0] / l, 0, dirWorld[2] / l];
+      }
+    }
+
+    // (4) THE PUSH GOES THROUGH THE ROOT — never a rig joint. A joint-level
+    //     shove cannot work while `bindRig` PINS a foot: the shoved joint flies
+    //     and the pinned one holds, so the body tears. The root moves every joint
+    //     together, including the pinned foot. The pose/upload refresh below is
+    //     still wanted because the sever tail must see a current pose.
+    posed = applyRig(current, bound, bodyYaw);
+    view.update(drawnPose(), current);
+    view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
+    refreshWounds();
+    if (blastWounds.length > 0) runSeverChecks();
+  }
+
+  /** World-space centre of the body's live flesh — the reaction anchor when a
+   *  blast arrives with no impulse (e.g. an impulse-free resolver call). */
+  function bodyCentreWorld(): Vec3 {
+    let x = 0, y = 0, z = 0, n = 0;
+    for (const c of current.clusters) {
+      if (!c.alive) continue;
+      x += c.center[0]; y += c.center[1]; z += c.center[2]; n++;
+    }
+    if (n === 0) return [0, 1, 0];
+    return [x / n, y / n, z / n];
   }
 
   /** Shared post-impact choreography: stamp wound, flinch signal, recoil
@@ -1070,7 +1264,7 @@ export function createZombieActor(opts: {
     pendingPelletShot = null;
     runSeverChecks();
     posed = applyRig(current, bound, bodyYaw);
-    view.update(posed, current);
+    view.update(drawnPose(), current);
     view.setHeadRotation(headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1]);
     refreshWounds();
   }
@@ -1150,6 +1344,29 @@ export function createZombieActor(opts: {
     beginHits,
     endHits,
     posed: () => posed,
+    beginTear: (at: Vec3, falloff: number) => {
+      tear = { at: [...at] as Vec3, falloff, age: 0 };
+    },
+    // FALSE THE MOMENT THE WINDOW IS SPENT, and the state itself is left in
+    // place until the caller ends it: `tearing()` is the wiring's "gib it now"
+    // signal, so it must go false exactly once per window and never flicker
+    // back (a flicker would gib the same body twice).
+    stepTear: (dt: number) => {
+      if (!tear) return;
+      tear = { ...tear, age: tear.age + dt };
+      // AND THE VIEW IS RE-UPLOADED HERE. The window has to survive a frame the
+      // actor did not step — `?frozen=1` skips the whole body block, and the
+      // capture rigs run frozen — or a body mid-tear is (a) never drawn bent and
+      // (b) NEVER GIBBED, because the clock that ends its window would never
+      // advance. Uploading the same pose twice on a frame the actor DID step is
+      // one wasted pack for one body; a body stuck mid-tear forever is a hole in
+      // the world.
+      view.update(drawnPose(), current);
+    },
+    tearing: () => tear !== null && tear.age < tearTuning.sec,
+    tearAge: () => tear?.age ?? 0,
+    endTear: () => { tear = null; },
+    setTearTuning: (t: Partial<TearTuning>) => { tearTuning = { ...tearTuning, ...t }; },
     motionFrame: () => lastFrame,
     sinceFire: () => state.sinceFire,
     boundRig: () => bound,
@@ -1197,5 +1414,6 @@ export function createZombieActor(opts: {
     hit,
     hitSlug,
     stampBlast,
+    blast,
   };
 }

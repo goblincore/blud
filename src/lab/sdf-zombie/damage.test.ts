@@ -1,6 +1,9 @@
 // src/lab/sdf-zombie/damage.test.ts
 import { describe, it, expect } from 'vitest';
-import { worldHitToWound, woundWorldPos, woundCarveNormal, pushWound, MAX_WOUNDS, WOUND_PROFILES, WOUND_CARVE_DEPTH_FRAC } from './damage';
+import { worldHitToWound, woundWorldPos, woundCarveNormal, pushWound, MAX_WOUNDS, WOUND_PROFILES, WOUND_CARVE_DEPTH_FRAC, rimScaleFor } from './damage';
+import { buildBody, DEFAULT_BUILD_OPTS } from './build-body';
+import { ZOMBIE } from './body';
+import { sdBody } from './validate';
 import { rotateYaw } from './gait';
 import type { Primitive, Vec3 } from './types';
 import { add, len, qFromAxisAngle, qMul, qRotate, sub } from './vec';
@@ -343,4 +346,93 @@ it('never binds a wound to a carve', () => {
   // The carve is nearer the hit, so a naive nearest-primitive search picks it.
   const carve: Primitive = { ...solid, a: [0.5, 0, 0], b: [0.5, 0, 0], op: 'sub' };
   expect(worldHitToWound([solid, carve], [0.49, 0, 0], 0.05, 'pellet').primIdx).toBe(0);
+});
+
+
+// ——— The flesh probe's cap is EXACT (2026-09-10) ————————————————————————
+// `probeFlesh` marches PROBE_MAX 0.6 m in PROBE_STEP 0.004 m samples — 150
+// `sdBody` folds PER WOUND — and `rimScaleFor` only ever reads
+// `min(1, thick / (2 * lip))`, so everything past `2 * lip` is the same answer.
+// Capping the march there is what took the arena blast's wound stamping from
+// 50 ms to single figures; these pin that it did not change a single rim.
+//
+// The reference below is the UNCAPPED probe, reimplemented here from the same
+// constants, so the claim "the cap changes nothing" is checked rather than
+// asserted.
+describe('the flesh probe cap is exact', () => {
+  const PROBE_STEP = 0.004, PROBE_MAX = 0.6, PROBE_SEEK_MAX = 0.04;
+
+  /** probeFlesh with NO cap — the pre-2026-09-10 behaviour, verbatim. */
+  function uncappedThick(field: (p: Vec3) => number, hit: Vec3, prim: Primitive): number | null {
+    const ab = sub(prim.b, prim.a);
+    const L2 = ab[0] ** 2 + ab[1] ** 2 + ab[2] ** 2;
+    const ap = sub(hit, prim.a);
+    const t = L2 === 0 ? 0 : Math.max(0, Math.min(1, (ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / L2));
+    const axisPt = add(prim.a, [ab[0] * t, ab[1] * t, ab[2] * t]);
+    const inward = sub(axisPt, hit);
+    const n = len(inward);
+    if (n < 1e-6) return null;
+    const dir: Vec3 = [inward[0] / n, inward[1] / n, inward[2] / n];
+    const measure = (from: number): number => {
+      let thick = 0;
+      for (let d = from; d <= PROBE_MAX; d += PROBE_STEP) {
+        if (field(add(hit, [dir[0] * d, dir[1] * d, dir[2] * d])) > 0) break;
+        thick = d;
+      }
+      return thick;
+    };
+    let thick = measure(PROBE_STEP);
+    if (thick > 0) return thick;
+    let seek = 0, entered = false;
+    for (let d = PROBE_STEP; d <= PROBE_SEEK_MAX; d += PROBE_STEP) {
+      seek = d;
+      if (field(add(hit, [dir[0] * d, dir[1] * d, dir[2] * d])) <= 0) { entered = true; break; }
+    }
+    if (!entered) return 0;
+    return measure(seek + PROBE_STEP) - seek;
+  }
+
+  it('rimScaleFor equals the uncapped rim at every sampled hit, on real flesh', () => {
+    const body = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
+    const field = (p: Vec3) => sdBody(p, body);
+    const live = body.prims.filter(p => p.op !== 'sub' && !p.dead);
+    const lips = [0.0165, 0.0715, 0.13];      // pellet-ish, blast-ish, big blast
+    let checked = 0;
+    for (const prim of live) {
+      // Hits marching along the prim's own axis, pulled out to its surface.
+      for (let u = 0; u <= 1.0001; u += 0.25) {
+        const onAxis: Vec3 = [
+          prim.a[0] + (prim.b[0] - prim.a[0]) * u,
+          prim.a[1] + (prim.b[1] - prim.a[1]) * u,
+          prim.a[2] + (prim.b[2] - prim.a[2]) * u,
+        ];
+        for (const off of [0.5, 1.0, 1.4]) {
+          const hit: Vec3 = [onAxis[0] + prim.radius * off, onAxis[1], onAxis[2]];
+          for (const lip of lips) {
+            const radius = lip / (0.55 * WOUND_PROFILES.blast.rimSplayScale);
+            const got = rimScaleFor(field, hit, prim, radius, 'blast');
+            const thick = uncappedThick(field, hit, prim);
+            if (thick === null) { expect(got).toBe(1); continue; }
+            const want = Math.max(0, Math.min(1, thick / (2 * lip)));
+            expect(got, `prim ${prim.limb} u=${u} off=${off} lip=${lip}: got ${got} want ${want}`)
+              .toBeCloseTo(want, 12);
+            checked++;
+          }
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(200);
+  });
+
+  it('a rim already at the cap stays at the cap', () => {
+    // The direction the cap clamps to: thick flesh, rim full.
+    const body = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
+    const field = (p: Vec3) => sdBody(p, body);
+    const torso = body.prims.find(p => p.limb === 'torso' && p.op !== 'sub')!;
+    const c: Vec3 = [(torso.a[0] + torso.b[0]) / 2, (torso.a[1] + torso.b[1]) / 2, (torso.a[2] + torso.b[2]) / 2];
+    const hit: Vec3 = [c[0] + torso.radius, c[1], c[2]];
+    // A pellet-sized lip makes 2*lip tiny, so any real flesh fills the rim.
+    const r = 0.03 / (0.55 * WOUND_PROFILES.pellet.rimSplayScale);
+    expect(rimScaleFor(field, hit, torso, r, 'pellet')).toBe(1);
+  });
 });

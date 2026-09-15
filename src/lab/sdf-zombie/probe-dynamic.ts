@@ -393,6 +393,24 @@ export function packCapsulesFromBoneInstances(
 
 /** Floats per packed light: three vec4. */
 export const LIGHT_FLOATS = 12;
+
+/**
+ * THE SOFT (ROOM-FILL) REFERENCE DISTANCE, in metres.
+ *
+ * A packed light is a POINT light and accumulates as `intensity · n·l / d²`, so
+ * it reads as a bright blob at its own position and as almost nothing across a
+ * room: at 2 m a surface gets 1/4 of the peak and at 8 m it gets 1/64. That is
+ * correct for a muzzle flash and WRONG for a detonation — the owner, playing:
+ * *"the explosion seems to have a rather small radius of light effect"*, with
+ * the room staying dark while the crater blew out.
+ *
+ * A real explosion also scatters: the flash lights the air, dust and smoke, and
+ * the room fills. `DynLightInput.fill` adds that component at
+ * `intensity · fill / (1 + d²/REF²)` — a soft falloff that is ~1 at the source
+ * and still ~0.2 at 8 m, i.e. a 12.8x lift in the far field for the same peak.
+ * REF is where that term has fallen to half.
+ */
+export const LIGHT_FILL_REF_M = 4;
 /** cosOuter value that marks a POINT light (no cone). Any cosine is > -1. */
 export const LIGHT_NO_CONE = -2;
 
@@ -401,6 +419,13 @@ export interface DynLightInput {
   /** SPOT lights: unit beam axis pointing away from the lamp, plus the cone
    *  cosines the analytic beam uses (inner >= outer). Omit for a point light. */
   axis?: Vec3; cosInner?: number; cosOuter?: number;
+  /**
+   * POINT lights only: the SOFT room-fill component, as a fraction of
+   * `intensity` (0 or absent = the pure point light every other caller wants).
+   * A detonation sets it — see `LIGHT_FILL_REF_M`. Ignored for spots, whose
+   * `cosInner` slot is reused to carry it in the packed layout.
+   */
+  fill?: number;
 }
 
 /**
@@ -427,7 +452,10 @@ export function packLights(
     out[o + 4] = l.color[0]; out[o + 5] = l.color[1]; out[o + 6] = l.color[2];
     out[o + 7] = spot ? l.cosOuter! : LIGHT_NO_CONE;
     out[o + 8] = spot ? l.axis![0] : 0; out[o + 9] = spot ? l.axis![1] : 0; out[o + 10] = spot ? l.axis![2] : 0;
-    out[o + 11] = spot ? l.cosInner! : LIGHT_NO_CONE;
+    // Slot 11 is `cosInner` for a SPOT and, for a POINT light, the room-fill
+    // fraction: the cone branch (the only reader of cosInner) runs only when
+    // cosOuter > -1.5, which a point light never satisfies (it packs -2 here).
+    out[o + 11] = spot ? l.cosInner! : (l.fill ?? 0);
     o += LIGHT_FLOATS;
   }
   return count;
@@ -639,7 +667,13 @@ function dynSurfaceRadiance(
       cone = t * t;
       if (cone <= 0) continue;
     }
-    const f = (intensity * ndl * cone) / d2;
+    // Hard point term, plus the SOFT room-fill term for a light that carries
+    // one (`fill` rides in slot 11 for point lights — see packLights). The fill
+    // is what lets a detonation light a whole room instead of a disc of floor
+    // around the crater: at 8 m it is 12.8x the hard term's contribution.
+    const fill = cosOuter > -1.5 ? 0 : lights[base + 11]!;
+    const soft = fill > 0 ? fill / (1 + d2 / (LIGHT_FILL_REF_M * LIGHT_FILL_REF_M)) : 0;
+    const f = (intensity * ndl * cone) * (1 / d2 + soft);
     out[0] += albedo[0] * lights[base + 4]! * f;
     out[1] += albedo[1] * lights[base + 5]! * f;
     out[2] += albedo[2] * lights[base + 6]! * f;

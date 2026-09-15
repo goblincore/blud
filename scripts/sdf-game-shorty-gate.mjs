@@ -82,7 +82,14 @@ await fetch(`http://localhost:${CDP}/json/activate/${tab.id}`);
 await send('Page.bringToFront');
 await send('Emulation.setDeviceMetricsOverride', { width: W, height: H, deviceScaleFactor: 1, mobile: false });
 
-const url = `http://localhost:${VITE}/sdf-game.html`;
+// ?ammo=finite IS REQUIRED BY THIS GATE, not a preference. Unlimited ammo ships
+// as the default (2026-09-10, for the dynamite tuning pass), and this gate's
+// whole subject is the RELOAD: it spends both shells, waits for the auto-reload
+// and reads the hinge. Under infinite ammo the magazine never empties, the
+// reload never starts and every assertion below would fail for a reason that
+// has nothing to do with the view-model. Pinned the same way the bench pins its
+// seams — a gate that can be silently reconfigured by a default is not a gate.
+const url = `http://localhost:${VITE}/sdf-game.html?ammo=finite`;
 console.log(`game ${url}`);
 await send('Page.navigate', { url });
 
