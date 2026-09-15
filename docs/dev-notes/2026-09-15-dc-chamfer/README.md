@@ -150,7 +150,7 @@ with the corrected 0.2 mm reference contour):
 | **DC candidate** | **0.042 / 1.873 / 2.360** | **0.044 / 2.323 / 2.914** | 32 | 3 / 26 |
 | DC eps 0.02·cell | 0.036 / 1.781 / 2.211 | 0.038 / 2.033 / 2.461 | 24 | 1 / 26 |
 | DC baseline, no clamp | 0.289 / 4.251 / 5.789 | 0.409 / 7.009 / 8.900 | 0 | 0 / 26 |
-| marching cubes (context) | 0.652 / 3.592 / 4.479 | 1.371 / 5.792 / 7.408 | — | — |
+| marching cubes (context) | 0.652 / 3.592 / 4.479 | 1.372 / 5.792 / 7.408 | — | — |
 | surface nets (context) | 0.494 / 4.104 / 4.522 | 0.983 / 5.281 / 6.883 | — | — |
 
 The candidate cuts the pit `t2r` tail **2.10×** (p95) / **2.41×** (max) and
