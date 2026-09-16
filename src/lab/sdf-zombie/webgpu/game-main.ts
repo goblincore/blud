@@ -129,7 +129,7 @@ import { runBench, type BenchDeps, type BenchMode } from './game-bench';
 import { installPassTiming, beginPassFrame, setPassLabel } from './gpu-pass-timing';
 import { GameTelemetry, type FrameTiming } from './game-telemetry';
 import { getPipelineLog, setPipelineLogEnabled } from './pipeline-log';
-import { warmGateOutcome, restoreLoopState } from './warm-gate';
+import { coordinateWarmGate, createLoopController, type WarmOutcome } from './warm-gate';
 import { createTelemetryControls } from './game-telemetry-controls';
 import { createGameTilePlaytest } from './game-tile-playtest';
 import { createComputeTileBinding } from './tile-bin-compute';
@@ -306,6 +306,15 @@ async function main() {
   const passTiming = installPassTiming(handle.renderer);
   const { scene, camera } = handle;
   mark('renderer-ready');
+
+  // LOOP INTENT vs WARM SUSPENSION (warm-gate.ts, corrected 2026-09-16). The
+  // old warm snapshotted loopRunning at its START and reapplied that in the
+  // finally, so a rig/bench that paused (or resumed) the loop WHILE the warm
+  // was in flight had its intent overwritten. Every external request now goes
+  // through the controller's intent; the warm only suspends and releases.
+  const rawSetLoopRunning = handle.setLoopRunning.bind(handle);
+  const loopControl = createLoopController((on) => rawSetLoopRunning(on), handle.loopRunning);
+  handle.setLoopRunning = (on: boolean) => loopControl.set(on);
 
   // PIPELINE LOG (pipeline-log.ts). The wraps are already installed (the lab
   // renderer does it right after init); ?pipelinelog=1 turns on per-creation
@@ -610,14 +619,22 @@ async function main() {
   //   player's enclosure, so a blast in the next room lights nothing. That is
   //   the documented architecture, not a property of this effect.
   //
-  // Allocated ONCE at intensity 0 and only ever modulated: adding or removing a
-  // light at runtime forces a TSL shader recompile (the muzzle flash's own
-  // note), which would hitch on every detonation.
+  // Allocated ONCE at intensity 0 and only ever modulated. CORRECTED
+  // 2026-09-16 (action-stall fix): `visible` is NEVER toggled. three r185
+  // folds the set of VISIBLE lights into `LightsNode.customCacheKey`, which is
+  // part of the NodeBuilderState chosen for every material lit by the scene
+  // lights. Toggling visibility therefore re-keys that state: the old shader
+  // variant's ProgrammableStage/pipeline is released and a DIFFERENT variant is
+  // compiled mid-frame. Measured on the old code: every detonation produced two
+  // 180–230 ms frames with 17–18 createRenderPipeline calls (ignite and
+  // expiry). Intensity 0 contributes no light — the cost of keeping the pool
+  // visible is three idle point-light iterations, against ~400 ms of pipeline
+  // churn per blast.
   const EXPLOSION_LIGHTS = 3;
   const explosionLightPool: THREE.PointLight[] = [];
   for (let i = 0; i < EXPLOSION_LIGHTS; i++) {
     const pl = new THREE.PointLight(0xffb060, 0, 0, 2);
-    pl.visible = false;
+    pl.visible = true;
     accentGroup.add(pl);
     explosionLightPool.push(pl);
   }
@@ -4432,17 +4449,15 @@ async function main() {
   // FRAME via handle.drawOnce() — the full live draw path (scene into
   // sceneTarget, sdf layer, goo, post chain incl. VHS) — so everything
   // compiles in the context it will actually run in, behind the loader.
-  const warmPipelines = async () => {
+  const warmPipelines = async (): Promise<WarmOutcome> => {
     const tInvoke = performance.now();
     const flipped: THREE.Object3D[] = [];
     // The render loop is ALREADY armed here (createLabRenderer starts it; the
-    // game drawFn replaced the default at setDrawFn) — pause before anything
+    // game drawFn replaced the default at setDrawFn) — suspend before anything
     // compiles so nothing renders warm and nothing compiles mid-frame.
-    // RESTORE THE PREVIOUS STATE, never an unconditional `true` (startup-freeze
-    // task, 2026-09-16): a bench or capture rig that deliberately paused the
-    // loop had it silently restarted by a late warm completion.
-    const wasLoopRunning = handle.loopRunning;
-    handle.setLoopRunning(false);
+    // SUSPEND, do not change intent: a rig that pauses the loop while this is
+    // in flight must win (warm-gate.ts createLoopController).
+    loopControl.suspend();
     mark('warm-invoked');
     // The gun load is awaited earlier in boot, so this has usually resolved
     // already; awaiting it keeps the ordering explicit — the weapon's
@@ -4462,6 +4477,9 @@ async function main() {
     mark('warm-steps-start');
     let passesCompiled = 0;
     let computesWarmed = 0;
+    // A warm that throws is a FAILED warm: the loader gate must say so rather
+    // than presenting the resolved promise as success (reviewer fix 2026-09-16b).
+    let didFail = false;
     const phases: Record<string, number | number[]> = {};
     try {
       let tp = performance.now();
@@ -4544,6 +4562,7 @@ async function main() {
       console.log(`[warm] ${done.ms} ms of warm steps after ${done.bootBeforeWarmMs} ms of synchronous boot (${done.flipped} hidden objects, ${done.computes} crowd types, ${passesCompiled} stage/layer passes)`);
       console.log(`[warm] phases ${JSON.stringify(phases)}`);
     } catch (err) {
+      didFail = true;
       console.error('[warm] pipeline warm-up failed', err);
       // A driver waiting on __warmDone must not wait forever because the
       // warm-up threw: record the failure under the same key.
@@ -4554,48 +4573,49 @@ async function main() {
       };
     } finally {
       for (const o of flipped) o.visible = false;
-      // Restore the state we found, not an unconditional restart
-      // (warm-gate.ts documents the contract).
-      handle.setLoopRunning(restoreLoopState(wasLoopRunning));
+      // Release the suspension; the CURRENT intent wins, so a pause requested
+      // while the warm was in flight is respected (warm-gate.ts).
+      loopControl.release();
       mark('warm-finally');
     }
+    return didFail ? 'failed' : 'ok';
   };
   // ?warm=0 skips the warm-up (A/B: the first-shot freeze it removes).
-  setLoader('compiling pipelines');
   // Adversarial review 794a7cfc: a compileAsync that never settles would hold
   // the loader (and the flipped meshes) forever — bound the LOADER, never the
   // work. STARTUP-FREEZE FIX (2026-09-16): the old Promise.race resolved the
   // gate at 15 s and then claimed READY while warmPipelines was still running
-  // with the loop paused — the owner's "loaded, then frozen" window. On a
-  // timeout the loader now says it is still compiling, keeps the loop's paused
-  // state, and settles to READY only when the warm-up actually completes.
+  // with the loop paused — the owner's "loaded, then frozen" window.
+  // REVIEWER FIX (2026-09-16b): warmPipelines catches its own throw, so its
+  // promise RESOLVES on failure; the old gate therefore revealed READY after a
+  // recorded warm error. `coordinateWarmGate` (warm-gate.ts) is the real
+  // coordinator: it awaits the warm's OUTCOME, reports `warm-failed` /
+  // `device-lost` honestly, and on the 15 s bound only changes the wording —
+  // it never reveals the game before the work settles.
   const warmRequested = new URLSearchParams(location.search).get('warm') !== '0';
-  let warmSettled = false;
-  let warmTimedOut = false;
-  const warmPromise: Promise<void> = (warmRequested ? warmPipelines() : Promise.resolve())
-    .then(() => { warmSettled = true; });
-  const warmBound: Promise<'settled' | 'timeout'> = new Promise((resolve) => {
-    const timer = setTimeout(() => {
-      if (warmSettled) return;
-      warmTimedOut = true;
-      resolve('timeout');
-    }, 15000);
-    void warmPromise.then(() => { clearTimeout(timer); resolve('settled'); });
-  });
-  // THE LOADER GATE: reveal the game only when the weapon is loaded AND the
-  // pipeline compilation finished — the two multi-second boot legs. READY
-  // auto-hides after 1.2 s so headless drivers that never click still run.
-  void Promise.all([gunReadyPromise, warmBound]).then(() => {
-    const reveal = () => {
-      setLoader('READY — CLICK TO START', true);
-      window.setTimeout(() => loaderEl?.classList.add('loader-hidden'), 1200);
-    };
-    if (warmGateOutcome(warmTimedOut) === 'still-compiling') {
-      setLoader('still compiling pipelines — the game starts when this finishes');
-      void warmPromise.then(reveal);
-      return;
-    }
-    reveal();
+  const warmPromise: Promise<WarmOutcome> = warmRequested ? warmPipelines() : Promise.resolve<WarmOutcome>('ok');
+  void coordinateWarmGate({
+    warm: warmPromise,
+    prereq: gunReadyPromise,
+    timeoutMs: 15000,
+    isDeviceLost: () => Boolean(handle.gpuDiagnostics.lost),
+    handlers: {
+      setLoader: (text, ready) => setLoader(text, ready),
+      revealReady: () => {
+        setLoader('READY — CLICK TO START', true);
+        window.setTimeout(() => loaderEl?.classList.add('loader-hidden'), 1200);
+      },
+      // A failed / lost warm must not be presented as a successful compile.
+      // The game is still playable, so the overlay is dismissed after a beat —
+      // with the honest message, and with the failure in the console.
+      revealFailure: (text) => {
+        setLoader(text, true);
+        window.setTimeout(() => loaderEl?.classList.add('loader-hidden'), 2500);
+      },
+    },
+  }).then((gate) => {
+    (window as unknown as Record<string, unknown>).__warmGate = { phase: gate.phase, timedOut: gate.timedOut };
+    if (gate.phase !== 'ready') console.warn(`[warm] loader gate settled ${gate.phase}${gate.timedOut ? ' (after the 15 s bound)' : ''}`);
   });
 
   /** Scratch, so the per-shot path allocates nothing. */
@@ -7151,9 +7171,11 @@ async function main() {
     explosionVfx?.update(dt, camera);
     burstLayer?.update(dt, camera);
 
-    // THE MESH-SIDE LIGHT. Aged and written every frame: the pool lights are
-    // allocated once and only ever modulated, and an idle slot is switched off
-    // rather than left at 0 intensity so it costs no shader work.
+    // THE MESH-SIDE LIGHT. Aged and written every frame. The pool is
+    // PERMANENTLY VISIBLE (see its construction comment): `visible` is never
+    // toggled, because that re-keys the scene's LightsNode and recompiles the
+    // light variant of every lit material mid-frame. An idle slot is left at
+    // intensity 0, which contributes no light.
     for (let i = explosionLights.length - 1; i >= 0; i--) {
       const e = explosionLights[i]!;
       e.age += dt;
@@ -7162,11 +7184,10 @@ async function main() {
     for (let i = 0; i < explosionLightPool.length; i++) {
       const pl = explosionLightPool[i]!;
       const e = explosionLights[i];
-      if (!e) { pl.visible = false; pl.intensity = 0; continue; }
+      if (!e) { pl.intensity = 0; continue; }
       const k = explosionLightEnv(e.age);
       pl.position.set(e.pos[0], e.pos[1], e.pos[2]);
       pl.intensity = EXPLOSION_LIGHT.meshPeak * k * fxLightScale;
-      pl.visible = k > 0.001;
     }
   }
 
