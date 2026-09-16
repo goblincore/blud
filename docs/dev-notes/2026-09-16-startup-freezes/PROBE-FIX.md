@@ -2,6 +2,13 @@
 
 2026-09-16, based on rupture candidate ae30d9c2.
 
+> **Superseded for attribution and fixes** by
+> [RESULTS.md](RESULTS.md) (second pass, branch `codex/blud-action-stall-fix`),
+> which corrects the "byte-identical descriptors" overclaim, fixes the
+> explosion-light pipeline churn, and replaces the trivial warm-gate helpers
+> with a real coordinator. The probe-buffer correction below stands and is
+> re-verified there.
+
 The observed `1030 capsules exceed max 1024` came from admitting 515 bone
 instances. Each instance produces two capsules. game-main allowed up to 1024
 bone instances but allocated only 1024 output capsules. The shared producer

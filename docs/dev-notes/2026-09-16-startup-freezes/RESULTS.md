@@ -1,232 +1,341 @@
-# Startup, WebGPU loss and first-gib freeze — attribution and fixes
+# Startup, WebGPU loss and first-gib freeze — corrected attribution and the action-stall fix
 
-2026-09-16. Worktree `2026-09-16-blud-startup-freeze-attribution`, branch
-`codex/blud-startup-freeze-attribution`, from **`fdf20ad0`** (inherits the
-rupture-rotation work `ae30d9c2` and the probe buffer correction). Node
-`v22.22.1`. Code + evidence commit: **`049f29e7`** (this doc adds that hash).
-This is the profiling task queued by
-[PROBE-FIX.md](PROBE-FIX.md) and the gib follow-up
-[`../2026-09-16-gib-follow-up/HANDOFF.md`](../2026-09-16-gib-follow-up/HANDOFF.md).
+2026-09-16 (second pass). Worktree `2026-09-16-blud-action-stall-fix`, branch
+`codex/blud-action-stall-fix`, from **`a678273d`**. Node `v22.22.1`.
+Commits: `c2dbdaa9` (full-fidelity pipeline attribution), `7eda66a5` (probe
+viewport/DPR), `d393d682` (**the blast-stall fix**), `34c076f2` (warm
+lifecycle), `97c462a6` (probe first-detonation record + summarizer), plus this
+doc and its evidence. This supersedes the attribution in the previous
+RESULTS.md revision; the earlier lifecycle fixes it inherited (`049f29e7` /
+`a678273d`) are preserved.
 
-Accepted behaviour this task preserves (none of it was changed): rupture
-rotation/release, faces and the mesh-skeleton default, and the baked-piece
-optimization. The retained appearance is re-verified by native vision in §8.
+Accepted behaviour preserved (not changed): rupture
+rotation/release/spin, faces, the mesh-skeleton default, the baked-piece
+optimization, lights and shadows. Re-verified by native vision in §9.
 
-## 0. What this session found, in one paragraph
+## 0. Reviewer corrections to the previous report
 
-Under a controlled, matched protocol the owner's **38.9 s boot did not
-reproduce**: six boots of the shipped default URL measured 2.3–5.0 s of warm
-work and 3.9–10.7 s from navigation to warm completion, with no `device.lost`
-and no uncaptured WebGPU error. What *does* reproduce is (a) a real but much
-smaller startup cost dominated by **one real drawn frame** (lazy mesh-skeleton
-extraction ~2 s CPU + synchronous GPU pipeline creation) and **one async
-fullscreen pipeline** (~0.6–1.3 s), (b) a **first-gib/action freeze** of
-300–760 ms frames caused by three.js rebuilding render pipelines it already
-built (the same 8 materials, identical descriptor signatures, ~12 times a
-session), and (c) in opt-in `?gibrender=carve` mode only, a **22.3 s synchronous
-carve library build** — the historical ~19.7 s — which the default URL never
-runs. The probe overflow fix (`fdf20ad0`) is verified live at the full admitted
-budget (1024 bone rows → 2048 capsules, 0 errors). Two lifecycle defects were
-found and fixed: the loader claimed READY on its 15 s bound while warm-up was
-still running, and a finished warm-up force-restarted a deliberately paused
-render loop.
+The previous pass's headline mechanism — *"the same 8 pipelines with
+byte-identical descriptors rebuilt 12×; three's cache entry is evicted by mesh
+churn"* — was **not established by its evidence**. Corrected here:
 
-## 1. Protocol
+1. **The old `descriptorSignature` could not prove pipeline identity.** It
+   named topology/cull/frontFace, a few depth/stencil scalars, multisample
+   count, colour-target *formats* and entry points. It omitted the **shader
+   module content**, the **pipeline layout**, **vertex buffer formats**, the
+   **blend state and colour write masks**, **stencil ops**, **depth bias**,
+   **alphaToCoverage** and **unclippedDepth**. Two creations could match it and
+   still be different GPU pipelines. The detector is now full-fidelity, and it
+   also records three.js's own render cache key (`stageVertex.id,
+   stageFragment.id, backend.getRenderCacheKey`) captured from
+   `backend.createRenderPipeline(renderObject).pipeline.cacheKey`, plus the
+   shader-module hashes (wrapped `createShaderModule`), the pipeline-layout
+   content signature (wrapped `createBindGroupLayout`/`createPipelineLayout`)
+   and every `Pipelines.delete`/`_releasePipeline` eviction. The old claim did
+   not survive; the corrected causal path is in §2.
+2. **The old `warm-gate` tests tested identity/ternary helpers**, not the
+   lifecycle. `warmPipelines` catches its own throw, so its promise resolves on
+   failure and the loader could show READY after a recorded warm error; and
+   restoring the loop state snapshotted at warm START overwrote a pause
+   requested while the warm was in flight. Both are now fixed and tested with
+   deferred promises and fake timers (§5).
+3. **The prior narrative said "2.3–5.0 s" while its own phase table contained
+   5.731 s.** This report uses raw measured values only. The previous task
+   established **no performance improvement**; its stress-gather p95 included
+   actor spawning; and its 960×720 DPR-1 headless viewport is **not** the
+   owner's headed viewport. All three limits are kept explicit in §6/§10.
 
-- One GPU job at a time, own Chrome profile (`--user-data-dir` keyed by CDP
-  port) and own Vite (`--strictPort`) on **5480/9480**. The owner's candidate
-  server on **5415** (`rupture-live-review`) and the stale task-3 server on
-  **5403** were never touched.
+## 1. Protocol (matched before/after)
+
+- One GPU job at a time; own Chrome profile (`--user-data-dir` keyed by CDP
+  port) and own Vite (`--strictPort`) on **5480/9480**, scratch under
+  `/tmp/…-lab` (outside the Vite root — with it inside, Vite reloads the page
+  when Chrome writes its profile, and the boot never completes). The owner's
+  servers on **5391/5415** and the stale **5403** were never touched.
 - Matched page URL for every timing sample:
-  `http://localhost:5480/sdf-game.html?room=arena&gibbones=core&pipelinelog=1&seed=7`.
-  Crowd flags ride the URL; crowd was never toggled mid-run.
-- **Cold vs warm**: "cold" is a brand-new Chrome profile (cold GPU/pipeline
-  shader cache, deleted from our own `.lab-tmp` scratch — never the owner's
-  personal cache). "Warm" is a second/third boot in the same profile. Two
-  independent cold/warm pairs (A and B) plus two post-change boots.
-- Live loop only (no `frozen=1`, no hand-stepping). Frame times are the page's
-  own rAF deltas. Frozen capture rigs are visual rigs, not perf tests.
+  `http://localhost:5480/sdf-game.html?room=arena&gibbones=core&pipelinelog=1&seed=7&crowd=1&vhs=blud&res=800`.
+  Boot flags only; crowd was never toggled mid-run.
+- **before = `a678273d` + the diagnostics commit `c2dbdaa9`** (identical
+  instrumentation, no behaviour fix); **after = the candidate**. 3 runs each,
+  plus one headed-equivalent run (`after-dpr2`, 1512×982 DPR 2).
 - Browser: Google Chrome **152.0.7977.84**, `--headless=new
   --enable-unsafe-webgpu`. Machine: Apple M3 (10 GPU cores), 24 GB, macOS
-  **26.3.1**. Load average during the matrix: **5.41/4.77/3.93** to
-  **6.07/5.14/4.16** (`captures/machine-load.txt`); the final validated run ran
-  at a lower load. This contention is why single samples are not trusted.
+  26.3.1. Load average at the start of each run: before 3.77 / 3.75 / 8.91;
+  after 7.03 / 6.64 / 9.66; dpr2 8.66. **Background load (OrbStack at
+  ~230 % CPU, Spotlight, the user's Chrome) was high and unequal**, so every
+  timing number is reported raw with its load, and only the effect that is
+  reproducible across all three matched pairs is claimed as the fix.
+- Only one owned GPU browser was alive at a time; tabs and Chrome profiles
+  created by these runs were closed with the run.
 
-Harness:
+Harness (one set):
 
 ```
-bash scripts/link-dev-assets.sh                       # gitignored dev placeholders
-LAB_VITE_PORT=5480 LAB_CDP_PORT=9480 LAB_TMP="$PWD/.lab-tmp" \
+LAB_VITE_PORT=5480 LAB_CDP_PORT=9480 LAB_TMP=/tmp/…-lab \
   bash -c '. scripts/lab-servers.sh; trap lab_servers_down EXIT; lab_servers_up; \
-           node scripts/startup-freeze-probe.mjs 5480 9480 .lab-tmp/startup-probe <label> [qs]'
+           PROFILE=1 bash .lab-tmp/run-probe.sh before 3 "&crowd=1&vhs=blud&res=800"'
+node scripts/summarize-probe.mjs .lab-tmp/startup-probe after 3
 ```
 
-`scripts/startup-freeze-probe.mjs` (new) is the attribution instrument: it
-CDP-profiles the whole boot, polls `__bootMarks`/`__warmDone`, reads the loader
-state, drives room entry → first shot → first dynamite detonation (release,
-first visible chunk, first worker bake submit/reply/upload, first textured-head
-draw) → repeated blasts → probe-gather stress, and reports
-`pipelineLog().longFrames` / `.duplicates`, `probeDynamic()`, `chunkStats()` and
-the new GPU diagnostics. Raw records: [`captures/`](captures) (`probe-*.json`,
-each ~80–95 kB, one per boot).
+Compact per-run records: [`captures/action-stall/`](captures/action-stall)
+(`before{1..3}.compact.json`, `after{1..3}.compact.json`,
+`after-dpr21.compact.json`, `matrix.json`). The full records, including the CDP
+CPU profiles, are in the worktree's gitignored `.lab-tmp/startup-probe/`.
 
-## 2. Phase table (ms; median of the reproducible boots)
+## 2. Corrected attribution: what actually caused the 180–230 ms blast frames
 
-`nav→main` is module load/parse (Vite dev); `zombies+rooms` is the one synchronous
-section in `main()`; `gun` is the GLB await; the warm columns are its own
-sub-phases. Raw rows are in `captures/probe-*.json` (`final.bootMarks`,
-`warm.phases`).
+The three `before` runs are numerically identical on the action path, which
+makes the mechanism unambiguous:
 
-| boot (load) | nav→main | zombies+rooms | gun | warm steps | · drawOnce | · precompile | · goo | · crowdBins | nav→warmDone |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| coldA (5.4) | 595 | 965 | 251 | 3887 | 2824 | 846 | 198 | 18 | 5816 |
-| warmA (5.4) | 174 | 1085 | 274 | 3316 | 2291 | 855 | 155 | 15 | 5020 |
-| coldB (6.1) | 1049 | 1732 | 362 | 3187 | 2109 | 799 | 256 | 23 | 6547 |
-| warmB (6.1) | 173 | 1234 | 321 | 3912 | 2812 | 856 | 227 | 17 | 5851 |
-| after-main (—) | 1542 | 2315 | 762 | 5731 | 4190 | 1343 | 164 | 33 | 10677 |
-| final (low) | 474 | 859 | 204 | **2283** | **1586** | **571** | 114 | 12 | **3918** |
-| carve `?gibrender=carve` | 287 | 2168 | 459 | **27539** | 3699 | 1255 | **22558** | 26 | 30778 |
+| before run | repeated-blast windows | pipelines created | window p95 | window max | LONG frames (≥100 ms) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| before1 | 6 | **189** | 221.5 ms | 221.5 ms | **11** |
+| before2 | 6 | **189** | 230.2 ms | 230.2 ms | **11** |
+| before3 | 6 | **189** | 234.0 ms | 234.0 ms | **11** |
 
-**Cold vs warm is not the story.** A brand-new Chrome profile booted in the
-same 3.2–3.9 s warm range as a warm reload (paired), so the owner's 38.9 s is
-not a cold-shader-cache effect on this machine.
+Every long frame and every creation lands inside a blast window, and the frame
+detail names 17–18 creations per frame with six material labels
+(`MeshBasicNodeMaterial_191`, `MeshStandardMaterial_384/494/537/576`,
+`MeshBasicMaterial_783`). Two such frames per detonation — **ignite and
+expiry**.
 
-### Named dominant costs
+**The correct detector result.** The authoritative three-cache-key census shows
+these are *not* the same key re-created; the **full-descriptor** census shows
+they are the same **GPU pipeline** re-created under a new key:
 
-1. **`drawOnce` — the one real frame** (1.6–4.3 s of the warm). CDP CPU profile
-   attribution (boot window, 4–10 s total): the largest first-party self-times
-   are `extractSegmentMesh` (~1.9 s) and the skeleton contract `distance`
-   (~1.7 s) — both called from `warmPipelines`, i.e. inside the first draw,
-   because the mesh skeleton is extracted lazily on the first render of an
-   actor and then cached per `revision@cellSize`. `createProgram` (three)
-   adds ~0.5–0.9 s of shader-program creation. This is the accepted mesh
-   skeleton's one-time cost, not a regression.
-2. **`precompilePasses` — one async fullscreen pipeline** (0.57–1.34 s). The
-   session's slowest creation is always `renderPipeline_MeshBasicNodeMaterial_185`
-   via `compile#8` (0.56–1.32 s); the other 10 passes are cache hits or
-   milliseconds. This is the post/VHS chain compiling in its real target, which
-   the live draw traversal cannot reach.
-3. **`zombies+rooms` — CPU body build** (0.86–2.3 s). CPU profile self-time:
-   `sdBody` ~1.7 s, `boneBreach` ~2.1 s, `sdPrimitive`/`sdBentCone`/`sdBezierTs`
-   the rest. This is `build-body.ts`'s containment filter (line 100) plus
-   `validateBody`'s `checkBoneContainment` — always-on correctness checks over
-   the authored SDF.
-4. **`goo` precompile** 0.11–0.35 s, **crowd tile-bin warm** 12–33 ms
-   (7 types), **hidden-object flip** ≤0.2 ms (61 objects).
-5. **Module load** 0.2–1.6 s (Vite dev; the production bundle is a single
-   2.17 MB `main` chunk — see `npm run build`).
+```
+before descriptorGroups (label, creations, distinct three keys)
+  MeshBasicMaterial_786        18 creations / 18 distinct keys
+  MeshBasicNodeMaterial_191    14 / 14
+  MeshBasicNodeMaterial_773     7 /  2   ← two LEGITIMATE variants, not 7
+  MeshStandardMaterial_715      7 /  7
+  Steel_682                     7 /  7
+```
 
-## 3. Carve: not invoked by default; 22.3 s when it is
+`MeshBasicMaterial_786`'s full signature (shader module hashes + layout hash +
+targets + buffers + depth state) is identical on all 18 creations while three's
+cache key differs each time — i.e. the same GPU pipeline rebuilt, because
+`ProgrammableStage` ids are a global counter (`three/src/renderers/common/
+ProgrammableStage.js`) and a new stage instance produces a new key even for
+identical WGSL. `MeshBasicNodeMaterial_773` is the control: 7 creations with
+only **2** distinct keys, the two genuine light-count variants. The detector
+does not misclassify legitimate variants.
 
-`?gibrender=carve` is the only boot trigger (`game-main.ts` `if (gibRenderMode
-=== 'carve') setTimeout(ensureCarvedLibrary, 0)`). Proof of the boundary:
+**The causal path** (three r185, read locally):
 
-- Default URL: `__sdfGame.gibRenderer()` returns
-  `{ mode: 'march', carvedLibraryBuilt: false, carvedBuildMs: 0 }` in every
-  default boot; no `[gib-carve]` console line ever appears.
-- Explicit `&gibrender=carve`: `carvedBuildMs = 22270.7 ms`, console line
-  `[gib-carve] zombie library: 11 pieces, 38738 verts, 68 bone prims in the
-  field, 22271 ms (cells 1)`, and `gibRenderer()` reports
-  `{ mode: 'carve', carvedLibraryBuilt: true, carvedBuildMs: 22270.7 }`.
+1. `explosionLightPool[i].visible` was toggled per blast (ignite:
+   `pl.visible = k > 0.001`; idle: `pl.visible = false`; boot:
+   `pl.visible = false`).
+2. `LightsNode.customCacheKey()` hashes the **ids of the visible lights**
+   (`three/src/nodes/lighting/LightsNode.js:147-172`). Toggling visibility
+   therefore changes the scene's lights-node key.
+3. That key is part of the `NodeBuilderState`/shader variant chosen for every
+   material lit by the scene lights (`RenderObject.getDynamicCacheKey` →
+   `NodeManager.getCacheKey`), so a different light variant means a different
+   WGSL source.
+4. `RenderObjects.get()` disposes and recreates render objects whose dynamic
+   key moved (`three/src/renderers/common/RenderObjects.js:127-134`), which
+   calls `Pipelines.delete` and releases the old variant's
+   `ProgrammableStage`/pipeline when its `usedTimes` reaches 0
+   (`three/src/renderers/common/Pipelines.js:274-284,431-433`).
+5. The next blast re-ignites the same variant, which is no longer cached, so
+   17–18 `createRenderPipeline` calls run mid-frame.
 
-The carve build is **synchronous main-thread CPU**, and because it is scheduled
-with `setTimeout(0)` it fires inside the warm's `await gooLayer.precompile()`
-macrotask slot — which is why that boot's `goo` phase reads 22,558 ms. A second
-warm on the same page (the lifecycle check) took 974 ms, proving the 22.5 s was
-the carve build, not goo. **The historical ~19.7 s the owner remembered is this
-build, and it applies to `gibrender=carve` only.** It is not on the owner's URL
-(`?room=arena&gibbones=core` has no `gibrender`), so it is not the default-mode
-startup delay. Fixing it needs the carve off-thread (§10, UNRESOLVED).
+This is causal, not coincident: the churn frames occur exactly on the light
+transitions, the descriptor-identical/distinct-key census is the signature of
+key churn, and removing the transitions removes the churn (§4). The three
+`PointLight:?` entries in the warm's flipped-object list (61 hidden objects)
+are the same three pool lights, so the warm→play restore re-keyed the lights
+node as well.
 
-## 4. Probe overflow: verified at the admitted maximum
+**The "mesh churn releases the pipeline" hypothesis is not supported.**
+`geometry.dispose()` alone does not evict a pipeline
+(`RenderObject.js:337-344`; `getGeometryCacheKey` is structural), and
+`retireActor` removes gibbed actor views without disposing them. The evictions
+that were measured are render-object re-creation, and the object census in
+`before` (below) names the viewmodel/gun parts, not gib meshes:
 
-`__sdfGame.probeDynamic().gates.capsules` is the **bone-row** count packed into
-the gather, capped at `PROBE_MAX_BONE_INSTANCES` (1024); the producer expands it
-to 2 capsules/row (2048). The live stress (`spawnCrowd`, healthy zombies in the
-arena) in `captures/probe-final.json`:
+```
+before evictions = 403 per run
+  byObject: Mesh 292, (unnamed) 62, Mesh:Watch_Screen 17, Mesh:hand_L 17, Mesh:crown1 15
+after  evictions = 120-121 per run
+  byObject: (unnamed) 62, Mesh 58
+```
 
-| bodies spawned | bone rows packed | probe errors | dynOn | lights | gather frames gained / 1.8 s |
-| ---: | ---: | ---: | --- | ---: | ---: |
-| 6 | 490 (≈ owner's 515) | **0** | true | 1–3 | 15 |
-| 9 | **1024 (cap)** | **0** | true | 3 | 9 |
-| 12 | **1024 (cap)** | **0** | true | 1 | 5 |
-| 20 | **1024 (cap)** | **0** | true | 1 | 3 |
+The per-head baked-chunk `faceMaterial` create/dispose in `freeBaked` is real
+but secondary: it is a `MeshBasicNodeMaterial` and it does not appear in the
+measured blast-frame creation set.
 
-1024 rows → 2048 capsules is exactly the allocation the `fdf20ad0` fix sized;
-before the fix `packCapsulesFromBoneInstances` would have thrown at 1030
-capsules (the owner's 515 rows). `probeDynamic().errors` stayed 0, `bound: true`,
-`radianceGain 0.15`, `visStrength 1`, and the gather kept ticking (`frames`
-advancing) — no silent freeze and no silent truncation. The unit tests cover the
-reported 515-row and full 1024-row inputs directly (§7).
+## 3. The fix (`d393d682`) — smallest measured change
 
-**Cost of the formerly-thrown work**: with 12–20 bodies near the room the gather
-now does the work it used to abort, and the frame p95 in that window rises to
-1.0–2.3 s (from 0.35 s at 490 rows). That window also includes spawning 20–47
-actors, so it is an upper bound, not a clean gather delta; it is still the
-honest measure that the intended gather is expensive at maximum occupancy and
-was never actually paid before.
+`src/lab/sdf-zombie/webgpu/game-main.ts`: the explosion light pool is created
+**permanently visible** and the per-frame update modulates **intensity only**.
 
-## 5. The first-gib / repeated-action freeze (reproduced, attributed, not fixed)
+- `pl.visible = false` at construction → `pl.visible = true`.
+- `if (!e) { pl.visible = false; pl.intensity = 0; }` → `if (!e) { pl.intensity = 0; }`.
+- `pl.visible = k > 0.001;` → removed.
 
-Blast timeline from `captures/probe-*.json` (live loop, real sim; poll granularity
-50 ms, so the first-chunk figure is an upper bound set by poll alignment):
+Intensity 0 contributes no light and intensity is not part of the lights-node
+key, so the shader variant is chosen once (during the warm) and never changes.
+The pool is no longer part of the warm's hidden-object flip either. Cost: three
+idle point-light iterations in the lit shaders, against ~400 ms of pipeline
+churn per blast. No renderer rewrite, no monkeypatch, no quality/default
+reduction, no disabled lighting, no swallowed errors, and no cost moved into
+startup (the variant compiled is the same one the warm already compiled with
+the lights flipped visible).
 
-- first visible chunk: **0.08–1.3 s** after `detonate` (`live` jumps to the 64 cap);
-- first worker bake submit: **2.8–5.3 s** after the blast;
-- first bake swap (main-thread upload): **0.4–1.7 ms** — the worker is not the hitch;
-- worker CPU bake: **156–977 ms**; first textured-head bake: **3.3–8.1 s** after the blast.
+**Residual, not fixed:** the warm's hidden-object flip/restore of the other 58
+meshes still re-keys their render objects. It shows up as the same six
+`MeshBasicNodeMaterial_185/195/196/197/198/199` entries rebuilt 5× (4
+releases) between frame ~5 and ~41–44 in **both** before and after, with
+creation times of 1–13 ms — it does not produce long frames and is not a blast
+stall. It is recorded as UNRESOLVED (§9) rather than papered over.
 
-The long frames during blasts name **17–23 pipeline creations each**
-(300–758 ms frames). Repeated-blast p95 was load-dependent and ranged 42–758 ms
-across boots, with the two highest-actor runs at 690 and 758 ms. The new
-duplicate detector (`pipelineLog().duplicates`) shows why: the same 8
-`MeshStandardMaterial` pipelines, with **byte-identical descriptor signatures**,
-are rebuilt **12 times per session** (`firstFrame` = the warm, `lastFrame` ≈ 306,
-i.e. across room entry, the first shot and every blast). The GPU pipeline is
-identical; three.js still calls `createRenderPipeline` because the cache key
-(`stageVertex.id,stageFragment.id,backend.getRenderCacheKey`) is re-keyed or its
-entry evicted — most plausibly by the shell/dynamite-prop/room mesh churn
-removing and re-adding RenderObjects (`usedTimes → 0` releases the pipeline).
-This is a real, reproducible defect, and the fix is a mesh/material-lifetime
-change, not a warm-up one; it is recorded as UNRESOLVED with a reproduction.
+## 4. Matched before/after results
 
-## 6. WebGPU loss and uncaptured errors
+### Repeated blasts (six windows, fixed 450 ms cadence, one detonation each)
 
-New device-health capture in `lab-renderer.ts` (`device.lost`,
-`device.onuncapturederror`, exposed as `__sdfGame.gpuDiagnostics()`):
+| set (load) | pipelines created | window p95 | window max | LONG frames |
+| --- | ---: | ---: | ---: | ---: |
+| before1 (3.77) | 189 | 221.5 ms | 221.5 ms | 11 |
+| before2 (3.75) | 189 | 230.2 ms | 230.2 ms | 11 |
+| before3 (8.91) | 189 | 234.0 ms | 234.0 ms | 11 |
+| **after1 (7.03)** | **0** | **31.3 ms** | **32.9 ms** | **0** |
+| **after2 (6.64)** | **0** | **34.3 ms** | **34.3 ms** | **0** |
+| **after3 (9.66)** | **1** | **34.7 ms** | **34.9 ms** | **0** |
+| after-dpr2 (8.66) | 0 | 34.3 ms | 36.2 ms | 0 |
 
-| run | lost | uncaptured | page errors |
-| --- | --- | --- | --- |
-| coldA / warmA / coldB / warmB | null | 0 | [] |
-| after-main / final | null | 0 | [] |
-| carve / dupcheck | null | 0 | [] |
+The blast-frame p95 falls **221.5–234.0 ms → 31.3–34.9 ms** (≈85 % lower) and
+the ≥100 ms frames go **11 → 0** in every one of the six windows. The effect is
+reproducible at higher load than the best before run (after3 at 9.66 is still
+34.7 ms) and at 1512×982 DPR 2.
 
-**Device loss did not reproduce** in any of the six controlled boots or the
-extra action/carve runs. Diagnostics are retained, so if the owner's loss
-recurs, `__sdfGame.gpuDiagnostics()` now carries the reason, message and time.
-One benign `index count of 0` draw warning and one 404 resource load appeared;
-neither is a render/validation error.
+### Repeated shots (six windows)
 
-## 7. Changes made (FIXED)
+| set | pipelines created | p95 | max | LONG frames |
+| --- | ---: | ---: | ---: | ---: |
+| before | 3 / 0 / 3 | 31.6 / 30.9 / 38.0 ms | 31.9 / 35.0 / 43.3 ms | 0 / 0 / 0 |
+| after | 3 / 3 / 0 | 31.0 / 41.3 / 42.4 ms | 31.6 / 41.5 / 42.6 ms | 0 / 0 / 0 |
 
-| # | Change | File | Why |
-| --- | --- | --- | --- |
-| 1 | **Honest loader gate.** The 15 s bound no longer resolves the gate on its own; on a timeout the loader says it is still compiling, the loop stays paused, and READY + auto-hide happen only when `warmPipelines()` actually settles. | `webgpu/game-main.ts`, `webgpu/warm-gate.ts` | The old `Promise.race` reported READY and hid the loader while warm-up still ran with the loop paused — the "loaded, then frozen" window. |
-| 2 | **Warm restores the loop state it found**, via `restoreLoopState(wasRunning)`, instead of `setLoopRunning(true)` in `finally`. | `game-main.ts`, `warm-gate.ts` | A bench/rig that deliberately paused the loop was silently restarted by a late warm completion. Verified live: `rewarm()` with the loop paused leaves `loopRunning()===false`. |
-| 3 | **Boot phase marks + warm sub-phases.** `__sdfGame.bootMarks()`, `warmDone()` (with `phases`, `bootBeforeWarmMs`, `flippedNames`); `ms` is now the sum of the warm's own sub-phases. | `game-main.ts` | There was no way to separate boot phases from warm steps; the old single number could not be broken down. |
-| 4 | **Device diagnostics**: `device.lost` / `onuncapturederror` capture, `loopRunning` getter, `gpuDiagnostics` on the handle. | `lab-renderer.ts` | There was no device-loss evidence channel at all. |
-| 5 | **Pipeline duplicate detector**: every creation records a descriptor signature; `pipelineLog().duplicates` ranks identical pipelines built more than once. | `pipeline-log.ts` | Names alone cannot distinguish a legitimate context variant from cache thrash. |
-| 6 | **Probe-gather / gib / session observability**: `chunkStats().faceBaked`, `gibRenderer()`, `rewarm()`. | `game-main.ts` | Needed to separate the first textured-head draw, prove the carve boundary and exercise the loop-restore contract. |
-| 7 | **`scripts/startup-freeze-probe.mjs`** (new). | `scripts/` | The focused startup + first-gib probe the task asked for. |
+Shots were never a multi-hundred-ms stall surface; the 3 first-repeat
+creations are a first-use cost and are unchanged.
 
-Lifecycle contract tests: `warm-gate.test.ts` (3 tests) pins the loader
-decision and the restore rule. Live integration: the probe's `lifecycle` check
-returned `{ loopAfterRunningWarm: true, loopAfterPausedWarm: false }` on the
-real warm path — the assertion that would have caught the unconditional
-restart. The timeout branch of the loader gate is unit-tested, not
-live-triggered (no boot approached the 15 s bound in this window).
+### Session long frames and pipeline/session totals
 
-### Tests and build
+| | before (3 runs) | after (3 runs) |
+| --- | --- | --- |
+| long frames (≥100 ms), total | 16 / 16 / 16 | 0 / 4 / 3 |
+| … with pipeline creations | 16 / 16 / 16 | 0 / 0 / 2 |
+| … with **no** creations | 0 / 0 / 0 | 0 / 4 / 1 |
+| render-cache-key rebuild census (sum) | 70 / 70 / 70 | 70 / 70 / 70 (warm only) |
+| evictions (`Pipelines.delete`) | 403 / 403 / 403 | 120 / 120 / 121 |
+| shader modules created / bytes / distinct | 674 / 16,353,422 B / 411 | 255 / 9,047,735 B / 195 |
+
+The residual after long frames are investigated: `after2` frames 230 (115.6 ms),
+740 (113.3 ms), 829 (109.6 ms), 830 (114.8 ms) and `after3` 798 (106.1 ms) have
+**0 creations** and fall in the first-shot / crowd-spawn stress phases;
+`after3` 179 (119.9 ms, 2 creations of `MeshBasicMaterial_912`) and 216
+(156.2 ms, 4 creations of `MeshBasicNodeMaterial_191/727/762`) are first-shot
+first-use under load 9.66. None is a blast window. The ≥100 ms frames with no
+creation are named, not left unexplained: they are CPU (spawn/gather) cost, not
+pipeline creation.
+
+### Warm / boot (raw; no improvement claimed)
+
+| set (load) | warm steps | nav→warmDone | drawOnce | precompile |
+| --- | ---: | ---: | ---: | ---: |
+| before1 (3.77) | 2284 ms | 4106 ms | 1567.8 ms | 578.5 ms |
+| before2 (3.75) | 2298 ms | 3820 ms | 1597.4 ms | 573.4 ms |
+| before3 (8.91) | 2385 ms | 3901 ms | 1697.0 ms | 558.4 ms |
+| after1 (7.03) | 3485 ms | 5606 ms | 2555.7 ms | 830.0 ms |
+| after2 (6.64) | 2603 ms | 4419 ms | 1784.3 ms | 652.0 ms |
+| after3 (9.66) | 3523 ms | 5814 ms | 2440.6 ms | 874.1 ms |
+| after-dpr2 (8.66) | 2524 ms | — | 1781.1 ms | 613.9 ms |
+
+Boot duration tracks machine load, and the after runs ran at ~2× the before
+load; **no warm/boot improvement or regression is claimed**. The previous
+task's raw spread (2 283–5 731 ms of warm steps, including the 5 731 ms row its
+narrative rounded to "5.0 s") stands as the pre-fix corpus. The fix's expected
+startup effect is neutral-to-positive (it removes the post-warm light-variant
+re-key rather than moving work into boot), and that is all that is claimed.
+
+### Headed-equivalent resolution
+
+`after-dpr21` ran at 1512×982, DPR 2. `viewport` records
+`{width:1512, height:982, dpr:2, canvasW:800, canvasH:600}`: the game's render
+target is fixed by the `res=800` rung (800×600) and only presentation scales
+with the window, so the owner's headed window size changes presentation cost,
+not the march/scene resolution. The blast fix holds at that viewport
+(0 creations, 34.3 ms p95, 0 long frames).
+
+### Probe-gather: spawn vs steady state, and the capsule fix
+
+The stress levels now measure a **spawn window** and, after a 3 s settle, a
+separate **2 s steady window** with no spawning in it. `rows` is the bone-ROW
+count (`gates.capsules`, rows × 2 = capsules).
+
+| cumulative bodies | bone rows | steady p95 before | steady p95 after | spawn p95 before | spawn p95 after | probe errors |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 6 | 395 | 27.8 / 33.8 / 49.5 ms | 28.1 / 36.8 / 61.7 ms | 196.9 / 190.7 / 250.5 | 31.5 / 29.2 / 29.8 | 0 |
+| 15 | **935** | 88.0 / 156.6 / 155.8 ms | 226.3 / 164.7 / 188.7 ms | 53.0 / 85.0 / 707.4 | 77.8 / 86.3 / 82.7 | 0 |
+| 27 | **1024 (cap)** | 273.4 / 332.4 / 262.3 ms | 445.5 / 417.4 / 338.0 ms | 573.8 / 492.9 / 649.7 | 633.1 / 1504.6 / 763.4 | 0 |
+| 47 | **1024 (cap)** | 411.3 / 613.7 / 561.3 ms | 608.9 / 1069.2 / 751.3 ms | 851.2 / 849.7 / 917.9 | 1080.7 / 2070.7 / 1138.8 | 0 |
+
+- **Capsule fix verified above 512 rows:** rows 935 and 1024 run with
+  `errors: 0`, `bound: true`, `dynOn: true` in all seven runs. 935 is the first
+  level above the 512/owner's-515 range and it is clean.
+- **Steady-state gather is a real, separate cost**, isolated from spawning:
+  ~28–62 ms at 395 rows, ~165–226 ms at 935 rows, and 338–1069 ms at the
+  1024-row cap. The previous report's 1.0–2.3 s figure conflated this with the
+  spawn CPU; the spawn window is the higher number (up to 2.07 s here) and the
+  steady window is the gather. Not reopened to lower the test load.
+
+### First gib / bake timeline (unchanged)
+
+first visible chunk 241–547 ms after detonate; first worker bake submit
+1.98–3.54 s; main-thread bake swap 0.4–0.9 ms; first textured-head draw
+3.17–5.12 s. The worker and the swap are not the hitch (unchanged finding).
+
+## 5. Warm lifecycle fixes (`34c076f2`), live-verified
+
+- `warmPipelines` now returns `'ok' | 'failed'`; `coordinateWarmGate`
+  (warm-gate.ts) awaits the **outcome**. A failed/rejected warm settles the
+  loader as `warm-failed` with honest wording — never READY; a lost device as
+  `device-lost`. On the 15 s bound the loader only changes wording and keeps
+  awaiting; it never reveals on the bound alone.
+- `createLoopController` separates the loop's **intent** from the warm's
+  suspension. All external `setLoopRunning` calls (including the rig seams) go
+  through the intent; the warm only suspends/releases, so the most recent
+  intent wins.
+- Live probe evidence on the real warm path, all runs:
+
+| lifecycle check | before (old code) | after |
+| --- | --- | --- |
+| loop stays armed after a warm started armed | true | true |
+| **loop stays paused after a warm started paused** | false (bug) | false |
+| **pause requested WHILE the warm is in flight** | **true (bug)** | **false** |
+| loader gate phase | n/a | `ready` ×3 |
+
+The first-pause case (`loopAfterPausedWarm`) was already correct in the old code
+because it snapshotted at START; the case the reviewer identified —
+pause **during** the warm — returned `true` before and returns `false` after.
+`warm-gate.test.ts` (12 tests) now drives the real coordinator with deferred
+promises and fake timers: fast success, slow success across the 15 s bound,
+failure, rejected warm, device loss, prereq gating, and pause/resume during
+warm. `pipeline-log.test.ts` (13 tests) pins the collisions the old signature
+produced (different shaders, layouts, blends, write masks, vertex formats,
+stencil ops) and asserts legitimate target/sample variants stay distinct.
+
+## 6. Carve and default-path scope
+
+Unchanged from the previous pass and re-affirmed: `?gibrender=carve` is the
+only trigger and is absent from the owner's URL; the default URL never builds
+the carved library. Off-thread carve remains a **separate, explicitly named
+open item** (§9); it was not touched because no measurement shows it on the
+default path. The retained diagnostics (`device.lost` /
+`onuncapturederror`) still cover the rare default device-loss case.
+
+## 7. Tests and build
 
 ```
 npx vitest run src/lab/sdf-zombie/probe-dynamic.test.ts \
@@ -235,88 +344,100 @@ npx vitest run src/lab/sdf-zombie/probe-dynamic.test.ts \
   src/lab/sdf-zombie/webgpu/probe-dynamic.wgsl.test.ts \
   src/lab/sdf-zombie/webgpu/probe-grid.wgsl.test.ts \
   src/lab/sdf-zombie/webgpu/probe-lighting-node.test.ts \
-  src/lab/sdf-zombie/webgpu/warm-gate.test.ts
-# 7 files passed, 102 tests passed (Node v22.22.1)
+  src/lab/sdf-zombie/webgpu/warm-gate.test.ts \
+  src/lab/sdf-zombie/webgpu/pipeline-log.test.ts
+# 8 files passed, 124 tests passed (Node v22.22.1)
 
-npm run build   # tsc --noEmit && vite build — exit 0, ✓ built in 8.46s
+npm run build   # tsc --noEmit && vite build — exit 0, ✓ built in 4.14s
 ```
 
-### Before / after
+## 8. Diagnostic cost (honest limit)
 
-The two fixes are lifecycle correctness, and the reproducible warm duration is
-dominated by machine load, so **no timing improvement is claimed**: warm steps
-spread 2.3–5.0 s across the pre-change boots and 2.3–5.7 s across the post-change
-boots, and repeated-blast p95 stayed in the same load-dependent range. What
-changed is behaviour under the pathological conditions: a
-warm-up slower than 15 s no longer produces a fake READY, and a paused loop
-stays paused. The owner's 38.9 s and the blast-frame p95 remain open (§10).
+The full-fidelity detector hashes every shader module source when
+`?pipelinelog=1` is on. That is 16.35 MB (before) / 9.05 MB (after) per boot and
+shows as `device.createShaderModule … pipeline-log.ts` self-time of
+318–659 ms in the boot CPU profiles. **Both arms carry the same overhead**, so
+the before/after comparison is unaffected, but the absolute warm numbers in §4
+include it and the production path (no `?pipelinelog=1`) does not. Disabled,
+the wraps are scalar counters only, as before.
 
-## 8. Retained appearance (native vision)
+## 9. Retained appearance (native vision)
 
-Captured with the accepted rupture rig on this branch
-(`RUP_VIEW=front RUP_DIST=2.4 RUP_FRAMES=16`), then opened with the native
-viewer — not read from filenames. Telemetry matches the accepted Task 4 numbers
-exactly (`f11` body rot 54.8°, release `f12` chunk rot 59.4°, spin 4.63 rad/s,
+Captured with the accepted rupture rig on this branch (`RUP_VIEW=front
+RUP_DIST=2.4 RUP_FRAMES=16 RUP_SEED=7`) and opened with the native viewer — not
+read from filenames. Telemetry matches the accepted Task 4 numbers exactly
+(`f11` body rot 54.8°, release `f12` chunk rot 59.4°, spin 4.63 rad/s,
 16 chunks, tier `parts`). Artifacts:
-[`captures/rupture-preserved-sheet.jpg`](captures/rupture-preserved-sheet.jpg),
-`-onset/-f11/-f12/-f15.jpg`, `rupture-preserved-telemetry.json`.
+[`captures/action-stall/rupture-after-sheet.jpg`](captures/action-stall/rupture-after-sheet.jpg),
+`rupture-after-telemetry.json`.
 
 - **f0 onset** — intact posed zombie, arms down, head/face intact.
-- **f1–f4** — the chest band lifts and a pale rib ladder opens; flesh peels.
-- **f8–f11** — regions are visibly rotated apart (not upright/parallel), ribs
-  exposed, and the mottled chunk surface is already present on the last window
-  frame (no material pop).
+- **f1–f3** — chest band separates; mottling appears; ribs begin to show.
+- **f4–f8** — cavity brightens, rib ladder reads, regions are visibly rotated
+  apart.
+- **f10–f11** — regions rotated (not upright/parallel), ribs exposed, mottled
+  chunk surface already present (no material pop).
 - **f12 release** — chunks spawn in the *same* configuration as f11: no snap
-  back to upright, no material blink.
-- **f13–f15** — pieces continue turning and scatter; the head stays a distinct,
-  face-bearing mass.
+  back to upright, no material blink; the head stays a distinct, face-bearing
+  mass.
+- **f13/f15** — pieces keep turning and scatter.
 
-Mesh-skeleton default and baked optimization were untouched (`skeleton` and
-`gib` defaults are not in the changed files).
+The light fix does not change this: the pool's intensity envelope and the
+blast's own lighting are unchanged; only the light's membership in the scene's
+light set is now stable.
 
-## 9. FIXED vs INVESTIGATED vs UNRESOLVED
+## 10. FIXED vs INVESTIGATED vs UNRESOLVED
 
 **FIXED**
-1. Probe gather overflow (`fdf20ad0`, inherited and verified live): 0 errors at
-   1024 bone rows → 2048 capsules; 515 rows covered by unit test.
-2. Loader honesty on a slow warm (no READY before the work settles).
-3. Warm-up loop restore (paused loop stays paused) — verified live.
-4. Device-loss / uncaptured-error evidence channel (was absent).
-5. Boot/warm/first-gib attribution instrumentation (marks, sub-phases, duplicate
-   detector, gib timeline, `faceBaked`, `gibRenderer`, `rewarm`).
+1. **Blast-frame stalls (this task's core).** Explosion light visibility
+   toggling re-keyed the scene lights node and rebuilt the light shader variant
+   mid-frame: 189 pipeline creations and 11 ≥100 ms frames per six blasts →
+   0–1 creations and 0 long frames; p95 221.5–234.0 ms → 31.3–34.9 ms.
+2. **Warm loader honesty on failure / device loss** (`coordinateWarmGate`).
+3. **Loop intent vs warm suspension**: a pause requested during the warm is
+   respected (live: `true` before → `false` after).
+4. Probe gather overflow (>512 rows → 1024 rows, 0 errors) — inherited and
+   re-verified live.
+5. Full-fidelity pipeline attribution: shader-source hashes, layout content
+   signatures, the true three cache key, and eviction recording with object
+   identity.
 
 **INVESTIGATED (attributed with raw evidence, not fixed)**
-1. Reproducible startup is 2.3–5.0 s warm + ~2–5 s boot; named costs in §2.
-2. The owner's 38.9 s did not reproduce (6 boots); cold profile made no
-   difference; no device loss. Prime remaining hypothesis: GPU-process
-   contention/loss at the time of the report.
-3. Carve is opt-in only; explicit cost 22.3 s synchronous CPU (§3).
-4. First-gib/repeated-action freeze: 17–23 pipeline creations/frame from the
-   same 8 pipelines rebuilt ~12× (byte-identical descriptors) — §5.
-5. Gather cost at maximum occupancy: 1.0–2.3 s frame p95 in the stress window.
+1. Steady-state gather at the 1024-row cap: 338–1069 ms p95 in a clean 2 s
+   window with no spawning (separate from the spawn CPU, which reaches 2.07 s).
+2. Residual warm→play re-key of the six `MeshBasicNodeMaterial_185/195–199`
+   pipelines (5 creations / 4 releases, 1–9 ms each, frames ~5→41–44) caused by
+   the warm's hidden-mesh flip/restore. No long frame.
+3. The residual after long frames with **no** creations (105–116 ms) are
+   CPU/gather during first-shot and crowd spawn, under load 8.7–9.7.
+4. Device loss / the owner's 38.9 s did not reproduce in any of the seven runs;
+   diagnostics are retained.
 
 **UNRESOLVED**
-1. The 38.9 s one-off — needs the owner's contended / GPU-process-restarted
-   conditions to reproduce; diagnostics are now in place.
-2. Pipeline-cache churn during room entry/shots/blasts. Reproduction:
-   `pipelineLog().duplicates` after a blast. Fix direction: stop the
-   shell/dynamite-prop/room mesh churn that evicts three's pipeline entries
-   (pool the meshes) rather than warming more pipelines.
-3. Carve's 22.3 s synchronous build. Needs an owned worker (or a reusable baked
-   library) — a deliberate scheduling change, not a timing tweak. Not started.
-4. Reproducible blast-frame p95 ~700 ms, unchanged by this task.
+1. The owner's 38.9 s one-off — needs the contended / GPU-process-restarted
+   conditions to reproduce.
+2. The warm hidden-object flip/restore re-key (§2 residual): a real second-order
+   churn, currently sub-10 ms.
+3. Carve's ~22.3 s synchronous build (opt-in only) still needs an owned worker
+   or a reusable baked library. **Explicitly open; not started.**
+4. Steady-state probe gather at maximum occupancy (1024 rows) is genuinely
+   expensive and load-sensitive.
 
-## 10. Limitations
+## 11. Limitations
 
-- Single machine, one GPU (Apple M3), all samples from one session window under
-  load average 3.9–6.1; medians/spreads are reported, not single samples.
-- Headless Chrome 152 at 960×720 DPR 1 is not the owner's headed window; GPU
-  driver behaviour under a contended browser GPU process may differ (this is the
-  leading explanation for the unreproduced 38.9 s).
-- `probeDynamic().gates.capsules` is the bone-ROW count despite the name
-  (rows × 2 = capsules). Left as-is to avoid disturbing the panel/tests.
-- The loader-timeout branch was unit-tested, not live-triggered.
-- The `spawnCrowd` gather-stress frames include the spawn itself; they bound the
-  gather cost rather than isolating it.
-- No owner playtest: model inspection and native-vision captures are not
-  acceptance. No merge or push was performed.
+- Single machine, one GPU (Apple M3), seven runs in one window under
+  **unequal, high background load** (3.75–9.66). The blast-stall fix is claimed
+  because it is identical across all three matched pairs and at DPR 2; the
+  warm/boot numbers are not used to claim any improvement.
+- Headless Chrome at 960×720 DPR 1 (and the 1512×982 DPR 2 control) is still
+  not the owner's live playtest; model inspection and native-vision captures
+  are not acceptance.
+- The `before` arm is `a678273d` **plus the diagnostics commit**, not the bare
+  commit: the same detector had to run on both sides. The diagnostics are
+  behaviour-neutral apart from the shader-hash CPU cost documented in §8.
+- The probe revision used for these records predates `97c462a6`, so the
+  first-detonation window was recorded as `undefined` in these seven files; the
+  first blast is still covered by the session long frames and the gib timeline,
+  and the probe now records it correctly.
+- `probeDynamic().gates.capsules` is a bone-ROW count despite the name.
+- No owner playtest; no merge or push was performed.
