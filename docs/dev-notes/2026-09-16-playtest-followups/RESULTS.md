@@ -192,6 +192,6 @@ timing or performance claim is made from these runs.
 
 ## 8. Commit
 
-Code + evidence commit: `<fill after commit>` on
+Code + evidence commit: **`bb5150e9`** on
 `codex/playtest-followups-task-3` (inherits Task 2 `874f21db`). No merge, no
 push. Extracted assets were never committed.
