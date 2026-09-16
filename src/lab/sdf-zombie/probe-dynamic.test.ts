@@ -9,6 +9,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   DYN_RAY_CAP,
+  PROBE_MAX_BONE_INSTANCES,
+  PROBE_MAX_CAPSULES,
   DYN_VEC4_PER_PROBE,
   BONE_INSTANCE_FLOATS,
   GOLDEN_ANGLE,
@@ -284,6 +286,21 @@ describe('packCapsulesFromBoneInstances', () => {
     // Instance 1's first capsule starts after instance 0's two capsules.
     const o = 4 + 2 * 8;
     expectFloats(out.slice(o, o + 4), [5, 0, 0, 0.2]);
+  });
+
+  it.each([515, PROBE_MAX_BONE_INSTANCES])('packs all %i admitted bone rows without dropping occluders', (count) => {
+    // 515 rows reproduced the arena's 1030 > 1024 failure. The other case
+    // exercises the producer's full budget, not just the reported overflow.
+    const ab = abOf(Array.from({ length: count }, (_, i) => ({
+      a: [i, 0, 0] as Vec3, b: [i, 1, 0] as Vec3, c: [i, 2, 0] as Vec3,
+      r1: 0.1, r2: 0.2, scale: [1, 1, 1] as Vec3,
+    })));
+    const out = new Float32Array(4 + PROBE_MAX_CAPSULES * 8);
+    expect(packCapsulesFromBoneInstances(ab, count, 0, out, PROBE_MAX_CAPSULES)).toBe(count * 2);
+    expect(out[0]).toBe(count * 2);
+    const last = 4 + (count * 2 - 1) * 8;
+    expectFloats(out.slice(last, last + 4), [count - 1, 1, 0, 0.2]);
+    expectFloats(out.slice(last + 4, last + 7), [count - 1, 2, 0]);
   });
 
   it('throws when max cannot hold two capsules per instance', () => {

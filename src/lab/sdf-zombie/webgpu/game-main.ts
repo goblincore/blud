@@ -109,6 +109,7 @@ import { hashFrame, DEFAULT_TILES_X, DEFAULT_TILES_Y } from './demo-hash';
 import { paddedRowStrideFloats } from './frame-hash';
 import { tracerGatherLights } from '../tracer-lights';
 import { boneInstanceArrays, packBoneInstances, INSTANCE_FLOATS } from './bone-instancer';
+import { PROBE_MAX_BONE_INSTANCES, PROBE_MAX_CAPSULES } from '../probe-dynamic';
 import { createZombieActor, segmentHitsBox, type ZombieActor } from './game-actor';
 import { separate, minPairDistance, type CrowdAgent } from '../crowd';
 import { arbitrate, RING_TUNING, type RingClaimant } from '../melee-ring';
@@ -923,7 +924,7 @@ async function main() {
   // with the bone instancer's OWN packer into a private array. Not the
   // instancer's array — that is only filled in bone-mesh mode, and in the
   // shipped mode (bones marched in the field) its count is zero.
-  const probeCapsuleArrays = boneInstanceArrays(1024);
+  const probeCapsuleArrays = boneInstanceArrays(PROBE_MAX_BONE_INSTANCES);
   let probeGateLogs = 0;
   let probeLastGates: unknown = null;
   let probeLastCapsules = 0;
@@ -1766,10 +1767,10 @@ async function main() {
       probeGatherTick++;
       if (dynOn && probeGather && dynRoom && dynGrid && gatherDue) {
         for (const a of actors) {
-          if (!nearRoom(a, dynRoom) || probeCapsuleCount >= 1024) continue;
+          if (!nearRoom(a, dynRoom) || probeCapsuleCount >= PROBE_MAX_BONE_INSTANCES) continue;
           const posed = a.posed();
           const sub = { ab: probeCapsuleArrays.ab.subarray(probeCapsuleCount * INSTANCE_FLOATS), overflowed: false };
-          probeCapsuleCount += packBoneInstances(posed.bonePrims ?? [], posed.clusters.map(c => c.alive), sub, 1024 - probeCapsuleCount);
+          probeCapsuleCount += packBoneInstances(posed.bonePrims ?? [], posed.clusters.map(c => c.alive), sub, PROBE_MAX_BONE_INSTANCES - probeCapsuleCount);
         }
         probeLastCapsules = probeCapsuleCount;
         // THE LIGHTS. (1) The player's muzzle flash, a point light while its
@@ -2996,7 +2997,7 @@ async function main() {
   });
   if (probesOff) roomProbes.setProbes(0, -1);
   probeGather = createProbeGatherBinding(handle.renderer, {
-    maxProbes: 10 * 4 * 10, maxBoxes: 16, maxCapsules: 1024, maxLights: 8,
+    maxProbes: 10 * 4 * 10, maxBoxes: 16, maxCapsules: PROBE_MAX_CAPSULES, maxLights: 8,
   });
 
   // -----------------------------------------------------------------------

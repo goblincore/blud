@@ -48,6 +48,11 @@ export const DYN_FLOATS_PER_PROBE = DYN_VEC4_PER_PROBE * 4;
 /** The kernel's hard per-probe ray cap (`min(u32(cfg.y), 64u)`). */
 export const DYN_RAY_CAP = 64;
 
+/** The game gathers at most this many bone rows; each expands to two capsules. */
+export const PROBE_MAX_BONE_INSTANCES = 1024;
+export const PROBE_CAPSULES_PER_BONE = 2;
+export const PROBE_MAX_CAPSULES = PROBE_MAX_BONE_INSTANCES * PROBE_CAPSULES_PER_BONE;
+
 /**
  * THE GATHER'S WORKGROUP SIZE, and the shape of the R1 dispatch (2026-09-10).
  *
@@ -367,7 +372,7 @@ export function packCapsulesFromBoneInstances(
   out: Float32Array,
   max: number,
 ): number {
-  const n = count * 2;
+  const n = count * PROBE_CAPSULES_PER_BONE;
   if (n > max) {
     throw new Error(`packCapsulesFromBoneInstances: ${n} capsules exceed max ${max}`);
   }
