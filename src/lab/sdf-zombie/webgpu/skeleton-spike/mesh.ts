@@ -110,8 +110,29 @@ export function extractSegmentMesh(source: BoneFieldSource, cellSize = MESH_CELL
  * returns the SAME SegmentMesh object on hit (identity is the cache-hit
  * signal the tests assert).
  */
+export interface SegmentMeshCacheStats {
+  entries: number;
+  /** Number of synchronous extractions (cache misses) since construction. */
+  extractCount: number;
+  /** Total wall time spent inside extractSegmentMesh on the main thread. */
+  extractMs: number;
+  /** performance.now() timestamp of the FIRST extraction (page time origin). */
+  firstExtractAt: number | null;
+  /** performance.now() timestamp of the most recent extraction. */
+  lastExtractAt: number | null;
+  /** bakeMs of the single most expensive extraction seen. */
+  maxExtractMs: number;
+  maxExtractKey: string | null;
+}
+
 export class SegmentMeshCache {
   readonly #map = new Map<string, SegmentMesh>();
+  #extractCount = 0;
+  #extractMs = 0;
+  #firstExtractAt: number | null = null;
+  #lastExtractAt: number | null = null;
+  #maxExtractMs = 0;
+  #maxExtractKey: string | null = null;
   constructor(readonly cellSize: number = MESH_CELL) {}
 
   keyOf(source: BoneFieldSource): string {
@@ -123,9 +144,30 @@ export class SegmentMeshCache {
     let m = this.#map.get(key);
     if (!m) {
       m = extractSegmentMesh(source, this.cellSize);
+      const at = performance.now();
+      this.#extractCount++;
+      this.#extractMs += m.bakeMs;
+      if (this.#firstExtractAt === null) this.#firstExtractAt = at;
+      this.#lastExtractAt = at;
+      if (m.bakeMs > this.#maxExtractMs) { this.#maxExtractMs = m.bakeMs; this.#maxExtractKey = key; }
       this.#map.set(key, m);
     }
     return m;
+  }
+
+  /** Bounded main-thread extraction telemetry. Never starts new work and is
+   *  CUMULATIVE across disposal (see dispose()); it is attribution, not a
+   *  view of the live map. */
+  stats(): SegmentMeshCacheStats {
+    return {
+      entries: this.#map.size,
+      extractCount: this.#extractCount,
+      extractMs: Math.round(this.#extractMs * 100) / 100,
+      firstExtractAt: this.#firstExtractAt === null ? null : Math.round(this.#firstExtractAt * 100) / 100,
+      lastExtractAt: this.#lastExtractAt === null ? null : Math.round(this.#lastExtractAt * 100) / 100,
+      maxExtractMs: Math.round(this.#maxExtractMs * 100) / 100,
+      maxExtractKey: this.#maxExtractKey,
+    };
   }
 
   get size(): number {
@@ -141,7 +183,9 @@ export class SegmentMeshCache {
 
   /** Disposes every cached geometry and clears the map. A later get()
    *  re-extracts from scratch — disposal is a memory event, not an
-   *  invalidation of the field contract. */
+   *  invalidation of the field contract. The extraction counters are
+   *  intentionally CUMULATIVE across a disposal: they are diagnostics, and
+   *  a rebuild that pays extraction again must not hide that cost. */
   dispose(): void {
     for (const m of this.#map.values()) m.geometry.dispose();
     this.#map.clear();

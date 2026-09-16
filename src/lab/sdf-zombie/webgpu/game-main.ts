@@ -77,7 +77,7 @@ import { createOccluderHull, buildHullInstances, HULL_SHRINK, type HullInstance 
 import { type BuildResult } from '../build-body';
 import { parseBlob } from '../blob-parse';
 import { MOTION_TUNING } from '../motion';
-import { createCharacterView, compileCharacterSheet } from './character-view';
+import { createCharacterView, compileCharacterSheet, bodyBuildCacheStats } from './character-view';
 import { createCharacterEffects } from './character-effects';
 import { characterEntry, characterNames } from '../character-registry';
 import { rotateYaw } from '../gait';
@@ -1573,6 +1573,11 @@ async function main() {
    *  `window.__sdfGame` seam). Nothing is lost — those frames drew nothing
    *  anyway — and the loader covers the canvas for all of it. */
   let drawReady = false;
+  /** One-shot boot marks around the FIRST skeleton-mesh sync, so a startup
+   *  probe can attribute the cold-blocking extraction without a per-frame
+   *  allocation. Set once; never cleared (a rebuild's re-extraction is
+   *  reported by SegmentMeshCache.stats() instead). */
+  let meshSyncMarked = false;
   handle.setDrawFn(() => {
     if (!drawReady) return;
     // GPU PROBE GATHER dispatch (P3/P4). OUTSIDE the post-aa pass on purpose:
@@ -1654,6 +1659,8 @@ async function main() {
       // the forward default without a controlled timing result (skeleton
       // wrap-up, 2026-09-08) and no capture could see it until now.
       const meshTiming = telemetry.begin();
+      const firstMeshSync = !meshSyncMarked;
+      if (firstMeshSync) { meshSyncMarked = true; mark('mesh-sync-start'); }
       const craters: { pos: Vec3; radius: number }[] = [];
       for (const a of actors) {
         const prims = a.posed().prims;
@@ -1667,6 +1674,7 @@ async function main() {
         return e.sources;
       }), actors);
       telemetry.end('skeleton-mesh', meshTiming);
+      if (firstMeshSync) mark('mesh-sync-end');
     }
     // skeleton=volume: only the tiny pose/meta texture changes per frame.
     // A body-reference change means sever/rebuild and therefore a new
@@ -11125,7 +11133,10 @@ function performBenchAction(a: BenchAction): void {
       return { actor: a.id, point, ejected, stamped: !!wound };
     },
     meshEyeState: (bodyId?: number) => { const a = bodyId === undefined ? actors[0] : actors.find(q => q.id === bodyId); return a && segMeshRenderer ? segMeshRenderer.eyeState(a) : null; },
-    skeletonMesh: () => segMeshRenderer ? { mode: skeletonMode, ...segMeshRenderer.stats, cacheEntries: segMeshCache!.size, cacheTotals: segMeshCache!.totals } : null,
+    skeletonMesh: () => segMeshRenderer ? { mode: skeletonMode, ...segMeshRenderer.stats, cacheEntries: segMeshCache!.size, cacheTotals: segMeshCache!.totals, cacheStats: segMeshCache!.stats() } : null,
+    /** Cold-start task 1: how many per-character body builds the memo actually
+     *  ran (vs served from cache) and their cumulative CPU time. */
+    bodyBuild: () => ({ ...bodyBuildCacheStats() }),
     /** Synchronous active-path proof for capture harnesses. */
     skeletonDiagnostics: () => ({
       requestedMode: skeletonMode,
