@@ -328,7 +328,7 @@ if (target) {
   await evaluate(`window.__sdfGame.aimSurface(undefined, ${target.id})`);
   await sleep(400);
   await frameStats();
-  const blast = await action('firstDetonation', async () => {
+  await action('firstDetonation', async () => {
     await evaluate(`window.__sdfGame.detonate(${target.pos[0]}, ${target.pos[1] + 0.6}, ${target.pos[2]})`);
   });
   // Poll the transition timeline for 4 s.
@@ -351,13 +351,17 @@ if (target) {
     if (firstFace === null && (cs.faceBaked ?? 0) > 0) firstFace = rec;
     if (firstFace && firstBake && i > 20) break;
   }
+  // `action` returns the PRE-action chunk stats; the measurement lives in
+  // actionLog (also exposed as result.actions). The old code read `blast.frames`
+  // off that return value, which silently recorded undefined for the first
+  // detonation — the first-blast window was lost from every earlier report.
+  const blastRec = actionLog.firstDetonation;
   result.gibTimeline = {
-    blastWallMs: blast.wallMs, blastFrames: blast.frames,
+    blastWallMs: blastRec?.wallMs ?? null, blastFrames: blastRec?.frames ?? null,
     firstVisibleChunk: firstLive, firstBakeSubmit: firstBakePending,
     firstBakeSwap: firstBake, firstTexturedHeadDraw: firstFace,
     samples: tl.filter((r, i) => i % 4 === 0 || r === firstLive || r === firstBake || r === firstFace),
   };
-  result.actions.firstDetonation = blast.frames;
   await frameStats();
   // MATCHED CADENCE. Repeated shots and repeated explosions, one measured
   // window each, with a FIXED 450 ms gap so the before/after runs are
