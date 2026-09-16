@@ -389,9 +389,8 @@ export const POST_AA_BLIT_WGSL = /* wgsl */ `fn postAaBlit(
  *     the render list;
  *   * the summed offset is clamped to dist.y UV (a few percent of the screen),
  *     so a near-camera blast cannot smear the frame or invert it;
- *   * the profile is a ring, zero at the blast centre and at the outer front, so
- *     the HUD/weapon stay readable through the hole and nothing is magnified
- *     into a bubble;
+ *   * the profile is a ring, zero at the blast centre and at the outer front,
+ *     with an outward visual bulge across the moving band;
  *   * the whole pass is inert (dist.w < 0.5 or no blasts) and only touches
  *     uniforms — toggling it never rebuilds this pipeline or moves a node key.
  *
@@ -433,7 +432,9 @@ fn postAaBlastWarp(
   }
   let l = length(off);
   if (l > dist.y) { off = off * (dist.y / l); }
-  return uvIn + off;
+  // This is an inverse texture lookup: sampling inward moves the visible
+  // image outward. Adding off instead made the blast look like suction.
+  return uvIn - off;
 }
 
 fn postAaOetf(c: vec3<f32>) -> vec3<f32> {
