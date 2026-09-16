@@ -1,5 +1,23 @@
 # End-to-end review — all five owner requirements on the accumulated branch
 
+## Owner review and merge decision — 2026-09-16
+
+The owner approved merging this incremental progress after manual play,
+specifically noting split limbs and pieces no longer floating on the floor.
+This is not acceptance of every visual claim in the dispatch report below:
+the owner still sees the chest enveloping the head and cannot distinguish
+the optional shockwave from the default. Those observations supersede the
+report's head-fix verdict. A separate slough/refraction replacement is in
+progress on `codex/rupture-slough-refraction-task-*`; it is not included here.
+The optical experiment remains off by default. Intermittent long cold-start
+freezes remain unresolved.
+
+Root review also fixed the body cache to key on full source contents instead
+of source length (`f3526b2c`), with an equal-length anatomy-edit regression
+test. Root verification: 115 focused tests and Node22 production build passed.
+
+The following sections retain the original dispatch measurements and limits.
+
 2026-09-16 playtest follow-ups, end-of-chain review. Branch
 `codex/playtest-followups-task-4`, from task-1 `b8636ffc`, task-2 `d84b1f09`,
 task-3 `bb5150e9` (all inherited on top of `ed97cd14`,
