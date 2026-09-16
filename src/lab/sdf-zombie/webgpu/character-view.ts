@@ -231,9 +231,9 @@ function bodyBuildKey(
 ): string {
   return [
     entry.name,
-    // entry.src is the registry's immutable source string; its length plus the
-    // name distinguishes a changed document without hashing the whole blob twice.
-    entry.src.length,
+    // Equal-length edits can change anatomy. Key on the complete source so
+    // rebuilding an edited character cannot reuse its previous geometry.
+    entry.src,
     face === undefined ? '@auto' : JSON.stringify(face),
     boneRatio === undefined ? '@default' : String(boneRatio),
     opts === undefined ? '@none' : JSON.stringify(opts),

@@ -74,4 +74,16 @@ describe('buildCharacterBody memo', () => {
     const after = bodyBuildCacheStats();
     expect(after.misses - before.misses).toBe(2);
   });
+
+  it('rebuilds geometry after an equal-length character source edit', () => {
+    const entry = characterEntry('zombie');
+    const edited = { ...entry, src: entry.src.replace('headRadius 0.118', 'headRadius 0.218') };
+    expect(edited.src).not.toBe(entry.src);
+    expect(edited.src.length).toBe(entry.src.length);
+    const before = bodyBuildCacheStats();
+    const original = buildCharacterBody(entry, [0, 0, 0], []);
+    const changed = buildCharacterBody(edited, [0, 0, 0], []);
+    expect(bodyBuildCacheStats().misses - before.misses).toBe(2);
+    expect(changed.prims).not.toEqual(original.prims);
+  });
 });
