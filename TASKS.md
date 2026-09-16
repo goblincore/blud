@@ -8,8 +8,12 @@
 
 - [x] Preserve flesh shading, cut geometry and face texture through settle baking; owner manual test accepted.
   [Results, captures and limits](docs/dev-notes/2026-09-15-gib-baked-vs-marched/parity-fix/RESULTS.md) · PR #8.
-- [ ] New report: long startup and initial gib freeze; no timings/root cause yet.
-  [Next-session handoff](docs/dev-notes/2026-09-16-gib-follow-up/HANDOFF.md) includes profiling leads and all remaining issues.
+- [x] Startup + first/repeated-blast freeze profiled with corrected attribution; blast stalls fixed.
+  Explosion light visibility toggle re-keyed three's lightsNode and rebuilt 17-18 pipelines per blast frame
+  (p95 221-234 ms → 31-35 ms, 11 long frames → 0 over six blasts). Candidate `fd704125` on
+  `codex/blud-action-stall-fix`; [results + raw evidence](docs/dev-notes/2026-09-16-startup-freezes/RESULTS.md).
+  Still open: steady-state probe gather at the 1024-row cap (338-1069 ms p95), warm hidden-mesh flip re-key,
+  opt-in carve 22.3 s build, and the unreproduced owner 38.9 s.
 - [ ] Next: body-to-gib tearing transition; active melting and retired NotBlood sprites are references. Design remains open.
 - [ ] Later: fix floating/upright settled pieces; split each arm/leg into two shorter pieces. Explicitly deferred by owner.
 

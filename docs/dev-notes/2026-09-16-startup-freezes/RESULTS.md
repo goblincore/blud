@@ -386,6 +386,18 @@ The light fix does not change this: the pool's intensity envelope and the
 blast's own lighting are unchanged; only the light's membership in the scene's
 light set is now stable.
 
+**The explosion light still reaches the room** (whole-frame mean luminance, not
+a changed-pixel count — a transient light lifts every wall slightly):
+
+```
+fxlight 0 (off) : room mean 29.89 -> 29.93  (+0.04)  mesh intensity [0,0,0]
+fxlight 1 (SHIP): room mean 30.07 -> 39.00  (+8.93)  mesh intensity [136.2,0,0]
+```
+
+`mesh intensity [136.2,0,0]` is read live from `__sdfGame.dynamite()`, so the
+light is on in the material, not just allocated. Artifact:
+[`captures/action-stall/explosion-light-reach.txt`](captures/action-stall/explosion-light-reach.txt).
+
 ## 10. FIXED vs INVESTIGATED vs UNRESOLVED
 
 **FIXED**
