@@ -6,7 +6,8 @@
 //   * progress is MONOTONIC 0..1 and STOPS at 1 — the old envelope relaxed back
 //     to the clean pose, which is the "the body just becomes chunks" bug;
 //   * progress 0 is bit-identical to the posed body (the onset silhouette);
-//   * regions move rigidly, flesh leads bone, the head is damped, cuts open;
+//   * regions move rigidly, flesh leads bone, the head rides the upper torso and
+//     the neck opens, cuts open;
 //   * nothing NaNs, the cull bound COVERS the moved flesh (an under-covering
 //     bound does not draw a wrong shape, it deletes geometry);
 //   * it does not mutate the body it was handed — the actor's own `posed()` is
@@ -95,14 +96,78 @@ describe('rupturePosed', () => {
     expect(len(cage)).toBeGreaterThan(0);
   });
 
-  it('damps the head so the face stays recognizable', () => {
+  it('carries the head with the upper torso and opens the neck seam', () => {
+    // Owner report 2026-09-16: "the chest peel currently moves upward into the
+    // head, giving a false swollen/big head." The head is NOT an independently
+    // damped region; it is attached to the upper torso. These are the two
+    // observable consequences: the head tracks the chest's travel, and the neck
+    // opens by at least `neckGapM` along the body's own axis, so the chest is
+    // never above it.
+    expect(TEAR_TUNING.headFollow).toBeGreaterThan(0.5);
+    expect(TEAR_TUNING.neckGapM).toBeGreaterThan(0.02);
     const { offsets } = rupturePosed(posed, plan, tearAt(TEAR_TUNING.sec));
+    const hi = plan.pieces.findIndex(p => p.part === 'head');
+    const ci = plan.pieces.findIndex(p => p.part === 'torso.chest');
+    expect(hi).toBeGreaterThanOrEqual(0);
+    expect(ci).toBeGreaterThanOrEqual(0);
+    const head = offsets[hi]!, chest = offsets[ci]!;
+    // The head is carried by the upper torso rather than left behind under it.
+    expect(len(head)).toBeGreaterThan(len(chest) * 0.5);
+    // ...and the neck gap is guaranteed, not merely whatever is left over.
+    const up = plan.up!;
+    const along = (o: Vec3) => o[0] * up[0] + o[1] * up[1] + o[2] * up[2];
+    expect(along(head) - along(chest)).toBeGreaterThanOrEqual(TEAR_TUNING.neckGapM * 0.9 - 1e-9);
+    expect(along(head) - along(chest)).toBeGreaterThan(0);
+  });
+
+  it('the detached control IS the reproduced defect: the chest out-travels the head', () => {
+    // `?tearhead=0&tearneck=0` is the honest A/B control for the owner's report:
+    // it restores the pre-task independent-damped head. This pins that the
+    // control really does reproduce the defect (the chest band climbs ~0.3 m
+    // past the head along the body's own axis) so a normal-speed comparison
+    // against the default is comparing the fix to the thing that broke.
+    const detached = { ...TEAR_TUNING, headFollow: 0, neckGapM: 0 };
+    const { offsets } = rupturePosed(posed, plan, tearAt(TEAR_TUNING.sec), detached);
     const head = offsets[plan.pieces.findIndex(p => p.part === 'head')]!;
-    // No cut touches the head and its damping is applied last, so it can never
-    // exceed the damped amplitude.
-    const cap = TEAR_TUNING.amplitudeM * TEAR_TUNING.headDamp * (1 + TEAR_TUNING.jiggleAmp) + 1e-9;
-    expect(len(head)).toBeGreaterThan(0);
-    expect(len(head)).toBeLessThanOrEqual(cap);
+    const chest = offsets[plan.pieces.findIndex(p => p.part === 'torso.chest')]!;
+    const up = plan.up!;
+    const along = (o: Vec3) => o[0] * up[0] + o[1] * up[1] + o[2] * up[2];
+    // Negative: the chest is ABOVE the head along the body axis — the geometry
+    // that reads as the head being swallowed / the chest becoming a big head.
+    expect(along(head) - along(chest)).toBeLessThan(-0.05);
+  });
+
+  it('keeps the head coherent with the torso from onset — no independent lag', () => {
+    // The failure the owner saw was relative motion: the chest travelled a third
+    // of a metre more than the head. Across the whole window the head's offset
+    // must stay close to the upper torso's (its own residual push plus the neck
+    // gap), never the ~0.3 m shortfall the independent damping produced.
+    for (const age of [0.02, 0.06, 0.12, TEAR_TUNING.sec]) {
+      const { offsets } = rupturePosed(posed, plan, tearAt(age));
+      const head = offsets[plan.pieces.findIndex(p => p.part === 'head')]!;
+      const chest = offsets[plan.pieces.findIndex(p => p.part === 'torso.chest')]!;
+      expect(len(sub(head, chest))).toBeLessThan(TEAR_TUNING.neckGapM + 0.03);
+    }
+  });
+
+  it('adds a UNIFORM root recoil away from the blast', () => {
+    expect(TEAR_TUNING.recoilM).toBeGreaterThan(0.01);
+    const still = { ...TEAR_TUNING, recoilM: 0 };
+    const { offsets: base } = rupturePosed(posed, plan, tearAt(TEAR_TUNING.sec), still);
+    const { offsets: withRecoil } = rupturePosed(posed, plan, tearAt(TEAR_TUNING.sec));
+    const jolt = sub(withRecoil[0]!, base[0]!);
+    expect(len(jolt)).toBeGreaterThan(0.005);
+    // Uniform: every region got exactly the same displacement, so the recoil
+    // opens no seam (that is the seams' and the peel's job).
+    for (let r = 0; r < withRecoil.length; r++) {
+      expect(len(sub(sub(withRecoil[r]!, base[r]!), jolt))).toBeLessThan(1e-9);
+    }
+    // ...and it points away from the epicentre.
+    let cx = 0, cy = 0, cz = 0;
+    for (const piece of plan.pieces) { cx += piece.origin[0]; cy += piece.origin[1]; cz += piece.origin[2]; }
+    const bodyC: Vec3 = [cx / plan.pieces.length, cy / plan.pieces.length, cz / plan.pieces.length];
+    const away = sub(bodyC, torso.center);
+    expect(jolt[0] * away[0] + jolt[1] * away[1] + jolt[2] * away[2]).toBeGreaterThan(0);
   });
 
   it('opens every cut: the two sides separate along the cut normal', () => {

@@ -151,6 +151,7 @@ import {
 } from '../dynamite-flight';
 import { gibAll, gibAllPieces, type ChunkGroup } from '../sever';
 import { displaceGibPieces, gibTierPlan, type GibBoneRelease, type GibPiece, type GibPlan } from '../gib-parts';
+import { TEAR_TUNING } from '../gib-tear';
 import { createBurstLayer, createStickProp, type BurstLayer, type StickProp } from './fpv-view';
 import { createExplosionVfx, type ExplosionVfx } from './explosion-vfx';
 import {
@@ -5250,7 +5251,25 @@ async function main() {
    *  separates into real regions (see gib-tear.ts's TearTuning). */
   const tearShape = {
     amplitudeM: 0.06, jiggleAmp: 0.35, seamM: 0.09, boneLag: 0.15, headDamp: 0.3,
+    // HEAD ATTACHMENT / ROOT RECOIL (2026-09-16 playtest follow-up task 4). The
+    // defaults come from TEAR_TUNING so the page and the module cannot drift;
+    // `?tearhead=0&tearneck=0&tearrecoil=0` restores the OLD independent-damped
+    // head + no whole-body jolt, which is the honest A/B control for whether the
+    // attachment actually removes the chest-overtakes-head read.
+    headFollow: parseFloatParam(DYN_PARAMS.get('tearhead'), { min: 0, max: 1 }) ?? TEAR_TUNING.headFollow,
+    neckGapM: parseFloatParam(DYN_PARAMS.get('tearneck'), { min: 0, max: 0.2 }) ?? TEAR_TUNING.neckGapM,
+    recoilM: parseFloatParam(DYN_PARAMS.get('tearrecoil'), { min: 0, max: 0.2 }) ?? TEAR_TUNING.recoilM,
   };
+  // ——— BLAST REFRACTION (EXPERIMENT, default OFF) ———————————————————————————
+  // The owner asked for a shockwave/distortion read on the blast. This is the
+  // bounded screen-space experiment (post-aa.ts's postAaBlastWarp): `?blastdistort=1`
+  // turns it on, `?bdstrength=` scales it, and at the same seed/pose/frame an
+  // on/off pair is an honest A/B. It is NOT accepted until a normal-speed review
+  // says it improves the read; default OFF keeps the shipped frame untouched.
+  let blastDistortStrength = parseFloatParam(DYN_PARAMS.get('bdstrength'), { min: 0, max: 4 }) ?? 1;
+  postAa.setBlastDistort(
+    DYN_PARAMS.get('blastdistort') === '1' || DYN_PARAMS.get('blastdistort') === 'on');
+  postAa.setBlastDistortStrength(blastDistortStrength);
   /** The cheapest tier's piece count — one chunk per limb cluster, i.e. the
    *  shape a body falls back to when the pool cannot afford anything better.
    *  Held back for every body still to come in a blast, so no body is left with
@@ -6562,6 +6581,27 @@ async function main() {
     // a distance gate nobody can see).
     igniteExplosionLight(at);
     const burst = scaleBurstVisual(fx.burst);
+    // BLAST REFRACTION (experiment, default OFF): feed the bounded post-aa ring
+    // the blast's projected screen position and apparent radius. Projecting the
+    // centre AND a point one AOE-radius above it measures the on-screen size
+    // rather than guessing a constant; `project`'s z > 1 flags a blast behind the
+    // camera, and the feed's uv gate drops it (a blast that cannot be seen must
+    // not warp the screen). Sim-time aging happens in tick, so this is the only
+    // per-blast cost: two projections and one ring push.
+    if (postAa.blastDistort) {
+      const c = new THREE.Vector3(at[0], at[1], at[2]).project(camera);
+      // The SHOCKWAVE SHELL is sized from the FIREBALL's visual half-height, not
+      // the 4.7 m damage radius: the AOE radius projects larger than the screen
+      // at any playable standoff, which turned the experiment into a full-frame
+      // lens in the first pass. 0.3 of the burst's visible half-height tracks the
+      // thing the player can actually see, at either distance.
+      const shellM = Math.max(0.2, burst.heightM * 0.3);
+      const e = new THREE.Vector3(at[0], at[1] + shellM, at[2]).project(camera);
+      const radiusUv = Math.max(0.05,
+        Math.min(0.28, 0.5 * Math.hypot(e.x - c.x, e.y - c.y)));
+      const strength = Math.min(0.05, 0.015 + 0.008 * burst.heightM) * blastDistortStrength;
+      postAa.pushBlastDistort(c.x * 0.5 + 0.5, c.y * 0.5 + 0.5, radiusUv, strength);
+    }
     if (explosionVfx) explosionVfx.spawn(burst);
     else if (burstLayer) burstLayer.spawn(burst);
     // ...including the stand-in, which used to get the UNSCALED height and was
@@ -8013,6 +8053,10 @@ async function main() {
     // replay. See the declaration next to lastSeenMs for the why.
     advanceSimClock(dt);
     simFrame++;
+    // BLAST REFRACTION ages on SIM time, like every other sim clock — never
+    // wall time — so a frozen capture advances it exactly one frame per step and
+    // an on/off pair at the same frame is a real comparison (post-aa.ts).
+    postAa.stepBlastDistort(dt);
     // Billboard the gib sprites. Cheap (a handful of quads) and it has to be per
     // frame: a piece that stops facing the camera vanishes edge-on.
     for (const s of spriteBenchSprites) billboardGib(s, camera);
@@ -10516,6 +10560,18 @@ function performBenchAction(a: BenchAction): void {
     setFxaa: (on: boolean) => postAa.setFxaa(on),
     get fxaa() { return postAa.fxaa; },
     setSmear: (v: number) => postAa.setSmear(v),
+    /** BLAST REFRACTION experiment (default OFF). Live seam so the capture rig
+     *  can A/B the SAME frame with it off and on — same seed, same pose, same
+     *  sim time — which is the only honest comparison. */
+    setBlastDistort: (on: boolean) => { postAa.setBlastDistort(on); return postAa.blastDistort; },
+    get blastDistort() { return postAa.blastDistort; },
+    setBlastDistortStrength: (v: number) => {
+      blastDistortStrength = Math.max(0, Math.min(4, Number(v) || 0));
+      postAa.setBlastDistortStrength(blastDistortStrength);
+      return blastDistortStrength;
+    },
+    get blastDistortStrength() { return postAa.blastDistortStrength; },
+    get blastDistortCount() { return postAa.blastDistortCount; },
     /** Per-room probe grids (P3 step 2): weight 0 = bit-identical P1; gain -1
      *  = each room's matched level, else an absolute multiplier. */
     /** Flashlight bounce spot (P4 step 1): 0 = off and bit-identical. */

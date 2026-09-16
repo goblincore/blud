@@ -580,3 +580,100 @@ describe('post-aa fisheye in the blit', () => {
     expect(offsets.reduce((sum, [, y]) => sum + y, 0)).toBeCloseTo(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// BLAST REFRACTION — the bounded experiment (2026-09-16 playtest task 4).
+// These pin the BOUNDS, not the look: the ring is at most four blasts, ages on
+// sim time, drops off-screen/behind-camera feeds, and is inert while off.
+// ---------------------------------------------------------------------------
+describe('blast refraction (bounded experiment)', () => {
+  it('is off and empty by default, and inert in the parity path', () => {
+    const { renderer, calls } = stubRenderer();
+    const post = createPostAa(renderer);
+    expect(post.blastDistort).toBe(false);
+    expect(post.blastDistortCount).toBe(0);
+    post.setFxaa(false);
+    post.setSmear(0);
+    calls.setRenderTarget = 0;
+    calls.render = 0;
+    post.pushBlastDistort(0.5, 0.5, 0.2, 0.08);
+    // A push while off records it, but the pass stays inactive.
+    expect(post.blastDistortCount).toBe(1);
+    post.render(() => {});
+    expect(calls.render).toBe(0);
+  });
+
+  it('runs the blit once enabled with a live blast', () => {
+    const { renderer, calls } = stubRenderer();
+    const post = createPostAa(renderer);
+    post.setFxaa(false);
+    post.setSmear(0);
+    post.setBlastDistort(true);
+    post.pushBlastDistort(0.4, 0.6, 0.25, 0.09);
+    const sink = { target: null as THREE.RenderTarget | null };
+    post.addSink({ setOutputTarget(t) { sink.target = t; } });
+    post.render(() => {});
+    expect(sink.target).not.toBeNull();
+    expect(calls.render).toBeGreaterThan(0);
+  });
+
+  it('keeps at most FOUR blasts and drops the oldest', () => {
+    const { renderer } = stubRenderer();
+    const post = createPostAa(renderer);
+    for (let i = 0; i < 7; i++) post.pushBlastDistort(0.1 + i * 0.1, 0.5, 0.2, 0.08);
+    expect(post.blastDistortCount).toBe(4);
+  });
+
+  it('drops off-screen, behind-camera and degenerate feeds', () => {
+    const { renderer } = stubRenderer();
+    const post = createPostAa(renderer);
+    post.pushBlastDistort(NaN, 0.5, 0.2, 0.08);
+    post.pushBlastDistort(0.5, NaN, 0.2, 0.08);
+    post.pushBlastDistort(-0.9, 0.5, 0.2, 0.08);
+    post.pushBlastDistort(0.5, 1.9, 0.2, 0.08);
+    post.pushBlastDistort(0.5, 0.5, 0, 0.08);
+    post.pushBlastDistort(0.5, 0.5, 0.2, 0);
+    expect(post.blastDistortCount).toBe(0);
+  });
+
+  it('ages on sim time and expires, so a frozen capture stays deterministic', () => {
+    const { renderer } = stubRenderer();
+    const post = createPostAa(renderer);
+    post.pushBlastDistort(0.5, 0.5, 0.2, 0.08);
+    expect(post.blastDistortCount).toBe(1);
+    post.stepBlastDistort(1 / 60);
+    expect(post.blastDistortCount).toBe(1);
+    // Long enough to exceed the ~0.34 s life regardless of its exact value.
+    post.stepBlastDistort(0.5);
+    expect(post.blastDistortCount).toBe(0);
+    // Wall-clock is never consulted: a second identical run gives the same
+    // state for the same dt sequence.
+    post.pushBlastDistort(0.5, 0.5, 0.2, 0.08);
+    post.stepBlastDistort(0.1);
+    expect(post.blastDistortCount).toBe(1);
+  });
+
+  it('clamps strength into a bounded multiplier', () => {
+    const { renderer } = stubRenderer();
+    const post = createPostAa(renderer);
+    post.setBlastDistortStrength(99);
+    expect(post.blastDistortStrength).toBe(4);
+    post.setBlastDistortStrength(-3);
+    expect(post.blastDistortStrength).toBe(0);
+    post.setBlastDistortStrength(NaN);
+    expect(post.blastDistortStrength).toBe(1);
+  });
+
+  it('the WGSL loop is unrolled, bounded to four, and clamped', () => {
+    expect(POST_AA_BLIT_WGSL).toContain('fn postAaBlastWarp(');
+    expect(POST_AA_BLIT_WGSL.indexOf('fn postAaBlastWarp('))
+      .toBeGreaterThan(POST_AA_BLIT_WGSL.indexOf('fn postAaBlit('));
+    // One loop of four iterations and a per-blast slot guard.
+    expect(POST_AA_BLIT_WGSL).toMatch(/for \(var i: i32 = 0; i < 4; i = i \+ 1\)/);
+    expect(POST_AA_BLIT_WGSL).toContain('f32(i) + 0.5 > dist.x');
+    // The summed offset is clamped to the uniform max.
+    expect(POST_AA_BLIT_WGSL).toMatch(/if \(l > dist\.y\) \{ off = off \* \(dist\.y \/ l\); \}/);
+    // Inert gate.
+    expect(POST_AA_BLIT_WGSL).toContain('if (dist.w < 0.5 || dist.x < 0.5) { return uvIn; }');
+  });
+});

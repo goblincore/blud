@@ -40,7 +40,7 @@ import type { BuildResult } from './build-body';
 import type { Primitive, Vec3 } from './types';
 import { refitClusters } from './rig-bind';
 import {
-  add, cross, len, normalize, qFromAxisAngle, qIdentity, qMul, qNormalize,
+  add, cross, dot, len, normalize, qFromAxisAngle, qIdentity, qMul, qNormalize,
   qRotate, scale, sub, type Quat,
 } from './vec';
 
@@ -77,9 +77,42 @@ export interface TearTuning {
    * a separate reveal timer, is the rib exposure.
    */
   boneLag: number;
-  /** Displacement scale for the head region, so the face stays recognizable
-   *  rather than being thrown with the chest. */
+  /** Displacement scale for the head region's OWN blast push — the residual
+   *  recoil it keeps after `headFollow`. This is no longer the head's whole
+   *  motion: the head is attached to the upper torso (owner report 2026-09-16),
+   *  so damping it to a third while the chest got a full push plus a 0.3 m peel
+   *  let the chest rise INTO the head and read as a swollen head. See
+   *  `headFollow`. */
   headDamp: number;
+  /**
+   * HEAD ATTACHMENT (owner report 2026-09-16). Fraction of the upper torso's
+   * (chest) region offset the head RIDES while the neck is still attached,
+   * 0..1. At 1 the head is rigidly carried by the upper body's recoil and
+   * cranial displacement, so no blast direction can leave it behind under a
+   * chest that is peeling toward it; below 1 a little of the head's own damped
+   * push survives. The relative head/chest motion is then the neck gap below,
+   * NOT an independent damped lag.
+   */
+  headFollow: number;
+  /**
+   * NECK SEPARATION, metres. While attached, the head opens this far from the
+   * upper torso ALONG THE BODY'S OWN AXIS on the same sharp seam ramp, so the
+   * neck visibly parts ahead of the blast push. It is a guaranteed MINIMUM
+   * separation at full falloff, not an addition on top of whatever the chest's
+   * peel happens to do — the defect this task fixes is exactly the chest
+   * out-travelling the head.
+   */
+  neckGapM: number;
+  /**
+   * ROOT RECOIL, metres. The blast JOLTS the whole body away from the epicentre
+   * over the window: every region takes this uniform displacement along the
+   * body's own direction away from the blast. Uniform on purpose — it adds no
+   * relative motion, so it is the owner's "clear recoil" without turning the
+   * tear back into the inflation the seam ramp exists to prevent. It does not
+   * relax back to the pose; the released pieces spawn from where the body was
+   * last drawn.
+   */
+  recoilM: number;
   /**
    * FLESH PEEL: extra metres the ribcage-bearing chest band is lifted along
    * the body's own cranial axis (the plan's `up`), scaled by the region's
@@ -130,7 +163,18 @@ export const TEAR_TUNING: TearTuning = {
   // 0.15, down from 0.3: the cage must stay near the body's own pose while the
   // meat leaves, or it rides out with the chest.
   boneLag: 0.15,
+  // 0.3 is the head's own residual recoil ONLY; the head's motion is dominated
+  // by `headFollow` below (see the owner report).
   headDamp: 0.3,
+  // HEAD ATTACHMENT (2026-09-16 playtest follow-up task 4). 0.85 keeps a trace
+  // of the head's own recoil while making it ride the upper torso's travel;
+  // `neckGapM` then guarantees the joint opens by at least 7 cm along the body
+  // axis, so the chest can never peel up into the head. See the fields' docs.
+  headFollow: 0.85,
+  neckGapM: 0.07,
+  // ROOT RECOIL (2026-09-16 task 4). A bounded whole-body jolt away from the
+  // epicentre; uniform, so it is pure recoil and opens no seam of its own.
+  recoilM: 0.05,
   // TASK-3 (2026-09-16). The chest band now splits at the costal margin
   // (gib-parts splitTorso), and this peel lifts it clear of the ~0.20 m the
   // neighbouring abdominal mass still occupies, so the smin bridge tears and
@@ -259,9 +303,11 @@ const ZERO: Vec3 = [0, 0, 0];
  * gives the zero vector for every region (so the body is its own pose).
  *
  * Every region is pushed away from the blast with the falloff weight, shuddered
- * by its own phase, damped on the head and lagged on bones. Then each cut adds
- * a symmetric ±n separation to its two sides, which is what actually opens the
- * seam between two neighbours the blast pushes almost equally.
+ * by its own phase and lagged on bones. Then each cut adds a symmetric ±n
+ * separation to its two sides, which is what actually opens the seam between
+ * two neighbours the blast pushes almost equally. Finally the head is RE-ATTACHED
+ * to the upper torso (`headFollow` + `neckGapM`) so the chest cannot overtake it,
+ * and the whole body takes the uniform root recoil.
  */
 export function ruptureOffsets(
   plan: RupturePlan,
@@ -273,6 +319,28 @@ export function ruptureOffsets(
   const n = plan.pieces.length;
   if (p <= 0) return new Array(n).fill(ZERO);
   const phase0 = TAU * tuning.jiggleHz * tear.age;
+  const sp = seamProgress(p);
+  const up: Vec3 = plan.up && len(plan.up) > 1e-6 ? normalize(plan.up) : [0, 1, 0];
+  // ——— ROOT RECOIL ——————————————————————————————————————————————————————————
+  // A blast JOLTS the body, it does not merely open seams in place. The owner's
+  // "clear recoil" is that jolt: one bounded displacement of every region along
+  // the body's own direction away from the epicentre, on the same ease-out as
+  // the push and NOT relaxing back at the end (the old window's return to the
+  // clean pose was the "it just becomes chunks" bug). Uniform across regions, so
+  // it adds no relative motion and cannot reintroduce inflation.
+  let recoil: Vec3 = ZERO;
+  if (tuning.recoilM > 0) {
+    let cx = 0, cy = 0, cz = 0;
+    for (const piece of plan.pieces) {
+      cx += piece.origin[0]; cy += piece.origin[1]; cz += piece.origin[2];
+    }
+    const inv = 1 / Math.max(1, plan.pieces.length);
+    const centre: Vec3 = [cx * inv, cy * inv, cz * inv];
+    const away = sub(centre, tear.at);
+    const awayLen = len(away);
+    const awayDir: Vec3 = awayLen < 1e-5 ? up : scale(away, 1 / awayLen);
+    recoil = scale(awayDir, tuning.recoilM * fall * p);
+  }
   const offsets: Vec3[] = new Array(n);
   for (let r = 0; r < n; r++) {
     const region = plan.pieces[r]!;
@@ -282,7 +350,7 @@ export function ruptureOffsets(
     // The body's up is the only axis that means anything there, and it only has
     // to be stable — a division by zero would put a NaN in the prim rows and
     // blank the body rather than move it.
-    const dir: Vec3 = dist < 1e-5 ? [0, 1, 0] : scale(off, 1 / dist);
+    const dir: Vec3 = dist < 1e-5 ? up : scale(off, 1 / dist);
     // The shudder is never negative enough to reverse the push (jiggleAmp < 1),
     // so the flesh is driven OUT, never sucked in.
     const shudder = 1 + tuning.jiggleAmp * Math.sin(phase0 + r * PHASE_STEP);
@@ -290,7 +358,6 @@ export function ruptureOffsets(
     if (region.kind === 'bone') mag *= tuning.boneLag;
     if (region.limb === 'head') mag *= tuning.headDamp;
     let v = scale(dir, mag);
-    const sp = seamProgress(p);
     // FLESH PEEL. A piece flagged `peel` is lifted ALONG THE BODY'S CRANIAL
     // AXIS on the same sharp ramp as the seams, so the chest opens off the
     // ribcage early in the window. This is not a second push: it is the
@@ -298,8 +365,7 @@ export function ruptureOffsets(
     // independent of `dir` so an off-centre bundle still peels the chest
     // upward along the spine rather than sideways.
     if (region.peel) {
-      const up = plan.up;
-      if (up) v = add(v, scale(up, tuning.chestPeelM * region.peel * fall * sp));
+      v = add(v, scale(up, tuning.chestPeelM * region.peel * fall * sp));
     }
     for (const cut of plan.cuts) {
       if (cut.a !== r && cut.b !== r) continue;
@@ -307,9 +373,56 @@ export function ruptureOffsets(
       const s = tuning.seamM * cw * sp;
       v = cut.a === r ? add(v, scale(cut.n, -s)) : add(v, scale(cut.n, s));
     }
-    offsets[r] = v;
+    offsets[r] = add(v, recoil);
+  }
+  // ——— THE HEAD RIDES THE UPPER TORSO (owner report 2026-09-16) ——————————————
+  // THE DEFECT: the chest band gets a full blast push PLUS an independent 0.3 m
+  // cranial peel, while the head was damped to 0.3 of its own push and had no
+  // peel — so the chest out-travelled the head by ~0.3 m and rose INTO it, which
+  // read as a swollen/enveloped head. A damped head is the wrong model: the head
+  // is ATTACHED to the upper torso, so it must travel with the upper torso's
+  // recoil and cranial displacement while the neck holds, and only then carry
+  // its own transform into flight. `headFollow` is that attachment; `neckGapM`
+  // then opens the joint along the body's own axis as a guaranteed MINIMUM, so
+  // whatever the blast direction and however hard the chest peels, the head is
+  // never left underneath it. The residual `headDamp` push keeps the head from
+  // being perfectly welded (so it does not read as one rigid slab).
+  const headIdx = plan.pieces.findIndex(x => x.limb === 'head');
+  if (headIdx >= 0 && n > 1 && (tuning.headFollow > 0 || tuning.neckGapM > 0)) {
+    const parentIdx = headAttachParent(plan, headIdx);
+    if (parentIdx >= 0) {
+      const follow = Math.max(0, Math.min(1, tuning.headFollow));
+      const own = offsets[headIdx]!;
+      const parent = offsets[parentIdx]!;
+      let head = add(scale(parent, follow), scale(own, 1 - follow));
+      const want = tuning.neckGapM * fall * sp;
+      const relUp = dot(sub(head, parent), up);
+      if (relUp < want) head = add(head, scale(up, want - relUp));
+      offsets[headIdx] = head;
+    }
   }
   return offsets;
+}
+
+/**
+ * The region the head hangs from: the ribcage-bearing chest band when the plan
+ * has one (`gibBlastPlan`/`gibPlan`), otherwise the region whose own origin is
+ * nearest the head's. The nearest-origin fallback is what makes the attachment
+ * work on the `clusters` tier too, where the torso is one whole piece labelled
+ * `torso` rather than split into `torso.chest`.
+ */
+function headAttachParent(plan: RupturePlan, headIdx: number): number {
+  const chest = plan.pieces.findIndex((x, i) => i !== headIdx && x.part === 'torso.chest');
+  if (chest >= 0) return chest;
+  const headOrigin = plan.pieces[headIdx]!.origin;
+  let best = -1, bestD = Infinity;
+  for (let i = 0; i < plan.pieces.length; i++) {
+    if (i === headIdx) continue;
+    if (plan.pieces[i]!.limb === 'head') continue;
+    const d = len(sub(plan.pieces[i]!.origin, headOrigin));
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  return best;
 }
 
 /**
