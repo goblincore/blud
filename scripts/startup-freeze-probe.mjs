@@ -26,7 +26,11 @@ const OUT = process.argv[4] ?? '.lab-tmp/startup-probe';
 const LABEL = process.argv[5] ?? 'run';
 const QS = process.argv[6] ?? '';
 const PROFILE = process.env.PROFILE !== '0';
-const W = 960, H = 720;
+const W = Number(process.env.PROBE_W ?? 960), H = Number(process.env.PROBE_H ?? 720);
+// DPR is a stated limit of the default rig (960x720 @ DPR 1 is NOT the owner's
+// headed viewport). PROBE_DPR=2 + PROBE_W/H lets a headed-equivalent run be
+// measured; the value is recorded in result.viewport.
+const DPR = Number(process.env.PROBE_DPR ?? 1);
 
 mkdirSync(OUT, { recursive: true });
 const url = process.env.START_URL
@@ -106,6 +110,11 @@ function profileTop(profile, limit = 30) {
 }
 
 const { tab, send, evaluate } = await connectGame({ vite: VITE, cdp: CDP, width: W, height: H });
+if (DPR !== 1) {
+  // connectGame pins deviceScaleFactor 1; raise it for a headed-equivalent run
+  // BEFORE the game navigates, so the whole boot sees the real DPR.
+  await send('Emulation.setDeviceMetricsOverride', { width: W, height: H, deviceScaleFactor: DPR, mobile: false });
+}
 const consoleTap = await attachConsoleTap(tab);
 
 // Frame-time sampler in the page (real rAF, live loop).
