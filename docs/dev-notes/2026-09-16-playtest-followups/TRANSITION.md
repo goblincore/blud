@@ -3,7 +3,8 @@
 2026-09-16 playtest follow-ups, task 4. Worktree
 `2026-09-16-blud-playtest-followups-task-4`, branch
 `codex/playtest-followups-task-4`, from task-3 tip `49e9c95d`
-(which sits on `ed97cd14`, `claude/dynamite-weapon-slot`). Node `v22.22.1`.
+(which sits on `ed97cd14`, `claude/dynamite-weapon-slot`). The code + evidence
+commit is **`23497213`**. Node `v22.22.1`.
 Owned Vite on `5434` + headless Chrome `9434` (`--enable-unsafe-webgpu`), all
 scratch under `/tmp` (the profile is outside the Vite root so the watcher cannot
 reload the page mid-capture). The owner's `5391`/`5415` servers and their Chrome

@@ -148,7 +148,7 @@ clips are review material; model inspection is not a playtest.
 
 ## 8. Playtest URL, settings and commit
 
-Code + evidence commit: **`TBD`** on `codex/playtest-followups-task-4`
+Code + evidence commit: **`23497213`** on `codex/playtest-followups-task-4`
 (recorded in the following doc-only commit). Node `v22.22.1`. Owned Vite on
 `5434` + headless Chrome `9434` (`--enable-unsafe-webgpu`); the owner's
 `5391`/`5415` servers and Chrome were never touched.
