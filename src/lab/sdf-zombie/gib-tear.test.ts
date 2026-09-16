@@ -95,6 +95,36 @@ describe('rupturePosed', () => {
     }
   });
 
+  it('opens the SEAMS ahead of the global push (Task-2 tuning)', () => {
+    // The push is an ease-out and reads as inflation if the cuts open at the
+    // same rate; the seam has its own sqrt ramp so the gap is legible in the
+    // middle of the window. At the 67 ms third of a 0.2 s window the cut must
+    // already be most of the way open even though the push is only ~56%.
+    const cutAlong = (age: number) => {
+      const { offsets } = rupturePosed(posed, plan, tearAt(age));
+      let m = 0;
+      for (const cut of plan.cuts) {
+        const rel = sub(offsets[cut.b]!, offsets[cut.a]!);
+        m = Math.max(m, rel[0] * cut.n[0] + rel[1] * cut.n[1] + rel[2] * cut.n[2]);
+      }
+      return m;
+    };
+    const early = cutAlong(TEAR_TUNING.sec * (1 / 3));
+    const end = cutAlong(TEAR_TUNING.sec);
+    expect(end).toBeGreaterThan(0.02);
+    expect(early / end).toBeGreaterThan(0.55);
+  });
+
+  it('the skeleton lags the flesh far enough to be exposed', () => {
+    // Task-2 tuning: 0.15 rather than 0.3. The cage must stay near the body's
+    // own pose while the chest leaves, or there is no gap for it to sit in.
+    expect(TEAR_TUNING.boneLag).toBeLessThan(0.25);
+    const { offsets } = rupturePosed(posed, plan, tearAt(TEAR_TUNING.sec));
+    const flesh = offsets[plan.pieces.findIndex(p => p.part === 'torso.chest')]!;
+    const cage = offsets[plan.pieces.findIndex(p => p.part === 'bone.cage')]!;
+    expect(len(cage)).toBeLessThan(len(flesh) * 0.5);
+  });
+
   it('a graze barely moves and a zero falloff does nothing', () => {
     const hard = ruptureOffsets(plan, tearAt(TEAR_TUNING.sec, 1));
     const graze = ruptureOffsets(plan, tearAt(TEAR_TUNING.sec, 0.1));

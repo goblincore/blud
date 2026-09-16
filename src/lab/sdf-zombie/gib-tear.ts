@@ -81,12 +81,21 @@ export interface TearTuning {
 
 export const TEAR_TUNING: TearTuning = {
   sec: 0.2,
-  amplitudeM: 0.055,
+  amplitudeM: 0.06,
   falloffM: 0.8,
   jiggleHz: 22,
   jiggleAmp: 0.35,
-  seamM: 0.05,
-  boneLag: 0.3,
+  // TASK-2 TUNING (2026-09-16). At 0.05 m the seam was dominated by the blast's
+  // radial push, so the whole body read as INFLATING and the chest never
+  // visibly left the pelvis. 0.09 m plus the sharper seam ramp below makes the
+  // chest/abdomen gap readable by ~67 ms (see RESULTS.md, 150/200/250 ms
+  // candidates). The lagging cage sits in that gap; at gameplay distance the
+  // pale skeleton is still not readable — that remains an open item, recorded
+  // honestly in RESULTS.md §7.
+  seamM: 0.09,
+  // 0.15, down from 0.3: the cage must stay near the body's own pose while the
+  // meat leaves, or it rides out with the chest.
+  boneLag: 0.15,
   headDamp: 0.3,
 };
 
@@ -119,6 +128,18 @@ export interface TearState {
   /** The resolver's falloff at this body, 0..1 — a grazing blast barely moves. */
   falloff: number;
   age: number;
+}
+
+/**
+ * The SEAM's own ramp, deliberately sharper than the global push. The push
+ * opens on an ease-out (an impulse that settles), which is right for the body's
+ * travel but reads as inflation if the CUTS open at the same rate: the two sides
+ * of a cut separate by almost the same amount late in the window. sqrt(p) is
+ * 0.5 at p=0.25 and 0.71 at p=0.5, so the gap between chest and abdomen is
+ * already legible around 67 ms while the overall silhouette stays coherent.
+ */
+function seamProgress(p: number): number {
+  return Math.sqrt(Math.max(0, Math.min(1, p)));
 }
 
 /** The slice of a gib piece the rupture needs: an identity, a centre and the
@@ -188,10 +209,11 @@ export function ruptureOffsets(
     if (region.kind === 'bone') mag *= tuning.boneLag;
     if (region.limb === 'head') mag *= tuning.headDamp;
     let v = scale(dir, mag);
+    const sp = seamProgress(p);
     for (const cut of plan.cuts) {
       if (cut.a !== r && cut.b !== r) continue;
       const cw = Math.exp(-len(sub(cut.at, tear.at)) / tuning.falloffM) * fall;
-      const s = tuning.seamM * cw * p;
+      const s = tuning.seamM * cw * sp;
       v = cut.a === r ? add(v, scale(cut.n, -s)) : add(v, scale(cut.n, s));
     }
     offsets[r] = v;

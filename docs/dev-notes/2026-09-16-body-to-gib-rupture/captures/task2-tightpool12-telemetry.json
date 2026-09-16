@@ -1,0 +1,618 @@
+{
+  "tag": "tight12",
+  "qs": "&gibtear=0.2&maxchunks=12",
+  "vfx": "&explosionfx=standin",
+  "seed": 7,
+  "view": "front",
+  "dist": 2.4,
+  "tearSec": 0.2,
+  "targetId": 17,
+  "targetPos": [
+    23.5,
+    0,
+    -7.5
+  ],
+  "crop": [
+    249,
+    143,
+    303,
+    421
+  ],
+  "image": [
+    800,
+    600
+  ],
+  "frames": [
+    {
+      "label": "onset",
+      "simMs": 0,
+      "tearAge": 0
+    },
+    {
+      "label": "17ms",
+      "simMs": 16.666666666666668,
+      "tearAge": 0.016666666666666666,
+      "tears": 1,
+      "ruptureMaxM": 0.03939029689205582,
+      "pendingGibs": 1,
+      "held": 0,
+      "delays": [],
+      "live": 0,
+      "baked": 0,
+      "cap": 12,
+      "tier": "parts",
+      "spawned": 0,
+      "heldBack": 0,
+      "parts": [],
+      "livePieces": []
+    },
+    {
+      "label": "33ms",
+      "simMs": 33.333333333333336,
+      "tearAge": 0.03333333333333333,
+      "tears": 1,
+      "ruptureMaxM": 0.058943101130773154,
+      "pendingGibs": 1,
+      "held": 0,
+      "delays": [],
+      "live": 0,
+      "baked": 0,
+      "cap": 12,
+      "tier": "parts",
+      "spawned": 0,
+      "heldBack": 0,
+      "parts": [],
+      "livePieces": []
+    },
+    {
+      "label": "50ms",
+      "simMs": 50,
+      "tearAge": 0.05,
+      "tears": 1,
+      "ruptureMaxM": 0.07482216263467273,
+      "pendingGibs": 1,
+      "held": 0,
+      "delays": [],
+      "live": 0,
+      "baked": 0,
+      "cap": 12,
+      "tier": "parts",
+      "spawned": 0,
+      "heldBack": 0,
+      "parts": [],
+      "livePieces": []
+    },
+    {
+      "label": "67ms",
+      "simMs": 66.66666666666667,
+      "tearAge": 0.06666666666666667,
+      "tears": 1,
+      "ruptureMaxM": 0.08775831379234357,
+      "pendingGibs": 1,
+      "held": 0,
+      "delays": [],
+      "live": 0,
+      "baked": 0,
+      "cap": 12,
+      "tier": "parts",
+      "spawned": 0,
+      "heldBack": 0,
+      "parts": [],
+      "livePieces": []
+    },
+    {
+      "label": "83ms",
+      "simMs": 83.33333333333333,
+      "tearAge": 0.08333333333333333,
+      "tears": 1,
+      "ruptureMaxM": 0.09902477094923105,
+      "pendingGibs": 1,
+      "held": 0,
+      "delays": [],
+      "live": 0,
+      "baked": 0,
+      "cap": 12,
+      "tier": "parts",
+      "spawned": 0,
+      "heldBack": 0,
+      "parts": [],
+      "livePieces": []
+    },
+    {
+      "label": "100ms",
+      "simMs": 100,
+      "tearAge": 0.09999999999999999,
+      "tears": 1,
+      "ruptureMaxM": 0.1079873602964134,
+      "pendingGibs": 1,
+      "held": 0,
+      "delays": [],
+      "live": 0,
+      "baked": 0,
+      "cap": 12,
+      "tier": "parts",
+      "spawned": 0,
+      "heldBack": 0,
+      "parts": [],
+      "livePieces": []
+    },
+    {
+      "label": "117ms",
+      "simMs": 116.66666666666667,
+      "tearAge": 0.11666666666666665,
+      "tears": 1,
+      "ruptureMaxM": 0.1114318385519888,
+      "pendingGibs": 1,
+      "held": 0,
+      "delays": [],
+      "live": 0,
+      "baked": 0,
+      "cap": 12,
+      "tier": "parts",
+      "spawned": 0,
+      "heldBack": 0,
+      "parts": [],
+      "livePieces": []
+    },
+    {
+      "label": "133ms",
+      "simMs": 133.33333333333334,
+      "tearAge": 0.13333333333333333,
+      "tears": 1,
+      "ruptureMaxM": 0.11870041902249082,
+      "pendingGibs": 1,
+      "held": 0,
+      "delays": [],
+      "live": 0,
+      "baked": 0,
+      "cap": 12,
+      "tier": "parts",
+      "spawned": 0,
+      "heldBack": 0,
+      "parts": [],
+      "livePieces": []
+    },
+    {
+      "label": "150ms",
+      "simMs": 150,
+      "tearAge": 0.15,
+      "tears": 1,
+      "ruptureMaxM": 0.1233659398092027,
+      "pendingGibs": 1,
+      "held": 0,
+      "delays": [],
+      "live": 0,
+      "baked": 0,
+      "cap": 12,
+      "tier": "parts",
+      "spawned": 0,
+      "heldBack": 0,
+      "parts": [],
+      "livePieces": []
+    },
+    {
+      "label": "167ms",
+      "simMs": 166.66666666666666,
+      "tearAge": 0.16666666666666666,
+      "tears": 1,
+      "ruptureMaxM": 0.12439138418521731,
+      "pendingGibs": 1,
+      "held": 0,
+      "delays": [],
+      "live": 0,
+      "baked": 0,
+      "cap": 12,
+      "tier": "parts",
+      "spawned": 0,
+      "heldBack": 0,
+      "parts": [],
+      "livePieces": []
+    },
+    {
+      "label": "183ms",
+      "simMs": 183.33333333333331,
+      "tearAge": 0.18333333333333332,
+      "tears": 1,
+      "ruptureMaxM": 0.13180804582979475,
+      "pendingGibs": 1,
+      "held": 0,
+      "delays": [],
+      "live": 0,
+      "baked": 0,
+      "cap": 12,
+      "tier": "parts",
+      "spawned": 0,
+      "heldBack": 0,
+      "parts": [],
+      "livePieces": []
+    },
+    {
+      "label": "200ms",
+      "simMs": 200,
+      "tearAge": 0.19999999999999998,
+      "tears": 1,
+      "ruptureMaxM": 0.13188274436162525,
+      "pendingGibs": 1,
+      "held": 0,
+      "delays": [],
+      "live": 0,
+      "baked": 0,
+      "cap": 12,
+      "tier": "parts",
+      "spawned": 0,
+      "heldBack": 0,
+      "parts": [],
+      "livePieces": []
+    },
+    {
+      "label": "217ms",
+      "simMs": 216.66666666666669,
+      "tearAge": 0,
+      "tears": 0,
+      "ruptureMaxM": 0,
+      "pendingGibs": 0,
+      "held": 0,
+      "delays": [],
+      "live": 9,
+      "baked": 0,
+      "cap": 12,
+      "tier": "clusters+core",
+      "spawned": 9,
+      "heldBack": 0,
+      "parts": [
+        "legR",
+        "legL",
+        "bone.pelvis",
+        "armL",
+        "armR",
+        "torso",
+        "bone.cage",
+        "bone.skull",
+        "head"
+      ],
+      "livePieces": [
+        [
+          23.2484,
+          0.7523,
+          -7.4723
+        ],
+        [
+          23.7532,
+          0.7595,
+          -7.4715
+        ],
+        [
+          23.5,
+          1.1603,
+          -7.5146
+        ],
+        [
+          23.8114,
+          1.2681,
+          -7.4368
+        ],
+        [
+          23.1833,
+          1.271,
+          -7.4357
+        ],
+        [
+          23.5,
+          1.3466,
+          -7.4806
+        ],
+        [
+          23.5,
+          1.4112,
+          -7.4844
+        ],
+        [
+          23.5,
+          1.6992,
+          -7.3805
+        ],
+        [
+          23.5,
+          1.7286,
+          -7.344
+        ]
+      ]
+    },
+    {
+      "label": "233ms",
+      "simMs": 233.33333333333334,
+      "tearAge": 0,
+      "tears": 0,
+      "ruptureMaxM": 0,
+      "pendingGibs": 0,
+      "held": 0,
+      "delays": [],
+      "live": 9,
+      "baked": 0,
+      "cap": 12,
+      "tier": "clusters+core",
+      "spawned": 9,
+      "heldBack": 0,
+      "parts": [
+        "legR",
+        "legL",
+        "bone.pelvis",
+        "armL",
+        "armR",
+        "torso",
+        "bone.cage",
+        "bone.skull",
+        "head"
+      ],
+      "livePieces": [
+        [
+          23.1499,
+          0.8458,
+          -7.4614
+        ],
+        [
+          23.8503,
+          0.853,
+          -7.4606
+        ],
+        [
+          23.5,
+          1.2998,
+          -7.5173
+        ],
+        [
+          23.8556,
+          1.4004,
+          -7.4279
+        ],
+        [
+          23.1387,
+          1.4031,
+          -7.4267
+        ],
+        [
+          23.5,
+          1.4861,
+          -7.4779
+        ],
+        [
+          23.5,
+          1.5506,
+          -7.4825
+        ],
+        [
+          23.5,
+          1.8383,
+          -7.3696
+        ],
+        [
+          23.5,
+          1.8675,
+          -7.3302
+        ]
+      ]
+    },
+    {
+      "label": "250ms",
+      "simMs": 250,
+      "tearAge": 0,
+      "tears": 0,
+      "ruptureMaxM": 0,
+      "pendingGibs": 0,
+      "held": 0,
+      "delays": [],
+      "live": 9,
+      "baked": 0,
+      "cap": 12,
+      "tier": "clusters+core",
+      "spawned": 9,
+      "heldBack": 0,
+      "parts": [
+        "legR",
+        "legL",
+        "bone.pelvis",
+        "armL",
+        "armR",
+        "torso",
+        "bone.cage",
+        "bone.skull",
+        "head"
+      ],
+      "livePieces": [
+        [
+          23.0519,
+          0.9359,
+          -7.4506
+        ],
+        [
+          23.9468,
+          0.9431,
+          -7.4497
+        ],
+        [
+          23.5,
+          1.4357,
+          -7.52
+        ],
+        [
+          23.8995,
+          1.5291,
+          -7.419
+        ],
+        [
+          23.0943,
+          1.5317,
+          -7.4176
+        ],
+        [
+          23.5,
+          1.622,
+          -7.4753
+        ],
+        [
+          23.5,
+          1.6865,
+          -7.4805
+        ],
+        [
+          23.5,
+          1.9738,
+          -7.3588
+        ],
+        [
+          23.5,
+          2.0027,
+          -7.3165
+        ]
+      ]
+    },
+    {
+      "label": "267ms",
+      "simMs": 266.6666666666667,
+      "tearAge": 0,
+      "tears": 0,
+      "ruptureMaxM": 0,
+      "pendingGibs": 0,
+      "held": 0,
+      "delays": [],
+      "live": 9,
+      "baked": 0,
+      "cap": 12,
+      "tier": "clusters+core",
+      "spawned": 9,
+      "heldBack": 0,
+      "parts": [
+        "legR",
+        "legL",
+        "bone.pelvis",
+        "armL",
+        "armR",
+        "torso",
+        "bone.cage",
+        "bone.skull",
+        "head"
+      ],
+      "livePieces": [
+        [
+          22.9545,
+          1.0228,
+          -7.4398
+        ],
+        [
+          24.0428,
+          1.03,
+          -7.4389
+        ],
+        [
+          23.5,
+          1.568,
+          -7.5227
+        ],
+        [
+          23.9432,
+          1.6544,
+          -7.4101
+        ],
+        [
+          23.0502,
+          1.6569,
+          -7.4087
+        ],
+        [
+          23.5,
+          1.7543,
+          -7.4726
+        ],
+        [
+          23.5,
+          1.8189,
+          -7.4786
+        ],
+        [
+          23.5,
+          2.1058,
+          -7.348
+        ],
+        [
+          23.5,
+          2.1345,
+          -7.3029
+        ]
+      ]
+    },
+    {
+      "label": "283ms",
+      "simMs": 283.3333333333333,
+      "tearAge": 0,
+      "tears": 0,
+      "ruptureMaxM": 0,
+      "pendingGibs": 0,
+      "held": 0,
+      "delays": [],
+      "live": 9,
+      "baked": 0,
+      "cap": 12,
+      "tier": "clusters+core",
+      "spawned": 9,
+      "heldBack": 0,
+      "parts": [
+        "legR",
+        "legL",
+        "bone.pelvis",
+        "armL",
+        "armR",
+        "torso",
+        "bone.cage",
+        "bone.skull",
+        "head"
+      ],
+      "livePieces": [
+        [
+          22.8577,
+          1.1065,
+          -7.4292
+        ],
+        [
+          24.1382,
+          1.1137,
+          -7.4282
+        ],
+        [
+          23.5,
+          1.6969,
+          -7.5254
+        ],
+        [
+          23.9866,
+          1.7763,
+          -7.4013
+        ],
+        [
+          23.0063,
+          1.7786,
+          -7.3998
+        ],
+        [
+          23.5,
+          1.8832,
+          -7.47
+        ],
+        [
+          23.5,
+          1.9478,
+          -7.4767
+        ],
+        [
+          23.5,
+          2.2343,
+          -7.3373
+        ],
+        [
+          23.5,
+          2.2627,
+          -7.2893
+        ]
+      ]
+    }
+  ]
+}

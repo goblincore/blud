@@ -5089,7 +5089,7 @@ async function main() {
    *  the panel knobs; the rest are the coherent defaults for a body that
    *  separates into real regions (see gib-tear.ts's TearTuning). */
   const tearShape = {
-    amplitudeM: 0.055, jiggleAmp: 0.35, seamM: 0.05, boneLag: 0.3, headDamp: 0.3,
+    amplitudeM: 0.06, jiggleAmp: 0.35, seamM: 0.09, boneLag: 0.15, headDamp: 0.3,
   };
   /** The cheapest tier's piece count — one chunk per limb cluster, i.e. the
    *  shape a body falls back to when the pool cannot afford anything better.
@@ -6639,11 +6639,21 @@ async function main() {
     const liveBefore = liveChunks.length;
     const spawning = ordered;
     const dropped = pieces.length - spawning.length;
-    // The stagger's shape: pieces per frame, so the whole body has come apart
-    // within `gibStaggerFrames` frames whatever the piece count is. A 24-piece
-    // body over 3 frames releases 8 a frame — a wavefront through the body,
-    // which is the read; a fixed 1-per-frame would take 8 frames on the one
-    // body and 2 on the next.
+    // THE RUPTURE HAND-OFF DOES NOT GET THE ZERO-VELOCITY HOLD (Task 2 audit).
+    // The `+ 1` below exists for the OLD path, where the body was intact up to
+    // the blast frame: one full frame at rest is what kept frame 0 the body's
+    // own silhouette instead of a substitution. A planned hand-off comes from a
+    // body that has ALREADY been visibly separating for `gibTearSec`, and the
+    // strain is nearly spent by the end of the ease-out — so spawning it at rest
+    // again produced exactly the second pause the contract forbids: measured
+    // (RESULTS.md) 16 pieces at zero velocity for the release frame plus 1-3
+    // stagger frames, on a body that had been moving. A delay of 0 still fires
+    // in the SPAWN TICK (`stepPendingGibImpulses` runs later in the same tick),
+    // so the pieces integrate their launch velocity on the release frame; the
+    // jump is vel*dt, identical to what a delay of 1 produced one frame later,
+    // minus the dead frame. `?gibstagger` keeps its meaning for the immediate
+    // path.
+    const ruptureHandoff = planned !== undefined;
     const perFrame = Math.max(1, Math.ceil(spawning.length / gibStaggerFrames));
     const boneOnly = (g: GibPiece) => g.prims.length === 0 && g.bones.length > 0;
     let spawned = 0, boneSpawned = 0;
@@ -6676,12 +6686,13 @@ async function main() {
     for (let i = 0; i < spawning.length && !carveMode; i++) {
       const g = spawning[i]!;
       const vel = concussionVelocity(at, g.origin, EXPLOSION_STANDARD.impulse * launchFall * gibVelScale);
-      // + 1: every piece spends at least ONE FULL FRAME at rest, so the
-      // first frame drawn after the blast is the body's own silhouette in
-      // place. See stepPendingGibImpulses for why this counts drains. The
-      // sprite path passes it to `spawnSpritePiece` instead, and
-      // `stepSpritePieces` counts drains the same way.
-      const delay = 1 + Math.min(gibStaggerFrames - 1, Math.floor(i / perFrame));
+      // + 1 on the OLD path only: every piece spends at least ONE FULL FRAME at
+      // rest, so the first frame drawn after the blast is the body's own
+      // silhouette in place. The rupture hand-off launches on the spawn tick —
+      // see `ruptureHandoff` above. See stepPendingGibImpulses for why this
+      // counts drains. The sprite path passes it to `spawnSpritePiece` instead,
+      // and `stepSpritePieces` counts drains the same way.
+      const delay = ruptureHandoff ? 0 : 1 + Math.min(gibStaggerFrames - 1, Math.floor(i / perFrame));
       if (spriteMode) {
         // THE SAME PIECE, A DIFFERENT RENDERER. `g` carries the split (which
         // prims, which bones, which limb) and the sprite path reads only its

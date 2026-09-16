@@ -73,6 +73,16 @@ for (let i = 0; i < 60; i++) {
   await sleep(500);
   if (i === 59) fail('the view-model never became ready');
 }
+// WAIT FOR THE WARM-UP BEFORE STOPPING THE LOOP. `warmPipelines` pauses the loop
+// and its `.finally` re-arms it; a rig that stops the loop first gets it
+// silently restarted, and then the tear window advances on wall time between
+// CDP reads (measured 2026-09-16, sdf-gib-rupture.mjs's header).
+for (let i = 0; i < 80; i++) {
+  if (await ev('!!window.__warmDone').catch(() => false)) break;
+  await sleep(250);
+  if (i === 79) console.log('WARNING: __warmDone never appeared; timings may drift');
+}
+await sleep(600);
 await ev('window.__sdfGame.setDemoHold(true)');
 await ev('window.__sdfGame.setVhs(null)');
 // STOP THE REAL-TIME LOOP. `step(n)` stops it too, but a rig that reads the
