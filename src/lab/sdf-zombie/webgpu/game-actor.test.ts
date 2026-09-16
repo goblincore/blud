@@ -17,7 +17,10 @@ import { parseBlob } from '../blob-parse';
 import { compileBlob, compileFace } from '../blob-compile';
 import { translateBody } from '../translate';
 import zombieBlobSrc from '../characters/zombie.blob?raw';
-import { createZombieActor, avoidPoint, firstBlockingBox, pickAvoidSide, pushOutOfFurniture, segmentCrossesBox } from './game-actor';
+import {
+  createZombieActor, avoidPoint, firstBlockingBox, pickAvoidSide, pushOutOfFurniture,
+  segmentCrossesBox,
+} from './game-actor';
 import type { Aabb } from './game-level';
 import { ROOMS, FURNITURE, wanderBounds, spawnPoints } from './game-level';
 import { sdBody } from '../validate';
@@ -816,5 +819,83 @@ describe('createZombieActor — the ring wiring', () => {
     // Over eight bodies and several swings each, BOTH must appear. A variant
     // that never fires is a selection bug every unit test above would pass.
     expect([...variants].sort()).toEqual(['hook', 'overhead']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE BLAST'S REACTION MUST NOT TEAR THE BODY. Two owner reports came out of
+// this, and they are the same defect seen from both ends: "they are like
+// teleported outside the screen then animated backwards", and then, once the
+// (smaller) `impulseAt` unit bug was fixed, "the upper torso/arms/head fly off
+// leaving just the legs and then they rubberband back to the body".
+//
+// THE MECHANISM: `stagger.ts` turns the shot signal into a pose reaction by
+// scaling its `dir` by METRE amplitudes — `lurchAmp` 0.26, `flinchAmp` 0.085 —
+// and writing the result into `rootOffset` plus `offsets.chest` / `offsets.neck`
+// / the shoulders. `blast()` was handing it the resolver's concussion VELOCITY
+// (up to 25.2) instead of a unit direction, so the lurch became
+// 0.26 x 25.2 x 1.3(gain) = 8.5 m of chest-and-neck offset. That is the tear.
+// ---------------------------------------------------------------------------
+describe('blast reaction — the body must not tear in half', () => {
+  /** INTRA-BODY distance (a foot to the chest). A body that is walking,
+   *  staggering or being knocked across the room does not change this; a body
+   *  being torn apart does. A versus-control POSITION differential cannot tell
+   *  those apart — the control walks away and every number grows on its own. */
+  const span = (a: ReturnType<typeof makeTestActor>, from: string, to: string): number => {
+    const p = a.posed().clusters.find(c => c.limb === from)!.center;
+    const q = a.posed().clusters.find(c => c.limb === to)!.center;
+    return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+  };
+  const chestOf = (a: ReturnType<typeof makeTestActor>): Vec3 =>
+    [...a.posed().clusters.find(c => c.limb === 'torso')!.center] as Vec3;
+
+  it('keeps the chest-to-foot span intact through a point-blank blast', () => {
+    const a = makeTestActor({ start: [0, 0, 0] });
+    for (let f = 0; f < 30; f++) a.step(1 / 60);
+    const before = span(a, 'torso', 'legL');
+    // The worst case the resolver ever sends, aimed at the chest.
+    a.blast({ wounds: [], meterCredit: 0, impulse: { at: chestOf(a), vel: [0, 25.2, 0] } });
+    let worst = 0, worstAt = 0;
+    for (let f = 0; f < 40; f++) {
+      a.step(1 / 60);
+      const d = Math.abs(span(a, 'torso', 'legL') - before);
+      if (d > worst) { worst = d; worstAt = f; }
+    }
+    // THE BUG measured 8.23 m at frame 5. What is left is the DESIGNED reaction:
+    // the tuned lurch is 0.26 m of root offset with an upper-body scale on top,
+    // so a hit body leans. An order of magnitude below the tear, and bounded.
+    expect(worst).toBeLessThan(0.6);
+    expect(worstAt).toBeLessThan(40);
+  });
+
+  it('still REACTS — the blast is not a no-op', () => {
+    const hit = makeTestActor({ start: [0, 0, 0] });
+    const control = makeTestActor({ start: [0, 0, 0] });
+    for (let f = 0; f < 30; f++) { hit.step(1 / 60); control.step(1 / 60); }
+    hit.blast({ wounds: [], meterCredit: 0, impulse: { at: chestOf(hit), vel: [25.2, 0, 0] } });
+    for (let f = 0; f < 30; f++) { hit.step(1 / 60); control.step(1 / 60); }
+    const a = hit.pose().pos, b = control.pose().pos;
+    const travel = Math.hypot(a[0] - b[0], a[2] - b[2]);
+    expect(travel).toBeGreaterThan(0.05);   // it was shoved
+    expect(travel).toBeLessThan(2.5);       // ...but not launched across the room
+  });
+
+  it('the reaction direction is the blast direction, at ANY velocity magnitude', () => {
+    // The defect was purely one of SCALE, so the same direction at a tenth of
+    // the speed must produce the same reaction up to the envelope. Measured on
+    // the root travel of two otherwise identical bodies.
+    const slow = makeTestActor({ start: [0, 0, 0] });
+    const fast = makeTestActor({ start: [0, 0, 0] });
+    for (let f = 0; f < 30; f++) { slow.step(1 / 60); fast.step(1 / 60); }
+    slow.blast({ wounds: [], meterCredit: 0, impulse: { at: chestOf(slow), vel: [2.52, 0, 0] } });
+    fast.blast({ wounds: [], meterCredit: 0, impulse: { at: chestOf(fast), vel: [25.2, 0, 0] } });
+    let worst = 0;
+    for (let f = 0; f < 40; f++) {
+      slow.step(1 / 60); fast.step(1 / 60);
+      const a = slow.posed().clusters.find(c => c.limb === 'head')!.center;
+      const b = fast.posed().clusters.find(c => c.limb === 'head')!.center;
+      worst = Math.max(worst, Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]));
+    }
+    expect(worst).toBeLessThan(0.5);
   });
 });

@@ -227,8 +227,40 @@ const PROBE_SEEK_MAX = 0.04;
  * (2026-08-27). The seek changes nothing for hits that already measure
  * flesh: their loop is byte-identical to the original.
  */
+/** A/B SEAM for the cap below — `?woundcap=0` restores the uncapped march so
+ *  the two can be measured INTERLEAVED in one boot. Single runs of this
+ *  machine disagree by more than the effect (a blast's resolve moved 39 -> 55 ms
+ *  between two runs of the SAME build), which is exactly the trap TASKS.md
+ *  records for the bench: judge a delta against its own legs' spread. */
+let probeCapEnabled = true;
+export function setProbeCapEnabled(on: boolean): void { probeCapEnabled = on; }
+
+/** The CARVE-depth probe's own cap (see worldHitToWound) — a second, separate
+ *  seam, because the two probes have different consumers and a single knob
+ *  cannot price them apart. `false` restores the uncapped march. */
+let carveProbeCapEnabled = true;
+export function setCarveProbeCapEnabled(on: boolean): void { carveProbeCapEnabled = on; }
+
 function probeFlesh(
   field: (p: Vec3) => number, hit: Vec3, prim: Primitive,
+  /**
+   * STOP ONCE THE MEASUREMENT REACHES THIS. The ONLY consumer of `thick` is
+   * `rimScaleFor`, which computes `min(1, thick / (2 * lip))` — so every
+   * thickness at or beyond `2 * lip` produces the same answer, and marching to
+   * PROBE_MAX 0.6 m to find that out is work with no reader.
+   *
+   * MEASURED, and this was the blast pause: the march is
+   * PROBE_MAX / PROBE_STEP = 150 `sdBody` folds PER WOUND, and a 5-body blast
+   * stamps 16 wounds on each — 50 ms of a 56 ms resolve, while the traces that
+   * find the surfaces cost 5 ms. With the cap the march stops at
+   * `2 * lip / PROBE_STEP` samples: ~36 for a 0.13 m blast wound, ~9 for a
+   * 0.03 m pellet one.
+   *
+   * EXACT, not an approximation: below the cap nothing changes, and at or above
+   * it both the capped and uncapped forms clamp to 1. `damage.test.ts` pins that
+   * against an uncapped reference probe.
+   */
+  stopAtThick: number = PROBE_MAX,
 ): { thick: number; inward: Vec3 | null } {
   const ab = sub(prim.b, prim.a);
   const L2 = dot(ab, ab);
@@ -238,12 +270,14 @@ function probeFlesh(
   const n = len(inward);
   if (n < 1e-6) return { thick: 0, inward: null };
   const dir = scale(inward, 1 / n);
-  const measure = (from: number): number => {
+  const cap = probeCapEnabled ? stopAtThick : PROBE_MAX;
+  const measure = (from: number, stopAt: number = cap): number => {
     let thick = 0;
     for (let d = from; d <= PROBE_MAX; d += PROBE_STEP) {
       const p = add(hit, scale(dir, d));
       if (field(p) > 0) break;
       thick = d;
+      if (thick >= stopAt) break;   // nothing past here can change the rim
     }
     return thick;
   };
@@ -257,7 +291,10 @@ function probeFlesh(
     if (field(add(hit, scale(dir, d))) <= 0) { entered = true; break; }
   }
   if (!entered) return { thick: 0, inward: dir };
-  thick = measure(seek + PROBE_STEP) - seek;
+  // The seek subtracted below means the cap has to be raised by `seek`, or a
+  // thickened measurement would come back under the threshold and shrink a rim
+  // the uncapped probe called full.
+  thick = measure(seek + PROBE_STEP, stopAtThick + seek) - seek;
   return { thick, inward: dir };
 }
 
@@ -276,11 +313,14 @@ function probeFlesh(
 export function rimScaleFor(
   field: (p: Vec3) => number, hit: Vec3, prim: Primitive, radius: number, type: WoundType,
 ): number {
-  // Inward direction: toward the nearest point on the primitive's axis.
-  const { thick, inward } = probeFlesh(field, hit, prim);
-  if (!inward) return 1;
   const lip = radius * STOCK_RIM_SPLAY * WOUND_PROFILES[type].rimSplayScale;
-  return Math.max(0, Math.min(1, thick / (2 * lip)));
+  const full = 2 * lip;
+  // Inward direction: toward the nearest point on the primitive's axis.
+  // `full` is the cap: at or beyond it the rim is 1 whatever the probe would
+  // have kept marching to find (see probeFlesh's stopAtThick).
+  const { thick, inward } = probeFlesh(field, hit, prim, full);
+  if (!inward) return 1;
+  return Math.max(0, Math.min(1, thick / full));
 }
 
 /**
@@ -340,7 +380,23 @@ export function worldHitToWound(
     // thing that must be capped; see march.wgsl.ts APPLY_WOUNDS for the
     // GPU side (max of the sphere and the slab SDFs, exact for the convex
     // intersection).
-    const { thick, inward } = probeFlesh(field, hit, prim);
+    // THE SECOND PROBE IS CAPPED TOO, AND EXACTLY. This one has a CONTINUOUS
+    // consumer (carveDepth = FRAC x thick), not a thresholded one like the rim,
+    // so it is not "the same answer past a point" in general — but it is past
+    // ONE point, and that point is computable: march.wgsl.ts's APPLY_WOUNDS
+    // intersects the carve SPHERE (radius = w.w = this wound's radius) with a
+    // slab through the anchor at capEff, and a slab that reaches the sphere's
+    // centre cannot bind anywhere. capEff >= radius  <=>  thick >= radius/FRAC,
+    // so every measurement at or past that is a full sphere and the extra
+    // marching buys nothing at all.
+    //
+    // MEASURED, and this was the second half of the blast pause: the uncapped
+    // march is PROBE_MAX/PROBE_STEP = 150 `sdBody` folds PER WOUND, against 36
+    // for the capped rim probe beside it, and a 5-body blast stamps 16 wounds
+    // on each. The cap lands at 73 samples for a 0.13 m blast wound and 17 for
+    // a 0.03 m pellet one.
+    const { thick, inward } = probeFlesh(field, hit, prim,
+      carveProbeCapEnabled ? radius / WOUND_CARVE_DEPTH_FRAC : PROBE_MAX);
     if (inward) {
       wound.carveDepth = WOUND_CARVE_DEPTH_FRAC * thick;
       wound.carveN = [dot(inward, u), dot(inward, v), dot(inward, w)];

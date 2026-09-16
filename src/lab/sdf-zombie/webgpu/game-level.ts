@@ -125,9 +125,41 @@ export interface TunnelDef {
 }
 
 const R = ROOM_HALF, B = BAND_HALF, O = OUTER, T = TUNNEL_OFF, W = TUNNEL_HALF_W;
+/** The annex's z span, named because the arena centres on it (see ARENA_*). */
+const ANNEX_MIN_Z_REF = -O;
+const ANNEX_MAX_Z_REF = -B;
 const ANNEX_MIN_X = O + 2 * B;
 const ANNEX_MAX_X = ANNEX_MIN_X + 2 * R;
 const ANNEX_TUNNEL_HALF_W = 1;
+
+// ——— THE ARENA (2026-09-10) ——————————————————————————————————————————————
+// A 16 x 16 m open chamber hung off the annex's east wall, on the SAME z lane
+// as the annex corridor so you walk straight in from room 2.
+//
+// WHY IT EXISTS. Every other room is exactly 8 x 8 m — the whole dungeon is
+// corridors and cells — and the owner's dynamite gib pass came back with
+// "mostly i cant see the clusters at all... though also the rooms are quite
+// small. we might need to make another testing arena area where its like a big
+// open space". A blast of radiusM 4.69 m covers most of an 8 m room, so the
+// gib happens against a wall instead of on open ground and the pieces have
+// nowhere to fly. This is that open ground, with a horde to spend on it.
+//
+// Its ceiling is TWICE the rooms' (6 m against WALL_H 3 m): the space has to
+// read as open, and a lobbed bundle needs headroom. That is also why the
+// thrown bundle's ceiling is resolved PER POSITION rather than from one global
+// plane (game-main, ceilingAt) — a single max-height plane would let a bundle
+// leave through the 3 m room ceilings.
+const ARENA_MIN_X = ANNEX_MAX_X + WALL_T + 1.3;
+const ARENA_MAX_X = ARENA_MIN_X + 16;
+const ARENA_CENTRE_Z = (ANNEX_MIN_Z_REF + ANNEX_MAX_Z_REF) / 2;
+const ARENA_HALF = 8;
+const ARENA_MIN_Z = ARENA_CENTRE_Z - ARENA_HALF;
+const ARENA_MAX_Z = ARENA_CENTRE_Z + ARENA_HALF;
+const ARENA_H = 6.0;
+/** The arena's door lane — the same z band tunnel-2-5 uses, so the two line up
+ *  and the whole route from room 2 is one straight walk. */
+const ARENA_TUNNEL_MIN_Z = -T - ANNEX_TUNNEL_HALF_W;
+const ARENA_TUNNEL_MAX_Z = -T + ANNEX_TUNNEL_HALF_W;
 
 // DUNGEON STONE. Cold gray, deliberately not the reference video's sepia:
 // warm light on warm stone gives soft golden highlights that fight the
@@ -137,6 +169,13 @@ const ANNEX_TUNNEL_HALF_W = 1;
 const GALLERY_WALL: Vec3 = [0.21, 0.215, 0.225];
 const GALLERY_FLOOR: Vec3 = [0.135, 0.138, 0.142];
 const GALLERY_CEIL: Vec3 = [0.175, 0.18, 0.19];
+
+// The arena's stone: a shade darker and cooler than the cells, so the big room
+// reads as a different place. Cold by rule (blue >= red) and the floor stays
+// darker than the walls — both pinned by dungeon-palette.test.ts.
+const ARENA_WALL: Vec3 = [0.185, 0.19, 0.20];
+const ARENA_FLOOR: Vec3 = [0.112, 0.115, 0.122];
+const ARENA_CEIL: Vec3 = [0.15, 0.155, 0.165];
 
 export const ROOMS: RoomDef[] = [
   { id: 1, name: 'room1', minX: -O, maxX: -B, minZ: -O, maxZ: -B, height: WALL_H,
@@ -167,6 +206,19 @@ export const ROOMS: RoomDef[] = [
     // FIRE brazier along the north wall.
     accents: [{ pos: [-3.5, 1.15, 7.9], color: [1.0, 0.44, 0.12], power: 9 }],
     zombies: 4 },
+  // THE ARENA. Same cold stone family as the rest, a shade darker and taller
+  // so it reads as somewhere else. Braziers on two walls (the palette tests
+  // want 1-2 accents per room, placed off-centre and below 2 m), a shade
+  // stronger than the rooms' — it is a much bigger volume to light.
+  { id: 6, name: 'arena', minX: ARENA_MIN_X, maxX: ARENA_MAX_X,
+    minZ: ARENA_MIN_Z, maxZ: ARENA_MAX_Z, height: ARENA_H,
+    wallColor: ARENA_WALL, floorColor: ARENA_FLOOR, ceilColor: ARENA_CEIL,
+    accents: [
+      { pos: [ARENA_MIN_X + 1.6, 1.15, ARENA_MAX_Z - 1.6], color: [1.0, 0.34, 0.11], power: 13 },
+      { pos: [ARENA_MAX_X - 1.8, 1.15, ARENA_MIN_Z + 1.8], color: [0.98, 0.46, 0.14], power: 13 },
+    ],
+    // A HORDE, not a fireteam: this room exists so a blast has bodies to spend.
+    zombies: 8, soldiers: 0 },
   { id: 5, name: 'room5', minX: ANNEX_MIN_X, maxX: ANNEX_MAX_X, minZ: -O, maxZ: -B, height: WALL_H,
     wallColor: GALLERY_WALL, floorColor: GALLERY_FLOOR, ceilColor: GALLERY_CEIL,
     accents: [
@@ -187,6 +239,9 @@ export const TUNNELS: TunnelDef[] = [
     height: TUNNEL_H, color: TUNNEL_COLOR, axis: 'x' },
   { name: 'tunnel-4-1', a: 4, b: 1, minX: -T - W, maxX: -T + W, minZ: -B, maxZ: B,
     height: TUNNEL_H, color: TUNNEL_COLOR, axis: 'z' },
+  { name: 'tunnel-5-6', a: 5, b: 6, minX: ANNEX_MAX_X, maxX: ARENA_MIN_X,
+    minZ: ARENA_TUNNEL_MIN_Z, maxZ: ARENA_TUNNEL_MAX_Z,
+    height: TUNNEL_H, color: TUNNEL_COLOR, axis: 'x' },
   { name: 'tunnel-2-5', a: 2, b: 5, minX: O, maxX: ANNEX_MIN_X,
     minZ: -T - ANNEX_TUNNEL_HALF_W, maxZ: -T + ANNEX_TUNNEL_HALF_W,
     height: TUNNEL_H, color: TUNNEL_COLOR, axis: 'x' },
@@ -214,7 +269,9 @@ export function levelColliders(): Aabb[] {
   box(O, O + WALL_T, annexTunnel.maxZ, O + WALL_T);
   // Annex shell and west wall split around its mouth. Corridor side walls
   // meet both shells, so the rendered tunnel has matching solid sides.
-  box(ANNEX_MAX_X, ANNEX_MAX_X + WALL_T, -O - WALL_T, -B + WALL_T);
+  // The EAST shell is split around the arena door the same way (2026-09-10).
+  box(ANNEX_MAX_X, ANNEX_MAX_X + WALL_T, -O - WALL_T, ARENA_TUNNEL_MIN_Z);
+  box(ANNEX_MAX_X, ANNEX_MAX_X + WALL_T, ARENA_TUNNEL_MAX_Z, -B + WALL_T);
   box(ANNEX_MIN_X - WALL_T, ANNEX_MAX_X + WALL_T, -O - WALL_T, -O);
   box(ANNEX_MIN_X - WALL_T, ANNEX_MAX_X + WALL_T, -B, -B + WALL_T);
   box(ANNEX_MIN_X - WALL_T, ANNEX_MIN_X, -O, annexTunnel.minZ);
@@ -258,6 +315,28 @@ export function levelColliders(): Aabb[] {
     }
   }
 
+  // ——— THE ARENA SHELL ————————————————————————————————————————————————
+  // A closed 16 x 16 m box on the east, full ARENA_H tall (the walls are load
+  // bearing for the height, not just the ceiling plane: a 3 m collider wall in
+  // a 6 m room would let a lobbed bundle out over it).
+  // The door corridor's side walls run from the annex shell to the arena's
+  // west wall, exactly as the annex corridor's do.
+  box(ANNEX_MAX_X, ARENA_MIN_X, ARENA_TUNNEL_MIN_Z - WALL_T, ARENA_TUNNEL_MIN_Z);
+  box(ANNEX_MAX_X, ARENA_MIN_X, ARENA_TUNNEL_MAX_Z, ARENA_TUNNEL_MAX_Z + WALL_T);
+  // West wall, split around the door lane.
+  box(ARENA_MIN_X - WALL_T, ARENA_MIN_X, ARENA_MIN_Z - WALL_T, ARENA_TUNNEL_MIN_Z, 0, ARENA_H);
+  box(ARENA_MIN_X - WALL_T, ARENA_MIN_X, ARENA_TUNNEL_MAX_Z, ARENA_MAX_Z + WALL_T, 0, ARENA_H);
+  // ...plus the DOOR HEADER above the generic tunnel lintel. The rendered west
+  // wall carries a header plane over the mouth spanning TUNNEL_H to ARENA_H,
+  // while the lintel box the TUNNELS loop builds for EVERY corridor only fills
+  // TUNNEL_H..WALL_H — so without this box the visible wall above the arena door
+  // has no collision behind it. Caught by game-level.test.ts's
+  // planes-to-collision agreement, which is exactly what that gate is for.
+  box(ARENA_MIN_X - WALL_T, ARENA_MIN_X, ARENA_TUNNEL_MIN_Z, ARENA_TUNNEL_MAX_Z, WALL_H, ARENA_H);
+  box(ARENA_MAX_X, ARENA_MAX_X + WALL_T, ARENA_MIN_Z - WALL_T, ARENA_MAX_Z + WALL_T, 0, ARENA_H);
+  box(ARENA_MIN_X - WALL_T, ARENA_MAX_X + WALL_T, ARENA_MAX_Z, ARENA_MAX_Z + WALL_T, 0, ARENA_H);
+  box(ARENA_MIN_X - WALL_T, ARENA_MAX_X + WALL_T, ARENA_MIN_Z - WALL_T, ARENA_MIN_Z, 0, ARENA_H);
+
   // Furniture — crude boxes, same collision path as walls.
   for (const f of FURNITURE) box(f.minX, f.maxX, f.minZ, f.maxZ, 0, f.height);
   return out;
@@ -289,6 +368,11 @@ export const FURNITURE: FurnitureDef[] = [
   // paths along both outer walls; nothing pinches the west entry.
   { room: 5, minX: 13.0, maxX: 14.4, minZ: -6.7, maxZ: -5.7, height: 1.15 },
   { room: 5, minX: 14.0, maxX: 15.4, minZ: -3.8, maxZ: -2.8, height: 1.0 },
+  // arena: sparse on purpose — the room is for blowing things up in, so the
+  // cover is there to bounce a bundle off, not to clutter the blast.
+  { room: 6, minX: 26.0, maxX: 27.4, minZ: -6.2, maxZ: -4.8, height: 1.15 },
+  { room: 6, minX: 30.5, maxX: 32.0, minZ: 0.2, maxZ: 1.7, height: 0.85 },
+  { room: 6, minX: 22.5, maxX: 24.0, minZ: -1.0, maxZ: 0.5, height: 1.0 },
 ];
 
 /** The enclosure a point belongs to: its room, or a tunnel corridor. */
@@ -354,6 +438,12 @@ const SPAWN_TABLE: Record<number, Vec3[]> = {
   4: [[-4.8, 0, 4.8], [-6.8, 0, 6.0], [-2.4, 0, 4.4], [-6.0, 0, 3.2]],
   // Soldier slots first: spread the squad across the far side of cover.
   5: [[15.8, 0, -7.5], [17.0, 0, -4.8], [15.8, 0, -2.1], [11.8, 0, -6.8], [11.8, 0, -2.8]],
+  // arena: eight slots spread around the room, none of them in the door lane
+  // (z -5.6..-4.0 on the west wall) and none inside a crate.
+  6: [
+    [23.0, 0, -10.5], [27.5, 0, -11.2], [32.0, 0, -10.6], [34.5, 0, -7.0],
+    [34.5, 0, -1.0], [30.0, 0, -10.2], [23.5, 0, -7.5], [21.8, 0, 1.2],
+  ],
 };
 export function spawnPoints(room: RoomDef): Vec3[] {
   return (SPAWN_TABLE[room.id] ?? []).slice(0, room.zombies).map(p => [...p] as Vec3);

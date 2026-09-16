@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   makeChunk, stepChunk, chunkPoint, squashFactors, chunkSettled, toppleAngleToFlat,
-  type Chunk,
+  type Chunk, type ChunkBox,
 } from './gib-chunks';
 import { qRotate, qFromAxisAngle } from './vec';
 import type { Vec3 } from './types';
@@ -19,6 +19,19 @@ describe('makeChunk', () => {
     const c = makeChunk('armL', [0, 1, 0], [2, 3, 1], 0.2, [0, 1, 0], rng);
     expect(Math.hypot(...c.quat)).toBeCloseTo(1, 6);
     for (const w of c.angVel) expect(Math.abs(w)).toBeLessThanOrEqual(9);
+  });
+
+  it('takes a pre-release orientation/angular velocity over the random tumble', () => {
+    const quat: [number, number, number, number] = [0, Math.SQRT1_2, 0, Math.SQRT1_2];
+    const angVel: Vec3 = [0, 2.4, 0];
+    const c = makeChunk('torso', [1, 2, 3], [0, 0, 0], 0.2, [0, 1, 0], rng, 'limb', { quat, angVel });
+    for (let k = 0; k < 4; k++) expect(c.quat[k]).toBeCloseTo(quat[k]!, 12);
+    expect(c.angVel).toEqual(angVel);
+    // The random draws are still consumed (the shared stream is unchanged), so
+    // a chunk with no pre-release state keeps the old spawn behaviour.
+    const random = makeChunk('torso', [1, 2, 3], [0, 0, 0], 0.2, [0, 1, 0], rng);
+    expect(random.quat).toEqual([0, 0, 0, 1]);
+    expect(random.angVel).not.toEqual(angVel);
   });
 });
 
@@ -141,5 +154,99 @@ describe('chunkSettled (close-up task 5 bake predicate)', () => {
     }
     expect(settledAt).toBeGreaterThan(0);
     expect(settledAt).toBeLessThan(60 * 4);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WALLS. The owner, playing: "it seems the gibs dont bounce off the walls/have
+// collission" — and they did not. `stepChunk` had a floor plane at y = radius and
+// NOTHING else, so a piece thrown at a wall flew straight through it and out of
+// the room. The boxes are the level's own colliders (`levelColliders()`), which
+// are the walls SPLIT AROUND THE DOORWAYS — so the doorway case below is the one
+// that says the model is right rather than a box drawn around the room.
+// ---------------------------------------------------------------------------
+describe('chunk walls', () => {
+  /** The arena's east wall: a slab in x, spanning z and y. */
+  const WALL = { min: [-0.2, 0, -8] as Vec3, max: [0, 3, 8] as Vec3 };
+
+  /** Fly for `frames` and report the extreme x reached plus the final state. */
+  function fly(c: Chunk, frames: number, colliders?: { boxes?: readonly ChunkBox[]; ceilingY?: number }) {
+    let maxX = c.pos[0], minX = c.pos[0], maxY = c.pos[1];
+    for (let i = 0; i < frames; i++) {
+      c = stepChunk(c, 1 / 60, colliders);
+      maxX = Math.max(maxX, c.pos[0]); minX = Math.min(minX, c.pos[0]);
+      maxY = Math.max(maxY, c.pos[1]);
+    }
+    return { c, maxX, minX, maxY };
+  }
+
+  it('bounces off a wall instead of flying through it', () => {
+    const r = fly(makeChunk('armL', [-1.5, 1, 0], [9, 0, 0], 0.15, [1, 0, 0], rng), 40, { boxes: [WALL] });
+    // Never ends up inside the slab, and it came back off it.
+    expect(r.maxX + 0.15).toBeLessThanOrEqual(WALL.max[0] + 1e-9);
+    expect(r.c.vel[0]).toBeLessThan(0);
+    expect(r.c.pos[0]).toBeLessThan(r.maxX);
+    // ...and it is not glue: it came back with a real fraction of the speed.
+    expect(Math.abs(r.c.vel[0])).toBeGreaterThan(2);
+  });
+
+  it('skids along a wall rather than stopping dead on it', () => {
+    // 12 frames puts it just past the wall (1.35 m at ~9 m/s is ~9 frames), so
+    // this reads the state just after the bounce: friction applies on EVERY
+    // contact frame, exactly as it does on the floor, so a longer run decays the
+    // tangential too and would measure the friction rather than the bounce.
+    const r = fly(makeChunk('armL', [-1.5, 1, 0], [9, 0, 4], 0.15, [1, 0, 0], rng), 12, { boxes: [WALL] });
+    expect(r.c.vel[0]).toBeLessThan(0);          // normal component reflected
+    expect(r.c.vel[2]).toBeGreaterThan(2.2);     // tangential mostly kept (friction 0.72)
+  });
+
+  it('flies THROUGH a doorway: the boxes have a gap, the model does not care', () => {
+    // The same wall, split around a 1.6 m opening at z in [-0.8, 0.8] — exactly
+    // how levelColliders() models a tunnel mouth.
+    const boxes = [
+      { min: [-0.2, 0, -8] as Vec3, max: [0, 3, -0.8] as Vec3 },
+      { min: [-0.2, 0, 0.8] as Vec3, max: [0, 3, 8] as Vec3 },
+    ];
+    const through = fly(makeChunk('armL', [-1.5, 1, 0], [9, 0, 0], 0.15, [1, 0, 0], rng), 20, { boxes });
+    const blocked = fly(makeChunk('armL', [-1.5, 1, 4], [9, 0, 0], 0.15, [1, 0, 0], rng), 20, { boxes });
+    expect(through.c.pos[0]).toBeGreaterThan(0.5);   // out the door
+    expect(through.c.vel[0]).toBeGreaterThan(0);     // never reflected
+    expect(blocked.maxX + 0.15).toBeLessThanOrEqual(0 + 1e-9);   // bounced off the wall beside it
+    expect(blocked.c.vel[0]).toBeLessThan(0);
+  });
+
+  it('stops at the ceiling instead of leaving the room through the roof', () => {
+    // Asserted AT the contact, not at the end of a one-second run: by then the
+    // piece has already bounced off the FLOOR and is rising again, so "it is
+    // going down now" would be false for a perfectly good bounce.
+    let c = makeChunk('armL', [0, 1, 0], [0, 12, 0], 0.15, [1, 0, 0], rng);
+    let ceilingHits = 0;
+    for (let i = 0; i < 60; i++) {
+      const prevVy = c.vel[1];
+      c = stepChunk(c, 1 / 60, { ceilingY: 3 });
+      expect(c.pos[1] + c.radius).toBeLessThanOrEqual(3 + 1e-9);
+      if (prevVy > 0 && c.vel[1] < 0) ceilingHits++;
+    }
+    expect(ceilingHits).toBeGreaterThanOrEqual(1);
+  });
+
+  it('is UNCHANGED when no colliders are passed (the lab and every old test)', () => {
+    // The stepper must be bit-identical to its old self when it is given no
+    // geometry, or every tuning made in the lab stops meaning anything.
+    const c1 = stepChunk(makeChunk('armL', [0, 1, 0], [3, 2, 1], 0.2, [0, 1, 0], rng), 1 / 60);
+    const c2 = stepChunk(makeChunk('armL', [0, 1, 0], [3, 2, 1], 0.2, [0, 1, 0], rng), 1 / 60, {});
+    expect([...c1.pos, ...c1.vel]).toEqual([...c2.pos, ...c2.vel]);
+    const a = settle(makeChunk('armL', [0, 1, 0], [3, 2, 1], 0.2, [0, 1, 0], rng), 1);
+    const b = settle(makeChunk('armL', [0, 1, 0], [3, 2, 1], 0.2, [0, 1, 0], rng), 1);
+    expect([...a.pos, ...a.vel]).toEqual([...b.pos, ...b.vel]);
+  });
+
+  it('pushes a chunk whose CENTRE is inside a box out along its shallowest axis', () => {
+    // The fast-piece-through-a-thin-wall case: there is no surface normal at the
+    // centre, so the resolve has to pick an axis. x is 0.1 from either face here,
+    // y/z are metres away, so -x wins and the sphere lands clear of the slab.
+    const inside = stepChunk(makeChunk('armL', [-0.1, 1, 0], [0, 0, 0], 0.05, [1, 0, 0], rng),
+      1 / 60, { boxes: [WALL] });
+    expect(inside.pos[0] + inside.radius).toBeLessThanOrEqual(WALL.min[0] + 1e-9);
   });
 });

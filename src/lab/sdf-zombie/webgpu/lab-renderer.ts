@@ -26,11 +26,31 @@ import { WebGPURenderer } from 'three/webgpu';
 import type { FrameTiming } from './game-telemetry';
 import { installPipelineLog, noteFrameEnd } from './pipeline-log';
 
+/**
+ * WebGPU device health, captured where the device is created (startup-freeze
+ * attribution, 2026-09-16). Device loss is otherwise silent: the canvas just
+ * stops updating and every driver-visible symptom is inferred. There was no
+ * `device.lost` / `onuncapturederror` handler before this, so a lost device or
+ * a validation error outside a three error scope left no evidence at all.
+ */
+export interface GpuDiagnostics {
+  /** Set when `device.lost` resolves. `atMs` is performance.now() at loss. */
+  lost: { reason: string; message: string; atMs: number } | null;
+  /** First few uncaptured errors (validation / out-of-memory / internal). */
+  uncaptured: { message: string; atMs: number }[];
+  /** Total uncaptured errors seen (the list above is bounded). */
+  uncapturedCount: number;
+}
+
 export interface LabRendererHandle {
   renderer: WebGPURenderer;
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   canvas: HTMLCanvasElement;
+  /** Device loss / uncaptured-error evidence. */
+  readonly gpuDiagnostics: GpuDiagnostics;
+  /** True while the rAF loop is armed; setLoopRunning keeps this in sync. */
+  readonly loopRunning: boolean;
   setRenderCallback(cb: (dtSec: number) => void): void;
   setDrawFn(fn: () => void): void;
   /** Observe natural frames only; CPU submission timing is NOT GPU duration. */
@@ -280,6 +300,46 @@ export async function createLabRenderer(mount: HTMLElement, cap?: RenderCap): Pr
   // device. Recording itself is gated by ?pipelinelog=1 / setPipelineLog.
   installPipelineLog(renderer);
 
+  // DEVICE HEALTH (startup-freeze attribution). `device.lost` is a promise that
+  // never rejects, so a `.then` never firing means the device survived the run —
+  // which is itself the evidence ("loss did not reproduce"). `onuncapturederror`
+  // catches validation/oom errors that no error scope claimed (three wraps most
+  // of its own work in scopes, so this is the residual channel).
+  const gpuDiagnostics: GpuDiagnostics = { lost: null, uncaptured: [], uncapturedCount: 0 };
+  {
+    // Structural device shape: the DOM WebGPU lib types are not loaded here
+    // (three ships its own), so name only what is used.
+    type DeviceLike = {
+      lost?: Promise<{ reason?: string; message?: string }>;
+      onuncapturederror?: ((ev: { error?: { message?: string } }) => void) | null;
+    };
+    const device = (renderer.backend as unknown as { device?: DeviceLike })?.device;
+    try {
+      void device?.lost?.then((info) => {
+        gpuDiagnostics.lost = {
+          reason: String(info?.reason ?? 'unknown'),
+          message: String(info?.message ?? ''),
+          atMs: Math.round(performance.now()),
+        };
+        console.error(`[gpu] device lost (${gpuDiagnostics.lost.reason}): ${gpuDiagnostics.lost.message}`);
+      });
+    } catch { /* no lost promise on this backend */ }
+    try {
+      if (device) {
+        device.onuncapturederror = (ev) => {
+          gpuDiagnostics.uncapturedCount++;
+          if (gpuDiagnostics.uncaptured.length < 20) {
+            gpuDiagnostics.uncaptured.push({
+              message: String(ev.error?.message ?? ev),
+              atMs: Math.round(performance.now()),
+            });
+          }
+        };
+      }
+    } catch { /* handler unsupported */ }
+    (window as unknown as Record<string, unknown>).__gpuDiagnostics = gpuDiagnostics;
+  }
+
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0x1a1116, 10, 60);
 
@@ -394,6 +454,7 @@ export async function createLabRenderer(mount: HTMLElement, cap?: RenderCap): Pr
         .finally(() => { resolvingCompute = false; });
     }
   };
+  let loopOn = true;
   renderer.setAnimationLoop(loop);
 
   // `backend.isWebGPUBackend` is how three distinguishes them. Surfacing this
@@ -408,6 +469,8 @@ export async function createLabRenderer(mount: HTMLElement, cap?: RenderCap): Pr
     scene,
     camera,
     canvas: renderer.domElement as HTMLCanvasElement,
+    gpuDiagnostics,
+    get loopRunning() { return loopOn; },
     setFrameCap(fps) {
       const ok = Number.isFinite(fps) && fps > 0;
       frameCapFps = ok ? fps : 0;
@@ -438,6 +501,7 @@ export async function createLabRenderer(mount: HTMLElement, cap?: RenderCap): Pr
       }
     },
     setLoopRunning(on) {
+      loopOn = on;
       renderer.setAnimationLoop(on ? loop : null);
       // Otherwise the first frame back sees the whole benchmark as its dt and
       // the rig integrates a several-second step in one go.

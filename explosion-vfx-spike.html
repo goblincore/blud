@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Blud — explosion VFX spike</title>
+<style>
+  body { margin: 0; background: #121820; color: #eee; font: 13px monospace; overflow: hidden; }
+  #app { width: 100vw; height: 100vh; }
+  #status {
+    position: fixed; top: 8px; left: 8px; z-index: 10;
+    background: rgba(0,0,0,0.78); padding: 8px 10px; border: 1px solid #444;
+    font-size: 11px; line-height: 1.6; color: #bbb; max-width: 46vw;
+  }
+  #status b { color: #d88; font-weight: normal; }
+  #stats {
+    position: fixed; bottom: 8px; left: 8px; z-index: 10;
+    background: rgba(0,0,0,0.68); padding: 8px 10px; border: 1px solid #444;
+    font-size: 11px; line-height: 1.6; color: #9cf; max-width: 80vw; white-space: pre-wrap;
+  }
+  #controls {
+    position: fixed; bottom: 8px; right: 8px; z-index: 10;
+    background: rgba(0,0,0,0.68); padding: 8px 10px; border: 1px solid #444;
+    font-size: 11px; line-height: 1.6; color: #bbb; text-align: right;
+  }
+  #controls b { color: #d88; font-weight: normal; }
+</style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="status">booting…</div>
+  <div id="stats"></div>
+  <div id="controls">
+    <b>?control=hash|test</b> fire-material A/B &nbsp;·&nbsp; <b>?spawn=0</b> empty scene<br />
+    console · <b>__explosionSpike.stats()</b> · <b>.frame(dt)</b> · <b>.measureRender()</b>
+  </div>
+  <script type="module" src="/src/lab/sdf-zombie/webgpu/explosion-vfx-spike-main.ts"></script>
+</body>
+</html>

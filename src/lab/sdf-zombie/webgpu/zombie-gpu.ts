@@ -23,7 +23,7 @@ import { MAX_WOUNDS } from '../damage';
 import { chunkPoint, squashFactors, type Chunk } from '../gib-chunks';
 import type { FleshMaterial, LightPreset } from '../material';
 import type { Primitive, Vec3 } from '../types';
-import { bendCtrl, qRotate, sub as vsub } from '../vec';
+import { bendCtrl, qRotate, qMul, type Quat, sub as vsub } from '../vec';
 import { chunkExtent, tornEndRadius } from '../extent';
 import { createFallbackHandVolumeTexture } from './hand-volume';
 import {
@@ -164,6 +164,15 @@ export interface ZombieGpuView {
   /** Melt progress 0..1 → meltCfg.x (zombie melt task 6). Only the lab's
    *  melting body (and its released bone chunks) ever set this non-zero. */
   setMelt(progress: number): void;
+  /**
+   * RUPTURE GORE 0..1 → lodCfg.w, the SAME channel a spawned flesh chunk sets
+   * to 1 (body-to-gib task 3). A standing body is 0; a doomed body ramps it
+   * toward 1.0 as it tears, so the release frame is the material the body was
+   * already wearing rather than a switch. It is a VIEW-WIDE gate — that is the
+   * channel's shape — which is why the ramp is tied to progress and is 0 for
+   * the whole recoil phase: an intact body is never repainted.
+   */
+  setGoreStrength(v: number): void;
   /** Crowd stage a: the per-instance record buffer this view writes through
    *  syncRecord(). Exposed so the frame-hash seam can cover pose/wound state. */
   records: CrowdRecords;
@@ -1524,6 +1533,10 @@ export function writeViewRecord(
     volumePose1: u.volumePose1.value.toArray(),
     bodyCentre: centre.toArray(), variantSeed: 0, bodyHalf: u.bodyHalf.value.toArray(),
     damageRevision: 0,
+    // The per-instance half of the rupture material ramp: `lodCfg.w` is a
+    // per-VIEW uniform, and the crowd shares one material, so the only way a
+    // doomed body can wear the gore the chunks wear is through its own record.
+    gore: u.lodCfg.value.w,
   }, band);
 }
 
@@ -2486,6 +2499,7 @@ export function createZombieGpuView(
       if (depthSegMetaNode) (depthSegMetaNode as unknown as { value: THREE.Texture }).value = meta;
     },
     setMelt(progress) { u.meltCfg.value.x = progress; syncRecord(); },
+    setGoreStrength(v) { u.lodCfg.value.w = v; syncRecord(); },
     update(next, rest) {
       const p = upload(next, rest);
       const f = fit(next, p.maxBlendK);
@@ -2618,7 +2632,7 @@ export interface ChunkGpuView {
   records: CrowdRecords;
   instCfg: ReturnType<typeof uniform>;
   /** Reuses this mesh/render-object slot for a newly spawned chunk. */
-  reset(chunk: Chunk, prims: Primitive[], tornAt?: Vec3[], bones?: Primitive[]): void;
+  reset(chunk: Chunk, prims: Primitive[], tornAt?: Vec3[], bones?: Primitive[], template?: MarchUniforms): void;
   update(chunk: Chunk): void;
   /** Bone tubes: flip the packBones layout (pack.ts PackOpts.packBones).
    *  Re-packs immediately from the last reset() args. */
@@ -2659,6 +2673,7 @@ export interface ChunkGpuBakeData {
   extent: number;
   quat: import('../gib-chunks').Chunk['quat'];
   look: import('./baked-chunks').ChunkBakeData['look'];
+  surface: NonNullable<import('./baked-chunks').ChunkBakeData['surface']>;
   gore: number;
 }
 
@@ -2743,6 +2758,16 @@ export function createChunkGpuView(
     records,
     instCfg,
   } satisfies ChunkMaterialState;
+  // FRUSTUM CULLING WAS TRIED HERE AND MEASURED TO BUY NOTHING (2026-09-11).
+  // The box IS the bound, so Three's test is exact and it was frame-hash
+  // verified — but it is not worth the risk: measured with 64 pieces in the
+  // arena, 55 of them OUT of frame, culling the off-screen ones saved a median
+  // of -0.3 ms (spread +-2), because a piece whose proxy box is off-screen has
+  // its fragments clipped anyway and cost only a draw call. The piece cost is
+  // per piece IN FRAME, and no cull can touch that. See the dev-note.
+  //
+  // `Proxy IS the bound; don't double-cull` — the shader's per-pixel box reject
+  // is the only cull this path needs.
   mesh.frustumCulled = false;
 
   /** Crowd stage a (task 7c): push the chunk's per-instance uniforms into its
@@ -2773,6 +2798,9 @@ export function createChunkGpuView(
   let tornRadii: number[] = [];
   let packed!: ReturnType<typeof packBody>;
   let proxySize = 1;
+  let faceCentreLocal: Vec3 = [0, 0, 0];
+  let faceRestQuat: Quat = [0, 0, 0, 1];
+  let faceRestAxes: Vec3 = [1, 1, 1];
 
   function copyTemplateLook() {
     u.faceTex.value = template.faceTex.value;
@@ -2911,7 +2939,11 @@ export function createChunkGpuView(
       u.woundCfg.value.x = 0;
     }
 
-    if (u.faceCfg.value.x > 0.5) u.headCentre.value.set(c.pos[0], c.pos[1], c.pos[2]);
+    if (u.faceCfg.value.x > 0.5) {
+      u.headCentre.value.set(...chunkPoint(c, faceCentreLocal, sx, sy, sz));
+      u.headQuat.value.set(...qMul(c.quat, faceRestQuat));
+      u.headAxes.value.set(faceRestAxes[0] * sx, faceRestAxes[1] * sy, faceRestAxes[2] * sz);
+    }
 
     // Noise anchor: the chunk's gore mottle rides the CHUNK, not the world.
     // Overwrites the body root shift the template copy brought over — a
@@ -2926,8 +2958,9 @@ export function createChunkGpuView(
   }
 
   function reset(
-    c: Chunk, nextPrims: Primitive[], nextTornAt?: Vec3[], nextBones?: Primitive[],
+    c: Chunk, nextPrims: Primitive[], nextTornAt?: Vec3[], nextBones?: Primitive[], nextTemplate?: MarchUniforms,
   ) {
+    if (nextTemplate) template = nextTemplate;
     lastReset = { c, prims: nextPrims, tornAt: nextTornAt, bones: nextBones };
     copyTemplateLook();
 
@@ -2996,9 +3029,12 @@ export function createChunkGpuView(
     // released skeleton groups) is not torn meat; the mask would paint bare
     // bone red and the puddle's pale bits would read as more goo.
     u.lodCfg.value.w = nextPrims.length > 0 ? 1 : 0;
-    u.faceCfg.value.x = c.limb === 'head' ? 1 : 0;
-    u.headCentre.value.set(c.pos[0], c.pos[1], c.pos[2]);
-    u.headAxes.value.set(extent, extent, extent);
+    // Preserve the source projection/mode; a spherical extent is not the
+    // skull's authored projection frame. The frame tumbles with its piece.
+    u.faceCfg.value.x = c.limb === 'head' && nextPrims.length > 0 ? template.faceCfg.value.x : 0;
+    faceCentreLocal = vsub(template.headCentre.value.toArray() as Vec3, c.pos);
+    faceRestQuat = template.headQuat.value.toArray() as Quat;
+    faceRestAxes = template.headAxes.value.toArray() as Vec3;
     proxySize = extent * 2 * 1.4 + packed.maxBlendK * 4 + 0.05;
 
     const { sx, sy, sz } = apply(c);
@@ -3051,7 +3087,8 @@ export function createChunkGpuView(
       const col = (u2: { value: THREE.Color }): Vec3 =>
         [u2.value.r, u2.value.g, u2.value.b];
       return {
-        flesh: local.filter(p => p.op !== 'sub').map(xf),
+        // Keep the cap carves: dropping them turns cut meat back into rounded limbs.
+        flesh: local.map(xf),
         bones: localBones.map(xf),
         torn: tornLocals.map((t, i) => ({
           at: chunkPoint(c, t, sx, sy, sz),
@@ -3078,6 +3115,8 @@ export function createChunkGpuView(
           organAmp: u.organAmp.value,
           goreStrength: u.lodCfg.value.w,
         },
+        surface: { legacyGamma: u.lodCfg.value.y, wetness: u.surfCfg2.value.x,
+          roughness: u.surfCfg.value.y, specIntensity: u.surfCfg.value.x, noiseAmp: u.marchCfg.value.z, fresnel: u.surfCfg.value.z },
         gore: u.lodCfg.value.w,
       };
     },

@@ -141,6 +141,7 @@ export default defineConfig({
       'scripts/census-diff.test.mjs',
       'scripts/lib/demo-digest.test.mjs',
       'scripts/lib/demo-presented.test.mjs',
+      'scripts/lib/png-write.test.mjs',
     ],
     exclude: ['**/node_modules/**', '**/.claude/**', 'docs/**', 'dist/**'],
   },

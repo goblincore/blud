@@ -463,7 +463,24 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
     return { ...p, ...poseEnds(bound.boneBinding[i]!), boneSegment };
   });
 
-  const clusters: ClusterInfo[] = body.clusters.map(c => {
+  const clusters = refitClusters(prims, body.clusters);
+
+  return { ...body, prims, bonePrims, clusters };
+}
+
+/**
+ * Recompute every cluster's centre and radius from a POSED prim set.
+ *
+ * A cluster sphere is an OUTER bound: the march culls by it and the proxy box
+ * is sized from it, so a bound left over a body whose prims have MOVED does not
+ * draw a wrong shape — it CULLS, which presents as a round see-through hole
+ * (extent.ts's header counts the eight sites that compute this recipe and warns
+ * about a ninth). It is exported for exactly that reason: the hurt-box tear
+ * (gib-tear.ts) displaces posed prims and needs the same refit, and two copies
+ * of this arithmetic is how the ninth site happens.
+ */
+export function refitClusters(prims: Primitive[], clusters: ClusterInfo[]): ClusterInfo[] {
+  return clusters.map(c => {
     const members = prims.slice(c.start, c.start + c.count);
     // Same bent-prim rule as assignClusters: the ctrl point joins the fit or
     // a swung horn escapes the sphere the shader culls by.
@@ -474,7 +491,7 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
       pts += 2;
       if (m.bend !== undefined) { sum = add(sum, bendCtrl(m.a, m.b, m.bend)); pts += 1; }
     }
-    const center = vscale(sum, 1 / pts);
+    const center = vscale(sum, 1 / (pts || 1));
     let radius = 0;
     for (const m of members) {
       const maxScale = Math.max(m.scale[0], m.scale[1], m.scale[2]);
@@ -486,8 +503,6 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
     }
     return { ...c, center, radius };
   });
-
-  return { ...body, prims, bonePrims, clusters };
 }
 
 /**

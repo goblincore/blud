@@ -7,7 +7,7 @@ import { TILE_MAX_ENTRIES } from './tile-cull';
 import { MAX_PRIMS, MAX_CLUSTERS, BONE_SEG_MAX } from '../validate';
 import { REC_VEC4S, REC_COUNTS, REC_COUNTS2, REC_WOUND_BOUND, REC_ANCHOR_BAND, REC_WIND_ALIVE, REC_MELT,
   REC_FLASH, REC_NOISE_YAW, REC_HEAD_WCOUNT, REC_HEAD_QUAT, REC_VOL_POSE0, REC_VOL_POSE1,
-  REC_CENTRE_SEED, REC_HALF_REV, MAX_CROWD_INSTANCES } from './crowd-records';
+  REC_CENTRE_SEED, REC_HALF_REV, REC_GORE, MAX_CROWD_INSTANCES } from './crowd-records';
 
 /** Extra metres added to the per-ray tile sphere test (tileCfg.x == 2) so the
  *  off-ray shading probes — calcNormal's 0.0015 eps and the AO probe at
@@ -1504,7 +1504,11 @@ var<private> gInstVolPose1: vec4<f32> = vec4<f32>(0.0);
 var<private> gInstCentre: vec3<f32> = vec3<f32>(0.0);
 var<private> gInstSeed: f32 = 0.0;
 var<private> gInstHalf: vec3<f32> = vec3<f32>(0.0);
-var<private> gInstRevision: f32 = 0.0;`;
+var<private> gInstRevision: f32 = 0.0;
+// RUPTURE GORE (body-to-gib task 3). 0 outside a crowd draw (so the per-view
+// lodCfg.w remains authoritative there); the doomed body's ramp rides its own
+// record because the crowd shares one material and one lodCfg uniform.
+var<private> gInstGore: f32 = 0.0;`;
 
 // Per-instance state, loaded from the record buffer by slot. Everything that
 // used to be a per-body uniform parameter is a private global now, so the
@@ -1550,6 +1554,7 @@ export const INSTANCE_STATE = /* wgsl */ `fn loadInstance(inst: ptr<storage, arr
   let hr = (*inst)[base + ${REC_HALF_REV}];
   gInstHalf = hr.xyz;
   gInstRevision = hr.w;
+  gInstGore = (*inst)[base + ${REC_GORE}].x;
 }
 `;
 
@@ -3330,6 +3335,157 @@ export const MARCH_TRACE_LOOP = /* wgsl */ `  var t = clamp(max(max(max(max(star
     return vec4<f32>(gDebugVolumeSamples, gDebugVolumeFallbacks, select(0.0, 1.0, hit), t);
   }
 `;
+/** Shared projection/colour/relief layer for live flesh and settled head meshes. */
+export const FACE_LAYER_WGSL = /* wgsl */ `  // Emissive mask from the face sheet; added into the lit colour further down.
+  var faceGlow = 0.0;
+  // Decal coverage at this pixel (facing * alpha, decal mode only): drives
+  // the FLAT-LIGHTING blend at fleshLit. A painted PSX face is authored
+  // pre-lit; shading it again buries the nose and lips under the fringe
+  // shadow and the jaw's diffuse falloff.
+  var faceFlat = 0.0;
+
+  // Face texture, before wounds and char so damage still paints over it.
+  if (faceCfg.x > 0.5) {
+    let forward = faceCfg.z;
+    // Head-space position, normalised PER AXIS by the skull's own semi-axes —
+    // re-uploaded every frame from the posed primitives, so the projection
+    // rides the head as it jiggles without a full rest-space transform. One
+    // scalar radius put whichever axis was largest exactly on the head-mask
+    // cutoff, and raising headDepth then erased the entire face.
+    // Un-rotate into the head's REST frame before projecting (motion-polish):
+    // the rigid head pass rotates the skull masses, and a projection that
+    // stays axis-aligned paints the face onto whichever side happens to face
+    // front — nose mass out the ear, eyes off the brow. Rotation by the
+    // CONJUGATE of the head quaternion (v' = v + 2*cross(-q.xyz, cross(-q.xyz, v) + q.w*v)).
+    let hql = -gInstHeadQuat.xyz;
+    let hpv = p - gInstHeadCentre;
+    let hrot = hpv + 2.0 * cross(hql, cross(hql, hpv) + gInstHeadQuat.w * hpv);
+    let hs = hrot / max(headAxes, vec3<f32>(1e-4, 1e-4, 1e-4));
+    var raw = vec2<f32>(hs.x * forward, hs.y);
+    if (faceCfg2.x > 0.5) {
+      let dir = normalize(hs);
+      // Longitude measured from the front, latitude from the equator. Both
+      // normalised to -1..1 so faceProj means the same thing in either mode.
+      // NOTE atan2 — GLSL's two-argument atan() renames on this path.
+      raw = vec2<f32>(
+        atan2(dir.x * forward, dir.z * forward) / 3.14159265,
+        asin(clamp(dir.y, -1.0, 1.0)) / 1.57079633);
+    }
+    let uv0 = raw * faceProj.xy + faceProj.zw;
+    // Melt drips the face off the skull (task 8): sag drags features DOWN
+    // (see the FACE_MELT_SAG comment at the constants for why positive is
+    // down), the stretch elongates them as they go. The offset alone would
+    // slide a rigid face downward like a sticker.
+    let meltSag = gInstMelt.x;
+    var uv = uv0;
+    uv.y = uv0.y + meltSag * ${FACE_MELT_SAG} - (uv0.y - faceProj.w) * meltSag * ${FACE_MELT_STRETCH};
+    // Fade by how squarely this surface faces the front, so the projection does
+    // not smear a second face down the sides and back of the skull. A planar
+    // projection derives uv from x/y alone, so as the surface turns away it
+    // repeats the same uv column and STREAKS; fading out well before edge-on
+    // hides that.
+    // The facing axis is the head's rotated forward, not world +z.
+    // The lower bound widens toward FACE_MELT_FADE_LO as the melt flattens
+    // the head: a squashed skull's surface turns away from the forward axis
+    // far sooner than a round one's, and the un-widened cutoff faded the
+    // face out before it had finished dripping.
+    let hfw = vec3<f32>(0.0, 0.0, forward);
+    let hfr = hfw + 2.0 * cross(gInstHeadQuat.xyz, cross(gInstHeadQuat.xyz, hfw) + gInstHeadQuat.w * hfw);
+    var facing = smoothstep(mix(0.28, ${FACE_MELT_FADE_LO}, gInstMelt.x), 0.66, dot(n, hfr));
+    // Confine it to the HEAD. Generous, because the surface now sits at
+    // |hs| ~= 1 everywhere and the jaw hangs past that: this is only a backstop
+    // against wrapping onto the neck.
+    // A DECAL (faceCfg.x == 2) gets half again the reach: hs is normalised by
+    // the FATTEST head prim, which on a character with hair is the crown
+    // shell, centred well above the face -- the schoolgirl's mouth sat at
+    // |hs| 1.55 and faded out at every projection setting. The decal's own
+    // alpha and the facing fade bound it instead.
+    // FACE MODE, faceCfg.x: 1 = sheet (MULTIPLY the rgb), 2 = decal (REPLACE
+    // the albedo), 3 = LUMA multiply. Mode 3 exists because multiplying two
+    // COLOURED values compounds their hue -- a skin-toned bake times skin-toned
+    // flesh reads more saturated than either, which the owner spotted as the
+    // face looking "more saturated from the surrounding skin". Using the
+    // decal's LUMINANCE as a scalar modulates brightness and leaves hue alone.
+    // Modes 1 and 2 are untouched and bit-identical.
+    let decal = select(0.0, 1.0, abs(faceCfg.x - 2.0) < 0.5);
+    let lumaOnly = abs(faceCfg.x - 3.0) < 0.5;
+    let reach = 1.0 + 0.5 * decal;
+    facing = facing * (1.0 - smoothstep(1.30 * reach, 1.70 * reach, length(hs)));
+    if (facing > 0.0 && uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) {
+      let base = uv * faceAtlas.xy + faceAtlas.zw;
+      // Not linearised, deliberately: the sheet is sRGB-encoded and so are the
+      // hand-tuned flesh colours it blends against, which were authored to
+      // compensate for the missing output encode. Revisit both together at the
+      // preset retune, not before.
+      let tex = texel(faceTex, base);
+      faceFlat = facing * tex.a * decal;
+      let W = vec3<f32>(0.2126, 0.7152, 0.0722);
+      // DECAL mode (faceCfg.x == 2): the sheet is a colour image baked off a
+      // reference mesh and pasted on as albedo where its alpha is set, the way
+      // a PSX face was painted onto a head. No luma glow -- a photo is bright in
+      // many places that are not eyes -- and no relief, because its luminance
+      // edges (hairline, lips) are colour changes, not height.
+      faceGlow = smoothstep(faceCfg2.z, 1.0, dot(tex.rgb, W)) * facing * tex.a * (1.0 - decal);
+      // Opt-in painted red eyes: brightness alone would select skin/teeth.
+      // Red dominance rejects those, and the brightness gate rejects dark
+      // reddish hair/mouth pixels. This mask works with Replace albedo too.
+      if (faceGlowRedOnly > 0.5) {
+        let redDominance = (tex.r - max(tex.g, tex.b)) / max(tex.r, 0.001);
+        let redMask = smoothstep(min(faceCfg2.z, 0.999), 1.0, redDominance)
+                    * smoothstep(0.35, 0.70, tex.r);
+        faceGlow = redMask * facing * tex.a * clamp(faceCfg.y, 0.0, 1.0)
+                 * clamp(faceCfg2.w, 0.0, 1.0);
+      }
+
+      // Otherwise a MULTIPLIER, not a replacement: the generated sheet carries
+      // baked lighting, so pasting it in as albedo and lighting it again
+      // double-shades. Dividing by its measured mean keeps the pattern and
+      // throws away level.
+      // Luma mode divides by the same mean, so an average texel still
+      // multiplies by ~1 and the level is unchanged -- only the hue shift goes.
+      let detailSrc = select(tex.rgb, vec3<f32>(dot(tex.rgb, W)), lumaOnly);
+      let detail = detailSrc / max(faceCfg2.y, 1e-3);
+      // Skip the multiply where it glows: an eye is not tinted flesh, and the
+      // emissive term below supplies its colour outright.
+      // Soldier uses the otherwise unique red-only face flag. Its Replace
+      // decal must yield to the wound mask or it paints pale forehead pixels
+      // back over the tissue ramp after the crater was shaded.
+      let woundDecalFade = 1.0 - faceGlowRedOnly * smoothstep(0.02, 0.25, wm);
+      albedo = mix(albedo, mix(albedo * detail, tex.rgb, decal),
+                   facing * tex.a * faceCfg.y * (1.0 - faceGlow) * woundDecalFade);
+      // Keep only the decal's dark facial structure over damaged Soldier
+      // tissue. This restores sockets/nose/mouth contrast without pasting its
+      // intact skin colour back onto the red wound.
+      let damagedFace = faceGlowRedOnly * smoothstep(0.02, 0.62, wm) * facing * tex.a;
+      let faceShadow = clamp(1.0 - dot(tex.rgb, W) / max(faceCfg2.y, 1e-3), 0.0, 1.0);
+      albedo = albedo * (1.0 - faceShadow * damagedFace * 0.78);
+
+      // Relief. Central differences on luminance give the height gradient; the
+      // projection is planar along z, so its tangent basis is just x and y and
+      // the bump drops straight into world space with no TBN to build.
+      if (faceCfg.w > 0.0 && decal < 0.5) {
+        let e = faceAtlas.xy * 0.012;
+        let hL = dot(texel(faceTex, base - vec2<f32>(e.x, 0.0)).rgb, W);
+        let hR = dot(texel(faceTex, base + vec2<f32>(e.x, 0.0)).rgb, W);
+        let hD = dot(texel(faceTex, base - vec2<f32>(0.0, e.y)).rgb, W);
+        let hU = dot(texel(faceTex, base + vec2<f32>(0.0, e.y)).rgb, W);
+        // Negated: the gradient points UPHILL, and a normal tilts away from
+        // rising ground. Without this the sockets would bulge instead of sink.
+        let bumpL = vec3<f32>(-(hR - hL) * forward, -(hU - hD), 0.0);
+        // The bump lives in the PROJECTION frame (the un-rotated head/hand
+        // space the uv was derived in) — rotate it by headQuat into world,
+        // the same rotation hfr gets above. Identity for an unrotated head;
+        // load-bearing for the hands view, whose frame is a large rotation
+        // (Opus hands round 3 — grooves shaded from a skewed direction).
+        let bump = bumpL
+          + 2.0 * cross(gInstHeadQuat.xyz, cross(gInstHeadQuat.xyz, bumpL) + gInstHeadQuat.w * bumpL);
+        // Suppressed where it glows: bright means RAISED to a height map, so
+        // without this the eyes bulge out of their sockets.
+        n = normalize(n + bump * faceCfg.w * facing * tex.a * (1.0 - faceGlow));
+      }
+    }
+  }`;
+
 export const MARCH_TRACE_POST = /* wgsl */ `  if (!hit) { discard; }
   // Reload the slot whose field won the union fold. Every post-hit row read
   // below (material, rest anchor, face, wound masks) is the HIT instance's.
@@ -3544,7 +3700,7 @@ export const MARCH_TRACE_POST = /* wgsl */ `  if (!hit) { discard; }
   // thinning flesh with no wound anywhere near it (the bareBones bypass), so
   // the wm gate alone would leave an exposed bone unidentified and it would
   // shade as meat — the exact pale-vs-red contrast the melt lives on lost.
-  if ((wm > 0.0 || gInstMelt.x > 0.0) && hitBest >= 0) {
+  if ((wm > 0.0 || gInstMelt.x > 0.0 || gInstCounts2.y > 0.5) && hitBest >= 0) {
     hitMat = textureLoad(data, vec2<i32>(hitBest, ${ROW_PRIM_SCALE} + gBand), 0).w;
   }
   let isOrgan = hitMat > 4.5 && hitMat < 5.5;
@@ -3605,164 +3761,25 @@ export const MARCH_TRACE_POST = /* wgsl */ `  if (!hit) { discard; }
   // and char painted over the gore, and before the wet line, which maxes wm
   // against gore. goreStrength is 0 on the body view, so standing bodies skip
   // the whole block — including its fbm — and shade exactly as before.
-  let goreStrength = lodCfg.w;
+  //
+  // TASK 3: the gate is the MAX of the per-view uniform (non-crowd draws and
+  // chunk views) and the per-instance record. The crowd shares ONE material, so
+  // a doomed body in a crowd could not ramp its gore through lodCfg.w without
+  // repainting the whole type; gInstGore carries its own ramp (REC_GORE).
+  let goreStrength = max(lodCfg.w, gInstGore);
   var gore = 0.0;
   if (goreStrength > 0.0) {
     let mottle = clamp(fbm(anchor * 6.0) * 0.5 + 0.5, 0.0, 1.0);
     gore = clamp(mottle * 0.55 + wm * 0.65, 0.0, 1.0) * goreStrength;
     let clot = deepColor * 0.55;
     albedo = mix(albedo, mix(deepColor, clot, mottle), gore * 0.85);
+    // Capped blast cuts have no spherical torn-end wound. Stain their flesh
+    // without carving away the caps; mirror this in bakeChunkAlbedo.
+    let stain = smoothstep(0.40, 0.68, mottle) * goreStrength;
+    albedo = mix(albedo, deepColor * 0.22, stain * 0.85);
   }
 
-  // Emissive mask from the face sheet; added into the lit colour further down.
-  var faceGlow = 0.0;
-  // Decal coverage at this pixel (facing * alpha, decal mode only): drives
-  // the FLAT-LIGHTING blend at fleshLit. A painted PSX face is authored
-  // pre-lit; shading it again buries the nose and lips under the fringe
-  // shadow and the jaw's diffuse falloff.
-  var faceFlat = 0.0;
-
-  // Face texture, before wounds and char so damage still paints over it.
-  if (faceCfg.x > 0.5) {
-    let forward = faceCfg.z;
-    // Head-space position, normalised PER AXIS by the skull's own semi-axes —
-    // re-uploaded every frame from the posed primitives, so the projection
-    // rides the head as it jiggles without a full rest-space transform. One
-    // scalar radius put whichever axis was largest exactly on the head-mask
-    // cutoff, and raising headDepth then erased the entire face.
-    // Un-rotate into the head's REST frame before projecting (motion-polish):
-    // the rigid head pass rotates the skull masses, and a projection that
-    // stays axis-aligned paints the face onto whichever side happens to face
-    // front — nose mass out the ear, eyes off the brow. Rotation by the
-    // CONJUGATE of the head quaternion (v' = v + 2*cross(-q.xyz, cross(-q.xyz, v) + q.w*v)).
-    let hql = -gInstHeadQuat.xyz;
-    let hpv = p - gInstHeadCentre;
-    let hrot = hpv + 2.0 * cross(hql, cross(hql, hpv) + gInstHeadQuat.w * hpv);
-    let hs = hrot / max(headAxes, vec3<f32>(1e-4, 1e-4, 1e-4));
-    var raw = vec2<f32>(hs.x * forward, hs.y);
-    if (faceCfg2.x > 0.5) {
-      let dir = normalize(hs);
-      // Longitude measured from the front, latitude from the equator. Both
-      // normalised to -1..1 so faceProj means the same thing in either mode.
-      // NOTE atan2 — GLSL's two-argument atan() renames on this path.
-      raw = vec2<f32>(
-        atan2(dir.x * forward, dir.z * forward) / 3.14159265,
-        asin(clamp(dir.y, -1.0, 1.0)) / 1.57079633);
-    }
-    let uv0 = raw * faceProj.xy + faceProj.zw;
-    // Melt drips the face off the skull (task 8): sag drags features DOWN
-    // (see the FACE_MELT_SAG comment at the constants for why positive is
-    // down), the stretch elongates them as they go. The offset alone would
-    // slide a rigid face downward like a sticker.
-    let meltSag = gInstMelt.x;
-    var uv = uv0;
-    uv.y = uv0.y + meltSag * ${FACE_MELT_SAG} - (uv0.y - faceProj.w) * meltSag * ${FACE_MELT_STRETCH};
-    // Fade by how squarely this surface faces the front, so the projection does
-    // not smear a second face down the sides and back of the skull. A planar
-    // projection derives uv from x/y alone, so as the surface turns away it
-    // repeats the same uv column and STREAKS; fading out well before edge-on
-    // hides that.
-    // The facing axis is the head's rotated forward, not world +z.
-    // The lower bound widens toward FACE_MELT_FADE_LO as the melt flattens
-    // the head: a squashed skull's surface turns away from the forward axis
-    // far sooner than a round one's, and the un-widened cutoff faded the
-    // face out before it had finished dripping.
-    let hfw = vec3<f32>(0.0, 0.0, forward);
-    let hfr = hfw + 2.0 * cross(gInstHeadQuat.xyz, cross(gInstHeadQuat.xyz, hfw) + gInstHeadQuat.w * hfw);
-    var facing = smoothstep(mix(0.28, ${FACE_MELT_FADE_LO}, gInstMelt.x), 0.66, dot(n, hfr));
-    // Confine it to the HEAD. Generous, because the surface now sits at
-    // |hs| ~= 1 everywhere and the jaw hangs past that: this is only a backstop
-    // against wrapping onto the neck.
-    // A DECAL (faceCfg.x == 2) gets half again the reach: hs is normalised by
-    // the FATTEST head prim, which on a character with hair is the crown
-    // shell, centred well above the face -- the schoolgirl's mouth sat at
-    // |hs| 1.55 and faded out at every projection setting. The decal's own
-    // alpha and the facing fade bound it instead.
-    // FACE MODE, faceCfg.x: 1 = sheet (MULTIPLY the rgb), 2 = decal (REPLACE
-    // the albedo), 3 = LUMA multiply. Mode 3 exists because multiplying two
-    // COLOURED values compounds their hue -- a skin-toned bake times skin-toned
-    // flesh reads more saturated than either, which the owner spotted as the
-    // face looking "more saturated from the surrounding skin". Using the
-    // decal's LUMINANCE as a scalar modulates brightness and leaves hue alone.
-    // Modes 1 and 2 are untouched and bit-identical.
-    let decal = select(0.0, 1.0, abs(faceCfg.x - 2.0) < 0.5);
-    let lumaOnly = abs(faceCfg.x - 3.0) < 0.5;
-    let reach = 1.0 + 0.5 * decal;
-    facing = facing * (1.0 - smoothstep(1.30 * reach, 1.70 * reach, length(hs)));
-    if (facing > 0.0 && uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) {
-      let base = uv * faceAtlas.xy + faceAtlas.zw;
-      // Not linearised, deliberately: the sheet is sRGB-encoded and so are the
-      // hand-tuned flesh colours it blends against, which were authored to
-      // compensate for the missing output encode. Revisit both together at the
-      // preset retune, not before.
-      let tex = texel(faceTex, base);
-      faceFlat = facing * tex.a * decal;
-      let W = vec3<f32>(0.2126, 0.7152, 0.0722);
-      // DECAL mode (faceCfg.x == 2): the sheet is a colour image baked off a
-      // reference mesh and pasted on as albedo where its alpha is set, the way
-      // a PSX face was painted onto a head. No luma glow -- a photo is bright in
-      // many places that are not eyes -- and no relief, because its luminance
-      // edges (hairline, lips) are colour changes, not height.
-      faceGlow = smoothstep(faceCfg2.z, 1.0, dot(tex.rgb, W)) * facing * tex.a * (1.0 - decal);
-      // Opt-in painted red eyes: brightness alone would select skin/teeth.
-      // Red dominance rejects those, and the brightness gate rejects dark
-      // reddish hair/mouth pixels. This mask works with Replace albedo too.
-      if (faceGlowRedOnly > 0.5) {
-        let redDominance = (tex.r - max(tex.g, tex.b)) / max(tex.r, 0.001);
-        let redMask = smoothstep(min(faceCfg2.z, 0.999), 1.0, redDominance)
-                    * smoothstep(0.35, 0.70, tex.r);
-        faceGlow = redMask * facing * tex.a * clamp(faceCfg.y, 0.0, 1.0)
-                 * clamp(faceCfg2.w, 0.0, 1.0);
-      }
-
-      // Otherwise a MULTIPLIER, not a replacement: the generated sheet carries
-      // baked lighting, so pasting it in as albedo and lighting it again
-      // double-shades. Dividing by its measured mean keeps the pattern and
-      // throws away level.
-      // Luma mode divides by the same mean, so an average texel still
-      // multiplies by ~1 and the level is unchanged -- only the hue shift goes.
-      let detailSrc = select(tex.rgb, vec3<f32>(dot(tex.rgb, W)), lumaOnly);
-      let detail = detailSrc / max(faceCfg2.y, 1e-3);
-      // Skip the multiply where it glows: an eye is not tinted flesh, and the
-      // emissive term below supplies its colour outright.
-      // Soldier uses the otherwise unique red-only face flag. Its Replace
-      // decal must yield to the wound mask or it paints pale forehead pixels
-      // back over the tissue ramp after the crater was shaded.
-      let woundDecalFade = 1.0 - faceGlowRedOnly * smoothstep(0.02, 0.25, wm);
-      albedo = mix(albedo, mix(albedo * detail, tex.rgb, decal),
-                   facing * tex.a * faceCfg.y * (1.0 - faceGlow) * woundDecalFade);
-      // Keep only the decal's dark facial structure over damaged Soldier
-      // tissue. This restores sockets/nose/mouth contrast without pasting its
-      // intact skin colour back onto the red wound.
-      let damagedFace = faceGlowRedOnly * smoothstep(0.02, 0.62, wm) * facing * tex.a;
-      let faceShadow = clamp(1.0 - dot(tex.rgb, W) / max(faceCfg2.y, 1e-3), 0.0, 1.0);
-      albedo = albedo * (1.0 - faceShadow * damagedFace * 0.78);
-
-      // Relief. Central differences on luminance give the height gradient; the
-      // projection is planar along z, so its tangent basis is just x and y and
-      // the bump drops straight into world space with no TBN to build.
-      if (faceCfg.w > 0.0 && decal < 0.5) {
-        let e = faceAtlas.xy * 0.012;
-        let hL = dot(texel(faceTex, base - vec2<f32>(e.x, 0.0)).rgb, W);
-        let hR = dot(texel(faceTex, base + vec2<f32>(e.x, 0.0)).rgb, W);
-        let hD = dot(texel(faceTex, base - vec2<f32>(0.0, e.y)).rgb, W);
-        let hU = dot(texel(faceTex, base + vec2<f32>(0.0, e.y)).rgb, W);
-        // Negated: the gradient points UPHILL, and a normal tilts away from
-        // rising ground. Without this the sockets would bulge instead of sink.
-        let bumpL = vec3<f32>(-(hR - hL) * forward, -(hU - hD), 0.0);
-        // The bump lives in the PROJECTION frame (the un-rotated head/hand
-        // space the uv was derived in) — rotate it by headQuat into world,
-        // the same rotation hfr gets above. Identity for an unrotated head;
-        // load-bearing for the hands view, whose frame is a large rotation
-        // (Opus hands round 3 — grooves shaded from a skewed direction).
-        let bump = bumpL
-          + 2.0 * cross(gInstHeadQuat.xyz, cross(gInstHeadQuat.xyz, bumpL) + gInstHeadQuat.w * bumpL);
-        // Suppressed where it glows: bright means RAISED to a height map, so
-        // without this the eyes bulge out of their sockets.
-        n = normalize(n + bump * faceCfg.w * facing * tex.a * (1.0 - faceGlow));
-      }
-    }
-  }
+${FACE_LAYER_WGSL}
 
   // Soldier-only wet blood stain. This uses the existing character flag and
   // the one authoritative wound mask, so it affects head and torso lips while
@@ -3848,23 +3865,30 @@ export const MARCH_TRACE_POST = /* wgsl */ `  if (!hit) { discard; }
   // meltCfg.x is 0 everywhere except a melting body and its released bone
   // chunks, so every other pixel shades bit-identical to before this existed.
   let meltU = smoothstep(0.0, 1.0, clamp(gInstMelt.x * 2.0, 0.0, 1.0));
-  if (meltU > 0.0) {
-    if (isBone) {
-      albedo = mix(albedo, boneColor, meltU * 0.9);
-    } else {
-      // Patchy, not uniform: skin sloughs in pieces. Each point crosses over
-      // at its OWN progress, read off the rest-space anchor, and the patches
-      // scaled past 1.0 by MELT_SKIN_KEEP never cross at all — so pink skin
-      // survives in the finished puddle instead of everything staining red
-      // together. See the constants for the owner's brief.
-      // NB 'patch' is a RESERVED KEYWORD in WGSL — naming this variable that
-      // compiles fine in TypeScript and fails the shader at runtime, which
-      // renders the body invisible rather than erroring anywhere a test looks.
-      let skinPatch = clamp(fbm(anchor * ${MELT_SKIN_PATCH_FREQ}) * ${MELT_SKIN_CONTRAST} * 0.5 + 0.5, 0.0, 1.0);
-      let thresh = skinPatch * ${MELT_SKIN_KEEP};
-      let local = smoothstep(thresh - ${MELT_SKIN_PATCH_SOFT}, thresh + ${MELT_SKIN_PATCH_SOFT}, meltU);
-      albedo = mix(albedo, deepColor * 0.8, local * 0.8);
-    }
+  // BONE EXPOSURE (body-to-gib rupture). A live body whose procedural skeleton
+  // is folded bare (counts2.y, set while the flesh is pulled off it) has bones
+  // winning the fold with no wound and no melt anywhere near, so the paleness
+  // cannot ride meltU — that would require meltCfg.x > 0 and drag the skin
+  // reddening and face sag of an actual melt onto a body that is being TORN,
+  // not liquefied. bareBoneU is the separate, monotone "this row is exposed
+  // bone" flag; the flesh branch below still runs only for a real melt.
+  let bareBoneU = select(0.0, 1.0, gInstCounts2.y > 0.5);
+  let bonePaleU = max(bareBoneU, meltU);
+  if (isBone && bonePaleU > 0.0) {
+    albedo = mix(albedo, boneColor, bonePaleU * 0.9);
+  } else if (meltU > 0.0) {
+    // Patchy, not uniform: skin sloughs in pieces. Each point crosses over
+    // at its OWN progress, read off the rest-space anchor, and the patches
+    // scaled past 1.0 by MELT_SKIN_KEEP never cross at all — so pink skin
+    // survives in the finished puddle instead of everything staining red
+    // together. See the constants for the owner's brief.
+    // NB 'patch' is a RESERVED KEYWORD in WGSL — naming this variable that
+    // compiles fine in TypeScript and fails the shader at runtime, which
+    // renders the body invisible rather than erroring anywhere a test looks.
+    let skinPatch = clamp(fbm(anchor * ${MELT_SKIN_PATCH_FREQ}) * ${MELT_SKIN_CONTRAST} * 0.5 + 0.5, 0.0, 1.0);
+    let thresh = skinPatch * ${MELT_SKIN_KEEP};
+    let local = smoothstep(thresh - ${MELT_SKIN_PATCH_SOFT}, thresh + ${MELT_SKIN_PATCH_SOFT}, meltU);
+    albedo = mix(albedo, deepColor * 0.8, local * 0.8);
   }
 `;
 export const MARCH_BODY_TRACE = /* wgsl */ `${MARCH_TRACE_SETUP}${MARCH_TRACE_LOOP}${MARCH_TRACE_POST}`;
@@ -3897,12 +3921,14 @@ export const MARCH_BODY_SURFACE_PREP = /* wgsl */ `
   // Melt wetness (task 6): liquefying flesh goes FULLY wet — the puddle
   // glistens. FLESH ONLY: bone stays matte (the anchor comment above — wet
   // skin reflects, wet bone just looks polished), and that matte-vs-wet
-  // contrast is what makes pale bones read inside the red puddle.
+  // contrast is what makes pale bones read inside the red puddle. The same
+  // branch now covers a RUPTURING body's bare bones (bareBoneU), so exposed
+  // ribs read matte there too.
   // 1.6, the wound-wetness precedent: 2.2 was the first guess and the
   // near-level capture showed the whole grazing-angle puddle clipping to
   // paper white — wet, yes; blown out, no.
-  if (meltU > 0.0) {
-    wet = mix(wet, select(1.6, 0.45, isBone), meltU);
+  if (bonePaleU > 0.0) {
+    wet = mix(wet, select(1.6, 0.45, isBone), bonePaleU);
   }
   // The legacy shine exponent, named so the lighting tail and the deferred
   // surface output share one definition: the surface's roughness inverts the

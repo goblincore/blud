@@ -1,0 +1,2001 @@
+{
+ "set": "before",
+ "label": "before3",
+ "url": "http://localhost:5480/sdf-game.html?room=arena&gibbones=core&pipelinelog=1&seed=7&crowd=1&vhs=blud&res=800",
+ "startedAt": "2026-09-16T16:49:54.340Z",
+ "warmWallMs": 3901,
+ "backendWallMs": 1367,
+ "warm": {
+  "ms": 2385,
+  "bootBeforeWarmMs": 10,
+  "flipped": 61,
+  "flippedNames": [
+   "PointLight:?",
+   "PointLight:?",
+   "PointLight:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Group:shell-eject-0",
+   "Group:shell-load-0",
+   "Group:shell-eject-1",
+   "Group:shell-load-1",
+   "Group:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?"
+  ],
+  "passes": 11,
+  "computes": 7,
+  "phases": {
+   "flip": 0.10000002384185791,
+   "crowdBinsPerType": [
+    3.4,
+    1.6,
+    1.6,
+    1.5,
+    1.5,
+    1.3,
+    1.4
+   ],
+   "crowdBins": 12.299999952316284,
+   "goo": 117.5,
+   "drawOnce": 1697,
+   "precompile": 558.3999999761581
+  }
+ },
+ "actions": {
+  "roomEntry": {
+   "wallMs": 1417,
+   "frames": {
+    "n": 74,
+    "p50": 10.7,
+    "p95": 61.4,
+    "max": 89
+   },
+   "pipelinesCreated": 1,
+   "compileMs": 0,
+   "longFramesAdded": 0,
+   "longFrames": []
+  },
+  "firstShot": {
+   "wallMs": 504,
+   "frames": {
+    "n": 27,
+    "p50": 11.8,
+    "p95": 55,
+    "max": 73.7
+   },
+   "pipelinesCreated": 0,
+   "compileMs": 0,
+   "longFramesAdded": 0,
+   "longFrames": []
+  },
+  "repeatShot0": {
+   "wallMs": 463,
+   "frames": {
+    "n": 27,
+    "p50": 25.6,
+    "p95": 38,
+    "max": 43.3
+   },
+   "pipelinesCreated": 3,
+   "compileMs": 0,
+   "longFramesAdded": 0,
+   "longFrames": []
+  },
+  "repeatShot1": {
+   "wallMs": 463,
+   "frames": {
+    "n": 28,
+    "p50": 27.9,
+    "p95": 30.9,
+    "max": 32
+   },
+   "pipelinesCreated": 0,
+   "compileMs": 0,
+   "longFramesAdded": 0,
+   "longFrames": []
+  },
+  "repeatShot2": {
+   "wallMs": 466,
+   "frames": {
+    "n": 28,
+    "p50": 26.9,
+    "p95": 29,
+    "max": 29.5
+   },
+   "pipelinesCreated": 0,
+   "compileMs": 0,
+   "longFramesAdded": 0,
+   "longFrames": []
+  },
+  "repeatShot3": {
+   "wallMs": 466,
+   "frames": {
+    "n": 28,
+    "p50": 27.1,
+    "p95": 29.1,
+    "max": 29.2
+   },
+   "pipelinesCreated": 0,
+   "compileMs": 0,
+   "longFramesAdded": 0,
+   "longFrames": []
+  },
+  "repeatShot4": {
+   "wallMs": 467,
+   "frames": {
+    "n": 27,
+    "p50": 6.2,
+    "p95": 30.2,
+    "max": 30.9
+   },
+   "pipelinesCreated": 0,
+   "compileMs": 0,
+   "longFramesAdded": 0,
+   "longFrames": []
+  },
+  "repeatShot5": {
+   "wallMs": 470,
+   "frames": {
+    "n": 28,
+    "p50": 28,
+    "p95": 30.7,
+    "max": 30.8
+   },
+   "pipelinesCreated": 0,
+   "compileMs": 0,
+   "longFramesAdded": 0,
+   "longFrames": []
+  },
+  "repeatBlast0": {
+   "wallMs": 458,
+   "frames": {
+    "n": 15,
+    "p50": 18.4,
+    "p95": 233.4,
+    "max": 233.4
+   },
+   "pipelinesCreated": 17,
+   "compileMs": 1,
+   "longFramesAdded": 1,
+   "longFrames": [
+    {
+     "frame": 382,
+     "ms": 216.8,
+     "creations": 17,
+     "names": [
+      "renderPipeline_MeshBasicNodeMaterial_191",
+      "renderPipeline_MeshStandardMaterial_384",
+      "renderPipeline_MeshStandardMaterial_494",
+      "renderPipeline_MeshStandardMaterial_537",
+      "renderPipeline_MeshStandardMaterial_576",
+      "renderPipeline_MeshBasicMaterial_783"
+     ]
+    }
+   ]
+  },
+  "repeatBlast1": {
+   "wallMs": 621,
+   "frames": {
+    "n": 12,
+    "p50": 17.2,
+    "p95": 223.1,
+    "max": 223.1
+   },
+   "pipelinesCreated": 35,
+   "compileMs": 1,
+   "longFramesAdded": 2,
+   "longFrames": [
+    {
+     "frame": 390,
+     "ms": 206.4,
+     "creations": 17,
+     "names": [
+      "renderPipeline_MeshBasicNodeMaterial_191",
+      "renderPipeline_MeshStandardMaterial_384",
+      "renderPipeline_MeshStandardMaterial_494",
+      "renderPipeline_MeshStandardMaterial_537",
+      "renderPipeline_MeshStandardMaterial_576",
+      "renderPipeline_MeshBasicMaterial_783"
+     ]
+    },
+    {
+     "frame": 395,
+     "ms": 181.7,
+     "creations": 18,
+     "names": [
+      "renderPipeline_MeshBasicNodeMaterial_191",
+      "renderPipeline_MeshStandardMaterial_384",
+      "renderPipeline_MeshStandardMaterial_494",
+      "renderPipeline_MeshStandardMaterial_537",
+      "renderPipeline_MeshStandardMaterial_576",
+      "renderPipeline_MeshBasicMaterial_783"
+     ]
+    }
+   ]
+  },
+  "repeatBlast2": {
+   "wallMs": 566,
+   "frames": {
+    "n": 12,
+    "p50": 16,
+    "p95": 222.1,
+    "max": 222.1
+   },
+   "pipelinesCreated": 35,
+   "compileMs": 0,
+   "longFramesAdded": 2,
+   "longFrames": [
+    {
+     "frame": 397,
+     "ms": 193.3,
+     "creations": 18,
+     "names": [
+      "renderPipeline_MeshBasicNodeMaterial_191",
+      "renderPipeline_MeshStandardMaterial_384",
+      "renderPipeline_MeshStandardMaterial_494",
+      "renderPipeline_MeshStandardMaterial_537",
+      "renderPipeline_MeshStandardMaterial_576",
+      "renderPipeline_MeshBasicMaterial_783"
+     ]
+    },
+    {
+     "frame": 402,
+     "ms": 179.6,
+     "creations": 17,
+     "names": [
+      "renderPipeline_MeshBasicNodeMaterial_191",
+      "renderPipeline_MeshStandardMaterial_384",
+      "renderPipeline_MeshStandardMaterial_494",
+      "renderPipeline_MeshStandardMaterial_537",
+      "renderPipeline_MeshStandardMaterial_576",
+      "renderPipeline_MeshBasicMaterial_783"
+     ]
+    }
+   ]
+  },
+  "repeatBlast3": {
+   "wallMs": 562,
+   "frames": {
+    "n": 10,
+    "p50": 24,
+    "p95": 234,
+    "max": 234
+   },
+   "pipelinesCreated": 34,
+   "compileMs": 1,
+   "longFramesAdded": 2,
+   "longFrames": [
+    {
+     "frame": 404,
+     "ms": 215.9,
+     "creations": 17,
+     "names": [
+      "renderPipeline_MeshBasicNodeMaterial_191",
+      "renderPipeline_MeshStandardMaterial_384",
+      "renderPipeline_MeshStandardMaterial_494",
+      "renderPipeline_MeshStandardMaterial_537",
+      "renderPipeline_MeshStandardMaterial_576",
+      "renderPipeline_MeshBasicMaterial_783"
+     ]
+    },
+    {
+     "frame": 409,
+     "ms": 187.4,
+     "creations": 17,
+     "names": [
+      "renderPipeline_MeshBasicNodeMaterial_191",
+      "renderPipeline_MeshStandardMaterial_384",
+      "renderPipeline_MeshStandardMaterial_494",
+      "renderPipeline_MeshStandardMaterial_537",
+      "renderPipeline_MeshStandardMaterial_576",
+      "renderPipeline_MeshBasicMaterial_783"
+     ]
+    }
+   ]
+  },
+  "repeatBlast4": {
+   "wallMs": 553,
+   "frames": {
+    "n": 11,
+    "p50": 15.6,
+    "p95": 203.3,
+    "max": 203.3
+   },
+   "pipelinesCreated": 34,
+   "compileMs": 1,
+   "longFramesAdded": 2,
+   "longFrames": [
+    {
+     "frame": 411,
+     "ms": 186.5,
+     "creations": 17,
+     "names": [
+      "renderPipeline_MeshBasicNodeMaterial_191",
+      "renderPipeline_MeshStandardMaterial_384",
+      "renderPipeline_MeshStandardMaterial_494",
+      "renderPipeline_MeshStandardMaterial_537",
+      "renderPipeline_MeshStandardMaterial_576",
+      "renderPipeline_MeshBasicMaterial_783"
+     ]
+    },
+    {
+     "frame": 416,
+     "ms": 180.1,
+     "creations": 17,
+     "names": [
+      "renderPipeline_MeshBasicNodeMaterial_191",
+      "renderPipeline_MeshStandardMaterial_384",
+      "renderPipeline_MeshStandardMaterial_494",
+      "renderPipeline_MeshStandardMaterial_537",
+      "renderPipeline_MeshStandardMaterial_576",
+      "renderPipeline_MeshBasicMaterial_783"
+     ]
+    }
+   ]
+  },
+  "repeatBlast5": {
+   "wallMs": 550,
+   "frames": {
+    "n": 12,
+    "p50": 11.6,
+    "p95": 210.6,
+    "max": 210.6
+   },
+   "pipelinesCreated": 34,
+   "compileMs": 0,
+   "longFramesAdded": 2,
+   "longFrames": [
+    {
+     "frame": 418,
+     "ms": 194,
+     "creations": 17,
+     "names": [
+      "renderPipeline_MeshBasicNodeMaterial_191",
+      "renderPipeline_MeshStandardMaterial_384",
+      "renderPipeline_MeshStandardMaterial_494",
+      "renderPipeline_MeshStandardMaterial_537",
+      "renderPipeline_MeshStandardMaterial_576",
+      "renderPipeline_MeshBasicMaterial_783"
+     ]
+    },
+    {
+     "frame": 423,
+     "ms": 182.3,
+     "creations": 17,
+     "names": [
+      "renderPipeline_MeshBasicNodeMaterial_191",
+      "renderPipeline_MeshStandardMaterial_384",
+      "renderPipeline_MeshStandardMaterial_494",
+      "renderPipeline_MeshStandardMaterial_537",
+      "renderPipeline_MeshStandardMaterial_576",
+      "renderPipeline_MeshBasicMaterial_783"
+     ]
+    }
+   ]
+  }
+ },
+ "repeatedShots": {
+  "windows": 6,
+  "totalPipelinesCreated": 3,
+  "maxFrameMs": 43.3,
+  "maxP95": 38,
+  "longFrames": 0,
+  "perWindow": [
+   {
+    "created": 3,
+    "compileMs": 0,
+    "long": 0,
+    "p95": 38,
+    "max": 43.3,
+    "longFrameDetail": []
+   },
+   {
+    "created": 0,
+    "compileMs": 0,
+    "long": 0,
+    "p95": 30.9,
+    "max": 32,
+    "longFrameDetail": []
+   },
+   {
+    "created": 0,
+    "compileMs": 0,
+    "long": 0,
+    "p95": 29,
+    "max": 29.5,
+    "longFrameDetail": []
+   },
+   {
+    "created": 0,
+    "compileMs": 0,
+    "long": 0,
+    "p95": 29.1,
+    "max": 29.2,
+    "longFrameDetail": []
+   },
+   {
+    "created": 0,
+    "compileMs": 0,
+    "long": 0,
+    "p95": 30.2,
+    "max": 30.9,
+    "longFrameDetail": []
+   },
+   {
+    "created": 0,
+    "compileMs": 0,
+    "long": 0,
+    "p95": 30.7,
+    "max": 30.8,
+    "longFrameDetail": []
+   }
+  ]
+ },
+ "repeatedBlasts": {
+  "windows": 6,
+  "totalPipelinesCreated": 189,
+  "maxFrameMs": 234,
+  "maxP95": 234,
+  "longFrames": 11,
+  "perWindow": [
+   {
+    "created": 17,
+    "compileMs": 1,
+    "long": 1,
+    "p95": 233.4,
+    "max": 233.4,
+    "longFrameDetail": [
+     {
+      "frame": 382,
+      "ms": 216.8,
+      "creations": 17,
+      "names": [
+       "renderPipeline_MeshBasicNodeMaterial_191",
+       "renderPipeline_MeshStandardMaterial_384",
+       "renderPipeline_MeshStandardMaterial_494",
+       "renderPipeline_MeshStandardMaterial_537",
+       "renderPipeline_MeshStandardMaterial_576",
+       "renderPipeline_MeshBasicMaterial_783"
+      ]
+     }
+    ]
+   },
+   {
+    "created": 35,
+    "compileMs": 1,
+    "long": 2,
+    "p95": 223.1,
+    "max": 223.1,
+    "longFrameDetail": [
+     {
+      "frame": 390,
+      "ms": 206.4,
+      "creations": 17,
+      "names": [
+       "renderPipeline_MeshBasicNodeMaterial_191",
+       "renderPipeline_MeshStandardMaterial_384",
+       "renderPipeline_MeshStandardMaterial_494",
+       "renderPipeline_MeshStandardMaterial_537",
+       "renderPipeline_MeshStandardMaterial_576",
+       "renderPipeline_MeshBasicMaterial_783"
+      ]
+     },
+     {
+      "frame": 395,
+      "ms": 181.7,
+      "creations": 18,
+      "names": [
+       "renderPipeline_MeshBasicNodeMaterial_191",
+       "renderPipeline_MeshStandardMaterial_384",
+       "renderPipeline_MeshStandardMaterial_494",
+       "renderPipeline_MeshStandardMaterial_537",
+       "renderPipeline_MeshStandardMaterial_576",
+       "renderPipeline_MeshBasicMaterial_783"
+      ]
+     }
+    ]
+   },
+   {
+    "created": 35,
+    "compileMs": 0,
+    "long": 2,
+    "p95": 222.1,
+    "max": 222.1,
+    "longFrameDetail": [
+     {
+      "frame": 397,
+      "ms": 193.3,
+      "creations": 18,
+      "names": [
+       "renderPipeline_MeshBasicNodeMaterial_191",
+       "renderPipeline_MeshStandardMaterial_384",
+       "renderPipeline_MeshStandardMaterial_494",
+       "renderPipeline_MeshStandardMaterial_537",
+       "renderPipeline_MeshStandardMaterial_576",
+       "renderPipeline_MeshBasicMaterial_783"
+      ]
+     },
+     {
+      "frame": 402,
+      "ms": 179.6,
+      "creations": 17,
+      "names": [
+       "renderPipeline_MeshBasicNodeMaterial_191",
+       "renderPipeline_MeshStandardMaterial_384",
+       "renderPipeline_MeshStandardMaterial_494",
+       "renderPipeline_MeshStandardMaterial_537",
+       "renderPipeline_MeshStandardMaterial_576",
+       "renderPipeline_MeshBasicMaterial_783"
+      ]
+     }
+    ]
+   },
+   {
+    "created": 34,
+    "compileMs": 1,
+    "long": 2,
+    "p95": 234,
+    "max": 234,
+    "longFrameDetail": [
+     {
+      "frame": 404,
+      "ms": 215.9,
+      "creations": 17,
+      "names": [
+       "renderPipeline_MeshBasicNodeMaterial_191",
+       "renderPipeline_MeshStandardMaterial_384",
+       "renderPipeline_MeshStandardMaterial_494",
+       "renderPipeline_MeshStandardMaterial_537",
+       "renderPipeline_MeshStandardMaterial_576",
+       "renderPipeline_MeshBasicMaterial_783"
+      ]
+     },
+     {
+      "frame": 409,
+      "ms": 187.4,
+      "creations": 17,
+      "names": [
+       "renderPipeline_MeshBasicNodeMaterial_191",
+       "renderPipeline_MeshStandardMaterial_384",
+       "renderPipeline_MeshStandardMaterial_494",
+       "renderPipeline_MeshStandardMaterial_537",
+       "renderPipeline_MeshStandardMaterial_576",
+       "renderPipeline_MeshBasicMaterial_783"
+      ]
+     }
+    ]
+   },
+   {
+    "created": 34,
+    "compileMs": 1,
+    "long": 2,
+    "p95": 203.3,
+    "max": 203.3,
+    "longFrameDetail": [
+     {
+      "frame": 411,
+      "ms": 186.5,
+      "creations": 17,
+      "names": [
+       "renderPipeline_MeshBasicNodeMaterial_191",
+       "renderPipeline_MeshStandardMaterial_384",
+       "renderPipeline_MeshStandardMaterial_494",
+       "renderPipeline_MeshStandardMaterial_537",
+       "renderPipeline_MeshStandardMaterial_576",
+       "renderPipeline_MeshBasicMaterial_783"
+      ]
+     },
+     {
+      "frame": 416,
+      "ms": 180.1,
+      "creations": 17,
+      "names": [
+       "renderPipeline_MeshBasicNodeMaterial_191",
+       "renderPipeline_MeshStandardMaterial_384",
+       "renderPipeline_MeshStandardMaterial_494",
+       "renderPipeline_MeshStandardMaterial_537",
+       "renderPipeline_MeshStandardMaterial_576",
+       "renderPipeline_MeshBasicMaterial_783"
+      ]
+     }
+    ]
+   },
+   {
+    "created": 34,
+    "compileMs": 0,
+    "long": 2,
+    "p95": 210.6,
+    "max": 210.6,
+    "longFrameDetail": [
+     {
+      "frame": 418,
+      "ms": 194,
+      "creations": 17,
+      "names": [
+       "renderPipeline_MeshBasicNodeMaterial_191",
+       "renderPipeline_MeshStandardMaterial_384",
+       "renderPipeline_MeshStandardMaterial_494",
+       "renderPipeline_MeshStandardMaterial_537",
+       "renderPipeline_MeshStandardMaterial_576",
+       "renderPipeline_MeshBasicMaterial_783"
+      ]
+     },
+     {
+      "frame": 423,
+      "ms": 182.3,
+      "creations": 17,
+      "names": [
+       "renderPipeline_MeshBasicNodeMaterial_191",
+       "renderPipeline_MeshStandardMaterial_384",
+       "renderPipeline_MeshStandardMaterial_494",
+       "renderPipeline_MeshStandardMaterial_537",
+       "renderPipeline_MeshStandardMaterial_576",
+       "renderPipeline_MeshBasicMaterial_783"
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ "probeStress": [
+  {
+   "requested": 6,
+   "charName": "zombie",
+   "spawn": {
+    "ok": 6,
+    "placed": [
+     [
+      22.1,
+      0,
+      -10.95
+     ],
+     [
+      23,
+      0,
+      -10.95
+     ],
+     [
+      23.9,
+      0,
+      -10.95
+     ],
+     [
+      22.1,
+      0,
+      -10.05
+     ],
+     [
+      23,
+      0,
+      -10.05
+     ],
+     [
+      23.9,
+      0,
+      -10.05
+     ]
+    ]
+   },
+   "pre": {
+    "frames": 211,
+    "errors": 0,
+    "capsules": 35
+   },
+   "post": {
+    "frames": 287,
+    "errors": 0,
+    "bound": true,
+    "capsules": 395,
+    "lights": 3,
+    "dynOn": true,
+    "radianceGain": 0.15,
+    "visStrength": 1
+   },
+   "spawnFrames": {
+    "n": 20,
+    "p50": 17.7,
+    "p95": 250.5,
+    "max": 250.5
+   },
+   "steadyFrames": {
+    "n": 50,
+    "p50": 40.9,
+    "p95": 49.5,
+    "max": 51.7
+   },
+   "steadyWallMs": 2159,
+   "steadyGainFrames": 76,
+   "pipelinesCreated": 17
+  },
+  {
+   "requested": 9,
+   "charName": "zombie",
+   "spawn": {
+    "ok": 9,
+    "placed": [
+     [
+      22.1,
+      0,
+      -11.4
+     ],
+     [
+      23,
+      0,
+      -11.4
+     ],
+     [
+      23.9,
+      0,
+      -11.4
+     ],
+     [
+      22.1,
+      0,
+      -10.5
+     ],
+     [
+      23,
+      0,
+      -10.5
+     ],
+     [
+      23.9,
+      0,
+      -10.5
+     ],
+     [
+      22.1,
+      0,
+      -9.6
+     ],
+     [
+      23,
+      0,
+      -9.6
+     ],
+     [
+      23.9,
+      0,
+      -9.6
+     ]
+    ]
+   },
+   "pre": {
+    "frames": 288,
+    "errors": 0,
+    "capsules": 395
+   },
+   "post": {
+    "frames": 336,
+    "errors": 0,
+    "bound": true,
+    "capsules": 935,
+    "lights": 1,
+    "dynOn": true,
+    "radianceGain": 0.15,
+    "visStrength": 1
+   },
+   "spawnFrames": {
+    "n": 17,
+    "p50": 26.8,
+    "p95": 707.4,
+    "max": 707.4
+   },
+   "steadyFrames": {
+    "n": 49,
+    "p50": 31.7,
+    "p95": 155.8,
+    "max": 169.4
+   },
+   "steadyWallMs": 2003,
+   "steadyGainFrames": 48,
+   "pipelinesCreated": 0
+  },
+  {
+   "requested": 12,
+   "charName": "zombie",
+   "spawn": {
+    "ok": 12,
+    "placed": [
+     [
+      21.65,
+      0,
+      -11.4
+     ],
+     [
+      22.55,
+      0,
+      -11.4
+     ],
+     [
+      23.45,
+      0,
+      -11.4
+     ],
+     [
+      24.35,
+      0,
+      -11.4
+     ],
+     [
+      21.65,
+      0,
+      -10.5
+     ],
+     [
+      22.55,
+      0,
+      -10.5
+     ],
+     [
+      23.45,
+      0,
+      -10.5
+     ],
+     [
+      24.35,
+      0,
+      -10.5
+     ],
+     [
+      21.65,
+      0,
+      -9.6
+     ],
+     [
+      22.55,
+      0,
+      -9.6
+     ],
+     [
+      23.45,
+      0,
+      -9.6
+     ],
+     [
+      24.35,
+      0,
+      -9.6
+     ]
+    ]
+   },
+   "pre": {
+    "frames": 336,
+    "errors": 0,
+    "capsules": 935
+   },
+   "post": {
+    "frames": 356,
+    "errors": 0,
+    "bound": true,
+    "capsules": 1024,
+    "lights": 1,
+    "dynOn": true,
+    "radianceGain": 0.15,
+    "visStrength": 1
+   },
+   "spawnFrames": {
+    "n": 8,
+    "p50": 42.4,
+    "p95": 649.7,
+    "max": 649.7
+   },
+   "steadyFrames": {
+    "n": 28,
+    "p50": 30.8,
+    "p95": 262.3,
+    "max": 269.7
+   },
+   "steadyWallMs": 2002,
+   "steadyGainFrames": 20,
+   "pipelinesCreated": 0
+  },
+  {
+   "requested": 20,
+   "charName": "zombie",
+   "spawn": {
+    "ok": 20,
+    "placed": [
+     [
+      21.2,
+      0,
+      -11.85
+     ],
+     [
+      22.1,
+      0,
+      -11.85
+     ],
+     [
+      23,
+      0,
+      -11.85
+     ],
+     [
+      23.9,
+      0,
+      -11.85
+     ],
+     [
+      24.8,
+      0,
+      -11.85
+     ],
+     [
+      21.2,
+      0,
+      -10.95
+     ],
+     [
+      22.1,
+      0,
+      -10.95
+     ],
+     [
+      23,
+      0,
+      -10.95
+     ],
+     [
+      23.9,
+      0,
+      -10.95
+     ],
+     [
+      24.8,
+      0,
+      -10.95
+     ],
+     [
+      21.2,
+      0,
+      -10.05
+     ],
+     [
+      22.1,
+      0,
+      -10.05
+     ],
+     [
+      23,
+      0,
+      -10.05
+     ],
+     [
+      23.9,
+      0,
+      -10.05
+     ],
+     [
+      24.8,
+      0,
+      -10.05
+     ],
+     [
+      21.2,
+      0,
+      -9.15
+     ],
+     [
+      22.1,
+      0,
+      -9.15
+     ],
+     [
+      23,
+      0,
+      -9.15
+     ],
+     [
+      23.9,
+      0,
+      -9.15
+     ],
+     [
+      24.8,
+      0,
+      -9.15
+     ]
+    ]
+   },
+   "pre": {
+    "frames": 356,
+    "errors": 0,
+    "capsules": 1024
+   },
+   "post": {
+    "frames": 368,
+    "errors": 0,
+    "bound": true,
+    "capsules": 1024,
+    "lights": 1,
+    "dynOn": true,
+    "radianceGain": 0.15,
+    "visStrength": 1
+   },
+   "spawnFrames": {
+    "n": 6,
+    "p50": 31.9,
+    "p95": 917.9,
+    "max": 917.9
+   },
+   "steadyFrames": {
+    "n": 12,
+    "p50": 34.8,
+    "p95": 561.3,
+    "max": 561.3
+   },
+   "steadyWallMs": 2003,
+   "steadyGainFrames": 12,
+   "pipelinesCreated": 0
+  }
+ ],
+ "probeHealth": {
+  "errors": 0,
+  "frames": 368,
+  "bound": true,
+  "rate": 2,
+  "gates": {
+   "bound": true,
+   "dynKey": "arena",
+   "room": 6,
+   "grid": true,
+   "gain": 0.15,
+   "vis": 1,
+   "dynOn": true,
+   "flashI": 0,
+   "flashAge": 14.63789999949937,
+   "capsules": 1024,
+   "lights": 1
+  },
+  "radianceGain": 0.15,
+  "visStrength": 1
+ },
+ "gibTimeline": {
+  "firstVisibleChunk": {
+   "t": 463,
+   "pendingGibs": 0,
+   "tearing": 0,
+   "tier": null,
+   "blastMs": 9,
+   "live": 64,
+   "baked": 0,
+   "pendingBake": null,
+   "totalBakes": 0,
+   "lastBakeMs": 0,
+   "lastBakeSwapMs": 0,
+   "faceBaked": 0
+  },
+  "firstBakeSubmit": {
+   "t": 2653,
+   "pendingGibs": 0,
+   "tearing": 0,
+   "tier": null,
+   "blastMs": 9,
+   "live": 64,
+   "baked": 0,
+   "pendingBake": 57,
+   "totalBakes": 0,
+   "lastBakeMs": 0,
+   "lastBakeSwapMs": 0,
+   "faceBaked": 0
+  },
+  "firstBakeSwap": {
+   "t": 2761,
+   "pendingGibs": 0,
+   "tearing": 0,
+   "tier": null,
+   "blastMs": 9,
+   "live": 63,
+   "baked": 1,
+   "pendingBake": 53,
+   "totalBakes": 1,
+   "lastBakeMs": 81.10000002384186,
+   "lastBakeSwapMs": 0.6000000238418579,
+   "faceBaked": 0
+  },
+  "firstTexturedHeadDraw": {
+   "t": 3957,
+   "pendingGibs": 0,
+   "tearing": 0,
+   "tier": null,
+   "blastMs": 9,
+   "live": 53,
+   "baked": 11,
+   "pendingBake": 64,
+   "totalBakes": 11,
+   "lastBakeMs": 206.79999995231628,
+   "lastBakeSwapMs": 0.20000004768371582,
+   "faceBaked": 1
+  }
+ },
+ "pipelineLog": {
+  "totalPipelines": 539,
+  "totalCompileMs": 708,
+  "slowest": [
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_185",
+    "ms": 549,
+    "async": true,
+    "via": "compile#8@f4",
+    "frame": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_766",
+    "ms": 60,
+    "async": true,
+    "via": "compile#1@f4",
+    "frame": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_185",
+    "ms": 51,
+    "async": true,
+    "via": "compile#23@f39",
+    "frame": 39
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_773",
+    "ms": 12,
+    "async": true,
+    "via": "compile#17@f39",
+    "frame": 39
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_195",
+    "ms": 12,
+    "async": true,
+    "via": "compile#55@f39",
+    "frame": 39
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_781",
+    "ms": 4,
+    "async": true,
+    "via": "compile#3@f4",
+    "frame": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_767",
+    "ms": 4,
+    "async": true,
+    "via": "compile#2@f4",
+    "frame": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_782",
+    "ms": 3,
+    "async": true,
+    "via": "compile#4@f4",
+    "frame": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_196",
+    "ms": 1,
+    "async": true,
+    "via": "compile#11@f4",
+    "frame": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_197",
+    "ms": 1,
+    "async": true,
+    "via": "compile#12@f4",
+    "frame": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_198",
+    "ms": 0,
+    "async": true,
+    "via": "compile#13@f4",
+    "frame": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_199",
+    "ms": 0,
+    "async": true,
+    "via": "compile#14@f4",
+    "frame": 4
+   }
+  ],
+  "longFrames": [
+   {
+    "frame": 4,
+    "ms": 206.8,
+    "creations": 23,
+    "names": [
+     "renderPipeline_MeshStandardMaterial_384",
+     "renderPipeline_MeshStandardMaterial_385",
+     "renderPipeline_MeshStandardMaterial_494",
+     "renderPipeline_MeshStandardMaterial_495",
+     "renderPipeline_MeshStandardMaterial_537",
+     "renderPipeline_MeshStandardMaterial_538",
+     "renderPipeline_MeshStandardMaterial_576",
+     "renderPipeline_MeshStandardMaterial_577"
+    ]
+   },
+   {
+    "frame": 39,
+    "ms": 176.5,
+    "creations": 23,
+    "names": [
+     "renderPipeline_MeshStandardMaterial_384",
+     "renderPipeline_MeshStandardMaterial_385",
+     "renderPipeline_MeshStandardMaterial_494",
+     "renderPipeline_MeshStandardMaterial_495",
+     "renderPipeline_MeshStandardMaterial_537",
+     "renderPipeline_MeshStandardMaterial_538",
+     "renderPipeline_MeshStandardMaterial_576",
+     "renderPipeline_MeshStandardMaterial_577"
+    ]
+   },
+   {
+    "frame": 198,
+    "ms": 206,
+    "creations": 20,
+    "names": [
+     "renderPipeline_MeshStandardMaterial_384",
+     "renderPipeline_MeshStandardMaterial_494",
+     "renderPipeline_MeshStandardMaterial_537",
+     "renderPipeline_MeshStandardMaterial_576",
+     "renderPipeline_MeshBasicMaterial_783",
+     "renderPipeline_MeshBasicMaterial_785",
+     "renderPipeline_MeshBasicMaterial_786",
+     "renderPipeline_MeshStandardMaterial_385"
+    ]
+   },
+   {
+    "frame": 209,
+    "ms": 199.9,
+    "creations": 17,
+    "names": [
+     "renderPipeline_MeshBasicNodeMaterial_191",
+     "renderPipeline_MeshStandardMaterial_384",
+     "renderPipeline_MeshStandardMaterial_494",
+     "renderPipeline_MeshStandardMaterial_537",
+     "renderPipeline_MeshStandardMaterial_576",
+     "renderPipeline_MeshBasicMaterial_783",
+     "renderPipeline_MeshBasicMaterial_785",
+     "renderPipeline_MeshBasicMaterial_786"
+    ]
+   },
+   {
+    "frame": 382,
+    "ms": 216.8,
+    "creations": 17,
+    "names": [
+     "renderPipeline_MeshBasicNodeMaterial_191",
+     "renderPipeline_MeshStandardMaterial_384",
+     "renderPipeline_MeshStandardMaterial_494",
+     "renderPipeline_MeshStandardMaterial_537",
+     "renderPipeline_MeshStandardMaterial_576",
+     "renderPipeline_MeshBasicMaterial_783",
+     "renderPipeline_MeshBasicMaterial_785",
+     "renderPipeline_MeshBasicMaterial_786"
+    ]
+   },
+   {
+    "frame": 390,
+    "ms": 206.4,
+    "creations": 17,
+    "names": [
+     "renderPipeline_MeshBasicNodeMaterial_191",
+     "renderPipeline_MeshStandardMaterial_384",
+     "renderPipeline_MeshStandardMaterial_494",
+     "renderPipeline_MeshStandardMaterial_537",
+     "renderPipeline_MeshStandardMaterial_576",
+     "renderPipeline_MeshBasicMaterial_783",
+     "renderPipeline_MeshBasicMaterial_785",
+     "renderPipeline_MeshBasicMaterial_786"
+    ]
+   },
+   {
+    "frame": 395,
+    "ms": 181.7,
+    "creations": 18,
+    "names": [
+     "renderPipeline_MeshBasicNodeMaterial_191",
+     "renderPipeline_MeshStandardMaterial_384",
+     "renderPipeline_MeshStandardMaterial_494",
+     "renderPipeline_MeshStandardMaterial_537",
+     "renderPipeline_MeshStandardMaterial_576",
+     "renderPipeline_MeshBasicMaterial_783",
+     "renderPipeline_MeshBasicMaterial_785",
+     "renderPipeline_MeshBasicMaterial_786"
+    ]
+   },
+   {
+    "frame": 397,
+    "ms": 193.3,
+    "creations": 18,
+    "names": [
+     "renderPipeline_MeshBasicNodeMaterial_191",
+     "renderPipeline_MeshStandardMaterial_384",
+     "renderPipeline_MeshStandardMaterial_494",
+     "renderPipeline_MeshStandardMaterial_537",
+     "renderPipeline_MeshStandardMaterial_576",
+     "renderPipeline_MeshBasicMaterial_783",
+     "renderPipeline_MeshBasicMaterial_785",
+     "renderPipeline_MeshBasicMaterial_786"
+    ]
+   },
+   {
+    "frame": 402,
+    "ms": 179.6,
+    "creations": 17,
+    "names": [
+     "renderPipeline_MeshBasicNodeMaterial_191",
+     "renderPipeline_MeshStandardMaterial_384",
+     "renderPipeline_MeshStandardMaterial_494",
+     "renderPipeline_MeshStandardMaterial_537",
+     "renderPipeline_MeshStandardMaterial_576",
+     "renderPipeline_MeshBasicMaterial_783",
+     "renderPipeline_MeshBasicMaterial_785",
+     "renderPipeline_MeshBasicMaterial_786"
+    ]
+   },
+   {
+    "frame": 404,
+    "ms": 215.9,
+    "creations": 17,
+    "names": [
+     "renderPipeline_MeshBasicNodeMaterial_191",
+     "renderPipeline_MeshStandardMaterial_384",
+     "renderPipeline_MeshStandardMaterial_494",
+     "renderPipeline_MeshStandardMaterial_537",
+     "renderPipeline_MeshStandardMaterial_576",
+     "renderPipeline_MeshBasicMaterial_783",
+     "renderPipeline_MeshBasicMaterial_785",
+     "renderPipeline_MeshBasicMaterial_786"
+    ]
+   },
+   {
+    "frame": 409,
+    "ms": 187.4,
+    "creations": 17,
+    "names": [
+     "renderPipeline_MeshBasicNodeMaterial_191",
+     "renderPipeline_MeshStandardMaterial_384",
+     "renderPipeline_MeshStandardMaterial_494",
+     "renderPipeline_MeshStandardMaterial_537",
+     "renderPipeline_MeshStandardMaterial_576",
+     "renderPipeline_MeshBasicMaterial_783",
+     "renderPipeline_MeshBasicMaterial_785",
+     "renderPipeline_MeshBasicMaterial_786"
+    ]
+   },
+   {
+    "frame": 411,
+    "ms": 186.5,
+    "creations": 17,
+    "names": [
+     "renderPipeline_MeshBasicNodeMaterial_191",
+     "renderPipeline_MeshStandardMaterial_384",
+     "renderPipeline_MeshStandardMaterial_494",
+     "renderPipeline_MeshStandardMaterial_537",
+     "renderPipeline_MeshStandardMaterial_576",
+     "renderPipeline_MeshBasicMaterial_783",
+     "renderPipeline_MeshBasicMaterial_785",
+     "renderPipeline_MeshBasicMaterial_786"
+    ]
+   },
+   {
+    "frame": 416,
+    "ms": 180.1,
+    "creations": 17,
+    "names": [
+     "renderPipeline_MeshBasicNodeMaterial_191",
+     "renderPipeline_MeshStandardMaterial_384",
+     "renderPipeline_MeshStandardMaterial_494",
+     "renderPipeline_MeshStandardMaterial_537",
+     "renderPipeline_MeshStandardMaterial_576",
+     "renderPipeline_MeshBasicMaterial_783",
+     "renderPipeline_MeshBasicMaterial_785",
+     "renderPipeline_MeshBasicMaterial_786"
+    ]
+   },
+   {
+    "frame": 418,
+    "ms": 194,
+    "creations": 17,
+    "names": [
+     "renderPipeline_MeshBasicNodeMaterial_191",
+     "renderPipeline_MeshStandardMaterial_384",
+     "renderPipeline_MeshStandardMaterial_494",
+     "renderPipeline_MeshStandardMaterial_537",
+     "renderPipeline_MeshStandardMaterial_576",
+     "renderPipeline_MeshBasicMaterial_783",
+     "renderPipeline_MeshBasicMaterial_785",
+     "renderPipeline_MeshBasicMaterial_786"
+    ]
+   },
+   {
+    "frame": 423,
+    "ms": 182.3,
+    "creations": 17,
+    "names": [
+     "renderPipeline_MeshBasicNodeMaterial_191",
+     "renderPipeline_MeshStandardMaterial_384",
+     "renderPipeline_MeshStandardMaterial_494",
+     "renderPipeline_MeshStandardMaterial_537",
+     "renderPipeline_MeshStandardMaterial_576",
+     "renderPipeline_MeshBasicMaterial_783",
+     "renderPipeline_MeshBasicMaterial_785",
+     "renderPipeline_MeshBasicMaterial_786"
+    ]
+   },
+   {
+    "frame": 430,
+    "ms": 183.1,
+    "creations": 17,
+    "names": [
+     "renderPipeline_MeshBasicNodeMaterial_191",
+     "renderPipeline_MeshStandardMaterial_384",
+     "renderPipeline_MeshStandardMaterial_494",
+     "renderPipeline_MeshStandardMaterial_537",
+     "renderPipeline_MeshStandardMaterial_576",
+     "renderPipeline_MeshBasicMaterial_783",
+     "renderPipeline_MeshBasicMaterial_785",
+     "renderPipeline_MeshBasicMaterial_786"
+    ]
+   }
+  ],
+  "rebuilds": [
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_185",
+    "count": 5,
+    "firstFrame": 4,
+    "lastFrame": 39,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_195",
+    "count": 5,
+    "firstFrame": 4,
+    "lastFrame": 39,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_196",
+    "count": 5,
+    "firstFrame": 4,
+    "lastFrame": 39,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_197",
+    "count": 5,
+    "firstFrame": 4,
+    "lastFrame": 39,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_198",
+    "count": 5,
+    "firstFrame": 4,
+    "lastFrame": 39,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_199",
+    "count": 5,
+    "firstFrame": 4,
+    "lastFrame": 39,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_194",
+    "count": 5,
+    "firstFrame": 4,
+    "lastFrame": 39,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_773",
+    "count": 4,
+    "firstFrame": 4,
+    "lastFrame": 39,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 3
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_185",
+    "count": 4,
+    "firstFrame": 4,
+    "lastFrame": 39,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_195",
+    "count": 4,
+    "firstFrame": 4,
+    "lastFrame": 39,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_196",
+    "count": 4,
+    "firstFrame": 4,
+    "lastFrame": 39,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_197",
+    "count": 4,
+    "firstFrame": 4,
+    "lastFrame": 39,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_198",
+    "count": 4,
+    "firstFrame": 4,
+    "lastFrame": 39,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_199",
+    "count": 4,
+    "firstFrame": 4,
+    "lastFrame": 39,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_194",
+    "count": 4,
+    "firstFrame": 4,
+    "lastFrame": 39,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_773",
+    "count": 3,
+    "firstFrame": 39,
+    "lastFrame": 39,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 3
+   }
+  ],
+  "descriptorGroups": [
+   {
+    "name": "renderPipeline_MeshBasicMaterial_786",
+    "count": 18,
+    "distinctThreeKeys": 18,
+    "firstFrame": 4,
+    "lastFrame": 430
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_191",
+    "count": 14,
+    "distinctThreeKeys": 14,
+    "firstFrame": 202,
+    "lastFrame": 430
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_773",
+    "count": 7,
+    "distinctThreeKeys": 2,
+    "firstFrame": 4,
+    "lastFrame": 39
+   },
+   {
+    "name": "renderPipeline_MeshStandardMaterial_715",
+    "count": 7,
+    "distinctThreeKeys": 7,
+    "firstFrame": 198,
+    "lastFrame": 423
+   },
+   {
+    "name": "renderPipeline_Steel_682",
+    "count": 7,
+    "distinctThreeKeys": 7,
+    "firstFrame": 198,
+    "lastFrame": 423
+   },
+   {
+    "name": "renderPipeline_MeshStandardMaterial_716",
+    "count": 7,
+    "distinctThreeKeys": 7,
+    "firstFrame": 198,
+    "lastFrame": 423
+   },
+   {
+    "name": "renderPipeline_MeshStandardMaterial_174",
+    "count": 7,
+    "distinctThreeKeys": 7,
+    "firstFrame": 198,
+    "lastFrame": 423
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_185",
+    "count": 5,
+    "distinctThreeKeys": 1,
+    "firstFrame": 4,
+    "lastFrame": 39
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_195",
+    "count": 5,
+    "distinctThreeKeys": 1,
+    "firstFrame": 4,
+    "lastFrame": 39
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_196",
+    "count": 5,
+    "distinctThreeKeys": 1,
+    "firstFrame": 4,
+    "lastFrame": 39
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_197",
+    "count": 5,
+    "distinctThreeKeys": 1,
+    "firstFrame": 4,
+    "lastFrame": 39
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_198",
+    "count": 5,
+    "distinctThreeKeys": 1,
+    "firstFrame": 4,
+    "lastFrame": 39
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_199",
+    "count": 5,
+    "distinctThreeKeys": 1,
+    "firstFrame": 4,
+    "lastFrame": 39
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_194",
+    "count": 5,
+    "distinctThreeKeys": 1,
+    "firstFrame": 4,
+    "lastFrame": 39
+   },
+   {
+    "name": "renderPipeline_MeshStandardMaterial_715",
+    "count": 5,
+    "distinctThreeKeys": 5,
+    "firstFrame": 390,
+    "lastFrame": 418
+   },
+   {
+    "name": "renderPipeline_Steel_682",
+    "count": 5,
+    "distinctThreeKeys": 5,
+    "firstFrame": 390,
+    "lastFrame": 418
+   }
+  ],
+  "shaderModules": {
+   "created": 674,
+   "totalBytes": 16353422,
+   "distinct": 411,
+   "repeated": [
+    {
+     "hash": "bcf6bbd3b99aba14:1650",
+     "count": 18,
+     "label": "vertex"
+    },
+    {
+     "hash": "f4ce1bf60456b9a5:3886",
+     "count": 18,
+     "label": "fragment"
+    },
+    {
+     "hash": "efe2ab98e53795b4:4064",
+     "count": 18,
+     "label": "fragment"
+    },
+    {
+     "hash": "8ca00a26d1e4137a:4730",
+     "count": 14,
+     "label": "vertex"
+    },
+    {
+     "hash": "056a7d28a47a6166:11207",
+     "count": 14,
+     "label": "fragment"
+    },
+    {
+     "hash": "2cfb64324542b8e8:1320",
+     "count": 9,
+     "label": "vertex_PMREM.Background"
+    },
+    {
+     "hash": "1c2bdcf733829950:858",
+     "count": 9,
+     "label": "fragment_PMREM.Background"
+    },
+    {
+     "hash": "e104c5d150922112:1594",
+     "count": 9,
+     "label": "vertex_PMREM_blur"
+    },
+    {
+     "hash": "5f7d2707c8462f31:1525",
+     "count": 9,
+     "label": "vertex_PMREM_ggx"
+    },
+    {
+     "hash": "3b4823187eb3ae0b:9302",
+     "count": 9,
+     "label": "fragment_PMREM_ggx"
+    },
+    {
+     "hash": "60dee19eac56ee33:63809",
+     "count": 7,
+     "label": "fragment"
+    },
+    {
+     "hash": "d01c187456a5d235:4013",
+     "count": 7,
+     "label": "vertex"
+    },
+    {
+     "hash": "b0c7bb0b5e133850:77059",
+     "count": 7,
+     "label": "fragment"
+    },
+    {
+     "hash": "3710ab9810f88279:3791",
+     "count": 7,
+     "label": "vertex_Steel"
+    },
+    {
+     "hash": "52503f358804771c:73712",
+     "count": 7,
+     "label": "fragment_Steel"
+    },
+    {
+     "hash": "12865dac39b5aecb:3802",
+     "count": 7,
+     "label": "vertex"
+    }
+   ]
+  },
+  "evictions": {
+   "total": 403,
+   "byObject": [
+    {
+     "object": "Mesh",
+     "count": 292
+    },
+    {
+     "object": "",
+     "count": 62
+    },
+    {
+     "object": "Mesh:Watch_Screen",
+     "count": 17
+    },
+    {
+     "object": "Mesh:hand_L",
+     "count": 17
+    },
+    {
+     "object": "Mesh:crown1",
+     "count": 15
+    }
+   ],
+   "eventsLast12": [
+    {
+     "key": "630,160,false,1,false,204,205,100,,,,true,true,true,3,false,519,7680,7680,7680,255,255,0,false,1,,rgba16float,depth24plus,triangle-list,normal,3,position,3,uv,2,index,,",
+     "frame": 430,
+     "via": "delete",
+     "object": "Mesh",
+     "material": "MeshBasicMaterial"
+    },
+    {
+     "key": "631,160,false,1,false,204,205,100,,,,true,true,true,3,false,519,7680,7680,7680,255,255,0,false,1,,rgba16float,depth24plus,triangle-list,normal,3,position,3,uv,2,index,,",
+     "frame": 430,
+     "via": "delete",
+     "object": "Mesh",
+     "material": "MeshBasicMaterial"
+    },
+    {
+     "key": "632,633,false,1,false,204,205,100,,,,true,true,true,3,false,519,7680,7680,7680,255,255,2,false,1,,rgba16float,depth24plus,triangle-list,color,3,position,3,index,,",
+     "frame": 430,
+     "via": "delete",
+     "object": "Mesh",
+     "material": "MeshBasicMaterial"
+    },
+    {
+     "key": "634,626,false,1,false,204,205,100,,,,true,true,true,3,false,519,7680,7680,7680,255,255,0,false,1,,rgba16float,depth24plus,triangle-list,normal,3,position,3,uv,2,index,,",
+     "frame": 430,
+     "via": "delete",
+     "object": "Mesh",
+     "material": "MeshStandardMaterial"
+    },
+    {
+     "key": "635,626,false,1,false,204,205,100,,,,true,true,true,3,false,519,7680,7680,7680,255,255,0,false,1,,rgba16float,depth24plus,triangle-list,normal,3,position,3,uv,2,index,,",
+     "frame": 430,
+     "via": "delete",
+     "object": "Mesh",
+     "material": "MeshStandardMaterial"
+    },
+    {
+     "key": "636,626,false,1,false,204,205,100,,,,true,true,true,3,false,519,7680,7680,7680,255,255,0,false,1,,rgba16float,depth24plus,triangle-list,normal,3,position,3,uv,2,index,,",
+     "frame": 430,
+     "via": "delete",
+     "object": "Mesh",
+     "material": "MeshStandardMaterial"
+    },
+    {
+     "key": "637,626,false,1,false,204,205,100,,,,true,true,true,3,false,519,7680,7680,7680,255,255,0,false,1,,rgba16float,depth24plus,triangle-list,normal,3,position,3,uv,2,index,,",
+     "frame": 430,
+     "via": "delete",
+     "object": "Mesh",
+     "material": "MeshStandardMaterial"
+    },
+    {
+     "key": "642,643,false,1,false,204,205,100,,,,true,true,true,3,false,519,7680,7680,7680,255,255,0,false,1,,rgba16float,depth24plus,triangle-list,normal,3,position,3,uv,2,index,,",
+     "frame": 430,
+     "via": "delete",
+     "object": "Mesh:Watch_Screen",
+     "material": "MeshStandardMaterial"
+    },
+    {
+     "key": "638,639,false,1,false,204,205,100,,,,true,true,true,3,false,519,7680,7680,7680,255,255,0,false,1,,rgba16float,depth24plus,triangle-list,normal,3,position,3,uv,2,index,,",
+     "frame": 430,
+     "via": "delete",
+     "object": "Mesh:hand_L",
+     "material": "MeshStandardMaterial"
+    },
+    {
+     "key": "640,641,false,1,false,204,205,100,,,,true,true,true,3,false,519,7680,7680,7680,255,255,2,false,1,,rgba16float,depth24plus,triangle-list,normal,3,position,3,index,,",
+     "frame": 430,
+     "via": "delete",
+     "object": "Mesh:crown1",
+     "material": "Steel"
+    },
+    {
+     "key": "644,645,false,1,false,204,205,100,,,,true,true,true,3,false,519,7680,7680,7680,255,255,0,false,1,,rgba16float,depth24plus,triangle-list,normal,3,position,3,uv,2,,",
+     "frame": 430,
+     "via": "delete",
+     "object": "Mesh",
+     "material": "MeshStandardMaterial"
+    },
+    {
+     "key": "646,647,true,1,false,204,205,100,,,,true,false,true,3,false,519,7680,7680,7680,255,255,0,false,1,,rgba16float,depth24plus,triangle-list,normal,3,position,3,uv,2,index,,",
+     "frame": 430,
+     "via": "delete",
+     "object": "Mesh",
+     "material": "MeshBasicMaterial"
+    }
+   ]
+  },
+  "compute": {
+   "total": 922,
+   "maxPerFrame": 27
+  }
+ },
+ "lifecycle": {
+  "loopAfterRunningWarm": true,
+  "loopAfterPausedWarm": false,
+  "loopAfterPauseDuringWarm": true
+ },
+ "warmGate": null,
+ "viewport": {
+  "width": 960,
+  "height": 720,
+  "dpr": 1,
+  "canvasW": 800,
+  "canvasH": 600
+ },
+ "pageErrors": [],
+ "consoleCounts": {
+  "queriesExceeded": 0,
+  "indexCount0": 1,
+  "gpuLost": 0,
+  "uncaptured": 0,
+  "probeGatherFail": 0,
+  "errors": 0,
+  "warnings": 1
+ },
+ "gpuDiagnostics": {
+  "lost": null,
+  "uncaptured": [],
+  "uncapturedCount": 0
+ },
+ "run": 3
+}

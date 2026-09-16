@@ -9,9 +9,12 @@
 import { describe, it, expect } from 'vitest';
 import {
   DYN_RAY_CAP,
+  PROBE_MAX_BONE_INSTANCES,
+  PROBE_MAX_CAPSULES,
   DYN_VEC4_PER_PROBE,
   BONE_INSTANCE_FLOATS,
   GOLDEN_ANGLE,
+  LIGHT_FILL_REF_M,
   PROBE_GATHER_WORKGROUP,
   TWO_PI,
   blendDynamic,
@@ -285,6 +288,21 @@ describe('packCapsulesFromBoneInstances', () => {
     expectFloats(out.slice(o, o + 4), [5, 0, 0, 0.2]);
   });
 
+  it.each([515, PROBE_MAX_BONE_INSTANCES])('packs all %i admitted bone rows without dropping occluders', (count) => {
+    // 515 rows reproduced the arena's 1030 > 1024 failure. The other case
+    // exercises the producer's full budget, not just the reported overflow.
+    const ab = abOf(Array.from({ length: count }, (_, i) => ({
+      a: [i, 0, 0] as Vec3, b: [i, 1, 0] as Vec3, c: [i, 2, 0] as Vec3,
+      r1: 0.1, r2: 0.2, scale: [1, 1, 1] as Vec3,
+    })));
+    const out = new Float32Array(4 + PROBE_MAX_CAPSULES * 8);
+    expect(packCapsulesFromBoneInstances(ab, count, 0, out, PROBE_MAX_CAPSULES)).toBe(count * 2);
+    expect(out[0]).toBe(count * 2);
+    const last = 4 + (count * 2 - 1) * 8;
+    expectFloats(out.slice(last, last + 4), [count - 1, 1, 0, 0.2]);
+    expectFloats(out.slice(last + 4, last + 7), [count - 1, 2, 0]);
+  });
+
   it('throws when max cannot hold two capsules per instance', () => {
     const ab = abOf([{ a: [0, 0, 0], b: [0, 1, 0], c: [0, 2, 0], r1: 0.1, r2: 0.1, scale: [1, 1, 1] }]);
     const out = new Float32Array(4 + 8);
@@ -303,10 +321,20 @@ describe('packLights', () => {
     expect(out[0]).toBe(2);
     expectFloats(out.slice(4, 8), [1, 2, 3, 55]);
     expectFloats(out.slice(8, 12), [1, 0.8, 0.6, -2]);
-    expectFloats(out.slice(12, 16), [0, 0, 0, -2]);
+    // SLOT 11 IS cosInner FOR A SPOT AND THE ROOM-FILL FRACTION FOR A POINT
+    // LIGHT. The cone branch — cosInner's only reader — runs only when
+    // cosOuter > -1.5, and a point light packs -2 there, so the slot is free.
+    // A point light with no fill therefore writes 0, not LIGHT_NO_CONE.
+    expectFloats(out.slice(12, 16), [0, 0, 0, 0]);
     expectFloats(out.slice(16, 20), [-1, 0, 0, 2]);
     expectFloats(out.slice(20, 24), [0, 1, 0, 0.7]);
     expectFloats(out.slice(24, 28), [0, 0, -1, 0.9]);
+  });
+
+  it('carries the room-fill fraction of a point light in that slot', () => {
+    const out = new Float32Array(4 + 12);
+    packLights([{ pos: [0, 1, 0], color: [1, 1, 1], intensity: 220, fill: 1.2 }], out);
+    expect(out[4 + 11]).toBeCloseTo(1.2, 5);
   });
 });
 
@@ -584,5 +612,59 @@ describe('R1 gather dispatch shape — threads per probe', () => {
     expect(gatherThreadsPerProbe(2.7)).toBe(2);
     expect(gatherThreadsPerProbe(1000)).toBe(PROBE_GATHER_WORKGROUP);
     expect(gatherThreadsPerProbe(DYN_RAY_CAP)).toBe(PROBE_GATHER_WORKGROUP);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE ROOM-FILL COMPONENT. The owner, playing: "the explosion seems to have a
+// rather small radius of light effect", and "lighting the room will fix it" for
+// picking the gibs out of the dark. A packed light is a POINT light, so it
+// accumulates as intensity/d2: at 2 m a wall gets 1/4 of the peak and at 8 m it
+// gets 1/64, which is a blob at the crater and nothing across the room. `fill`
+// adds the soft component a real detonation has, and these tests pin BOTH ends:
+// the far field must lift a lot, and the near field must not blow out.
+// ---------------------------------------------------------------------------
+describe('room fill (the blast has to light the room, not a disc of floor)', () => {
+  const RAYS = 32;
+  const SEED = 7;
+  /** The +X wall's radiance from a blast at the origin, at two distances. */
+  function wallRadiance(distM: number, fill: number | undefined): number {
+    const probe = gatherProbeDynamic(0, GRID, sceneOf({ lights: [
+      { pos: [0, 1.5, 0], color: [1, 0.55, 0.24], intensity: 220, ...(fill ? { fill } : {}) },
+    ] }), { raysPerProbe: RAYS, frameSeed: SEED });
+    return radAt(probe.radiance, [1, 0, 0])[0]!;
+  }
+
+  it('lifts the FAR field by an order of magnitude at the shipped fill', () => {
+    const near = wallRadiance(0, 0);
+    const far = wallRadiance(0, 1.2);
+    // Same probe, same rays: `fill` only ever ADDS light, so the far wall can
+    // only get brighter. The measured ratio is what "lights the room" means.
+    expect(far).toBeGreaterThan(near * 2);
+  });
+
+  it('the fill term is a SOFT falloff: 1/(1+d2/REF^2), not 1/d2', () => {
+    const ref = LIGHT_FILL_REF_M;
+    const soft = (d: number): number => 1 / (1 + (d * d) / (ref * ref));
+    // The claim, in one line: at 8 m the soft term still carries ~0.2 of its
+    // source value where the hard term has fallen to 1/64 = 0.016.
+    expect(soft(0)).toBeCloseTo(1, 6);
+    expect(soft(ref)).toBeCloseTo(0.5, 6);
+    expect(soft(8)).toBeGreaterThan(0.19);
+    // The comparison, exactly: soft(8) = 1/(1+4) = 0.2 against the hard term's
+    // 1/64 = 0.015625 — a 12.8x lift in the far field for the same peak.
+    expect(soft(8) / (1 / 64)).toBeCloseTo(12.8, 6);
+  });
+
+  it('is OFF by default, so every other light in the game is unchanged', () => {
+    // The muzzle flash wants to stay a point light. `fill` absent must be
+    // bit-identical to the old `intensity / d2`, not merely close.
+    const flash = () => gatherProbeDynamic(0, GRID, sceneOf({ lights: [
+      { pos: [0, 1.5, 0], color: [1, 1, 1], intensity: 35 },
+    ] }), { raysPerProbe: RAYS, frameSeed: SEED });
+    const zero = () => gatherProbeDynamic(0, GRID, sceneOf({ lights: [
+      { pos: [0, 1.5, 0], color: [1, 1, 1], intensity: 35, fill: 0 },
+    ] }), { raysPerProbe: RAYS, frameSeed: SEED });
+    expect([...flash().radiance]).toEqual([...zero().radiance]);
   });
 });

@@ -130,6 +130,44 @@ export interface ResolveExplosionOpts {
   /** Floor distance below the blast (m). Default: the lab floor plane y=0.
  *  `null` = no floor below (forced air burst). */
   floorDistM?: number | null;
+  /**
+   * Stamp the 16 wounds on a body this blast has ALREADY decided to gib.
+   * Default TRUE — the resolver's historical contract, and what the lab and
+   * the wound tests read.
+   *
+   * A caller that gibs instead of damaging passes FALSE. MEASURED, the wound
+   * phase is the blast's dominant cost (a 5-body blast in the arena: 18.1 of
+   * 22.0 ms of resolve, `?`/profile seam), it is 16 wounds x bodies in range,
+   * and the active game's gibbed branch NEVER READS THEM — it takes
+   * `gibActor` and continues, so those wounds are stamped, carried through the
+   * meter arithmetic and dropped. This is the largest single lever left on the
+   * blast and it is a pure waste, not a quality trade.
+   */
+  woundsOnGibbed?: boolean;
+  /**
+   * MULTIPLIER on the AOE radius. Default 1 = the reference's 4.6875 m
+   * (`EXPLOSION_STANDARD.radius` × `RADIUS_SCALE_FACTOR`).
+   *
+   * The owner, on the shipped blast: *"it seems the effective radius of the
+   * explosion is quite large (idk i guess maybe you added some kind of
+   * shockwave effect?) like too large — the area of effect should be abit more
+   * focused"*. Every distance-gated term in this module — damage, wounds, the
+   * launch, the hand band, the prune — reads `radiusM`, so ONE multiplier
+   * focuses all of them together and cannot leave the blast half-scaled. It is
+   * deliberately NOT wired to the fireball's size (see `burst.heightM`).
+   */
+  radiusScale?: number;
+  /**
+   * FRACTION of point-blank launch speed that survives to the radius EDGE.
+   * Default `EXPLOSION_LAUNCH.falloffFloor` (0.45, kept for the NotBlood
+   * reason in that constant's doc: "which is what makes edge SURVIVORS fly
+   * comically").
+   *
+   * This is the other half of "the radius feels too big": the AOE decides who
+   * is HIT, and this decides how far the ones at the edge are THROWN. A blast
+   * can keep its damage radius and stop flinging the far field.
+   */
+  launchFloor?: number;
 }
 
 /** The rig shove for one body: a world point plus a concussion VELOCITY
@@ -279,6 +317,92 @@ function traceSurface(
   return null;
 }
 
+/**
+ * Distance from `p` to the SEGMENT a→b. Pure and cheap: no field evaluation,
+ * which is the whole point of it existing (see `primLowerBoundM`).
+ */
+export function segmentDistanceM(p: Vec3, a: Vec3, b: Vec3): number {
+  const abx = b[0] - a[0], aby = b[1] - a[1], abz = b[2] - a[2];
+  const apx = p[0] - a[0], apy = p[1] - a[1], apz = p[2] - a[2];
+  const l2 = abx * abx + aby * aby + abz * abz;
+  let t = l2 > 1e-12 ? (apx * abx + apy * aby + apz * abz) / l2 : 0;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const dx = apx - abx * t, dy = apy - aby * t, dz = apz - abz * t;
+  return Math.sqrt(dx * dx + dy * dy + dz * dz);
+}
+
+/**
+ * A LOWER BOUND on the distance from `at` to THIS PRIM'S OWN SURFACE:
+ * `segmentDist − radius − blendK`.
+ *
+ *   Every surface point of a capsule lies within its radius of the segment, so
+ *   surfaceDist >= segmentDist − radius; the union's smooth blend (smin <= min)
+ *   can only round the crease OUTWARD, which is what the `blendK` slack covers.
+ *
+ * ⚠ THIS IS NOT A BOUND ON THE DISTANCE THE RESOLVER WILL MEASURE. `traceSurface`
+ * stops at the first crossing of the WHOLE BODY's field, so a prim behind other
+ * flesh reports the NEAR surface's distance — measured, a bound of 0.668 m
+ * against a reported hit at 0.598 m, and a prim "provably outside" the radius
+ * whose reported hit was at 4.15 m inside it. Pruning PRIMS with this is
+ * therefore UNSOUND: the resolver's per-prim hit is a property of the ray, not
+ * of the prim. It is still exactly the right bound for deciding whether a whole
+ * BODY can be reached, because every ray to a body hits at or beyond the body's
+ * nearest surface:
+ *
+ *     hitDist >= dist(at, body surface) >= min_i(primLowerBoundM_i) − blendK
+ *
+ * so a body whose minimum bound clears the radius cannot produce a single hit —
+ * which is the prune below, and what `explosion-aoe.test.ts` pins.
+ *
+ * WHY IT IS WORTH IT. `resolveExplosion` is handed EVERY body the caller knows
+ * about and the AOE radius is 4.69 m against a 23-body arena: the unpruned
+ * resolver sphere-traced every prim of every body — and each trace step folds
+ * every prim of that body (sdBody over ~25 capsules), so the cost was
+ * O(bodies x prims^2 x steps) to find the ~5 bodies actually in range.
+ * MEASURED on the arena: 81-122 ms per detonation, ~95% of the entire blast,
+ * and the "noticeable pause when the explosion and the gib happens" the owner
+ * reported.
+ */
+export function primLowerBoundM(at: Vec3, prim: Primitive): number {
+  // ——— FIELDS THAT CAN EXCEED THEIR OWN CAPSULE ARE NEVER PRUNED. ———
+  // The bound is built from the segment and the radius, so it is only a bound
+  // while the surface really does live inside that capsule:
+  //   * a HAIR STRAND is a bundle of windowed capsules with a wobble, and the
+  //     wobble puts geometry outside the straight segment (strand.ts);
+  //   * a SHELL is thinned and clipped with a ROUNDED RIM that stands off the
+  //     base surface;
+  //   * a BENT cone follows a curve that bulges away from its chord.
+  // Each returns 0 — a bound that can never exclude anything — rather than a
+  // number that would be right for the common case and wrong for these. The
+  // cost of being wrong here is a body that silently stops being damaged, so
+  // the safe direction is the cheap one.
+  if (prim.strand !== undefined || prim.shell !== undefined || prim.bend !== undefined) return 0;
+  // The field is `(len(q, closest) - radius) * minScale` in a SCALE-DIVIDED
+  // frame (validate.ts sdPrimitive), so the surface stands `radius * scale_i`
+  // off the axis in direction i — i.e. up to `radius * maxScale` in world. A
+  // bound that subtracts the bare radius under-subtracts for any prim scaled
+  // above 1, and the reference test caught exactly that: 0.504 returned as a
+  // "lower bound" against a true surface distance of 0.491.
+  // A BOX is the same arithmetic: its half-extents are `radius * scale` in
+  // world (sdPrimitive's own comment says so).
+  const r = Math.max(prim.radius, prim.radiusB ?? prim.radius);
+  const maxScale = Math.max(prim.scale[0], prim.scale[1], prim.scale[2]);
+  return segmentDistanceM(at, prim.a, prim.b) - r * maxScale - (prim.blendK || 0);
+}
+
+/**
+ * DIAGNOSTIC SPLIT of the last `resolveExplosion`, in ms. The resolver's cost
+ * is not one thing — tracing to find surfaces, stamping the wounds it found, and
+ * the connectivity cuts are three different pieces of maths — and the atomic
+ * phase timer upstream (game-main's blastProfile) could only say "resolve".
+ * MEASURED, arena, 5 bodies in range: this is what turned "optimise the field"
+ * into "optimise the right half of the field".
+ */
+export const EXPLOSION_PROFILE = {
+  traceMs: 0, woundMs: 0, cutMs: 0,
+  bodiesTraced: 0, bodiesPruned: 0, prunedPrims: 0, traces: 0,
+};
+
 // ——— The resolver —————————————————————————————————————————————————————
 
 /**
@@ -293,7 +417,14 @@ export function resolveExplosion(
   opts: ResolveExplosionOpts = {},
 ): ExplosionEffect {
   const T = EXPLOSION_TUNING;
-  const radiusM = explosionRadiusM();
+  // THE REFERENCE RADIUS, and the scaled one the blast is actually resolved at.
+  // `radiusScale` defaults to 1, so nothing here moves unless a caller asks.
+  const refRadiusM = explosionRadiusM();
+  const radiusM = refRadiusM * (opts.radiusScale ?? 1);
+  // The launch floor is the second focus lever: it is how much of the
+  // point-blank speed survives to the EDGE of the radius, i.e. how far the far
+  // field is visibly flung.
+  const launchFloor = opts.launchFloor ?? EXPLOSION_LAUNCH.falloffFloor;
 
   // — Burst visual: air vs ground via the floor distance (NotBlood florhit).
   //   The lab floor is the y=0 plane (dynamite-flight.ts), so the default
@@ -305,7 +436,14 @@ export function resolveExplosion(
   const burst: BurstVisual = {
     kind: air ? 'air' : 'ground',
     at: [at[0], at[1], at[2]],
-    heightM: radiusM * EXPLOSION_VFX_HEIGHT_SCALE,
+    // THE REFERENCE RADIUS, NOT THE SCALED ONE — deliberately. The fireball's
+    // size is a LOOK that was tuned and judged on its own (`?fxsize`, the plume
+    // note), and EXPLOSION_VFX_HEIGHT_SCALE's own doc calls it "decoupled from
+    // the gameplay AOE radius". Folding `radiusScale` in here would mean a
+    // gameplay-focus slider silently resized the explosion the owner has
+    // already tuned, which is exactly the kind of cross-coupling that makes a
+    // tuning pass untrustworthy.
+    heightM: refRadiusM * EXPLOSION_VFX_HEIGHT_SCALE,
   };
 
   // — Per-body effects: nearest-surface distance gates everything. —
@@ -314,26 +452,96 @@ export function resolveExplosion(
     const body = entry.body;
     const bodyYaw = entry.bodyYaw ?? 0;
 
-    // One trace per live additive prim toward its midpoint; each hit is a
-    // candidate wound site at its own falloff-scaled distance.
+    // ——— PRUNE FIRST, THEN TRACE. ————————————————————————————————————
+    // A prim's surface can only be reached if its cheap lower bound is inside
+    // the AOE (primLowerBoundM), so the candidates are collected by arithmetic
+    // alone and this body is skipped outright when there are none — which is
+    // most bodies on a 23-body map at a 4.69 m radius. Candidates are then
+    // traced NEAREST-FIRST, so the sort below is a nearly-sorted pass and, more
+    // to the point, so the traces that dominate the cost are the ones that
+    // matter. The RESULT SET IS UNCHANGED: a pruned prim was one the old code
+    // traced and then discarded on `fall <= 0`.
     interface Hit { point: Vec3; distM: number; falloff: number }
-    const hits: Hit[] = [];
+
+    // ——— CANDIDATES, THEN TRACES. ————————————————————————————————————
+    // The live additive prims of this body, collected once.
+    const live: Primitive[] = [];
     for (const c of body.clusters) {
       if (!c.alive) continue; // severed limbs fly as chunks — see opts.chunks
       for (const prim of body.prims.slice(c.start, c.start + c.count)) {
         if (prim.op === 'sub' || prim.dead) continue; // holes have no surface
-        const mid: Vec3 = [
+        live.push(prim);
+      }
+    }
+    if (live.length === 0) continue;
+
+    const hits: Hit[] = [];
+
+    // ——— THE BURIED CASE, HANDLED FIRST. ————————————————————————————
+    // `traceSurface` returns its START POINT the moment the field there is
+    // already inside a surface ("a blast buried in flesh"), so a detonation
+    // inside the body produced a distance-0, full-falloff hit for EVERY live
+    // prim. The prune below would have to skip some of those — their segments
+    // can be metres away while their SURFACE, in this convention, is at zero —
+    // so it would have quietly changed how many wounds a point-blank blast
+    // stamps. One field evaluation decides it, and reproducing the old result
+    // is then cheaper than tracing anything at all. Pinned by the exactness
+    // tests in explosion-aoe.test.ts.
+    const tBody = performance.now();
+    if (sdBody(at, body) < T.traceEps) {
+      for (let i = 0; i < live.length; i++) hits.push({ point: at, distM: 0, falloff: 1 });
+    } else {
+      // ——— PRUNE, THEN TRACE NEAREST-FIRST. ————————————————————————
+      // A prim's surface can only be reached if its cheap lower bound is inside
+      // the AOE (primLowerBoundM), so candidates are collected by arithmetic
+      // alone and the traces that dominate the cost are only the ones that
+      // matter. The RESULT SET IS UNCHANGED: a pruned prim was one the old code
+      // traced and then discarded on `fall <= 0`, which is exactly what the
+      // bound proves cannot have mattered.
+      // ——— THE PRUNE: A WHOLE BODY AT A TIME. ————————————————————————
+      // The minimum bound over the body's prims lower-bounds EVERY ray's hit
+      // distance (see primLowerBoundM), so a body that clears the radius here
+      // cannot produce a hit, let alone a wound — and on a 23-body map at a
+      // 4.69 m radius that is most of them, traced not at all instead of
+      // prim-by-prim. A PRIM cannot be pruned this way: its own bounds say
+      // nothing about a ray that stops at another part of the body first.
+      let bodyLower = Infinity;
+      for (const prim of live) {
+        const lower = primLowerBoundM(at, prim);
+        if (lower < bodyLower) bodyLower = lower;
+      }
+      // One more `blendK` of slack for the `min_i − blendK` step, taken from the
+      // widest blend in the body so the bound holds for the smoothest crease.
+      let maxBlend = 0;
+      for (const prim of live) if ((prim.blendK || 0) > maxBlend) maxBlend = prim.blendK || 0;
+      if (bodyLower - maxBlend >= radiusM) {
+        EXPLOSION_PROFILE.bodiesPruned++;
+        EXPLOSION_PROFILE.prunedPrims += live.length;
+        continue; // unreachable: no traces
+      }
+
+      const cands: { mid: Vec3; lower: number }[] = live.map(prim => ({
+        mid: [
           (prim.a[0] + prim.b[0]) / 2, (prim.a[1] + prim.b[1]) / 2,
           (prim.a[2] + prim.b[2]) / 2,
-        ];
-        const p = traceSurface(at, mid, pt => sdBody(pt, body));
+        ],
+        lower: primLowerBoundM(at, prim),
+      }));
+      // Nearest-first: the hit set is unchanged (it is sorted below anyway), but
+      // the traces that dominate the cost then belong to the prims that matter.
+      cands.sort((a, b) => a.lower - b.lower);
+      for (const c of cands) {
+        const p = traceSurface(at, c.mid, pt => sdBody(pt, body));
         if (!p) continue;
         const distM = len(sub(p, at));
         const fall = linearFalloff(distM, radiusM);
         if (fall <= 0) continue; // prim surface outside the AOE
         hits.push({ point: p, distM, falloff: fall });
+        EXPLOSION_PROFILE.traces++;
       }
     }
+    EXPLOSION_PROFILE.traceMs += performance.now() - tBody;
+    EXPLOSION_PROFILE.bodiesTraced++;
     if (hits.length === 0) continue; // not in radius
     hits.sort((a, b) => a.distM - b.distM);
 
@@ -344,6 +552,26 @@ export function resolveExplosion(
 
     // Wounds: nearest prims first, ring-capped; each carries its own falloff
     // so the far side of the body grazes shallower than the near side.
+    //
+    // ...UNLESS THE CALLER GIBS THIS BODY AND SAYS SO (see
+    // ResolveExplosionOpts.woundsOnGibbed). The gib decision is made four lines
+    // above, so the resolver is the only place that can skip the work it
+    // implies; meterCredit is then 0, which is what the gib branch's own
+    // contract already is (it credits meterCredit only on the survivors' path).
+    const tWound = performance.now();
+    if (gibbed && opts.woundsOnGibbed === false) {
+      EXPLOSION_PROFILE.woundMs += performance.now() - tWound;
+      perBody.push({
+        bodyId: entry.id, distM, falloff, damage, gibbed, wounds: [], meterCredit: 0,
+        rigImpulse: {
+          at: hits[0]!.point,
+          vel: concussionVelocity(at, hits[0]!.point, EXPLOSION_STANDARD.impulse
+            * (EXPLOSION_LAUNCH.falloffFloor + (1 - EXPLOSION_LAUNCH.falloffFloor) * falloff)),
+        },
+        severedLimbs: [], chainCuts: [],
+      });
+      continue;
+    }
     const wounds: Wound[] = hits.slice(0, T.maxWoundsPerBody).map(h =>
       worldHitToWound(
         body.prims, h.point,
@@ -361,11 +589,11 @@ export function resolveExplosion(
     }
     const meterCredit = wounds.reduce(
       (m, w) => m + w.radius * COLLAPSE_TUNING.meterRadiusWeight, 0);
+    EXPLOSION_PROFILE.woundMs += performance.now() - tWound;
 
     // Rig shove at the nearest surface: direction from the blast centre,
     // magnitude with the launch floor (edge survivors still fly).
-    const launchFall = EXPLOSION_LAUNCH.falloffFloor
-      + (1 - EXPLOSION_LAUNCH.falloffFloor) * falloff;
+    const launchFall = launchFloor + (1 - launchFloor) * falloff;
     const rigImpulse: RigImpulse = {
       at: hits[0]!.point,
       vel: concussionVelocity(at, hits[0]!.point, EXPLOSION_STANDARD.impulse * launchFall),
@@ -376,11 +604,13 @@ export function resolveExplosion(
     // gibbed: gibAll supersedes severing, so the wiring checks that first.
     let severedLimbs: LimbId[] = [];
     let chainCuts: ChainCut[] = [];
+    const tCut = performance.now();
     if (!gibbed && wounds.length > 0) {
       const torso = body.clusters.find(c => c.limb === 'torso');
       if (torso) severedLimbs = cutLimbs(body, wounds, torso.center, bodyYaw);
       chainCuts = cutChains(body, wounds, bodyYaw);
     }
+    EXPLOSION_PROFILE.cutMs += performance.now() - tCut;
 
     perBody.push({
       bodyId: entry.id,
@@ -395,8 +625,7 @@ export function resolveExplosion(
     const distM = len(sub(ch.pos, at));
     const fall = linearFalloff(distM, radiusM);
     if (fall <= 0) continue;
-    const launchFall = EXPLOSION_LAUNCH.falloffFloor
-      + (1 - EXPLOSION_LAUNCH.falloffFloor) * fall;
+    const launchFall = launchFloor + (1 - launchFloor) * fall;
     chunkImpulses.push({
       chunkId: ch.id,
       vel: concussionVelocity(at, ch.pos, EXPLOSION_STANDARD.impulse * launchFall),

@@ -1,0 +1,1424 @@
+{
+ "set": "after-dpr2",
+ "label": "after-dpr21",
+ "url": "http://localhost:5480/sdf-game.html?room=arena&gibbones=core&pipelinelog=1&seed=7&crowd=1&vhs=blud&res=800",
+ "startedAt": "2026-09-16T16:55:04.467Z",
+ "warmWallMs": 4363,
+ "backendWallMs": 1758,
+ "warm": {
+  "ms": 2524,
+  "bootBeforeWarmMs": 9,
+  "flipped": 58,
+  "flippedNames": [
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Group:shell-eject-0",
+   "Group:shell-load-0",
+   "Group:shell-eject-1",
+   "Group:shell-load-1",
+   "Group:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?",
+   "Mesh:?"
+  ],
+  "passes": 11,
+  "computes": 7,
+  "phases": {
+   "flip": 0,
+   "crowdBinsPerType": [
+    2.8,
+    1.7,
+    1.6,
+    1.6,
+    1.3,
+    1.6,
+    1.6
+   ],
+   "crowdBins": 12.200000047683716,
+   "goo": 116.89999997615814,
+   "drawOnce": 1781.1000000238419,
+   "precompile": 613.8999999761581
+  }
+ },
+ "actions": {
+  "roomEntry": {
+   "wallMs": 1407,
+   "frames": {
+    "n": 80,
+    "p50": 9,
+    "p95": 49.8,
+    "max": 62
+   },
+   "pipelinesCreated": 0,
+   "compileMs": 0,
+   "longFramesAdded": 0,
+   "longFrames": []
+  },
+  "firstShot": {
+   "wallMs": 505,
+   "frames": {
+    "n": 28,
+    "p50": 21.8,
+    "p95": 34.4,
+    "max": 69.7
+   },
+   "pipelinesCreated": 2,
+   "compileMs": 0,
+   "longFramesAdded": 0,
+   "longFrames": []
+  },
+  "repeatShot0": {
+   "wallMs": 466,
+   "frames": {
+    "n": 27,
+    "p50": 31.1,
+    "p95": 34.4,
+    "max": 34.8
+   },
+   "pipelinesCreated": 0,
+   "compileMs": 0,
+   "longFramesAdded": 0,
+   "longFrames": []
+  },
+  "repeatShot1": {
+   "wallMs": 464,
+   "frames": {
+    "n": 27,
+    "p50": 31.1,
+    "p95": 33.9,
+    "max": 35.2
+   },
+   "pipelinesCreated": 0,
+   "compileMs": 0,
+   "longFramesAdded": 0,
+   "longFrames": []
+  },
+  "repeatShot2": {
+   "wallMs": 465,
+   "frames": {
+    "n": 26,
+    "p50": 30.4,
+    "p95": 32.4,
+    "max": 32.5
+   },
+   "pipelinesCreated": 0,
+   "compileMs": 0,
+   "longFramesAdded": 0,
+   "longFrames": []
+  },
+  "repeatShot3": {
+   "wallMs": 468,
+   "frames": {
+    "n": 27,
+    "p50": 30,
+    "p95": 32,
+    "max": 33.7
+   },
+   "pipelinesCreated": 0,
+   "compileMs": 0,
+   "longFramesAdded": 0,
+   "longFrames": []
+  },
+  "repeatShot4": {
+   "wallMs": 462,
+   "frames": {
+    "n": 27,
+    "p50": 28.3,
+    "p95": 31.9,
+    "max": 32.8
+   },
+   "pipelinesCreated": 0,
+   "compileMs": 0,
+   "longFramesAdded": 0,
+   "longFrames": []
+  },
+  "repeatShot5": {
+   "wallMs": 471,
+   "frames": {
+    "n": 28,
+    "p50": 28.4,
+    "p95": 31.8,
+    "max": 33.6
+   },
+   "pipelinesCreated": 0,
+   "compileMs": 0,
+   "longFramesAdded": 0,
+   "longFrames": []
+  },
+  "repeatBlast0": {
+   "wallMs": 461,
+   "frames": {
+    "n": 27,
+    "p50": 27.9,
+    "p95": 34.3,
+    "max": 36.2
+   },
+   "pipelinesCreated": 0,
+   "compileMs": 0,
+   "longFramesAdded": 0,
+   "longFrames": []
+  },
+  "repeatBlast1": {
+   "wallMs": 467,
+   "frames": {
+    "n": 28,
+    "p50": 24,
+    "p95": 30.4,
+    "max": 30.6
+   },
+   "pipelinesCreated": 0,
+   "compileMs": 0,
+   "longFramesAdded": 0,
+   "longFrames": []
+  },
+  "repeatBlast2": {
+   "wallMs": 466,
+   "frames": {
+    "n": 28,
+    "p50": 29.1,
+    "p95": 32.9,
+    "max": 34.4
+   },
+   "pipelinesCreated": 0,
+   "compileMs": 0,
+   "longFramesAdded": 0,
+   "longFrames": []
+  },
+  "repeatBlast3": {
+   "wallMs": 464,
+   "frames": {
+    "n": 28,
+    "p50": 26.2,
+    "p95": 31.3,
+    "max": 36
+   },
+   "pipelinesCreated": 0,
+   "compileMs": 0,
+   "longFramesAdded": 0,
+   "longFrames": []
+  },
+  "repeatBlast4": {
+   "wallMs": 467,
+   "frames": {
+    "n": 28,
+    "p50": 28.4,
+    "p95": 31.1,
+    "max": 34.2
+   },
+   "pipelinesCreated": 0,
+   "compileMs": 0,
+   "longFramesAdded": 0,
+   "longFrames": []
+  },
+  "repeatBlast5": {
+   "wallMs": 466,
+   "frames": {
+    "n": 28,
+    "p50": 27.2,
+    "p95": 31.5,
+    "max": 33.4
+   },
+   "pipelinesCreated": 0,
+   "compileMs": 0,
+   "longFramesAdded": 0,
+   "longFrames": []
+  }
+ },
+ "repeatedShots": {
+  "windows": 6,
+  "totalPipelinesCreated": 0,
+  "maxFrameMs": 35.2,
+  "maxP95": 34.4,
+  "longFrames": 0,
+  "perWindow": [
+   {
+    "created": 0,
+    "compileMs": 0,
+    "long": 0,
+    "p95": 34.4,
+    "max": 34.8,
+    "longFrameDetail": []
+   },
+   {
+    "created": 0,
+    "compileMs": 0,
+    "long": 0,
+    "p95": 33.9,
+    "max": 35.2,
+    "longFrameDetail": []
+   },
+   {
+    "created": 0,
+    "compileMs": 0,
+    "long": 0,
+    "p95": 32.4,
+    "max": 32.5,
+    "longFrameDetail": []
+   },
+   {
+    "created": 0,
+    "compileMs": 0,
+    "long": 0,
+    "p95": 32,
+    "max": 33.7,
+    "longFrameDetail": []
+   },
+   {
+    "created": 0,
+    "compileMs": 0,
+    "long": 0,
+    "p95": 31.9,
+    "max": 32.8,
+    "longFrameDetail": []
+   },
+   {
+    "created": 0,
+    "compileMs": 0,
+    "long": 0,
+    "p95": 31.8,
+    "max": 33.6,
+    "longFrameDetail": []
+   }
+  ]
+ },
+ "repeatedBlasts": {
+  "windows": 6,
+  "totalPipelinesCreated": 0,
+  "maxFrameMs": 36.2,
+  "maxP95": 34.3,
+  "longFrames": 0,
+  "perWindow": [
+   {
+    "created": 0,
+    "compileMs": 0,
+    "long": 0,
+    "p95": 34.3,
+    "max": 36.2,
+    "longFrameDetail": []
+   },
+   {
+    "created": 0,
+    "compileMs": 0,
+    "long": 0,
+    "p95": 30.4,
+    "max": 30.6,
+    "longFrameDetail": []
+   },
+   {
+    "created": 0,
+    "compileMs": 0,
+    "long": 0,
+    "p95": 32.9,
+    "max": 34.4,
+    "longFrameDetail": []
+   },
+   {
+    "created": 0,
+    "compileMs": 0,
+    "long": 0,
+    "p95": 31.3,
+    "max": 36,
+    "longFrameDetail": []
+   },
+   {
+    "created": 0,
+    "compileMs": 0,
+    "long": 0,
+    "p95": 31.1,
+    "max": 34.2,
+    "longFrameDetail": []
+   },
+   {
+    "created": 0,
+    "compileMs": 0,
+    "long": 0,
+    "p95": 31.5,
+    "max": 33.4,
+    "longFrameDetail": []
+   }
+  ]
+ },
+ "probeStress": [
+  {
+   "requested": 6,
+   "charName": "zombie",
+   "spawn": {
+    "ok": 6,
+    "placed": [
+     [
+      22.1,
+      0,
+      -10.95
+     ],
+     [
+      23,
+      0,
+      -10.95
+     ],
+     [
+      23.9,
+      0,
+      -10.95
+     ],
+     [
+      22.1,
+      0,
+      -10.05
+     ],
+     [
+      23,
+      0,
+      -10.05
+     ],
+     [
+      23.9,
+      0,
+      -10.05
+     ]
+    ]
+   },
+   "pre": {
+    "frames": 239,
+    "errors": 0,
+    "capsules": 35
+   },
+   "post": {
+    "frames": 321,
+    "errors": 0,
+    "bound": true,
+    "capsules": 395,
+    "lights": 1,
+    "dynOn": true,
+    "radianceGain": 0.15,
+    "visStrength": 1
+   },
+   "spawnFrames": {
+    "n": 31,
+    "p50": 3.9,
+    "p95": 33.9,
+    "max": 299.7
+   },
+   "steadyFrames": {
+    "n": 85,
+    "p50": 30.9,
+    "p95": 42.6,
+    "max": 49.2
+   },
+   "steadyWallMs": 2028,
+   "steadyGainFrames": 82,
+   "pipelinesCreated": 0
+  },
+  {
+   "requested": 9,
+   "charName": "zombie",
+   "spawn": {
+    "ok": 9,
+    "placed": [
+     [
+      22.1,
+      0,
+      -11.4
+     ],
+     [
+      23,
+      0,
+      -11.4
+     ],
+     [
+      23.9,
+      0,
+      -11.4
+     ],
+     [
+      22.1,
+      0,
+      -10.5
+     ],
+     [
+      23,
+      0,
+      -10.5
+     ],
+     [
+      23.9,
+      0,
+      -10.5
+     ],
+     [
+      22.1,
+      0,
+      -9.6
+     ],
+     [
+      23,
+      0,
+      -9.6
+     ],
+     [
+      23.9,
+      0,
+      -9.6
+     ]
+    ]
+   },
+   "pre": {
+    "frames": 321,
+    "errors": 0,
+    "capsules": 395
+   },
+   "post": {
+    "frames": 368,
+    "errors": 0,
+    "bound": true,
+    "capsules": 935,
+    "lights": 1,
+    "dynOn": true,
+    "radianceGain": 0.15,
+    "visStrength": 1
+   },
+   "spawnFrames": {
+    "n": 21,
+    "p50": 26.4,
+    "p95": 77.4,
+    "max": 809.1
+   },
+   "steadyFrames": {
+    "n": 36,
+    "p50": 34.8,
+    "p95": 194.7,
+    "max": 206.8
+   },
+   "steadyWallMs": 2014,
+   "steadyGainFrames": 47,
+   "pipelinesCreated": 0
+  },
+  {
+   "requested": 12,
+   "charName": "zombie",
+   "spawn": {
+    "ok": 12,
+    "placed": [
+     [
+      21.65,
+      0,
+      -11.4
+     ],
+     [
+      22.55,
+      0,
+      -11.4
+     ],
+     [
+      23.45,
+      0,
+      -11.4
+     ],
+     [
+      24.35,
+      0,
+      -11.4
+     ],
+     [
+      21.65,
+      0,
+      -10.5
+     ],
+     [
+      22.55,
+      0,
+      -10.5
+     ],
+     [
+      23.45,
+      0,
+      -10.5
+     ],
+     [
+      24.35,
+      0,
+      -10.5
+     ],
+     [
+      21.65,
+      0,
+      -9.6
+     ],
+     [
+      22.55,
+      0,
+      -9.6
+     ],
+     [
+      23.45,
+      0,
+      -9.6
+     ],
+     [
+      24.35,
+      0,
+      -9.6
+     ]
+    ]
+   },
+   "pre": {
+    "frames": 368,
+    "errors": 0,
+    "capsules": 935
+   },
+   "post": {
+    "frames": 384,
+    "errors": 0,
+    "bound": true,
+    "capsules": 1024,
+    "lights": 1,
+    "dynOn": true,
+    "radianceGain": 0.15,
+    "visStrength": 1
+   },
+   "spawnFrames": {
+    "n": 9,
+    "p50": 30,
+    "p95": 974.9,
+    "max": 974.9
+   },
+   "steadyFrames": {
+    "n": 8,
+    "p50": 205.8,
+    "p95": 503.2,
+    "max": 503.2
+   },
+   "steadyWallMs": 2004,
+   "steadyGainFrames": 16,
+   "pipelinesCreated": 0
+  },
+  {
+   "requested": 20,
+   "charName": "zombie",
+   "spawn": {
+    "ok": 20,
+    "placed": [
+     [
+      21.2,
+      0,
+      -11.85
+     ],
+     [
+      22.1,
+      0,
+      -11.85
+     ],
+     [
+      23,
+      0,
+      -11.85
+     ],
+     [
+      23.9,
+      0,
+      -11.85
+     ],
+     [
+      24.8,
+      0,
+      -11.85
+     ],
+     [
+      21.2,
+      0,
+      -10.95
+     ],
+     [
+      22.1,
+      0,
+      -10.95
+     ],
+     [
+      23,
+      0,
+      -10.95
+     ],
+     [
+      23.9,
+      0,
+      -10.95
+     ],
+     [
+      24.8,
+      0,
+      -10.95
+     ],
+     [
+      21.2,
+      0,
+      -10.05
+     ],
+     [
+      22.1,
+      0,
+      -10.05
+     ],
+     [
+      23,
+      0,
+      -10.05
+     ],
+     [
+      23.9,
+      0,
+      -10.05
+     ],
+     [
+      24.8,
+      0,
+      -10.05
+     ],
+     [
+      21.2,
+      0,
+      -9.15
+     ],
+     [
+      22.1,
+      0,
+      -9.15
+     ],
+     [
+      23,
+      0,
+      -9.15
+     ],
+     [
+      23.9,
+      0,
+      -9.15
+     ],
+     [
+      24.8,
+      0,
+      -9.15
+     ]
+    ]
+   },
+   "pre": {
+    "frames": 384,
+    "errors": 0,
+    "capsules": 1024
+   },
+   "post": {
+    "frames": 394,
+    "errors": 0,
+    "bound": true,
+    "capsules": 1024,
+    "lights": 1,
+    "dynOn": true,
+    "radianceGain": 0.15,
+    "visStrength": 1
+   },
+   "spawnFrames": {
+    "n": 5,
+    "p50": 39.5,
+    "p95": 1774.6,
+    "max": 1774.6
+   },
+   "steadyFrames": {
+    "n": 6,
+    "p50": 321.7,
+    "p95": 753.3,
+    "max": 753.3
+   },
+   "steadyWallMs": 2008,
+   "steadyGainFrames": 10,
+   "pipelinesCreated": 0
+  }
+ ],
+ "probeHealth": {
+  "errors": 0,
+  "frames": 394,
+  "bound": true,
+  "rate": 2,
+  "gates": {
+   "bound": true,
+   "dynKey": "arena",
+   "room": 6,
+   "grid": true,
+   "gain": 0.15,
+   "vis": 1,
+   "dynOn": true,
+   "flashI": 0,
+   "flashAge": 15.164699999928526,
+   "capsules": 1024,
+   "lights": 1
+  },
+  "radianceGain": 0.15,
+  "visStrength": 1
+ },
+ "gibTimeline": {
+  "firstVisibleChunk": {
+   "t": 448,
+   "pendingGibs": 0,
+   "tearing": 0,
+   "tier": null,
+   "blastMs": 21.200000047683716,
+   "live": 64,
+   "baked": 0,
+   "pendingBake": null,
+   "totalBakes": 0,
+   "lastBakeMs": 0,
+   "lastBakeSwapMs": 0,
+   "faceBaked": 0
+  },
+  "firstBakeSubmit": {
+   "t": 3379,
+   "pendingGibs": 0,
+   "tearing": 0,
+   "tier": null,
+   "blastMs": 21.200000047683716,
+   "live": 64,
+   "baked": 0,
+   "pendingBake": 52,
+   "totalBakes": 0,
+   "lastBakeMs": 0,
+   "lastBakeSwapMs": 0,
+   "faceBaked": 0
+  },
+  "firstBakeSwap": {
+   "t": 3630,
+   "pendingGibs": 0,
+   "tearing": 0,
+   "tier": null,
+   "blastMs": 21.200000047683716,
+   "live": 63,
+   "baked": 1,
+   "pendingBake": 59,
+   "totalBakes": 1,
+   "lastBakeMs": 165.5,
+   "lastBakeSwapMs": 0.5999999046325684,
+   "faceBaked": 0
+  },
+  "firstTexturedHeadDraw": {
+   "t": 4692,
+   "pendingGibs": 0,
+   "tearing": 0,
+   "tier": null,
+   "blastMs": 21.200000047683716,
+   "live": 56,
+   "baked": 8,
+   "pendingBake": 50,
+   "totalBakes": 8,
+   "lastBakeMs": 184,
+   "lastBakeSwapMs": 0.2999999523162842,
+   "faceBaked": 1
+  }
+ },
+ "pipelineLog": {
+  "totalPipelines": 253,
+  "totalCompileMs": 701,
+  "slowest": [
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_185",
+    "ms": 607,
+    "async": true,
+    "via": "compile#8@f4",
+    "frame": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_766",
+    "ms": 60,
+    "async": true,
+    "via": "compile#1@f4",
+    "frame": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_195",
+    "ms": 8,
+    "async": true,
+    "via": "compile#40@f41",
+    "frame": 41
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_195",
+    "ms": 6,
+    "async": true,
+    "via": "compile#55@f41",
+    "frame": 41
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_767",
+    "ms": 6,
+    "async": true,
+    "via": "compile#2@f4",
+    "frame": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_781",
+    "ms": 2,
+    "async": true,
+    "via": "compile#3@f4",
+    "frame": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_195",
+    "ms": 2,
+    "async": true,
+    "via": "compile#25@f41",
+    "frame": 41
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_782",
+    "ms": 1,
+    "async": true,
+    "via": "compile#4@f4",
+    "frame": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_196",
+    "ms": 1,
+    "async": true,
+    "via": "compile#11@f4",
+    "frame": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_197",
+    "ms": 1,
+    "async": true,
+    "via": "compile#12@f4",
+    "frame": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_198",
+    "ms": 1,
+    "async": true,
+    "via": "compile#13@f4",
+    "frame": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_195",
+    "ms": 0,
+    "async": true,
+    "via": "compile#10@f4",
+    "frame": 4
+   }
+  ],
+  "longFrames": [
+   {
+    "frame": 213,
+    "ms": 150.2,
+    "creations": 4,
+    "names": [
+     "renderPipeline_MeshBasicNodeMaterial_191",
+     "renderPipeline_MeshBasicNodeMaterial_727",
+     "renderPipeline_MeshBasicNodeMaterial_762"
+    ]
+   }
+  ],
+  "rebuilds": [
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_185",
+    "count": 5,
+    "firstFrame": 4,
+    "lastFrame": 41,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_195",
+    "count": 5,
+    "firstFrame": 4,
+    "lastFrame": 41,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_196",
+    "count": 5,
+    "firstFrame": 4,
+    "lastFrame": 41,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_197",
+    "count": 5,
+    "firstFrame": 4,
+    "lastFrame": 41,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_198",
+    "count": 5,
+    "firstFrame": 4,
+    "lastFrame": 41,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_199",
+    "count": 5,
+    "firstFrame": 4,
+    "lastFrame": 41,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_194",
+    "count": 5,
+    "firstFrame": 4,
+    "lastFrame": 41,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_773",
+    "count": 4,
+    "firstFrame": 4,
+    "lastFrame": 41,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 3
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_185",
+    "count": 4,
+    "firstFrame": 4,
+    "lastFrame": 41,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_195",
+    "count": 4,
+    "firstFrame": 4,
+    "lastFrame": 41,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_196",
+    "count": 4,
+    "firstFrame": 4,
+    "lastFrame": 41,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_197",
+    "count": 4,
+    "firstFrame": 4,
+    "lastFrame": 41,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_198",
+    "count": 4,
+    "firstFrame": 4,
+    "lastFrame": 41,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_199",
+    "count": 4,
+    "firstFrame": 4,
+    "lastFrame": 41,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_194",
+    "count": 4,
+    "firstFrame": 4,
+    "lastFrame": 41,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 4
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_773",
+    "count": 3,
+    "firstFrame": 41,
+    "lastFrame": 41,
+    "objects": [
+     "Mesh"
+    ],
+    "releases": 3
+   }
+  ],
+  "descriptorGroups": [
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_773",
+    "count": 7,
+    "distinctThreeKeys": 2,
+    "firstFrame": 4,
+    "lastFrame": 41
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_185",
+    "count": 5,
+    "distinctThreeKeys": 1,
+    "firstFrame": 4,
+    "lastFrame": 41
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_195",
+    "count": 5,
+    "distinctThreeKeys": 1,
+    "firstFrame": 4,
+    "lastFrame": 41
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_196",
+    "count": 5,
+    "distinctThreeKeys": 1,
+    "firstFrame": 4,
+    "lastFrame": 41
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_197",
+    "count": 5,
+    "distinctThreeKeys": 1,
+    "firstFrame": 4,
+    "lastFrame": 41
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_198",
+    "count": 5,
+    "distinctThreeKeys": 1,
+    "firstFrame": 4,
+    "lastFrame": 41
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_199",
+    "count": 5,
+    "distinctThreeKeys": 1,
+    "firstFrame": 4,
+    "lastFrame": 41
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_194",
+    "count": 5,
+    "distinctThreeKeys": 1,
+    "firstFrame": 4,
+    "lastFrame": 41
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_185",
+    "count": 4,
+    "distinctThreeKeys": 1,
+    "firstFrame": 4,
+    "lastFrame": 41
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_195",
+    "count": 4,
+    "distinctThreeKeys": 1,
+    "firstFrame": 4,
+    "lastFrame": 41
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_196",
+    "count": 4,
+    "distinctThreeKeys": 1,
+    "firstFrame": 4,
+    "lastFrame": 41
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_197",
+    "count": 4,
+    "distinctThreeKeys": 1,
+    "firstFrame": 4,
+    "lastFrame": 41
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_198",
+    "count": 4,
+    "distinctThreeKeys": 1,
+    "firstFrame": 4,
+    "lastFrame": 41
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_199",
+    "count": 4,
+    "distinctThreeKeys": 1,
+    "firstFrame": 4,
+    "lastFrame": 41
+   },
+   {
+    "name": "renderPipeline_MeshBasicNodeMaterial_194",
+    "count": 4,
+    "distinctThreeKeys": 1,
+    "firstFrame": 4,
+    "lastFrame": 41
+   }
+  ],
+  "shaderModules": {
+   "created": 255,
+   "totalBytes": 9047735,
+   "distinct": 195,
+   "repeated": [
+    {
+     "hash": "2cfb64324542b8e8:1320",
+     "count": 9,
+     "label": "vertex_PMREM.Background"
+    },
+    {
+     "hash": "1c2bdcf733829950:858",
+     "count": 9,
+     "label": "fragment_PMREM.Background"
+    },
+    {
+     "hash": "e104c5d150922112:1594",
+     "count": 9,
+     "label": "vertex_PMREM_blur"
+    },
+    {
+     "hash": "5f7d2707c8462f31:1525",
+     "count": 9,
+     "label": "vertex_PMREM_ggx"
+    },
+    {
+     "hash": "3b4823187eb3ae0b:9302",
+     "count": 9,
+     "label": "fragment_PMREM_ggx"
+    },
+    {
+     "hash": "44b98deb54ea6ea4:1969",
+     "count": 5,
+     "label": "vertex"
+    },
+    {
+     "hash": "5632057679686c0b:14557",
+     "count": 5,
+     "label": "fragment"
+    },
+    {
+     "hash": "65fd7fa65e2e6df2:14534",
+     "count": 5,
+     "label": "fragment"
+    },
+    {
+     "hash": "f249b9a07fc5dcc9:1802",
+     "count": 5,
+     "label": "vertex"
+    },
+    {
+     "hash": "145a060507721dbf:4349",
+     "count": 5,
+     "label": "fragment"
+    }
+   ]
+  },
+  "evictions": {
+   "total": 120,
+   "byObject": [
+    {
+     "object": "",
+     "count": 62
+    },
+    {
+     "object": "Mesh",
+     "count": 58
+    }
+   ],
+   "eventsLast12": [
+    {
+     "key": "213,215,false,0,false,204,205,100,,,,true,false,false,3,false,519,7680,7680,7680,255,255,0,false,1,,rgba16float,,triangle-list,normal,3,position,3,uv,2,index,,",
+     "frame": 41,
+     "via": "release",
+     "object": "",
+     "material": ""
+    },
+    {
+     "key": "213,216,false,0,false,204,205,100,,,,true,false,false,3,false,519,7680,7680,7680,255,255,0,false,1,,rgba16float,,triangle-list,normal,3,position,3,uv,2,index,,",
+     "frame": 41,
+     "via": "release",
+     "object": "",
+     "material": ""
+    },
+    {
+     "key": "217,218,false,0,false,204,205,100,,,,true,false,false,3,false,519,7680,7680,7680,255,255,0,false,1,,rgba32float,,triangle-list,normal,3,position,3,uv,2,index,,",
+     "frame": 41,
+     "via": "release",
+     "object": "",
+     "material": ""
+    },
+    {
+     "key": "219,220,false,0,false,204,205,100,,,,true,false,false,3,false,519,7680,7680,7680,255,255,0,false,1,,rgba32float,,triangle-list,normal,3,position,3,uv,2,index,,",
+     "frame": 41,
+     "via": "release",
+     "object": "",
+     "material": ""
+    },
+    {
+     "key": "209,210,false,1,false,204,205,100,,,,true,false,false,3,false,519,7680,7680,7680,255,255,0,false,1,,rgba32float,depth24plus,triangle-list,normal,3,position,3,uv,2,index,,",
+     "frame": 41,
+     "via": "release",
+     "object": "",
+     "material": ""
+    },
+    {
+     "key": "211,212,false,0,false,204,205,100,,,,true,false,false,3,false,519,7680,7680,7680,255,255,0,false,1,,rgba16float,depth24plus,triangle-list,normal,3,position,3,uv,2,index,,",
+     "frame": 41,
+     "via": "release",
+     "object": "",
+     "material": ""
+    },
+    {
+     "key": "213,214,false,0,false,204,205,100,,,,true,false,false,3,false,519,7680,7680,7680,255,255,0,false,1,,rgba16float,depth24plus,triangle-list,normal,3,position,3,uv,2,index,,",
+     "frame": 41,
+     "via": "release",
+     "object": "",
+     "material": ""
+    },
+    {
+     "key": "213,215,false,0,false,204,205,100,,,,true,false,false,3,false,519,7680,7680,7680,255,255,0,false,1,,rgba16float,depth24plus,triangle-list,normal,3,position,3,uv,2,index,,",
+     "frame": 41,
+     "via": "release",
+     "object": "",
+     "material": ""
+    },
+    {
+     "key": "213,216,false,0,false,204,205,100,,,,true,false,false,3,false,519,7680,7680,7680,255,255,0,false,1,,rgba16float,depth24plus,triangle-list,normal,3,position,3,uv,2,index,,",
+     "frame": 41,
+     "via": "release",
+     "object": "",
+     "material": ""
+    },
+    {
+     "key": "217,218,false,0,false,204,205,100,,,,true,false,false,3,false,519,7680,7680,7680,255,255,0,false,1,,rgba32float,depth24plus,triangle-list,normal,3,position,3,uv,2,index,,",
+     "frame": 41,
+     "via": "release",
+     "object": "",
+     "material": ""
+    },
+    {
+     "key": "219,220,false,0,false,204,205,100,,,,true,false,false,3,false,519,7680,7680,7680,255,255,0,false,1,,rgba32float,depth24plus,triangle-list,normal,3,position,3,uv,2,index,,",
+     "frame": 41,
+     "via": "release",
+     "object": "",
+     "material": ""
+    },
+    {
+     "key": "252,253,false,1,false,204,205,100,,,,true,true,true,3,false,519,7680,7680,7680,255,255,0,false,1,,rgba16float,depth24plus,triangle-list,bakeAnchor,4,bakeAo,1,bakeColor,4,bakeFresnel,1,bakeResponse,4,normal,3,position,3,index,,",
+     "frame": 430,
+     "via": "delete",
+     "object": "Mesh",
+     "material": "MeshBasicNodeMaterial"
+    }
+   ]
+  },
+  "compute": {
+   "total": 1135,
+   "maxPerFrame": 27
+  }
+ },
+ "lifecycle": {
+  "loopAfterRunningWarm": true,
+  "loopAfterPausedWarm": false,
+  "loopAfterPauseDuringWarm": false
+ },
+ "warmGate": {
+  "phase": "ready",
+  "timedOut": false
+ },
+ "viewport": {
+  "width": 1512,
+  "height": 982,
+  "dpr": 2,
+  "canvasW": 800,
+  "canvasH": 600
+ },
+ "pageErrors": [],
+ "consoleCounts": {
+  "queriesExceeded": 0,
+  "indexCount0": 1,
+  "gpuLost": 0,
+  "uncaptured": 0,
+  "probeGatherFail": 0,
+  "errors": 1,
+  "warnings": 1
+ },
+ "gpuDiagnostics": {
+  "lost": null,
+  "uncaptured": [],
+  "uncapturedCount": 0
+ },
+ "run": 1
+}

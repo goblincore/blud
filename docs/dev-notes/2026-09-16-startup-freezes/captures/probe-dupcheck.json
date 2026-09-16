@@ -1,0 +1,4123 @@
+{
+  "label": "dupcheck",
+  "url": "http://localhost:5480/sdf-game.html?room=arena&gibbones=core&pipelinelog=1&seed=7",
+  "startedAt": "2026-09-16T14:10:50.982Z",
+  "qs": "",
+  "backend": "webgpu",
+  "backendWallMs": 4748,
+  "warmWallMs": 10120,
+  "warm": {
+    "ms": 5035,
+    "bootBeforeWarmMs": 25,
+    "flipped": 61,
+    "flippedNames": [
+      "PointLight:?",
+      "PointLight:?",
+      "PointLight:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Group:shell-eject-0",
+      "Group:shell-load-0",
+      "Group:shell-eject-1",
+      "Group:shell-load-1",
+      "Group:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?"
+    ],
+    "passes": 11,
+    "computes": 7,
+    "phases": {
+      "flip": 0.10000002384185791,
+      "crowdBinsPerType": [
+        7.3,
+        4.7,
+        3.5,
+        3.1,
+        2.7,
+        3.6,
+        3.2
+      ],
+      "crowdBins": 28.200000047683716,
+      "goo": 350.7999999523163,
+      "drawOnce": 3369.5,
+      "precompile": 1286.2000000476837
+    }
+  },
+  "bootPoll": [],
+  "cpuProfile": {
+    "file": "dupcheck-boot.cpuprofile",
+    "totalMs": 10143,
+    "top": [
+      {
+        "fn": "(idle)  :0",
+        "ms": 2627,
+        "pct": 25.9
+      },
+      {
+        "fn": "sdBody  src/lab/sdf-zombie/validate.ts:185",
+        "ms": 1130,
+        "pct": 11.1
+      },
+      {
+        "fn": "createProgram  three/chunk-DEF7EUCY.js:45188",
+        "ms": 657,
+        "pct": 6.5
+      },
+      {
+        "fn": "sdPrimitive  src/lab/sdf-zombie/validate.ts:14",
+        "ms": 493,
+        "pct": 4.9
+      },
+      {
+        "fn": "boneBreach  src/lab/sdf-zombie/validate.ts:237",
+        "ms": 477,
+        "pct": 4.7
+      },
+      {
+        "fn": "sdBentCone  src/lab/sdf-zombie/validate.ts:131",
+        "ms": 304,
+        "pct": 3
+      },
+      {
+        "fn": "distance  src/lab/sdf-zombie/webgpu/skeleton-spike/contract.ts:132",
+        "ms": 290,
+        "pct": 2.9
+      },
+      {
+        "fn": "(garbage collector)  :0",
+        "ms": 260,
+        "pct": 2.6
+      },
+      {
+        "fn": "(program)  :0",
+        "ms": 229,
+        "pct": 2.3
+      },
+      {
+        "fn": "build  three/chunk-DEF7EUCY.js:1442",
+        "ms": 211,
+        "pct": 2.1
+      },
+      {
+        "fn": "at  src/lab/sdf-zombie/validate.ts:138",
+        "ms": 195,
+        "pct": 1.9
+      },
+      {
+        "fn": "sdBezierTs  src/lab/sdf-zombie/validate.ts:100",
+        "ms": 181,
+        "pct": 1.8
+      },
+      {
+        "fn": "sub  src/lab/sdf-zombie/vec.ts:2",
+        "ms": 172,
+        "pct": 1.7
+      },
+      {
+        "fn": "extractHullSoup  src/lab/sdf-zombie/webgpu/surface-nets-cpu.ts:70",
+        "ms": 134,
+        "pct": 1.3
+      },
+      {
+        "fn": "g  src/lab/sdf-zombie/validate.ts:143",
+        "ms": 84,
+        "pct": 0.8
+      },
+      {
+        "fn": "build  three/chunk-DEF7EUCY.js:1744",
+        "ms": 77,
+        "pct": 0.8
+      },
+      {
+        "fn": "_getChildren  three/chunk-DEF7EUCY.js:1139",
+        "ms": 72,
+        "pct": 0.7
+      },
+      {
+        "fn": "extractSegmentMesh  src/lab/sdf-zombie/webgpu/skeleton-spike/mesh.ts:5",
+        "ms": 68,
+        "pct": 0.7
+      },
+      {
+        "fn": "getDataFromNode  three/chunk-DEF7EUCY.js:25488",
+        "ms": 66,
+        "pct": 0.7
+      },
+      {
+        "fn": "getChildren  three/chunk-DEF7EUCY.js:1103",
+        "ms": 61,
+        "pct": 0.6
+      },
+      {
+        "fn": "analyze  three/chunk-DEF7EUCY.js:1363",
+        "ms": 56,
+        "pct": 0.6
+      },
+      {
+        "fn": "build  three/chunk-DEF7EUCY.js:2431",
+        "ms": 42,
+        "pct": 0.4
+      },
+      {
+        "fn": "getNodeFromHash  three/chunk-DEF7EUCY.js:24868",
+        "ms": 35,
+        "pct": 0.3
+      },
+      {
+        "fn": "w  src/lab/sdf-zombie/webgpu/goblin-skin.ts:100",
+        "ms": 35,
+        "pct": 0.3
+      },
+      {
+        "fn": "dot  src/lab/sdf-zombie/vec.ts:4",
+        "ms": 35,
+        "pct": 0.3
+      },
+      {
+        "fn": "build  three/chunk-DEF7EUCY.js:4238",
+        "ms": 34,
+        "pct": 0.3
+      },
+      {
+        "fn": "tileNoise  src/lab/sdf-zombie/webgpu/goblin-skin.ts:96",
+        "ms": 33,
+        "pct": 0.3
+      },
+      {
+        "fn": "generateStone  src/game/level/stone-textures.ts:67",
+        "ms": 31,
+        "pct": 0.3
+      },
+      {
+        "fn": "getNodeType  three/chunk-DEF7EUCY.js:1267",
+        "ms": 28,
+        "pct": 0.3
+      },
+      {
+        "fn": "createAttribute  three/chunk-DEF7EUCY.js:42270",
+        "ms": 28,
+        "pct": 0.3
+      }
+    ]
+  },
+  "atWarm": {
+    "t": 10646,
+    "bootMarks": [
+      {
+        "n": "main-start",
+        "t": 1473
+      },
+      {
+        "n": "renderer-ready",
+        "t": 1489
+      },
+      {
+        "n": "world-start",
+        "t": 1490
+      },
+      {
+        "n": "gallery-start",
+        "t": 1679
+      },
+      {
+        "n": "dungeon-start",
+        "t": 1687
+      },
+      {
+        "n": "drawchain-start",
+        "t": 1687
+      },
+      {
+        "n": "deferred-start",
+        "t": 1696
+      },
+      {
+        "n": "adaptive-start",
+        "t": 1696
+      },
+      {
+        "n": "zombies-start",
+        "t": 1722
+      },
+      {
+        "n": "room-probes-start",
+        "t": 1729
+      },
+      {
+        "n": "player-start",
+        "t": 4083
+      },
+      {
+        "n": "gun-start",
+        "t": 4083
+      },
+      {
+        "n": "gun-ready",
+        "t": 4629
+      },
+      {
+        "n": "warm-invoked",
+        "t": 4629
+      },
+      {
+        "n": "dynamite-start",
+        "t": 4638
+      },
+      {
+        "n": "detonation-start",
+        "t": 4639
+      },
+      {
+        "n": "burst-start",
+        "t": 4639
+      },
+      {
+        "n": "bleed-start",
+        "t": 4642
+      },
+      {
+        "n": "goo-start",
+        "t": 4642
+      },
+      {
+        "n": "hud-start",
+        "t": 4653
+      },
+      {
+        "n": "boot-time",
+        "t": 4653
+      },
+      {
+        "n": "frameloop-start",
+        "t": 4653
+      },
+      {
+        "n": "api-start",
+        "t": 4654
+      },
+      {
+        "n": "demo-start",
+        "t": 4654
+      },
+      {
+        "n": "draw-ready",
+        "t": 4654
+      },
+      {
+        "n": "main-end",
+        "t": 4654
+      },
+      {
+        "n": "warm-steps-start",
+        "t": 4654
+      },
+      {
+        "n": "warm-flip-done",
+        "t": 4654
+      },
+      {
+        "n": "warm-crowd-bins-done",
+        "t": 4683
+      },
+      {
+        "n": "warm-goo-done",
+        "t": 5033
+      },
+      {
+        "n": "warm-draw-once-done",
+        "t": 8403
+      },
+      {
+        "n": "warm-precompile-done",
+        "t": 9689
+      },
+      {
+        "n": "warm-finally",
+        "t": 9689
+      }
+    ],
+    "warmDone": {
+      "ms": 5035,
+      "bootBeforeWarmMs": 25,
+      "flipped": 61,
+      "flippedNames": [
+        "PointLight:?",
+        "PointLight:?",
+        "PointLight:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Group:shell-eject-0",
+        "Group:shell-load-0",
+        "Group:shell-eject-1",
+        "Group:shell-load-1",
+        "Group:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?"
+      ],
+      "passes": 11,
+      "computes": 7,
+      "phases": {
+        "flip": 0.10000002384185791,
+        "crowdBinsPerType": [
+          7.3,
+          4.7,
+          3.5,
+          3.1,
+          2.7,
+          3.6,
+          3.2
+        ],
+        "crowdBins": 28.200000047683716,
+        "goo": 350.7999999523163,
+        "drawOnce": 3369.5,
+        "precompile": 1286.2000000476837
+      }
+    },
+    "loader": {
+      "status": "READY — CLICK TO START",
+      "hidden": false,
+      "ready": true
+    },
+    "loopRunning": true,
+    "gpuDiagnostics": {
+      "lost": null,
+      "uncaptured": [],
+      "uncapturedCount": 0
+    },
+    "gibRenderer": {
+      "mode": "march",
+      "carvedLibraryBuilt": false,
+      "carvedBuildMs": 0,
+      "carveCells": 1
+    },
+    "probeDynamic": {
+      "radianceGain": 0.15,
+      "visStrength": 1,
+      "frames": 6,
+      "errors": 0,
+      "bound": true,
+      "reached": 15,
+      "gates": {
+        "bound": true,
+        "dynKey": "arena",
+        "room": 6,
+        "grid": true,
+        "gain": 0.15,
+        "vis": 1,
+        "dynOn": true,
+        "flashI": 0,
+        "flashAge": null,
+        "capsules": 480,
+        "lights": 1
+      },
+      "rate": 2
+    },
+    "chunkStats": {
+      "live": 0,
+      "sharedLiveMaterial": true,
+      "baked": 0,
+      "views": 0,
+      "totalBakes": 0,
+      "lastBakeMs": 0,
+      "lastBakeSwapMs": 0,
+      "lastBakeSwapFrame": -1,
+      "lastBakeRequestMs": 0,
+      "bakeThread": "worker",
+      "pendingBake": null,
+      "bakeError": null,
+      "lastBakeInfo": null,
+      "faceBaked": 0,
+      "pieces": [],
+      "livePieces": []
+    },
+    "gunReady": true,
+    "frames": 14
+  },
+  "atWarmSettle": {
+    "t": 11669,
+    "bootMarks": [
+      {
+        "n": "main-start",
+        "t": 1473
+      },
+      {
+        "n": "renderer-ready",
+        "t": 1489
+      },
+      {
+        "n": "world-start",
+        "t": 1490
+      },
+      {
+        "n": "gallery-start",
+        "t": 1679
+      },
+      {
+        "n": "dungeon-start",
+        "t": 1687
+      },
+      {
+        "n": "drawchain-start",
+        "t": 1687
+      },
+      {
+        "n": "deferred-start",
+        "t": 1696
+      },
+      {
+        "n": "adaptive-start",
+        "t": 1696
+      },
+      {
+        "n": "zombies-start",
+        "t": 1722
+      },
+      {
+        "n": "room-probes-start",
+        "t": 1729
+      },
+      {
+        "n": "player-start",
+        "t": 4083
+      },
+      {
+        "n": "gun-start",
+        "t": 4083
+      },
+      {
+        "n": "gun-ready",
+        "t": 4629
+      },
+      {
+        "n": "warm-invoked",
+        "t": 4629
+      },
+      {
+        "n": "dynamite-start",
+        "t": 4638
+      },
+      {
+        "n": "detonation-start",
+        "t": 4639
+      },
+      {
+        "n": "burst-start",
+        "t": 4639
+      },
+      {
+        "n": "bleed-start",
+        "t": 4642
+      },
+      {
+        "n": "goo-start",
+        "t": 4642
+      },
+      {
+        "n": "hud-start",
+        "t": 4653
+      },
+      {
+        "n": "boot-time",
+        "t": 4653
+      },
+      {
+        "n": "frameloop-start",
+        "t": 4653
+      },
+      {
+        "n": "api-start",
+        "t": 4654
+      },
+      {
+        "n": "demo-start",
+        "t": 4654
+      },
+      {
+        "n": "draw-ready",
+        "t": 4654
+      },
+      {
+        "n": "main-end",
+        "t": 4654
+      },
+      {
+        "n": "warm-steps-start",
+        "t": 4654
+      },
+      {
+        "n": "warm-flip-done",
+        "t": 4654
+      },
+      {
+        "n": "warm-crowd-bins-done",
+        "t": 4683
+      },
+      {
+        "n": "warm-goo-done",
+        "t": 5033
+      },
+      {
+        "n": "warm-draw-once-done",
+        "t": 8403
+      },
+      {
+        "n": "warm-precompile-done",
+        "t": 9689
+      },
+      {
+        "n": "warm-finally",
+        "t": 9689
+      }
+    ],
+    "warmDone": {
+      "ms": 5035,
+      "bootBeforeWarmMs": 25,
+      "flipped": 61,
+      "flippedNames": [
+        "PointLight:?",
+        "PointLight:?",
+        "PointLight:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Group:shell-eject-0",
+        "Group:shell-load-0",
+        "Group:shell-eject-1",
+        "Group:shell-load-1",
+        "Group:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?"
+      ],
+      "passes": 11,
+      "computes": 7,
+      "phases": {
+        "flip": 0.10000002384185791,
+        "crowdBinsPerType": [
+          7.3,
+          4.7,
+          3.5,
+          3.1,
+          2.7,
+          3.6,
+          3.2
+        ],
+        "crowdBins": 28.200000047683716,
+        "goo": 350.7999999523163,
+        "drawOnce": 3369.5,
+        "precompile": 1286.2000000476837
+      }
+    },
+    "loader": {
+      "status": "READY — CLICK TO START",
+      "hidden": true,
+      "ready": true
+    },
+    "loopRunning": true,
+    "gpuDiagnostics": {
+      "lost": null,
+      "uncaptured": [],
+      "uncapturedCount": 0
+    },
+    "gibRenderer": {
+      "mode": "march",
+      "carvedLibraryBuilt": false,
+      "carvedBuildMs": 0,
+      "carveCells": 1
+    },
+    "probeDynamic": {
+      "radianceGain": 0.15,
+      "visStrength": 1,
+      "frames": 18,
+      "errors": 0,
+      "bound": true,
+      "reached": 39,
+      "gates": {
+        "bound": true,
+        "dynKey": "arena",
+        "room": 6,
+        "grid": true,
+        "gain": 0.15,
+        "vis": 1,
+        "dynOn": true,
+        "flashI": 0,
+        "flashAge": null,
+        "capsules": 480,
+        "lights": 1
+      },
+      "rate": 2
+    },
+    "chunkStats": {
+      "live": 0,
+      "sharedLiveMaterial": true,
+      "baked": 0,
+      "views": 0,
+      "totalBakes": 0,
+      "lastBakeMs": 0,
+      "lastBakeSwapMs": 0,
+      "lastBakeSwapFrame": -1,
+      "lastBakeRequestMs": 0,
+      "bakeThread": "worker",
+      "pendingBake": null,
+      "bakeError": null,
+      "lastBakeInfo": null,
+      "faceBaked": 0,
+      "pieces": [],
+      "livePieces": []
+    },
+    "gunReady": true,
+    "frames": 38
+  },
+  "perf": {
+    "postWarmIdle": {
+      "n": 42,
+      "p50": 50.9,
+      "p95": 74,
+      "max": 153.7
+    }
+  },
+  "actions": {
+    "roomEntry": {
+      "wallMs": 1442,
+      "frames": {
+        "n": 21,
+        "p50": 55.1,
+        "p95": 127.2,
+        "max": 241.3
+      }
+    },
+    "firstShot": {
+      "wallMs": 510,
+      "frames": {
+        "n": 8,
+        "p50": 55.3,
+        "p95": 194.7,
+        "max": 194.7
+      }
+    },
+    "repeatedBlasts": {
+      "n": 15,
+      "p50": 38.1,
+      "p95": 689.5,
+      "max": 689.5
+    }
+  },
+  "arenaRoom": "arena",
+  "target": {
+    "id": 16,
+    "kind": "zombie",
+    "room": 6,
+    "pos": [
+      28.734356731793337,
+      0,
+      -5.573805642356227
+    ],
+    "yaw": -0.7347907660676913,
+    "phase": "standing",
+    "meter": 0
+  },
+  "gibTimeline": {
+    "firstVisibleChunk": {
+      "t": 1265,
+      "pendingGibs": 0,
+      "tearing": 0,
+      "tier": null,
+      "blastMs": 32.199999928474426,
+      "live": 64,
+      "baked": 0,
+      "pendingBake": null,
+      "totalBakes": 0,
+      "lastBakeMs": 0,
+      "lastBakeSwapMs": 0,
+      "faceBaked": 0
+    },
+    "firstBakeSubmit": {
+      "t": 5217,
+      "pendingGibs": 0,
+      "tearing": 0,
+      "tier": null,
+      "blastMs": 32.199999928474426,
+      "live": 64,
+      "baked": 0,
+      "pendingBake": 52,
+      "totalBakes": 0,
+      "lastBakeMs": 0,
+      "lastBakeSwapMs": 0,
+      "faceBaked": 0
+    },
+    "firstBakeSwap": {
+      "t": 6766,
+      "pendingGibs": 0,
+      "tearing": 0,
+      "tier": null,
+      "blastMs": 32.199999928474426,
+      "live": 63,
+      "baked": 1,
+      "pendingBake": 61,
+      "totalBakes": 1,
+      "lastBakeMs": 787,
+      "lastBakeSwapMs": 1.7000000476837158,
+      "faceBaked": 0
+    },
+    "firstTexturedHeadDraw": {
+      "t": 8367,
+      "pendingGibs": 0,
+      "tearing": 0,
+      "tier": null,
+      "blastMs": 32.199999928474426,
+      "live": 61,
+      "baked": 3,
+      "pendingBake": 62,
+      "totalBakes": 3,
+      "lastBakeMs": 645.5,
+      "lastBakeSwapMs": 0.7000000476837158,
+      "faceBaked": 1
+    },
+    "samples": [
+      {
+        "t": 872,
+        "pendingGibs": 7,
+        "tearing": 7,
+        "tier": "parts",
+        "blastMs": 32.199999928474426,
+        "live": 0,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 1265,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 32.199999928474426,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 1548,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 32.199999928474426,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 2742,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 32.199999928474426,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 3095,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 32.199999928474426,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 3562,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 32.199999928474426,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 3991,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 32.199999928474426,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 4389,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 32.199999928474426,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 4648,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 32.199999928474426,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 4933,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 32.199999928474426,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 5217,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 32.199999928474426,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": 52,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 6766,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 32.199999928474426,
+        "live": 63,
+        "baked": 1,
+        "pendingBake": 61,
+        "totalBakes": 1,
+        "lastBakeMs": 787,
+        "lastBakeSwapMs": 1.7000000476837158,
+        "faceBaked": 0
+      },
+      {
+        "t": 8367,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 32.199999928474426,
+        "live": 61,
+        "baked": 3,
+        "pendingBake": 62,
+        "totalBakes": 3,
+        "lastBakeMs": 645.5,
+        "lastBakeSwapMs": 0.7000000476837158,
+        "faceBaked": 1
+      }
+    ]
+  },
+  "probeStress": [
+    {
+      "requested": 6,
+      "spawn": {
+        "ok": 0,
+        "placed": []
+      },
+      "pre": {
+        "frames": 146,
+        "errors": 0,
+        "capsules": 35
+      },
+      "post": {
+        "frames": 156,
+        "errors": 0,
+        "bound": true,
+        "capsules": 35,
+        "lights": 1,
+        "dynOn": true,
+        "radianceGain": 0.15,
+        "visStrength": 1
+      }
+    },
+    {
+      "requested": 12,
+      "spawn": {
+        "ok": 0,
+        "placed": []
+      },
+      "pre": {
+        "frames": 156,
+        "errors": 0,
+        "capsules": 35
+      },
+      "post": {
+        "frames": 176,
+        "errors": 0,
+        "bound": true,
+        "capsules": 35,
+        "lights": 1,
+        "dynOn": true,
+        "radianceGain": 0.15,
+        "visStrength": 1
+      }
+    },
+    {
+      "requested": 20,
+      "spawn": {
+        "ok": 0,
+        "placed": []
+      },
+      "pre": {
+        "frames": 178,
+        "errors": 0,
+        "capsules": 35
+      },
+      "post": {
+        "frames": 194,
+        "errors": 0,
+        "bound": true,
+        "capsules": 35,
+        "lights": 1,
+        "dynOn": true,
+        "radianceGain": 0.15,
+        "visStrength": 1
+      }
+    }
+  ],
+  "probeHealth": {
+    "errors": 0,
+    "frames": 195,
+    "bound": true,
+    "rate": 2,
+    "gates": {
+      "bound": true,
+      "dynKey": "arena",
+      "room": 6,
+      "grid": true,
+      "gain": 0.15,
+      "vis": 1,
+      "dynOn": true,
+      "flashI": 0,
+      "flashAge": 11.983500000000015,
+      "capsules": 35,
+      "lights": 1
+    },
+    "radianceGain": 0.15,
+    "visStrength": 1
+  },
+  "pipelineLog": {
+    "totalPipelines": 356,
+    "totalCompileMs": 1566,
+    "longFrames": [
+      {
+        "frame": 5,
+        "ms": 413,
+        "creations": 23,
+        "names": [
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_385",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_495",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_538",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshStandardMaterial_577"
+        ]
+      },
+      {
+        "frame": 47,
+        "ms": 122.8,
+        "creations": 0,
+        "names": []
+      },
+      {
+        "frame": 113,
+        "ms": 179,
+        "creations": 1,
+        "names": [
+          "renderPipeline_plate_789"
+        ]
+      },
+      {
+        "frame": 134,
+        "ms": 139.2,
+        "creations": 2,
+        "names": [
+          "renderPipeline_MeshBasicMaterial_936"
+        ]
+      },
+      {
+        "frame": 161,
+        "ms": 825.8,
+        "creations": 20,
+        "names": [
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshBasicMaterial_783",
+          "renderPipeline_MeshBasicMaterial_785",
+          "renderPipeline_MeshBasicMaterial_786",
+          "renderPipeline_MeshStandardMaterial_385"
+        ]
+      },
+      {
+        "frame": 164,
+        "ms": 123.9,
+        "creations": 4,
+        "names": [
+          "renderPipeline_MeshBasicNodeMaterial_191",
+          "renderPipeline_MeshBasicNodeMaterial_727",
+          "renderPipeline_MeshBasicNodeMaterial_762"
+        ]
+      },
+      {
+        "frame": 171,
+        "ms": 788.8,
+        "creations": 17,
+        "names": [
+          "renderPipeline_MeshBasicNodeMaterial_191",
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshBasicMaterial_783",
+          "renderPipeline_MeshBasicMaterial_785",
+          "renderPipeline_MeshBasicMaterial_786"
+        ]
+      },
+      {
+        "frame": 286,
+        "ms": 546.7,
+        "creations": 18,
+        "names": [
+          "renderPipeline_MeshBasicNodeMaterial_191",
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshBasicMaterial_783",
+          "renderPipeline_MeshBasicMaterial_785",
+          "renderPipeline_MeshBasicMaterial_786"
+        ]
+      },
+      {
+        "frame": 292,
+        "ms": 593.3,
+        "creations": 17,
+        "names": [
+          "renderPipeline_MeshBasicNodeMaterial_191",
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshBasicMaterial_783",
+          "renderPipeline_MeshBasicMaterial_785",
+          "renderPipeline_MeshBasicMaterial_786"
+        ]
+      },
+      {
+        "frame": 295,
+        "ms": 520.6,
+        "creations": 15,
+        "names": [
+          "renderPipeline_MeshBasicNodeMaterial_191",
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshBasicMaterial_783",
+          "renderPipeline_MeshBasicMaterial_785",
+          "renderPipeline_MeshBasicMaterial_786"
+        ]
+      },
+      {
+        "frame": 297,
+        "ms": 546.3,
+        "creations": 17,
+        "names": [
+          "renderPipeline_MeshBasicNodeMaterial_191",
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshBasicMaterial_783",
+          "renderPipeline_MeshBasicMaterial_785",
+          "renderPipeline_MeshBasicMaterial_786"
+        ]
+      },
+      {
+        "frame": 303,
+        "ms": 515.6,
+        "creations": 17,
+        "names": [
+          "renderPipeline_MeshBasicNodeMaterial_191",
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshBasicMaterial_783",
+          "renderPipeline_MeshBasicMaterial_785",
+          "renderPipeline_MeshBasicMaterial_786"
+        ]
+      },
+      {
+        "frame": 306,
+        "ms": 453.4,
+        "creations": 17,
+        "names": [
+          "renderPipeline_MeshBasicNodeMaterial_191",
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshBasicMaterial_783",
+          "renderPipeline_MeshBasicMaterial_785",
+          "renderPipeline_MeshBasicMaterial_786"
+        ]
+      }
+    ],
+    "slowest": [
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_185",
+        "ms": 1270,
+        "async": true,
+        "via": "compile#8@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_766",
+        "ms": 255,
+        "async": true,
+        "via": "compile#1@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_767",
+        "ms": 12,
+        "async": true,
+        "via": "compile#2@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_781",
+        "ms": 5,
+        "async": true,
+        "via": "compile#3@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_782",
+        "ms": 4,
+        "async": true,
+        "via": "compile#4@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_196",
+        "ms": 2,
+        "async": true,
+        "via": "compile#11@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_198",
+        "ms": 2,
+        "async": true,
+        "via": "compile#13@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_197",
+        "ms": 1,
+        "async": true,
+        "via": "compile#12@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_195",
+        "ms": 1,
+        "async": true,
+        "via": "compile#10@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_194",
+        "ms": 1,
+        "async": true,
+        "via": "compile#15@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_199",
+        "ms": 0,
+        "async": true,
+        "via": "compile#14@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_496",
+        "ms": 0,
+        "async": false,
+        "via": "",
+        "frame": 5
+      }
+    ],
+    "duplicates": [
+      {
+        "name": "computePipeline_compute",
+        "sig": ",,,,,,,,,,,",
+        "count": 29
+      },
+      {
+        "name": "renderPipeline_MeshStandardMaterial_715",
+        "sig": "triangle-list,back,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 10
+      },
+      {
+        "name": "renderPipeline_MeshStandardMaterial_716",
+        "sig": "triangle-list,back,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 10
+      },
+      {
+        "name": "renderPipeline_MeshStandardMaterial_384",
+        "sig": "triangle-list,back,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 10
+      },
+      {
+        "name": "renderPipeline_MeshStandardMaterial_385",
+        "sig": "triangle-list,back,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 10
+      },
+      {
+        "name": "renderPipeline_MeshStandardMaterial_494",
+        "sig": "triangle-list,back,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 10
+      },
+      {
+        "name": "renderPipeline_MeshStandardMaterial_495",
+        "sig": "triangle-list,back,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 10
+      },
+      {
+        "name": "renderPipeline_MeshStandardMaterial_537",
+        "sig": "triangle-list,back,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 10
+      },
+      {
+        "name": "renderPipeline_MeshStandardMaterial_538",
+        "sig": "triangle-list,back,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 10
+      },
+      {
+        "name": "renderPipeline_MeshStandardMaterial_576",
+        "sig": "triangle-list,back,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 10
+      },
+      {
+        "name": "renderPipeline_MeshStandardMaterial_577",
+        "sig": "triangle-list,back,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 10
+      },
+      {
+        "name": "renderPipeline_MeshBasicMaterial_783",
+        "sig": "triangle-list,back,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 10
+      },
+      {
+        "name": "renderPipeline_MeshBasicMaterial_785",
+        "sig": "triangle-list,back,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 10
+      },
+      {
+        "name": "renderPipeline_MeshBasicMaterial_786",
+        "sig": "triangle-list,none,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 10
+      },
+      {
+        "name": "renderPipeline_MeshBasicMaterial_784",
+        "sig": "triangle-list,back,ccw,depth24plus,false,less-equal,,,1,rgba16float,main,main",
+        "count": 10
+      },
+      {
+        "name": "renderPipeline_Steel_682",
+        "sig": "triangle-list,none,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 9
+      },
+      {
+        "name": "renderPipeline_MeshStandardMaterial_174",
+        "sig": "triangle-list,back,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 8
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_191",
+        "sig": "triangle-list,back,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 8
+      },
+      {
+        "name": "renderPipeline_ShadowMaterial_863",
+        "sig": "triangle-list,back,cw,depth24plus,true,less-equal,,,1,rgba8unorm,main,main",
+        "count": 2
+      },
+      {
+        "name": "renderPipeline_plate_789",
+        "sig": "triangle-list,none,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 2
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_185",
+        "sig": "triangle-list,back,ccw,,,,,,1,rgba32float,main,main",
+        "count": 2
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_195",
+        "sig": "triangle-list,back,ccw,,,,,,1,rgba16float|rgba16float|rgba16float|rgba16float,main,main",
+        "count": 2
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_196",
+        "sig": "triangle-list,back,ccw,,,,,,1,rgba16float|rgba16float|rgba16float|rgba16float,main,main",
+        "count": 2
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_197",
+        "sig": "triangle-list,back,ccw,,,,,,1,rgba16float|rgba16float|rgba16float|rgba16float,main,main",
+        "count": 2
+      }
+    ],
+    "compute": {
+      "total": 380,
+      "maxPerFrame": 8,
+      "byFrame": [
+        {
+          "frame": 5,
+          "calls": 8
+        },
+        {
+          "frame": 6,
+          "calls": 1
+        },
+        {
+          "frame": 7,
+          "calls": 2
+        },
+        {
+          "frame": 8,
+          "calls": 1
+        },
+        {
+          "frame": 9,
+          "calls": 2
+        },
+        {
+          "frame": 10,
+          "calls": 1
+        },
+        {
+          "frame": 11,
+          "calls": 2
+        },
+        {
+          "frame": 12,
+          "calls": 1
+        },
+        {
+          "frame": 13,
+          "calls": 2
+        },
+        {
+          "frame": 14,
+          "calls": 1
+        },
+        {
+          "frame": 15,
+          "calls": 2
+        },
+        {
+          "frame": 16,
+          "calls": 1
+        },
+        {
+          "frame": 17,
+          "calls": 2
+        },
+        {
+          "frame": 18,
+          "calls": 1
+        },
+        {
+          "frame": 19,
+          "calls": 2
+        },
+        {
+          "frame": 20,
+          "calls": 1
+        },
+        {
+          "frame": 21,
+          "calls": 2
+        },
+        {
+          "frame": 22,
+          "calls": 1
+        },
+        {
+          "frame": 23,
+          "calls": 2
+        },
+        {
+          "frame": 24,
+          "calls": 1
+        },
+        {
+          "frame": 25,
+          "calls": 2
+        },
+        {
+          "frame": 26,
+          "calls": 1
+        },
+        {
+          "frame": 27,
+          "calls": 2
+        },
+        {
+          "frame": 28,
+          "calls": 1
+        },
+        {
+          "frame": 29,
+          "calls": 2
+        },
+        {
+          "frame": 30,
+          "calls": 1
+        },
+        {
+          "frame": 31,
+          "calls": 2
+        },
+        {
+          "frame": 32,
+          "calls": 1
+        },
+        {
+          "frame": 33,
+          "calls": 2
+        },
+        {
+          "frame": 34,
+          "calls": 1
+        },
+        {
+          "frame": 35,
+          "calls": 2
+        },
+        {
+          "frame": 36,
+          "calls": 1
+        },
+        {
+          "frame": 37,
+          "calls": 2
+        },
+        {
+          "frame": 38,
+          "calls": 1
+        },
+        {
+          "frame": 39,
+          "calls": 2
+        },
+        {
+          "frame": 40,
+          "calls": 1
+        },
+        {
+          "frame": 41,
+          "calls": 2
+        },
+        {
+          "frame": 42,
+          "calls": 1
+        },
+        {
+          "frame": 43,
+          "calls": 2
+        },
+        {
+          "frame": 44,
+          "calls": 1
+        },
+        {
+          "frame": 45,
+          "calls": 2
+        },
+        {
+          "frame": 46,
+          "calls": 1
+        },
+        {
+          "frame": 47,
+          "calls": 2
+        },
+        {
+          "frame": 48,
+          "calls": 1
+        },
+        {
+          "frame": 49,
+          "calls": 2
+        },
+        {
+          "frame": 50,
+          "calls": 1
+        },
+        {
+          "frame": 51,
+          "calls": 2
+        },
+        {
+          "frame": 52,
+          "calls": 1
+        },
+        {
+          "frame": 53,
+          "calls": 2
+        },
+        {
+          "frame": 54,
+          "calls": 1
+        },
+        {
+          "frame": 55,
+          "calls": 2
+        },
+        {
+          "frame": 56,
+          "calls": 1
+        },
+        {
+          "frame": 57,
+          "calls": 2
+        },
+        {
+          "frame": 58,
+          "calls": 1
+        },
+        {
+          "frame": 59,
+          "calls": 2
+        },
+        {
+          "frame": 60,
+          "calls": 1
+        },
+        {
+          "frame": 61,
+          "calls": 2
+        },
+        {
+          "frame": 62,
+          "calls": 1
+        },
+        {
+          "frame": 63,
+          "calls": 2
+        },
+        {
+          "frame": 64,
+          "calls": 1
+        },
+        {
+          "frame": 65,
+          "calls": 2
+        },
+        {
+          "frame": 66,
+          "calls": 1
+        },
+        {
+          "frame": 67,
+          "calls": 2
+        },
+        {
+          "frame": 68,
+          "calls": 1
+        },
+        {
+          "frame": 69,
+          "calls": 2
+        },
+        {
+          "frame": 70,
+          "calls": 1
+        },
+        {
+          "frame": 71,
+          "calls": 2
+        },
+        {
+          "frame": 72,
+          "calls": 1
+        },
+        {
+          "frame": 73,
+          "calls": 2
+        },
+        {
+          "frame": 74,
+          "calls": 1
+        },
+        {
+          "frame": 75,
+          "calls": 2
+        },
+        {
+          "frame": 76,
+          "calls": 1
+        },
+        {
+          "frame": 77,
+          "calls": 2
+        },
+        {
+          "frame": 78,
+          "calls": 1
+        },
+        {
+          "frame": 79,
+          "calls": 2
+        },
+        {
+          "frame": 80,
+          "calls": 1
+        },
+        {
+          "frame": 81,
+          "calls": 2
+        },
+        {
+          "frame": 82,
+          "calls": 1
+        },
+        {
+          "frame": 83,
+          "calls": 2
+        },
+        {
+          "frame": 84,
+          "calls": 1
+        },
+        {
+          "frame": 85,
+          "calls": 2
+        },
+        {
+          "frame": 86,
+          "calls": 1
+        },
+        {
+          "frame": 87,
+          "calls": 2
+        },
+        {
+          "frame": 88,
+          "calls": 1
+        },
+        {
+          "frame": 89,
+          "calls": 2
+        },
+        {
+          "frame": 90,
+          "calls": 1
+        },
+        {
+          "frame": 91,
+          "calls": 2
+        },
+        {
+          "frame": 92,
+          "calls": 1
+        },
+        {
+          "frame": 93,
+          "calls": 2
+        },
+        {
+          "frame": 94,
+          "calls": 1
+        },
+        {
+          "frame": 95,
+          "calls": 2
+        },
+        {
+          "frame": 96,
+          "calls": 1
+        },
+        {
+          "frame": 97,
+          "calls": 2
+        },
+        {
+          "frame": 98,
+          "calls": 1
+        },
+        {
+          "frame": 99,
+          "calls": 2
+        },
+        {
+          "frame": 100,
+          "calls": 1
+        },
+        {
+          "frame": 101,
+          "calls": 2
+        },
+        {
+          "frame": 102,
+          "calls": 1
+        },
+        {
+          "frame": 103,
+          "calls": 2
+        },
+        {
+          "frame": 104,
+          "calls": 1
+        },
+        {
+          "frame": 105,
+          "calls": 2
+        },
+        {
+          "frame": 106,
+          "calls": 1
+        },
+        {
+          "frame": 107,
+          "calls": 2
+        },
+        {
+          "frame": 108,
+          "calls": 1
+        },
+        {
+          "frame": 109,
+          "calls": 2
+        },
+        {
+          "frame": 110,
+          "calls": 1
+        },
+        {
+          "frame": 111,
+          "calls": 2
+        },
+        {
+          "frame": 112,
+          "calls": 1
+        },
+        {
+          "frame": 113,
+          "calls": 3
+        },
+        {
+          "frame": 114,
+          "calls": 2
+        },
+        {
+          "frame": 115,
+          "calls": 3
+        },
+        {
+          "frame": 116,
+          "calls": 2
+        },
+        {
+          "frame": 117,
+          "calls": 2
+        },
+        {
+          "frame": 118,
+          "calls": 1
+        },
+        {
+          "frame": 119,
+          "calls": 2
+        },
+        {
+          "frame": 120,
+          "calls": 1
+        },
+        {
+          "frame": 121,
+          "calls": 2
+        },
+        {
+          "frame": 122,
+          "calls": 1
+        },
+        {
+          "frame": 123,
+          "calls": 3
+        },
+        {
+          "frame": 124,
+          "calls": 2
+        },
+        {
+          "frame": 125,
+          "calls": 3
+        },
+        {
+          "frame": 126,
+          "calls": 2
+        },
+        {
+          "frame": 127,
+          "calls": 2
+        },
+        {
+          "frame": 128,
+          "calls": 1
+        },
+        {
+          "frame": 129,
+          "calls": 2
+        },
+        {
+          "frame": 130,
+          "calls": 1
+        },
+        {
+          "frame": 131,
+          "calls": 2
+        },
+        {
+          "frame": 132,
+          "calls": 1
+        },
+        {
+          "frame": 133,
+          "calls": 2
+        },
+        {
+          "frame": 134,
+          "calls": 1
+        },
+        {
+          "frame": 135,
+          "calls": 2
+        },
+        {
+          "frame": 136,
+          "calls": 1
+        },
+        {
+          "frame": 137,
+          "calls": 2
+        },
+        {
+          "frame": 138,
+          "calls": 1
+        },
+        {
+          "frame": 139,
+          "calls": 2
+        },
+        {
+          "frame": 140,
+          "calls": 1
+        },
+        {
+          "frame": 141,
+          "calls": 2
+        },
+        {
+          "frame": 142,
+          "calls": 1
+        },
+        {
+          "frame": 143,
+          "calls": 2
+        },
+        {
+          "frame": 144,
+          "calls": 1
+        },
+        {
+          "frame": 145,
+          "calls": 2
+        },
+        {
+          "frame": 146,
+          "calls": 1
+        },
+        {
+          "frame": 147,
+          "calls": 2
+        },
+        {
+          "frame": 148,
+          "calls": 1
+        },
+        {
+          "frame": 149,
+          "calls": 2
+        },
+        {
+          "frame": 150,
+          "calls": 1
+        },
+        {
+          "frame": 151,
+          "calls": 2
+        },
+        {
+          "frame": 152,
+          "calls": 1
+        },
+        {
+          "frame": 153,
+          "calls": 2
+        },
+        {
+          "frame": 154,
+          "calls": 1
+        },
+        {
+          "frame": 155,
+          "calls": 2
+        },
+        {
+          "frame": 156,
+          "calls": 1
+        },
+        {
+          "frame": 157,
+          "calls": 2
+        },
+        {
+          "frame": 158,
+          "calls": 1
+        },
+        {
+          "frame": 159,
+          "calls": 2
+        },
+        {
+          "frame": 160,
+          "calls": 1
+        },
+        {
+          "frame": 161,
+          "calls": 2
+        },
+        {
+          "frame": 162,
+          "calls": 1
+        },
+        {
+          "frame": 163,
+          "calls": 2
+        },
+        {
+          "frame": 165,
+          "calls": 1
+        },
+        {
+          "frame": 167,
+          "calls": 1
+        },
+        {
+          "frame": 169,
+          "calls": 1
+        },
+        {
+          "frame": 171,
+          "calls": 1
+        },
+        {
+          "frame": 173,
+          "calls": 1
+        },
+        {
+          "frame": 175,
+          "calls": 1
+        },
+        {
+          "frame": 177,
+          "calls": 1
+        },
+        {
+          "frame": 179,
+          "calls": 1
+        },
+        {
+          "frame": 181,
+          "calls": 1
+        },
+        {
+          "frame": 183,
+          "calls": 1
+        },
+        {
+          "frame": 185,
+          "calls": 1
+        },
+        {
+          "frame": 187,
+          "calls": 1
+        },
+        {
+          "frame": 189,
+          "calls": 1
+        },
+        {
+          "frame": 191,
+          "calls": 1
+        },
+        {
+          "frame": 193,
+          "calls": 1
+        },
+        {
+          "frame": 195,
+          "calls": 1
+        },
+        {
+          "frame": 197,
+          "calls": 1
+        },
+        {
+          "frame": 199,
+          "calls": 1
+        },
+        {
+          "frame": 201,
+          "calls": 1
+        },
+        {
+          "frame": 203,
+          "calls": 1
+        },
+        {
+          "frame": 205,
+          "calls": 1
+        },
+        {
+          "frame": 207,
+          "calls": 1
+        },
+        {
+          "frame": 209,
+          "calls": 1
+        },
+        {
+          "frame": 211,
+          "calls": 1
+        },
+        {
+          "frame": 213,
+          "calls": 1
+        },
+        {
+          "frame": 215,
+          "calls": 1
+        },
+        {
+          "frame": 217,
+          "calls": 1
+        },
+        {
+          "frame": 219,
+          "calls": 1
+        },
+        {
+          "frame": 221,
+          "calls": 1
+        },
+        {
+          "frame": 223,
+          "calls": 1
+        },
+        {
+          "frame": 225,
+          "calls": 1
+        },
+        {
+          "frame": 227,
+          "calls": 1
+        },
+        {
+          "frame": 229,
+          "calls": 1
+        },
+        {
+          "frame": 231,
+          "calls": 1
+        },
+        {
+          "frame": 233,
+          "calls": 1
+        },
+        {
+          "frame": 235,
+          "calls": 1
+        },
+        {
+          "frame": 237,
+          "calls": 1
+        },
+        {
+          "frame": 239,
+          "calls": 1
+        },
+        {
+          "frame": 241,
+          "calls": 1
+        },
+        {
+          "frame": 243,
+          "calls": 1
+        },
+        {
+          "frame": 245,
+          "calls": 1
+        },
+        {
+          "frame": 247,
+          "calls": 1
+        },
+        {
+          "frame": 249,
+          "calls": 1
+        },
+        {
+          "frame": 251,
+          "calls": 1
+        },
+        {
+          "frame": 253,
+          "calls": 1
+        },
+        {
+          "frame": 255,
+          "calls": 1
+        },
+        {
+          "frame": 257,
+          "calls": 1
+        },
+        {
+          "frame": 259,
+          "calls": 1
+        },
+        {
+          "frame": 261,
+          "calls": 1
+        },
+        {
+          "frame": 263,
+          "calls": 1
+        },
+        {
+          "frame": 265,
+          "calls": 1
+        },
+        {
+          "frame": 267,
+          "calls": 2
+        },
+        {
+          "frame": 268,
+          "calls": 1
+        },
+        {
+          "frame": 269,
+          "calls": 2
+        },
+        {
+          "frame": 270,
+          "calls": 1
+        },
+        {
+          "frame": 271,
+          "calls": 2
+        },
+        {
+          "frame": 272,
+          "calls": 1
+        },
+        {
+          "frame": 273,
+          "calls": 2
+        },
+        {
+          "frame": 274,
+          "calls": 1
+        },
+        {
+          "frame": 275,
+          "calls": 2
+        },
+        {
+          "frame": 277,
+          "calls": 1
+        },
+        {
+          "frame": 279,
+          "calls": 1
+        },
+        {
+          "frame": 281,
+          "calls": 1
+        },
+        {
+          "frame": 283,
+          "calls": 1
+        },
+        {
+          "frame": 285,
+          "calls": 1
+        },
+        {
+          "frame": 287,
+          "calls": 1
+        },
+        {
+          "frame": 289,
+          "calls": 1
+        },
+        {
+          "frame": 291,
+          "calls": 1
+        },
+        {
+          "frame": 293,
+          "calls": 1
+        },
+        {
+          "frame": 295,
+          "calls": 1
+        },
+        {
+          "frame": 297,
+          "calls": 1
+        },
+        {
+          "frame": 299,
+          "calls": 1
+        },
+        {
+          "frame": 301,
+          "calls": 1
+        },
+        {
+          "frame": 303,
+          "calls": 1
+        },
+        {
+          "frame": 305,
+          "calls": 1
+        },
+        {
+          "frame": 307,
+          "calls": 1
+        },
+        {
+          "frame": 309,
+          "calls": 1
+        },
+        {
+          "frame": 311,
+          "calls": 1
+        },
+        {
+          "frame": 313,
+          "calls": 1
+        },
+        {
+          "frame": 315,
+          "calls": 1
+        },
+        {
+          "frame": 317,
+          "calls": 1
+        },
+        {
+          "frame": 319,
+          "calls": 1
+        },
+        {
+          "frame": 321,
+          "calls": 1
+        },
+        {
+          "frame": 323,
+          "calls": 1
+        },
+        {
+          "frame": 325,
+          "calls": 1
+        },
+        {
+          "frame": 327,
+          "calls": 1
+        },
+        {
+          "frame": 329,
+          "calls": 1
+        },
+        {
+          "frame": 331,
+          "calls": 1
+        },
+        {
+          "frame": 333,
+          "calls": 1
+        },
+        {
+          "frame": 335,
+          "calls": 1
+        },
+        {
+          "frame": 337,
+          "calls": 1
+        },
+        {
+          "frame": 339,
+          "calls": 1
+        },
+        {
+          "frame": 341,
+          "calls": 1
+        },
+        {
+          "frame": 343,
+          "calls": 1
+        },
+        {
+          "frame": 345,
+          "calls": 1
+        },
+        {
+          "frame": 347,
+          "calls": 1
+        },
+        {
+          "frame": 349,
+          "calls": 1
+        },
+        {
+          "frame": 351,
+          "calls": 1
+        },
+        {
+          "frame": 353,
+          "calls": 1
+        },
+        {
+          "frame": 355,
+          "calls": 1
+        },
+        {
+          "frame": 357,
+          "calls": 1
+        },
+        {
+          "frame": 359,
+          "calls": 1
+        },
+        {
+          "frame": 361,
+          "calls": 1
+        },
+        {
+          "frame": 363,
+          "calls": 1
+        },
+        {
+          "frame": 365,
+          "calls": 1
+        },
+        {
+          "frame": 367,
+          "calls": 1
+        },
+        {
+          "frame": 369,
+          "calls": 1
+        },
+        {
+          "frame": 371,
+          "calls": 1
+        },
+        {
+          "frame": 373,
+          "calls": 1
+        },
+        {
+          "frame": 375,
+          "calls": 1
+        },
+        {
+          "frame": 377,
+          "calls": 1
+        },
+        {
+          "frame": 379,
+          "calls": 1
+        },
+        {
+          "frame": 381,
+          "calls": 1
+        },
+        {
+          "frame": 383,
+          "calls": 1
+        },
+        {
+          "frame": 385,
+          "calls": 1
+        },
+        {
+          "frame": 387,
+          "calls": 1
+        },
+        {
+          "frame": 389,
+          "calls": 1
+        },
+        {
+          "frame": 391,
+          "calls": 1
+        },
+        {
+          "frame": 393,
+          "calls": 1
+        },
+        {
+          "frame": 395,
+          "calls": 1
+        },
+        {
+          "frame": 397,
+          "calls": 1
+        },
+        {
+          "frame": 399,
+          "calls": 1
+        }
+      ]
+    }
+  },
+  "final": {
+    "chunkStats": {
+      "live": 48,
+      "sharedLiveMaterial": true,
+      "baked": 16,
+      "views": 64,
+      "totalBakes": 24,
+      "lastBakeMs": 86.80000007152557,
+      "lastBakeSwapMs": 0,
+      "lastBakeSwapFrame": 388,
+      "lastBakeRequestMs": 0.10000002384185791,
+      "bakeThread": "worker",
+      "pendingBake": 86,
+      "bakeError": null,
+      "lastBakeInfo": {
+        "id": 90,
+        "verts": 1960,
+        "tris": 3916,
+        "bakeMs": 86.80000007152557,
+        "overflow": 0,
+        "droppedQuads": 0,
+        "extent": 0.283439926217815,
+        "flesh": 3,
+        "bones": 0,
+        "torn": 0,
+        "gore": 1,
+        "radius": 0.19364596353274988
+      },
+      "faceBaked": 2,
+      "pieces": [
+        {
+          "id": 55,
+          "centre": [
+            27.10817527770996,
+            0.3555130362510681,
+            -0.01052539050579071
+          ],
+          "radius": 0.36271979291464823,
+          "face": false
+        },
+        {
+          "id": 53,
+          "centre": [
+            26.930127143859863,
+            0.352476105093956,
+            -7.331650257110596
+          ],
+          "radius": 0.3036004030750414,
+          "face": false
+        },
+        {
+          "id": 51,
+          "centre": [
+            34.865047454833984,
+            0.6032596528530121,
+            1.6506956815719604
+          ],
+          "radius": 0.49063420477763015,
+          "face": false
+        },
+        {
+          "id": 50,
+          "centre": [
+            34.18268394470215,
+            0.6119716465473175,
+            1.5271738171577454
+          ],
+          "radius": 0.47322589149051064,
+          "face": false
+        },
+        {
+          "id": 49,
+          "centre": [
+            35.08235168457031,
+            0.2721610814332962,
+            0.8766840100288391
+          ],
+          "radius": 0.1947126982145967,
+          "face": true
+        },
+        {
+          "id": 47,
+          "centre": [
+            34.53939628601074,
+            0.3529293015599251,
+            0.3719625324010849
+          ],
+          "radius": 0.34657897586189124,
+          "face": false
+        },
+        {
+          "id": 46,
+          "centre": [
+            35.39743423461914,
+            0.3596394509077072,
+            2.8270978927612305
+          ],
+          "radius": 0.3575108148269508,
+          "face": false
+        },
+        {
+          "id": 45,
+          "centre": [
+            33.529890060424805,
+            0.601719319820404,
+            0.3315120989573188
+          ],
+          "radius": 0.4809716923430281,
+          "face": false
+        },
+        {
+          "id": 44,
+          "centre": [
+            34.553592681884766,
+            0.3801323026418686,
+            -0.15944555215537548
+          ],
+          "radius": 0.37528867529295407,
+          "face": false
+        },
+        {
+          "id": 87,
+          "centre": [
+            11.49545955657959,
+            0.4152555912733078,
+            -2.2871596813201904
+          ],
+          "radius": 0.2905913297915399,
+          "face": false
+        },
+        {
+          "id": 96,
+          "centre": [
+            11.38657283782959,
+            0.29188087582588196,
+            -7.411912202835083
+          ],
+          "radius": 0.19973757937681935,
+          "face": false
+        },
+        {
+          "id": 95,
+          "centre": [
+            11.47345495223999,
+            0.2671903297305107,
+            -7.4421374797821045
+          ],
+          "radius": 0.1964611333169917,
+          "face": true
+        },
+        {
+          "id": 93,
+          "centre": [
+            11.309460639953613,
+            0.28328172117471695,
+            -6.694279193878174
+          ],
+          "radius": 0.19201762577442122,
+          "face": false
+        },
+        {
+          "id": 92,
+          "centre": [
+            11.004950046539307,
+            0.288261815905571,
+            -6.054460287094116
+          ],
+          "radius": 0.1954371553387227,
+          "face": false
+        },
+        {
+          "id": 91,
+          "centre": [
+            13.078320503234863,
+            0.30553072690963745,
+            -8.093496084213257
+          ],
+          "radius": 0.20244589590976977,
+          "face": false
+        },
+        {
+          "id": 90,
+          "centre": [
+            13.17789602279663,
+            0.28343991935253143,
+            -8.052452087402344
+          ],
+          "radius": 0.19364596353274988,
+          "face": false
+        }
+      ],
+      "livePieces": [
+        {
+          "id": 25,
+          "centre": [
+            31.114456579194904,
+            0.6055962350091768,
+            -9.291712126531312
+          ],
+          "radius": 0.6055962350091768,
+          "quat": [
+            0.4945472214114172,
+            0.18647667278533053,
+            0.008685256112577582,
+            0.8488663396715754
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 26,
+          "centre": [
+            32.61274174121286,
+            0.6029261039907249,
+            -6.353295250065267
+          ],
+          "radius": 0.6029261039907249,
+          "quat": [
+            -0.16954654265420774,
+            0.022623672189454262,
+            0.7007826049699749,
+            0.6925647117072636
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 27,
+          "centre": [
+            35.032965250940855,
+            0.3747068989878536,
+            -3.7785824328975592
+          ],
+          "radius": 0.3747068989878536,
+          "quat": [
+            -0.2580895367929542,
+            -0.03523475764115244,
+            0.18667693704246455,
+            0.9472592169139403
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 28,
+          "centre": [
+            34.878252508750336,
+            0.07680000000000001,
+            -5.860015253768122
+          ],
+          "radius": 0.07680000000000001,
+          "quat": [
+            0.03618899408680819,
+            -0.08852268025104879,
+            0.05937939173060304,
+            0.9936438897441372
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 29,
+          "centre": [
+            33.94187580860973,
+            0.36185185253950647,
+            -5.663421599791671
+          ],
+          "radius": 0.36185185253950647,
+          "quat": [
+            0.4529908830694977,
+            0.05719653283825093,
+            0.5429541968305593,
+            0.7047897251175572
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 30,
+          "centre": [
+            36.24659663653175,
+            0.043776,
+            -5.644302687384267
+          ],
+          "radius": 0.043776,
+          "quat": [
+            0.4586765953752513,
+            0.163998772737225,
+            0.5646601604822146,
+            0.6662425133236783
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 31,
+          "centre": [
+            32.40477195005292,
+            0.6042917246456126,
+            -6.8203176610141565
+          ],
+          "radius": 0.6042917246456126,
+          "quat": [
+            0.4265447210380668,
+            0.17623711656658508,
+            0.4150592007232271,
+            0.7840446030640408
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 32,
+          "centre": [
+            35.66037555732249,
+            0.16112000000000004,
+            -4.981649742533129
+          ],
+          "radius": 0.16112000000000004,
+          "quat": [
+            0.360755411188894,
+            -0.02565502227365544,
+            0.4538982057958895,
+            0.814354819415556
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 33,
+          "centre": [
+            34.715139762232354,
+            0.23458241589482348,
+            -4.595241511703314
+          ],
+          "radius": 0.23458241589482348,
+          "quat": [
+            0.3594104409839509,
+            -0.06948223880092709,
+            0.4499969273274423,
+            0.8145545523774289
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 34,
+          "centre": [
+            34.45551311864017,
+            0.36467712058142393,
+            -2.9849451620858933
+          ],
+          "radius": 0.36467712058142393,
+          "quat": [
+            -0.11989979819074592,
+            -0.032367963332138545,
+            0.3954018389641248,
+            0.910073480048362
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 35,
+          "centre": [
+            29.084270900547352,
+            0.07680000000000001,
+            2.752865421502045
+          ],
+          "radius": 0.07680000000000001,
+          "quat": [
+            0.07173804572570823,
+            0.09890673061594177,
+            -0.1539823935206872,
+            0.9804899458535828
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 36,
+          "centre": [
+            29.279346382079616,
+            0.36682224745208775,
+            1.5702885834449507
+          ],
+          "radius": 0.36682224745208775,
+          "quat": [
+            -0.41515277962809943,
+            0.30550203549518107,
+            0.5724055988257477,
+            0.6377056580494649
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 37,
+          "centre": [
+            28.959834322530437,
+            0.603468433710862,
+            1.080322948496404
+          ],
+          "radius": 0.603468433710862,
+          "quat": [
+            -0.5460843305617274,
+            0.1729250341140782,
+            0.33312897447203993,
+            0.7489418688114597
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 38,
+          "centre": [
+            29.34183934577014,
+            0.043776,
+            3.1335294482560503
+          ],
+          "radius": 0.043776,
+          "quat": [
+            -0.5359670842034957,
+            0.20936200317258297,
+            -0.3582893770183308,
+            0.735211233995906
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 39,
+          "centre": [
+            29.452977705406276,
+            0.6046335614097864,
+            1.7014416603654654
+          ],
+          "radius": 0.6046335614097864,
+          "quat": [
+            -0.5275091658493191,
+            0.326213619433553,
+            0.1979190314695204,
+            0.7590433527955989
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 40,
+          "centre": [
+            31.839799842787254,
+            0.37572962339787885,
+            2.306674735424829
+          ],
+          "radius": 0.37572962339787885,
+          "quat": [
+            0.032237806876269454,
+            -0.0818013455378151,
+            0.2841230708337822,
+            0.9547477909353826
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 41,
+          "centre": [
+            29.66972767667109,
+            0.16112000000000004,
+            2.818024528827132
+          ],
+          "radius": 0.16112000000000004,
+          "quat": [
+            0.3194637795069718,
+            0.08037446649912554,
+            0.64309106034702,
+            0.6913152152382062
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 42,
+          "centre": [
+            29.927974073209356,
+            0.23462424105736673,
+            2.0892193080582513
+          ],
+          "radius": 0.23462424105736673,
+          "quat": [
+            0.26617725311845675,
+            -0.04875892423135457,
+            0.6557522225563149,
+            0.7048129254224608
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 43,
+          "centre": [
+            29.210124420126302,
+            0.36266345523253307,
+            1.5630162948243553
+          ],
+          "radius": 0.36266345523253307,
+          "quat": [
+            -0.10839977638536268,
+            0.021967232518364552,
+            0.03346416084784266,
+            0.9933011019393049
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 48,
+          "centre": [
+            35.66804067127046,
+            0.043776,
+            0.004037742729398134
+          ],
+          "radius": 0.043776,
+          "quat": [
+            0.36595266103214874,
+            -0.21491415585866286,
+            0.5349531558247602,
+            0.7305584689593144
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 54,
+          "centre": [
+            27.47994789328447,
+            0.043776,
+            -6.780825450961786
+          ],
+          "radius": 0.043776,
+          "quat": [
+            0.6947846324876592,
+            -0.06969362248958695,
+            0.08285748042860637,
+            0.7110216251143775
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 57,
+          "centre": [
+            26.295010458725425,
+            1.3817672273155859,
+            -5.151406903314831
+          ],
+          "radius": 0.23176722731558602,
+          "quat": [
+            0.32845427156459145,
+            0.0015710256076501325,
+            0.14609741121543257,
+            0.9331510434038333
+          ],
+          "angVel": [
+            1.5954510623928676e-7,
+            7.631182456029981e-10,
+            7.096612530754404e-8
+          ]
+        },
+        {
+          "id": 63,
+          "centre": [
+            22.494641751110848,
+            0.043776,
+            -12.524167735508817
+          ],
+          "radius": 0.043776,
+          "quat": [
+            0.6297377248148838,
+            -0.11006962833060613,
+            -0.34421933339509053,
+            0.6876249889155973
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 65,
+          "centre": [
+            23.915900311008006,
+            0.26690578064922965,
+            1.5239598546177537
+          ],
+          "radius": 0.26690578064922965,
+          "quat": [
+            -0.3256190066090972,
+            0.6326591684624767,
+            -0.6177904274882606,
+            0.3347381466148498
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 66,
+          "centre": [
+            33.68096003936655,
+            0.4086787965839201,
+            1.9441422470239345
+          ],
+          "radius": 0.4086787965839201,
+          "quat": [
+            -0.24892239915753364,
+            0.09654218470314904,
+            0.6561352588830964,
+            0.7058355104560926
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 67,
+          "centre": [
+            24.951441988930757,
+            0.40857037373115684,
+            -2.6268432769786103
+          ],
+          "radius": 0.40857037373115684,
+          "quat": [
+            0.27018264785981516,
+            -0.017890661062477563,
+            0.6361389232633675,
+            0.7225015787882615
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 68,
+          "centre": [
+            25.21010990340955,
+            0.31751283265179936,
+            -4.972832545790905
+          ],
+          "radius": 0.31751283265179936,
+          "quat": [
+            -0.10840575486094853,
+            -0.6331740974116404,
+            -0.6989479196109889,
+            0.3143414709379802
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 69,
+          "centre": [
+            30.00531981899321,
+            0.3175142976298948,
+            0.3973004046083259
+          ],
+          "radius": 0.3175142976298948,
+          "quat": [
+            -0.6582732879359063,
+            0.5349056458132616,
+            0.2603388946183008,
+            0.4612763688029879
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 70,
+          "centre": [
+            27.639026908621194,
+            0.07680000000000001,
+            -1.9531582209646365
+          ],
+          "radius": 0.07680000000000001,
+          "quat": [
+            -0.14197243445218063,
+            0.31353770350228183,
+            -0.6361613252635405,
+            0.6905336375421348
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 71,
+          "centre": [
+            26.09450984784754,
+            0.32375410422043704,
+            0.4732542818285615
+          ],
+          "radius": 0.32375410422043704,
+          "quat": [
+            -0.7165995756771287,
+            -0.508900299586952,
+            0.030296415028986133,
+            0.4760122482206322
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 72,
+          "centre": [
+            28.603501605047597,
+            0.0416,
+            -2.906642973584461
+          ],
+          "radius": 0.0416,
+          "quat": [
+            -0.6808869926147273,
+            -0.22172941226336207,
+            -0.6850921589870667,
+            -0.13370753426735676
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 73,
+          "centre": [
+            27.921683904032665,
+            0.043776,
+            -2.4149183290027105
+          ],
+          "radius": 0.043776,
+          "quat": [
+            -0.41665254891417597,
+            -0.3362867223765684,
+            -0.5667731876303045,
+            0.6261629561223889
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 74,
+          "centre": [
+            31.27547463638913,
+            0.2877554643070617,
+            -0.7041419570797085
+          ],
+          "radius": 0.2877554643070617,
+          "quat": [
+            -0.11681594085110603,
+            0.5924028685210866,
+            0.6843840770754793,
+            0.408694644418793
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 75,
+          "centre": [
+            26.29094213518653,
+            0.3013095518457392,
+            -1.2872303970218768
+          ],
+          "radius": 0.3013095518457392,
+          "quat": [
+            0.4467951060867825,
+            -0.14297793645354015,
+            -0.4525336121708494,
+            0.7583829987018376
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 76,
+          "centre": [
+            30.59510835167231,
+            0.2833378154659489,
+            -11.195772188279074
+          ],
+          "radius": 0.2833378154659489,
+          "quat": [
+            0.5155105730165717,
+            -0.2125967029890559,
+            -0.21183044570841894,
+            0.8026078452502703
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 77,
+          "centre": [
+            35.08921474175854,
+            0.2833923069362386,
+            -4.547692699244512
+          ],
+          "radius": 0.2833923069362386,
+          "quat": [
+            -0.46475157317655474,
+            0.11107109664982641,
+            0.5430780971249121,
+            0.6904602574675149
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 78,
+          "centre": [
+            28.859338062839594,
+            0.16112000000000004,
+            -3.163731568338986
+          ],
+          "radius": 0.16112000000000004,
+          "quat": [
+            -0.593901678683463,
+            0.19882932225996022,
+            -0.09363584983468241,
+            0.7739379977054663
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 79,
+          "centre": [
+            29.508381754435913,
+            0.2336982573644662,
+            -3.777773295873074
+          ],
+          "radius": 0.2336982573644662,
+          "quat": [
+            0.20844918261514359,
+            -0.19387466374590476,
+            -0.4220179691509242,
+            0.860733632861073
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 80,
+          "centre": [
+            29.22617673068674,
+            0.2932757346476121,
+            -4.063194872917839
+          ],
+          "radius": 0.2932757346476121,
+          "quat": [
+            -0.5761738509001185,
+            -0.22653349050759447,
+            -0.14541596554019015,
+            0.7717256430775047
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 81,
+          "centre": [
+            12.09617631068199,
+            0.2674077087149838,
+            -4.000265363764215
+          ],
+          "radius": 0.2674077087149838,
+          "quat": [
+            -0.7139352749292723,
+            0.6491473603744092,
+            -0.129193293273406,
+            0.22850212406840548
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 82,
+          "centre": [
+            14.462280824355936,
+            0.32233883992633383,
+            -7.417108294195024
+          ],
+          "radius": 0.32233883992633383,
+          "quat": [
+            -0.12437604864939188,
+            0.5469830702170362,
+            0.5587290298826696,
+            0.6108698638701046
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 83,
+          "centre": [
+            11.655651802402476,
+            0.4087752879747761,
+            -6.618792426888928
+          ],
+          "radius": 0.4087752879747761,
+          "quat": [
+            -0.5988343553284113,
+            0.032075504200224356,
+            -0.3840828266514751,
+            0.7020320214777389
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 84,
+          "centre": [
+            12.234447486188088,
+            0.07680000000000001,
+            -6.570210625439051
+          ],
+          "radius": 0.07680000000000001,
+          "quat": [
+            -0.12245217485299793,
+            0.16009801735429613,
+            -0.2259724986342877,
+            0.9530532616669284
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 85,
+          "centre": [
+            10.82152978765116,
+            0.3186667474329609,
+            -6.115309857756103
+          ],
+          "radius": 0.3186667474329609,
+          "quat": [
+            -0.7537995382349093,
+            -0.5181960265898455,
+            0.10188657515786843,
+            0.39099649612999543
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 86,
+          "centre": [
+            11.391309149609683,
+            0.32373812787822676,
+            -5.519944067434415
+          ],
+          "radius": 0.32373812787822676,
+          "quat": [
+            -0.4848525041231727,
+            -0.33853972904845253,
+            0.5150803722996978,
+            0.6204845777075317
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 88,
+          "centre": [
+            11.723402690955126,
+            0.0416,
+            -7.1073622228796465
+          ],
+          "radius": 0.0416,
+          "quat": [
+            -0.9639721546293997,
+            -0.26287799757733377,
+            -0.033980190651788235,
+            -0.022320173210620742
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 89,
+          "centre": [
+            12.043996876952903,
+            0.043776,
+            -6.691672901479504
+          ],
+          "radius": 0.043776,
+          "quat": [
+            -0.2371931725534746,
+            -0.23993137560998373,
+            0.6402857978949514,
+            0.6900771195351604
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 94,
+          "centre": [
+            11.795972642836146,
+            0.16112000000000004,
+            -7.12672464692635
+          ],
+          "radius": 0.16112000000000004,
+          "quat": [
+            -0.4425622975783075,
+            0.10293633525669732,
+            0.371795220823835,
+            0.8095128395638244
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "chunkCensus": {
+      "inFrustum": 9,
+      "ofPieces": 48,
+      "bonePieces": 0,
+      "boneRows": 0,
+      "organPieces": 2,
+      "buriedBonePieces": 14,
+      "bonesShadingAsMeat": 0,
+      "organsShadingAsBone": 0,
+      "live": 48,
+      "baked": 16,
+      "views": 64,
+      "spare": 0,
+      "bakePending": true,
+      "cap": 64
+    },
+    "probeDynamic": {
+      "radianceGain": 0.15,
+      "visStrength": 1,
+      "frames": 199,
+      "errors": 0,
+      "bound": true,
+      "reached": 400,
+      "gates": {
+        "bound": true,
+        "dynKey": "arena",
+        "room": 6,
+        "grid": true,
+        "gain": 0.15,
+        "vis": 1,
+        "dynOn": true,
+        "flashI": 0,
+        "flashAge": 12.316000000000017,
+        "capsules": 35,
+        "lights": 3
+      },
+      "rate": 2
+    },
+    "gpuDiagnostics": {
+      "lost": null,
+      "uncaptured": [],
+      "uncapturedCount": 0
+    },
+    "gibRenderer": {
+      "mode": "march",
+      "carvedLibraryBuilt": false,
+      "carvedBuildMs": 0,
+      "carveCells": 1
+    },
+    "frames": 399,
+    "loopRunning": true,
+    "bootMarks": [
+      {
+        "n": "main-start",
+        "t": 1473
+      },
+      {
+        "n": "renderer-ready",
+        "t": 1489
+      },
+      {
+        "n": "world-start",
+        "t": 1490
+      },
+      {
+        "n": "gallery-start",
+        "t": 1679
+      },
+      {
+        "n": "dungeon-start",
+        "t": 1687
+      },
+      {
+        "n": "drawchain-start",
+        "t": 1687
+      },
+      {
+        "n": "deferred-start",
+        "t": 1696
+      },
+      {
+        "n": "adaptive-start",
+        "t": 1696
+      },
+      {
+        "n": "zombies-start",
+        "t": 1722
+      },
+      {
+        "n": "room-probes-start",
+        "t": 1729
+      },
+      {
+        "n": "player-start",
+        "t": 4083
+      },
+      {
+        "n": "gun-start",
+        "t": 4083
+      },
+      {
+        "n": "gun-ready",
+        "t": 4629
+      },
+      {
+        "n": "warm-invoked",
+        "t": 4629
+      },
+      {
+        "n": "dynamite-start",
+        "t": 4638
+      },
+      {
+        "n": "detonation-start",
+        "t": 4639
+      },
+      {
+        "n": "burst-start",
+        "t": 4639
+      },
+      {
+        "n": "bleed-start",
+        "t": 4642
+      },
+      {
+        "n": "goo-start",
+        "t": 4642
+      },
+      {
+        "n": "hud-start",
+        "t": 4653
+      },
+      {
+        "n": "boot-time",
+        "t": 4653
+      },
+      {
+        "n": "frameloop-start",
+        "t": 4653
+      },
+      {
+        "n": "api-start",
+        "t": 4654
+      },
+      {
+        "n": "demo-start",
+        "t": 4654
+      },
+      {
+        "n": "draw-ready",
+        "t": 4654
+      },
+      {
+        "n": "main-end",
+        "t": 4654
+      },
+      {
+        "n": "warm-steps-start",
+        "t": 4654
+      },
+      {
+        "n": "warm-flip-done",
+        "t": 4654
+      },
+      {
+        "n": "warm-crowd-bins-done",
+        "t": 4683
+      },
+      {
+        "n": "warm-goo-done",
+        "t": 5033
+      },
+      {
+        "n": "warm-draw-once-done",
+        "t": 8403
+      },
+      {
+        "n": "warm-precompile-done",
+        "t": 9689
+      },
+      {
+        "n": "warm-finally",
+        "t": 9689
+      }
+    ]
+  },
+  "pageErrors": [],
+  "consoleCounts": {
+    "queriesExceeded": 0,
+    "indexCount0": 1,
+    "gpuLost": 0,
+    "uncaptured": 0,
+    "probeGatherFail": 0,
+    "errors": 1,
+    "warnings": 1
+  },
+  "consoleTail": [
+    {
+      "ts": 1789567851390.363,
+      "level": "log",
+      "text": "[vite] connecting..."
+    },
+    {
+      "ts": 1789567851402.893,
+      "level": "log",
+      "text": "[vite] connected."
+    },
+    {
+      "ts": 1789567852798.993,
+      "level": "log",
+      "text": "[sdf-game] demo seed 7 (?seed=)"
+    },
+    {
+      "ts": 1789567853018.442,
+      "level": "error",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "ts": 1789567856048.716,
+      "level": "log",
+      "text": "[room-probes] room 1 baked"
+    },
+    {
+      "ts": 1789567856300.645,
+      "level": "log",
+      "text": "[room-probes] room 2 baked"
+    },
+    {
+      "ts": 1789567859720.051,
+      "level": "log",
+      "text": "[room-probes] room 3 baked"
+    },
+    {
+      "ts": 1789567859869.037,
+      "level": "log",
+      "text": "[room-probes] room 4 baked"
+    },
+    {
+      "ts": 1789567860026.631,
+      "level": "log",
+      "text": "[room-probes] room 6 baked"
+    },
+    {
+      "ts": 1789567860173.655,
+      "level": "log",
+      "text": "[room-probes] room 5 baked"
+    },
+    {
+      "ts": 1789567860998.773,
+      "level": "log",
+      "text": "[warm] 5035 ms of warm steps after 25 ms of synchronous boot (61 hidden objects, 7 crowd types, 11 stage/layer passes)"
+    },
+    {
+      "ts": 1789567860998.848,
+      "level": "log",
+      "text": "[warm] phases {\"flip\":0.10000002384185791,\"crowdBinsPerType\":[7.3,4.7,3.5,3.1,2.7,3.6,3.2],\"crowdBins\":28.200000047683716,\"goo\":350.7999999523163,\"drawOnce\":3369.5,\"precompile\":1286.2000000476837}"
+    },
+    {
+      "ts": 1789567861426.826,
+      "level": "warning",
+      "text": "Calling [RenderPassEncoder (unlabeled)].Draw with an index count of 0 is unusual."
+    }
+  ]
+}

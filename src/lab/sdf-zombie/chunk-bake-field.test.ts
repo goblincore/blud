@@ -104,7 +104,8 @@ const LOOK: ChunkLook = {
   woundDepthAmp: 1, fatDepth: 0.004, muscleDepth: 0.012, visceraAmp: 0.7, visceraDepth: 0.03,
   mottleAmp: 0.5, mottleScale: 1.5,
   organAmp: 0.6,
-  goreStrength: 1,
+  // Tissue/organ tests isolate the wound chain from the optional gib stains.
+  goreStrength: 0,
 };
 
 describe('bakeChunkAlbedo', () => {
@@ -145,6 +146,21 @@ describe('bakeChunkAlbedo', () => {
     const noOrgan = bakeChunkAlbedo(p, p, chunkBakeField({ ...PARTS, bones: [...BONE] }), LOOK);
     // Organ tint moved the colour.
     expect(Math.abs(r - noOrgan[0]) + Math.abs(g - noOrgan[1]) + Math.abs(b - noOrgan[2])).toBeGreaterThan(0.01);
+  });
+
+  it('adds dark patches to capped gibs without inventing torn-end geometry', () => {
+    const ev = chunkBakeField({ ...PARTS, torn: [] });
+    const ratios: number[] = [];
+    for (let i = 0; i < 200; i++) {
+      const p: Vec3 = [i * .003, .02, .01];
+      const clean = bakeChunkAlbedo(p, p, ev, { ...LOOK, mottleAmp: 0 });
+      const stained = bakeChunkAlbedo(p, p, ev, { ...LOOK, mottleAmp: 0, goreStrength: 1 });
+      expect(stained[3]).toBe(0);
+      expect(ev.field(p)).toBeCloseTo(ev.preWound(p), 8);
+      ratios.push(stained[1] / clean[1]);
+    }
+    expect(Math.min(...ratios)).toBeLessThan(.3);
+    expect(Math.max(...ratios)).toBeGreaterThan(.7);
   });
 
   it('is stable and finite over a sweep of the whole chunk', () => {

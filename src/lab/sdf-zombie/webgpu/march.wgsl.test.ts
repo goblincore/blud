@@ -335,6 +335,10 @@ describe('ported features reach the entry point', () => {
     // chunk's own translation, not the world.
     expect(MARCH_BODY).toContain('goreStrength');
     expect(MARCH_BODY).toContain('fbm(anchor * 6.0)');
+    // TASK 3: the gate is per-instance OR per-view, so a doomed body in a
+    // crowd can ramp its own gore without repainting the shared-material type.
+    expect(MARCH_BODY).toContain('let goreStrength = max(lodCfg.w, gInstGore);');
+    expect(INSTANCE_STATE).toContain('gInstGore = (*inst)[base + ');
   });
 
   it('skips dead prims (w=2) in the carve pass too, not just the fold', () => {
@@ -474,7 +478,7 @@ describe('ported features reach the entry point', () => {
     // Before the gore and face passes: mottle is the flesh's own colour, so
     // damage and the face paint OVER it.
     expect(MARCH_BODY.indexOf('mix(albedo, mottleColor'))
-      .toBeLessThan(MARCH_BODY.indexOf('let goreStrength = lodCfg.w;'));
+      .toBeLessThan(MARCH_BODY.indexOf('let goreStrength = max(lodCfg.w, gInstGore);'));
     expect(MARCH_BODY.indexOf('mix(albedo, mottleColor'))
       .toBeLessThan(MARCH_BODY.indexOf('if (faceCfg.x > 0.5) {'));
   });
@@ -834,7 +838,9 @@ describe('melt wet-red ramp (zombie melt task 6)', () => {
     expect(MARCH_BODY).toContain(
       'let meltU = smoothstep(0.0, 1.0, clamp(gInstMelt.x * 2.0, 0.0, 1.0));');
     // Flesh reddens; bone goes PALE instead — the contrast is the effect.
-    expect(MARCH_BODY).toContain('albedo = mix(albedo, boneColor, meltU * 0.9)');
+    // `bonePaleU` is max(bareBoneU, meltU): a rupture's exposed skeleton goes
+    // pale with NO melt ramp (see the body-to-gib rupture branch below).
+    expect(MARCH_BODY).toContain('albedo = mix(albedo, boneColor, bonePaleU * 0.9)');
     // Flesh mixes toward the deep red — but through the PER-PATCH `local`,
     // not meltU directly. Skin sloughs in pieces (owner review 2026-09-03):
     // each point crosses at its own progress off the rest-space anchor, and
@@ -848,13 +854,15 @@ describe('melt wet-red ramp (zombie melt task 6)', () => {
     // `patch` is a RESERVED WORD in WGSL: naming it that compiles in TS and
     // fails the shader at runtime, rendering the body invisible. Guard it.
     expect(MARCH_BODY).not.toMatch(/\blet patch\b/);
-    // Wetness ramps on flesh ONLY — bone stays matte.
-    expect(MARCH_BODY).toContain('wet = mix(wet, select(1.6, 0.45, isBone), meltU)');
+    // Wetness ramps on flesh ONLY — bone stays matte. `bonePaleU` is
+    // max(bareBoneU, meltU), so a rupturing body's exposed bones go matte too.
+    expect(MARCH_BODY).toContain('wet = mix(wet, select(1.6, 0.45, isBone), bonePaleU)');
   });
-  it('identifies an exposed bone row — the wm gate alone cannot see one', () => {
-    // The melt's skeleton emerges with NO wound (bareBones bypass), so the
-    // primScale.w material read must also run when meltCfg.x > 0.
-    expect(MARCH_BODY).toContain('if ((wm > 0.0 || gInstMelt.x > 0.0) && hitBest >= 0)');
+  it('identifies an exposed bone row — the wound gate alone cannot see one', () => {
+    // The melt's skeleton emerges with NO wound (bareBones bypass) and so does
+    // a rupturing body's, so the primScale.w material read must also run when
+    // meltCfg.x > 0 OR bareBones is set.
+    expect(MARCH_BODY).toContain('if ((wm > 0.0 || gInstMelt.x > 0.0 || gInstCounts2.y > 0.5) && hitBest >= 0)');
     expect(MARCH_BODY).toContain('let isBone = hitMat > 3.5 && hitMat < 4.5;');
   });
 
@@ -2049,31 +2057,26 @@ describe('bone material (wound pass r2)', () => {
     expect(SHADE_BODY).not.toContain('boneStain');
   });
 
-  it('identifies bone by material code ONLY for the melt ramp (task 6)', () => {
+  it('identifies bone by material code for the melt ramp AND a rupture', () => {
     // Bone tubes deleted the old always-on bone albedo branch, and it stays
-    // deleted: bone is identified again, but the ONLY consumer is the melt's
-    // pale-vs-wet-red split (march.wgsl.ts, zombie melt task 6) — the melt's
-    // skeleton emerges through thinning flesh with no wound to key on, and
-    // without the material read an exposed bone would take the red flesh
-    // ramp and shade as meat. The read is gated on meltCfg.x, so a
-    // non-melting body pays and shades exactly as the bone-tubes deletion
-    // left it.
+    // deleted: bone is identified again, but its only consumers are the melt's
+    // pale-vs-wet-red split (zombie melt task 6) and the body-to-gib rupture's
+    // exposed skeleton. Both need the material read because the bone wins the
+    // fold with no wound to key on.
     expect(SHADE_BODY).toContain('let isBone = hitMat > 3.5 && hitMat < 4.5;');
-    expect(SHADE_BODY).toContain('if ((wm > 0.0 || gInstMelt.x > 0.0) && hitBest >= 0)');
-    // And bone still does not get its old always-on shading back — the
-    // isBone read is consumed ONLY inside the meltU-gated block (the one
-    // bare `if (isBone)` line is nested directly inside `if (meltU > 0.0)`).
-    const uses = SHADE_BODY.split('\n').filter((l: string) => l.includes('isBone'));
-    for (const l of uses) {
-      if (l.includes('let isBone') || l.trim() === 'if (isBone) {') continue;
-      expect(l).toMatch(/meltU|meltCfg/);
-    }
-    // Prove the nesting claimed above: the bare branch sits inside the meltU
-    // gate, not loose in the shading flow.
-    const gate = SHADE_BODY.indexOf('if (meltU > 0.0) {');
-    const branch = SHADE_BODY.indexOf('if (isBone) {');
-    expect(branch).toBeGreaterThan(gate);
-    expect(branch - gate).toBeLessThan(200);
+    expect(SHADE_BODY).toContain('if ((wm > 0.0 || gInstMelt.x > 0.0 || gInstCounts2.y > 0.5) && hitBest >= 0)');
+    // Bone paleness is gated on bonePaleU = max(bareBoneU, meltU); the FLESH
+    // reddening stays meltU-only, so a bare-bone rupture never stains skin and
+    // never sags a face — the melt geometry is a separate ramp.
+    expect(SHADE_BODY).toContain('let bonePaleU = max(bareBoneU, meltU);');
+    expect(SHADE_BODY).toContain('if (isBone && bonePaleU > 0.0) {');
+    expect(SHADE_BODY).toContain('} else if (meltU > 0.0) {');
+    // The flesh branch must sit BELOW the bone branch, so nothing can redden
+    // exposed bone.
+    const pale = SHADE_BODY.indexOf('if (isBone && bonePaleU > 0.0) {');
+    const flesh = SHADE_BODY.indexOf('} else if (meltU > 0.0) {');
+    expect(pale).toBeGreaterThan(-1);
+    expect(flesh).toBeGreaterThan(pale);
   });
 });
 

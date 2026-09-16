@@ -207,8 +207,14 @@ describe('ring layout', () => {
         const t = hit([cx, 1.6, cz], d);
         expect(t, `${r.name} ${name} invisible from inside`).not.toBeNull();
         if (!hasMouth) {
-          // Room half-size to the wall (4 m); ceiling 3.0 - 1.6 = 1.4 m.
-          expect(t!, `${r.name} ${name} too far`).toBeLessThan(5);
+          // Bound RELATIVE to the room's own size: the original cells are 8 m
+          // across (4 m to the wall), and the arena added 2026-09-10 is 16 m
+          // (8 m to the wall), so a hard-coded 5 m could only ever describe
+          // the small rooms. The ceiling runs from 1.6 m to the room's height.
+          const halfSpan = name === 'ceiling'
+            ? Math.max(0, r.height - 1.6)
+            : Math.max((r.maxX - r.minX) / 2, (r.maxZ - r.minZ) / 2);
+          expect(t!, `${r.name} ${name} too far`).toBeLessThan(halfSpan + 0.5);
         }
         // Aligned mouths can now expose the far annex wall through room2.
         const levelSpan = Math.max(...ROOMS.map(room => room.maxX))
@@ -343,10 +349,17 @@ describe('mixed encounter annex', () => {
     expect(ROOMS[0]!.soldiers).toBe(1);
     expect(spawnPoints(room!)).toHaveLength(5);
     expect(enclosureKeyAt(14.4, -4.8)).toBe('room5');
+    // TWO mouths since 2026-09-10: the original west door from room 2, and the
+    // east door into the new ARENA. The annex is a through-room now, which is
+    // a deliberate topology change — see the arena note in game-level.ts.
     const tunnels = TUNNELS.filter(t => t.a === 5 || t.b === 5);
-    expect(tunnels).toHaveLength(1);
-    expect([tunnels[0]!.a, tunnels[0]!.b]).toEqual([2, 5]);
-    expect(tunnels[0]!.maxZ - tunnels[0]!.minZ).toBeGreaterThanOrEqual(2);
+    expect(tunnels).toHaveLength(2);
+    const west = tunnels.find(t => t.a === 2 || t.b === 2)!;
+    expect([west.a, west.b].sort()).toEqual([2, 5]);
+    expect(west.maxZ - west.minZ).toBeGreaterThanOrEqual(2);
+    const east = tunnels.find(t => t.a === 6 || t.b === 6)!;
+    expect([east.a, east.b].sort()).toEqual([5, 6]);
+    expect(east.axis).toBe('x');
   });
 
   it('admits two lateral capsule lanes through both new doorway mouths', () => {
@@ -406,8 +419,18 @@ describe('mixed encounter annex', () => {
     }
   });
 
-  it('keeps a walking capsule inside all three closed annex sides', () => {
-    for (const [x, z, yaw] of [[17, -4.8, Math.PI / 2], [17, -7.5, 0], [17, -2, Math.PI]]) {
+  it('keeps a walking capsule inside the annex and now lets it out east into the arena', () => {
+    // The first lane drives EAST down the door lane. Before 2026-09-10 that
+    // ended against a wall and the capsule stayed in room5; the arena door is
+    // there now, so it must walk THROUGH — and the two lanes that still face
+    // closed sides must still be contained. Both halves are asserted, so
+    // neither "the door vanished" nor "the annex lost its walls" can pass.
+    const east = makePlayer(17, -4.8, Math.PI / 2);
+    walk(east, { x: 0, z: 1, jump: false }, 180);
+    expect(enclosureKeyAt(east.pos[0], east.pos[2])).toBe('arena');
+    expect(east.pos[0]).toBeGreaterThan(OUTER);
+
+    for (const [x, z, yaw] of [[17, -7.5, 0], [17, -2, Math.PI]]) {
       const s = makePlayer(x!, z!, yaw!);
       walk(s, { x: 0, z: 1, jump: false }, 180);
       expect(enclosureKeyAt(s.pos[0], s.pos[2])).toBe('room5');

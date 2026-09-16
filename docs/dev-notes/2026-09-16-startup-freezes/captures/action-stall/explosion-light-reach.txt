@@ -1,0 +1,8 @@
+# Explosion-light reach on the candidate (always-visible pool).
+# /tmp/light-check.mjs: frozen page, teleport(6), spawnExplosionFx ground burst,
+# step(6), whole-frame mean luminance before -> after, and the live mesh-side
+# pool intensities read from __sdfGame.dynamite().
+# 2026-09-16, candidate d393d682+. Load ~9.
+fxlight 0   (off)  : room mean 29.89 -> 29.93  (+0.04), scale 0, mesh intensity [0,0,0],       ages [0.1], lights 1
+fxlight 1   (SHIP) : room mean 30.07 -> 39.00  (+8.93), scale 1, mesh intensity [136.2,0,0],   ages [0.1], lights 1
+page errors: none

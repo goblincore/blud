@@ -6,7 +6,9 @@ import {
   makeFlight,
   stepFlight,
   type FlightBounds,
+  type FlightBox,
   type FlightState,
+  type FlightWorld,
 } from './dynamite-flight';
 import { FPV_TUNING, throwDirection, throwSpeedMps } from './fpv';
 import { BALLISTIC_BOUNDS, DYNAMITE_COOK } from '../../game/gibs/tuning';
@@ -20,10 +22,11 @@ function run(
   f: FlightState,
   pred: (f: FlightState) => boolean,
   maxSteps: number,
-  bounds: FlightBounds = BALLISTIC_BOUNDS,
+  bounds: FlightBounds | null = BALLISTIC_BOUNDS,
+  world: FlightWorld = {},
   dt = 1 / 60,
 ): FlightState {
-  for (let i = 0; i < maxSteps && !pred(f); i++) f = stepFlight(f, dt, bounds);
+  for (let i = 0; i < maxSteps && !pred(f); i++) f = stepFlight(f, dt, bounds, world);
   return f;
 }
 
@@ -187,5 +190,114 @@ describe('determinism', () => {
       return JSON.stringify(out);
     };
     expect(runOnce()).toBe(runOnce());
+  });
+});
+
+// ——— Dungeon world: solid boxes + a ceiling (2026-09-10) ————————————————
+// The active game's level is not an arena rect. It is a box list the player
+// already collides with (game-level.ts levelColliders()) under a 3 m ceiling,
+// and a thrown bundle must bounce off both. `bounds: null` selects that world;
+// the arena-rect default is untouched, which the tests above pin.
+
+describe('dungeon world — box collision', () => {
+  /** A 2×2 m room wall: a thin slab crossing X at x = 3, floor to 3 m. */
+  const WALL: FlightBox = { min: [3, 0, -2], max: [3.2, 3, 2] };
+  /** A chest-high crate at the origin-ish. */
+  const CRATE: FlightBox = { min: [-1, 0, -1], max: [1, 0.9, 1] };
+
+  it('reflects off a wall slab and stays on its near side', () => {
+    // Sliding on the floor toward +X at 10 m/s, fuse off so nothing detonates.
+    let f = makeFlight([0, 0.04, 0], [10, 0, 0], { impactMode: false, fuseSec: 30 });
+    const r = FLIGHT_TUNING.bundleRadiusM;
+    let bounced = false;
+    for (let i = 0; i < 60 * 3; i++) {
+      const prev = f;
+      f = stepFlight(f, 1 / 60, null, { colliders: [WALL] });
+      if (!bounced && prev.vel[0] > 0 && f.vel[0] < 0) {
+        // Reflected with the same elastic as the arena walls, and pushed out
+        // to exactly one bundle radius short of the face.
+        expect(f.vel[0]).toBeCloseTo(-prev.vel[0] * FLIGHT_TUNING.elastic, 1);
+        expect(f.pos[0]).toBeLessThanOrEqual(WALL.min[0] - r + 1e-6);
+        bounced = true;
+      }
+      // Never penetrates the slab, ever.
+      expect(f.pos[0]).toBeLessThan(WALL.min[0] + 1e-6);
+    }
+    expect(bounced).toBe(true);
+  });
+
+  it('lands ON a crate instead of passing through it', () => {
+    let f = makeFlight([0, 2, 0], [0, 0, 0], { impactMode: false, fuseSec: 30 });
+    f = run(f, (s) => s.resting, 60 * 6, null, { colliders: [CRATE] });
+    expect(f.resting).toBe(true);
+    // Rests on the lid, one radius above it — not on the floor inside it.
+    expect(f.pos[1]).toBeCloseTo(CRATE.max[1] + FLIGHT_TUNING.bundleRadiusM, 3);
+  });
+
+  it('a dropped bundle at rest INSIDE a box leaves by the nearest face', () => {
+    // Spawned overlapping the crate's centre: d2 === 0, the min-penetration
+    // fallback must eject it rather than divide by zero.
+    let f = makeFlight([0, 0.45, 0], [0, 0, 0], { impactMode: false, fuseSec: 30 });
+    f = stepFlight(f, 1 / 60, null, { colliders: [CRATE] });
+    expect(Number.isFinite(f.pos[0]) && Number.isFinite(f.pos[1]) && Number.isFinite(f.pos[2])).toBe(true);
+    const inside = f.pos[0] > CRATE.min[0] && f.pos[0] < CRATE.max[0]
+      && f.pos[1] > CRATE.min[1] && f.pos[1] < CRATE.max[1]
+      && f.pos[2] > CRATE.min[2] && f.pos[2] < CRATE.max[2];
+    expect(inside).toBe(false);
+  });
+
+  it('bounces off the ceiling instead of leaving through the roof', () => {
+    let f = makeFlight([0, 0.1, 0], [0, 25, 0], { impactMode: false, fuseSec: 30 });
+    const ceil = 3.0;
+    let reflected = false;
+    for (let i = 0; i < 120; i++) {
+      f = stepFlight(f, 1 / 60, null, { ceilM: ceil });
+      expect(f.pos[1]).toBeLessThanOrEqual(ceil + 1e-9);
+      if (f.vel[1] < 0) reflected = true;
+    }
+    expect(reflected).toBe(true);
+  });
+
+  it('impact detonation fires on a wall hit once past the safe distance', () => {
+    let f = makeFlight([0, 1.0, 0], [12, 0, 0], { impactMode: true });
+    f = run(f, detonated, 60 * 3, null, { colliders: [WALL] });
+    expect(detonated(f)).toBe(true);
+    expect(f.fuse).toBeGreaterThan(0);        // the wall beat the safety fuse
+    expect(f.pos[0]).toBeLessThan(WALL.min[0]);
+  });
+
+  it('a wall hit within the safe distance does NOT detonate (spawn protection)', () => {
+    const near: FlightBox = { min: [0.4, 0, -1], max: [0.5, 3, 1] };
+    let f = makeFlight([0, 1.0, 0], [8, 0, 0], { impactMode: true });
+    f = run(f, detonated, 60 * 2, null, { colliders: [near] });
+    expect(f.pos[0]).toBeLessThan(near.min[0]);
+    expect(f.vel[0]).toBeLessThan(0);          // bounced, still armed
+  });
+
+  it('is deterministic with a box list, and the arena default is unchanged', () => {
+    const boxes = [WALL, CRATE];
+    const runOnce = (): string => {
+      let f = makeFlight([-2, 1.4, 0.3], [7, 4, -3], { impactMode: true });
+      const out: FlightState[] = [];
+      for (let i = 0; i < 240 && !detonated(f); i++) {
+        f = stepFlight(f, 1 / 60, null, { colliders: boxes, ceilM: 3 });
+        out.push(f);
+      }
+      return JSON.stringify(out);
+    };
+    expect(runOnce()).toBe(runOnce());
+
+    // No world → the arena-rect trajectory is byte-identical to omitting both.
+    const withDefault = (() => {
+      let f = makeFlight([0, 2, 0], [4, 3, 1], { impactMode: true });
+      for (let i = 0; i < 120; i++) f = stepFlight(f, 1 / 60, HUGE);
+      return JSON.stringify(f);
+    })();
+    const withEmptyWorld = (() => {
+      let f = makeFlight([0, 2, 0], [4, 3, 1], { impactMode: true });
+      for (let i = 0; i < 120; i++) f = stepFlight(f, 1 / 60, HUGE, {});
+      return JSON.stringify(f);
+    })();
+    expect(withDefault).toBe(withEmptyWorld);
   });
 });

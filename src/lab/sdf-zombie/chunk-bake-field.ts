@@ -294,12 +294,49 @@ export function bakeChunkAlbedo(
     const gore = Math.min(1, mottle * 0.55 + wm * 0.65) * look.goreStrength;
     const goreTarget = mix3(look.deepColor, [look.deepColor[0] * 0.55, look.deepColor[1] * 0.55, look.deepColor[2] * 0.55], mottle);
     albedo = mix3(albedo, goreTarget, gore * 0.85);
+    // Broad dark clots on torn meat, including capped blast pieces whose
+    // torn-end list is intentionally empty. Same mask as MARCH_BODY.
+    const stain = smoothstep(0.40, 0.68, mottle) * look.goreStrength;
+    albedo = mix3(albedo, [look.deepColor[0] * 0.22, look.deepColor[1] * 0.22, look.deepColor[2] * 0.22], stain * 0.85);
   }
 
   return [albedo[0], albedo[1], albedo[2], wm];
 }
 
 /** World dir -> chunk-local unit axis helper re-exported for tests. */
+/**
+ * BAKED AMBIENT OCCLUSION — the term a baked chunk cannot compute at runtime.
+ *
+ * The march has cheap AO from the field ("so creases and the insides of joints
+ * stay dark") and `chunkShade` cannot: a mesh fragment shader has no field to
+ * sample. Without it a settled piece shades at ao = 1.0 and NOTHING on it can be
+ * in shadow, which is most of the owner's "way too light and dont follow the
+ * lighting" beside the marched piece next to it.
+ *
+ * iq's five-tap occlusion along the surface normal, against the piece's OWN
+ * field — a gib is a separate object, so occlusion by the body it came from
+ * would be a shadow cast by something no longer there. The normal is the field
+ * gradient by central differences rather than the triangulation's, because it is
+ * the surface's own and is available before `computeVertexNormals` has run.
+ */
+export function bakeAoAt(field: (p: Vec3) => number, p: Vec3, cell: number): number {
+  const e = cell * 0.5;
+  const gx = field([p[0] + e, p[1], p[2]]) - field([p[0] - e, p[1], p[2]]);
+  const gy = field([p[0], p[1] + e, p[2]]) - field([p[0], p[1] - e, p[2]]);
+  const gz = field([p[0], p[1], p[2] + e]) - field([p[0], p[1], p[2] - e]);
+  const gl = Math.hypot(gx, gy, gz) || 1;
+  const n: Vec3 = [gx / gl, gy / gl, gz / gl];
+  let occ = 0;
+  let sca = 1;
+  for (let i = 1; i <= 5; i++) {
+    const h = 0.01 + 0.11 * (i / 5);
+    const d = field([p[0] + n[0] * h, p[1] + n[1] * h, p[2] + n[2] * h]);
+    occ += (h - d) * sca;
+    sca *= 0.92;
+  }
+  return Math.max(0, Math.min(1, 1 - 2.4 * occ));
+}
+
 export const worldToLocalAxis = (v: Vec3): Vec3 => normalize(v);
 
 /** Squared distance, the pellet test's inner loop. */

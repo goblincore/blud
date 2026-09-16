@@ -412,6 +412,8 @@ export interface MotionSignals {
    *  gain is an optional stagger/recoil amplitude multiplier (default 1 =
    *  the lab's tuned amplitudes — the lab wiring never sets it, so its
    *  reactions are bit-identical to a build without the knob). */
+  /** `dirWorld` must be a UNIT vector: the reaction amplitudes it scales are
+   *  metres (see stagger.ts's header — a velocity here tore bodies in half). */
   shot: { type: WoundType; dirWorld: Vec3; woundWorld: Vec3; torso: boolean; gain?: number;
     soldierLevel?: SoldierStaggerLevel; fullStagger?: boolean } | null;
   mobilityInjury?: { severity: number; side: 'L' | 'R' | 'both' };

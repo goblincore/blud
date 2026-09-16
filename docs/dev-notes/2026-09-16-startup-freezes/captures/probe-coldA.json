@@ -1,0 +1,3893 @@
+{
+  "label": "coldA",
+  "url": "http://localhost:5480/sdf-game.html?room=arena&gibbones=core&pipelinelog=1&seed=7",
+  "startedAt": "2026-09-16T14:07:14.475Z",
+  "qs": "",
+  "backend": "webgpu",
+  "backendWallMs": 2015,
+  "warmWallMs": 6094,
+  "warm": {
+    "ms": 3887,
+    "bootBeforeWarmMs": 14,
+    "flipped": 61,
+    "flippedNames": [
+      "PointLight:?",
+      "PointLight:?",
+      "PointLight:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Group:shell-eject-0",
+      "Group:shell-load-0",
+      "Group:shell-eject-1",
+      "Group:shell-load-1",
+      "Group:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?"
+    ],
+    "passes": 11,
+    "computes": 7,
+    "phases": {
+      "flip": 0.19999992847442627,
+      "crowdBinsPerType": [
+        5,
+        2.3,
+        2.4,
+        2.2,
+        2.1,
+        2.1,
+        2
+      ],
+      "crowdBins": 18.200000047683716,
+      "goo": 198.19999992847443,
+      "drawOnce": 2824.2000000476837,
+      "precompile": 846.1000000238419
+    }
+  },
+  "bootPoll": [],
+  "cpuProfile": {
+    "file": "coldA-boot.cpuprofile",
+    "totalMs": 6107,
+    "top": [
+      {
+        "fn": "(idle)  :0",
+        "ms": 1381,
+        "pct": 22.6
+      },
+      {
+        "fn": "createProgram  three/chunk-DEF7EUCY.js:45188",
+        "ms": 500,
+        "pct": 8.2
+      },
+      {
+        "fn": "sdBody  src/lab/sdf-zombie/validate.ts:185",
+        "ms": 471,
+        "pct": 7.7
+      },
+      {
+        "fn": "distance  src/lab/sdf-zombie/webgpu/skeleton-spike/contract.ts:132",
+        "ms": 270,
+        "pct": 4.4
+      },
+      {
+        "fn": "sdPrimitive  src/lab/sdf-zombie/validate.ts:14",
+        "ms": 266,
+        "pct": 4.4
+      },
+      {
+        "fn": "sdBentCone  src/lab/sdf-zombie/validate.ts:131",
+        "ms": 232,
+        "pct": 3.8
+      },
+      {
+        "fn": "boneBreach  src/lab/sdf-zombie/validate.ts:237",
+        "ms": 176,
+        "pct": 2.9
+      },
+      {
+        "fn": "(garbage collector)  :0",
+        "ms": 176,
+        "pct": 2.9
+      },
+      {
+        "fn": "at  src/lab/sdf-zombie/validate.ts:138",
+        "ms": 169,
+        "pct": 2.8
+      },
+      {
+        "fn": "sdBezierTs  src/lab/sdf-zombie/validate.ts:100",
+        "ms": 154,
+        "pct": 2.5
+      },
+      {
+        "fn": "build  three/chunk-DEF7EUCY.js:1442",
+        "ms": 138,
+        "pct": 2.3
+      },
+      {
+        "fn": "sub  src/lab/sdf-zombie/vec.ts:2",
+        "ms": 121,
+        "pct": 2
+      },
+      {
+        "fn": "(program)  :0",
+        "ms": 115,
+        "pct": 1.9
+      },
+      {
+        "fn": "extractSegmentMesh  src/lab/sdf-zombie/webgpu/skeleton-spike/mesh.ts:5",
+        "ms": 77,
+        "pct": 1.3
+      },
+      {
+        "fn": "g  src/lab/sdf-zombie/validate.ts:143",
+        "ms": 76,
+        "pct": 1.2
+      },
+      {
+        "fn": "extractHullSoup  src/lab/sdf-zombie/webgpu/surface-nets-cpu.ts:70",
+        "ms": 71,
+        "pct": 1.2
+      },
+      {
+        "fn": "build  three/chunk-DEF7EUCY.js:1744",
+        "ms": 59,
+        "pct": 1
+      },
+      {
+        "fn": "_getChildren  three/chunk-DEF7EUCY.js:1139",
+        "ms": 50,
+        "pct": 0.8
+      },
+      {
+        "fn": "getDataFromNode  three/chunk-DEF7EUCY.js:25488",
+        "ms": 45,
+        "pct": 0.7
+      },
+      {
+        "fn": "getChildren  three/chunk-DEF7EUCY.js:1103",
+        "ms": 37,
+        "pct": 0.6
+      },
+      {
+        "fn": "build  three/chunk-DEF7EUCY.js:4238",
+        "ms": 37,
+        "pct": 0.6
+      },
+      {
+        "fn": "analyze  three/chunk-DEF7EUCY.js:1363",
+        "ms": 36,
+        "pct": 0.6
+      },
+      {
+        "fn": "getNodeFromHash  three/chunk-DEF7EUCY.js:24868",
+        "ms": 34,
+        "pct": 0.6
+      },
+      {
+        "fn": "createAttribute  three/chunk-DEF7EUCY.js:42270",
+        "ms": 30,
+        "pct": 0.5
+      },
+      {
+        "fn": "build  three/chunk-DEF7EUCY.js:2431",
+        "ms": 25,
+        "pct": 0.4
+      },
+      {
+        "fn": "tileNoise  src/lab/sdf-zombie/webgpu/goblin-skin.ts:96",
+        "ms": 24,
+        "pct": 0.4
+      },
+      {
+        "fn": "setData  three/chunk-DEF7EUCY.js:24069",
+        "ms": 22,
+        "pct": 0.4
+      },
+      {
+        "fn": "generateStone  src/game/level/stone-textures.ts:67",
+        "ms": 22,
+        "pct": 0.4
+      },
+      {
+        "fn": "getNodeType  three/chunk-DEF7EUCY.js:1267",
+        "ms": 20,
+        "pct": 0.3
+      },
+      {
+        "fn": "scale  src/lab/sdf-zombie/vec.ts:3",
+        "ms": 20,
+        "pct": 0.3
+      }
+    ]
+  },
+  "atWarm": {
+    "t": 6318,
+    "bootMarks": [
+      {
+        "n": "main-start",
+        "t": 595
+      },
+      {
+        "n": "renderer-ready",
+        "t": 602
+      },
+      {
+        "n": "world-start",
+        "t": 602
+      },
+      {
+        "n": "gallery-start",
+        "t": 680
+      },
+      {
+        "n": "dungeon-start",
+        "t": 684
+      },
+      {
+        "n": "drawchain-start",
+        "t": 684
+      },
+      {
+        "n": "deferred-start",
+        "t": 688
+      },
+      {
+        "n": "adaptive-start",
+        "t": 688
+      },
+      {
+        "n": "zombies-start",
+        "t": 699
+      },
+      {
+        "n": "room-probes-start",
+        "t": 702
+      },
+      {
+        "n": "player-start",
+        "t": 1664
+      },
+      {
+        "n": "gun-start",
+        "t": 1664
+      },
+      {
+        "n": "gun-ready",
+        "t": 1915
+      },
+      {
+        "n": "warm-invoked",
+        "t": 1915
+      },
+      {
+        "n": "dynamite-start",
+        "t": 1920
+      },
+      {
+        "n": "detonation-start",
+        "t": 1921
+      },
+      {
+        "n": "burst-start",
+        "t": 1921
+      },
+      {
+        "n": "bleed-start",
+        "t": 1922
+      },
+      {
+        "n": "goo-start",
+        "t": 1922
+      },
+      {
+        "n": "hud-start",
+        "t": 1928
+      },
+      {
+        "n": "boot-time",
+        "t": 1928
+      },
+      {
+        "n": "frameloop-start",
+        "t": 1928
+      },
+      {
+        "n": "api-start",
+        "t": 1929
+      },
+      {
+        "n": "demo-start",
+        "t": 1929
+      },
+      {
+        "n": "draw-ready",
+        "t": 1929
+      },
+      {
+        "n": "main-end",
+        "t": 1929
+      },
+      {
+        "n": "warm-steps-start",
+        "t": 1929
+      },
+      {
+        "n": "warm-flip-done",
+        "t": 1929
+      },
+      {
+        "n": "warm-crowd-bins-done",
+        "t": 1947
+      },
+      {
+        "n": "warm-goo-done",
+        "t": 2145
+      },
+      {
+        "n": "warm-draw-once-done",
+        "t": 4970
+      },
+      {
+        "n": "warm-precompile-done",
+        "t": 5816
+      },
+      {
+        "n": "warm-finally",
+        "t": 5816
+      }
+    ],
+    "warmDone": {
+      "ms": 3887,
+      "bootBeforeWarmMs": 14,
+      "flipped": 61,
+      "flippedNames": [
+        "PointLight:?",
+        "PointLight:?",
+        "PointLight:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Group:shell-eject-0",
+        "Group:shell-load-0",
+        "Group:shell-eject-1",
+        "Group:shell-load-1",
+        "Group:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?"
+      ],
+      "passes": 11,
+      "computes": 7,
+      "phases": {
+        "flip": 0.19999992847442627,
+        "crowdBinsPerType": [
+          5,
+          2.3,
+          2.4,
+          2.2,
+          2.1,
+          2.1,
+          2
+        ],
+        "crowdBins": 18.200000047683716,
+        "goo": 198.19999992847443,
+        "drawOnce": 2824.2000000476837,
+        "precompile": 846.1000000238419
+      }
+    },
+    "loader": {
+      "status": "READY — CLICK TO START",
+      "hidden": false,
+      "ready": true
+    },
+    "loopRunning": true,
+    "gpuDiagnostics": {
+      "lost": null,
+      "uncaptured": [],
+      "uncapturedCount": 0
+    },
+    "gibRenderer": {
+      "mode": "march",
+      "carvedLibraryBuilt": false,
+      "carvedBuildMs": 0,
+      "carveCells": 1
+    },
+    "probeDynamic": {
+      "radianceGain": 0.15,
+      "visStrength": 1,
+      "frames": 3,
+      "errors": 0,
+      "bound": true,
+      "reached": 8,
+      "gates": {
+        "bound": true,
+        "dynKey": "arena",
+        "room": 6,
+        "grid": true,
+        "gain": 0.15,
+        "vis": 1,
+        "dynOn": true,
+        "flashI": 0,
+        "flashAge": null,
+        "capsules": 480,
+        "lights": 1
+      },
+      "rate": 2
+    },
+    "chunkStats": {
+      "live": 0,
+      "sharedLiveMaterial": true,
+      "baked": 0,
+      "views": 0,
+      "totalBakes": 0,
+      "lastBakeMs": 0,
+      "lastBakeSwapMs": 0,
+      "lastBakeSwapFrame": -1,
+      "lastBakeRequestMs": 0,
+      "bakeThread": "worker",
+      "pendingBake": null,
+      "bakeError": null,
+      "lastBakeInfo": null,
+      "faceBaked": 0,
+      "pieces": [],
+      "livePieces": []
+    },
+    "gunReady": true,
+    "frames": 7
+  },
+  "atWarmSettle": {
+    "t": 7322,
+    "bootMarks": [
+      {
+        "n": "main-start",
+        "t": 595
+      },
+      {
+        "n": "renderer-ready",
+        "t": 602
+      },
+      {
+        "n": "world-start",
+        "t": 602
+      },
+      {
+        "n": "gallery-start",
+        "t": 680
+      },
+      {
+        "n": "dungeon-start",
+        "t": 684
+      },
+      {
+        "n": "drawchain-start",
+        "t": 684
+      },
+      {
+        "n": "deferred-start",
+        "t": 688
+      },
+      {
+        "n": "adaptive-start",
+        "t": 688
+      },
+      {
+        "n": "zombies-start",
+        "t": 699
+      },
+      {
+        "n": "room-probes-start",
+        "t": 702
+      },
+      {
+        "n": "player-start",
+        "t": 1664
+      },
+      {
+        "n": "gun-start",
+        "t": 1664
+      },
+      {
+        "n": "gun-ready",
+        "t": 1915
+      },
+      {
+        "n": "warm-invoked",
+        "t": 1915
+      },
+      {
+        "n": "dynamite-start",
+        "t": 1920
+      },
+      {
+        "n": "detonation-start",
+        "t": 1921
+      },
+      {
+        "n": "burst-start",
+        "t": 1921
+      },
+      {
+        "n": "bleed-start",
+        "t": 1922
+      },
+      {
+        "n": "goo-start",
+        "t": 1922
+      },
+      {
+        "n": "hud-start",
+        "t": 1928
+      },
+      {
+        "n": "boot-time",
+        "t": 1928
+      },
+      {
+        "n": "frameloop-start",
+        "t": 1928
+      },
+      {
+        "n": "api-start",
+        "t": 1929
+      },
+      {
+        "n": "demo-start",
+        "t": 1929
+      },
+      {
+        "n": "draw-ready",
+        "t": 1929
+      },
+      {
+        "n": "main-end",
+        "t": 1929
+      },
+      {
+        "n": "warm-steps-start",
+        "t": 1929
+      },
+      {
+        "n": "warm-flip-done",
+        "t": 1929
+      },
+      {
+        "n": "warm-crowd-bins-done",
+        "t": 1947
+      },
+      {
+        "n": "warm-goo-done",
+        "t": 2145
+      },
+      {
+        "n": "warm-draw-once-done",
+        "t": 4970
+      },
+      {
+        "n": "warm-precompile-done",
+        "t": 5816
+      },
+      {
+        "n": "warm-finally",
+        "t": 5816
+      }
+    ],
+    "warmDone": {
+      "ms": 3887,
+      "bootBeforeWarmMs": 14,
+      "flipped": 61,
+      "flippedNames": [
+        "PointLight:?",
+        "PointLight:?",
+        "PointLight:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Group:shell-eject-0",
+        "Group:shell-load-0",
+        "Group:shell-eject-1",
+        "Group:shell-load-1",
+        "Group:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?"
+      ],
+      "passes": 11,
+      "computes": 7,
+      "phases": {
+        "flip": 0.19999992847442627,
+        "crowdBinsPerType": [
+          5,
+          2.3,
+          2.4,
+          2.2,
+          2.1,
+          2.1,
+          2
+        ],
+        "crowdBins": 18.200000047683716,
+        "goo": 198.19999992847443,
+        "drawOnce": 2824.2000000476837,
+        "precompile": 846.1000000238419
+      }
+    },
+    "loader": {
+      "status": "READY — CLICK TO START",
+      "hidden": true,
+      "ready": true
+    },
+    "loopRunning": true,
+    "gpuDiagnostics": {
+      "lost": null,
+      "uncaptured": [],
+      "uncapturedCount": 0
+    },
+    "gibRenderer": {
+      "mode": "march",
+      "carvedLibraryBuilt": false,
+      "carvedBuildMs": 0,
+      "carveCells": 1
+    },
+    "probeDynamic": {
+      "radianceGain": 0.15,
+      "visStrength": 1,
+      "frames": 18,
+      "errors": 0,
+      "bound": true,
+      "reached": 38,
+      "gates": {
+        "bound": true,
+        "dynKey": "arena",
+        "room": 6,
+        "grid": true,
+        "gain": 0.15,
+        "vis": 1,
+        "dynOn": true,
+        "flashI": 0,
+        "flashAge": null,
+        "capsules": 480,
+        "lights": 1
+      },
+      "rate": 2
+    },
+    "chunkStats": {
+      "live": 0,
+      "sharedLiveMaterial": true,
+      "baked": 0,
+      "views": 0,
+      "totalBakes": 0,
+      "lastBakeMs": 0,
+      "lastBakeSwapMs": 0,
+      "lastBakeSwapFrame": -1,
+      "lastBakeRequestMs": 0,
+      "bakeThread": "worker",
+      "pendingBake": null,
+      "bakeError": null,
+      "lastBakeInfo": null,
+      "faceBaked": 0,
+      "pieces": [],
+      "livePieces": []
+    },
+    "gunReady": true,
+    "frames": 37
+  },
+  "perf": {
+    "postWarmIdle": {
+      "n": 98,
+      "p50": 29.3,
+      "p95": 53.8,
+      "max": 103.9
+    }
+  },
+  "actions": {
+    "roomEntry": {
+      "wallMs": 1416,
+      "frames": {
+        "n": 59,
+        "p50": 28.9,
+        "p95": 99.8,
+        "max": 117.8
+      }
+    },
+    "firstShot": {
+      "wallMs": 523,
+      "frames": {
+        "n": 13,
+        "p50": 37.7,
+        "p95": 162.8,
+        "max": 162.8
+      }
+    },
+    "repeatedBlasts": {
+      "n": 26,
+      "p50": 29.3,
+      "p95": 493.6,
+      "max": 1097
+    }
+  },
+  "arenaRoom": "arena",
+  "target": {
+    "id": 16,
+    "kind": "zombie",
+    "room": 6,
+    "pos": [
+      28.38570072798715,
+      0,
+      -5.572031337052392
+    ],
+    "yaw": -0.7459947626063903,
+    "phase": "falling",
+    "meter": 0.8800000000000003
+  },
+  "gibTimeline": {
+    "firstVisibleChunk": {
+      "t": 282,
+      "pendingGibs": 0,
+      "tearing": 0,
+      "tier": null,
+      "blastMs": 24.90000009536743,
+      "live": 64,
+      "baked": 0,
+      "pendingBake": null,
+      "totalBakes": 0,
+      "lastBakeMs": 0,
+      "lastBakeSwapMs": 0,
+      "faceBaked": 0
+    },
+    "firstBakeSubmit": {
+      "t": 2819,
+      "pendingGibs": 0,
+      "tearing": 0,
+      "tier": null,
+      "blastMs": 24.90000009536743,
+      "live": 64,
+      "baked": 0,
+      "pendingBake": 57,
+      "totalBakes": 0,
+      "lastBakeMs": 0,
+      "lastBakeSwapMs": 0,
+      "faceBaked": 0
+    },
+    "firstBakeSwap": {
+      "t": 3089,
+      "pendingGibs": 0,
+      "tearing": 0,
+      "tier": null,
+      "blastMs": 24.90000009536743,
+      "live": 63,
+      "baked": 1,
+      "pendingBake": 55,
+      "totalBakes": 1,
+      "lastBakeMs": 156,
+      "lastBakeSwapMs": 1,
+      "faceBaked": 0
+    },
+    "firstTexturedHeadDraw": {
+      "t": 3289,
+      "pendingGibs": 0,
+      "tearing": 0,
+      "tier": null,
+      "blastMs": 24.90000009536743,
+      "live": 62,
+      "baked": 2,
+      "pendingBake": 60,
+      "totalBakes": 2,
+      "lastBakeMs": 219.70000004768372,
+      "lastBakeSwapMs": 0.30000007152557373,
+      "faceBaked": 1
+    },
+    "samples": [
+      {
+        "t": 70,
+        "pendingGibs": 7,
+        "tearing": 7,
+        "tier": "parts",
+        "blastMs": 24.90000009536743,
+        "live": 0,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 282,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 24.90000009536743,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 336,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 24.90000009536743,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 579,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 24.90000009536743,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 1239,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 24.90000009536743,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 1524,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 24.90000009536743,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 1822,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 24.90000009536743,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 2080,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 24.90000009536743,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 2347,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 24.90000009536743,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 2613,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 24.90000009536743,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 2885,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 24.90000009536743,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": 57,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 3089,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 24.90000009536743,
+        "live": 63,
+        "baked": 1,
+        "pendingBake": 55,
+        "totalBakes": 1,
+        "lastBakeMs": 156,
+        "lastBakeSwapMs": 1,
+        "faceBaked": 0
+      },
+      {
+        "t": 3157,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 24.90000009536743,
+        "live": 63,
+        "baked": 1,
+        "pendingBake": 55,
+        "totalBakes": 1,
+        "lastBakeMs": 156,
+        "lastBakeSwapMs": 1,
+        "faceBaked": 0
+      },
+      {
+        "t": 3289,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 24.90000009536743,
+        "live": 62,
+        "baked": 2,
+        "pendingBake": 60,
+        "totalBakes": 2,
+        "lastBakeMs": 219.70000004768372,
+        "lastBakeSwapMs": 0.30000007152557373,
+        "faceBaked": 1
+      }
+    ]
+  },
+  "probeHealth": {
+    "errors": 0,
+    "frames": 143,
+    "bound": true,
+    "rate": 2,
+    "gates": {
+      "bound": true,
+      "dynKey": "arena",
+      "room": 6,
+      "grid": true,
+      "gain": 0.15,
+      "vis": 1,
+      "dynOn": true,
+      "flashI": 0,
+      "flashAge": 4.547500000000001,
+      "capsules": 35,
+      "lights": 1
+    },
+    "radianceGain": 0.15,
+    "visStrength": 1
+  },
+  "pipelineLog": {
+    "totalPipelines": 320,
+    "totalCompileMs": 1003,
+    "longFrames": [
+      {
+        "frame": 5,
+        "ms": 273.1,
+        "creations": 23,
+        "names": [
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_385",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_495",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_538",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshStandardMaterial_577"
+        ]
+      },
+      {
+        "frame": 173,
+        "ms": 107,
+        "creations": 0,
+        "names": []
+      },
+      {
+        "frame": 202,
+        "ms": 492.1,
+        "creations": 20,
+        "names": [
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshBasicMaterial_783",
+          "renderPipeline_MeshBasicMaterial_785",
+          "renderPipeline_MeshBasicMaterial_786",
+          "renderPipeline_MeshStandardMaterial_385"
+        ]
+      },
+      {
+        "frame": 212,
+        "ms": 398.8,
+        "creations": 17,
+        "names": [
+          "renderPipeline_MeshBasicNodeMaterial_191",
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshBasicMaterial_783",
+          "renderPipeline_MeshBasicMaterial_785",
+          "renderPipeline_MeshBasicMaterial_786"
+        ]
+      },
+      {
+        "frame": 278,
+        "ms": 486.2,
+        "creations": 17,
+        "names": [
+          "renderPipeline_MeshBasicNodeMaterial_191",
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshBasicMaterial_783",
+          "renderPipeline_MeshBasicMaterial_785",
+          "renderPipeline_MeshBasicMaterial_786"
+        ]
+      },
+      {
+        "frame": 288,
+        "ms": 421.8,
+        "creations": 17,
+        "names": [
+          "renderPipeline_MeshBasicNodeMaterial_191",
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshBasicMaterial_783",
+          "renderPipeline_MeshBasicMaterial_785",
+          "renderPipeline_MeshBasicMaterial_786"
+        ]
+      },
+      {
+        "frame": 290,
+        "ms": 391.4,
+        "creations": 17,
+        "names": [
+          "renderPipeline_MeshBasicNodeMaterial_191",
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshBasicMaterial_783",
+          "renderPipeline_MeshBasicMaterial_785",
+          "renderPipeline_MeshBasicMaterial_786"
+        ]
+      },
+      {
+        "frame": 291,
+        "ms": 285.4,
+        "creations": 17,
+        "names": [
+          "renderPipeline_MeshBasicNodeMaterial_191",
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshBasicMaterial_783",
+          "renderPipeline_MeshBasicMaterial_785",
+          "renderPipeline_MeshBasicMaterial_786"
+        ]
+      }
+    ],
+    "slowest": [
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_185",
+        "ms": 836,
+        "async": true,
+        "via": "compile#8@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_766",
+        "ms": 142,
+        "async": true,
+        "via": "compile#1@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_767",
+        "ms": 7,
+        "async": true,
+        "via": "compile#2@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_781",
+        "ms": 5,
+        "async": true,
+        "via": "compile#3@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_782",
+        "ms": 2,
+        "async": true,
+        "via": "compile#4@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_197",
+        "ms": 1,
+        "async": true,
+        "via": "compile#12@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_196",
+        "ms": 1,
+        "async": true,
+        "via": "compile#11@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_198",
+        "ms": 1,
+        "async": true,
+        "via": "compile#13@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_195",
+        "ms": 1,
+        "async": true,
+        "via": "compile#10@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_199",
+        "ms": 0,
+        "async": true,
+        "via": "compile#14@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_194",
+        "ms": 0,
+        "async": true,
+        "via": "compile#15@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_PMREM_blur_620",
+        "ms": 0,
+        "async": false,
+        "via": "",
+        "frame": 3
+      }
+    ],
+    "compute": {
+      "total": 365,
+      "maxPerFrame": 8,
+      "byFrame": [
+        {
+          "frame": 5,
+          "calls": 8
+        },
+        {
+          "frame": 6,
+          "calls": 1
+        },
+        {
+          "frame": 7,
+          "calls": 2
+        },
+        {
+          "frame": 8,
+          "calls": 1
+        },
+        {
+          "frame": 9,
+          "calls": 2
+        },
+        {
+          "frame": 10,
+          "calls": 1
+        },
+        {
+          "frame": 11,
+          "calls": 2
+        },
+        {
+          "frame": 12,
+          "calls": 1
+        },
+        {
+          "frame": 13,
+          "calls": 2
+        },
+        {
+          "frame": 14,
+          "calls": 1
+        },
+        {
+          "frame": 15,
+          "calls": 2
+        },
+        {
+          "frame": 16,
+          "calls": 1
+        },
+        {
+          "frame": 17,
+          "calls": 2
+        },
+        {
+          "frame": 18,
+          "calls": 1
+        },
+        {
+          "frame": 19,
+          "calls": 2
+        },
+        {
+          "frame": 20,
+          "calls": 1
+        },
+        {
+          "frame": 21,
+          "calls": 2
+        },
+        {
+          "frame": 22,
+          "calls": 1
+        },
+        {
+          "frame": 23,
+          "calls": 2
+        },
+        {
+          "frame": 24,
+          "calls": 1
+        },
+        {
+          "frame": 25,
+          "calls": 2
+        },
+        {
+          "frame": 26,
+          "calls": 1
+        },
+        {
+          "frame": 27,
+          "calls": 2
+        },
+        {
+          "frame": 28,
+          "calls": 1
+        },
+        {
+          "frame": 29,
+          "calls": 2
+        },
+        {
+          "frame": 30,
+          "calls": 1
+        },
+        {
+          "frame": 31,
+          "calls": 2
+        },
+        {
+          "frame": 32,
+          "calls": 1
+        },
+        {
+          "frame": 33,
+          "calls": 2
+        },
+        {
+          "frame": 34,
+          "calls": 1
+        },
+        {
+          "frame": 35,
+          "calls": 2
+        },
+        {
+          "frame": 36,
+          "calls": 1
+        },
+        {
+          "frame": 37,
+          "calls": 2
+        },
+        {
+          "frame": 38,
+          "calls": 1
+        },
+        {
+          "frame": 39,
+          "calls": 2
+        },
+        {
+          "frame": 40,
+          "calls": 1
+        },
+        {
+          "frame": 41,
+          "calls": 2
+        },
+        {
+          "frame": 42,
+          "calls": 1
+        },
+        {
+          "frame": 43,
+          "calls": 2
+        },
+        {
+          "frame": 44,
+          "calls": 1
+        },
+        {
+          "frame": 45,
+          "calls": 2
+        },
+        {
+          "frame": 46,
+          "calls": 1
+        },
+        {
+          "frame": 47,
+          "calls": 2
+        },
+        {
+          "frame": 48,
+          "calls": 1
+        },
+        {
+          "frame": 49,
+          "calls": 2
+        },
+        {
+          "frame": 50,
+          "calls": 1
+        },
+        {
+          "frame": 51,
+          "calls": 2
+        },
+        {
+          "frame": 52,
+          "calls": 1
+        },
+        {
+          "frame": 53,
+          "calls": 2
+        },
+        {
+          "frame": 54,
+          "calls": 1
+        },
+        {
+          "frame": 55,
+          "calls": 2
+        },
+        {
+          "frame": 56,
+          "calls": 1
+        },
+        {
+          "frame": 57,
+          "calls": 2
+        },
+        {
+          "frame": 58,
+          "calls": 1
+        },
+        {
+          "frame": 59,
+          "calls": 2
+        },
+        {
+          "frame": 60,
+          "calls": 1
+        },
+        {
+          "frame": 61,
+          "calls": 2
+        },
+        {
+          "frame": 62,
+          "calls": 1
+        },
+        {
+          "frame": 63,
+          "calls": 2
+        },
+        {
+          "frame": 64,
+          "calls": 1
+        },
+        {
+          "frame": 65,
+          "calls": 2
+        },
+        {
+          "frame": 66,
+          "calls": 1
+        },
+        {
+          "frame": 67,
+          "calls": 2
+        },
+        {
+          "frame": 68,
+          "calls": 1
+        },
+        {
+          "frame": 69,
+          "calls": 2
+        },
+        {
+          "frame": 70,
+          "calls": 1
+        },
+        {
+          "frame": 71,
+          "calls": 2
+        },
+        {
+          "frame": 72,
+          "calls": 1
+        },
+        {
+          "frame": 73,
+          "calls": 2
+        },
+        {
+          "frame": 74,
+          "calls": 1
+        },
+        {
+          "frame": 75,
+          "calls": 2
+        },
+        {
+          "frame": 76,
+          "calls": 1
+        },
+        {
+          "frame": 77,
+          "calls": 2
+        },
+        {
+          "frame": 78,
+          "calls": 1
+        },
+        {
+          "frame": 79,
+          "calls": 2
+        },
+        {
+          "frame": 80,
+          "calls": 1
+        },
+        {
+          "frame": 81,
+          "calls": 2
+        },
+        {
+          "frame": 82,
+          "calls": 1
+        },
+        {
+          "frame": 83,
+          "calls": 2
+        },
+        {
+          "frame": 84,
+          "calls": 1
+        },
+        {
+          "frame": 85,
+          "calls": 2
+        },
+        {
+          "frame": 86,
+          "calls": 1
+        },
+        {
+          "frame": 87,
+          "calls": 2
+        },
+        {
+          "frame": 88,
+          "calls": 1
+        },
+        {
+          "frame": 89,
+          "calls": 2
+        },
+        {
+          "frame": 90,
+          "calls": 1
+        },
+        {
+          "frame": 91,
+          "calls": 2
+        },
+        {
+          "frame": 92,
+          "calls": 1
+        },
+        {
+          "frame": 93,
+          "calls": 2
+        },
+        {
+          "frame": 94,
+          "calls": 1
+        },
+        {
+          "frame": 95,
+          "calls": 2
+        },
+        {
+          "frame": 96,
+          "calls": 1
+        },
+        {
+          "frame": 97,
+          "calls": 2
+        },
+        {
+          "frame": 98,
+          "calls": 1
+        },
+        {
+          "frame": 99,
+          "calls": 2
+        },
+        {
+          "frame": 100,
+          "calls": 1
+        },
+        {
+          "frame": 101,
+          "calls": 2
+        },
+        {
+          "frame": 102,
+          "calls": 1
+        },
+        {
+          "frame": 103,
+          "calls": 2
+        },
+        {
+          "frame": 104,
+          "calls": 1
+        },
+        {
+          "frame": 105,
+          "calls": 2
+        },
+        {
+          "frame": 106,
+          "calls": 1
+        },
+        {
+          "frame": 107,
+          "calls": 2
+        },
+        {
+          "frame": 108,
+          "calls": 1
+        },
+        {
+          "frame": 109,
+          "calls": 2
+        },
+        {
+          "frame": 110,
+          "calls": 1
+        },
+        {
+          "frame": 111,
+          "calls": 2
+        },
+        {
+          "frame": 112,
+          "calls": 1
+        },
+        {
+          "frame": 113,
+          "calls": 2
+        },
+        {
+          "frame": 114,
+          "calls": 1
+        },
+        {
+          "frame": 115,
+          "calls": 2
+        },
+        {
+          "frame": 116,
+          "calls": 1
+        },
+        {
+          "frame": 117,
+          "calls": 2
+        },
+        {
+          "frame": 118,
+          "calls": 1
+        },
+        {
+          "frame": 119,
+          "calls": 2
+        },
+        {
+          "frame": 120,
+          "calls": 1
+        },
+        {
+          "frame": 121,
+          "calls": 2
+        },
+        {
+          "frame": 122,
+          "calls": 1
+        },
+        {
+          "frame": 123,
+          "calls": 2
+        },
+        {
+          "frame": 124,
+          "calls": 1
+        },
+        {
+          "frame": 125,
+          "calls": 2
+        },
+        {
+          "frame": 126,
+          "calls": 1
+        },
+        {
+          "frame": 127,
+          "calls": 2
+        },
+        {
+          "frame": 128,
+          "calls": 1
+        },
+        {
+          "frame": 129,
+          "calls": 2
+        },
+        {
+          "frame": 130,
+          "calls": 1
+        },
+        {
+          "frame": 131,
+          "calls": 2
+        },
+        {
+          "frame": 132,
+          "calls": 1
+        },
+        {
+          "frame": 133,
+          "calls": 2
+        },
+        {
+          "frame": 134,
+          "calls": 1
+        },
+        {
+          "frame": 135,
+          "calls": 2
+        },
+        {
+          "frame": 136,
+          "calls": 1
+        },
+        {
+          "frame": 137,
+          "calls": 2
+        },
+        {
+          "frame": 138,
+          "calls": 1
+        },
+        {
+          "frame": 139,
+          "calls": 3
+        },
+        {
+          "frame": 140,
+          "calls": 2
+        },
+        {
+          "frame": 141,
+          "calls": 3
+        },
+        {
+          "frame": 142,
+          "calls": 2
+        },
+        {
+          "frame": 143,
+          "calls": 3
+        },
+        {
+          "frame": 144,
+          "calls": 2
+        },
+        {
+          "frame": 145,
+          "calls": 3
+        },
+        {
+          "frame": 146,
+          "calls": 1
+        },
+        {
+          "frame": 147,
+          "calls": 2
+        },
+        {
+          "frame": 148,
+          "calls": 1
+        },
+        {
+          "frame": 149,
+          "calls": 2
+        },
+        {
+          "frame": 150,
+          "calls": 1
+        },
+        {
+          "frame": 151,
+          "calls": 2
+        },
+        {
+          "frame": 152,
+          "calls": 1
+        },
+        {
+          "frame": 153,
+          "calls": 2
+        },
+        {
+          "frame": 154,
+          "calls": 1
+        },
+        {
+          "frame": 155,
+          "calls": 2
+        },
+        {
+          "frame": 156,
+          "calls": 1
+        },
+        {
+          "frame": 157,
+          "calls": 2
+        },
+        {
+          "frame": 158,
+          "calls": 2
+        },
+        {
+          "frame": 159,
+          "calls": 3
+        },
+        {
+          "frame": 160,
+          "calls": 2
+        },
+        {
+          "frame": 161,
+          "calls": 3
+        },
+        {
+          "frame": 162,
+          "calls": 2
+        },
+        {
+          "frame": 163,
+          "calls": 3
+        },
+        {
+          "frame": 164,
+          "calls": 2
+        },
+        {
+          "frame": 165,
+          "calls": 2
+        },
+        {
+          "frame": 166,
+          "calls": 1
+        },
+        {
+          "frame": 167,
+          "calls": 2
+        },
+        {
+          "frame": 168,
+          "calls": 1
+        },
+        {
+          "frame": 169,
+          "calls": 2
+        },
+        {
+          "frame": 170,
+          "calls": 1
+        },
+        {
+          "frame": 171,
+          "calls": 2
+        },
+        {
+          "frame": 172,
+          "calls": 1
+        },
+        {
+          "frame": 173,
+          "calls": 2
+        },
+        {
+          "frame": 174,
+          "calls": 1
+        },
+        {
+          "frame": 175,
+          "calls": 2
+        },
+        {
+          "frame": 176,
+          "calls": 1
+        },
+        {
+          "frame": 177,
+          "calls": 2
+        },
+        {
+          "frame": 178,
+          "calls": 1
+        },
+        {
+          "frame": 179,
+          "calls": 2
+        },
+        {
+          "frame": 180,
+          "calls": 1
+        },
+        {
+          "frame": 181,
+          "calls": 2
+        },
+        {
+          "frame": 182,
+          "calls": 1
+        },
+        {
+          "frame": 183,
+          "calls": 2
+        },
+        {
+          "frame": 184,
+          "calls": 1
+        },
+        {
+          "frame": 185,
+          "calls": 2
+        },
+        {
+          "frame": 186,
+          "calls": 1
+        },
+        {
+          "frame": 187,
+          "calls": 2
+        },
+        {
+          "frame": 188,
+          "calls": 1
+        },
+        {
+          "frame": 189,
+          "calls": 2
+        },
+        {
+          "frame": 190,
+          "calls": 1
+        },
+        {
+          "frame": 191,
+          "calls": 2
+        },
+        {
+          "frame": 192,
+          "calls": 1
+        },
+        {
+          "frame": 193,
+          "calls": 2
+        },
+        {
+          "frame": 194,
+          "calls": 1
+        },
+        {
+          "frame": 195,
+          "calls": 2
+        },
+        {
+          "frame": 196,
+          "calls": 1
+        },
+        {
+          "frame": 197,
+          "calls": 2
+        },
+        {
+          "frame": 198,
+          "calls": 1
+        },
+        {
+          "frame": 199,
+          "calls": 2
+        },
+        {
+          "frame": 200,
+          "calls": 1
+        },
+        {
+          "frame": 201,
+          "calls": 2
+        },
+        {
+          "frame": 202,
+          "calls": 1
+        },
+        {
+          "frame": 203,
+          "calls": 2
+        },
+        {
+          "frame": 204,
+          "calls": 1
+        },
+        {
+          "frame": 205,
+          "calls": 2
+        },
+        {
+          "frame": 207,
+          "calls": 1
+        },
+        {
+          "frame": 209,
+          "calls": 1
+        },
+        {
+          "frame": 211,
+          "calls": 1
+        },
+        {
+          "frame": 213,
+          "calls": 1
+        },
+        {
+          "frame": 215,
+          "calls": 1
+        },
+        {
+          "frame": 217,
+          "calls": 1
+        },
+        {
+          "frame": 219,
+          "calls": 1
+        },
+        {
+          "frame": 221,
+          "calls": 1
+        },
+        {
+          "frame": 223,
+          "calls": 1
+        },
+        {
+          "frame": 225,
+          "calls": 1
+        },
+        {
+          "frame": 227,
+          "calls": 1
+        },
+        {
+          "frame": 229,
+          "calls": 1
+        },
+        {
+          "frame": 231,
+          "calls": 1
+        },
+        {
+          "frame": 233,
+          "calls": 1
+        },
+        {
+          "frame": 235,
+          "calls": 1
+        },
+        {
+          "frame": 237,
+          "calls": 1
+        },
+        {
+          "frame": 239,
+          "calls": 1
+        },
+        {
+          "frame": 241,
+          "calls": 1
+        },
+        {
+          "frame": 243,
+          "calls": 1
+        },
+        {
+          "frame": 245,
+          "calls": 1
+        },
+        {
+          "frame": 247,
+          "calls": 1
+        },
+        {
+          "frame": 249,
+          "calls": 1
+        },
+        {
+          "frame": 251,
+          "calls": 1
+        },
+        {
+          "frame": 253,
+          "calls": 1
+        },
+        {
+          "frame": 255,
+          "calls": 1
+        },
+        {
+          "frame": 257,
+          "calls": 1
+        },
+        {
+          "frame": 259,
+          "calls": 1
+        },
+        {
+          "frame": 261,
+          "calls": 1
+        },
+        {
+          "frame": 263,
+          "calls": 1
+        },
+        {
+          "frame": 265,
+          "calls": 1
+        },
+        {
+          "frame": 267,
+          "calls": 1
+        },
+        {
+          "frame": 269,
+          "calls": 1
+        },
+        {
+          "frame": 271,
+          "calls": 1
+        },
+        {
+          "frame": 273,
+          "calls": 1
+        },
+        {
+          "frame": 275,
+          "calls": 1
+        },
+        {
+          "frame": 277,
+          "calls": 1
+        },
+        {
+          "frame": 279,
+          "calls": 1
+        },
+        {
+          "frame": 281,
+          "calls": 1
+        },
+        {
+          "frame": 283,
+          "calls": 1
+        },
+        {
+          "frame": 285,
+          "calls": 1
+        },
+        {
+          "frame": 287,
+          "calls": 1
+        },
+        {
+          "frame": 289,
+          "calls": 1
+        },
+        {
+          "frame": 291,
+          "calls": 1
+        }
+      ]
+    }
+  },
+  "final": {
+    "chunkStats": {
+      "live": 63,
+      "sharedLiveMaterial": true,
+      "baked": 1,
+      "views": 64,
+      "totalBakes": 7,
+      "lastBakeMs": 46.699999928474426,
+      "lastBakeSwapMs": 0,
+      "lastBakeSwapFrame": 288,
+      "lastBakeRequestMs": 0.09999990463256836,
+      "bakeThread": "worker",
+      "pendingBake": 56,
+      "bakeError": null,
+      "lastBakeInfo": {
+        "id": 58,
+        "verts": 3770,
+        "tris": 7536,
+        "bakeMs": 46.699999928474426,
+        "overflow": 0,
+        "droppedQuads": 0,
+        "extent": 0.3584528302634579,
+        "flesh": 4,
+        "bones": 4,
+        "torn": 0,
+        "gore": 1,
+        "radius": 0.358876043057141
+      },
+      "faceBaked": 0,
+      "pieces": [
+        {
+          "id": 58,
+          "centre": [
+            22.030601501464844,
+            0.35788407921791077,
+            -12.32169771194458
+          ],
+          "radius": 0.358876043057141,
+          "face": false
+        }
+      ],
+      "livePieces": [
+        {
+          "id": 27,
+          "centre": [
+            32.89112689371364,
+            0.603600099553415,
+            -3.807928013488702
+          ],
+          "radius": 0.603600099553415,
+          "quat": [
+            0.34063247517988277,
+            0.18615430412912026,
+            0.6893645711471623,
+            0.611631081579508
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 28,
+          "centre": [
+            35.0994350999848,
+            0.07680000000000001,
+            -4.604456541296844
+          ],
+          "radius": 0.07680000000000001,
+          "quat": [
+            -0.02590959600330268,
+            -0.054070062702715034,
+            -0.05480481640133564,
+            0.9966953161590988
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 29,
+          "centre": [
+            34.0848621025435,
+            0.36436640371574,
+            -4.3610477362577
+          ],
+          "radius": 0.36436640371574,
+          "quat": [
+            0.4142203264023991,
+            0.04548963198921814,
+            0.5730807283403365,
+            0.7056420433771535
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 30,
+          "centre": [
+            34.825469707232685,
+            0.3714346113927399,
+            -1.9940712509478478
+          ],
+          "radius": 0.3714346113927399,
+          "quat": [
+            -0.15316575308000743,
+            -0.08921868035048883,
+            0.27799502574182905,
+            0.9440863545368884
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 31,
+          "centre": [
+            35.5163257845768,
+            0.043776,
+            -4.522947069357879
+          ],
+          "radius": 0.043776,
+          "quat": [
+            0.37487041150052675,
+            0.14353717035107158,
+            0.6632723772124479,
+            0.6316161879939282
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 32,
+          "centre": [
+            35.63938641813012,
+            0.16112000000000004,
+            -3.9734986543543314
+          ],
+          "radius": 0.16112000000000004,
+          "quat": [
+            0.378072940452519,
+            -0.04981709785259893,
+            0.4662903229185864,
+            0.7982182929572654
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 33,
+          "centre": [
+            34.677643627846756,
+            0.23335467707120977,
+            -3.4829116121444432
+          ],
+          "radius": 0.23335467707120977,
+          "quat": [
+            0.3961972577389817,
+            -0.09057657031657726,
+            0.4407572325409886,
+            0.8003478492709318
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 34,
+          "centre": [
+            34.189364677138016,
+            0.36844022233102325,
+            -2.683153824524136
+          ],
+          "radius": 0.36844022233102325,
+          "quat": [
+            0.06314104984511804,
+            -0.10782707698404614,
+            0.44195638391463343,
+            0.8882911031923229
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 35,
+          "centre": [
+            29.489674899484612,
+            0.6031324888464922,
+            1.4031735594482333
+          ],
+          "radius": 0.6031324888464922,
+          "quat": [
+            -0.5654551121948876,
+            0.031205710540444843,
+            0.39328444587927447,
+            0.724302467448348
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 36,
+          "centre": [
+            30.751471724030846,
+            0.07680000000000001,
+            2.9834892445203196
+          ],
+          "radius": 0.07680000000000001,
+          "quat": [
+            -0.21049996451272449,
+            -0.06251170607219816,
+            0.10362896420126327,
+            0.9700737545788249
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 37,
+          "centre": [
+            29.068294605798876,
+            0.36199674436267926,
+            2.5333360374056633
+          ],
+          "radius": 0.36199674436267926,
+          "quat": [
+            -0.06637301993266553,
+            0.11548252354465875,
+            0.7039848167574477,
+            0.6976129204335009
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 38,
+          "centre": [
+            30.505669184977872,
+            0.043776,
+            2.880807947149331
+          ],
+          "radius": 0.043776,
+          "quat": [
+            -0.701371616144193,
+            0.176730667043511,
+            -0.06521186859912272,
+            0.687452936270876
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 39,
+          "centre": [
+            32.00623560531805,
+            0.6040852919890572,
+            2.4155133867726906
+          ],
+          "radius": 0.6040852919890572,
+          "quat": [
+            -0.4894717598084274,
+            0.2848627641513143,
+            0.4040126118948993,
+            0.7183623120542831
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 40,
+          "centre": [
+            28.043387699183622,
+            0.3785974968735902,
+            1.8325295950667881
+          ],
+          "radius": 0.3785974968735902,
+          "quat": [
+            -0.3304577333800621,
+            -0.04200476245608,
+            0.03421435737250512,
+            0.9422646465457073
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 41,
+          "centre": [
+            29.88648925948015,
+            0.16112000000000004,
+            2.535293692106991
+          ],
+          "radius": 0.16112000000000004,
+          "quat": [
+            0.03625640138171928,
+            -0.05544229786334777,
+            0.5746046313941057,
+            0.815745758522178
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 42,
+          "centre": [
+            29.956331420911663,
+            0.23259029903822676,
+            2.149164391151089
+          ],
+          "radius": 0.23246945496087795,
+          "quat": [
+            -0.008031203369087839,
+            -0.12374612651355395,
+            0.22072092797956142,
+            0.9674216598242861
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 43,
+          "centre": [
+            30.00451443328828,
+            0.3610788685353282,
+            1.7723413226468145
+          ],
+          "radius": 0.3610788685353282,
+          "quat": [
+            -0.4092144976575229,
+            -0.12228454586769116,
+            0.27157350544442976,
+            0.8624603271394329
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 44,
+          "centre": [
+            35.073499549518004,
+            0.3819156359411762,
+            1.6730860524281395
+          ],
+          "radius": 0.3819156359411762,
+          "quat": [
+            -0.15042672842025936,
+            -0.005541417469058299,
+            -0.18359257788863523,
+            0.9714086974149533
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 45,
+          "centre": [
+            34.65948309142345,
+            0.5996956801271879,
+            1.9190103910494722
+          ],
+          "radius": 0.5996956801271879,
+          "quat": [
+            -0.5521395172319213,
+            0.07787481276365232,
+            0.5224477932338402,
+            0.6450781118539191
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 46,
+          "centre": [
+            34.7393192435213,
+            0.36333240441419606,
+            1.5863197774550164
+          ],
+          "radius": 0.36333240441419606,
+          "quat": [
+            0.1824999639600378,
+            0.05431421495442679,
+            0.6831498833744949,
+            0.7050177061988465
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 47,
+          "centre": [
+            35.9292057505995,
+            0.043776,
+            0.8812313369684442
+          ],
+          "radius": 0.043776,
+          "quat": [
+            0.4152304633002891,
+            -0.2097390051356556,
+            0.5089650528401788,
+            0.7242567135067005
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 48,
+          "centre": [
+            35.39729932347039,
+            0.23519061287099474,
+            1.9051114091452375
+          ],
+          "radius": 0.23519061287099474,
+          "quat": [
+            0.061133610406972703,
+            -0.04497400875156247,
+            0.5716383017757822,
+            0.8169881713698937
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 49,
+          "centre": [
+            34.4372854196771,
+            0.6033389027551369,
+            1.6476379677949233
+          ],
+          "radius": 0.6033389027551369,
+          "quat": [
+            -0.029781875026637778,
+            0.19464778603839183,
+            0.6695501770946891,
+            0.7161898070083941
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 50,
+          "centre": [
+            35.589910085206796,
+            0.3566158153509719,
+            2.5467421134216903
+          ],
+          "radius": 0.3566158153509719,
+          "quat": [
+            -0.13817861058244837,
+            -0.14915195518672056,
+            -0.10214271571514533,
+            0.9737695987592843
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 51,
+          "centre": [
+            29.49181278068197,
+            0.4295108552555651,
+            -2.6140798217452774
+          ],
+          "radius": 0.4295108552555651,
+          "quat": [
+            0.23914977021800696,
+            0.15717452329073492,
+            -0.6654377411934753,
+            0.689417267863469
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 52,
+          "centre": [
+            32.19284059507196,
+            0.3566684023049827,
+            -7.0608340098522975
+          ],
+          "radius": 0.3566684023049827,
+          "quat": [
+            0.052861320067540546,
+            0.4793279098359774,
+            -0.5875213315221455,
+            0.6498223762686502
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 53,
+          "centre": [
+            23.94175455593145,
+            0.043776,
+            1.5721216213538005
+          ],
+          "radius": 0.043776,
+          "quat": [
+            0.3231965778450672,
+            -0.20018348948108072,
+            -0.41103947975312305,
+            0.8285632677669806
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 54,
+          "centre": [
+            26.739026734031345,
+            0.3577991435813971,
+            -9.45752399190111
+          ],
+          "radius": 0.3577991435813971,
+          "quat": [
+            -0.126656514723511,
+            0.11889505960652948,
+            0.3130123937320956,
+            0.9337265838827535
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 56,
+          "centre": [
+            25.76629479511544,
+            0.2976309172022707,
+            1.0581637614729942
+          ],
+          "radius": 0.2976309172022707,
+          "quat": [
+            0.1555134743089746,
+            -0.6264883572995349,
+            -0.22270204348917405,
+            0.7305694335942534
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 63,
+          "centre": [
+            22.73421463610175,
+            0.043776,
+            -12.717080520296182
+          ],
+          "radius": 0.043776,
+          "quat": [
+            0.6412032275181329,
+            -0.1085605236220232,
+            -0.31966920913199925,
+            0.6891187346634569
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 64,
+          "centre": [
+            22.79597003482598,
+            0.23234820711724308,
+            -11.940154393336652
+          ],
+          "radius": 0.23234820711724308,
+          "quat": [
+            0.4881838945817372,
+            -0.0697508407513348,
+            -0.12757755062276,
+            0.8605435920757217
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 65,
+          "centre": [
+            23.056702013210977,
+            2.9213718222342373,
+            1.4088198029818144
+          ],
+          "radius": 0.26692328835301604,
+          "quat": [
+            -0.18229109181118883,
+            0.24924837083852608,
+            -0.7146732286635896,
+            0.6276044803155774
+          ],
+          "angVel": [
+            -0.4817226333734988,
+            0.6586640102455052,
+            -1.888596235245292
+          ]
+        },
+        {
+          "id": 66,
+          "centre": [
+            24.049682166722654,
+            3.156058328880246,
+            1.7541441108527942
+          ],
+          "radius": 0.3175117814163478,
+          "quat": [
+            -0.3156286637010767,
+            0.486982709092552,
+            -0.018675136417114293,
+            0.8141729711645762
+          ],
+          "angVel": [
+            -0.7764343601649202,
+            1.1979587142432444,
+            -0.04594011654387427
+          ]
+        },
+        {
+          "id": 67,
+          "centre": [
+            23.59674074096857,
+            1.118758976024165,
+            1.652210829938914
+          ],
+          "radius": 0.40858656338708577,
+          "quat": [
+            0.052987934782938,
+            -0.010532894026339687,
+            0.30949217331325535,
+            0.949366068262768
+          ],
+          "angVel": [
+            0.1242741440553685,
+            -0.024703102600834956,
+            0.7258609924673874
+          ]
+        },
+        {
+          "id": 68,
+          "centre": [
+            23.60052165819834,
+            3.169803815850876,
+            0.4716455141559953
+          ],
+          "radius": 0.3175117814163479,
+          "quat": [
+            0.14913436985723078,
+            -0.6008772844094304,
+            -0.2623394675605101,
+            0.7401914837176278
+          ],
+          "angVel": [
+            0.377107948268042,
+            -1.5194056212624731,
+            -0.6633635053823101
+          ]
+        },
+        {
+          "id": 69,
+          "centre": [
+            24.43743488374838,
+            1.5682263179379543,
+            2.2859547677576684
+          ],
+          "radius": 0.4085865633870859,
+          "quat": [
+            -0.19079748633291943,
+            0.0443081790598207,
+            0.2972146474032626,
+            0.9345033749786016
+          ],
+          "angVel": [
+            -0.2516467662297121,
+            0.05843897732738183,
+            0.3920025694920836
+          ]
+        },
+        {
+          "id": 70,
+          "centre": [
+            23.765549483363444,
+            3.257951217948477,
+            1.1525697196702225
+          ],
+          "radius": 0.07680000000000001,
+          "quat": [
+            -0.23601874482598978,
+            0.00475821503120466,
+            -0.4088903956747075,
+            0.8815220676792286
+          ],
+          "angVel": [
+            -0.566730689941499,
+            0.01142547592782418,
+            -0.9818319143338738
+          ]
+        },
+        {
+          "id": 71,
+          "centre": [
+            23.366010105209522,
+            3.2189600186783895,
+            1.4260746001412008
+          ],
+          "radius": 0.32324713502521524,
+          "quat": [
+            -0.5578222306309221,
+            -0.37912122979689183,
+            -0.11935586241454961,
+            0.7285984012050218
+          ],
+          "angVel": [
+            -1.4167745045947842,
+            -0.9629040633955009,
+            -0.30314378588246055
+          ]
+        },
+        {
+          "id": 72,
+          "centre": [
+            24.003135577440037,
+            3.2904147672160353,
+            1.0679479590902274
+          ],
+          "radius": 0.0416,
+          "quat": [
+            -0.4929420650268065,
+            -0.12266294453037968,
+            -0.7228714735311935,
+            0.468421557276227
+          ],
+          "angVel": [
+            -1.3935369300748461,
+            -0.34676558419803544,
+            -2.0435425692643197
+          ]
+        },
+        {
+          "id": 73,
+          "centre": [
+            23.88574992082297,
+            3.5127432438115735,
+            1.140196057998687
+          ],
+          "radius": 0.043776,
+          "quat": [
+            0.012113914604270483,
+            -0.27443988105952954,
+            -0.18681532726363417,
+            0.9432051941419604
+          ],
+          "angVel": [
+            0.02847102652673732,
+            -0.6450090981230789,
+            -0.4390673297506169
+          ]
+        },
+        {
+          "id": 74,
+          "centre": [
+            23.820317949549214,
+            3.626558116452119,
+            0.4116250337242142
+          ],
+          "radius": 0.30397124428909655,
+          "quat": [
+            0.47611373365882975,
+            0.04762951467608439,
+            -0.12029734012372882,
+            0.8698135960723571
+          ],
+          "angVel": [
+            1.147996483973241,
+            0.11484339038343704,
+            -0.2900586849954914
+          ]
+        },
+        {
+          "id": 75,
+          "centre": [
+            24.344810838453437,
+            3.624715822758774,
+            1.7441557892053057
+          ],
+          "radius": 0.28677998840203267,
+          "quat": [
+            -0.01588726415362603,
+            0.6307589509390715,
+            0.19329794749773133,
+            0.7513498813077164
+          ],
+          "angVel": [
+            -0.04000397867219214,
+            1.5882449852073397,
+            0.48672237676068836
+          ]
+        },
+        {
+          "id": 76,
+          "centre": [
+            25.843231763492646,
+            3.121175937816714,
+            1.474421328070199
+          ],
+          "radius": 0.2833520326758119,
+          "quat": [
+            -0.386988594055415,
+            0.046564361846943486,
+            0.3203473481851191,
+            0.8633939800505689
+          ],
+          "angVel": [
+            -0.9352316369076806,
+            0.11253164827241027,
+            0.7741803748854222
+          ]
+        },
+        {
+          "id": 77,
+          "centre": [
+            25.19020671528647,
+            3.125433770709608,
+            -0.38958560178217994
+          ],
+          "radius": 0.28340109109640854,
+          "quat": [
+            0.31455141063729986,
+            -0.2126060739332282,
+            -0.104762929922017,
+            0.9191739747767765
+          ],
+          "angVel": [
+            0.7454263260400353,
+            -0.503835491517104,
+            -0.2482679883671087
+          ]
+        },
+        {
+          "id": 78,
+          "centre": [
+            24.166600783876007,
+            3.7714783266084853,
+            1.0179460079528364
+          ],
+          "radius": 0.16112000000000004,
+          "quat": [
+            -0.2751515887222444,
+            0.15956256636810187,
+            -0.09197980141623346,
+            0.9435947789009222
+          ],
+          "angVel": [
+            -0.6465955526999196,
+            0.3749658370868043,
+            -0.21614896286859134
+          ]
+        },
+        {
+          "id": 79,
+          "centre": [
+            24.2725148521315,
+            3.781584135021025,
+            0.9793336536515809
+          ],
+          "radius": 0.23340692060219714,
+          "quat": [
+            0.1613810472041564,
+            -0.05223981581226151,
+            -0.14772712098985966,
+            0.9743735715685429
+          ],
+          "angVel": [
+            0.37529297726879357,
+            -0.12148412931882428,
+            -0.3435406574694964
+          ]
+        },
+        {
+          "id": 80,
+          "centre": [
+            24.260788604589283,
+            3.894698396969316,
+            0.9658867426919869
+          ],
+          "radius": 0.28880989613368196,
+          "quat": [
+            -0.45917465942064045,
+            -0.11456499894899344,
+            -0.2160305630041324,
+            0.8540282717860538
+          ],
+          "angVel": [
+            -1.1133987128945733,
+            -0.27779521311894856,
+            -0.5238271447692154
+          ]
+        },
+        {
+          "id": 81,
+          "centre": [
+            12.25377349569729,
+            1.044522285363977,
+            -7.111502773973169
+          ],
+          "radius": 0.26691983488046367,
+          "quat": [
+            0.27661754422356843,
+            0.34722059791693327,
+            0.022107700772594482,
+            0.8957855994469207
+          ],
+          "angVel": [
+            2.3013582690690653,
+            2.888750228949347,
+            0.18392810234044427
+          ]
+        },
+        {
+          "id": 82,
+          "centre": [
+            12.22405880739122,
+            1.2183153411648298,
+            -7.081865652227407
+          ],
+          "radius": 0.2522598348804639,
+          "quat": [
+            0.0431452535585678,
+            -0.1593904324373245,
+            0.44345204278749845,
+            0.8809559937309039
+          ],
+          "angVel": [
+            0.36082994052311745,
+            -1.3330050356116834,
+            3.7086530041284926
+          ]
+        },
+        {
+          "id": 83,
+          "centre": [
+            12.034302211301725,
+            1.236670746630102,
+            -7.166389525138157
+          ],
+          "radius": 0.3175117778896862,
+          "quat": [
+            0.1989014343197306,
+            0.22363204140165946,
+            0.09613580938033031,
+            0.9493075558736848
+          ],
+          "angVel": [
+            1.624437170293767,
+            1.82641317677765,
+            0.7851455807133583
+          ]
+        },
+        {
+          "id": 84,
+          "centre": [
+            12.2530866860662,
+            0.41277169415424525,
+            -6.771618131086872
+          ],
+          "radius": 0.4084141406031143,
+          "quat": [
+            -0.15646125115593232,
+            -0.004624853043995586,
+            0.04970071305429411,
+            0.986421982086235
+          ],
+          "angVel": [
+            -1.2618767791709102,
+            -0.037299936055603077,
+            0.4008415837666164
+          ]
+        },
+        {
+          "id": 85,
+          "centre": [
+            12.228203086730085,
+            1.255006751436142,
+            -6.8813170605689535
+          ],
+          "radius": 0.31751144740817916,
+          "quat": [
+            -0.06628925221262308,
+            -0.24773387594319307,
+            0.26882326676060725,
+            0.928422163134535
+          ],
+          "angVel": [
+            -0.5452811757733272,
+            -2.037805747452142,
+            2.2112825545879
+          ]
+        },
+        {
+          "id": 86,
+          "centre": [
+            11.934623736401266,
+            0.40843391175735133,
+            -7.227362514592578
+          ],
+          "radius": 0.40843391175735133,
+          "quat": [
+            -0.22472867189253354,
+            0.09344622280348218,
+            -0.09790320431643529,
+            0.9649765748751389
+          ],
+          "angVel": [
+            -0.7229429287177667,
+            0.3006126695905903,
+            -0.31495059648296353
+          ]
+        },
+        {
+          "id": 87,
+          "centre": [
+            12.143339215582039,
+            1.2947019665494817,
+            -7.034023739810455
+          ],
+          "radius": 0.07680000000000001,
+          "quat": [
+            -0.1967661739496995,
+            0.05995434115920308,
+            0.14417833719778614,
+            0.9679365458790385
+          ],
+          "angVel": [
+            -1.5968549401682126,
+            0.48655916788359177,
+            1.1700786034411523
+          ]
+        },
+        {
+          "id": 88,
+          "centre": [
+            12.08675261808002,
+            1.3287871027303724,
+            -6.995009672547958
+          ],
+          "radius": 0.0416,
+          "quat": [
+            -0.2274431417287172,
+            -0.40032319922487214,
+            0.26326223979423563,
+            0.8477640866075046
+          ],
+          "angVel": [
+            -1.9247442187592787,
+            -3.3877467462278066,
+            2.2278643805666176
+          ]
+        },
+        {
+          "id": 89,
+          "centre": [
+            12.109574017206015,
+            1.5481978718469913,
+            -7.02146139755516
+          ],
+          "radius": 0.043776,
+          "quat": [
+            0.10323506593322956,
+            -0.08324776383120297,
+            0.12107676039905682,
+            0.9837442498282444
+          ],
+          "angVel": [
+            0.83335059310482,
+            -0.6720058997032375,
+            0.9773751697414904
+          ]
+        },
+        {
+          "id": 90,
+          "centre": [
+            11.83638278722943,
+            1.3520965593949144,
+            -6.341235237132451
+          ],
+          "radius": 0.2834019380307442,
+          "quat": [
+            -0.09890059027181335,
+            -0.12312951164272516,
+            -0.13449936606994528,
+            0.9782472678895116
+          ],
+          "angVel": [
+            -0.799838464877769,
+            -0.9957849523728728,
+            -1.0877363440274408
+          ]
+        },
+        {
+          "id": 91,
+          "centre": [
+            12.183852243744408,
+            1.6924177376098974,
+            -6.756859979434746
+          ],
+          "radius": 0.29200430596892785,
+          "quat": [
+            0.07761148690549446,
+            0.018370099845676092,
+            0.25687420298722446,
+            0.9631482961474087
+          ],
+          "angVel": [
+            0.6308782202208747,
+            0.14932449252044208,
+            2.0880458094890995
+          ]
+        },
+        {
+          "id": 92,
+          "centre": [
+            11.898678325514163,
+            1.7113828020789792,
+            -7.20177256334486
+          ],
+          "radius": 0.305564949177201,
+          "quat": [
+            0.33040376665420407,
+            0.06630109075264143,
+            0.09983348076450459,
+            0.9362001882418992
+          ],
+          "angVel": [
+            2.71056370496533,
+            0.5439203433228648,
+            0.8190130888666048
+          ]
+        },
+        {
+          "id": 93,
+          "centre": [
+            11.345869373867428,
+            1.5177657924083836,
+            -6.946030957901609
+          ],
+          "radius": 0.2833403085814363,
+          "quat": [
+            -0.2040213933924825,
+            0.04029864346695609,
+            -0.17156542016375817,
+            0.9629727914001237
+          ],
+          "angVel": [
+            -1.6585214504533492,
+            0.32759390328024823,
+            -1.394681826087945
+          ]
+        },
+        {
+          "id": 94,
+          "centre": [
+            12.009118226506372,
+            1.8165116884120522,
+            -6.945044311787048
+          ],
+          "radius": 0.16112000000000004,
+          "quat": [
+            -0.0033540949415704585,
+            0.06288190804242307,
+            0.16147112857707988,
+            0.9848663311963259
+          ],
+          "angVel": [
+            -0.027065261297696867,
+            0.5074141614098299,
+            1.3029620100516375
+          ]
+        },
+        {
+          "id": 95,
+          "centre": [
+            11.97036721769211,
+            1.8321123737477079,
+            -6.917377884781132
+          ],
+          "radius": 0.2318317434525599,
+          "quat": [
+            0.08405342917924462,
+            -0.009674416287584175,
+            0.08115336929199979,
+            0.9931040012834811
+          ],
+          "angVel": [
+            0.676384458061286,
+            -0.07785077755462622,
+            0.6530474514176148
+          ]
+        },
+        {
+          "id": 96,
+          "centre": [
+            12.001030319493193,
+            1.9094788780028296,
+            -6.933468971201789
+          ],
+          "radius": 0.32322334366334493,
+          "quat": [
+            -0.06662903377704599,
+            -0.0653330581693312,
+            0.22818292887500163,
+            0.9691360659567914
+          ],
+          "angVel": [
+            -0.5405082202139748,
+            -0.529995003535633,
+            1.8510661460609164
+          ]
+        }
+      ]
+    },
+    "chunkCensus": {
+      "inFrustum": 5,
+      "ofPieces": 63,
+      "bonePieces": 0,
+      "boneRows": 0,
+      "organPieces": 2,
+      "buriedBonePieces": 22,
+      "bonesShadingAsMeat": 0,
+      "organsShadingAsBone": 0,
+      "live": 63,
+      "baked": 1,
+      "views": 64,
+      "spare": 0,
+      "bakePending": true,
+      "cap": 64
+    },
+    "probeDynamic": {
+      "radianceGain": 0.15,
+      "visStrength": 1,
+      "frames": 143,
+      "errors": 0,
+      "bound": true,
+      "reached": 289,
+      "gates": {
+        "bound": true,
+        "dynKey": "arena",
+        "room": 6,
+        "grid": true,
+        "gain": 0.15,
+        "vis": 1,
+        "dynOn": true,
+        "flashI": 0,
+        "flashAge": 4.547500000000001,
+        "capsules": 35,
+        "lights": 1
+      },
+      "rate": 2
+    },
+    "gpuDiagnostics": {
+      "lost": null,
+      "uncaptured": [],
+      "uncapturedCount": 0
+    },
+    "gibRenderer": {
+      "mode": "march",
+      "carvedLibraryBuilt": false,
+      "carvedBuildMs": 0,
+      "carveCells": 1
+    },
+    "frames": 288,
+    "loopRunning": true,
+    "bootMarks": [
+      {
+        "n": "main-start",
+        "t": 595
+      },
+      {
+        "n": "renderer-ready",
+        "t": 602
+      },
+      {
+        "n": "world-start",
+        "t": 602
+      },
+      {
+        "n": "gallery-start",
+        "t": 680
+      },
+      {
+        "n": "dungeon-start",
+        "t": 684
+      },
+      {
+        "n": "drawchain-start",
+        "t": 684
+      },
+      {
+        "n": "deferred-start",
+        "t": 688
+      },
+      {
+        "n": "adaptive-start",
+        "t": 688
+      },
+      {
+        "n": "zombies-start",
+        "t": 699
+      },
+      {
+        "n": "room-probes-start",
+        "t": 702
+      },
+      {
+        "n": "player-start",
+        "t": 1664
+      },
+      {
+        "n": "gun-start",
+        "t": 1664
+      },
+      {
+        "n": "gun-ready",
+        "t": 1915
+      },
+      {
+        "n": "warm-invoked",
+        "t": 1915
+      },
+      {
+        "n": "dynamite-start",
+        "t": 1920
+      },
+      {
+        "n": "detonation-start",
+        "t": 1921
+      },
+      {
+        "n": "burst-start",
+        "t": 1921
+      },
+      {
+        "n": "bleed-start",
+        "t": 1922
+      },
+      {
+        "n": "goo-start",
+        "t": 1922
+      },
+      {
+        "n": "hud-start",
+        "t": 1928
+      },
+      {
+        "n": "boot-time",
+        "t": 1928
+      },
+      {
+        "n": "frameloop-start",
+        "t": 1928
+      },
+      {
+        "n": "api-start",
+        "t": 1929
+      },
+      {
+        "n": "demo-start",
+        "t": 1929
+      },
+      {
+        "n": "draw-ready",
+        "t": 1929
+      },
+      {
+        "n": "main-end",
+        "t": 1929
+      },
+      {
+        "n": "warm-steps-start",
+        "t": 1929
+      },
+      {
+        "n": "warm-flip-done",
+        "t": 1929
+      },
+      {
+        "n": "warm-crowd-bins-done",
+        "t": 1947
+      },
+      {
+        "n": "warm-goo-done",
+        "t": 2145
+      },
+      {
+        "n": "warm-draw-once-done",
+        "t": 4970
+      },
+      {
+        "n": "warm-precompile-done",
+        "t": 5816
+      },
+      {
+        "n": "warm-finally",
+        "t": 5816
+      }
+    ]
+  },
+  "pageErrors": [],
+  "consoleCounts": {
+    "queriesExceeded": 0,
+    "indexCount0": 1,
+    "gpuLost": 0,
+    "uncaptured": 0,
+    "probeGatherFail": 0,
+    "errors": 1,
+    "warnings": 1
+  },
+  "consoleTail": [
+    {
+      "ts": 1789567634616.725,
+      "level": "log",
+      "text": "[vite] connecting..."
+    },
+    {
+      "ts": 1789567634621.094,
+      "level": "log",
+      "text": "[vite] connected."
+    },
+    {
+      "ts": 1789567635180.426,
+      "level": "log",
+      "text": "[sdf-game] demo seed 7 (?seed=)"
+    },
+    {
+      "ts": 1789567635271.535,
+      "level": "error",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "ts": 1789567636562.231,
+      "level": "log",
+      "text": "[room-probes] room 1 baked"
+    },
+    {
+      "ts": 1789567636702.941,
+      "level": "log",
+      "text": "[room-probes] room 2 baked"
+    },
+    {
+      "ts": 1789567639553.42,
+      "level": "log",
+      "text": "[room-probes] room 3 baked"
+    },
+    {
+      "ts": 1789567639627.318,
+      "level": "log",
+      "text": "[room-probes] room 4 baked"
+    },
+    {
+      "ts": 1789567639713.317,
+      "level": "log",
+      "text": "[room-probes] room 6 baked"
+    },
+    {
+      "ts": 1789567639790.03,
+      "level": "log",
+      "text": "[room-probes] room 5 baked"
+    },
+    {
+      "ts": 1789567640394.391,
+      "level": "log",
+      "text": "[warm] 3887 ms of warm steps after 14 ms of synchronous boot (61 hidden objects, 7 crowd types, 11 stage/layer passes)"
+    },
+    {
+      "ts": 1789567640394.46,
+      "level": "log",
+      "text": "[warm] phases {\"flip\":0.19999992847442627,\"crowdBinsPerType\":[5,2.3,2.4,2.2,2.1,2.1,2],\"crowdBins\":18.200000047683716,\"goo\":198.19999992847443,\"drawOnce\":2824.2000000476837,\"precompile\":846.1000000238419}"
+    },
+    {
+      "ts": 1789567640670.603,
+      "level": "warning",
+      "text": "Calling [RenderPassEncoder (unlabeled)].Draw with an index count of 0 is unusual."
+    }
+  ]
+}

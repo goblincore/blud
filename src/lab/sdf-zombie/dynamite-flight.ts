@@ -28,6 +28,34 @@ export interface FlightBounds {
   maxZ: number;
 }
 
+/** One solid box to bounce off. Structurally identical to game-level.ts's
+ *  `Aabb` — declared here so this pure module never imports the level. */
+export interface FlightBox {
+  min: Vec3;
+  max: Vec3;
+}
+
+/**
+ * The WORLD a bundle flies through, beyond the floor plane. Optional and
+ * defaulted, so the lab's arena-rect flight is bit-identical to before this
+ * existed (the arena has no boxes and no ceiling).
+ *
+ * The dungeon passes `colliders: levelColliders()` — every wall, lintel, arch
+ * step and furniture box the player already collides with — plus `ceilM`, the
+ * room ceiling. Together those are the whole level: the tunnel lintels are
+ * boxes spanning 2.2 → 3.0 m, so a ceiling plane at the room height plus the
+ * boxes reproduces the real geometry, including the low tunnel mouths.
+ */
+export interface FlightWorld {
+  /** Solid boxes, from game-level.ts's `levelColliders()`. */
+  colliders?: readonly FlightBox[];
+  /** Ceiling plane height (m); null/undefined = open sky. */
+  ceilM?: number | null;
+  /** Bundle collision radius (m); defaults to FLIGHT_TUNING.bundleRadiusM. */
+  bundleRadiusM?: number;
+}
+
+
 export interface FlightState {
   /** Bundle center, meters; the floor is at y = 0. */
   pos: Vec3;
@@ -79,6 +107,9 @@ export const FLIGHT_TUNING = {
    *  (ang set once at spawn, never updated — dynamite.ts header) — this is a
    *  LAB-PROP feel value for the cheap cylinder-bundle mesh. */
   spinRateRadPerSec: 12,
+  /** Bundle collision radius (m) — the 0.08 m the arena-bounds comment used to
+   *  subsume, now an explicit sphere radius for the box tests. */
+  bundleRadiusM: 0.08,
 } as const;
 
 /**
@@ -118,9 +149,9 @@ function clamp(v: number, lo: number, hi: number): number {
 }
 
 /** One 120 Hz sub-step (the game's tic): gravity + integrate, airdrag, floor /
- *  wall bounce with elastic damping, then the detonation checks in the sim's
- *  order (fuse first, then qualifying impact). */
-function stepSub(s: FlightState, sub: number, b: FlightBounds): FlightState {
+ *  wall / box bounce with elastic damping, then the detonation checks in the
+ *  sim's order (fuse first, then qualifying impact). */
+function stepSub(s: FlightState, sub: number, b: FlightBounds | null, world: FlightWorld): FlightState {
   const T = FLIGHT_TUNING;
   const pos: [number, number, number] = [...s.pos];
   const vel: [number, number, number] = [...s.vel];
@@ -144,30 +175,96 @@ function stepSub(s: FlightState, sub: number, b: FlightBounds): FlightState {
   // — Floor (y = 0): reflect + dampen, or rest once the bounce is weak.
   //   resting zeroes the VERTICAL only; horizontal keeps sliding (stepThing). —
   let hit = false;
-  let resting = s.resting;
+  /** |velocity along the normal| of EVERY contact made this sub-step. The
+   *  bundle counts as resting when it touched something and none of those
+   *  components is still above the rest speed — the floor's original rule,
+   *  generalised so a bundle landing on a CRATE settles too. */
+  const contactSpeeds: number[] = [];
   if (pos[1] <= 0) {
     pos[1] = 0;
     hit = true;
     if (vel[1] < 0) {
       const up = -vel[1] * T.elastic;
-      if (up <= T.restSpeedMps) {
-        vel[1] = 0;
-        resting = true;
-      } else {
-        vel[1] = up;
-        resting = false;
-      }
+      vel[1] = up <= T.restSpeedMps ? 0 : up;
     }
-  } else {
-    resting = false;
+    contactSpeeds.push(Math.abs(vel[1]));
   }
 
-  // — Walls: bounce planes = BALLISTIC_BOUNDS (the game's arena-inset
-  //   constant; the bundle's 0.08 m radius is subsumed by the inset). —
-  if (pos[0] < b.minX) { pos[0] = b.minX; vel[0] = -vel[0] * T.elastic; hit = true; }
-  if (pos[0] > b.maxX) { pos[0] = b.maxX; vel[0] = -vel[0] * T.elastic; hit = true; }
-  if (pos[2] < b.minZ) { pos[2] = b.minZ; vel[2] = -vel[2] * T.elastic; hit = true; }
-  if (pos[2] > b.maxZ) { pos[2] = b.maxZ; vel[2] = -vel[2] * T.elastic; hit = true; }
+  // — Walls: bounce planes = the arena rect, when one was supplied. The dungeon
+  //   passes null and gets its walls from `colliders` instead. —
+  if (b) {
+    if (pos[0] < b.minX) { pos[0] = b.minX; vel[0] = -vel[0] * T.elastic; hit = true; }
+    if (pos[0] > b.maxX) { pos[0] = b.maxX; vel[0] = -vel[0] * T.elastic; hit = true; }
+    if (pos[2] < b.minZ) { pos[2] = b.minZ; vel[2] = -vel[2] * T.elastic; hit = true; }
+    if (pos[2] > b.maxZ) { pos[2] = b.maxZ; vel[2] = -vel[2] * T.elastic; hit = true; }
+  }
+
+  // — Ceiling plane (the dungeon's room height). Rooms have no ceiling BOX in
+  //   levelColliders, so without this a full-charge lob leaves through the
+  //   roof. Tunnels are handled by their own lintel boxes, which the box test
+  //   below catches — a lintel spans 2.2 → 3.0 m, so the low mouths are real. —
+  const ceil = world.ceilM ?? null;
+  if (ceil !== null && pos[1] > ceil) {
+    pos[1] = ceil;
+    hit = true;
+    if (vel[1] > 0) vel[1] = -vel[1] * T.elastic;
+  }
+
+  // — Solid boxes: sphere-vs-AABB, push out along the contact normal and
+  //   reflect the normal component. Two passes so a bundle wedged into a
+  //   corner settles instead of jittering between two faces. —
+  const boxes = world.colliders;
+  if (boxes !== undefined && boxes.length > 0) {
+    const r = world.bundleRadiusM ?? T.bundleRadiusM;
+    for (let pass = 0; pass < 2; pass++) {
+      for (const box of boxes) {
+        // Cheap reject on the bundle's own AABB.
+        if (pos[0] + r < box.min[0] || pos[0] - r > box.max[0]
+          || pos[1] + r < box.min[1] || pos[1] - r > box.max[1]
+          || pos[2] + r < box.min[2] || pos[2] - r > box.max[2]) continue;
+
+        // Closest point on the box to the centre.
+        const cx = clamp(pos[0], box.min[0], box.max[0]);
+        const cy = clamp(pos[1], box.min[1], box.max[1]);
+        const cz = clamp(pos[2], box.min[2], box.max[2]);
+        const dx = pos[0] - cx, dy = pos[1] - cy, dz = pos[2] - cz;
+        const d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 >= r * r) continue;
+        hit = true;
+
+        let nx: number, ny: number, nz: number, pen: number;
+        if (d2 > 1e-12) {
+          const dist = Math.sqrt(d2);
+          nx = dx / dist; ny = dy / dist; nz = dz / dist;
+          pen = r - dist;
+        } else {
+          // Centre INSIDE the box (a fast sub-step can land there): leave by
+          // the nearest face, the same min-penetration fallback the player
+          // capsule uses (game-player.ts resolveCapsule).
+          const faces: [number, 0 | 1 | 2, number][] = [
+            [pos[0] - box.min[0] + r, 0, -1], [box.max[0] - pos[0] + r, 0, 1],
+            [pos[1] - box.min[1] + r, 1, -1], [box.max[1] - pos[1] + r, 1, 1],
+            [pos[2] - box.min[2] + r, 2, -1], [box.max[2] - pos[2] + r, 2, 1],
+          ];
+          faces.sort((p, q) => p[0] - q[0]);
+          const [amount, axis, sign] = faces[0]!;
+          nx = axis === 0 ? sign : 0; ny = axis === 1 ? sign : 0; nz = axis === 2 ? sign : 0;
+          pen = amount;
+        }
+        pos[0] += nx * pen; pos[1] += ny * pen; pos[2] += nz * pen;
+        const vn = vel[0] * nx + vel[1] * ny + vel[2] * nz;
+        if (vn < 0) {
+          const k = (1 + T.elastic) * vn;
+          vel[0] -= k * nx; vel[1] -= k * ny; vel[2] -= k * nz;
+        }
+        // Post-contact normal speed, on the same rest rule as the floor: a
+        // bundle that has stopped bouncing off a crate lid is at rest on it.
+        contactSpeeds.push(Math.abs(vel[0] * nx + vel[1] * ny + vel[2] * nz));
+      }
+    }
+  }
+
+  const resting = hit && contactSpeeds.every(v => v <= T.restSpeedMps);
 
   // — Detonation, in the sim's order (stepProjectiles): fuse out wins; else a
   //   qualifying impact — past the grace window AND ≥ safe distance from
@@ -195,16 +292,21 @@ function stepSub(s: FlightState, sub: number, b: FlightBounds): FlightState {
 /**
  * Advance the flight by `dt` seconds (clamped to 0..0.25), consuming it in
  * 120 Hz sub-steps so bounces and impact checks land on the game's tic grid.
- * Pure and deterministic: same (state, dt, bounds) → same next state. Once
- * `detonated` is true the state stops changing.
+ * Pure and deterministic: same (state, dt, bounds, world) → same next state.
+ * Once `detonated` is true the state stops changing.
+ *
+ * `bounds` is the arena rect (pass null for the dungeon, which uses `world`);
+ * `world` adds the solid boxes and the ceiling and defaults to none of either,
+ * so every existing caller keeps the exact behaviour it had.
  */
 export function stepFlight(
   state: FlightState,
   dt: number,
-  bounds: FlightBounds = BALLISTIC_BOUNDS,
+  bounds: FlightBounds | null = BALLISTIC_BOUNDS,
+  world: FlightWorld = {},
 ): FlightState {
   const dtc = clamp(dt, 0, 0.25);
-  const b = {
+  const b = bounds === null ? null : {
     minX: Math.min(bounds.minX, bounds.maxX),
     maxX: Math.max(bounds.minX, bounds.maxX),
     minZ: Math.min(bounds.minZ, bounds.maxZ),
@@ -216,7 +318,7 @@ export function stepFlight(
   while (remaining > 1e-9 && !out.detonated) {
     const step = Math.min(remaining, sub);
     remaining -= step;
-    out = stepSub(out, step, b);
+    out = stepSub(out, step, b, world);
   }
   return out;
 }
