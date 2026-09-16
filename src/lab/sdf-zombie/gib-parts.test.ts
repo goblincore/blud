@@ -16,7 +16,7 @@ import soldierSrc from './characters/soldier.blob?raw';
 import { compileBlob } from './blob-compile';
 import { parseBlob } from './blob-parse';
 import { buildBody } from './build-body';
-import { gibParts, gibPlan, gibTierPlan, gibBlastPlan, gibClusterPieces, displaceGibPieces, type GibPiece } from './gib-parts';
+import { gibParts, gibPlan, gibTierPlan, gibBlastPlan, gibClusterPieces, displaceGibPieces, retargetGibPieces, type GibPiece } from './gib-parts';
 import { sdBody, type Body } from './validate';
 import type { BuildResult } from './build-body';
 import type { Vec3 } from './types';
@@ -306,6 +306,44 @@ describe('gibPlan — the reusable region identity', () => {
       // The plan it was handed is untouched.
       expect(a.origin).toEqual(plan.pieces[i]!.origin);
     }
+  });
+
+  it('retargetGibPieces swaps in the drawn geometry by source index, keeping caps', () => {
+    // The release must spawn the geometry that was LAST DRAWN, not a snap back
+    // to the clean pose. `retargetGibPieces` maps each piece's sourced flesh and
+    // bone prims through the sloughed body arrays by their srcPrims/srcBones
+    // index; the appended `sub` caps have no source and keep their own shape.
+    const flesh = zombie.prims.map((p, i) => i === 0 ? { ...p, a: [p.a[0] + 0.07, p.a[1] - 0.03, p.a[2]] as Vec3 } : p);
+    const bones = (zombie.bonePrims ?? []).map((p, i) => i === 0 ? { ...p, b: [p.b[0] - 0.05, p.b[1], p.b[2]] as Vec3 } : p);
+    const out = retargetGibPieces(plan.pieces, flesh, bones);
+    let swapped = 0;
+    for (let r = 0; r < plan.pieces.length; r++) {
+      const g = plan.pieces[r]!;
+      const o = out[r]!;
+      expect(o.origin).toEqual(g.origin);
+      for (let j = 0; j < g.prims.length; j++) {
+        const src = g.srcPrims?.[j];
+        if (src !== undefined) {
+          // Sourced flesh IS the drawn (sloughed) geometry, not the clean copy.
+          expect(o.prims[j]!.a).toEqual(flesh[src]!.a);
+          if (src === 0) swapped++;
+        } else if (g.prims[j]!.op === 'sub') {
+          // A cap keeps its own geometry, welded to the region it cuts.
+          expect(o.prims[j]!.a).toEqual(g.prims[j]!.a);
+        }
+      }
+      for (let j = 0; j < g.bones.length; j++) {
+        const src = g.srcBones?.[j];
+        if (src !== undefined && src === 0) {
+          expect(o.bones[j]!.b).toEqual(bones[0]!.b);
+          swapped++;
+        }
+      }
+    }
+    // The mutation really reached a piece (so this is not vacuously clean).
+    expect(swapped).toBeGreaterThan(0);
+    // The plan itself is untouched.
+    expect(plan.pieces[0]!.prims[0]!.a).not.toEqual(flesh[0]!.a);
   });
 });
 

@@ -114,14 +114,60 @@ export interface TearTuning {
    */
   recoilM: number;
   /**
-   * FLESH PEEL: extra metres the ribcage-bearing chest band is lifted along
-   * the body's own cranial axis (the plan's `up`), scaled by the region's
-   * `peel`. This is what opens a REAL gap over the cage — a rigid translation
-   * of the whole chest just slides the flesh, and the overlapping spine blobs
-   * keep the surface closed. Along the body axis, not the blast push, so the
-   * reveal is the same wherever the bundle landed.
+   * NON-RIGID SLOUGH (2026-09-16 — replaces the owner-rejected FLESH PEEL).
+   *
+   * The previous pass lifted the chest band along the body's own cranial axis
+   * as a rigid translation. The owner rejected it: the chest rose into the head
+   * and read as a swollen head, and the flesh otherwise slid as whole regions.
+   * The rupture now deforms the FLESH ENDPOINTS themselves — every endpoint is
+   * displaced away from the blast and downward by its own blast-distance
+   * weight, so capsules stretch and thin and the silhouette changes SHAPE.
+   *
+   * `sloughOutM` is the peak horizontal (radial-from-blast) displacement of an
+   * endpoint at the epicentre; `sloughSagM` the world-downward drop; both decay
+   * with distance at `sloughFalloffM` metres.
    */
-  chestPeelM: number;
+  sloughOutM: number;
+  /** Peak world-downward drop of an endpoint at full slough, metres. */
+  sloughSagM: number;
+  /** Distance over which an endpoint's slough decays, metres: e^{-d/falloff}. */
+  sloughFalloffM: number;
+  /**
+   * How far a PRIM is drawn out along the pull, metres at full slough. This is
+   * the within-prim half of the non-rigid change: a capsule whose two ends are
+   * driven differently stretches (its radius then thins below), and a point
+   * blob — the torso is mostly spheres — is pulled into a short strand along
+   * the pull instead of just sliding as an unchanged ball. Bounded so the body
+   * draws out rather than becoming spaghetti.
+   */
+  sloughStretchM: number;
+  /**
+   * FRONT-DEPENDENT TIMING, 0..1. An endpoint far from the blast waits this
+   * fraction of the window before it starts, so the slough travels outward
+   * through the flesh instead of all of it moving on the same frame. The
+   * nearest endpoint (exposure 1) starts at 0.
+   */
+  sloughLead: number;
+  /**
+   * Bounded thinning, 0..1. A stretched prim's radius scales as
+   * 1/sqrt(stretch), never below (1 - sloughThinK) of its rest radius, so the
+   * flesh draws out into a strand instead of a balloon or a needle.
+   */
+  sloughThinK: number;
+  /** Fraction of the slough the HEAD region keeps, 0..1. Low, so the face and
+   *  skull stay a recognizable shape while the body comes apart. */
+  sloughHeadKeep: number;
+  /** Fraction of the slough a BONE region keeps, 0..1. Low, so the skeleton
+   *  stays near the pose and the flesh pulls OFF it — that gap is the rib
+   *  exposure, same principle as `boneLag`. */
+  sloughBoneKeep: number;
+  /**
+   * How strongly the planner's `peel` flag scales a region's slough. The
+   * ribcage-bearing chest band (`peel = 1`) sloughs hardest and the
+   * abdomen/pelvis (`peel = -0.7`) least, which opens the cage WITHOUT the
+   * rejected rigid cranial lift. 0 disables the weighting.
+   */
+  peelSloughK: number;
   /**
    * PEAK ANGULAR SPEED, rad/s, the blast imparts to a region at the body's
    * surface. The rotation is LINEAR in age (a constant angular velocity, which
@@ -148,7 +194,11 @@ export interface TearTuning {
 
 export const TEAR_TUNING: TearTuning = {
   sec: 0.2,
-  amplitudeM: 0.06,
+  // The rigid region push is now a MINORITY of the motion: the non-rigid slough
+  // below carries the visible change. Keeping a little rigid travel preserves
+  // the seam-opening the cuts need and the piece-level separation the release
+  // spawns at; the flesh's stretch/slough is what makes it read as tearing.
+  amplitudeM: 0.045,
   falloffM: 0.8,
   jiggleHz: 22,
   jiggleAmp: 0.35,
@@ -175,12 +225,29 @@ export const TEAR_TUNING: TearTuning = {
   // ROOT RECOIL (2026-09-16 task 4). A bounded whole-body jolt away from the
   // epicentre; uniform, so it is pure recoil and opens no seam of its own.
   recoilM: 0.05,
-  // TASK-3 (2026-09-16). The chest band now splits at the costal margin
-  // (gib-parts splitTorso), and this peel lifts it clear of the ~0.20 m the
-  // neighbouring abdominal mass still occupies, so the smin bridge tears and
-  // the ribcage is left standing in the opening. Tuned against the 200 ms
-  // captures; see RESULTS.md Task 3.
-  chestPeelM: 0.3,
+  // ——— NON-RIGID SLOUGH (2026-09-16, replaces the rejected chest peel) ——————
+  // The owner's report: the body slid apart as rigid regions (an exploded
+  // assembly diagram) and the chest's 0.3 m cranial peel rose into the head.
+  // These values make the flesh itself move: endpoints near the blast are
+  // driven outward and down, far ones start later, and the pull is strong
+  // enough to change the silhouette while staying under the cap where a prim
+  // would read as taffy. `?tearslough=0` restores rigid-only motion as the A/B.
+  sloughOutM: 0.15,
+  sloughSagM: 0.11,
+  sloughFalloffM: 0.7,
+  sloughStretchM: 0.08,
+  sloughLead: 0.55,
+  sloughThinK: 0.45,
+  // The head keeps just over a tenth: enough that the neck stretches, far too
+  // little to pull the face out of shape.
+  sloughHeadKeep: 0.12,
+  // 0.06: the cage stays essentially where the body stood, so the meat leaves
+  // it behind. This is the rib reveal, and it is why `boneLag` exists too.
+  sloughBoneKeep: 0.06,
+  // The chest band sloughs 1.4x, the abdomen/pelvis 0.72x — the same
+  // ribcage-band weighting `splitTorso` tags, but as a shape change rather than
+  // the rejected rigid lift.
+  peelSloughK: 0.4,
   // TASK-4 (2026-09-16). Owner: "when the zombie begins coming apart all pieces
   // remain upright/parallel, like an exploded assembly diagram. The pieces
   // should already be rotated into different angles and have angular velocity."
@@ -273,8 +340,10 @@ export interface RuptureRegion {
   kind: string;
   srcPrims?: number[];
   srcBones?: number[];
-  /** FLESH-PEEL scale, applied along the plan's own cranial axis at
-   *  `TearTuning.chestPeelM * peel` (see `TearTuning.chestPeelM`). */
+  /** RIBBAGE-BAND weight for the non-rigid slough: a region's endpoint pull is
+   *  scaled by `1 + peelSloughK * peel`. The chest band (`peel = 1`) sloughs
+   *  hardest, the abdomen/pelvis counterweighted, so the cage is exposed by the
+   *  flesh leaving rather than by the rejected rigid cranial lift. */
   peel?: number;
 }
 
@@ -291,7 +360,8 @@ export interface RuptureCut {
 export interface RupturePlan {
   pieces: readonly RuptureRegion[];
   cuts: readonly RuptureCut[];
-  /** The body's own cranial axis — the direction `peel` is applied along. */
+  /** The body's own cranial axis — the head's attachment frame and the axis a
+   *  peaking slough is measured against. */
   up?: Vec3;
 }
 
@@ -358,15 +428,6 @@ export function ruptureOffsets(
     if (region.kind === 'bone') mag *= tuning.boneLag;
     if (region.limb === 'head') mag *= tuning.headDamp;
     let v = scale(dir, mag);
-    // FLESH PEEL. A piece flagged `peel` is lifted ALONG THE BODY'S CRANIAL
-    // AXIS on the same sharp ramp as the seams, so the chest opens off the
-    // ribcage early in the window. This is not a second push: it is the
-    // separation the cut needs to become a hole, and it is deliberately
-    // independent of `dir` so an off-centre bundle still peels the chest
-    // upward along the spine rather than sideways.
-    if (region.peel) {
-      v = add(v, scale(up, tuning.chestPeelM * region.peel * fall * sp));
-    }
     for (const cut of plan.cuts) {
       if (cut.a !== r && cut.b !== r) continue;
       const cw = Math.exp(-len(sub(cut.at, tear.at)) / tuning.falloffM) * fall;
@@ -423,6 +484,139 @@ function headAttachParent(plan: RupturePlan, headIdx: number): number {
     if (d < bestD) { bestD = d; best = i; }
   }
   return best;
+}
+
+// ——— THE NON-RIGID SLOUGH (2026-09-16) ————————————————————————————————————
+//
+// WHAT IT IS. Instead of translating a region as one rigid body, every FLESH
+// endpoint is displaced on its own by the blast: outward from the epicentre and
+// downward, with a distance falloff and a front-dependent start. Two endpoints
+// of one capsule therefore move by different amounts, so the capsule STRETCHES
+// (and thins) and the body's silhouette changes shape rather than sliding. The
+// head keeps almost none of it (the face must survive) and the skeleton keeps
+// almost none (the flesh pulls off the standing cage — that gap is the rib
+// reveal). This replaced the owner-rejected rigid cranial chest peel.
+//
+// All of it is pure and deterministic, and it runs BEFORE the region's rigid
+// offset/rotation so the release can hand the very same prims to the chunks
+// (`retargetGibPieces` in gib-parts.ts).
+
+/**
+ * The slough weight for one region: bone and head are held back, and the
+ * planner's `peel` flag scales the ribcage band. Bounded to [0, 1.6] so the
+ * chest's weighting cannot blow the displacement past the tuning's intent.
+ */
+function regionSloughScale(region: RuptureRegion, tuning: TearTuning): number {
+  if (region.kind === 'bone') return Math.max(0, Math.min(1, tuning.sloughBoneKeep));
+  let s = 1 + tuning.peelSloughK * (region.peel ?? 0);
+  if (region.limb === 'head') s *= tuning.sloughHeadKeep;
+  return Math.max(0, Math.min(1.6, s));
+}
+
+/** The pull direction at a point: horizontal-radial from the blast combined
+ *  with world-down, normalized. Never zero (the sag term is positive). */
+function sloughPullDir(e: Vec3, at: Vec3, tuning: TearTuning): Vec3 {
+  const ox = e[0] - at[0];
+  const oz = e[2] - at[2];
+  const r = Math.hypot(ox, oz);
+  const nx = r > 1e-5 ? ox / r : 0;
+  const nz = r > 1e-5 ? oz / r : 0;
+  return normalize([nx * tuning.sloughOutM, -tuning.sloughSagM, nz * tuning.sloughOutM]);
+}
+
+interface SloughSample {
+  /** Slough weight 0..~1.6 for this endpoint. */
+  w: number;
+  /** The displaced endpoint. */
+  p: Vec3;
+}
+
+/** One endpoint's sloughed position AND its weight, so the caller can derive
+ *  the within-prim stretch from the pair. */
+function sloughSample(
+  e: Vec3, at: Vec3, p: number, fall: number, scale: number, tuning: TearTuning,
+): SloughSample {
+  const ox = e[0] - at[0];
+  const oy = e[1] - at[1];
+  const oz = e[2] - at[2];
+  const d = Math.sqrt(ox * ox + oy * oy + oz * oz);
+  const falloff = tuning.sloughFalloffM > 1e-6 ? tuning.sloughFalloffM : 1e-6;
+  // Exposure: 1 on the epicentre, decaying with distance. It sets BOTH the
+  // displacement and the START of the endpoint's ramp — near flesh leads.
+  const expo = Math.exp(-d / falloff);
+  const start = Math.max(0, Math.min(0.95, (1 - expo) * tuning.sloughLead));
+  const u = Math.max(0, Math.min(1, (p - start) / Math.max(1e-6, 1 - start)));
+  const ramp = u * u * (3 - 2 * u);
+  const w = expo * ramp * fall * scale;
+  if (!(w > 0)) return { w: 0, p: e };
+  // Horizontal radial from the blast; a point exactly on the blast axis has no
+  // outward direction and simply drops.
+  const r = Math.hypot(ox, oz);
+  const nx = r > 1e-5 ? ox / r : 0;
+  const nz = r > 1e-5 ? oz / r : 0;
+  return {
+    w,
+    p: [
+      e[0] + nx * tuning.sloughOutM * w,
+      e[1] - tuning.sloughSagM * w,
+      e[2] + nz * tuning.sloughOutM * w,
+    ],
+  };
+}
+
+/**
+ * The sloughed version of one prim. `region` may be -1 (a prim no piece owns)
+ * in which case nothing moves. Carve (`sub`) prims are never sloughed: they are
+ * holes, not surface.
+ *
+ * STRETCH AND THINNING. Two ends driven by different weights pull the prim
+ * apart; the radius thins as 1/sqrt(stretch), floored at `1 - sloughThinK`. A
+ * point blob (a == b — the torso's spheres) has no two ends of its own, so it
+ * is drawn into a short strand along the pull direction at the mean weight; its
+ * radius thins by the same volume argument. Both are bounded by
+ * `sloughStretchM`, so the flesh draws out rather than becoming a puddle.
+ */
+function sloughPrim(
+  q: Primitive,
+  region: number,
+  pieces: readonly RuptureRegion[],
+  tear: TearState,
+  tuning: TearTuning,
+  p: number,
+): Primitive {
+  if (region < 0 || !(p > 0) || q.op === 'sub') return q;
+  const piece = pieces[region];
+  if (!piece) return q;
+  const sloughScale = regionSloughScale(piece, tuning);
+  const fall = Math.max(0, Math.min(1, tear.falloff));
+  if (!(sloughScale > 0) || !(fall > 0)) return q;
+  const sa = sloughSample(q.a, tear.at, p, fall, sloughScale, tuning);
+  const sb = sloughSample(q.b, tear.at, p, fall, sloughScale, tuning);
+  if (sa.w <= 0 && sb.w <= 0) return q;
+  let a = sa.p;
+  let b = sb.p;
+  const rest = len(sub(q.b, q.a));
+  let stretch: number;
+  if (rest < 1e-4) {
+    // A point blob: draw it out into a strand along the pull.
+    const half = 0.5 * tuning.sloughStretchM * (sa.w + sb.w) * 0.5;
+    if (half > 0) {
+      const dir = sloughPullDir(q.a, tear.at, tuning);
+      a = add(sa.p, scale(dir, half));
+      b = add(sa.p, scale(dir, -half));
+    }
+    stretch = 1 + half / Math.max(1e-4, q.radius);
+  } else {
+    stretch = len(sub(b, a)) / rest;
+  }
+  const thin = Math.max(1 - tuning.sloughThinK, Math.min(1, 1 / Math.sqrt(Math.max(1, stretch))));
+  let radius = q.radius;
+  let radiusB = q.radiusB;
+  if (thin < 1) {
+    radius = q.radius * thin;
+    if (radiusB !== undefined) radiusB = radiusB * thin;
+  }
+  return radiusB !== undefined ? { ...q, a, b, radius, radiusB } : { ...q, a, b, radius };
 }
 
 /**
@@ -563,14 +757,24 @@ export interface RuptureFrame {
   /** Per-region angular velocity, rad/s (zero at onset) — the derivative the
    *  live chunk continues with. */
   angVels: Vec3[];
+  /**
+   * THE SLOUGHED SOURCE GEOMETRY, before any rigid region motion: flesh in
+   * `posed.prims` order, bone/organ in `posed.bonePrims` order. The release
+   * retargets each piece's sourced prims through these (`retargetGibPieces`)
+   * so the spawned chunk carries the geometry that was last drawn instead of
+   * snapping back to the clean pose. Identity (same reference) at progress 0.
+   */
+  deformedPrims: readonly Primitive[];
+  deformedBones: readonly Primitive[];
 }
 
 /**
- * Bend a POSED body away from the blast by moving every planned region as a
- * rigid unit — rotation about the region's own origin PLUS its translation.
- * Pure: `posed` is not mutated. Returns the posed body itself (and identity
- * regions) when the window has not started, so progress 0 is bit-identical to
- * the pre-blast frame — the exact onset silhouette the contract requires.
+ * Bend a POSED body away from the blast: first the NON-RIGID SLOUGH deforms
+ * each flesh endpoint, then every planned region rotates rigidly about its own
+ * origin and translates. Pure: `posed` is not mutated. Returns the posed body
+ * itself (and identity regions) when the window has not started, so progress 0
+ * is bit-identical to the pre-blast frame — the exact onset silhouette the
+ * contract requires.
  *
  * THE PIVOT IS `region.origin`, the same centre `spawnChunkPiece` makes the
  * chunk's position (gib-parts.ts) and the same frame `chunkPoint` rotates
@@ -601,15 +805,34 @@ export function rupturePosed(
     const o = offsets[r]!;
     if (o[0] !== 0 || o[1] !== 0 || o[2] !== 0 || angle !== 0) moved = true;
   }
-  if (!moved) return { body: posed, offsets, quats, angVels };
+
+  const baseBones = posed.bonePrims ?? [];
+  // The slough's own progress/falloff are needed BEFORE the region maps, so the
+  // untouched onset frame returns the posed body with no map allocation.
+  const p = ruptureProgress(tear.age, tuning.sec);
+  const fall = Math.max(0, Math.min(1, tear.falloff));
+  const sloughing = p > 0 && fall > 0;
+  if (!moved && !sloughing) {
+    return { body: posed, offsets, quats, angVels, deformedPrims: posed.prims, deformedBones: baseBones };
+  }
 
   const primRegion = new Int32Array(posed.prims.length).fill(-1);
-  const boneRegion = new Int32Array((posed.bonePrims ?? []).length).fill(-1);
+  const boneRegion = new Int32Array(baseBones.length).fill(-1);
   for (let r = 0; r < plan.pieces.length; r++) {
     const region = plan.pieces[r]!;
     for (const i of region.srcPrims ?? []) if (i >= 0 && i < primRegion.length) primRegion[i] = r;
     for (const i of region.srcBones ?? []) if (i >= 0 && i < boneRegion.length) boneRegion[i] = r;
   }
+
+  // ——— THE NON-RIGID SLOUGH, before any rigid motion ————————————————————
+  const deformedPrims: readonly Primitive[] = sloughing
+    ? posed.prims.map((q, i) => sloughPrim(q, primRegion[i]!, plan.pieces, tear, tuning, p))
+    : posed.prims;
+  const deformedBones: readonly Primitive[] = sloughing
+    ? baseBones.map((q, i) => sloughPrim(q, boneRegion[i]!, plan.pieces, tear, tuning, p))
+    : baseBones;
+  if (sloughing) moved = true;
+
   const shift = (q: Primitive, o: Vec3): Primitive => ({ ...q, a: add(q.a, o), b: add(q.b, o) });
   const place = (q: Primitive, r: number): Primitive => {
     const rot = quats[r]!;
@@ -618,11 +841,11 @@ export function rupturePosed(
       : rotatePrimAbout(q, rot, plan.pieces[r]!.origin);
     return shift(moved2, offsets[r]!);
   };
-  const prims = posed.prims.map((q, i) => {
+  const prims = deformedPrims.map((q, i) => {
     const r = primRegion[i]!;
     return r >= 0 ? place(q, r) : q;
   });
-  const bonePrims = (posed.bonePrims ?? []).map((q, i) => {
+  const bonePrims = deformedBones.map((q, i) => {
     const r = boneRegion[i]!;
     return r >= 0 ? place(q, r) : q;
   });
@@ -632,15 +855,16 @@ export function rupturePosed(
   // a huge sphere tangent to the cut plane that removes everything on the far
   // side, which is correct PER PIECE (a chunk is its own marched field) but
   // deletes the NEIGHBOUR when both pieces share one field. The rib reveal is
-  // therefore a real PEEL (`TearTuning.chestPeelM`) that lifts the chest band
-  // far enough to tear the smin bridge and clear the cage, and the residual
-  // between the drawn (rounded) cut and the spawned (capped, flat) face is the
-  // sub-centimetre overhang the piece set already documented — measured in
-  // RESULTS.md Task 3 rather than asserted.
+  // therefore the NON-RIGID SLOUGH pulling the flesh off the standing skeleton
+  // (`sloughBoneKeep`), and the residual between the drawn (rounded) cut and
+  // the spawned (capped, flat) face is the sub-centimetre overhang the piece
+  // set already documented — measured in RESULTS.md rather than asserted.
   return {
     body: { ...posed, prims, bonePrims, clusters: refitClusters(prims, posed.clusters) },
     offsets,
     quats,
     angVels,
+    deformedPrims,
+    deformedBones,
   };
 }

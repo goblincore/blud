@@ -145,13 +145,14 @@ export interface GibPiece {
    *  twin of `srcPrims`. Empty on a flesh piece. */
   srcBones?: number[];
   /**
-   * FLESH PEEL scale, applied by the rupture along the plan's own cranial axis
-   * (`GibPlan.up`) at `TearTuning.chestPeelM * peel`. Set on the ribcage-bearing
-   * chest band (body-to-gib task 3) so it lifts a few extra centimetres off the
-   * ribcage and leaves the cage standing in a real gap, rather than the whole
-   * chest merely translating with the blast push. Along the BODY's axis, not
-   * the push, so the reveal does not depend on where the bundle landed.
-   * Absent (0) means "no peel", which is every piece but `torso.chest`.
+   * RIBBAGE-BAND weight, 0..1-ish. The rupture scales a region's NON-RIGID
+   * slough (gib-tear.ts) by `1 + TearTuning.peelSloughK * peel`, so the
+   * ribcage-bearing chest band (set to 1 here, body-to-gib task 3) sloughs
+   * hardest and leaves the cage standing while the abdomen/pelvis (-0.7)
+   * counterweight it. Absent (0) means "neutral", every piece but the torso
+   * bands. NOTE: this is NOT a rigid translation — the rejected 0.3 m cranial
+   * chest lift was removed on 2026-09-16 after the owner reported the chest
+   * rising into the head.
    */
   peel?: number;
   /**
@@ -645,18 +646,17 @@ function splitTorso(ips: IdxPrim[], up: Vec3, centre: Vec3): GibGroups {
   if (pelvic.length > 0) parts.push({ id: 'torso.pelvis', ips: pelvic });
 
   const groups = assemble(parts, up, 'torso');
-  // TORSO STRETCH (see GibPiece.peel). The cranial half LIFTS off the cage and
-  // the caudal half is driven the other way, so the ribcage band is emptied
-  // rather than just translated: measured on the marched field, lifting the
-  // chest alone still left the gut's top edge across ribs 4-6, and the exposed
-  // band was three ribs. The counter-peel on the abdomen opens the band to the
-  // whole cage and is the brief stretch the contract asks for.
+  // RIBBAGE-BAND WEIGHTING (see GibPiece.peel). The cranial half is weighted
+  // UP for the rupture's non-rigid slough and the caudal half down, so the flesh
+  // over the cage is drawn off harder than the gut/pelvis and the band is
+  // emptied by the shape change. This replaced the 2026-09-16 task-3 rigid
+  // cranial lift, which the owner rejected: the chest rose into the head and
+  // read as a swollen head. The counterweight on the abdomen is what keeps the
+  // whole band opening over the cage rather than the chest merely translating.
   //
-  // The PELVIS takes the SAME counter-peel as the abdomen so the peel cancels
-  // across their shared cut: the abdomen/pelvis seam then opens on the blast
-  // push exactly as it always did. (Moving the abdomen down alone closed that
-  // cut — measured, `gib-tear.test.ts` "opens every cut" caught it.) The price
-  // is a visible stretch at the hips, which is the same "brief flesh stretch".
+  // The PELVIS takes the SAME counterweight as the abdomen so the weighting
+  // cancels across their shared cut — the abdomen/pelvis seam then opens on the
+  // blast push exactly as it always did.
   for (const p of groups.pieces) {
     if (p.part === 'torso.chest') p.peel = 1;
     else if (p.part === 'torso.abdomen' || p.part === 'torso.pelvis') p.peel = -0.7;
@@ -986,5 +986,51 @@ export function displaceGibPieces(
       if (w !== undefined) out.spinAngVel = w;
     }
     return out;
+  });
+}
+
+/**
+ * RE-TARGET a plan's pieces onto the geometry the body was LAST DRAWN with.
+ *
+ * WHY THIS EXISTS (2026-09-16, the non-rigid slough). The rupture no longer
+ * moves whole regions rigidly: it deforms the flesh ENDPOINTS, so the shape on
+ * screen at release is not the clean plan's shape. Spawning the plan's own
+ * (clean) prims would snap every piece back to the intact pose on the frame the
+ * chunks appear — the "no return to the original pose" contract. The caller
+ * passes the rupture frame's per-region sloughed prim arrays and this maps each
+ * piece's SOURCED prims through them by index.
+ *
+ * THE CAPS ARE THE ONE EXCEPTION. `GibPiece.prims`/`bones` are [sourced...,
+ * cap] and `srcPrims`/`srcBones` name only the sourced rows, so any trailing
+ * `sub` cap (or an unsourced organ/bone row) has no index and keeps its own
+ * geometry. Caps are subtractive cut spheres welded to the region's cut plane;
+ * the region's own rigid transform carries them with the flesh, which is the
+ * same residual relationship the capped partition already documents.
+ *
+ * `radius` is recomputed from the drawn geometry because it feeds the live
+ * chunk's broad-phase extent and support. The origin is NOT recomputed: it is
+ * the region pivot the drawn rotation and the chunk rotation share.
+ */
+export function retargetGibPieces(
+  pieces: readonly GibPiece[],
+  flesh: readonly Primitive[],
+  bones: readonly Primitive[],
+): GibPiece[] {
+  return pieces.map(g => {
+    const prims = g.prims.map((p, j) => {
+      const src = g.srcPrims?.[j];
+      return src !== undefined && flesh[src] ? { ...flesh[src]! } : { ...p };
+    });
+    const nextBones = g.bones.map((p, j) => {
+      const src = g.srcBones?.[j];
+      return src !== undefined && bones[src] ? { ...bones[src]! } : { ...p };
+    });
+    const solid = [...prims, ...nextBones].filter(p => p.op !== 'sub');
+    return {
+      ...g,
+      prims,
+      bones: nextBones,
+      radius: solid.length > 0 ? extentOf(solid, g.origin) : g.radius,
+    };
   });
 }

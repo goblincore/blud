@@ -587,6 +587,14 @@ describe('post-aa fisheye in the blit', () => {
 // sim time, drops off-screen/behind-camera feeds, and is inert while off.
 // ---------------------------------------------------------------------------
 describe('blast refraction (bounded experiment)', () => {
+  /** A camera at the origin looking down -Z; f = 1 at 90 deg vertical FOV. */
+  const camera = () => {
+    const cam = new THREE.PerspectiveCamera(90, 1, 0.1, 100);
+    cam.updateMatrixWorld(true);
+    cam.matrixWorldInverse.copy(cam.matrixWorld).invert();
+    return cam;
+  };
+
   it('is off and empty by default, and inert in the parity path', () => {
     const { renderer, calls } = stubRenderer();
     const post = createPostAa(renderer);
@@ -596,7 +604,7 @@ describe('blast refraction (bounded experiment)', () => {
     post.setSmear(0);
     calls.setRenderTarget = 0;
     calls.render = 0;
-    post.pushBlastDistort(0.5, 0.5, 0.2, 0.08);
+    post.pushBlastDistort([0, 0, -4], 1, 0.03);
     // A push while off records it, but the pass stays inactive.
     expect(post.blastDistortCount).toBe(1);
     post.render(() => {});
@@ -608,8 +616,9 @@ describe('blast refraction (bounded experiment)', () => {
     const post = createPostAa(renderer);
     post.setFxaa(false);
     post.setSmear(0);
+    post.setBlastDistortCamera(camera());
     post.setBlastDistort(true);
-    post.pushBlastDistort(0.4, 0.6, 0.25, 0.09);
+    post.pushBlastDistort([0, 0, -4], 1, 0.03);
     const sink = { target: null as THREE.RenderTarget | null };
     post.addSink({ setOutputTarget(t) { sink.target = t; } });
     post.render(() => {});
@@ -620,35 +629,39 @@ describe('blast refraction (bounded experiment)', () => {
   it('keeps at most FOUR blasts and drops the oldest', () => {
     const { renderer } = stubRenderer();
     const post = createPostAa(renderer);
-    for (let i = 0; i < 7; i++) post.pushBlastDistort(0.1 + i * 0.1, 0.5, 0.2, 0.08);
+    for (let i = 0; i < 7; i++) post.pushBlastDistort([0, 0, -4 - i * 0.5], 1, 0.03);
     expect(post.blastDistortCount).toBe(4);
   });
 
-  it('drops off-screen, behind-camera and degenerate feeds', () => {
+  it('drops non-finite and degenerate feeds at the push', () => {
     const { renderer } = stubRenderer();
     const post = createPostAa(renderer);
-    post.pushBlastDistort(NaN, 0.5, 0.2, 0.08);
-    post.pushBlastDistort(0.5, NaN, 0.2, 0.08);
-    post.pushBlastDistort(-0.9, 0.5, 0.2, 0.08);
-    post.pushBlastDistort(0.5, 1.9, 0.2, 0.08);
-    post.pushBlastDistort(0.5, 0.5, 0, 0.08);
-    post.pushBlastDistort(0.5, 0.5, 0.2, 0);
+    post.pushBlastDistort([NaN, 0, -4], 1, 0.03);
+    post.pushBlastDistort([0, 0, -4], NaN, 0.03);
+    post.pushBlastDistort([0, 0, -4], 0, 0.03);
+    post.pushBlastDistort([0, 0, -4], 1, 0);
+    post.pushBlastDistort([0, 0, -4], 1, NaN);
     expect(post.blastDistortCount).toBe(0);
+    // A behind-camera blast is STORED (there is no camera at the feed), and the
+    // per-frame projection drops it: `projectBlastRefraction` is the gate, and
+    // its own behind-camera contract is pinned in blast-refraction.test.ts.
+    post.pushBlastDistort([0, 0, 4], 1, 0.03);
+    expect(post.blastDistortCount).toBe(1);
   });
 
   it('ages on sim time and expires, so a frozen capture stays deterministic', () => {
     const { renderer } = stubRenderer();
     const post = createPostAa(renderer);
-    post.pushBlastDistort(0.5, 0.5, 0.2, 0.08);
+    post.pushBlastDistort([0, 0, -4], 1, 0.03);
     expect(post.blastDistortCount).toBe(1);
     post.stepBlastDistort(1 / 60);
     expect(post.blastDistortCount).toBe(1);
-    // Long enough to exceed the ~0.34 s life regardless of its exact value.
-    post.stepBlastDistort(0.5);
+    // Long enough to exceed the ~0.55 s life regardless of its exact value.
+    post.stepBlastDistort(0.7);
     expect(post.blastDistortCount).toBe(0);
     // Wall-clock is never consulted: a second identical run gives the same
     // state for the same dt sequence.
-    post.pushBlastDistort(0.5, 0.5, 0.2, 0.08);
+    post.pushBlastDistort([0, 0, -4], 1, 0.03);
     post.stepBlastDistort(0.1);
     expect(post.blastDistortCount).toBe(1);
   });
@@ -675,5 +688,8 @@ describe('blast refraction (bounded experiment)', () => {
     expect(POST_AA_BLIT_WGSL).toMatch(/if \(l > dist\.y\) \{ off = off \* \(dist\.y \/ l\); \}/);
     // Inert gate.
     expect(POST_AA_BLIT_WGSL).toContain('if (dist.w < 0.5 || dist.x < 0.5) { return uvIn; }');
+    // The BROAD shell, not the old sin^4 hairline.
+    expect(POST_AA_BLIT_WGSL).toContain('let ring = s * s;');
+    expect(POST_AA_BLIT_WGSL).not.toContain('ring = ring * ring;');
   });
 });
