@@ -22,7 +22,7 @@ import type { EncounterOrder } from './encounter-director';
 import type { BuildResult } from '../build-body';
 import { bindRig, applyRig, headQuatOf, impulseAt, type BoundRig } from '../rig-bind';
 import {
-  TEAR_TUNING, tearPosed, type TearState, type TearTuning,
+  TEAR_TUNING, rupturePosed, type RuptureFrame, type RupturePlan, type TearState, type TearTuning,
 } from '../gib-tear';
 import { constrainRigBends, stepRig } from '../rig';
 import { relaxRopeConstraints } from '../collapse';
@@ -305,16 +305,18 @@ export interface ZombieActor {
   readonly posed: () => BuildResult;
   readonly boundRig: () => BoundRig;
   /**
-   * BEGIN THE PRE-TEAR WINDOW (gib-tear.ts): for `sec` seconds the march draws
-   * the flesh pushed outward from `at` and shuddering, and `posed()` stays
-   * clean. The caller gibs the body when `tearing()` goes false — that is the
-   * whole hand-off, and it is why the actor owns the clock rather than the
-   * wiring: the window has to end on a frame the actor has already stepped, or
-   * the pieces spawn from a pose the body was never drawn in.
+   * BEGIN THE RUPTURE WINDOW (gib-tear.ts): for `sec` seconds the march draws
+   * the body with its planned regions pulled apart — flesh leading, bones
+   * lagging — and `posed()` stays clean. `plan` is the reusable piece plan
+   * prepared once from the clean posed body; the caller gibs the body with the
+   * SAME plan at the offsets `tearFrame()` reports when `tearing()` goes false.
+   * The actor owns the clock rather than the wiring because the window has to
+   * end on a frame the actor has already stepped, or the chunks spawn from a
+   * pose the body was never drawn in.
    */
-  beginTear(at: Vec3, falloff: number): void;
+  beginTear(at: Vec3, falloff: number, plan: RupturePlan): void;
   /**
-   * ADVANCE THE WINDOW BY `dt` AND RE-DRAW THE BENT BODY. The CALLER owns this
+   * ADVANCE THE WINDOW BY `dt` AND RE-DRAW THE BODY. The CALLER owns this
    * clock (game-main steps it for the bodies it has queued to gib) rather than
    * the body's own step, because the step is skippable — `?frozen=1`, and any
    * future distance/room culling of bodies — and a window whose clock stops is
@@ -325,6 +327,14 @@ export interface ZombieActor {
   readonly tearing: () => boolean;
   /** Seconds into the window (0 when not tearing) — the capture rig's clock. */
   readonly tearAge: () => number;
+  /**
+   * The body as LAST drawn by the rupture and the per-region offsets it was
+   * built with, or null when not tearing. This is the hand-off: the caller
+   * displaces the plan it passed to `beginTear` by `offsets` and spawns that,
+   * so the displayed region and the spawned piece are the same prims at the
+   * same transform.
+   */
+  tearFrame(): RuptureFrame | null;
   /** Drop the window immediately without gibbing (a reset, a bake pause). */
   endTear(): void;
   /** Retune the window for this actor (the page's `?gibtear*` knobs). */
@@ -528,21 +538,35 @@ export function createZombieActor(opts: {
   let current = body;
   let posed = body;
   /**
-   * THE PRE-TEAR WINDOW (gib-tear.ts). While this is set the march draws a BENT
-   * copy of the posed body — the shockwave pushing the flesh outward from the
-   * blast, shuddering — and `posed` itself stays the CLEAN body, so the
-   * resolver, the wound ring and the gib's own piece set all still see the body
-   * as it is. Null on every frame of ordinary play.
+   * THE RUPTURE WINDOW (gib-tear.ts). While this is set the march draws the
+   * body with its planned regions pulled apart and the flesh leading the bones,
+   * and `posed` itself stays the CLEAN body, so the resolver, the wound ring
+   * and the gib's own piece plan all still see the body as it is. Null on every
+   * frame of ordinary play.
    */
   let tear: TearState | null = null;
+  /**
+   * The piece plan this body is separating into, prepared ONCE from the clean
+   * posed body when the window begins. The visualization (`rupturePosed`) and
+   * the released chunks both read THIS plan, so the region drawn is the region
+   * spawned.
+   */
+  let tearPlan: RupturePlan | null = null;
   /** Per-actor copy of the window's shape, so a live seam can retune it. */
   let tearTuning: TearTuning = TEAR_TUNING;
   /**
-   * THE BODY THE MARCH SHOULD DRAW THIS FRAME: the posed body, bent by the tear
-   * window when one is running. EVERY view upload goes through here, so the
-   * distortion cannot appear on one path and be missing on another.
+   * THE BODY THE MARCH SHOULD DRAW THIS FRAME: the posed body with its planned
+   * regions pulled apart when a rupture is running. EVERY view upload goes
+   * through here, so the separation cannot appear on one path and be missing on
+   * another.
    */
-  const drawnPose = (): BuildResult => (tear ? tearPosed(posed, tear, tearTuning) : posed);
+  const ruptureFrameNow = (): RuptureFrame | null =>
+    tear && tearPlan ? rupturePosed(posed, tearPlan, tear, tearTuning) : null;
+  const drawnPose = (): BuildResult => ruptureFrameNow()?.body ?? posed;
+  /** A body mid-rupture is DOOMED: it is already dead for gameplay (the blast
+   *  resolved the kill), it just has not finished coming apart. It must not keep
+   *  attacking or moving while it tears. */
+  let doomed = false;
   let bodyYaw = 0;
   const soldierDamage = opts.profile?.name === 'soldier';
   let soldierFatal = false;
@@ -844,6 +868,18 @@ export function createZombieActor(opts: {
           canMoveTo: (target: Vec3) => clearCombatMove(state.wander.pos, target, opts.furniture),
         } : {}),
       });
+      // A DOOMED BODY KEEPS NO AGENDA. It is already dead for gameplay — the
+      // blast resolved that on impact — it just has not finished coming apart,
+      // so it must not keep chasing, swinging or shooting during the window.
+      // The mind still ran (its own debug/timing stays coherent); its verdict is
+      // overridden here, which keeps this to ONE place rather than teaching the
+      // brain a new "rupturing" state.
+      if (doomed) {
+        think = {
+          ...think, target: null, halt: true,
+          attack: null, fire: false, weaponUp: false, contact: false,
+        };
+      }
       if (encounterOrder) {
         if (encounterOrder.moveTarget) think={...think,target:encounterOrder.moveTarget,halt:think.committed && think.halt,
           faceHeading:encounterOrder.visible?think.faceHeading:null,fire:false,weaponUp:false};
@@ -1344,8 +1380,15 @@ export function createZombieActor(opts: {
     beginHits,
     endHits,
     posed: () => posed,
-    beginTear: (at: Vec3, falloff: number) => {
+    beginTear: (at: Vec3, falloff: number, plan: RupturePlan) => {
       tear = { at: [...at] as Vec3, falloff, age: 0 };
+      tearPlan = plan;
+      doomed = true;
+      // A live body whose procedure skeleton is packed folds it bare while the
+      // flesh pulls away (counts2.y, march.wgsl.ts) — the mesh-skeleton path
+      // (`setPackBones(false)`, the forward default) draws its bones separately
+      // and needs none of this. Harmless when there are no packed bones.
+      view.setBonesBare(true);
     },
     // FALSE THE MOMENT THE WINDOW IS SPENT, and the state itself is left in
     // place until the caller ends it: `tearing()` is the wiring's "gib it now"
@@ -1356,16 +1399,22 @@ export function createZombieActor(opts: {
       tear = { ...tear, age: tear.age + dt };
       // AND THE VIEW IS RE-UPLOADED HERE. The window has to survive a frame the
       // actor did not step — `?frozen=1` skips the whole body block, and the
-      // capture rigs run frozen — or a body mid-tear is (a) never drawn bent and
-      // (b) NEVER GIBBED, because the clock that ends its window would never
-      // advance. Uploading the same pose twice on a frame the actor DID step is
-      // one wasted pack for one body; a body stuck mid-tear forever is a hole in
-      // the world.
+      // capture rigs run frozen — or a body mid-rupture is (a) never drawn
+      // separating and (b) NEVER GIBBED, because the clock that ends its window
+      // would never advance. Uploading the same pose twice on a frame the actor
+      // DID step is one wasted pack for one body; a body stuck mid-rupture
+      // forever is a hole in the world.
       view.update(drawnPose(), current);
     },
     tearing: () => tear !== null && tear.age < tearTuning.sec,
     tearAge: () => tear?.age ?? 0,
-    endTear: () => { tear = null; },
+    tearFrame: ruptureFrameNow,
+    endTear: () => {
+      tear = null; tearPlan = null; doomed = false;
+      // Restore the ordinary packed-bone layout for a body returned to play
+      // (a reset mid-window). A retired body keeps its view hidden either way.
+      view.setBonesBare(false);
+    },
     setTearTuning: (t: Partial<TearTuning>) => { tearTuning = { ...tearTuning, ...t }; },
     motionFrame: () => lastFrame,
     sinceFire: () => state.sinceFire,
@@ -1380,7 +1429,7 @@ export function createZombieActor(opts: {
     },
     mind: () => mind,
     kind: mind.kind,
-    meleeCapable: () => soldierDamage ? missingLimbs().armR : mind.meleeCapable,
+    meleeCapable: () => !doomed && (soldierDamage ? missingLimbs().armR : mind.meleeCapable),
     setRingInput: (hasToken: boolean, drift: -1 | 0 | 1) => {
       ringToken = hasToken;
       ringDrift = drift;
@@ -1388,8 +1437,8 @@ export function createZombieActor(opts: {
     forceSwing: (phase: number, side: 'L' | 'R', variant: SwingVariant) => {
       forcedSwing = { phase, side, variant };
     },
-    engagedForCrowd: () => lastEngaged,
-    committed: () => lastCommitted,
+    engagedForCrowd: () => !doomed && lastEngaged,
+    committed: () => !doomed && lastCommitted,
     step,
     corpseBakeEligible: () => soldierDamage && state.collapse.phase === 'settled',
     refineEligible: () => state.collapse.phase === 'standing',

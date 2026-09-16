@@ -1,33 +1,41 @@
 // src/lab/sdf-zombie/gib-tear.ts
 //
-// THE PRE-TEAR WINDOW — the shockwave bending the flesh BEFORE the body comes
-// apart. This is the owner's own idea, from the review that started the gib
-// pass: *"the SDF flesh potentially allows us to distort the flesh from the
-// shockwave and jiggle and then rip away"*.
+// THE RUPTURE WINDOW — the body coming apart BEFORE it becomes chunks.
 //
-// WHY IT IS A JS PRIM DISPLACEMENT AND NOT A SHADER TERM. The design note
-// claimed "the march already supports per-prim displacement (wounds carve, the
-// rig re-solves, bodyFlash/impulse paths exist), so a pre-tear window is a
-// per-frame uniform plus a shader term". Checked against the source: `wounds
-// carve` is per-WOUND (radial around a crater, and a gibbing blast stamps none),
-// `the rig re-solves` is true and per-frame, `bodyFlash` is colour-only, and
-// there is NO uniform anywhere that displaces the marched field per prim — a
-// new one would have to be threaded through `mapBody`'s 19-parameter positional
-// signature, its 13 call sites, the material binding order and the chunk-view
-// copy list. The pose path, by contrast, ALREADY re-packs every prim row and
-// recomputes every cull bound every frame (rig-bind.applyRig -> view.update ->
-// pack.ts), so displacing the POSED prims costs one pure function and nothing
-// else: the pack, the proxy box, the cluster spheres and the hull all follow by
-// construction. That is the same idiom fpv-mode's hand jiggle has shipped since
-// the goblin arms.
+// This replaces the earlier "pre-tear" window, and the difference is the whole
+// point of the owner's report. The old window bent the flesh outward from the
+// blast and then RELAXED BACK TO THE CLEAN POSE at the end of its 100 ms, so the
+// last frame before release was the intact body again and the body "instantly
+// became separate chunks" on the next. Increasing that timer would only hold an
+// intact body longer. The owner asked for the opposite: *"the SDF flesh ...
+// distort the flesh from the shockwave and jiggle and then rip away"* — the
+// regions that separate must be the regions that fly, continuously, with no
+// return to the pose.
 //
-// IT IS VIEW-ONLY, ON PURPOSE. `tearPosed` returns a COPY; the actor's own
-// `posed()` stays clean, so everything that reads the body for real — the
-// resolver's traces, the wound ring, and the gib's own piece set — sees the
-// body as it actually is. The distortion is what the MARCH draws for the length
-// of the window, and nothing else. That also makes the hand-off exact: the
-// pieces are spawned from the clean posed body, so the frame the body
-// disappears is the frame the pieces are, in the same pose.
+// WHAT IS NORMALISED. `ruptureProgress` runs 0..1 over `sec` (default 0.2 s),
+// monotonic, reaching exactly 1 at release — never back to 0. At progress 0 the
+// body is bit-identical to the posed body, so the onset silhouette is exact; at
+// progress 1 the regions are at the offsets the chunks are spawned with, so the
+// displayed frame and the first chunk frame agree.
+//
+// REGION RIGID, NOT PER-PRIM SMOOTH. Each piece of the gib plan (gib-parts.ts)
+// moves as ONE region: every prim it owns — flesh, bone and the cut caps that
+// have no source index — is translated by the same offset. That is what makes
+// the hand-off exact (the drawn region IS the spawned region, same prims, same
+// transform) and what opens real seams between neighbours. A per-prim field
+// would smear the cut planes apart and put the caps somewhere else.
+//
+// BONES LAG THE FLESH. A bone region follows `boneLag` of the flesh push and has
+// no seam of its own, so the flesh pulls away from the skeleton and the ribs
+// become the surface in the gap instead of riding out with the meat.
+//
+// VIEW-ONLY, LIKE THE OLD WINDOW: `posed()` stays clean. The actor's own body is
+// what the resolver, the wound ring and the piece plan read; only the march
+// draws the rupture. When the window closes the caller spawns the SAME plan at
+// the SAME offsets (see game-main's spawnScheduledGibs), so there is no second
+// partition and no second pose to drift.
+//
+// PURE. No Date.now, no Math.random: the capture rigs compare runs.
 import type { BuildResult } from './build-body';
 import type { Primitive, Vec3 } from './types';
 import { refitClusters } from './rig-bind';
@@ -36,118 +44,207 @@ import { add, len, scale, sub } from './vec';
 /**
  * The window's shape. ALL of it is in one place so a look pass has one place to
  * look, and every value is a `number` rather than a literal: the page retunes
- * this per actor (`ZombieActor.setTearTuning`), and `as const` would have made
- * `{ sec: 0.08 }` a type error against a field typed as `0.1`.
+ * this per actor (`ZombieActor.setTearTuning`).
  */
 export interface TearTuning {
-  /** Seconds the body is bent by the blast before it becomes pieces. */
+  /** Seconds the regions take to separate before they become pieces.
+   *  Contract range 0.15–0.25; 0.2 is the agreed start. */
   sec: number;
-  /** Peak displacement, metres, at the surface facing the blast. */
+  /** Peak displacement, metres, of the flesh at the surface facing the blast. */
   amplitudeM: number;
   /** Distance over which the displacement decays, metres: e^{-d/falloff}. */
   falloffM: number;
-  /** Shudder rate. The window is ~0.1 s, so ~2 cycles read as a shudder;
+  /** Shudder rate. The window is ~0.2 s, so a few cycles read as a shudder;
    *  much more than that reads as a buzz. */
   jiggleHz: number;
   /** Shudder depth as a fraction of the displacement. Under 1 so the push is
    *  never inward: the flesh is driven OUT from the blast and wobbles on the
    *  way, it does not pump. */
   jiggleAmp: number;
+  /**
+   * Extra separation of two neighbours along their own cut, metres. This is
+   * what makes a SEAM rather than a translation: two pieces at nearly the same
+   * distance from the blast would otherwise move almost identically and stay
+   * welded. Reference scale: the cut overhang is a blend radius, a few mm.
+   */
+  seamM: number;
+  /**
+   * Fraction of the flesh push a BONE region follows, 0..1. Below 1 the
+   * skeleton lags the meat and is exposed in the opening gaps — that lag, not
+   * a separate reveal timer, is the rib exposure.
+   */
+  boneLag: number;
+  /** Displacement scale for the head region, so the face stays recognizable
+   *  rather than being thrown with the chest. */
+  headDamp: number;
 }
 
 export const TEAR_TUNING: TearTuning = {
-  /** Seconds the body is bent by the blast before it becomes pieces. */
-  sec: 0.1,
-  /** Peak displacement, metres, at the surface facing the blast. */
-  amplitudeM: 0.035,
-  /** Distance over which the displacement decays, metres: e^{-d/falloff}. */
-  falloffM: 0.6,
-  /** Shudder rate. The window is ~0.1 s, so ~2 cycles read as a shudder and
-   *  more than that reads as a buzz. */
-  jiggleHz: 20,
-  /** Shudder depth as a fraction of the displacement. Under 1 so the push is
-   *  never inward: the flesh is driven OUT from the blast and wobbles on the
-   *  way, it does not pump. */
-  jiggleAmp: 0.4,
+  sec: 0.2,
+  amplitudeM: 0.055,
+  falloffM: 0.8,
+  jiggleHz: 22,
+  jiggleAmp: 0.35,
+  seamM: 0.05,
+  boneLag: 0.3,
+  headDamp: 0.3,
 };
 
 const TAU = Math.PI * 2;
-/** Golden angle, in radians — spreads consecutive prims' shudder phases as
+/** Golden angle, in radians — spreads consecutive regions' shudder phases as
  *  evenly as any constant can, with no RNG (this path must stay deterministic:
  *  the capture rigs compare runs). */
 const PHASE_STEP = 2.399963229728653;
 
 /**
- * The window's envelope, 0..1. Snaps OUT over the first fifth — a blast arrives
- * as an impulse, not a fade — and then relaxes linearly to nothing at the end,
- * so the last frame of the window is the body's own shape and the hand-off to
- * the pieces has no snap to hide.
+ * The window's progress, 0..1. Monotonic, and it reaches exactly 1 at `sec` and
+ * STAYS there — the old envelope's return to 0 was the "there is no tear, the
+ * body just becomes chunks" bug. The shape is ease-out: a blast arrives as an
+ * impulse, so most of the separation is present early (0.31 by 35 ms on a
+ * 200 ms window) and the rest is spent opening seams and finishing the pull.
  *
- * `t` is seconds since the tear began; anything outside the window is 0, so a
- * caller that forgets to stop calling this is inert rather than wrong.
+ * `t` is seconds since the rupture began; anything at or outside the window is
+ * clamped, so a caller that keeps calling past the end is inert, not wrong.
  */
-export function tearAmount(t: number, sec: number = TEAR_TUNING.sec): number {
+export function ruptureProgress(t: number, sec: number = TEAR_TUNING.sec): number {
   if (!(sec > 0) || !(t > 0)) return 0;
-  if (t >= sec) return 0;
+  if (t >= sec) return 1;
   const u = t / sec;
-  // smoothstep(0, 0.2, u): 0 at the blast, 1 by a fifth of the window.
-  const rise = u <= 0 ? 0 : u >= 0.2 ? 1 : (u / 0.2) * (u / 0.2) * (3 - 2 * (u / 0.2));
-  return rise * (1 - u);
+  return 1 - (1 - u) * (1 - u);
 }
 
-/** A live tear: where the blast was, how hard it hit, how long it has run. */
+/** A live rupture: where the blast was, how hard it hit, how long it has run. */
 export interface TearState {
   at: Vec3;
-  /** The resolver's falloff at this body, 0..1 — a grazing blast barely bends. */
+  /** The resolver's falloff at this body, 0..1 — a grazing blast barely moves. */
   falloff: number;
   age: number;
 }
 
+/** The slice of a gib piece the rupture needs: an identity, a centre and the
+ *  source indices of the prims/bones it owns. `GibPiece` satisfies it. */
+export interface RuptureRegion {
+  origin: Vec3;
+  limb: string;
+  /** The chunk kind the region will become ('limb' | 'bone' | …). Only 'bone'
+   *  matters to the rupture (it lags the flesh); typed as string so a
+   *  `GibPiece`'s `ChunkKind` is assignable without a wider coupling. */
+  kind: string;
+  srcPrims?: number[];
+  srcBones?: number[];
+}
+
+/** A cut between two regions, `a` keeping the `-n` side, indexed by region. */
+export interface RuptureCut {
+  a: number;
+  b: number;
+  at: Vec3;
+  n: Vec3;
+}
+
+/** The reusable region plan: the pieces plus the cuts between them. A
+ *  `gib-parts.ts` `GibPlan` satisfies this structurally. */
+export interface RupturePlan {
+  pieces: readonly RuptureRegion[];
+  cuts: readonly RuptureCut[];
+}
+
+const ZERO: Vec3 = [0, 0, 0];
+
 /**
- * Bend a POSED body away from the blast. Pure: `posed` is not mutated, and the
- * returned body's cluster spheres are refitted so the march's outer bound still
- * covers the displaced flesh (an under-covering bound CULLS — see
- * refitClusters).
+ * The rigid offset of every region at the current age. Pure and deterministic:
+ * the same (plan, tear, tuning) always gives the same offsets, and progress 0
+ * gives the zero vector for every region (so the body is its own pose).
  *
- * Every prim is translated along its own outward direction by
- * `amplitude × e^{-dist/falloffM} × shudder`, so the flesh nearest the blast
- * moves most and the body is stretched away from it — which is what a
- * shockwave does to a body it is passing through, and what the shudder then
- * makes read as meat rather than as a slide.
+ * Every region is pushed away from the blast with the falloff weight, shuddered
+ * by its own phase, damped on the head and lagged on bones. Then each cut adds
+ * a symmetric ±n separation to its two sides, which is what actually opens the
+ * seam between two neighbours the blast pushes almost equally.
  */
-export function tearPosed(
-  posed: BuildResult,
+export function ruptureOffsets(
+  plan: RupturePlan,
   tear: TearState,
   tuning: TearTuning = TEAR_TUNING,
-): BuildResult {
-  const amount = tearAmount(tear.age, tuning.sec);
-  if (amount <= 0) return posed;
-  const amp = tuning.amplitudeM * Math.max(0, Math.min(1, tear.falloff)) * amount;
-  if (amp <= 0) return posed;
-
+): Vec3[] {
+  const p = ruptureProgress(tear.age, tuning.sec);
+  const fall = Math.max(0, Math.min(1, tear.falloff));
+  const n = plan.pieces.length;
+  if (p <= 0) return new Array(n).fill(ZERO);
   const phase0 = TAU * tuning.jiggleHz * tear.age;
-  let index = 0;
-  const displace = (p: Primitive): Primitive => {
-    const centre: Vec3 = [(p.a[0] + p.b[0]) / 2, (p.a[1] + p.b[1]) / 2, (p.a[2] + p.b[2]) / 2];
-    const off = sub(centre, tear.at);
+  const offsets: Vec3[] = new Array(n);
+  for (let r = 0; r < n; r++) {
+    const region = plan.pieces[r]!;
+    const off = sub(region.origin, tear.at);
     const dist = len(off);
-    // A prim sitting exactly ON the blast point has no outward direction. The
-    // body's up is the only axis that means anything there, and it only has to
-    // be stable — a division by zero here would put a NaN in the prim rows and
-    // blank the body rather than bend it.
+    // A region sitting exactly ON the blast point has no outward direction.
+    // The body's up is the only axis that means anything there, and it only has
+    // to be stable — a division by zero would put a NaN in the prim rows and
+    // blank the body rather than move it.
     const dir: Vec3 = dist < 1e-5 ? [0, 1, 0] : scale(off, 1 / dist);
-    const weight = Math.exp(-dist / tuning.falloffM);
-    const shudder = 1 + tuning.jiggleAmp * Math.sin(phase0 + index * PHASE_STEP);
-    const d = amp * weight * shudder;
-    index++;
-    if (d <= 0) return p;
-    const shift = scale(dir, d);
-    return { ...p, a: add(p.a, shift), b: add(p.b, shift) };
-  };
+    // The shudder is never negative enough to reverse the push (jiggleAmp < 1),
+    // so the flesh is driven OUT, never sucked in.
+    const shudder = 1 + tuning.jiggleAmp * Math.sin(phase0 + r * PHASE_STEP);
+    let mag = tuning.amplitudeM * Math.exp(-dist / tuning.falloffM) * fall * p * shudder;
+    if (region.kind === 'bone') mag *= tuning.boneLag;
+    if (region.limb === 'head') mag *= tuning.headDamp;
+    let v = scale(dir, mag);
+    for (const cut of plan.cuts) {
+      if (cut.a !== r && cut.b !== r) continue;
+      const cw = Math.exp(-len(sub(cut.at, tear.at)) / tuning.falloffM) * fall;
+      const s = tuning.seamM * cw * p;
+      v = cut.a === r ? add(v, scale(cut.n, -s)) : add(v, scale(cut.n, s));
+    }
+    offsets[r] = v;
+  }
+  return offsets;
+}
 
-  const prims = posed.prims.map(displace);
-  // Bones ride the same push, each by its own weight: leave them behind and a
-  // femur pokes out of a thigh that has just moved 3.5 cm.
-  const bonePrims = (posed.bonePrims ?? []).map(displace);
-  return { ...posed, prims, bonePrims, clusters: refitClusters(prims, posed.clusters) };
+/** The body the march should draw this frame, plus the region offsets it was
+ *  built with — the exact pair the chunk spawn reuses. */
+export interface RuptureFrame {
+  body: BuildResult;
+  offsets: Vec3[];
+}
+
+/**
+ * Bend a POSED body away from the blast by moving every planned region as a
+ * rigid unit. Pure: `posed` is not mutated. Returns the posed body itself (and
+ * zero offsets) when the window has not started, so progress 0 is bit-identical
+ * to the pre-blast frame — the exact onset silhouette the contract requires.
+ *
+ * Every upload goes through here, so the cull bounds have to cover the moved
+ * prims or the march CULLS them (an under-covering bound does not draw a wrong
+ * shape, it deletes geometry — see refitClusters).
+ */
+export function rupturePosed(
+  posed: BuildResult,
+  plan: RupturePlan,
+  tear: TearState,
+  tuning: TearTuning = TEAR_TUNING,
+): RuptureFrame {
+  const offsets = ruptureOffsets(plan, tear, tuning);
+  let moved = false;
+  for (const o of offsets) if (o[0] !== 0 || o[1] !== 0 || o[2] !== 0) { moved = true; break; }
+  if (!moved) return { body: posed, offsets };
+
+  const primRegion = new Int32Array(posed.prims.length).fill(-1);
+  const boneRegion = new Int32Array((posed.bonePrims ?? []).length).fill(-1);
+  for (let r = 0; r < plan.pieces.length; r++) {
+    const region = plan.pieces[r]!;
+    for (const i of region.srcPrims ?? []) if (i >= 0 && i < primRegion.length) primRegion[i] = r;
+    for (const i of region.srcBones ?? []) if (i >= 0 && i < boneRegion.length) boneRegion[i] = r;
+  }
+  const shift = (q: Primitive, o: Vec3): Primitive => ({ ...q, a: add(q.a, o), b: add(q.b, o) });
+  const prims = posed.prims.map((q, i) => {
+    const r = primRegion[i]!;
+    return r >= 0 ? shift(q, offsets[r]!) : q;
+  });
+  const bonePrims = (posed.bonePrims ?? []).map((q, i) => {
+    const r = boneRegion[i]!;
+    return r >= 0 ? shift(q, offsets[r]!) : q;
+  });
+  return {
+    body: { ...posed, prims, bonePrims, clusters: refitClusters(prims, posed.clusters) },
+    offsets,
+  };
 }

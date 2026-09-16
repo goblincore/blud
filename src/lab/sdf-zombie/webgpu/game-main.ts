@@ -147,7 +147,7 @@ import {
   FLIGHT_TUNING, type FlightState,
 } from '../dynamite-flight';
 import { gibAll, gibAllPieces, type ChunkGroup } from '../sever';
-import { gibParts, type GibBoneRelease, type GibPiece } from '../gib-parts';
+import { displaceGibPieces, gibParts, gibPlan, type GibBoneRelease, type GibPiece, type GibPlan } from '../gib-parts';
 import { createBurstLayer, createStickProp, type BurstLayer, type StickProp } from './fpv-view';
 import { createExplosionVfx, type ExplosionVfx } from './explosion-vfx';
 import {
@@ -3584,6 +3584,13 @@ async function main() {
   function rebuildCast(): void {
     soldierCorpses?.dispose();
     encounter.clear(); encounterHomes.clear();
+    // DRAIN IN-FLIGHT RUPTURES FIRST. Their actors are about to be disposed and
+    // their queued impulses reference chunks from the pool that is also being
+    // rebuilt; a window that survived the reset would gib a stale actor or
+    // launch a stale id on the next tick.
+    for (const q of pendingGibs) q.actor.endTear();
+    pendingGibs.length = 0;
+    pendingGibImpulses.length = 0;
     // The old source views are disposed below; refill from the rebuilt cast.
     crowdSourceView.clear();
     crowdVolumeBound.clear();
@@ -5070,16 +5077,20 @@ async function main() {
   // and was capped in the first pass, the carve's feeds a continuous depth and
   // is capped at the point where the shader's slab stops binding.
   setCarveProbeCapEnabled(DYN_PARAMS.get('carvecap') !== '0');
-  // THE PRE-TEAR WINDOW (dev-note §3c, gib-tear.ts): seconds the body is bent by
-  // the blast before it becomes pieces. 0 restores the old behaviour — the body
-  // is swapped for debris in the very frame the bundle goes off — and is the
-  // A/B for whether the window reads. It is the owner's own idea and the last
-  // piece of the transition design that was not built.
-  let gibTearSec = parseFloatParam(DYN_PARAMS.get('gibtear'), { min: 0, max: 0.4 }) ?? 0.1;
-  /** The pre-tear window's SHAPE, page-level so the panel owns it and every
+  // THE RUPTURE WINDOW (gib-tear.ts): seconds the body's planned regions take
+  // to pull apart before they become chunks. 0 restores the old behaviour — the
+  // body is swapped for debris in the very frame the bundle goes off — and is
+  // the A/B for whether the window reads. Contract range 0.15–0.25 s; 0.2 is
+  // the agreed start.
+  let gibTearSec = parseFloatParam(DYN_PARAMS.get('gibtear'), { min: 0, max: 0.4 }) ?? 0.2;
+  /** The rupture window's SHAPE, page-level so the panel owns it and every
    *  actor is pushed the same values (ZombieActor keeps its own copy, which is
-   *  what makes a capture reproducible per body). */
-  const tearShape = { amplitudeM: 0.035, jiggleAmp: 0.4 };
+   *  what makes a capture reproducible per body). `amplitudeM`/`jiggleAmp` are
+   *  the panel knobs; the rest are the coherent defaults for a body that
+   *  separates into real regions (see gib-tear.ts's TearTuning). */
+  const tearShape = {
+    amplitudeM: 0.055, jiggleAmp: 0.35, seamM: 0.05, boneLag: 0.3, headDamp: 0.3,
+  };
   /** The cheapest tier's piece count — one chunk per limb cluster, i.e. the
    *  shape a body falls back to when the pool cannot afford anything better.
    *  Held back for every body still to come in a blast, so no body is left with
@@ -5971,13 +5982,16 @@ async function main() {
    * same fixed step that integrates the chunks (see stepPendingGibImpulses). */
   const pendingGibImpulses: { id: number; vel: Vec3; delay: number }[] = [];
   /**
-   * BODIES IN THEIR PRE-TEAR WINDOW, waiting to become pieces. A gibbed body is
-   * NOT retired at the blast any more: it stays in the world, drawn bent, for
-   * `gibTearSec`, and the pieces are spawned when its own window closes. The
-   * actor owns that clock (see ZombieActor.beginTear); this queue only remembers
-   * what to do when it stops.
+   * BODIES IN THEIR RUPTURE WINDOW, waiting to become pieces. A gibbed body is
+   * NOT retired at the blast any more: it stays in the world, drawn with its
+   * planned regions separating, for `gibTearSec`, and the pieces are spawned
+   * when its own window closes. The actor owns that clock (see
+   * ZombieActor.beginTear); this queue remembers the plan and where to release.
+   * The plan is prepared ONCE here and handed BOTH to the visualization (via
+   * beginTear) and to `gibActor` at release, so the drawn regions and the
+   * spawned chunks cannot disagree.
    */
-  const pendingGibs: { actor: ZombieActor; at: Vec3; falloff: number }[] = [];
+  const pendingGibs: { actor: ZombieActor; at: Vec3; falloff: number; plan: GibPlan }[] = [];
   /**
    * Apply every impulse whose delay has run out. A piece whose chunk was
    * recycled out of the pool in the meantime is simply gone — the queue is
@@ -6393,8 +6407,13 @@ async function main() {
     if (gibTearSec <= 0) return; // caller gibs immediately
     if (a.tearing() || pendingGibs.some(q => q.actor === a)) return;
     a.setTearTuning({ sec: gibTearSec, ...tearShape });
-    a.beginTear(at, falloff);
-    pendingGibs.push({ actor: a, at: [at[0], at[1], at[2]], falloff });
+    // THE PLAN IS PREPARED ONCE, from the clean posed body, and reused for the
+    // whole visualization AND the release. `gibParts` would re-derive it at
+    // release from a body the rupture has already moved; the plan's own region
+    // offsets are what the chunks are spawned with instead (spawnScheduledGibs).
+    const plan = gibPlan(a.posed(), { bones: gibBones });
+    a.beginTear(at, falloff, plan);
+    pendingGibs.push({ actor: a, at: [at[0], at[1], at[2]], falloff, plan });
   }
 
   /**
@@ -6411,8 +6430,8 @@ async function main() {
     if (pendingGibs.length === 0) return 0;
     // THE WINDOW'S CLOCK LIVES HERE, not in the body's step: a frozen capture
     // (`?frozen=1`) skips the whole body block, and a body whose clock stopped
-    // would never become pieces. Stepping it here also means the bent body is
-    // re-drawn on frames the body itself did not step.
+    // would never become pieces. Stepping it here also means the separating
+    // body is re-drawn on frames the body itself did not step.
     for (const q of pendingGibs) q.actor.stepTear(dt);
     const ready = pendingGibs.filter(q => !q.actor.tearing());
     if (ready.length === 0) return 0;
@@ -6423,7 +6442,15 @@ async function main() {
       const i = pendingGibs.indexOf(q);
       if (i >= 0) pendingGibs.splice(i, 1);
       const allowance = gibAllowance(remaining, left);
-      const made = gibActor(q.actor, q.at, q.falloff, allowance);
+      // THE HAND-OFF: the plan's own regions at the offsets the body was last
+      // DRAWN with. `stepTear` above uploaded exactly this frame (age >= sec,
+      // progress 1), so the region on screen and the spawned piece are the same
+      // prims at the same transform — no second partition, no snap.
+      const frame = q.actor.tearFrame();
+      const planned = frame
+        ? { pieces: displaceGibPieces(q.plan.pieces, frame.offsets), body: frame.body }
+        : { pieces: q.plan.pieces, body: q.actor.posed() };
+      const made = gibActor(q.actor, q.at, q.falloff, allowance, planned);
       q.actor.endTear();
       remaining = gibDebit(remaining, made);
       left--;
@@ -6478,13 +6505,25 @@ async function main() {
    *     this function now does — are the prerequisite, which is the order the
    *     design asks for them in anyway.
    */
-  function gibActor(a: ZombieActor, at: Vec3, falloff: number, budget: number): number {
-    const posedBody = a.posed();
+  function gibActor(
+    a: ZombieActor,
+    at: Vec3,
+    falloff: number,
+    budget: number,
+    planned?: { pieces: GibPiece[]; body: BuildResult },
+  ): number {
+    // A planned hand-off comes from the rupture: `body` is the pose the body was
+    // last DRAWN in and `pieces` are the plan's own regions at the same offsets,
+    // so the tier ladder below re-derives from the drawn pose if it must degrade
+    // rather than from the clean one.
+    const posedBody = planned?.body ?? a.posed();
     const torsoC = posedBody.clusters.find(c => c.limb === 'torso')?.center
       ?? ([at[0], at[1], at[2]] as Vec3);
     const clusters: GibPiece[] = (gibMode === 'pieces' ? gibAllPieces(posedBody, torsoC) : gibAll(posedBody))
       .chunks.map(g => ({ ...g, part: g.limb, kind: 'limb' as const }));
-    const pieces: GibPiece[] = gibMode === 'parts' ? gibParts(posedBody, { bones: gibBones }) : clusters;
+    const pieces: GibPiece[] = gibMode === 'parts'
+      ? (planned?.pieces ?? gibParts(posedBody, { bones: gibBones }))
+      : clusters;
     const template = { uniforms: a.view.uniforms, volumeTexture: a.view.volumeTexture };
     // IS THIS BODY ACTUALLY GOING OUT AS SPRITES? Both halves matter: the mode
     // has to be on AND there has to be an atlas to cut a frame from. Resolved
@@ -9540,6 +9579,9 @@ function performBenchAction(a: BenchAction): void {
       player.pitch = 0;
       return true;
     },
+    /** The player's ground position — a capture rig needs it to stand beside a
+     *  chosen body rather than detonate across the room. Read-only. */
+    playerPos: () => [...player.pos] as Vec3,
     /** Enclosure key under the player's feet ('room1'..'room5', tunnel, 'void'). */
     room: () => enclosureKeyAt(player.pos[0], player.pos[2]),
     /** Hand-step N frames at dt seconds each; stops the rAF loop first. */
@@ -13188,6 +13230,16 @@ function performBenchAction(a: BenchAction): void {
       // about the frames.
       tearing: actors.filter(x => x.tearing()).length,
       tearAge: actors.reduce((m, x) => Math.max(m, x.tearAge()), 0),
+      // THE RUPTURE'S ACTUAL DISPLACEMENT, in metres: the largest region offset
+      // any body is being drawn with right now. A rig asserts that the body is
+      // separating (this climbs from 0 to the peak) instead of trusting a
+      // frame's silhouette.
+      ruptureMaxM: actors.reduce((m, x) => {
+        const f = x.tearFrame();
+        if (!f) return m;
+        for (const o of f.offsets) m = Math.max(m, Math.hypot(o[0], o[1], o[2]));
+        return m;
+      }, 0),
       pendingGibs: pendingGibs.length,
       scheduledGibBodies: dynScheduledGibBodies, scheduledGibPieces: dynScheduledGibPieces,
       lastGibParts: dynLastGibParts, lastGibHeld: dynLastGibHeld,

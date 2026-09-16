@@ -16,7 +16,7 @@ import soldierSrc from './characters/soldier.blob?raw';
 import { compileBlob } from './blob-compile';
 import { parseBlob } from './blob-parse';
 import { buildBody } from './build-body';
-import { gibParts, type GibPiece } from './gib-parts';
+import { gibParts, gibPlan, displaceGibPieces, type GibPiece } from './gib-parts';
 import { sdBody, type Body } from './validate';
 import type { BuildResult } from './build-body';
 import type { Vec3 } from './types';
@@ -236,5 +236,75 @@ describe('gibParts — the cut does not eat the body', () => {
     // the residual is the smooth-min fillet lost at a seam, which is a
     // thinner-looking waist, not a hole.
     expect(miss.worst).toBeLessThan(0.03);
+  });
+});
+
+describe('gibPlan — the reusable region identity', () => {
+  const plan = gibPlan(zombie);
+
+  it('names every live flesh prim exactly once, and non-flesh only as a source', () => {
+    const seen = new Map<number, number>();
+    for (const p of plan.pieces) {
+      for (const i of p.srcPrims ?? []) seen.set(i, (seen.get(i) ?? 0) + 1);
+    }
+    const live = zombie.prims.map((p, i) => (!p.dead ? i : -1)).filter(i => i >= 0);
+    expect(seen.size).toBe(live.length);
+    expect([...seen.values()].every(n => n === 1)).toBe(true);
+    for (const i of seen.keys()) expect(zombie.prims[i]!.dead).not.toBe(true);
+  });
+
+  it('names every live bone prim once, and the organs as their own region', () => {
+    const bones = plan.pieces.flatMap(p => p.srcBones ?? []);
+    // `srcBones` covers the bone pieces AND the gut coil, which rides
+    // `bonePrims` as `op: 'organ'` and is a region of its own.
+    const live = zombie.bonePrims
+      .map((p, i) => ((p.op === 'bone' || p.op === 'organ') && !p.dead ? i : -1))
+      .filter(i => i >= 0);
+    expect(bones.slice().sort((a, b) => a - b)).toEqual(live);
+    // No organ is buried inside a bone piece: the bone release is bone-only.
+    for (const p of plan.pieces.filter(q => q.kind === 'bone')) {
+      for (const i of p.srcBones ?? []) expect(zombie.bonePrims[i]!.op).toBe('bone');
+    }
+  });
+
+  it('caps carry no source index but ride their piece', () => {
+    const chest = plan.pieces.find(p => p.part === 'torso.chest')!;
+    expect(chest.srcPrims!.length).toBeGreaterThan(0);
+    // The cap is extra geometry: srcPrims indexes only the body's own prims,
+    // while prims includes the `sub` carve.
+    expect(chest.prims.filter(p => p.op === 'sub').length).toBeGreaterThan(0);
+    expect(chest.prims.length).toBeGreaterThan(chest.srcPrims!.length);
+  });
+
+  it('every cut links two real pieces and separates them', () => {
+    expect(plan.cuts.length).toBeGreaterThan(0);
+    for (const c of plan.cuts) {
+      expect(c.a).toBeGreaterThanOrEqual(0);
+      expect(c.b).toBeGreaterThan(c.a);
+      expect(c.b).toBeLessThan(plan.pieces.length);
+      // The normal is unit-ish and the two sides are different regions.
+      expect(plan.pieces[c.a]!.part).not.toBe(plan.pieces[c.b]!.part);
+    }
+  });
+
+  it('displaceGibPieces is identity at zero and a rigid translation otherwise', () => {
+    const zero = displaceGibPieces(plan.pieces, plan.pieces.map(() => [0, 0, 0] as Vec3));
+    expect(JSON.stringify(zero)).toBe(JSON.stringify(plan.pieces));
+    const off: Vec3 = [0.1, -0.02, 0.03];
+    const moved = displaceGibPieces(plan.pieces, plan.pieces.map(() => off));
+    for (let i = 0; i < plan.pieces.length; i++) {
+      const a = plan.pieces[i]!;
+      const b = moved[i]!;
+      expect(b.origin).toEqual([a.origin[0] + off[0], a.origin[1] + off[1], a.origin[2] + off[2]]);
+      for (let k = 0; k < a.prims.length; k++) {
+        const p0 = a.prims[k]!, p1 = b.prims[k]!;
+        for (let j = 0; j < 3; j++) {
+          expect(p1.a[j]! - p0.a[j]!).toBeCloseTo(off[j]!, 12);
+          expect(p1.b[j]! - p0.b[j]!).toBeCloseTo(off[j]!, 12);
+        }
+      }
+      // The plan it was handed is untouched.
+      expect(a.origin).toEqual(plan.pieces[i]!.origin);
+    }
   });
 });

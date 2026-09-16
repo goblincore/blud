@@ -1,12 +1,16 @@
 // src/lab/sdf-zombie/gib-tear.test.ts
 //
-// The pre-tear window is a LOOK effect, so what is testable about it is not
-// "does it look right" but the three things that would make it a bug:
-//   * the envelope ends at 0, so the hand-off to the pieces has no snap to hide;
-//   * nothing NaNs, and the cull bound COVERS the bent flesh (an under-covering
+// The rupture window is a LOOK effect, so what is testable about it is not
+// "does it look right" but the properties that make it a coherent transition
+// rather than a second death scheduler:
+//   * progress is MONOTONIC 0..1 and STOPS at 1 — the old envelope relaxed back
+//     to the clean pose, which is the "the body just becomes chunks" bug;
+//   * progress 0 is bit-identical to the posed body (the onset silhouette);
+//   * regions move rigidly, flesh leads bone, the head is damped, cuts open;
+//   * nothing NaNs, the cull bound COVERS the moved flesh (an under-covering
 //     bound does not draw a wrong shape, it deletes geometry);
 //   * it does not mutate the body it was handed — the actor's own `posed()` is
-//     what the resolver, the wound ring and the piece set read.
+//     what the resolver, the wound ring and the piece plan read.
 import { describe, it, expect } from 'vitest';
 import zombieSrc from './characters/zombie.blob?raw';
 import { compileBlob } from './blob-compile';
@@ -14,79 +18,100 @@ import { parseBlob } from './blob-parse';
 import { buildBody } from './build-body';
 import { applyRig, bindRig } from './rig-bind';
 import { sdBody } from './validate';
-import { TEAR_TUNING, tearAmount, tearPosed, type TearState } from './gib-tear';
+import { gibPlan } from './gib-parts';
+import {
+  TEAR_TUNING, ruptureProgress, rupturePosed, ruptureOffsets, type TearState,
+} from './gib-tear';
 import { len, sub } from './vec';
 import type { Vec3 } from './types';
 
 const body = buildBody(compileBlob(parseBlob(zombieSrc)));
 const posed = applyRig(body, bindRig(body), 0);
 const torso = posed.clusters.find(c => c.limb === 'torso')!;
+const plan = gibPlan(posed);
 const tearAt = (age: number, falloff = 1): TearState => ({ at: torso.center, falloff, age });
 
-describe('tearAmount', () => {
-  it('snaps out, relaxes to ZERO, and is inert outside its window', () => {
-    expect(tearAmount(0)).toBe(0);
-    // A blast arrives as an impulse: most of the displacement is there in the
-    // first fifth of the window.
-    expect(tearAmount(TEAR_TUNING.sec * 0.2)).toBeGreaterThan(0.7);
-    // ...and the LAST frame is the body's own shape again, so the hand-off to
-    // the pieces is a continuation rather than a snap back.
-    expect(tearAmount(TEAR_TUNING.sec)).toBe(0);
-    expect(tearAmount(TEAR_TUNING.sec * 2)).toBe(0);
-    expect(tearAmount(-1)).toBe(0);
-    expect(tearAmount(0, 0)).toBe(0);
-    // It never dips below zero: the flesh is pushed OUT, never sucked in.
-    for (let t = 0; t <= TEAR_TUNING.sec; t += TEAR_TUNING.sec / 200) {
-      expect(tearAmount(t)).toBeGreaterThanOrEqual(0);
+describe('ruptureProgress', () => {
+  it('rises monotonically, reaches 1 at sec, then STAYS there', () => {
+    expect(ruptureProgress(0)).toBe(0);
+    expect(ruptureProgress(-1)).toBe(0);
+    expect(ruptureProgress(0, 0)).toBe(0);
+    // A blast arrives as an impulse: a third of the separation by 35 ms of a
+    // 200 ms window.
+    expect(ruptureProgress(TEAR_TUNING.sec * 0.175)).toBeGreaterThan(0.25);
+    // ...and it CLAMPS at 1 instead of relaxing back to 0.
+    expect(ruptureProgress(TEAR_TUNING.sec)).toBe(1);
+    expect(ruptureProgress(TEAR_TUNING.sec * 2)).toBe(1);
+    let prev = 0;
+    for (let t = 0; t <= TEAR_TUNING.sec * 1.5; t += TEAR_TUNING.sec / 500) {
+      const p = ruptureProgress(t);
+      expect(p).toBeGreaterThanOrEqual(0);
+      expect(p).toBeLessThanOrEqual(1);
+      expect(p).toBeGreaterThanOrEqual(prev);
+      prev = p;
     }
   });
 });
 
-describe('tearPosed', () => {
-  it('bends the flesh AWAY from the blast, most where the blast is', () => {
-    const bent = tearPosed(posed, tearAt(TEAR_TUNING.sec * 0.2));
-    const before = new Map(posed.prims.map((p, i) => [i, p]));
-    let maxMove = 0;
-    let moved = 0;
-    for (let i = 0; i < posed.prims.length; i++) {
-      const a = before.get(i)!;
-      const b = bent.prims[i]!;
-      const d = len(sub(b.a, a.a));
-      if (d > 1e-6) moved++;
-      if (d > maxMove) maxMove = d;
-      // Every prim moves along its own outward direction from the blast.
-      const outward = sub([(a.a[0] + a.b[0]) / 2, (a.a[1] + a.b[1]) / 2, (a.a[2] + a.b[2]) / 2], torso.center);
-      const motion = sub(b.a, a.a);
-      if (len(outward) > 1e-4 && len(motion) > 1e-6) {
-        const cos = (outward[0] * motion[0] + outward[1] * motion[1] + outward[2] * motion[2])
-          / (len(outward) * len(motion));
-        expect(cos).toBeGreaterThan(0.99);
-      }
+describe('rupturePosed', () => {
+  it('progress 0 is the posed body, bit for bit', () => {
+    const frame = rupturePosed(posed, plan, tearAt(0));
+    expect(JSON.stringify(frame.body)).toBe(JSON.stringify(posed));
+    for (const o of frame.offsets) expect(o).toEqual([0, 0, 0]);
+  });
+
+  it('moves flesh AWAY from the blast and bone LESS than flesh', () => {
+    const { offsets } = rupturePosed(posed, plan, tearAt(TEAR_TUNING.sec));
+    const at = (part: string) => offsets[plan.pieces.findIndex(p => p.part === part)]!;
+    const chest = at('torso.chest');
+    const cage = at('bone.cage');
+    expect(len(chest)).toBeGreaterThan(0.005);
+    // The chest is pushed away from the blast (outward from `torso.center`).
+    const chestOrigin = plan.pieces.find(p => p.part === 'torso.chest')!.origin;
+    const outward = sub(chestOrigin, torso.center);
+    expect(chest[0] * outward[0] + chest[1] * outward[1] + chest[2] * outward[2]).toBeGreaterThan(0);
+    // The ribcage LAGS the meat around it — that lag is the exposure.
+    expect(len(cage)).toBeLessThan(len(chest));
+    expect(len(cage)).toBeGreaterThan(0);
+  });
+
+  it('damps the head so the face stays recognizable', () => {
+    const { offsets } = rupturePosed(posed, plan, tearAt(TEAR_TUNING.sec));
+    const head = offsets[plan.pieces.findIndex(p => p.part === 'head')]!;
+    // No cut touches the head and its damping is applied last, so it can never
+    // exceed the damped amplitude.
+    const cap = TEAR_TUNING.amplitudeM * TEAR_TUNING.headDamp * (1 + TEAR_TUNING.jiggleAmp) + 1e-9;
+    expect(len(head)).toBeGreaterThan(0);
+    expect(len(head)).toBeLessThanOrEqual(cap);
+  });
+
+  it('opens every cut: the two sides separate along the cut normal', () => {
+    const { offsets } = rupturePosed(posed, plan, tearAt(TEAR_TUNING.sec));
+    expect(plan.cuts.length).toBeGreaterThan(0);
+    for (const cut of plan.cuts) {
+      const rel = sub(offsets[cut.b]!, offsets[cut.a]!);
+      const along = rel[0] * cut.n[0] + rel[1] * cut.n[1] + rel[2] * cut.n[2];
+      expect(along).toBeGreaterThan(0);
     }
-    expect(moved).toBeGreaterThan(posed.prims.length * 0.8);
-    // A few centimetres, on a body whose torso radius is ~0.19 m: a bend, not a
-    // relocation.
-    expect(maxMove).toBeGreaterThan(0.004);
-    expect(maxMove).toBeLessThan(0.05);
   });
 
-  it('a graze barely bends and a zero falloff does nothing', () => {
-    const hard = tearPosed(posed, tearAt(TEAR_TUNING.sec * 0.2, 1));
-    const graze = tearPosed(posed, tearAt(TEAR_TUNING.sec * 0.2, 0.1));
-    const none = tearPosed(posed, tearAt(TEAR_TUNING.sec * 0.2, 0));
-    const move = (b: typeof posed) => Math.max(...posed.prims.map((p, i) => len(sub(b.prims[i]!.a, p.a))));
-    expect(move(graze)).toBeLessThan(move(hard) * 0.2);
-    expect(move(none)).toBe(0);
+  it('a graze barely moves and a zero falloff does nothing', () => {
+    const hard = ruptureOffsets(plan, tearAt(TEAR_TUNING.sec, 1));
+    const graze = ruptureOffsets(plan, tearAt(TEAR_TUNING.sec, 0.1));
+    const none = ruptureOffsets(plan, tearAt(TEAR_TUNING.sec, 0));
+    const mag = (os: Vec3[]) => Math.max(...os.map(o => len(o)));
+    expect(mag(graze)).toBeLessThan(mag(hard) * 0.2);
+    expect(mag(none)).toBe(0);
   });
 
-  it('the cull bound still COVERS the bent flesh', () => {
+  it('the cull bound still COVERS the moved flesh', () => {
     // The trap this guards is documented in extent.ts: a bound that stops
     // covering does not draw the wrong shape, it CULLS, and the symptom is a
     // round see-through hole in the body.
-    const bent = tearPosed(posed, tearAt(TEAR_TUNING.sec * 0.2));
-    for (const c of bent.clusters) {
-      const members = bent.prims.slice(c.start, c.start + c.count);
-      for (const m of members) {
+    const frame = rupturePosed(posed, plan, tearAt(TEAR_TUNING.sec));
+    for (const c of frame.body.clusters) {
+      for (let i = c.start; i < c.start + c.count; i++) {
+        const m = frame.body.prims[i]!;
         for (const e of [m.a, m.b]) {
           expect(len(sub(e, c.center))).toBeLessThanOrEqual(c.radius + 1e-9);
         }
@@ -94,27 +119,30 @@ describe('tearPosed', () => {
     }
   });
 
-  it('never NaNs, and keeps the field marching', () => {
-    // A prim sitting exactly on the blast point has no outward direction; if
-    // that divides by zero the prim rows go NaN and the body renders black
-    // rather than bent.
+  it('never NaNs, even with the blast exactly on a prim', () => {
     const onAPrim = posed.prims[0]!;
-    const centred = tearPosed(posed, { at: onAPrim.a, falloff: 1, age: TEAR_TUNING.sec * 0.2 });
-    for (const p of [...centred.prims, ...(centred.bonePrims ?? [])]) {
+    const frame = rupturePosed(posed, plan, { at: onAPrim.a, falloff: 1, age: TEAR_TUNING.sec });
+    for (const p of [...frame.body.prims, ...(frame.body.bonePrims ?? [])]) {
       for (const v of [...p.a, ...p.b]) expect(Number.isFinite(v)).toBe(true);
     }
     const q: Vec3 = [torso.center[0], torso.center[1] + 0.05, torso.center[2]];
-    expect(Number.isFinite(sdBody(q, centred))).toBe(true);
+    expect(Number.isFinite(sdBody(q, frame.body))).toBe(true);
   });
 
-  it('does not mutate the body it was handed', () => {
+  it('is pure — the posed body is not mutated and two calls agree', () => {
     const snapshot = JSON.stringify(posed);
-    tearPosed(posed, tearAt(TEAR_TUNING.sec * 0.2));
+    const a = rupturePosed(posed, plan, tearAt(TEAR_TUNING.sec * 0.5));
+    const b = rupturePosed(posed, plan, tearAt(TEAR_TUNING.sec * 0.5));
     expect(JSON.stringify(posed)).toBe(snapshot);
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
   });
 
-  it('at the END of the window it is the body again', () => {
-    const after = tearPosed(posed, tearAt(TEAR_TUNING.sec));
-    expect(JSON.stringify(after)).toBe(JSON.stringify(posed));
+  it('is deterministic as time advances (same age, same frame)', () => {
+    const ages = [0.02, 0.05, 0.1, 0.15, 0.2];
+    for (const age of ages) {
+      const f1 = rupturePosed(posed, plan, tearAt(age));
+      const f2 = rupturePosed(posed, plan, tearAt(age));
+      expect(JSON.stringify(f1)).toBe(JSON.stringify(f2));
+    }
   });
 });
