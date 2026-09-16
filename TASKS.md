@@ -22,6 +22,10 @@
   [diagnosis, census, captures, limits](docs/dev-notes/2026-09-16-playtest-followups/ANATOMY-HEADS.md).
 - [ ] Then: blast shockwave A/B + integrated rupture review (task 4); NotBlood launch dispersion (task 3);
   floating/upright settled pieces (later follow-up, not this task).
+- [~] Offline reusable gib assets 2026-09-16 (candidate `codex/offline-gib-assets-task-1`, not merged).
+  Task 1 generator + schema + committed zombie/soldier sets (43 pieces, 80,656 verts, 8.4 MB, 12 mm cells),
+  bone pieces included, `npm run gib:assets[ :check]` incremental/stale check, 10 focused tests; no runtime
+  wiring yet. [handoff, sizes, approximation, binding contract](docs/dev-notes/2026-09-16-offline-gib-assets/REPORT.md).
 
 ## Neural upscale (ESPCN family) — flesh 400×300 → 800×600 — 2026-09-11
 

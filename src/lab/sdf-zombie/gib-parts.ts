@@ -184,6 +184,11 @@ export interface GibCutLink {
   b: number;
   at: Vec3;
   n: Vec3;
+  /** The cut's overhang in metres (`GibCut.overhang`) — each side keeps this
+   *  much past the plane so the smin fillet is not deleted. Optional so
+   *  hand-built test plans keep compiling; the offline gib asset carries it so
+   *  a loader can reproduce the cut boundary, not just the plane. */
+  overhang?: number;
 }
 
 /**
@@ -420,7 +425,7 @@ export function gibBlastPlan(body: BuildResult, opts: GibBlastOptions = {}): Gib
   const up = bodyUp(body);
   const out: { p: GibPiece; rank: number }[] = [];
   /** Cut links by PIECE REFERENCE, remapped to indices after the sort. */
-  const cutRefs: { a: GibPiece; b: GibPiece; at: Vec3; n: Vec3 }[] = [];
+  const cutRefs: { a: GibPiece; b: GibPiece; at: Vec3; n: Vec3; overhang?: number }[] = [];
 
   for (const c of body.clusters) {
     if (!c.alive) continue;
@@ -443,7 +448,7 @@ export function gibBlastPlan(body: BuildResult, opts: GibBlastOptions = {}): Gib
     for (const l of groups.cuts) {
       const a = groups.pieces[l.a];
       const b = groups.pieces[l.b];
-      if (a && b) cutRefs.push({ a, b, at: l.at, n: l.n });
+      if (a && b) cutRefs.push({ a, b, at: l.at, n: l.n, overhang: l.overhang });
     }
   }
 
@@ -489,7 +494,7 @@ export function gibBlastPlan(body: BuildResult, opts: GibBlastOptions = {}): Gib
     const a = index.get(c.a);
     const b = index.get(c.b);
     if (a === undefined || b === undefined) continue;
-    cuts.push({ a: Math.min(a, b), b: Math.max(a, b), at: c.at, n: c.n });
+    cuts.push({ a: Math.min(a, b), b: Math.max(a, b), at: c.at, n: c.n, overhang: c.overhang });
   }
   cuts.sort((x, y) => x.a - y.a || x.b - y.b);
   return { pieces: ranked, cuts, up };
@@ -561,7 +566,7 @@ export function gibTierPlan(
     const a = index.get(full.pieces[c.a]!);
     const b = index.get(full.pieces[c.b]!);
     if (a === undefined || b === undefined) continue;
-    cuts.push({ a: Math.min(a, b), b: Math.max(a, b), at: c.at, n: c.n });
+    cuts.push({ a: Math.min(a, b), b: Math.max(a, b), at: c.at, n: c.n, overhang: c.overhang });
   }
   cuts.sort((x, y) => x.a - y.a || x.b - y.b);
   return {
@@ -731,7 +736,7 @@ function assemble(
     });
     // The link this piece forms with the NEXT one, in piece indices. One piece
     // per part, so part i is piece i.
-    if (above) links.push({ a: i, b: i + 1, at: above.at, n: above.n });
+    if (above) links.push({ a: i, b: i + 1, at: above.at, n: above.n, overhang: above.overhang });
   }
   return { pieces: out, cuts: links };
 }
