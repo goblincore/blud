@@ -22,7 +22,8 @@ import type { EncounterOrder } from './encounter-director';
 import type { BuildResult } from '../build-body';
 import { bindRig, applyRig, headQuatOf, impulseAt, type BoundRig } from '../rig-bind';
 import {
-  TEAR_TUNING, rupturePosed, type RuptureFrame, type RupturePlan, type TearState, type TearTuning,
+  TEAR_TUNING, ruptureGore, rupturePosed, ruptureProgress,
+  type RuptureFrame, type RupturePlan, type TearState, type TearTuning,
 } from '../gib-tear';
 import { constrainRigBends, stepRig } from '../rig';
 import { relaxRopeConstraints } from '../collapse';
@@ -1389,6 +1390,8 @@ export function createZombieActor(opts: {
       // (`setPackBones(false)`, the forward default) draws its bones separately
       // and needs none of this. Harmless when there are no packed bones.
       view.setBonesBare(true);
+      // The material ramp starts at 0: the recoil frames are the intact body.
+      view.setGoreStrength(0);
     },
     // FALSE THE MOMENT THE WINDOW IS SPENT, and the state itself is left in
     // place until the caller ends it: `tearing()` is the wiring's "gib it now"
@@ -1405,6 +1408,10 @@ export function createZombieActor(opts: {
       // DID step is one wasted pack for one body; a body stuck mid-rupture
       // forever is a hole in the world.
       view.update(drawnPose(), current);
+      // ...and the material ramp rides the SAME clock, so at release the drawn
+      // body is already wearing the gore strength the spawned chunks carry and
+      // there is no one-frame material switch (see ruptureGore).
+      view.setGoreStrength(ruptureGore(ruptureProgress(tear.age, tearTuning.sec)));
     },
     tearing: () => tear !== null && tear.age < tearTuning.sec,
     tearAge: () => tear?.age ?? 0,
@@ -1414,6 +1421,9 @@ export function createZombieActor(opts: {
       // Restore the ordinary packed-bone layout for a body returned to play
       // (a reset mid-window). A retired body keeps its view hidden either way.
       view.setBonesBare(false);
+      // ...and drop the material ramp: a reset mid-window returns the body to
+      // ordinary play, so it must not keep the gore it was tearing into.
+      view.setGoreStrength(0);
     },
     setTearTuning: (t: Partial<TearTuning>) => { tearTuning = { ...tearTuning, ...t }; },
     motionFrame: () => lastFrame,

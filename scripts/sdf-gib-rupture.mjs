@@ -206,6 +206,9 @@ for (let i = 0; i <= NFRAMES; i++) {
   const sim = {
     tears: d.tearing, tearAge: d.tearAge, ruptureMaxM: d.ruptureMaxM,
     pendingGibs: d.pendingGibs, held: d.pendingPieceImpulses, delays: d.pendingPieceDelays,
+    // Task 3: the region count the window is DRAWN with and the tier it will
+    // spawn — compare against `tier`/`spawned` after release.
+    pendingPlanPieces: d.pendingPlanPieces, pendingTiers: d.pendingTiers,
     live: chunks.live, baked: chunks.baked, cap: chunks.cap,
     tier: d.lastGibTier, spawned: d.lastGibSpawned, heldBack: d.lastGibHeld,
     parts: d.lastGibParts,

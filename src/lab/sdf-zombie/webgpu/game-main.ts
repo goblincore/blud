@@ -147,7 +147,7 @@ import {
   FLIGHT_TUNING, type FlightState,
 } from '../dynamite-flight';
 import { gibAll, gibAllPieces, type ChunkGroup } from '../sever';
-import { displaceGibPieces, gibParts, gibPlan, type GibBoneRelease, type GibPiece, type GibPlan } from '../gib-parts';
+import { displaceGibPieces, gibParts, gibPlan, gibTierPlan, type GibBoneRelease, type GibPiece, type GibPlan } from '../gib-parts';
 import { createBurstLayer, createStickProp, type BurstLayer, type StickProp } from './fpv-view';
 import { createExplosionVfx, type ExplosionVfx } from './explosion-vfx';
 import {
@@ -5023,7 +5023,22 @@ async function main() {
    */
   const gibBudget = () => (gibRenderMode !== 'march'
     ? gibSpriteLiveCap
-    : Math.max(1, liveChunks.length + Math.max(0, maxChunks - chunkViews.length)));
+    : Math.max(1, liveChunks.length + Math.max(0, maxChunks - chunkViews.length) - gibReserved()));
+
+  /**
+   * SLOTS A PENDING RUPTURE IS HOLDING (body-to-gib task 3). The tier is chosen
+   * when the body is SCHEDULED, and `gibActor` is locked to that plan at
+   * release, so the views it will need must not be spent by a later blast in
+   * the meantime. Counting them out of `gibBudget()` makes a second blast (or
+   * an immediate `gibtear=0` gib) budget around them, which is what keeps the
+   * preview and the release the same shape without raising any cap. The slot is
+   * freed when the body is spliced out of `pendingGibs` at release.
+   */
+  const gibReserved = () => {
+    let n = 0;
+    for (const q of pendingGibs) n += q.reserve;
+    return n;
+  };
 
   /** What one body may take this blast. Identical in both modes EXCEPT that the
    *  sprite path reserves no tier floor: the floor exists to guarantee every
@@ -5991,7 +6006,13 @@ async function main() {
    * beginTear) and to `gibActor` at release, so the drawn regions and the
    * spawned chunks cannot disagree.
    */
-  const pendingGibs: { actor: ZombieActor; at: Vec3; falloff: number; plan: GibPlan }[] = [];
+  const pendingGibs: {
+    actor: ZombieActor; at: Vec3; falloff: number; plan: GibPlan;
+    /** The tier chosen at SCHEDULE time; the release is locked to it. */
+    tier: string;
+    /** Chunk views this plan needs, held out of `gibBudget()` until release. */
+    reserve: number;
+  }[] = [];
   /**
    * Apply every impulse whose delay has run out. A piece whose chunk was
    * recycled out of the pool in the meantime is simply gone — the queue is
@@ -6323,10 +6344,15 @@ async function main() {
         // resolver has already decided, and nothing severs a body that is
         // about to stop existing.
         if (gibTearSec > 0) {
-          // The window takes it from here: `spawnScheduledGibs` does the pool
-          // arithmetic when the body actually becomes pieces, so the budget
-          // below is deliberately not spent now.
-          scheduleGib(a, at, pb.falloff);
+          // The window takes it from here. The TIER IS CHOSEN NOW (task 3) with
+          // the same greedy allowance the immediate path uses, and its views
+          // are RESERVED out of `gibBudget()` until release, so the preview is
+          // the shape that will spawn and a later blast cannot spend its slots.
+          const chosen = scheduleGib(a, at, pb.falloff, gibAllowance(remaining, condemnedLeft));
+          if (chosen) {
+            remaining = gibDebit(remaining, chosen.reserve);
+            condemnedLeft = Math.max(0, condemnedLeft - 1);
+          }
           prof.gib += performance.now() - tg;
           gibbed++;
           continue;
@@ -6403,17 +6429,31 @@ async function main() {
    * on a doomed body inside 0.1 s finds it mid-tear and leaves it alone, which
    * is also what keeps the piece census honest (one body, one gib).
    */
-  function scheduleGib(a: ZombieActor, at: Vec3, falloff: number): void {
-    if (gibTearSec <= 0) return; // caller gibs immediately
-    if (a.tearing() || pendingGibs.some(q => q.actor === a)) return;
+  function scheduleGib(
+    a: ZombieActor, at: Vec3, falloff: number, allowance: number,
+  ): ReturnType<typeof gibTierPlan> | null {
+    if (gibTearSec <= 0) return null; // caller gibs immediately
+    if (a.tearing() || pendingGibs.some(q => q.actor === a)) return null;
     a.setTearTuning({ sec: gibTearSec, ...tearShape });
     // THE PLAN IS PREPARED ONCE, from the clean posed body, and reused for the
     // whole visualization AND the release. `gibParts` would re-derive it at
     // release from a body the rupture has already moved; the plan's own region
     // offsets are what the chunks are spawned with instead (spawnScheduledGibs).
-    const plan = gibPlan(a.posed(), { bones: gibBones });
-    a.beginTear(at, falloff, plan);
-    pendingGibs.push({ actor: a, at: [at[0], at[1], at[2]], falloff, plan });
+    //
+    // THE TIER IS CHOSEN HERE, not at release (task 3). `gibTierPlan` runs the
+    // same ladder `gibActor` would, against the allowance this body is handed,
+    // and the wiring locks `gibActor` to the result — so a tight pool previews
+    // the cheap shape it will actually spawn instead of the full partition.
+    // `?gib=pieces` is the one shape with no source indices yet; it keeps the
+    // old preview-then-spawn route (see RESULTS.md Task 3 limits).
+    const mode = gibMode === 'clusters' ? 'clusters' : 'parts';
+    const planned = gibTierPlan(a.posed(), allowance, { bones: gibBones, mode, at });
+    a.beginTear(at, falloff, planned.plan);
+    pendingGibs.push({
+      actor: a, at: [at[0], at[1], at[2]], falloff, plan: planned.plan,
+      tier: planned.tier, reserve: planned.reserve,
+    });
+    return planned;
   }
 
   /**
@@ -6447,10 +6487,17 @@ async function main() {
       // progress 1), so the region on screen and the spawned piece are the same
       // prims at the same transform — no second partition, no snap.
       const frame = q.actor.tearFrame();
-      const planned = frame
-        ? { pieces: displaceGibPieces(q.plan.pieces, frame.offsets), body: frame.body }
-        : { pieces: q.plan.pieces, body: q.actor.posed() };
-      const made = gibActor(q.actor, q.at, q.falloff, allowance, planned);
+      // LOCKED TO THE SCHEDULE-TIME TIER (task 3): the ladder does not re-run,
+      // so a tight pool cannot preview one shape and spawn another. `q.reserve`
+      // is what `gibBudget()` held for it; the splice above frees it.
+      const locked = gibMode !== 'pieces';
+      const planned = {
+        pieces: frame ? displaceGibPieces(q.plan.pieces, frame.offsets) : q.plan.pieces,
+        body: frame?.body ?? q.actor.posed(),
+        tier: q.tier,
+        locked,
+      };
+      const made = gibActor(q.actor, q.at, q.falloff, locked ? q.reserve : allowance, planned);
       q.actor.endTear();
       remaining = gibDebit(remaining, made);
       left--;
@@ -6510,7 +6557,7 @@ async function main() {
     at: Vec3,
     falloff: number,
     budget: number,
-    planned?: { pieces: GibPiece[]; body: BuildResult },
+    planned?: { pieces: GibPiece[]; body: BuildResult; tier?: string; locked?: boolean },
   ): number {
     // A planned hand-off comes from the rupture: `body` is the pose the body was
     // last DRAWN in and `pieces` are the plan's own regions at the same offsets,
@@ -6560,6 +6607,14 @@ async function main() {
     // does not fit is anything dropped at all.
     let chosen = byBlast(pieces);
     let tier = gibMode === 'parts' ? 'parts' : gibMode;
+    // THE SCHEDULE-TIME TIER IS BINDING (task 3). When the caller locked the
+    // plan, the shape was already chosen with the pool arithmetic and previewed;
+    // re-deriving here is exactly the "preview rich, spawn cheap" defect this
+    // removes, so the whole ladder — including the slice fallback — is skipped.
+    // `?gib=pieces` is the exception (no source indices yet): it keeps the old
+    // route.
+    const tierLocked = planned?.locked === true;
+    if (tierLocked && planned?.tier) tier = planned.tier;
     // ——— SPRITE MODE HAS NO LADDER, AND THAT IS THE FEATURE ————————————————
     // Everything below this branch exists to answer ONE question: "the pool
     // cannot afford this body's full piece set, what shape do we take instead?"
@@ -6584,7 +6639,7 @@ async function main() {
       // a shape compromise: the pieces that go are the ones the player is
       // furthest from.
       if (chosen.length > budget) chosen = chosen.slice(0, Math.max(1, budget));
-    } else if (chosen.length > budget) {
+    } else if (chosen.length > budget && !tierLocked) {
       // The ladder is computed LAZILY — the cheapest shape is a second
       // partition of the body, and a blast that fits the full set must not pay
       // to build shapes it will not use.
@@ -13252,6 +13307,12 @@ function performBenchAction(a: BenchAction): void {
         return m;
       }, 0),
       pendingGibs: pendingGibs.length,
+      // THE PREVIEW'S SHAPE, live (task 3): the regions a pending body is
+      // actually being drawn as, and the tier that will spawn. A rig compares
+      // these against `lastGibTier`/`lastGibSpawned` after release to prove the
+      // preview and the spawn are the same piece set.
+      pendingPlanPieces: pendingGibs.reduce((n, q) => n + q.plan.pieces.length, 0),
+      pendingTiers: pendingGibs.map(q => q.tier),
       scheduledGibBodies: dynScheduledGibBodies, scheduledGibPieces: dynScheduledGibPieces,
       lastGibParts: dynLastGibParts, lastGibHeld: dynLastGibHeld,
       blastProfile: dynBlastProfile,

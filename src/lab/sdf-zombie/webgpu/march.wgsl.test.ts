@@ -335,6 +335,10 @@ describe('ported features reach the entry point', () => {
     // chunk's own translation, not the world.
     expect(MARCH_BODY).toContain('goreStrength');
     expect(MARCH_BODY).toContain('fbm(anchor * 6.0)');
+    // TASK 3: the gate is per-instance OR per-view, so a doomed body in a
+    // crowd can ramp its own gore without repainting the shared-material type.
+    expect(MARCH_BODY).toContain('let goreStrength = max(lodCfg.w, gInstGore);');
+    expect(INSTANCE_STATE).toContain('gInstGore = (*inst)[base + ');
   });
 
   it('skips dead prims (w=2) in the carve pass too, not just the fold', () => {
@@ -474,7 +478,7 @@ describe('ported features reach the entry point', () => {
     // Before the gore and face passes: mottle is the flesh's own colour, so
     // damage and the face paint OVER it.
     expect(MARCH_BODY.indexOf('mix(albedo, mottleColor'))
-      .toBeLessThan(MARCH_BODY.indexOf('let goreStrength = lodCfg.w;'));
+      .toBeLessThan(MARCH_BODY.indexOf('let goreStrength = max(lodCfg.w, gInstGore);'));
     expect(MARCH_BODY.indexOf('mix(albedo, mottleColor'))
       .toBeLessThan(MARCH_BODY.indexOf('if (faceCfg.x > 0.5) {'));
   });

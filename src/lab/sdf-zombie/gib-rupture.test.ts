@@ -36,7 +36,7 @@ function actor(view: Record<string, unknown> = {}) {
     id: 1, room: 0, body,
     view: {
       setRootShift() {}, setTime() {}, setHeadRotation() {},
-      setWounds() {}, update() {}, setBonesBare() {}, setPackBones() {},
+      setWounds() {}, update() {}, setBonesBare() {}, setPackBones() {}, setGoreStrength() {},
       ...view,
     } as never,
     start: [0, 0, 0], seed: 0,
@@ -162,8 +162,14 @@ describe('rupture hand-off continuity', () => {
       bonePrims: [],
     }));
     const min = [1e9, 1e9, 1e9], max = [-1e9, -1e9, -1e9];
-    for (const p of frame.body.prims) for (const e of [p.a, p.b]) for (let i = 0; i < 3; i++) {
-      min[i] = Math.min(min[i]!, e[i]!); max[i] = Math.max(max[i]!, e[i]!);
+    // The box is the SOLID body: a carve cap's centre sits a metre off the cut
+    // on purpose, so including `sub` prims would sample a box metres wide and
+    // miss the surface entirely.
+    for (const p of frame.body.prims) {
+      if (p.op === 'sub') continue;
+      for (const e of [p.a, p.b]) for (let i = 0; i < 3; i++) {
+        min[i] = Math.min(min[i]!, e[i]!); max[i] = Math.max(max[i]!, e[i]!);
+      }
     }
     for (let i = 0; i < 3; i++) { min[i] = min[i]! - 0.05; max[i] = max[i]! + 0.05; }
     const n = 40;

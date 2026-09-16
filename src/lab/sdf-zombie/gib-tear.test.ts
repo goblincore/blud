@@ -20,7 +20,7 @@ import { applyRig, bindRig } from './rig-bind';
 import { sdBody } from './validate';
 import { gibPlan } from './gib-parts';
 import {
-  TEAR_TUNING, ruptureProgress, rupturePosed, ruptureOffsets, type TearState,
+  TEAR_TUNING, ruptureGore, ruptureProgress, rupturePosed, ruptureOffsets, type TearState,
 } from './gib-tear';
 import { len, sub } from './vec';
 import type { Vec3 } from './types';
@@ -49,6 +49,25 @@ describe('ruptureProgress', () => {
       expect(p).toBeLessThanOrEqual(1);
       expect(p).toBeGreaterThanOrEqual(prev);
       prev = p;
+    }
+  });
+});
+
+describe('ruptureGore', () => {
+  it('is exactly 0 through the recoil and exactly 1 at release', () => {
+    // The release material pop is the jump from the body's goreStrength 0 to a
+    // chunk's 1 (march.wgsl.ts's gore block). The ramp must therefore start at
+    // the body's own value and END at the chunk's, or the switch just moves.
+    expect(ruptureGore(0)).toBe(0);
+    expect(ruptureGore(0.05)).toBe(0);
+    expect(ruptureGore(0.1)).toBe(0);
+    expect(ruptureGore(1)).toBe(1);
+    expect(ruptureGore(2)).toBe(1);
+    let prev = 0;
+    for (let p = 0; p <= 1; p += 0.05) {
+      const g = ruptureGore(p);
+      expect(g).toBeGreaterThanOrEqual(prev);
+      prev = g;
     }
   });
 });
@@ -137,16 +156,35 @@ describe('rupturePosed', () => {
   it('the cull bound still COVERS the moved flesh', () => {
     // The trap this guards is documented in extent.ts: a bound that stops
     // covering does not draw the wrong shape, it CULLS, and the symptom is a
-    // round see-through hole in the body.
+    // round see-through hole in the body. Carve (`sub`) prims are excluded on
+    // purpose — a carve is a hole, not a surface, and `assignClusters` has
+    // never let one inflate a cluster sphere (the cut caps' centres sit a
+    // metre from the plane by design).
     const frame = rupturePosed(posed, plan, tearAt(TEAR_TUNING.sec));
     for (const c of frame.body.clusters) {
       for (let i = c.start; i < c.start + c.count; i++) {
         const m = frame.body.prims[i]!;
+        if (m.op === 'sub') continue;
         for (const e of [m.a, m.b]) {
           expect(len(sub(e, c.center))).toBeLessThanOrEqual(c.radius + 1e-9);
         }
       }
     }
+  });
+
+  it('peels the ribcage-bearing chest band along the body axis', () => {
+    // Task 3: the chest band lifts along the plan's own cranial axis, which is
+    // what opens a real gap over the cage independent of where the bundle
+    // landed. The abdominal band gets none of it.
+    expect(TEAR_TUNING.chestPeelM).toBeGreaterThan(0.05);
+    const { offsets } = rupturePosed(posed, plan, tearAt(TEAR_TUNING.sec));
+    const chest = plan.pieces.findIndex(p => p.part === 'torso.chest');
+    const abdomen = plan.pieces.findIndex(p => p.part === 'torso.abdomen');
+    expect(plan.up).toBeDefined();
+    const up = plan.up!;
+    const along = (o: Vec3) => o[0] * up[0] + o[1] * up[1] + o[2] * up[2];
+    // The chest is lifted at least the peel beyond the abdomen's own travel.
+    expect(along(offsets[chest]!) - along(offsets[abdomen]!)).toBeGreaterThan(TEAR_TUNING.chestPeelM * 0.7);
   });
 
   it('never NaNs, even with the blast exactly on a prim', () => {

@@ -7,7 +7,7 @@ import { TILE_MAX_ENTRIES } from './tile-cull';
 import { MAX_PRIMS, MAX_CLUSTERS, BONE_SEG_MAX } from '../validate';
 import { REC_VEC4S, REC_COUNTS, REC_COUNTS2, REC_WOUND_BOUND, REC_ANCHOR_BAND, REC_WIND_ALIVE, REC_MELT,
   REC_FLASH, REC_NOISE_YAW, REC_HEAD_WCOUNT, REC_HEAD_QUAT, REC_VOL_POSE0, REC_VOL_POSE1,
-  REC_CENTRE_SEED, REC_HALF_REV, MAX_CROWD_INSTANCES } from './crowd-records';
+  REC_CENTRE_SEED, REC_HALF_REV, REC_GORE, MAX_CROWD_INSTANCES } from './crowd-records';
 
 /** Extra metres added to the per-ray tile sphere test (tileCfg.x == 2) so the
  *  off-ray shading probes — calcNormal's 0.0015 eps and the AO probe at
@@ -1504,7 +1504,11 @@ var<private> gInstVolPose1: vec4<f32> = vec4<f32>(0.0);
 var<private> gInstCentre: vec3<f32> = vec3<f32>(0.0);
 var<private> gInstSeed: f32 = 0.0;
 var<private> gInstHalf: vec3<f32> = vec3<f32>(0.0);
-var<private> gInstRevision: f32 = 0.0;`;
+var<private> gInstRevision: f32 = 0.0;
+// RUPTURE GORE (body-to-gib task 3). 0 outside a crowd draw (so the per-view
+// lodCfg.w remains authoritative there); the doomed body's ramp rides its own
+// record because the crowd shares one material and one lodCfg uniform.
+var<private> gInstGore: f32 = 0.0;`;
 
 // Per-instance state, loaded from the record buffer by slot. Everything that
 // used to be a per-body uniform parameter is a private global now, so the
@@ -1550,6 +1554,7 @@ export const INSTANCE_STATE = /* wgsl */ `fn loadInstance(inst: ptr<storage, arr
   let hr = (*inst)[base + ${REC_HALF_REV}];
   gInstHalf = hr.xyz;
   gInstRevision = hr.w;
+  gInstGore = (*inst)[base + ${REC_GORE}].x;
 }
 `;
 
@@ -3756,7 +3761,12 @@ export const MARCH_TRACE_POST = /* wgsl */ `  if (!hit) { discard; }
   // and char painted over the gore, and before the wet line, which maxes wm
   // against gore. goreStrength is 0 on the body view, so standing bodies skip
   // the whole block — including its fbm — and shade exactly as before.
-  let goreStrength = lodCfg.w;
+  //
+  // TASK 3: the gate is the MAX of the per-view uniform (non-crowd draws and
+  // chunk views) and the per-instance record. The crowd shares ONE material, so
+  // a doomed body in a crowd could not ramp its gore through lodCfg.w without
+  // repainting the whole type; gInstGore carries its own ramp (REC_GORE).
+  let goreStrength = max(lodCfg.w, gInstGore);
   var gore = 0.0;
   if (goreStrength > 0.0) {
     let mottle = clamp(fbm(anchor * 6.0) * 0.5 + 0.5, 0.0, 1.0);

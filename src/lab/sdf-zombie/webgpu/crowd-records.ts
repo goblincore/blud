@@ -22,7 +22,12 @@ export const REC_VOL_POSE0 = 10;    // volumePose0
 export const REC_VOL_POSE1 = 11;    // volumePose1
 export const REC_CENTRE_SEED = 12;  // bodyCentre.xyz, w = variantSeed
 export const REC_HALF_REV = 13;     // bodyHalf.xyz, w = damageRevision
-// 14, 15 spare
+/** RUPTURE GORE (body-to-gib task 3): x = goreStrength 0..1. `lodCfg` is a
+ *  per-VIEW uniform, so on the shared crowd draw a doomed body could not ramp
+ *  its gore without ramping the whole type; the ramp has to ride the record.
+ *  Slot 14 was the first free vec4. */
+export const REC_GORE = 14;         // x = goreStrength, yzw spare
+// 15 spare
 
 function createRecordNode(attribute: THREE.StorageBufferAttribute, count: number) {
   return storage(attribute, 'vec4', count).toReadOnly();
@@ -38,6 +43,8 @@ export interface RecordSource {
   headCentre: ArrayLike<number>; woundCount: number; headQuat: ArrayLike<number>;
   volumePose0: ArrayLike<number>; volumePose1: ArrayLike<number>;
   bodyCentre: ArrayLike<number>; variantSeed: number; bodyHalf: ArrayLike<number>; damageRevision: number;
+  /** Rupture gore strength 0..1 (0 on a standing body, 1 on a chunk view). */
+  gore: number;
 }
 
 export interface CrowdRecords {
@@ -80,6 +87,7 @@ export function createCrowdRecords(capacity = MAX_CROWD_INSTANCES): CrowdRecords
       put4(b + REC_VOL_POSE1 * 4, s.volumePose1);
       put4(b + REC_CENTRE_SEED * 4, s.bodyCentre, s.variantSeed);
       put4(b + REC_HALF_REV * 4, s.bodyHalf, s.damageRevision);
+      put4(b + REC_GORE * 4, [s.gore, 0, 0, 0]);
       rec.dirty = true;
     },
     alive(slot, on) {

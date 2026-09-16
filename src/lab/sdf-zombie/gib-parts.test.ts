@@ -16,7 +16,7 @@ import soldierSrc from './characters/soldier.blob?raw';
 import { compileBlob } from './blob-compile';
 import { parseBlob } from './blob-parse';
 import { buildBody } from './build-body';
-import { gibParts, gibPlan, displaceGibPieces, type GibPiece } from './gib-parts';
+import { gibParts, gibPlan, gibTierPlan, gibClusterPieces, displaceGibPieces, type GibPiece } from './gib-parts';
 import { sdBody, type Body } from './validate';
 import type { BuildResult } from './build-body';
 import type { Vec3 } from './types';
@@ -306,5 +306,99 @@ describe('gibPlan — the reusable region identity', () => {
       // The plan it was handed is untouched.
       expect(a.origin).toEqual(plan.pieces[i]!.origin);
     }
+  });
+});
+
+// ——— TASK 3: the budget tier is chosen ONCE, before the preview ———————————
+describe('gibTierPlan — preview and release agree on the shape', () => {
+  const at: Vec3 = [0, 1, 0];
+
+  it('fits the full split set when the pool can afford it', () => {
+    const t = gibTierPlan(zombie, 64, { bones: 'core', at });
+    expect(t.tier).toBe('parts');
+    expect(t.reserve).toBe(t.plan.pieces.length);
+    expect(t.plan.cuts.length).toBeGreaterThan(0);
+  });
+
+  it('degrades to the same rung gibActor would have picked at a tight pool', () => {
+    // 16 full > 12, 16 core > 12, clusters+core 9 <= 12 — the exact rung the
+    // old release-time ladder chose after previewing all 16 (RESULTS.md §7.1).
+    const tight = gibTierPlan(zombie, 12, { bones: 'core', at });
+    expect(tight.tier).toBe('clusters+core');
+    expect(tight.reserve).toBe(9);
+    // The floor rung is clusters+the cage, 7 pieces; below that, a slice.
+    expect(gibTierPlan(zombie, 7, { bones: 'core', at }).tier).toBe('clusters+cage');
+    const slice = gibTierPlan(zombie, 3, { bones: 'core', at });
+    expect(slice.tier).toBe('slice');
+    expect(slice.plan.pieces).toHaveLength(3);
+  });
+
+  it('the reduced tiers still name the body prims and bones they own', () => {
+    const clusters = gibClusterPieces(zombie);
+    expect(clusters.length).toBeGreaterThan(0);
+    // Every live flesh prim is owned exactly once and the BONES travel too —
+    // without these the preview could not draw the cheap shape.
+    const seen = new Set<number>();
+    for (const p of clusters) {
+      expect(p.srcPrims!.length).toBeGreaterThan(0);
+      expect(p.srcBones).toBeDefined();
+      for (const i of p.srcPrims!) {
+        expect(seen.has(i)).toBe(false);
+        seen.add(i);
+      }
+    }
+    expect(seen.size).toBe(zombie.prims.filter(p => !p.dead).length);
+  });
+
+  it('plans and pieces are deterministic, and reserve matches what spawns', () => {
+    const a = gibTierPlan(zombie, 12, { bones: 'core', at });
+    const b = gibTierPlan(zombie, 12, { bones: 'core', at });
+    expect(JSON.stringify(a.plan)).toBe(JSON.stringify(b.plan));
+    // The release spawns exactly the plan's pieces (offsets are identity here,
+    // which is the displacement at progress 0) — the count the reservation made.
+    expect(displaceGibPieces(a.plan.pieces, a.plan.pieces.map(() => [0, 0, 0] as Vec3)))
+      .toHaveLength(a.reserve);
+  });
+
+  it('the peel flag is on the ribcage-bearing chest band only', () => {
+    const plan = gibPlan(zombie, { bones: 'core' });
+    const peeled = plan.pieces.filter(p => (p.peel ?? 0) !== 0).map(p => p.part).sort();
+    expect(peeled).toEqual(['torso.abdomen', 'torso.chest', 'torso.pelvis']);
+    expect(plan.pieces.find(p => p.part === 'torso.chest')!.peel).toBeGreaterThan(0);
+    expect(plan.up).toBeDefined();
+  });
+
+  it('plans the SECOND humanoid the same way (safe fallback, not a crash)', () => {
+    // Task 3 asks for a second supported humanoid. The soldier has its own
+    // torso split and its own (restrained) cage; the planner must run on it
+    // exactly as on the zombie. An actor with no rib STRUCTURE still gets the
+    // flesh peel (the cage is the mesh/material's problem, not the planner's),
+    // which is the explicit fallback: peel the flesh, and if there is no bone
+    // to reveal, the result is simply torn flesh rather than an error.
+    const t = gibTierPlan(soldier, 64, { bones: 'core', at });
+    expect(t.tier).toBe('parts');
+    expect(t.plan.pieces.some(p => p.part === 'torso.chest')).toBe(true);
+    expect(t.plan.pieces.find(p => p.part === 'torso.chest')!.peel).toBeGreaterThan(0);
+    // A body whose torso/head are missing still plans: bodyUp falls back to
+    // world-up rather than throwing on an empty cluster list.
+    const headless: BuildResult = {
+      ...soldier,
+      clusters: soldier.clusters.map(c => (c.limb === 'head' ? { ...c, alive: false } : c)),
+    };
+    expect(() => gibTierPlan(headless, 64, { bones: 'core', at })).not.toThrow();
+  });
+
+  it('a pre-severed limb is missing from the plan, preview and cluster tier', () => {
+    // The body that lost an arm to a slug earlier must not emit that arm — the
+    // same alive-flag rule the clean path has always used (sever.ts), now also
+    // honoured by the tier planner that builds the preview.
+    const maimed: BuildResult = {
+      ...zombie,
+      clusters: zombie.clusters.map(c => (c.limb === 'armL' ? { ...c, alive: false } : c)),
+    };
+    const full = gibTierPlan(maimed, 64, { bones: 'core', at });
+    expect(full.plan.pieces.some(p => p.part.startsWith('armL.'))).toBe(false);
+    const clusters = gibClusterPieces(maimed);
+    expect(clusters.some(p => p.limb === 'armL')).toBe(false);
   });
 });

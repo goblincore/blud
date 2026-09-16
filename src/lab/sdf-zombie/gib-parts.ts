@@ -143,6 +143,16 @@ export interface GibPiece {
   /** Indices into the body's own `bonePrims` for a bone/organ piece — the
    *  twin of `srcPrims`. Empty on a flesh piece. */
   srcBones?: number[];
+  /**
+   * FLESH PEEL scale, applied by the rupture along the plan's own cranial axis
+   * (`GibPlan.up`) at `TearTuning.chestPeelM * peel`. Set on the ribcage-bearing
+   * chest band (body-to-gib task 3) so it lifts a few extra centimetres off the
+   * ribcage and leaves the cage standing in a real gap, rather than the whole
+   * chest merely translating with the blast push. Along the BODY's axis, not
+   * the push, so the reveal does not depend on where the bundle landed.
+   * Absent (0) means "no peel", which is every piece but `torso.chest`.
+   */
+  peel?: number;
 }
 
 /** A cut between two pieces of one plan, indexed by PIECE (not by prim), for
@@ -167,6 +177,14 @@ export interface GibCutLink {
 export interface GibPlan {
   pieces: GibPiece[];
   cuts: GibCutLink[];
+  /**
+   * THE BODY'S OWN CRANIAL AXIS (torso centre toward head centre), in world
+   * space. A piece's `peel` is applied along THIS, not along the blast push:
+   * a bundle that lands beside or inside the body must still lift the chest
+   * off the ribs along the body's axis, or the reveal changes with the throw.
+   * Optional only so hand-built test plans keep compiling.
+   */
+  up?: Vec3;
 }
 
 /** One prim plus its index in the body array it came from. The partition runs
@@ -240,7 +258,7 @@ export function gibPlan(body: BuildResult, opts: GibPartsOptions = {}): GibPlan 
       });
     }
   }
-  return { pieces: out, cuts };
+  return { pieces: out, cuts, up };
 }
 
 /**
@@ -256,6 +274,117 @@ export function gibPlan(body: BuildResult, opts: GibPartsOptions = {}): GibPlan 
  */
 export function gibParts(body: BuildResult, opts: GibPartsOptions = {}): GibPiece[] {
   return gibPlan(body, opts).pieces;
+}
+
+/**
+ * ONE CHUNK PER LIVE CLUSTER, with the source indices the rupture needs.
+ *
+ * This is `sever.ts`'s `gibAll` shape (same live-prim filter, same
+ * cluster-bone filter, same origin) but carrying `srcPrims`/`srcBones`, which
+ * `gibAll` never did. It exists for the BUDGET TIER PLANNER (task 3): the
+ * preview has to be drawn from the SAME regions the release will spawn, and a
+ * cluster-tier preview that could not name the body prims would have to fall
+ * back to the full set — the exact "preview rich, spawn cheap" mismatch this
+ * task fixes. No cuts: one chunk per whole cluster shares no plane with
+ * another, so there is nothing for the seam term to open.
+ */
+export function gibClusterPieces(body: BuildResult): GibPiece[] {
+  const out: GibPiece[] = [];
+  body.clusters.forEach((c, ci) => {
+    if (!c.alive) return;
+    const prims: Primitive[] = [];
+    const srcPrims: number[] = [];
+    for (let i = c.start; i < c.start + c.count; i++) {
+      const p = body.prims[i];
+      if (p && !p.dead) { prims.push({ ...p }); srcPrims.push(i); }
+    }
+    if (prims.length === 0) return;
+    const bones: Primitive[] = [];
+    const srcBones: number[] = [];
+    (body.bonePrims ?? []).forEach((b, j) => {
+      if (b.cluster === ci && !b.dead) { bones.push({ ...b }); srcBones.push(j); }
+    });
+    out.push({
+      limb: c.limb, part: c.limb, kind: 'limb',
+      prims, bones, origin: c.center, tornAt: [], srcPrims, srcBones,
+    });
+  });
+  return out;
+}
+
+/** The tier the release ladder would choose, chosen ONCE up front. */
+export interface GibTierPlan {
+  plan: GibPlan;
+  /** Graph label of the chosen shape — the same ids `gibActor` reports. */
+  tier: string;
+  /** How many chunk views this plan needs (what to reserve). */
+  reserve: number;
+}
+
+export interface GibTierPlanOptions extends GibPartsOptions {
+  /** `?gib=` shape. `parts` is the default ladder; `clusters` is its own single
+   *  shape. `pieces` is NOT planned here — `gibAllPieces` has no source indices
+   *  yet, so it keeps the pre-task-3 path (see RESULTS.md Task 3 limits). */
+  mode?: 'parts' | 'clusters';
+  /** Blast point, used only for the `slice` fallback's nearest-first order. */
+  at?: Vec3;
+}
+
+/**
+ * CHOOSE THE PIECE SHAPE AT SCHEDULE TIME (body-to-gib task 3).
+ *
+ * The defect this replaces: `scheduleGib` previewed the full `parts` plan for
+ * the whole window and `gibActor` then re-derived a cheaper tier at release, so
+ * a tight pool showed a 16-region body and spawned 9 cluster lumps. Both ends
+ * now read THIS function: the preview is built from the returned plan, and
+ * `gibActor` is locked to it (no ladder re-derivation), so what separates is
+ * what spawns.
+ *
+ * The ladder is deliberately the same rung order and the same lengths as
+ * `gibActor`'s, because the choice must be the one the game would already have
+ * made — this moves WHEN it is made, not what it is. `budget` is the allowance
+ * the existing greedy arithmetic hands this body.
+ */
+export function gibTierPlan(
+  body: BuildResult,
+  budget: number,
+  opts: GibTierPlanOptions = {},
+): GibTierPlan {
+  const up = bodyUp(body);
+  const mode = opts.mode ?? 'parts';
+  if (mode === 'clusters') {
+    const pieces = gibClusterPieces(body);
+    return { plan: { pieces, cuts: [], up }, tier: 'clusters', reserve: pieces.length };
+  }
+  const bones: GibBoneRelease = opts.bones ?? 'all';
+  const organs = opts.organs ?? true;
+  const full = gibPlan(body, { bones, organs });
+  if (full.pieces.length <= budget) return { plan: full, tier: 'parts', reserve: full.pieces.length };
+
+  const core = gibPlan(body, { bones: 'core', organs });
+  if (core.pieces.length <= budget) return { plan: core, tier: 'parts-core', reserve: core.pieces.length };
+
+  const clusters = gibClusterPieces(body);
+  const coreBones = core.pieces.filter(p => p.kind === 'bone');
+  const cage = coreBones.filter(p => p.part === 'bone.cage');
+  const rungs: { tier: string; pieces: GibPiece[] }[] = [
+    { tier: 'clusters+core', pieces: [...clusters, ...coreBones] },
+    { tier: 'clusters+cage', pieces: [...clusters, ...cage] },
+    { tier: 'clusters', pieces: clusters },
+  ];
+  for (const rung of rungs) {
+    if (rung.pieces.length <= budget) {
+      return { plan: { pieces: rung.pieces, cuts: [], up }, tier: rung.tier, reserve: rung.pieces.length };
+    }
+  }
+  // The slice is the last resort, and it is done HERE for the same reason as
+  // every rung: the preview must already be the sliced set. Nearest the blast
+  // first, matching gibActor's own order.
+  const at = opts.at ?? [0, 0, 0] as Vec3;
+  const dist = (p: Vec3) => (p[0] - at[0]) ** 2 + (p[1] - at[1]) ** 2 + (p[2] - at[2]) ** 2;
+  const sliced = [...clusters].sort((x, y) => dist(x.origin) - dist(y.origin))
+    .slice(0, Math.max(1, budget));
+  return { plan: { pieces: sliced, cuts: [], up }, tier: 'slice', reserve: sliced.length };
 }
 
 /**
@@ -332,7 +461,24 @@ function splitTorso(ips: IdxPrim[], up: Vec3, centre: Vec3): GibGroups {
   }
   if (pelvic.length > 0) parts.push({ id: 'torso.pelvis', ips: pelvic });
 
-  return assemble(parts, up, 'torso');
+  const groups = assemble(parts, up, 'torso');
+  // TORSO STRETCH (see GibPiece.peel). The cranial half LIFTS off the cage and
+  // the caudal half is driven the other way, so the ribcage band is emptied
+  // rather than just translated: measured on the marched field, lifting the
+  // chest alone still left the gut's top edge across ribs 4-6, and the exposed
+  // band was three ribs. The counter-peel on the abdomen opens the band to the
+  // whole cage and is the brief stretch the contract asks for.
+  //
+  // The PELVIS takes the SAME counter-peel as the abdomen so the peel cancels
+  // across their shared cut: the abdomen/pelvis seam then opens on the blast
+  // push exactly as it always did. (Moving the abdomen down alone closed that
+  // cut — measured, `gib-tear.test.ts` "opens every cut" caught it.) The price
+  // is a visible stretch at the hips, which is the same "brief flesh stretch".
+  for (const p of groups.pieces) {
+    if (p.part === 'torso.chest') p.peel = 1;
+    else if (p.part === 'torso.abdomen' || p.part === 'torso.pelvis') p.peel = -0.7;
+  }
+  return groups;
 }
 
 /**

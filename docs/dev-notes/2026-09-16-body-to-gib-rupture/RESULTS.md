@@ -362,3 +362,152 @@ Additional direct run of the changed file: `gib-tear.test.ts` 12 tests passed
   material; model inspection does not equal the owner's playtest.
 - Extracted assets were never committed; the deferred rendering blocker
   (`gMarchAnchor`) is untouched.
+
+---
+
+# Body-to-gib rupture — Task 3 results (rib reveal, material continuity, tier coherence)
+
+Worktree `2026-09-16-body-to-gib-rupture-task-3`, branch
+`codex/body-to-gib-rupture-task-3`, from Task 2 `ae524a23` (which sits on Task 1
+`6898f65f` on accepted baseline `4dcb1ffd`). Node `v22.22.1`. Owned Vite on
+`5403` and headless Chrome on `9403` (`--enable-unsafe-webgpu`, scratch in
+`.lab-tmp/`); the owner's `5391` server was never touched. This section
+**supersedes** the "unmet" claims in Task 1 §5 and Task 2 §7/§11 for the default
+path; the remaining gaps are listed in §7 below.
+
+## 1. What changed
+
+The reviewer's read of `task2-c200-threequarter-sheet.jpg` was confirmed with
+native vision before editing: intact smooth flesh splitting only at limb joints
+through 200 ms, then an abrupt switch to mottled chunks at 217 ms, no readable
+ribcage. Three defects, three fixes.
+
+| # | Defect (Task 2) | Fix | File |
+| --- | --- | --- | --- |
+| 1 | No ribcage readable: the torso regions translated but the overlapping spine blobs kept the union closed, and the chest/abdomen cut was **below** the ribs. | **Flesh peel.** The chest band lifts along the body's own cranial axis and the abdominal/pelvic bands are driven the other way (`GibPiece.peel` + `TearTuning.chestPeelM`), tearing the smin bridge so the ribcage is left standing in the opening. Measured on the marched field: 85 % of the ribcage band's surface is exposed by 60 ms, 96 % by release. | `gib-parts.ts`, `gib-tear.ts` |
+| 2 | Release material pop: the body's goreStrength (`lodCfg.w`) is 0 and a flesh chunk's is 1. | **Material ramp.** `ruptureGore(progress)` drives `lodCfg.w` from exactly 0 through the recoil to exactly 1 at release, so the last window frame already wears the chunk surface. Because the crowd shares one material, the ramp rides a new **per-instance** record field (`REC_GORE`), read by the shader as `max(lodCfg.w, gInstGore)`. | `gib-tear.ts`, `game-actor.ts`, `zombie-gpu.ts`, `crowd-records.ts`, `march.wgsl.ts` |
+| 3 | Tight-pool mismatch: a fresh `?maxchunks=12` previewed the 16-region `parts` plan then spawned 9 `clusters+core` pieces. | **Tier at schedule time.** `gibTierPlan` runs the ladder once, against the body's allowance, before `beginTear`; the plan's views are reserved out of `gibBudget()`; `gibActor` is locked to the chosen tier and the release ladder is skipped. | `gib-parts.ts`, `game-main.ts` |
+
+`rupturePosed` is unchanged in shape (originals shifted per region, re-fitted
+clusters). An earlier attempt to append the plan's `sub` cut caps to the drawn
+body was **reverted**: a cap is a huge sphere tangent to the cut that removes
+everything on the far side, which is right per piece but deletes the neighbour
+when both share one marched field. The cut-cap residual is therefore the
+sub-centimetre overhang the piece set already documents, not a drawn flat face;
+see §7.
+
+## 2. Rib reveal — measured, not asserted
+
+Vertical scan of the marched field (`sdBody`), zombie ribcage band y 1.16–1.40,
+surface points of the posed body, at `age` into the 200 ms window (blast at the
+torso centre):
+
+| age | ribcage-band surface points | exposed (flesh no longer there) |
+| --- | --- | --- |
+| 60 ms | 192 | 164 (85 %) |
+| 120 ms | 192 | 181 (94 %) |
+| 200 ms | 192 | 184 (96 %) |
+
+## 3. Native-vision observations (images actually opened)
+
+Every image below was opened with the native image viewer, not read from a
+filename. Before/after pairs are Task 2's committed sheets vs this task's.
+
+| Image | What was inspected | Observation |
+| --- | --- | --- |
+| `captures/task3-front-sheet.jpg` | default crowd path, front, 2.4 m, 16 tiles | f0 the intact posed body; f1–f4 the chest band lifts and a pale **rib ladder** is readable across the thorax; f8–f11 the cage is fully readable while the flesh is stretched around it; f12 the pieces spawn wearing the same mottled surface (no switch). |
+| `captures/task3-threequarter-sheet.jpg` | default crowd path, 3/4 view, real VFX | Same seam and cage read off-axis; the head stays a distinct mass; material is continuous across f11 → f12. |
+| `captures/task3-gameplay-sheet.jpg` | 5.25 m, real explosion VFX | The pale ribs are visible from f4 onward even under the burst light; body through f11, chunks at f12, continuous mottle. |
+| `captures/task3-front-lastwindow.jpg` / `task3-front-release.jpg` | 2.4× torso crop, 200 ms last window frame vs release tick | Pale ribcage in the opening in BOTH; the mottled/chunk surface is already present on the window frame, so the release tick is not a material switch (compare `captures/task2-c200-lastwindow.jpg`, which was smooth pink). |
+| `captures/task3-front-onset.jpg` | pre-blast onset | The intact posed body — the silhouette the contract requires at onset, unchanged by the ramp (gore 0). |
+| `captures/task3-zero-duration-control-sheet.jpg` | `?gibtear=0` | Already chunks on the first frame — the zero-duration comparison path is preserved. |
+| `captures/rupture-task3-front-normal.mp4`, `rupture-task3-gameplay-normal.mp4` | 0.5 s at 60 fps, looped 4× | Normal-speed read: the chest peels, the ribs show, and the pieces continue outward with no dead frame or material blink. |
+
+## 4. Tier coherence — observable behavior
+
+From `captures/task3-tightpool12-telemetry.json` (fresh boot, `?maxchunks=12`,
+one body; `pendingPlanPieces`/`pendingTiers` read live from `dynamite()`):
+
+```
+f0..f11 : pendingPlanPieces 9   pendingTiers ["clusters+core"]   (the PREVIEW)
+f12     : pendingPlanPieces 0   tier clusters+core  spawned 9     (the RELEASE)
+```
+
+The preview draws 9 regions and the release spawns 9 of the same shape — the
+"preview rich, spawn cheap" mismatch is gone. The full-pool run keeps `parts`
+(16 preview / 16 spawned; `task3-front-telemetry.json`). Reservations are held
+out of `gibBudget()` until release, so a later blast cannot spend a pending
+body's slots; `?maxchunks` and `MAX_CHUNK_BUDGET` are unchanged.
+
+## 5. Lifecycle, second humanoid, severed actor
+
+From `captures/task3-lifecycle.json` (real loop, no `frozen`, `pageErrors: []`):
+
+| Case | Result |
+| --- | --- |
+| Moving cast | `movingCast: true` |
+| Second blast during the window | `pendingMid 1 → pendingAfterSecond 1`, `scheduledBodies 1`, `oneRelease true` — no second breakup, no clock reset |
+| Repeated explosions | `live 64 / cap 64`, unique ids, `bounded true` |
+| Reset mid-window | mid `tearing 1 / pending 1` → after `0 / 0`, `drained true` |
+| Tight multi-body in-session | confounded exactly as Task 2 §8 recorded (the pool already held 64 views, so an in-session `maxchunks:12` does not bind); the fresh-boot test in §4 is the one that binds |
+
+New unit coverage (`gib-parts.test.ts`): the peel flag is on `torso.chest`,
+`torso.abdomen` and `torso.pelvis` only and `plan.up` is set; the **soldier**
+(second humanoid) plans with the same peel and a headless fallback does not
+throw; a **pre-severed** zombie emits no arm pieces in the full plan or the
+cluster tier. The explicit fallback for an actor with no rib structure is that
+the flesh still peels (the cage is the renderer's problem, not the planner's);
+if there is no bone to reveal, the result is torn flesh, not an error.
+
+## 6. Tests and build
+
+```
+npx vitest run <26 focused files: gib-tear, gib-parts, gib-rupture, gib-chunks,
+  explosion-aoe, sever, sever-bones, humanoid-sever, detached-pose, melt,
+  melt-bones, melt-gate, chunk-bake-field, march.wgsl, crowd-records,
+  game-actor{,-soldier,-collision,-bounded-wounds,-elbow,-torso-slug},
+  baked-chunks, chunk-bake-jobs, gib-sprite-pieces, march-step-soundness,
+  dynamite-panel>
+# 26 files passed, 602 tests passed (Task 1's set was 596)
+
+npm run build        # tsc --noEmit && vite build — exit 0, built in 5.39s
+```
+
+New/updated pins: `ruptureGore` endpoints; the peel term; the cull bound
+skips carves; the tier planner (rungs, src indices, reserve, determinism,
+soldier, severed); `crowd-records.test.ts` (the `REC_GORE` write);
+`march.wgsl.test.ts` (the `max(lodCfg.w, gInstGore)` gate and the instance
+load).
+
+## 7. Limits / honest gaps (Task 3)
+
+1. **`?gib=pieces` still previews `parts`.** `gibAllPieces` has no source
+   indices yet, so that A/B shape keeps the old preview-then-spawn route and can
+   still mismatch. `?gib=clusters` is planned exactly by `gibClusterPieces`, and
+   the default (`parts`) is coherent. This is the one mode not fixed.
+2. **The cheap tiers do not reveal ribs.** A `clusters*` tier has one piece per
+   whole limb, so there is no chest band to peel and no intra-torso cut; those
+   tiers translate whole clusters. They agree with their own spawn (the §4 fix),
+   but only the default `parts` tier peels. A rib read at every tier would need a
+   torso-only subdivision plus a source-indexed plan for the rest.
+3. **Cut caps are not drawn in the preview.** The drawn cut is the piece's
+   rounded end and the spawned cut is the capped flat face; the difference is
+   bounded by the cut overhang (`GIB_CUT.overhangK × blendK`, a few mm), which
+   the continuity test already covers (<10 % union residual, measured). A
+   per-piece preview (each region as its own marched view) would remove even
+   that, but it is a renderer change, not a scheduler one.
+4. **The gore ramp is view/record-wide, not cut-local.** It reaches exactly the
+   chunk's value at release so the pop is gone, but it does not make cut faces
+   more torn than intact skin. A cut-local mask (`-hitField.w`, the
+   `gib-carve.ts` approach) would change the accepted chunk skin, which the
+   contract says to preserve, so it was not taken.
+5. **Performance is not a matched baseline.** The live-loop frames still show
+   long p95 frames (cold p95 223 ms, repeated p95 182 ms) with the machine under
+   load (~3); as in Task 2 these are **not attributed** and the pre-existing
+   startup/first-gib freeze remains a separate, undiagnosed task. The new work
+   adds one record vec4 and one `max` per fragment; no measurement claims a
+   regression or an improvement.
+6. **Owner acceptance is not claimed.** Model inspection is not the owner's
+   playtest; the videos and sheets are the review material.
+7. Deferred rendering keeps its pre-existing `gMarchAnchor` limitation; extracted
+   assets were never committed.

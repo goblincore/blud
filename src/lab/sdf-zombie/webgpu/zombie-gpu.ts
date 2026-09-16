@@ -164,6 +164,15 @@ export interface ZombieGpuView {
   /** Melt progress 0..1 → meltCfg.x (zombie melt task 6). Only the lab's
    *  melting body (and its released bone chunks) ever set this non-zero. */
   setMelt(progress: number): void;
+  /**
+   * RUPTURE GORE 0..1 → lodCfg.w, the SAME channel a spawned flesh chunk sets
+   * to 1 (body-to-gib task 3). A standing body is 0; a doomed body ramps it
+   * toward 1.0 as it tears, so the release frame is the material the body was
+   * already wearing rather than a switch. It is a VIEW-WIDE gate — that is the
+   * channel's shape — which is why the ramp is tied to progress and is 0 for
+   * the whole recoil phase: an intact body is never repainted.
+   */
+  setGoreStrength(v: number): void;
   /** Crowd stage a: the per-instance record buffer this view writes through
    *  syncRecord(). Exposed so the frame-hash seam can cover pose/wound state. */
   records: CrowdRecords;
@@ -1524,6 +1533,10 @@ export function writeViewRecord(
     volumePose1: u.volumePose1.value.toArray(),
     bodyCentre: centre.toArray(), variantSeed: 0, bodyHalf: u.bodyHalf.value.toArray(),
     damageRevision: 0,
+    // The per-instance half of the rupture material ramp: `lodCfg.w` is a
+    // per-VIEW uniform, and the crowd shares one material, so the only way a
+    // doomed body can wear the gore the chunks wear is through its own record.
+    gore: u.lodCfg.value.w,
   }, band);
 }
 
@@ -2486,6 +2499,7 @@ export function createZombieGpuView(
       if (depthSegMetaNode) (depthSegMetaNode as unknown as { value: THREE.Texture }).value = meta;
     },
     setMelt(progress) { u.meltCfg.value.x = progress; syncRecord(); },
+    setGoreStrength(v) { u.lodCfg.value.w = v; syncRecord(); },
     update(next, rest) {
       const p = upload(next, rest);
       const f = fit(next, p.maxBlendK);

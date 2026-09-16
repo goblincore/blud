@@ -77,6 +77,15 @@ export interface TearTuning {
   /** Displacement scale for the head region, so the face stays recognizable
    *  rather than being thrown with the chest. */
   headDamp: number;
+  /**
+   * FLESH PEEL: extra metres the ribcage-bearing chest band is lifted along
+   * the body's own cranial axis (the plan's `up`), scaled by the region's
+   * `peel`. This is what opens a REAL gap over the cage — a rigid translation
+   * of the whole chest just slides the flesh, and the overlapping spine blobs
+   * keep the surface closed. Along the body axis, not the blast push, so the
+   * reveal is the same wherever the bundle landed.
+   */
+  chestPeelM: number;
 }
 
 export const TEAR_TUNING: TearTuning = {
@@ -97,6 +106,12 @@ export const TEAR_TUNING: TearTuning = {
   // meat leaves, or it rides out with the chest.
   boneLag: 0.15,
   headDamp: 0.3,
+  // TASK-3 (2026-09-16). The chest band now splits at the costal margin
+  // (gib-parts splitTorso), and this peel lifts it clear of the ~0.20 m the
+  // neighbouring abdominal mass still occupies, so the smin bridge tears and
+  // the ribcage is left standing in the opening. Tuned against the 200 ms
+  // captures; see RESULTS.md Task 3.
+  chestPeelM: 0.3,
 };
 
 const TAU = Math.PI * 2;
@@ -120,6 +135,22 @@ export function ruptureProgress(t: number, sec: number = TEAR_TUNING.sec): numbe
   if (t >= sec) return 1;
   const u = t / sec;
   return 1 - (1 - u) * (1 - u);
+}
+
+/**
+ * THE MATERIAL RAMP (body-to-gib task 3). A spawned flesh chunk renders with
+ * `lodCfg.w` (goreStrength) 1; a standing body renders with 0, and that single
+ * value was the whole "smooth flesh → mottled chunks" pop at the release
+ * frame (see march.wgsl.ts's gore block). This is the doomed body's value over
+ * the window: EXACTLY 0 through the recoil phase so the intact silhouette is
+ * untouched, then rising to EXACTLY 1 at release, so the frame before the
+ * pieces spawn already wears the surface they spawn with. View-wide by
+ * necessity — the channel is a per-view scalar — which is why it is gated on
+ * progress rather than switched on.
+ */
+export function ruptureGore(p: number): number {
+  const u = Math.max(0, Math.min(1, (p - 0.1) / 0.75));
+  return u * u * (3 - 2 * u);
 }
 
 /** A live rupture: where the blast was, how hard it hit, how long it has run. */
@@ -153,6 +184,9 @@ export interface RuptureRegion {
   kind: string;
   srcPrims?: number[];
   srcBones?: number[];
+  /** FLESH-PEEL scale, applied along the plan's own cranial axis at
+   *  `TearTuning.chestPeelM * peel` (see `TearTuning.chestPeelM`). */
+  peel?: number;
 }
 
 /** A cut between two regions, `a` keeping the `-n` side, indexed by region. */
@@ -168,6 +202,8 @@ export interface RuptureCut {
 export interface RupturePlan {
   pieces: readonly RuptureRegion[];
   cuts: readonly RuptureCut[];
+  /** The body's own cranial axis — the direction `peel` is applied along. */
+  up?: Vec3;
 }
 
 const ZERO: Vec3 = [0, 0, 0];
@@ -210,6 +246,16 @@ export function ruptureOffsets(
     if (region.limb === 'head') mag *= tuning.headDamp;
     let v = scale(dir, mag);
     const sp = seamProgress(p);
+    // FLESH PEEL. A piece flagged `peel` is lifted ALONG THE BODY'S CRANIAL
+    // AXIS on the same sharp ramp as the seams, so the chest opens off the
+    // ribcage early in the window. This is not a second push: it is the
+    // separation the cut needs to become a hole, and it is deliberately
+    // independent of `dir` so an off-centre bundle still peels the chest
+    // upward along the spine rather than sideways.
+    if (region.peel) {
+      const up = plan.up;
+      if (up) v = add(v, scale(up, tuning.chestPeelM * region.peel * fall * sp));
+    }
     for (const cut of plan.cuts) {
       if (cut.a !== r && cut.b !== r) continue;
       const cw = Math.exp(-len(sub(cut.at, tear.at)) / tuning.falloffM) * fall;
@@ -265,6 +311,17 @@ export function rupturePosed(
     const r = boneRegion[i]!;
     return r >= 0 ? shift(q, offsets[r]!) : q;
   });
+  // NOTE ON THE CUT CAPS (task 3). The obvious companion — append each piece's
+  // `sub` caps here so the moving cut is a real hole — does NOT work in a
+  // single SDF union, and the failure is geometric, not a bug to fix: a cap is
+  // a huge sphere tangent to the cut plane that removes everything on the far
+  // side, which is correct PER PIECE (a chunk is its own marched field) but
+  // deletes the NEIGHBOUR when both pieces share one field. The rib reveal is
+  // therefore a real PEEL (`TearTuning.chestPeelM`) that lifts the chest band
+  // far enough to tear the smin bridge and clear the cage, and the residual
+  // between the drawn (rounded) cut and the spawned (capped, flat) face is the
+  // sub-centimetre overhang the piece set already documented — measured in
+  // RESULTS.md Task 3 rather than asserted.
   return {
     body: { ...posed, prims, bonePrims, clusters: refitClusters(prims, posed.clusters) },
     offsets,
