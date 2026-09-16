@@ -54,7 +54,12 @@ churn"* — was **not established by its evidence**. Corrected here:
   servers on **5391/5415** and the stale **5403** were never touched.
 - Matched page URL for every timing sample:
   `http://localhost:5480/sdf-game.html?room=arena&gibbones=core&pipelinelog=1&seed=7&crowd=1&vhs=blud&res=800`.
-  Boot flags only; crowd was never toggled mid-run.
+  Boot flags only; crowd was never toggled mid-run. Settings held fixed for
+  every run: seed 7, room `arena`, gibbones `core`, `crowd=1`, `vhs=blud`,
+  `res=800` (800×600 render), graphics `default` with the **shipped upscale
+  stage on** (`upscale` absent) and DPR 1 for the matched set (`after-dpr2` is
+  the DPR-2 control). `&upscale=1` is NOT a valid value — it is parsed as a
+  model config and breaks the boot; that mistake cost two discarded runs.
 - **before = `a678273d` + the diagnostics commit `c2dbdaa9`** (identical
   instrumentation, no behaviour fix); **after = the candidate**. 3 runs each,
   plus one headed-equivalent run (`after-dpr2`, 1512×982 DPR 2).
