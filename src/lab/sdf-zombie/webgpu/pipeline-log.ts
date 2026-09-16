@@ -57,6 +57,13 @@ export interface PipelineCreationRecord {
    *  '<none>', meaning three dispatched it WITHOUT a caller-compileAsync
    *  (an internal lazy-async path worth naming). */
   via: string;
+  /** Structural signature of the pipeline DESCRIPTOR (topology, depth/stencil,
+   *  multisample, colour-target formats, entry points). Two creations with the
+   *  same label and the same signature are the same pipeline built twice —
+   *  cache thrash, not a legitimate context variant. Added 2026-09-16 after
+   *  the first-gib probe saw the same material labels created on consecutive
+   *  frames. */
+  sig: string;
 }
 
 export interface LongFrameRecord {
@@ -92,6 +99,10 @@ export interface PipelineLogSummary {
     maxPerFrame: number;
     byFrame: { frame: number; calls: number }[];
   };
+  /** Pipeline-cache thrash detector: (label, descriptor signature) pairs built
+   *  more than once, most-repeated first. A high count for one signature is
+   *  the same pipeline re-created — the first-gib / repeated-blast hitch. */
+  duplicates: { name: string; sig: string; count: number; firstFrame: number; lastFrame: number }[];
 }
 
 /** Shorten labels but keep the material/stage name readable. */
@@ -99,6 +110,40 @@ function cleanLabel(label: unknown): string {
   const s = typeof label === 'string' && label.length > 0 ? label : '<unlabeled>';
   return s.length > 160 ? s.slice(0, 157) + '...' : s;
 }
+
+/** Structural signature of a GPURenderPipelineDescriptor / compute descriptor.
+ *  Deliberately excludes the layout object identity (opaque) and the shader
+ *  module contents; it names the STATE that legitimately distinguishes two
+ *  pipelines for the same material (pass topology, depth/stencil, MRT target
+ *  formats, sample count). Identical signature on repeated creations means the
+ *  same pipeline was built again. */
+function descriptorSignature(desc: unknown): string {
+  const d = desc as {
+    primitive?: Record<string, unknown>;
+    depthStencil?: Record<string, unknown> | null;
+    multisample?: Record<string, unknown>;
+    fragment?: { targets?: { format?: string }[]; entryPoint?: string } | null;
+    vertex?: { entryPoint?: string };
+  } | undefined;
+  if (!d) return 'none';
+  const p = d.primitive ?? {};
+  const ds = d.depthStencil ?? {};
+  const ms = d.multisample ?? {};
+  const targets = (d.fragment?.targets ?? []).map((t) => t?.format ?? '-').join('|');
+  return [
+    p.topology, p.cullMode, p.frontFace,
+    ds.format, ds.depthWriteEnabled, ds.depthCompare, ds.depthBias, ds.depthBiasSlopeScale,
+    ms.count,
+    targets,
+    d.fragment?.entryPoint, d.vertex?.entryPoint,
+  ].join(',');
+}
+
+// Creation census by (label, signature): the duplicate detector. Always on —
+// it is a Map write on pipeline creation, which is a first-use event.
+const creationCensus = new Map<string, { name: string; sig: string; count: number; firstFrame: number; lastFrame: number }>();
+const MAX_CENSUS = 4000;
+
 
 // -- module state (one renderer per page; the lab is single-renderer) -------
 let installed = false;
@@ -154,14 +199,20 @@ export function installPipelineLog(renderer: THREE.WebGPURenderer): boolean {
       const frame = frameNo + 1;
       const desc = args[0] as { label?: string } | undefined;
       const result = (orig as (...a: unknown[]) => unknown).apply(this, args);
+      const sig = descriptorSignature(desc);
       const record: PipelineCreationRecord = {
         kind, name: cleanLabel(desc?.label), ms: 0, frame, t: t0, async,
-        via: async ? (activeCompile ?? '<none>') : '',
+        via: async ? (activeCompile ?? '<none>') : '', sig,
       };
       const finish = () => {
         record.ms = performance.now() - t0;
         totalPipelines++;
         totalCompileMs += record.ms;
+        // Duplicate detector: same label AND same descriptor state built again.
+        const ckey = record.name + '#' + sig;
+        const entry = creationCensus.get(ckey);
+        if (entry) { entry.count++; entry.lastFrame = frame; }
+        else if (creationCensus.size < MAX_CENSUS) creationCensus.set(ckey, { name: record.name, sig, count: 1, firstFrame: frame, lastFrame: frame });
         // Slowest-16, insertion-sorted (creations are rare; 16 compares).
         let i = 0;
         while (i < slowest.length && slowest[i]!.ms >= record.ms) i++;
@@ -269,5 +320,10 @@ export function getPipelineLog(): PipelineLogSummary {
       maxPerFrame: computeMaxPerFrame,
       byFrame: computeByFrame,
     },
+    duplicates: [...creationCensus.values()]
+      .filter((e) => e.count > 1)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 24)
+      .map((e) => ({ ...e })),
   };
 }

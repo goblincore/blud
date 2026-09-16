@@ -129,6 +129,7 @@ import { runBench, type BenchDeps, type BenchMode } from './game-bench';
 import { installPassTiming, beginPassFrame, setPassLabel } from './gpu-pass-timing';
 import { GameTelemetry, type FrameTiming } from './game-telemetry';
 import { getPipelineLog, setPipelineLogEnabled } from './pipeline-log';
+import { warmGateOutcome, restoreLoopState } from './warm-gate';
 import { createTelemetryControls } from './game-telemetry-controls';
 import { createGameTilePlaytest } from './game-tile-playtest';
 import { createComputeTileBinding } from './tile-bin-compute';
@@ -283,6 +284,17 @@ function headShape(b: BuildResult): { centre: Vec3; axes: Vec3 } | null {
 }
 
 async function main() {
+  // BOOT PHASE MARKS (startup attribution, 2026-09-16). main() is one long
+  // synchronous block after its first awaits — rAF cannot run, timers cannot
+  // fire, and every console line lands at the same wall clock — so phase
+  // boundaries cannot be inferred from the log. Two array pushes per phase;
+  // read via __sdfGame.bootMarks() or window.__bootMarks. `t` is
+  // performance.now(), comparable to performance.timeOrigin-relative CDP
+  // timestamps and to the pipeline log's frame windows.
+  const bootMarks: { n: string; t: number }[] = [];
+  const mark = (n: string) => { bootMarks.push({ n, t: Math.round(performance.now()) }); };
+  mark('main-start');
+  (window as unknown as Record<string, unknown>).__bootMarks = bootMarks;
   const boundedWoundPreview = import.meta.env.DEV && new URLSearchParams(location.search).has('bounded-wounds');
   const mount = document.getElementById('app');
   if (!mount) throw new Error('#app not found');
@@ -293,6 +305,7 @@ async function main() {
   // __sdfGame.bench({ mode: 'passes' }) or __sdfGame.passTimings().
   const passTiming = installPassTiming(handle.renderer);
   const { scene, camera } = handle;
+  mark('renderer-ready');
 
   // PIPELINE LOG (pipeline-log.ts). The wraps are already installed (the lab
   // renderer does it right after init); ?pipelinelog=1 turns on per-creation
@@ -369,6 +382,7 @@ async function main() {
   handle.setFrameCap(30);
 
   // -----------------------------------------------------------------------
+  mark('world-start');
   // The world: grey-box meshes from the same layout that feeds collision.
   // -----------------------------------------------------------------------
   const colliders = levelColliders();
@@ -549,6 +563,7 @@ async function main() {
   const levelNodeMaterials: THREE.NodeMaterial[] = [];
 
   // -----------------------------------------------------------------------
+  mark('gallery-start');
   // THE GALLERY RIG (mesh side only). The lab factory ships a warm-sun +
   // dim-purple-ambient default that made the rooms read dark; the owner
   // wants a bright white-wall gallery. We give THIS PAGE its own rig by
@@ -634,6 +649,7 @@ async function main() {
   scene.add(accentGroup);
 
   // ---------------------------------------------------------------------
+  mark('dungeon-start');
   // DUNGEON RIG. Off-state parity matters: with dungeon disabled the gallery
   // must render exactly as before, so the rig is applied, not hard-coded.
   // ---------------------------------------------------------------------
@@ -749,6 +765,7 @@ async function main() {
   };
 
   // -----------------------------------------------------------------------
+  mark('drawchain-start');
   // The draw chain, exactly as the bench stands it up.
   // -----------------------------------------------------------------------
   const postAa = createPostAa(handle.renderer);
@@ -1025,6 +1042,7 @@ async function main() {
   }
 
   // -----------------------------------------------------------------------
+  mark('deferred-start');
   // THE DEFERRED COORDINATOR (?renderer=deferred only — M2 task 5). Owns the
   // deferred frame composition: shadow maps -> shared light list ->
   // environment -> G-buffer (mesh + SDF producer passes through the task-3
@@ -1352,6 +1370,7 @@ async function main() {
   }
 
   // -----------------------------------------------------------------------
+  mark('adaptive-start');
   // ADAPTIVE RESOLUTION — same pure controller the lab uses (X1.13), wired
   // into the render callback. DEFAULT OFF: the chosen rung is what ships;
   // this is the frame-rate safety net the owner can switch on.
@@ -2766,6 +2785,7 @@ async function main() {
   let occluderDesired = true;
 
   // -----------------------------------------------------------------------
+  mark('zombies-start');
   // Zombies. One compiled .blob, ten bodies; seeds/headings vary, the
   // character does not (12 prims each — the cheap one, on purpose).
   // -----------------------------------------------------------------------
@@ -3001,6 +3021,7 @@ async function main() {
   });
 
   // -----------------------------------------------------------------------
+  mark('room-probes-start');
   // LEVEL SURFACES READING THE PROBES (lighting P3/P4 step 3; plan
   // docs/superpowers/plans/2026-09-10-level-probe-lighting.md). ONE
   // ProbeLightingNode per room, shared by every level surface of that room,
@@ -3673,6 +3694,7 @@ async function main() {
   let shotAlert = false;
 
   // -----------------------------------------------------------------------
+  mark('player-start');
   // Player: pointer lock + WASD + gravity + capsule-vs-AABB.
   // -----------------------------------------------------------------------
   // BOOT SELECT. `?room=6` (or any room id, or its name) starts the player at
@@ -3937,6 +3959,7 @@ async function main() {
   scene.add(camera);
 
   // -----------------------------------------------------------------------
+  mark('gun-start');
   // GRAPESHOT — the first weapon. View-model (k3 GLB + green orb hands),
   // travelling pellets, wound/sever wiring through the actors, and ballistic
   // chunks for whatever comes off. Fire model per the spec §2 as trimmed by
@@ -4376,9 +4399,11 @@ async function main() {
     refreshLevelLights();
     gunReady = true;
     resolveGunReady();
+    mark('gun-ready');
   } catch (err) {
     console.error('[sdf-game] gun model failed to load — firing still works', err);
     resolveGunReady();
+    mark('gun-ready');
   }
 
   // PIPELINE WARM-UP (spike program, 2026-09-10). three's WebGPU backend
@@ -4408,42 +4433,72 @@ async function main() {
   // sceneTarget, sdf layer, goo, post chain incl. VHS) — so everything
   // compiles in the context it will actually run in, behind the loader.
   const warmPipelines = async () => {
-    const t0 = performance.now();
+    const tInvoke = performance.now();
     const flipped: THREE.Object3D[] = [];
     // The render loop is ALREADY armed here (createLabRenderer starts it; the
     // game drawFn replaced the default at setDrawFn) — pause before anything
     // compiles so nothing renders warm and nothing compiles mid-frame.
+    // RESTORE THE PREVIOUS STATE, never an unconditional `true` (startup-freeze
+    // task, 2026-09-16): a bench or capture rig that deliberately paused the
+    // loop had it silently restarted by a late warm completion.
+    const wasLoopRunning = handle.loopRunning;
     handle.setLoopRunning(false);
+    mark('warm-invoked');
     // The gun load is awaited earlier in boot, so this has usually resolved
     // already; awaiting it keeps the ordering explicit — the weapon's
     // materials and the lights it registers must be in the scene before the
     // compiles below run.
+    //
+    // TIMING SPLIT (2026-09-16). Awaiting a settled promise queues a
+    // microtask, and main() yields at its next await; measured on the shipped
+    // page that interlude is only 9-27 ms, so this continuation starts just
+    // after warmPipelines() was invoked. The split is kept because `ms` should
+    // be the warm's own work (it now equals the sum of `phases`) and because it
+    // stays correct if more synchronous code is ever added between the invoke
+    // and this point. `bootBeforeWarmMs` is that interlude, reported, not
+    // folded into the warm.
     await gunReadyPromise;
+    const t0 = performance.now();
+    mark('warm-steps-start');
     let passesCompiled = 0;
     let computesWarmed = 0;
+    const phases: Record<string, number | number[]> = {};
     try {
+      let tp = performance.now();
       scene.traverse((o) => {
         // Any invisible Object3D, not just meshes: a hidden GROUP (flash
         // group) hides visible children that the compiles would otherwise
         // skip — the first-shot freeze survived for exactly those.
         if (!o.visible) { flipped.push(o); o.visible = true; }
       });
+      phases.flip = performance.now() - tp;
+      mark('warm-flip-done');
       // CROWD TILE-BIN COMPUTES (attribution 2 above). An empty-group bin
       // dispatches the same four kernels with zero visible slots, so the
       // pipelines are built here instead of in the first crowd sync.
       camera.updateMatrixWorld();
       camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
+      tp = performance.now();
       if (crowdOn) {
         const warmGrid = {
           widthPx: sdfLayer.targetSize.width,
           heightPx: sdfLayer.targetSize.height,
         };
+        const perType: number[] = [];
         for (const t of crowdTypes.values()) {
+          const t1 = performance.now();
           t.tiles.bin([], camera, 0, warmGrid);
+          perType.push(Math.round((performance.now() - t1) * 10) / 10);
           computesWarmed++;
         }
+        phases.crowdBinsPerType = perType;
       }
+      phases.crowdBins = performance.now() - tp;
+      mark('warm-crowd-bins-done');
+      tp = performance.now();
       if (gooLayer) await gooLayer.precompile(camera);
+      phases.goo = performance.now() - tp;
+      mark('warm-goo-done');
       // ONE REAL FRAME (attribution 1 above). The previous warm-up ended here
       // with a compileAsync(scene, camera) — canvas context — and every
       // main-pass pipeline still had to be built the first time the live draw
@@ -4461,45 +4516,86 @@ async function main() {
       // here FIRST, the crowd pipeline is created synchronously inside the
       // march submit and precompilePasses below becomes a cache-hit
       // confirmation pass.
+      tp = performance.now();
       handle.drawOnce();
+      phases.drawOnce = performance.now() - tp;
+      mark('warm-draw-once-done');
       // The SDF layer's own passes: the twins in their real target/MRT context,
       // the fullscreen passes (blit/accum/detail/refine-view/composite) that are
       // in private scenes the traversal above cannot reach, and the upscale
       // stage's per-layer passes. See SdfLayer.precompilePasses.
+      tp = performance.now();
       passesCompiled = await sdfLayer.precompilePasses(scene, camera);
+      phases.precompile = performance.now() - tp;
+      mark('warm-precompile-done');
       const done = {
         ms: Math.round(performance.now() - t0),
+        bootBeforeWarmMs: Math.round(t0 - tInvoke),
         flipped: flipped.length,
+        // WHAT the 61 hidden objects are — the flip exists for the flash
+        // group, but the traversal takes everything; the names make an
+        // over-broad warm visible instead of guessed.
+        flippedNames: flipped.slice(0, 80).map((o) => `${o.type}:${o.name || '?'}`),
         passes: passesCompiled,
         computes: computesWarmed,
+        phases,
       };
       (window as unknown as Record<string, unknown>).__warmDone = done;
-      console.log(`[warm] pipelines compiled in ${done.ms} ms (${done.flipped} hidden objects, ${done.computes} crowd types, ${passesCompiled} stage/layer passes)`);
+      console.log(`[warm] ${done.ms} ms of warm steps after ${done.bootBeforeWarmMs} ms of synchronous boot (${done.flipped} hidden objects, ${done.computes} crowd types, ${passesCompiled} stage/layer passes)`);
+      console.log(`[warm] phases ${JSON.stringify(phases)}`);
     } catch (err) {
       console.error('[warm] pipeline warm-up failed', err);
       // A driver waiting on __warmDone must not wait forever because the
       // warm-up threw: record the failure under the same key.
       (window as unknown as Record<string, unknown>).__warmDone = {
-        ms: Math.round(performance.now() - t0), flipped: flipped.length, error: String(err),
+        ms: Math.round(performance.now() - t0),
+        bootBeforeWarmMs: Math.round(t0 - tInvoke),
+        flipped: flipped.length, error: String(err), phases,
       };
     } finally {
       for (const o of flipped) o.visible = false;
-      handle.setLoopRunning(true);
+      // Restore the state we found, not an unconditional restart
+      // (warm-gate.ts documents the contract).
+      handle.setLoopRunning(restoreLoopState(wasLoopRunning));
+      mark('warm-finally');
     }
   };
   // ?warm=0 skips the warm-up (A/B: the first-shot freeze it removes).
   setLoader('compiling pipelines');
-  // Adversarial review 794a7cfc: a compileAsync that never settles would
-  // hold the loader (and the flipped meshes) forever — bound it.
-  const warmDone = new URLSearchParams(location.search).get('warm') !== '0'
-    ? Promise.race([warmPipelines(), new Promise<void>((r) => setTimeout(r, 15000))])
-    : Promise.resolve();
+  // Adversarial review 794a7cfc: a compileAsync that never settles would hold
+  // the loader (and the flipped meshes) forever — bound the LOADER, never the
+  // work. STARTUP-FREEZE FIX (2026-09-16): the old Promise.race resolved the
+  // gate at 15 s and then claimed READY while warmPipelines was still running
+  // with the loop paused — the owner's "loaded, then frozen" window. On a
+  // timeout the loader now says it is still compiling, keeps the loop's paused
+  // state, and settles to READY only when the warm-up actually completes.
+  const warmRequested = new URLSearchParams(location.search).get('warm') !== '0';
+  let warmSettled = false;
+  let warmTimedOut = false;
+  const warmPromise: Promise<void> = (warmRequested ? warmPipelines() : Promise.resolve())
+    .then(() => { warmSettled = true; });
+  const warmBound: Promise<'settled' | 'timeout'> = new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      if (warmSettled) return;
+      warmTimedOut = true;
+      resolve('timeout');
+    }, 15000);
+    void warmPromise.then(() => { clearTimeout(timer); resolve('settled'); });
+  });
   // THE LOADER GATE: reveal the game only when the weapon is loaded AND the
   // pipeline compilation finished — the two multi-second boot legs. READY
   // auto-hides after 1.2 s so headless drivers that never click still run.
-  void Promise.all([gunReadyPromise, warmDone]).then(() => {
-    setLoader('READY — CLICK TO START', true);
-    window.setTimeout(() => loaderEl?.classList.add('loader-hidden'), 1200);
+  void Promise.all([gunReadyPromise, warmBound]).then(() => {
+    const reveal = () => {
+      setLoader('READY — CLICK TO START', true);
+      window.setTimeout(() => loaderEl?.classList.add('loader-hidden'), 1200);
+    };
+    if (warmGateOutcome(warmTimedOut) === 'still-compiling') {
+      setLoader('still compiling pipelines — the game starts when this finishes');
+      void warmPromise.then(reveal);
+      return;
+    }
+    reveal();
   });
 
   /** Scratch, so the per-shot path allocates nothing. */
@@ -5879,6 +5975,7 @@ async function main() {
   }
 
   // -----------------------------------------------------------------------
+  mark('dynamite-start');
   // WEAPON SLOT 2 — DYNAMITE (2026-09-10).
   //
   // The purpose is TUNING: a bundle you can throw at zombies and soldiers so
@@ -6268,6 +6365,7 @@ async function main() {
   }
 
   // -----------------------------------------------------------------------
+  mark('detonation-start');
   // THE DETONATION — one blast, everything it does.
   // -----------------------------------------------------------------------
   /** Per-phase timings of the LAST detonation, ms. The blast is one frame of
@@ -6827,6 +6925,7 @@ async function main() {
   }
 
   // -----------------------------------------------------------------------
+  mark('burst-start');
   // The burst stand-in (stage 3 replaces this with webgpu/explosion-vfx.ts).
   // Additive cards in the effects overlay — the SAME routing the tracers use
   // (character-effects.ts's header explains why: that scene is drawn after the
@@ -7072,6 +7171,7 @@ async function main() {
   }
 
   // -----------------------------------------------------------------------
+  mark('bleed-start');
   // BLEED (bleeding-wounds spec, 2026-08-31). Wounds ooze/spurt/gush per
   // calibre; flying chunks trail droplets; everything settles into floor
   // splats. The pure sim lives in blood-sim.ts, the ledger in
@@ -7106,6 +7206,7 @@ async function main() {
   }
 
   // -----------------------------------------------------------------------
+  mark('goo-start');
   // GOO — screen-space metaball blood (X1.bleed-look round 2). The owner's
   // brief was "viscous and gooey and shiny blobbys and no hard edges ...
   // kinda like the metablob for the goo system", which is goo-layer.ts's own
@@ -7336,7 +7437,11 @@ async function main() {
   // inside a detonation would be a two-second freeze at the worst possible
   // moment. Once built it is reused for every zombie in the session.
   if (gibRenderMode === 'carve') {
-    setTimeout(() => { ensureCarvedLibrary(); }, 0);
+    // The ONLY boot-time carve trigger. Under the shipped default URL (no
+    // ?gibrender=) this branch does not run: measured 2026-09-16, the default
+    // mode is 'march' and the historical carve build cost is NOT boot cost.
+    mark('carve-boot-scheduled');
+    setTimeout(() => { mark('carve-build-start'); ensureCarvedLibrary(); mark('carve-build-end'); }, 0);
   }
   if (gibRenderMode === 'sprite') {
     void ensureGibAtlas('sheet').then((n) => {
@@ -7590,6 +7695,7 @@ async function main() {
   };
 
   // -----------------------------------------------------------------------
+  mark('hud-start');
   // HUD: frame time, bodies on screen, probeWeight, where you are.
   // -----------------------------------------------------------------------
   // THE RETICLE. A target graphic rather than a bare dot, per the owner: outer
@@ -7618,6 +7724,7 @@ async function main() {
   const hudEl = document.getElementById('hud');
   const hud = { lockHint: true };
   let frameEma = 0;
+  mark('boot-time');
   const bootTime = performance.now();
 
   // ---- ACTOR VISIBILITY CULL (2026-09-09) --------------------------------
@@ -7821,6 +7928,7 @@ async function main() {
   }
 
   // -----------------------------------------------------------------------
+  mark('frameloop-start');
   // Frame loop.
   // -----------------------------------------------------------------------
   // ?frozen=1 — boot with the wanderers frozen from frame 0. The boot loop
@@ -8773,6 +8881,7 @@ async function main() {
   updateHud();
 
   // -----------------------------------------------------------------------
+  mark('api-start');
   // __sdfGame — the deterministic driver surface. The grapeshot dispatch
   // builds on this: zombies are addressable by id, the player pose is
   // settable, frames are steppable, wanderers freezable.
@@ -9124,6 +9233,7 @@ function performBenchAction(a: BenchAction): void {
 }
 
   // -------------------------------------------------------------------------
+  mark('demo-start');
   // DEMO RECORDER / PLAYER (deterministic demo recordings stage 3, 2026-09-14).
   //
   // The recording is an INPUT log: one DemoFrame per fixed-step tick. Live play
@@ -9500,6 +9610,7 @@ function performBenchAction(a: BenchAction): void {
   });
 
   // -------------------------------------------------------------------------
+  mark('draw-ready');
   // Everything the draw callback reads now exists — let frames draw. See the
   // boot-frame gate's note at setDrawFn.
   drawReady = true;
@@ -13132,7 +13243,10 @@ function performBenchAction(a: BenchAction): void {
       pendingBake: chunkBakeJobs.pendingId,
       bakeError: chunkBakeJobs.error,
       lastBakeInfo,
-      pieces: bakedChunks.map(b => ({ id: b.id, centre: [...b.centre] as [number, number, number], radius: b.radius })),
+      /** Baked pieces wearing the per-fragment textured HEAD material — the
+       *  first non-zero value is the first textured-head draw (startup probe). */
+      faceBaked: bakedChunks.filter(b => b.faceMaterial !== undefined).length,
+      pieces: bakedChunks.map(b => ({ id: b.id, centre: [...b.centre] as [number, number, number], radius: b.radius, face: b.faceMaterial !== undefined })),
       /** Live (still-marched) chunk positions — the look/bench drivers frame
        *  the camera on these in bake-OFF captures. */
       livePieces: liveChunks.map(c => ({
@@ -13810,6 +13924,28 @@ function performBenchAction(a: BenchAction): void {
       }
       return { ok, placed };
     },
+    /**
+     * STARTUP ATTRIBUTION SEAM (2026-09-16). `bootMarks` are main()'s phase
+     * marks (performance.now()), `warmDone` the warm-up's own sub-phase record,
+     * `gpuDiagnostics` the device-loss / uncaptured-error channel, and
+     * `loopRunning` the current rAF state (so a caller can prove the warm did
+     * not restart a loop it had deliberately paused).
+     */
+    bootMarks: () => bootMarks.slice(),
+    warmDone: () => (window as unknown as Record<string, unknown>).__warmDone ?? null,
+    /** Re-run the warm-up on demand. The startup probe uses this to prove the
+     *  loop-restore contract: pause the loop, call rewarm(), assert it is still
+     *  paused. Warm steps are cache hits after boot, so this is cheap. */
+    rewarm: () => warmPipelines(),
+    gpuDiagnostics: () => handle.gpuDiagnostics,
+    loopRunning: () => handle.loopRunning,
+    /** Which gib renderer boot selected and whether the carve library built. */
+    gibRenderer: () => ({
+      mode: gibRenderMode,
+      carvedLibraryBuilt: carvedLibrary !== null,
+      carvedBuildMs,
+      carveCells: gibCarveCells,
+    }),
     uptime: () => (performance.now() - bootTime) / 1000,
     get frames() { return frameCount; },
     /** Where a view-model hangs (child of the camera). */
@@ -13829,6 +13965,7 @@ function performBenchAction(a: BenchAction): void {
     const disposePlaytest = installNormalPlaytest(api);
     import.meta.hot?.dispose(disposePlaytest);
   }
+  mark('main-end');
 }
 
 main().catch((err) => {

@@ -1,0 +1,3515 @@
+{
+  "label": "carve",
+  "url": "http://localhost:5480/sdf-game.html?room=arena&gibbones=core&pipelinelog=1&seed=7&gibrender=carve",
+  "startedAt": "2026-09-16T14:13:45.658Z",
+  "qs": "&gibrender=carve",
+  "backend": "webgpu",
+  "backendWallMs": 25700,
+  "warmWallMs": 31253,
+  "warm": {
+    "ms": 27539,
+    "bootBeforeWarmMs": 21,
+    "flipped": 61,
+    "flippedNames": [
+      "PointLight:?",
+      "PointLight:?",
+      "PointLight:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Group:shell-eject-0",
+      "Group:shell-load-0",
+      "Group:shell-eject-1",
+      "Group:shell-load-1",
+      "Group:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?"
+    ],
+    "passes": 11,
+    "computes": 7,
+    "phases": {
+      "flip": 0.20000004768371582,
+      "crowdBinsPerType": [
+        6.8,
+        3.3,
+        3.3,
+        3,
+        2.4,
+        3.9,
+        3.2
+      ],
+      "crowdBins": 25.899999976158142,
+      "goo": 22557.5,
+      "drawOnce": 3699.2999999523163,
+      "precompile": 1255.3999999761581
+    }
+  },
+  "bootPoll": [],
+  "cpuProfile": {
+    "file": "carve-boot.cpuprofile",
+    "totalMs": 31269,
+    "top": [
+      {
+        "fn": "minDistTo  src/lab/sdf-zombie/webgpu/gib-carve.ts:52",
+        "ms": 4338,
+        "pct": 13.9
+      },
+      {
+        "fn": "sdBentCone  src/lab/sdf-zombie/validate.ts:131",
+        "ms": 3969,
+        "pct": 12.7
+      },
+      {
+        "fn": "sdPrimitive  src/lab/sdf-zombie/validate.ts:14",
+        "ms": 3175,
+        "pct": 10.2
+      },
+      {
+        "fn": "sdBody  src/lab/sdf-zombie/validate.ts:185",
+        "ms": 2514,
+        "pct": 8
+      },
+      {
+        "fn": "sdBezierTs  src/lab/sdf-zombie/validate.ts:100",
+        "ms": 2434,
+        "pct": 7.8
+      },
+      {
+        "fn": "at  src/lab/sdf-zombie/validate.ts:138",
+        "ms": 2388,
+        "pct": 7.6
+      },
+      {
+        "fn": "sub  src/lab/sdf-zombie/vec.ts:2",
+        "ms": 1661,
+        "pct": 5.3
+      },
+      {
+        "fn": "(idle)  :0",
+        "ms": 1421,
+        "pct": 4.5
+      },
+      {
+        "fn": "field  src/lab/sdf-zombie/chunk-bake-field.ts:74",
+        "ms": 1095,
+        "pct": 3.5
+      },
+      {
+        "fn": "g  src/lab/sdf-zombie/validate.ts:143",
+        "ms": 1068,
+        "pct": 3.4
+      },
+      {
+        "fn": "createProgram  three/chunk-DEF7EUCY.js:45188",
+        "ms": 839,
+        "pct": 2.7
+      },
+      {
+        "fn": "(garbage collector)  :0",
+        "ms": 677,
+        "pct": 2.2
+      },
+      {
+        "fn": "boneBreach  src/lab/sdf-zombie/validate.ts:237",
+        "ms": 445,
+        "pct": 1.4
+      },
+      {
+        "fn": "dot  src/lab/sdf-zombie/vec.ts:4",
+        "ms": 336,
+        "pct": 1.1
+      },
+      {
+        "fn": "distance  src/lab/sdf-zombie/webgpu/skeleton-spike/contract.ts:132",
+        "ms": 283,
+        "pct": 0.9
+      },
+      {
+        "fn": "(anon)  src/lab/sdf-zombie/webgpu/gib-carve.ts:38",
+        "ms": 279,
+        "pct": 0.9
+      },
+      {
+        "fn": "(program)  :0",
+        "ms": 273,
+        "pct": 0.9
+      },
+      {
+        "fn": "extractHullSoup  src/lab/sdf-zombie/webgpu/surface-nets-cpu.ts:70",
+        "ms": 246,
+        "pct": 0.8
+      },
+      {
+        "fn": "build  three/chunk-DEF7EUCY.js:1442",
+        "ms": 207,
+        "pct": 0.7
+      },
+      {
+        "fn": "scale  src/lab/sdf-zombie/vec.ts:3",
+        "ms": 198,
+        "pct": 0.6
+      },
+      {
+        "fn": "add  src/lab/sdf-zombie/vec.ts:1",
+        "ms": 191,
+        "pct": 0.6
+      },
+      {
+        "fn": "extractRegion  src/lab/sdf-zombie/webgpu/gib-carve.ts:164",
+        "ms": 116,
+        "pct": 0.4
+      },
+      {
+        "fn": "preWound  src/lab/sdf-zombie/chunk-bake-field.ts:88",
+        "ms": 108,
+        "pct": 0.3
+      },
+      {
+        "fn": "_getChildren  three/chunk-DEF7EUCY.js:1139",
+        "ms": 93,
+        "pct": 0.3
+      },
+      {
+        "fn": "build  three/chunk-DEF7EUCY.js:1744",
+        "ms": 78,
+        "pct": 0.2
+      },
+      {
+        "fn": "getDataFromNode  three/chunk-DEF7EUCY.js:25488",
+        "ms": 74,
+        "pct": 0.2
+      },
+      {
+        "fn": "getChildren  three/chunk-DEF7EUCY.js:1103",
+        "ms": 63,
+        "pct": 0.2
+      },
+      {
+        "fn": "analyze  three/chunk-DEF7EUCY.js:1363",
+        "ms": 57,
+        "pct": 0.2
+      },
+      {
+        "fn": "extractSegmentMesh  src/lab/sdf-zombie/webgpu/skeleton-spike/mesh.ts:5",
+        "ms": 54,
+        "pct": 0.2
+      },
+      {
+        "fn": "build  three/chunk-DEF7EUCY.js:4238",
+        "ms": 52,
+        "pct": 0.2
+      }
+    ]
+  },
+  "atWarm": {
+    "t": 32619,
+    "bootMarks": [
+      {
+        "n": "main-start",
+        "t": 287
+      },
+      {
+        "n": "renderer-ready",
+        "t": 361
+      },
+      {
+        "n": "world-start",
+        "t": 362
+      },
+      {
+        "n": "gallery-start",
+        "t": 550
+      },
+      {
+        "n": "dungeon-start",
+        "t": 557
+      },
+      {
+        "n": "drawchain-start",
+        "t": 561
+      },
+      {
+        "n": "deferred-start",
+        "t": 566
+      },
+      {
+        "n": "adaptive-start",
+        "t": 567
+      },
+      {
+        "n": "zombies-start",
+        "t": 589
+      },
+      {
+        "n": "room-probes-start",
+        "t": 596
+      },
+      {
+        "n": "player-start",
+        "t": 2757
+      },
+      {
+        "n": "gun-start",
+        "t": 2758
+      },
+      {
+        "n": "gun-ready",
+        "t": 3217
+      },
+      {
+        "n": "warm-invoked",
+        "t": 3218
+      },
+      {
+        "n": "dynamite-start",
+        "t": 3225
+      },
+      {
+        "n": "detonation-start",
+        "t": 3226
+      },
+      {
+        "n": "burst-start",
+        "t": 3226
+      },
+      {
+        "n": "bleed-start",
+        "t": 3229
+      },
+      {
+        "n": "goo-start",
+        "t": 3229
+      },
+      {
+        "n": "carve-boot-scheduled",
+        "t": 3234
+      },
+      {
+        "n": "hud-start",
+        "t": 3238
+      },
+      {
+        "n": "boot-time",
+        "t": 3238
+      },
+      {
+        "n": "frameloop-start",
+        "t": 3238
+      },
+      {
+        "n": "api-start",
+        "t": 3238
+      },
+      {
+        "n": "demo-start",
+        "t": 3239
+      },
+      {
+        "n": "draw-ready",
+        "t": 3239
+      },
+      {
+        "n": "main-end",
+        "t": 3239
+      },
+      {
+        "n": "warm-steps-start",
+        "t": 3239
+      },
+      {
+        "n": "warm-flip-done",
+        "t": 3239
+      },
+      {
+        "n": "warm-crowd-bins-done",
+        "t": 3265
+      },
+      {
+        "n": "carve-build-start",
+        "t": 3368
+      },
+      {
+        "n": "carve-build-end",
+        "t": 25640
+      },
+      {
+        "n": "warm-goo-done",
+        "t": 25823
+      },
+      {
+        "n": "warm-draw-once-done",
+        "t": 29522
+      },
+      {
+        "n": "warm-precompile-done",
+        "t": 30777
+      },
+      {
+        "n": "warm-finally",
+        "t": 30778
+      }
+    ],
+    "warmDone": {
+      "ms": 27539,
+      "bootBeforeWarmMs": 21,
+      "flipped": 61,
+      "flippedNames": [
+        "PointLight:?",
+        "PointLight:?",
+        "PointLight:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Group:shell-eject-0",
+        "Group:shell-load-0",
+        "Group:shell-eject-1",
+        "Group:shell-load-1",
+        "Group:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?"
+      ],
+      "passes": 11,
+      "computes": 7,
+      "phases": {
+        "flip": 0.20000004768371582,
+        "crowdBinsPerType": [
+          6.8,
+          3.3,
+          3.3,
+          3,
+          2.4,
+          3.9,
+          3.2
+        ],
+        "crowdBins": 25.899999976158142,
+        "goo": 22557.5,
+        "drawOnce": 3699.2999999523163,
+        "precompile": 1255.3999999761581
+      }
+    },
+    "loader": {
+      "status": "READY — CLICK TO START",
+      "hidden": true,
+      "ready": true
+    },
+    "loopRunning": true,
+    "gpuDiagnostics": {
+      "lost": null,
+      "uncaptured": [],
+      "uncapturedCount": 0
+    },
+    "gibRenderer": {
+      "mode": "carve",
+      "carvedLibraryBuilt": true,
+      "carvedBuildMs": 22270.700000047684,
+      "carveCells": 1
+    },
+    "probeDynamic": {
+      "radianceGain": 0.15,
+      "visStrength": 1,
+      "frames": 16,
+      "errors": 0,
+      "bound": true,
+      "reached": 35,
+      "gates": {
+        "bound": true,
+        "dynKey": "arena",
+        "room": 6,
+        "grid": true,
+        "gain": 0.15,
+        "vis": 1,
+        "dynOn": true,
+        "flashI": 0,
+        "flashAge": null,
+        "capsules": 480,
+        "lights": 1
+      },
+      "rate": 2
+    },
+    "chunkStats": {
+      "live": 0,
+      "sharedLiveMaterial": true,
+      "baked": 0,
+      "views": 0,
+      "totalBakes": 0,
+      "lastBakeMs": 0,
+      "lastBakeSwapMs": 0,
+      "lastBakeSwapFrame": -1,
+      "lastBakeRequestMs": 0,
+      "bakeThread": "worker",
+      "pendingBake": null,
+      "bakeError": null,
+      "lastBakeInfo": null,
+      "faceBaked": 0,
+      "pieces": [],
+      "livePieces": []
+    },
+    "gunReady": true,
+    "frames": 34
+  },
+  "atWarmSettle": {
+    "t": 33685,
+    "bootMarks": [
+      {
+        "n": "main-start",
+        "t": 287
+      },
+      {
+        "n": "renderer-ready",
+        "t": 361
+      },
+      {
+        "n": "world-start",
+        "t": 362
+      },
+      {
+        "n": "gallery-start",
+        "t": 550
+      },
+      {
+        "n": "dungeon-start",
+        "t": 557
+      },
+      {
+        "n": "drawchain-start",
+        "t": 561
+      },
+      {
+        "n": "deferred-start",
+        "t": 566
+      },
+      {
+        "n": "adaptive-start",
+        "t": 567
+      },
+      {
+        "n": "zombies-start",
+        "t": 589
+      },
+      {
+        "n": "room-probes-start",
+        "t": 596
+      },
+      {
+        "n": "player-start",
+        "t": 2757
+      },
+      {
+        "n": "gun-start",
+        "t": 2758
+      },
+      {
+        "n": "gun-ready",
+        "t": 3217
+      },
+      {
+        "n": "warm-invoked",
+        "t": 3218
+      },
+      {
+        "n": "dynamite-start",
+        "t": 3225
+      },
+      {
+        "n": "detonation-start",
+        "t": 3226
+      },
+      {
+        "n": "burst-start",
+        "t": 3226
+      },
+      {
+        "n": "bleed-start",
+        "t": 3229
+      },
+      {
+        "n": "goo-start",
+        "t": 3229
+      },
+      {
+        "n": "carve-boot-scheduled",
+        "t": 3234
+      },
+      {
+        "n": "hud-start",
+        "t": 3238
+      },
+      {
+        "n": "boot-time",
+        "t": 3238
+      },
+      {
+        "n": "frameloop-start",
+        "t": 3238
+      },
+      {
+        "n": "api-start",
+        "t": 3238
+      },
+      {
+        "n": "demo-start",
+        "t": 3239
+      },
+      {
+        "n": "draw-ready",
+        "t": 3239
+      },
+      {
+        "n": "main-end",
+        "t": 3239
+      },
+      {
+        "n": "warm-steps-start",
+        "t": 3239
+      },
+      {
+        "n": "warm-flip-done",
+        "t": 3239
+      },
+      {
+        "n": "warm-crowd-bins-done",
+        "t": 3265
+      },
+      {
+        "n": "carve-build-start",
+        "t": 3368
+      },
+      {
+        "n": "carve-build-end",
+        "t": 25640
+      },
+      {
+        "n": "warm-goo-done",
+        "t": 25823
+      },
+      {
+        "n": "warm-draw-once-done",
+        "t": 29522
+      },
+      {
+        "n": "warm-precompile-done",
+        "t": 30777
+      },
+      {
+        "n": "warm-finally",
+        "t": 30778
+      }
+    ],
+    "warmDone": {
+      "ms": 27539,
+      "bootBeforeWarmMs": 21,
+      "flipped": 61,
+      "flippedNames": [
+        "PointLight:?",
+        "PointLight:?",
+        "PointLight:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Group:shell-eject-0",
+        "Group:shell-load-0",
+        "Group:shell-eject-1",
+        "Group:shell-load-1",
+        "Group:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?"
+      ],
+      "passes": 11,
+      "computes": 7,
+      "phases": {
+        "flip": 0.20000004768371582,
+        "crowdBinsPerType": [
+          6.8,
+          3.3,
+          3.3,
+          3,
+          2.4,
+          3.9,
+          3.2
+        ],
+        "crowdBins": 25.899999976158142,
+        "goo": 22557.5,
+        "drawOnce": 3699.2999999523163,
+        "precompile": 1255.3999999761581
+      }
+    },
+    "loader": {
+      "status": "READY — CLICK TO START",
+      "hidden": true,
+      "ready": true
+    },
+    "loopRunning": true,
+    "gpuDiagnostics": {
+      "lost": null,
+      "uncaptured": [],
+      "uncapturedCount": 0
+    },
+    "gibRenderer": {
+      "mode": "carve",
+      "carvedLibraryBuilt": true,
+      "carvedBuildMs": 22270.700000047684,
+      "carveCells": 1
+    },
+    "probeDynamic": {
+      "radianceGain": 0.15,
+      "visStrength": 1,
+      "frames": 29,
+      "errors": 0,
+      "bound": true,
+      "reached": 61,
+      "gates": {
+        "bound": true,
+        "dynKey": "arena",
+        "room": 6,
+        "grid": true,
+        "gain": 0.15,
+        "vis": 1,
+        "dynOn": true,
+        "flashI": 0,
+        "flashAge": null,
+        "capsules": 480,
+        "lights": 1
+      },
+      "rate": 2
+    },
+    "chunkStats": {
+      "live": 0,
+      "sharedLiveMaterial": true,
+      "baked": 0,
+      "views": 0,
+      "totalBakes": 0,
+      "lastBakeMs": 0,
+      "lastBakeSwapMs": 0,
+      "lastBakeSwapFrame": -1,
+      "lastBakeRequestMs": 0,
+      "bakeThread": "worker",
+      "pendingBake": null,
+      "bakeError": null,
+      "lastBakeInfo": null,
+      "faceBaked": 0,
+      "pieces": [],
+      "livePieces": []
+    },
+    "gunReady": true,
+    "frames": 60
+  },
+  "lifecycle": {
+    "loopAfterRunningWarm": true,
+    "loopAfterPausedWarm": false
+  },
+  "perf": {
+    "postWarmIdle": {
+      "n": 31,
+      "p50": 50,
+      "p95": 122.8,
+      "max": 393
+    }
+  },
+  "actions": {
+    "roomEntry": {
+      "wallMs": 1479,
+      "frames": {
+        "n": 22,
+        "p50": 48.7,
+        "p95": 114.5,
+        "max": 343.3
+      }
+    },
+    "firstShot": {
+      "wallMs": 537,
+      "frames": {
+        "n": 11,
+        "p50": 44.9,
+        "p95": 179.8,
+        "max": 179.8
+      }
+    },
+    "repeatedBlasts": {
+      "n": 39,
+      "p50": 19,
+      "p95": 424.9,
+      "max": 553.8
+    }
+  },
+  "arenaRoom": "arena",
+  "target": {
+    "id": 16,
+    "kind": "zombie",
+    "room": 6,
+    "pos": [
+      28.463740702541056,
+      0,
+      -5.557900812887071
+    ],
+    "yaw": -0.8243114437521089,
+    "phase": "falling",
+    "meter": 1
+  },
+  "gibTimeline": {
+    "firstVisibleChunk": {
+      "t": 870,
+      "pendingGibs": 7,
+      "tearing": 7,
+      "tier": "parts",
+      "blastMs": 27.699999928474426,
+      "live": 1,
+      "baked": 0,
+      "pendingBake": null,
+      "totalBakes": 0,
+      "lastBakeMs": 0,
+      "lastBakeSwapMs": 0,
+      "faceBaked": 0
+    },
+    "firstBakeSubmit": {
+      "t": 4140,
+      "pendingGibs": 0,
+      "tearing": 0,
+      "tier": null,
+      "blastMs": 27.699999928474426,
+      "live": 1,
+      "baked": 0,
+      "pendingBake": 1,
+      "totalBakes": 0,
+      "lastBakeMs": 0,
+      "lastBakeSwapMs": 0,
+      "faceBaked": 0
+    },
+    "firstBakeSwap": {
+      "t": 4275,
+      "pendingGibs": 0,
+      "tearing": 0,
+      "tier": null,
+      "blastMs": 27.699999928474426,
+      "live": 0,
+      "baked": 1,
+      "pendingBake": null,
+      "totalBakes": 1,
+      "lastBakeMs": 17.90000009536743,
+      "lastBakeSwapMs": 0.40000009536743164,
+      "faceBaked": 0
+    },
+    "firstTexturedHeadDraw": null,
+    "samples": [
+      {
+        "t": 870,
+        "pendingGibs": 7,
+        "tearing": 7,
+        "tier": "parts",
+        "blastMs": 27.699999928474426,
+        "live": 1,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 1232,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 27.699999928474426,
+        "live": 1,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 1490,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 27.699999928474426,
+        "live": 1,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 1706,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 27.699999928474426,
+        "live": 1,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 1922,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 27.699999928474426,
+        "live": 1,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 2139,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 27.699999928474426,
+        "live": 1,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 2383,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 27.699999928474426,
+        "live": 1,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 3018,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 27.699999928474426,
+        "live": 1,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 3277,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 27.699999928474426,
+        "live": 1,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 3545,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 27.699999928474426,
+        "live": 1,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 3808,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 27.699999928474426,
+        "live": 1,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 4074,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 27.699999928474426,
+        "live": 1,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 4275,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 27.699999928474426,
+        "live": 0,
+        "baked": 1,
+        "pendingBake": null,
+        "totalBakes": 1,
+        "lastBakeMs": 17.90000009536743,
+        "lastBakeSwapMs": 0.40000009536743164,
+        "faceBaked": 0
+      },
+      {
+        "t": 4341,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 27.699999928474426,
+        "live": 0,
+        "baked": 1,
+        "pendingBake": null,
+        "totalBakes": 1,
+        "lastBakeMs": 17.90000009536743,
+        "lastBakeSwapMs": 0.40000009536743164,
+        "faceBaked": 0
+      },
+      {
+        "t": 4609,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 27.699999928474426,
+        "live": 0,
+        "baked": 1,
+        "pendingBake": null,
+        "totalBakes": 1,
+        "lastBakeMs": 17.90000009536743,
+        "lastBakeSwapMs": 0.40000009536743164,
+        "faceBaked": 0
+      },
+      {
+        "t": 4843,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 27.699999928474426,
+        "live": 0,
+        "baked": 1,
+        "pendingBake": null,
+        "totalBakes": 1,
+        "lastBakeMs": 17.90000009536743,
+        "lastBakeSwapMs": 0.40000009536743164,
+        "faceBaked": 0
+      },
+      {
+        "t": 5116,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 27.699999928474426,
+        "live": 0,
+        "baked": 1,
+        "pendingBake": null,
+        "totalBakes": 1,
+        "lastBakeMs": 17.90000009536743,
+        "lastBakeSwapMs": 0.40000009536743164,
+        "faceBaked": 0
+      },
+      {
+        "t": 5380,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 27.699999928474426,
+        "live": 0,
+        "baked": 1,
+        "pendingBake": null,
+        "totalBakes": 1,
+        "lastBakeMs": 17.90000009536743,
+        "lastBakeSwapMs": 0.40000009536743164,
+        "faceBaked": 0
+      },
+      {
+        "t": 5645,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 27.699999928474426,
+        "live": 0,
+        "baked": 1,
+        "pendingBake": null,
+        "totalBakes": 1,
+        "lastBakeMs": 17.90000009536743,
+        "lastBakeSwapMs": 0.40000009536743164,
+        "faceBaked": 0
+      },
+      {
+        "t": 5958,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 27.699999928474426,
+        "live": 0,
+        "baked": 1,
+        "pendingBake": null,
+        "totalBakes": 1,
+        "lastBakeMs": 17.90000009536743,
+        "lastBakeSwapMs": 0.40000009536743164,
+        "faceBaked": 0
+      },
+      {
+        "t": 6595,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 27.699999928474426,
+        "live": 0,
+        "baked": 1,
+        "pendingBake": null,
+        "totalBakes": 1,
+        "lastBakeMs": 17.90000009536743,
+        "lastBakeSwapMs": 0.40000009536743164,
+        "faceBaked": 0
+      }
+    ]
+  },
+  "probeStress": [
+    {
+      "requested": 6,
+      "charName": "zombie",
+      "spawn": {
+        "ok": 6,
+        "placed": [
+          [
+            22.1,
+            0,
+            -10.95
+          ],
+          [
+            23,
+            0,
+            -10.95
+          ],
+          [
+            23.9,
+            0,
+            -10.95
+          ],
+          [
+            22.1,
+            0,
+            -10.05
+          ],
+          [
+            23,
+            0,
+            -10.05
+          ],
+          [
+            23.9,
+            0,
+            -10.05
+          ]
+        ]
+      },
+      "pre": {
+        "frames": 151,
+        "errors": 0,
+        "capsules": 35
+      },
+      "post": {
+        "frames": 168,
+        "errors": 0,
+        "bound": true,
+        "capsules": 395,
+        "lights": 3,
+        "dynOn": true,
+        "radianceGain": 0.15,
+        "visStrength": 1
+      }
+    },
+    {
+      "requested": 12,
+      "charName": "zombie",
+      "spawn": {
+        "ok": 12,
+        "placed": [
+          [
+            21.65,
+            0,
+            -11.4
+          ],
+          [
+            22.55,
+            0,
+            -11.4
+          ],
+          [
+            23.45,
+            0,
+            -11.4
+          ],
+          [
+            24.35,
+            0,
+            -11.4
+          ],
+          [
+            21.65,
+            0,
+            -10.5
+          ],
+          [
+            22.55,
+            0,
+            -10.5
+          ],
+          [
+            23.45,
+            0,
+            -10.5
+          ],
+          [
+            24.35,
+            0,
+            -10.5
+          ],
+          [
+            21.65,
+            0,
+            -9.6
+          ],
+          [
+            22.55,
+            0,
+            -9.6
+          ],
+          [
+            23.45,
+            0,
+            -9.6
+          ],
+          [
+            24.35,
+            0,
+            -9.6
+          ]
+        ]
+      },
+      "pre": {
+        "frames": 169,
+        "errors": 0,
+        "capsules": 395
+      },
+      "post": {
+        "frames": 177,
+        "errors": 0,
+        "bound": true,
+        "capsules": 1024,
+        "lights": 1,
+        "dynOn": true,
+        "radianceGain": 0.15,
+        "visStrength": 1
+      }
+    },
+    {
+      "requested": 20,
+      "charName": "zombie",
+      "spawn": {
+        "ok": 20,
+        "placed": [
+          [
+            21.2,
+            0,
+            -11.85
+          ],
+          [
+            22.1,
+            0,
+            -11.85
+          ],
+          [
+            23,
+            0,
+            -11.85
+          ],
+          [
+            23.9,
+            0,
+            -11.85
+          ],
+          [
+            24.8,
+            0,
+            -11.85
+          ],
+          [
+            21.2,
+            0,
+            -10.95
+          ],
+          [
+            22.1,
+            0,
+            -10.95
+          ],
+          [
+            23,
+            0,
+            -10.95
+          ],
+          [
+            23.9,
+            0,
+            -10.95
+          ],
+          [
+            24.8,
+            0,
+            -10.95
+          ],
+          [
+            21.2,
+            0,
+            -10.05
+          ],
+          [
+            22.1,
+            0,
+            -10.05
+          ],
+          [
+            23,
+            0,
+            -10.05
+          ],
+          [
+            23.9,
+            0,
+            -10.05
+          ],
+          [
+            24.8,
+            0,
+            -10.05
+          ],
+          [
+            21.2,
+            0,
+            -9.15
+          ],
+          [
+            22.1,
+            0,
+            -9.15
+          ],
+          [
+            23,
+            0,
+            -9.15
+          ],
+          [
+            23.9,
+            0,
+            -9.15
+          ],
+          [
+            24.8,
+            0,
+            -9.15
+          ]
+        ]
+      },
+      "pre": {
+        "frames": 177,
+        "errors": 0,
+        "capsules": 1024
+      },
+      "post": {
+        "frames": 181,
+        "errors": 0,
+        "bound": true,
+        "capsules": 1024,
+        "lights": 1,
+        "dynOn": true,
+        "radianceGain": 0.15,
+        "visStrength": 1
+      }
+    }
+  ],
+  "probeHealth": {
+    "errors": 0,
+    "frames": 181,
+    "bound": true,
+    "rate": 2,
+    "gates": {
+      "bound": true,
+      "dynKey": "arena",
+      "room": 6,
+      "grid": true,
+      "gain": 0.15,
+      "vis": 1,
+      "dynOn": true,
+      "flashI": 0,
+      "flashAge": 8.873799999952324,
+      "capsules": 1024,
+      "lights": 1
+    },
+    "radianceGain": 0.15,
+    "visStrength": 1
+  },
+  "pipelineLog": {
+    "totalPipelines": 420,
+    "totalCompileMs": 23789,
+    "longFrames": [
+      {
+        "frame": 5,
+        "ms": 453.4,
+        "creations": 23,
+        "names": [
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_385",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_495",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_538",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshStandardMaterial_577"
+        ]
+      },
+      {
+        "frame": 67,
+        "ms": 601.7,
+        "creations": 23,
+        "names": [
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_385",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_495",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_538",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshStandardMaterial_577"
+        ]
+      },
+      {
+        "frame": 122,
+        "ms": 146.5,
+        "creations": 1,
+        "names": [
+          "renderPipeline_plate_789"
+        ]
+      },
+      {
+        "frame": 144,
+        "ms": 138.5,
+        "creations": 2,
+        "names": [
+          "renderPipeline_MeshBasicNodeMaterial_191",
+          "renderPipeline_MeshBasicNodeMaterial_727"
+        ]
+      },
+      {
+        "frame": 163,
+        "ms": 845.3,
+        "creations": 21,
+        "names": [
+          "renderPipeline_MeshBasicNodeMaterial_191",
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshBasicMaterial_783",
+          "renderPipeline_MeshBasicMaterial_785",
+          "renderPipeline_MeshBasicMaterial_786"
+        ]
+      },
+      {
+        "frame": 174,
+        "ms": 445.4,
+        "creations": 17,
+        "names": [
+          "renderPipeline_MeshBasicNodeMaterial_191",
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshBasicMaterial_783",
+          "renderPipeline_MeshBasicMaterial_785",
+          "renderPipeline_MeshBasicMaterial_786"
+        ]
+      },
+      {
+        "frame": 285,
+        "ms": 538.6,
+        "creations": 17,
+        "names": [
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshBasicMaterial_783",
+          "renderPipeline_MeshBasicMaterial_785",
+          "renderPipeline_MeshBasicMaterial_786",
+          "renderPipeline_MeshStandardMaterial_385"
+        ]
+      },
+      {
+        "frame": 294,
+        "ms": 410.5,
+        "creations": 17,
+        "names": [
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshBasicMaterial_783",
+          "renderPipeline_MeshBasicMaterial_785",
+          "renderPipeline_MeshBasicMaterial_786",
+          "renderPipeline_MeshStandardMaterial_385"
+        ]
+      },
+      {
+        "frame": 297,
+        "ms": 338.7,
+        "creations": 17,
+        "names": [
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshBasicMaterial_783",
+          "renderPipeline_MeshBasicMaterial_785",
+          "renderPipeline_MeshBasicMaterial_786",
+          "renderPipeline_MeshStandardMaterial_385"
+        ]
+      },
+      {
+        "frame": 299,
+        "ms": 389.6,
+        "creations": 17,
+        "names": [
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshBasicMaterial_783",
+          "renderPipeline_MeshBasicMaterial_785",
+          "renderPipeline_MeshBasicMaterial_786",
+          "renderPipeline_MeshStandardMaterial_385"
+        ]
+      },
+      {
+        "frame": 305,
+        "ms": 385.9,
+        "creations": 17,
+        "names": [
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshBasicMaterial_783",
+          "renderPipeline_MeshBasicMaterial_785",
+          "renderPipeline_MeshBasicMaterial_786",
+          "renderPipeline_MeshStandardMaterial_385"
+        ]
+      },
+      {
+        "frame": 310,
+        "ms": 437.8,
+        "creations": 17,
+        "names": [
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshBasicMaterial_783",
+          "renderPipeline_MeshBasicMaterial_785",
+          "renderPipeline_MeshBasicMaterial_786",
+          "renderPipeline_MeshStandardMaterial_385"
+        ]
+      }
+    ],
+    "slowest": [
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_766",
+        "ms": 22386,
+        "async": true,
+        "via": "compile#1@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_185",
+        "ms": 1241,
+        "async": true,
+        "via": "compile#8@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_185",
+        "ms": 75,
+        "async": true,
+        "via": "compile#23@f67",
+        "frame": 67
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_773",
+        "ms": 48,
+        "async": true,
+        "via": "compile#17@f67",
+        "frame": 67
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_767",
+        "ms": 8,
+        "async": true,
+        "via": "compile#2@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_781",
+        "ms": 3,
+        "async": true,
+        "via": "compile#3@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_782",
+        "ms": 2,
+        "async": true,
+        "via": "compile#4@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_196",
+        "ms": 1,
+        "async": true,
+        "via": "compile#11@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_197",
+        "ms": 1,
+        "async": true,
+        "via": "compile#12@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_198",
+        "ms": 1,
+        "async": true,
+        "via": "compile#13@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_198",
+        "ms": 1,
+        "async": true,
+        "via": "compile#43@f67",
+        "frame": 67
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_199",
+        "ms": 1,
+        "async": true,
+        "via": "compile#14@f5",
+        "frame": 5
+      }
+    ],
+    "duplicates": [
+      {
+        "name": "computePipeline_compute",
+        "sig": ",,,,,,,,,,,",
+        "count": 29,
+        "firstFrame": 5,
+        "lastFrame": 7
+      },
+      {
+        "name": "renderPipeline_MeshStandardMaterial_715",
+        "sig": "triangle-list,back,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 12,
+        "firstFrame": 5,
+        "lastFrame": 310
+      },
+      {
+        "name": "renderPipeline_MeshStandardMaterial_716",
+        "sig": "triangle-list,back,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 12,
+        "firstFrame": 5,
+        "lastFrame": 310
+      },
+      {
+        "name": "renderPipeline_MeshStandardMaterial_384",
+        "sig": "triangle-list,back,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 12,
+        "firstFrame": 5,
+        "lastFrame": 310
+      },
+      {
+        "name": "renderPipeline_MeshStandardMaterial_385",
+        "sig": "triangle-list,back,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 12,
+        "firstFrame": 5,
+        "lastFrame": 310
+      },
+      {
+        "name": "renderPipeline_MeshStandardMaterial_494",
+        "sig": "triangle-list,back,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 12,
+        "firstFrame": 5,
+        "lastFrame": 310
+      },
+      {
+        "name": "renderPipeline_MeshStandardMaterial_495",
+        "sig": "triangle-list,back,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 12,
+        "firstFrame": 5,
+        "lastFrame": 310
+      },
+      {
+        "name": "renderPipeline_MeshStandardMaterial_537",
+        "sig": "triangle-list,back,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 12,
+        "firstFrame": 5,
+        "lastFrame": 310
+      },
+      {
+        "name": "renderPipeline_MeshStandardMaterial_538",
+        "sig": "triangle-list,back,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 12,
+        "firstFrame": 5,
+        "lastFrame": 310
+      },
+      {
+        "name": "renderPipeline_MeshStandardMaterial_576",
+        "sig": "triangle-list,back,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 12,
+        "firstFrame": 5,
+        "lastFrame": 310
+      },
+      {
+        "name": "renderPipeline_MeshStandardMaterial_577",
+        "sig": "triangle-list,back,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 12,
+        "firstFrame": 5,
+        "lastFrame": 310
+      },
+      {
+        "name": "renderPipeline_MeshBasicMaterial_783",
+        "sig": "triangle-list,back,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 12,
+        "firstFrame": 5,
+        "lastFrame": 310
+      },
+      {
+        "name": "renderPipeline_MeshBasicMaterial_785",
+        "sig": "triangle-list,back,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 12,
+        "firstFrame": 5,
+        "lastFrame": 310
+      },
+      {
+        "name": "renderPipeline_MeshBasicMaterial_786",
+        "sig": "triangle-list,none,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 12,
+        "firstFrame": 5,
+        "lastFrame": 310
+      },
+      {
+        "name": "renderPipeline_MeshBasicMaterial_784",
+        "sig": "triangle-list,back,ccw,depth24plus,false,less-equal,,,1,rgba16float,main,main",
+        "count": 12,
+        "firstFrame": 5,
+        "lastFrame": 310
+      },
+      {
+        "name": "renderPipeline_Steel_682",
+        "sig": "triangle-list,none,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 11,
+        "firstFrame": 5,
+        "lastFrame": 310
+      },
+      {
+        "name": "renderPipeline_MeshStandardMaterial_174",
+        "sig": "triangle-list,back,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 10,
+        "firstFrame": 5,
+        "lastFrame": 310
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_977",
+        "sig": "triangle-list,back,ccw,depth24plus,true,less-equal,,,1,rgba16float,main,main",
+        "count": 7,
+        "firstFrame": 214,
+        "lastFrame": 310
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_773",
+        "sig": "triangle-list,back,ccw,depth24plus,false,less-equal,,,1,rgba16float,main,main",
+        "count": 5,
+        "firstFrame": 5,
+        "lastFrame": 67
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_185",
+        "sig": "triangle-list,back,ccw,,,,,,1,rgba32float,main,main",
+        "count": 4,
+        "firstFrame": 5,
+        "lastFrame": 67
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_195",
+        "sig": "triangle-list,back,ccw,,,,,,1,rgba16float|rgba16float|rgba16float|rgba16float,main,main",
+        "count": 4,
+        "firstFrame": 5,
+        "lastFrame": 67
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_196",
+        "sig": "triangle-list,back,ccw,,,,,,1,rgba16float|rgba16float|rgba16float|rgba16float,main,main",
+        "count": 4,
+        "firstFrame": 5,
+        "lastFrame": 67
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_197",
+        "sig": "triangle-list,back,ccw,,,,,,1,rgba16float|rgba16float|rgba16float|rgba16float,main,main",
+        "count": 4,
+        "firstFrame": 5,
+        "lastFrame": 67
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_198",
+        "sig": "triangle-list,back,ccw,,,,,,1,rgba16float|rgba16float|rgba16float|rgba16float,main,main",
+        "count": 4,
+        "firstFrame": 5,
+        "lastFrame": 67
+      }
+    ],
+    "compute": {
+      "total": 433,
+      "maxPerFrame": 19,
+      "byFrame": [
+        {
+          "frame": 5,
+          "calls": 8
+        },
+        {
+          "frame": 6,
+          "calls": 1
+        },
+        {
+          "frame": 7,
+          "calls": 2
+        },
+        {
+          "frame": 8,
+          "calls": 1
+        },
+        {
+          "frame": 9,
+          "calls": 2
+        },
+        {
+          "frame": 10,
+          "calls": 1
+        },
+        {
+          "frame": 11,
+          "calls": 2
+        },
+        {
+          "frame": 12,
+          "calls": 1
+        },
+        {
+          "frame": 13,
+          "calls": 2
+        },
+        {
+          "frame": 14,
+          "calls": 1
+        },
+        {
+          "frame": 15,
+          "calls": 2
+        },
+        {
+          "frame": 16,
+          "calls": 1
+        },
+        {
+          "frame": 17,
+          "calls": 2
+        },
+        {
+          "frame": 18,
+          "calls": 1
+        },
+        {
+          "frame": 19,
+          "calls": 2
+        },
+        {
+          "frame": 20,
+          "calls": 1
+        },
+        {
+          "frame": 21,
+          "calls": 2
+        },
+        {
+          "frame": 22,
+          "calls": 1
+        },
+        {
+          "frame": 23,
+          "calls": 2
+        },
+        {
+          "frame": 24,
+          "calls": 1
+        },
+        {
+          "frame": 25,
+          "calls": 2
+        },
+        {
+          "frame": 26,
+          "calls": 1
+        },
+        {
+          "frame": 27,
+          "calls": 2
+        },
+        {
+          "frame": 28,
+          "calls": 1
+        },
+        {
+          "frame": 29,
+          "calls": 2
+        },
+        {
+          "frame": 30,
+          "calls": 1
+        },
+        {
+          "frame": 31,
+          "calls": 2
+        },
+        {
+          "frame": 32,
+          "calls": 1
+        },
+        {
+          "frame": 33,
+          "calls": 2
+        },
+        {
+          "frame": 34,
+          "calls": 1
+        },
+        {
+          "frame": 35,
+          "calls": 2
+        },
+        {
+          "frame": 36,
+          "calls": 1
+        },
+        {
+          "frame": 37,
+          "calls": 2
+        },
+        {
+          "frame": 38,
+          "calls": 1
+        },
+        {
+          "frame": 39,
+          "calls": 2
+        },
+        {
+          "frame": 40,
+          "calls": 1
+        },
+        {
+          "frame": 41,
+          "calls": 2
+        },
+        {
+          "frame": 42,
+          "calls": 1
+        },
+        {
+          "frame": 43,
+          "calls": 2
+        },
+        {
+          "frame": 44,
+          "calls": 1
+        },
+        {
+          "frame": 45,
+          "calls": 2
+        },
+        {
+          "frame": 46,
+          "calls": 1
+        },
+        {
+          "frame": 47,
+          "calls": 2
+        },
+        {
+          "frame": 48,
+          "calls": 1
+        },
+        {
+          "frame": 49,
+          "calls": 2
+        },
+        {
+          "frame": 50,
+          "calls": 1
+        },
+        {
+          "frame": 51,
+          "calls": 2
+        },
+        {
+          "frame": 52,
+          "calls": 1
+        },
+        {
+          "frame": 53,
+          "calls": 2
+        },
+        {
+          "frame": 54,
+          "calls": 1
+        },
+        {
+          "frame": 55,
+          "calls": 2
+        },
+        {
+          "frame": 56,
+          "calls": 1
+        },
+        {
+          "frame": 57,
+          "calls": 2
+        },
+        {
+          "frame": 58,
+          "calls": 1
+        },
+        {
+          "frame": 59,
+          "calls": 2
+        },
+        {
+          "frame": 60,
+          "calls": 1
+        },
+        {
+          "frame": 61,
+          "calls": 2
+        },
+        {
+          "frame": 62,
+          "calls": 1
+        },
+        {
+          "frame": 63,
+          "calls": 2
+        },
+        {
+          "frame": 64,
+          "calls": 1
+        },
+        {
+          "frame": 65,
+          "calls": 2
+        },
+        {
+          "frame": 66,
+          "calls": 1
+        },
+        {
+          "frame": 67,
+          "calls": 19
+        },
+        {
+          "frame": 68,
+          "calls": 1
+        },
+        {
+          "frame": 69,
+          "calls": 2
+        },
+        {
+          "frame": 70,
+          "calls": 1
+        },
+        {
+          "frame": 71,
+          "calls": 2
+        },
+        {
+          "frame": 72,
+          "calls": 1
+        },
+        {
+          "frame": 73,
+          "calls": 2
+        },
+        {
+          "frame": 74,
+          "calls": 1
+        },
+        {
+          "frame": 75,
+          "calls": 2
+        },
+        {
+          "frame": 76,
+          "calls": 1
+        },
+        {
+          "frame": 77,
+          "calls": 2
+        },
+        {
+          "frame": 78,
+          "calls": 1
+        },
+        {
+          "frame": 79,
+          "calls": 2
+        },
+        {
+          "frame": 80,
+          "calls": 1
+        },
+        {
+          "frame": 81,
+          "calls": 2
+        },
+        {
+          "frame": 82,
+          "calls": 1
+        },
+        {
+          "frame": 83,
+          "calls": 2
+        },
+        {
+          "frame": 84,
+          "calls": 1
+        },
+        {
+          "frame": 85,
+          "calls": 2
+        },
+        {
+          "frame": 86,
+          "calls": 1
+        },
+        {
+          "frame": 87,
+          "calls": 2
+        },
+        {
+          "frame": 88,
+          "calls": 1
+        },
+        {
+          "frame": 89,
+          "calls": 2
+        },
+        {
+          "frame": 90,
+          "calls": 1
+        },
+        {
+          "frame": 91,
+          "calls": 2
+        },
+        {
+          "frame": 92,
+          "calls": 1
+        },
+        {
+          "frame": 93,
+          "calls": 2
+        },
+        {
+          "frame": 94,
+          "calls": 1
+        },
+        {
+          "frame": 95,
+          "calls": 2
+        },
+        {
+          "frame": 96,
+          "calls": 1
+        },
+        {
+          "frame": 97,
+          "calls": 2
+        },
+        {
+          "frame": 98,
+          "calls": 1
+        },
+        {
+          "frame": 99,
+          "calls": 2
+        },
+        {
+          "frame": 100,
+          "calls": 1
+        },
+        {
+          "frame": 101,
+          "calls": 2
+        },
+        {
+          "frame": 102,
+          "calls": 1
+        },
+        {
+          "frame": 103,
+          "calls": 2
+        },
+        {
+          "frame": 104,
+          "calls": 1
+        },
+        {
+          "frame": 105,
+          "calls": 2
+        },
+        {
+          "frame": 106,
+          "calls": 1
+        },
+        {
+          "frame": 107,
+          "calls": 2
+        },
+        {
+          "frame": 108,
+          "calls": 1
+        },
+        {
+          "frame": 109,
+          "calls": 2
+        },
+        {
+          "frame": 110,
+          "calls": 1
+        },
+        {
+          "frame": 111,
+          "calls": 2
+        },
+        {
+          "frame": 112,
+          "calls": 1
+        },
+        {
+          "frame": 113,
+          "calls": 2
+        },
+        {
+          "frame": 114,
+          "calls": 1
+        },
+        {
+          "frame": 115,
+          "calls": 2
+        },
+        {
+          "frame": 116,
+          "calls": 1
+        },
+        {
+          "frame": 117,
+          "calls": 2
+        },
+        {
+          "frame": 118,
+          "calls": 1
+        },
+        {
+          "frame": 119,
+          "calls": 2
+        },
+        {
+          "frame": 120,
+          "calls": 1
+        },
+        {
+          "frame": 121,
+          "calls": 2
+        },
+        {
+          "frame": 122,
+          "calls": 2
+        },
+        {
+          "frame": 123,
+          "calls": 3
+        },
+        {
+          "frame": 124,
+          "calls": 2
+        },
+        {
+          "frame": 125,
+          "calls": 3
+        },
+        {
+          "frame": 126,
+          "calls": 1
+        },
+        {
+          "frame": 127,
+          "calls": 2
+        },
+        {
+          "frame": 128,
+          "calls": 1
+        },
+        {
+          "frame": 129,
+          "calls": 2
+        },
+        {
+          "frame": 130,
+          "calls": 1
+        },
+        {
+          "frame": 131,
+          "calls": 3
+        },
+        {
+          "frame": 132,
+          "calls": 2
+        },
+        {
+          "frame": 133,
+          "calls": 3
+        },
+        {
+          "frame": 134,
+          "calls": 2
+        },
+        {
+          "frame": 135,
+          "calls": 3
+        },
+        {
+          "frame": 136,
+          "calls": 1
+        },
+        {
+          "frame": 137,
+          "calls": 2
+        },
+        {
+          "frame": 138,
+          "calls": 1
+        },
+        {
+          "frame": 139,
+          "calls": 2
+        },
+        {
+          "frame": 140,
+          "calls": 1
+        },
+        {
+          "frame": 141,
+          "calls": 2
+        },
+        {
+          "frame": 142,
+          "calls": 1
+        },
+        {
+          "frame": 143,
+          "calls": 2
+        },
+        {
+          "frame": 144,
+          "calls": 1
+        },
+        {
+          "frame": 145,
+          "calls": 2
+        },
+        {
+          "frame": 146,
+          "calls": 1
+        },
+        {
+          "frame": 147,
+          "calls": 2
+        },
+        {
+          "frame": 148,
+          "calls": 1
+        },
+        {
+          "frame": 149,
+          "calls": 2
+        },
+        {
+          "frame": 150,
+          "calls": 1
+        },
+        {
+          "frame": 151,
+          "calls": 2
+        },
+        {
+          "frame": 152,
+          "calls": 1
+        },
+        {
+          "frame": 153,
+          "calls": 2
+        },
+        {
+          "frame": 154,
+          "calls": 1
+        },
+        {
+          "frame": 155,
+          "calls": 2
+        },
+        {
+          "frame": 156,
+          "calls": 1
+        },
+        {
+          "frame": 157,
+          "calls": 2
+        },
+        {
+          "frame": 158,
+          "calls": 1
+        },
+        {
+          "frame": 159,
+          "calls": 2
+        },
+        {
+          "frame": 160,
+          "calls": 1
+        },
+        {
+          "frame": 161,
+          "calls": 2
+        },
+        {
+          "frame": 162,
+          "calls": 1
+        },
+        {
+          "frame": 163,
+          "calls": 2
+        },
+        {
+          "frame": 164,
+          "calls": 1
+        },
+        {
+          "frame": 165,
+          "calls": 2
+        },
+        {
+          "frame": 167,
+          "calls": 1
+        },
+        {
+          "frame": 169,
+          "calls": 1
+        },
+        {
+          "frame": 171,
+          "calls": 1
+        },
+        {
+          "frame": 173,
+          "calls": 1
+        },
+        {
+          "frame": 175,
+          "calls": 1
+        },
+        {
+          "frame": 177,
+          "calls": 1
+        },
+        {
+          "frame": 179,
+          "calls": 1
+        },
+        {
+          "frame": 181,
+          "calls": 1
+        },
+        {
+          "frame": 183,
+          "calls": 1
+        },
+        {
+          "frame": 185,
+          "calls": 1
+        },
+        {
+          "frame": 187,
+          "calls": 1
+        },
+        {
+          "frame": 189,
+          "calls": 1
+        },
+        {
+          "frame": 191,
+          "calls": 1
+        },
+        {
+          "frame": 193,
+          "calls": 1
+        },
+        {
+          "frame": 195,
+          "calls": 1
+        },
+        {
+          "frame": 197,
+          "calls": 1
+        },
+        {
+          "frame": 199,
+          "calls": 1
+        },
+        {
+          "frame": 201,
+          "calls": 1
+        },
+        {
+          "frame": 203,
+          "calls": 1
+        },
+        {
+          "frame": 205,
+          "calls": 1
+        },
+        {
+          "frame": 207,
+          "calls": 1
+        },
+        {
+          "frame": 209,
+          "calls": 1
+        },
+        {
+          "frame": 211,
+          "calls": 1
+        },
+        {
+          "frame": 213,
+          "calls": 1
+        },
+        {
+          "frame": 215,
+          "calls": 1
+        },
+        {
+          "frame": 217,
+          "calls": 1
+        },
+        {
+          "frame": 219,
+          "calls": 1
+        },
+        {
+          "frame": 221,
+          "calls": 1
+        },
+        {
+          "frame": 223,
+          "calls": 1
+        },
+        {
+          "frame": 225,
+          "calls": 1
+        },
+        {
+          "frame": 227,
+          "calls": 1
+        },
+        {
+          "frame": 229,
+          "calls": 1
+        },
+        {
+          "frame": 231,
+          "calls": 1
+        },
+        {
+          "frame": 233,
+          "calls": 1
+        },
+        {
+          "frame": 235,
+          "calls": 1
+        },
+        {
+          "frame": 237,
+          "calls": 1
+        },
+        {
+          "frame": 239,
+          "calls": 1
+        },
+        {
+          "frame": 241,
+          "calls": 1
+        },
+        {
+          "frame": 243,
+          "calls": 1
+        },
+        {
+          "frame": 245,
+          "calls": 1
+        },
+        {
+          "frame": 247,
+          "calls": 1
+        },
+        {
+          "frame": 249,
+          "calls": 1
+        },
+        {
+          "frame": 251,
+          "calls": 1
+        },
+        {
+          "frame": 253,
+          "calls": 1
+        },
+        {
+          "frame": 255,
+          "calls": 1
+        },
+        {
+          "frame": 257,
+          "calls": 1
+        },
+        {
+          "frame": 259,
+          "calls": 1
+        },
+        {
+          "frame": 261,
+          "calls": 1
+        },
+        {
+          "frame": 263,
+          "calls": 1
+        },
+        {
+          "frame": 265,
+          "calls": 1
+        },
+        {
+          "frame": 267,
+          "calls": 1
+        },
+        {
+          "frame": 269,
+          "calls": 1
+        },
+        {
+          "frame": 271,
+          "calls": 1
+        },
+        {
+          "frame": 273,
+          "calls": 1
+        },
+        {
+          "frame": 275,
+          "calls": 1
+        },
+        {
+          "frame": 277,
+          "calls": 1
+        },
+        {
+          "frame": 279,
+          "calls": 1
+        },
+        {
+          "frame": 281,
+          "calls": 1
+        },
+        {
+          "frame": 283,
+          "calls": 1
+        },
+        {
+          "frame": 285,
+          "calls": 1
+        },
+        {
+          "frame": 287,
+          "calls": 1
+        },
+        {
+          "frame": 289,
+          "calls": 1
+        },
+        {
+          "frame": 291,
+          "calls": 1
+        },
+        {
+          "frame": 293,
+          "calls": 1
+        },
+        {
+          "frame": 295,
+          "calls": 1
+        },
+        {
+          "frame": 297,
+          "calls": 1
+        },
+        {
+          "frame": 299,
+          "calls": 1
+        },
+        {
+          "frame": 301,
+          "calls": 1
+        },
+        {
+          "frame": 303,
+          "calls": 1
+        },
+        {
+          "frame": 305,
+          "calls": 1
+        },
+        {
+          "frame": 307,
+          "calls": 2
+        },
+        {
+          "frame": 308,
+          "calls": 1
+        },
+        {
+          "frame": 309,
+          "calls": 2
+        },
+        {
+          "frame": 310,
+          "calls": 1
+        },
+        {
+          "frame": 311,
+          "calls": 2
+        },
+        {
+          "frame": 312,
+          "calls": 1
+        },
+        {
+          "frame": 313,
+          "calls": 2
+        },
+        {
+          "frame": 314,
+          "calls": 1
+        },
+        {
+          "frame": 315,
+          "calls": 2
+        },
+        {
+          "frame": 316,
+          "calls": 1
+        },
+        {
+          "frame": 317,
+          "calls": 2
+        },
+        {
+          "frame": 318,
+          "calls": 1
+        },
+        {
+          "frame": 319,
+          "calls": 2
+        },
+        {
+          "frame": 320,
+          "calls": 1
+        },
+        {
+          "frame": 321,
+          "calls": 2
+        },
+        {
+          "frame": 322,
+          "calls": 1
+        },
+        {
+          "frame": 323,
+          "calls": 2
+        },
+        {
+          "frame": 324,
+          "calls": 1
+        },
+        {
+          "frame": 325,
+          "calls": 2
+        },
+        {
+          "frame": 326,
+          "calls": 1
+        },
+        {
+          "frame": 327,
+          "calls": 2
+        },
+        {
+          "frame": 328,
+          "calls": 1
+        },
+        {
+          "frame": 329,
+          "calls": 2
+        },
+        {
+          "frame": 330,
+          "calls": 1
+        },
+        {
+          "frame": 331,
+          "calls": 2
+        },
+        {
+          "frame": 332,
+          "calls": 1
+        },
+        {
+          "frame": 333,
+          "calls": 2
+        },
+        {
+          "frame": 334,
+          "calls": 1
+        },
+        {
+          "frame": 335,
+          "calls": 2
+        },
+        {
+          "frame": 336,
+          "calls": 1
+        },
+        {
+          "frame": 337,
+          "calls": 2
+        },
+        {
+          "frame": 338,
+          "calls": 1
+        },
+        {
+          "frame": 339,
+          "calls": 2
+        },
+        {
+          "frame": 340,
+          "calls": 1
+        },
+        {
+          "frame": 341,
+          "calls": 2
+        },
+        {
+          "frame": 342,
+          "calls": 1
+        },
+        {
+          "frame": 343,
+          "calls": 2
+        },
+        {
+          "frame": 344,
+          "calls": 1
+        },
+        {
+          "frame": 345,
+          "calls": 2
+        },
+        {
+          "frame": 346,
+          "calls": 1
+        },
+        {
+          "frame": 347,
+          "calls": 2
+        },
+        {
+          "frame": 348,
+          "calls": 1
+        },
+        {
+          "frame": 349,
+          "calls": 2
+        },
+        {
+          "frame": 350,
+          "calls": 1
+        },
+        {
+          "frame": 351,
+          "calls": 2
+        },
+        {
+          "frame": 352,
+          "calls": 1
+        },
+        {
+          "frame": 353,
+          "calls": 2
+        },
+        {
+          "frame": 354,
+          "calls": 1
+        },
+        {
+          "frame": 355,
+          "calls": 2
+        },
+        {
+          "frame": 356,
+          "calls": 1
+        },
+        {
+          "frame": 357,
+          "calls": 2
+        },
+        {
+          "frame": 358,
+          "calls": 1
+        },
+        {
+          "frame": 359,
+          "calls": 2
+        },
+        {
+          "frame": 360,
+          "calls": 1
+        },
+        {
+          "frame": 361,
+          "calls": 2
+        },
+        {
+          "frame": 362,
+          "calls": 1
+        },
+        {
+          "frame": 363,
+          "calls": 2
+        },
+        {
+          "frame": 364,
+          "calls": 1
+        },
+        {
+          "frame": 365,
+          "calls": 2
+        }
+      ]
+    }
+  },
+  "final": {
+    "chunkStats": {
+      "live": 0,
+      "sharedLiveMaterial": true,
+      "baked": 1,
+      "views": 1,
+      "totalBakes": 1,
+      "lastBakeMs": 17.90000009536743,
+      "lastBakeSwapMs": 0.40000009536743164,
+      "lastBakeSwapFrame": 210,
+      "lastBakeRequestMs": 0.3999999761581421,
+      "bakeThread": "worker",
+      "pendingBake": null,
+      "bakeError": null,
+      "lastBakeInfo": {
+        "id": 1,
+        "verts": 128,
+        "tris": 252,
+        "bakeMs": 17.90000009536743,
+        "overflow": 0,
+        "droppedQuads": 0,
+        "extent": 0.062,
+        "flesh": 1,
+        "bones": 1,
+        "torn": 1,
+        "gore": 1,
+        "radius": 0.0231290810787642
+      },
+      "faceBaked": 0,
+      "pieces": [
+        {
+          "id": 1,
+          "centre": [
+            26.6318941116333,
+            0.06199999898672104,
+            -7.617777585983276
+          ],
+          "radius": 0.0231290810787642,
+          "face": false
+        }
+      ],
+      "livePieces": []
+    },
+    "chunkCensus": {
+      "inFrustum": 0,
+      "ofPieces": 0,
+      "bonePieces": 0,
+      "boneRows": 0,
+      "organPieces": 0,
+      "buriedBonePieces": 0,
+      "bonesShadingAsMeat": 0,
+      "organsShadingAsBone": 0,
+      "live": 0,
+      "baked": 1,
+      "views": 1,
+      "spare": 0,
+      "bakePending": false,
+      "cap": 64
+    },
+    "probeDynamic": {
+      "radianceGain": 0.15,
+      "visStrength": 1,
+      "frames": 181,
+      "errors": 0,
+      "bound": true,
+      "reached": 364,
+      "gates": {
+        "bound": true,
+        "dynKey": "arena",
+        "room": 6,
+        "grid": true,
+        "gain": 0.15,
+        "vis": 1,
+        "dynOn": true,
+        "flashI": 0,
+        "flashAge": 8.873799999952324,
+        "capsules": 1024,
+        "lights": 1
+      },
+      "rate": 2
+    },
+    "gpuDiagnostics": {
+      "lost": null,
+      "uncaptured": [],
+      "uncapturedCount": 0
+    },
+    "gibRenderer": {
+      "mode": "carve",
+      "carvedLibraryBuilt": true,
+      "carvedBuildMs": 22270.700000047684,
+      "carveCells": 1
+    },
+    "frames": 361,
+    "loopRunning": true,
+    "bootMarks": [
+      {
+        "n": "main-start",
+        "t": 287
+      },
+      {
+        "n": "renderer-ready",
+        "t": 361
+      },
+      {
+        "n": "world-start",
+        "t": 362
+      },
+      {
+        "n": "gallery-start",
+        "t": 550
+      },
+      {
+        "n": "dungeon-start",
+        "t": 557
+      },
+      {
+        "n": "drawchain-start",
+        "t": 561
+      },
+      {
+        "n": "deferred-start",
+        "t": 566
+      },
+      {
+        "n": "adaptive-start",
+        "t": 567
+      },
+      {
+        "n": "zombies-start",
+        "t": 589
+      },
+      {
+        "n": "room-probes-start",
+        "t": 596
+      },
+      {
+        "n": "player-start",
+        "t": 2757
+      },
+      {
+        "n": "gun-start",
+        "t": 2758
+      },
+      {
+        "n": "gun-ready",
+        "t": 3217
+      },
+      {
+        "n": "warm-invoked",
+        "t": 3218
+      },
+      {
+        "n": "dynamite-start",
+        "t": 3225
+      },
+      {
+        "n": "detonation-start",
+        "t": 3226
+      },
+      {
+        "n": "burst-start",
+        "t": 3226
+      },
+      {
+        "n": "bleed-start",
+        "t": 3229
+      },
+      {
+        "n": "goo-start",
+        "t": 3229
+      },
+      {
+        "n": "carve-boot-scheduled",
+        "t": 3234
+      },
+      {
+        "n": "hud-start",
+        "t": 3238
+      },
+      {
+        "n": "boot-time",
+        "t": 3238
+      },
+      {
+        "n": "frameloop-start",
+        "t": 3238
+      },
+      {
+        "n": "api-start",
+        "t": 3238
+      },
+      {
+        "n": "demo-start",
+        "t": 3239
+      },
+      {
+        "n": "draw-ready",
+        "t": 3239
+      },
+      {
+        "n": "main-end",
+        "t": 3239
+      },
+      {
+        "n": "warm-steps-start",
+        "t": 3239
+      },
+      {
+        "n": "warm-flip-done",
+        "t": 3239
+      },
+      {
+        "n": "warm-crowd-bins-done",
+        "t": 3265
+      },
+      {
+        "n": "carve-build-start",
+        "t": 3368
+      },
+      {
+        "n": "carve-build-end",
+        "t": 25640
+      },
+      {
+        "n": "warm-goo-done",
+        "t": 25823
+      },
+      {
+        "n": "warm-draw-once-done",
+        "t": 29522
+      },
+      {
+        "n": "warm-precompile-done",
+        "t": 30777
+      },
+      {
+        "n": "warm-finally",
+        "t": 30778
+      },
+      {
+        "n": "warm-invoked",
+        "t": 33808
+      },
+      {
+        "n": "warm-steps-start",
+        "t": 33808
+      },
+      {
+        "n": "warm-flip-done",
+        "t": 33809
+      },
+      {
+        "n": "warm-crowd-bins-done",
+        "t": 33811
+      },
+      {
+        "n": "warm-goo-done",
+        "t": 33863
+      },
+      {
+        "n": "warm-draw-once-done",
+        "t": 34690
+      },
+      {
+        "n": "warm-precompile-done",
+        "t": 34783
+      },
+      {
+        "n": "warm-finally",
+        "t": 34783
+      },
+      {
+        "n": "warm-invoked",
+        "t": 34783
+      },
+      {
+        "n": "warm-steps-start",
+        "t": 34783
+      },
+      {
+        "n": "warm-flip-done",
+        "t": 34783
+      },
+      {
+        "n": "warm-crowd-bins-done",
+        "t": 34784
+      },
+      {
+        "n": "warm-goo-done",
+        "t": 34786
+      },
+      {
+        "n": "warm-draw-once-done",
+        "t": 34810
+      },
+      {
+        "n": "warm-precompile-done",
+        "t": 34852
+      },
+      {
+        "n": "warm-finally",
+        "t": 34852
+      }
+    ]
+  },
+  "pageErrors": [],
+  "consoleCounts": {
+    "queriesExceeded": 0,
+    "indexCount0": 1,
+    "gpuLost": 0,
+    "uncaptured": 0,
+    "probeGatherFail": 0,
+    "errors": 0,
+    "warnings": 1
+  },
+  "consoleTail": [
+    {
+      "ts": 1789568025950.853,
+      "level": "log",
+      "text": "[vite] connecting..."
+    },
+    {
+      "ts": 1789568026022.382,
+      "level": "log",
+      "text": "[vite] connected."
+    },
+    {
+      "ts": 1789568026275.706,
+      "level": "log",
+      "text": "[sdf-game] demo seed 7 (?seed=)"
+    },
+    {
+      "ts": 1789568029281.798,
+      "level": "log",
+      "text": "[room-probes] room 1 baked"
+    },
+    {
+      "ts": 1789568051553.969,
+      "level": "log",
+      "text": "[gib-carve] zombie library: 11 pieces, 38738 verts, 68 bone prims in the field, 22271 ms (cells 1)"
+    },
+    {
+      "ts": 1789568051601.005,
+      "level": "log",
+      "text": "[room-probes] room 2 baked"
+    },
+    {
+      "ts": 1789568055444.353,
+      "level": "log",
+      "text": "[room-probes] room 3 baked"
+    },
+    {
+      "ts": 1789568055571.904,
+      "level": "log",
+      "text": "[room-probes] room 4 baked"
+    },
+    {
+      "ts": 1789568055727.5,
+      "level": "log",
+      "text": "[room-probes] room 6 baked"
+    },
+    {
+      "ts": 1789568055863.649,
+      "level": "log",
+      "text": "[room-probes] room 5 baked"
+    },
+    {
+      "ts": 1789568056691.81,
+      "level": "log",
+      "text": "[warm] 27539 ms of warm steps after 21 ms of synchronous boot (61 hidden objects, 7 crowd types, 11 stage/layer passes)"
+    },
+    {
+      "ts": 1789568056691.943,
+      "level": "log",
+      "text": "[warm] phases {\"flip\":0.20000004768371582,\"crowdBinsPerType\":[6.8,3.3,3.3,3,2.4,3.9,3.2],\"crowdBins\":25.899999976158142,\"goo\":22557.5,\"drawOnce\":3699.2999999523163,\"precompile\":1255.3999999761581}"
+    },
+    {
+      "ts": 1789568057155.652,
+      "level": "warning",
+      "text": "Calling [RenderPassEncoder (unlabeled)].Draw with an index count of 0 is unusual."
+    },
+    {
+      "ts": 1789568060697.013,
+      "level": "log",
+      "text": "[warm] 974 ms of warm steps after 0 ms of synchronous boot (63 hidden objects, 7 crowd types, 11 stage/layer passes)"
+    },
+    {
+      "ts": 1789568060697.151,
+      "level": "log",
+      "text": "[warm] phases {\"flip\":0.6000000238418579,\"crowdBinsPerType\":[0.7,0.3,0.5,0.2,0.2,0.1,0.2],\"crowdBins\":2.200000047683716,\"goo\":51.39999997615814,\"drawOnce\":826.7999999523163,\"precompile\":92.89999997615814}"
+    },
+    {
+      "ts": 1789568060766.051,
+      "level": "log",
+      "text": "[warm] 69 ms of warm steps after 0 ms of synchronous boot (63 hidden objects, 7 crowd types, 11 stage/layer passes)"
+    },
+    {
+      "ts": 1789568060766.18,
+      "level": "log",
+      "text": "[warm] phases {\"flip\":0.19999992847442627,\"crowdBinsPerType\":[0.3,0.2,0.1,0.1,0.2,0,0.1],\"crowdBins\":1,\"goo\":1.5,\"drawOnce\":23.800000071525574,\"precompile\":42.09999990463257}"
+    }
+  ]
+}

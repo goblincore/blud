@@ -1,0 +1,3984 @@
+{
+  "label": "warmA",
+  "url": "http://localhost:5480/sdf-game.html?room=arena&gibbones=core&pipelinelog=1&seed=7",
+  "startedAt": "2026-09-16T14:07:35.031Z",
+  "qs": "",
+  "backend": "webgpu",
+  "backendWallMs": 1855,
+  "warmWallMs": 5338,
+  "warm": {
+    "ms": 3316,
+    "bootBeforeWarmMs": 12,
+    "flipped": 61,
+    "flippedNames": [
+      "PointLight:?",
+      "PointLight:?",
+      "PointLight:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Group:shell-eject-0",
+      "Group:shell-load-0",
+      "Group:shell-eject-1",
+      "Group:shell-load-1",
+      "Group:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?",
+      "Mesh:?"
+    ],
+    "passes": 11,
+    "computes": 7,
+    "phases": {
+      "flip": 0.10000002384185791,
+      "crowdBinsPerType": [
+        3.9,
+        2.1,
+        1.8,
+        1.8,
+        1.7,
+        2,
+        2
+      ],
+      "crowdBins": 15.300000071525574,
+      "goo": 154.79999995231628,
+      "drawOnce": 2291.2000000476837,
+      "precompile": 854.7999999523163
+    }
+  },
+  "bootPoll": [],
+  "cpuProfile": {
+    "file": "warmA-boot.cpuprofile",
+    "totalMs": 5352,
+    "top": [
+      {
+        "fn": "(idle)  :0",
+        "ms": 951,
+        "pct": 17.8
+      },
+      {
+        "fn": "sdBody  src/lab/sdf-zombie/validate.ts:185",
+        "ms": 545,
+        "pct": 10.2
+      },
+      {
+        "fn": "createProgram  three/chunk-DEF7EUCY.js:45188",
+        "ms": 507,
+        "pct": 9.5
+      },
+      {
+        "fn": "sdPrimitive  src/lab/sdf-zombie/validate.ts:14",
+        "ms": 230,
+        "pct": 4.3
+      },
+      {
+        "fn": "boneBreach  src/lab/sdf-zombie/validate.ts:237",
+        "ms": 208,
+        "pct": 3.9
+      },
+      {
+        "fn": "sdBentCone  src/lab/sdf-zombie/validate.ts:131",
+        "ms": 176,
+        "pct": 3.3
+      },
+      {
+        "fn": "distance  src/lab/sdf-zombie/webgpu/skeleton-spike/contract.ts:132",
+        "ms": 174,
+        "pct": 3.3
+      },
+      {
+        "fn": "(garbage collector)  :0",
+        "ms": 170,
+        "pct": 3.2
+      },
+      {
+        "fn": "(program)  :0",
+        "ms": 139,
+        "pct": 2.6
+      },
+      {
+        "fn": "build  three/chunk-DEF7EUCY.js:1442",
+        "ms": 135,
+        "pct": 2.5
+      },
+      {
+        "fn": "at  src/lab/sdf-zombie/validate.ts:138",
+        "ms": 117,
+        "pct": 2.2
+      },
+      {
+        "fn": "sdBezierTs  src/lab/sdf-zombie/validate.ts:100",
+        "ms": 109,
+        "pct": 2
+      },
+      {
+        "fn": "sub  src/lab/sdf-zombie/vec.ts:2",
+        "ms": 99,
+        "pct": 1.9
+      },
+      {
+        "fn": "extractHullSoup  src/lab/sdf-zombie/webgpu/surface-nets-cpu.ts:70",
+        "ms": 57,
+        "pct": 1.1
+      },
+      {
+        "fn": "build  three/chunk-DEF7EUCY.js:1744",
+        "ms": 49,
+        "pct": 0.9
+      },
+      {
+        "fn": "getDataFromNode  three/chunk-DEF7EUCY.js:25488",
+        "ms": 46,
+        "pct": 0.9
+      },
+      {
+        "fn": "g  src/lab/sdf-zombie/validate.ts:143",
+        "ms": 44,
+        "pct": 0.8
+      },
+      {
+        "fn": "extractSegmentMesh  src/lab/sdf-zombie/webgpu/skeleton-spike/mesh.ts:5",
+        "ms": 44,
+        "pct": 0.8
+      },
+      {
+        "fn": "_getChildren  three/chunk-DEF7EUCY.js:1139",
+        "ms": 40,
+        "pct": 0.7
+      },
+      {
+        "fn": "analyze  three/chunk-DEF7EUCY.js:1363",
+        "ms": 34,
+        "pct": 0.6
+      },
+      {
+        "fn": "build  three/chunk-DEF7EUCY.js:4238",
+        "ms": 33,
+        "pct": 0.6
+      },
+      {
+        "fn": "getChildren  three/chunk-DEF7EUCY.js:1103",
+        "ms": 32,
+        "pct": 0.6
+      },
+      {
+        "fn": "getNodeFromHash  three/chunk-DEF7EUCY.js:24868",
+        "ms": 29,
+        "pct": 0.5
+      },
+      {
+        "fn": "createAttribute  three/chunk-DEF7EUCY.js:42270",
+        "ms": 23,
+        "pct": 0.4
+      },
+      {
+        "fn": "getNodeType  three/chunk-DEF7EUCY.js:1267",
+        "ms": 22,
+        "pct": 0.4
+      },
+      {
+        "fn": "build  three/chunk-DEF7EUCY.js:2431",
+        "ms": 22,
+        "pct": 0.4
+      },
+      {
+        "fn": "generateStone  src/game/level/stone-textures.ts:67",
+        "ms": 21,
+        "pct": 0.4
+      },
+      {
+        "fn": "w  src/lab/sdf-zombie/webgpu/goblin-skin.ts:100",
+        "ms": 21,
+        "pct": 0.4
+      },
+      {
+        "fn": "(anon)  src/lab/sdf-zombie/webgpu/encounter-navigation.ts:11",
+        "ms": 18,
+        "pct": 0.3
+      },
+      {
+        "fn": "dot  src/lab/sdf-zombie/vec.ts:4",
+        "ms": 18,
+        "pct": 0.3
+      }
+    ]
+  },
+  "atWarm": {
+    "t": 5564,
+    "bootMarks": [
+      {
+        "n": "main-start",
+        "t": 174
+      },
+      {
+        "n": "renderer-ready",
+        "t": 211
+      },
+      {
+        "n": "world-start",
+        "t": 211
+      },
+      {
+        "n": "gallery-start",
+        "t": 310
+      },
+      {
+        "n": "dungeon-start",
+        "t": 314
+      },
+      {
+        "n": "drawchain-start",
+        "t": 316
+      },
+      {
+        "n": "deferred-start",
+        "t": 319
+      },
+      {
+        "n": "adaptive-start",
+        "t": 319
+      },
+      {
+        "n": "zombies-start",
+        "t": 332
+      },
+      {
+        "n": "room-probes-start",
+        "t": 335
+      },
+      {
+        "n": "player-start",
+        "t": 1417
+      },
+      {
+        "n": "gun-start",
+        "t": 1417
+      },
+      {
+        "n": "gun-ready",
+        "t": 1691
+      },
+      {
+        "n": "warm-invoked",
+        "t": 1691
+      },
+      {
+        "n": "dynamite-start",
+        "t": 1695
+      },
+      {
+        "n": "detonation-start",
+        "t": 1696
+      },
+      {
+        "n": "burst-start",
+        "t": 1696
+      },
+      {
+        "n": "bleed-start",
+        "t": 1698
+      },
+      {
+        "n": "goo-start",
+        "t": 1698
+      },
+      {
+        "n": "hud-start",
+        "t": 1703
+      },
+      {
+        "n": "boot-time",
+        "t": 1703
+      },
+      {
+        "n": "frameloop-start",
+        "t": 1703
+      },
+      {
+        "n": "api-start",
+        "t": 1703
+      },
+      {
+        "n": "demo-start",
+        "t": 1703
+      },
+      {
+        "n": "draw-ready",
+        "t": 1703
+      },
+      {
+        "n": "main-end",
+        "t": 1703
+      },
+      {
+        "n": "warm-steps-start",
+        "t": 1703
+      },
+      {
+        "n": "warm-flip-done",
+        "t": 1703
+      },
+      {
+        "n": "warm-crowd-bins-done",
+        "t": 1719
+      },
+      {
+        "n": "warm-goo-done",
+        "t": 1874
+      },
+      {
+        "n": "warm-draw-once-done",
+        "t": 4165
+      },
+      {
+        "n": "warm-precompile-done",
+        "t": 5020
+      },
+      {
+        "n": "warm-finally",
+        "t": 5020
+      }
+    ],
+    "warmDone": {
+      "ms": 3316,
+      "bootBeforeWarmMs": 12,
+      "flipped": 61,
+      "flippedNames": [
+        "PointLight:?",
+        "PointLight:?",
+        "PointLight:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Group:shell-eject-0",
+        "Group:shell-load-0",
+        "Group:shell-eject-1",
+        "Group:shell-load-1",
+        "Group:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?"
+      ],
+      "passes": 11,
+      "computes": 7,
+      "phases": {
+        "flip": 0.10000002384185791,
+        "crowdBinsPerType": [
+          3.9,
+          2.1,
+          1.8,
+          1.8,
+          1.7,
+          2,
+          2
+        ],
+        "crowdBins": 15.300000071525574,
+        "goo": 154.79999995231628,
+        "drawOnce": 2291.2000000476837,
+        "precompile": 854.7999999523163
+      }
+    },
+    "loader": {
+      "status": "READY — CLICK TO START",
+      "hidden": false,
+      "ready": true
+    },
+    "loopRunning": true,
+    "gpuDiagnostics": {
+      "lost": null,
+      "uncaptured": [],
+      "uncapturedCount": 0
+    },
+    "gibRenderer": {
+      "mode": "march",
+      "carvedLibraryBuilt": false,
+      "carvedBuildMs": 0,
+      "carveCells": 1
+    },
+    "probeDynamic": {
+      "radianceGain": 0.15,
+      "visStrength": 1,
+      "frames": 3,
+      "errors": 0,
+      "bound": true,
+      "reached": 8,
+      "gates": {
+        "bound": true,
+        "dynKey": "arena",
+        "room": 6,
+        "grid": true,
+        "gain": 0.15,
+        "vis": 1,
+        "dynOn": true,
+        "flashI": 0,
+        "flashAge": null,
+        "capsules": 480,
+        "lights": 1
+      },
+      "rate": 2
+    },
+    "chunkStats": {
+      "live": 0,
+      "sharedLiveMaterial": true,
+      "baked": 0,
+      "views": 0,
+      "totalBakes": 0,
+      "lastBakeMs": 0,
+      "lastBakeSwapMs": 0,
+      "lastBakeSwapFrame": -1,
+      "lastBakeRequestMs": 0,
+      "bakeThread": "worker",
+      "pendingBake": null,
+      "bakeError": null,
+      "lastBakeInfo": null,
+      "faceBaked": 0,
+      "pieces": [],
+      "livePieces": []
+    },
+    "gunReady": true,
+    "frames": 7
+  },
+  "atWarmSettle": {
+    "t": 6568,
+    "bootMarks": [
+      {
+        "n": "main-start",
+        "t": 174
+      },
+      {
+        "n": "renderer-ready",
+        "t": 211
+      },
+      {
+        "n": "world-start",
+        "t": 211
+      },
+      {
+        "n": "gallery-start",
+        "t": 310
+      },
+      {
+        "n": "dungeon-start",
+        "t": 314
+      },
+      {
+        "n": "drawchain-start",
+        "t": 316
+      },
+      {
+        "n": "deferred-start",
+        "t": 319
+      },
+      {
+        "n": "adaptive-start",
+        "t": 319
+      },
+      {
+        "n": "zombies-start",
+        "t": 332
+      },
+      {
+        "n": "room-probes-start",
+        "t": 335
+      },
+      {
+        "n": "player-start",
+        "t": 1417
+      },
+      {
+        "n": "gun-start",
+        "t": 1417
+      },
+      {
+        "n": "gun-ready",
+        "t": 1691
+      },
+      {
+        "n": "warm-invoked",
+        "t": 1691
+      },
+      {
+        "n": "dynamite-start",
+        "t": 1695
+      },
+      {
+        "n": "detonation-start",
+        "t": 1696
+      },
+      {
+        "n": "burst-start",
+        "t": 1696
+      },
+      {
+        "n": "bleed-start",
+        "t": 1698
+      },
+      {
+        "n": "goo-start",
+        "t": 1698
+      },
+      {
+        "n": "hud-start",
+        "t": 1703
+      },
+      {
+        "n": "boot-time",
+        "t": 1703
+      },
+      {
+        "n": "frameloop-start",
+        "t": 1703
+      },
+      {
+        "n": "api-start",
+        "t": 1703
+      },
+      {
+        "n": "demo-start",
+        "t": 1703
+      },
+      {
+        "n": "draw-ready",
+        "t": 1703
+      },
+      {
+        "n": "main-end",
+        "t": 1703
+      },
+      {
+        "n": "warm-steps-start",
+        "t": 1703
+      },
+      {
+        "n": "warm-flip-done",
+        "t": 1703
+      },
+      {
+        "n": "warm-crowd-bins-done",
+        "t": 1719
+      },
+      {
+        "n": "warm-goo-done",
+        "t": 1874
+      },
+      {
+        "n": "warm-draw-once-done",
+        "t": 4165
+      },
+      {
+        "n": "warm-precompile-done",
+        "t": 5020
+      },
+      {
+        "n": "warm-finally",
+        "t": 5020
+      }
+    ],
+    "warmDone": {
+      "ms": 3316,
+      "bootBeforeWarmMs": 12,
+      "flipped": 61,
+      "flippedNames": [
+        "PointLight:?",
+        "PointLight:?",
+        "PointLight:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Group:shell-eject-0",
+        "Group:shell-load-0",
+        "Group:shell-eject-1",
+        "Group:shell-load-1",
+        "Group:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?",
+        "Mesh:?"
+      ],
+      "passes": 11,
+      "computes": 7,
+      "phases": {
+        "flip": 0.10000002384185791,
+        "crowdBinsPerType": [
+          3.9,
+          2.1,
+          1.8,
+          1.8,
+          1.7,
+          2,
+          2
+        ],
+        "crowdBins": 15.300000071525574,
+        "goo": 154.79999995231628,
+        "drawOnce": 2291.2000000476837,
+        "precompile": 854.7999999523163
+      }
+    },
+    "loader": {
+      "status": "READY — CLICK TO START",
+      "hidden": true,
+      "ready": true
+    },
+    "loopRunning": true,
+    "gpuDiagnostics": {
+      "lost": null,
+      "uncaptured": [],
+      "uncapturedCount": 0
+    },
+    "gibRenderer": {
+      "mode": "march",
+      "carvedLibraryBuilt": false,
+      "carvedBuildMs": 0,
+      "carveCells": 1
+    },
+    "probeDynamic": {
+      "radianceGain": 0.15,
+      "visStrength": 1,
+      "frames": 18,
+      "errors": 0,
+      "bound": true,
+      "reached": 38,
+      "gates": {
+        "bound": true,
+        "dynKey": "arena",
+        "room": 6,
+        "grid": true,
+        "gain": 0.15,
+        "vis": 1,
+        "dynOn": true,
+        "flashI": 0,
+        "flashAge": null,
+        "capsules": 480,
+        "lights": 1
+      },
+      "rate": 2
+    },
+    "chunkStats": {
+      "live": 0,
+      "sharedLiveMaterial": true,
+      "baked": 0,
+      "views": 0,
+      "totalBakes": 0,
+      "lastBakeMs": 0,
+      "lastBakeSwapMs": 0,
+      "lastBakeSwapFrame": -1,
+      "lastBakeRequestMs": 0,
+      "bakeThread": "worker",
+      "pendingBake": null,
+      "bakeError": null,
+      "lastBakeInfo": null,
+      "faceBaked": 0,
+      "pieces": [],
+      "livePieces": []
+    },
+    "gunReady": true,
+    "frames": 37
+  },
+  "perf": {
+    "postWarmIdle": {
+      "n": 82,
+      "p50": 31,
+      "p95": 73.3,
+      "max": 86.8
+    }
+  },
+  "actions": {
+    "roomEntry": {
+      "wallMs": 1412,
+      "frames": {
+        "n": 34,
+        "p50": 37.1,
+        "p95": 151.2,
+        "max": 197.4
+      }
+    },
+    "firstShot": {
+      "wallMs": 504,
+      "frames": {
+        "n": 19,
+        "p50": 29.6,
+        "p95": 125.6,
+        "max": 125.6
+      }
+    },
+    "repeatedBlasts": {
+      "n": 90,
+      "p50": 22.1,
+      "p95": 41.7,
+      "max": 382.1
+    }
+  },
+  "arenaRoom": "arena",
+  "target": {
+    "id": 16,
+    "kind": "zombie",
+    "room": 6,
+    "pos": [
+      28.54720740243376,
+      0,
+      -5.452980961816047
+    ],
+    "yaw": -0.8067979987301547,
+    "phase": "standing",
+    "meter": 0
+  },
+  "gibTimeline": {
+    "firstVisibleChunk": {
+      "t": 877,
+      "pendingGibs": 0,
+      "tearing": 0,
+      "tier": null,
+      "blastMs": 21.399999976158142,
+      "live": 64,
+      "baked": 0,
+      "pendingBake": null,
+      "totalBakes": 0,
+      "lastBakeMs": 0,
+      "lastBakeSwapMs": 0,
+      "faceBaked": 0
+    },
+    "firstBakeSubmit": {
+      "t": 3583,
+      "pendingGibs": 0,
+      "tearing": 0,
+      "tier": null,
+      "blastMs": 21.399999976158142,
+      "live": 64,
+      "baked": 0,
+      "pendingBake": 52,
+      "totalBakes": 0,
+      "lastBakeMs": 0,
+      "lastBakeSwapMs": 0,
+      "faceBaked": 0
+    },
+    "firstBakeSwap": {
+      "t": 4617,
+      "pendingGibs": 0,
+      "tearing": 0,
+      "tier": null,
+      "blastMs": 21.399999976158142,
+      "live": 63,
+      "baked": 1,
+      "pendingBake": 63,
+      "totalBakes": 1,
+      "lastBakeMs": 482.89999997615814,
+      "lastBakeSwapMs": 1.399999976158142,
+      "faceBaked": 0
+    },
+    "firstTexturedHeadDraw": {
+      "t": 5516,
+      "pendingGibs": 0,
+      "tearing": 0,
+      "tier": null,
+      "blastMs": 21.399999976158142,
+      "live": 60,
+      "baked": 4,
+      "pendingBake": 60,
+      "totalBakes": 4,
+      "lastBakeMs": 227.60000002384186,
+      "lastBakeSwapMs": 0.5,
+      "faceBaked": 1
+    },
+    "samples": [
+      {
+        "t": 545,
+        "pendingGibs": 7,
+        "tearing": 7,
+        "tier": "parts",
+        "blastMs": 21.399999976158142,
+        "live": 0,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 801,
+        "pendingGibs": 7,
+        "tearing": 7,
+        "tier": "parts",
+        "blastMs": 21.399999976158142,
+        "live": 0,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 877,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 21.399999976158142,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 1054,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 21.399999976158142,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 1289,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 21.399999976158142,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 1850,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 21.399999976158142,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 2115,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 21.399999976158142,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 2376,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 21.399999976158142,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 2644,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 21.399999976158142,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 2908,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 21.399999976158142,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 3177,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 21.399999976158142,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 3449,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 21.399999976158142,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": null,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 3725,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 21.399999976158142,
+        "live": 64,
+        "baked": 0,
+        "pendingBake": 52,
+        "totalBakes": 0,
+        "lastBakeMs": 0,
+        "lastBakeSwapMs": 0,
+        "faceBaked": 0
+      },
+      {
+        "t": 4617,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 21.399999976158142,
+        "live": 63,
+        "baked": 1,
+        "pendingBake": 63,
+        "totalBakes": 1,
+        "lastBakeMs": 482.89999997615814,
+        "lastBakeSwapMs": 1.399999976158142,
+        "faceBaked": 0
+      },
+      {
+        "t": 4979,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 21.399999976158142,
+        "live": 62,
+        "baked": 2,
+        "pendingBake": 61,
+        "totalBakes": 2,
+        "lastBakeMs": 685.7999999523163,
+        "lastBakeSwapMs": 0.19999992847442627,
+        "faceBaked": 0
+      },
+      {
+        "t": 5255,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 21.399999976158142,
+        "live": 61,
+        "baked": 3,
+        "pendingBake": 64,
+        "totalBakes": 3,
+        "lastBakeMs": 290.10000002384186,
+        "lastBakeSwapMs": 0.10000002384185791,
+        "faceBaked": 0
+      },
+      {
+        "t": 5516,
+        "pendingGibs": 0,
+        "tearing": 0,
+        "tier": null,
+        "blastMs": 21.399999976158142,
+        "live": 60,
+        "baked": 4,
+        "pendingBake": 60,
+        "totalBakes": 4,
+        "lastBakeMs": 227.60000002384186,
+        "lastBakeSwapMs": 0.5,
+        "faceBaked": 1
+      }
+    ]
+  },
+  "probeHealth": {
+    "errors": 0,
+    "frames": 170,
+    "bound": true,
+    "rate": 2,
+    "gates": {
+      "bound": true,
+      "dynKey": "arena",
+      "room": 6,
+      "grid": true,
+      "gain": 0.15,
+      "vis": 1,
+      "dynOn": true,
+      "flashI": 0,
+      "flashAge": 6.8530999996662185,
+      "capsules": 35,
+      "lights": 4
+    },
+    "radianceGain": 0.15,
+    "visStrength": 1
+  },
+  "pipelineLog": {
+    "totalPipelines": 324,
+    "totalCompileMs": 981,
+    "longFrames": [
+      {
+        "frame": 5,
+        "ms": 305.6,
+        "creations": 23,
+        "names": [
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_385",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_495",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_538",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshStandardMaterial_577"
+        ]
+      },
+      {
+        "frame": 137,
+        "ms": 136.7,
+        "creations": 1,
+        "names": [
+          "renderPipeline_plate_808"
+        ]
+      },
+      {
+        "frame": 184,
+        "ms": 535.1,
+        "creations": 20,
+        "names": [
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshBasicMaterial_783",
+          "renderPipeline_MeshBasicMaterial_785",
+          "renderPipeline_MeshBasicMaterial_786",
+          "renderPipeline_MeshStandardMaterial_385"
+        ]
+      },
+      {
+        "frame": 195,
+        "ms": 354.4,
+        "creations": 17,
+        "names": [
+          "renderPipeline_MeshBasicNodeMaterial_191",
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshBasicMaterial_783",
+          "renderPipeline_MeshBasicMaterial_785",
+          "renderPipeline_MeshBasicMaterial_786"
+        ]
+      },
+      {
+        "frame": 299,
+        "ms": 375.7,
+        "creations": 18,
+        "names": [
+          "renderPipeline_MeshBasicNodeMaterial_191",
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshBasicMaterial_783",
+          "renderPipeline_MeshBasicMaterial_785",
+          "renderPipeline_MeshBasicMaterial_786"
+        ]
+      },
+      {
+        "frame": 328,
+        "ms": 310.2,
+        "creations": 17,
+        "names": [
+          "renderPipeline_MeshBasicNodeMaterial_191",
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshBasicMaterial_783",
+          "renderPipeline_MeshBasicMaterial_785",
+          "renderPipeline_MeshBasicMaterial_786"
+        ]
+      },
+      {
+        "frame": 330,
+        "ms": 326.4,
+        "creations": 17,
+        "names": [
+          "renderPipeline_MeshBasicNodeMaterial_191",
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshBasicMaterial_783",
+          "renderPipeline_MeshBasicMaterial_785",
+          "renderPipeline_MeshBasicMaterial_786"
+        ]
+      },
+      {
+        "frame": 344,
+        "ms": 304.3,
+        "creations": 17,
+        "names": [
+          "renderPipeline_MeshBasicNodeMaterial_191",
+          "renderPipeline_MeshStandardMaterial_384",
+          "renderPipeline_MeshStandardMaterial_494",
+          "renderPipeline_MeshStandardMaterial_537",
+          "renderPipeline_MeshStandardMaterial_576",
+          "renderPipeline_MeshBasicMaterial_783",
+          "renderPipeline_MeshBasicMaterial_785",
+          "renderPipeline_MeshBasicMaterial_786"
+        ]
+      }
+    ],
+    "slowest": [
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_185",
+        "ms": 844,
+        "async": true,
+        "via": "compile#8@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_766",
+        "ms": 113,
+        "async": true,
+        "via": "compile#1@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_767",
+        "ms": 7,
+        "async": true,
+        "via": "compile#2@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_781",
+        "ms": 4,
+        "async": true,
+        "via": "compile#3@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_782",
+        "ms": 2,
+        "async": true,
+        "via": "compile#4@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_198",
+        "ms": 1,
+        "async": true,
+        "via": "compile#13@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_196",
+        "ms": 1,
+        "async": true,
+        "via": "compile#11@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_197",
+        "ms": 1,
+        "async": true,
+        "via": "compile#12@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_195",
+        "ms": 1,
+        "async": true,
+        "via": "compile#10@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_199",
+        "ms": 1,
+        "async": true,
+        "via": "compile#14@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshBasicNodeMaterial_194",
+        "ms": 0,
+        "async": true,
+        "via": "compile#15@f5",
+        "frame": 5
+      },
+      {
+        "name": "renderPipeline_MeshStandardMaterial_613",
+        "ms": 0,
+        "async": false,
+        "via": "",
+        "frame": 3
+      }
+    ],
+    "compute": {
+      "total": 371,
+      "maxPerFrame": 8,
+      "byFrame": [
+        {
+          "frame": 5,
+          "calls": 8
+        },
+        {
+          "frame": 6,
+          "calls": 1
+        },
+        {
+          "frame": 7,
+          "calls": 2
+        },
+        {
+          "frame": 8,
+          "calls": 1
+        },
+        {
+          "frame": 9,
+          "calls": 2
+        },
+        {
+          "frame": 10,
+          "calls": 1
+        },
+        {
+          "frame": 11,
+          "calls": 2
+        },
+        {
+          "frame": 12,
+          "calls": 1
+        },
+        {
+          "frame": 13,
+          "calls": 2
+        },
+        {
+          "frame": 14,
+          "calls": 1
+        },
+        {
+          "frame": 15,
+          "calls": 2
+        },
+        {
+          "frame": 16,
+          "calls": 1
+        },
+        {
+          "frame": 17,
+          "calls": 2
+        },
+        {
+          "frame": 18,
+          "calls": 1
+        },
+        {
+          "frame": 19,
+          "calls": 2
+        },
+        {
+          "frame": 20,
+          "calls": 1
+        },
+        {
+          "frame": 21,
+          "calls": 2
+        },
+        {
+          "frame": 22,
+          "calls": 1
+        },
+        {
+          "frame": 23,
+          "calls": 2
+        },
+        {
+          "frame": 24,
+          "calls": 1
+        },
+        {
+          "frame": 25,
+          "calls": 2
+        },
+        {
+          "frame": 26,
+          "calls": 1
+        },
+        {
+          "frame": 27,
+          "calls": 2
+        },
+        {
+          "frame": 28,
+          "calls": 1
+        },
+        {
+          "frame": 29,
+          "calls": 2
+        },
+        {
+          "frame": 30,
+          "calls": 1
+        },
+        {
+          "frame": 31,
+          "calls": 2
+        },
+        {
+          "frame": 32,
+          "calls": 1
+        },
+        {
+          "frame": 33,
+          "calls": 2
+        },
+        {
+          "frame": 34,
+          "calls": 1
+        },
+        {
+          "frame": 35,
+          "calls": 2
+        },
+        {
+          "frame": 36,
+          "calls": 1
+        },
+        {
+          "frame": 37,
+          "calls": 2
+        },
+        {
+          "frame": 38,
+          "calls": 1
+        },
+        {
+          "frame": 39,
+          "calls": 2
+        },
+        {
+          "frame": 40,
+          "calls": 1
+        },
+        {
+          "frame": 41,
+          "calls": 2
+        },
+        {
+          "frame": 42,
+          "calls": 1
+        },
+        {
+          "frame": 43,
+          "calls": 2
+        },
+        {
+          "frame": 44,
+          "calls": 1
+        },
+        {
+          "frame": 45,
+          "calls": 2
+        },
+        {
+          "frame": 46,
+          "calls": 1
+        },
+        {
+          "frame": 47,
+          "calls": 2
+        },
+        {
+          "frame": 48,
+          "calls": 1
+        },
+        {
+          "frame": 49,
+          "calls": 2
+        },
+        {
+          "frame": 50,
+          "calls": 1
+        },
+        {
+          "frame": 51,
+          "calls": 2
+        },
+        {
+          "frame": 52,
+          "calls": 1
+        },
+        {
+          "frame": 53,
+          "calls": 2
+        },
+        {
+          "frame": 54,
+          "calls": 1
+        },
+        {
+          "frame": 55,
+          "calls": 2
+        },
+        {
+          "frame": 56,
+          "calls": 1
+        },
+        {
+          "frame": 57,
+          "calls": 2
+        },
+        {
+          "frame": 58,
+          "calls": 1
+        },
+        {
+          "frame": 59,
+          "calls": 2
+        },
+        {
+          "frame": 60,
+          "calls": 1
+        },
+        {
+          "frame": 61,
+          "calls": 2
+        },
+        {
+          "frame": 62,
+          "calls": 1
+        },
+        {
+          "frame": 63,
+          "calls": 2
+        },
+        {
+          "frame": 64,
+          "calls": 1
+        },
+        {
+          "frame": 65,
+          "calls": 2
+        },
+        {
+          "frame": 66,
+          "calls": 1
+        },
+        {
+          "frame": 67,
+          "calls": 2
+        },
+        {
+          "frame": 68,
+          "calls": 1
+        },
+        {
+          "frame": 69,
+          "calls": 2
+        },
+        {
+          "frame": 70,
+          "calls": 1
+        },
+        {
+          "frame": 71,
+          "calls": 2
+        },
+        {
+          "frame": 72,
+          "calls": 1
+        },
+        {
+          "frame": 73,
+          "calls": 2
+        },
+        {
+          "frame": 74,
+          "calls": 1
+        },
+        {
+          "frame": 75,
+          "calls": 2
+        },
+        {
+          "frame": 76,
+          "calls": 1
+        },
+        {
+          "frame": 77,
+          "calls": 2
+        },
+        {
+          "frame": 78,
+          "calls": 1
+        },
+        {
+          "frame": 79,
+          "calls": 2
+        },
+        {
+          "frame": 80,
+          "calls": 1
+        },
+        {
+          "frame": 81,
+          "calls": 2
+        },
+        {
+          "frame": 82,
+          "calls": 1
+        },
+        {
+          "frame": 83,
+          "calls": 2
+        },
+        {
+          "frame": 84,
+          "calls": 1
+        },
+        {
+          "frame": 85,
+          "calls": 2
+        },
+        {
+          "frame": 86,
+          "calls": 1
+        },
+        {
+          "frame": 87,
+          "calls": 2
+        },
+        {
+          "frame": 88,
+          "calls": 1
+        },
+        {
+          "frame": 89,
+          "calls": 2
+        },
+        {
+          "frame": 90,
+          "calls": 1
+        },
+        {
+          "frame": 91,
+          "calls": 2
+        },
+        {
+          "frame": 92,
+          "calls": 1
+        },
+        {
+          "frame": 93,
+          "calls": 2
+        },
+        {
+          "frame": 94,
+          "calls": 1
+        },
+        {
+          "frame": 95,
+          "calls": 2
+        },
+        {
+          "frame": 96,
+          "calls": 1
+        },
+        {
+          "frame": 97,
+          "calls": 2
+        },
+        {
+          "frame": 98,
+          "calls": 1
+        },
+        {
+          "frame": 99,
+          "calls": 2
+        },
+        {
+          "frame": 100,
+          "calls": 1
+        },
+        {
+          "frame": 101,
+          "calls": 2
+        },
+        {
+          "frame": 102,
+          "calls": 1
+        },
+        {
+          "frame": 103,
+          "calls": 2
+        },
+        {
+          "frame": 104,
+          "calls": 1
+        },
+        {
+          "frame": 105,
+          "calls": 2
+        },
+        {
+          "frame": 106,
+          "calls": 1
+        },
+        {
+          "frame": 107,
+          "calls": 2
+        },
+        {
+          "frame": 108,
+          "calls": 1
+        },
+        {
+          "frame": 109,
+          "calls": 2
+        },
+        {
+          "frame": 110,
+          "calls": 1
+        },
+        {
+          "frame": 111,
+          "calls": 2
+        },
+        {
+          "frame": 112,
+          "calls": 1
+        },
+        {
+          "frame": 113,
+          "calls": 2
+        },
+        {
+          "frame": 114,
+          "calls": 1
+        },
+        {
+          "frame": 115,
+          "calls": 2
+        },
+        {
+          "frame": 116,
+          "calls": 1
+        },
+        {
+          "frame": 117,
+          "calls": 2
+        },
+        {
+          "frame": 118,
+          "calls": 1
+        },
+        {
+          "frame": 119,
+          "calls": 2
+        },
+        {
+          "frame": 120,
+          "calls": 1
+        },
+        {
+          "frame": 121,
+          "calls": 2
+        },
+        {
+          "frame": 122,
+          "calls": 1
+        },
+        {
+          "frame": 123,
+          "calls": 2
+        },
+        {
+          "frame": 124,
+          "calls": 1
+        },
+        {
+          "frame": 125,
+          "calls": 2
+        },
+        {
+          "frame": 126,
+          "calls": 1
+        },
+        {
+          "frame": 127,
+          "calls": 2
+        },
+        {
+          "frame": 128,
+          "calls": 1
+        },
+        {
+          "frame": 129,
+          "calls": 2
+        },
+        {
+          "frame": 130,
+          "calls": 1
+        },
+        {
+          "frame": 131,
+          "calls": 2
+        },
+        {
+          "frame": 132,
+          "calls": 1
+        },
+        {
+          "frame": 133,
+          "calls": 2
+        },
+        {
+          "frame": 134,
+          "calls": 1
+        },
+        {
+          "frame": 135,
+          "calls": 2
+        },
+        {
+          "frame": 136,
+          "calls": 1
+        },
+        {
+          "frame": 137,
+          "calls": 3
+        },
+        {
+          "frame": 138,
+          "calls": 2
+        },
+        {
+          "frame": 139,
+          "calls": 3
+        },
+        {
+          "frame": 140,
+          "calls": 2
+        },
+        {
+          "frame": 141,
+          "calls": 3
+        },
+        {
+          "frame": 142,
+          "calls": 1
+        },
+        {
+          "frame": 143,
+          "calls": 2
+        },
+        {
+          "frame": 144,
+          "calls": 1
+        },
+        {
+          "frame": 145,
+          "calls": 2
+        },
+        {
+          "frame": 146,
+          "calls": 1
+        },
+        {
+          "frame": 147,
+          "calls": 2
+        },
+        {
+          "frame": 148,
+          "calls": 1
+        },
+        {
+          "frame": 149,
+          "calls": 2
+        },
+        {
+          "frame": 150,
+          "calls": 1
+        },
+        {
+          "frame": 151,
+          "calls": 3
+        },
+        {
+          "frame": 152,
+          "calls": 2
+        },
+        {
+          "frame": 153,
+          "calls": 3
+        },
+        {
+          "frame": 154,
+          "calls": 2
+        },
+        {
+          "frame": 155,
+          "calls": 3
+        },
+        {
+          "frame": 156,
+          "calls": 2
+        },
+        {
+          "frame": 157,
+          "calls": 2
+        },
+        {
+          "frame": 158,
+          "calls": 1
+        },
+        {
+          "frame": 159,
+          "calls": 2
+        },
+        {
+          "frame": 160,
+          "calls": 1
+        },
+        {
+          "frame": 161,
+          "calls": 2
+        },
+        {
+          "frame": 162,
+          "calls": 1
+        },
+        {
+          "frame": 163,
+          "calls": 2
+        },
+        {
+          "frame": 164,
+          "calls": 1
+        },
+        {
+          "frame": 165,
+          "calls": 2
+        },
+        {
+          "frame": 166,
+          "calls": 1
+        },
+        {
+          "frame": 167,
+          "calls": 2
+        },
+        {
+          "frame": 168,
+          "calls": 1
+        },
+        {
+          "frame": 169,
+          "calls": 2
+        },
+        {
+          "frame": 170,
+          "calls": 1
+        },
+        {
+          "frame": 171,
+          "calls": 2
+        },
+        {
+          "frame": 172,
+          "calls": 1
+        },
+        {
+          "frame": 173,
+          "calls": 2
+        },
+        {
+          "frame": 174,
+          "calls": 1
+        },
+        {
+          "frame": 175,
+          "calls": 2
+        },
+        {
+          "frame": 176,
+          "calls": 1
+        },
+        {
+          "frame": 177,
+          "calls": 2
+        },
+        {
+          "frame": 178,
+          "calls": 1
+        },
+        {
+          "frame": 179,
+          "calls": 2
+        },
+        {
+          "frame": 180,
+          "calls": 1
+        },
+        {
+          "frame": 181,
+          "calls": 2
+        },
+        {
+          "frame": 182,
+          "calls": 1
+        },
+        {
+          "frame": 183,
+          "calls": 2
+        },
+        {
+          "frame": 184,
+          "calls": 1
+        },
+        {
+          "frame": 185,
+          "calls": 2
+        },
+        {
+          "frame": 186,
+          "calls": 1
+        },
+        {
+          "frame": 187,
+          "calls": 2
+        },
+        {
+          "frame": 189,
+          "calls": 1
+        },
+        {
+          "frame": 191,
+          "calls": 1
+        },
+        {
+          "frame": 193,
+          "calls": 1
+        },
+        {
+          "frame": 195,
+          "calls": 1
+        },
+        {
+          "frame": 197,
+          "calls": 1
+        },
+        {
+          "frame": 199,
+          "calls": 1
+        },
+        {
+          "frame": 201,
+          "calls": 1
+        },
+        {
+          "frame": 203,
+          "calls": 1
+        },
+        {
+          "frame": 205,
+          "calls": 1
+        },
+        {
+          "frame": 207,
+          "calls": 1
+        },
+        {
+          "frame": 209,
+          "calls": 1
+        },
+        {
+          "frame": 211,
+          "calls": 1
+        },
+        {
+          "frame": 213,
+          "calls": 1
+        },
+        {
+          "frame": 215,
+          "calls": 1
+        },
+        {
+          "frame": 217,
+          "calls": 1
+        },
+        {
+          "frame": 219,
+          "calls": 1
+        },
+        {
+          "frame": 221,
+          "calls": 1
+        },
+        {
+          "frame": 223,
+          "calls": 1
+        },
+        {
+          "frame": 225,
+          "calls": 1
+        },
+        {
+          "frame": 227,
+          "calls": 1
+        },
+        {
+          "frame": 229,
+          "calls": 1
+        },
+        {
+          "frame": 231,
+          "calls": 1
+        },
+        {
+          "frame": 233,
+          "calls": 1
+        },
+        {
+          "frame": 235,
+          "calls": 1
+        },
+        {
+          "frame": 237,
+          "calls": 1
+        },
+        {
+          "frame": 239,
+          "calls": 1
+        },
+        {
+          "frame": 241,
+          "calls": 1
+        },
+        {
+          "frame": 243,
+          "calls": 1
+        },
+        {
+          "frame": 245,
+          "calls": 1
+        },
+        {
+          "frame": 247,
+          "calls": 1
+        },
+        {
+          "frame": 249,
+          "calls": 1
+        },
+        {
+          "frame": 251,
+          "calls": 1
+        },
+        {
+          "frame": 253,
+          "calls": 1
+        },
+        {
+          "frame": 255,
+          "calls": 1
+        },
+        {
+          "frame": 257,
+          "calls": 1
+        },
+        {
+          "frame": 259,
+          "calls": 1
+        },
+        {
+          "frame": 261,
+          "calls": 1
+        },
+        {
+          "frame": 263,
+          "calls": 1
+        },
+        {
+          "frame": 265,
+          "calls": 1
+        },
+        {
+          "frame": 267,
+          "calls": 1
+        },
+        {
+          "frame": 269,
+          "calls": 1
+        },
+        {
+          "frame": 271,
+          "calls": 1
+        },
+        {
+          "frame": 273,
+          "calls": 1
+        },
+        {
+          "frame": 275,
+          "calls": 1
+        },
+        {
+          "frame": 277,
+          "calls": 1
+        },
+        {
+          "frame": 279,
+          "calls": 1
+        },
+        {
+          "frame": 281,
+          "calls": 1
+        },
+        {
+          "frame": 283,
+          "calls": 1
+        },
+        {
+          "frame": 285,
+          "calls": 1
+        },
+        {
+          "frame": 287,
+          "calls": 1
+        },
+        {
+          "frame": 289,
+          "calls": 1
+        },
+        {
+          "frame": 291,
+          "calls": 1
+        },
+        {
+          "frame": 293,
+          "calls": 1
+        },
+        {
+          "frame": 295,
+          "calls": 1
+        },
+        {
+          "frame": 297,
+          "calls": 1
+        },
+        {
+          "frame": 299,
+          "calls": 1
+        },
+        {
+          "frame": 301,
+          "calls": 1
+        },
+        {
+          "frame": 303,
+          "calls": 1
+        },
+        {
+          "frame": 305,
+          "calls": 1
+        },
+        {
+          "frame": 307,
+          "calls": 1
+        },
+        {
+          "frame": 309,
+          "calls": 1
+        },
+        {
+          "frame": 311,
+          "calls": 1
+        },
+        {
+          "frame": 313,
+          "calls": 1
+        },
+        {
+          "frame": 315,
+          "calls": 1
+        },
+        {
+          "frame": 317,
+          "calls": 1
+        },
+        {
+          "frame": 319,
+          "calls": 1
+        },
+        {
+          "frame": 321,
+          "calls": 1
+        },
+        {
+          "frame": 323,
+          "calls": 1
+        },
+        {
+          "frame": 325,
+          "calls": 1
+        },
+        {
+          "frame": 327,
+          "calls": 1
+        },
+        {
+          "frame": 329,
+          "calls": 1
+        },
+        {
+          "frame": 331,
+          "calls": 1
+        },
+        {
+          "frame": 333,
+          "calls": 1
+        },
+        {
+          "frame": 335,
+          "calls": 1
+        },
+        {
+          "frame": 337,
+          "calls": 1
+        },
+        {
+          "frame": 339,
+          "calls": 1
+        },
+        {
+          "frame": 341,
+          "calls": 1
+        },
+        {
+          "frame": 343,
+          "calls": 1
+        },
+        {
+          "frame": 345,
+          "calls": 1
+        }
+      ]
+    }
+  },
+  "final": {
+    "chunkStats": {
+      "live": 61,
+      "sharedLiveMaterial": true,
+      "baked": 3,
+      "views": 64,
+      "totalBakes": 16,
+      "lastBakeMs": 118.69999992847443,
+      "lastBakeSwapMs": 0.10000002384185791,
+      "lastBakeSwapFrame": 341,
+      "lastBakeRequestMs": 0.10000002384185791,
+      "bakeThread": "worker",
+      "pendingBake": 44,
+      "bakeError": null,
+      "lastBakeInfo": {
+        "id": 45,
+        "verts": 6616,
+        "tris": 13228,
+        "bakeMs": 118.69999992847443,
+        "overflow": 0,
+        "droppedQuads": 0,
+        "extent": 0.6036877210081303,
+        "flesh": 3,
+        "bones": 3,
+        "torn": 0,
+        "gore": 1,
+        "radius": 0.4768813197024429
+      },
+      "faceBaked": 0,
+      "pieces": [
+        {
+          "id": 47,
+          "centre": [
+            34.88404655456543,
+            0.357781782746315,
+            2.334359884262085
+          ],
+          "radius": 0.35129665504821833,
+          "face": false
+        },
+        {
+          "id": 46,
+          "centre": [
+            34.953895568847656,
+            0.603448897600174,
+            2.3928734064102173
+          ],
+          "radius": 0.47957929368215674,
+          "face": false
+        },
+        {
+          "id": 45,
+          "centre": [
+            34.41910934448242,
+            0.6005653440952301,
+            1.356263518333435
+          ],
+          "radius": 0.4768813197024429,
+          "face": false
+        }
+      ],
+      "livePieces": [
+        {
+          "id": 36,
+          "centre": [
+            32.10264930688641,
+            0.07680000000000001,
+            3.0301690131460206
+          ],
+          "radius": 0.07680000000000001,
+          "quat": [
+            0.055626504066280294,
+            0.027058167570743686,
+            0.009672358637141509,
+            0.9980380719649286
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 37,
+          "centre": [
+            32.5257585111706,
+            0.36232759894070055,
+            1.7789385055269231
+          ],
+          "radius": 0.36232759894070055,
+          "quat": [
+            -0.11603362575974767,
+            0.2190829344148965,
+            0.6975214675499557,
+            0.6723114366483447
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 38,
+          "centre": [
+            32.38435726978689,
+            0.043776,
+            2.6625523089258403
+          ],
+          "radius": 0.043776,
+          "quat": [
+            -0.7014698475081725,
+            0.19718864351260504,
+            -0.03588796957958697,
+            0.6839362145302548
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 39,
+          "centre": [
+            33.16993970235705,
+            0.5996076884867501,
+            1.1115147897448159
+          ],
+          "radius": 0.5996076884867501,
+          "quat": [
+            -0.4649888337798197,
+            0.32265481853835215,
+            0.4125671824178459,
+            0.713769971717686
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 40,
+          "centre": [
+            32.20383036432961,
+            0.16112000000000004,
+            2.733379315297736
+          ],
+          "radius": 0.16112000000000004,
+          "quat": [
+            0.18929536697537255,
+            -0.0282723185872944,
+            0.6957382499172725,
+            0.6923266769707841
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 41,
+          "centre": [
+            32.416608707216895,
+            0.23419392107179354,
+            2.136688086081348
+          ],
+          "radius": 0.23419392107179354,
+          "quat": [
+            0.31373617865581876,
+            -0.12390685411357424,
+            0.603849370377834,
+            0.7222067845156365
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 42,
+          "centre": [
+            34.01928498423532,
+            0.3725883279309779,
+            1.9020051922919345
+          ],
+          "radius": 0.3725883279309779,
+          "quat": [
+            0.030058778568408107,
+            -0.16406799021800766,
+            0.37507911183985765,
+            0.9118628319425146
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 43,
+          "centre": [
+            30.693885294066348,
+            0.3664884126964008,
+            2.1621675145968906
+          ],
+          "radius": 0.3664884126964008,
+          "quat": [
+            -0.09853078093268809,
+            -0.04481042352953192,
+            0.1315541060863957,
+            0.9853817678056096
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 44,
+          "centre": [
+            35.417566845225075,
+            0.382039275720503,
+            2.6514166899169602
+          ],
+          "radius": 0.382039275720503,
+          "quat": [
+            -0.2195088927203545,
+            -0.0016551567394045104,
+            -0.12324001733728573,
+            0.9677938853906639
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 48,
+          "centre": [
+            35.65839567181125,
+            0.043776,
+            1.395788548181812
+          ],
+          "radius": 0.043776,
+          "quat": [
+            0.3330739636337293,
+            -0.15643824605732348,
+            0.621360766184466,
+            0.6917366609964221
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 53,
+          "centre": [
+            26.82207712138577,
+            1.512534344822787,
+            -5.204021032631624
+          ],
+          "radius": 0.36253434482278707,
+          "quat": [
+            0.564486049952661,
+            0.21059152480544813,
+            0.2445379603084905,
+            0.7597419924271143
+          ],
+          "angVel": [
+            0.00006043876853894743,
+            0.00002254775370453869,
+            0.000026182353281025576
+          ]
+        },
+        {
+          "id": 54,
+          "centre": [
+            27.55804755394474,
+            0.043776,
+            -5.327856256152092
+          ],
+          "radius": 0.043776,
+          "quat": [
+            0.6939285340931837,
+            -0.08024041643249351,
+            0.15818678866562394,
+            0.6978550028721456
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 62,
+          "centre": [
+            24.588647275405364,
+            0.043776,
+            -12.595573442624067
+          ],
+          "radius": 0.043776,
+          "quat": [
+            0.6844273435978558,
+            -0.035572174365217125,
+            -0.1618656533404337,
+            0.7099953112628192
+          ],
+          "angVel": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "id": 65,
+          "centre": [
+            28.615294066477787,
+            1.9813013548573366,
+            1.2031992197483814
+          ],
+          "radius": 0.26727208090690574,
+          "quat": [
+            -0.6445727779500574,
+            0.461173404152246,
+            -0.5612025287732818,
+            0.23853038994402542
+          ],
+          "angVel": [
+            -0.16828978890742358,
+            0.12040653513374541,
+            -0.14652287271878184
+          ]
+        },
+        {
+          "id": 66,
+          "centre": [
+            24.78658844894104,
+            2.3790954866894203,
+            -1.891759170557181
+          ],
+          "radius": 0.3264808419456863,
+          "quat": [
+            -0.36516457525332535,
+            -0.7346431118108763,
+            -0.34174664545136624,
+            0.45843599506542765
+          ],
+          "angVel": [
+            -0.08574175774988857,
+            -0.17249644679201045,
+            -0.08024315629685728
+          ]
+        },
+        {
+          "id": 67,
+          "centre": [
+            35.02664426883078,
+            0.5913674838580932,
+            -5.334507184452564
+          ],
+          "radius": 0.4106117290475802,
+          "quat": [
+            -0.09285331951260292,
+            0.07546994442349596,
+            0.6728517645338494,
+            0.7300363357449341
+          ],
+          "angVel": [
+            -0.007854834682949887,
+            0.0063843052686718025,
+            0.05691922921320187
+          ]
+        },
+        {
+          "id": 68,
+          "centre": [
+            28.19078080814305,
+            2.713422692998352,
+            -1.45952000470105
+          ],
+          "radius": 0.07680000000000001,
+          "quat": [
+            -0.5580734995500278,
+            0.04552538303845301,
+            -0.3611256989916952,
+            0.7457007698312688
+          ],
+          "angVel": [
+            -0.11644446528373571,
+            0.009499069368146377,
+            -0.07535044927452891
+          ]
+        },
+        {
+          "id": 69,
+          "centre": [
+            30.056176273369907,
+            2.439159958332869,
+            -1.4386511873148582
+          ],
+          "radius": 0.328087145185367,
+          "quat": [
+            -0.3431309447658138,
+            0.5993439311706407,
+            0.3944025704717994,
+            0.6062133447213776
+          ],
+          "angVel": [
+            -0.07563351048619643,
+            0.13210841573607066,
+            0.08693489003132784
+          ]
+        },
+        {
+          "id": 70,
+          "centre": [
+            27.483430814820164,
+            2.539124385238206,
+            0.2564520710665254
+          ],
+          "radius": 0.324609130365793,
+          "quat": [
+            -0.8111729395865233,
+            -0.288655655082826,
+            0.26911336507371897,
+            0.4315719773223954
+          ],
+          "angVel": [
+            -0.19278997574287635,
+            -0.06860425690461078,
+            0.06395967689835906
+          ]
+        },
+        {
+          "id": 71,
+          "centre": [
+            28.68950116135227,
+            2.7234040599337734,
+            -2.070596398195139
+          ],
+          "radius": 0.0416,
+          "quat": [
+            -0.9087205548037322,
+            -0.061470240641541794,
+            -0.4100319771968177,
+            -0.04818859272417745
+          ],
+          "angVel": [
+            -0.28081160549640705,
+            -0.01899545121275493,
+            -0.12670753094869
+          ]
+        },
+        {
+          "id": 72,
+          "centre": [
+            21.435307159872547,
+            0.6747719968668395,
+            2.6875875899093358
+          ],
+          "radius": 0.4177185242453278,
+          "quat": [
+            -0.44253610278282335,
+            -0.017827180808819443,
+            -0.08593387490831464,
+            0.8924457173976702
+          ],
+          "angVel": [
+            -0.035169804885365384,
+            -0.0014167849058181882,
+            -0.00682944870387675
+          ]
+        },
+        {
+          "id": 73,
+          "centre": [
+            27.89455476147522,
+            2.9908573699186354,
+            -2.0375109091341415
+          ],
+          "radius": 0.043776,
+          "quat": [
+            -0.24808348199971159,
+            -0.4044394308538815,
+            -0.02301735921575506,
+            0.8799735984131684
+          ],
+          "angVel": [
+            -0.04928466478474084,
+            -0.08034658984425293,
+            -0.004572665717340148
+          ]
+        },
+        {
+          "id": 74,
+          "centre": [
+            26.603702096407133,
+            2.982056746311712,
+            -3.996055151310427
+          ],
+          "radius": 0.30128979056710636,
+          "quat": [
+            0.5978149871190052,
+            0.08626857592893779,
+            -0.3499478075029659,
+            0.7160387601289219
+          ],
+          "angVel": [
+            0.12615614795549562,
+            0.01820514952502268,
+            -0.07384904750013756
+          ]
+        },
+        {
+          "id": 75,
+          "centre": [
+            29.729151261162706,
+            2.956988763555499,
+            -1.1524047572737466
+          ],
+          "radius": 0.28760950773121585,
+          "quat": [
+            -0.020388497682270246,
+            0.4099911311068744,
+            0.7765626964141966,
+            0.4779560232007526
+          ],
+          "angVel": [
+            -0.004745895394056364,
+            0.09543493841707218,
+            0.1807629665285747
+          ]
+        },
+        {
+          "id": 76,
+          "centre": [
+            28.316832115518494,
+            3.2241174898218614,
+            -2.7413128679539653
+          ],
+          "radius": 0.16112000000000004,
+          "quat": [
+            -0.4422765489370861,
+            0.18058635151337846,
+            0.06592061613826324,
+            0.8760333876487468
+          ],
+          "angVel": [
+            -0.08798583977348683,
+            0.03592558056202727,
+            0.013114149468810786
+          ]
+        },
+        {
+          "id": 77,
+          "centre": [
+            28.51226711057978,
+            3.2142500965141627,
+            -2.9703145756211877
+          ],
+          "radius": 0.2380818258523466,
+          "quat": [
+            -0.14123106562596247,
+            -0.10546968050186543,
+            0.27730799379884663,
+            0.9444735089838403
+          ],
+          "angVel": [
+            -0.027435104685247753,
+            -0.020488209961905063,
+            0.05386898276386597
+          ]
+        },
+        {
+          "id": 78,
+          "centre": [
+            29.278011324925412,
+            1.7598796772026601,
+            -7.41915939559977
+          ],
+          "radius": 0.2833308557002639,
+          "quat": [
+            0.4551326609377557,
+            -0.24510614188072818,
+            -0.23393779237795725,
+            0.8234381272793907
+          ],
+          "angVel": [
+            0.09226713930391998,
+            -0.04968934220312615,
+            -0.04742522945577061
+          ]
+        },
+        {
+          "id": 79,
+          "centre": [
+            33.03710283207138,
+            1.7371001391096024,
+            -3.646600494228435
+          ],
+          "radius": 0.28338390009816317,
+          "quat": [
+            -0.4479646133072713,
+            0.08996056518596122,
+            0.5422463525436974,
+            0.7051267227165238
+          ],
+          "angVel": [
+            -0.09493210632882862,
+            0.019064331614464552,
+            0.11491217579900358
+          ]
+        },
+        {
+          "id": 80,
+          "centre": [
+            28.24366077389334,
+            3.3153933230752504,
+            -3.1887503417723964
+          ],
+          "radius": 0.2972728530117489,
+          "quat": [
+            -0.7155604264779899,
+            -0.12217232537998944,
+            -0.05538997245672056,
+            0.685550253388566
+          ],
+          "angVel": [
+            -0.15279964661964054,
+            -0.026088485967070692,
+            -0.011827887491370192
+          ]
+        },
+        {
+          "id": 81,
+          "centre": [
+            11.117101940496234,
+            0.5833355745236224,
+            -7.618124324310102
+          ],
+          "radius": 0.26715910042578533,
+          "quat": [
+            0.4176987080244583,
+            0.33622197099102835,
+            -0.7698190838209756,
+            0.3462096961707456
+          ],
+          "angVel": [
+            0.11066742152179275,
+            0.08908052113575927,
+            -0.20396015455175348
+          ]
+        },
+        {
+          "id": 82,
+          "centre": [
+            11.78795312212816,
+            0.7640001438145072,
+            -7.181107846253779
+          ],
+          "radius": 0.2524991004257855,
+          "quat": [
+            0.5821353295211715,
+            -0.7179514073950914,
+            0.25680019262737436,
+            0.28234357759514883
+          ],
+          "angVel": [
+            0.16141554579947134,
+            -0.19907487555771614,
+            0.07120602573365983
+          ]
+        },
+        {
+          "id": 83,
+          "centre": [
+            11.377798005008692,
+            0.40961770116036983,
+            -4.155677849962366
+          ],
+          "radius": 0.40961770116036983,
+          "quat": [
+            -0.28398225651588044,
+            0.025978686762035085,
+            0.32060633927657756,
+            0.9032667164431227
+          ],
+          "angVel": [
+            -0.05890200046003813,
+            0.005388352914658269,
+            0.06649836146542518
+          ]
+        },
+        {
+          "id": 84,
+          "centre": [
+            12.13436234410721,
+            0.1627510102303951,
+            -6.547942475899134
+          ],
+          "radius": 0.07680000000000001,
+          "quat": [
+            0.10960093952207592,
+            -0.0035293952628918175,
+            -0.6116052782647966,
+            0.7835267455700523
+          ],
+          "angVel": [
+            0.02414908556396205,
+            -0.0007776545398632221,
+            -0.1347589560873468
+          ]
+        },
+        {
+          "id": 85,
+          "centre": [
+            10.79852991115745,
+            0.7503458843880997,
+            -7.344046748490991
+          ],
+          "radius": 0.33120465663744264,
+          "quat": [
+            0.4187822240097972,
+            0.5581718284402001,
+            -0.22363143189586904,
+            0.680481183764353
+          ],
+          "angVel": [
+            0.09808608683271695,
+            0.130733558620867,
+            -0.052378374223806284
+          ]
+        },
+        {
+          "id": 86,
+          "centre": [
+            13.35881336383248,
+            1.8933939473411427,
+            -6.229587398069671
+          ],
+          "radius": 0.3247562938522763,
+          "quat": [
+            0.30977666920402175,
+            -0.6333485460765909,
+            0.4787174881783476,
+            0.5231993892501638
+          ],
+          "angVel": [
+            0.18793129370048112,
+            -0.3842316851470208,
+            0.290422119592064
+          ]
+        },
+        {
+          "id": 87,
+          "centre": [
+            12.348396994868088,
+            0.29218039230867726,
+            -6.122472369381218
+          ],
+          "radius": 0.0416,
+          "quat": [
+            0.10849135604100978,
+            -0.23179729853653214,
+            -0.9634199998374399,
+            0.07950812517457578
+          ],
+          "angVel": [
+            0.032932746345869415,
+            -0.07036248706741045,
+            -0.2924478745310429
+          ]
+        },
+        {
+          "id": 88,
+          "centre": [
+            11.553815162301651,
+            0.48424027006706405,
+            -6.298066894135353
+          ],
+          "radius": 0.4239123333842932,
+          "quat": [
+            0.35309345304663603,
+            -0.14143650085000886,
+            0.5293336863602897,
+            0.7583710029577444
+          ],
+          "angVel": [
+            0.19490521440328196,
+            -0.07807199846036227,
+            0.2921886394118595
+          ]
+        },
+        {
+          "id": 89,
+          "centre": [
+            12.332822515527909,
+            0.1415889346811434,
+            -6.427474108971869
+          ],
+          "radius": 0.043776,
+          "quat": [
+            0.3748537659474268,
+            -0.248571006818836,
+            -0.025683727281545762,
+            0.8927695418623045
+          ],
+          "angVel": [
+            0.07993998136242848,
+            -0.05300936913923045,
+            -0.005477220363560172
+          ]
+        },
+        {
+          "id": 90,
+          "centre": [
+            11.531162117449306,
+            0.9911995605057999,
+            -5.701997107852166
+          ],
+          "radius": 0.2942983199813479,
+          "quat": [
+            0.7152749487693181,
+            0.19183971862966973,
+            -0.3096590537384202,
+            0.5963979715399483
+          ],
+          "angVel": [
+            0.1763054552436941,
+            0.04728585697712463,
+            -0.07632670560267436
+          ]
+        },
+        {
+          "id": 91,
+          "centre": [
+            13.44101218615771,
+            1.7796294633796248,
+            -6.573810816074573
+          ],
+          "radius": 0.30349837619311143,
+          "quat": [
+            0.5497219770679894,
+            0.02694208176769477,
+            0.358837244615712,
+            0.7538671660412644
+          ],
+          "angVel": [
+            0.3039576099112696,
+            0.014897077289543516,
+            0.19841177135082494
+          ]
+        },
+        {
+          "id": 92,
+          "centre": [
+            15.443499294928705,
+            0.5948543916671599,
+            -4.532352601031064
+          ],
+          "radius": 0.28345194648791655,
+          "quat": [
+            0.02048955627183495,
+            -0.5139787876423955,
+            0.10296632148492472,
+            0.8513541687084757
+          ],
+          "angVel": [
+            0.004404344605936352,
+            -0.11048261225794524,
+            0.02213318612705239
+          ]
+        },
+        {
+          "id": 93,
+          "centre": [
+            12.520977309721902,
+            0.22300917222316502,
+            -5.978147296646683
+          ],
+          "radius": 0.16112000000000004,
+          "quat": [
+            0.20716283689063902,
+            0.3716075859345719,
+            0.07414228135917071,
+            0.901939179325391
+          ],
+          "angVel": [
+            0.045075582459163814,
+            0.08085633810415094,
+            0.01613226854428557
+          ]
+        },
+        {
+          "id": 94,
+          "centre": [
+            12.575400138637207,
+            1.0005704214689608,
+            -5.828810697787685
+          ],
+          "radius": 0.23652391678577012,
+          "quat": [
+            0.2869574543863988,
+            -0.03164278255254071,
+            -0.0006920736563710129,
+            0.9574203229086298
+          ],
+          "angVel": [
+            0.062401383242366985,
+            -0.006880997063269059,
+            -0.0001504974092953923
+          ]
+        },
+        {
+          "id": 95,
+          "centre": [
+            12.232092213851573,
+            0.8415376262491494,
+            -3.325899124314364
+          ],
+          "radius": 0.2832868484347146,
+          "quat": [
+            -0.6459250374920158,
+            0.05974999038445481,
+            -0.0029244544593800765,
+            0.7610533701102115
+          ],
+          "angVel": [
+            -0.14668228938730893,
+            0.013568548781591179,
+            -0.0006641106171954154
+          ]
+        },
+        {
+          "id": 96,
+          "centre": [
+            12.501573727688127,
+            1.070200395426121,
+            -5.975160418042179
+          ],
+          "radius": 0.3237035144189394,
+          "quat": [
+            -0.02363091040153939,
+            -0.5273304082130367,
+            -0.24158461695050312,
+            0.8142487909111962
+          ],
+          "angVel": [
+            -0.005461524463356641,
+            -0.12187545362364582,
+            -0.05583450967508496
+          ]
+        },
+        {
+          "id": 97,
+          "centre": [
+            10.745497637744124,
+            2.514553843797203,
+            -2.866597184970708
+          ],
+          "radius": 0.2663221730188377,
+          "quat": [
+            0.1541217222247151,
+            0.2901142734788214,
+            -0.7272262665415778,
+            0.602679152048867
+          ],
+          "angVel": [
+            0.37290640818113974,
+            0.7019482401535189,
+            -1.7595659526539622
+          ]
+        },
+        {
+          "id": 98,
+          "centre": [
+            11.073129843353795,
+            2.3734729700926605,
+            -3.247446251260841
+          ],
+          "radius": 0.2559544801260799,
+          "quat": [
+            0.31217244935288696,
+            -0.7702508071767202,
+            -0.08408650964309643,
+            0.549719487379401
+          ],
+          "angVel": [
+            0.7721577747680903,
+            -1.9052134501804694,
+            -0.20798777185052844
+          ]
+        },
+        {
+          "id": 99,
+          "centre": [
+            11.043487577569069,
+            2.314788412860099,
+            -2.336913188527001
+          ],
+          "radius": 0.31750728601663175,
+          "quat": [
+            -0.02252827209527783,
+            0.532838533567152,
+            -0.2712959435557729,
+            0.8012328532409234
+          ],
+          "angVel": [
+            -0.0504677924361586,
+            1.1936638726807136,
+            -0.6077566583996687
+          ]
+        },
+        {
+          "id": 100,
+          "centre": [
+            12.779529792821501,
+            1.641658751676486,
+            -4.270114489751765
+          ],
+          "radius": 0.40851311312433486,
+          "quat": [
+            -0.09072217122470155,
+            -0.010644307552192105,
+            0.31180925551043415,
+            0.9457437150428435
+          ],
+          "angVel": [
+            -0.19308755053443766,
+            -0.02265469669258074,
+            0.6636358518289466
+          ]
+        },
+        {
+          "id": 101,
+          "centre": [
+            11.881778647982285,
+            2.3155057488496698,
+            -3.4255902428210687
+          ],
+          "radius": 0.31752367305350265,
+          "quat": [
+            0.3959958616267709,
+            -0.5539056649236285,
+            0.12064583579072884,
+            0.722371354807443
+          ],
+          "angVel": [
+            0.9137548313136087,
+            -1.2781294615977012,
+            0.278388554059056
+          ]
+        },
+        {
+          "id": 102,
+          "centre": [
+            10.808426461527528,
+            1.6378261977280313,
+            -1.5731438799056272
+          ],
+          "radius": 0.4084264615275285,
+          "quat": [
+            -0.31805785204621406,
+            0.04489119076977201,
+            0.16792705224766646,
+            0.932000262267361
+          ],
+          "angVel": [
+            -0.386654918246059,
+            0.054573089723728575,
+            0.2041446870133827
+          ]
+        },
+        {
+          "id": 103,
+          "centre": [
+            11.400118042049774,
+            2.696760063349103,
+            -2.8522014023999507
+          ],
+          "radius": 0.07680000000000001,
+          "quat": [
+            -0.016338668398437076,
+            0.01144000701026215,
+            -0.47497661819680087,
+            0.8797723491454489
+          ],
+          "angVel": [
+            -0.03558071379155462,
+            0.024912900199654753,
+            -1.0343564541255705
+          ]
+        },
+        {
+          "id": 104,
+          "centre": [
+            11.605854166705589,
+            2.732388312011576,
+            -2.720369382563442
+          ],
+          "radius": 0.0416,
+          "quat": [
+            -0.07627850770966974,
+            -0.1586200783782738,
+            -0.9006898467411344,
+            0.3972141235836006
+          ],
+          "angVel": [
+            -0.20188266570991611,
+            -0.4198121491836982,
+            -2.383812592795457
+          ]
+        },
+        {
+          "id": 105,
+          "centre": [
+            11.477018468086301,
+            2.4069397721637666,
+            -2.777700305841136
+          ],
+          "radius": 0.043776,
+          "quat": [
+            0.25439405303211515,
+            -0.20610916317125016,
+            -0.12040297544084469,
+            0.937179706429739
+          ],
+          "angVel": [
+            0.5430282393562682,
+            -0.43995956138938663,
+            -0.2570115731386375
+          ]
+        },
+        {
+          "id": 106,
+          "centre": [
+            12.006793317469683,
+            1.9589466381971652,
+            -3.164523714909441
+          ],
+          "radius": 0.3050076706262717,
+          "quat": [
+            0.4881596241330397,
+            0.03777425082344981,
+            0.1365470120215269,
+            0.8611783792275615
+          ],
+          "angVel": [
+            1.0701020541512738,
+            0.08280550336785468,
+            0.2993267587665797
+          ]
+        },
+        {
+          "id": 107,
+          "centre": [
+            13.482293981969192,
+            2.4028913763782853,
+            -2.4425432155025555
+          ],
+          "radius": 0.2833577847430153,
+          "quat": [
+            0.16964845396983455,
+            -0.35992260503412116,
+            0.08555979955607222,
+            0.913430151216294
+          ],
+          "angVel": [
+            0.36511345657183636,
+            -0.7746170586718963,
+            0.18413981046397074
+          ]
+        },
+        {
+          "id": 108,
+          "centre": [
+            11.243377797368627,
+            1.9787981931873369,
+            -2.0790005224671306
+          ],
+          "radius": 0.2914973113309382,
+          "quat": [
+            0.46923572515584994,
+            0.3022350071873763,
+            -0.3777304685825596,
+            0.7387770487584941
+          ],
+          "angVel": [
+            1.0759987069311692,
+            0.69305140143568,
+            -0.8661691213480097
+          ]
+        },
+        {
+          "id": 109,
+          "centre": [
+            12.176971780558027,
+            2.45627629113113,
+            -1.1865202391351928
+          ],
+          "radius": 0.28340915090876573,
+          "quat": [
+            -0.5089754597070644,
+            0.040499860263675726,
+            0.10172739113061093,
+            0.8537887798679278
+          ],
+          "angVel": [
+            -1.118681231840229,
+            0.08901496664534982,
+            0.22358744621475732
+          ]
+        },
+        {
+          "id": 110,
+          "centre": [
+            11.721348544011663,
+            2.0964107885824936,
+            -2.605418684945006
+          ],
+          "radius": 0.16112000000000004,
+          "quat": [
+            -0.018129523756465506,
+            0.31564967918237985,
+            -0.13127446189814435,
+            0.9395762960259144
+          ],
+          "angVel": [
+            -0.03866736973336082,
+            0.673230197059591,
+            -0.2799873964120692
+          ]
+        },
+        {
+          "id": 111,
+          "centre": [
+            11.802838807197517,
+            1.8095086761871062,
+            -2.5470084354305795
+          ],
+          "radius": 0.23225189328364088,
+          "quat": [
+            0.22601364594366433,
+            -0.020949939656916897,
+            -0.0540491163950965,
+            0.9723978737597756
+          ],
+          "angVel": [
+            0.4766961810370658,
+            -0.044186518852487915,
+            -0.11399757420130496
+          ]
+        },
+        {
+          "id": 112,
+          "centre": [
+            11.754552206772484,
+            1.7171241609470367,
+            -2.569405893215302
+          ],
+          "radius": 0.3231627921473785,
+          "quat": [
+            -0.2391629607339923,
+            -0.21057950514027143,
+            -0.3623627580881103,
+            0.875871327181457
+          ],
+          "angVel": [
+            -0.5215438993330382,
+            -0.4592118106140716,
+            -0.7902063314751671
+          ]
+        }
+      ]
+    },
+    "chunkCensus": {
+      "inFrustum": 4,
+      "ofPieces": 61,
+      "bonePieces": 0,
+      "boneRows": 0,
+      "organPieces": 3,
+      "buriedBonePieces": 7,
+      "bonesShadingAsMeat": 0,
+      "organsShadingAsBone": 0,
+      "live": 61,
+      "baked": 3,
+      "views": 64,
+      "spare": 0,
+      "bakePending": true,
+      "cap": 64
+    },
+    "probeDynamic": {
+      "radianceGain": 0.15,
+      "visStrength": 1,
+      "frames": 170,
+      "errors": 0,
+      "bound": true,
+      "reached": 342,
+      "gates": {
+        "bound": true,
+        "dynKey": "arena",
+        "room": 6,
+        "grid": true,
+        "gain": 0.15,
+        "vis": 1,
+        "dynOn": true,
+        "flashI": 0,
+        "flashAge": 6.8530999996662185,
+        "capsules": 35,
+        "lights": 4
+      },
+      "rate": 2
+    },
+    "gpuDiagnostics": {
+      "lost": null,
+      "uncaptured": [],
+      "uncapturedCount": 0
+    },
+    "gibRenderer": {
+      "mode": "march",
+      "carvedLibraryBuilt": false,
+      "carvedBuildMs": 0,
+      "carveCells": 1
+    },
+    "frames": 341,
+    "loopRunning": true,
+    "bootMarks": [
+      {
+        "n": "main-start",
+        "t": 174
+      },
+      {
+        "n": "renderer-ready",
+        "t": 211
+      },
+      {
+        "n": "world-start",
+        "t": 211
+      },
+      {
+        "n": "gallery-start",
+        "t": 310
+      },
+      {
+        "n": "dungeon-start",
+        "t": 314
+      },
+      {
+        "n": "drawchain-start",
+        "t": 316
+      },
+      {
+        "n": "deferred-start",
+        "t": 319
+      },
+      {
+        "n": "adaptive-start",
+        "t": 319
+      },
+      {
+        "n": "zombies-start",
+        "t": 332
+      },
+      {
+        "n": "room-probes-start",
+        "t": 335
+      },
+      {
+        "n": "player-start",
+        "t": 1417
+      },
+      {
+        "n": "gun-start",
+        "t": 1417
+      },
+      {
+        "n": "gun-ready",
+        "t": 1691
+      },
+      {
+        "n": "warm-invoked",
+        "t": 1691
+      },
+      {
+        "n": "dynamite-start",
+        "t": 1695
+      },
+      {
+        "n": "detonation-start",
+        "t": 1696
+      },
+      {
+        "n": "burst-start",
+        "t": 1696
+      },
+      {
+        "n": "bleed-start",
+        "t": 1698
+      },
+      {
+        "n": "goo-start",
+        "t": 1698
+      },
+      {
+        "n": "hud-start",
+        "t": 1703
+      },
+      {
+        "n": "boot-time",
+        "t": 1703
+      },
+      {
+        "n": "frameloop-start",
+        "t": 1703
+      },
+      {
+        "n": "api-start",
+        "t": 1703
+      },
+      {
+        "n": "demo-start",
+        "t": 1703
+      },
+      {
+        "n": "draw-ready",
+        "t": 1703
+      },
+      {
+        "n": "main-end",
+        "t": 1703
+      },
+      {
+        "n": "warm-steps-start",
+        "t": 1703
+      },
+      {
+        "n": "warm-flip-done",
+        "t": 1703
+      },
+      {
+        "n": "warm-crowd-bins-done",
+        "t": 1719
+      },
+      {
+        "n": "warm-goo-done",
+        "t": 1874
+      },
+      {
+        "n": "warm-draw-once-done",
+        "t": 4165
+      },
+      {
+        "n": "warm-precompile-done",
+        "t": 5020
+      },
+      {
+        "n": "warm-finally",
+        "t": 5020
+      }
+    ]
+  },
+  "pageErrors": [],
+  "consoleCounts": {
+    "queriesExceeded": 0,
+    "indexCount0": 1,
+    "gpuLost": 0,
+    "uncaptured": 0,
+    "probeGatherFail": 0,
+    "errors": 0,
+    "warnings": 1
+  },
+  "consoleTail": [
+    {
+      "ts": 1789567655144.76,
+      "level": "log",
+      "text": "[vite] connecting..."
+    },
+    {
+      "ts": 1789567655150.076,
+      "level": "log",
+      "text": "[vite] connected."
+    },
+    {
+      "ts": 1789567655329.56,
+      "level": "log",
+      "text": "[sdf-game] demo seed 7 (?seed=)"
+    },
+    {
+      "ts": 1789567656970.975,
+      "level": "log",
+      "text": "[room-probes] room 1 baked"
+    },
+    {
+      "ts": 1789567659288.177,
+      "level": "log",
+      "text": "[room-probes] room 2 baked"
+    },
+    {
+      "ts": 1789567659359.783,
+      "level": "log",
+      "text": "[room-probes] room 3 baked"
+    },
+    {
+      "ts": 1789567659438.623,
+      "level": "log",
+      "text": "[room-probes] room 4 baked"
+    },
+    {
+      "ts": 1789567659527.67,
+      "level": "log",
+      "text": "[room-probes] room 6 baked"
+    },
+    {
+      "ts": 1789567659606.668,
+      "level": "log",
+      "text": "[room-probes] room 5 baked"
+    },
+    {
+      "ts": 1789567660138.212,
+      "level": "log",
+      "text": "[warm] 3316 ms of warm steps after 12 ms of synchronous boot (61 hidden objects, 7 crowd types, 11 stage/layer passes)"
+    },
+    {
+      "ts": 1789567660138.291,
+      "level": "log",
+      "text": "[warm] phases {\"flip\":0.10000002384185791,\"crowdBinsPerType\":[3.9,2.1,1.8,1.8,1.7,2,2],\"crowdBins\":15.300000071525574,\"goo\":154.79999995231628,\"drawOnce\":2291.2000000476837,\"precompile\":854.7999999523163}"
+    },
+    {
+      "ts": 1789567660452.366,
+      "level": "warning",
+      "text": "Calling [RenderPassEncoder (unlabeled)].Draw with an index count of 0 is unusual."
+    }
+  ]
+}
