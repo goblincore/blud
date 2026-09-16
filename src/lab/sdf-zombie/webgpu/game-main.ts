@@ -6984,6 +6984,9 @@ async function main() {
   /** Take a gibbed actor out of the world: hidden from every pass, out of the
    *  router, out of the roster. The view is retained — see gibActor. */
   function retireActor(a: ZombieActor): void {
+    // Equipment is a scene sibling of the flesh proxies, not their child.
+    // This actor stops ticking here, so its attachments must retire too.
+    a.character?.retireEquipment();
     const pi = pendingGibs.findIndex(q => q.actor === a);
     if (pi >= 0) pendingGibs.splice(pi, 1);
     a.view.object.visible = false;

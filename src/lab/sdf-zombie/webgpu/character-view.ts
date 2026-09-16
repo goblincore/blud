@@ -490,6 +490,8 @@ export interface CharacterView {
   releaseProp(vel: Vec3, seed: number): void;
   /** Restore equipment and clear detached armor when a fresh body replaces this one. */
   resetEquipment(): void;
+  /** Permanently remove attachments when the actor leaves the simulation. */
+  retireEquipment(): void;
   dispose(): void;
 }
 
@@ -559,6 +561,7 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
   let kit: KitOverlay | null = null;
   let heldProp: HeldProp | null = null;
   let disposed = false;
+  let equipmentRetired = false;
   const wounds = createWoundRing();
   const muzzleFlash = entry.profile.prop && opts.effectsScene ? createMuzzleFlash() : null;
   const armorSparks = entry.name === 'soldier' && opts.effectsScene ? createArmorSparks() : null;
@@ -572,7 +575,7 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
   if (kitUrl) {
     loadKit(kitUrl, opts.renderer, [0, 0, 0], entry.name === 'soldier')
       .then(k => {
-        if (disposed) { k.dispose(); return; }
+        if (disposed || equipmentRetired) { k.dispose(); return; }
         kit = k; opts.scene.add(k.object, k.debris);
       })
       .catch(e => console.error(`[kit] ${kitUrl} failed to load; rendering the body undressed`, e));
@@ -580,10 +583,24 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
   if (entry.profile.prop) {
     loadHeldProp(entry.profile.prop.url, opts.renderer)
       .then(p => {
-        if (disposed) { p.dispose(); return; }
+        if (disposed || equipmentRetired) { p.dispose(); return; }
         heldProp = p; opts.scene.add(p.object);
       })
       .catch(e => console.error(`[prop] ${entry.profile.prop!.url} failed to load; rendering unarmed`, e));
+  }
+
+  function retireEquipment(): void {
+    if (equipmentRetired) return;
+    equipmentRetired = true;
+    kit?.object.removeFromParent();
+    kit?.dispose();
+    heldProp?.object.removeFromParent();
+    heldProp?.dispose();
+    kit = null;
+    heldProp = null;
+    muzzleFlash?.dispose();
+    armorSparks?.dispose();
+    casings?.dispose();
   }
 
   return {
@@ -595,6 +612,7 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
     get kit() { return kit; },
     get prop() { return heldProp; },
     pose(body, bound, bodyYaw, sinceFire, frame, dt, releaseSeed, damageBody) {
+      if (equipmentRetired) return;
       // Polygon halves ride the rig: the kit from per-bone frames, the gun from
       // the motion frame's gun pose (right forearm). Collapse and gib release
       // the gun; the kit simply keeps following the (fallen) rig.
@@ -633,22 +651,19 @@ export function createCharacterView(opts: CharacterViewOpts): CharacterView {
       muzzleFlash?.pose(null, Infinity);
     },
     resetEquipment() {
+      if (equipmentRetired) return;
       ejection.reset();
       kit?.resetDamage();
       armorSparks?.reset();
       heldProp?.reset();
       muzzleFlash?.pose(null, Infinity);
     },
+    retireEquipment,
     dispose() {
       if (disposed) return;
       disposed = true;
-      kit?.object.removeFromParent();
+      retireEquipment();
       gpu.dispose();
-      kit?.dispose();
-      heldProp?.dispose();
-      muzzleFlash?.dispose();
-      armorSparks?.dispose();
-      casings?.dispose();
     },
   };
 }
