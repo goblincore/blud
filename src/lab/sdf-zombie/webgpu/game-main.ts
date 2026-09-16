@@ -151,7 +151,7 @@ import {
 } from '../dynamite-flight';
 import { gibAll, gibAllPieces, type ChunkGroup } from '../sever';
 import { displaceGibPieces, gibTierPlan, retargetGibPieces, type GibBoneRelease, type GibPiece, type GibPlan } from '../gib-parts';
-import { TEAR_TUNING } from '../gib-tear';
+import { TEAR_TUNING, type RuptureFrame } from '../gib-tear';
 import { blastRefractionBirthRadiusM, blastRefractionStrength } from '../blast-refraction';
 import { createBurstLayer, createStickProp, type BurstLayer, type StickProp } from './fpv-view';
 import { createExplosionVfx, type ExplosionVfx } from './explosion-vfx';
@@ -197,6 +197,9 @@ import {
   type SpritePieceSet,
 } from './gib-sprite-pieces';
 import { carveBodyIntoPieces, type CarvedLibrary, type CarvedPiece } from './gib-carve';
+import { GibAssetRuntime, gibAssetEligible } from './gib-asset-runtime';
+import { gibAssetPosedRows, gibAssetRowsFromPrims } from './gib-asset-deform';
+import { resetGibAssetCache } from './gib-asset-loader';
 import { compileBlob } from '../blob-compile';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
 import { BONE_VARIANTS, MEAT_VARIANTS } from '../gore-parts';
@@ -5081,8 +5084,10 @@ async function main() {
   // outright, so the skeleton shows on a cut as MATERIAL (goreKind), not as
   // silhouette. An earlier version of this comment claimed otherwise.
   const gibRenderParam = DYN_PARAMS.get('gibrender');
-  let gibRenderMode: 'march' | 'sprite' | 'carve' =
-    gibRenderParam === 'sprite' ? 'sprite' : gibRenderParam === 'carve' ? 'carve' : 'march';
+  let gibRenderMode: 'march' | 'sprite' | 'carve' | 'assets' =
+    gibRenderParam === 'sprite' ? 'sprite'
+      : gibRenderParam === 'carve' ? 'carve'
+        : gibRenderParam === 'assets' ? 'assets' : 'march';
   /** Slabs per cluster for the carved library — the GRANULARITY dial. */
   // 1 SINCE THE ANATOMICAL PARTITION (2026-09-11): `cells` used to mean slabs per
   // CLUSTER, where 3 was the owner's "more granular" ask; it now means
@@ -5642,6 +5647,125 @@ async function main() {
       impulseDelay, impulseVel,
       render: 'mesh', geometry: piece.geometry, material: carvedMaterial.material,
     });
+    return true;
+  }
+
+  /**
+   * THE OFFLINE GIB ASSET RUNTIME (2026-09-16 offline-gib-assets task 2).
+   *
+   * The committed `public/assets/lab/gibs/*` sets are loaded ONCE per archetype
+   * (asynchronously, off the boot path) and their immutable rest geometry and
+   * material are shared by every piece. A spawn takes a per-instance geometry
+   * from the pool and deforms it to the pose/slough the body is being drawn
+   * with, so the first mesh frame is the last SDF frame — no rest-pose snap and
+   * no crossfade hiding a shape change.
+   *
+   * `?gibrender=assets` is the A/B toggle. The SHIPPED default stays `march`
+   * until Task 3's visual gate; a body gibbed before the load resolves falls
+   * back to marched pieces for that blast, never to no gore.
+   */
+  let gibAssetMaterial: BakedChunkMaterial | null = null;
+  const createGibAssetRuntime = (): GibAssetRuntime => new GibAssetRuntime({
+    materialFactory: {
+      create: () => {
+        // Same procedural detail layer the carve uses, plus the baked flesh
+        // response (this set carries `bakeResponse`/`bakeFresnel`/`bakeAnchor`,
+        // so the per-pixel detail rides the asset's own rest-frame anchor).
+        gibAssetMaterial = registerLitChunkMaterial(createBakedChunkMaterial({
+          goreDetail: true, bakedAo: true, fleshResponse: true,
+        }));
+        gibAssetMaterial.uniforms.goreCfg.value.set(
+          gorePartDetail.x, gorePartDetail.y, gorePartDetail.z, gorePartDetail.w,
+        );
+        gibAssetMaterial.uniforms.goreCfg2.value.set(
+          gorePartStain.x, gorePartStain.y, gorePartStain.z, gorePartStain.w,
+        );
+        bakedChunkSeed?.(gibAssetMaterial);
+        return gibAssetMaterial.material;
+      },
+    },
+    onLoad: (lib) => {
+      console.log(`[gib-assets] ${lib.archetype}: ${lib.pieces.length} pieces, ${lib.verts} verts, `
+        + `${lib.bytes.bin} bin bytes (library build ${lib.builtMs.toFixed(0)} ms)`);
+    },
+  });
+  let gibAssetRuntime = createGibAssetRuntime();
+
+  /** The archetype whose committed set an actor uses. */
+  function gibAssetArchetypeOf(a: ZombieActor): string {
+    return a.kind === 'soldier' ? 'soldier' : 'zombie';
+  }
+
+  /** Kick off (or join) the load for the archetypes the assets path can use. */
+  function ensureGibAssets(): Promise<unknown> {
+    return Promise.all([
+      gibAssetRuntime.ensure('zombie'),
+      gibAssetRuntime.ensure('soldier'),
+    ]);
+  }
+
+  /** True once at least one archetype's committed set is loaded and usable. */
+  function gibAssetArmed(): boolean {
+    return gibAssetRuntime.archetypeState('zombie') === 'ready'
+      || gibAssetRuntime.archetypeState('soldier') === 'ready';
+  }
+
+  /**
+   * Spawn one offline-asset mesh piece. Returns false (with a counted reason)
+   * when the archetype/part is not available or the runtime piece is damaged;
+   * the caller then falls back to the marched path for that piece.
+   *
+   * The `Chunk` state is built with EXACTLY `spawnChunkPiece`/`spawnSpriteGibPiece`
+   * arithmetic — same radius, long axis, support spheres and pre-release spin —
+   * so an asset gib settles at the same height, bounces off the same walls and
+   * topples the same way as the marched one.
+   */
+  function spawnAssetGibPiece(
+    a: ZombieActor,
+    g: GibPiece,
+    frame: RuptureFrame | null,
+    pivot: Vec3,
+    impulseVel: Vec3 | null,
+    impulseDelay: number,
+  ): boolean {
+    const lib = gibAssetRuntime.library(gibAssetArchetypeOf(a));
+    if (!lib) { gibAssetRuntime.countFallback('no-library'); return false; }
+    const piece = lib.byPart.get(g.part);
+    if (!piece) { gibAssetRuntime.countFallback('no-asset'); return false; }
+    const ineligible = gibAssetEligible(piece.doc, g);
+    if (ineligible) { gibAssetRuntime.countFallback(ineligible); return false; }
+    const pool = gibAssetRuntime.poolFor(lib);
+    if (!pool) { gibAssetRuntime.countFallback('no-pool'); return false; }
+    const kind = g.kind ?? 'limb';
+    const boneOnly = g.prims.length === 0 && g.bones.length > 0;
+    const extentSource = boneOnly ? g.bones : g.prims;
+    const support = chunkSupportSpheres(extentSource, g.origin);
+    const state = makeChunk(
+      g.limb as never, g.origin, [0, 0, 0],
+      boneOnly ? boneChunkRadius(g.bones) : chunkExtent(g.prims, g.origin),
+      primsLongAxis(extentSource, g.origin),
+      rngStreams.misc, kind,
+      (g.spinQuat || g.spinAngVel) ? { quat: g.spinQuat, angVel: g.spinAngVel } : undefined,
+      support.length > 0 ? support : undefined,
+    );
+    // THE DEFORMATION SOURCE. A rupture hand-off maps the asset's REST bind
+    // frames (the planner's SEALED prims) through the sloughed body twins by
+    // source index. The zero-duration path has no rupture, so the piece's own
+    // already-sealed posed prims ARE the row-aligned posed frames.
+    const rows = frame
+      ? gibAssetPosedRows(piece.doc, frame.deformedPrims, frame.deformedBones)
+      : gibAssetRowsFromPrims([...g.prims, ...g.bones]);
+    const inst = pool.acquire(g.part);
+    pool.deformRows(inst, rows, pivot);
+    const sprite = spawnSpritePiece(spritePieces, {
+      state, render: 'mesh', geometry: inst.geometry, material: lib.material,
+      impulseDelay, impulseVel,
+    });
+    // Return the per-instance buffers to the pool when this piece is retired
+    // (evicted over a cap, cleared, or reset) — the pool's whole point.
+    sprite.onDetach = () => pool.release(inst);
+    sprite.mesh.name = `gib-asset-${g.part}`;
+    gibAssetRuntime.countAssetPiece();
     return true;
   }
 
@@ -6722,6 +6846,10 @@ async function main() {
         body: frame?.body ?? q.actor.posed(),
         tier: q.tier,
         locked,
+        // The asset deform needs the frame's sloughed prims and the CLEAN
+        // origins (the displacement above added the offset to each `origin`).
+        frame,
+        cleanOrigins: q.plan.pieces.map(p => p.origin),
       };
       const made = gibActor(q.actor, q.at, q.falloff, locked ? q.reserve : allowance, planned);
       q.actor.endTear();
@@ -6784,7 +6912,16 @@ async function main() {
     at: Vec3,
     falloff: number,
     budget: number,
-    planned?: { pieces: GibPiece[]; body: BuildResult; tier?: string; locked?: boolean },
+    planned?: {
+      pieces: GibPiece[]; body: BuildResult; tier?: string; locked?: boolean;
+      /** The rupture frame the pieces were retargeted onto, when there is one.
+       *  The asset path needs its `deformedPrims`/`deformedBones` to deform the
+       *  canonical mesh onto the drawn slough. */
+      frame?: RuptureFrame | null;
+      /** Clean (pre-displacement) region origins, aligned with `pieces` before
+       *  the rupture offsets were added — the asset mesh's local frame. */
+      cleanOrigins?: Vec3[];
+    },
   ): number {
     // A planned hand-off comes from the rupture: `body` is the pose the body was
     // last DRAWN in and `pieces` are the plan's own regions at the same offsets,
@@ -6817,6 +6954,23 @@ async function main() {
     // resolves ONCE per body (mode on AND a library that built), so a body can
     // never take the carve budget while spawning something else.
     const carveMode = gibRenderMode === 'carve' && ensureCarvedLibrary() && carvedLibrary !== null;
+    // ASSETS ARE THE FOURTH RENDERER (task 2): real reusable meshes loaded from
+    // the committed offline sets. Resolved ONCE per body, like carve, so the
+    // budget/tier decision and the spawn loop agree. Until the archetype's load
+    // resolves this is false and the body falls back to marched pieces.
+    const assetMode = gibRenderMode === 'assets' && gibAssetRuntime.library(gibAssetArchetypeOf(a)) !== null;
+    // Pivot per part for the asset deform on the RUPTURE path: the chunk's world
+    // pivot is the CLEAN region origin plus the rupture offset (`displaceGibPieces`
+    // adds the offset to `origin`), and the asset mesh's local frame is the clean
+    // origin. `planned.cleanOrigins` is aligned with `planned.pieces` before the
+    // sort below.
+    const cleanOriginByPart = new Map<string, Vec3>();
+    if (planned?.cleanOrigins) {
+      planned.pieces.forEach((p, i) => {
+        const o = planned.cleanOrigins![i];
+        if (o) cleanOriginByPart.set(p.part, o);
+      });
+    }
     if (gibRenderMode === 'sprite' && gibAtlas === null && !gibSpriteAtlasWarned) {
       gibSpriteAtlasWarned = true;
       console.warn('[gib-sprites] ?gibrender=sprite but no atlas is loaded — '
@@ -6879,6 +7033,11 @@ async function main() {
       // there is no cheaper shape to degrade to — a degraded carve would just be
       // a body with holes in it.
       tier = 'carve';
+    } else if (assetMode) {
+      // The asset path IS the whole authored split by name, so there is no
+      // cheaper shape to degrade to; a missing/damaged piece falls back
+      // per-piece inside the loop below and is counted.
+      tier = 'assets';
     } else if (spriteMode) {
       tier = 'sprite';
       // A blast bigger than the cap still slices — nearest-the-blast first, the
@@ -6962,6 +7121,20 @@ async function main() {
           if (boneOnly(g)) boneSpawned++;
         }
         continue;
+      }
+      if (assetMode) {
+        // THE OFFLINE MESH, DEFORMED ONTO THE DRAWN POSE/SLOUGH. On success the
+        // piece is a reusable mesh from the committed set; on failure (missing
+        // part, damaged source set) the SAME piece falls through to the marched
+        // path below, so damage is never silently lost. The pivot is the clean
+        // region origin on the rupture path (`g.origin` minus the offset the
+        // displacement added); the zero-duration path has no offset.
+        const pivot = cleanOriginByPart.get(g.part) ?? g.origin;
+        if (spawnAssetGibPiece(a, g, planned?.frame ?? null, pivot, vel, delay)) {
+          spawned++;
+          if (boneOnly(g)) boneSpawned++;
+          continue;
+        }
       }
       spawnChunkPiece({
         limb: g.limb, origin: g.origin, prims: g.prims, tornAt: g.tornAt, bones: g.bones, kind: g.kind,
@@ -7543,6 +7716,17 @@ async function main() {
     void ensureGibAtlas('sheet').then((n) => {
       console.log(`[gib-sprites] blast render mode: sprite, ${n} frames, `
         + `live cap ${gibSpriteLiveCap}, rest cap ${gibSpriteRestCap}, size x${gibSpriteSizeScale}`);
+    });
+  }
+  // `?gibrender=assets` (task 2) preloads the committed offline sets at boot, so
+  // the first detonation has meshes to deform. It is a fetch + decode, not an
+  // extraction, so unlike carve it costs no surface nets; a body gibbed before
+  // it resolves still gets marched pieces (counted), never no gore.
+  if (gibRenderMode === 'assets') {
+    mark('gib-assets-boot-scheduled');
+    void ensureGibAssets().then(() => {
+      mark('gib-assets-boot-ready');
+      console.log(`[gib-assets] blast render mode: assets, armed=${gibAssetArmed()}`);
     });
   }
 
@@ -13361,6 +13545,12 @@ function performBenchAction(a: BenchAction): void {
       pendingBake: chunkBakeJobs.pendingId,
       bakeError: chunkBakeJobs.error,
       lastBakeInfo,
+      /** THE ASSET PATH'S OWN CENSUS (task 2): asset hits, fallback reasons,
+       *  load bytes, live moving meshes and runtime extraction jobs. Included
+       *  here so a single `chunkStats()` read answers "did the offline set
+       *  actually carry this blast, and how much runtime extraction did it
+       *  remove?" without a second seam. */
+      gibAssets: gibAssetRuntime.countersSnapshot(),
       /** Baked pieces wearing the per-fragment textured HEAD material — the
        *  first non-zero value is the first textured-head draw (startup probe). */
       faceBaked: bakedChunks.filter(b => b.faceMaterial !== undefined).length,
@@ -13734,20 +13924,31 @@ function performBenchAction(a: BenchAction): void {
      *  Turning it ON loads the sheet if it is not loaded yet and reports what
      *  happened, so a caller can tell "the mode is on" from "the mode is on and
      *  armed". */
-    setGibRenderMode: async (mode: 'march' | 'sprite' | 'carve' = 'march') => {
-      gibRenderMode = mode === 'sprite' ? 'sprite' : mode === 'carve' ? 'carve' : 'march';
+    setGibRenderMode: async (mode: 'march' | 'sprite' | 'carve' | 'assets' = 'march') => {
+      gibRenderMode = mode === 'sprite' ? 'sprite'
+        : mode === 'carve' ? 'carve' : mode === 'assets' ? 'assets' : 'march';
       if (gibRenderMode === 'carve') ensureCarvedLibrary();
       if (gibRenderMode === 'sprite') await ensureGibAtlas('sheet');
-      return { mode: gibRenderMode, frames: gibAtlas?.frames.length ?? 0, ready: gibAtlas !== null };
+      // The asset path is a fetch+decode; await it so a caller can tell "mode
+      // on" from "mode on and armed" (the same contract as the sprite atlas).
+      if (gibRenderMode === 'assets') await ensureGibAssets();
+      return { mode: gibRenderMode, frames: gibAtlas?.frames.length ?? 0, ready: gibRenderMode === 'assets' ? gibAssetArmed() : gibAtlas !== null };
     },
     gibRenderMode: () => ({
       mode: gibRenderMode,
       // `ready` is per mode: the sprite path needs its ATLAS, the carve path its
-      // LIBRARY, and conflating them would report one mode armed because the
-      // other's asset loaded.
-      ready: gibRenderMode === 'carve' ? (carvedLibrary !== null) : gibAtlas !== null,
+      // LIBRARY, the assets path a loaded archetype SET — and conflating them
+      // would report one mode armed because another's asset loaded.
+      ready: gibRenderMode === 'assets'
+        ? gibAssetArmed()
+        : gibRenderMode === 'carve' ? (carvedLibrary !== null) : gibAtlas !== null,
       frames: gibAtlas?.frames.length ?? 0, atlas: gibAtlasSource,
       liveCap: gibSpriteLiveCap, restCap: gibSpriteRestCap, sizeScale: gibSpriteSizeScale,
+      assets: {
+        armed: gibAssetArmed(),
+        zombie: gibAssetRuntime.archetypeState('zombie'),
+        soldier: gibAssetRuntime.archetypeState('soldier'),
+      },
       carve: carvedLibrary ? {
         pieces: carvedLibrary.pieces.length,
         verts: carvedLibrary.totalVerts,
@@ -13787,6 +13988,44 @@ function performBenchAction(a: BenchAction): void {
     /** Drop every sprite piece (both lists) — the reset a paired rig wants
      *  between arms, so an earlier blast's pile is not in the frame. */
     clearSpritePieces: () => clearSpritePieces(spritePieces),
+    /**
+     * THE OFFLINE ASSET SEAM (task 2). `stats` is the always-available census
+     * (asset hits, per-reason fallbacks, load bytes, live moving meshes, runtime
+     * extraction jobs). `library` reports what loaded. `reset` cancels in-flight
+     * loads and drops every cached library so a rig can force a clean reload —
+     * a reset drops the sprite pieces first, which returns their pooled buffers.
+     */
+    gibAssetStats: () => gibAssetRuntime.countersSnapshot(),
+    gibAssetLibrary: () => {
+      const out: Record<string, unknown> = {};
+      for (const archetype of ['zombie', 'soldier']) {
+        const lib = gibAssetRuntime.library(archetype);
+        out[archetype] = lib ? {
+          state: gibAssetRuntime.archetypeState(archetype),
+          fingerprint: lib.fingerprint,
+          pieces: lib.pieces.length,
+          verts: lib.verts,
+          tris: lib.tris,
+          binBytes: lib.bytes.bin,
+          builtMs: lib.builtMs,
+          materials: 1,
+        } : {
+          state: gibAssetRuntime.archetypeState(archetype),
+          reason: gibAssetRuntime.failureReason(archetype),
+        };
+      }
+      return out;
+    },
+    resetGibAssets: () => {
+      const dropped = clearSpritePieces(spritePieces);
+      gibAssetRuntime.dispose();
+      resetGibAssetCache();
+      gibAssetRuntime = createGibAssetRuntime();
+      return dropped;
+    },
+    /** PRELOAD THE COMMITTED SETS without switching mode — the paired rig's
+     *  "arm both arms first" step. Returns the armed state. */
+    preloadGibAssets: async () => { await ensureGibAssets(); return gibAssetArmed(); },
     /** RELAY THE GORE-PART BENCH in front of the player: meat chunks and classic
      *  bones, rendered through the real gib mesh path. Returns how many parts. */
     goreShowcase: () => spawnGoreShowcase(),
@@ -13838,7 +14077,7 @@ function performBenchAction(a: BenchAction): void {
       if (o.wetTint !== undefined) goreLookCfg.y = o.wetTint;
       if (o.spec !== undefined) goreLookCfg.z = o.spec;
       if (o.fres !== undefined) goreLookCfg.w = o.fres;
-      for (const m of [gorePartMat, carvedMaterial]) {
+      for (const m of [gorePartMat, carvedMaterial, gibAssetMaterial]) {
         m?.uniforms.look.value.set(goreLookCfg.x, goreLookCfg.y, goreLookCfg.z, goreLookCfg.w);
       }
       return { stain: goreLookCfg.x, wetTint: goreLookCfg.y, spec: goreLookCfg.z, fres: goreLookCfg.w };
@@ -13864,7 +14103,7 @@ function performBenchAction(a: BenchAction): void {
       // bench and leaves ?gibrender=carve on its boot values. That is the same
       // shape of bug as the flashlight's: see `litChunkMaterials`, which exists
       // because the per-frame beam update had exactly this omission.
-      for (const m of [gorePartMat, carvedMaterial]) {
+      for (const m of [gorePartMat, carvedMaterial, gibAssetMaterial]) {
         m?.uniforms.goreCfg.value.set(
           gorePartDetail.x, gorePartDetail.y, gorePartDetail.z, gorePartDetail.w,
         );
@@ -14074,6 +14313,13 @@ function performBenchAction(a: BenchAction): void {
       carvedLibraryBuilt: carvedLibrary !== null,
       carvedBuildMs,
       carveCells: gibCarveCells,
+      /** Task 2: the offline-asset arm's own state + census. */
+      assetArmed: gibAssetArmed(),
+      assets: {
+        zombie: gibAssetRuntime.archetypeState('zombie'),
+        soldier: gibAssetRuntime.archetypeState('soldier'),
+      },
+      assetStats: gibAssetRuntime.countersSnapshot(),
     }),
     uptime: () => (performance.now() - bootTime) / 1000,
     get frames() { return frameCount; },

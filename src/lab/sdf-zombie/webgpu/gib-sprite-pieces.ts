@@ -88,6 +88,17 @@ export interface SpritePiece {
    *  release exists to show. */
   impulseDelay: number;
   impulseVel: Chunk['vel'] | null;
+  /**
+   * CALLED WHEN THIS PIECE LEAVES THE SET (evicted over a cap, or cleared).
+   *
+   * Absent for a billboard/carved piece, whose geometry is shared and has
+   * nothing to give back. The OFFLINE ASSET path sets it so a dropped piece
+   * returns its per-instance deformed geometry to the per-part pool — that is
+   * what makes the pool bounded across a firefight rather than growing with
+   * every blast. See `detach` below: this is the ONE place a piece is retired,
+   * so registering the buffer return here cannot be forgotten at a call site.
+   */
+  onDetach?: () => void;
 }
 
 export interface SpritePieceSet {
@@ -309,6 +320,9 @@ export function spawnSpritePiece(
  *  sheet's `Source`, so one piece's clone dying would blank every sibling. */
 function detach(set: SpritePieceSet, p: SpritePiece): void {
   set.group.remove(p.mesh);
+  // The ONE retirement point (eviction over a cap, clear, or reset). An asset
+  // piece returns its per-instance geometry to the pool here.
+  p.onDetach?.();
 }
 
 export interface SpriteStepOptions {
