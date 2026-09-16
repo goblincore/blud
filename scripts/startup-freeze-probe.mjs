@@ -220,9 +220,17 @@ result.lifecycle = await evaluate(`(async () => {
   const afterRunning = g.loopRunning();
   g.setLoopRunning(false); await g.rewarm();
   const afterPaused = g.loopRunning();
+  // PAUSE DURING WARM (reviewer correction 2026-09-16): the old finally
+  // reapplied the state snapshotted at warm START, so this pause was lost.
   g.setLoopRunning(true);
-  return { loopAfterRunningWarm: afterRunning, loopAfterPausedWarm: afterPaused };
+  const inFlight = g.rewarm();
+  g.setLoopRunning(false); // deliberate pause while the warm is running
+  await inFlight;
+  const afterPauseDuringWarm = g.loopRunning();
+  g.setLoopRunning(true);
+  return { loopAfterRunningWarm: afterRunning, loopAfterPausedWarm: afterPaused, loopAfterPauseDuringWarm: afterPauseDuringWarm };
 })()`);
+result.warmGate = await evaluate('window.__warmGate ?? null');
 
 // Let the loop run clean for a moment; sample baseline frames.
 await sleep(1500);
@@ -237,14 +245,41 @@ const cstats = () => evaluate('window.__sdfGame.chunkStats()');
 const errors = () => evaluate('window.__errs ? window.__errs.slice() : []');
 
 const actionLog = {};
+// Pipeline-log cursor: every action window reports how many pipelines were
+// created inside it and how many long frames it added, so a stall is attributed
+// to creations (or explicitly NOT — a long frame with no creation is its own
+// finding).
+const plogCursor = () => evaluate(`(() => {
+  const l = window.__sdfGame.pipelineLog();
+  return { total: l.totalPipelines, totalMs: l.totalCompileMs, longFrames: (l.frames || []).length };
+})()`);
+/** The long frames recorded since a cursor, with their creation counts. */
+const longFramesSince = async (beforeLen) => evaluate(`(() => {
+  const all = (window.__sdfGame.pipelineLog().frames || []);
+  return all.slice(${JSON.stringify(beforeLen)}).map(f => ({
+    frame: f.frame, ms: f.ms, creations: (f.pipelines || []).length,
+    names: [...new Set((f.pipelines || []).map(p => p.name))].slice(0, 6),
+  }));
+})()`);
 const action = async (name, fn) => {
   const t0 = Date.now();
   await frameStats(); // clear before
   const pre = await cstats();
+  const pl0 = await plogCursor();
   await fn();
-  actionLog[name] = { wallMs: Date.now() - t0, frames: await frameStats() };
+  const frames = await frameStats();
+  const pl1 = await plogCursor();
+  actionLog[name] = {
+    wallMs: Date.now() - t0,
+    frames,
+    pipelinesCreated: pl1.total - pl0.total,
+    compileMs: Math.round((pl1.totalMs - pl0.totalMs) * 10) / 10,
+    longFramesAdded: pl1.longFrames - pl0.longFrames,
+    longFrames: await longFramesSince(pl0.longFrames),
+  };
   return pre;
 };
+
 result.actions = actionLog;
 
 // Room entry: leave the arena and come back.
@@ -315,29 +350,75 @@ if (target) {
   };
   result.actions.firstDetonation = blast.frames;
   await frameStats();
-  // Repeated explosions.
-  for (let k = 0; k < 3; k++) {
-    const q = await evaluate(pickNearest);
-    if (q) await evaluate(`window.__sdfGame.detonate(${q.pos[0]}, ${q.pos[1] + 0.6}, ${q.pos[2]})`);
-    await sleep(800);
+  // MATCHED CADENCE. Repeated shots and repeated explosions, one measured
+  // window each, with a FIXED 450 ms gap so the before/after runs are
+  // comparable. Per-window creation counts separate "long frame WITH pipeline
+  // creation" from "long frame with none" (the latter is its own finding).
+  const shotWindows = [];
+  for (let k = 0; k < 6; k++) {
+    const name = `repeatShot${k}`;
+    await action(name, async () => {
+      await evaluate('window.__sdfGame.fire(2)');
+      await sleep(450);
+    });
+    shotWindows.push(actionLog[name]);
   }
-  result.actions.repeatedBlasts = await frameStats();
+  const blastWindows = [];
+  for (let k = 0; k < 6; k++) {
+    const q = await evaluate(pickNearest);
+    const name = `repeatBlast${k}`;
+    await action(name, async () => {
+      if (q) await evaluate(`window.__sdfGame.detonate(${q.pos[0]}, ${q.pos[1] + 0.6}, ${q.pos[2]})`);
+      await sleep(450);
+    });
+    blastWindows.push(actionLog[name]);
+  }
+  const summarizeWindows = (wins) => ({
+    windows: wins.length,
+    totalPipelinesCreated: wins.reduce((a, w) => a + (w.pipelinesCreated ?? 0), 0),
+    maxFrameMs: wins.reduce((a, w) => Math.max(a, w.frames?.max ?? 0), 0),
+    maxP95: wins.reduce((a, w) => Math.max(a, w.frames?.p95 ?? 0), 0),
+    longFrames: wins.reduce((a, w) => a + (w.longFramesAdded ?? 0), 0),
+    perWindow: wins.map((w) => ({
+      created: w.pipelinesCreated, compileMs: w.compileMs, long: w.longFramesAdded,
+      p95: w.frames?.p95 ?? null, max: w.frames?.max ?? null,
+      longFrameDetail: (w.longFrames ?? []).filter((f) => f.ms >= 100).slice(0, 4),
+    })),
+  });
+  result.repeatedShots = summarizeWindows(shotWindows);
+  result.repeatedBlasts = summarizeWindows(blastWindows);
 }
 
 // Probe-gather STRESS: pack >512 bone rows near the room, then push toward the
 // admitted 1024-row maximum. The probe fix (fdf20ad0) must keep errors at 0
 // instead of throwing "N capsules exceed max 1024".
+//
+// SPAWN vs STEADY ARE SEPARATE (reviewer correction 2026-09-16): the old table
+// measured one window that contained the spawning itself and called it gather
+// cost. Each level now measures a spawn window, waits for spawn to settle, then
+// measures a clean 2 s steady-state window with no spawning in it.
 const stress = [];
 const charName = await evaluate('(() => { const n = window.__sdfGame.characterNames?.() ?? []; return n[0] ?? "zombie"; })()');
 for (const n of [6, 9, 12, 20]) {
   const pre = await evaluate('(() => { const p = window.__sdfGame.probeDynamic; return { frames: p.frames, errors: p.errors, capsules: p.gates?.capsules ?? null }; })()');
-  await frameStats(); // clear before
+  const pl0 = await plogCursor();
+  await frameStats(); // clear before spawn
   const spawn = await evaluate(`(() => { try { return window.__sdfGame.spawnCrowd(${JSON.stringify(charName)}, ${n}, { spacing: 0.9 }); } catch (e) { return { error: String(e) }; } })()`);
-  await sleep(1800);
+  await sleep(500);
+  const spawnFrames = await frameStats(); // includes the spawn's own CPU
+  await sleep(3000); // let the spawn settle so the next window has no spawn CPU
+  await frameStats(); // clear
+  const steadyT0 = Date.now();
+  await sleep(2000);
+  const steadyFrames = await frameStats(); // steady-state gather only
   const post = await evaluate('(() => { const p = window.__sdfGame.probeDynamic; return { frames: p.frames, errors: p.errors, bound: p.bound, capsules: p.gates?.capsules ?? null, lights: p.gates?.lights ?? null, dynOn: p.gates?.dynOn, radianceGain: p.radianceGain, visStrength: p.visStrength }; })()');
-  // Frames while this many bodies are near the room: the gather's own cost.
-  const frames = await frameStats();
-  stress.push({ requested: n, charName, spawn, pre, post, frames });
+  const pl1 = await plogCursor();
+  stress.push({
+    requested: n, charName, spawn, pre, post,
+    spawnFrames, steadyFrames, steadyWallMs: Date.now() - steadyT0,
+    steadyGainFrames: (post.frames ?? 0) - (pre.frames ?? 0),
+    pipelinesCreated: pl1.total - pl0.total,
+  });
 }
 result.probeStress = stress;
 
@@ -349,15 +430,30 @@ result.probeHealth = await evaluate(`(() => {
 })()`);
 
 // Long frames + pipeline creations after warm, plus final device state.
+// CORRECTED ATTRIBUTION (reviewer 2026-09-16): the payload now carries three's
+// own render-cache-key rebuild census, the full-descriptor groups with their
+// distinct-key counts, the shader-module census and the cache evictions — so a
+// "rebuilt" claim can be tied to the actual cache key and to the release that
+// preceded it, instead of to a partial signature.
 result.pipelineLog = await evaluate(`(() => {
   const l = window.__sdfGame.pipelineLog();
   return { totalPipelines: l.totalPipelines, totalCompileMs: l.totalCompileMs,
     longFrames: (l.frames || []).map(f => ({ frame: f.frame, ms: f.ms, creations: (f.pipelines || []).length,
       names: [...new Set((f.pipelines || []).map(p => p.name))].slice(0, 8) })),
     slowest: (l.slowest || []).slice(0, 12).map(p => ({ name: p.name, ms: Math.round(p.ms), async: p.async, via: p.via, frame: p.frame })),
-    duplicates: (l.duplicates || []).map(d => ({ name: d.name, sig: d.sig, count: d.count, firstFrame: d.firstFrame, lastFrame: d.lastFrame })),
+    rebuilds: (l.rebuilds || []).slice(0, 16).map(r => ({ key: r.key, name: r.name, count: r.count,
+      firstFrame: r.firstFrame, lastFrame: r.lastFrame, objects: r.objects,
+      releases: (r.releases || []).map(x => ({ frame: x.frame, via: x.via, object: x.objectType + (x.objectName ? ':' + x.objectName : ''), material: x.material })) })),
+    descriptorGroups: (l.descriptorGroups || []).slice(0, 16).map(d => ({ name: d.name, count: d.count,
+      distinctThreeKeys: d.distinctThreeKeys, firstFrame: d.firstFrame, lastFrame: d.lastFrame, sig: d.sig.slice(0, 240) })),
+    shaderModules: l.shaderModules,
+    evictions: { total: l.evictions?.total, byObject: (l.evictions?.byObject || []).slice(0, 12),
+      events: (l.evictions?.events || []).slice(-24).map(e => ({ key: e.key, frame: e.frame, via: e.via,
+        object: e.objectType + (e.objectName ? ':' + e.objectName : ''), material: e.material })) },
     compute: l.compute };
 })()`);
+result.viewport = await evaluate(`(() => ({ width: innerWidth, height: innerHeight, dpr: devicePixelRatio,
+  canvasW: document.querySelector('canvas')?.width ?? null, canvasH: document.querySelector('canvas')?.height ?? null }))()`);
 result.final = await evaluate(`(() => {
   const g = window.__sdfGame;
   return { chunkStats: g.chunkStats(), chunkCensus: g.chunkCensus(),
@@ -377,8 +473,14 @@ console.log(`[${LABEL}] probeErrors=${result.probeHealth?.errors} capsules=${res
 console.log(`[${LABEL}] gpuLost=${JSON.stringify(result.final?.gpuDiagnostics?.lost)} uncaptured=${result.final?.gpuDiagnostics?.uncapturedCount}`);
 console.log(`[${LABEL}] pageErrors=${JSON.stringify(result.pageErrors)}`);
 console.log(`[${LABEL}] longFrames=${result.pipelineLog?.longFrames?.length} slowest=${JSON.stringify((result.pipelineLog?.slowest ?? []).slice(0, 6))}`);
-console.log(`[${LABEL}] duplicates=${JSON.stringify((result.pipelineLog?.duplicates ?? []).slice(0, 10))}`);
-console.log(`[${LABEL}] probeStress=${JSON.stringify((result.probeStress ?? []).map(s => ({ n: s.requested, ok: s.spawn?.ok, capsules: s.post?.capsules, lights: s.post?.lights, errors: s.post?.errors, dynOn: s.post?.dynOn, gained: (s.post?.frames ?? 0) - (s.pre?.frames ?? 0) })))}`);
+console.log(`[${LABEL}] rebuilds=${JSON.stringify((result.pipelineLog?.rebuilds ?? []).slice(0, 6).map(r => ({ key: r.key, name: r.name, count: r.count, first: r.firstFrame, last: r.lastFrame, releases: r.releases.length })))}`);
+console.log(`[${LABEL}] descriptorGroups=${JSON.stringify((result.pipelineLog?.descriptorGroups ?? []).slice(0, 6).map(d => ({ name: d.name, count: d.count, keys: d.distinctThreeKeys })))}`);
+console.log(`[${LABEL}] evictions=${result.pipelineLog?.evictions?.total} byObject=${JSON.stringify(result.pipelineLog?.evictions?.byObject ?? [])}`);
+console.log(`[${LABEL}] shaderModules=${JSON.stringify(result.pipelineLog?.shaderModules)}`);
+console.log(`[${LABEL}] viewport=${JSON.stringify(result.viewport)}`);
+console.log(`[${LABEL}] repeatedShots=${JSON.stringify({ created: result.repeatedShots?.totalPipelinesCreated, max: result.repeatedShots?.maxFrameMs, p95: result.repeatedShots?.maxP95, long: result.repeatedShots?.longFrames })}`);
+console.log(`[${LABEL}] repeatedBlasts=${JSON.stringify({ created: result.repeatedBlasts?.totalPipelinesCreated, max: result.repeatedBlasts?.maxFrameMs, p95: result.repeatedBlasts?.maxP95, long: result.repeatedBlasts?.longFrames })}`);
+console.log(`[${LABEL}] probeStress=${JSON.stringify((result.probeStress ?? []).map(s => ({ n: s.requested, ok: s.spawn?.ok, rows: s.post?.capsules, lights: s.post?.lights, errors: s.post?.errors, dynOn: s.post?.dynOn, spawnP95: s.spawnFrames?.p95, steadyP95: s.steadyFrames?.p95, steadyMax: s.steadyFrames?.max, steadyN: s.steadyFrames?.n, gathered: s.steadyGainFrames, created: s.pipelinesCreated })))}`);
 if (result.gibTimeline) {
   const g = result.gibTimeline;
   console.log(`[${LABEL}] gib: firstLive=${g.firstVisibleChunk?.t}ms(=${g.firstVisibleChunk?.live}) firstBakeSubmit=${g.firstBakeSubmit?.t}ms firstSwap=${g.firstBakeSwap?.t}ms worker=${Math.round(g.firstBakeSwap?.lastBakeMs || 0)}ms swap=${g.firstBakeSwap?.lastBakeSwapMs}ms firstFace=${g.firstTexturedHeadDraw?.t ?? 'none'}ms`);
