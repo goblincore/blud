@@ -205,6 +205,14 @@ for (let i = 0; i <= NFRAMES; i++) {
   const stats = await ev('window.__sdfGame.chunkStats()');
   const sim = {
     tears: d.tearing, tearAge: d.tearAge, ruptureMaxM: d.ruptureMaxM,
+    // Task 4: the largest per-region angle the body is DRAWN with, and the
+    // largest spin on a released chunk — the two numbers that say the pieces
+    // are already rotated before release and keep turning after it.
+    ruptureMaxRad: d.ruptureMaxRad,
+    chunkMaxRad: Math.max(0, ...stats.livePieces.map(p =>
+      2 * Math.acos(Math.min(1, Math.abs(p.quat ? p.quat[3] : 1))))),
+    chunkMaxAngVel: Math.max(0, ...stats.livePieces.map(p =>
+      p.angVel ? Math.hypot(p.angVel[0], p.angVel[1], p.angVel[2]) : 0)),
     pendingGibs: d.pendingGibs, held: d.pendingPieceImpulses, delays: d.pendingPieceDelays,
     // Task 3: the region count the window is DRAWN with and the tier it will
     // spawn — compare against `tier`/`spawned` after release.
@@ -230,10 +238,11 @@ for (let i = 0; i <= NFRAMES; i++) {
   }
   prevPng = png; prevLabel = label;
   console.log(`frame ${String(i).padStart(2)} (~${label.padStart(6)}): `
-    + `tearing ${d.tearing}${d.tearing ? ` age ${d.tearAge.toFixed(3)} maxOffset ${d.ruptureMaxM.toFixed(4)}m` : ''} `
+    + `tearing ${d.tearing}${d.tearing ? ` age ${d.tearAge.toFixed(3)} maxOffset ${d.ruptureMaxM.toFixed(4)}m rot ${(d.ruptureMaxRad * 180 / Math.PI).toFixed(1)}deg` : ''} `
     + `pendingGibs ${d.pendingGibs} impulses ${d.pendingPieceImpulses}${d.pendingPieceImpulses ? ` delays ${JSON.stringify(d.pendingPieceDelays)}` : ''} `
     + `| chunks ${chunks.inFrustum}/${chunks.live} baked ${chunks.baked}`
-    + `${d.tearing ? '' : ` tier ${d.lastGibTier} parts ${d.lastGibParts.length}`}`);
+    + `${d.tearing ? '' : ` tier ${d.lastGibTier} parts ${d.lastGibParts.length}`
+      + ` chunkRot ${(sim.chunkMaxRad * 180 / Math.PI).toFixed(1)}deg spin ${sim.chunkMaxAngVel.toFixed(2)}rad/s`}`);
 }
 writeFileSync(`${OUT}/${TAG_FILE}-telemetry.json`, JSON.stringify({
   tag: TAG, qs: QS, vfx: VFX, seed: SEED, view: VIEW, dist: DIST, tearSec,

@@ -39,7 +39,10 @@
 import type { BuildResult } from './build-body';
 import type { Primitive, Vec3 } from './types';
 import { refitClusters } from './rig-bind';
-import { add, len, scale, sub } from './vec';
+import {
+  add, cross, len, normalize, qFromAxisAngle, qIdentity, qMul, qNormalize,
+  qRotate, scale, sub, type Quat,
+} from './vec';
 
 /**
  * The window's shape. ALL of it is in one place so a look pass has one place to
@@ -86,6 +89,28 @@ export interface TearTuning {
    * reveal is the same wherever the bundle landed.
    */
   chestPeelM: number;
+  /**
+   * PEAK ANGULAR SPEED, rad/s, the blast imparts to a region at the body's
+   * surface. The rotation is LINEAR in age (a constant angular velocity, which
+   * is what an impulsive torque produces), so the region is already turning at
+   * this rate on the last pre-release frame and the live chunk keeps turning at
+   * the same rate: orientation AND its derivative are continuous across the
+   * hand-off, and there is no second angular kick. Owner correction 2026-09-16:
+   * before this the regions only TRANSLATED and every piece stood upright, so
+   * the breakup read as an exploded assembly diagram.
+   */
+  spinRadPerSec: number;
+  /** How far a region's spin axis leans from the blast's own radial-plane
+   *  tumble axis toward a stable per-region seeded axis, 0..1. 0 is every
+   *  region spinning about the same kind of axis (a synchronous blender); 1 is
+   *  unrelated axes (noise). ~0.5 reads as one blast acting on distinct pieces. */
+  spinCoherence: number;
+  /** Spin scale for a released BONE region. Below 1 the skeleton keeps some of
+   *  its upright read — the same lag that exposes the ribs — instead of
+   *  tumbling like meat. */
+  boneSpin: number;
+  /** Spin scale for the head region, so the face stays recognizable. */
+  headSpin: number;
 }
 
 export const TEAR_TUNING: TearTuning = {
@@ -112,6 +137,18 @@ export const TEAR_TUNING: TearTuning = {
   // the ribcage is left standing in the opening. Tuned against the 200 ms
   // captures; see RESULTS.md Task 3.
   chestPeelM: 0.3,
+  // TASK-4 (2026-09-16). Owner: "when the zombie begins coming apart all pieces
+  // remain upright/parallel, like an exploded assembly diagram. The pieces
+  // should already be rotated into different angles and have angular velocity."
+  // At 0.2 s a 3.2 rad/s peak gives a ~37 deg final tilt on a surface region
+  // (more on a small piece, less on the lagging skeleton and the head), reached
+  // linearly so the rate carries into flight unchanged. See ruptureSpins.
+  spinRadPerSec: 3.2,
+  // Half blast-coherent, half region-seeded: a blast turning every piece about
+  // the same axis reads as a machine; fully independent axes read as noise.
+  spinCoherence: 0.5,
+  boneSpin: 0.5,
+  headSpin: 0.3,
 };
 
 const TAU = Math.PI * 2;
@@ -178,8 +215,16 @@ function seamProgress(p: number): number {
 export interface RuptureRegion {
   origin: Vec3;
   limb: string;
+  /** Stable label ('torso.chest', 'bone.cage', …). The spin axis varies by it,
+   *  so two regions of the same limb must not share one. Optional for
+   *  hand-built plans. */
+  part?: string;
+  /** Reach of this region's own geometry from `origin`, metres. Feeds the spin
+   *  magnitude: a smaller piece turns faster for the same angular impulse.
+   *  Optional (defaults to a mid-body reach) so hand-built plans compile. */
+  radius?: number;
   /** The chunk kind the region will become ('limb' | 'bone' | …). Only 'bone'
-   *  matters to the rupture (it lags the flesh); typed as string so a
+   *  matters to the rupture (it lags AND spins less); typed as string so a
    *  `GibPiece`'s `ChunkKind` is assignable without a wider coupling. */
   kind: string;
   srcPrims?: number[];
@@ -267,18 +312,157 @@ export function ruptureOffsets(
   return offsets;
 }
 
-/** The body the march should draw this frame, plus the region offsets it was
- *  built with — the exact pair the chunk spawn reuses. */
+/**
+ * One region's spin schedule: a unit world axis and a signed angular speed.
+ * The displayed rotation is `qFromAxisAngle(axis, rate * age)` — LINEAR in age,
+ * i.e. a constant angular velocity, which is the torque-free motion an
+ * impulsive blast torque produces. That linearity is what makes the hand-off
+ * exact: the sample at the release age is a valid state of the very rotation
+ * the live chunk continues at the same rate.
+ */
+export interface RegionSpin {
+  axis: Vec3;
+  rate: number;
+}
+
+/** FNV-1a-style deterministic hash → a stable 0..1 value for a string salt.
+ *  The spin variation must be PURE and repeatable (capture rigs compare runs),
+ *  so per-region asymmetry is seeded from the region's name and index rather
+ *  than Math.random. */
+function hash01(key: string, salt: number): number {
+  let h = (2166136261 ^ Math.imul(salt >>> 0, 2654435761)) >>> 0;
+  for (let i = 0; i < key.length; i++) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  h ^= h >>> 15; h = Math.imul(h, 2246822507) >>> 0;
+  h ^= h >>> 13; h = Math.imul(h, 3266489909) >>> 0;
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967295;
+}
+
+/**
+ * THE BLAST TORQUE, per region. Pure and deterministic — the same
+ * (plan, tear, tuning) always gives the same spins, and progress 0 (or a zero
+ * falloff) gives zero rate for every region, so the onset pose is untouched.
+ *
+ * The axis is a blend of two things, which is what keeps it COHERENT rather
+ * than either synchronous or noisy:
+ *
+ *   blast-coherent  — the radial-plane tumble `radial x up` a body blown apart
+ *                     by a blast actually shows: the piece cartwheels away
+ *                     from the epicentre, not about it;
+ *   seeded           — a stable per-region direction from the region's own name
+ *                     and index, so no two pieces share an axis.
+ *
+ * The magnitude is the peak rate scaled by the blast falloff, by the region's
+ * geometry (a smaller reach spins faster for the same angular impulse —
+ * `sqrt(refReach / reach)`), and by a seeded 0.6..1.5 variation. Bones and the
+ * head damp it further: the skeleton should still read as a ribcage in the gap
+ * and the face should stay recognizable.
+ */
+export function ruptureSpins(
+  plan: RupturePlan,
+  tear: TearState,
+  tuning: TearTuning = TEAR_TUNING,
+): RegionSpin[] {
+  const p = ruptureProgress(tear.age, tuning.sec);
+  const fall = Math.max(0, Math.min(1, tear.falloff));
+  const n = plan.pieces.length;
+  if (p <= 0 || fall <= 0) return new Array(n).fill({ axis: [0, 1, 0] as Vec3, rate: 0 });
+  const up = plan.up && len(plan.up) > 1e-6 ? normalize(plan.up) : ([0, 1, 0] as Vec3);
+  const coherence = Math.max(0, Math.min(1, tuning.spinCoherence));
+  const out: RegionSpin[] = new Array(n);
+  for (let r = 0; r < n; r++) {
+    const region = plan.pieces[r]!;
+    const off = sub(region.origin, tear.at);
+    const dist = len(off);
+    // A region exactly ON the blast point has no radial direction; the body's
+    // up is the only stable substitute (same fallback as `ruptureOffsets`).
+    const radial = dist < 1e-5 ? up : scale(off, 1 / dist);
+    // radial x up — the cartwheel axis of a radial blast. Degenerates when the
+    // radial is parallel to the body axis, where any perpendicular is as good.
+    let coh = cross(radial, up);
+    if (len(coh) < 1e-4) {
+      const seedAxis: Vec3 = Math.abs(radial[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+      coh = cross(radial, seedAxis);
+    }
+    coh = normalize(coh);
+    const key = `${region.part ?? region.limb}#${r}`;
+    let seeded = normalize([
+      hash01(key, 1) * 2 - 1,
+      hash01(key, 2) * 2 - 1,
+      hash01(key, 3) * 2 - 1,
+    ]);
+    if (len(seeded) < 1e-6) seeded = coh;
+    let axis = normalize(add(scale(coh, coherence), scale(seeded, 1 - coherence)));
+    if (len(axis) < 1e-6) axis = coh;
+    const reach = Math.max(0.03, region.radius ?? 0.15);
+    const geom = Math.max(0.55, Math.min(1.8, Math.sqrt(0.16 / reach)));
+    const vary = 0.6 + hash01(key, 7) * 0.9;
+    let rate = tuning.spinRadPerSec * fall * geom * vary;
+    if (region.kind === 'bone') rate *= tuning.boneSpin;
+    if (region.limb === 'head') rate *= tuning.headSpin;
+    out[r] = { axis, rate };
+  }
+  return out;
+}
+
+/**
+ * RIGIDLY ROTATE ONE PRIM about `pivot` by `q` (the region transform, minus the
+ * translation). Everything the region can carry rotates:
+ *
+ *   a/b            the endpoints, about the pivot;
+ *   orient         composed `q * orient`, so a non-spherical prim's scale
+ *                  basis and the rigged head frame turn with the region;
+ *   bend           the Bezier control DISPLACEMENT (mid-relative, world axes)
+ *                  rotates as a vector — no pivot;
+ *   shell.clip     the world-space clip normal rotates as a vector.
+ *
+ * `orient` is only written when the prim is actually orientation-sensitive
+ * (non-uniform scale, box, shell, or already oriented). A capsule or sphere is
+ * fully described by its endpoints, so leaving `orient` identity there keeps
+ * the shader on its cheap `sdPrim` path.
+ */
+export function rotatePrimAbout(p: Primitive, q: Quat, pivot: Vec3): Primitive {
+  const rot = (v: Vec3): Vec3 => add(pivot, qRotate(q, sub(v, pivot)));
+  const out: Primitive = { ...p, a: rot(p.a), b: rot(p.b) };
+  if (p.bend !== undefined) out.bend = qRotate(q, p.bend);
+  const sensitive = p.orient !== undefined
+    || p.scale[0] !== p.scale[1] || p.scale[1] !== p.scale[2]
+    || p.box !== undefined || p.shell !== undefined;
+  if (sensitive) out.orient = qNormalize(p.orient ? qMul(q, p.orient) : q);
+  if (p.shell) out.shell = { ...p.shell, clipNormal: qRotate(q, p.shell.clipNormal) };
+  return out;
+}
+
+const IDENTITY_Q: Quat = [0, 0, 0, 1];
+const isIdentityQ = (q: Quat): boolean =>
+  q[0] === 0 && q[1] === 0 && q[2] === 0 && q[3] === 1;
+
+/** The body the march should draw this frame, plus the per-region transforms
+ *  it was built with — the exact tuple the chunk spawn reuses. */
 export interface RuptureFrame {
   body: BuildResult;
   offsets: Vec3[];
+  /** Per-region orientation at the displayed age (identity at onset). */
+  quats: Quat[];
+  /** Per-region angular velocity, rad/s (zero at onset) — the derivative the
+   *  live chunk continues with. */
+  angVels: Vec3[];
 }
 
 /**
  * Bend a POSED body away from the blast by moving every planned region as a
- * rigid unit. Pure: `posed` is not mutated. Returns the posed body itself (and
- * zero offsets) when the window has not started, so progress 0 is bit-identical
- * to the pre-blast frame — the exact onset silhouette the contract requires.
+ * rigid unit — rotation about the region's own origin PLUS its translation.
+ * Pure: `posed` is not mutated. Returns the posed body itself (and identity
+ * regions) when the window has not started, so progress 0 is bit-identical to
+ * the pre-blast frame — the exact onset silhouette the contract requires.
+ *
+ * THE PIVOT IS `region.origin`, the same centre `spawnChunkPiece` makes the
+ * chunk's position (gib-parts.ts) and the same frame `chunkPoint` rotates
+ * about. That shared pivot is what makes the drawn region and the spawned chunk
+ * one continuous transform rather than two approximations of each other.
  *
  * Every upload goes through here, so the cull bounds have to cover the moved
  * prims or the march CULLS them (an under-covering bound does not draw a wrong
@@ -291,9 +475,20 @@ export function rupturePosed(
   tuning: TearTuning = TEAR_TUNING,
 ): RuptureFrame {
   const offsets = ruptureOffsets(plan, tear, tuning);
+  const spins = ruptureSpins(plan, tear, tuning);
+  const spinAge = Math.max(0, Math.min(tear.age, tuning.sec));
+  const quats: Quat[] = new Array(spins.length);
+  const angVels: Vec3[] = new Array(spins.length);
   let moved = false;
-  for (const o of offsets) if (o[0] !== 0 || o[1] !== 0 || o[2] !== 0) { moved = true; break; }
-  if (!moved) return { body: posed, offsets };
+  for (let r = 0; r < spins.length; r++) {
+    const s = spins[r]!;
+    const angle = s.rate * spinAge;
+    quats[r] = angle === 0 ? IDENTITY_Q : qFromAxisAngle(s.axis, angle);
+    angVels[r] = s.rate === 0 ? ZERO : scale(s.axis, s.rate);
+    const o = offsets[r]!;
+    if (o[0] !== 0 || o[1] !== 0 || o[2] !== 0 || angle !== 0) moved = true;
+  }
+  if (!moved) return { body: posed, offsets, quats, angVels };
 
   const primRegion = new Int32Array(posed.prims.length).fill(-1);
   const boneRegion = new Int32Array((posed.bonePrims ?? []).length).fill(-1);
@@ -303,13 +498,20 @@ export function rupturePosed(
     for (const i of region.srcBones ?? []) if (i >= 0 && i < boneRegion.length) boneRegion[i] = r;
   }
   const shift = (q: Primitive, o: Vec3): Primitive => ({ ...q, a: add(q.a, o), b: add(q.b, o) });
+  const place = (q: Primitive, r: number): Primitive => {
+    const rot = quats[r]!;
+    const moved2 = isIdentityQ(rot)
+      ? q
+      : rotatePrimAbout(q, rot, plan.pieces[r]!.origin);
+    return shift(moved2, offsets[r]!);
+  };
   const prims = posed.prims.map((q, i) => {
     const r = primRegion[i]!;
-    return r >= 0 ? shift(q, offsets[r]!) : q;
+    return r >= 0 ? place(q, r) : q;
   });
   const bonePrims = (posed.bonePrims ?? []).map((q, i) => {
     const r = boneRegion[i]!;
-    return r >= 0 ? shift(q, offsets[r]!) : q;
+    return r >= 0 ? place(q, r) : q;
   });
   // NOTE ON THE CUT CAPS (task 3). The obvious companion — append each piece's
   // `sub` caps here so the moving cut is a real hole — does NOT work in a
@@ -325,5 +527,7 @@ export function rupturePosed(
   return {
     body: { ...posed, prims, bonePrims, clusters: refitClusters(prims, posed.clusters) },
     offsets,
+    quats,
+    angVels,
   };
 }

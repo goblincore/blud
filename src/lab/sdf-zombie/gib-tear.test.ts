@@ -18,12 +18,13 @@ import { parseBlob } from './blob-parse';
 import { buildBody } from './build-body';
 import { applyRig, bindRig } from './rig-bind';
 import { sdBody } from './validate';
-import { gibPlan } from './gib-parts';
+import { gibPlan, gibTierPlan } from './gib-parts';
 import {
-  TEAR_TUNING, ruptureGore, ruptureProgress, rupturePosed, ruptureOffsets, type TearState,
+  TEAR_TUNING, rotatePrimAbout, ruptureGore, rupturePosed, ruptureProgress,
+  ruptureOffsets, ruptureSpins, type TearState,
 } from './gib-tear';
-import { len, sub } from './vec';
-import type { Vec3 } from './types';
+import { qFromAxisAngle, qMul, qRotate, add, cross, dot, len, normalize, sub } from './vec';
+import type { Primitive, Vec3 } from './types';
 
 const body = buildBody(compileBlob(parseBlob(zombieSrc)));
 const posed = applyRig(body, bindRig(body), 0);
@@ -212,5 +213,150 @@ describe('rupturePosed', () => {
       const f2 = rupturePosed(posed, plan, tearAt(age));
       expect(JSON.stringify(f1)).toBe(JSON.stringify(f2));
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TASK 4 — the blast-driven rotation. The owner's correction: before this the
+// regions only TRANSLATED and every piece stayed upright, so the breakup read
+// as an exploded assembly diagram. These pin the observable outcomes: identity
+// at onset, a nonzero VARIED pose by release, flesh > skeleton > head, rigid
+// prim transforms, determinism, and the finite degenerate blast.
+// ---------------------------------------------------------------------------
+describe('ruptureSpins (blast-driven rotation)', () => {
+  it('is identity at onset and nonzero across the body by release', () => {
+    const at0 = rupturePosed(posed, plan, tearAt(0));
+    for (const q of at0.quats) expect(q).toEqual([0, 0, 0, 1]);
+    for (const w of at0.angVels) expect(w).toEqual([0, 0, 0]);
+    const end = rupturePosed(posed, plan, tearAt(TEAR_TUNING.sec));
+    const spun = end.quats.filter(q => !(q[0] === 0 && q[1] === 0 && q[2] === 0 && q[3] === 1));
+    expect(spun.length).toBeGreaterThan(plan.pieces.length * 0.5);
+    expect(end.angVels.length).toBe(plan.pieces.length);
+  });
+
+  it('gives the regions DIFFERENT axes and rates, not one synchronous spin', () => {
+    const { angVels } = rupturePosed(posed, plan, tearAt(TEAR_TUNING.sec));
+    const axes = angVels.filter(w => len(w) > 1e-6).map(w => normalize(w));
+    expect(axes.length).toBeGreaterThan(4);
+    let dotSum = 0, pairs = 0;
+    for (let i = 0; i < axes.length; i++) {
+      for (let j = i + 1; j < axes.length; j++) {
+        dotSum += Math.abs(dot(axes[i]!, axes[j]!));
+        pairs++;
+      }
+    }
+    // A fully synchronous spin would average |dot| ~ 1; independent axes ~ 0.
+    expect(dotSum / pairs).toBeLessThan(0.95);
+    const rates = angVels.map(len).filter(r => r > 1e-6);
+    expect(Math.max(...rates) - Math.min(...rates)).toBeGreaterThan(0.1);
+  });
+
+  it('turns flesh more than the skeleton and the head least', () => {
+    const { angVels } = rupturePosed(posed, plan, tearAt(TEAR_TUNING.sec));
+    const rate = (part: string) => len(angVels[plan.pieces.findIndex(p => p.part === part)]!);
+    const chest = rate('torso.chest');
+    const cage = rate('bone.cage');
+    const head = rate('head');
+    expect(chest).toBeGreaterThan(0);
+    expect(cage).toBeGreaterThan(0);
+    expect(head).toBeGreaterThan(0);
+    expect(cage).toBeLessThan(chest);
+    expect(head).toBeLessThan(cage);
+  });
+
+  it('does not rotate on a zero falloff, and is finite on a degenerate blast', () => {
+    const none = rupturePosed(posed, plan, tearAt(TEAR_TUNING.sec, 0));
+    for (const q of none.quats) expect(q).toEqual([0, 0, 0, 1]);
+    for (const w of none.angVels) expect(w).toEqual([0, 0, 0]);
+
+    const p0 = posed.prims[0]!;
+    const onAPrim = rupturePosed(posed, plan, { at: p0.a, falloff: 1, age: TEAR_TUNING.sec });
+    for (const q of onAPrim.quats) for (const v of q) expect(Number.isFinite(v)).toBe(true);
+    for (const w of onAPrim.angVels) {
+      for (const v of w) expect(Number.isFinite(v)).toBe(true);
+      expect(len(w)).toBeLessThanOrEqual(TEAR_TUNING.spinRadPerSec * 2.2 + 1e-9);
+    }
+  });
+
+  it('rotates rigidly and deterministically as the window advances', () => {
+    for (const age of [0.03, 0.08, 0.15, 0.2]) {
+      const a = rupturePosed(posed, plan, tearAt(age));
+      const b = rupturePosed(posed, plan, tearAt(age));
+      expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+      // Rigid: a prim's distance to its own region pivot is preserved (compare
+      // against the DISPLACED pivot, since the region is also translated).
+      for (let r = 0; r < plan.pieces.length; r++) {
+        const piece = plan.pieces[r]!;
+        const i = piece.srcPrims?.[0];
+        if (i === undefined) continue;
+        const before = len(sub(posed.prims[i]!.a, piece.origin));
+        const pivot = add(piece.origin, a.offsets[r]!);
+        const after = len(sub(a.body.prims[i]!.a, pivot));
+        expect(after).toBeCloseTo(before, 4);
+      }
+    }
+  });
+
+  it('spins tight-budget CLUSTER plans, which use cluster centres as pivots', () => {
+    const clusterPlan = gibTierPlan(posed, 9, { mode: 'clusters', at: torso.center }).plan;
+    expect(clusterPlan.pieces.length).toBeGreaterThan(0);
+    const at0 = rupturePosed(posed, clusterPlan, tearAt(0));
+    for (const q of at0.quats) expect(q).toEqual([0, 0, 0, 1]);
+    const end = rupturePosed(posed, clusterPlan, tearAt(TEAR_TUNING.sec));
+    expect(end.quats.length).toBe(clusterPlan.pieces.length);
+    for (const w of end.angVels) {
+      expect(Number.isFinite(len(w))).toBe(true);
+      expect(len(w)).toBeLessThanOrEqual(TEAR_TUNING.spinRadPerSec * 2.2 + 1e-9);
+    }
+  });
+
+  it('plans no spin for a previously severed limb (the representation differs)', () => {
+    const severed = {
+      ...posed,
+      clusters: posed.clusters.map(c => c.limb === 'armL' ? { ...c, alive: false } : c),
+    };
+    const sPlan = gibPlan(severed);
+    // The flesh representation drops the arm entirely (gib-parts); the bones
+    // are released as their own pieces and are outside this task's scope.
+    expect(sPlan.pieces.some(p => p.part.startsWith('armL.'))).toBe(false);
+    const end = rupturePosed(severed, sPlan, tearAt(TEAR_TUNING.sec));
+    expect(end.quats.length).toBe(sPlan.pieces.length);
+    for (const w of end.angVels) expect(Number.isFinite(len(w))).toBe(true);
+  });
+});
+
+describe('rotatePrimAbout (region prim transform)', () => {
+  it('turns endpoints, composes orient, rotates bend and the shell clip', () => {
+    const pivot: Vec3 = [0, 1, 0];
+    const q = qFromAxisAngle([0, 1, 0], Math.PI / 2);
+    const orient: [number, number, number, number] = [0, 0, Math.SQRT1_2, Math.SQRT1_2];
+    const p: Primitive = {
+      a: [0.3, 1, 0], b: [0.3, 1.5, 0], radius: 0.05, scale: [2, 1, 0.5], blendK: 0,
+      limb: 'head', cluster: 0, orient,
+      bend: [0, 0, 0.1],
+      shell: { thickness: 0.01, clipNormal: [1, 0, 0], clipOffset: 0, rim: 0 },
+    };
+    const r = rotatePrimAbout(p, q, pivot);
+    const expectA = add(pivot, qRotate(q, sub(p.a, pivot)));
+    const expectB = add(pivot, qRotate(q, sub(p.b, pivot)));
+    expect(len(sub(r.a, expectA))).toBeLessThan(1e-9);
+    expect(len(sub(r.b, expectB))).toBeLessThan(1e-9);
+    // The local scale basis is unchanged; `orient` carries the rotation.
+    expect(r.scale).toEqual(p.scale);
+    const expectO = qMul(q, orient);
+    for (let k = 0; k < 4; k++) expect(r.orient![k]).toBeCloseTo(expectO[k]!, 9);
+    expect(len(sub(r.bend!, qRotate(q, p.bend!)))).toBeLessThan(1e-9);
+    expect(len(sub(r.shell!.clipNormal, qRotate(q, p.shell!.clipNormal)))).toBeLessThan(1e-9);
+  });
+
+  it('leaves a uniform sphere orientless so the cheap shader path survives', () => {
+    const q = qFromAxisAngle([0, 1, 0], 0.5);
+    const sphere: Primitive = {
+      a: [0, 1, 0], b: [0, 1, 0], radius: 0.1, scale: [1, 1, 1], blendK: 0,
+      limb: 'torso', cluster: 0,
+    };
+    const r = rotatePrimAbout(sphere, q, [0, 1, 0]);
+    expect(r.orient).toBeUndefined();
+    expect(len(sub(r.a, sphere.a))).toBeLessThan(1e-9);
   });
 });

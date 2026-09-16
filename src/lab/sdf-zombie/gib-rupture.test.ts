@@ -20,10 +20,10 @@ import { parseBlob } from './blob-parse';
 import { buildBody } from './build-body';
 import { applyRig, bindRig } from './rig-bind';
 import { gibPlan, displaceGibPieces } from './gib-parts';
-import { rupturePosed, TEAR_TUNING, type TearState } from './gib-tear';
+import { rupturePosed, rotatePrimAbout, TEAR_TUNING, type TearState } from './gib-tear';
 import { sdBody } from './validate';
 import { createZombieActor } from './webgpu/game-actor';
-import { add, len, sub } from './vec';
+import { add, len, qMul, qRotate, sub } from './vec';
 import type { Vec3 } from './types';
 
 const doc = parseBlob(zombieSrc);
@@ -90,7 +90,7 @@ describe('rupture lifecycle (actor)', () => {
     expect(a.tearAge()).toBeGreaterThanOrEqual(TEAR_TUNING.sec);
   });
 
-  it('the released frame is the plan displaced by the frame it was drawn at', () => {
+  it('the released frame is the plan displaced AND rotated by the frame it was drawn at', () => {
     const a = actor();
     for (let f = 0; f < 10; f++) a.step(1 / 60);
     const plan = planFor(a);
@@ -98,29 +98,48 @@ describe('rupture lifecycle (actor)', () => {
     a.stepTear(TEAR_TUNING.sec);
     expect(a.tearing()).toBe(false);
     const frame = a.tearFrame()!;
-    // The drawn body and the pieces use the SAME offsets: no second partition,
-    // no snap. Piece i is the plan's region i translated by offsets[i].
-    const pieces = displaceGibPieces(plan.pieces, frame.offsets);
-    for (let i = 0; i < plan.pieces.length; i++) {
-      const region = frame.offsets[i]!;
-      const before = plan.pieces[i]!;
-      const after = pieces[i]!;
-      for (let k = 0; k < before.prims.length; k++) {
-        const p0 = before.prims[k]!;
-        const p1 = after.prims[k]!;
-        expect(p1.a[0] - p0.a[0]).toBeCloseTo(region[0], 10);
-        expect(p1.a[1] - p0.a[1]).toBeCloseTo(region[1], 10);
-        expect(p1.a[2] - p0.a[2]).toBeCloseTo(region[2], 10);
-      }
-    }
-    // ...and the drawn body's own flesh prims moved by their region's offset.
     const clean = a.posed();
-    const prim0 = clean.prims[0]!;
-    const r0 = plan.pieces.findIndex(p => (p.srcPrims ?? []).includes(0));
-    if (r0 >= 0) {
-      expect(frame.body.prims[0]!.a[0] - prim0.a[0]).toBeCloseTo(frame.offsets[r0]![0], 10);
-      expect(frame.body.prims[0]!.a[1] - prim0.a[1]).toBeCloseTo(frame.offsets[r0]![1], 10);
+    const drawn = frame.body;
+    // Every body prim is exactly its region's rigid transform: rotate about the
+    // region origin, then translate by the region offset. No per-prim smear.
+    plan.pieces.forEach((piece, r) => {
+      const q = frame.quats[r]!;
+      const o = frame.offsets[r]!;
+      for (const i of piece.srcPrims ?? []) {
+        const p0 = clean.prims[i]!;
+        const p1 = drawn.prims[i]!;
+        const expectA = add(o, add(piece.origin, qRotate(q, sub(p0.a, piece.origin))));
+        const expectB = add(o, add(piece.origin, qRotate(q, sub(p0.b, piece.origin))));
+        expect(len(sub(p1.a, expectA))).toBeLessThan(1e-9);
+        expect(len(sub(p1.b, expectB))).toBeLessThan(1e-9);
+      }
+    });
+    // THE CHUNK HAND-OFF. The piece prims are TRANSLATED but not rotated, the
+    // chunk position is the displaced region origin, and the chunk quaternion is
+    // the displayed one. Applying that chunk transform (chunkPoint's map)
+    // reproduces the drawn world prim exactly — the rotation is not baked twice.
+    const pieces = displaceGibPieces(plan.pieces, frame.offsets, frame.quats, frame.angVels);
+    let handoffChecked = 0;
+    for (let r = 0; r < plan.pieces.length; r++) {
+      const piece = pieces[r]!;
+      const cleanPiece = plan.pieces[r]!;
+      if (piece.prims.length === 0 || cleanPiece.prims.length === 0) continue;
+      handoffChecked++;
+      const q = frame.quats[r]!;
+      const o = frame.offsets[r]!;
+      const pivot = cleanPiece.origin;
+      // The CHUNK convention: prims translated (not rotated), chunk at the
+      // displaced pivot with the displayed quat. `chunkPoint`'s map must
+      // reproduce the rupture's own rigid transform of the clean piece prim.
+      const chunkWorld = add(piece.origin, qRotate(q, sub(piece.prims[0]!.a, piece.origin)));
+      const ruptureWorld = add(o, add(pivot, qRotate(q, sub(cleanPiece.prims[0]!.a, pivot))));
+      expect(len(sub(chunkWorld, ruptureWorld))).toBeLessThan(1e-9);
+      // ...and the angular velocity handed over is the derivative the region was
+      // already turning at (non-zero for a hard blast).
+      expect(piece.spinAngVel).toBeDefined();
+      expect(len(piece.spinAngVel!)).toBeGreaterThan(0);
     }
+    expect(handoffChecked).toBeGreaterThan(5);
   });
 
   it('a reset mid-window drains the transition cleanly', () => {
@@ -154,13 +173,20 @@ describe('rupture hand-off continuity', () => {
     const plan = gibPlan(posed);
     const tear: TearState = { at: [torso.center[0], torso.center[1], torso.center[2] + 0.4], falloff: 1, age: TEAR_TUNING.sec };
     const frame = rupturePosed(posed, plan, tear);
-    const pieces = displaceGibPieces(plan.pieces, frame.offsets).filter(p => p.prims.length > 0);
-    // A one-cluster body per piece, so the CPU field can sample each piece.
-    const bodies = pieces.map(p => ({
-      prims: p.prims,
-      clusters: [{ id: 0, limb: p.limb, start: 0, count: p.prims.length, center: p.origin, radius: 0.6, alive: true }],
-      bonePrims: [],
-    }));
+    // The pieces as the CHUNK RENDERER will draw them: prims translated to the
+    // release position, then the region spin applied about the displaced region
+    // origin. Building them without the spin would compare the rotated drawn
+    // body against upright pieces — the exact defect this task removes.
+    const pieces = displaceGibPieces(plan.pieces, frame.offsets, frame.quats, frame.angVels)
+      .filter(p => p.prims.length > 0);
+    const bodies = pieces.map(p => {
+      const prims = p.spinQuat ? p.prims.map(q => rotatePrimAbout(q, p.spinQuat!, p.origin)) : p.prims;
+      return {
+        prims,
+        clusters: [{ id: 0, limb: p.limb, start: 0, count: prims.length, center: p.origin, radius: 0.6, alive: true }],
+        bonePrims: [],
+      };
+    });
     const min = [1e9, 1e9, 1e9], max = [-1e9, -1e9, -1e9];
     // The box is the SOLID body: a carve cap's centre sits a metre off the cut
     // on purpose, so including `sub` prims would sample a box metres wide and
@@ -190,5 +216,64 @@ describe('rupture hand-off continuity', () => {
     expect(total).toBeGreaterThan(2000);
     // Same order as the clean partition; the rupture adds no measurable loss.
     expect(missed / total).toBeLessThan(0.1);
+  });
+});
+
+describe('cap and face anchoring under the region spin (task 4)', () => {
+  it('carries a cut cap rigidly with its region, not as a detached sphere', () => {
+    const plan = gibPlan(posed);
+    const tear: TearState = {
+      at: [torso.center[0], torso.center[1], torso.center[2] + 0.4],
+      falloff: 1, age: TEAR_TUNING.sec,
+    };
+    const frame = rupturePosed(posed, plan, tear);
+    const pieces = displaceGibPieces(plan.pieces, frame.offsets, frame.quats, frame.angVels);
+    let checked = 0;
+    for (let r = 0; r < pieces.length; r++) {
+      const piece = pieces[r]!;
+      const cap = piece.prims.find(p => p.op === 'sub');
+      if (!cap) continue;
+      checked++;
+      const q = frame.quats[r]!;
+      const pivot = piece.origin;
+      // The cap is applied by the chunk's quat about its displaced region pivot
+      // (chunkPoint's map). Its offset from the pivot is unchanged by the rigid
+      // rotation, and so is its offset from the piece's flesh — i.e. it stays
+      // welded to the cut plane it caps instead of drifting off as a free
+      // sphere. Radius is rotation-invariant by construction.
+      const local = sub(cap.a, pivot);
+      expect(len(local)).toBeGreaterThan(1e-6);
+      expect(cap.radius).toBeGreaterThan(0);
+      const flesh = piece.prims.find(p => p.op !== 'sub');
+      if (flesh) {
+        const worldCap = add(pivot, qRotate(q, local));
+        const worldFlesh = add(pivot, qRotate(q, sub(flesh.a, pivot)));
+        expect(len(sub(worldCap, worldFlesh))).toBeCloseTo(len(sub(cap.a, flesh.a)), 9);
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
+  });
+
+  it('composes the head region spin onto skull prims already carrying an orient', () => {
+    const plan = gibPlan(posed);
+    const tear: TearState = {
+      at: [torso.center[0], torso.center[1], torso.center[2] + 0.4],
+      falloff: 1, age: TEAR_TUNING.sec,
+    };
+    const frame = rupturePosed(posed, plan, tear);
+    const hi = plan.pieces.findIndex(p => p.limb === 'head');
+    expect(hi).toBeGreaterThanOrEqual(0);
+    const q = frame.quats[hi]!;
+    let composed = 0;
+    for (const i of plan.pieces[hi]!.srcPrims ?? []) {
+      const before = posed.prims[i]!;
+      const after = frame.body.prims[i]!;
+      if (!before.orient) continue;
+      composed++;
+      const expectO = qMul(q, before.orient);
+      for (let k = 0; k < 4; k++) expect(after.orient![k]).toBeCloseTo(expectO[k]!, 9);
+    }
+    // The zombie's skull prims are rig-oriented, so this is not vacuous.
+    expect(composed).toBeGreaterThan(0);
   });
 });

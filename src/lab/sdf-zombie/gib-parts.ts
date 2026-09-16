@@ -61,6 +61,7 @@
 import type { BuildResult } from './build-body';
 import type { ChunkKind } from './gib-chunks';
 import type { LimbId, Primitive, Vec3 } from './types';
+import type { Quat } from './vec';
 import { BONE_GROUPS, groupCentroid, groupOf, limbOfGroup, type BoneGroup } from './melt-bones';
 import { add, dot, len, normalize, scale, sub } from './vec';
 
@@ -153,6 +154,24 @@ export interface GibPiece {
    * Absent (0) means "no peel", which is every piece but `torso.chest`.
    */
   peel?: number;
+  /**
+   * Reach of this piece's own geometry from `origin`, metres. Feeds the
+   * rupture's blast-driven spin (body-to-gib task 4): a smaller piece turns
+   * faster for the same angular impulse. Filled by every planner.
+   */
+  radius?: number;
+  /**
+   * ORIENTATION HAND-OFF (body-to-gib task 4). The orientation the region was
+   * last DRAWN with and the angular velocity that produced it. The chunk view
+   * applies `spinQuat` to prims handed to it in the CLEAN frame — the prims
+   * here are TRANSLATED by the region offset but deliberately NOT rotated,
+   * because `reset`/`chunkPoint` rotate them itself. Baking the rotation into
+   * the vertices and also setting the quaternion would rotate the piece twice.
+   * Only the rupture sets these; a sever/melt piece leaves them undefined and
+   * keeps the pre-existing random spawn tumble.
+   */
+  spinQuat?: Quat;
+  spinAngVel?: Vec3;
 }
 
 /** A cut between two pieces of one plan, indexed by PIECE (not by prim), for
@@ -251,9 +270,11 @@ export function gibPlan(body: BuildResult, opts: GibPartsOptions = {}): GibPlan 
       if (p && p.op === 'organ' && !p.dead) organs.push({ p, i });
     }
     if (organs.length > 0) {
+      const op = organs.map(o => o.p);
       out.push({
         limb: 'torso', part: 'organ.gut', kind: 'limb',
-        prims: [], bones: organs.map(o => ({ ...o.p })), origin: groupCentroid(organs.map(o => o.p)),
+        prims: [], bones: organs.map(o => ({ ...o.p })), origin: groupCentroid(op),
+        radius: extentOf(op, groupCentroid(op)),
         tornAt: [], srcPrims: [], srcBones: organs.map(o => o.i),
       });
     }
@@ -306,7 +327,7 @@ export function gibClusterPieces(body: BuildResult): GibPiece[] {
     });
     out.push({
       limb: c.limb, part: c.limb, kind: 'limb',
-      prims, bones, origin: c.center, tornAt: [], srcPrims, srcBones,
+      prims, bones, origin: c.center, tornAt: [], radius: c.radius, srcPrims, srcBones,
     });
   });
   return out;
@@ -543,6 +564,7 @@ function assemble(
     out.push({
       limb, part: own.id, kind: 'limb',
       prims, bones: [], origin: centre, tornAt: [],
+      radius: extentOf(ownPrims, centre),
       srcPrims: own.ips.map(x => x.i), srcBones: [],
     });
     // The link this piece forms with the NEXT one, in piece indices. One piece
@@ -695,8 +717,10 @@ function centroid(prims: Primitive[]): Vec3 {
 }
 
 function piece(limb: LimbId, part: string, ips: IdxPrim[], origin: Vec3, tornAt: Vec3[]): GibPiece {
+  const prims = ips.map(x => x.p);
   return {
     limb, part, kind: 'limb', prims: ips.map(x => ({ ...x.p })), bones: [], origin, tornAt,
+    radius: extentOf(prims, origin),
     srcPrims: ips.map(x => x.i), srcBones: [],
   };
 }
@@ -738,13 +762,16 @@ function bonePieces(body: BuildResult, release: GibBoneRelease): GibPiece[] {
     const ips = parts.get(group);
     if (!ips || ips.length === 0) continue;
     if (release === 'core' && !CORE_BONE_GROUPS.includes(group)) continue;
+    const bp = ips.map(x => x.p);
+    const origin = groupCentroid(bp);
     out.push({
       limb: limbOfGroup(group),
       part: `bone.${group}`,
       kind: 'bone',
       prims: [],
       bones: ips.map(x => ({ ...x.p })),
-      origin: groupCentroid(ips.map(x => x.p)),
+      origin,
+      radius: extentOf(bp, origin),
       tornAt: [],
       srcPrims: [],
       srcBones: ips.map(x => x.i),
@@ -754,28 +781,48 @@ function bonePieces(body: BuildResult, release: GibBoneRelease): GibPiece[] {
 }
 
 /**
- * Move every region of a plan by its own offset. PURE: the plan is not
- * mutated, and every prim of a region — flesh, bone and the `sub` caps that
- * have no source index — is translated together, so the caps stay welded to
- * the cut plane they cap. This is the hand-off from the rupture's drawn regions
- * to the live-chunk path: the pieces spawned are the plan's own regions at the
- * offsets the body was last drawn with, not a second partition of a second
- * pose (gib-tear.ts).
+ * Move every region of a plan by its own offset AND attach the region's
+ * displayed orientation/angular velocity. PURE: the plan is not mutated, and
+ * every prim of a region — flesh, bone and the `sub` caps that have no source
+ * index — is translated together, so the caps stay welded to the cut plane they
+ * cap.
+ *
+ * THE PRIMS ARE NOT ROTATED HERE, ON PURPOSE (body-to-gib task 4). The chunk
+ * view's `reset` subtracts the chunk position and `chunkPoint` then rotates by
+ * the chunk quaternion; if this function also baked the region rotation into
+ * the vertices, the chunk would apply it a second time. `quats`/`angVels` ride
+ * the piece instead (`spinQuat`/`spinAngVel`), with the region's own `origin`
+ * as the shared pivot — the exact same pivot `rupturePosed` rotates the drawn
+ * body about, so the drawn region and the spawned chunk are one transform.
+ *
+ * `quats`/`angVels` are optional so the sever/melt callers and tests that only
+ * need the translation keep working unchanged.
  */
 export function displaceGibPieces(
   pieces: readonly GibPiece[],
   offsets: readonly Vec3[],
+  quats?: readonly Quat[],
+  angVels?: readonly Vec3[],
 ): GibPiece[] {
   return pieces.map((g, i) => {
     const o = offsets[i] ?? [0, 0, 0] as Vec3;
-    if (o[0] === 0 && o[1] === 0 && o[2] === 0) return g;
+    const q = quats?.[i];
+    const w = angVels?.[i];
+    const moved = o[0] !== 0 || o[1] !== 0 || o[2] !== 0;
+    const spun = q !== undefined && !(q[0] === 0 && q[1] === 0 && q[2] === 0 && q[3] === 1);
+    if (!moved && !spun && w === undefined) return g;
     const t = (p: Primitive): Primitive => ({ ...p, a: add(p.a, o), b: add(p.b, o) });
-    return {
+    const out: GibPiece = {
       ...g,
       prims: g.prims.map(t),
       bones: g.bones.map(t),
       origin: add(g.origin, o),
       tornAt: g.tornAt.map(p => add(p, o)),
     };
+    if (spun || w !== undefined) {
+      if (q !== undefined) out.spinQuat = q;
+      if (w !== undefined) out.spinAngVel = w;
+    }
+    return out;
   });
 }

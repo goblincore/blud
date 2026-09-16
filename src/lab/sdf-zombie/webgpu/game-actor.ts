@@ -54,13 +54,13 @@ import type { MotionFrame } from '../motion';
 import type { SwingVariant } from '../attack';
 import type { MissingLimbs } from '../collapse';
 import type { ZombieGpuView } from './zombie-gpu';
-import { createWoundRing, type CharacterView } from './character-view';
+import { createWoundRing, type CharacterView, type WoundPointTransform } from './character-view';
 import { createTorsoWounds } from '../shared-wounds/torso';
 import { soldierVisualWounds } from '../soldier-wounds';
 import { soldierStaggerDuration } from '../soldier-stagger';
 import type { Aabb } from './game-level';
 import { GUN_GRIP, gunPoint } from '../carry';
-import { qRotate } from '../vec';
+import { add, qMul, qRotate, sub } from '../vec';
 
 /** Signals for an undamaged wanderer — every frame, verbatim. */
 const CALM: Omit<MotionSignals, 'dt'> = {
@@ -304,6 +304,13 @@ export interface ZombieActor {
   crowd?: { type: import('./crowd-type').CrowdType; slot: number };
   /** Latest POSED body (world space) — what projectiles will raycast. */
   readonly posed: () => BuildResult;
+  /**
+   * The body the march is ACTUALLY drawing this frame: `posed()` in ordinary
+   * play, or the rupture-displaced body while the window is running. The face
+   * projection and any other per-frame read that must sit on the drawn surface
+   * (not the clean pose) goes through this.
+   */
+  readonly drawnBody: () => BuildResult;
   readonly boundRig: () => BoundRig;
   /**
    * BEGIN THE RUPTURE WINDOW (gib-tear.ts): for `sec` seconds the march draws
@@ -553,6 +560,12 @@ export function createZombieActor(opts: {
    * spawned.
    */
   let tearPlan: RupturePlan | null = null;
+  /**
+   * FLESH-PRIM → REGION lookup, built once when the window begins. The wound
+   * upload needs it to carry each crater by the same rigid transform its
+   * region's flesh got (see `refreshWounds`).
+   */
+  let tearPrimRegion: Int32Array | null = null;
   /** Per-actor copy of the window's shape, so a live seam can retune it. */
   let tearTuning: TearTuning = TEAR_TUNING;
   /**
@@ -694,13 +707,32 @@ export function createZombieActor(opts: {
    *  the walk yaw against the REST body — a frame mismatch, not a reason to
    *  stamp at 0. Stamp(posed, θ) / upload(posed, θ) / resolve(rest, 0): one
    *  frame, three views of it. Same wiring as webgpu/lab-main's hero. */
-  function refreshWounds() {
+  function refreshWounds(frame?: RuptureFrame | null) {
     // The upload lives on the ring now (character-view.ts), so the lab and the
     // game push identical carve rows — including the depth-slab normals the
     // lab had ZERO references to before this. The pose is ours to supply: the
     // ring owns the wound DATA, the caller owns the rig it is stamped against.
     const visual=torsoWounds?.visual(posed) ?? (soldierDamage ? soldierVisualWounds(woundRing.all()) : undefined);
-    woundRing.refresh(view, posed, bodyYaw, visual);
+    // RUPTURE: a crater must ride the rotating region it is carved into. The
+    // ring computes the position from the CLEAN prims (the stored offset lives
+    // in that frame); this applies that region's rigid transform to the result.
+    // Re-running `frame()` on a rotated prim instead would reinterpret the
+    // offset in a different frame — the stamp/upload mismatch the wound path
+    // has been bitten by before.
+    const xf: WoundPointTransform | undefined = frame && tearPrimRegion && tearPlan
+      ? (v, primIdx, dir) => {
+          const r = primIdx >= 0 && primIdx < tearPrimRegion!.length ? tearPrimRegion![primIdx]! : -1;
+          if (r < 0) return v;
+          const q = frame.quats[r];
+          const off = frame.offsets[r];
+          if (!q || !off) return v;
+          const identity = q[0] === 0 && q[1] === 0 && q[2] === 0 && q[3] === 1;
+          if (identity) return dir ? v : add(v, off);
+          const pivot = tearPlan!.pieces[r]!.origin;
+          return dir ? qRotate(q, v) : add(off, add(pivot, qRotate(q, sub(v, pivot))));
+        }
+      : undefined;
+    woundRing.refresh(view, posed, bodyYaw, visual, xf);
   }
 
   function advanceWoundPreview(dt: number): boolean {
@@ -1381,9 +1413,17 @@ export function createZombieActor(opts: {
     beginHits,
     endHits,
     posed: () => posed,
+    drawnBody: () => drawnPose(),
     beginTear: (at: Vec3, falloff: number, plan: RupturePlan) => {
       tear = { at: [...at] as Vec3, falloff, age: 0 };
       tearPlan = plan;
+      // Flesh-prim -> region, for the wound upload's rigid carry (refreshWounds).
+      tearPrimRegion = new Int32Array(posed.prims.length).fill(-1);
+      for (let r = 0; r < plan.pieces.length; r++) {
+        for (const i of plan.pieces[r]!.srcPrims ?? []) {
+          if (i >= 0 && i < tearPrimRegion.length) tearPrimRegion[i] = r;
+        }
+      }
       doomed = true;
       // A live body whose procedure skeleton is packed folds it bare while the
       // flesh pulls away (counts2.y, march.wgsl.ts) — the mesh-skeleton path
@@ -1407,17 +1447,36 @@ export function createZombieActor(opts: {
       // would never advance. Uploading the same pose twice on a frame the actor
       // DID step is one wasted pack for one body; a body stuck mid-rupture
       // forever is a hole in the world.
-      view.update(drawnPose(), current);
+      //
+      // One frame computed once: the body, the wound carry and the face anchor
+      // must all read the SAME transforms, or they disagree by a frame.
+      const frame = ruptureFrameNow();
+      view.update(frame?.body ?? posed, current);
       // ...and the material ramp rides the SAME clock, so at release the drawn
       // body is already wearing the gore strength the spawned chunks carry and
       // there is no one-frame material switch (see ruptureGore).
       view.setGoreStrength(ruptureGore(ruptureProgress(tear.age, tearTuning.sec)));
+      // Wounds ride their rotating region (task 4).
+      refreshWounds(frame);
+      // THE FACE RIDES THE HEAD REGION. The head is one region; its displayed
+      // orientation is composed over the rig's own head quat, so the projection
+      // frame turns with the skull instead of staying pinned to the clean pose.
+      // The CENTRE is handled by the per-frame `headShape(a.drawnBody())` in the
+      // draw loop.
+      if (frame && tearPlan) {
+        const hi = tearPlan.pieces.findIndex(p => p.limb === 'head');
+        const hq = hi >= 0 ? frame.quats[hi] : undefined;
+        if (hq && !(hq[0] === 0 && hq[1] === 0 && hq[2] === 0 && hq[3] === 1)) {
+          const base = headQuatOf(bound, bodyYaw) ?? [0, 0, 0, 1];
+          view.setHeadRotation(qMul(hq, base));
+        }
+      }
     },
     tearing: () => tear !== null && tear.age < tearTuning.sec,
     tearAge: () => tear?.age ?? 0,
     tearFrame: ruptureFrameNow,
     endTear: () => {
-      tear = null; tearPlan = null; doomed = false;
+      tear = null; tearPlan = null; tearPrimRegion = null; doomed = false;
       // Restore the ordinary packed-bone layout for a body returned to play
       // (a reset mid-window). A retired body keeps its view hidden either way.
       view.setBonesBare(false);

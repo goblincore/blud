@@ -85,6 +85,7 @@ import { makeSoldierMind } from './enemy-mind';
 import { compileFace, compilePalette } from '../blob-compile';
 import { FLESH_PRESETS, LIGHT_PRESETS } from '../material';
 import type { Vec3 } from '../types';
+import type { Quat } from '../vec';
 import zombieBlobSrc from '../characters/zombie.blob?raw';
 import {
   ROOMS, TUNNELS, FURNITURE, levelColliders, levelSurfaces,
@@ -5736,6 +5737,8 @@ async function main() {
     piece: {
       limb: string; origin: Vec3; prims: Primitive[]; tornAt: Vec3[];
       bones: Primitive[]; kind?: 'limb' | 'gob' | 'bone';
+      /** Pre-release orientation + angular velocity (body-to-gib task 4). */
+      spinQuat?: Quat; spinAngVel?: Vec3;
     },
     template: { uniforms: import('./zombie-gpu').MarchUniforms; volumeTexture: THREE.Texture },
     initialVelocity?: Vec3,
@@ -5760,6 +5763,9 @@ async function main() {
       boneOnly ? boneChunkRadius(piece.bones) : chunkExtent(piece.prims, piece.origin),
       primsLongAxis(extentSource, piece.origin),
       rng, kind,
+      (piece.spinQuat || piece.spinAngVel)
+        ? { quat: piece.spinQuat, angVel: piece.spinAngVel }
+        : undefined,
     );
     // View budget. Order matters with the bake on: a BAKED piece is the
     // oldest, least-relevant gore, so its view recycles FIRST; only when
@@ -5845,6 +5851,7 @@ async function main() {
     piece: {
       limb: string; origin: Vec3; prims: Primitive[]; bones: Primitive[];
       kind?: 'limb' | 'gob' | 'bone';
+      spinQuat?: Quat; spinAngVel?: Vec3;
     },
     impulseVel: Vec3 | null,
     impulseDelay: number,
@@ -5859,6 +5866,9 @@ async function main() {
       boneOnly ? boneChunkRadius(piece.bones) : chunkExtent(piece.prims, piece.origin),
       primsLongAxis(extentSource, piece.origin),
       rng, kind,
+      (piece.spinQuat || piece.spinAngVel)
+        ? { quat: piece.spinQuat, angVel: piece.spinAngVel }
+        : undefined,
     );
     spawnSpritePiece(spritePieces, {
       state, frame: pickFrame(gibAtlas, rng()),
@@ -6492,7 +6502,9 @@ async function main() {
       // is what `gibBudget()` held for it; the splice above frees it.
       const locked = gibMode !== 'pieces';
       const planned = {
-        pieces: frame ? displaceGibPieces(q.plan.pieces, frame.offsets) : q.plan.pieces,
+        pieces: frame
+          ? displaceGibPieces(q.plan.pieces, frame.offsets, frame.quats, frame.angVels)
+          : q.plan.pieces,
         body: frame?.body ?? q.actor.posed(),
         tier: q.tier,
         locked,
@@ -6762,6 +6774,11 @@ async function main() {
       }
       spawnChunkPiece({
         limb: g.limb, origin: g.origin, prims: g.prims, tornAt: g.tornAt, bones: g.bones, kind: g.kind,
+        // THE PRE-RELEASE MOTION RIDES THE PIECE (task 4): the orientation the
+        // region was last drawn with and the angular velocity that produced it.
+        // `makeChunk` overrides its random tumble with these, so the release has
+        // no orientation reset and no second angular kick.
+        spinQuat: g.spinQuat, spinAngVel: g.spinAngVel,
       }, template, [0, 0, 0]); // AT REST: see the doc block, point 2
       const made = liveChunks[liveChunks.length - 1];
       if (made) {
@@ -8037,8 +8054,11 @@ async function main() {
       const now = demoHold ? simTimeMs() / 1000 : performance.now() / 1000;
       for (const a of actors) {
         a.view.setTime(now);
-        // Face projection tracks the posed skull through the gait jiggle.
-        const skull = headShape(a.posed());
+        // Face projection tracks the posed skull through the gait jiggle — and
+        // the RUPTURE's displaced head while a doomed body is coming apart, so
+        // the face does not stay pinned to the clean pose as the head rotates
+        // (task 4).
+        const skull = headShape(a.drawnBody());
         if (skull) a.view.setHeadShape(skull.centre, skull.axes);
       }
       // Wound exclusion, same contract as the lab's woundSpheres: hull
@@ -13114,7 +13134,13 @@ function performBenchAction(a: BenchAction): void {
       pieces: bakedChunks.map(b => ({ id: b.id, centre: [...b.centre] as [number, number, number], radius: b.radius })),
       /** Live (still-marched) chunk positions — the look/bench drivers frame
        *  the camera on these in bake-OFF captures. */
-      livePieces: liveChunks.map(c => ({ id: c.id, centre: [...c.state.pos] as [number, number, number], radius: c.state.radius })),
+      livePieces: liveChunks.map(c => ({
+        id: c.id, centre: [...c.state.pos] as [number, number, number], radius: c.state.radius,
+        /** Orientation and angular velocity (task 4): the rupture hand-off must
+         *  leave a NON-identity quat and a nonzero spin on each released piece. */
+        quat: [...c.state.quat] as [number, number, number, number],
+        angVel: [...c.state.angVel] as [number, number, number],
+      })),
     }),
     /** SDF-pass scale relative to the capped buffer (1.0 = 1:1). */
     setSdfScale: (v: number) => applySdfScale(v),
@@ -13304,6 +13330,20 @@ function performBenchAction(a: BenchAction): void {
         const f = x.tearFrame();
         if (!f) return m;
         for (const o of f.offsets) m = Math.max(m, Math.hypot(o[0], o[1], o[2]));
+        return m;
+      }, 0),
+      // THE RUPTURE'S ACTUAL ROTATION, in radians (task 4): the largest
+      // per-region angle any body is being drawn with right now. A rig asserts
+      // the pieces are already TILTED before release (this climbs from 0) and
+      // that the released chunks keep the orientation (chunkStats().livePieces
+      // quats) rather than being a translation-only explosion.
+      ruptureMaxRad: actors.reduce((m, x) => {
+        const f = x.tearFrame();
+        if (!f) return m;
+        for (const q of f.quats) {
+          const w = Math.min(1, Math.abs(q[3]));
+          m = Math.max(m, 2 * Math.acos(w));
+        }
         return m;
       }, 0),
       pendingGibs: pendingGibs.length,

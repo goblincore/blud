@@ -511,3 +511,208 @@ load).
    playtest; the videos and sheets are the review material.
 7. Deferred rendering keeps its pre-existing `gMarchAnchor` limitation; extracted
    assets were never committed.
+
+---
+
+# Body-to-gib rupture — Task 4 results (rotation during separation, continuous angular velocity)
+
+Worktree `2026-09-16-body-to-gib-rupture-task-4`, branch
+`codex/body-to-gib-rupture-task-4`, from Task 3 `d2bb6be5` (Task 3 `ae524a23` ←
+Task 1 `6898f65f` ← accepted baseline `4dcb1ffd`). Node `v22.22.1`. Owned Vite
+on `5414` and headless Chrome on `9414` (`--enable-unsafe-webgpu`, scratch in
+`.lab-tmp/`); the owner's `5391` server was never touched. `node_modules` was
+symlinked from the primary checkout (same lockfile) because the worktree had
+none; no source outside the worktree was edited.
+
+**Owner correction this task answers.** Reviewing the Task 3 video, the owner
+reported: *"when the zombie begins coming apart all pieces remain upright/
+parallel, like an exploded assembly diagram. The pieces should already be
+rotated into different angles and have angular velocity."* The screenshot
+supplied (`/Users/donny/Desktop/Screenshot 2026-09-16 at 7.56.21 AM.png`; not
+present at that path, found as the dispatch attachment uploaded at task
+creation and inspected with native vision) is a labelled `f0 ~-17ms … f15
+~267ms` sheet: through f11 the flesh peels and the ribs show, then f12/f13/f15
+show the pieces **translated apart but all still vertical**. That is the defect
+reproduced, and it is what this task removes.
+
+## 1. What changed
+
+Task 3's rib peel, gore ramp and tier coherence are unchanged; this only adds
+orientation. `rupturePosed` now rotates each region about its own pivot in
+addition to translating it, and that rotation (plus its derivative) rides the
+released chunk.
+
+| # | Change | File |
+| --- | --- | --- |
+| 1 | `TearTuning.spinRadPerSec` / `spinCoherence` / `boneSpin` / `headSpin`; `ruptureSpins()` (per-region axis + rate) and `rotatePrimAbout()` (endpoints, `orient`, `bend`, shell clip); `RuptureFrame` carries `quats`/`angVels`; `rupturePosed` applies rotation about `region.origin` then the offset. | `gib-tear.ts` |
+| 2 | `GibPiece.radius` (reach, for the mass/geometry term) and `GibPiece.spinQuat`/`spinAngVel` (the hand-off); `displaceGibPieces(pieces, offsets, quats?, angVels?)` attaches the spin but deliberately does **not** rotate the piece prims. | `gib-parts.ts` |
+| 3 | `makeChunk(..., kind, spin?)` takes a pre-release `quat`/`angVel`; the random tumble is still drawn (shared rng stream unchanged) and then overridden. | `gib-chunks.ts` |
+| 4 | `spawnChunkPiece` passes the spin into `makeChunk`; `gibActor` reads `g.spinQuat`/`g.spinAngVel` and the sprite path does the same; `spawnScheduledGibs` threads `frame.quats`/`frame.angVels`. `dynamite()` gains `ruptureMaxRad`; `chunkStats().livePieces` gains `quat`/`angVel`. | `game-main.ts` |
+| 5 | A doomed body's **wounds ride their rotating region** (a rigid transform applied to the position `woundWorldPos` computes from the *clean* prims — never by re-reading `frame()` on a rotated prim, which would reinterpret the stored offset); `drawnBody()` accessor; the head's face projection composes the head region quaternion and the draw loop reads `headShape(a.drawnBody())`. | `game-actor.ts`, `character-view.ts`, `game-main.ts` |
+
+## 2. The rotation model — why it is coherent, varied and continuous
+
+- **Linear in age, so the derivative is continuous.** A region's displayed
+  rotation is `qFromAxisAngle(axis, rate * age)` over the window. That is the
+  torque-free motion an impulsive blast torque produces, and it means the last
+  pre-release frame is a valid state of *the same rotation* the live chunk
+  continues at the same rate. The chunk is handed the displayed quaternion AND
+  `axis * rate`; because `stepChunk` integrates the next frame from exactly
+  there, there is no orientation reset, no still frame and no second angular
+  kick. The random spawn tumble never overwrites it (`makeChunk` still consumes
+  the draws, then overrides).
+- **Variation that is not synchronous and not noise.** Each axis is a blend
+  (`spinCoherence` 0.5) of the blast-coherent `radial × up` cartwheel axis and a
+  stable per-region seeded direction (an FNV-1a hash of `part#index`). Each rate
+  is `spinRadPerSec × falloff × sqrt(refReach/reach) × seeded(0.6..1.5)`, then
+  damped for bones (`boneSpin` 0.5) and the head (`headSpin` 0.3). So the
+  variation comes from blast position, region geometry/mass and stable seeded
+  asymmetry — pure, no `Math.random`, no whole-body rigid spin and no
+  indiscriminate blender. Flesh turns most, the skeleton lags (keeping some of
+  its upright read against the ribs), the head least (the face stays legible).
+- **One pivot, one transform.** The pivot is the region's own `origin`. That is
+  the same centre `spawnChunkPiece` uses as the chunk position and the same
+  frame `chunkPoint` rotates about, so the drawn region and the spawned chunk
+  are one transform rather than two approximations. The piece prims are handed
+  over **translated but not rotated** and the chunk quaternion is applied once
+  by the view — the rotation is never baked into the vertices and then applied
+  again.
+- **What rotates.** `rotatePrimAbout` turns `a`/`b` about the pivot, composes
+  `orient` (`q * orient`, for non-spherical scale bases and the rig-oriented
+  skull), rotates `bend` (a mid-relative world-vector) and the shell clip
+  normal. Uniform capsules/spheres are left `orient`-free so the cheap
+  `sdPrim` shader path survives. Cut caps have no source index but ride the
+  piece, so they rotate with it. `refitClusters` re-fits every cull/proxy
+  bound over the rotated prims (the existing "bound must cover the moved flesh"
+  test still passes).
+
+## 3. Telemetry — the rotation is real, and it does not reset
+
+From `captures/task4-t4-clear-telemetry.json` (front, 2.4 m, frozen loop,
+`__warmDone`-gated, one fixed step per frame, real sim times). `rot` is the
+largest per-REGION angle the body is drawn with; `chunkRot`/`spin` are the
+largest released-chunk orientation and angular speed:
+
+| frame | sim | age | maxOffset | body rot | chunk rot | spin |
+| --- | --- | --- | --- | --- | --- | --- |
+| f0 | 17 ms | 0.017 | 0.139 m | 4.6° | — | — |
+| f3 | 67 ms | 0.067 | 0.265 m | 18.3° | — | — |
+| f8 | 150 ms | 0.150 | 0.347 m | 41.1° | — | — |
+| f11 (last window) | 200 ms | 0.200 | 0.358 m | **54.8°** | — | — |
+| f12 (release) | 217 ms | ended | — | — | **59.4°** | **4.63 rad/s** |
+| f13 | 233 ms | — | — | — | 63.8° | 4.49 |
+| f15 | 267 ms | — | — | — | 72.3° | 4.21 |
+| f24 | 417 ms | — | — | — | 104.2° | 3.15 |
+| f30 | 517 ms | — | — | — | 120.9° | 2.60 |
+
+The release frame's chunk angle (59.4°) is the body's last drawn angle (54.8°)
+plus one 60 Hz step of its own spin (4.63 rad/s × 1/60 = 4.4°): the orientation
+is continuous across the hand-off, and the spin then bleeds off only at the
+pre-existing `angularAirDamp` rate. Telemetry in
+`captures/task4-t4-front-telemetry.json` (real VFX) and
+`captures/task4-t4-3q-telemetry.json` show the same numbers; all three runs
+exited 0 with `pageErrors: []`.
+
+## 4. Native-vision observations (images actually opened)
+
+Every image below was opened with the native image viewer, not read from a
+filename.
+
+| Image | What was inspected | Observation |
+| --- | --- | --- |
+| `captures/task4-t4-clear-sheet.jpg` | front, clear stand-in VFX, 16 tiles | f0 the intact posed body; f1–f4 the chest band lifts and the pale rib ladder opens; f8–f11 the regions are **already tilted** (chest and abdominal masses lean, arms at different angles) with the ribs readable in the gap; f12 the pieces spawn at those same angles; f13–f15 they continue to rotate. |
+| `captures/task4-t4-clear-onset-zoom.jpg` | pre-blast onset, 2.4× | The intact posed silhouette, arms down, head/face intact — the identity-at-onset the tests pin. |
+| `captures/task4-t4-clear-f11-zoom.jpg` | last window, 2.4× | The torso regions are visibly rotated apart (not upright/parallel), ribs exposed; this is the frame the owner's screenshot showed stacked vertically. |
+| `captures/task4-t4-clear-f12-zoom.jpg` | release tick, 2.4× | The spawned chunks are in the SAME configuration as f11 — same tilt, same ribcage, no snap back to upright and no material blink. |
+| `captures/task4-t4-clear-f13-zoom.jpg` / `-f15-zoom.jpg` | first flight / later flight, 2.4× | The pieces keep turning: by f15 a limb is near-horizontal and the chest mass is well off its birth angle. Clearly different from the owner's "exploded assembly diagram". |
+| `captures/task4-t4-front-sheet.jpg` | front, **real explosion VFX**, 16 tiles | Same read with the real fireball; the body/rotation is visible before the flash dominates, and the chunks scatter. |
+| `captures/task4-t4-3q-sheet.jpg` + `task4-3q-f15-zoom.jpg` | three-quarter, real VFX | Same separation and varied angles off-axis; the arm/leg pieces tumble at different angles, not in one plane. |
+| `captures/task4-procedural-sheet.jpg` + `task4-proc-f11-zoom.jpg` | `?skeleton=procedural` diagnostic | The marched bone prims (ribcage/spine) are in the opening gap and rotate with their regions at the damped bone rate — the diagnostic view where the skeleton itself is part of the ruptured body. |
+| `captures/task4-clear-normal.mp4`, `task4-front-vfx-normal.mp4`, `task4-threequarter-normal.mp4` | 0.5 s at 60 fps, looped 4× | Normal-speed read: the body rotates apart, the pieces continue turning through release with no dead frame or orientation reset. |
+
+Task 3's accepted improvements were rechecked in the same frames: the pale
+ribcage is readable from f1, and the last-window frame already wears the
+mottled chunk surface, so f12 is not a material switch.
+
+## 5. Tests and build
+
+```
+npx vitest run <27 focused files: gib-tear, gib-parts, gib-rupture, gib-chunks,
+  explosion-aoe, sever, sever-bones, humanoid-sever, detached-pose, melt,
+  melt-bones, melt-gate, chunk-bake-field, march.wgsl, crowd-records,
+  game-actor{,-soldier,-collision,-bounded-wounds,-elbow,-torso-slug},
+  baked-chunks, chunk-bake-jobs, gib-carve, gib-sprite-pieces,
+  march-step-soundness, dynamite-panel>
+# 27 files passed, 621 tests passed, 0 failed   (Task 3: 602)
+
+npm run build        # tsc --noEmit && vite build — exit 0, built in 3.25s
+```
+
+New/updated pins (behavior, not formula mirrors):
+
+- `gib-tear.test.ts` (23, +9) — identity at onset; nonzero pose across the body
+  by release; **varied** axes (mean pairwise |dot| < 0.95) and rates; flesh >
+  skeleton > head; zero-falloff identity and finite degenerate blast bounded by
+  the peak rate; rigid + deterministic evolution; tight-budget `clusters` plan
+  (cluster-centre pivots); a pre-severed limb; `rotatePrimAbout` turning
+  endpoints, composing `orient`, rotating `bend`/shell clip, and leaving a
+  uniform sphere `orient`-free.
+- `gib-rupture.test.ts` (7, rewritten/added) — the drawn body is the plan's
+  regions rotated about their origin then translated; the chunk convention
+  (`origin+offset` + quat) reproduces the rupture transform exactly; the union
+  of the ROTATED pieces still covers the drawn body (< 10 % residual); cut caps
+  stay rigidly welded (offset to the piece's flesh preserved) and skull prims
+  compose the head region spin.
+- `gib-chunks.test.ts` (21, +1) — `makeChunk` takes the pre-release quat/angVel
+  over the random tumble while still consuming the rng draws.
+
+## 6. Limits / honest gaps (Task 4)
+
+1. **The default `?skeleton=mesh` segment-mesh skeleton is not region-rotated.**
+   In the forward default the skeleton is a separate rig-driven object
+   (`createSkeletonSources(actor.body, actor.boundRig())` in `game-main.ts`), so
+   while the flesh and bone PRIMS rotate, that mesh keeps the posed body's
+   orientation through the window. The `?skeleton=procedural` path (marched
+   bone prims, captured) and every released chunk DO rotate. Threading
+   per-region transforms into the segment-mesh pose is a renderer change, not a
+   scheduler one, and was not taken in this task's budget. This is the one
+   sub-criterion of the rotation request not fully met.
+2. **Linear-velocity continuity is the blast launch, not the window's tail.**
+   The chunk is spawned with the blast `concussionVelocity` on the release tick
+   (Task 2's `delay = 0`), so there is no zero-velocity hold; the displayed
+   separation's own decelerating translation is not what carries into flight.
+   This matches the original contract ("apply release velocity once") but is a
+   deliberate discontinuity in the linear derivative the task text's "preserve
+   linear velocity" could be read to forbid. Orientation and angular derivative
+   ARE continuous.
+3. **Sprite and carve renderers.** The sprite path now receives the pre-release
+   quat/angVel but its own piece view was not visually reviewed; the carve path
+   is a separate whole-body library and was not exercised here. The default
+   marched path is the reviewed one.
+4. **`?gib=pieces` still previews-then-spawns** (Task 3 §7.1) and therefore
+   does not carry the plan's spin; the default `parts` and `clusters` tiers do.
+5. **No performance claim.** All captures are frozen, stepped loops; frame
+   times were not sampled on the live loop, and the pre-existing
+   startup/first-gib freeze remains a separate undiagnosed task. The added work
+   is one quaternion/region in the tear and one quat+angVel on the chunk — not
+   measured.
+6. **Owner acceptance is not claimed.** Model inspection is not the owner's
+   playtest; the videos and sheets are the review material.
+
+## 7. Artifacts
+
+All under `docs/dev-notes/2026-09-16-body-to-gib-rupture/captures/`:
+
+- Sheets: `task4-t4-clear-sheet.jpg` (clear front), `task4-t4-front-sheet.jpg`
+  (real VFX front), `task4-t4-3q-sheet.jpg` (real VFX three-quarter),
+  `task4-procedural-sheet.jpg`.
+- Zoom key frames: `task4-t4-clear-{onset,f03,f08,f11,f12,f13,f15,f18,f30}-zoom.jpg`,
+  `task4-3q-f{12,15}-zoom.jpg`, `task4-proc-f{11,12,15}-zoom.jpg`.
+- Normal-speed videos: `task4-clear-normal.mp4`, `task4-front-vfx-normal.mp4`,
+  `task4-threequarter-normal.mp4`.
+- Telemetry: `task4-t4-{clear,front,3q,proc}-telemetry.json` (per-frame
+  `tearAge`/`simMs`/`ruptureMaxM`/`ruptureMaxRad`/`chunkMaxRad`/`chunkMaxAngVel`,
+  tier, parts, page-error-free).
+- Reproduction: the Task 3 §4 commands, on `5414`/`9414`, e.g.
+  `RUP_VIEW=front RUP_DIST=2.4 RUP_FRAMES=30 RUP_SEED=7 node
+  scripts/sdf-gib-rupture.mjs 5414 9414 /tmp/t4-clear "&gibtear=0.2" t4-clear`.

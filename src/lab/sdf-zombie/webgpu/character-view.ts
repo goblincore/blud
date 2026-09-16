@@ -268,6 +268,18 @@ export function compileCharacterSheet(entry: CharacterEntry): CharacterSheet {
  *  each declared as their own TYPE_ID const. */
 const TYPE_ID: Record<WoundType, number> = { pellet: 0, blast: 1, burn: 2 };
 
+/**
+ * An extra rigid transform applied to a wound's world position (`dir=false`) or
+ * carve normal (`dir=true`) at upload time, keyed by the wound's prim index.
+ *
+ * The rupture (gib-tear.ts) uses this to carry a crater with the region it is
+ * stamped on while that region rotates during the breakup. It is applied to the
+ * position `woundWorldPos` computes from the CLEAN prims — never by handing
+ * `woundWorldPos` the rotated prims, which would reinterpret the stored
+ * body-frame offset in a different frame.
+ */
+export type WoundPointTransform = (v: Vec3, primIdx: number, dir: boolean) => Vec3;
+
 export interface WoundRing {
   /** The live ring, oldest evicted at MAX_WOUNDS. */
   all(): readonly Wound[];
@@ -307,7 +319,10 @@ export interface WoundRing {
    * report). Head wounds ride the orient quat and were fine; limb capsules
    * carry it in their axis.
    */
-  refresh(gpu: ZombieGpuView, posed: BuildResult, bodyYaw: number, visual?: readonly VisualWound[]): void;
+  refresh(
+    gpu: ZombieGpuView, posed: BuildResult, bodyYaw: number,
+    visual?: readonly VisualWound[], xf?: WoundPointTransform,
+  ): void;
   /** Replace the ring wholesale — the sever path rebuilds it. */
   set(wounds: Wound[]): void;
 }
@@ -333,11 +348,17 @@ export function createWoundRing(): WoundRing {
     },
     stampWorldOf: (w) => stampWorld.get(w) ?? null,
     set(next) { wounds = next.map(identify); },
-    refresh(gpu, posed, bodyYaw, visual) {
+    refresh(gpu, posed, bodyYaw, visual, xf) {
       const rows = visual ?? wounds;
       if ((!visual && wounds.length === 0) || typeof gpu.setWounds !== 'function') return;
+      // The wound position is computed from the CLEAN prims (its stored offset
+      // is in that frame), then the caller's rigid transform carries it with the
+      // rotating region. The normal takes the same transform WITHOUT the
+      // translation.
+      const map = (v: Vec3, w: Wound, dir: boolean): Vec3 =>
+        xf ? xf(v, w.primIdx, dir) : v;
       gpu.setWounds(
-        rows.map(w => woundWorldPos(posed.prims, w, bodyYaw)),
+        rows.map(w => map(woundWorldPos(posed.prims, w, bodyYaw), w, false)),
         rows.map(w => w.radius),
         rows.map(w => 'presetCut' in w && w.presetCut ? -1 : TYPE_ID[w.type]),
         rows.map(w => w.ageSec),
@@ -347,7 +368,7 @@ export function createWoundRing(): WoundRing {
           const n = woundCarveNormal(posed.prims, w, bodyYaw);
           // The preview repacks slots as its second cutter appears. Clear
           // an uncapped slot explicitly so it cannot inherit an old cap.
-          return n ? { n, depth: w.carveDepth ?? 0 } : visual ? { n: [0, 0, 0] as Vec3, depth: 0 } : null;
+          return n ? { n: map(n, w, true), depth: w.carveDepth ?? 0 } : visual ? { n: [0, 0, 0] as Vec3, depth: 0 } : null;
         }),
         rows.map(w => {
           // Severing retains wound history and primitive indices. A hidden

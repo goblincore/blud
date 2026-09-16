@@ -96,18 +96,29 @@ export function makeChunk(
   limb: LimbId, pos: Vec3, vel: Vec3, radius: number,
   longAxis: Vec3, rng: () => number = Math.random,
   kind: ChunkKind = 'limb',
+  /**
+   * PRE-RELEASE STATE (body-to-gib task 4). A chunk born from the rupture was
+   * ALREADY turning when the body was last drawn: it is handed the displayed
+   * orientation and the angular velocity that produced it, so the release has
+   * no orientation reset and no second angular kick. The random tumble is still
+   * drawn (so the shared rngStreams.misc sequence is unchanged for every other
+   * path) and then OVERRIDDEN — the pre-release state wins.
+   */
+  spin?: { quat?: Quat; angVel?: Vec3 },
 ): Chunk {
   // Tumble proportional-ish to being launched at all. Limbs tumble slower
   // than the game's ±9 rad/s (helicopter fix); gobs keep the chaotic spawn.
   const tumble = kind === 'gob' ? CHUNK_TUNING.gobTumble : CHUNK_TUNING.limbTumble;
-  const angVel: Vec3 = [
+  const tumbleVel: Vec3 = [
     (rng() - 0.5) * 2 * tumble,
     (rng() - 0.5) * 2 * tumble,
     (rng() - 0.5) * 2 * tumble,
   ];
   return {
     limb, kind, pos, vel, radius, squash: 0,
-    quat: qIdentity(), angVel, longAxis: normalize(longAxis),
+    quat: spin?.quat ? qNormalize(spin.quat) : qIdentity(),
+    angVel: spin?.angVel ?? tumbleVel,
+    longAxis: normalize(longAxis),
   };
 }
 

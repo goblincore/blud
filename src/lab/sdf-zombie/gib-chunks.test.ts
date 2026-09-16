@@ -20,6 +20,19 @@ describe('makeChunk', () => {
     expect(Math.hypot(...c.quat)).toBeCloseTo(1, 6);
     for (const w of c.angVel) expect(Math.abs(w)).toBeLessThanOrEqual(9);
   });
+
+  it('takes a pre-release orientation/angular velocity over the random tumble', () => {
+    const quat: [number, number, number, number] = [0, Math.SQRT1_2, 0, Math.SQRT1_2];
+    const angVel: Vec3 = [0, 2.4, 0];
+    const c = makeChunk('torso', [1, 2, 3], [0, 0, 0], 0.2, [0, 1, 0], rng, 'limb', { quat, angVel });
+    for (let k = 0; k < 4; k++) expect(c.quat[k]).toBeCloseTo(quat[k]!, 12);
+    expect(c.angVel).toEqual(angVel);
+    // The random draws are still consumed (the shared stream is unchanged), so
+    // a chunk with no pre-release state keeps the old spawn behaviour.
+    const random = makeChunk('torso', [1, 2, 3], [0, 0, 0], 0.2, [0, 1, 0], rng);
+    expect(random.quat).toEqual([0, 0, 0, 1]);
+    expect(random.angVel).not.toEqual(angVel);
+  });
 });
 
 describe('stepChunk', () => {
