@@ -588,6 +588,26 @@ export interface PostAa {
   stepBlastDistort(dt: number): void;
   /** How many blasts the bounded ring is currently holding (telemetry). */
   readonly blastDistortCount: number;
+  /**
+   * The RESOLVED slots the last blit actually pushed, one entry per live blast
+   * (task-2 review seam). A blast can be live yet unresolved — behind the
+   * camera, off-screen, or with the phase spent — and those two states project
+   * very differently, so the raw `u`/`v`/`radiusUv`/`strength` values are what
+   * a capture rig reads to prove the band is centred on the blast rather than
+   * mirrored or drifting. `u`/`v`/`radiusUv` are null when dropped; `reason`
+   * says why. Read-only, no allocation when nothing is live.
+   */
+  readonly blastDistortSlots: readonly {
+    world: readonly [number, number, number];
+    age: number;
+    radiusScale: number;
+    decay: number;
+    u: number | null;
+    v: number | null;
+    radiusUv: number | null;
+    strength: number;
+    reason: 'ok' | 'behind' | 'offscreen' | 'spent';
+  }[];
   readonly blastDistort: boolean;
   readonly blastDistortStrength: number;
   readonly fxaa: boolean;
@@ -721,6 +741,19 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     age: number;
   }
   const liveBlastDistorts: LiveBlastDistort[] = [];
+  /** The last blit's resolved slots — see `blastDistortSlots` (task-2 seam). */
+  type ResolvedBlastSlot = {
+    world: [number, number, number];
+    age: number;
+    radiusScale: number;
+    decay: number;
+    u: number | null;
+    v: number | null;
+    radiusUv: number | null;
+    strength: number;
+    reason: 'ok' | 'behind' | 'offscreen' | 'spent';
+  };
+  let lastBlastSlots: ResolvedBlastSlot[] = [];
 
   // --- VHS state. Every field below is inert while `vhsPreset` is null, and
   // null is the default: the all-off path must not even bind the material. --
@@ -1136,27 +1169,40 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       // the band on the blast instead of on where it used to be.
       {
         let active = 0;
+        const resolved: ResolvedBlastSlot[] = [];
         if (blastDistortOn && blastCamera !== null) {
           blastViewProj.multiplyMatrices(
             blastCamera.projectionMatrix, blastCamera.matrixWorldInverse);
           for (const b of liveBlastDistorts) {
-            if (active >= BLAST_DISTORT_MAX) break;
             const phase = blastRefractionPhase(b.age, BLAST_REFRACTION);
-            if (!phase) continue;
+            if (!phase) {
+              resolved.push({ world: b.world, age: b.age, radiusScale: 1, decay: 0, u: null, v: null, radiusUv: null, strength: 0, reason: 'spent' });
+              continue;
+            }
             const p = projectBlastRefraction(
               b.world, blastViewProj.elements, b.birthRadiusM * phase.radiusScale);
             // Behind-camera / non-finite, and a small margin off-screen: a blast
             // that cannot be seen must not clamp onto an edge and warp it.
-            if (!p || p.u < -0.3 || p.u > 1.3 || p.v < -0.3 || p.v > 1.3) continue;
+            if (!p) {
+              resolved.push({ world: b.world, age: b.age, radiusScale: phase.radiusScale, decay: phase.decay, u: null, v: null, radiusUv: null, strength: 0, reason: 'behind' });
+              continue;
+            }
+            if (p.u < -0.3 || p.u > 1.3 || p.v < -0.3 || p.v > 1.3) {
+              resolved.push({ world: b.world, age: b.age, radiusScale: phase.radiusScale, decay: phase.decay, u: p.u, v: p.v, radiusUv: p.radiusUv, strength: 0, reason: 'offscreen' });
+              continue;
+            }
             const strength = b.strength * phase.decay * blastDistortStrength;
+            const radiusUv = Math.min(BLAST_REFRACTION.maxScreenRadius, p.radiusUv);
             uBlastDistort[active]!.value.set(
               p.u, p.v,
-              Math.min(BLAST_REFRACTION.maxScreenRadius, p.radiusUv),
+              radiusUv,
               Math.max(0, strength),
             );
+            resolved.push({ world: b.world, age: b.age, radiusScale: phase.radiusScale, decay: phase.decay, u: p.u, v: p.v, radiusUv, strength: Math.max(0, strength), reason: 'ok' });
             active++;
           }
         }
+        lastBlastSlots = resolved;
         for (let i = active; i < BLAST_DISTORT_MAX; i++) uBlastDistort[i]!.value.set(0, 0, 0, 0);
         const aspect = drawSize.y > 0 ? drawSize.x / drawSize.y : 1;
         uBlastDistortCfg.value.set(
@@ -1229,6 +1275,7 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       }
     },
     get blastDistortCount() { return liveBlastDistorts.length; },
+    get blastDistortSlots() { return lastBlastSlots; },
     get blastDistort() { return blastDistortOn; },
     get blastDistortStrength() { return blastDistortStrength; },
     setSharpUpscale(on) {

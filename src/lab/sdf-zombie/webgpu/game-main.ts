@@ -10592,6 +10592,9 @@ function performBenchAction(a: BenchAction): void {
     },
     get blastDistortStrength() { return postAa.blastDistortStrength; },
     get blastDistortCount() { return postAa.blastDistortCount; },
+    /** The RESOLVED blast-refraction slots the last blit pushed — the seam a
+     *  capture rig reads to prove the band is centred on the blast (task-2). */
+    blastDistortInfo: () => postAa.blastDistortSlots,
     /** Per-room probe grids (P3 step 2): weight 0 = bit-identical P1; gain -1
      *  = each room's matched level, else an absolute multiplier. */
     /** Flashlight bounce spot (P4 step 1): 0 = off and bit-identical. */
@@ -13689,6 +13692,16 @@ function performBenchAction(a: BenchAction): void {
       bonesVisible = !!on;
       for (const c of liveChunks) if (c.kind === 'bone') c.view.object.visible = bonesVisible;
       return bonesVisible;
+    },
+    /** HIDE THE VIEW MODEL (the held shotgun/arm rig parented to the camera).
+     *  A capture that must see the BODY's silhouette has the player's own arm
+     *  across the right half of the frame, which covers the very flesh the
+     *  rupture review is about. The rig lives under the camera, NOT the scene,
+     *  so `setRegisteredObjectsVisible` cannot reach it. Capture-only, and off
+     *  by default. */
+    setViewModelVisible: (on: boolean) => {
+      viewModelAnchor.visible = !!on;
+      return viewModelAnchor.visible;
     },
     setChunksVisible: (on: boolean) => {
       chunksHidden = !on;

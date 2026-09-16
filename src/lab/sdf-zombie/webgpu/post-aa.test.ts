@@ -626,8 +626,72 @@ describe('blast refraction (bounded experiment)', () => {
     expect(calls.render).toBeGreaterThan(0);
   });
 
-  it('keeps at most FOUR blasts and drops the oldest', () => {
+  // TASK-2 REVIEW SEAM. `blastDistortSlots` is the read-back a capture rig uses
+  // to prove the band is centred on the blast and follows a moving camera. It
+  // reports exactly what the last blit PUSHED, so a wrong `u`/`v` (or a silent
+  // drop) is visible from the page instead of being inferred from a pixel diff.
+  it('reports the resolved slot it pushed, centred on the blast', () => {
     const { renderer } = stubRenderer();
+    const post = createPostAa(renderer);
+    post.setFxaa(false);
+    post.setSmear(0);
+    post.setBlastDistortCamera(camera());
+    post.setBlastDistort(true);
+    post.pushBlastDistort([0, 0, -4], 1, 0.03);
+    // Past the attack ramp: at age 0 the decay is deliberately 0.
+    post.stepBlastDistort(0.1);
+    const sink = { target: null as THREE.RenderTarget | null };
+    post.addSink({ setOutputTarget(t) { sink.target = t; } });
+    expect(post.blastDistortSlots).toEqual([]);
+    post.render(() => {});
+    const slots = post.blastDistortSlots;
+    expect(slots).toHaveLength(1);
+    expect(slots[0]!.reason).toBe('ok');
+    // The camera looks straight down -Z, so an origin-centred blast is centred.
+    expect(slots[0]!.u).toBeCloseTo(0.5, 5);
+    expect(slots[0]!.v).toBeCloseTo(0.5, 5);
+    expect(slots[0]!.radiusUv).toBeGreaterThan(0);
+    expect(slots[0]!.strength).toBeGreaterThan(0);
+  });
+
+  it('reports WHY a live blast was dropped (behind the camera)', () => {
+    const { renderer } = stubRenderer();
+    const post = createPostAa(renderer);
+    post.setFxaa(false);
+    post.setSmear(0);
+    post.setBlastDistortCamera(camera());
+    post.setBlastDistort(true);
+    // Behind the origin camera (which faces -Z).
+    post.pushBlastDistort([0, 0, 4], 1, 0.03);
+    const sink = { target: null as THREE.RenderTarget | null };
+    post.addSink({ setOutputTarget(t) { sink.target = t; } });
+    post.render(() => {});
+    expect(post.blastDistortSlots).toHaveLength(1);
+    expect(post.blastDistortSlots[0]!.reason).toBe('behind');
+    expect(post.blastDistortSlots[0]!.u).toBeNull();
+  });
+
+  it('resolves every live blast and reports the ring bound at four', () => {
+    const { renderer } = stubRenderer();
+    const post = createPostAa(renderer);
+    post.setFxaa(false);
+    post.setSmear(0);
+    post.setBlastDistortCamera(camera());
+    post.setBlastDistort(true);
+    for (let i = 0; i < 5; i++) post.pushBlastDistort([0, 0, -4 - i], 1, 0.03);
+    // The push is the bound: the ring never holds more than four, so the
+    // shader's four unrolled slots can never index out of range.
+    expect(post.blastDistortCount).toBe(4);
+    const sink = { target: null as THREE.RenderTarget | null };
+    post.addSink({ setOutputTarget(t) { sink.target = t; } });
+    post.render(() => {});
+    const reasons = post.blastDistortSlots.map(s => s.reason);
+    expect(reasons).toHaveLength(4);
+    expect(reasons.every(r => r === 'ok')).toBe(true);
+  });
+
+
+  it('keeps at most FOUR blasts and drops the oldest', () => {    const { renderer } = stubRenderer();
     const post = createPostAa(renderer);
     for (let i = 0; i < 7; i++) post.pushBlastDistort([0, 0, -4 - i * 0.5], 1, 0.03);
     expect(post.blastDistortCount).toBe(4);
