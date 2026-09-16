@@ -2,8 +2,9 @@
 
 Worktree `2026-09-16-blud-playtest-followups-task-2`, branch
 `codex/playtest-followups-task-2`, inherited from the task-1 cold-start branch
-(`64a4737b`, itself on `ed97cd14`). Node `v22.22.1`. Owned Vite on `5441` and
-headless Chrome on `9441` (`--enable-unsafe-webgpu`, scratch in `.lab-tmp/`);
+(`64a4737b`, itself on `ed97cd14`). The implementation-and-evidence commit for
+this task is **`d84b1f09`** (this following doc-only commit adds that hash to
+the file). Node `v22.22.1`. Owned Vite on `5441` and headless Chrome on `9441` (`--enable-unsafe-webgpu`, scratch in `.lab-tmp/`);
 the owner's `5391`/`5415` servers were never touched. `node_modules` was
 symlinked from the primary checkout (same lockfile) and
 `scripts/link-dev-assets.sh` was run for the dev-only placeholders; no source
