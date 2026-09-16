@@ -236,7 +236,7 @@ export class GibAssetInstancePool {
 // Eligibility
 // ---------------------------------------------------------------------------
 
-export type GibAssetIneligibleReason = 'no-asset' | 'source-mismatch';
+export type GibAssetIneligibleReason = 'no-asset' | 'source-mismatch' | 'head-face';
 
 /**
  * EXPLICIT asset eligibility. The asset was baked from the REST body's planner
@@ -260,6 +260,25 @@ export function gibAssetEligible(
   if (!eq(gib.srcPrims, doc.srcPrims)) return 'source-mismatch';
   if (!eq(gib.srcBones, doc.srcBones)) return 'source-mismatch';
   return null;
+}
+
+/**
+ * The MESH-path eligibility the renderer uses. It is `gibAssetEligible` plus the
+ * one deliberate exclusion Task 3 added after the visual gate:
+ *
+ *   `head-face` — a piece carrying a FACE FRAME keeps the marched path. The face
+ *   layer projects from `headCentre`/`headQuat`/`headAxes`, which the marched
+ *   path re-uploads from the POSED primitives every frame; an asset mesh has only
+ *   a REST face frame and one shared gore material, so an asset-built head draws
+ *   faceless. Falling back keeps the marched head, which bakes into the same
+ *   face-material mesh as before. Counted, never silent.
+ */
+export function gibAssetMeshEligible(
+  doc: GibAssetPiece,
+  gib: { part?: string; srcPrims?: readonly number[]; srcBones?: readonly number[] },
+): GibAssetIneligibleReason | null {
+  if (doc?.face) return 'head-face';
+  return gibAssetEligible(doc, gib);
 }
 
 // ---------------------------------------------------------------------------

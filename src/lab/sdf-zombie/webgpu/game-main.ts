@@ -151,7 +151,7 @@ import {
 } from '../dynamite-flight';
 import { gibAll, gibAllPieces, type ChunkGroup } from '../sever';
 import { displaceGibPieces, gibTierPlan, retargetGibPieces, type GibBoneRelease, type GibPiece, type GibPlan } from '../gib-parts';
-import { TEAR_TUNING, type RuptureFrame } from '../gib-tear';
+import { TEAR_TUNING } from '../gib-tear';
 import { blastRefractionBirthRadiusM, blastRefractionStrength } from '../blast-refraction';
 import { createBurstLayer, createStickProp, type BurstLayer, type StickProp } from './fpv-view';
 import { createExplosionVfx, type ExplosionVfx } from './explosion-vfx';
@@ -197,8 +197,8 @@ import {
   type SpritePieceSet,
 } from './gib-sprite-pieces';
 import { carveBodyIntoPieces, type CarvedLibrary, type CarvedPiece } from './gib-carve';
-import { GibAssetRuntime, gibAssetEligible } from './gib-asset-runtime';
-import { gibAssetPosedRows, gibAssetRowsFromPrims } from './gib-asset-deform';
+import { GibAssetRuntime, gibAssetMeshEligible } from './gib-asset-runtime';
+import { gibAssetRowsFromPrims } from './gib-asset-deform';
 import { resetGibAssetCache } from './gib-asset-loader';
 import { compileBlob } from '../blob-compile';
 import { buildBody, DEFAULT_BUILD_OPTS } from '../build-body';
@@ -5723,8 +5723,6 @@ async function main() {
   function spawnAssetGibPiece(
     a: ZombieActor,
     g: GibPiece,
-    frame: RuptureFrame | null,
-    pivot: Vec3,
     impulseVel: Vec3 | null,
     impulseDelay: number,
   ): boolean {
@@ -5732,8 +5730,21 @@ async function main() {
     if (!lib) { gibAssetRuntime.countFallback('no-library'); return false; }
     const piece = lib.byPart.get(g.part);
     if (!piece) { gibAssetRuntime.countFallback('no-asset'); return false; }
-    const ineligible = gibAssetEligible(piece.doc, g);
+    const ineligible = gibAssetMeshEligible(piece.doc, g);
     if (ineligible) { gibAssetRuntime.countFallback(ineligible); return false; }
+    // THE HEAD KEEPS THE MARCHED FACE PATH — `gibAssetMeshEligible`'s
+    // `head-face` rule; see its docstring for why the rest face frame is not
+    // enough to draw a face on a shared-material mesh.
+    //
+    // ROW ALIGNMENT IS PART OF ELIGIBILITY. The deform walks the runtime piece's
+    // rows (`g.prims` then `g.bones`) against the asset's bind table row for row.
+    // `srcPrims`/`srcBones` equality proves the SOURCED rows line up, but not the
+    // cut caps: a plan that grew or lost a `sub` cap between the rest bake and
+    // this body would silently deform against the wrong frame. Fall back instead.
+    if (piece.doc.bind.prims.length !== g.prims.length + g.bones.length) {
+      gibAssetRuntime.countFallback('row-mismatch');
+      return false;
+    }
     const pool = gibAssetRuntime.poolFor(lib);
     if (!pool) { gibAssetRuntime.countFallback('no-pool'); return false; }
     const kind = g.kind ?? 'limb';
@@ -5748,15 +5759,25 @@ async function main() {
       (g.spinQuat || g.spinAngVel) ? { quat: g.spinQuat, angVel: g.spinAngVel } : undefined,
       support.length > 0 ? support : undefined,
     );
-    // THE DEFORMATION SOURCE. A rupture hand-off maps the asset's REST bind
-    // frames (the planner's SEALED prims) through the sloughed body twins by
-    // source index. The zero-duration path has no rupture, so the piece's own
-    // already-sealed posed prims ARE the row-aligned posed frames.
-    const rows = frame
-      ? gibAssetPosedRows(piece.doc, frame.deformedPrims, frame.deformedBones)
-      : gibAssetRowsFromPrims([...g.prims, ...g.bones]);
+    // THE DEFORMATION SOURCE: THE RUNTIME PIECE'S OWN ROW-ALIGNED FRAMES.
+    //
+    // On the rupture path `g.prims`/`g.bones` are `retargetGibPieces`' output —
+    // each SOURCED row is the body's sloughed twin (so the released mesh is the
+    // geometry last drawn, no snap-back) — and `displaceGibPieces` has already
+    // added the region offset to every row AND to `g.origin`. So deforming
+    // against these rows and subtracting `g.origin` cancels that offset and
+    // leaves exactly the chunk-relative shape `spawnChunkPiece` marches.
+    //
+    // WHY NOT `gibAssetPosedRows` HERE (task 3, measured). That helper maps the
+    // bind table's SOURCE INDICES into `frame.deformedPrims`, which is equivalent
+    // for sourced rows but has NO TWIN for an unsourced `sub` cut cap: those rows
+    // fell back to the REST frame, so their vertices stayed at the REST body
+    // position while the region rotated — long spike triangles off every piece.
+    // The cap IS present row-aligned in the runtime piece (posed, +offset), so
+    // the row-aligned frames deform every row, caps included, with one contract.
+    const rows = gibAssetRowsFromPrims([...g.prims, ...g.bones]);
     const inst = pool.acquire(g.part);
-    pool.deformRows(inst, rows, pivot);
+    pool.deformRows(inst, rows, g.origin);
     const sprite = spawnSpritePiece(spritePieces, {
       state, render: 'mesh', geometry: inst.geometry, material: lib.material,
       impulseDelay, impulseVel,
@@ -6846,10 +6867,6 @@ async function main() {
         body: frame?.body ?? q.actor.posed(),
         tier: q.tier,
         locked,
-        // The asset deform needs the frame's sloughed prims and the CLEAN
-        // origins (the displacement above added the offset to each `origin`).
-        frame,
-        cleanOrigins: q.plan.pieces.map(p => p.origin),
       };
       const made = gibActor(q.actor, q.at, q.falloff, locked ? q.reserve : allowance, planned);
       q.actor.endTear();
@@ -6914,13 +6931,6 @@ async function main() {
     budget: number,
     planned?: {
       pieces: GibPiece[]; body: BuildResult; tier?: string; locked?: boolean;
-      /** The rupture frame the pieces were retargeted onto, when there is one.
-       *  The asset path needs its `deformedPrims`/`deformedBones` to deform the
-       *  canonical mesh onto the drawn slough. */
-      frame?: RuptureFrame | null;
-      /** Clean (pre-displacement) region origins, aligned with `pieces` before
-       *  the rupture offsets were added — the asset mesh's local frame. */
-      cleanOrigins?: Vec3[];
     },
   ): number {
     // A planned hand-off comes from the rupture: `body` is the pose the body was
@@ -6959,18 +6969,6 @@ async function main() {
     // budget/tier decision and the spawn loop agree. Until the archetype's load
     // resolves this is false and the body falls back to marched pieces.
     const assetMode = gibRenderMode === 'assets' && gibAssetRuntime.library(gibAssetArchetypeOf(a)) !== null;
-    // Pivot per part for the asset deform on the RUPTURE path: the chunk's world
-    // pivot is the CLEAN region origin plus the rupture offset (`displaceGibPieces`
-    // adds the offset to `origin`), and the asset mesh's local frame is the clean
-    // origin. `planned.cleanOrigins` is aligned with `planned.pieces` before the
-    // sort below.
-    const cleanOriginByPart = new Map<string, Vec3>();
-    if (planned?.cleanOrigins) {
-      planned.pieces.forEach((p, i) => {
-        const o = planned.cleanOrigins![i];
-        if (o) cleanOriginByPart.set(p.part, o);
-      });
-    }
     if (gibRenderMode === 'sprite' && gibAtlas === null && !gibSpriteAtlasWarned) {
       gibSpriteAtlasWarned = true;
       console.warn('[gib-sprites] ?gibrender=sprite but no atlas is loaded — '
@@ -7126,11 +7124,9 @@ async function main() {
         // THE OFFLINE MESH, DEFORMED ONTO THE DRAWN POSE/SLOUGH. On success the
         // piece is a reusable mesh from the committed set; on failure (missing
         // part, damaged source set) the SAME piece falls through to the marched
-        // path below, so damage is never silently lost. The pivot is the clean
-        // region origin on the rupture path (`g.origin` minus the offset the
-        // displacement added); the zero-duration path has no offset.
-        const pivot = cleanOriginByPart.get(g.part) ?? g.origin;
-        if (spawnAssetGibPiece(a, g, planned?.frame ?? null, pivot, vel, delay)) {
+        // path below, so damage is never silently lost. The deform subtracts
+        // `g.origin` — the same pivot `makeChunk` places the piece at.
+        if (spawnAssetGibPiece(a, g, vel, delay)) {
           spawned++;
           if (boneOnly(g)) boneSpawned++;
           continue;

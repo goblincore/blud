@@ -33,7 +33,7 @@ import { chunkSettled, makeChunk, stepChunk } from '../gib-chunks';
 import { createBakedChunkMaterial } from './baked-chunks';
 import { gibAssetPosedRows, gibAssetRowsFromPrims } from './gib-asset-deform';
 import { loadGibAssetSet, resetGibAssetCache } from './gib-asset-loader';
-import { buildGibAssetLibrary, GibAssetInstancePool, gibAssetEligible } from './gib-asset-runtime';
+import { buildGibAssetLibrary, GibAssetInstancePool, gibAssetEligible, gibAssetMeshEligible } from './gib-asset-runtime';
 import {
   applyMeshPose, clearSpritePieces, makeSpritePieceSet, spawnSpritePiece, stepSpritePieces,
 } from './gib-sprite-pieces';
@@ -98,9 +98,9 @@ describe('offline asset release continuity (CPU frame bookkeeping)', () => {
     pool.release(instPose);
 
     // (2) THE RUPTURE SLOUGH MOVES THE MESH off its rest placement, with every
-    // vertex finite. The exact residual against the drawn body is the Task-1
-    // binding/seal approximation and is reported in the task report — this test
-    // proves the deform is wired and continuous, not that it is pixel-exact.
+    // vertex finite, using the SHIPPED frame source: the runtime piece's own
+    // row-aligned prims (`retargetGibPieces` output + the region offset) with
+    // `moved.origin` as the pivot. This is what `spawnAssetGibPiece` does.
     const tear = { at: [0.35, 1.05, 0.1] as Vec3, falloff: 1, age: TEAR_TUNING.sec };
     const frame = rupturePosed(body, plan, tear, TEAR_TUNING);
     const moved = displaceGibPieces(
@@ -108,11 +108,9 @@ describe('offline asset release continuity (CPU frame bookkeeping)', () => {
       [frame.offsets[pi]!], [frame.quats[pi]!], [frame.angVels[pi]!],
     )[0]!;
     expect(gibAssetEligible(asset.doc, moved)).toBeNull();
-    const rows = gibAssetPosedRows(asset.doc, frame.deformedPrims, frame.deformedBones);
+    const rows = gibAssetRowsFromPrims([...moved.prims, ...moved.bones]);
     const inst = pool.acquire(piece.part);
-    // The game's pivot: the CLEAN region origin, while the chunk sits at
-    // `g.origin = clean + offset`.
-    pool.deformRows(inst, rows, piece.origin);
+    pool.deformRows(inst, rows, moved.origin);
     const state = makeChunk(
       moved.limb as never, moved.origin as Vec3, [0, 0, 0], 0.1,
       [0, 1, 0] as Vec3, () => 0.5, 'limb',
@@ -129,6 +127,67 @@ describe('offline asset release continuity (CPU frame bookkeeping)', () => {
       maxShift = Math.max(maxShift, Math.abs(v.x - restWorld));
     }
     expect(maxShift).toBeGreaterThan(0.01);
+    pool.dispose();
+  });
+
+  // THE TASK-3 REGRESSION (measured on the page, now pinned on the CPU). The
+  // asset's bind table stores a REST frame for the unsourced `sub` CUT CAPS. The
+  // old rupture path mapped those rows through `frame.deformedPrims` by source
+  // index — which has no entry for a cap — so `deformBoundVertex` fell back to
+  // the rest frame, and the vertex was placed at (rest body point − the RUNTIME
+  // plan's clean origin). The runtime plan is built on the POSED body, so that
+  // origin differs from the REST origin the asset was baked with; every cap
+  // vertex inherited that whole offset, which rotated into long spike triangles
+  // off each piece (page-observed, then fixed). The shipped path deforms against
+  // the runtime piece's own row-aligned prims (caps included) about
+  // `moved.origin`, which cancels the pose/origin difference.
+  it('deforms cut-cap rows against the runtime frames, with no rest-origin spike', async () => {
+    const lib = await loaded();
+    const rest = zombieBody();
+    const asset = lib.byPart.get('torso.chest')!;
+    const pool = new GibAssetInstancePool(lib);
+    const maxLocal = (p: Float32Array): number => {
+      let m = 0;
+      for (let i = 0; i < p.length; i += 3) m = Math.max(m, Math.hypot(p[i]!, p[i + 1]!, p[i + 2]!));
+      return m;
+    };
+    const t: Vec3 = [0.4, 0.05, -0.25];
+    const shift = <T extends { a: Vec3; b: Vec3 }>(q: T): T => ({
+      ...q, a: [q.a[0] + t[0], q.a[1] + t[1], q.a[2] + t[2]] as Vec3,
+      b: [q.b[0] + t[0], q.b[1] + t[1], q.b[2] + t[2]] as Vec3,
+    });
+    // A rigidly POSED body (a translation is enough: it moves the runtime plan's
+    // clean origins away from the rest origins the asset was baked at).
+    const posed = {
+      ...rest,
+      prims: rest.prims.map(shift),
+      bonePrims: (rest.bonePrims ?? []).map(shift),
+      clusters: rest.clusters.map(c => ({ ...c, center: [c.center[0] + t[0], c.center[1] + t[1], c.center[2] + t[2]] as Vec3 })),
+    };
+    const planPosed = gibPlan(posed, { bones: 'all', organs: true });
+    const piecePosed = planPosed.pieces.find(p => p.part === 'torso.chest')!;
+    const pi = planPosed.pieces.indexOf(piecePosed);
+    const tear = { at: [0.35 + t[0], 1.05 + t[1], 0.1 + t[2]] as Vec3, falloff: 1, age: TEAR_TUNING.sec };
+    const frame = rupturePosed(posed, planPosed, tear, TEAR_TUNING);
+    const moved = displaceGibPieces(
+      retargetGibPieces([piecePosed], frame.deformedPrims, frame.deformedBones),
+      [frame.offsets[pi]!], [frame.quats[pi]!], [frame.angVels[pi]!],
+    )[0]!;
+    expect(gibAssetEligible(asset.doc, moved)).toBeNull();
+
+    const restMax = maxLocal(asset.decoded.positions);
+    const newInst = pool.acquire('torso.chest');
+    pool.deformRows(newInst, gibAssetRowsFromPrims([...moved.prims, ...moved.bones]), moved.origin);
+    const newMax = maxLocal(newInst.positions);
+
+    // The OLD path, reproduced exactly as it shipped: source-indexed rows from
+    // the whole-body slough + the runtime plan's CLEAN origin.
+    const oldInst = pool.acquire('torso.chest');
+    pool.deformRows(oldInst, gibAssetPosedRows(asset.doc, frame.deformedPrims, frame.deformedBones), piecePosed.origin);
+    const oldMax = maxLocal(oldInst.positions);
+
+    expect(newMax).toBeLessThan(restMax * 1.6 + 0.1);
+    expect(oldMax).toBeGreaterThan(newMax + 0.2);
     pool.dispose();
   });
 });
@@ -175,6 +234,21 @@ describe('offline asset eligibility and split policy', () => {
     // The face texture is an EXTERNAL reference: the asset carries where it
     // projects, never pixels. The frame is in the rest body frame.
     expect([...head.face!.axes].every(Number.isFinite)).toBe(true);
+  });
+
+  it('excludes the face-carrying head from the mesh path (it keeps the marched face)', async () => {
+    const lib = await loaded();
+    const body = zombieBody();
+    const plan = gibPlan(body, { bones: 'all', organs: true });
+    const head = plan.pieces.find(p => p.part === 'head')!;
+    // Source sets MATCH, so the plain eligibility check is happy...
+    expect(gibAssetEligible(lib.byPart.get('head')!.doc, head)).toBeNull();
+    // ...but the MESH path refuses it, so the head falls through to the marched
+    // piece and its baked face material rather than drawing as bare flesh.
+    expect(gibAssetMeshEligible(lib.byPart.get('head')!.doc, head)).toBe('head-face');
+    // A non-face piece is unaffected.
+    const chest = plan.pieces.find(p => p.part === 'torso.chest')!;
+    expect(gibAssetMeshEligible(lib.byPart.get('torso.chest')!.doc, chest)).toBeNull();
   });
 
   it('a low-budget plan selects a subset of pieces that all stay eligible', async () => {

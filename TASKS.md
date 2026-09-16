@@ -22,10 +22,13 @@
   [diagnosis, census, captures, limits](docs/dev-notes/2026-09-16-playtest-followups/ANATOMY-HEADS.md).
 - [ ] Then: blast shockwave A/B + integrated rupture review (task 4); NotBlood launch dispersion (task 3);
   floating/upright settled pieces (later follow-up, not this task).
-- [~] Offline reusable gib assets 2026-09-16 (candidate `codex/offline-gib-assets-task-1`, not merged).
-  Task 1 generator + schema + committed zombie/soldier sets (43 pieces, 80,656 verts, 8.4 MB, 12 mm cells),
-  bone pieces included, `npm run gib:assets[ :check]` incremental/stale check, 10 focused tests; no runtime
-  wiring yet. [handoff, sizes, approximation, binding contract](docs/dev-notes/2026-09-16-offline-gib-assets/REPORT.md).
+- [~] Offline reusable gib assets 2026-09-16 — tasks 1–3 done on `codex/offline-gib-assets-task-3` (not merged):
+  generator + committed zombie/soldier sets (43 pieces, 8.4 MB, 12 mm cells) and the mesh path
+  `?gibrender=assets` (loads/deforms them, exact sim parity), but the default stays `march`: blockers are
+  `bakeColor.a == 0` on 100% of asset verts (no wet/cut mask) and the mesh head face projection is unwired
+  (head excluded, counted `head-face`). Task 3 fixed a rupture-path cut-cap spike (2,540/37,738 verts) with a
+  CPU regression test; loader 8.65 MB / 33–190 ms / 0 runtime extraction; no measurable moving-gib cadence
+  cost at 14–56 pieces. [report, captures, exact usage + blockers](docs/dev-notes/2026-09-16-offline-gib-assets/REPORT.md).
 
 ## Neural upscale (ESPCN family) — flesh 400×300 → 800×600 — 2026-09-11
 

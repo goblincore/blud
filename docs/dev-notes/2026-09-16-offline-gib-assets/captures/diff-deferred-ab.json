@@ -1,0 +1,446 @@
+{
+  "a": ".lab-tmp/gate/deferred-march",
+  "b": ".lab-tmp/gate/deferred-assets",
+  "summary": {
+    "frames": 62,
+    "meanPctGt12": 0.629,
+    "maxPctGt12": 1.68,
+    "meanMeanAbs": 0.165
+  },
+  "rows": [
+    {
+      "file": "f000-pre.png",
+      "pctGt12": 0,
+      "pctGt48": 0,
+      "meanAbs": 0.013,
+      "max": 1
+    },
+    {
+      "file": "f001.png",
+      "pctGt12": 0,
+      "pctGt48": 0,
+      "meanAbs": 0.001,
+      "max": 1
+    },
+    {
+      "file": "f002.png",
+      "pctGt12": 0,
+      "pctGt48": 0,
+      "meanAbs": 0.001,
+      "max": 1
+    },
+    {
+      "file": "f003.png",
+      "pctGt12": 0,
+      "pctGt48": 0,
+      "meanAbs": 0.001,
+      "max": 1
+    },
+    {
+      "file": "f004.png",
+      "pctGt12": 0,
+      "pctGt48": 0,
+      "meanAbs": 0.002,
+      "max": 1
+    },
+    {
+      "file": "f005.png",
+      "pctGt12": 0,
+      "pctGt48": 0,
+      "meanAbs": 0.004,
+      "max": 1
+    },
+    {
+      "file": "f006.png",
+      "pctGt12": 0,
+      "pctGt48": 0,
+      "meanAbs": 0.004,
+      "max": 5
+    },
+    {
+      "file": "f007.png",
+      "pctGt12": 0,
+      "pctGt48": 0,
+      "meanAbs": 0.001,
+      "max": 1
+    },
+    {
+      "file": "f008.png",
+      "pctGt12": 0,
+      "pctGt48": 0,
+      "meanAbs": 0.004,
+      "max": 1
+    },
+    {
+      "file": "f009.png",
+      "pctGt12": 0,
+      "pctGt48": 0,
+      "meanAbs": 0.005,
+      "max": 1
+    },
+    {
+      "file": "f010.png",
+      "pctGt12": 0,
+      "pctGt48": 0,
+      "meanAbs": 0.004,
+      "max": 1
+    },
+    {
+      "file": "f011.png",
+      "pctGt12": 0,
+      "pctGt48": 0,
+      "meanAbs": 0.002,
+      "max": 1
+    },
+    {
+      "file": "f012.png",
+      "pctGt12": 0,
+      "pctGt48": 0,
+      "meanAbs": 0.001,
+      "max": 1
+    },
+    {
+      "file": "f013.png",
+      "pctGt12": 0.201,
+      "pctGt48": 0.011,
+      "meanAbs": 0.026,
+      "max": 89
+    },
+    {
+      "file": "f014.png",
+      "pctGt12": 0.221,
+      "pctGt48": 0.01,
+      "meanAbs": 0.036,
+      "max": 90
+    },
+    {
+      "file": "f015.png",
+      "pctGt12": 0.229,
+      "pctGt48": 0.007,
+      "meanAbs": 0.055,
+      "max": 124
+    },
+    {
+      "file": "f016.png",
+      "pctGt12": 0.223,
+      "pctGt48": 0.009,
+      "meanAbs": 0.084,
+      "max": 126
+    },
+    {
+      "file": "f017.png",
+      "pctGt12": 0.227,
+      "pctGt48": 0.006,
+      "meanAbs": 0.1,
+      "max": 109
+    },
+    {
+      "file": "f018.png",
+      "pctGt12": 0.233,
+      "pctGt48": 0.007,
+      "meanAbs": 0.098,
+      "max": 86
+    },
+    {
+      "file": "f019.png",
+      "pctGt12": 0.24,
+      "pctGt48": 0.009,
+      "meanAbs": 0.07,
+      "max": 93
+    },
+    {
+      "file": "f020.png",
+      "pctGt12": 0.24,
+      "pctGt48": 0.005,
+      "meanAbs": 0.057,
+      "max": 104
+    },
+    {
+      "file": "f021.png",
+      "pctGt12": 0.285,
+      "pctGt48": 0.014,
+      "meanAbs": 0.09,
+      "max": 128
+    },
+    {
+      "file": "f022.png",
+      "pctGt12": 0.279,
+      "pctGt48": 0.014,
+      "meanAbs": 0.092,
+      "max": 108
+    },
+    {
+      "file": "f023.png",
+      "pctGt12": 0.279,
+      "pctGt48": 0.008,
+      "meanAbs": 0.08,
+      "max": 84
+    },
+    {
+      "file": "f024.png",
+      "pctGt12": 0.306,
+      "pctGt48": 0.006,
+      "meanAbs": 0.08,
+      "max": 82
+    },
+    {
+      "file": "f025.png",
+      "pctGt12": 0.335,
+      "pctGt48": 0.013,
+      "meanAbs": 0.092,
+      "max": 108
+    },
+    {
+      "file": "f026.png",
+      "pctGt12": 0.353,
+      "pctGt48": 0.009,
+      "meanAbs": 0.109,
+      "max": 154
+    },
+    {
+      "file": "f027.png",
+      "pctGt12": 0.411,
+      "pctGt48": 0.017,
+      "meanAbs": 0.126,
+      "max": 190
+    },
+    {
+      "file": "f028.png",
+      "pctGt12": 0.434,
+      "pctGt48": 0.02,
+      "meanAbs": 0.121,
+      "max": 195
+    },
+    {
+      "file": "f029.png",
+      "pctGt12": 0.473,
+      "pctGt48": 0.034,
+      "meanAbs": 0.109,
+      "max": 234
+    },
+    {
+      "file": "f030.png",
+      "pctGt12": 0.531,
+      "pctGt48": 0.047,
+      "meanAbs": 0.151,
+      "max": 235
+    },
+    {
+      "file": "f031.png",
+      "pctGt12": 0.581,
+      "pctGt48": 0.056,
+      "meanAbs": 0.181,
+      "max": 213
+    },
+    {
+      "file": "f032.png",
+      "pctGt12": 0.6,
+      "pctGt48": 0.063,
+      "meanAbs": 0.184,
+      "max": 181
+    },
+    {
+      "file": "f033.png",
+      "pctGt12": 0.661,
+      "pctGt48": 0.081,
+      "meanAbs": 0.176,
+      "max": 167
+    },
+    {
+      "file": "f034.png",
+      "pctGt12": 0.681,
+      "pctGt48": 0.08,
+      "meanAbs": 0.161,
+      "max": 189
+    },
+    {
+      "file": "f035.png",
+      "pctGt12": 0.699,
+      "pctGt48": 0.072,
+      "meanAbs": 0.16,
+      "max": 222
+    },
+    {
+      "file": "f036.png",
+      "pctGt12": 0.738,
+      "pctGt48": 0.079,
+      "meanAbs": 0.17,
+      "max": 194
+    },
+    {
+      "file": "f037.png",
+      "pctGt12": 0.751,
+      "pctGt48": 0.08,
+      "meanAbs": 0.172,
+      "max": 205
+    },
+    {
+      "file": "f038.png",
+      "pctGt12": 0.76,
+      "pctGt48": 0.086,
+      "meanAbs": 0.172,
+      "max": 203
+    },
+    {
+      "file": "f039.png",
+      "pctGt12": 0.8,
+      "pctGt48": 0.088,
+      "meanAbs": 0.199,
+      "max": 226
+    },
+    {
+      "file": "f040.png",
+      "pctGt12": 0.824,
+      "pctGt48": 0.092,
+      "meanAbs": 0.229,
+      "max": 233
+    },
+    {
+      "file": "f041.png",
+      "pctGt12": 0.862,
+      "pctGt48": 0.092,
+      "meanAbs": 0.252,
+      "max": 225
+    },
+    {
+      "file": "f042.png",
+      "pctGt12": 0.914,
+      "pctGt48": 0.105,
+      "meanAbs": 0.256,
+      "max": 225
+    },
+    {
+      "file": "f043.png",
+      "pctGt12": 0.956,
+      "pctGt48": 0.103,
+      "meanAbs": 0.237,
+      "max": 180
+    },
+    {
+      "file": "f044.png",
+      "pctGt12": 0.999,
+      "pctGt48": 0.109,
+      "meanAbs": 0.222,
+      "max": 183
+    },
+    {
+      "file": "f045.png",
+      "pctGt12": 1.04,
+      "pctGt48": 0.126,
+      "meanAbs": 0.252,
+      "max": 189
+    },
+    {
+      "file": "f046.png",
+      "pctGt12": 1.077,
+      "pctGt48": 0.161,
+      "meanAbs": 0.271,
+      "max": 193
+    },
+    {
+      "file": "f047.png",
+      "pctGt12": 1.105,
+      "pctGt48": 0.195,
+      "meanAbs": 0.283,
+      "max": 237
+    },
+    {
+      "file": "f048.png",
+      "pctGt12": 1.179,
+      "pctGt48": 0.23,
+      "meanAbs": 0.31,
+      "max": 239
+    },
+    {
+      "file": "f049.png",
+      "pctGt12": 1.245,
+      "pctGt48": 0.26,
+      "meanAbs": 0.341,
+      "max": 240
+    },
+    {
+      "file": "f050.png",
+      "pctGt12": 1.273,
+      "pctGt48": 0.287,
+      "meanAbs": 0.364,
+      "max": 240
+    },
+    {
+      "file": "f051.png",
+      "pctGt12": 1.363,
+      "pctGt48": 0.33,
+      "meanAbs": 0.384,
+      "max": 248
+    },
+    {
+      "file": "f052.png",
+      "pctGt12": 1.427,
+      "pctGt48": 0.347,
+      "meanAbs": 0.372,
+      "max": 239
+    },
+    {
+      "file": "f053.png",
+      "pctGt12": 1.458,
+      "pctGt48": 0.328,
+      "meanAbs": 0.355,
+      "max": 253
+    },
+    {
+      "file": "f054.png",
+      "pctGt12": 1.528,
+      "pctGt48": 0.356,
+      "meanAbs": 0.393,
+      "max": 254
+    },
+    {
+      "file": "f055.png",
+      "pctGt12": 1.54,
+      "pctGt48": 0.353,
+      "meanAbs": 0.413,
+      "max": 221
+    },
+    {
+      "file": "f056.png",
+      "pctGt12": 1.543,
+      "pctGt48": 0.335,
+      "meanAbs": 0.41,
+      "max": 224
+    },
+    {
+      "file": "f057.png",
+      "pctGt12": 1.577,
+      "pctGt48": 0.332,
+      "meanAbs": 0.4,
+      "max": 214
+    },
+    {
+      "file": "f058.png",
+      "pctGt12": 1.538,
+      "pctGt48": 0.301,
+      "meanAbs": 0.376,
+      "max": 233
+    },
+    {
+      "file": "f059.png",
+      "pctGt12": 1.536,
+      "pctGt48": 0.304,
+      "meanAbs": 0.369,
+      "max": 201
+    },
+    {
+      "file": "f060.png",
+      "pctGt12": 1.68,
+      "pctGt48": 0.329,
+      "meanAbs": 0.395,
+      "max": 228
+    },
+    {
+      "file": "settle-floor.png",
+      "pctGt12": 0.534,
+      "pctGt48": 0.022,
+      "meanAbs": 0.181,
+      "max": 204
+    }
+  ]
+}
