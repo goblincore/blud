@@ -3,7 +3,8 @@
 2026-09-16. Worktree `2026-09-16-blud-startup-freeze-attribution`, branch
 `codex/blud-startup-freeze-attribution`, from **`fdf20ad0`** (inherits the
 rupture-rotation work `ae30d9c2` and the probe buffer correction). Node
-`v22.22.1`. This is the profiling task queued by
+`v22.22.1`. Code + evidence commit: **`049f29e7`** (this doc adds that hash).
+This is the profiling task queued by
 [PROBE-FIX.md](PROBE-FIX.md) and the gib follow-up
 [`../2026-09-16-gib-follow-up/HANDOFF.md`](../2026-09-16-gib-follow-up/HANDOFF.md).
 
