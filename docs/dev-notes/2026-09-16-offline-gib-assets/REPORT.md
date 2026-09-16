@@ -307,11 +307,12 @@ matched settled floor contact, and the pool/reset contract holds.
 ## Verification (all on this branch, this worktree)
 
 - `npx tsc --noEmit` — clean.
-- `npm run build` (tsc + vite, Node 22) — clean.
+- `npm run build` (tsc + vite, Node 22) — clean, `built in 2.95 s`.
 - Focused suites — `gib-asset`, `gib-asset-runtime`, `gib-asset-integration`
-  all pass, including the new cap-row regression and head-exclusion tests.
-- Full `vitest run` — recorded in the commit's accompanying run; see the
-  commit message.
+  **30 tests** pass, including the new cap-row regression and head-exclusion
+  tests.
+- Full `vitest run` on the committed source — **340 files, 5340 tests, all
+  passing** (158 s).
 - Full GPU gate — `scripts/gib-assets-gate.sh .lab-tmp/gate all`, exit 0, no
   failed legs. Compact record: `captures/gate-summary.json`.
 
