@@ -184,6 +184,7 @@ import {
 import { rngStreams, setRngSeed, seedFromUnit } from './rng';
 import { advance as advanceSimClock, simTimeMs, resetSimClock } from './sim-clock';
 import { chunkSettled, makeChunk, stepChunk, type ChunkBox } from '../gib-chunks';
+import { gibLaunchVelocity } from '../gib-launch';
 import { bonePartGeometry, meatPartGeometry } from './gore-part-geom';
 import {
   billboardGib, loadGibSheet, loadGibSpriteAtlas, makeGibSprite, pickFrame, type GibSpriteAtlas,
@@ -206,7 +207,7 @@ import {
   createBakedChunkMaterial, type BakedChunkMaterial,
 } from './baked-chunks';
 import { boneChunkRadius } from '../melt-bones';
-import { chunkExtent } from '../extent';
+import { chunkExtent, chunkSupportSpheres } from '../extent';
 import { createChunkGpuView, createSharedChunkGpuMaterial, type ChunkGpuView, type GpuViewOpts } from './zombie-gpu';
 import {
   createGameDeferredRenderer,
@@ -5211,6 +5212,15 @@ async function main() {
   // the blast ripping outward through the body rather than a swap. 1 disables
   // the stagger (everything leaves on the blast frame) and is the A/B control.
   let gibStaggerFrames = parseIntParam(DYN_PARAMS.get('gibstagger'), { min: 1, max: 8 }) ?? 3;
+  /**
+   * GIB LAUNCH DISTRIBUTION (2026-09-16 task 3). Default `notblood` is the
+   * source-derived independent spread + one shared body shove (gib-launch.ts).
+   * `?giblaunch=radial` restores the OLD per-piece `concussionVelocity(at,
+   * g.origin, ...)` — a labelled A/B CONTROL for normal-speed review, not a
+   * supported gameplay mode. It exists because the owner's report ("pieces
+   * cluster too much") can only be judged against the thing that clustered.
+   */
+  const gibLaunchMode = DYN_PARAMS.get('giblaunch') === 'radial' ? 'radial' : 'notblood';
   // DOES A BODY THIS BLAST IS ABOUT TO GIB GET THE 16 WOUNDS STAMPED ON IT?
   //
   // No. The gibbed branch below takes `gibActor` and `continue`s, so those
@@ -5892,6 +5902,11 @@ async function main() {
     // length above the floor.
     const boneOnly = piece.prims.length === 0 && piece.bones.length > 0;
     const extentSource = boneOnly ? piece.bones : piece.prims;
+    // NARROW-PHASE floor support (2026-09-16 task 3): the piece's own capsule
+    // ends, so a flat shin rests on its thickness instead of hovering at its
+    // half-length `chunkExtent`. Falls back to the old single radius when the
+    // prims carry no usable geometry.
+    const support = chunkSupportSpheres(extentSource, piece.origin);
     const state = makeChunk(
       piece.limb as never, piece.origin, initialVelocity ?? vel,
       boneOnly ? boneChunkRadius(piece.bones) : chunkExtent(piece.prims, piece.origin),
@@ -5900,6 +5915,7 @@ async function main() {
       (piece.spinQuat || piece.spinAngVel)
         ? { quat: piece.spinQuat, angVel: piece.spinAngVel }
         : undefined,
+      support.length > 0 ? support : undefined,
     );
     // View budget. Order matters with the bake on: a BAKED piece is the
     // oldest, least-relevant gore, so its view recycles FIRST; only when
@@ -5995,6 +6011,7 @@ async function main() {
     const kind = piece.kind ?? 'limb';
     const boneOnly = piece.prims.length === 0 && piece.bones.length > 0;
     const extentSource = boneOnly ? piece.bones : piece.prims;
+    const support = chunkSupportSpheres(extentSource, piece.origin);
     const state = makeChunk(
       piece.limb as never, piece.origin, [0, 0, 0],
       boneOnly ? boneChunkRadius(piece.bones) : chunkExtent(piece.prims, piece.origin),
@@ -6003,6 +6020,7 @@ async function main() {
       (piece.spinQuat || piece.spinAngVel)
         ? { quat: piece.spinQuat, angVel: piece.spinAngVel }
         : undefined,
+      support.length > 0 ? support : undefined,
     );
     spawnSpritePiece(spritePieces, {
       state, frame: pickFrame(gibAtlas, rng()),
@@ -6746,6 +6764,28 @@ async function main() {
     }
     const launchFall = EXPLOSION_LAUNCH.falloffFloor
       + (1 - EXPLOSION_LAUNCH.falloffFloor) * falloff;
+    // ——— THE LAUNCH: INDEPENDENT PIECE SPREAD + ONE SHARED BODY SHOVE ————————
+    // The owner, on the shipped blast: "Gib launch should more closely follow
+    // the existing ported NotBlood behavior; pieces cluster too much." The old
+    // line called `concussionVelocity(at, g.origin, ...)` PER PIECE — a radial
+    // vector from the blast to that piece, so chest and abdomen (centimetres
+    // apart) left on one spoke. That is ConcussSprite's generic shockwave, not
+    // how NotBlood launches a gib (see gib-launch.ts's header).
+    //
+    // Source-faithful: NotBlood's GibThing gives each thing its OWN random
+    // spread from the gib table's `atc`/`at10` fields, and the blast's shared
+    // ConcussSprite then shoves the whole set coherently. So: compute ONE
+    // coherent velocity at the body (the shove the body itself would have
+    // taken), and let `gibLaunchVelocity` add each piece's independent,
+    // seed-deterministic spread on top at `coherentFrac`. GIB_LAUNCH keeps the
+    // source 1:3 horizontal:vertical ratio and the lab's accepted arc.
+    const coherentVel = concussionVelocity(
+      at, torsoC, EXPLOSION_STANDARD.impulse * launchFall * gibVelScale);
+    // `?giblaunch=radial` is the labelled CONTROL: the old per-piece radial
+    // shove, kept only so a normal-speed A/B can be captured side by side.
+    const launchFor = (key: string, origin: Vec3): Vec3 => gibLaunchMode === 'radial'
+      ? concussionVelocity(at, origin, EXPLOSION_STANDARD.impulse * launchFall * gibVelScale)
+      : gibLaunchVelocity({ key, seed: demoSeed, bodyVel: coherentVel });
     // NEAREST THE BLAST FIRST. This is the STAGGER order: the piece nearest the
     // explosion starts moving first, so the blast reads as ripping outward
     // through the body. It no longer decides what survives — the budget was
@@ -6836,14 +6876,14 @@ async function main() {
         const wy = base[1] + p.centre[1];
         const wz = base[2] + (-p.centre[0] * sy + p.centre[2] * cy);
         const o: Vec3 = [wx, wy, wz];
-        const vel = concussionVelocity(at, o, EXPLOSION_STANDARD.impulse * launchFall * gibVelScale);
+        const vel = launchFor(`carve#${i}`, o);
         const delay = 1 + Math.min(gibStaggerFrames - 1, Math.floor(i / perFrameCarve));
         if (spawnCarvedPiece(p, o, 'limb', vel, delay)) spawned++;
       }
     }
     for (let i = 0; i < spawning.length && !carveMode; i++) {
       const g = spawning[i]!;
-      const vel = concussionVelocity(at, g.origin, EXPLOSION_STANDARD.impulse * launchFall * gibVelScale);
+      const vel = launchFor(`${g.part ?? g.limb}#${i}`, g.origin);
       // + 1 on the OLD path only: every piece spends at least ONE FULL FRAME at
       // rest, so the first frame drawn after the blast is the body's own
       // silhouette in place. The rupture hand-off launches on the spawn tick —
@@ -6887,7 +6927,7 @@ async function main() {
     retireActor(a);
     telemetry.event('dynamite-gib', {
       actor: a.id, mode: gibMode, tier, pieces: spawned, dropped, bones: boneSpawned,
-      gibBones, gibStaggerFrames, gibVelScale, budget, liveBefore,
+      gibBones, gibStaggerFrames, gibVelScale, gibLaunchMode, budget, liveBefore,
     });
     dynLastGibDropped = dropped;
     dynLastGibTier = tier;
@@ -13404,6 +13444,7 @@ function performBenchAction(a: BenchAction): void {
       thrown: dynThrown, detonations: dynDetonations,
       gibbed: dynGibbed, gibPieces: dynGibPieces, lastBlastMs: dynLastBlastMs,
       gibMode, gibBones, gibStaggerFrames, maxChunks, dynSpeedScale, gibVelScale,
+      gibLaunchMode,
       aoeRadiusScale, aoeLaunchFloor,
       ceilM: BUNDLE_CEIL_M,
       // THE STAGED RELEASE, as numbers a gate can assert on: how many pieces are

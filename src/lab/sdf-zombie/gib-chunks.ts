@@ -90,6 +90,21 @@ export interface Chunk {
   angVel: Vec3;
   /** Chunk-LOCAL long axis (unit). The topple aligns this with the floor. */
   longAxis: Vec3;
+  /** CHUNK-LOCAL support spheres — the piece's real cross-section, used for the
+   *  NARROW-PHASE floor/ceiling contact (see `chunkSupportOffset`). Separate
+   *  from `radius`, which stays the CONSERVATIVE broad-phase bound for walls.
+   *  Defaults to one origin sphere of `radius`, which reproduces the old
+   *  single-radius floor behaviour for every caller that does not supply one. */
+  support: readonly SupportSphere[];
+}
+
+/** One sphere of a chunk's local support shape: a centre in chunk-local space
+ *  and a world radius. A capsule becomes two (its ends), so the piece rests on
+ *  its thickness when flat and on its end when upright instead of hovering at
+ *  half its length. */
+export interface SupportSphere {
+  c: Vec3;
+  r: number;
 }
 
 export function makeChunk(
@@ -105,6 +120,11 @@ export function makeChunk(
    * path) and then OVERRIDDEN — the pre-release state wins.
    */
   spin?: { quat?: Quat; angVel?: Vec3 },
+  /**
+   * NARROW-PHASE support shape (see `chunkSupportOffset`). Omitted keeps the
+   * historical single-sphere-at-origin behaviour: floor contact at `radius`.
+   */
+  support?: readonly SupportSphere[],
 ): Chunk {
   // Tumble proportional-ish to being launched at all. Limbs tumble slower
   // than the game's ±9 rad/s (helicopter fix); gobs keep the chaotic spawn.
@@ -119,6 +139,7 @@ export function makeChunk(
     quat: spin?.quat ? qNormalize(spin.quat) : qIdentity(),
     angVel: spin?.angVel ?? tumbleVel,
     longAxis: normalize(longAxis),
+    support: support ?? [{ c: [0, 0, 0] as Vec3, r: radius }],
   };
 }
 
@@ -210,6 +231,56 @@ function resolveBoxes(
   return { pos: [x, y, z], vel: [vx, vy, vz], hit };
 }
 
+/**
+ * How far the chunk ORIGIN sits above its LOWEST world point, for the current
+ * orientation. This is the NARROW-PHASE floor support: `pos[1] ===
+ * chunkSupportOffset(c)` puts the piece exactly on the floor, whatever its
+ * rotation. Deliberately separate from `radius`, which stays the conservative
+ * broad-phase bound for the wall/ceiling sweeps — the two answer different
+ * questions and conflating them was the floating-gib bug.
+ *
+ * Deterministic, pure, O(support spheres) (a capsule contributes two).
+ */
+export function chunkSupportOffset(c: Chunk): number {
+  return supportBottom(c.support, c.quat, c.squash, c.radius);
+}
+
+/** How far the chunk ORIGIN sits below its HIGHEST world point — the ceiling
+ *  counterpart of {@link chunkSupportOffset}. */
+export function chunkTopOffset(c: Chunk): number {
+  return supportTop(c.support, c.quat, c.squash, c.radius);
+}
+
+/** Private core: the lowest world point for an EXPLICIT orientation. `stepChunk`
+ *  must call this with the quat it just integrated, not the input chunk's, or
+ *  the contact plane lags the piece by one frame of rotation (measured: a
+ *  settled leg ~2.5 cm low / an arm ~1 frame stale). */
+function supportBottom(
+  support: readonly SupportSphere[], quat: Quat, squash: number, fallback: number,
+): number {
+  const sy = 1 - Math.min(1, Math.max(0, squash)) * 0.5;
+  let lowest = Infinity;
+  for (const s of support) {
+    const w = qRotate(quat, s.c);
+    const bottom = (w[1] - s.r) * sy;
+    if (bottom < lowest) lowest = bottom;
+  }
+  return Number.isFinite(lowest) ? -lowest : fallback;
+}
+
+function supportTop(
+  support: readonly SupportSphere[], quat: Quat, squash: number, fallback: number,
+): number {
+  const sy = 1 - Math.min(1, Math.max(0, squash)) * 0.5;
+  let highest = -Infinity;
+  for (const s of support) {
+    const w = qRotate(quat, s.c);
+    const top = (w[1] + s.r) * sy;
+    if (top > highest) highest = top;
+  }
+  return Number.isFinite(highest) ? highest : fallback;
+}
+
 export function stepChunk(c: Chunk, dt: number, colliders?: ChunkColliders): Chunk {
   let [x, y, z] = c.pos;
   let [vx, vy, vz] = c.vel;
@@ -243,15 +314,17 @@ export function stepChunk(c: Chunk, dt: number, colliders?: ChunkColliders): Chu
   // WALL_H), so it comes in as an explicit height for the enclosure the chunk is
   // in. Without it a blast can throw a piece up through the room's roof.
   const ceilingY = colliders?.ceilingY;
-  if (ceilingY !== undefined && y + c.radius > ceilingY) {
-    y = ceilingY - c.radius;
+  const topOffset = supportTop(c.support, quat, squash, c.radius);
+  if (ceilingY !== undefined && y + topOffset > ceilingY) {
+    y = ceilingY - topOffset;
     if (vy > 0) vy = -vy * CHUNK_TUNING.wallRestitution;
     vx *= FLOOR_FRICTION; vz *= FLOOR_FRICTION;
   }
 
   let grounded = false;
-  if (y < c.radius) {
-    y = c.radius;
+  const floorOffset = supportBottom(c.support, quat, squash, c.radius);
+  if (y < floorOffset) {
+    y = floorOffset;
     grounded = true;
     if (vy < 0) {
       // Squash scales with impact speed — this is what sells wetness. BONES
@@ -291,6 +364,16 @@ export function stepChunk(c: Chunk, dt: number, colliders?: ChunkColliders): Chu
   }
 
   squash = Math.max(0, squash - SQUASH_RELAX * dt);
+
+  // The topple above changed the orientation, and a rotation can swing a
+  // support sphere further DOWN than the floor clamp saw (measured on a real
+  // severed arm: 1.6 cm of sink at settle). Re-seat UP only — never down — so
+  // the piece follows the contact its new orientation implies without popping
+  // through the floor.
+  if (grounded) {
+    const postFloor = supportBottom(c.support, quat, squash, c.radius);
+    if (y < postFloor) y = postFloor;
+  }
 
   const out: Chunk = { ...c, pos: [x, y, z], vel: [vx, vy, vz], squash, quat, angVel };
   return finite(out) ? out : {
@@ -338,7 +421,9 @@ export function toppleAngleToFlat(c: Chunk): number {
  * fails grounded; one mid-topple fails the angle.
  */
 export function chunkSettled(c: Chunk): boolean {
-  if (!(c.pos[1] <= c.radius + 1e-4)) return false;              // grounded
+  // Grounded = the piece's LOWEST WORLD POINT is on the floor (orientation
+  // aware), not merely that its origin is under the broad-phase radius.
+  if (!(c.pos[1] <= chunkSupportOffset(c) + 1e-4)) return false;
   if (c.angVel[0] !== 0 || c.angVel[1] !== 0 || c.angVel[2] !== 0) return false;
   if (c.squash > 0) return false;                                 // still relaxing
   if (toppleAngleToFlat(c) > 0.011) return false;                 // still toppling

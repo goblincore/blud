@@ -1,5 +1,6 @@
 // src/lab/sdf-zombie/extent.ts
 import type { BoxParams, Primitive, ShellParams, Vec3 } from './types';
+import type { SupportSphere } from './gib-chunks';
 import { bendCtrl, len, sub } from './vec';
 import { strandReach } from './strand';
 
@@ -83,6 +84,37 @@ export function shellReach(prim: { shell?: ShellParams }): number {
   const sh = prim.shell;
   if (sh === undefined) return 0;
   return sh.thickness + Math.abs(sh.warpAmp ?? 0);
+}
+
+/**
+ * LOCAL support spheres for a detached piece's floor/ceiling contact (see
+ * `gib-chunks.ts` `chunkSupportOffset`). One sphere per capsule END, at the
+ * piece's own cross-section girth — a flat shin then rests on its thickness
+ * instead of hovering at the half-length `chunkExtent` radius.
+ *
+ * Conservative in the same direction as every other outer bound: the sphere
+ * radius is `radius * boxReach * strandReach * maxScale + shellReach`, so a
+ * box/stretch/shell never under-covers. Past `maxCount` points it degrades to
+ * ONE sphere of the full `chunkExtent`, which is the old (safe but floaty)
+ * behaviour rather than an unbounded shape.
+ */
+export function chunkSupportSpheres(
+  prims: readonly Primitive[], origin: Vec3, maxCount = 24,
+): SupportSphere[] {
+  const out: SupportSphere[] = [];
+  for (const p of prims) {
+    if (p.op === 'sub') continue;
+    const ms = Math.max(p.scale[0], p.scale[1], p.scale[2]);
+    const r = Math.max(p.radius, p.radiusB ?? p.radius)
+      * boxReach(p.box) * strandReach(p.strand) * ms + shellReach(p);
+    for (const e of [p.a, p.b]) {
+      if (out.length >= maxCount) {
+        return [{ c: [0, 0, 0], r: chunkExtent(prims as Primitive[], origin) }];
+      }
+      out.push({ c: sub(e, origin), r });
+    }
+  }
+  return out;
 }
 
 export function chunkExtent(prims: Primitive[], origin: Vec3): number {
