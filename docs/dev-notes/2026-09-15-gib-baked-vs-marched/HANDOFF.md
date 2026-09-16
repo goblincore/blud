@@ -1,7 +1,39 @@
-# HANDOFF — a settled gib should look like a flying one, and it still does not
+# HANDOFF — settled gib appearance accepted
+
+## Current status — 2026-09-16
+
+The owner manually accepted the repaired flesh shading and preserved head face.
+Keep baking enabled; stop appearance polish unless requested. The implementation,
+comparison images, measured limits and test results are in
+[RESULTS.md](parity-fix/RESULTS.md).
+
+The repair preserves source display/specular response, skin relief, subtractive
+blast caps and the per-fragment face atlas. Live chunks track the flashlight;
+head projection follows their rotation; recycled views receive the new actor's
+appearance. Both live and baked flesh carry the new dark stains.
+
+Next main topic: a visible body-rupture/tearing transition before the flying gibs,
+using the active melting effect and retired NotBlood tearing sprites as references.
+Design is not settled; the suggested 150–250 ms is an experiment, not an accepted
+requirement. Damage/explosion timing should remain immediate in that proposal.
+
+Deferred by the owner: investigate floating/resting-upright pieces, and split each
+arm and leg into two shorter pieces. Neither follow-up is implemented here.
+
+Validation: build/typecheck and 292 focused tests pass; forward WebGPU same-pose
+captures and head-material recycling pass. Full-suite Node 25 storage failures
+and the optional deferred renderer's existing `gMarchAnchor` compile issue are
+recorded in RESULTS.md. No pixel-identity or performance claim.
+
+## Historical handoff — superseded investigation, 2026-09-15
+
+The text below records the earlier agent's state and hypotheses, not current
+work instructions. In particular, the empty `tornAt` list is intentional for
+capped blast pieces: do not add tear spheres to fix it. The unresolved-appearance
+verdict and full-suite counts below belong to that earlier snapshot.
 
 **Branch:** `claude/dynamite-weapon-slot` · **PR:** [#8](https://github.com/goblincore/blud/pull/8) (draft)
-**Worktree:** `.claude/worktrees/dynamite-weapon-slot` · clean, pushed, `tsc` clean,
+**Earlier snapshot:** `.claude/worktrees/dynamite-weapon-slot` · clean, pushed, `tsc` clean,
 vitest **328/328 files, 5169/5169**.
 
 ---

@@ -27,7 +27,7 @@
 // flashlight values — baked chunks track the flashlight like tubes do.
 import * as THREE from 'three/webgpu';
 import {
-  attribute, cameraPosition, float, normalWorld, positionLocal, positionWorld, uniform, vec4, wgslFn,
+  attribute, cameraPosition, texture, float, normalWorld, positionLocal, positionWorld, uniform, vec4, wgslFn,
   mrt, cameraProjectionMatrix, cameraViewMatrix,
 } from 'three/tsl';
 import { len } from '../vec';
@@ -36,7 +36,8 @@ import { encodeSurfaceClass, SURFACE_CLASS_MESH, type SurfaceOutputOptions } fro
 // The march's OWN noise source strings, included verbatim as wgslFn
 // dependencies rather than re-derived here. Parity is then structural: if the
 // creature's micro-detail changes, a settled piece of it changes with it.
-import { HASH13, NOISE3, FBM } from './march.wgsl';
+import type { MarchUniforms } from './zombie-gpu';
+import { HASH13, NOISE3, FBM, TEXEL, FLICKER, FACE_LAYER_WGSL } from './march.wgsl';
 
 /**
  * Live lighting for every baked chunk. Same uniform names and semantics as
@@ -176,10 +177,18 @@ export type BakedChunkUniforms = ReturnType<typeof bakedChunkUniforms>;
  * next to one — but it is a visible change beyond the path that motivated it,
  * and it has not been through an owner view-test.
  */
-export const CHUNK_SHADE_WGSL = /* wgsl */ `fn chunkShade(p: vec3<f32>, n: vec3<f32>, camPos: vec3<f32>, albedo: vec4<f32>, ao: f32, deepColor: vec3<f32>, ambient: vec3<f32>, look: vec4<f32>, lightDir: vec3<f32>, keyColor: vec3<f32>, lightCfg: vec2<f32>, spotPos: vec3<f32>, spotAxis: vec3<f32>, spotCfg: vec4<f32>, spotCfg2: vec4<f32>, spotColor: vec3<f32>, gloss: f32, pl: vec3<f32>, kind: f32, goreCfg: vec4<f32>, goreCfg2: vec4<f32>, anchor: vec3<f32>, fleshDetail: vec4<f32>) -> vec3<f32> {
+// The same face layer as the march, with mesh-local variable names. The
+// source texture remains a texture: baking it into 1 cm vertex colours loses
+// eyes/teeth. Settled heads have no melt animation.
+const MESH_FACE_LAYER = FACE_LAYER_WGSL
+  .replace(/\balbedo\b/g, 'faceAlbedo').replace(/\bn\b/g, 'nrm')
+  .replaceAll('gInstHeadCentre', 'headCentre').replaceAll('gInstHeadQuat', 'headQuat')
+  .replaceAll('gInstMelt.x', '0.0');
+const FACE_ARGS = `faceTex: texture_2d<f32>, headCentre: vec3<f32>, headAxes: vec3<f32>, headQuat: vec4<f32>, faceCfg: vec4<f32>, faceCfg2: vec4<f32>, faceCfg3: vec4<f32>, faceProj: vec4<f32>, faceAtlas: vec4<f32>, faceGlowRedOnly: f32, faceGlowColor: vec3<f32>`;
+function chunkShadeWgsl(face: boolean): string { return /* wgsl */ `fn chunkShade(p: vec3<f32>, n: vec3<f32>, camPos: vec3<f32>, albedo: vec4<f32>, ao: f32, deepColor: vec3<f32>, ambient: vec3<f32>, look: vec4<f32>, lightDir: vec3<f32>, keyColor: vec3<f32>, lightCfg: vec2<f32>, spotPos: vec3<f32>, spotAxis: vec3<f32>, spotCfg: vec4<f32>, spotCfg2: vec4<f32>, spotColor: vec3<f32>, gloss: f32, pl: vec3<f32>, kind: f32, goreCfg: vec4<f32>, goreCfg2: vec4<f32>, anchor: vec4<f32>, fleshDetail: vec4<f32>, response: vec4<f32>, fresnelGain: f32${face ? ', ' + FACE_ARGS : ''}) -> vec3<f32> {
   var a = albedo;
   var nrm = n;
-  var gloss2 = gloss;
+  var gloss2 = select(gloss, response.z, response.x > 0.5);
   if (goreCfg.x > 0.0) {
     let lp = pl * max(goreCfg.w, 1.0);
     let w1 = vec3<f32>(6.0, 9.0, 11.0);
@@ -221,9 +230,29 @@ export const CHUNK_SHADE_WGSL = /* wgsl */ `fn chunkShade(p: vec3<f32>, n: vec3<
       }
     }
   }
+  // mapBody displaces the surface by fbm(restPoint * 3) * marchCfg.z.
+  // Its DERIVATIVE supplies the visible skin relief. Adding the tiny fine
+  // normal noise alone (surfCfg2.y) cannot reproduce that texture.
+  if (anchor.w > 0.0) {
+    let e = 0.0015;
+    let k1 = vec3<f32>(1.0, -1.0, -1.0);
+    let k2 = vec3<f32>(-1.0, -1.0, 1.0);
+    let k3 = vec3<f32>(-1.0, 1.0, -1.0);
+    let k4 = vec3<f32>(1.0, 1.0, 1.0);
+    let grad = (k1 * fbm((anchor.xyz + k1 * e) * 3.0)
+              + k2 * fbm((anchor.xyz + k2 * e) * 3.0)
+              + k3 * fbm((anchor.xyz + k3 * e) * 3.0)
+              + k4 * fbm((anchor.xyz + k4 * e) * 3.0)) * (anchor.w / (4.0 * e));
+    let px = dpdx(p); let py = dpdy(p);
+    let r1 = cross(py, nrm); let r2 = cross(nrm, px);
+    let det = dot(px, r1);
+    let surfaceGrad = (dot(grad, dpdx(anchor.xyz)) * r1 + dot(grad, dpdy(anchor.xyz)) * r2)
+                    * (sign(det) / max(abs(det), 1e-10));
+    nrm = normalize(nrm + surfaceGrad);
+  }
   if (fleshDetail.x > 0.0) {
     let df = max(fleshDetail.y, 0.5);
-    let dp = anchor * df;
+    let dp = anchor.xyz * df;
     let detailNoise = vec3<f32>(fbm(dp), fbm(dp + 5.0), fbm(dp + 11.0));
     nrm = normalize(nrm + detailNoise * fleshDetail.x);
     if (fleshDetail.z > 0.0) {
@@ -246,17 +275,26 @@ export const CHUNK_SHADE_WGSL = /* wgsl */ `fn chunkShade(p: vec3<f32>, n: vec3<
     keyC = mix(keyColor, spotColor, clamp(beam, 0.0, 1.0));
     keyI = lightCfg.x * spotCfg2.z + beam * spotCfg2.x;
   }
+  ${face ? `let wm = clamp(a.a, 0.0, 1.0);
+  var faceAlbedo = a.rgb;
+  ${MESH_FACE_LAYER}
+  a = vec4<f32>(faceAlbedo, a.a);` : ''}
   let V = normalize(camPos - p);
   let ndl = max(dot(nrm, L), 0.0);
   let H = normalize(L + V);
-  let wm = clamp(a.a, 0.0, 1.0);
+  ${face ? '' : 'let wm = clamp(a.a, 0.0, 1.0);'}
   let shine = pow(max(dot(nrm, H), 0.0), max(gloss2, 2.0));
-  let fres = pow(1.0 - max(dot(nrm, V), 0.0), 4.0) * look.w * (1.0 - wm);
+  let fres = pow(1.0 - max(dot(nrm, V), 0.0), 4.0) * select(look.w, fresnelGain, response.x > 0.5) * (1.0 - wm);
   let wetTint = mix(vec3<f32>(1.0), deepColor, look.y * wm);
-  let floorK = clamp(look.x, 0.0, 1.0);
+  let floorK = select(clamp(look.x, 0.0, 1.0), 0.0, response.x > 0.5);
   let diffuse = a.rgb * (ambient + keyI * keyC * (floorK + (1.0 - floorK) * ndl)) * ao;
-  let specular = keyC * wetTint * (shine * look.z * keyI + fres * (0.5 + 0.5 * keyI));
+  // The SDF's highlight is weighted by wetness, NOT the diffuse key gain.
+  // Multiplying it by the flashlight gain turns a broad highlight white.
+  let meshSpec = keyC * wetTint * (shine * look.z * keyI + fres * (0.5 + 0.5 * keyI));
+  let fleshSpec = keyC * (shine * response.w + fres) * response.y;
+  let specular = select(meshSpec, fleshSpec, response.x > 0.5);
   var out = diffuse + specular;
+  ${face ? 'out = mix(out, a.rgb * (ambient + 0.30 * lightCfg.x * keyColor), faceFlat * 0.85);' : ''}
   if (spotCfg.x > 0.0 && spotCfg2.y > 0.0) {
     let knee = clamp(1.0 - spotCfg2.y, 0.05, 0.99);
     let head = max(1.0 - knee, 1e-4);
@@ -264,7 +302,27 @@ export const CHUNK_SHADE_WGSL = /* wgsl */ `fn chunkShade(p: vec3<f32>, n: vec3<
     let rolled = vec3<f32>(knee) + head * (vec3<f32>(1.0) - exp(-over / head));
     out = select(rolled, out, out <= vec3<f32>(knee));
   }
+  ${face ? 'out = out * (1.0 - faceGlow) + faceGlowColor * faceGlow * faceCfg2.w * flicker(faceCfg3.y, faceCfg3.x);' : ''}
+  // Same legacy display transform as MARCH_BODY: presets were authored
+  // against raw linear display. Omitting this lifts the low colour channels
+  // when Three encodes to sRGB, washing pink flesh into pale cream.
+  if (response.x > 1.5) {
+    let c = max(out, vec3<f32>(0.0));
+    out = select(pow((c + 0.055) / 1.055, vec3<f32>(2.4)), c / 12.92,
+                 c <= vec3<f32>(0.04045));
+  }
   return out;
+}`; }
+export const CHUNK_SHADE_WGSL = chunkShadeWgsl(false);
+export const CHUNK_FACE_SHADE_WGSL = chunkShadeWgsl(true);
+
+const CHUNK_FACE_SURFACE_WGSL = /* wgsl */ `fn chunkFaceSurface(p: vec3<f32>, n: vec3<f32>, albedo: vec4<f32>, ${FACE_ARGS}) -> mat4x4<f32> {
+  var nrm = n;
+  var faceAlbedo = albedo.rgb;
+  let wm = clamp(albedo.a, 0.0, 1.0);
+  ${MESH_FACE_LAYER}
+  return mat4x4<f32>(vec4<f32>(faceAlbedo, mix(0.82, 0.34, wm)), vec4<f32>(nrm, 0.0),
+    vec4<f32>(faceGlowColor * faceGlow * faceCfg2.w * flicker(faceCfg3.y, faceCfg3.x), 0.0), vec4<f32>(0.0));
 }`;
 
 /**
@@ -346,22 +404,39 @@ export interface GoreMaterialOptions extends SurfaceOutputOptions {
    *  geometry does not carry is a BIND ERROR, not a zero — that is exactly the
    *  bug `goreKind` shipped with. Geometry without `bakeAo` must NOT set this. */
   bakedAo?: boolean;
+  /** Source flesh response carried through the worker in bakeResponse. */
+  fleshResponse?: boolean;
+  /** Snapshot these uniforms at the swap; borrowed atlas remains owned by the actor. */
+  face?: Pick<MarchUniforms, 'faceTex' | 'headCentre' | 'headAxes' | 'headQuat' | 'faceCfg' | 'faceCfg2' | 'faceCfg3' | 'faceProj' | 'faceAtlas' | 'faceGlowRedOnly' | 'faceGlowColor'>;
 }
 
 export function createBakedChunkMaterial(options?: GoreMaterialOptions): BakedChunkMaterial {
   const u = bakedChunkUniforms();
   const material = new THREE.MeshBasicNodeMaterial();
+  // Own immutable projection uniforms: the retained view can be recycled.
+  const face = options?.face;
+  const faceBindings = face ? {
+    faceTex: texture(face.faceTex.value),
+    headCentre: uniform(face.headCentre.value.clone()), headAxes: uniform(face.headAxes.value.clone()),
+    headQuat: uniform(face.headQuat.value.clone()), faceCfg: uniform(face.faceCfg.value.clone()),
+    faceCfg2: uniform(face.faceCfg2.value.clone()), faceCfg3: uniform(face.faceCfg3.value.clone()), faceProj: uniform(face.faceProj.value.clone()),
+    faceAtlas: uniform(face.faceAtlas.value.clone()), faceGlowRedOnly: uniform(face.faceGlowRedOnly.value),
+    faceGlowColor: uniform(face.faceGlowColor.value.clone()),
+  } : {};
   let surfaceKind: number | undefined;
   if (options?.output === 'surface') {
     const surf = wgslFn(CHUNK_SURFACE_WGSL)({
       albedo: attribute('bakeColor', 'vec4'),
     }) as unknown as { xyz: unknown; w: unknown };
+    const faceSurface = face ? wgslFn(CHUNK_FACE_SURFACE_WGSL, [wgslFn(TEXEL), wgslFn(FLICKER)] as never)({
+      p: positionWorld, n: normalWorld, albedo: attribute('bakeColor', 'vec4'), ...faceBindings,
+    } as never) as unknown as { element(i: number): ReturnType<typeof vec4> } : null;
     const kind = encodeSurfaceClass(SURFACE_CLASS_MESH, options.shadowReceiver ?? 'full');
     const clip = cameraProjectionMatrix.mul(cameraViewMatrix).mul(vec4(positionWorld, 1.0));
     material.mrtNode = mrt({
-      albedoRoughness: vec4(surf.xyz as never, surf.w as never),
-      normalMetalness: vec4(normalWorld, float(0)),
-      emissionClass: vec4(float(0), float(0), float(0), float(kind)),
+      albedoRoughness: faceSurface ? faceSurface.element(0) : vec4(surf.xyz as never, surf.w as never),
+      normalMetalness: faceSurface ? faceSurface.element(1) : vec4(normalWorld, float(0)),
+      emissionClass: faceSurface ? vec4(faceSurface.element(2).xyz, float(kind)) : vec4(float(0), float(0), float(0), float(kind)),
       surfaceDepth: vec4(clip.z.div(clip.w) as never, float(0), float(0), float(1)),
       // Mesh response has no authored flesh parameters; still write every MRT lane.
       surfaceParams: vec4(float(0), float(0), float(0), float(1)),
@@ -380,7 +455,7 @@ export function createBakedChunkMaterial(options?: GoreMaterialOptions): BakedCh
     // MARCH'S OWN source strings, so a settled piece samples the identical
     // field the living body does — the previous attempt at this passed TSL
     // noise NODES as wgslFn arguments and measurably delivered nothing.
-    const [, , , shade] = [HASH13, NOISE3, FBM, CHUNK_SHADE_WGSL]
+    const [, , , , , shade] = [HASH13, NOISE3, FBM, TEXEL, FLICKER, face ? CHUNK_FACE_SHADE_WGSL : CHUNK_SHADE_WGSL]
       .reduce<ReturnType<typeof wgslFn>[]>(
         (acc, src) => [...acc, wgslFn(src, acc.slice(-1))], [],
       );
@@ -391,6 +466,7 @@ export function createBakedChunkMaterial(options?: GoreMaterialOptions): BakedCh
     // rather than an attribute, because baked-chunk geometry does not carry one
     // and an attribute that is not there is not 0 — it is a bind error.
     material.colorNode = vec4(shade({
+      ...faceBindings,
       p: positionWorld, n: normalWorld, camPos: cameraPosition,
       albedo: attribute('bakeColor', 'vec4'),
       ao: options?.bakedAo ? attribute('bakeAo', 'float') : float(1.0),
@@ -407,8 +483,10 @@ export function createBakedChunkMaterial(options?: GoreMaterialOptions): BakedCh
       // ride the piece through its tumble. Sampled in world space it would swim
       // across the surface as the chunk spins, which is the same reason the
       // march anchors its own detail in the body's rest frame.
-      anchor: positionLocal,
+      anchor: options?.fleshResponse ? attribute('bakeAnchor', 'vec4') : vec4(positionLocal, 0),
       fleshDetail: u.fleshDetail,
+      response: options?.fleshResponse ? attribute('bakeResponse', 'vec4') : vec4(0),
+      fresnelGain: options?.fleshResponse ? attribute('bakeFresnel', 'float') : u.look.w,
     }) as never, float(1.0));
   }
   material.depthWrite = true;

@@ -1943,6 +1943,17 @@ async function main() {
         // the per-body path (the view's own material reads the same record).
         a.view.syncRecord();
       }
+      // Detached views copied the lamp only at spawn, so moving/turning the
+      // camera left their flashlight behind until the bake suddenly caught up.
+      // Refresh at draw time, including render-locked diagnostic frames.
+      for (const c of bakedChunkReference ? [...liveChunks, ...bakedChunks] : liveChunks) {
+        const u = c.view.uniforms;
+        u.spotPos.value.copy(flashlight.spot.position);
+        u.spotAxis.value.copy(sAxis);
+        u.spotCfg.value.set(spotOn, cosInner, cosOuter, flashlight.spot.distance);
+        u.spotColor.value.copy(flashlight.spot.color);
+        u.spotCfg2.value.set(beamTuning.gain, beamTuning.shoulder, beamTuning.keyFloor, 0);
+      }
       // Bone tubes take the SAME beam (bone-instancer's boneShade is the
       // march's own cone formula on these exact values).
       boneInstancer.uniforms.spotPos.value.copy(flashlight.spot.position);
@@ -3441,30 +3452,9 @@ async function main() {
   // on a STATIC phantom key with the beam off. The bake did not get worse; it
   // stopped being lit. That is fixed now, but it is not the whole gap.
   //
-  // THE WHOLE GAP IS STRUCTURAL. `chunkShade` is a reimplementation of the
-  // march's lighting, and it reproduces a SUBSET. Against the marched piece
-  // flying beside it, a baked piece has:
-  //   * NO ambient occlusion — `bakedAo` is passed only by the carve, so a
-  //     settled chunk shades at ao = 1.0 and nothing on it can ever be in shadow;
-  //   * NO backlit scatter, though flesh is authored `translucency 0.45`;
-  //   * NO wound shadow;
-  //   * and a FLAT 0.15 KEY FLOOR (`0.15 + 0.85 * ndl`) that the march does not
-  //     have, so a surface facing directly away from the light still takes 15%
-  //     of it.
-  // Those four together are exactly the owner's read: "way too light and dont
-  // follow the lighting". They are not a tuning miss; each is a term that is not
-  // there, and closing them means porting the march's lighting piece by piece
-  // into a second shader that then has to be kept in step with it forever.
-  //
-  // Not baking makes the difference vanish BY CONSTRUCTION rather than by
-  // approximation: a settled piece is then the same renderer as a flying one,
-  // because it IS one. Bone pieces have always worked this way — they never bake
-  // — and they have never been the ones that looked wrong.
-  //
-  // THE COST IS REAL AND IS NOT MEASURED HERE: every settled piece stays a
-  // marched chunk holding a view slot for its life, which is what the bake was
-  // built to avoid. `?chunkbake=1`, the panel's `settle bake` row, or
-  // `__sdfGame.setChunkBake(true)` put it back for an A/B.
+  // Keep the optimization on. Source display/specular response and cut
+  // primitives travel with the bake; retained views provide a same-pose
+  // diagnostic reference via setBakedChunkReference, never the shipping draw.
   const GAME_CHUNK_BAKE: 0 | 1 = 1;
   let chunkBakeEnabled = new URLSearchParams(location.search).get('chunkbake') !== '0'
     && (GAME_CHUNK_BAKE as 0 | 1) === 1;
@@ -3473,6 +3463,8 @@ async function main() {
     id: number;
     mesh: THREE.Mesh;
     view: ChunkGpuView;
+    state: import('../gib-chunks').Chunk;
+    faceMaterial?: BakedChunkMaterial;
     centre: Vec3;
     radius: number;
     bakeMs: number;
@@ -3481,6 +3473,7 @@ async function main() {
     template: ChunkTemplate;
   }
   const bakedChunks: BakedChunk[] = [];
+  let bakedChunkReference = false;
   let soldierCorpses: ReturnType<typeof createSoldierCorpseBakes> | null = null;
   // One material for every baked chunk — one pipeline, N meshes. Lighting
   // uniforms are LIVE (refreshed per frame beside the bone instancer's);
@@ -5161,7 +5154,12 @@ async function main() {
     if (i >= 0) bakedChunks.splice(i, 1);
     scene.remove(b.mesh);
     deferredApi?.router.unregister(b.mesh);
-    b.mesh.geometry.dispose(); // material is shared; geometry is per-bake
+    b.mesh.geometry.dispose();
+    if (b.faceMaterial) {
+      const mi = litChunkMaterials.indexOf(b.faceMaterial);
+      if (mi >= 0) litChunkMaterials.splice(mi, 1);
+      b.faceMaterial.dispose(); // borrowed actor atlas is not disposed
+    }
     return b.view;
   }
   const chunkBakeJobs = createChunkBakeJobs(() => new Worker(
@@ -5181,7 +5179,7 @@ async function main() {
       bakedChunkMat = registerLitChunkMaterial(createBakedChunkMaterial(
         deferredMode
           ? { output: 'surface', shadowReceiver: 'level-only', bakedAo: true }
-          : { bakedAo: true },
+          : { bakedAo: true, fleshResponse: true },
       ));
       bakedChunkSeed?.(bakedChunkMat);
     }
@@ -5579,12 +5577,20 @@ async function main() {
         // shadow — half of "way too light and dont follow the lighting".
         deferredMode
           ? { output: 'surface', shadowReceiver: 'level-only', bakedAo: true }
-          : { bakedAo: true },
+          : { bakedAo: true, fleshResponse: true },
       ));
       bakedChunkSeed?.(bakedChunkMat);
     }
     liveChunks.splice(index, 1);
-    const mesh = new THREE.Mesh(baked.geometry, bakedChunkMat.material);
+    // Face detail stays per-fragment at the source atlas resolution. A head
+    // owns its projection snapshot/material; other chunks share the plain one.
+    const faceMaterial = entry.view.uniforms.faceCfg.value.x > 0.5
+      ? registerLitChunkMaterial(createBakedChunkMaterial({
+        bakedAo: true, fleshResponse: true, face: entry.view.uniforms,
+        ...(deferredMode ? { output: 'surface' as const, shadowReceiver: 'level-only' as const } : {}),
+      })) : undefined;
+    if (faceMaterial) bakedChunkSeed?.(faceMaterial);
+    const mesh = new THREE.Mesh(baked.geometry, (faceMaterial ?? bakedChunkMat).material);
     mesh.frustumCulled = true; // it is a static bounded mesh — let three cull it
     scene.add(mesh);
     // DEFERRED MODE: the bake swaps the piece between producer routes —
@@ -5592,9 +5598,10 @@ async function main() {
     // producer). The proxy is only HIDDEN (its registration stays valid for
     // the recycle ring).
     deferredApi?.router.register(mesh, 'mesh', 'level-only');
-    entry.view.object.visible = false; // the proxy box leaves the SDF passes
+    entry.view.object.visible = bakedChunkReference;
+    mesh.visible = !bakedChunkReference; // normally the proxy leaves the SDF passes
     bakedChunks.push({
-      id: entry.id, mesh, view: entry.view,
+      id: entry.id, mesh, view: entry.view, state: entry.state, faceMaterial,
       centre: baked.centre, radius: baked.radius, bakeMs: baked.bakeMs,
       template: entry.template,
     });
@@ -5680,7 +5687,7 @@ async function main() {
   /** Whether BONE pieces are drawn — see setBonePiecesVisible. */
   let bonesVisible = true;
   // Now that the array exists, the frame draw can read it directly.
-  chunkObjects = () => liveChunks.map(c => c.view.object);
+  chunkObjects = () => (bakedChunkReference ? [...liveChunks, ...bakedChunks] : liveChunks).map(c => c.view.object);
   let nextChunkId = 1;
   function primsLongAxis(prims: Primitive[], origin: Vec3): Vec3 {
     let best: Vec3 = [0, 1, 0];
@@ -5751,7 +5758,7 @@ async function main() {
     }
     if (recycled) {
       recycled.reset(state, piece.prims,
-        piece.tornAt.length ? piece.tornAt : undefined, piece.bones);
+        piece.tornAt.length ? piece.tornAt : undefined, piece.bones, template.uniforms);
       // A bone-only chunk needs its bone ROWS packed whatever the bone-tube
       // mode is: with packBones off (the `?boneMesh` path) `reset` writes
       // organ rows only, so a chunk whose flesh list is empty packs NOTHING and
@@ -11501,7 +11508,7 @@ function performBenchAction(a: BenchAction): void {
     },
     normalGradientPiece(key: string) {
       if(key.startsWith('body:')) return actors.find(a=>a.id===Number(key.slice(5)))?.view;
-      if(key.startsWith('chunk:')) return liveChunks.find(c=>c.id===Number(key.slice(6)))?.view;
+      if(key.startsWith('chunk:')) return [...liveChunks, ...bakedChunks].find(c=>c.id===Number(key.slice(6)))?.view;
       return undefined;
     },
     normalGradientStatus() {
@@ -12954,6 +12961,16 @@ function performBenchAction(a: BenchAction): void {
         })(),
       };
     }),
+    /** Compare the SAME settled poses, with no worker timing or physics drift.
+     * The retained views exist for recycling already; only this dev seam draws them. */
+    setBakedChunkReference(on: boolean) {
+      bakedChunkReference = on;
+      for (const b of bakedChunks) {
+        b.mesh.visible = !on;
+        b.view.object.visible = on;
+        if (on) b.view.update(b.state);
+      }
+    },
     setChunkBake(on: boolean) {
       chunkBakeEnabled = on;
       if (!on) cancelChunkBake();

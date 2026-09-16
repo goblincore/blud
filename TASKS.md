@@ -4,6 +4,13 @@
 > Per-milestone step-by-step tasks live in `docs/superpowers/plans/`.
 > This file is **coarse-grained state only** — keep rows to ≤2 lines and link out for detail.
 
+## Dynamite gib appearance — owner accepted 2026-09-16
+
+- [x] Preserve flesh shading, cut geometry and face texture through settle baking; owner manual test accepted.
+  [Results, captures and limits](docs/dev-notes/2026-09-15-gib-baked-vs-marched/parity-fix/RESULTS.md) · PR #8.
+- [ ] Next: body-to-gib tearing transition; active melting and retired NotBlood sprites are references. Design remains open.
+- [ ] Later: fix floating/upright settled pieces; split each arm/leg into two shorter pieces. Explicitly deferred by owner.
+
 ## Neural upscale (ESPCN family) — flesh 400×300 → 800×600 — 2026-09-11
 
 - [x] Spec approved: `docs/superpowers/specs/2026-09-11-neural-upscale-espcn-design.md`.

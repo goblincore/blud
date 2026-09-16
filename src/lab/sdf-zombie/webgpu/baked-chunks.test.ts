@@ -45,7 +45,7 @@ describe('createBakedChunkMaterial — default lit path (M1 behavior)', () => {
       // shadow. It defaults to 0.04, and at 0 the term is plain `ndl`.
       'let diffuse = a.rgb * (ambient + keyI * keyC * (floorK + (1.0 - floorK) * ndl)) * ao;',
       'let wm = clamp(a.a, 0.0, 1.0);',
-      'let specular = keyC * wetTint',
+      'let meshSpec = keyC * wetTint',
     ]) {
       expect(CHUNK_SHADE_WGSL).toContain(present);
     }

@@ -23,7 +23,7 @@ import { MAX_WOUNDS } from '../damage';
 import { chunkPoint, squashFactors, type Chunk } from '../gib-chunks';
 import type { FleshMaterial, LightPreset } from '../material';
 import type { Primitive, Vec3 } from '../types';
-import { bendCtrl, qRotate, sub as vsub } from '../vec';
+import { bendCtrl, qRotate, qMul, type Quat, sub as vsub } from '../vec';
 import { chunkExtent, tornEndRadius } from '../extent';
 import { createFallbackHandVolumeTexture } from './hand-volume';
 import {
@@ -2618,7 +2618,7 @@ export interface ChunkGpuView {
   records: CrowdRecords;
   instCfg: ReturnType<typeof uniform>;
   /** Reuses this mesh/render-object slot for a newly spawned chunk. */
-  reset(chunk: Chunk, prims: Primitive[], tornAt?: Vec3[], bones?: Primitive[]): void;
+  reset(chunk: Chunk, prims: Primitive[], tornAt?: Vec3[], bones?: Primitive[], template?: MarchUniforms): void;
   update(chunk: Chunk): void;
   /** Bone tubes: flip the packBones layout (pack.ts PackOpts.packBones).
    *  Re-packs immediately from the last reset() args. */
@@ -2659,6 +2659,7 @@ export interface ChunkGpuBakeData {
   extent: number;
   quat: import('../gib-chunks').Chunk['quat'];
   look: import('./baked-chunks').ChunkBakeData['look'];
+  surface: NonNullable<import('./baked-chunks').ChunkBakeData['surface']>;
   gore: number;
 }
 
@@ -2783,6 +2784,9 @@ export function createChunkGpuView(
   let tornRadii: number[] = [];
   let packed!: ReturnType<typeof packBody>;
   let proxySize = 1;
+  let faceCentreLocal: Vec3 = [0, 0, 0];
+  let faceRestQuat: Quat = [0, 0, 0, 1];
+  let faceRestAxes: Vec3 = [1, 1, 1];
 
   function copyTemplateLook() {
     u.faceTex.value = template.faceTex.value;
@@ -2921,7 +2925,11 @@ export function createChunkGpuView(
       u.woundCfg.value.x = 0;
     }
 
-    if (u.faceCfg.value.x > 0.5) u.headCentre.value.set(c.pos[0], c.pos[1], c.pos[2]);
+    if (u.faceCfg.value.x > 0.5) {
+      u.headCentre.value.set(...chunkPoint(c, faceCentreLocal, sx, sy, sz));
+      u.headQuat.value.set(...qMul(c.quat, faceRestQuat));
+      u.headAxes.value.set(faceRestAxes[0] * sx, faceRestAxes[1] * sy, faceRestAxes[2] * sz);
+    }
 
     // Noise anchor: the chunk's gore mottle rides the CHUNK, not the world.
     // Overwrites the body root shift the template copy brought over — a
@@ -2936,8 +2944,9 @@ export function createChunkGpuView(
   }
 
   function reset(
-    c: Chunk, nextPrims: Primitive[], nextTornAt?: Vec3[], nextBones?: Primitive[],
+    c: Chunk, nextPrims: Primitive[], nextTornAt?: Vec3[], nextBones?: Primitive[], nextTemplate?: MarchUniforms,
   ) {
+    if (nextTemplate) template = nextTemplate;
     lastReset = { c, prims: nextPrims, tornAt: nextTornAt, bones: nextBones };
     copyTemplateLook();
 
@@ -3006,9 +3015,12 @@ export function createChunkGpuView(
     // released skeleton groups) is not torn meat; the mask would paint bare
     // bone red and the puddle's pale bits would read as more goo.
     u.lodCfg.value.w = nextPrims.length > 0 ? 1 : 0;
-    u.faceCfg.value.x = c.limb === 'head' ? 1 : 0;
-    u.headCentre.value.set(c.pos[0], c.pos[1], c.pos[2]);
-    u.headAxes.value.set(extent, extent, extent);
+    // Preserve the source projection/mode; a spherical extent is not the
+    // skull's authored projection frame. The frame tumbles with its piece.
+    u.faceCfg.value.x = c.limb === 'head' && nextPrims.length > 0 ? template.faceCfg.value.x : 0;
+    faceCentreLocal = vsub(template.headCentre.value.toArray() as Vec3, c.pos);
+    faceRestQuat = template.headQuat.value.toArray() as Quat;
+    faceRestAxes = template.headAxes.value.toArray() as Vec3;
     proxySize = extent * 2 * 1.4 + packed.maxBlendK * 4 + 0.05;
 
     const { sx, sy, sz } = apply(c);
@@ -3061,7 +3073,8 @@ export function createChunkGpuView(
       const col = (u2: { value: THREE.Color }): Vec3 =>
         [u2.value.r, u2.value.g, u2.value.b];
       return {
-        flesh: local.filter(p => p.op !== 'sub').map(xf),
+        // Keep the cap carves: dropping them turns cut meat back into rounded limbs.
+        flesh: local.map(xf),
         bones: localBones.map(xf),
         torn: tornLocals.map((t, i) => ({
           at: chunkPoint(c, t, sx, sy, sz),
@@ -3088,6 +3101,8 @@ export function createChunkGpuView(
           organAmp: u.organAmp.value,
           goreStrength: u.lodCfg.value.w,
         },
+        surface: { legacyGamma: u.lodCfg.value.y, wetness: u.surfCfg2.value.x,
+          roughness: u.surfCfg.value.y, specIntensity: u.surfCfg.value.x, noiseAmp: u.marchCfg.value.z, fresnel: u.surfCfg.value.z },
         gore: u.lodCfg.value.w,
       };
     },

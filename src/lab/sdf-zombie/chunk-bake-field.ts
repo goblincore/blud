@@ -294,6 +294,10 @@ export function bakeChunkAlbedo(
     const gore = Math.min(1, mottle * 0.55 + wm * 0.65) * look.goreStrength;
     const goreTarget = mix3(look.deepColor, [look.deepColor[0] * 0.55, look.deepColor[1] * 0.55, look.deepColor[2] * 0.55], mottle);
     albedo = mix3(albedo, goreTarget, gore * 0.85);
+    // Broad dark clots on torn meat, including capped blast pieces whose
+    // torn-end list is intentionally empty. Same mask as MARCH_BODY.
+    const stain = smoothstep(0.40, 0.68, mottle) * look.goreStrength;
+    albedo = mix3(albedo, [look.deepColor[0] * 0.22, look.deepColor[1] * 0.22, look.deepColor[2] * 0.22], stain * 0.85);
   }
 
   return [albedo[0], albedo[1], albedo[2], wm];

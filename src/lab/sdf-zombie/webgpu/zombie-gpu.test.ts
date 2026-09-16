@@ -105,6 +105,7 @@ describe('shared gib chunk material', () => {
   it('reconfigures a bounded mesh slot without allocating a new render object', () => {
     const shared = createSharedChunkGpuMaterial();
     const template = createZombieGpuView(body, {});
+    template.uniforms.faceCfg.value.x = 1;
     const armPrims = body.prims.filter(p => p.limb === 'armL').slice(0, 2);
     const headPrims = body.prims.filter(p => p.limb === 'head').slice(0, 4);
     const arm = makeChunk('armL', [0.4, 1, -0.2], [1, 2, 0], 0.1, [0, 0, 1]);
