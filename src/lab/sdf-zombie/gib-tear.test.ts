@@ -203,8 +203,11 @@ describe('rupturePosed', () => {
   it('the skeleton lags the flesh far enough to be exposed', () => {
     // Task-2 tuning: 0.15 rather than 0.3. The cage must stay near the body's
     // own pose while the chest leaves, or there is no gap for it to sit in.
+    // Measured with the uniform root recoil removed — recoil translates every
+    // region equally and so says nothing about the RELATIVE lag.
     expect(TEAR_TUNING.boneLag).toBeLessThan(0.25);
-    const { offsets } = rupturePosed(posed, plan, tearAt(TEAR_TUNING.sec));
+    const noRecoil = { ...TEAR_TUNING, recoilM: 0 };
+    const { offsets } = rupturePosed(posed, plan, tearAt(TEAR_TUNING.sec), noRecoil);
     const flesh = offsets[plan.pieces.findIndex(p => p.part === 'torso.chest')]!;
     const cage = offsets[plan.pieces.findIndex(p => p.part === 'bone.cage')]!;
     expect(len(cage)).toBeLessThan(len(flesh) * 0.5);
@@ -238,19 +241,23 @@ describe('rupturePosed', () => {
     }
   });
 
-  it('peels the ribcage-bearing chest band along the body axis', () => {
-    // Task 3: the chest band lifts along the plan's own cranial axis, which is
-    // what opens a real gap over the cage independent of where the bundle
-    // landed. The abdominal band gets none of it.
-    expect(TEAR_TUNING.chestPeelM).toBeGreaterThan(0.05);
+  it('does NOT carry a rigid cranial chest peel any more (owner-rejected)', () => {
+    // Owner report 2026-09-16: the chest band's independent 0.3 m upward peel
+    // rose into the head and read as a swollen head. It is gone: the field is
+    // removed entirely, so no URL/param can silently restore it, and the chest
+    // and abdomen differ only by the blast push and their own seam.
+    expect('chestPeelM' in TEAR_TUNING).toBe(false);
     const { offsets } = rupturePosed(posed, plan, tearAt(TEAR_TUNING.sec));
     const chest = plan.pieces.findIndex(p => p.part === 'torso.chest');
     const abdomen = plan.pieces.findIndex(p => p.part === 'torso.abdomen');
-    expect(plan.up).toBeDefined();
+    expect(chest).toBeGreaterThanOrEqual(0);
+    expect(abdomen).toBeGreaterThanOrEqual(0);
     const up = plan.up!;
     const along = (o: Vec3) => o[0] * up[0] + o[1] * up[1] + o[2] * up[2];
-    // The chest is lifted at least the peel beyond the abdomen's own travel.
-    expect(along(offsets[chest]!) - along(offsets[abdomen]!)).toBeGreaterThan(TEAR_TUNING.chestPeelM * 0.7);
+    // The only cranial separation left is the seam (2 x seamM) plus the blast
+    // push difference — well under the rejected 0.3 m rigid lift.
+    expect(Math.abs(along(offsets[chest]!) - along(offsets[abdomen]!)))
+      .toBeLessThan(TEAR_TUNING.seamM * 2 + 0.06);
   });
 
   it('never NaNs, even with the blast exactly on a prim', () => {
@@ -343,18 +350,19 @@ describe('ruptureSpins (blast-driven rotation)', () => {
     }
   });
 
-  it('rotates rigidly and deterministically as the window advances', () => {
+  it('rotates the SLOUGHED geometry rigidly as the window advances', () => {
     for (const age of [0.03, 0.08, 0.15, 0.2]) {
       const a = rupturePosed(posed, plan, tearAt(age));
       const b = rupturePosed(posed, plan, tearAt(age));
       expect(JSON.stringify(a)).toBe(JSON.stringify(b));
-      // Rigid: a prim's distance to its own region pivot is preserved (compare
-      // against the DISPLACED pivot, since the region is also translated).
+      // Rigid: the SLOUGHED prim's distance to its own region pivot is
+      // preserved by the region rotation. (The slough itself is non-rigid by
+      // design, so the comparison base is `deformedPrims`, not the clean pose.)
       for (let r = 0; r < plan.pieces.length; r++) {
         const piece = plan.pieces[r]!;
         const i = piece.srcPrims?.[0];
         if (i === undefined) continue;
-        const before = len(sub(posed.prims[i]!.a, piece.origin));
+        const before = len(sub(a.deformedPrims[i]!.a, piece.origin));
         const pivot = add(piece.origin, a.offsets[r]!);
         const after = len(sub(a.body.prims[i]!.a, pivot));
         expect(after).toBeCloseTo(before, 4);
@@ -387,6 +395,185 @@ describe('ruptureSpins (blast-driven rotation)', () => {
     const end = rupturePosed(severed, sPlan, tearAt(TEAR_TUNING.sec));
     expect(end.quats.length).toBe(sPlan.pieces.length);
     for (const w of end.angVels) expect(Number.isFinite(len(w))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE NON-RIGID SLOUGH (2026-09-16, replacing the owner-rejected chest peel).
+// The owner's correction: the previous pass only TRANSLATED rigid regions (and
+// lifted the chest up into the head). These pin the shape change: flesh
+// endpoints deform individually, stretch and thin, the blast-facing side leads,
+// the head keeps its face and the skeleton stays put so the ribs are exposed.
+// ---------------------------------------------------------------------------
+describe('non-rigid slough', () => {
+  /** A blast to the body's SIDE, so the outward direction is not degenerate. */
+  const sideBlast = (age: number, falloff = 1): TearState => ({
+    at: [torso.center[0] + 0.4, torso.center[1], torso.center[2]], falloff, age,
+  });
+  const chestIdx = plan.pieces.findIndex(p => p.part === 'torso.chest');
+  const headIdx = plan.pieces.findIndex(p => p.part === 'head');
+  const cageIdx = plan.pieces.findIndex(p => p.part === 'bone.cage');
+
+  it('is identity at onset and on a zero falloff', () => {
+    const at0 = rupturePosed(posed, plan, sideBlast(0));
+    expect(JSON.stringify(at0.deformedPrims)).toBe(JSON.stringify(posed.prims));
+    const none = rupturePosed(posed, plan, sideBlast(TEAR_TUNING.sec, 0));
+    expect(JSON.stringify(none.deformedPrims)).toBe(JSON.stringify(posed.prims));
+  });
+
+  it('deforms FLESH ENDPOINTS individually — shapes change, not just places', () => {
+    const frame = rupturePosed(posed, plan, sideBlast(TEAR_TUNING.sec));
+    let changed = 0, maxStretch = 1, maxThin = 0;
+    for (let r = 0; r < plan.pieces.length; r++) {
+      if (plan.pieces[r]!.kind === 'bone') continue;
+      for (const i of plan.pieces[r]!.srcPrims ?? []) {
+        const p0 = posed.prims[i]!;
+        const p1 = frame.deformedPrims[i]!;
+        const rest = len(sub(p0.b, p0.a));
+        const now = len(sub(p1.b, p1.a));
+        // A point blob (the torso's spheres) is drawn into a strand, so its
+        // "stretch" is the NEW length it gains rather than a ratio.
+        if (rest < 1e-4) {
+          if (now > 0.01) {
+            changed++;
+            maxThin = Math.max(maxThin, 1 - p1.radius / (p0.radius || 1));
+          }
+          continue;
+        }
+        const ratio = now / rest;
+        if (ratio > 1.02) {
+          changed++;
+          maxThin = Math.max(maxThin, 1 - p1.radius / (p0.radius || 1));
+        }
+        maxStretch = Math.max(maxStretch, ratio);
+      }
+    }
+    // Real flesh is stretched by the pull, not merely translated.
+    expect(changed).toBeGreaterThan(8);
+    expect(maxStretch).toBeGreaterThan(1.03);
+    // ...bounded: no prim is drawn out to absurdity.
+    expect(maxStretch).toBeLessThan(3);
+    // and a stretched prim THINS rather than keeping its radius.
+    expect(maxThin).toBeGreaterThan(0.01);
+    expect(maxThin).toBeLessThanOrEqual(TEAR_TUNING.sloughThinK + 1e-9);
+  });
+
+  it('sloughs flesh OUTWARD from the blast and DOWN, near side leading', () => {
+    const frame = rupturePosed(posed, plan, sideBlast(TEAR_TUNING.sec));
+    let outward = 0, down = 0, checked = 0;
+    for (const i of plan.pieces[chestIdx]!.srcPrims ?? []) {
+      const p0 = posed.prims[i]!;
+      const p1 = frame.deformedPrims[i]!;
+      for (const [e0, e1] of [[p0.a, p1.a], [p0.b, p1.b]] as const) {
+        const dv = sub(e1, e0);
+        if (len(dv) < 1e-4) continue;
+        checked++;
+        const off: Vec3 = [e0[0] - torso.center[0] - 0.4, 0, e0[2] - torso.center[2]];
+        if (dv[0] * off[0] + dv[2] * off[2] > 0) outward++;
+        if (dv[1] < 0) down++;
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
+    expect(outward / checked).toBeGreaterThan(0.8);
+    expect(down / checked).toBeGreaterThan(0.8);
+
+    // The blast-facing ENDPOINT leads: within the chest, the endpoint nearer
+    // the epicentre is displaced MORE than the farther one.
+    const at = sideBlast(0).at;
+    let nearDisp = 0, farDisp = 0, nearD = Infinity, farD = -Infinity;
+    for (const i of plan.pieces[chestIdx]!.srcPrims ?? []) {
+      const p0 = posed.prims[i]!;
+      const p1 = frame.deformedPrims[i]!;
+      for (const end of ['a', 'b'] as const) {
+        const d = len(sub(p0[end], at));
+        const disp = len(sub(p1[end], p0[end]));
+        if (d < nearD) { nearD = d; nearDisp = disp; }
+        if (d > farD) { farD = d; farDisp = disp; }
+      }
+    }
+    expect(nearDisp).toBeGreaterThan(farDisp);
+  });
+
+  it('keeps the HEAD coherent — the face is not sloughed into the blast', () => {
+    const frame = rupturePosed(posed, plan, sideBlast(TEAR_TUNING.sec));
+    let maxMove = 0, maxStretch = 1;
+    for (const i of plan.pieces[headIdx]!.srcPrims ?? []) {
+      const p0 = posed.prims[i]!;
+      const p1 = frame.deformedPrims[i]!;
+      maxMove = Math.max(maxMove, len(sub(p1.a, p0.a)), len(sub(p1.b, p0.b)));
+      const rest = len(sub(p0.b, p0.a));
+      if (rest > 1e-4) maxStretch = Math.max(maxStretch, len(sub(p1.b, p1.a)) / rest);
+    }
+    // The skull translates a few centimetres at most and keeps its shape: a
+    // recognizable head, not a pulled taffy blob.
+    expect(maxMove).toBeLessThan(0.05);
+    expect(maxStretch).toBeLessThan(1.05);
+    // The head is still the head region, and still drawn where the plan put it.
+    expect(frame.body.prims.length).toBe(posed.prims.length);
+  });
+
+  it('the skeleton barely moves while the flesh sloughs off it', () => {
+    expect(TEAR_TUNING.sloughBoneKeep).toBeLessThan(0.2);
+    const frame = rupturePosed(posed, plan, sideBlast(TEAR_TUNING.sec));
+    const cage = plan.pieces[cageIdx]!;
+    let boneMove = 0;
+    for (const i of cage.srcBones ?? []) {
+      const b0 = posed.bonePrims![i]!;
+      const b1 = frame.deformedBones[i]!;
+      boneMove = Math.max(boneMove, len(sub(b1.a, b0.a)));
+    }
+    let fleshMove = 0;
+    for (const i of plan.pieces[chestIdx]!.srcPrims ?? []) {
+      fleshMove = Math.max(fleshMove, len(sub(frame.deformedPrims[i]!.a, posed.prims[i]!.a)));
+    }
+    expect(boneMove).toBeLessThan(0.03);
+    expect(fleshMove).toBeGreaterThan(0.08);
+    // The exposed gap is the flesh's own travel: that is the rib reveal.
+    expect(fleshMove).toBeGreaterThan(boneMove * 4);
+  });
+
+  it('makes the silhouette change shape rather than slide as one rigid region', () => {
+    const frame = rupturePosed(posed, plan, sideBlast(TEAR_TUNING.sec));
+    // A rigid translation preserves every prim's own span (b - a). The slough
+    // changes it: capsules stretch and point blobs are drawn into strands. The
+    // change is not uniform either — the ribcage-bearing chest band is weighted
+    // harder than the abdomen/pelvis, which is what opens the cage.
+    const spanOf = (prims: readonly Primitive[], i: number) =>
+      len(sub(prims[i]!.b, prims[i]!.a));
+    const srcOf = (part: string) => plan.pieces[plan.pieces.findIndex(p => p.part === part)]!.srcPrims ?? [];
+    let changed = 0;
+    for (let r = 0; r < plan.pieces.length; r++) {
+      if (plan.pieces[r]!.kind === 'bone') continue;
+      for (const i of plan.pieces[r]!.srcPrims ?? []) {
+        if (Math.abs(spanOf(frame.deformedPrims, i) - spanOf(posed.prims, i)) > 0.01) changed++;
+      }
+    }
+    expect(changed).toBeGreaterThan(6);
+    // Fewer, but still real, shape change within the ribcage band itself.
+    const chestChanged = srcOf('torso.chest')
+      .filter(i => Math.abs(spanOf(frame.deformedPrims, i) - spanOf(posed.prims, i)) > 0.01).length;
+    expect(chestChanged).toBeGreaterThan(0);
+    // The band weighting is observable: the chest's mean shape change is larger
+    // than the abdomen's (which is counter-weighted down).
+    const meanChange = (part: string) => {
+      const src = srcOf(part);
+      if (src.length === 0) return 0;
+      return src.reduce((s, i) => s + Math.abs(spanOf(frame.deformedPrims, i) - spanOf(posed.prims, i)), 0) / src.length;
+    };
+    expect(meanChange('torso.chest')).toBeGreaterThan(meanChange('torso.abdomen'));
+  });
+
+  it('never NaNs on a degenerate blast and is deterministic', () => {
+    const onAPrim = posed.prims.find(p => p.limb === 'torso')!;
+    const frame = rupturePosed(posed, plan, {
+      at: onAPrim.a, falloff: 1, age: TEAR_TUNING.sec,
+    });
+    for (const p of [...frame.deformedPrims, ...frame.deformedBones]) {
+      for (const v of [...p.a, ...p.b, p.radius]) expect(Number.isFinite(v)).toBe(true);
+    }
+    const again = rupturePosed(posed, plan, sideBlast(TEAR_TUNING.sec));
+    expect(JSON.stringify(frame.deformedPrims)).toBe(JSON.stringify(frame.deformedPrims));
+    expect(JSON.stringify(again)).toBe(JSON.stringify(rupturePosed(posed, plan, sideBlast(TEAR_TUNING.sec))));
   });
 });
 

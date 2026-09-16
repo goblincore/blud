@@ -150,8 +150,9 @@ import {
   FLIGHT_TUNING, type FlightState,
 } from '../dynamite-flight';
 import { gibAll, gibAllPieces, type ChunkGroup } from '../sever';
-import { displaceGibPieces, gibTierPlan, type GibBoneRelease, type GibPiece, type GibPlan } from '../gib-parts';
+import { displaceGibPieces, gibTierPlan, retargetGibPieces, type GibBoneRelease, type GibPiece, type GibPlan } from '../gib-parts';
 import { TEAR_TUNING } from '../gib-tear';
+import { blastRefractionBirthRadiusM, blastRefractionStrength } from '../blast-refraction';
 import { createBurstLayer, createStickProp, type BurstLayer, type StickProp } from './fpv-view';
 import { createExplosionVfx, type ExplosionVfx } from './explosion-vfx';
 import {
@@ -788,6 +789,10 @@ async function main() {
   // The draw chain, exactly as the bench stands it up.
   // -----------------------------------------------------------------------
   const postAa = createPostAa(handle.renderer);
+  // The blast refraction reprojects its live bands from WORLD positions every
+  // frame, so it needs the camera's current view-projection. Handing it the
+  // persistent camera once is enough — the matrices update in place.
+  postAa.setBlastDistortCamera(camera);
   // VHS ships ON at 'blud' (owner, 2026-09-09) — the preset the owner swept in
   // vhs-panel.ts, replacing the club-mutant 'soft' this shipped at first.
   // ?vhs=blud|soft|balanced|chaotic picks another; ?vhs=off disables it, which is
@@ -5244,13 +5249,25 @@ async function main() {
   // the A/B for whether the window reads. Contract range 0.15–0.25 s; 0.2 is
   // the agreed start.
   let gibTearSec = parseFloatParam(DYN_PARAMS.get('gibtear'), { min: 0, max: 0.4 }) ?? 0.2;
+  /**
+   * NON-RIGID SLOUGH multiplier (`?tearslough=`, 0..3, default 1). The rupture
+   * deforms flesh endpoints rather than sliding rigid regions; this scales the
+   * outward/downward pull and the within-prim stretch together. `?tearslough=0`
+   * is the honest A/B control: the old rigid-region motion with the head
+   * attachment intact. There is no way to restore the rejected 0.3 m cranial
+   * chest peel — that code path is gone.
+   */
+  const sloughScale = parseFloatParam(DYN_PARAMS.get('tearslough'), { min: 0, max: 3 }) ?? 1;
   /** The rupture window's SHAPE, page-level so the panel owns it and every
    *  actor is pushed the same values (ZombieActor keeps its own copy, which is
    *  what makes a capture reproducible per body). `amplitudeM`/`jiggleAmp` are
    *  the panel knobs; the rest are the coherent defaults for a body that
    *  separates into real regions (see gib-tear.ts's TearTuning). */
   const tearShape = {
-    amplitudeM: 0.06, jiggleAmp: 0.35, seamM: 0.09, boneLag: 0.15, headDamp: 0.3,
+    amplitudeM: 0.045, jiggleAmp: 0.35, seamM: 0.09, boneLag: 0.15, headDamp: 0.3,
+    sloughOutM: TEAR_TUNING.sloughOutM * sloughScale,
+    sloughSagM: TEAR_TUNING.sloughSagM * sloughScale,
+    sloughStretchM: TEAR_TUNING.sloughStretchM * sloughScale,
     // HEAD ATTACHMENT / ROOT RECOIL (2026-09-16 playtest follow-up task 4). The
     // defaults come from TEAR_TUNING so the page and the module cannot drift;
     // `?tearhead=0&tearneck=0&tearrecoil=0` restores the OLD independent-damped
@@ -6582,25 +6599,23 @@ async function main() {
     igniteExplosionLight(at);
     const burst = scaleBurstVisual(fx.burst);
     // BLAST REFRACTION (experiment, default OFF): feed the bounded post-aa ring
-    // the blast's projected screen position and apparent radius. Projecting the
-    // centre AND a point one AOE-radius above it measures the on-screen size
-    // rather than guessing a constant; `project`'s z > 1 flags a blast behind the
-    // camera, and the feed's uv gate drops it (a blast that cannot be seen must
-    // not warp the screen). Sim-time aging happens in tick, so this is the only
-    // per-blast cost: two projections and one ring push.
+    // the blast's WORLD position, the shell's birth radius and its peak screen
+    // offset. The ring reprojects every frame from its world position and a
+    // growing world radius (see blast-refraction.ts and post-aa's render), so a
+    // camera that moves during the ~0.55 s life keeps the band on the blast.
+    //
+    // THE DEFECT THIS FIXES (owner, 2026-09-16: "blastdistort=1 is
+    // indistinguishable from off"): the old feed used 0.3 x burst.heightM =
+    // 0.25 m, which is INSIDE the ~0.83 m opaque fireball, so the band warped
+    // only pixels the fireball covered; and its life was 0.3 s with a squared
+    // decay, so it was gone before the fireball cleared. The birth radius is now
+    // the fireball's own rendered radius and the band expands past it.
     if (postAa.blastDistort) {
-      const c = new THREE.Vector3(at[0], at[1], at[2]).project(camera);
-      // The SHOCKWAVE SHELL is sized from the FIREBALL's visual half-height, not
-      // the 4.7 m damage radius: the AOE radius projects larger than the screen
-      // at any playable standoff, which turned the experiment into a full-frame
-      // lens in the first pass. 0.3 of the burst's visible half-height tracks the
-      // thing the player can actually see, at either distance.
-      const shellM = Math.max(0.2, burst.heightM * 0.3);
-      const e = new THREE.Vector3(at[0], at[1] + shellM, at[2]).project(camera);
-      const radiusUv = Math.max(0.05,
-        Math.min(0.28, 0.5 * Math.hypot(e.x - c.x, e.y - c.y)));
-      const strength = Math.min(0.05, 0.015 + 0.008 * burst.heightM) * blastDistortStrength;
-      postAa.pushBlastDistort(c.x * 0.5 + 0.5, c.y * 0.5 + 0.5, radiusUv, strength);
+      postAa.pushBlastDistort(
+        [at[0], at[1], at[2]],
+        blastRefractionBirthRadiusM(burst.heightM),
+        blastRefractionStrength(burst.heightM) * blastDistortStrength,
+      );
     }
     if (explosionVfx) explosionVfx.spawn(burst);
     else if (burstLayer) burstLayer.spawn(burst);
@@ -6687,9 +6702,12 @@ async function main() {
       if (i >= 0) pendingGibs.splice(i, 1);
       const allowance = gibAllowance(remaining, left);
       // THE HAND-OFF: the plan's own regions at the offsets the body was last
-      // DRAWN with. `stepTear` above uploaded exactly this frame (age >= sec,
-      // progress 1), so the region on screen and the spawned piece are the same
-      // prims at the same transform — no second partition, no snap.
+      // DRAWN with, RETARGETED onto the SLOUGHED prims (`deformedPrims`/
+      // `deformedBones`). Without the retarget the chunks would spawn their
+      // clean prims and the body would snap back to the intact pose on the
+      // release frame; with it, the spawned flesh is the geometry that was on
+      // screen. `stepTear` above uploaded exactly this frame (age >= sec,
+      // progress 1), so there is no second partition and no snap.
       const frame = q.actor.tearFrame();
       // LOCKED TO THE SCHEDULE-TIME TIER (task 3): the ladder does not re-run,
       // so a tight pool cannot preview one shape and spawn another. `q.reserve`
@@ -6697,7 +6715,9 @@ async function main() {
       const locked = gibMode !== 'pieces';
       const planned = {
         pieces: frame
-          ? displaceGibPieces(q.plan.pieces, frame.offsets, frame.quats, frame.angVels)
+          ? displaceGibPieces(
+              retargetGibPieces(q.plan.pieces, frame.deformedPrims, frame.deformedBones),
+              frame.offsets, frame.quats, frame.angVels)
           : q.plan.pieces,
         body: frame?.body ?? q.actor.posed(),
         tier: q.tier,
@@ -10575,6 +10595,9 @@ function performBenchAction(a: BenchAction): void {
     },
     get blastDistortStrength() { return postAa.blastDistortStrength; },
     get blastDistortCount() { return postAa.blastDistortCount; },
+    /** The RESOLVED blast-refraction slots the last blit pushed — the seam a
+     *  capture rig reads to prove the band is centred on the blast (task-2). */
+    blastDistortInfo: () => postAa.blastDistortSlots,
     /** Per-room probe grids (P3 step 2): weight 0 = bit-identical P1; gain -1
      *  = each room's matched level, else an absolute multiplier. */
     /** Flashlight bounce spot (P4 step 1): 0 = off and bit-identical. */
@@ -13672,6 +13695,16 @@ function performBenchAction(a: BenchAction): void {
       bonesVisible = !!on;
       for (const c of liveChunks) if (c.kind === 'bone') c.view.object.visible = bonesVisible;
       return bonesVisible;
+    },
+    /** HIDE THE VIEW MODEL (the held shotgun/arm rig parented to the camera).
+     *  A capture that must see the BODY's silhouette has the player's own arm
+     *  across the right half of the frame, which covers the very flesh the
+     *  rupture review is about. The rig lives under the camera, NOT the scene,
+     *  so `setRegisteredObjectsVisible` cannot reach it. Capture-only, and off
+     *  by default. */
+    setViewModelVisible: (on: boolean) => {
+      viewModelAnchor.visible = !!on;
+      return viewModelAnchor.visible;
     },
     setChunksVisible: (on: boolean) => {
       chunksHidden = !on;

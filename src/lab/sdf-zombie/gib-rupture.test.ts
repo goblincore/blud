@@ -19,7 +19,7 @@ import { compileBlob } from './blob-compile';
 import { parseBlob } from './blob-parse';
 import { buildBody } from './build-body';
 import { applyRig, bindRig } from './rig-bind';
-import { gibPlan, displaceGibPieces } from './gib-parts';
+import { gibPlan, displaceGibPieces, retargetGibPieces } from './gib-parts';
 import { rupturePosed, rotatePrimAbout, TEAR_TUNING, type TearState } from './gib-tear';
 import { sdBody } from './validate';
 import { createZombieActor } from './webgpu/game-actor';
@@ -98,15 +98,15 @@ describe('rupture lifecycle (actor)', () => {
     a.stepTear(TEAR_TUNING.sec);
     expect(a.tearing()).toBe(false);
     const frame = a.tearFrame()!;
-    const clean = a.posed();
     const drawn = frame.body;
-    // Every body prim is exactly its region's rigid transform: rotate about the
-    // region origin, then translate by the region offset. No per-prim smear.
+    // Every body prim is the NON-RIGID SLOUGH followed by its region's rigid
+    // transform: the slough deforms the endpoints, then the region rotates about
+    // its origin and translates. No per-prim rigid translation of the clean pose.
     plan.pieces.forEach((piece, r) => {
       const q = frame.quats[r]!;
       const o = frame.offsets[r]!;
       for (const i of piece.srcPrims ?? []) {
-        const p0 = clean.prims[i]!;
+        const p0 = frame.deformedPrims[i]!;
         const p1 = drawn.prims[i]!;
         const expectA = add(o, add(piece.origin, qRotate(q, sub(p0.a, piece.origin))));
         const expectB = add(o, add(piece.origin, qRotate(q, sub(p0.b, piece.origin))));
@@ -114,11 +114,15 @@ describe('rupture lifecycle (actor)', () => {
         expect(len(sub(p1.b, expectB))).toBeLessThan(1e-9);
       }
     });
-    // THE CHUNK HAND-OFF. The piece prims are TRANSLATED but not rotated, the
-    // chunk position is the displaced region origin, and the chunk quaternion is
-    // the displayed one. Applying that chunk transform (chunkPoint's map)
-    // reproduces the drawn world prim exactly — the rotation is not baked twice.
-    const pieces = displaceGibPieces(plan.pieces, frame.offsets, frame.quats, frame.angVels);
+    // THE CHUNK HAND-OFF. The piece prims are the SAME sloughed geometry,
+    // translated (not rotated); the chunk position is the displaced region
+    // origin and the chunk quaternion is the displayed one. Applying that chunk
+    // transform (chunkPoint's map) reproduces the drawn world prim exactly — the
+    // rotation is not baked twice and there is no snap back to the clean pose.
+    const pieces = displaceGibPieces(
+      retargetGibPieces(plan.pieces, frame.deformedPrims, frame.deformedBones),
+      frame.offsets, frame.quats, frame.angVels,
+    );
     let handoffChecked = 0;
     for (let r = 0; r < plan.pieces.length; r++) {
       const piece = pieces[r]!;
@@ -128,12 +132,17 @@ describe('rupture lifecycle (actor)', () => {
       const q = frame.quats[r]!;
       const o = frame.offsets[r]!;
       const pivot = cleanPiece.origin;
+      const src = cleanPiece.srcPrims?.[0];
+      if (src === undefined) continue;
+      const sloughed = frame.deformedPrims[src]!;
       // The CHUNK convention: prims translated (not rotated), chunk at the
       // displaced pivot with the displayed quat. `chunkPoint`'s map must
-      // reproduce the rupture's own rigid transform of the clean piece prim.
+      // reproduce the rupture's own slough + rigid transform.
       const chunkWorld = add(piece.origin, qRotate(q, sub(piece.prims[0]!.a, piece.origin)));
-      const ruptureWorld = add(o, add(pivot, qRotate(q, sub(cleanPiece.prims[0]!.a, pivot))));
+      const ruptureWorld = add(o, add(pivot, qRotate(q, sub(sloughed.a, pivot))));
       expect(len(sub(chunkWorld, ruptureWorld))).toBeLessThan(1e-9);
+      // The slough is real: the released geometry is NOT the clean pose.
+      expect(len(sub(piece.prims[0]!.a, cleanPiece.prims[0]!.a))).toBeGreaterThan(0);
       // ...and the angular velocity handed over is the derivative the region was
       // already turning at (non-zero for a hard blast).
       expect(piece.spinAngVel).toBeDefined();
@@ -172,50 +181,69 @@ describe('rupture hand-off continuity', () => {
   it('the union of the released pieces still covers the drawn body', () => {
     const plan = gibPlan(posed);
     const tear: TearState = { at: [torso.center[0], torso.center[1], torso.center[2] + 0.4], falloff: 1, age: TEAR_TUNING.sec };
-    const frame = rupturePosed(posed, plan, tear);
-    // The pieces as the CHUNK RENDERER will draw them: prims translated to the
-    // release position, then the region spin applied about the displaced region
-    // origin. Building them without the spin would compare the rotated drawn
-    // body against upright pieces — the exact defect this task removes.
-    const pieces = displaceGibPieces(plan.pieces, frame.offsets, frame.quats, frame.angVels)
-      .filter(p => p.prims.length > 0);
-    const bodies = pieces.map(p => {
-      const prims = p.spinQuat ? p.prims.map(q => rotatePrimAbout(q, p.spinQuat!, p.origin)) : p.prims;
-      return {
-        prims,
-        clusters: [{ id: 0, limb: p.limb, start: 0, count: prims.length, center: p.origin, radius: 0.6, alive: true }],
-        bonePrims: [],
-      };
-    });
-    const min = [1e9, 1e9, 1e9], max = [-1e9, -1e9, -1e9];
-    // The box is the SOLID body: a carve cap's centre sits a metre off the cut
-    // on purpose, so including `sub` prims would sample a box metres wide and
-    // miss the surface entirely.
-    for (const p of frame.body.prims) {
-      if (p.op === 'sub') continue;
-      for (const e of [p.a, p.b]) for (let i = 0; i < 3; i++) {
-        min[i] = Math.min(min[i]!, e[i]!); max[i] = Math.max(max[i]!, e[i]!);
+    /** Missing fraction of the drawn solid, sampled on a grid, for a tuning. */
+    const missRate = (tuning: typeof TEAR_TUNING): { miss: number; total: number } => {
+      const frame = rupturePosed(posed, plan, tear, tuning);
+      // The pieces as the CHUNK RENDERER will draw them: the SLOUGHED prims
+      // translated to the release position, then the region spin applied about
+      // the displaced region origin.
+      const pieces = displaceGibPieces(
+        retargetGibPieces(plan.pieces, frame.deformedPrims, frame.deformedBones),
+        frame.offsets, frame.quats, frame.angVels,
+      ).filter(p => p.prims.length + p.bones.length > 0);
+      const bodies = pieces.map(p => {
+        // BOTH the flesh and the bone/organ prims. The slough holds the skeleton
+        // near the pose while the flesh leaves, so the drawn body's interior
+        // holds real bone volume; a piece set that dropped the bone pieces would
+        // report that exposed cage as "missing" flesh.
+        const solid = [...p.prims, ...p.bones];
+        const prims = p.spinQuat ? solid.map(q => rotatePrimAbout(q, p.spinQuat!, p.origin)) : solid;
+        return {
+          prims,
+          clusters: [{ id: 0, limb: p.limb, start: 0, count: prims.length, center: p.origin, radius: 0.6, alive: true }],
+          bonePrims: [],
+        };
+      });
+      const min = [1e9, 1e9, 1e9], max = [-1e9, -1e9, -1e9];
+      // The box is the SOLID body: a carve cap's centre sits a metre off the cut
+      // on purpose, so including `sub` prims would sample a box metres wide and
+      // miss the surface entirely.
+      for (const p of frame.body.prims) {
+        if (p.op === 'sub') continue;
+        for (const e of [p.a, p.b]) for (let i = 0; i < 3; i++) {
+          min[i] = Math.min(min[i]!, e[i]!); max[i] = Math.max(max[i]!, e[i]!);
+        }
       }
-    }
-    for (let i = 0; i < 3; i++) { min[i] = min[i]! - 0.05; max[i] = max[i]! + 0.05; }
-    const n = 40;
-    const step = [0, 1, 2].map(i => (max[i]! - min[i]!) / n);
-    let total = 0, missed = 0;
-    for (let i = 0; i <= n; i++) for (let j = 0; j <= n; j++) for (let k = 0; k <= n; k++) {
-      const q: Vec3 = [min[0]! + i * step[0]!, min[1]! + j * step[1]!, min[2]! + k * step[2]!];
-      if (sdBody(q, frame.body) > 0.002) continue;
-      total++;
-      let dU = Infinity;
-      for (const b of bodies) {
-        const d = sdBody(q, b);
-        if (d < dU) dU = d;
-        if (dU < -0.02) break;
+      for (let i = 0; i < 3; i++) { min[i] = min[i]! - 0.05; max[i] = max[i]! + 0.05; }
+      const n = 40;
+      const step = [0, 1, 2].map(i => (max[i]! - min[i]!) / n);
+      let total = 0, missed = 0;
+      for (let i = 0; i <= n; i++) for (let j = 0; j <= n; j++) for (let k = 0; k <= n; k++) {
+        const q: Vec3 = [min[0]! + i * step[0]!, min[1]! + j * step[1]!, min[2]! + k * step[2]!];
+        if (sdBody(q, frame.body) > 0.002) continue;
+        total++;
+        let dU = Infinity;
+        for (const b of bodies) {
+          const d = sdBody(q, b);
+          if (d < dU) dU = d;
+          if (dU < -0.02) break;
+        }
+        if (dU > 0.002) missed++;
       }
-      if (dU > 0.002) missed++;
-    }
-    expect(total).toBeGreaterThan(2000);
-    // Same order as the clean partition; the rupture adds no measurable loss.
-    expect(missed / total).toBeLessThan(0.1);
+      return { miss: total > 0 ? missed / total : 1, total };
+    };
+    // The residual is the EXISTING smooth-union partition residual (cluster
+    // seams, the smoothed cut fillet, and the smin bridge between regions). The
+    // slough stretches prims, which grows those bridges slightly, so the test
+    // calibrates against the RIGID-ONLY frame rather than a magic constant:
+    // the non-rigid geometry adds a few points, not a new hole.
+    const rigid = { ...TEAR_TUNING, sloughOutM: 0, sloughSagM: 0, sloughStretchM: 0 };
+    const rigidMiss = missRate(rigid);
+    const sloughMiss = missRate(TEAR_TUNING);
+    expect(sloughMiss.total).toBeGreaterThan(2000);
+    expect(rigidMiss.miss).toBeLessThan(0.1);
+    expect(sloughMiss.miss).toBeLessThan(rigidMiss.miss + 0.05);
+    expect(sloughMiss.miss).toBeLessThan(0.15);
   });
 });
 
@@ -227,7 +255,10 @@ describe('cap and face anchoring under the region spin (task 4)', () => {
       falloff: 1, age: TEAR_TUNING.sec,
     };
     const frame = rupturePosed(posed, plan, tear);
-    const pieces = displaceGibPieces(plan.pieces, frame.offsets, frame.quats, frame.angVels);
+    const pieces = displaceGibPieces(
+      retargetGibPieces(plan.pieces, frame.deformedPrims, frame.deformedBones),
+      frame.offsets, frame.quats, frame.angVels,
+    );
     let checked = 0;
     for (let r = 0; r < pieces.length; r++) {
       const piece = pieces[r]!;
