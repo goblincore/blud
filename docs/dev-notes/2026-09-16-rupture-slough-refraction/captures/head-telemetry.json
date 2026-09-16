@@ -1,0 +1,207 @@
+{
+  "view": "face",
+  "dist": 2.2,
+  "qs": "",
+  "vhs": "",
+  "targetId": 17,
+  "release": {
+    "headIdx": 13,
+    "tier": "parts",
+    "parts": [
+      "legR.lower",
+      "legL.lower",
+      "torso.pelvis",
+      "legR.upper",
+      "legL.upper",
+      "armR.lower",
+      "armL.lower",
+      "organ.gut",
+      "torso.abdomen",
+      "bone.cage",
+      "torso.chest",
+      "armR.upper",
+      "armL.upper",
+      "head"
+    ]
+  },
+  "flight": [
+    {
+      "label": "flight-12",
+      "file": "head-flight-12.png",
+      "centre": [
+        23.46648250284059,
+        1.853421832749276,
+        -7.340533304586108
+      ],
+      "live": 14,
+      "baked": 0
+    },
+    {
+      "label": "flight-13",
+      "file": "head-flight-13.png",
+      "centre": [
+        23.400043145859378,
+        2.016989981174643,
+        -7.368941667192962
+      ],
+      "live": 14,
+      "baked": 0
+    },
+    {
+      "label": "flight-14",
+      "file": "head-flight-14.png",
+      "centre": [
+        23.334398669345088,
+        2.16781011538336,
+        -7.397010152149587
+      ],
+      "live": 14,
+      "baked": 0
+    },
+    {
+      "label": "flight-15",
+      "file": "head-flight-15.png",
+      "centre": [
+        23.269539563347813,
+        2.306034752617515,
+        -7.424742825752191
+      ],
+      "live": 14,
+      "baked": 0
+    },
+    {
+      "label": "flight-16",
+      "file": "head-flight-16.png",
+      "centre": [
+        23.20545643169469,
+        2.4318145854029116,
+        -7.4521437056478135
+      ],
+      "live": 14,
+      "baked": 0
+    },
+    {
+      "label": "flight-17",
+      "file": "head-flight-17.png",
+      "centre": [
+        23.142139990628664,
+        2.5452985033799753,
+        -7.479216761416365
+      ],
+      "live": 14,
+      "baked": 0
+    },
+    {
+      "label": "flight-18",
+      "file": "head-flight-18.png",
+      "centre": [
+        23.079581067463554,
+        2.6466336148734726,
+        -7.505965915145701
+      ],
+      "live": 14,
+      "baked": 0
+    },
+    {
+      "label": "flight-19",
+      "file": "head-flight-19.png",
+      "centre": [
+        23.01777059925519,
+        2.735965268204173,
+        -7.53239504199982
+      ],
+      "live": 14,
+      "baked": 0
+    },
+    {
+      "label": "flight-20",
+      "file": "head-flight-20.png",
+      "centre": [
+        22.956699631488473,
+        2.8134370727455353,
+        -7.558507970780255
+      ],
+      "live": 14,
+      "baked": 0
+    },
+    {
+      "label": "flight-21",
+      "file": "head-flight-21.png",
+      "centre": [
+        22.896359316780114,
+        2.8791909197284764,
+        -7.584308484480762
+      ],
+      "live": 14,
+      "baked": 0
+    },
+    {
+      "label": "flight-22",
+      "file": "head-flight-22.png",
+      "centre": [
+        22.836740913596923,
+        2.9333670027972243,
+        -7.6098003208353555
+      ],
+      "live": 14,
+      "baked": 0
+    },
+    {
+      "label": "flight-23",
+      "file": "head-flight-23.png",
+      "centre": [
+        22.777835784989417,
+        2.9761038383192493,
+        -7.634987172859803
+      ],
+      "live": 14,
+      "baked": 0
+    },
+    {
+      "label": "flight-24",
+      "file": "head-flight-24.png",
+      "centre": [
+        22.71963539734057,
+        3.0075382854521995,
+        -7.65987268938663
+      ],
+      "live": 14,
+      "baked": 0
+    }
+  ],
+  "settle": {
+    "steps": 200,
+    "live": 10,
+    "baked": 4,
+    "faceBaked": 1,
+    "lastBakeMs": 67.20000004768372,
+    "lastBakeSwapFrame": 297
+  },
+  "baked": {
+    "id": 14,
+    "centre": [
+      20.524913787841797,
+      0.13857706548878923,
+      -8.651051044464111
+    ],
+    "radius": 0.19626455906686846,
+    "face": true
+  },
+  "census": {
+    "inFrustum": 7,
+    "ofPieces": 9,
+    "bonePieces": 0,
+    "boneRows": 0,
+    "organPieces": 1,
+    "buriedBonePieces": 0,
+    "bonesShadingAsMeat": 0,
+    "organsShadingAsBone": 0,
+    "live": 9,
+    "baked": 5,
+    "views": 14,
+    "spare": 0,
+    "bakePending": true,
+    "cap": 64
+  },
+  "pageErrors": []
+}

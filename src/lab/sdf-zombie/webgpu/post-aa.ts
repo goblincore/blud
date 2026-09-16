@@ -88,6 +88,9 @@ import { computeRenderSize, canvasCssSize } from './lab-renderer';
 import { FISHEYE_WGSL, makeLens, type Lens } from './fisheye';
 import { setPassLabel } from './gpu-pass-timing';
 import {
+  BLAST_REFRACTION, blastRefractionPhase, projectBlastRefraction,
+} from '../blast-refraction';
+import {
   POST_VHS_WGSL,
   VHS_PRESETS,
   effectiveSmear as vhsEffectiveSmear,
@@ -366,11 +369,19 @@ export const POST_AA_BLIT_WGSL = /* wgsl */ `fn postAaBlit(
 }
 
 /**
- * THE BOUNDED BLAST REFRACTION (2026-09-16 playtest follow-up task 4). A brief,
- * localized, expanding screen-space displacement centred on a blast's projected
- * position: at radius r inside the blast's screen radius the sampled coordinate
- * is pushed radially outward-inward so the image REFRACTS through the shell
- * instead of the explosion just adding a static bloom ring.
+ * THE BOUNDED BLAST REFRACTION. A brief, localized, expanding screen-space
+ * displacement centred on a blast's projected position: at radius r inside the
+ * blast's screen radius the sampled coordinate is pushed radially so the image
+ * REFRACTS through the shell instead of the explosion just adding a static
+ * bloom ring.
+ *
+ * WHERE THE WAVE COMES FROM. blast-refraction.ts owns the world radius, its
+ * growth over the life, the decay and the projection; the host reprojects every
+ * frame and fills b.xy/b.z/b.w with the CURRENT centre, radius and
+ * strength. This function therefore only draws the radial waveform, and the
+ * waveform is deliberately BROAD: sin^2 has its half-maximum spanning a
+ * quarter of the band on either side, where the old sin^4 shell dropped to a
+ * quarter of its peak an eighth of the way in and bent almost nothing.
  *
  * BOUNDS, all enforced here as well as at the feed:
  *   * at most FOUR simultaneous blasts, unrolled (d0..d3) — no array indexing
@@ -378,17 +389,15 @@ export const POST_AA_BLIT_WGSL = /* wgsl */ `fn postAaBlit(
  *     the render list;
  *   * the summed offset is clamped to dist.y UV (a few percent of the screen),
  *     so a near-camera blast cannot smear the frame or invert it;
- *   * the profile is a ring (sin(pi*t)^2), zero at the blast centre and at the
- *     outer front, so the HUD/weapon stay readable through the hole and nothing
- *     is magnified into a bubble;
+ *   * the profile is a ring, zero at the blast centre and at the outer front,
+ *     with an outward visual bulge across the moving band;
  *   * the whole pass is inert (dist.w < 0.5 or no blasts) and only touches
  *     uniforms — toggling it never rebuilds this pipeline or moves a node key.
  *
  * LIMIT (honest): this reads only the colour chain, not scene depth, so a wall
- * between the camera and the blast is still warped. The host's feed drops
- * behind-camera and off-screen blasts; a partially occluded blast is not
- * depth-gated. See the dev-note for why a depth-gated version is a renderer
- * change rather than a bounded experiment.
+ * between the camera and the blast is still warped. A partially occluded blast
+ * is not depth-gated. See the dev-note for why a depth-gated version is a
+ * renderer change rather than a bounded experiment.
  */
 fn postAaBlastWarp(
   uvIn: vec2<f32>,
@@ -411,20 +420,21 @@ fn postAaBlastWarp(
     let r = length(d);
     if (r < 1e-5 || r >= b.z) { continue; }
     let t = 1.0 - r / b.z;
-    // A thin RING, not a lens: the displacement is zero at the centre and at
-    // the front and concentrated into a narrow shell, so the blast reads as a
-    // refracting front passing outward rather than a bubble magnifying the
-    // whole disk. The fourth power narrows the band without a second sample.
-    var ring = sin(3.14159265 * t);
-    ring = ring * ring;
-    ring = ring * ring;
+    // A BROAD SHELL: the displacement is zero at the centre and at the front
+    // and peaks across the middle of the band. sin^2 (mirrored by
+    // blastRefractionBand in blast-refraction.ts — keep them in step) is the
+    // wide profile; the previous sin^4 fell off far faster.
+    let s = sin(3.14159265 * t);
+    let ring = s * s;
     var dir = d / r;
     dir.x = dir.x / aspect;
     off = off + dir * (ring * b.w);
   }
   let l = length(off);
   if (l > dist.y) { off = off * (dist.y / l); }
-  return uvIn + off;
+  // This is an inverse texture lookup: sampling inward moves the visible
+  // image outward. Adding off instead made the blast look like suction.
+  return uvIn - off;
 }
 
 fn postAaOetf(c: vec3<f32>) -> vec3<f32> {
@@ -544,29 +554,61 @@ export interface PostAa {
   /** The lens resolved against the live content aspect. `k = 0` = off. */
   readonly lens: Lens;
   /**
-   * BLAST REFRACTION (2026-09-16 playtest follow-up task 4) — an explicitly
-   * EXPERIMENTAL, bounded distortion pass folded into the final blit. Default
-   * OFF; the game page owns the `?blastdistort=` decision and the A/B.
-   * `pushBlastDistort` records a blast in a bounded (4) ring; `stepBlastDistort`
-   * ages it on SIM time (never wall time) so a frozen capture is deterministic
-   * and an on/off comparison at the same frame is honest. There is no
-   * per-blast pipeline and no additional render target: only four vec4 uniforms
-   * and one loop in the existing blit.
+   * BLAST REFRACTION — a bounded screen-space distortion folded into the final
+   * blit, explicitly an EXPERIMENT (default OFF; the game page owns the
+   * `?blastdistort=` decision and the A/B). `pushBlastDistort` records a blast
+   * in a bounded (4) ring by its WORLD position and birth shell radius;
+   * `setBlastDistortCamera` hands over the camera so every live band is
+   * REPROJECTED each frame (a camera that moves during the ~0.55 s life keeps
+   * the band on the blast); `stepBlastDistort` ages it on SIM time (never wall
+   * time) so a frozen capture is deterministic. There is no per-blast pipeline
+   * and no additional render target: four vec4 uniforms and one loop.
+   *
+   * The radius growth and the decay are computed in blast-refraction.ts, not
+   * in the shader, which is what makes them testable and what keeps the band
+   * sounding like a wave. The shader draws only the radial waveform.
    */
   setBlastDistort(on: boolean): void;
   /** Global strength multiplier for the experiment (default 1). */
   setBlastDistortStrength(v: number): void;
   /**
-   * `u`/`v` are the blast's projected position in the blit's screen UV space
-   * (0..1, v up); `radiusUv` its screen radius; `strength` the peak UV offset.
-   * Off-screen and behind-camera blasts (a caller passes v outside a small
-   * margin) are dropped rather than clamped onto an edge.
+   * Record a blast at a WORLD position with the world radius its shell is born
+   * at and the peak UV offset it would apply. Non-finite worlds, a
+   * non-positive radius or a non-positive strength are dropped. Off-screen and
+   * behind-camera blasts are dropped at projection time (the camera may not
+   * exist yet when a blast is pushed).
    */
-  pushBlastDistort(u: number, v: number, radiusUv: number, strength: number): void;
+  pushBlastDistort(world: readonly [number, number, number], birthRadiusM: number, strength: number): void;
+  /**
+   * The camera the live bands are reprojected against. Called once with the
+   * page's persistent camera; without it the pass stays inert (a blast with no
+   * camera cannot be placed on screen).
+   */
+  setBlastDistortCamera(camera: THREE.PerspectiveCamera): void;
   /** Age every live blast by the SIM tick's dt (not wall time). */
   stepBlastDistort(dt: number): void;
   /** How many blasts the bounded ring is currently holding (telemetry). */
   readonly blastDistortCount: number;
+  /**
+   * The RESOLVED slots the last blit actually pushed, one entry per live blast
+   * (task-2 review seam). A blast can be live yet unresolved — behind the
+   * camera, off-screen, or with the phase spent — and those two states project
+   * very differently, so the raw `u`/`v`/`radiusUv`/`strength` values are what
+   * a capture rig reads to prove the band is centred on the blast rather than
+   * mirrored or drifting. `u`/`v`/`radiusUv` are null when dropped; `reason`
+   * says why. Read-only, no allocation when nothing is live.
+   */
+  readonly blastDistortSlots: readonly {
+    world: readonly [number, number, number];
+    age: number;
+    radiusScale: number;
+    decay: number;
+    u: number | null;
+    v: number | null;
+    radiusUv: number | null;
+    strength: number;
+    reason: 'ok' | 'behind' | 'offscreen' | 'spent';
+  }[];
   readonly blastDistort: boolean;
   readonly blastDistortStrength: number;
   readonly fxaa: boolean;
@@ -683,18 +725,36 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
   // at most four live blasts, aged on SIM time by the host's tick so a frozen
   // capture is deterministic. No new target and no per-blast pipeline. --------
   const BLAST_DISTORT_MAX = 4;
-  /** Seconds a blast's refraction lives (fast decay; ~18 frames at 60 Hz). */
-  const BLAST_DISTORT_LIFE = 0.3;
-  /** Hard ceiling on the summed UV offset, as a fraction of the screen. */
-  const BLAST_DISTORT_MAX_UV = 0.02;
   const uBlastDistort = Array.from({ length: BLAST_DISTORT_MAX }, () =>
     uniform(new THREE.Vector4(0, 0, 0, 0)));
   // (count, maxUv, aspect, on)
-  const uBlastDistortCfg = uniform(new THREE.Vector4(0, BLAST_DISTORT_MAX_UV, 1, 0));
+  const uBlastDistortCfg = uniform(new THREE.Vector4(0, BLAST_REFRACTION.maxOffsetUv, 1, 0));
   let blastDistortOn = false;
   let blastDistortStrength = 1;
-  interface LiveBlastDistort { u: number; v: number; radiusUv: number; strength: number; age: number; }
+  /** The camera the live bands are reprojected against, or null (inert). */
+  let blastCamera: THREE.PerspectiveCamera | null = null;
+  /** Scratch view-projection; recomposed each frame, never a new node. */
+  const blastViewProj = new THREE.Matrix4();
+  interface LiveBlastDistort {
+    world: [number, number, number];
+    birthRadiusM: number;
+    strength: number;
+    age: number;
+  }
   const liveBlastDistorts: LiveBlastDistort[] = [];
+  /** The last blit's resolved slots — see `blastDistortSlots` (task-2 seam). */
+  type ResolvedBlastSlot = {
+    world: [number, number, number];
+    age: number;
+    radiusScale: number;
+    decay: number;
+    u: number | null;
+    v: number | null;
+    radiusUv: number | null;
+    strength: number;
+    reason: 'ok' | 'behind' | 'offscreen' | 'spent';
+  };
+  let lastBlastSlots: ResolvedBlastSlot[] = [];
 
   // --- VHS state. Every field below is inert while `vhsPreset` is null, and
   // null is the default: the all-off path must not even bind the material. --
@@ -1105,24 +1165,49 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       // BLAST REFRACTION uniforms, resolved fresh each frame from the bounded
       // ring. Only uniform values change here — never the node graph — so
       // toggling the experiment or firing a blast never triggers a shader
-      // compile. The radius expands and the strength decays with age so it
-      // reads as a shell passing outward, not a bulb switching off.
+      // compile. Each live blast is REPROJECTED from its WORLD position and the
+      // grown world radius, so a camera that moves during the wave's life keeps
+      // the band on the blast instead of on where it used to be.
       {
         let active = 0;
-        for (const b of liveBlastDistorts) {
-          if (active >= BLAST_DISTORT_MAX) break;
-          const t = Math.min(1, b.age / BLAST_DISTORT_LIFE);
-          if (t >= 1) continue;
-          const decay = (1 - t) * (1 - t);
-          const radius = Math.min(0.75, b.radiusUv * (0.5 + 1.6 * t));
-          const strength = b.strength * decay * blastDistortStrength;
-          uBlastDistort[active]!.value.set(b.u, b.v, radius, Math.max(0, strength));
-          active++;
+        const resolved: ResolvedBlastSlot[] = [];
+        if (blastDistortOn && blastCamera !== null) {
+          blastViewProj.multiplyMatrices(
+            blastCamera.projectionMatrix, blastCamera.matrixWorldInverse);
+          for (const b of liveBlastDistorts) {
+            const phase = blastRefractionPhase(b.age, BLAST_REFRACTION);
+            if (!phase) {
+              resolved.push({ world: b.world, age: b.age, radiusScale: 1, decay: 0, u: null, v: null, radiusUv: null, strength: 0, reason: 'spent' });
+              continue;
+            }
+            const p = projectBlastRefraction(
+              b.world, blastViewProj.elements, b.birthRadiusM * phase.radiusScale);
+            // Behind-camera / non-finite, and a small margin off-screen: a blast
+            // that cannot be seen must not clamp onto an edge and warp it.
+            if (!p) {
+              resolved.push({ world: b.world, age: b.age, radiusScale: phase.radiusScale, decay: phase.decay, u: null, v: null, radiusUv: null, strength: 0, reason: 'behind' });
+              continue;
+            }
+            if (p.u < -0.3 || p.u > 1.3 || p.v < -0.3 || p.v > 1.3) {
+              resolved.push({ world: b.world, age: b.age, radiusScale: phase.radiusScale, decay: phase.decay, u: p.u, v: p.v, radiusUv: p.radiusUv, strength: 0, reason: 'offscreen' });
+              continue;
+            }
+            const strength = b.strength * phase.decay * blastDistortStrength;
+            const radiusUv = Math.min(BLAST_REFRACTION.maxScreenRadius, p.radiusUv);
+            uBlastDistort[active]!.value.set(
+              p.u, p.v,
+              radiusUv,
+              Math.max(0, strength),
+            );
+            resolved.push({ world: b.world, age: b.age, radiusScale: phase.radiusScale, decay: phase.decay, u: p.u, v: p.v, radiusUv, strength: Math.max(0, strength), reason: 'ok' });
+            active++;
+          }
         }
+        lastBlastSlots = resolved;
         for (let i = active; i < BLAST_DISTORT_MAX; i++) uBlastDistort[i]!.value.set(0, 0, 0, 0);
         const aspect = drawSize.y > 0 ? drawSize.x / drawSize.y : 1;
         uBlastDistortCfg.value.set(
-          active, BLAST_DISTORT_MAX_UV, aspect,
+          active, BLAST_REFRACTION.maxOffsetUv, aspect,
           blastDistortOn && active > 0 ? 1 : 0,
         );
       }
@@ -1167,15 +1252,17 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
     setBlastDistortStrength(v: number) {
       blastDistortStrength = Number.isFinite(v) ? Math.max(0, Math.min(4, v)) : 1;
     },
-    pushBlastDistort(u: number, v: number, radiusUv: number, strength: number) {
-      if (!Number.isFinite(u) || !Number.isFinite(v)) return;
-      if (!(radiusUv > 0) || !(strength > 0)) return;
-      // Off-screen / behind-camera gate: a caller that cannot project the blast
-      // passes NaN or an out-of-range v, and there is nothing to warp.
-      if (u < -0.3 || u > 1.3 || v < -0.3 || v > 1.3) return;
+    setBlastDistortCamera(camera: THREE.PerspectiveCamera) { blastCamera = camera; },
+    pushBlastDistort(world, birthRadiusM, strength) {
+      if (world.length < 3) return;
+      const [x, y, z] = world;
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return;
+      if (!(birthRadiusM > 0) || !(strength > 0)) return;
       liveBlastDistorts.push({
-        u, v, radiusUv: Math.max(0.02, Math.min(0.75, radiusUv)),
-        strength: Math.max(0, Math.min(0.2, strength)), age: 0,
+        world: [x, y, z],
+        birthRadiusM: Math.max(0.05, Math.min(20, birthRadiusM)),
+        strength: Math.max(0, Math.min(BLAST_REFRACTION.maxOffsetUv, strength)),
+        age: 0,
       });
       // BOUNDED: the oldest blast beyond the four unrolled slots is dropped.
       while (liveBlastDistorts.length > BLAST_DISTORT_MAX) liveBlastDistorts.shift();
@@ -1185,10 +1272,11 @@ export function createPostAa(renderer: THREE.WebGPURenderer): PostAa {
       for (let i = liveBlastDistorts.length - 1; i >= 0; i--) {
         const b = liveBlastDistorts[i]!;
         b.age += dt;
-        if (b.age >= BLAST_DISTORT_LIFE) liveBlastDistorts.splice(i, 1);
+        if (!blastRefractionPhase(b.age, BLAST_REFRACTION)) liveBlastDistorts.splice(i, 1);
       }
     },
     get blastDistortCount() { return liveBlastDistorts.length; },
+    get blastDistortSlots() { return lastBlastSlots; },
     get blastDistort() { return blastDistortOn; },
     get blastDistortStrength() { return blastDistortStrength; },
     setSharpUpscale(on) {
