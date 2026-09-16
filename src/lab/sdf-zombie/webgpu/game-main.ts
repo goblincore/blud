@@ -77,7 +77,7 @@ import { createOccluderHull, buildHullInstances, HULL_SHRINK, type HullInstance 
 import { type BuildResult } from '../build-body';
 import { parseBlob } from '../blob-parse';
 import { MOTION_TUNING } from '../motion';
-import { createCharacterView, compileCharacterSheet } from './character-view';
+import { createCharacterView, compileCharacterSheet, bodyBuildCacheStats } from './character-view';
 import { createCharacterEffects } from './character-effects';
 import { characterEntry, characterNames } from '../character-registry';
 import { rotateYaw } from '../gait';
@@ -150,7 +150,8 @@ import {
   FLIGHT_TUNING, type FlightState,
 } from '../dynamite-flight';
 import { gibAll, gibAllPieces, type ChunkGroup } from '../sever';
-import { displaceGibPieces, gibParts, gibPlan, gibTierPlan, type GibBoneRelease, type GibPiece, type GibPlan } from '../gib-parts';
+import { displaceGibPieces, gibTierPlan, type GibBoneRelease, type GibPiece, type GibPlan } from '../gib-parts';
+import { TEAR_TUNING } from '../gib-tear';
 import { createBurstLayer, createStickProp, type BurstLayer, type StickProp } from './fpv-view';
 import { createExplosionVfx, type ExplosionVfx } from './explosion-vfx';
 import {
@@ -184,6 +185,7 @@ import {
 import { rngStreams, setRngSeed, seedFromUnit } from './rng';
 import { advance as advanceSimClock, simTimeMs, resetSimClock } from './sim-clock';
 import { chunkSettled, makeChunk, stepChunk, type ChunkBox } from '../gib-chunks';
+import { gibLaunchVelocity } from '../gib-launch';
 import { bonePartGeometry, meatPartGeometry } from './gore-part-geom';
 import {
   billboardGib, loadGibSheet, loadGibSpriteAtlas, makeGibSprite, pickFrame, type GibSpriteAtlas,
@@ -206,7 +208,7 @@ import {
   createBakedChunkMaterial, type BakedChunkMaterial,
 } from './baked-chunks';
 import { boneChunkRadius } from '../melt-bones';
-import { chunkExtent } from '../extent';
+import { chunkExtent, chunkSupportSpheres } from '../extent';
 import { createChunkGpuView, createSharedChunkGpuMaterial, type ChunkGpuView, type GpuViewOpts } from './zombie-gpu';
 import {
   createGameDeferredRenderer,
@@ -1573,6 +1575,11 @@ async function main() {
    *  `window.__sdfGame` seam). Nothing is lost — those frames drew nothing
    *  anyway — and the loader covers the canvas for all of it. */
   let drawReady = false;
+  /** One-shot boot marks around the FIRST skeleton-mesh sync, so a startup
+   *  probe can attribute the cold-blocking extraction without a per-frame
+   *  allocation. Set once; never cleared (a rebuild's re-extraction is
+   *  reported by SegmentMeshCache.stats() instead). */
+  let meshSyncMarked = false;
   handle.setDrawFn(() => {
     if (!drawReady) return;
     // GPU PROBE GATHER dispatch (P3/P4). OUTSIDE the post-aa pass on purpose:
@@ -1654,6 +1661,8 @@ async function main() {
       // the forward default without a controlled timing result (skeleton
       // wrap-up, 2026-09-08) and no capture could see it until now.
       const meshTiming = telemetry.begin();
+      const firstMeshSync = !meshSyncMarked;
+      if (firstMeshSync) { meshSyncMarked = true; mark('mesh-sync-start'); }
       const craters: { pos: Vec3; radius: number }[] = [];
       for (const a of actors) {
         const prims = a.posed().prims;
@@ -1667,6 +1676,7 @@ async function main() {
         return e.sources;
       }), actors);
       telemetry.end('skeleton-mesh', meshTiming);
+      if (firstMeshSync) mark('mesh-sync-end');
     }
     // skeleton=volume: only the tiny pose/meta texture changes per frame.
     // A body-reference change means sever/rebuild and therefore a new
@@ -5161,10 +5171,19 @@ async function main() {
   /** What one body may take this blast. Identical in both modes EXCEPT that the
    *  sprite path reserves no tier floor: the floor exists to guarantee every
    *  body in a blast can afford the cheapest SHAPE, and sprite mode has no
-   *  shapes to choose between. */
+   *  shapes to choose between.
+   *
+   *  CLAMPED TO `remaining` (2026-09-16 task 2, adversarial caps). The floor is
+   *  the cheapest shape's slot count, but it is a RESERVATION, not extra
+   *  capacity: at `?maxchunks=5` the old `max(floor, remaining - reserve)`
+   *  handed a body 7 slots from a 5-slot pool, so the recycler overwrote two of
+   *  its own pieces inside the same call — the "pieces jumping into positions"
+   *  defect the budget exists to prevent. A body can now never be allowed more
+   *  than the pool actually holds. */
   const gibAllowance = (remaining: number, condemnedLeft: number) => (gibRenderMode !== 'march'
     ? Math.max(1, remaining)
-    : Math.max(GIB_TIER_FLOOR, remaining - GIB_TIER_FLOOR * Math.max(0, condemnedLeft - 1)));
+    : Math.max(1, Math.min(remaining,
+      Math.max(GIB_TIER_FLOOR, remaining - GIB_TIER_FLOOR * Math.max(0, condemnedLeft - 1)))));
 
   /** And what that body actually spent. The marched path debits at least a
    *  floor's worth whatever it made, because the floor's slots are reserved for
@@ -5194,6 +5213,15 @@ async function main() {
   // the blast ripping outward through the body rather than a swap. 1 disables
   // the stagger (everything leaves on the blast frame) and is the A/B control.
   let gibStaggerFrames = parseIntParam(DYN_PARAMS.get('gibstagger'), { min: 1, max: 8 }) ?? 3;
+  /**
+   * GIB LAUNCH DISTRIBUTION (2026-09-16 task 3). Default `notblood` is the
+   * source-derived independent spread + one shared body shove (gib-launch.ts).
+   * `?giblaunch=radial` restores the OLD per-piece `concussionVelocity(at,
+   * g.origin, ...)` — a labelled A/B CONTROL for normal-speed review, not a
+   * supported gameplay mode. It exists because the owner's report ("pieces
+   * cluster too much") can only be judged against the thing that clustered.
+   */
+  const gibLaunchMode = DYN_PARAMS.get('giblaunch') === 'radial' ? 'radial' : 'notblood';
   // DOES A BODY THIS BLAST IS ABOUT TO GIB GET THE 16 WOUNDS STAMPED ON IT?
   //
   // No. The gibbed branch below takes `gibActor` and `continue`s, so those
@@ -5223,7 +5251,25 @@ async function main() {
    *  separates into real regions (see gib-tear.ts's TearTuning). */
   const tearShape = {
     amplitudeM: 0.06, jiggleAmp: 0.35, seamM: 0.09, boneLag: 0.15, headDamp: 0.3,
+    // HEAD ATTACHMENT / ROOT RECOIL (2026-09-16 playtest follow-up task 4). The
+    // defaults come from TEAR_TUNING so the page and the module cannot drift;
+    // `?tearhead=0&tearneck=0&tearrecoil=0` restores the OLD independent-damped
+    // head + no whole-body jolt, which is the honest A/B control for whether the
+    // attachment actually removes the chest-overtakes-head read.
+    headFollow: parseFloatParam(DYN_PARAMS.get('tearhead'), { min: 0, max: 1 }) ?? TEAR_TUNING.headFollow,
+    neckGapM: parseFloatParam(DYN_PARAMS.get('tearneck'), { min: 0, max: 0.2 }) ?? TEAR_TUNING.neckGapM,
+    recoilM: parseFloatParam(DYN_PARAMS.get('tearrecoil'), { min: 0, max: 0.2 }) ?? TEAR_TUNING.recoilM,
   };
+  // ——— BLAST REFRACTION (EXPERIMENT, default OFF) ———————————————————————————
+  // The owner asked for a shockwave/distortion read on the blast. This is the
+  // bounded screen-space experiment (post-aa.ts's postAaBlastWarp): `?blastdistort=1`
+  // turns it on, `?bdstrength=` scales it, and at the same seed/pose/frame an
+  // on/off pair is an honest A/B. It is NOT accepted until a normal-speed review
+  // says it improves the read; default OFF keeps the shipped frame untouched.
+  let blastDistortStrength = parseFloatParam(DYN_PARAMS.get('bdstrength'), { min: 0, max: 4 }) ?? 1;
+  postAa.setBlastDistort(
+    DYN_PARAMS.get('blastdistort') === '1' || DYN_PARAMS.get('blastdistort') === 'on');
+  postAa.setBlastDistortStrength(blastDistortStrength);
   /** The cheapest tier's piece count — one chunk per limb cluster, i.e. the
    *  shape a body falls back to when the pool cannot afford anything better.
    *  Held back for every body still to come in a blast, so no body is left with
@@ -5875,6 +5921,11 @@ async function main() {
     // length above the floor.
     const boneOnly = piece.prims.length === 0 && piece.bones.length > 0;
     const extentSource = boneOnly ? piece.bones : piece.prims;
+    // NARROW-PHASE floor support (2026-09-16 task 3): the piece's own capsule
+    // ends, so a flat shin rests on its thickness instead of hovering at its
+    // half-length `chunkExtent`. Falls back to the old single radius when the
+    // prims carry no usable geometry.
+    const support = chunkSupportSpheres(extentSource, piece.origin);
     const state = makeChunk(
       piece.limb as never, piece.origin, initialVelocity ?? vel,
       boneOnly ? boneChunkRadius(piece.bones) : chunkExtent(piece.prims, piece.origin),
@@ -5883,6 +5934,7 @@ async function main() {
       (piece.spinQuat || piece.spinAngVel)
         ? { quat: piece.spinQuat, angVel: piece.spinAngVel }
         : undefined,
+      support.length > 0 ? support : undefined,
     );
     // View budget. Order matters with the bake on: a BAKED piece is the
     // oldest, least-relevant gore, so its view recycles FIRST; only when
@@ -5978,6 +6030,7 @@ async function main() {
     const kind = piece.kind ?? 'limb';
     const boneOnly = piece.prims.length === 0 && piece.bones.length > 0;
     const extentSource = boneOnly ? piece.bones : piece.prims;
+    const support = chunkSupportSpheres(extentSource, piece.origin);
     const state = makeChunk(
       piece.limb as never, piece.origin, [0, 0, 0],
       boneOnly ? boneChunkRadius(piece.bones) : chunkExtent(piece.prims, piece.origin),
@@ -5986,6 +6039,7 @@ async function main() {
       (piece.spinQuat || piece.spinAngVel)
         ? { quat: piece.spinQuat, angVel: piece.spinAngVel }
         : undefined,
+      support.length > 0 ? support : undefined,
     );
     spawnSpritePiece(spritePieces, {
       state, frame: pickFrame(gibAtlas, rng()),
@@ -6527,6 +6581,27 @@ async function main() {
     // a distance gate nobody can see).
     igniteExplosionLight(at);
     const burst = scaleBurstVisual(fx.burst);
+    // BLAST REFRACTION (experiment, default OFF): feed the bounded post-aa ring
+    // the blast's projected screen position and apparent radius. Projecting the
+    // centre AND a point one AOE-radius above it measures the on-screen size
+    // rather than guessing a constant; `project`'s z > 1 flags a blast behind the
+    // camera, and the feed's uv gate drops it (a blast that cannot be seen must
+    // not warp the screen). Sim-time aging happens in tick, so this is the only
+    // per-blast cost: two projections and one ring push.
+    if (postAa.blastDistort) {
+      const c = new THREE.Vector3(at[0], at[1], at[2]).project(camera);
+      // The SHOCKWAVE SHELL is sized from the FIREBALL's visual half-height, not
+      // the 4.7 m damage radius: the AOE radius projects larger than the screen
+      // at any playable standoff, which turned the experiment into a full-frame
+      // lens in the first pass. 0.3 of the burst's visible half-height tracks the
+      // thing the player can actually see, at either distance.
+      const shellM = Math.max(0.2, burst.heightM * 0.3);
+      const e = new THREE.Vector3(at[0], at[1] + shellM, at[2]).project(camera);
+      const radiusUv = Math.max(0.05,
+        Math.min(0.28, 0.5 * Math.hypot(e.x - c.x, e.y - c.y)));
+      const strength = Math.min(0.05, 0.015 + 0.008 * burst.heightM) * blastDistortStrength;
+      postAa.pushBlastDistort(c.x * 0.5 + 0.5, c.y * 0.5 + 0.5, radiusUv, strength);
+    }
     if (explosionVfx) explosionVfx.spawn(burst);
     else if (burstLayer) burstLayer.spawn(burst);
     // ...including the stand-in, which used to get the UNSCALED height and was
@@ -6652,11 +6727,12 @@ async function main() {
    * belongs to an actor with a GPU view, a brain, a collapse clock and a room
    * membership, so this is bookkeeping as much as it is gore:
    *
-   *  1. `gibParts` (the default) on the POSED body — the split piece set with
-   *     the skeleton released as its own bone pieces. `?gib=clusters|pieces`
-   *     keeps sever.ts's two older shapes as A/B controls. Pieces come back in
-   *     WORLD space, which is exactly what spawnChunkPiece wants — the same
-   *     frame the existing sever path hands it.
+   *  1. `gibBlastPlan` (via `gibTierPlan`, the default) on the POSED body — the
+   *     split-only priority plan with the skeleton's readable core released as
+   *     its own bone piece. `?gib=clusters|pieces` keeps sever.ts's two older
+   *     shapes as labelled A/B controls. Pieces come back in WORLD space, which
+   *     is exactly what spawnChunkPiece wants — the same frame the existing
+   *     sever path hands it.
    *  2. **ZERO VELOCITY AT BIRTH, THEN THE BLAST.** Every piece is spawned
    *     stationary at the transform the body is actually in, and its concussion
    *     velocity is QUEUED for a later frame (`pendingGibImpulses`). Frame 0 is
@@ -6692,15 +6768,24 @@ async function main() {
   ): number {
     // A planned hand-off comes from the rupture: `body` is the pose the body was
     // last DRAWN in and `pieces` are the plan's own regions at the same offsets,
-    // so the tier ladder below re-derives from the drawn pose if it must degrade
-    // rather than from the clean one.
+    // so the released set is the drawn set (task 3), not a re-derivation from
+    // the clean pose.
     const posedBody = planned?.body ?? a.posed();
     const torsoC = posedBody.clusters.find(c => c.limb === 'torso')?.center
       ?? ([at[0], at[1], at[2]] as Vec3);
     const clusters: GibPiece[] = (gibMode === 'pieces' ? gibAllPieces(posedBody, torsoC) : gibAll(posedBody))
       .chunks.map(g => ({ ...g, part: g.limb, kind: 'limb' as const }));
+    // THE SPLIT PLAN IS CHOSEN THE SAME WAY AT BOTH ENDS (2026-09-16 task 2).
+    // A scheduled rupture already carries the plan the preview drew; the
+    // zero-duration path (`?gibtear=0`) and any direct caller choose it HERE
+    // with the same `gibTierPlan`, so no default path can silently fall back to
+    // whole-limb clusters. `?gib=clusters|pieces` keep their own labelled
+    // reference shapes.
+    const scheduledPlan = gibMode === 'parts' && planned === undefined
+      ? gibTierPlan(posedBody, budget, { bones: gibBones, mode: 'parts', at })
+      : null;
     const pieces: GibPiece[] = gibMode === 'parts'
-      ? (planned?.pieces ?? gibParts(posedBody, { bones: gibBones }))
+      ? (planned?.pieces ?? scheduledPlan!.plan.pieces)
       : clusters;
     const template = { uniforms: a.view.uniforms, volumeTexture: a.view.volumeTexture };
     // IS THIS BODY ACTUALLY GOING OUT AS SPRITES? Both halves matter: the mode
@@ -6719,44 +6804,55 @@ async function main() {
     }
     const launchFall = EXPLOSION_LAUNCH.falloffFloor
       + (1 - EXPLOSION_LAUNCH.falloffFloor) * falloff;
-    // NEAREST THE BLAST FIRST, and the sort is load-bearing twice over: it is
-    // what the stagger's order means, AND it is what decides which pieces
-    // survive the budget when even the cheapest shape does not fit. The old
-    // code sliced in cluster order, so which half of a body you got was an
-    // accident of the authoring order.
+    // ——— THE LAUNCH: INDEPENDENT PIECE SPREAD + ONE SHARED BODY SHOVE ————————
+    // The owner, on the shipped blast: "Gib launch should more closely follow
+    // the existing ported NotBlood behavior; pieces cluster too much." The old
+    // line called `concussionVelocity(at, g.origin, ...)` PER PIECE — a radial
+    // vector from the blast to that piece, so chest and abdomen (centimetres
+    // apart) left on one spoke. That is ConcussSprite's generic shockwave, not
+    // how NotBlood launches a gib (see gib-launch.ts's header).
+    //
+    // Source-faithful: NotBlood's GibThing gives each thing its OWN random
+    // spread from the gib table's `atc`/`at10` fields, and the blast's shared
+    // ConcussSprite then shoves the whole set coherently. So: compute ONE
+    // coherent velocity at the body (the shove the body itself would have
+    // taken), and let `gibLaunchVelocity` add each piece's independent,
+    // seed-deterministic spread on top at `coherentFrac`. GIB_LAUNCH keeps the
+    // source 1:3 horizontal:vertical ratio and the lab's accepted arc.
+    const coherentVel = concussionVelocity(
+      at, torsoC, EXPLOSION_STANDARD.impulse * launchFall * gibVelScale);
+    // `?giblaunch=radial` is the labelled CONTROL: the old per-piece radial
+    // shove, kept only so a normal-speed A/B can be captured side by side.
+    const launchFor = (key: string, origin: Vec3): Vec3 => gibLaunchMode === 'radial'
+      ? concussionVelocity(at, origin, EXPLOSION_STANDARD.impulse * launchFall * gibVelScale)
+      : gibLaunchVelocity({ key, seed: demoSeed, bodyVel: coherentVel });
+    // NEAREST THE BLAST FIRST. This is the STAGGER order: the piece nearest the
+    // explosion starts moving first, so the blast reads as ripping outward
+    // through the body. It no longer decides what survives — the budget was
+    // applied to the plan (by priority) before this point.
     const dist = (p: Vec3) => (p[0] - at[0]) ** 2 + (p[1] - at[1]) ** 2 + (p[2] - at[2]) ** 2;
     const byBlast = (list: GibPiece[]) => [...list].sort((x, y) => dist(x.origin) - dist(y.origin));
 
-    // ——— THE TIERS. A blast that takes three bodies at once wants ~72 pieces
-    // and the live pool holds 24; SOMETHING has to give, and what must NOT give
-    // is the body. A retired actor whose pieces were all dropped does not read
-    // as "the pool was full", it reads as a body that VANISHED with no gore at
-    // all — and three of the arena's eight zombies disappear at once. So the
-    // shape degrades before the count does: the full split set, then the same
-    // set without the skeleton (the bones are what the pool cannot afford
-    // first), then sever.ts's one-chunk-per-limb shape, and only if even THAT
-    // does not fit is anything dropped at all.
+    // ——— THE TIERS ————————————————————————————————————————————————————————
+    // The default `parts` shape is SPLIT-ONLY and is chosen by `gibTierPlan`
+    // (schedule time, or the call above for the zero-duration path). There is
+    // deliberately NO release-time ladder here any more: the old one degraded by
+    // rebuilding whole limbs (`clusters`, `clusters+cage`, `clusters+core`) and
+    // that is the "arms and legs become tubes again" the owner reported. The
+    // only remaining whole-limb shape is `?gib=clusters`, which is a labelled
+    // A/B control the page asked for by name.
     let chosen = byBlast(pieces);
-    let tier = gibMode === 'parts' ? 'parts' : gibMode;
+    let tier = gibMode === 'parts' ? (scheduledPlan?.tier ?? 'parts') : gibMode;
     // THE SCHEDULE-TIME TIER IS BINDING (task 3). When the caller locked the
     // plan, the shape was already chosen with the pool arithmetic and previewed;
     // re-deriving here is exactly the "preview rich, spawn cheap" defect this
-    // removes, so the whole ladder — including the slice fallback — is skipped.
-    // `?gib=pieces` is the exception (no source indices yet): it keeps the old
-    // route.
+    // removes.
     const tierLocked = planned?.locked === true;
     if (tierLocked && planned?.tier) tier = planned.tier;
     // ——— SPRITE MODE HAS NO LADDER, AND THAT IS THE FEATURE ————————————————
-    // Everything below this branch exists to answer ONE question: "the pool
-    // cannot afford this body's full piece set, what shape do we take instead?"
-    // Every rung is a worse-looking body — `clusters` is the one-tube-per-limb
-    // shape the owner rejected by name ("it just breaks into like tubes (arms and
-    // legs) and orbs (torso) which doesnt really read as gibs"), and it is
-    // reached precisely when several bodies are gibbed at once, which is exactly
-    // what a bundle thrown into a crowd does. A quad cannot cost what a marched
-    // piece costs, so `gibBudget()` hands sprite mode its own cap and the
-    // condition that would degrade the shape never becomes true. The body comes
-    // apart completely, every time, which is what retired the owner's report.
+    // A quad cannot cost what a marched piece costs, so `gibBudget()` hands
+    // sprite mode its own cap and the condition that would degrade the shape
+    // never becomes true. The body comes apart completely, every time.
     if (carveMode) {
       // NO LADDER, for the same reason as sprite mode and one more: the carved
       // piece set IS the whole body by construction (every region of it), so
@@ -6766,60 +6862,16 @@ async function main() {
     } else if (spriteMode) {
       tier = 'sprite';
       // A blast bigger than the cap still slices — nearest-the-blast first, the
-      // same order the ladder's fallbacks use — but that is the CAP talking, not
-      // a shape compromise: the pieces that go are the ones the player is
-      // furthest from.
+      // same order the blast's own spawn order uses — but that is the CAP
+      // talking, not a shape compromise: the pieces that go are the ones the
+      // player is furthest from.
       if (chosen.length > budget) chosen = chosen.slice(0, Math.max(1, budget));
-    } else if (chosen.length > budget && !tierLocked) {
-      // The ladder is computed LAZILY — the cheapest shape is a second
-      // partition of the body, and a blast that fits the full set must not pay
-      // to build shapes it will not use.
-      //
-      // `parts-core` is the FIRST rung because the skeleton is the part of this
-      // the owner asked for BY NAME: the three torso masses and the skull are
-      // what make a pile read as a body rather than as meat, so dropping the
-      // eight long bones before dropping those is the right way round.
-      const coreOnly = () => gibParts(posedBody, { bones: 'core' })
-        .filter(p => p.kind === 'bone');
-      const core = () => byBlast(gibParts(posedBody, { bones: 'core' }));
-      // CLUSTERS + THE CORE SKELETON, which is the one tier that exists purely
-      // for the owner's headline complaint. The cheap shape below it is one
-      // chunk per LIMB, and those chunks carry their bones PACKED INSIDE the
-      // meat — the exact "i still dont see anything bone related like idk rib
-      // cage or something" the piece set was built to end. MEASURED with the
-      // bone census (`chunkCensus().bonePieces` / `.buriedBonePieces`): a
-      // two-body blast into a 24-piece pool read `bonePieces 3` (a visible
-      // ribcage, skull and pelvis on the first body) and `buriedBonePieces 6`
-      // (only the body the pool could not afford), against `bonePieces 22,
-      // buried 0` for the two bodies a 48-piece pool allows.
-      const clustersPlusCore = () => byBlast([...clusters, ...coreOnly()]);
-      // CLUSTERS + THE RIBCAGE ALONE, for a pool that can afford seven pieces
-      // per body and no more. `bone.cage` is the piece the owner asked for BY
-      // NAME ("idk rib cage or something") and it is the one that reads as a
-      // skeleton at a glance; of the eleven bone groups it is the one worth a
-      // slot when there is exactly one to spend.
-      const cageOnly = () => gibParts(posedBody, { bones: 'core' })
-        .filter(p => p.kind === 'bone' && p.part === 'bone.cage');
-      const clustersPlusCage = () => byBlast([...clusters, ...cageOnly()]);
-      // A FLESH-ONLY TIER (twelve split pieces, no skeleton at all) USED TO SIT
-      // HERE, between these two, and it has been REMOVED — measured, not
-      // tidied. In a tight pool it won the allocation on piece count and spent
-      // the body's whole allowance on meat: the blast then released twelve
-      // pieces with no bone anywhere in the pile, which is the owner's headline
-      // complaint reproduced by the fallback rather than by the piece set. The
-      // flesh-only shape is still reachable (`?gibbones=off` makes it the FIRST
-      // tier, so it needs no rung of its own), and the rung below buys the
-      // skull, ribcage and pelvis for the same three slots it costs.
-      for (const tierTry of [
-        { id: 'parts-core', size: core },
-        { id: 'clusters+core', size: clustersPlusCore },
-        { id: 'clusters+cage', size: clustersPlusCage },
-        { id: 'clusters', size: () => byBlast(clusters) },
-      ]) {
-        const candidate = tierTry.size();
-        if (candidate.length <= budget) { chosen = candidate; tier = tierTry.id; break; }
-      }
-      if (chosen.length > budget) { chosen = chosen.slice(0, Math.max(1, budget)); tier = 'slice'; }
+    } else if (chosen.length > budget) {
+      // The split plan was already chosen against the pool (reserved at schedule
+      // time, or planned here for the zero-duration path), so this is only a
+      // belt-and-braces bound for the labelled `clusters`/`pieces` controls.
+      // Never reached for default `parts`.
+      chosen = chosen.slice(0, Math.max(1, budget));
     }
     const ordered = chosen;
     const liveBefore = liveChunks.length;
@@ -6864,14 +6916,14 @@ async function main() {
         const wy = base[1] + p.centre[1];
         const wz = base[2] + (-p.centre[0] * sy + p.centre[2] * cy);
         const o: Vec3 = [wx, wy, wz];
-        const vel = concussionVelocity(at, o, EXPLOSION_STANDARD.impulse * launchFall * gibVelScale);
+        const vel = launchFor(`carve#${i}`, o);
         const delay = 1 + Math.min(gibStaggerFrames - 1, Math.floor(i / perFrameCarve));
         if (spawnCarvedPiece(p, o, 'limb', vel, delay)) spawned++;
       }
     }
     for (let i = 0; i < spawning.length && !carveMode; i++) {
       const g = spawning[i]!;
-      const vel = concussionVelocity(at, g.origin, EXPLOSION_STANDARD.impulse * launchFall * gibVelScale);
+      const vel = launchFor(`${g.part ?? g.limb}#${i}`, g.origin);
       // + 1 on the OLD path only: every piece spends at least ONE FULL FRAME at
       // rest, so the first frame drawn after the blast is the body's own
       // silhouette in place. The rupture hand-off launches on the spawn tick —
@@ -6915,7 +6967,7 @@ async function main() {
     retireActor(a);
     telemetry.event('dynamite-gib', {
       actor: a.id, mode: gibMode, tier, pieces: spawned, dropped, bones: boneSpawned,
-      gibBones, gibStaggerFrames, gibVelScale, budget, liveBefore,
+      gibBones, gibStaggerFrames, gibVelScale, gibLaunchMode, budget, liveBefore,
     });
     dynLastGibDropped = dropped;
     dynLastGibTier = tier;
@@ -8001,6 +8053,10 @@ async function main() {
     // replay. See the declaration next to lastSeenMs for the why.
     advanceSimClock(dt);
     simFrame++;
+    // BLAST REFRACTION ages on SIM time, like every other sim clock — never
+    // wall time — so a frozen capture advances it exactly one frame per step and
+    // an on/off pair at the same frame is a real comparison (post-aa.ts).
+    postAa.stepBlastDistort(dt);
     // Billboard the gib sprites. Cheap (a handful of quads) and it has to be per
     // frame: a piece that stops facing the camera vanishes edge-on.
     for (const s of spriteBenchSprites) billboardGib(s, camera);
@@ -10504,6 +10560,18 @@ function performBenchAction(a: BenchAction): void {
     setFxaa: (on: boolean) => postAa.setFxaa(on),
     get fxaa() { return postAa.fxaa; },
     setSmear: (v: number) => postAa.setSmear(v),
+    /** BLAST REFRACTION experiment (default OFF). Live seam so the capture rig
+     *  can A/B the SAME frame with it off and on — same seed, same pose, same
+     *  sim time — which is the only honest comparison. */
+    setBlastDistort: (on: boolean) => { postAa.setBlastDistort(on); return postAa.blastDistort; },
+    get blastDistort() { return postAa.blastDistort; },
+    setBlastDistortStrength: (v: number) => {
+      blastDistortStrength = Math.max(0, Math.min(4, Number(v) || 0));
+      postAa.setBlastDistortStrength(blastDistortStrength);
+      return blastDistortStrength;
+    },
+    get blastDistortStrength() { return postAa.blastDistortStrength; },
+    get blastDistortCount() { return postAa.blastDistortCount; },
     /** Per-room probe grids (P3 step 2): weight 0 = bit-identical P1; gain -1
      *  = each room's matched level, else an absolute multiplier. */
     /** Flashlight bounce spot (P4 step 1): 0 = off and bit-identical. */
@@ -11125,7 +11193,10 @@ function performBenchAction(a: BenchAction): void {
       return { actor: a.id, point, ejected, stamped: !!wound };
     },
     meshEyeState: (bodyId?: number) => { const a = bodyId === undefined ? actors[0] : actors.find(q => q.id === bodyId); return a && segMeshRenderer ? segMeshRenderer.eyeState(a) : null; },
-    skeletonMesh: () => segMeshRenderer ? { mode: skeletonMode, ...segMeshRenderer.stats, cacheEntries: segMeshCache!.size, cacheTotals: segMeshCache!.totals } : null,
+    skeletonMesh: () => segMeshRenderer ? { mode: skeletonMode, ...segMeshRenderer.stats, cacheEntries: segMeshCache!.size, cacheTotals: segMeshCache!.totals, cacheStats: segMeshCache!.stats() } : null,
+    /** Cold-start task 1: how many per-character body builds the memo actually
+     *  ran (vs served from cache) and their cumulative CPU time. */
+    bodyBuild: () => ({ ...bodyBuildCacheStats() }),
     /** Synchronous active-path proof for capture harnesses. */
     skeletonDiagnostics: () => ({
       requestedMode: skeletonMode,
@@ -13267,7 +13338,7 @@ function performBenchAction(a: BenchAction): void {
       /** Baked pieces wearing the per-fragment textured HEAD material — the
        *  first non-zero value is the first textured-head draw (startup probe). */
       faceBaked: bakedChunks.filter(b => b.faceMaterial !== undefined).length,
-      pieces: bakedChunks.map(b => ({ id: b.id, centre: [...b.centre] as [number, number, number], radius: b.radius, face: b.faceMaterial !== undefined })),
+      pieces: bakedChunks.map(b => ({ id: b.id, centre: [...b.centre] as [number, number, number], radius: b.radius, face: b.faceMaterial !== undefined, quat: [...b.state.quat] as [number, number, number, number] })),
       /** Live (still-marched) chunk positions — the look/bench drivers frame
        *  the camera on these in bake-OFF captures. */
       livePieces: liveChunks.map(c => ({
@@ -13429,6 +13500,7 @@ function performBenchAction(a: BenchAction): void {
       thrown: dynThrown, detonations: dynDetonations,
       gibbed: dynGibbed, gibPieces: dynGibPieces, lastBlastMs: dynLastBlastMs,
       gibMode, gibBones, gibStaggerFrames, maxChunks, dynSpeedScale, gibVelScale,
+      gibLaunchMode,
       aoeRadiusScale, aoeLaunchFloor,
       ceilM: BUNDLE_CEIL_M,
       // THE STAGED RELEASE, as numbers a gate can assert on: how many pieces are

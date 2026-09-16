@@ -15,7 +15,13 @@
   Still open: steady-state probe gather at the 1024-row cap (338-1069 ms p95), warm hidden-mesh flip re-key,
   opt-in carve 22.3 s build, and the unreproduced owner 38.9 s.
 - [ ] Next: body-to-gib tearing transition; active melting and retired NotBlood sprites are references. Design remains open.
-- [ ] Later: fix floating/upright settled pieces; split each arm/leg into two shorter pieces. Explicitly deferred by owner.
+- [~] Playtest follow-ups 2026-09-16 (candidates on `codex/playtest-followups-task-*`, not merged).
+  Task 1 cold start (`64a4737b`); task 2 split limbs + recognizable heads + leaner plan — the default `parts`
+  shape is a priority prefix of one split-only 14-piece plan (no whole-limb fallback at any budget), the
+  skull/pelvis duplicates are gone and the gore pass is face-aware in the march and the bake.
+  [diagnosis, census, captures, limits](docs/dev-notes/2026-09-16-playtest-followups/ANATOMY-HEADS.md).
+- [ ] Then: blast shockwave A/B + integrated rupture review (task 4); NotBlood launch dispersion (task 3);
+  floating/upright settled pieces (later follow-up, not this task).
 
 ## Neural upscale (ESPCN family) — flesh 400×300 → 800×600 — 2026-09-11
 

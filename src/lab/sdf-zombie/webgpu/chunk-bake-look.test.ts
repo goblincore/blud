@@ -90,8 +90,14 @@ describe('detached head face frame', () => {
     v.reset(c, [prim], undefined, undefined, other);
     expect(v.uniforms.faceTex.value).toBe(otherTex);
     expect(v.uniforms.faceCfg.value.x).toBe(3);
+    // The bake must know the face frame so it can keep the gore off the face
+    // (2026-09-16 follow-ups task 2) — and must NOT carry a stale one onto a
+    // recycled non-head piece.
+    expect(v.bakeData().face).toBeDefined();
+    expect(v.bakeData().face!.forward).toBe(v.uniforms.faceCfg.value.z);
     c.limb = 'armL'; v.reset(c, [prim]);
     expect(v.uniforms.faceCfg.value.x).toBe(0);
+    expect(v.bakeData().face).toBeUndefined();
     v.dispose(); tex.dispose(); otherTex.dispose();
   });
 });

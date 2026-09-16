@@ -1,0 +1,472 @@
+{
+  "label": "shot-off",
+  "url": "http://localhost:5490/sdf-game.html?seed=7&bodycache=0",
+  "qs": "&bodycache=0",
+  "loads": 1,
+  "viewport": {
+    "width": 1512,
+    "height": 982,
+    "dpr": 2
+  },
+  "startedAt": "2026-09-16T18:21:45.829Z",
+  "samples": [
+    {
+      "t": 7543,
+      "backend": "webgpu",
+      "bootMarks": [
+        {
+          "n": "main-start",
+          "t": 271
+        },
+        {
+          "n": "renderer-ready",
+          "t": 277
+        },
+        {
+          "n": "world-start",
+          "t": 281
+        },
+        {
+          "n": "gallery-start",
+          "t": 346
+        },
+        {
+          "n": "dungeon-start",
+          "t": 348
+        },
+        {
+          "n": "drawchain-start",
+          "t": 348
+        },
+        {
+          "n": "deferred-start",
+          "t": 350
+        },
+        {
+          "n": "adaptive-start",
+          "t": 350
+        },
+        {
+          "n": "zombies-start",
+          "t": 357
+        },
+        {
+          "n": "room-probes-start",
+          "t": 359
+        },
+        {
+          "n": "player-start",
+          "t": 1219
+        },
+        {
+          "n": "gun-start",
+          "t": 1220
+        },
+        {
+          "n": "gun-ready",
+          "t": 1508
+        },
+        {
+          "n": "warm-invoked",
+          "t": 1509
+        },
+        {
+          "n": "dynamite-start",
+          "t": 1512
+        },
+        {
+          "n": "detonation-start",
+          "t": 1512
+        },
+        {
+          "n": "burst-start",
+          "t": 1512
+        },
+        {
+          "n": "bleed-start",
+          "t": 1513
+        },
+        {
+          "n": "goo-start",
+          "t": 1513
+        },
+        {
+          "n": "hud-start",
+          "t": 1516
+        },
+        {
+          "n": "boot-time",
+          "t": 1516
+        },
+        {
+          "n": "frameloop-start",
+          "t": 1516
+        },
+        {
+          "n": "api-start",
+          "t": 1516
+        },
+        {
+          "n": "demo-start",
+          "t": 1517
+        },
+        {
+          "n": "draw-ready",
+          "t": 1517
+        },
+        {
+          "n": "main-end",
+          "t": 1517
+        },
+        {
+          "n": "warm-steps-start",
+          "t": 1517
+        },
+        {
+          "n": "warm-flip-done",
+          "t": 1517
+        },
+        {
+          "n": "warm-crowd-bins-done",
+          "t": 1530
+        },
+        {
+          "n": "warm-goo-done",
+          "t": 1572
+        },
+        {
+          "n": "mesh-sync-start",
+          "t": 1573
+        },
+        {
+          "n": "mesh-sync-end",
+          "t": 2293
+        },
+        {
+          "n": "warm-draw-once-done",
+          "t": 3057
+        },
+        {
+          "n": "warm-precompile-done",
+          "t": 3710
+        },
+        {
+          "n": "warm-finally",
+          "t": 3710
+        }
+      ],
+      "warmDone": {
+        "ms": 2193,
+        "bootBeforeWarmMs": 8,
+        "flipped": 58,
+        "flippedNames": [
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Group:shell-eject-0",
+          "Group:shell-load-0",
+          "Group:shell-eject-1",
+          "Group:shell-load-1",
+          "Group:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?"
+        ],
+        "passes": 11,
+        "computes": 7,
+        "phases": {
+          "flip": 0.10000002384185791,
+          "crowdBinsPerType": [
+            2.6,
+            1.5,
+            1.3,
+            1.4,
+            2.9,
+            1.4,
+            1.7
+          ],
+          "crowdBins": 12.799999952316284,
+          "goo": 42.200000047683716,
+          "drawOnce": 1485.2999999523163,
+          "precompile": 652.7000000476837
+        }
+      },
+      "warmGate": {
+        "phase": "ready",
+        "timedOut": false
+      },
+      "loader": {
+        "status": "READY — CLICK TO START",
+        "hidden": true,
+        "ready": true
+      },
+      "loopRunning": true,
+      "gunReady": true,
+      "frames": 114,
+      "skeletonMesh": {
+        "mode": "mesh",
+        "actors": 23,
+        "segments": 426,
+        "rigid": 96,
+        "limb": 330,
+        "hidden": 0,
+        "verts": 387482,
+        "tris": 776004,
+        "overflow": 0,
+        "clamped": 0,
+        "droppedQuads": 0,
+        "cacheEntries": 39,
+        "cacheTotals": {
+          "verts": 32948,
+          "tris": 65916
+        },
+        "cacheStats": {
+          "entries": 39,
+          "extractCount": 39,
+          "extractMs": 710.9,
+          "firstExtractAt": 1580.5,
+          "lastExtractAt": 2289,
+          "maxExtractMs": 533.3,
+          "maxExtractKey": "zombie:axial:1-2:33:d25a5fde@0.01"
+        }
+      },
+      "bodyBuild": {
+        "entries": 0,
+        "hits": 0,
+        "misses": 0,
+        "buildMs": 0
+      },
+      "gpuDiagnostics": {
+        "lost": null,
+        "uncaptured": [],
+        "uncapturedCount": 0
+      },
+      "resources": {
+        "count": 239,
+        "byType": {
+          "script": 230,
+          "other": 2,
+          "fetch": 5,
+          "img": 2
+        },
+        "transferSize": 17034494,
+        "encodedBodySize": 17030948,
+        "totalDuration": 11647
+      },
+      "navigation": {
+        "responseEnd": 5,
+        "domContentLoaded": 272,
+        "loadEvent": 272
+      },
+      "longTasks": {
+        "n": 6,
+        "totalMs": 2700,
+        "longest": [
+          {
+            "s": 1572,
+            "d": 1486
+          },
+          {
+            "s": 354,
+            "d": 866
+          },
+          {
+            "s": 1224,
+            "d": 110
+          },
+          {
+            "s": 1446,
+            "d": 84
+          },
+          {
+            "s": 3712,
+            "d": 78
+          },
+          {
+            "s": 276,
+            "d": 76
+          }
+        ]
+      },
+      "pageErrors": [],
+      "load": 0,
+      "mode": "cold",
+      "backendWallMs": 1557,
+      "warmWallMs": 3825,
+      "readyWallMs": 3825,
+      "warm": {
+        "ms": 2193,
+        "bootBeforeWarmMs": 8,
+        "flipped": 58,
+        "flippedNames": [
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Group:shell-eject-0",
+          "Group:shell-load-0",
+          "Group:shell-eject-1",
+          "Group:shell-load-1",
+          "Group:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?",
+          "Mesh:?"
+        ],
+        "passes": 11,
+        "computes": 7,
+        "phases": {
+          "flip": 0.10000002384185791,
+          "crowdBinsPerType": [
+            2.6,
+            1.5,
+            1.3,
+            1.4,
+            2.9,
+            1.4,
+            1.7
+          ],
+          "crowdBins": 12.799999952316284,
+          "goo": 42.200000047683716,
+          "drawOnce": 1485.2999999523163,
+          "precompile": 652.7000000476837
+        }
+      },
+      "markDeltas": {
+        "main-start->renderer-ready": 6,
+        "renderer-ready->world-start": 4,
+        "world-start->gallery-start": 65,
+        "gallery-start->dungeon-start": 2,
+        "dungeon-start->drawchain-start": 0,
+        "drawchain-start->deferred-start": 2,
+        "deferred-start->adaptive-start": 0,
+        "adaptive-start->zombies-start": 7,
+        "zombies-start->room-probes-start": 2,
+        "room-probes-start->player-start": 860,
+        "player-start->gun-start": 1,
+        "gun-start->gun-ready": 288,
+        "gun-ready->warm-invoked": 1,
+        "warm-invoked->dynamite-start": 3,
+        "dynamite-start->detonation-start": 0,
+        "detonation-start->burst-start": 0,
+        "burst-start->bleed-start": 1,
+        "bleed-start->goo-start": 0,
+        "goo-start->hud-start": 3,
+        "hud-start->boot-time": 0,
+        "boot-time->frameloop-start": 0,
+        "frameloop-start->api-start": 0,
+        "api-start->demo-start": 1,
+        "demo-start->draw-ready": 0,
+        "draw-ready->main-end": 0,
+        "main-end->warm-steps-start": 0,
+        "warm-steps-start->warm-flip-done": 0,
+        "warm-flip-done->warm-crowd-bins-done": 13,
+        "warm-crowd-bins-done->warm-goo-done": 42,
+        "warm-goo-done->mesh-sync-start": 1,
+        "mesh-sync-start->mesh-sync-end": 720,
+        "mesh-sync-end->warm-draw-once-done": 764,
+        "warm-draw-once-done->warm-precompile-done": 653,
+        "warm-precompile-done->warm-finally": 0
+      },
+      "postReadyFrames": {
+        "n": 151,
+        "p50": 17,
+        "p95": 17,
+        "max": 18
+      }
+    }
+  ],
+  "finishedAt": "2026-09-16T18:21:55.788Z"
+}

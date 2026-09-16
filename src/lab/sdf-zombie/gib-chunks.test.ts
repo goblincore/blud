@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   makeChunk, stepChunk, chunkPoint, squashFactors, chunkSettled, toppleAngleToFlat,
+  chunkSupportOffset,
   type Chunk, type ChunkBox,
 } from './gib-chunks';
-import { qRotate, qFromAxisAngle } from './vec';
+import { qRotate, qFromAxisAngle, qIdentity } from './vec';
 import type { Vec3 } from './types';
 
 const rng = () => 0.5; // deterministic spawn
@@ -250,3 +251,87 @@ describe('chunk walls', () => {
     expect(inside.pos[0] + inside.radius).toBeLessThanOrEqual(WALL.min[0] + 1e-9);
   });
 });
+
+// ---------------------------------------------------------------------------
+// ORIENTATION-AWARE FLOOR SUPPORT. The owner, playing: "some pieces remaining
+// above the floor". `stepChunk` pinned the chunk ORIGIN to one collision radius
+// while the piece rotated, and that radius is the farthest reach of the piece
+// (half a limb's LENGTH). A shin lying flat therefore rested with its origin at
+// half-length height — floating by (length - thickness). The support shape is
+// the actual geometry's local spheres; the floor test uses the lowest WORLD
+// point, so a flat shin rests on its thickness and an upright one on its end.
+// ---------------------------------------------------------------------------
+describe('orientation-aware support (settled pieces on the floor)', () => {
+  /** A 1 m capsule along local x with a 6 cm tube radius. */
+  const CAPSULE = [
+    { c: [-0.5, 0, 0] as Vec3, r: 0.06 },
+    { c: [0.5, 0, 0] as Vec3, r: 0.06 },
+  ];
+  /** Broad-phase radius (chunkExtent) — half-length + r. */
+  const EXTENT = 0.56;
+
+  const makeSupportChunk = (quat: Chunk['quat'], pos: Vec3, vel: Vec3 = [0, 0, 0]): Chunk =>
+    ({ ...makeChunk('legL', pos, vel, EXTENT, [1, 0, 0], rng, 'limb', undefined, CAPSULE), quat });
+
+  it('chunkSupportOffset follows the rotation, not one sphere', () => {
+    const flat = makeSupportChunk(qIdentity(), [0, 0, 0]);
+    expect(chunkSupportOffset(flat)).toBeCloseTo(0.06, 6);
+    // Turn the long axis vertical: the support is now half-length + tube.
+    const upright = makeSupportChunk(qFromAxisAngle([0, 0, 1], Math.PI / 2), [0, 0, 0]);
+    expect(chunkSupportOffset(upright)).toBeCloseTo(0.56, 6);
+  });
+
+  it('a flat long piece rests on its THICKNESS, not its half-length', () => {
+    let c = makeSupportChunk(qIdentity(), [0, 2, 0], [0, -0.5, 0]);
+    c = { ...c, angVel: [0, 0, 0] as Vec3 };
+    for (let i = 0; i < 60 * 4; i++) c = stepChunk(c, 1 / 60);
+    // The old radius pin left this at y = 0.56 (floating). It must rest at 0.06.
+    expect(c.pos[1]).toBeCloseTo(0.06, 3);
+    expect(c.pos[1]).toBeLessThan(0.12);
+  });
+
+  it('an upright piece rests on its END (does not sink through the floor)', () => {
+    let c = makeSupportChunk(qFromAxisAngle([0, 0, 1], Math.PI / 2), [0, 3, 0], [0, -0.5, 0]);
+    c = { ...c, angVel: [0, 0, 0] as Vec3 };
+    for (let i = 0; i < 60 * 4; i++) c = stepChunk(c, 1 / 60);
+    expect(c.pos[1]).toBeGreaterThanOrEqual(chunkSupportOffset(c) - 1e-6);
+  });
+
+  it('never lets the origin sink below its orientation-aware support', () => {
+    let c = makeSupportChunk(qIdentity(), [0, 4, 0], [0, -12, 0]);
+    for (let i = 0; i < 60 * 4; i++) {
+      c = stepChunk(c, 1 / 60);
+      expect(c.pos[1]).toBeGreaterThanOrEqual(chunkSupportOffset(c) - 1e-6);
+    }
+  });
+
+  it('chunkSettled uses the orientation-aware support (a floating piece is not settled)', () => {
+    const flat = makeSupportChunk(qIdentity(), [0, 0.3, 0]);
+    const atRest: Chunk = { ...flat, vel: [0, 0, 0] as Vec3, angVel: [0, 0, 0] as Vec3, squash: 0 };
+    // 0.3 m above the floor is airborne for a flat 6 cm shin even though the
+    // old radius-based predicate (y <= 0.56) called it grounded.
+    expect(chunkSettled(atRest)).toBe(false);
+    const grounded: Chunk = { ...atRest, pos: [0, 0.06, 0] };
+    expect(chunkSettled(grounded)).toBe(true);
+  });
+
+  it('a toppling long limb ends flat ON the floor, not hovering above it', () => {
+    // Upright, slow, spin-free: only the topple moves it. It must lie down AND
+    // descend to its thickness as the long axis goes horizontal.
+    let c = makeSupportChunk(qFromAxisAngle([0, 0, 1], Math.PI / 2), [0, 0.56, 0], [0.01, 0, 0]);
+    c = { ...c, angVel: [0, 0, 0] as Vec3 };
+    for (let i = 0; i < 60 * 6; i++) c = stepChunk(c, 1 / 60);
+    const worldLong = qRotate(c.quat, c.longAxis);
+    expect(Math.abs(worldLong[1])).toBeLessThan(0.2);          // lying flat
+    expect(Math.abs(c.pos[1] - 0.06)).toBeLessThan(0.06);      // and on the floor
+  });
+
+  it('defaults to the old single-sphere support (existing calls unchanged)', () => {
+    const c = makeChunk('armL', [0, 0.2, 0], [0, 0, 0], 0.2, [0, 1, 0], rng);
+    expect(chunkSupportOffset(c)).toBeCloseTo(0.2, 12);
+    // Rotating a single origin sphere changes nothing.
+    const spun = { ...c, quat: qFromAxisAngle([1, 1, 0], 0.7) };
+    expect(chunkSupportOffset(spun)).toBeCloseTo(0.2, 12);
+  });
+});
+

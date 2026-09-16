@@ -26,6 +26,7 @@ import {
   ROW_WOUND_CAP, APPLY_BONES, FOLD_BONE_RANGE, ROW_WOUND_FLAGS, TISSUE_RAMP, SD_ROUND_BOX, LEVEL_SHADOW,
   CALC_NORMAL, INSTANCE_STATE, MARCH_BODY_PARAMS, MARCH_TRACE_SETUP, MARCH_TRACE_POST,
   FACE_MELT_SAG, FACE_MELT_STRETCH, FACE_MELT_FADE_LO, DEPTH_PREPASS_MARCH, DEPTH_PRE_FETCH, WOUND_STEP_MUL,
+  HEAD_EXTERIOR_GORE_KEEP,
   QUAD_TILE_EMPTY_WGSL,
   soldierFaceDamageShadow,
 } from './march.wgsl';
@@ -337,7 +338,18 @@ describe('ported features reach the entry point', () => {
     expect(MARCH_BODY).toContain('fbm(anchor * 6.0)');
     // TASK 3: the gate is per-instance OR per-view, so a doomed body in a
     // crowd can ramp its own gore without repainting the shared-material type.
-    expect(MARCH_BODY).toContain('let goreStrength = max(lodCfg.w, gInstGore);');
+    // TASK 2 (2026-09-16 follow-ups): the mask is attenuated by face coverage,
+    // and the pass now runs AFTER the face layer, so a detached head keeps its
+    // painted face instead of being mottled into a meat blob.
+    expect(MARCH_BODY).toContain('let goreStrength = max(lodCfg.w, gInstGore) * (1.0 - faceCover);');
+    expect(MARCH_BODY).toContain('faceCover = faceCover * tex.a;');
+    // The head's non-face exterior keeps a bounded share of the gore, so the
+    // head is not a meat blob from the back either, while the neck cut still
+    // tears. The constant is shared with the CPU bake.
+    expect(MARCH_BODY).toContain(`faceRegion * ${HEAD_EXTERIOR_GORE_KEEP}`);
+    expect(MARCH_BODY).toContain('let faceRegion = 1.0 - smoothstep(1.30 * reach, 1.70 * reach, length(hs));');
+    expect(MARCH_BODY.indexOf('if (faceCfg.x > 0.5) {'))
+      .toBeLessThan(MARCH_BODY.indexOf('let goreStrength = max(lodCfg.w, gInstGore) * (1.0 - faceCover);'));
     expect(INSTANCE_STATE).toContain('gInstGore = (*inst)[base + ');
   });
 
@@ -475,12 +487,15 @@ describe('ported features reach the entry point', () => {
     //    presets (all mottleAmp 0) skip the fbm entirely and shade exactly as
     //    they did before this existed.
     expect(MARCH_BODY).toContain('if (surfCfg2.z > 0.0) {');
-    // Before the gore and face passes: mottle is the flesh's own colour, so
-    // damage and the face paint OVER it.
-    expect(MARCH_BODY.indexOf('mix(albedo, mottleColor'))
-      .toBeLessThan(MARCH_BODY.indexOf('let goreStrength = max(lodCfg.w, gInstGore);'));
-    expect(MARCH_BODY.indexOf('mix(albedo, mottleColor'))
-      .toBeLessThan(MARCH_BODY.indexOf('if (faceCfg.x > 0.5) {'));
+    // Before the FACE pass (mottle is the flesh's own colour, so the face
+    // paints over it) and therefore before the gore pass, which task 2 moved
+    // AFTER the face layer so it can be attenuated by the face's own coverage.
+    const mottleIdx = MARCH_BODY.indexOf('mix(albedo, mottleColor');
+    const faceIdx = MARCH_BODY.indexOf('if (faceCfg.x > 0.5) {');
+    const goreIdx = MARCH_BODY.indexOf('let goreStrength = max(lodCfg.w, gInstGore)');
+    expect(mottleIdx).toBeGreaterThanOrEqual(0);
+    expect(mottleIdx).toBeLessThan(faceIdx);
+    expect(faceIdx).toBeLessThan(goreIdx);
   });
 
   it('steps the shell conservatively and never retracts a displaced sample', () => {

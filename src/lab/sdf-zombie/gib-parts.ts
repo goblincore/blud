@@ -220,6 +220,50 @@ export interface GibPartsOptions {
   organs?: boolean;
 }
 
+/** Options for the BLAST plan (`gibBlastPlan`), which is the default shape the
+ *  tier planner and every blast use. Same knobs as `gibParts`, different
+ *  defaults and a priority order — see gibBlastPlan. */
+export interface GibBlastOptions extends GibPartsOptions {
+  /** Include the optional gut coil at the lowest priority. Default true: it
+   *  rides the full plan and is the first thing a tight pool drops. */
+  organs?: boolean;
+}
+
+/**
+ * PRIORITY BANDS for the split blast plan. LOWER is kept longer, so the
+ * bounded degradation drops the bottom of this table first and NEVER merges an
+ * upper/lower limb pair back into a whole tube.
+ *
+ * The order is what the owner's own brief names: the head is the identity and
+ * goes first; the ribcage-bearing chest band is the readable torso anchor; the
+ * four UPPER limb sections keep a body silhouette at the seven-slot floor; the
+ * cage is the readable skeletal core; the lower sections, the remaining torso
+ * split, the tiny gut coil and the optional extra long bones fill in after.
+ */
+const BLAST_RANK = {
+  head: 0,
+  torsoChest: 1,
+  limbUpper: 2,
+  cage: 3,
+  limbLower: 4,
+  torsoOther: 5,
+  organ: 6,
+  extraBone: 7,
+} as const;
+
+/** Which band a piece id belongs to. */
+function blastRank(part: string): number {
+  if (part === 'head') return BLAST_RANK.head;
+  if (part === 'torso.chest') return BLAST_RANK.torsoChest;
+  if (part === 'bone.cage') return BLAST_RANK.cage;
+  if (part === 'organ.gut') return BLAST_RANK.organ;
+  if (part.startsWith('bone.')) return BLAST_RANK.extraBone;
+  if (part.startsWith('torso.')) return BLAST_RANK.torsoOther;
+  if (part.endsWith('.upper')) return BLAST_RANK.limbUpper;
+  if (part.endsWith('.lower')) return BLAST_RANK.limbLower;
+  return BLAST_RANK.torsoOther;
+}
+
 /**
  * Build the reusable plan: the piece set plus the piece-to-piece cuts. Pure,
  * like everything here. The rupture calls this ONCE on the clean posed body and
@@ -333,6 +377,123 @@ export function gibClusterPieces(body: BuildResult): GibPiece[] {
   return out;
 }
 
+/** A live flesh cluster exists for this limb id. Used to suppress a bone group
+ *  whose limb was already severed (the severed chunk carried its bones) and a
+ *  duplicate skeleton piece whose flesh counterpart is still attached. */
+function limbClusterAlive(body: BuildResult, limb: LimbId): boolean {
+  return body.clusters.some(c => c.limb === limb && c.alive);
+}
+
+/**
+ * THE BLAST PLAN — the split-only, priority-ordered shape a blast actually
+ * uses (2026-09-16 playtest follow-ups task 2).
+ *
+ * This is the answer to the owner's report that arms and legs came back as
+ * whole tubes once the pool got tight. `gibPlan` (above) is the reference
+ * partition: it always splits, but it also always emits the full 11-group
+ * skeleton, the gut and every torso subdivision, and the old tier ladder
+ * degraded by throwing the split away (`clusters` = one whole tube per limb).
+ * Here the split is the INVARIANT: every supported budget takes a prefix of
+ * this list, so what changes with the pool is how MUCH of the split body is
+ * released, never whether a leg is one piece again.
+ *
+ * ORDER (see BLAST_RANK): head, ribcage-bearing chest, the four upper limb
+ * sections, the released ribcage, the four lower sections, the remaining torso
+ * split, the optional gut, then any extra long bones. The first seven pieces
+ * alone still read as a body: head, torso, four split upper limbs and a
+ * ribcage.
+ *
+ * WHAT IS DROPPED, IN ORDER (never anatomy): the gut coil (tiny, optional),
+ * `bone.skull` and `bone.pelvis` (they duplicate the whole flesh head and the
+ * pelvic flesh band — emitting both is the "two indistinguishable heads" the
+ * brief forbids), long bones of an already-severed limb (that limb's chunk
+ * already carries them), then the tail of the priority list above. The head is
+ * rank 0, so a one-slot budget still releases the head.
+ *
+ * CUTS are carried through the sort and remapped, so the full plan still opens
+ * real seams; a sliced plan keeps only the cuts whose two pieces both survive.
+ */
+export function gibBlastPlan(body: BuildResult, opts: GibBlastOptions = {}): GibPlan {
+  const boneRelease: GibBoneRelease = opts.bones ?? 'core';
+  const includeOrgans = opts.organs ?? true;
+  const up = bodyUp(body);
+  const out: { p: GibPiece; rank: number }[] = [];
+  /** Cut links by PIECE REFERENCE, remapped to indices after the sort. */
+  const cutRefs: { a: GibPiece; b: GibPiece; at: Vec3; n: Vec3 }[] = [];
+
+  for (const c of body.clusters) {
+    if (!c.alive) continue;
+    const ips: IdxPrim[] = [];
+    for (let k = c.start; k < c.start + c.count; k++) {
+      const p = body.prims[k];
+      if (p && !p.dead) ips.push({ p, i: k });
+    }
+    if (ips.length === 0) continue;
+
+    if (c.limb === 'head') {
+      const p = piece(c.limb, 'head', ips, c.center, []);
+      out.push({ p, rank: blastRank(p.part) });
+      continue;
+    }
+    const groups = c.limb === 'torso'
+      ? splitTorso(ips, up, c.center)
+      : splitLimb(ips);
+    for (const g of groups.pieces) out.push({ p: g, rank: blastRank(g.part) });
+    for (const l of groups.cuts) {
+      const a = groups.pieces[l.a];
+      const b = groups.pieces[l.b];
+      if (a && b) cutRefs.push({ a, b, at: l.at, n: l.n });
+    }
+  }
+
+  if (boneRelease !== 'off') {
+    for (const b of bonePieces(body, boneRelease)) {
+      const group = b.part.slice('bone.'.length);
+      // Long bones of a limb that is already gone were released with it; the
+      // skull and pelvis duplicate a live flesh piece (or one that took its
+      // skeleton with it), so they are never detached a second time.
+      if (group === 'skull' || group === 'pelvis') continue;
+      if (!limbClusterAlive(body, b.limb)) continue;
+      if (boneRelease === 'core' && group !== 'cage') continue;
+      out.push({ p: b, rank: blastRank(b.part) });
+    }
+  }
+
+  if (includeOrgans) {
+    const organs: IdxPrim[] = [];
+    for (let i = 0; i < body.bonePrims.length; i++) {
+      const p = body.bonePrims[i];
+      if (p && p.op === 'organ' && !p.dead) organs.push({ p, i });
+    }
+    if (organs.length > 0) {
+      const op = organs.map(o => o.p);
+      const centre = groupCentroid(op);
+      const p: GibPiece = {
+        limb: 'torso', part: 'organ.gut', kind: 'limb',
+        prims: [], bones: organs.map(o => ({ ...o.p })), origin: centre,
+        radius: extentOf(op, centre),
+        tornAt: [], srcPrims: [], srcBones: organs.map(o => o.i),
+      };
+      out.push({ p, rank: blastRank(p.part) });
+    }
+  }
+
+  // STABLE priority sort: within a band the authored cluster order survives, so
+  // the plan is deterministic and the preview/spawn order cannot drift.
+  const ranked = [...out].sort((x, y) => x.rank - y.rank).map(x => x.p);
+  const index = new Map<GibPiece, number>();
+  ranked.forEach((p, i) => index.set(p, i));
+  const cuts: GibCutLink[] = [];
+  for (const c of cutRefs) {
+    const a = index.get(c.a);
+    const b = index.get(c.b);
+    if (a === undefined || b === undefined) continue;
+    cuts.push({ a: Math.min(a, b), b: Math.max(a, b), at: c.at, n: c.n });
+  }
+  cuts.sort((x, y) => x.a - y.a || x.b - y.b);
+  return { pieces: ranked, cuts, up };
+}
+
 /** The tier the release ladder would choose, chosen ONCE up front. */
 export interface GibTierPlan {
   plan: GibPlan;
@@ -343,28 +504,36 @@ export interface GibTierPlan {
 }
 
 export interface GibTierPlanOptions extends GibPartsOptions {
-  /** `?gib=` shape. `parts` is the default ladder; `clusters` is its own single
-   *  shape. `pieces` is NOT planned here — `gibAllPieces` has no source indices
-   *  yet, so it keeps the pre-task-3 path (see RESULTS.md Task 3 limits). */
+  /** `?gib=` shape. `parts` is the DEFAULT split ladder (always upper/lower
+   *  limbs, bounded by a priority prefix). `clusters` is the explicitly
+   *  labelled whole-limb A/B control — the shape the owner rejected by name.
+   *  `pieces` is NOT planned here — `gibAllPieces` has no source indices yet,
+   *  so it keeps the pre-task-3 path (see RESULTS.md Task 3 limits). */
   mode?: 'parts' | 'clusters';
-  /** Blast point, used only for the `slice` fallback's nearest-first order. */
+  /** Blast point. Kept for API stability; the split plan's bounded degradation
+   *  is a PRIORITY prefix (so the head and split anatomy survive) rather than a
+   *  nearest-blast slice that can drop the head. */
   at?: Vec3;
 }
 
 /**
- * CHOOSE THE PIECE SHAPE AT SCHEDULE TIME (body-to-gib task 3).
+ * CHOOSE THE PIECE SHAPE AT SCHEDULE TIME (body-to-gib task 3, split-only
+ * follow-up 2026-09-16 task 2).
  *
- * The defect this replaces: `scheduleGib` previewed the full `parts` plan for
- * the whole window and `gibActor` then re-derived a cheaper tier at release, so
- * a tight pool showed a 16-region body and spawned 9 cluster lumps. Both ends
- * now read THIS function: the preview is built from the returned plan, and
- * `gibActor` is locked to it (no ladder re-derivation), so what separates is
- * what spawns.
+ * The defect task 3 fixed: `scheduleGib` previewed the full plan and `gibActor`
+ * re-derived a cheaper one at release, so a tight pool showed a 16-region body
+ * and spawned 9 cluster lumps. Both ends now read THIS function.
  *
- * The ladder is deliberately the same rung order and the same lengths as
- * `gibActor`'s, because the choice must be the one the game would already have
- * made — this moves WHEN it is made, not what it is. `budget` is the allowance
- * the existing greedy arithmetic hands this body.
+ * The defect THIS revision fixes: the old ladder degraded by rebuilding whole
+ * limbs (`clusters+core`, `clusters+cage`, `clusters`), which is exactly the
+ * "arms and legs reconnect into tubes" the owner reported. The ladder is gone.
+ * `parts` mode takes a priority PREFIX of `gibBlastPlan` — head first, then the
+ * split limbs and torso — so every budget keeps split anatomy; `clusters` mode
+ * remains only as the explicit whole-limb A/B the page asks for by name.
+ *
+ * `budget` is the allowance the existing greedy arithmetic hands this body.
+ * `at` is accepted for call-site compatibility and is no longer used to order
+ * the slice: the head must never be the thing the slice drops.
  */
 export function gibTierPlan(
   body: BuildResult,
@@ -377,35 +546,28 @@ export function gibTierPlan(
     const pieces = gibClusterPieces(body);
     return { plan: { pieces, cuts: [], up }, tier: 'clusters', reserve: pieces.length };
   }
-  const bones: GibBoneRelease = opts.bones ?? 'all';
-  const organs = opts.organs ?? true;
-  const full = gibPlan(body, { bones, organs });
-  if (full.pieces.length <= budget) return { plan: full, tier: 'parts', reserve: full.pieces.length };
-
-  const core = gibPlan(body, { bones: 'core', organs });
-  if (core.pieces.length <= budget) return { plan: core, tier: 'parts-core', reserve: core.pieces.length };
-
-  const clusters = gibClusterPieces(body);
-  const coreBones = core.pieces.filter(p => p.kind === 'bone');
-  const cage = coreBones.filter(p => p.part === 'bone.cage');
-  const rungs: { tier: string; pieces: GibPiece[] }[] = [
-    { tier: 'clusters+core', pieces: [...clusters, ...coreBones] },
-    { tier: 'clusters+cage', pieces: [...clusters, ...cage] },
-    { tier: 'clusters', pieces: clusters },
-  ];
-  for (const rung of rungs) {
-    if (rung.pieces.length <= budget) {
-      return { plan: { pieces: rung.pieces, cuts: [], up }, tier: rung.tier, reserve: rung.pieces.length };
-    }
+  const full = gibBlastPlan(body, { bones: opts.bones ?? 'core', organs: opts.organs ?? true });
+  if (full.pieces.length <= budget) {
+    return { plan: full, tier: 'parts', reserve: full.pieces.length };
   }
-  // The slice is the last resort, and it is done HERE for the same reason as
-  // every rung: the preview must already be the sliced set. Nearest the blast
-  // first, matching gibActor's own order.
-  const at = opts.at ?? [0, 0, 0] as Vec3;
-  const dist = (p: Vec3) => (p[0] - at[0]) ** 2 + (p[1] - at[1]) ** 2 + (p[2] - at[2]) ** 2;
-  const sliced = [...clusters].sort((x, y) => dist(x.origin) - dist(y.origin))
-    .slice(0, Math.max(1, budget));
-  return { plan: { pieces: sliced, cuts: [], up }, tier: 'slice', reserve: sliced.length };
+  // BOUNDED DEGRADATION: a prefix of the priority order, never a merge. The head
+  // is rank 0, so `max(1, budget)` always contains it.
+  const keep = full.pieces.slice(0, Math.max(1, Math.min(budget, full.pieces.length)));
+  const index = new Map<GibPiece, number>();
+  keep.forEach((p, i) => index.set(p, i));
+  const cuts: GibCutLink[] = [];
+  for (const c of full.cuts) {
+    const a = index.get(full.pieces[c.a]!);
+    const b = index.get(full.pieces[c.b]!);
+    if (a === undefined || b === undefined) continue;
+    cuts.push({ a: Math.min(a, b), b: Math.max(a, b), at: c.at, n: c.n });
+  }
+  cuts.sort((x, y) => x.a - y.a || x.b - y.b);
+  return {
+    plan: { pieces: keep, cuts, up },
+    tier: keep.length === full.pieces.length ? 'parts' : 'parts-slice',
+    reserve: keep.length,
+  };
 }
 
 /**

@@ -1,0 +1,185 @@
+{
+  "view": "face",
+  "dist": 0.7,
+  "qs": "&gibtear=0.2",
+  "vhs": "blud",
+  "targetId": 17,
+  "release": {
+    "headIdx": 12,
+    "tier": "parts",
+    "parts": [
+      "torso.pelvis",
+      "torso.abdomen",
+      "legR.lower",
+      "legR.upper",
+      "legL.lower",
+      "legL.upper",
+      "armR.lower",
+      "armL.lower",
+      "organ.gut",
+      "bone.cage",
+      "armR.upper",
+      "armL.upper",
+      "head",
+      "torso.chest"
+    ]
+  },
+  "flight": [
+    {
+      "label": "flight-12",
+      "file": "head-flight-12.png",
+      "centre": [
+        23.5,
+        1.7286469427419806,
+        -7.344014307031922
+      ],
+      "live": 14,
+      "baked": 0
+    },
+    {
+      "label": "flight-13",
+      "file": "head-flight-13.png",
+      "centre": [
+        23.5,
+        2.0027250933033915,
+        -7.316490377496161
+      ],
+      "live": 14,
+      "baked": 0
+    },
+    {
+      "label": "flight-14",
+      "file": "head-flight-14.png",
+      "centre": [
+        23.5,
+        2.262733087982597,
+        -7.2892957442533675
+      ],
+      "live": 14,
+      "baked": 0
+    },
+    {
+      "label": "flight-15",
+      "file": "head-flight-15.png",
+      "centre": [
+        23.5,
+        2.5088392621245714,
+        -7.2624264676026895
+      ],
+      "live": 14,
+      "baked": 0
+    },
+    {
+      "label": "flight-16",
+      "file": "head-flight-16.png",
+      "centre": [
+        23.5,
+        2.7412099371102223,
+        -7.235878654977861
+      ],
+      "live": 14,
+      "baked": 0
+    },
+    {
+      "label": "flight-17",
+      "file": "head-flight-17.png",
+      "centre": [
+        23.5,
+        2.960009444451456,
+        -7.209648460383276
+      ],
+      "live": 14,
+      "baked": 0
+    },
+    {
+      "label": "flight-18",
+      "file": "head-flight-18.png",
+      "centre": [
+        23.5,
+        3.1654001495979704,
+        -7.18373208383682
+      ],
+      "live": 14,
+      "baked": 0
+    },
+    {
+      "label": "flight-19",
+      "file": "head-flight-19.png",
+      "centre": [
+        23.5,
+        3.3575424754592227,
+        -7.158125770819367
+      ],
+      "live": 14,
+      "baked": 0
+    },
+    {
+      "label": "flight-20",
+      "file": "head-flight-20.png",
+      "centre": [
+        23.5,
+        3.5365949256449825,
+        -7.132825811730853
+      ],
+      "live": 14,
+      "baked": 0
+    },
+    {
+      "label": "flight-21",
+      "file": "head-flight-21.png",
+      "centre": [
+        23.5,
+        3.702714107427831,
+        -7.107828541352875
+      ],
+      "live": 14,
+      "baked": 0
+    },
+    {
+      "label": "flight-22",
+      "file": "head-flight-22.png",
+      "centre": [
+        23.5,
+        3.8560547544309403,
+        -7.083130338317699
+      ],
+      "live": 14,
+      "baked": 0
+    }
+  ],
+  "settle": {
+    "steps": 240,
+    "live": 8,
+    "baked": 6,
+    "faceBaked": 1,
+    "lastBakeMs": 77,
+    "lastBakeSwapFrame": 335
+  },
+  "baked": {
+    "id": 13,
+    "centre": [
+      23.488755226135254,
+      0.2899994030594826,
+      -5.973362922668457
+    ],
+    "radius": 0.19657655466394097,
+    "face": true
+  },
+  "census": {
+    "inFrustum": 4,
+    "ofPieces": 5,
+    "bonePieces": 0,
+    "boneRows": 0,
+    "organPieces": 1,
+    "buriedBonePieces": 0,
+    "bonesShadingAsMeat": 0,
+    "organsShadingAsBone": 0,
+    "live": 5,
+    "baked": 9,
+    "views": 14,
+    "spare": 0,
+    "bakePending": true,
+    "cap": 64
+  },
+  "pageErrors": []
+}

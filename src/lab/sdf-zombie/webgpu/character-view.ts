@@ -29,7 +29,7 @@ import { parseBlob } from '../blob-parse';
 import { compileBlob, compileFace, compilePalette, compileSheet } from '../blob-compile';
 import { BlobError } from '../blob-ast';
 import { checkStance } from '../blob-checks';
-import { buildBody, DEFAULT_BUILD_OPTS, type BodyOverride, type BuildResult } from '../build-body';
+import { buildBody, BodyBuildCache, DEFAULT_BUILD_OPTS, type BodyOverride, type BuildResult } from '../build-body';
 import { makeZombie } from '../body';
 import { translateBody } from '../translate';
 import { boneFrames } from '../rig-frames';
@@ -147,41 +147,103 @@ export function buildCharacterBody(
   boneRatio?: number,
 ): BuildResult {
   const paletteOut = out ?? { palette: null };
-  let f = face;
-  if (f === undefined) {
-    // Seed the face from the character's OWN `face` block (compileFace parses
-    // the .blob), so a .blob-authored head renders at the size its author
-    // declared. Before that seeding existed, every character built from
-    // DEFAULT_FACE alone and the .blob's headRadius/headWidth were silently
-    // ignored at render time — the clown's 0.235 x 1.18 ball rendered as the
-    // 0.118 x 0.76 DEFAULT_FACE skull.
-    try {
-      f = { ...DEFAULT_FACE, ...compileFace(parseBlob(entry.src)) };
-    } catch {
-      f = { ...DEFAULT_FACE };
+  // COLD-START MEMO (2026-09-16 playtest follow-ups task 1). The pre-translate
+  // half — face derivation, .blob compile, bone derivation and the containment
+  // checks — is deterministic in the key below, but spawnAll called it once per
+  // actor (23 bodies) and the whole boot paid it 23 times. The key carries
+  // EVERY input that can change the result; anything added here that changes
+  // the body must be folded into `bodyBuildKey` too. On a HIT the caller still
+  // gets its own translated body because translateBody copies every array.
+  //
+  // `?bodycache=0` disables the memo for a matched A/B (same build, same
+  // instrumentation, only the memo differs); it is the verification knob, not a
+  // gameplay setting.
+  const build = () => {
+    let f = face;
+    if (f === undefined) {
+      // Seed the face from the character's OWN `face` block (compileFace parses
+      // the .blob), so a .blob-authored head renders at the size its author
+      // declared. Before that seeding existed, every character built from
+      // DEFAULT_FACE alone and the .blob's headRadius/headWidth were silently
+      // ignored at render time — the clown's 0.235 x 1.18 ball rendered as the
+      // 0.118 x 0.76 DEFAULT_FACE skull.
+      try {
+        f = { ...DEFAULT_FACE, ...compileFace(parseBlob(entry.src)) };
+      } catch {
+        f = { ...DEFAULT_FACE };
+      }
     }
-  }
-  const { compiled, stance, error } = compileCharacter(entry, f, paletteOut);
-  // The panel's ratio, once the owner has touched it, overrides whatever the
-  // doc would have done (nothing today; an authored ratio from the bones
-  // block, later). Applied to the COMPILED body only — the TS fallback zombie
-  // has no bones block to override.
-  if (compiled && boneRatio !== undefined) compiled.boneRatio = boneRatio;
-  const result = buildBody(compiled ?? makeZombie(f), DEFAULT_BUILD_OPTS, opts ?? {});
-  // Declared-vs-actual knee fold. Surfaced next to validateBody's own errors
-  // because it is the same kind of finding — something the author almost
-  // certainly did not mean — and because a backward knee is otherwise
-  // invisible to every geometric check: it is perfectly closed, connected and
-  // non-interpenetrating.
-  if (compiled && stance)
-    result.errors = [...checkStance(result.bones, stance), ...result.errors];
-  if (error) {
-    const msg = `zombie.blob failed to compile, rendering the fallback TS zombie: ${error}`;
-    result.errors = [msg, ...result.errors];
-    errors.push(msg);
-  }
-  return translateBody(result, start);
+    // The cache owns the palette side effect for a miss; the caller's `out`
+    // is filled from the cached entry below so a hit reports it identically.
+    const sideOut = { palette: null as FleshMaterial | null };
+    const { compiled, stance, error } = compileCharacter(entry, f, sideOut);
+    // The panel's ratio, once the owner has touched it, overrides whatever the
+    // doc would have done (nothing today; an authored ratio from the bones
+    // block, later). Applied to the COMPILED body only — the TS fallback zombie
+    // has no bones block to override. `compiled` is created inside this
+    // memoized builder (and the ratio is part of the key), so this mutation
+    // never leaks across cache entries.
+    if (compiled && boneRatio !== undefined) compiled.boneRatio = boneRatio;
+    const result = buildBody(compiled ?? makeZombie(f), DEFAULT_BUILD_OPTS, opts ?? {});
+    // Declared-vs-actual knee fold. Surfaced next to validateBody's own errors
+    // because it is the same kind of finding — something the author almost
+    // certainly did not mean — and because a backward knee is otherwise
+    // invisible to every geometric check: it is perfectly closed, connected and
+    // non-interpenetrating.
+    if (compiled && stance)
+      result.errors = [...checkStance(result.bones, stance), ...result.errors];
+    if (error) {
+      const msg = `zombie.blob failed to compile, rendering the fallback TS zombie: ${error}`;
+      result.errors = [msg, ...result.errors];
+      // Report a per-character compile failure once, not once per actor.
+      errors.push(msg);
+    }
+    return { body: result, palette: sideOut.palette };
+  };
+  const cached = bodyBuildMemoEnabled()
+    ? characterBodyCache.get(bodyBuildKey(entry, face, boneRatio, opts), build)
+    : build();
+  paletteOut.palette = cached.palette;
+  return translateBody(cached.body, start);
 }
+
+/** `?bodycache=0` turns off the body-build memo (matched A/B only). Guarded for
+ *  the Node test environment, where `location` does not exist. */
+export function bodyBuildMemoEnabled(): boolean {
+  if (typeof location === 'undefined') return true;
+  return new URLSearchParams(location.search).get('bodycache') !== '0';
+}
+
+/** Cache for the pre-translate half of buildCharacterBody. Module-scoped like
+ *  the character registry: a page load rebuilds both together, so there is no
+ *  cross-load staleness to expire. Diagnostics only — never a correctness
+ *  dependency. */
+const characterBodyCache = new BodyBuildCache<{ body: BuildResult; palette: FleshMaterial | null }>();
+
+/** Signature of every input that can change a built body. Keep in step with
+ *  buildCharacterBody: an input that is not in this key is an input a cache hit
+ *  would silently ignore. */
+function bodyBuildKey(
+  entry: CharacterEntry,
+  face: FaceParams | undefined,
+  boneRatio: number | undefined,
+  opts: BodyOverride | undefined,
+): string {
+  return [
+    entry.name,
+    // Equal-length edits can change anatomy. Key on the complete source so
+    // rebuilding an edited character cannot reuse its previous geometry.
+    entry.src,
+    face === undefined ? '@auto' : JSON.stringify(face),
+    boneRatio === undefined ? '@default' : String(boneRatio),
+    opts === undefined ? '@none' : JSON.stringify(opts),
+  ].join('\u0000');
+}
+
+/** Cold-start diagnostics: how many body builds the memo actually ran. */
+export const bodyBuildCacheStats = () => characterBodyCache.stats();
+/** Test/rebuild seam: drop every memoized body and keep the counters. */
+export const clearBodyBuildCache = () => characterBodyCache.clear();
 
 // ---------------------------------------------------------------------------
 // The face step — the `sheet` block's data half
