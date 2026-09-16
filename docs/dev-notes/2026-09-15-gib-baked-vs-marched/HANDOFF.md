@@ -1,5 +1,7 @@
 # HANDOFF — settled gib appearance accepted
 
+> **Next session:** [Current issues, loading/first-gib freeze and tearing transition](../2026-09-16-gib-follow-up/HANDOFF.md).
+
 ## Current status — 2026-09-16
 
 The owner manually accepted the repaired flesh shading and preserved head face.

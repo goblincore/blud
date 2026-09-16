@@ -8,6 +8,8 @@
 
 - [x] Preserve flesh shading, cut geometry and face texture through settle baking; owner manual test accepted.
   [Results, captures and limits](docs/dev-notes/2026-09-15-gib-baked-vs-marched/parity-fix/RESULTS.md) · PR #8.
+- [ ] New report: long startup and initial gib freeze; no timings/root cause yet.
+  [Next-session handoff](docs/dev-notes/2026-09-16-gib-follow-up/HANDOFF.md) includes profiling leads and all remaining issues.
 - [ ] Next: body-to-gib tearing transition; active melting and retired NotBlood sprites are references. Design remains open.
 - [ ] Later: fix floating/upright settled pieces; split each arm/leg into two shorter pieces. Explicitly deferred by owner.
 
