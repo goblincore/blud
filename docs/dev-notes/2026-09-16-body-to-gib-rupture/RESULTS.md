@@ -145,8 +145,9 @@ Worktree `2026-09-16-body-to-gib-rupture-task-2`, branch
 `codex/body-to-gib-rupture-task-2`, inherited Task 1 as
 `6898f65f` on top of `4dcb1ffd`. Node `v22.22.1`. Owned Vite on `5401` and
 headless Chrome on `9401` (`--enable-unsafe-webgpu`, scratch in `.lab-tmp/`);
-the owner's `5391` server was never touched. Commit for this task is the tip of
-the branch (see §10).
+the owner's `5391` server was never touched. The implementation/evidence commit
+for this task is **`af601dc3`** (a following doc-only commit adds that hash to
+this file); see §10.
 
 ## 1. What changed here
 
@@ -334,6 +335,9 @@ NOT fixed or hidden here; `lastBakeMs`/`lastBakeSwapMs` stayed 0 in this run
 before/after regression claim.
 
 ## 10. Tests and build
+
+Code + evidence commit: `af601dc3` on `codex/body-to-gib-rupture-task-2`
+(inherits Task 1 `6898f65f` on `4dcb1ffd`). No merge, no push.
 
 ```
 npx vitest run src/lab/sdf-zombie/gib-tear.test.ts \
