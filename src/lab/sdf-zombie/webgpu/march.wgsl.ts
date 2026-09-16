@@ -5,6 +5,7 @@ import { PROBE_DYNAMIC_WGSL } from './probe-dynamic.wgsl';
 import { SEG_VOLUME_WGSL } from './skeleton-spike/volume.wgsl';
 import { TILE_MAX_ENTRIES } from './tile-cull';
 import { MAX_PRIMS, MAX_CLUSTERS, BONE_SEG_MAX } from '../validate';
+import { HEAD_EXTERIOR_GORE_KEEP } from '../gib-look-tuning';
 import { REC_VEC4S, REC_COUNTS, REC_COUNTS2, REC_WOUND_BOUND, REC_ANCHOR_BAND, REC_WIND_ALIVE, REC_MELT,
   REC_FLASH, REC_NOISE_YAW, REC_HEAD_WCOUNT, REC_HEAD_QUAT, REC_VOL_POSE0, REC_VOL_POSE1,
   REC_CENTRE_SEED, REC_HALF_REV, REC_GORE, MAX_CROWD_INSTANCES } from './crowd-records';
@@ -2342,6 +2343,13 @@ export const DEPTH_PREPASS_MARCH = /* wgsl */ `fn depthPrepassMarch(
 export const FACE_MELT_SAG = 0.25;
 export const FACE_MELT_STRETCH = 0.6;
 export const FACE_MELT_FADE_LO = 0.05;
+/** Fraction of a piece's gore a HEAD's non-face exterior keeps (0..1).
+ *  A detached head was torn at the NECK; its exterior skin is intact, so at
+ *  0.6 of the normal chunk gore it reads as a bloodied head rather than the
+ *  generic mottled meat blob the owner reported (2026-09-16 follow-ups task 2).
+ *  Setting it to 1 restores the pre-task-2 behaviour exactly. Shared with the
+ *  CPU bake (gib-look-tuning.ts) so the two cannot drift. */
+export { HEAD_EXTERIOR_GORE_KEEP };
 
 /**
  * MELT SKIN PATCHES (owner review, 2026-09-03: "some of the pink would still
@@ -3343,6 +3351,12 @@ export const FACE_LAYER_WGSL = /* wgsl */ `  // Emissive mask from the face shee
   // pre-lit; shading it again buries the nose and lips under the fringe
   // shadow and the jaw's diffuse falloff.
   var faceFlat = 0.0;
+  // Face coverage REGARDLESS of mode (facing * alpha). The torn-meat gore pass
+  // runs after this layer and attenuates by (1 - faceCover), so a detached
+  // head keeps its authored face instead of being mottled into a meat blob —
+  // the torn treatment belongs on the cut and the rest of the piece, not over
+  // the exterior skin (2026-09-16 playtest follow-ups task 2).
+  var faceCover = 0.0;
 
   // Face texture, before wounds and char so damage still paints over it.
   if (faceCfg.x > 0.5) {
@@ -3410,7 +3424,15 @@ export const FACE_LAYER_WGSL = /* wgsl */ `  // Emissive mask from the face shee
     let decal = select(0.0, 1.0, abs(faceCfg.x - 2.0) < 0.5);
     let lumaOnly = abs(faceCfg.x - 3.0) < 0.5;
     let reach = 1.0 + 0.5 * decal;
-    facing = facing * (1.0 - smoothstep(1.30 * reach, 1.70 * reach, length(hs)));
+    // HEAD-REGION MASK, independent of which way the surface faces: ~1 anywhere
+    // on the head's own extent, 0 down the neck. The gore pass uses it so a
+    // detached head keeps its OWN SKIN all around (the torn treatment belongs
+    // on the neck cut, not over the exterior), not merely the frontal face.
+    let faceRegion = 1.0 - smoothstep(1.30 * reach, 1.70 * reach, length(hs));
+    facing = facing * faceRegion;
+    // Full protection on the frontal face; the rest of the head keeps only the
+    // HEAD_EXTERIOR_GORE_KEEP fraction of the piece's gore.
+    faceCover = clamp(facing + faceRegion * ${HEAD_EXTERIOR_GORE_KEEP}, 0.0, 1.0);
     if (facing > 0.0 && uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) {
       let base = uv * faceAtlas.xy + faceAtlas.zw;
       // Not linearised, deliberately: the sheet is sRGB-encoded and so are the
@@ -3419,6 +3441,10 @@ export const FACE_LAYER_WGSL = /* wgsl */ `  // Emissive mask from the face shee
       // preset retune, not before.
       let tex = texel(faceTex, base);
       faceFlat = facing * tex.a * decal;
+      // Refine the region-level protection with the sheet's own alpha where it
+      // is actually sampled (a decal's transparent background must not shield
+      // the gore). A sheet with no alpha channel reads 1 and is unchanged.
+      faceCover = faceCover * tex.a;
       let W = vec3<f32>(0.2126, 0.7152, 0.0722);
       // DECAL mode (faceCfg.x == 2): the sheet is a colour image baked off a
       // reference mesh and pasted on as albedo where its alpha is set, the way
@@ -3754,19 +3780,24 @@ export const MARCH_TRACE_POST = /* wgsl */ `  if (!hit) { discard; }
     albedo = mix(albedo, mottleColor, blotch * surfCfg2.z);
   }
 
+${FACE_LAYER_WGSL}
+
   // Gore mask (gobs-and-goo spec §2): chunks are torn meat, not clean latex.
   // fbm mottling + proximity to the torn wounds; blends toward wet deep red
   // and darker clot, and rides the wet boost so bloody regions glisten.
-  // Sits BEFORE the face/char pass so a torn-off head still gets its face
-  // and char painted over the gore, and before the wet line, which maxes wm
-  // against gore. goreStrength is 0 on the body view, so standing bodies skip
-  // the whole block — including its fbm — and shade exactly as before.
+  //
+  // TASK 2 (2026-09-16 playtest follow-ups): this pass MOVED AFTER the face
+  // layer and is attenuated by (1 - faceCover). Before, the face multiplied an
+  // already gore-blackened albedo, so a detached head read as a mottled meat
+  // blob with the painted face invisible under it. Standing bodies have
+  // goreStrength 0 and pay nothing; a non-head chunk has faceCfg.x 0, so the
+  // face layer is a no-op and the gore result is bit-identical to before.
   //
   // TASK 3: the gate is the MAX of the per-view uniform (non-crowd draws and
   // chunk views) and the per-instance record. The crowd shares ONE material, so
   // a doomed body in a crowd could not ramp its gore through lodCfg.w without
   // repainting the whole type; gInstGore carries its own ramp (REC_GORE).
-  let goreStrength = max(lodCfg.w, gInstGore);
+  let goreStrength = max(lodCfg.w, gInstGore) * (1.0 - faceCover);
   var gore = 0.0;
   if (goreStrength > 0.0) {
     let mottle = clamp(fbm(anchor * 6.0) * 0.5 + 0.5, 0.0, 1.0);
@@ -3778,8 +3809,6 @@ export const MARCH_TRACE_POST = /* wgsl */ `  if (!hit) { discard; }
     let stain = smoothstep(0.40, 0.68, mottle) * goreStrength;
     albedo = mix(albedo, deepColor * 0.22, stain * 0.85);
   }
-
-${FACE_LAYER_WGSL}
 
   // Soldier-only wet blood stain. This uses the existing character flag and
   // the one authoritative wound mask, so it affects head and torso lips while

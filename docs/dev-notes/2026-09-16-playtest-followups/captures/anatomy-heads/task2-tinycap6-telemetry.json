@@ -1,0 +1,352 @@
+{
+  "tag": "tiny",
+  "qs": "&gibtear=0&maxchunks=6",
+  "vfx": "&explosionfx=standin",
+  "seed": 7,
+  "view": "back",
+  "dist": 2.4,
+  "tearSec": 0,
+  "targetId": 17,
+  "targetPos": [
+    23.5,
+    0,
+    -7.5
+  ],
+  "crop": [
+    250,
+    143,
+    300,
+    417
+  ],
+  "image": [
+    800,
+    600
+  ],
+  "frames": [
+    {
+      "label": "onset",
+      "simMs": 0,
+      "tearAge": 0
+    },
+    {
+      "label": "17ms",
+      "simMs": 16.666666666666668,
+      "tearAge": 0,
+      "tears": 0,
+      "ruptureMaxM": 0,
+      "ruptureMaxRad": 0,
+      "chunkMaxRad": 0.09876849099030961,
+      "chunkMaxAngVel": 5.738449326536861,
+      "pendingGibs": 0,
+      "held": 6,
+      "delays": [
+        0,
+        0,
+        1,
+        1,
+        2,
+        2
+      ],
+      "pendingPlanPieces": 0,
+      "pendingTiers": [],
+      "live": 6,
+      "baked": 0,
+      "cap": 6,
+      "tier": "parts-slice",
+      "spawned": 6,
+      "heldBack": 0,
+      "parts": [
+        "legL.upper",
+        "legR.upper",
+        "torso.chest",
+        "armL.upper",
+        "armR.upper",
+        "head"
+      ],
+      "livePieces": [
+        [
+          23.6,
+          0.8573,
+          -7.5
+        ],
+        [
+          23.4,
+          0.8573,
+          -7.5
+        ],
+        [
+          23.5,
+          1.2767,
+          -7.4737
+        ],
+        [
+          23.7109,
+          1.3252,
+          -7.4595
+        ],
+        [
+          23.2891,
+          1.3252,
+          -7.4595
+        ],
+        [
+          23.5,
+          1.5802,
+          -7.3584
+        ]
+      ]
+    },
+    {
+      "label": "33ms",
+      "simMs": 33.333333333333336,
+      "tearAge": 0,
+      "tears": 0,
+      "ruptureMaxM": 0,
+      "ruptureMaxRad": 0,
+      "chunkMaxRad": 0.19440931309925366,
+      "chunkMaxAngVel": 5.55673176452986,
+      "pendingGibs": 0,
+      "held": 4,
+      "delays": [
+        0,
+        0,
+        1,
+        1
+      ],
+      "pendingPlanPieces": 0,
+      "pendingTiers": [],
+      "live": 6,
+      "baked": 0,
+      "cap": 6,
+      "tier": "parts-slice",
+      "spawned": 6,
+      "heldBack": 0,
+      "parts": [
+        "legL.upper",
+        "legR.upper",
+        "torso.chest",
+        "armL.upper",
+        "armR.upper",
+        "head"
+      ],
+      "livePieces": [
+        [
+          23.6354,
+          0.996,
+          -7.5
+        ],
+        [
+          23.3646,
+          0.996,
+          -7.5
+        ],
+        [
+          23.5,
+          1.2713,
+          -7.4737
+        ],
+        [
+          23.7109,
+          1.3198,
+          -7.4595
+        ],
+        [
+          23.2891,
+          1.3198,
+          -7.4595
+        ],
+        [
+          23.5,
+          1.5748,
+          -7.3584
+        ]
+      ]
+    },
+    {
+      "label": "50ms",
+      "simMs": 50,
+      "tearAge": 0,
+      "tears": 0,
+      "ruptureMaxM": 0,
+      "ruptureMaxRad": 0,
+      "chunkMaxRad": 0.28702150917475383,
+      "chunkMaxAngVel": 5.380768591986414,
+      "pendingGibs": 0,
+      "held": 2,
+      "delays": [
+        0,
+        0
+      ],
+      "pendingPlanPieces": 0,
+      "pendingTiers": [],
+      "live": 6,
+      "baked": 0,
+      "cap": 6,
+      "tier": "parts-slice",
+      "spawned": 6,
+      "heldBack": 0,
+      "parts": [
+        "legL.upper",
+        "legR.upper",
+        "torso.chest",
+        "armL.upper",
+        "armR.upper",
+        "head"
+      ],
+      "livePieces": [
+        [
+          23.6706,
+          1.1311,
+          -7.5
+        ],
+        [
+          23.3294,
+          1.1311,
+          -7.5
+        ],
+        [
+          23.5,
+          1.4143,
+          -7.4699
+        ],
+        [
+          23.7382,
+          1.4602,
+          -7.4543
+        ],
+        [
+          23.2891,
+          1.3117,
+          -7.4595
+        ],
+        [
+          23.5,
+          1.5668,
+          -7.3584
+        ]
+      ]
+    },
+    {
+      "label": "67ms",
+      "simMs": 66.66666666666667,
+      "tearAge": 0,
+      "tears": 0,
+      "ruptureMaxM": 0,
+      "ruptureMaxRad": 0,
+      "chunkMaxRad": 0.3767009857078588,
+      "chunkMaxAngVel": 5.210377586573512,
+      "pendingGibs": 0,
+      "held": 0,
+      "delays": [],
+      "pendingPlanPieces": 0,
+      "pendingTiers": [],
+      "live": 6,
+      "baked": 0,
+      "cap": 6,
+      "tier": "parts-slice",
+      "spawned": 6,
+      "heldBack": 0,
+      "parts": [
+        "legL.upper",
+        "legR.upper",
+        "torso.chest",
+        "armL.upper",
+        "armR.upper",
+        "head"
+      ],
+      "livePieces": [
+        [
+          23.7056,
+          1.2627,
+          -7.5
+        ],
+        [
+          23.2944,
+          1.2627,
+          -7.5
+        ],
+        [
+          23.5,
+          1.5537,
+          -7.4662
+        ],
+        [
+          23.7652,
+          1.597,
+          -7.4491
+        ],
+        [
+          23.2618,
+          1.4521,
+          -7.4543
+        ],
+        [
+          23.5,
+          1.7091,
+          -7.3445
+        ]
+      ]
+    },
+    {
+      "label": "83ms",
+      "simMs": 83.33333333333333,
+      "tearAge": 0,
+      "tears": 0,
+      "ruptureMaxM": 0,
+      "ruptureMaxRad": 0,
+      "chunkMaxRad": 0.4635406121507517,
+      "chunkMaxAngVel": 5.045382296332018,
+      "pendingGibs": 0,
+      "held": 0,
+      "delays": [],
+      "pendingPlanPieces": 0,
+      "pendingTiers": [],
+      "live": 6,
+      "baked": 0,
+      "cap": 6,
+      "tier": "parts-slice",
+      "spawned": 6,
+      "heldBack": 0,
+      "parts": [
+        "legL.upper",
+        "legR.upper",
+        "torso.chest",
+        "armL.upper",
+        "armR.upper",
+        "head"
+      ],
+      "livePieces": [
+        [
+          23.7404,
+          1.3908,
+          -7.5
+        ],
+        [
+          23.2596,
+          1.3908,
+          -7.5
+        ],
+        [
+          23.5,
+          1.6896,
+          -7.4624
+        ],
+        [
+          23.7922,
+          1.7303,
+          -7.4439
+        ],
+        [
+          23.2348,
+          1.5889,
+          -7.4491
+        ],
+        [
+          23.5,
+          1.8479,
+          -7.3307
+        ]
+      ]
+    }
+  ]
+}

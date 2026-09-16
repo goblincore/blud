@@ -150,7 +150,7 @@ import {
   FLIGHT_TUNING, type FlightState,
 } from '../dynamite-flight';
 import { gibAll, gibAllPieces, type ChunkGroup } from '../sever';
-import { displaceGibPieces, gibParts, gibPlan, gibTierPlan, type GibBoneRelease, type GibPiece, type GibPlan } from '../gib-parts';
+import { displaceGibPieces, gibTierPlan, type GibBoneRelease, type GibPiece, type GibPlan } from '../gib-parts';
 import { createBurstLayer, createStickProp, type BurstLayer, type StickProp } from './fpv-view';
 import { createExplosionVfx, type ExplosionVfx } from './explosion-vfx';
 import {
@@ -5169,10 +5169,19 @@ async function main() {
   /** What one body may take this blast. Identical in both modes EXCEPT that the
    *  sprite path reserves no tier floor: the floor exists to guarantee every
    *  body in a blast can afford the cheapest SHAPE, and sprite mode has no
-   *  shapes to choose between. */
+   *  shapes to choose between.
+   *
+   *  CLAMPED TO `remaining` (2026-09-16 task 2, adversarial caps). The floor is
+   *  the cheapest shape's slot count, but it is a RESERVATION, not extra
+   *  capacity: at `?maxchunks=5` the old `max(floor, remaining - reserve)`
+   *  handed a body 7 slots from a 5-slot pool, so the recycler overwrote two of
+   *  its own pieces inside the same call — the "pieces jumping into positions"
+   *  defect the budget exists to prevent. A body can now never be allowed more
+   *  than the pool actually holds. */
   const gibAllowance = (remaining: number, condemnedLeft: number) => (gibRenderMode !== 'march'
     ? Math.max(1, remaining)
-    : Math.max(GIB_TIER_FLOOR, remaining - GIB_TIER_FLOOR * Math.max(0, condemnedLeft - 1)));
+    : Math.max(1, Math.min(remaining,
+      Math.max(GIB_TIER_FLOOR, remaining - GIB_TIER_FLOOR * Math.max(0, condemnedLeft - 1)))));
 
   /** And what that body actually spent. The marched path debits at least a
    *  floor's worth whatever it made, because the floor's slots are reserved for
@@ -6660,11 +6669,12 @@ async function main() {
    * belongs to an actor with a GPU view, a brain, a collapse clock and a room
    * membership, so this is bookkeeping as much as it is gore:
    *
-   *  1. `gibParts` (the default) on the POSED body — the split piece set with
-   *     the skeleton released as its own bone pieces. `?gib=clusters|pieces`
-   *     keeps sever.ts's two older shapes as A/B controls. Pieces come back in
-   *     WORLD space, which is exactly what spawnChunkPiece wants — the same
-   *     frame the existing sever path hands it.
+   *  1. `gibBlastPlan` (via `gibTierPlan`, the default) on the POSED body — the
+   *     split-only priority plan with the skeleton's readable core released as
+   *     its own bone piece. `?gib=clusters|pieces` keeps sever.ts's two older
+   *     shapes as labelled A/B controls. Pieces come back in WORLD space, which
+   *     is exactly what spawnChunkPiece wants — the same frame the existing
+   *     sever path hands it.
    *  2. **ZERO VELOCITY AT BIRTH, THEN THE BLAST.** Every piece is spawned
    *     stationary at the transform the body is actually in, and its concussion
    *     velocity is QUEUED for a later frame (`pendingGibImpulses`). Frame 0 is
@@ -6700,15 +6710,24 @@ async function main() {
   ): number {
     // A planned hand-off comes from the rupture: `body` is the pose the body was
     // last DRAWN in and `pieces` are the plan's own regions at the same offsets,
-    // so the tier ladder below re-derives from the drawn pose if it must degrade
-    // rather than from the clean one.
+    // so the released set is the drawn set (task 3), not a re-derivation from
+    // the clean pose.
     const posedBody = planned?.body ?? a.posed();
     const torsoC = posedBody.clusters.find(c => c.limb === 'torso')?.center
       ?? ([at[0], at[1], at[2]] as Vec3);
     const clusters: GibPiece[] = (gibMode === 'pieces' ? gibAllPieces(posedBody, torsoC) : gibAll(posedBody))
       .chunks.map(g => ({ ...g, part: g.limb, kind: 'limb' as const }));
+    // THE SPLIT PLAN IS CHOSEN THE SAME WAY AT BOTH ENDS (2026-09-16 task 2).
+    // A scheduled rupture already carries the plan the preview drew; the
+    // zero-duration path (`?gibtear=0`) and any direct caller choose it HERE
+    // with the same `gibTierPlan`, so no default path can silently fall back to
+    // whole-limb clusters. `?gib=clusters|pieces` keep their own labelled
+    // reference shapes.
+    const scheduledPlan = gibMode === 'parts' && planned === undefined
+      ? gibTierPlan(posedBody, budget, { bones: gibBones, mode: 'parts', at })
+      : null;
     const pieces: GibPiece[] = gibMode === 'parts'
-      ? (planned?.pieces ?? gibParts(posedBody, { bones: gibBones }))
+      ? (planned?.pieces ?? scheduledPlan!.plan.pieces)
       : clusters;
     const template = { uniforms: a.view.uniforms, volumeTexture: a.view.volumeTexture };
     // IS THIS BODY ACTUALLY GOING OUT AS SPRITES? Both halves matter: the mode
@@ -6727,44 +6746,33 @@ async function main() {
     }
     const launchFall = EXPLOSION_LAUNCH.falloffFloor
       + (1 - EXPLOSION_LAUNCH.falloffFloor) * falloff;
-    // NEAREST THE BLAST FIRST, and the sort is load-bearing twice over: it is
-    // what the stagger's order means, AND it is what decides which pieces
-    // survive the budget when even the cheapest shape does not fit. The old
-    // code sliced in cluster order, so which half of a body you got was an
-    // accident of the authoring order.
+    // NEAREST THE BLAST FIRST. This is the STAGGER order: the piece nearest the
+    // explosion starts moving first, so the blast reads as ripping outward
+    // through the body. It no longer decides what survives — the budget was
+    // applied to the plan (by priority) before this point.
     const dist = (p: Vec3) => (p[0] - at[0]) ** 2 + (p[1] - at[1]) ** 2 + (p[2] - at[2]) ** 2;
     const byBlast = (list: GibPiece[]) => [...list].sort((x, y) => dist(x.origin) - dist(y.origin));
 
-    // ——— THE TIERS. A blast that takes three bodies at once wants ~72 pieces
-    // and the live pool holds 24; SOMETHING has to give, and what must NOT give
-    // is the body. A retired actor whose pieces were all dropped does not read
-    // as "the pool was full", it reads as a body that VANISHED with no gore at
-    // all — and three of the arena's eight zombies disappear at once. So the
-    // shape degrades before the count does: the full split set, then the same
-    // set without the skeleton (the bones are what the pool cannot afford
-    // first), then sever.ts's one-chunk-per-limb shape, and only if even THAT
-    // does not fit is anything dropped at all.
+    // ——— THE TIERS ————————————————————————————————————————————————————————
+    // The default `parts` shape is SPLIT-ONLY and is chosen by `gibTierPlan`
+    // (schedule time, or the call above for the zero-duration path). There is
+    // deliberately NO release-time ladder here any more: the old one degraded by
+    // rebuilding whole limbs (`clusters`, `clusters+cage`, `clusters+core`) and
+    // that is the "arms and legs become tubes again" the owner reported. The
+    // only remaining whole-limb shape is `?gib=clusters`, which is a labelled
+    // A/B control the page asked for by name.
     let chosen = byBlast(pieces);
-    let tier = gibMode === 'parts' ? 'parts' : gibMode;
+    let tier = gibMode === 'parts' ? (scheduledPlan?.tier ?? 'parts') : gibMode;
     // THE SCHEDULE-TIME TIER IS BINDING (task 3). When the caller locked the
     // plan, the shape was already chosen with the pool arithmetic and previewed;
     // re-deriving here is exactly the "preview rich, spawn cheap" defect this
-    // removes, so the whole ladder — including the slice fallback — is skipped.
-    // `?gib=pieces` is the exception (no source indices yet): it keeps the old
-    // route.
+    // removes.
     const tierLocked = planned?.locked === true;
     if (tierLocked && planned?.tier) tier = planned.tier;
     // ——— SPRITE MODE HAS NO LADDER, AND THAT IS THE FEATURE ————————————————
-    // Everything below this branch exists to answer ONE question: "the pool
-    // cannot afford this body's full piece set, what shape do we take instead?"
-    // Every rung is a worse-looking body — `clusters` is the one-tube-per-limb
-    // shape the owner rejected by name ("it just breaks into like tubes (arms and
-    // legs) and orbs (torso) which doesnt really read as gibs"), and it is
-    // reached precisely when several bodies are gibbed at once, which is exactly
-    // what a bundle thrown into a crowd does. A quad cannot cost what a marched
-    // piece costs, so `gibBudget()` hands sprite mode its own cap and the
-    // condition that would degrade the shape never becomes true. The body comes
-    // apart completely, every time, which is what retired the owner's report.
+    // A quad cannot cost what a marched piece costs, so `gibBudget()` hands
+    // sprite mode its own cap and the condition that would degrade the shape
+    // never becomes true. The body comes apart completely, every time.
     if (carveMode) {
       // NO LADDER, for the same reason as sprite mode and one more: the carved
       // piece set IS the whole body by construction (every region of it), so
@@ -6774,60 +6782,16 @@ async function main() {
     } else if (spriteMode) {
       tier = 'sprite';
       // A blast bigger than the cap still slices — nearest-the-blast first, the
-      // same order the ladder's fallbacks use — but that is the CAP talking, not
-      // a shape compromise: the pieces that go are the ones the player is
-      // furthest from.
+      // same order the blast's own spawn order uses — but that is the CAP
+      // talking, not a shape compromise: the pieces that go are the ones the
+      // player is furthest from.
       if (chosen.length > budget) chosen = chosen.slice(0, Math.max(1, budget));
-    } else if (chosen.length > budget && !tierLocked) {
-      // The ladder is computed LAZILY — the cheapest shape is a second
-      // partition of the body, and a blast that fits the full set must not pay
-      // to build shapes it will not use.
-      //
-      // `parts-core` is the FIRST rung because the skeleton is the part of this
-      // the owner asked for BY NAME: the three torso masses and the skull are
-      // what make a pile read as a body rather than as meat, so dropping the
-      // eight long bones before dropping those is the right way round.
-      const coreOnly = () => gibParts(posedBody, { bones: 'core' })
-        .filter(p => p.kind === 'bone');
-      const core = () => byBlast(gibParts(posedBody, { bones: 'core' }));
-      // CLUSTERS + THE CORE SKELETON, which is the one tier that exists purely
-      // for the owner's headline complaint. The cheap shape below it is one
-      // chunk per LIMB, and those chunks carry their bones PACKED INSIDE the
-      // meat — the exact "i still dont see anything bone related like idk rib
-      // cage or something" the piece set was built to end. MEASURED with the
-      // bone census (`chunkCensus().bonePieces` / `.buriedBonePieces`): a
-      // two-body blast into a 24-piece pool read `bonePieces 3` (a visible
-      // ribcage, skull and pelvis on the first body) and `buriedBonePieces 6`
-      // (only the body the pool could not afford), against `bonePieces 22,
-      // buried 0` for the two bodies a 48-piece pool allows.
-      const clustersPlusCore = () => byBlast([...clusters, ...coreOnly()]);
-      // CLUSTERS + THE RIBCAGE ALONE, for a pool that can afford seven pieces
-      // per body and no more. `bone.cage` is the piece the owner asked for BY
-      // NAME ("idk rib cage or something") and it is the one that reads as a
-      // skeleton at a glance; of the eleven bone groups it is the one worth a
-      // slot when there is exactly one to spend.
-      const cageOnly = () => gibParts(posedBody, { bones: 'core' })
-        .filter(p => p.kind === 'bone' && p.part === 'bone.cage');
-      const clustersPlusCage = () => byBlast([...clusters, ...cageOnly()]);
-      // A FLESH-ONLY TIER (twelve split pieces, no skeleton at all) USED TO SIT
-      // HERE, between these two, and it has been REMOVED — measured, not
-      // tidied. In a tight pool it won the allocation on piece count and spent
-      // the body's whole allowance on meat: the blast then released twelve
-      // pieces with no bone anywhere in the pile, which is the owner's headline
-      // complaint reproduced by the fallback rather than by the piece set. The
-      // flesh-only shape is still reachable (`?gibbones=off` makes it the FIRST
-      // tier, so it needs no rung of its own), and the rung below buys the
-      // skull, ribcage and pelvis for the same three slots it costs.
-      for (const tierTry of [
-        { id: 'parts-core', size: core },
-        { id: 'clusters+core', size: clustersPlusCore },
-        { id: 'clusters+cage', size: clustersPlusCage },
-        { id: 'clusters', size: () => byBlast(clusters) },
-      ]) {
-        const candidate = tierTry.size();
-        if (candidate.length <= budget) { chosen = candidate; tier = tierTry.id; break; }
-      }
-      if (chosen.length > budget) { chosen = chosen.slice(0, Math.max(1, budget)); tier = 'slice'; }
+    } else if (chosen.length > budget) {
+      // The split plan was already chosen against the pool (reserved at schedule
+      // time, or planned here for the zero-duration path), so this is only a
+      // belt-and-braces bound for the labelled `clusters`/`pieces` controls.
+      // Never reached for default `parts`.
+      chosen = chosen.slice(0, Math.max(1, budget));
     }
     const ordered = chosen;
     const liveBefore = liveChunks.length;
@@ -13278,7 +13242,7 @@ function performBenchAction(a: BenchAction): void {
       /** Baked pieces wearing the per-fragment textured HEAD material — the
        *  first non-zero value is the first textured-head draw (startup probe). */
       faceBaked: bakedChunks.filter(b => b.faceMaterial !== undefined).length,
-      pieces: bakedChunks.map(b => ({ id: b.id, centre: [...b.centre] as [number, number, number], radius: b.radius, face: b.faceMaterial !== undefined })),
+      pieces: bakedChunks.map(b => ({ id: b.id, centre: [...b.centre] as [number, number, number], radius: b.radius, face: b.faceMaterial !== undefined, quat: [...b.state.quat] as [number, number, number, number] })),
       /** Live (still-marched) chunk positions — the look/bench drivers frame
        *  the camera on these in bake-OFF captures. */
       livePieces: liveChunks.map(c => ({

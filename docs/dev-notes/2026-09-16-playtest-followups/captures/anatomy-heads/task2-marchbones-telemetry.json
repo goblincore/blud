@@ -1,0 +1,734 @@
+{
+  "tag": "marchbones",
+  "qs": "&gibtear=0.2&gibbonemesh=0",
+  "vfx": "&explosionfx=standin",
+  "seed": 7,
+  "view": "back",
+  "dist": 2.4,
+  "tearSec": 0.2,
+  "targetId": 17,
+  "targetPos": [
+    23.5,
+    0,
+    -7.5
+  ],
+  "crop": [
+    250,
+    143,
+    300,
+    417
+  ],
+  "image": [
+    800,
+    600
+  ],
+  "frames": [
+    {
+      "label": "onset",
+      "simMs": 0,
+      "tearAge": 0
+    },
+    {
+      "label": "17ms",
+      "simMs": 16.666666666666668,
+      "tearAge": 0.016666666666666666,
+      "tears": 1,
+      "ruptureMaxM": 0.13923920598354114,
+      "ruptureMaxRad": 0.08386313035733009,
+      "chunkMaxRad": 0,
+      "chunkMaxAngVel": 0,
+      "pendingGibs": 1,
+      "held": 0,
+      "delays": [],
+      "pendingPlanPieces": 14,
+      "pendingTiers": [
+        "parts"
+      ],
+      "live": 0,
+      "baked": 0,
+      "cap": 64,
+      "inFrustum": 0,
+      "bonePieces": 0,
+      "boneRows": 0,
+      "buriedBonePieces": 0,
+      "organPieces": 0,
+      "tier": "parts",
+      "spawned": 0,
+      "heldBack": 0,
+      "parts": [],
+      "livePieces": []
+    },
+    {
+      "label": "33ms",
+      "simMs": 33.333333333333336,
+      "tearAge": 0.03333333333333333,
+      "tears": 1,
+      "ruptureMaxM": 0.1983805506763485,
+      "ruptureMaxRad": 0.1677262607146555,
+      "chunkMaxRad": 0,
+      "chunkMaxAngVel": 0,
+      "pendingGibs": 1,
+      "held": 0,
+      "delays": [],
+      "pendingPlanPieces": 14,
+      "pendingTiers": [
+        "parts"
+      ],
+      "live": 0,
+      "baked": 0,
+      "cap": 64,
+      "inFrustum": 0,
+      "bonePieces": 0,
+      "boneRows": 0,
+      "buriedBonePieces": 0,
+      "organPieces": 0,
+      "tier": "parts",
+      "spawned": 0,
+      "heldBack": 0,
+      "parts": [],
+      "livePieces": []
+    },
+    {
+      "label": "50ms",
+      "simMs": 50,
+      "tearAge": 0.05,
+      "tears": 1,
+      "ruptureMaxM": 0.237488566534065,
+      "ruptureMaxRad": 0.2515893910719824,
+      "chunkMaxRad": 0,
+      "chunkMaxAngVel": 0,
+      "pendingGibs": 1,
+      "held": 0,
+      "delays": [],
+      "pendingPlanPieces": 14,
+      "pendingTiers": [
+        "parts"
+      ],
+      "live": 0,
+      "baked": 0,
+      "cap": 64,
+      "inFrustum": 0,
+      "bonePieces": 0,
+      "boneRows": 0,
+      "buriedBonePieces": 0,
+      "organPieces": 0,
+      "tier": "parts",
+      "spawned": 0,
+      "heldBack": 0,
+      "parts": [],
+      "livePieces": []
+    },
+    {
+      "label": "67ms",
+      "simMs": 66.66666666666667,
+      "tearAge": 0.06666666666666667,
+      "tears": 1,
+      "ruptureMaxM": 0.26474950418596443,
+      "ruptureMaxRad": 0.33545252142931004,
+      "chunkMaxRad": 0,
+      "chunkMaxAngVel": 0,
+      "pendingGibs": 1,
+      "held": 0,
+      "delays": [],
+      "pendingPlanPieces": 14,
+      "pendingTiers": [
+        "parts"
+      ],
+      "live": 0,
+      "baked": 0,
+      "cap": 64,
+      "inFrustum": 0,
+      "bonePieces": 0,
+      "boneRows": 0,
+      "buriedBonePieces": 0,
+      "organPieces": 0,
+      "tier": "parts",
+      "spawned": 0,
+      "heldBack": 0,
+      "parts": [],
+      "livePieces": []
+    },
+    {
+      "label": "83ms",
+      "simMs": 83.33333333333333,
+      "tearAge": 0.08333333333333333,
+      "tears": 1,
+      "ruptureMaxM": 0.299773313732558,
+      "ruptureMaxRad": 0.4193156517866377,
+      "chunkMaxRad": 0,
+      "chunkMaxAngVel": 0,
+      "pendingGibs": 1,
+      "held": 0,
+      "delays": [],
+      "pendingPlanPieces": 14,
+      "pendingTiers": [
+        "parts"
+      ],
+      "live": 0,
+      "baked": 0,
+      "cap": 64,
+      "inFrustum": 0,
+      "bonePieces": 0,
+      "boneRows": 0,
+      "buriedBonePieces": 0,
+      "organPieces": 0,
+      "tier": "parts",
+      "spawned": 0,
+      "heldBack": 0,
+      "parts": [],
+      "livePieces": []
+    },
+    {
+      "label": "100ms",
+      "simMs": 100,
+      "tearAge": 0.09999999999999999,
+      "tears": 1,
+      "ruptureMaxM": 0.3115736656262411,
+      "ruptureMaxRad": 0.5031787821439655,
+      "chunkMaxRad": 0,
+      "chunkMaxAngVel": 0,
+      "pendingGibs": 1,
+      "held": 0,
+      "delays": [],
+      "pendingPlanPieces": 14,
+      "pendingTiers": [
+        "parts"
+      ],
+      "live": 0,
+      "baked": 0,
+      "cap": 64,
+      "inFrustum": 0,
+      "bonePieces": 0,
+      "boneRows": 0,
+      "buriedBonePieces": 0,
+      "organPieces": 0,
+      "tier": "parts",
+      "spawned": 0,
+      "heldBack": 0,
+      "parts": [],
+      "livePieces": []
+    },
+    {
+      "label": "117ms",
+      "simMs": 116.66666666666667,
+      "tearAge": 0.11666666666666665,
+      "tears": 1,
+      "ruptureMaxM": 0.3291265345438182,
+      "ruptureMaxRad": 0.5870419125012933,
+      "chunkMaxRad": 0,
+      "chunkMaxAngVel": 0,
+      "pendingGibs": 1,
+      "held": 0,
+      "delays": [],
+      "pendingPlanPieces": 14,
+      "pendingTiers": [
+        "parts"
+      ],
+      "live": 0,
+      "baked": 0,
+      "cap": 64,
+      "inFrustum": 0,
+      "bonePieces": 0,
+      "boneRows": 0,
+      "buriedBonePieces": 0,
+      "organPieces": 0,
+      "tier": "parts",
+      "spawned": 0,
+      "heldBack": 0,
+      "parts": [],
+      "livePieces": []
+    },
+    {
+      "label": "133ms",
+      "simMs": 133.33333333333334,
+      "tearAge": 0.13333333333333333,
+      "tears": 1,
+      "ruptureMaxM": 0.3516258438020854,
+      "ruptureMaxRad": 0.6709050428586207,
+      "chunkMaxRad": 0,
+      "chunkMaxAngVel": 0,
+      "pendingGibs": 1,
+      "held": 0,
+      "delays": [],
+      "pendingPlanPieces": 14,
+      "pendingTiers": [
+        "parts"
+      ],
+      "live": 0,
+      "baked": 0,
+      "cap": 64,
+      "inFrustum": 0,
+      "bonePieces": 0,
+      "boneRows": 0,
+      "buriedBonePieces": 0,
+      "organPieces": 0,
+      "tier": "parts",
+      "spawned": 0,
+      "heldBack": 0,
+      "parts": [],
+      "livePieces": []
+    },
+    {
+      "label": "150ms",
+      "simMs": 150,
+      "tearAge": 0.15,
+      "tears": 1,
+      "ruptureMaxM": 0.34697820352401093,
+      "ruptureMaxRad": 0.7547681732159485,
+      "chunkMaxRad": 0,
+      "chunkMaxAngVel": 0,
+      "pendingGibs": 1,
+      "held": 0,
+      "delays": [],
+      "pendingPlanPieces": 14,
+      "pendingTiers": [
+        "parts"
+      ],
+      "live": 0,
+      "baked": 0,
+      "cap": 64,
+      "inFrustum": 0,
+      "bonePieces": 0,
+      "boneRows": 0,
+      "buriedBonePieces": 0,
+      "organPieces": 0,
+      "tier": "parts",
+      "spawned": 0,
+      "heldBack": 0,
+      "parts": [],
+      "livePieces": []
+    },
+    {
+      "label": "167ms",
+      "simMs": 166.66666666666666,
+      "tearAge": 0.16666666666666666,
+      "tears": 1,
+      "ruptureMaxM": 0.36391220001945684,
+      "ruptureMaxRad": 0.8386313035732762,
+      "chunkMaxRad": 0,
+      "chunkMaxAngVel": 0,
+      "pendingGibs": 1,
+      "held": 0,
+      "delays": [],
+      "pendingPlanPieces": 14,
+      "pendingTiers": [
+        "parts"
+      ],
+      "live": 0,
+      "baked": 0,
+      "cap": 64,
+      "inFrustum": 0,
+      "bonePieces": 0,
+      "boneRows": 0,
+      "buriedBonePieces": 0,
+      "organPieces": 0,
+      "tier": "parts",
+      "spawned": 0,
+      "heldBack": 0,
+      "parts": [],
+      "livePieces": []
+    },
+    {
+      "label": "183ms",
+      "simMs": 183.33333333333331,
+      "tearAge": 0.18333333333333332,
+      "tears": 1,
+      "ruptureMaxM": 0.36987044487548054,
+      "ruptureMaxRad": 0.9224944339306038,
+      "chunkMaxRad": 0,
+      "chunkMaxAngVel": 0,
+      "pendingGibs": 1,
+      "held": 0,
+      "delays": [],
+      "pendingPlanPieces": 14,
+      "pendingTiers": [
+        "parts"
+      ],
+      "live": 0,
+      "baked": 0,
+      "cap": 64,
+      "inFrustum": 0,
+      "bonePieces": 0,
+      "boneRows": 0,
+      "buriedBonePieces": 0,
+      "organPieces": 0,
+      "tier": "parts",
+      "spawned": 0,
+      "heldBack": 0,
+      "parts": [],
+      "livePieces": []
+    },
+    {
+      "label": "200ms",
+      "simMs": 200,
+      "tearAge": 0.19999999999999998,
+      "tears": 1,
+      "ruptureMaxM": 0.35828736834450764,
+      "ruptureMaxRad": 1.0063575642879314,
+      "chunkMaxRad": 0,
+      "chunkMaxAngVel": 0,
+      "pendingGibs": 1,
+      "held": 0,
+      "delays": [],
+      "pendingPlanPieces": 14,
+      "pendingTiers": [
+        "parts"
+      ],
+      "live": 0,
+      "baked": 0,
+      "cap": 64,
+      "inFrustum": 0,
+      "bonePieces": 0,
+      "boneRows": 0,
+      "buriedBonePieces": 0,
+      "organPieces": 0,
+      "tier": "parts",
+      "spawned": 0,
+      "heldBack": 0,
+      "parts": [],
+      "livePieces": []
+    },
+    {
+      "label": "217ms",
+      "simMs": 216.66666666666669,
+      "tearAge": 0,
+      "tears": 0,
+      "ruptureMaxM": 0,
+      "ruptureMaxRad": 0,
+      "chunkMaxRad": 1.0902206946452588,
+      "chunkMaxAngVel": 4.872447873760735,
+      "pendingGibs": 0,
+      "held": 0,
+      "delays": [],
+      "pendingPlanPieces": 0,
+      "pendingTiers": [],
+      "live": 14,
+      "baked": 0,
+      "cap": 64,
+      "inFrustum": 14,
+      "bonePieces": 1,
+      "boneRows": 31,
+      "buriedBonePieces": 0,
+      "organPieces": 1,
+      "tier": "parts",
+      "spawned": 14,
+      "heldBack": 0,
+      "parts": [
+        "torso.pelvis",
+        "torso.abdomen",
+        "legR.lower",
+        "legR.upper",
+        "legL.lower",
+        "legL.upper",
+        "armR.lower",
+        "armL.lower",
+        "organ.gut",
+        "bone.cage",
+        "armR.upper",
+        "armL.upper",
+        "head",
+        "torso.chest"
+      ],
+      "livePieces": [
+        [
+          23.5,
+          0.9114,
+          -7.5962
+        ],
+        [
+          23.5,
+          1.0898,
+          -7.5724
+        ],
+        [
+          23.3075,
+          0.4084,
+          -7.4666
+        ],
+        [
+          23.3612,
+          1.1047,
+          -7.5025
+        ],
+        [
+          23.7015,
+          0.4084,
+          -7.4653
+        ],
+        [
+          23.6491,
+          1.1301,
+          -7.5025
+        ],
+        [
+          23.0973,
+          0.9819,
+          -7.4145
+        ],
+        [
+          23.9135,
+          0.9928,
+          -7.4123
+        ],
+        [
+          23.5005,
+          1.1947,
+          -7.4565
+        ],
+        [
+          23.5,
+          1.413,
+          -7.4844
+        ],
+        [
+          23.2661,
+          1.5292,
+          -7.4559
+        ],
+        [
+          23.7346,
+          1.5318,
+          -7.4558
+        ],
+        [
+          23.5,
+          1.7286,
+          -7.344
+        ],
+        [
+          23.5,
+          1.7842,
+          -7.37
+        ]
+      ]
+    },
+    {
+      "label": "233ms",
+      "simMs": 233.33333333333334,
+      "tearAge": 0,
+      "tears": 0,
+      "ruptureMaxM": 0,
+      "ruptureMaxRad": 0,
+      "chunkMaxRad": 1.1714281592079383,
+      "chunkMaxAngVel": 4.718153691091645,
+      "pendingGibs": 0,
+      "held": 0,
+      "delays": [],
+      "pendingPlanPieces": 0,
+      "pendingTiers": [],
+      "live": 14,
+      "baked": 0,
+      "cap": 64,
+      "inFrustum": 14,
+      "bonePieces": 1,
+      "boneRows": 31,
+      "buriedBonePieces": 0,
+      "organPieces": 1,
+      "tier": "parts",
+      "spawned": 14,
+      "heldBack": 0,
+      "parts": [
+        "torso.pelvis",
+        "torso.abdomen",
+        "legR.lower",
+        "legR.upper",
+        "legL.lower",
+        "legL.upper",
+        "armR.lower",
+        "armL.lower",
+        "organ.gut",
+        "bone.cage",
+        "armR.upper",
+        "armL.upper",
+        "head",
+        "torso.chest"
+      ],
+      "livePieces": [
+        [
+          23.5,
+          1.047,
+          -7.6296
+        ],
+        [
+          23.5,
+          1.2285,
+          -7.588
+        ],
+        [
+          23.2504,
+          0.5018,
+          -7.4568
+        ],
+        [
+          23.3329,
+          1.2414,
+          -7.503
+        ],
+        [
+          23.7592,
+          0.5018,
+          -7.4554
+        ],
+        [
+          23.6779,
+          1.2667,
+          -7.5029
+        ],
+        [
+          23.0167,
+          1.0956,
+          -7.3974
+        ],
+        [
+          23.9938,
+          1.1068,
+          -7.3952
+        ],
+        [
+          23.5006,
+          1.334,
+          -7.4488
+        ],
+        [
+          23.5,
+          1.5525,
+          -7.4824
+        ],
+        [
+          23.2412,
+          1.6665,
+          -7.4512
+        ],
+        [
+          23.7595,
+          1.669,
+          -7.4511
+        ],
+        [
+          23.5,
+          1.8675,
+          -7.3302
+        ],
+        [
+          23.5,
+          1.9233,
+          -7.3591
+        ]
+      ]
+    },
+    {
+      "label": "250ms",
+      "simMs": 250,
+      "tearAge": 0,
+      "tears": 0,
+      "ruptureMaxM": 0,
+      "ruptureMaxRad": 0,
+      "chunkMaxRad": 1.2500640540594654,
+      "chunkMaxAngVel": 4.568745490873742,
+      "pendingGibs": 0,
+      "held": 0,
+      "delays": [],
+      "pendingPlanPieces": 0,
+      "pendingTiers": [],
+      "live": 14,
+      "baked": 0,
+      "cap": 64,
+      "inFrustum": 14,
+      "bonePieces": 1,
+      "boneRows": 31,
+      "buriedBonePieces": 0,
+      "organPieces": 1,
+      "tier": "parts",
+      "spawned": 14,
+      "heldBack": 0,
+      "parts": [
+        "torso.pelvis",
+        "torso.abdomen",
+        "legR.lower",
+        "legR.upper",
+        "legL.lower",
+        "legL.upper",
+        "armR.lower",
+        "armL.lower",
+        "organ.gut",
+        "bone.cage",
+        "armR.upper",
+        "armL.upper",
+        "head",
+        "torso.chest"
+      ],
+      "livePieces": [
+        [
+          23.5,
+          1.179,
+          -7.6628
+        ],
+        [
+          23.5,
+          1.3635,
+          -7.6036
+        ],
+        [
+          23.1938,
+          0.5919,
+          -7.4469
+        ],
+        [
+          23.3048,
+          1.3745,
+          -7.5035
+        ],
+        [
+          23.8165,
+          0.5919,
+          -7.4455
+        ],
+        [
+          23.7064,
+          1.3998,
+          -7.5034
+        ],
+        [
+          22.9366,
+          1.206,
+          -7.3804
+        ],
+        [
+          24.0737,
+          1.2173,
+          -7.3783
+        ],
+        [
+          23.5006,
+          1.4697,
+          -7.4413
+        ],
+        [
+          23.5,
+          1.6884,
+          -7.4805
+        ],
+        [
+          23.2165,
+          1.8002,
+          -7.4466
+        ],
+        [
+          23.7843,
+          1.8027,
+          -7.4464
+        ],
+        [
+          23.5,
+          2.0027,
+          -7.3165
+        ],
+        [
+          23.5,
+          2.0588,
+          -7.3482
+        ]
+      ]
+    }
+  ]
+}

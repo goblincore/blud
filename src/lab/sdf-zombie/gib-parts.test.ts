@@ -16,7 +16,7 @@ import soldierSrc from './characters/soldier.blob?raw';
 import { compileBlob } from './blob-compile';
 import { parseBlob } from './blob-parse';
 import { buildBody } from './build-body';
-import { gibParts, gibPlan, gibTierPlan, gibClusterPieces, displaceGibPieces, type GibPiece } from './gib-parts';
+import { gibParts, gibPlan, gibTierPlan, gibBlastPlan, gibClusterPieces, displaceGibPieces, type GibPiece } from './gib-parts';
 import { sdBody, type Body } from './validate';
 import type { BuildResult } from './build-body';
 import type { Vec3 } from './types';
@@ -320,17 +320,91 @@ describe('gibTierPlan — preview and release agree on the shape', () => {
     expect(t.plan.cuts.length).toBeGreaterThan(0);
   });
 
-  it('degrades to the same rung gibActor would have picked at a tight pool', () => {
-    // 16 full > 12, 16 core > 12, clusters+core 9 <= 12 — the exact rung the
-    // old release-time ladder chose after previewing all 16 (RESULTS.md §7.1).
-    const tight = gibTierPlan(zombie, 12, { bones: 'core', at });
-    expect(tight.tier).toBe('clusters+core');
-    expect(tight.reserve).toBe(9);
-    // The floor rung is clusters+the cage, 7 pieces; below that, a slice.
-    expect(gibTierPlan(zombie, 7, { bones: 'core', at }).tier).toBe('clusters+cage');
-    const slice = gibTierPlan(zombie, 3, { bones: 'core', at });
-    expect(slice.tier).toBe('slice');
-    expect(slice.plan.pieces).toHaveLength(3);
+  it('degrades by a PRIORITY PREFIX, never by rebuilding whole limbs (task 2)', () => {
+    // The owner's report: at a tight pool arms/legs came back as whole tubes
+    // because the old ladder rebuilt `clusters` (one chunk per limb). The new
+    // ladder takes a prefix of one split plan, so a squeezed budget releases
+    // FEWER split pieces rather than a whole-limb body.
+    const full = gibTierPlan(zombie, 64, { bones: 'core', at });
+    expect(full.tier).toBe('parts');
+    expect(full.reserve).toBe(full.plan.pieces.length);
+    // The default blast plan is the lean, split candidate: one head, three
+    // torso bands, eight limb halves, the ribcage and the optional gut.
+    const names = full.plan.pieces.map(p => p.part);
+    expect(names.filter(n => n === 'head')).toHaveLength(1);
+    for (const limb of ['armL', 'armR', 'legL', 'legR']) {
+      expect(names).toContain(`${limb}.upper`);
+      expect(names).toContain(`${limb}.lower`);
+    }
+    expect(names).toEqual(expect.arrayContaining(['torso.chest', 'torso.abdomen', 'torso.pelvis', 'bone.cage']));
+    // The skull and pelvic duplicates are NOT emitted while their flesh pieces
+    // exist — that is the "two indistinguishable heads" the brief forbids.
+    expect(names).not.toContain('bone.skull');
+    expect(names).not.toContain('bone.pelvis');
+    // A pinned count, so adding a piece to the default has to be a decision.
+    expect(full.plan.pieces).toHaveLength(14);
+
+    // EVERY budget below the full set still emits NO whole limb, keeps the head
+    // and keeps every emitted arm/leg section paired-or-not (never a `.whole`).
+    for (const budget of [13, 12, 9, 7, 5, 3, 1]) {
+      const t = gibTierPlan(zombie, budget, { bones: 'core', at });
+      expect(t.reserve).toBeLessThanOrEqual(budget);
+      expect(t.plan.pieces[0]!.part).toBe('head');
+      for (const p of t.plan.pieces) {
+        expect(p.part).not.toMatch(/^(arm|leg)[LR]\.whole$/);
+      }
+      // The seven-slot floor still reads as a body: head, torso, cage and the
+      // four UPPER limb sections.
+      if (budget === 7) {
+        expect(t.plan.pieces.map(p => p.part)).toEqual(
+          expect.arrayContaining(['head', 'torso.chest', 'bone.cage',
+            'armL.upper', 'armR.upper', 'legL.upper', 'legR.upper']));
+      }
+    }
+    // ...and a one-slot budget is the head, not a random nearest piece.
+    expect(gibTierPlan(zombie, 1, { bones: 'core', at }).plan.pieces.map(p => p.part)).toEqual(['head']);
+  });
+
+  it('the blast plan covers every live flesh prim once, head first, no duplicate skeleton (task 2)', () => {
+    const plan = gibBlastPlan(zombie, { bones: 'core' });
+    const seen = new Map<number, number>();
+    for (const p of plan.pieces) for (const i of p.srcPrims ?? []) seen.set(i, (seen.get(i) ?? 0) + 1);
+    const live = zombie.prims.map((p, i) => (!p.dead ? i : -1)).filter(i => i >= 0);
+    expect(seen.size).toBe(live.length);
+    expect([...seen.values()].every(n => n === 1)).toBe(true);
+    // The head is the first priority: a one-piece budget is the head.
+    expect(plan.pieces[0]!.part).toBe('head');
+    // `core` releases the readable ribcage only; the skull and the pelvic
+    // assembly are NOT detached a second time on top of their flesh pieces.
+    expect(plan.pieces.filter(p => p.kind === 'bone').map(p => p.part)).toEqual(['bone.cage']);
+  });
+
+  it('never emits a whole-limb piece at ANY budget or bone release (task 2)', () => {    for (const bones of ['core', 'all', 'off'] as const) {
+      for (const budget of [1, 2, 3, 5, 7, 9, 12, 20, 64]) {
+        const t = gibTierPlan(zombie, budget, { bones, at });
+        for (const p of t.plan.pieces) {
+          expect(p.part.endsWith('.whole')).toBe(false);
+        }
+        // And the flesh arms/legs, where present, are always halves.
+        for (const p of t.plan.pieces) {
+          if (/^(arm|leg)[LR]\./.test(p.part)) {
+            expect(p.part.endsWith('.upper') || p.part.endsWith('.lower')).toBe(true);
+          }
+        }
+      }
+    }
+  });
+
+  it('the sliced plan keeps only cuts whose two pieces survived', () => {
+    const t = gibTierPlan(zombie, 8, { bones: 'core', at });
+    expect(t.tier).toBe('parts-slice');
+    for (const c of t.plan.cuts) {
+      expect(c.a).toBeLessThan(c.b);
+      expect(c.b).toBeLessThan(t.plan.pieces.length);
+    }
+    // A cut whose neighbour was dropped must not dangle: every cut must join
+    // two pieces that are actually in the plan.
+    expect(t.plan.cuts.every(c => t.plan.pieces[c.a] && t.plan.pieces[c.b])).toBe(true);
   });
 
   it('the reduced tiers still name the body prims and bones they own', () => {
@@ -400,5 +474,14 @@ describe('gibTierPlan — preview and release agree on the shape', () => {
     expect(full.plan.pieces.some(p => p.part.startsWith('armL.'))).toBe(false);
     const clusters = gibClusterPieces(maimed);
     expect(clusters.some(p => p.limb === 'armL')).toBe(false);
+    // DO NOT DOUBLE-SPAWN AN ALREADY-SEVERED SECTION (task 2): the severed arm
+    // chunk already carries armL's bones, so a full-skeleton release must not
+    // emit them a second time.
+    const all = gibTierPlan(maimed, 64, { bones: 'all', at });
+    expect(all.plan.pieces.map(p => p.part)).not.toContain('bone.upperArm.l');
+    expect(all.plan.pieces.map(p => p.part)).not.toContain('bone.foreArm.l');
+    // ...and the OTHER arm's long bones are still released.
+    expect(all.plan.pieces.map(p => p.part)).toContain('bone.upperArm.r');
+    expect(all.plan.pieces.map(p => p.part)).toContain('bone.shin.l');
   });
 });

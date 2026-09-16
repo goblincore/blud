@@ -1,7 +1,7 @@
 // CPU extraction shared by the worker and deterministic tests. No renderer/DOM imports.
 import * as THREE from 'three';
 import { extractHullSoup, fitHullGrid } from './surface-nets-cpu';
-import { fbm, bakeAoAt, bakeChunkAlbedo, chunkBakeField, type ChunkFieldEvals, type ChunkLook, type ChunkBakeParts } from '../chunk-bake-field';
+import { fbm, bakeAoAt, bakeChunkAlbedo, bakeFaceCover, chunkBakeField, type ChunkFieldEvals, type ChunkLook, type ChunkBakeParts, type BakeFaceFrame } from '../chunk-bake-field';
 import { qRotate, type Quat } from '../vec';
 import { nearestPrim } from '../validate';
 import type { Primitive, Vec3 } from '../types';
@@ -24,6 +24,10 @@ export interface ChunkBakeData {
   surface?: { legacyGamma: number; wetness: number; roughness: number; specIntensity: number; noiseAmp: number; fresnel: number };
   /** The gore/lod strength actually in effect (0 = never bake, e.g. bone-only chunks). */
   gore: number;
+  /** The detached head's face frame, when this piece wears the face projection.
+   *  Its coverage attenuates the baked gore so the face is not baked under
+   *  clot (2026-09-16 playtest follow-ups task 2). */
+  face?: BakeFaceFrame;
 }
 
 export interface BakedChunkResult {
@@ -88,7 +92,8 @@ export function bakeChunkGeometry(data: ChunkBakeData): BakedChunkResult {
       positions.push(p[0], p[1], p[2]);
       const painted = data.body ? data.body.prims[nearestPrim(p, data.body)]?.color : undefined;
       const [r, g, b, wm] = bakeChunkAlbedo(p, localOf(p), ev,
-        painted ? { ...data.look, baseColor: painted } : data.look);
+        painted ? { ...data.look, baseColor: painted } : data.look,
+        data.face ? bakeFaceCover(p, data.face) : 0);
       colors.push(r, g, b, wm);
       const surf = data.surface;
       const anchor = localOf(p);

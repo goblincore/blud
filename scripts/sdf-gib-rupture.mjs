@@ -218,6 +218,11 @@ for (let i = 0; i <= NFRAMES; i++) {
     // spawn — compare against `tier`/`spawned` after release.
     pendingPlanPieces: d.pendingPlanPieces, pendingTiers: d.pendingTiers,
     live: chunks.live, baked: chunks.baked, cap: chunks.cap,
+    inFrustum: chunks.inFrustum,
+    // Piece census beside the images (task 2): the ribcage must be a pale,
+    // packed, bone-only piece in the pile, and no piece may bury its bones.
+    bonePieces: chunks.bonePieces, boneRows: chunks.boneRows,
+    buriedBonePieces: chunks.buriedBonePieces, organPieces: chunks.organPieces,
     tier: d.lastGibTier, spawned: d.lastGibSpawned, heldBack: d.lastGibHeld,
     parts: d.lastGibParts,
     livePieces: stats.livePieces.map(p => p.centre.map(v => +v.toFixed(4))),

@@ -2675,6 +2675,9 @@ export interface ChunkGpuBakeData {
   look: import('./baked-chunks').ChunkBakeData['look'];
   surface: NonNullable<import('./baked-chunks').ChunkBakeData['surface']>;
   gore: number;
+  /** Present only on a head chunk that wears the face projection; the bake
+   *  uses it to keep the gore off the face. */
+  face?: import('../chunk-bake-field').BakeFaceFrame;
 }
 
 /**
@@ -3118,6 +3121,18 @@ export function createChunkGpuView(
         surface: { legacyGamma: u.lodCfg.value.y, wetness: u.surfCfg2.value.x,
           roughness: u.surfCfg.value.y, specIntensity: u.surfCfg.value.x, noiseAmp: u.marchCfg.value.z, fresnel: u.surfCfg.value.z },
         gore: u.lodCfg.value.w,
+        // The head's face frame, in the same world values the march reads. The
+        // bake attenuates its gore by this coverage so a settled head keeps its
+        // face (task 2); non-head chunks and face-off views omit it.
+        face: u.faceCfg.value.x > 0.5
+          ? {
+            centre: u.headCentre.value.toArray() as Vec3,
+            quat: u.headQuat.value.toArray() as Quat,
+            axes: u.headAxes.value.toArray() as Vec3,
+            forward: u.faceCfg.value.z,
+            reach: 1 + 0.5 * (Math.abs(u.faceCfg.value.x - 2) < 0.5 ? 1 : 0),
+          }
+          : undefined,
       };
     },
     posedBones(): Primitive[] {
