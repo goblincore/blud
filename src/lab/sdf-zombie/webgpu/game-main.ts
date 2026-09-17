@@ -175,6 +175,10 @@ import {
 import { shouldSpill, GUT_DROPLET_SIZE, SPILL_CHANCE } from '../entrails-spawn';
 import { createBloodView } from './blood-view-gpu';
 import { createGooLayer, type GooLayer, type GooReconstruction } from './goo-layer';
+import {
+  createShutterGameLayer, readShutterGameSettings, type ShutterGameLayer,
+} from './shutter-game-layer';
+import { createShutterPanel, shutterPanelHost, type ShutterPanel } from './shutter-panel';
 import { connectionBlobsForSim } from './blood-connections';
 import { createImpactSplashLayer, type ImpactSplashLayer } from './impact-splash';
 import { createGooPanel, type GooPanel } from './goo-panel';
@@ -1358,6 +1362,14 @@ async function main() {
   // default: opt in with ?impactsplash=1 or __sdfGame.setImpactSplash.
   let impactSplashEnabled = false;
   let impactSplashLayer: ImpactSplashLayer | null = null;
+
+  // SELECTIVE SHUTTER BLUR (2026-09-17). Owner accepted the lab look and asked
+  // for it in the game at the equivalent of the screenshot's 320° @ 20 fps =
+  // 44.44 ms fixed exposure. Created with the goo layer (it partitions it) and
+  // registered as post-aa's pre-post capture stage. ON by default; ?bloodblur=0
+  // or __sdfGame.setBloodBlur(false) restores the fused sharp goo exactly.
+  let shutterGame: ShutterGameLayer | null = null;
+  let shutterPanel: ShutterPanel | null = null;
 
   /** Create the splash layer on first enable only, sharing the flesh/goo
    *  light uniform NODES so it is lit by the same rig. Returns silently if
@@ -3891,6 +3903,7 @@ async function main() {
       gooPanel?.setVisible(!panelsHidden);
       vhsPanel?.setVisible(!panelsHidden);
       dynamitePanel?.setVisible(!panelsHidden);
+      shutterPanel?.setVisible(!panelsHidden);
     }
     // Manual reload. Dead under unlimited ammo BY CONSTRUCTION (the magazine is
     // never partial), which is why ?ammo=finite is the way to exercise it.
@@ -7635,6 +7648,39 @@ async function main() {
     gooSheetsEnabled = gooCandidateBoot.get('goosheets') === '1';
     gooLayer.setReconstruction(gooReconstruction);
 
+    // SELECTIVE SHUTTER BLUR (2026-09-17). Owner-accepted lab look, now a
+    // shipped default: fixed 320°/360/20 s (44.44 ms) exposure on airborne
+    // blood. The layer partitions THIS goo layer's density input (see
+    // GooSelection) and composites as post-aa's pre-post capture stage, so the
+    // blur runs in working-linear space before SSCS/FXAA/VHS and never touches
+    // gameplay physics. Failure is surfaced through __sdfGame.bloodBlur.error,
+    // never silently swallowed.
+    shutterGame = createShutterGameLayer({
+      renderer: handle.renderer,
+      gooLayer,
+      settings: readShutterGameSettings(location.search),
+      onError: (message) => {
+        // eslint-disable-next-line no-console
+        console.error('[shutter-game] disabled after error:', message);
+      },
+    });
+    postAa.setCaptureStage((capture) =>
+      gooEnabled && shutterGame ? shutterGame.capture(capture, bloodSim, camera) : null);
+    void shutterGame.precompile();
+    // Player-facing controls: on/off, exposure (ms), max trail length. Ships
+    // visible+collapsed like its sibling panels; debug seams stay on the API.
+    shutterPanel = createShutterPanel(shutterPanelHost(shutterGame));
+    shutterPanel.setVisible(true);
+    const disposeShutter = (): void => {
+      postAa.setCaptureStage(null);
+      shutterGame?.dispose();
+    };
+    window.addEventListener('pagehide', disposeShutter);
+    import.meta.hot?.dispose(() => {
+      disposeShutter();
+      window.removeEventListener('pagehide', disposeShutter);
+    });
+
     // SUPPLEMENTARY IMPACT SPLASH boot flag. Read AFTER the shipping defaults
     // so it can only ever add the new crown, never move a shipped value. It
     // is independent of the goo candidates above.
@@ -9228,6 +9274,11 @@ async function main() {
         enableStrands: gooStrandsEnabled, enableSheets: gooSheetsEnabled,
       })
       : []);
+    // SHUTTER BLUR PARTITION: when on, this sync poses only the sharp
+    // remainder (pools/guts/leftover drops). The selected airborne partition is
+    // posed and shaded later by the capture stage, exactly once. When off this
+    // clears the selection, so the frame is the shipped fused goo.
+    shutterGame?.poseSharp();
     gooLayer?.sync(bloodSim, camera);
     telemetry.end('goo-sync', gooTiming);
   }
@@ -11281,6 +11332,46 @@ function performBenchAction(a: BenchAction): void {
       bloodView.setMistVisible(true);
       gooPanel?.setVisible(on);
       return true;
+    },
+    // ---------------------------------------------------------------
+    // SELECTIVE SHUTTER BLUR (2026-09-17). The ordinary controls are on/off,
+    // exposure ms and max trail length; seed scale and depth bias are the
+    // documented debug seams. All read back the APPLIED value.
+    // ---------------------------------------------------------------
+    /** On/off. Returns the resulting state. Off restores the fused sharp goo. */
+    setBloodBlur: (on: boolean) => {
+      const next = shutterGame?.setEnabled(on) ?? false;
+      shutterPanel?.refresh();
+      return next;
+    },
+    get bloodBlurEnabled() { return shutterGame?.enabled ?? false; },
+    /** Exposure in ms — longer = longer trails. Clamped [0, 200]. */
+    setBloodBlurExposure: (ms: number) => {
+      const applied = shutterGame?.setExposureMs(ms) ?? 0;
+      shutterPanel?.refresh();
+      return applied;
+    },
+    /** Max drawn trail in CONTENT pixels. Clamped [1, 400]. */
+    setBloodBlurMaxStreak: (px: number) => {
+      const applied = shutterGame?.setMaxStreakPx(px) ?? 0;
+      shutterPanel?.refresh();
+      return applied;
+    },
+    /** DEBUG: seed grid scale vs the goo density dims. Clamped [0.25, 2]. */
+    setBloodBlurSeedScale: (v: number) => shutterGame?.setSeedScale(v) ?? 0,
+    /** DEBUG: destination depth bias in metres. Clamped [0, 50]. */
+    setBloodBlurDepthBias: (m: number) => shutterGame?.setDepthBiasM(m) ?? 0,
+    /** Effective values, seed/layer dims, per-frame stats and any hard error. */
+    get bloodBlur() {
+      return shutterGame
+        ? shutterGame.diagnostics()
+        : { enabled: false, unavailable: true, route: 'capture-stage' as const };
+    },
+    /** Show/hide the focused shutter controls. */
+    shutterPanel: (on?: boolean) => {
+      if (on !== undefined) shutterPanel?.setVisible(on);
+      shutterPanel?.refresh();
+      return shutterPanel?.visible ?? false;
     },
     get goo() {
       return gooLayer

@@ -50,7 +50,7 @@ import {
   wgslFn, texture, uv, vec2, vec3, vec4, uniform, float, max, dot, positionView,
   attribute, mul,
 } from 'three/tsl';
-import type { BloodSim } from '../blood-sim';
+import type { BloodSim, Droplet } from '../blood-sim';
 import { setPassLabel } from './gpu-pass-timing';
 
 /**
@@ -1023,6 +1023,27 @@ type Swizzled = { xyz: unknown; w: unknown };
 export type GooReconstruction = 'original' | 'smooth';
 
 /**
+ * SELECTION SEAM (shutter game integration, 2026-09-17).
+ *
+ * A per-sync partition of the density input. `droplet(d)` decides which sim
+ * droplets are posed; `splats`/`extras` gate the floor pools and the
+ * connection blobs independently (they have no droplet of their own to test).
+ * `null` (the shipped default) poses everything in one pass — bit-identical.
+ *
+ * The shutter layer syncs the goo layer TWICE per frame: once with the
+ * sharp-remainder selection (pools, guts, leftover drops) and once with the
+ * selected airborne partition, so airborne blood is shaded into its own
+ * premultiplied layer exactly once and static blood stays sharp. This is the
+ * same moving/static split the lab's quality oracle performs, but without
+ * copying the sim into scratch arrays.
+ */
+export interface GooSelection {
+  droplet(d: Droplet): boolean;
+  splats: boolean;
+  extras: boolean;
+}
+
+/**
  * One extra density quad — candidate-only geometry (blood connections) fed
  * into the SAME density pass as droplets and splats, so it is shaded by the
  * same wet surface pass rather than a second, flat material.
@@ -1149,6 +1170,17 @@ export interface GooLayer {
    * default — the shipped frame is bit-identical with no blobs set.
    */
   setExtraBlobs(blobs: readonly GooDensityBlob[]): void;
+  /**
+   * SELECTION SEAM — see GooSelection. Applied by the NEXT sync(); null
+   * restores the shipped one-pass pose. Does not touch any tuning.
+   */
+  setSelection(sel: GooSelection | null): void;
+  /**
+   * PIPELINE WARM-UP for the reference layer materials
+   * (renderLayer's makeLayerMat graphs). Compiles them off the capture path so
+   * the first shutter frame does not hitch on a mid-firefight compile.
+   */
+  precompileLayer(): Promise<void>;
   /** How many extra blobs the last setExtraBlobs accepted (capped). */
   readonly extraBlobCount: number;
   /** Density-target resolution, independent of the canvas/output size. */
@@ -1665,6 +1697,8 @@ export function createGooLayer(
   let lastOutputW = 0;
   let lastOutputH = 0;
   const passGate = { density: true, blur: true, surface: true };
+  // SELECTION SEAM state (shutter game integration). null = pose everything.
+  let selection: GooSelection | null = null;
   // Area-priority scratch: candidate world positions/extents, collected once
   // per sync, reused across frames (never reallocated in steady state).
   const candCap = GOO_TUNING.maxParticles + 1024;
@@ -2018,6 +2052,8 @@ export function createGooLayer(
           const d = sim.droplets[i]!;
           if (d.kind === 'mist') continue;
           if (d.kind !== 'scrap' && d.size < GOO_TUNING.mistMaxSize) continue;
+          // SELECTION SEAM: partition the density input across two syncs.
+          if (selection && !selection.droplet(d)) continue;
           if (count >= candCap) break;
           const gs = d.size * sizeScale;
           const halfH = (gs * GOO_TUNING.quadScale) / 2;
@@ -2039,7 +2075,8 @@ export function createGooLayer(
           count++;
         }
         const dropletCount = count;
-        for (let i = 0; i < sim.splats.length; i++) {
+        const splatCount = selection === null || selection.splats ? sim.splats.length : 0;
+        for (let i = 0; i < splatCount; i++) {
           const sp = sim.splats[i]!;
           if (count >= candCap) break;
           const gr = sp.size * GOO_TUNING.splatGooScale * 2; // quad edge = 2x radius
@@ -2088,6 +2125,8 @@ export function createGooLayer(
           // has no mist particles.
           if (d.kind === 'mist') continue;
           if (d.kind !== 'scrap' && d.size < GOO_TUNING.mistMaxSize) continue;
+          // SELECTION SEAM: see the area-priority branch above.
+          if (selection && !selection.droplet(d)) continue;
           // ITEM 2a: skip what distance has made sub-texel (see tooSmall).
           const gs = d.size * sizeScale;
           if (tooSmall((gs * GOO_TUNING.quadScale) / 2, d.pos[0], d.pos[1], d.pos[2])) continue;
@@ -2111,7 +2150,8 @@ export function createGooLayer(
         // space by the stamp yaw so pools still smear directionally. Droplets
         // take the budget first — they are the flying action — but the splat
         // ring is capped at 256 so both fit.
-        for (let i = 0; i < sim.splats.length && n < particleCap; i++) {
+        const splatLimit = selection === null || selection.splats ? sim.splats.length : 0;
+        for (let i = 0; i < splatLimit && n < particleCap; i++) {
           const sp = sim.splats[i]!;
           const gr = sp.size * GOO_TUNING.splatGooScale * 2; // quad edge = 2x radius
           if (tooSmall(gr / 2, sp.pos[0], 0.02, sp.pos[2])) continue;
@@ -2138,7 +2178,9 @@ export function createGooLayer(
       // drops connections rather than droplets. Gut mask and density weight
       // ride the same per-instance attributes, so the same surface pass
       // shades them (there is no second, flat material for strands).
-      const extraBudget = Math.min(extraCount, Math.max(0, particleCap - n));
+      const extraBudget = selection !== null && !selection.extras
+        ? 0
+        : Math.min(extraCount, Math.max(0, particleCap - n));
       for (let e = 0; e < extraBudget; e++) {
         p.set(extraX[e]!, extraY[e]!, extraZ[e]!);
         roll.setFromAxisAngle(zAxis, extraRoll[e]!);
@@ -2241,6 +2283,25 @@ export function createGooLayer(
         extraGut[i] = b.gut ?? 0;
       }
       extraCount = count;
+    },
+    // SELECTION SEAM (shutter game integration): see GooSelection.
+    setSelection(sel) { selection = sel; },
+    async precompileLayer() {
+      // Compile the reference layer graphs in the SAME scene/target shape
+      // renderLayer draws, so the first shutter frame does not pay a
+      // mid-firefight pipeline compile. The material is restored afterwards:
+      // this is a warm-up, not a pose.
+      try {
+        const prev = quad.material;
+        for (const m of [layerMats.smooth.raw, layerMats.smooth.blur,
+          layerMats.original.raw, layerMats.original.blur]) {
+          quad.material = m;
+          await renderer.compileAsync(quadScene, quadCam);
+        }
+        quad.material = prev;
+      } catch (err) {
+        console.error('[goo] precompileLayer failed', err);
+      }
     },
     // PERF SEAMS (close-up task 4) — every default is the shipped state.
     setSurfaceAtDensityRes(on) { surfaceAtDensityRes = on; },

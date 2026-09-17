@@ -140,6 +140,20 @@ export interface SweepStampOpts {
   mistMaxSize: number;
   /** Skip droplets whose projected radius is below this many output pixels. */
   minRadiusPx?: number;
+  /**
+   * GAME INTEGRATION (2026-09-17): clamp the back-projected interval to the
+   * droplet's own AGE. A bead born 3 ms ago cannot have been exposed for
+   * 44.4 ms, so without this a newborn draws a streak backwards into its
+   * emitter — the plan's "no pre-birth streaks". When true, a droplet with
+   * age <= 0 gets no sweep at all (the resolve still composites its sharp
+   * current shape through the layer's `base`, so nothing disappears). The
+   * lab leaves this off so its fixture cadence is unchanged.
+   *
+   * The stored motion vector is still divided by the FULL exposure (not the
+   * age-clamped one): `seed.xy * exposureSeconds` must reproduce the clamped
+   * segment, which is exactly what the resolve's gather integrates over.
+   */
+  clampToAge?: boolean;
 }
 
 export interface SweepStamp {
@@ -186,12 +200,20 @@ export function planSweepStamp(
   if (d.kind !== 'scrap' && d.size < opts.mistMaxSize) return null;
   if (!Number.isFinite(d.pos[0]) || !Number.isFinite(d.vel[0])) return null;
 
+  // AGE CLAMP (game integration): never expose a droplet before it was born.
+  let exposure = exposureSeconds;
+  if (opts.clampToAge) {
+    const age = Number.isFinite(d.age) ? Math.max(0, d.age) : 0;
+    exposure = Math.min(exposureSeconds, age);
+    if (!(exposure > 0)) return null;
+  }
+
   const now = projectWorldToPixel(d.pos, proj.viewProj, proj.width, proj.height);
   if (!now) return null;
   const startWorld: [number, number, number] = [
-    d.pos[0] - d.vel[0] * exposureSeconds,
-    d.pos[1] - d.vel[1] * exposureSeconds,
-    d.pos[2] - d.vel[2] * exposureSeconds,
+    d.pos[0] - d.vel[0] * exposure,
+    d.pos[1] - d.vel[1] * exposure,
+    d.pos[2] - d.vel[2] * exposure,
   ];
   const start = projectWorldToPixel(startWorld, proj.viewProj, proj.width, proj.height);
   if (!start) return null;
@@ -283,12 +305,19 @@ export const EMPTY_SEED_STATS: Readonly<SweepSeedStats> = Object.freeze({
 export function seedDimsForOutput(
   outputWidth: number, outputHeight: number, scale = 0.5,
 ): { width: number; height: number } {
+  const srcW = Math.max(1, outputWidth) * scale;
+  const srcH = Math.max(1, outputHeight) * scale;
+  // ASPECT-PRESERVING MAX CLAMP (game integration, 2026-09-17). The original
+  // clamped width and height INDEPENDENTLY, so a 960x540 density grid came
+  // back 512x512 — a 1.78:1 sweep field stored into a square texture, which
+  // stretches every streak vertically and desynchronises the seed from the
+  // display. Scale BOTH axes by the single largest overshoot instead.
+  const over = Math.max(srcW / SHUTTER_SEED_MAX, srcH / SHUTTER_SEED_MAX, 1);
+  const w = srcW / over;
+  const h = srcH / over;
   const clampDim = (v: number): number =>
     Math.max(SHUTTER_SEED_MIN, Math.min(SHUTTER_SEED_MAX, Math.round(v)));
-  return {
-    width: clampDim(outputWidth * scale),
-    height: clampDim(outputHeight * scale),
-  };
+  return { width: clampDim(w), height: clampDim(h) };
 }
 
 /** Squared distance from point p to segment ab (all in the same units). */

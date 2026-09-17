@@ -311,6 +311,50 @@ describe('post-aa all-off parity (the hard gate)', () => {
     expect(calls.render).toBeGreaterThan(0);
   });
 
+  it('a capture stage forces the captured path even with every effect off', () => {
+    const { renderer, calls } = stubRenderer();
+    const post = createPostAa(renderer);
+    post.setFxaa(false);
+    post.setSmear(0);
+    const sink = { target: null as THREE.RenderTarget | null };
+    post.addSink({ setOutputTarget(t) { sink.target = t; } });
+
+    const stageOut = new THREE.RenderTarget(8, 8);
+    let stageCalls = 0;
+    let seen: THREE.RenderTarget | null = null;
+    post.setCaptureStage((capture) => { stageCalls++; seen = capture; return stageOut; });
+    calls.setRenderTarget = 0;
+    calls.render = 0;
+
+    let chainCalls = 0;
+    post.render(() => { chainCalls++; });
+
+    // The stage is the only active stage, yet the chain was still captured:
+    // the sinks were redirected and the stage received the capture target.
+    expect(chainCalls).toBe(1);
+    expect(stageCalls).toBe(1);
+    expect(seen).not.toBeNull();
+    expect(sink.target).toBe(seen);
+    expect(calls.render).toBeGreaterThan(0);
+  });
+
+  it('clearing the capture stage restores the all-off parity path', () => {
+    const { renderer, calls } = stubRenderer();
+    const post = createPostAa(renderer);
+    post.setFxaa(false);
+    post.setSmear(0);
+    post.setCaptureStage(() => new THREE.RenderTarget(8, 8));
+    post.render(() => {});
+    // Now off.
+    post.setCaptureStage(null);
+    calls.setRenderTarget = 0;
+    calls.render = 0;
+    let chainCalls = 0;
+    post.render(() => { chainCalls++; });
+    expect(chainCalls).toBe(1);
+    expect(calls.render).toBe(0);
+  });
+
   it('setSmear clamps to the slider range', () => {
     const { renderer } = stubRenderer();
     const post = createPostAa(renderer);

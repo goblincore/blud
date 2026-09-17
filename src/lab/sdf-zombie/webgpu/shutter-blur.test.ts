@@ -138,6 +138,30 @@ describe('shutter candidate — object-only projected sweep', () => {
     const stamps = planSweepStamps(sim.droplets, projection(), 0.1, OPTS);
     expect(stamps.map(s => s.stream)).toEqual([7, 9]);
   });
+
+  it('clamps the back-projection to the droplet age (game integration)', () => {
+    // A bead born at the emitter cannot have been exposed before it existed.
+    expect(planSweepStamp(droplet({ age: 0 }), projection(), 0.1, OPTS)).not.toBeNull();
+    expect(planSweepStamp(
+      droplet({ age: 0 }), projection(), 0.1, { ...OPTS, clampToAge: true },
+    )).toBeNull();
+    // Half the exposure window => half the drawn streak...
+    const young = planSweepStamp(
+      droplet({ pos: [0, 0, -5], vel: [1, 0, 0], age: 0.05 }),
+      projection(), 0.1, { ...OPTS, clampToAge: true },
+    )!;
+    expect(young.streakPx).toBeCloseTo(20, 6);
+    expect(young.fromX).toBeCloseTo(380, 6);
+    // ...but the stored vector is still per FULL exposure, so the resolve's
+    // gather reproduces the clamped segment rather than overreaching.
+    expect(young.velocityX).toBeCloseTo(200, 6);
+    expect(young.velocityU).toBeCloseTo(200 / 800, 9);
+    // Without the flag the lab's original full-exposure sweep is unchanged.
+    const old = planSweepStamp(
+      droplet({ pos: [0, 0, -5], vel: [1, 0, 0], age: 0.05 }), projection(), 0.1, OPTS,
+    )!;
+    expect(old.streakPx).toBeCloseTo(40, 6);
+  });
 });
 
 function stamp(over: Partial<SweepStamp> = {}): SweepStamp {
