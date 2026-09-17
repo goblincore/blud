@@ -701,6 +701,23 @@ describe('ported features reach the entry point', () => {
     expect(params).toContain('burnCfg: vec4<f32>,');
     expect(params).toMatch(/burnFireGain: f32,?\s*\)/);
   });
+
+  it('paints fire and char on a burning body from the rest-space anchor', () => {
+    // Rest space, not world space: the fire must ride the body, or it swims
+    // through the skin as the body walks (the same reason the gore mottle uses
+    // `anchor`). The char mix must come AFTER the wound char mix so a burnt
+    // body reads burnt, and the fire must be emissive, not albedo.
+    expect(readFileSync('src/lab/sdf-zombie/webgpu/march.wgsl.ts', 'utf8'))
+      .toContain('fn fireRamp(t: f32) -> vec3<f32> {');
+    expect(MARCH_BODY).toContain('let burnAmt = clamp(max(burnCfg.x, gInstBurn.x), 0.0, 1.0);');
+    expect(MARCH_BODY).toContain('fbm(anchor * burnNoiseScale');
+    expect(MARCH_BODY.indexOf('albedo = mix(albedo, charColor, cm);'))
+      .toBeLessThan(MARCH_BODY.indexOf('let burnAmt = clamp(max(burnCfg.x, gInstBurn.x), 0.0, 1.0);'));
+    expect(MARCH_BODY).toContain('gBurnEmit = fireRamp(fire)');
+    // The emissive fold: burning fire adds light, and a burning face is fire.
+    expect(MARCH_BODY).toContain('+ glow + gBurnEmit');
+    expect(MARCH_BODY).toContain('faceGlow = faceGlow * (1.0 - burnAmt);');
+  });
 });
 
 describe('wound soft shadow (iq rsmshadows, wound-zone gated)', () => {
@@ -2386,9 +2403,11 @@ describe('per-prim glow= in primClip.w (hard-surface task 3)', () => {
     // The face path replaces lit with fleshLit * (1 - faceGlow) + glow;
     // per-prim glow fades by its own amount, and at primGlow 0 the factor is
     // exactly 1.0 — bit-identical (multiplication by 1.0 is exact), so every
-    // non-glowing pixel everywhere shades byte-for-byte as before.
+    // non-glowing pixel everywhere shades byte-for-byte as before. The burn
+    // emissive carrier rides the same line — gBurnEmit is 0 everywhere burn
+    // is off (adding 0.0 is exact), and a burning body's fire is light.
     expect(SHADE_BODY).toContain(
-      'var lit = fleshLit * (1.0 - faceGlow) * (1.0 - primGlow) + glow;');
+      'var lit = fleshLit * (1.0 - faceGlow) * (1.0 - primGlow) + glow + gBurnEmit;');
   });
 
   it('char still kills per-prim glow — burnt is burnt', () => {
@@ -2408,12 +2427,13 @@ describe('per-prim glow= in primClip.w (hard-surface task 3)', () => {
     expect(SHADE_BODY).toContain('faceGlow = faceGlow * (1.0 - painted);');
     const killLine = SHADE_BODY.split('\n').find(l => l.includes('faceGlow = faceGlow * (1.0 - painted);'))!;
     expect(killLine).not.toContain('primGlow');
-    // ...and primGlow is ASSIGNED exactly twice in the module: the `var
-    // primGlow = 0.0` default and the clamp read. A third assignment — e.g. a
-    // separate `primGlow = primGlow * (1.0 - painted)` kill line — would be
-    // the resurrected sunglasses rule wearing a different hat (this exact
-    // mutation was run and killed).
-    expect((moduleSource.match(/primGlow =/g) ?? []).length).toBe(2);
+    // ...and primGlow is ASSIGNED exactly three times in the module: the `var
+    // primGlow = 0.0` default, the clamp read, and the burning-body fade
+    // (flame lab task 6 — a burning body's fire replaces authored glow). A
+    // FOURTH assignment — e.g. a separate `primGlow = primGlow * (1.0 -
+    // painted)` kill line — would be the resurrected sunglasses rule wearing
+    // a different hat (this exact mutation was run and killed).
+    expect((moduleSource.match(/primGlow =/g) ?? []).length).toBe(3);
   });
 });
 

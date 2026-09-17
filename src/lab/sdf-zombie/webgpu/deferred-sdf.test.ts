@@ -246,8 +246,10 @@ describe('legacy expansion preserved', () => {
     expect(MARCH_BODY_SURFACE_PREP).toContain(
       'let glow = faceGlowColor * faceGlow * faceCfg2.w\n           * flicker(faceCfg3.y, faceCfg3.x) * (1.0 - cm)',
     );
-    // …and the legacy lighting tail consumes them, with the compose untouched.
-    expect(MARCH_BODY_LIGHT).toContain('var lit = fleshLit * (1.0 - faceGlow) * (1.0 - primGlow) + glow;');
+    // …and the legacy lighting tail consumes them, with the compose untouched
+    // except for the burn emissive carrier — gBurnEmit is 0 on every
+    // non-burning body, so adding it is an exact identity there.
+    expect(MARCH_BODY_LIGHT).toContain('var lit = fleshLit * (1.0 - faceGlow) * (1.0 - primGlow) + glow + gBurnEmit;');
     expect(MARCH_BODY.indexOf('let wetWound')).toBeLessThan(MARCH_BODY.indexOf('ANALYTIC FLASHLIGHT'));
     expect(MARCH_BODY.indexOf('let glow')).toBeLessThan(MARCH_BODY.indexOf('ANALYTIC FLASHLIGHT'));
     // Each hoisted symbol is defined exactly once across the whole entry.

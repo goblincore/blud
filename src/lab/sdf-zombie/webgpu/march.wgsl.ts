@@ -1173,8 +1173,22 @@ export const TISSUE_RAMP = /* wgsl */ `fn tissueRamp(depth: f32, baseColor: vec3
   return mix(c, visceraColor, toViscera);
 }`;
 
+// FIRE COLOUR RAMP + CHAR MASK. The ramp (dull red through pale yellow-white,
+// four stops) matches the NotBlood burning-run palette closely enough to A/B
+// against the sprites; it is consumed by the burning-body surface block in
+// MARCH_BODY's surface prep.
+export const CHAR_MASK = /* wgsl */ `fn fireRamp(t: f32) -> vec3<f32> {
+  let x = clamp(t, 0.0, 1.0);
+  let a = vec3<f32>(0.30, 0.02, 0.00);
+  let b = vec3<f32>(1.00, 0.22, 0.02);
+  let c = vec3<f32>(1.00, 0.62, 0.10);
+  let d = vec3<f32>(1.00, 0.95, 0.72);
+  if (x < 0.34) { return mix(a, b, x / 0.34); }
+  if (x < 0.70) { return mix(b, c, (x - 0.34) / 0.36); }
+  return mix(c, d, (x - 0.70) / 0.30);
+}
 // 0 unburned, 1 fully charred.
-export const CHAR_MASK = /* wgsl */ `fn charMask(p: vec3<f32>, data: texture_2d<f32>, woundCfg: vec4<f32>) -> f32 {
+fn charMask(p: vec3<f32>, data: texture_2d<f32>, woundCfg: vec4<f32>) -> f32 {
   var m = 0.0;
   let n = i32(gInstWoundCount);
   for (var i = 0; i < 16; i = i + 1) {
@@ -3892,6 +3906,24 @@ ${FACE_LAYER_WGSL}
 
   albedo = mix(albedo, charColor, cm);
 
+  // BURNING BODY (flame lab). burnCfg.x is the per-view ramp and gInstBurn.x the
+  // per-instance one; max() makes one shader serve single and crowd draws, as
+  // goreStrength does above. The noise rides the anchor (REST space) and scrolls
+  // along -y, so fire climbs the body and stays ON the body as it walks -- in
+  // world space it would swim through the skin. char blackens the albedo and
+  // holds fire off the parts already burnt out.
+  let burnAmt = clamp(max(burnCfg.x, gInstBurn.x), 0.0, 1.0);
+  if (burnAmt > 0.0) {
+    let burnPhase = max(burnCfg.y, gInstBurn.y) * burnRiseSpeed;
+    let charAmt = clamp(max(burnCfg.z, gInstBurn.z), 0.0, 1.0);
+    let fireN = fbm(anchor * burnNoiseScale + vec3<f32>(0.0, -burnPhase, 0.0));
+    let fire = clamp(fireN * 1.45 - 0.22, 0.0, 1.0) * burnAmt * (1.0 - charAmt * burnCharPatch);
+    albedo = mix(albedo, charColor, charAmt);
+    gBurnEmit = fireRamp(fire) * fire * burnFireGain;
+    faceGlow = faceGlow * (1.0 - burnAmt);
+    primGlow = primGlow * (1.0 - burnAmt);
+  }
+
   // MELT (2026-09-03, task 6) — the wet red, on flesh ONLY.
   //
   // The colour LEADS the sag: the reference goes red while the body is still
@@ -4307,7 +4339,9 @@ export const MARCH_BODY_LIGHT = /* wgsl */ `  // Runtime normal out (MARCH_NORMA
   // At primGlow 0 the factor is exactly 1.0 — bit-identical to the old line
   // (multiplication by 1.0 is exact), so every non-glowing pixel everywhere
   // shades byte-for-byte as before.
-  var lit = fleshLit * (1.0 - faceGlow) * (1.0 - primGlow) + glow;
+  // gBurnEmit is 0 on every non-burning body, so this line is bit-identical to
+  // the old one everywhere burn is off (adding 0.0 is exact).
+  var lit = fleshLit * (1.0 - faceGlow) * (1.0 - primGlow) + glow + gBurnEmit;
 
   // Legacy display look (lodCfg.y). Every flesh preset was hand-tuned in the
   // WebGL lab, which displayed the lit LINEAR value raw — no output sRGB
