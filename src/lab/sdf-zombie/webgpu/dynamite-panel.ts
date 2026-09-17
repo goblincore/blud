@@ -56,6 +56,7 @@ export type DynamiteTuningKey =
   // ——— the BLAST (its own group: these are what the blast DOES to the world,
   //     as opposed to what it looks like — see the owner's report in the table)
   | 'aoesize' | 'edgekick'
+  | 'blastdistort' | 'bdstrength'
   // ——— the burst
   | 'fxsize' | 'fxsmoke' | 'fxlife' | 'fxgain'
   | 'plume' | 'capflat' | 'neck' | 'cap'
@@ -137,6 +138,9 @@ const _DYNAMITE_KEYS = [
   { key: 'aoesize', label: 'AOE size (x)', min: 0.3, max: 1.5, step: 0.02, value: 1 },
   { key: 'edgekick', label: 'edge fling', min: 0, max: 1, step: 0.02, value: 0.45 },
   // ——— THE BURST.
+  { key: 'blastdistort', label: 'optical wave', min: 0, max: 1, step: 1, value: 0,
+    labels: ['off', 'on'] },
+  { key: 'bdstrength', label: 'wave strength (x)', min: 0, max: 4, step: 0.1, value: 1 },
   { key: 'fxsize', label: 'burst size', min: 0.1, max: 2, step: 0.02, value: 0.42 },
   { key: 'fxsmoke', label: 'smoke', min: 0, max: 1, step: 0.02, value: 0.38 },
   { key: 'fxlife', label: 'life (s)', min: 0.3, max: 3, step: 0.05, value: 1.15 },

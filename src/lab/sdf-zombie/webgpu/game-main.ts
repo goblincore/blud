@@ -1190,6 +1190,13 @@ async function main() {
     for (const [k, raw] of Object.entries(patch)) {
       if (raw === undefined || !Number.isFinite(raw)) continue;
       switch (k as DynamiteTuningKey) {
+        case 'blastdistort':
+          postAa.setBlastDistort(raw >= 0.5);
+          break;
+        case 'bdstrength':
+          blastDistortStrength = Math.max(0, Math.min(4, raw));
+          postAa.setBlastDistortStrength(blastDistortStrength);
+          break;
         case 'maxchunks':
           maxChunks = Math.max(1, Math.min(MAX_CHUNK_BUDGET, Math.round(raw)));
           break;
@@ -1286,6 +1293,8 @@ async function main() {
     const t = explosionVfx?.tuning;
     return {
       ...dynamiteDefaults(),
+      blastdistort: postAa.blastDistort ? 1 : 0,
+      bdstrength: postAa.blastDistortStrength,
       maxchunks: maxChunks,
       mode: Math.max(0, GIB_MODES.indexOf(gibMode as typeof GIB_MODES[number])),
       bones: Math.max(0, GIB_BONES.indexOf(gibBones as typeof GIB_BONES[number])),
@@ -6842,7 +6851,8 @@ async function main() {
       postAa.pushBlastDistort(
         [at[0], at[1], at[2]],
         blastRefractionBirthRadiusM(burst.heightM),
-        blastRefractionStrength(burst.heightM) * blastDistortStrength,
+        // Strength is applied by the post pass, once, including live changes.
+        blastRefractionStrength(burst.heightM),
       );
     }
     if (explosionVfx) explosionVfx.spawn(burst);
@@ -7818,6 +7828,7 @@ async function main() {
     get: dynamiteTuningValues,
     set: (key, v) => applyDynamiteTuning({ [key]: v } as Partial<DynamiteTuningValues>),
     presets: [
+      { label: 'optical wave', values: { blastdistort: 1, bdstrength: 2 } },
       { label: 'split', values: { mode: 2, bones: 2, maxchunks: 64, tearSec: 0.1 } },
       { label: 'tubes (old)', values: { mode: 0, bones: 0, maxchunks: 24 } },
       { label: 'plume', values: { plume: 1, capflat: 0.55, ringreach: 1.4 } },
