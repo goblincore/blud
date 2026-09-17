@@ -1,0 +1,24 @@
+{
+  "reference": "reference-repeat.png",
+  "images": {
+    "reference": {
+      "changedPixels": 4616,
+      "changedOver8": 322,
+      "max": 66,
+      "meanAbs": 0.010722981770833334
+    },
+    "candidate": {
+      "changedPixels": 3257,
+      "changedOver8": 148,
+      "max": 42,
+      "meanAbs": 0.00583984375
+    },
+    "reference-again": {
+      "changedPixels": 3896,
+      "changedOver8": 213,
+      "max": 55,
+      "meanAbs": 0.007937825520833334
+    }
+  },
+  "note": "VHS disabled; 120 settle frames; reference-repeat noise controls included. PNG originals remain under /tmp/blud-perf-20260917/uploads-final."
+}

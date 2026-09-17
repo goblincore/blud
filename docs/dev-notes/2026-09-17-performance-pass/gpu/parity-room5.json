@@ -1,0 +1,389 @@
+{
+  "label": "run",
+  "optimizationAB": true,
+  "room": 5,
+  "at": "2026-09-17T11:07:26.051Z",
+  "probesReady": true,
+  "dispatchFrames": [
+    55,
+    63,
+    71,
+    79,
+    87,
+    95,
+    103,
+    111,
+    119,
+    127,
+    135
+  ],
+  "advanced": true,
+  "anyRadiance": true,
+  "finite": true,
+  "consoleProblems": [],
+  "results": [
+    {
+      "optimization": {
+        "referenceDigest": 2315578821,
+        "candidateDigest": 2315578821,
+        "changed": 0,
+        "repeatChanged": false,
+        "inputsEqual": true
+      },
+      "rays": 0,
+      "digest": 2315578821,
+      "digest2": 2315578821,
+      "repeat": {
+        "changed": 0,
+        "maxDelta": 0,
+        "identical": true
+      },
+      "stats": {
+        "length": 6400,
+        "nonZero": 0,
+        "nonFinite": 0,
+        "maxAbs": 0,
+        "sum": 0
+      },
+      "gates": {
+        "capsules": 225,
+        "lights": 1,
+        "room": 5,
+        "dynOn": true,
+        "grid": true
+      },
+      "bound": true,
+      "frames": 55
+    },
+    {
+      "optimization": {
+        "referenceDigest": 1652930689,
+        "candidateDigest": 1652930689,
+        "changed": 0,
+        "repeatChanged": false,
+        "inputsEqual": true
+      },
+      "rays": 1,
+      "digest": 1652930689,
+      "digest2": 1652930689,
+      "repeat": {
+        "changed": 0,
+        "maxDelta": 0,
+        "identical": true
+      },
+      "stats": {
+        "length": 6400,
+        "nonZero": 796,
+        "nonFinite": 0,
+        "maxAbs": 6.1399664878845215,
+        "sum": 3854.58091878891
+      },
+      "gates": {
+        "capsules": 225,
+        "lights": 1,
+        "room": 5,
+        "dynOn": true,
+        "grid": true
+      },
+      "bound": true,
+      "frames": 63
+    },
+    {
+      "optimization": {
+        "referenceDigest": 1615784773,
+        "candidateDigest": 1615784773,
+        "changed": 0,
+        "repeatChanged": false,
+        "inputsEqual": true
+      },
+      "rays": 2,
+      "digest": 1615784773,
+      "digest2": 1615784773,
+      "repeat": {
+        "changed": 0,
+        "maxDelta": 0,
+        "identical": true
+      },
+      "stats": {
+        "length": 6400,
+        "nonZero": 1204,
+        "nonFinite": 0,
+        "maxAbs": 3.544910192489624,
+        "sum": 2390.6726226210594
+      },
+      "gates": {
+        "capsules": 225,
+        "lights": 1,
+        "room": 5,
+        "dynOn": true,
+        "grid": true
+      },
+      "bound": true,
+      "frames": 71
+    },
+    {
+      "optimization": {
+        "referenceDigest": 771346227,
+        "candidateDigest": 771346227,
+        "changed": 0,
+        "repeatChanged": false,
+        "inputsEqual": true
+      },
+      "rays": 3,
+      "digest": 771346227,
+      "digest2": 771346227,
+      "repeat": {
+        "changed": 0,
+        "maxDelta": 0,
+        "identical": true
+      },
+      "stats": {
+        "length": 6400,
+        "nonZero": 1600,
+        "nonFinite": 0,
+        "maxAbs": 3.544910430908203,
+        "sum": 1406.5155952539935
+      },
+      "gates": {
+        "capsules": 225,
+        "lights": 1,
+        "room": 5,
+        "dynOn": true,
+        "grid": true
+      },
+      "bound": true,
+      "frames": 79
+    },
+    {
+      "optimization": {
+        "referenceDigest": 1493894582,
+        "candidateDigest": 1493894582,
+        "changed": 0,
+        "repeatChanged": false,
+        "inputsEqual": true
+      },
+      "rays": 5,
+      "digest": 1493894582,
+      "digest2": 1493894582,
+      "repeat": {
+        "changed": 0,
+        "maxDelta": 0,
+        "identical": true
+      },
+      "stats": {
+        "length": 6400,
+        "nonZero": 1237,
+        "nonFinite": 0,
+        "maxAbs": 3.544910192489624,
+        "sum": 1489.8223157934844
+      },
+      "gates": {
+        "capsules": 225,
+        "lights": 1,
+        "room": 5,
+        "dynOn": true,
+        "grid": true
+      },
+      "bound": true,
+      "frames": 87
+    },
+    {
+      "optimization": {
+        "referenceDigest": 662344962,
+        "candidateDigest": 662344962,
+        "changed": 0,
+        "repeatChanged": false,
+        "inputsEqual": true
+      },
+      "rays": 8,
+      "digest": 662344962,
+      "digest2": 662344962,
+      "repeat": {
+        "changed": 0,
+        "maxDelta": 0,
+        "identical": true
+      },
+      "stats": {
+        "length": 6400,
+        "nonZero": 1292,
+        "nonFinite": 0,
+        "maxAbs": 3.544910192489624,
+        "sum": 1370.6794674303383
+      },
+      "gates": {
+        "capsules": 225,
+        "lights": 1,
+        "room": 5,
+        "dynOn": true,
+        "grid": true
+      },
+      "bound": true,
+      "frames": 95
+    },
+    {
+      "optimization": {
+        "referenceDigest": 180898716,
+        "candidateDigest": 180898716,
+        "changed": 0,
+        "repeatChanged": false,
+        "inputsEqual": true
+      },
+      "rays": 16,
+      "digest": 180898716,
+      "digest2": 180898716,
+      "repeat": {
+        "changed": 0,
+        "maxDelta": 0,
+        "identical": true
+      },
+      "stats": {
+        "length": 6400,
+        "nonZero": 1600,
+        "nonFinite": 0,
+        "maxAbs": 3.544910192489624,
+        "sum": 1378.6467851447605
+      },
+      "gates": {
+        "capsules": 225,
+        "lights": 1,
+        "room": 5,
+        "dynOn": true,
+        "grid": true
+      },
+      "bound": true,
+      "frames": 103
+    },
+    {
+      "optimization": {
+        "referenceDigest": 1573156168,
+        "candidateDigest": 1573156168,
+        "changed": 0,
+        "repeatChanged": false,
+        "inputsEqual": true
+      },
+      "rays": 31,
+      "digest": 1573156168,
+      "digest2": 1573156168,
+      "repeat": {
+        "changed": 0,
+        "maxDelta": 0,
+        "identical": true
+      },
+      "stats": {
+        "length": 6400,
+        "nonZero": 1600,
+        "nonFinite": 0,
+        "maxAbs": 3.544909954071045,
+        "sum": 1391.4870278372487
+      },
+      "gates": {
+        "capsules": 225,
+        "lights": 1,
+        "room": 5,
+        "dynOn": true,
+        "grid": true
+      },
+      "bound": true,
+      "frames": 111
+    },
+    {
+      "optimization": {
+        "referenceDigest": 2697911551,
+        "candidateDigest": 2697911551,
+        "changed": 0,
+        "repeatChanged": false,
+        "inputsEqual": true
+      },
+      "rays": 32,
+      "digest": 2697911551,
+      "digest2": 2697911551,
+      "repeat": {
+        "changed": 0,
+        "maxDelta": 0,
+        "identical": true
+      },
+      "stats": {
+        "length": 6400,
+        "nonZero": 1600,
+        "nonFinite": 0,
+        "maxAbs": 3.544910192489624,
+        "sum": 1381.7097866350282
+      },
+      "gates": {
+        "capsules": 225,
+        "lights": 1,
+        "room": 5,
+        "dynOn": true,
+        "grid": true
+      },
+      "bound": true,
+      "frames": 119
+    },
+    {
+      "optimization": {
+        "referenceDigest": 1079923040,
+        "candidateDigest": 1079923040,
+        "changed": 0,
+        "repeatChanged": false,
+        "inputsEqual": true
+      },
+      "rays": 47,
+      "digest": 1079923040,
+      "digest2": 1079923040,
+      "repeat": {
+        "changed": 0,
+        "maxDelta": 0,
+        "identical": true
+      },
+      "stats": {
+        "length": 6400,
+        "nonZero": 1600,
+        "nonFinite": 0,
+        "maxAbs": 3.544910192489624,
+        "sum": 1384.1563363734194
+      },
+      "gates": {
+        "capsules": 225,
+        "lights": 1,
+        "room": 5,
+        "dynOn": true,
+        "grid": true
+      },
+      "bound": true,
+      "frames": 127
+    },
+    {
+      "optimization": {
+        "referenceDigest": 2645758111,
+        "candidateDigest": 2645758111,
+        "changed": 0,
+        "repeatChanged": false,
+        "inputsEqual": true
+      },
+      "rays": 64,
+      "digest": 2645758111,
+      "digest2": 2645758111,
+      "repeat": {
+        "changed": 0,
+        "maxDelta": 0,
+        "identical": true
+      },
+      "stats": {
+        "length": 6400,
+        "nonZero": 1600,
+        "nonFinite": 0,
+        "maxAbs": 3.544910192489624,
+        "sum": 1383.091142250809
+      },
+      "gates": {
+        "capsules": 225,
+        "lights": 1,
+        "room": 5,
+        "dynOn": true,
+        "grid": true
+      },
+      "bound": true,
+      "frames": 135
+    }
+  ]
+}

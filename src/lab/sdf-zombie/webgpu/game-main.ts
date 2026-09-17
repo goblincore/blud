@@ -11480,6 +11480,8 @@ function performBenchAction(a: BenchAction): void {
       return next;
     },
     get bloodBlurEnabled() { return shutterGame?.enabled ?? false; },
+    /** Compare identical density inputs with full versus live-prefix uploads. */
+    setGooUploadOptimization: (on: boolean) => gooLayer?.setUploadOptimization(on),
     /** Exposure in ms — longer = longer trails. Clamped [0, 200]. Shared by
      *  the blood AND gib layers (the panel control is one control). */
     setBloodBlurExposure: (ms: number) => {

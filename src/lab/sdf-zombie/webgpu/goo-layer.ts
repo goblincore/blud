@@ -1175,6 +1175,8 @@ export interface GooLayer {
    * restores the shipped one-pass pose. Does not touch any tuning.
    */
   setSelection(sel: GooSelection | null): void;
+  /** Exact-work A/B: upload only the instances the next draw consumes. */
+  setUploadOptimization(on: boolean): void;
   /**
    * PIPELINE WARM-UP for the reference layer materials
    * (renderLayer's makeLayerMat graphs). Compiles them off the capture path so
@@ -1699,6 +1701,7 @@ export function createGooLayer(
   const passGate = { density: true, blur: true, surface: true };
   // SELECTION SEAM state (shutter game integration). null = pose everything.
   let selection: GooSelection | null = null;
+  let uploadOptimization = true;
   // Area-priority scratch: candidate world positions/extents, collected once
   // per sync, reused across frames (never reallocated in steady state).
   const candCap = GOO_TUNING.maxParticles + 1024;
@@ -2191,15 +2194,34 @@ export function createGooLayer(
         fallArr[n] = extraWeight[e]!;
         quads.setMatrixAt(n++, m);
       }
-      for (let i = n; i < GOO_TUNING.maxParticles; i++) {
-        m.makeScale(0, 0, 0);
-        quads.setMatrixAt(i, m);
-        gutArr[i] = 0;
-        fallArr[i] = 1;
+      if (!uploadOptimization) {
+        for (let i = n; i < GOO_TUNING.maxParticles; i++) {
+          m.makeScale(0, 0, 0);
+          quads.setMatrixAt(i, m);
+          gutArr[i] = 0;
+          fallArr[i] = 1;
+        }
+        quads.instanceMatrix.clearUpdateRanges();
+        gutAttr.clearUpdateRanges();
+        fallAttr.clearUpdateRanges();
+        quads.instanceMatrix.needsUpdate = true;
+        gutAttr.needsUpdate = true;
+        fallAttr.needsUpdate = true;
+      } else if (n > 0) {
+        // sync writes every live slot before increasing count. Slots >= n
+        // cannot be drawn, so they need neither clearing nor uploading. The
+        // sharp and selected shutter partitions share this mesh; replace the
+        // range on EVERY sync, including when several syncs precede a draw.
+        quads.instanceMatrix.clearUpdateRanges();
+        quads.instanceMatrix.addUpdateRange(0, n * 16);
+        gutAttr.clearUpdateRanges();
+        gutAttr.addUpdateRange(0, n);
+        fallAttr.clearUpdateRanges();
+        fallAttr.addUpdateRange(0, n);
+        quads.instanceMatrix.needsUpdate = true;
+        gutAttr.needsUpdate = true;
+        fallAttr.needsUpdate = true;
       }
-      quads.instanceMatrix.needsUpdate = true;
-      gutAttr.needsUpdate = true;
-      fallAttr.needsUpdate = true;
       // Draw only the live instances. At 0 the pass still runs (and clears),
       // which the first-clear discipline depends on.
       quads.count = n;
@@ -2286,6 +2308,7 @@ export function createGooLayer(
     },
     // SELECTION SEAM (shutter game integration): see GooSelection.
     setSelection(sel) { selection = sel; },
+    setUploadOptimization(on) { uploadOptimization = !!on; },
     async precompileLayer() {
       // Compile the reference layer graphs in the SAME scene/target shape
       // renderLayer draws, so the first shutter frame does not pay a

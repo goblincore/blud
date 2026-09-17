@@ -1,16 +1,17 @@
 # Default-graphics performance pass — 2026-09-17
 
-**GPU candidate implemented; GPU validation and performance verdict pending. No
-game frame-time improvement claimed.** Target: recover approximately 5 ms without
-reducing the default graphics quality. Primary checkout unchanged.
+**Performance pass validated against the accepted shutter-blur merge.** Target:
+recover approximately 5 ms without reducing default graphics quality. That
+whole-frame target was not established; report the measured gains below. Primary
+checkout unchanged.
 
 **CPU follow-up:** [CPU.md](CPU.md) records a measured 14.6–15.9% reduction in
 offline actor-step plus packing cost (0.19–0.41 ms/update), byte-identical sampled
 output and 281 passing focused tests. Its commit is separate from the shader
 candidate below. The full-game 5 ms target remains open.
 
-Branch: `codex/perf-pass-2026-09-17`, based on `761cf8d3` (includes accepted
-offline gib assets). Worktree: `.claude/worktrees/perf-pass-2026-09-17`.
+Branch: `codex/perf-pass-2026-09-17`, now includes main `4ce1e826` (accepted
+offline gib assets and shutter blur). Worktree: `.claude/worktrees/perf-pass-2026-09-17`.
 
 ## Candidate
 
@@ -35,8 +36,8 @@ it does not reduce capsule count, ray count, lighting, or update cadence.
 queries for comparison. `true` selects the candidate. The switch is reset by
 the bench before each leg; `probeCostSplit.optimized` reports it. The shader's
 reference and candidate share one compiled pipeline, so this first comparison
-isolates runtime work. A final comparison against the parent checkout is still
-needed to detect any shader-compilation/register-pressure cost of the switch.
+isolates runtime work. A separate run of the original compiled shader from main confirms the small
+probe-pass improvement in the blast fixture; see GPU.md for limits.
 
 ## Completed verification
 
@@ -53,37 +54,24 @@ needed to detect any shader-compilation/register-pressure cost of the switch.
   128 capsules 0.00062 ms; 790 capsules 0.00373 ms; 2,048 capsules 0.00968 ms.
   These are bounds-construction costs, **not** GPU or game-frame improvements.
 
-## Outstanding GPU window
+## GPU and shutter verdict
 
-The dispatch task `2026-09-17-shutter-blur-game-task-1` was actively running its
-GPU checker on 5484/9484. Its processes were left alone; no GPU work launched
-by this task. Subsequent shutter tasks are pending. Do not measure concurrently.
+[GPU.md](GPU.md) contains the results, evidence and reproduction commands.
 
-After an exclusive window is available, run from this worktree:
+- GPU readback parity passes in rooms 1/3/5 at all eleven ray counts, and with
+  705 capsules plus flashlight/muzzle lighting at six ray counts. No shader errors.
+- Probe savings scale with capsule occupancy; the small blast fixture saves only
+  about 0.02 ms of amortized GPU pass time. Do not equate this with frame latency.
+  At 705 capsules / two lights the gather drops 70% (1.844→0.547 ms per dispatch,
+  about 0.65 ms amortized); the full-frame result is still inconclusive.
+- The accepted blood + gib blur adds 0–0.5 ms to the median frame in the frozen
+  28-piece blast test. Exposure, trail, taps, seed resolution and occlusion stay intact.
+- Goo buffers now upload only live instances. Real sync tests preserve drawn
+  bytes through partition/count transitions; CPU preparation saves 0.01–0.02 ms
+  and the synthetic blast transfers 66% fewer attribute bytes. Full-frame deltas
+  remain below the measurement noise.
+- The initial six full-fight legs had different scene censuses and are discarded
+  for attribution. Character marching remains the largest measured GPU cost.
 
-```bash
-LAB_VITE_PORT=5492 LAB_CDP_PORT=9492 LAB_TMP=/tmp/blud-perf-20260917 \
-  bash -c '. scripts/lab-servers.sh; trap lab_servers_down EXIT; lab_servers_up;
-    for room in 1 3 5; do
-      node scripts/sdf-gather-dispatch-check.mjs --optimization-ab --room "$room" \
-        --out "/tmp/blud-perf-parity-room$room.json" || exit;
-    done'
-
-LAB_VITE_PORT=5492 LAB_CDP_PORT=9492 LAB_TMP=/tmp/blud-perf-20260917 \
-  BENCH_QUERY='seed=4242&res=800' BENCH_PASSES=1 BENCH_REPEATS=3 \
-  BENCH_ROOMS=1,3,5 BENCH_LEGS=probe-reference-ship,upscale-ship \
-  BENCH_OUT=/tmp/blud-perf-20260917-ab bash scripts/sdf-game-bench.sh
-```
-
-The parity option compares reference/candidate in **one frozen boot**, requires
-identical dynamic-layer digests and floats, repeats both, and saves a mismatch
-payload on failure. It sweeps 0/1/2/3/5/8/16/31/32/47/64 rays. This also catches
-WGSL compilation errors, which CPU tests and Vite cannot catch. Repeat with
-live point lights/flashlight and increased capsule occupancy before accepting.
-
-Measure both fenced frame time and `compute:probe-gather`, with matched census
-and frame hashes. Gather runs every second frame: do not equate its pass timing
-with per-frame savings. Keep repeat ranges visible. Then compare parent versus
-candidate default boots and perform a visual gameplay check. If savings are
-below 5 ms, report the actual result and use the new pass breakdown to decide
-whether wounded-character rendering has a worthwhile next target.
+Focused tests and the final build are recorded in GPU.md. CPU results from the
+prior commit remain in CPU.md; do not sum numbers across different scenarios.
