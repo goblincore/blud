@@ -4,6 +4,15 @@
 > Per-milestone step-by-step tasks live in `docs/superpowers/plans/`.
 > This file is **coarse-grained state only** — keep rows to ≤2 lines and link out for detail.
 
+## Burning enemies — flame look + flame lab — 2026-09-17
+
+- [x] Foundation: `sdf-flame-lab.html` + per-body burn + surface fire/char + glow, heat warp, shutter, fire light.
+  [Spec](docs/superpowers/specs/2026-09-17-burning-enemies-flame-lab-design.md) ·
+  [plan](docs/superpowers/plans/2026-09-17-flame-lab-foundation.md) ·
+  [captures](docs/dev-notes/2026-09-17-flame-lab/NOTES.md).
+- [ ] Next: the three tongue techniques (screen-space, flame cards, volumetric), then the owner picks a look, then measure.
+- [ ] Then: flare gun + burning behaviour (second spec, not yet written).
+
 ## Game design — GOBLIN vision + production scope — 2026-09-10
 
 - [x] Vision draft 3: goblin in a flat it can't leave, playing a 10-level shareware FPS on a CRT; frame layers, knock, endings. [Vision](docs/game/vision.md).
