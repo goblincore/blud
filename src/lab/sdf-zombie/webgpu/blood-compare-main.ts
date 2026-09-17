@@ -89,6 +89,10 @@ import {
   SHUTTER_CANDIDATE_TAPS, DEFAULT_DEPTH_BIAS_M, EMPTY_SEED_STATS,
   type ShutterResolveHandle, type ShutterProjection, type SweepSeedStats, type SeedOwnership,
 } from './shutter-blur';
+import {
+  installPassTiming, beginPassFrame, setPassLabel, attributePassSamples,
+  type PassTiming,
+} from './gpu-pass-timing';
 import type { Vec3 } from '../types';
 
 // -------------------------------------------------------------------------
@@ -260,6 +264,10 @@ async function bootstrap(): Promise<void> {
   }
 
   const { renderer, scene, camera } = handle;
+  // Per-pass GPU timestamps for the task-3 cost report. trackTimestamp is on
+  // (lab-renderer) and the backend labels every render/compute pass; a no-op
+  // on a backend without the feature (which the page already rejects).
+  const passTiming: PassTiming = installPassTiming(renderer);
   scene.fog = null;
   const bgDark = new THREE.Color(0x1a1116);
   const bgNeutral = new THREE.Color(0x8a8a8a);
@@ -820,11 +828,19 @@ async function bootstrap(): Promise<void> {
   }
 
   function renderVariant(v: Variant, target: THREE.RenderTarget | null): void {
+    // One goo chain + the fixture scene it wraps; both labels are snapshotted
+    // by gpu-pass-timing at encode time for the task-3 pass table.
+    setPassLabel('sharp:goo');
     renderVariantFrame({
       gooLayer,
       sim,
       camera,
-      renderScene: (t) => { renderer.setRenderTarget(t); renderer.render(scene, camera); },
+      renderScene: (t) => {
+        setPassLabel('sharp:scene');
+        renderer.setRenderTarget(t);
+        renderer.render(scene, camera);
+        setPassLabel('sharp:goo');
+      },
     }, v, extrasFor(v.connections), target);
   }
 
@@ -894,7 +910,13 @@ async function bootstrap(): Promise<void> {
     gooLayer.setOutputTarget(refScene);
     camera.updateMatrixWorld();
     gooLayer.sync(staticSim, camera);
-    gooLayer.render(camera, () => { renderer.setRenderTarget(refScene); renderer.render(scene, camera); });
+    setPassLabel('oracle:static-goo');
+    gooLayer.render(camera, () => {
+      setPassLabel('oracle:static-scene');
+      renderer.setRenderTarget(refScene);
+      renderer.render(scene, camera);
+      setPassLabel('oracle:static-goo');
+    });
 
     // 2. ACCUMULATE the selected moving blood, one shaded sample at a time.
     const timeline = timelineForCurrentEvent();
@@ -908,9 +930,11 @@ async function bootstrap(): Promise<void> {
     renderer.clear(true, true, true);
     // Frozen fixture depth into refAccum with colour writes off. The layer
     // depth-tests against this and never writes depth.
+    setPassLabel('oracle:depth');
     scene.overrideMaterial = depthOnly;
     renderer.render(scene, camera);
     scene.overrideMaterial = null;
+    setPassLabel('oracle:sample');
     for (const t of plan.sampleTimes) {
       movingSimAt(timeline, t, movingScratch);
       gooLayer.sync(movingScratch, camera);
@@ -928,6 +952,7 @@ async function bootstrap(): Promise<void> {
     renderer.setRenderTarget(target);
     renderer.setScissorTest(false);
     renderer.setViewport(0, 0, outW, outH);
+    setPassLabel('oracle:composite');
     renderer.render(compScene, blitCam);
     renderer.autoClear = prevAutoClear;
 
@@ -1028,6 +1053,30 @@ async function bootstrap(): Promise<void> {
    */
   function renderCandidateReference(target: THREE.RenderTarget | null): void {
     const exposure = currentExposureSeconds();
+    // 0. EMPTY WORK. With no selected moving blood the two-chain candidate
+    //    (static half + empty layer + resolve) draws the same pixels as the
+    //    fused sharp frame while paying for the extra chain and the resolve —
+    //    measured at ~+0.33 ms of GPU in TASK-3's empty bench. The empty
+    //    candidate frame is byte-identical to the fused sharp frame (parity
+    //    capture r20), so route it there and skip the work entirely.
+    const { staticSim, moving } = splitSimForShutter(sim);
+    if (moving.droplets.length === 0) {
+      renderSharpReference(target);
+      const dims = candidateSeedDims();
+      lastCandidateStats = {
+        ...EMPTY_SEED_STATS,
+        width: dims.width, height: dims.height,
+        taps: SHUTTER_CANDIDATE_TAPS, seedScale: candSeedScale, depthBias: candDepthBias,
+        buildMs: 0,
+        passes: { sceneRenders: 1, gooChains: 1, fullscreen: 0 },
+      };
+      lastRefStats = {
+        samples: 0, particles: 0, streakPx: 0, ms: exposureMs(exposure), builds: timelineBuilds,
+        timelineParticles: 0, livePos: null, samplePos: null,
+        firstSampleT: eventTime - exposure, lastSampleT: eventTime,
+      };
+      return;
+    }
     ensureCandidate();
     const resolve = candResolve!;
     const seedTex = candSeedTex!;
@@ -1035,13 +1084,18 @@ async function bootstrap(): Promise<void> {
     const ownership = candOwnership!;
 
     // 1. SHARP HALF: fixture + static pools/guts, no selected moving blood.
-    const { staticSim, moving } = splitSimForShutter(sim);
     gooLayer.setReconstruction('smooth');
     gooLayer.setExtraBlobs([]);
     gooLayer.setOutputTarget(refScene);
     camera.updateMatrixWorld();
     gooLayer.sync(staticSim, camera);
-    gooLayer.render(camera, () => { renderer.setRenderTarget(refScene); renderer.render(scene, camera); });
+    setPassLabel('cand:static-goo');
+    gooLayer.render(camera, () => {
+      setPassLabel('cand:static-scene');
+      renderer.setRenderTarget(refScene);
+      renderer.render(scene, camera);
+      setPassLabel('cand:static-goo');
+    });
 
     // 2. SELECTED BLOOD, once, premultiplied. NO depth pre-pass: the resolve
     //    owns per-pixel occlusion (owner depth vs the frozen scene depth at
@@ -1058,6 +1112,7 @@ async function bootstrap(): Promise<void> {
     renderer.clear(true, true, true);
     renderer.setClearColor(prevClear, prevAlpha);
     gooLayer.sync(moving, camera);
+    setPassLabel('cand:selected-goo');
     gooLayer.renderLayer(camera, candLayer!);
 
     // 3. CPU MOTION SEED: object-only projected sweeps, current camera at both
@@ -1083,6 +1138,7 @@ async function bootstrap(): Promise<void> {
     resolve.setDepthBias(candDepthBias);
     resolve.setExposure(exposure);
     resolve.setSeedDims(candSeedW, candSeedH);
+    setPassLabel('cand:resolve');
     resolve.render(renderer, target);
 
     lastCandidateStats = {
@@ -1131,6 +1187,7 @@ async function bootstrap(): Promise<void> {
     renderer.clear(true, true, true);
     renderer.setScissorTest(true);
     renderer.setScissor(0, 0, w, h);
+    setPassLabel('blit');
     renderer.render(blitSceneA, blitCam);
     renderer.setScissor(0, 0, cut, h);
     renderer.render(blitSceneB, blitCam);
@@ -1779,6 +1836,176 @@ async function bootstrap(): Promise<void> {
   ].join('\n');
   controlsEl.appendChild(hint);
 
+  // --- task-3 bench (GPU pass timing + fenced frame cost) ----------------
+  // Drives the FROZEN frame by hand with the rAF loop off, so every draw in a
+  // batch is the same seed/time/particle count and off-vs-candidate is a
+  // like-for-like delta. Per-pass labels come from gpu-pass-timing; the fence
+  // is three's timestamp resolve, which is a completion fence (the lab-renderer
+  // note: trust the fence, not the per-pass number).
+  function benchPercentile(sorted: readonly number[], p: number): number {
+    if (sorted.length === 0) return 0;
+    const i = Math.min(sorted.length - 1, Math.max(0, Math.round(p * (sorted.length - 1))));
+    return sorted[i]!;
+  }
+  function benchSummary(xs: readonly number[]): { p50: number; p95: number; mean: number; min: number; max: number } {
+    if (xs.length === 0) return { p50: 0, p95: 0, mean: 0, min: 0, max: 0 };
+    const s = [...xs].sort((a, b) => a - b);
+    const mean = xs.reduce((a, b) => a + b, 0) / xs.length;
+    return { p50: benchPercentile(s, 0.5), p95: benchPercentile(s, 0.95), mean, min: s[0]!, max: s[s.length - 1]! };
+  }
+
+  interface ShutterBenchOptions {
+    reference?: ShutterReferenceId;
+    scenario?: ScenarioId;
+    seed?: number;
+    eventTime?: number;
+    preset?: ShutterPresetId;
+    samples?: number;
+    maxStreakPx?: number;
+    seedScale?: number;
+    depthBias?: number;
+    camera?: { yaw?: number; pitch?: number; distance?: number };
+    source?: { width: number; height: number };
+    goo?: boolean;
+    mist?: boolean;
+    frames?: number;
+    warmup?: number;
+  }
+
+  async function benchShutter(o: ShutterBenchOptions = {}): Promise<Record<string, unknown>> {
+    // 'current' shape first: setShape forces scenario=burst, so the requested
+    // scenario must be applied AFTER it.
+    if (shape !== 'current') setShape('current');
+    if (o.reference) shutterRef = o.reference;
+    if (o.preset) shutterPresetId = o.preset;
+    if (o.samples !== undefined) shutterSampleCount = clampSampleCount(o.samples);
+    if (o.maxStreakPx !== undefined && Number.isFinite(o.maxStreakPx)) shutterMaxStreakPx = o.maxStreakPx;
+    if (o.seedScale !== undefined && Number.isFinite(o.seedScale)) {
+      candSeedScale = Math.max(0.25, Math.min(2, o.seedScale));
+      seedScaleInput.value = String(candSeedScale);
+    }
+    if (o.depthBias !== undefined && Number.isFinite(o.depthBias)) {
+      candDepthBias = Math.max(0, Math.min(50, o.depthBias));
+    }
+    if (o.scenario) { scenario = o.scenario; if (scenarioSelect) scenarioSelect.value = o.scenario; }
+    if (o.seed !== undefined && Number.isFinite(o.seed)) { seed = Math.floor(o.seed); seedInput.value = String(seed); }
+    if (o.source) {
+      sourceW = Math.max(16, Math.round(o.source.width));
+      sourceH = Math.max(16, Math.round(o.source.height));
+      gooLayer.setSize(sourceW, sourceH);
+    }
+    if (o.camera) {
+      if (o.camera.yaw !== undefined && Number.isFinite(o.camera.yaw)) orbit.yaw = o.camera.yaw;
+      if (o.camera.pitch !== undefined && Number.isFinite(o.camera.pitch)) orbit.pitch = Math.max(-0.4, Math.min(1.2, o.camera.pitch));
+      if (o.camera.distance !== undefined && Number.isFinite(o.camera.distance)) orbit.distance = Math.max(1.2, Math.min(9, o.camera.distance));
+      applyCamera();
+    }
+    if (o.goo !== undefined) gooVisible = o.goo;
+    if (o.mist !== undefined) mistVisible = o.mist;
+    if (o.goo !== undefined || o.mist !== undefined) applyLayerToggles();
+    eventTime = Math.max(0, Math.min(IMPACT_SPLASH_TUNING.lifetimeSec, o.eventTime ?? eventTime));
+    eventTimeInput.value = String(eventTime);
+    simulateCurrentTo(eventTime);
+    playing = false;
+    handle.setLoopRunning(false);
+
+    const exposure = currentExposureSeconds();
+    const candidate = shutterRef === 'efficient' && exposure > 0;
+    const coldStart = !candResolve;
+    if (candidate) ensureCandidate();
+    // Drain anything recorded before the batch so the label census is exact.
+    await passTiming.collect();
+    passTiming.countsSinceLast();
+
+    const warmup = Math.max(0, Math.floor(o.warmup ?? 6));
+    const warmupFenced: number[] = [];
+    let coldFencedMs: number | null = null;
+    for (let i = 0; i < warmup; i++) {
+      beginPassFrame();
+      const t0 = performance.now();
+      handle.drawOnce();
+      await handle.resolveGpu();
+      const ms = performance.now() - t0;
+      warmupFenced.push(ms);
+      if (i === 0 && coldStart) coldFencedMs = ms;
+    }
+    // Drain the warm-up passes so no sampled frame leaks into the timed batch.
+    await passTiming.collect();
+    passTiming.countsSinceLast();
+
+    const frames = Math.max(1, Math.floor(o.frames ?? 30));
+    const fenced: number[] = [];
+    const drawCpu: number[] = [];
+    const prep: number[] = [];
+    const spans: number[] = [];
+    const byLabel = new Map<string, number[]>();
+    for (let i = 0; i < frames; i++) {
+      beginPassFrame();
+      const t0 = performance.now();
+      handle.drawOnce();
+      drawCpu.push(performance.now() - t0);
+      const samples = await passTiming.collect();
+      fenced.push(performance.now() - t0);
+      const attr = attributePassSamples(samples);
+      for (const [, labels] of attr.exclusive) {
+        for (const [label, ms] of labels) {
+          let arr = byLabel.get(label);
+          if (!arr) { arr = []; byLabel.set(label, arr); }
+          arr.push(ms);
+        }
+      }
+      let span = 0;
+      for (const [, s] of attr.span) span += s;
+      spans.push(span);
+      if (lastCandidateStats) prep.push(lastCandidateStats.buildMs);
+    }
+    const counts = new Map(passTiming.countsSinceLast().map(c => [c.label, c.passes / frames] as const));
+    const labels = [...byLabel.entries()].map(([label, xs]) => {
+      const s = benchSummary(xs);
+      return { label, passesPerFrame: counts.get(label) ?? 0, p50: s.p50, p95: s.p95, exclusiveMean: s.mean };
+    }).sort((a, b) => b.exclusiveMean - a.exclusiveMean);
+
+    let candidateBytes = 0;
+    if (candSeedData) candidateBytes += candSeedData.byteLength;
+    if (candOwnership) {
+      candidateBytes += candOwnership.stream.byteLength + candOwnership.vx.byteLength + candOwnership.vy.byteLength;
+    }
+    if (candLayer) candidateBytes += candLayer.width * candLayer.height * 8; // RGBA16F
+    const perfMemory = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory;
+
+    return {
+      reference: shutterRef,
+      scenario,
+      seed,
+      eventTime,
+      exposureMs: exposureMs(exposure),
+      source: { width: sourceW, height: sourceH },
+      output: { width: contentW, height: contentH },
+      density: { ...gooLayer.densityDiagnostics },
+      droplets: sim.droplets.length,
+      splats: sim.splats.length,
+      frames,
+      warmupFrames: warmup,
+      candidateAvailable: candResolve !== null,
+      passTimingInstalled: passTiming.installed,
+      coldFencedMs,
+      warmupFencedMs: warmupFenced,
+      fenced: benchSummary(fenced),
+      drawCpu: benchSummary(drawCpu),
+      gpuSpan: benchSummary(spans),
+      cpuPrep: prep.length > 0 ? { ...benchSummary(prep), last: prep[prep.length - 1]! } : null,
+      labels,
+      candidate: lastCandidateStats,
+      memory: {
+        jsHeapBytes: perfMemory?.usedJSHeapSize ?? 0,
+        geometries: renderer.info.memory.geometries,
+        textures: renderer.info.memory.textures,
+        candidateBytes,
+      },
+      gpu: { lost: handle.gpuDiagnostics.lost !== null, uncaptured: handle.gpuDiagnostics.uncapturedCount },
+    };
+  }
+
   // --- global API --------------------------------------------------------
   const api = {
     state: candidateState,
@@ -1896,6 +2123,22 @@ async function bootstrap(): Promise<void> {
       if (!playing) handle.drawOnce();
     },
     shutterState,
+    benchShutter,
+    passTimingInstalled: passTiming.installed,
+    /** Present the frozen frame once without advancing the sim. */
+    present: () => { handle.drawOnce(); },
+    /**
+     * Drive the SHARED clock by explicit fixed steps — the cadence test. The
+     * step size is presentation cadence; the exposure is a fixed shutter
+     * interval, so the two must not be conflated. Stops the rAF loop first.
+     */
+    driveSteps: (dtSec: number, count: number) => {
+      if (!Number.isFinite(dtSec) || dtSec <= 0 || !Number.isFinite(count) || count <= 0) return;
+      playing = false;
+      handle.setLoopRunning(false);
+      const n = Math.floor(count);
+      for (let i = 0; i < n; i++) handle.step(dtSec);
+    },
     captureInstructions: () => [
       '1. npm run dev and open /sdf-blood-compare.html (WebGPU required).',
       '2. Default is shape=Impact splash, FROZEN at the representative crown moment (event t).',

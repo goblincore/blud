@@ -435,3 +435,36 @@ describe('blood comparison page — shutter mode (task 1)', () => {
     expect(src).toContain("mode: compareMode");
   });
 });
+
+describe('blood comparison page — task 3 bench + pass labels', () => {
+  it('installs labeled pass timing and labels the candidate passes', () => {
+    for (const needle of ['installPassTiming', 'beginPassFrame', 'setPassLabel', 'attributePassSamples']) {
+      expect(src, `${needle} must be imported/used`).toContain(needle);
+    }
+    // The candidate's passes are individually attributable.
+    for (const label of ['cand:static-scene', 'cand:selected-goo', 'cand:resolve']) {
+      expect(src, `${label} must be labeled`).toContain(label);
+    }
+    for (const label of ['oracle:static-scene', 'oracle:depth', 'oracle:sample', 'oracle:composite']) {
+      expect(src, `${label} must be labeled`).toContain(label);
+    }
+  });
+
+  it('drives the frozen frame by hand and never advances the sim in the bench', () => {
+    expect(src).toContain('async function benchShutter');
+    expect(src).toContain('handle.setLoopRunning(false)');
+    expect(src).toContain('handle.resolveGpu()');
+    // The bench reports the frozen state, not a live frame count.
+    expect(src).toContain('warmupFencedMs');
+    expect(src).toContain('coldFencedMs');
+    expect(src).toContain('cpuPrep');
+  });
+
+  it('separates presentation cadence from the fixed shutter interval', () => {
+    expect(src).toContain('driveSteps: (dtSec: number, count: number)');
+    expect(src).toContain('handle.step(dtSec)');
+    for (const needle of ['benchShutter', 'passTimingInstalled', 'present:']) {
+      expect(src, `${needle} must be exposed`).toContain(needle);
+    }
+  });
+});

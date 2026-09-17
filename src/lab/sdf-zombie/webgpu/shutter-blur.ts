@@ -44,8 +44,19 @@ import { projectWorldToPixel } from './shutter-reference';
 // Bounds. Every one is a hard cap: the resolve never grows work on a hitch.
 // ---------------------------------------------------------------------------
 
-/** Bounded directional gather taps in the resolve. */
-export const SHUTTER_CANDIDATE_TAPS = 8;
+/**
+ * Bounded directional gather taps in the resolve.
+ *
+ * TASK-3 FIX (evidence: 41-crop-crossing-cand-vs-sampled.png). At 8 uniform
+ * taps a fast spray's streak read as a string of discrete beads against the
+ * sampled oracle's continuous smear: 8 translates of the CURRENT discrete goo
+ * surface leave gaps of ~streakPx/8. 24 taps (spacing <= ~1.3 px on a 30 px
+ * streak) resolves the streak continuously, and each tap is stratified-jittered
+ * so any residual regularity is noise rather than banding. This is still a hard
+ * cap — the resolve never grows work on a hitch — and the measured GPU delta
+ * for the ordinary case stays inside the ~1 ms target (TASK-3.md).
+ */
+export const SHUTTER_CANDIDATE_TAPS = 24;
 /** Seed field dimensions are clamped into this band whatever the density res. */
 export const SHUTTER_SEED_MIN = 16;
 export const SHUTTER_SEED_MAX = 512;
@@ -493,9 +504,18 @@ export const SHUTTER_RESOLVE_WGSL = /* wgsl */ `fn shutterResolve(
       // current layer along that segment fills the whole swept region and
       // gives the interior the right partial coverage, without ever
       // accumulating a density field across times.
+      //
+      // STRATIFIED JITTER: the tap lands at (i + hash(pix,i)) / N rather than
+      // (i + 0.5) / N. The hash is a pure function of the destination pixel and
+      // the tap index, so a frame is reproducible; it only breaks the regular
+      // phase that made under-sampled streaks read as evenly spaced beads.
       var acc = vec4<f32>(0.0);
       for (var i = 0; i < ${SHUTTER_CANDIDATE_TAPS}; i = i + 1) {
-        let t = motion.x * (f32(i) + 0.5) / ${SHUTTER_CANDIDATE_TAPS.toFixed(1)};
+        var h = (u32(pix.x) + u32(i) * 131u) * 374761393u
+              + (u32(pix.y) + u32(i) * 977u) * 668265263u;
+        h = (h ^ (h >> 13u)) * 1274126177u;
+        let jitter = f32(h & 0x00ffffffu) * 5.9604645e-8; // 2^-24
+        let t = motion.x * (f32(i) + jitter) / ${SHUTTER_CANDIDATE_TAPS.toFixed(1)};
         let s = d + seed.xy * t;
         let sp = clamp(vec2<i32>(floor(s * outDims)), vec2<i32>(0, 0), maxP);
         acc = acc + textureLoad(layerTex, sp, 0);

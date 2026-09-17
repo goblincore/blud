@@ -233,6 +233,8 @@ describe('shutter candidate — bounded seed ownership', () => {
     expect(huge.width).toBe(SHUTTER_SEED_MAX);
     expect(huge.height).toBe(SHUTTER_SEED_MAX);
     expect(SHUTTER_CANDIDATE_TAPS).toBeGreaterThan(0);
-    expect(SHUTTER_CANDIDATE_TAPS).toBeLessThanOrEqual(8);
+    // Task-3 raised the cap from 8 to 24 after the crossing crop showed
+    // beaded streaks; the bound is the contract, not the old value.
+    expect(SHUTTER_CANDIDATE_TAPS).toBeLessThanOrEqual(24);
   });
 });

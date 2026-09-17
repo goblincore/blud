@@ -1,0 +1,158 @@
+{
+  "seed": 12345,
+  "frame": 51,
+  "scenario": "bleed",
+  "playing": false,
+  "speed": 1,
+  "splashPreset": "spurt",
+  "shape": "current",
+  "eventTime": 0.85,
+  "splash": {
+    "shape": "current",
+    "frozen": true,
+    "eventTime": 0.85,
+    "origin": [
+      0,
+      1.35,
+      0.55
+    ],
+    "direction": [
+      0,
+      0,
+      1
+    ],
+    "time": 0.3,
+    "lifetime": 1.15,
+    "progress": 0.2608695652173913,
+    "crownMoment": 0.3,
+    "events": 1,
+    "vertices": 7091,
+    "droplets": 14
+  },
+  "compare": "shutter",
+  "shutter": {
+    "mode": "shutter",
+    "reference": "sampled",
+    "references": [
+      {
+        "id": "sharp",
+        "implemented": true
+      },
+      {
+        "id": "sampled",
+        "implemented": true
+      },
+      {
+        "id": "efficient",
+        "implemented": true
+      }
+    ],
+    "candidateAvailable": true,
+    "candidate": {
+      "stamps": 13,
+      "texels": 125,
+      "conflicts": 0,
+      "oppositeConflicts": 0,
+      "nearerWins": 0,
+      "maxStreakPx": 15.65560130321445,
+      "avgStreakPx": 8.92626809177207,
+      "width": 200,
+      "height": 150,
+      "taps": 24,
+      "seedScale": 1,
+      "depthBias": 0.02,
+      "buildMs": 0.10000002384185791,
+      "passes": {
+        "sceneRenders": 1,
+        "gooChains": 2,
+        "fullscreen": 1
+      }
+    },
+    "preset": "1-60",
+    "exposureSeconds": 0.016666666666666666,
+    "exposureMs": 16.666666666666668,
+    "exposureMode": "seconds",
+    "angleDeg": 180,
+    "referenceFps": 60,
+    "samples": 8,
+    "sampleTimes": [
+      0.834375,
+      0.8364583333333333,
+      0.8385416666666666,
+      0.840625,
+      0.8427083333333333,
+      0.8447916666666666,
+      0.8468749999999999,
+      0.8489583333333333
+    ],
+    "interval": {
+      "from": 0.8333333333333333,
+      "to": 0.85
+    },
+    "maxStreakPx": 120,
+    "last": {
+      "samples": 8,
+      "particles": 12,
+      "streakPx": 10,
+      "ms": 16.666666666666668,
+      "builds": 3,
+      "timelineParticles": 30,
+      "livePos": [
+        0.10460468752957845,
+        0.1449619283020478,
+        0.7193897770645666
+      ],
+      "samplePos": [
+        0.10447689862877854,
+        0.14788981242165555,
+        0.7189018679487599
+      ],
+      "firstSampleT": 0.834375,
+      "lastSampleT": 0.8489583333333333
+    }
+  },
+  "variant": "original",
+  "wipe": false,
+  "wipeA": "original",
+  "wipeB": "smooth",
+  "wipePos": 0.5,
+  "filter": "original",
+  "filterApplies": true,
+  "strands": true,
+  "sheets": false,
+  "goo": true,
+  "mist": true,
+  "reconstruction": "smooth",
+  "connections": false,
+  "extraBlobs": 0,
+  "droplets": 19,
+  "splats": 4,
+  "density": {
+    "densityWidth": 200,
+    "densityHeight": 150,
+    "sourceWidth": 400,
+    "sourceHeight": 300,
+    "outputWidth": 800,
+    "outputHeight": 600,
+    "densityScale": 0.5,
+    "texelsPerSourcePixelX": 0.5,
+    "texelsPerSourcePixelY": 0.5,
+    "texelsPerOutputPixelX": 0.25,
+    "texelsPerOutputPixelY": 0.25,
+    "smoothForcesFullResComposite": true
+  },
+  "source": {
+    "width": 400,
+    "height": 300
+  },
+  "output": {
+    "width": 800,
+    "height": 600
+  },
+  "camera": {
+    "yaw": 0,
+    "pitch": 0.14,
+    "distance": 1.35
+  },
+  "backend": "webgpu"
+}
