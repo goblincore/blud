@@ -1,6 +1,6 @@
 # Selective shutter blur — next rendering / FX phase
 
-Status: owner approved 2026-09-16; lab implementation authorized through Dispatch UI using `deepseek-flash` and the `dsh` harness. No runtime implementation or visual acceptance yet.
+Status: owner accepted the lab and then the combined in-game blood/gib result; merged into main on 2026-09-17. Execution used `deepseek-flash` through `dsh`. See the [final wrap-up](../../dev-notes/2026-09-17-shutter-blur-game/WRAP-UP.md) for shipped controls, verification and remaining limits. The original proposal below is retained as design history; its pending gates and initial scope have been superseded by the accepted implementation.
 
 Owner intent: cinematic motion blur controlled by shutter speed, selectively applied to blood trails and other movement after the dynamite/gib work. Recommended first scope: airborne blood, then flying gibs. This ordering is a proposal, not a recorded owner decision.
 

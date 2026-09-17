@@ -4,6 +4,14 @@
 > Per-milestone step-by-step tasks live in `docs/superpowers/plans/`.
 > This file is **coarse-grained state only** — keep rows to ≤2 lines and link out for detail.
 
+## Selective shutter blur — owner accepted and merged 2026-09-17
+
+- [x] Blood + rotating gibs default ON at 44.44 ms / 120 px; lab comparison and in-game controls shipped.
+  [Wrap-up, controls, evidence and limits](docs/dev-notes/2026-09-17-shutter-blur-game/WRAP-UP.md).
+- [x] Hidden blur-panel bug fixed: **BLOOD + GIB BLUR** docks bottom-right, clear of Dynamite / Gib; H toggles visibility.
+- [ ] Quiet-machine combined blur cost measurement; prior loaded-machine marginal timings are inconclusive.
+- [ ] Investigate first-use gib-material compile hitch and in-app-browser GPU loss during warm-up; Chrome boots successfully.
+
 ## Dynamite gib appearance — owner accepted 2026-09-16
 
 - [x] Preserve flesh shading, cut geometry and face texture through settle baking; owner manual test accepted.
@@ -1087,7 +1095,8 @@ Subtasks use `.N`: `A5.1`, `F1.gibs`.
 > [docs/dev-notes/2026-09-10-PASSOFF-3.md](docs/dev-notes/2026-09-10-PASSOFF-3.md) first**
 > (latest: R1 shipped, then TWO temporal ideas built and killed — held-row
 > reprojection and accumulation-as-reconstruction — plus the per-object motion-blur
-> idea that is liked but unspecced, and the open items). Then
+> idea that was then unspecced (blood/gib shutter blur is now accepted and merged;
+> see the [wrap-up](docs/dev-notes/2026-09-17-shutter-blur-game/WRAP-UP.md)), and the open items). Then
 > [docs/dev-notes/2026-09-10-PASSOFF-2.md](docs/dev-notes/2026-09-10-PASSOFF-2.md)**
 > (R1 and what it unlocked). Then
 > [docs/dev-notes/2026-09-10-PASSOFF.md](docs/dev-notes/2026-09-10-PASSOFF.md) —
