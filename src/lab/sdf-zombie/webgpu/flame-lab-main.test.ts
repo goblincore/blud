@@ -47,6 +47,12 @@ describe('flame lab page', () => {
     expect(src).toContain('capture');
   });
 
+  it('installs the game shutter through the post capture stage', () => {
+    expect(src).toContain('createShutterGameLayer');
+    expect(src).toContain('postAa.setCaptureStage(');
+    expect(src).toContain('prewarm(postAa.captureTarget)');
+  });
+
   it('pins the Blood reference sprites beside the bodies', () => {
     // Tiles 3321-3326 are the burning-run frames and ARE tracked in the repo.
     expect(html).toContain('assets/blood-tiles/3321.png');

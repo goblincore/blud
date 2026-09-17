@@ -41,6 +41,9 @@ import { BURN_TUNING, burnPresets, resolveBurnTuning, type BurnTuning } from './
 import { createFlamePanel } from './flame-panel';
 import { burnLightFlicker, burnLightIntensity, burnLightAnchor } from './burn-light';
 import { burnDistortStrength, burnDistortRadiusM, burnWobble } from './burn-distort';
+import { createGooLayer } from './goo-layer';
+import { createShutterGameLayer } from './shutter-game-layer';
+import { createBloodSim } from '../blood-sim';
 
 export interface FlameLabBody {
   name: string;
@@ -427,6 +430,48 @@ async function bootstrap(): Promise<void> {
   }
   sizeSdfLayer();
   window.addEventListener('resize', sizeSdfLayer);
+
+  // ——— THE SHUTTER (plan task 13). The game's selective blood-blur layer,
+  // installed as post-aa's PRE-POST capture stage so a later plan can feed it
+  // flame sources and the streaks get judged here, not only in the game. The
+  // goo layer is the SAME one the shutter consumes (lab-main builds one for
+  // its draw chain); its light rig shares the march's uniform NODES — not
+  // copies — so any re-tune moves goo and flesh together. The sim stays
+  // EMPTY: with nothing selected the shutter's capture takes its empty-work
+  // fast path and returns null every frame, so the stage is an exact
+  // pass-through until something feeds it.
+  const gooLayer = createGooLayer(handle.renderer, {
+    lightDir: actors[0]!.gpu.uniforms.lightDir,
+    keyColor: actors[0]!.gpu.uniforms.keyColor,
+    lightCfg: actors[0]!.gpu.uniforms.lightCfg,
+  });
+  {
+    const t = sdfLayer.targetSize;
+    gooLayer.setSize(t.width, t.height);
+  }
+  // AFTER sizeSdfLayer's own listener (lab-main's ordering note): it reads
+  // the already-updated targetSize.
+  window.addEventListener('resize', () => {
+    const t = sdfLayer.targetSize;
+    gooLayer.setSize(t.width, t.height);
+  });
+  const bloodSim = createBloodSim();
+  const shutterGame = createShutterGameLayer({
+    renderer: handle.renderer, gooLayer,
+    onError: (m) => { console.error(m); },
+  });
+  postAa.setCaptureStage((capture) => {
+    let out: THREE.RenderTarget = capture;
+    shutterGame.setSceneTexture(out.texture);
+    shutterGame.setOccluderDepth(null);
+    const b = shutterGame.capture(capture, bloodSim, camera);
+    if (b) out = b;
+    return out === capture ? null : out;
+  });
+  // Warm the layer/seed targets + resolve pipeline against the REAL capture
+  // target now, instead of stalling the first live blurred frame
+  // (game-main's measured ~0.26 s).
+  shutterGame.prewarm(postAa.captureTarget);
 
   // The frame's draw: the SDF pass composites over the polygonal scene inside
   // the post chain. No goo, no effects scene — the flame lab has nothing else
