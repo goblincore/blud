@@ -48,7 +48,7 @@ import * as THREE from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
 import {
   wgslFn, texture, uv, vec2, vec3, vec4, uniform, float, max, dot, positionView,
-  attribute,
+  attribute, mul,
 } from 'three/tsl';
 import type { BloodSim } from '../blood-sim';
 import { setPassLabel } from './gpu-pass-timing';
@@ -1075,6 +1075,20 @@ export interface GooLayer {
    */
   render(camera: THREE.PerspectiveCamera, between: () => void): void;
   /**
+   * REFERENCE-ONLY (selective shutter blur, task 1): run the density + blur
+   * passes, then composite the reconstructed goo surface into `target` as
+   * WORKING-LINEAR PREMULTIPLIED colour+coverage, summed with One/One
+   * blending. No scene is drawn and `between` is never invoked. The caller
+   * owns the target's DEPTH: pre-load the frozen scene depth with colour
+   * writes off, because the layer depth-tests but never depth-writes.
+   *
+   * Used by blood-compare-main's sampled shutter reference to shade N
+   * exposure samples SEPARATELY (never accumulating density across times) and
+   * divide once. Returns false when the surface pass is gated off, matching
+   * render()'s diagnostic-only gate.
+   */
+  renderLayer(camera: THREE.PerspectiveCamera, target: THREE.RenderTarget): boolean;
+  /**
    * PIPELINE WARM-UP: compileAsync every goo scene graph once at boot so the
    * first gout does not compile pipelines mid-firefight. Await-and-forget.
    */
@@ -1512,6 +1526,51 @@ export function createGooLayer(
   };
   let reconstruction: GooReconstruction = 'original';
 
+  // ---------------------------------------------------------------
+  // REFERENCE-ONLY LAYER MATERIALS (selective shutter blur, task 1).
+  //
+  // Same shading graphs as the surface materials, but the fragment writes
+  // WORKING-LINEAR PREMULTIPLIED colour + coverage and blends One/One, so a
+  // caller can accumulate N exposure samples into a half-float target and
+  // divide once. depthNode routes the reconstructed depth into the hardware
+  // depth test against the FROZEN scene depth the caller pre-loaded; depth
+  // WRITE stays off so a translucent streak never stamps an opaque depth.
+  //
+  // This is deliberately NOT reachable from the shipped render() path: it is
+  // a quality oracle for the lab, not a shipping frame cost.
+  // ---------------------------------------------------------------
+  function makeLayerMat(densTexture: THREE.Texture, smooth: boolean): MeshBasicNodeMaterial {
+    const m = new MeshBasicNodeMaterial();
+    if (smooth) {
+      const shaded = shadeSmoothOf(densTexture);
+      const cov = coverageSmoothOf(densTexture);
+      m.colorNode = vec4(mul(shaded.xyz as never, cov.w as never) as never, cov.w as never);
+      m.depthNode = shaded.w as never;
+    } else {
+      const shaded = shadeOf(densTexture);
+      const a = alphaFn({
+        densTex: texture(densTexture),
+        texCoord: uv(),
+        flipY: uFlipY,
+        gooCfg: vec3(uThresh, uEdge, uLegacy),
+      }) as unknown as Swizzled;
+      m.colorNode = vec4(mul(shaded.xyz as never, a.w as never) as never, a.w as never);
+      m.depthNode = shaded.w as never;
+    }
+    m.depthWrite = false;
+    m.depthTest = true;
+    m.transparent = true;
+    m.blending = THREE.AdditiveBlending;
+    m.premultipliedAlpha = true;
+    m.fog = false;
+    return m;
+  }
+
+  const layerMats = {
+    original: { raw: makeLayerMat(target.texture, false), blur: makeLayerMat(blurB.texture, false) },
+    smooth: { raw: makeLayerMat(target.texture, true), blur: makeLayerMat(blurB.texture, true) },
+  };
+
 
   // ---------------------------------------------------------------
   // ITEM 1 (close-up task 4): the density-resolution surface path.
@@ -1869,6 +1928,64 @@ export function createGooLayer(
       renderer.autoClear = false;
       void renderer.render(quadScene, quadCam);
       renderer.autoClear = prevAutoClear;
+    },
+
+    renderLayer(camera, layerTarget) {
+      camera.updateMatrixWorld();
+      uCamWorld.value.copy(camera.matrixWorld);
+      uCamCfg.value.set(
+        Math.tan((camera.fov * Math.PI) / 360),
+        camera.aspect,
+        camera.near,
+        camera.far,
+      );
+      lastOutputW = layerTarget.width;
+      lastOutputH = layerTarget.height;
+      uCoverageTexels.value = densityTexelsPerOutputPixel(
+        target.width, target.height, lastOutputW, lastOutputH,
+      );
+
+      if (targetsNeedInit) {
+        targetsNeedInit = false;
+        setPassLabel('init');
+        for (const t of [target, blurA, blurB, surfaceLow]) {
+          renderer.setRenderTarget(t);
+          void renderer.render(emptyScene, camera);
+        }
+      }
+
+      const restore = camera.layers.mask;
+      const prevClear = renderer.getClearColor(clearColorScratch).getHex();
+      renderer.setClearColor(0x000000);
+      setPassLabel('goo:density');
+      renderer.setRenderTarget(target);
+      if (passGate.density) void renderer.render(gooScene, camera);
+      renderer.setClearColor(prevClear);
+      camera.layers.mask = restore;
+
+      const blurred = uBlurPx.value > 0;
+      if (blurred && passGate.blur) {
+        setPassLabel('goo:blur');
+        renderer.setRenderTarget(blurA);
+        void renderer.render(blurH.scene, quadCam);
+        renderer.setRenderTarget(blurB);
+        void renderer.render(blurV.scene, quadCam);
+      }
+
+      if (!passGate.surface) return false;
+      setPassLabel('goo:layer');
+      // 'smooth' is the game default; original stays available for an A/B of
+      // the reconstruction family without changing the averaging contract.
+      const want = reconstruction === 'smooth'
+        ? layerMats.smooth[blurred ? 'blur' : 'raw']
+        : layerMats.original[blurred ? 'blur' : 'raw'];
+      if (quad.material !== want) quad.material = want;
+      renderer.setRenderTarget(layerTarget);
+      const prevAutoClear = renderer.autoClear;
+      renderer.autoClear = false;
+      void renderer.render(quadScene, quadCam);
+      renderer.autoClear = prevAutoClear;
+      return true;
     },
 
     sync(sim, camera) {

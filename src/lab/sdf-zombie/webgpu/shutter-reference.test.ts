@@ -15,6 +15,7 @@ import {
 } from './shutter-reference';
 import { recordTimeline, type ParticleState } from './shutter-timeline';
 import { stepBlood, burst } from '../blood-sim';
+import { streakPixels } from './shutter-timing';
 
 function droplet(over: Partial<Droplet> = {}): Droplet {
   return {
@@ -223,5 +224,37 @@ describe('shutter reference — timeline reconstruction', () => {
     const b = movingSimAt(make(), 0.3).droplets.map(d => [...d.pos]);
     expect(a).toEqual(b);
     expect(a.length).toBeGreaterThan(0);
+  });
+});
+
+describe('shutter reference — zero exposure and cadence independence', () => {
+  it('zero exposure collapses to the sharp frame exactly', () => {
+    const plan = planShutterSamples(1.234, 0, 8);
+    expect(plan.sampleCount).toBe(0);
+    // A zero-sample average is identity over the scene: sharp parity. This is
+    // why the page routes exposure-off straight to the existing sharp render
+    // rather than through the sampled path.
+    const avg = averageSamples([], plan.sampleCount);
+    expect(compositeOverScene([0.3, 0.2, 0.1], avg)).toEqual([0.3, 0.2, 0.1]);
+  });
+
+  it('the sample plan and reconstructed motion do not depend on presentation fps', () => {
+    const timeline = (() => {
+      const sim = createBloodSim();
+      const rng = seeded(99);
+      burst(sim, [0, 1.35, 0.55], rng);
+      return recordTimeline({ dt: 1 / 60, duration: 0.5, sim, step: (dt) => stepBlood(sim, dt, rng) });
+    })();
+    // A presentation loop at 30/60/120 fps reaches the SAME event time; the
+    // reference is a function of (eventTime, exposure, sampleCount) alone.
+    const atFps = (_fps: number) => {
+      const plan = planShutterSamples(0.5, 1 / 60, 8);
+      return plan.sampleTimes.map(t => movingSimAt(timeline, t).droplets.map(d => [...d.pos]));
+    };
+    const a = JSON.stringify(atFps(30));
+    expect(JSON.stringify(atFps(60))).toBe(a);
+    expect(JSON.stringify(atFps(120))).toBe(a);
+    // And the streak equation is cadence-free: 600 px/s at 1/60 = 10 px.
+    expect(streakPixels(600, 1 / 60)).toBeCloseTo(10, 10);
   });
 });

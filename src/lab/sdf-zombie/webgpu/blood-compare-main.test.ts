@@ -315,3 +315,100 @@ describe('blood comparison page — Current slug vs Impact splash shape axis', (
     expect(SHAPES.map(s => s.id)).toContain('current');
   });
 });
+
+describe('blood comparison page — shutter mode (task 1)', () => {
+  it('adds a mode axis and RETAINS the surface/shape controls', () => {
+    expect(src).toContain("row('mode'");
+    expect(src).toContain("'Surface / shape (existing)'");
+    expect(src).toContain("'Shutter (exposure)'");
+    // The existing axes must still be present and independent.
+    expect(src).toContain("row('shape'");
+    expect(src).toContain("row('filter (Current only)'");
+    expect(src).toContain('renderVariantFrame({');
+    expect(VARIANTS.length).toBe(4);
+  });
+
+  it('lists sharp + sampled and DISABLES the efficient candidate (no alias)', () => {
+    expect(src).toContain('SHUTTER_REFERENCES');
+    expect(src).toContain("o.value === 'efficient'");
+    expect(src).toContain('o.disabled = true');
+    expect(src).toContain('unavailable until task 2');
+    expect(src).toContain('candidateAvailable: false');
+    // The API refuses the efficient id rather than silently aliasing it.
+    expect(src).toContain("o.reference !== 'efficient'");
+  });
+
+  it('uses the fixed-second presets and shows milliseconds', () => {
+    expect(src).toContain('SHUTTER_PRESETS');
+    expect(src).toContain('exposureMs');
+    expect(src).toContain('resolveExposureSeconds');
+    expect(src).toContain('clampSampleCount');
+    // Angle math needs the EXPLICIT reference fps; never the measured frame rate.
+    expect(src).toContain('referenceFps: shutterReferenceFps');
+    expect(src).toContain("row('reference fps'");
+    expect(src).toContain("row('shutter angle'");
+  });
+
+  it('records one deterministic timeline and never re-steps the live sim', () => {
+    expect(src).toContain('recordTimeline');
+    expect(src).toContain('timelineForCurrentEvent');
+    expect(src).toContain('const scratch: BloodSim = { droplets: [], splats: [], clocks: {} };');
+    expect(src).toContain('timelineCache');
+    expect(src).toContain('advanceScenarioState');
+    expect(src).toContain('freshState');
+  });
+
+  it('shades each sample separately as premultiplied colour+coverage', () => {
+    expect(src).toContain('planShutterSamples');
+    expect(src).toContain('movingSimAt');
+    expect(src).toContain('splitSimForShutter');
+    expect(src).toContain('renderLayer');
+    expect(src).toContain('scene.overrideMaterial = depthOnly');
+    expect(src).toContain('renderSampledReference');
+    expect(src).toContain('colorWrite: false');
+    // Never accumulate density across times then threshold once.
+    expect(src).not.toContain('accumulateDensity');
+  });
+
+  it('keeps static pools/guts sharp and the background normalized', () => {
+    // Static half comes from splitSimForShutter; moving half has no splats.
+    expect(src).toContain('staticSim');
+    expect(src).toContain('refScene');
+    expect(src).toContain('refAccum');
+    expect(src).toContain('oneMinus');
+    expect(src).toContain('refScale');
+  });
+
+  it('shows sample/radius limits and the trailing interval in diagnostics', () => {
+    expect(src).toContain("row('samples (oracle)'");
+    expect(src).toContain("row('max streak px'");
+    expect(src).toContain('trailing box');
+    expect(src).toContain('streak @600 px/s');
+  });
+
+  it('adds the three repeatable shutter fixtures via production emitters', () => {
+    expect(src).toContain("label: 'bleed (slow wound dribble)'");
+    expect(src).toContain("label: 'trail (fast gib-like 6 m/s)'");
+    expect(src).toContain("label: 'crossing (opposed streams)'");
+    expect(src).toContain('emitTrails');
+    expect(src).toContain('spawnWoundDroplets');
+  });
+
+  it('reuses the wipe view for Sharp vs Sampled and keeps pause/step/replay', () => {
+    expect(src).toContain('renderSharpReference(rtA)');
+    expect(src).toContain('renderSampledReference(rtB)');
+    expect(src).toContain('blitWipe');
+    // The transport rows are unchanged and shared by both modes.
+    expect(src).toContain("'Play'");
+    expect(src).toContain("'Pause'");
+    expect(src).toContain("'Step'");
+    expect(src).toContain("'Replay'");
+  });
+
+  it('exposes the shutter API and reports the efficient candidate as unavailable', () => {
+    for (const needle of ['setMode', 'setShutter', 'shutterState', 'exposureSeconds', 'last: lastRefStats']) {
+      expect(src, `${needle} must be exposed`).toContain(needle);
+    }
+    expect(src).toContain("mode: compareMode");
+  });
+});
