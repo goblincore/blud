@@ -39,6 +39,7 @@ import { makeRng, type Rng, type WanderBounds } from '../wander';
 import { createBurnState, igniteBurn, extinguishBurn, stepBurn, forceBurn } from '../burn-state';
 import { BURN_TUNING, burnPresets, resolveBurnTuning, type BurnTuning } from './burn-profiles';
 import { createFlamePanel } from './flame-panel';
+import { burnLightFlicker, burnLightIntensity, burnLightAnchor } from './burn-light';
 
 export interface FlameLabBody {
   name: string;
@@ -493,6 +494,21 @@ async function bootstrap(): Promise<void> {
     if (ev.key === 'o' || ev.key === 'O') { for (const s of burns) extinguishBurn(s); return; }
   });
 
+  // ——— THE FIRE LIGHTS (plan task 10). One per body, allocated ONCE at
+  // intensity 0 and only ever modulated — `visible` is NEVER toggled: three
+  // r185 folds the set of VISIBLE lights into LightsNode.customCacheKey, so a
+  // toggle re-keys every lit material's shader variant and recompiles
+  // pipelines mid-frame (measured 180–230 ms per frame in game-main;
+  // intensity is not in that cache key, so 0 costs three idle iterations).
+  // Distance 0 + decay 2 is the game's explosion-pool shape: a physical
+  // 1/d² falloff with no hard cut.
+  const fireLights = FLAME_LAB_BODIES.map(() => {
+    const pl = new THREE.PointLight(0xff7a2a, 0, 0, 2);
+    pl.visible = true;
+    scene.add(pl);
+    return pl;
+  });
+
   // -------------------------------------------------------------------------
   // Frame loop. setRenderCallback REPLACES rather than appends, so everything
   // per-frame has to live in this one function.
@@ -561,6 +577,9 @@ async function bootstrap(): Promise<void> {
     //    with no re-upload path.
     {
       const burnDt = Math.min(dt, 1 / 30);
+      // Wall-clock seconds, as game-main's flicker clock — never dt-integrated,
+      // so a stall cannot jump the wobble phase.
+      const clock = now * 0.001;
       for (let i = 0; i < actors.length; i++) {
         const s = stepBurn(burns[i]!, burnDt, tuning);
         const gpu = actors[i]!.gpu;
@@ -569,6 +588,19 @@ async function bootstrap(): Promise<void> {
         gpu.uniforms.burnRiseSpeed.value = tuning.riseSpeed;
         gpu.uniforms.burnCharPatch.value = tuning.charPatch;
         gpu.uniforms.burnFireGain.value = tuning.fireGain;
+        // The body's floor position: the pelvis base (its spawn x) plus the
+        // walk displacement the motion record measured. The light rides it at
+        // chest height, inside the flames, and per-body phase keeps the pair
+        // flickering out of step.
+        const a = actors[i]!;
+        const rs = a.motion.lastRootShift;
+        const bodyPos: Vec3 = [FLAME_LAB_BODIES[i]!.x + rs[0]!, 0, rs[2]!];
+        const anchor = burnLightAnchor(bodyPos);
+        fireLights[i]!.position.set(anchor[0], anchor[1], anchor[2]);
+        fireLights[i]!.intensity = burnLightIntensity(
+          s.burn, s.char, tuning.lightPeak, tuning.lightFlicker,
+          burnLightFlicker(clock, tuning.lightFlicker, i * 2.7),
+        );
       }
     }
 
