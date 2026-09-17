@@ -931,7 +931,7 @@ export interface SdfLayer {
    *  the stage's output-resolution flesh. The caller sets the march scale.
    *  `model` = trained weights (parseUpscaleModelJson), matching config's model and
    *  inputs; absent = seeded random weights. A mismatch throws and keeps the old stage. */
-  setUpscale(config: UpscaleConfig | null, model?: UpscaleModel): UpscaleInfo;
+  setUpscale(config: UpscaleConfig | null, model?: UpscaleModel, options?: { emptyTileCulling?: boolean }): UpscaleInfo;
   readonly upscaleInfo: UpscaleInfo;
   /** The live stage, for measurement readbacks only; null when off. */
   readonly upscaleStage: UpscaleStage | null;
@@ -2414,7 +2414,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
       return accumOn;
     },
     resetTemporalAccum() { resetAccum(); },
-    setUpscale(config, model) {
+    setUpscale(config, model, options) {
       if (config === null) {
         upscale?.dispose();
         upscale = null;
@@ -2433,7 +2433,7 @@ export function createSdfLayer(renderer: THREE.WebGPURenderer, options: SdfLayer
       }
       const next = createUpscaleStage(config, target.texture, uFlipY, model, marchNormals ? target.textures[1] : undefined,
         detailScene ? detailTarget.texture : undefined,
-        refineTarget ? { n: refineTarget.textures[1]!, c: refineTarget.textures[0]! } : undefined);
+        refineTarget ? { n: refineTarget.textures[1]!, c: refineTarget.textures[0]! } : undefined, options);
       upscale?.dispose();
       upscale = next;
       upscale.setSize(target.width, target.height, fullW, fullH);

@@ -21,6 +21,51 @@ const CHARACTERS: Record<string, string> = Object.fromEntries(
 /** Packs into Float32Array, so expected values must be rounded to float32. */
 const f32 = (v: number) => Math.fround(v);
 
+describe('packBody caller-owned scratch', () => {
+  it('matches fresh bytes after shrinking, severing, and switching bone modes', () => {
+    const bodies = ['schoolgirl.blob', 'soldier.blob', 'zombie.blob'].map(name => {
+      const rest = buildBody(compileBlob(parseBlob(CHARACTERS[name]!)));
+      return { rest, posed: applyRig(rest, bindRig(rest), 0.7) };
+    });
+    let scratch = packBody(bodies[0]!.posed);
+    const buffers = Object.values(scratch).filter(v => v instanceof Float32Array);
+    let checks = 0;
+    for (const { rest, posed } of bodies) {
+      const severed = { ...posed, clusters: posed.clusters.map((c, i) => ({ ...c, alive: i === 0 })) };
+      for (const body of [posed, severed, { ...posed, prims: [], bonePrims: [], clusters: [] }]) {
+        for (const boneCullMode of ['segment', 'cluster', 'off'] as const) {
+          for (const packBones of [true, false]) {
+            // Dirty EVERY field, including tails and mode-specific metadata.
+            // A missing clear cannot accidentally pass on a naturally zero row.
+            for (const buf of buffers) buf.fill(123.25);
+            const expected = packBody(body, rest, { boneCullMode, packBones });
+            scratch = packBody(body, rest, { boneCullMode, packBones }, scratch);
+            for (const key of Object.keys(expected) as (keyof typeof expected)[]) {
+              const want = expected[key], got = scratch[key];
+              if (want instanceof Float32Array && got instanceof Float32Array) {
+                expect(buffers.includes(got)).toBe(true);
+                expect(new Uint8Array(got.buffer)).toEqual(new Uint8Array(want.buffer));
+              } else expect(got).toBe(want);
+            }
+            checks++;
+          }
+        }
+      }
+    }
+    expect(checks).toBe(54);
+  });
+
+  it('keeps default packs independent and one caller’s scratch isolated from another', () => {
+    const body = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
+    const a = packBody(body), b = packBody(body);
+    const bytes = b.primA.slice();
+    packBody({ ...body, prims: [], bonePrims: [], clusters: [] }, undefined, {}, a);
+    expect(b.primA).toEqual(bytes);
+    expect(a.primA).not.toBe(b.primA);
+    expect(a.primA.every(x => x === 0)).toBe(true);
+  });
+});
+
 describe('packBody', () => {
   const built = buildBody(ZOMBIE, DEFAULT_BUILD_OPTS);
   const packed = packBody(built);

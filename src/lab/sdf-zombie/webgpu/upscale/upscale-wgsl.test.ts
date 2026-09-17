@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 // @ts-expect-error — deep three source import for the real wgslFn parser (same as sdf-layer.test.ts).
 import WGSLNodeFunction from 'three/src/renderers/webgpu/nodes/WGSLNodeFunction.js';
 import { createUpscaleModel, type ConvLayer } from './upscale-model';
-import { lit, matLiteral, planUpscalePasses, UPSCALE_RECONSTRUCT_WGSL, UPSCALE_SHARPEN_WGSL } from './upscale-wgsl';
+import { lit, matLiteral, planUpscalePasses, upscaleDependencyRadius, UPSCALE_RECONSTRUCT_WGSL, UPSCALE_SHARPEN_WGSL } from './upscale-wgsl';
 
 const declared = (src: string) => {
   const params = src.slice(src.indexOf('(') + 1, src.indexOf(') ->')).replace(/\/\/[^\n]*/g, '');
@@ -15,6 +15,21 @@ const expectParses = (src: string) => {
 };
 
 describe('upscale pass plan', () => {
+  it('bounds the dilated network dependencies and parses the culled default pipeline', () => {
+    const model = createUpscaleModel('t16', 'rgb', 1);
+    expect(upscaleDependencyRadius(model)).toBe(5);
+    const passes = planUpscalePasses(model, 'sp', true);
+    expect(passes.map(p => p.name)).toEqual(['occupiedTiles', 'activeTiles', 'L1a', 'L2a', 'L3a', 'L4a', 'shuffle']);
+    for (const p of passes) expectParses(p.run);
+    expect(passes.filter(p => p.usesEmptyTileMask).map(p => p.name)).toEqual(['L1a', 'L2a', 'L3a', 'L4a']);
+    expect(passes.every(p => p.inputs.length + Number(!!p.usesEmptyTileMask) <= 16)).toBe(true);
+    // Alternate graphics/model paths retain their established pipelines.
+    for (const [m, layout] of [[model, 'dc'], [createUpscaleModel('t16', 'rgbn', 1), 'sp'],
+      [createUpscaleModel('s32', 'rgbn', 1, true), 'sp']] as const) {
+      expect(planUpscalePasses(m, layout, true)).toEqual(planUpscalePasses(m, layout));
+    }
+  });
+
   it('a model with a head appends H1/H2 at full res and moves the final flag to H2', () => {
     const passes = planUpscalePasses(createUpscaleModel('s8', 'rgbn', 1, true), 'sp');
     expect(passes.map((p) => p.name)).toEqual(['L1a', 'L2a', 'L3a', 'shuffle', 'H1', 'H2']);

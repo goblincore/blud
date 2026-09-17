@@ -403,12 +403,26 @@ export function pinTips(points: readonly RigPoint[], tips: readonly RigidTip[], 
 export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): BuildResult {
   const pos = bound.rig.points;
   const rigid = bound.head ? headTransform(bound.head, pos, bodyYaw, bound.rig.headFollowsRig) : null;
+  // Every rib/vertebra on an axial segment uses the same rotation. Derive it
+  // once per applyRig call; a cache lasting across calls would retain a stale
+  // pose after Verlet, yaw changes, or a collapse. Check restDir too because
+  // callers can supply custom bindings for the same pair of rig points.
+  const rotations = new Map<number, { restDir: Vec3; q: Quat }>();
+  const rotationOf = (frame: { head: number; tail: number; restDir: Vec3 }): Quat => {
+    const key = frame.head * pos.length + frame.tail;
+    const cached = rotations.get(key);
+    const r = frame.restDir;
+    if (cached && cached.restDir[0] === r[0] && cached.restDir[1] === r[1] && cached.restDir[2] === r[2]) return cached.q;
+    const dir = normalize(sub(pos[frame.tail]!.pos, pos[frame.head]!.pos));
+    const q = segmentQuat(r, dir, bodyYaw);
+    rotations.set(key, { restDir: r, q });
+    return q;
+  };
   const poseEnds = (bind: PrimBind): { a: Vec3; b: Vec3 } => {
     let a = bind.a.offset, b = bind.b.offset;
     if (bind.armFrame) {
       const frame = bind.armFrame;
-      const dir = normalize(sub(pos[frame.tail]!.pos, pos[frame.head]!.pos));
-      const q = segmentQuat(frame.restDir, dir, bodyYaw);
+      const q = rotationOf(frame);
       a = qRotate(q, a); b = qRotate(q, b);
     }
     return { a: add(pos[bind.a.point]!.pos, a), b: add(pos[bind.b.point]!.pos, b) };
@@ -456,8 +470,7 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
       // segment is near-vertical, so a bare shortest-arc rotation between rest
       // and current direction would drop the azimuth), then the residual tilt.
       const h = pos[frame.head]!.pos;
-      const dir = normalize(sub(pos[frame.tail]!.pos, h));
-      const q = segmentQuat(frame.restDir, dir, bodyYaw);
+      const q = rotationOf(frame);
       return { ...p, a: add(h, qRotate(q, frame.restA)), b: add(h, qRotate(q, frame.restB)), orient: q, boneSegment };
     }
     return { ...p, ...poseEnds(bound.boneBinding[i]!), boneSegment };
@@ -481,25 +494,34 @@ export function applyRig(body: BuildResult, bound: BoundRig, bodyYaw = 0): Build
  */
 export function refitClusters(prims: Primitive[], clusters: ClusterInfo[]): ClusterInfo[] {
   return clusters.map(c => {
-    const members = prims.slice(c.start, c.start + c.count);
-    // Same bent-prim rule as assignClusters: the ctrl point joins the fit or
-    // a swung horn escapes the sphere the shader culls by.
-    let sum: Vec3 = [0, 0, 0];
-    let pts = 0;
-    for (const m of members) {
-      sum = add(sum, add(m.a, m.b));
+    const end = Math.min(prims.length, c.start + c.count);
+    // Keep the original addition order while avoiding member slices and the
+    // two temporary vectors previously allocated for every endpoint pair.
+    let sx = 0, sy = 0, sz = 0, pts = 0;
+    for (let i = c.start; i < end; i++) {
+      const m = prims[i]!;
+      sx += m.a[0] + m.b[0]; sy += m.a[1] + m.b[1]; sz += m.a[2] + m.b[2];
       pts += 2;
-      if (m.bend !== undefined) { sum = add(sum, bendCtrl(m.a, m.b, m.bend)); pts += 1; }
+      if (m.bend !== undefined) {
+        const ctrl = bendCtrl(m.a, m.b, m.bend);
+        sx += ctrl[0]; sy += ctrl[1]; sz += ctrl[2]; pts++;
+      }
     }
-    const center = vscale(sum, 1 / (pts || 1));
+    const inv = 1 / (pts || 1);
+    const center: Vec3 = [sx * inv, sy * inv, sz * inv];
     let radius = 0;
-    for (const m of members) {
+    const distance = (v: Vec3): number => {
+      const x = v[0] - center[0], y = v[1] - center[1], z = v[2] - center[2];
+      return Math.sqrt(x * x + y * y + z * z);
+    };
+    for (let i = c.start; i < end; i++) {
+      const m = prims[i]!;
       const maxScale = Math.max(m.scale[0], m.scale[1], m.scale[2]);
-      const ends = m.bend === undefined
-        ? [m.a, m.b] : [m.a, m.b, bendCtrl(m.a, m.b, m.bend)];
       const rMax = Math.max(m.radius, m.radiusB ?? m.radius) * boxReach(m.box) * strandReach(m.strand);
-      for (const end of ends)
-        radius = Math.max(radius, len(sub(end, center)) + rMax * maxScale + shellReach(m));
+      const reach = rMax * maxScale, shell = shellReach(m);
+      radius = Math.max(radius, distance(m.a) + reach + shell);
+      radius = Math.max(radius, distance(m.b) + reach + shell);
+      if (m.bend !== undefined) radius = Math.max(radius, distance(bendCtrl(m.a, m.b, m.bend)) + reach + shell);
     }
     return { ...c, center, radius };
   });

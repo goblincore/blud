@@ -71,6 +71,12 @@ const argOf = (name, dflt) => {
 const RAYS = argOf('rays', '0,1,2,3,5,8,16,31,32,47,64').split(',').map(Number);
 const OUT = argOf('out', '');
 const LABEL = argOf('label', 'run');
+// Same-boot exact output gate for the capsule/visibility/cone optimization.
+const OPTIMIZATION_AB = argv.includes('--optimization-ab');
+const ROOM = argOf('room', '1');
+const FLASH = argv.includes('--flash');
+const CROWD = Number(argOf('crowd', '0'));
+if (!Number.isInteger(CROWD) || CROWD < 0 || CROWD > 12) throw new Error('--crowd must be 0..12');
 const COMPARE = argOf('compare', '');
 // --diff OLD.json NEW.json: OFFLINE, no browser and no GPU. Two runs are
 // compared as files, which is what makes the evidence re-checkable by anyone
@@ -117,8 +123,9 @@ await send('Page.addScriptToEvaluateOnNewDocument', {
 });
 
 await send('Page.bringToFront');
-await bootCloseupPage({ send, evaluate, url: `http://localhost:${VITE}/sdf-game.html?frozen=1`, fail });
+await bootCloseupPage({ send, evaluate, url: `http://localhost:${VITE}/sdf-game.html?frozen=1&simidle=1&seed=4242&res=800`, fail });
 await applyShipDefaults(evaluate);
+await evaluate(`__sdfGame.teleport(${JSON.stringify(Number(ROOM))})`);
 await evaluate('(() => { __sdfGame.setOccluder(false); __sdfGame.setHullExitBound(true); return 1; })()');
 await evaluate('(() => { __sdfGame.setLightClockFrozen(true); __sdfGame.setDemoHold(true); return 1; })()');
 // The fire flicker runs off wall-clock performance.now() INSIDE the draw path,
@@ -141,6 +148,16 @@ if (!probesReady) fail('roomProbesReady never landed');
 // afterglow blend. `?frozen=1` already froze the wanderers from frame 0, which
 // is what makes the settled state itself reproducible.
 await evaluate('(() => { __sdfGame.step(90); return 1; })()');
+if (CROWD > 0) await evaluate(`__sdfGame.spawnCrowd('zombie', ${CROWD}, { spacing: 1.2 })`);
+if (FLASH) {
+  const fired = await evaluate(`(() => {
+    __sdfGame.setRenderLock(false);
+    const fired = __sdfGame.fire(1);
+    __sdfGame.step(1);
+    return fired;
+  })()`);
+  if (!fired) fail('requested muzzle flash did not fire');
+}
 await evaluate('(() => { __sdfGame.freeze(true); __sdfGame.setRenderLock(true); return __sdfGame.renderLock; })()');
 // TRAP 5, for the gather: THE AFTERGLOW MAKES A CROSS-BOOT READING MEANINGLESS.
 // With the shipped blend (0.6) each record is `mix(previous record, this
@@ -197,10 +214,12 @@ const READ = `(async () => {
 
 const results = [];
 for (const rays of RAYS) {
+  if (OPTIMIZATION_AB) await evaluate('__sdfGame.setProbeOptimization(false)');
   // Pin the seam under test, then settle two dispatches so the reading is not
   // taken mid-transition from the previous ray count.
   await evaluate(`(() => { __sdfGame.setProbeRays(${rays}); __sdfGame.step(4); return 1; })()`);
   const first = await evaluate(READ);
+  if (FLASH && !(first.gates?.lights > 1)) fail('muzzle-flash fixture has no additional probe light');
   const second = await evaluate(READ);
   if (!first || first.floats.length === 0) fail(`no probeDyn readback at rays=${rays} (gather unbound?)`);
   // ONE READING IS NOT ENOUGH, and here it is a hard gate rather than a note.
@@ -222,7 +241,24 @@ for (const rays of RAYS) {
       + `(max ${maxDelta.toExponential(3)}, first at float ${firstDiff} = probe ${Math.floor(firstDiff / 16)} ch ${firstDiff % 16}) `
       + `— with blend 1 nothing about the record depends on history, so this is a race or a mis-reduction, not drift`);
   }
+  let optimization = null;
+  if (OPTIMIZATION_AB) {
+    await evaluate('(() => { __sdfGame.setProbeOptimization(true); __sdfGame.step(4); return 1; })()');
+    const candidate = await evaluate(READ);
+    const repeated = await evaluate(READ);
+    const changedIndices = first.floats.flatMap((x, i) => Object.is(x, candidate.floats[i]) ? [] : [i]);
+    const repeatChanged = candidate.digest !== repeated.digest || candidate.floats.some((x, i) => !Object.is(x, repeated.floats[i]));
+    const inputsEqual = JSON.stringify(first.gates) === JSON.stringify(candidate.gates);
+    optimization = { referenceDigest: first.digest, candidateDigest: candidate.digest,
+      changed: changedIndices.length, repeatChanged, inputsEqual };
+    if (first.digest !== candidate.digest || changedIndices.length || repeatChanged || !inputsEqual || candidate.stats.nonFinite) {
+      if (OUT) writeFileSync(`${OUT}.mismatch.json`, JSON.stringify({ rays, optimization, first, candidate, repeated }));
+      fail(`optimization rays=${rays}: ${JSON.stringify(optimization)}`);
+    }
+    console.log(`optimization rays=${rays}: bit-identical, repeated candidate stable, matched inputs`);
+  }
   results.push({
+    optimization,
     rays, digest: first.digest, digest2: second.digest,
     repeat: { changed, maxDelta, identical: true },
     stats: first.stats, gates: first.gates, bound: first.bound, frames: first.frames,
@@ -239,6 +275,32 @@ for (const rays of RAYS) {
 // Leave the seams as the harness expects to find them (scripts/sdf-game-bench.mjs
 // pins the same three at the top of every leg).
 await evaluate('(() => { __sdfGame.setProbeRays(null); __sdfGame.setProbeBlend(null); __sdfGame.setProbeFall(null); return 1; })()');
+const timing = [];
+if (argv.includes('--timing-ab')) {
+  // applyShipDefaults above is the historical native-march parity fixture.
+  // Timing must restore today's half-resolution shipped upscaler input.
+  const upscale = await evaluate(`(() => { __sdfGame.setSdfScale(0.5); __sdfGame.setHullExitBound(false); return __sdfGame.upscaleInfo(); })()`);
+  if (!upscale.on || upscale.inSize.width !== 400 || upscale.inSize.height !== 300) fail('timing fixture is not the shipped upscaler scale');
+  for (let rep = 0; rep < 4; rep++) for (const optimized of rep % 2 ? [true, false] : [false, true]) {
+    const sample = await evaluate(`(async () => {
+      const g = __sdfGame;
+      g.setProbeOptimization(${optimized}); g.step(80); await g.resolveGpu(); await g.passTimings();
+      const frames = [];
+      // This parity harness pins performance.now for scene clocks. Use the
+      // unmodified prototype method for elapsed wall time.
+      const now = Performance.prototype.now.bind(performance);
+      for (let i = 0; i < 100; i++) {
+        const t = now(); g.step(1); await g.resolveGpu(); frames.push(now() - t);
+      }
+      const p = await g.passTimings();
+      return { frames, gather: p.samples.filter(s => s.label === 'compute:probe-gather').map(s => s.ms), gates:g.probeDynamic.gates, hidden:document.hidden };
+    })()`);
+    if (sample.hidden || !sample.gather.length || sample.frames.every(t=>t<=0)) fail('invalid timing sample');
+    const med = a => [...a].sort((a,b)=>a-b)[Math.floor(a.length/2)];
+    timing.push({ rep, optimized, upscale, ...sample });
+    console.log(`timing rep${rep} optimized=${optimized}: frame ${med(sample.frames).toFixed(3)} ms, gather ${med(sample.gather).toFixed(4)} ms`);
+  }
+}
 
 // THE GATHER MUST ACTUALLY HAVE RUN. A kernel that fails to compile, or a
 // dispatch of zero workgroups, leaves the buffer at its initial value: all
@@ -261,8 +323,9 @@ console.log(`console errors/problems: ${problems.length}`);
 for (const [kind, text] of problems.slice(0, 20)) console.log(`  [${kind}] ${String(text).slice(0, 300)}`);
 
 const payload = {
-  label: LABEL, at: new Date().toISOString(), probesReady,
+  label: LABEL, optimizationAB: OPTIMIZATION_AB, room: Number(ROOM), at: new Date().toISOString(), probesReady,
   dispatchFrames, advanced, anyRadiance, finite,
+  timing,
   consoleProblems: problems.map(([k, t]) => [k, String(t).slice(0, 400)]),
   results: results.map(r => ({ ...r, floats: undefined })),
   floats: Object.fromEntries(results.map(r => [r.rays, r.floats])),
@@ -308,4 +371,4 @@ function diffPayloads(ref, cur, labelRef, labelCur) {
 }
 
 if (COMPARE) diffPayloads(JSON.parse(readFileSync(COMPARE, 'utf8')), payload, COMPARE, LABEL);
-process.exit(0);
+process.exit(problems.length ? 2 : 0);

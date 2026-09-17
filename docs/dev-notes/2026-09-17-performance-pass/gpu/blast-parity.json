@@ -1,0 +1,189 @@
+[
+  {
+    "rays": 0,
+    "identical": true,
+    "gates": {
+      "bound": true,
+      "dynKey": "tunnel-4-1",
+      "room": 1,
+      "grid": true,
+      "gain": 0.15,
+      "vis": 1,
+      "dynOn": true,
+      "flashI": 0,
+      "flashAge": null,
+      "capsules": 35,
+      "lights": 1
+    }
+  },
+  {
+    "rays": 1,
+    "identical": true,
+    "gates": {
+      "bound": true,
+      "dynKey": "tunnel-4-1",
+      "room": 1,
+      "grid": true,
+      "gain": 0.15,
+      "vis": 1,
+      "dynOn": true,
+      "flashI": 0,
+      "flashAge": null,
+      "capsules": 35,
+      "lights": 1
+    }
+  },
+  {
+    "rays": 2,
+    "identical": true,
+    "gates": {
+      "bound": true,
+      "dynKey": "tunnel-4-1",
+      "room": 1,
+      "grid": true,
+      "gain": 0.15,
+      "vis": 1,
+      "dynOn": true,
+      "flashI": 0,
+      "flashAge": null,
+      "capsules": 35,
+      "lights": 1
+    }
+  },
+  {
+    "rays": 3,
+    "identical": true,
+    "gates": {
+      "bound": true,
+      "dynKey": "tunnel-4-1",
+      "room": 1,
+      "grid": true,
+      "gain": 0.15,
+      "vis": 1,
+      "dynOn": true,
+      "flashI": 0,
+      "flashAge": null,
+      "capsules": 35,
+      "lights": 1
+    }
+  },
+  {
+    "rays": 5,
+    "identical": true,
+    "gates": {
+      "bound": true,
+      "dynKey": "tunnel-4-1",
+      "room": 1,
+      "grid": true,
+      "gain": 0.15,
+      "vis": 1,
+      "dynOn": true,
+      "flashI": 0,
+      "flashAge": null,
+      "capsules": 35,
+      "lights": 1
+    }
+  },
+  {
+    "rays": 8,
+    "identical": true,
+    "gates": {
+      "bound": true,
+      "dynKey": "tunnel-4-1",
+      "room": 1,
+      "grid": true,
+      "gain": 0.15,
+      "vis": 1,
+      "dynOn": true,
+      "flashI": 0,
+      "flashAge": null,
+      "capsules": 35,
+      "lights": 1
+    }
+  },
+  {
+    "rays": 16,
+    "identical": true,
+    "gates": {
+      "bound": true,
+      "dynKey": "tunnel-4-1",
+      "room": 1,
+      "grid": true,
+      "gain": 0.15,
+      "vis": 1,
+      "dynOn": true,
+      "flashI": 0,
+      "flashAge": null,
+      "capsules": 35,
+      "lights": 1
+    }
+  },
+  {
+    "rays": 31,
+    "identical": true,
+    "gates": {
+      "bound": true,
+      "dynKey": "tunnel-4-1",
+      "room": 1,
+      "grid": true,
+      "gain": 0.15,
+      "vis": 1,
+      "dynOn": true,
+      "flashI": 0,
+      "flashAge": null,
+      "capsules": 35,
+      "lights": 1
+    }
+  },
+  {
+    "rays": 32,
+    "identical": true,
+    "gates": {
+      "bound": true,
+      "dynKey": "tunnel-4-1",
+      "room": 1,
+      "grid": true,
+      "gain": 0.15,
+      "vis": 1,
+      "dynOn": true,
+      "flashI": 0,
+      "flashAge": null,
+      "capsules": 35,
+      "lights": 1
+    }
+  },
+  {
+    "rays": 47,
+    "identical": true,
+    "gates": {
+      "bound": true,
+      "dynKey": "tunnel-4-1",
+      "room": 1,
+      "grid": true,
+      "gain": 0.15,
+      "vis": 1,
+      "dynOn": true,
+      "flashI": 0,
+      "flashAge": null,
+      "capsules": 35,
+      "lights": 1
+    }
+  },
+  {
+    "rays": 64,
+    "identical": true,
+    "gates": {
+      "bound": true,
+      "dynKey": "tunnel-4-1",
+      "room": 1,
+      "grid": true,
+      "gain": 0.15,
+      "vis": 1,
+      "dynOn": true,
+      "flashI": 0,
+      "flashAge": null,
+      "capsules": 35,
+      "lights": 1
+    }
+  }
+]

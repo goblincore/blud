@@ -970,6 +970,7 @@ async function main() {
   // every OTHER frame halves that cost for a one-frame lag on indirect
   // radiance the layer smooths anyway. 1 = every frame (the old behaviour;
   // setProbeGatherRate / ?proberate flip it live).
+  let probeOptimized = bootSearch.get('probeopt') !== '0';
   let probeGatherRate = 2;
   if (probeGatherRateBoot !== null) probeGatherRate = probeGatherRateBoot;
   let probeGatherTick = 0;
@@ -1988,6 +1989,7 @@ async function main() {
           })),
           instances: probeCapsuleArrays.ab, instanceCount: probeCapsuleCount,
           capsuleMargin: 0.06,
+          optimized: probeOptimized,
           // Diagnostic seams (see ?dynrays / ?dynlights above); both default to
           // the shipped values, so an unset URL is bit-identical to before.
           lights: probeLightsBoot === null ? gatherLights : gatherLights.slice(0, probeLightsBoot),
@@ -11063,6 +11065,8 @@ function performBenchAction(a: BenchAction): void {
       if (flashBoost !== undefined) probeFlashBoost = Math.max(0, flashBoost);
       return { radianceGain: probeDynGain, visStrength: probeVisStrength, flashBoost: probeFlashBoost };
     },
+    /** Exact-work A/B: capsule broad phase, visibility any-hit, cone-first shadows. */
+    setProbeOptimization(enabled: boolean) { probeOptimized = enabled; return probeOptimized; },
     setProbeGatherRate(framesPerGather: number) {
       probeGatherRate = Math.max(1, Math.min(4, Math.floor(framesPerGather)));
       return probeGatherRate;
@@ -11081,7 +11085,7 @@ function performBenchAction(a: BenchAction): void {
       return probeLightsBoot;
     },
     get probeCostSplit() {
-      return { rays: probeRaysBoot, lights: probeLightsBoot, blend: probeBlendBoot, fall: probeFallBoot };
+      return { rays: probeRaysBoot, lights: probeLightsBoot, blend: probeBlendBoot, fall: probeFallBoot, optimized: probeOptimized };
     },
     /** The gather's afterglow rates (?dynblend / ?dynfall). Set BOTH to 1 for the
      *  PURE-ESTIMATE configuration the R1 dispatch check measures in: the record
@@ -11476,6 +11480,8 @@ function performBenchAction(a: BenchAction): void {
       return next;
     },
     get bloodBlurEnabled() { return shutterGame?.enabled ?? false; },
+    /** Compare identical density inputs with full versus live-prefix uploads. */
+    setGooUploadOptimization: (on: boolean) => gooLayer?.setUploadOptimization(on),
     /** Exposure in ms — longer = longer trails. Clamped [0, 200]. Shared by
      *  the blood AND gib layers (the panel control is one control). */
     setBloodBlurExposure: (ms: number) => {
@@ -12019,6 +12025,10 @@ function performBenchAction(a: BenchAction): void {
       if (!st) return 'off';
       st.setSharpenMode(mode);
       return st.sharpenMode;
+    },
+    setUpscaleEmptyTileCulling: (enabled: boolean): boolean => {
+      sdfLayer.upscaleStage?.setEmptyTileCulling(enabled);
+      return sdfLayer.upscaleStage?.emptyTileCulling ?? false;
     },
     upscaleInfo: () => ({
       ...sdfLayer.upscaleInfo,
@@ -13149,6 +13159,24 @@ function performBenchAction(a: BenchAction): void {
         return { w, h, rgba32f: btoa(binary) };
       };
       (window as unknown as { __sdfGameDebug: unknown }).__sdfGameDebug = {
+        /** Rebuild with the original dense shader for honest whole-frame A/B;
+         * the live uniform toggle still contains the culling branch. */
+        setUpscaleCullingPipeline(emptyTileCulling: boolean) {
+          const st = sdfLayer.upscaleStage;
+          if (!st) throw new Error('Upscale is off');
+          const { config, model, sharpen, sharpenMode } = st;
+          sdfLayer.setUpscale(config, model, { emptyTileCulling });
+          sdfLayer.upscaleStage!.setSharpen(sharpen);
+          sdfLayer.upscaleStage!.setSharpenMode(sharpenMode);
+          return sdfLayer.upscaleInfo;
+        },
+        async upscaleCullingCheck(opts?: { frames?: number; repeats?: number; synthetic?: boolean }) {
+          handle.setLoopRunning(false);
+          await handle.resolveGpu();
+          const { runUpscaleCullingCheck } = await import('./upscale/upscale-culling-check');
+          return runUpscaleCullingCheck({ renderer: handle.renderer, layer: sdfLayer,
+            camera: camera as THREE.PerspectiveCamera, renderFrames: () => {}, resolveGpu: () => handle.resolveGpu() }, opts);
+        },
         /** Raw float readback, row padding removed. The driver compares these
          * bytes before any composite, color conversion or antialias filtering. */
         normalCaptureState() {

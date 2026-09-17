@@ -203,20 +203,23 @@ export interface PackOpts {
   boneCullMode?: 'off' | 'cluster' | 'segment';
 }
 
-export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {}): PackedBody {
-  const primA = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
-  const primB = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
-  const primScale = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
-  const primQuat = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
-  const primShape = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
-  const primBend = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
-  const primColor = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
-  const primShell = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
-  const primClip = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
-  const primWarp = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
-  const primStrand = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
-  const restA = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
-  const restB = new Float32Array(MAX_PRIMS * PRIM_STRIDE);
+/** Optional scratch must be a previous packBody result owned by this caller.
+ * Its arrays are overwritten, including ALL unused tails and disabled rows.
+ * Omit scratch for an independent snapshot (the default API is unchanged). */
+export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {}, scratch?: PackedBody): PackedBody {
+  const primA = scratch?.primA.fill(0) ?? new Float32Array(MAX_PRIMS * PRIM_STRIDE);
+  const primB = scratch?.primB.fill(0) ?? new Float32Array(MAX_PRIMS * PRIM_STRIDE);
+  const primScale = scratch?.primScale.fill(0) ?? new Float32Array(MAX_PRIMS * PRIM_STRIDE);
+  const primQuat = scratch?.primQuat.fill(0) ?? new Float32Array(MAX_PRIMS * PRIM_STRIDE);
+  const primShape = scratch?.primShape.fill(0) ?? new Float32Array(MAX_PRIMS * PRIM_STRIDE);
+  const primBend = scratch?.primBend.fill(0) ?? new Float32Array(MAX_PRIMS * PRIM_STRIDE);
+  const primColor = scratch?.primColor.fill(0) ?? new Float32Array(MAX_PRIMS * PRIM_STRIDE);
+  const primShell = scratch?.primShell.fill(0) ?? new Float32Array(MAX_PRIMS * PRIM_STRIDE);
+  const primClip = scratch?.primClip.fill(0) ?? new Float32Array(MAX_PRIMS * PRIM_STRIDE);
+  const primWarp = scratch?.primWarp.fill(0) ?? new Float32Array(MAX_PRIMS * PRIM_STRIDE);
+  const primStrand = scratch?.primStrand.fill(0) ?? new Float32Array(MAX_PRIMS * PRIM_STRIDE);
+  const restA = scratch?.restA.fill(0) ?? new Float32Array(MAX_PRIMS * PRIM_STRIDE);
+  const restB = scratch?.restB.fill(0) ?? new Float32Array(MAX_PRIMS * PRIM_STRIDE);
 
   let maxBlendK = 0;
   let carveCount = 0;
@@ -352,11 +355,11 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
   // see the PackedBody doc for the layout. Only op writes anything;
   // allocating here guarantees the OFF path yields all-zero arrays, the
   // shader's flat-fallback signal.
-  const boneClusterBounds = new Float32Array((MAX_CLUSTERS + 1) * CLUSTER_STRIDE);
-  const boneClusterRange = new Float32Array((MAX_CLUSTERS + 1) * CLUSTER_STRIDE);
+  const boneClusterBounds = scratch?.boneClusterBounds.fill(0) ?? new Float32Array((MAX_CLUSTERS + 1) * CLUSTER_STRIDE);
+  const boneClusterRange = scratch?.boneClusterRange.fill(0) ?? new Float32Array((MAX_CLUSTERS + 1) * CLUSTER_STRIDE);
   // Per-SEGMENT texels (mode 2), columns 2*MAX_CLUSTERS+1.. of the same rows.
-  const boneSegmentBounds = new Float32Array(BONE_SEG_MAX * CLUSTER_STRIDE);
-  const boneSegmentRange = new Float32Array(BONE_SEG_MAX * CLUSTER_STRIDE);
+  const boneSegmentBounds = scratch?.boneSegmentBounds.fill(0) ?? new Float32Array(BONE_SEG_MAX * CLUSTER_STRIDE);
+  const boneSegmentRange = scratch?.boneSegmentRange.fill(0) ?? new Float32Array(BONE_SEG_MAX * CLUSTER_STRIDE);
   let boneCount = 0;
   // The writable path shared by the flat and grouped loops — one place for
   // the dead/op encoding and the rest pairing, so a grouped reorder cannot
@@ -472,8 +475,8 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
     });
   }
 
-  const clusterBounds = new Float32Array(MAX_CLUSTERS * CLUSTER_STRIDE);
-  const clusterRange = new Float32Array(MAX_CLUSTERS * CLUSTER_STRIDE);
+  const clusterBounds = scratch?.clusterBounds.fill(0) ?? new Float32Array(MAX_CLUSTERS * CLUSTER_STRIDE);
+  const clusterRange = scratch?.clusterRange.fill(0) ?? new Float32Array(MAX_CLUSTERS * CLUSTER_STRIDE);
   body.clusters.forEach((c, i) => {
     const o = i * CLUSTER_STRIDE;
     clusterBounds.set([c.center[0], c.center[1], c.center[2], c.radius], o);
@@ -499,9 +502,9 @@ export function packBody(body: BuiltBody, rest?: BuiltBody, opts: PackOpts = {})
       [c.start, c.count, c.alive ? 1 : 0, (oriented ? 1 : 0) + (shaped ? 2 : 0)], o);
   });
 
-  const groupBounds = new Float32Array(MAX_PRIMS * CLUSTER_STRIDE);
-  const groupRange = new Float32Array(MAX_PRIMS * CLUSTER_STRIDE);
-  const clusterGroups = new Float32Array(MAX_CLUSTERS * CLUSTER_STRIDE);
+  const groupBounds = scratch?.groupBounds.fill(0) ?? new Float32Array(MAX_PRIMS * CLUSTER_STRIDE);
+  const groupRange = scratch?.groupRange.fill(0) ?? new Float32Array(MAX_PRIMS * CLUSTER_STRIDE);
+  const clusterGroups = scratch?.clusterGroups.fill(0) ?? new Float32Array(MAX_CLUSTERS * CLUSTER_STRIDE);
   let groupCount = 0;
   body.clusters.forEach((c, ci) => {
     const first = groupCount;

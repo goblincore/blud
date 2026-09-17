@@ -2136,6 +2136,9 @@ export function createZombieGpuView(
   // re-pack, so the frame is bit-identical to the pre-toggle frame.
   let lastUploadNext: BuildResult | undefined;
   let lastUploadRest: BuildResult | undefined;
+  // Each view owns its packing scratch. writeRow copies into the atlas before
+  // the next upload, so the temporary rows need not allocate every frame.
+  let uploadScratch: ReturnType<typeof packBody> | undefined;
 
   // Bone tubes: FALSE once the instanced-tube renderer owns the bones — the
   // pack then writes ORGANS only and counts2.x counts organs.
@@ -2166,7 +2169,8 @@ export function createZombieGpuView(
   function upload(next: BuildResult, rest?: BuildResult) {
     lastUploadNext = next;
     lastUploadRest = rest;
-    const p = packBody(next, rest, { packBones, boneCullMode });
+    const p = packBody(next, rest, { packBones, boneCullMode }, uploadScratch);
+    uploadScratch = p;
     lastGroups = [];
     for (let g = 0; g < p.groupCount; g++) {
       const o = g * 4;
