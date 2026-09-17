@@ -335,7 +335,7 @@ why the report recommends raising Max trail with the longer presets.
 npx tsc --noEmit                                                     -> exit 0
 npm run build                                                        -> exit 0
 npx vitest run shutter- gib-motion-blur gib-shutter-layer goo-layer post-aa gib-sprite-pieces
-  -> 10 files / 281+ tests passed  (18 gib-motion + 13 gib-layer + …)
+  -> 10 files / 302 tests passed  (baseline 299 + 3 new tripwires)
 node scripts/sdf-shutter-game-task4.mjs 5497 9497 <evidence>         -> all legs, 88 shots, 0 errors
 python3 scripts/shutter-game-task4-evidence.py <evidence>            -> task4-image-diff.json + tight crops
 ```
