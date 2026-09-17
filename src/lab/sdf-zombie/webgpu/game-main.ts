@@ -5098,7 +5098,7 @@ async function main() {
   let gibRenderMode: 'march' | 'sprite' | 'carve' | 'assets' =
     gibRenderParam === 'sprite' ? 'sprite'
       : gibRenderParam === 'carve' ? 'carve'
-        : gibRenderParam === 'assets' ? 'assets' : 'march';
+        : gibRenderParam === 'march' ? 'march' : 'assets';
   /** Slabs per cluster for the carved library — the GRANULARITY dial. */
   // 1 SINCE THE ANATOMICAL PARTITION (2026-09-11): `cells` used to mean slabs per
   // CLUSTER, where 3 was the owner's "more granular" ask; it now means
@@ -5293,15 +5293,10 @@ async function main() {
     neckGapM: parseFloatParam(DYN_PARAMS.get('tearneck'), { min: 0, max: 0.2 }) ?? TEAR_TUNING.neckGapM,
     recoilM: parseFloatParam(DYN_PARAMS.get('tearrecoil'), { min: 0, max: 0.2 }) ?? TEAR_TUNING.recoilM,
   };
-  // ——— BLAST REFRACTION (EXPERIMENT, default OFF) ———————————————————————————
-  // The owner asked for a shockwave/distortion read on the blast. This is the
-  // bounded screen-space experiment (post-aa.ts's postAaBlastWarp): `?blastdistort=1`
-  // turns it on, `?bdstrength=` scales it, and at the same seed/pose/frame an
-  // on/off pair is an honest A/B. It is NOT accepted until a normal-speed review
-  // says it improves the read; default OFF keeps the shipped frame untouched.
-  let blastDistortStrength = parseFloatParam(DYN_PARAMS.get('bdstrength'), { min: 0, max: 4 }) ?? 1;
+  // Owner-approved optical wave defaults; URL flags retain off/on A/B control.
+  let blastDistortStrength = parseFloatParam(DYN_PARAMS.get('bdstrength'), { min: 0, max: 4 }) ?? 2.7;
   postAa.setBlastDistort(
-    DYN_PARAMS.get('blastdistort') === '1' || DYN_PARAMS.get('blastdistort') === 'on');
+    DYN_PARAMS.get('blastdistort') !== '0' && DYN_PARAMS.get('blastdistort') !== 'off');
   postAa.setBlastDistortStrength(blastDistortStrength);
   /** The cheapest tier's piece count — one chunk per limb cluster, i.e. the
    *  shape a body falls back to when the pool cannot afford anything better.
@@ -5331,20 +5326,20 @@ async function main() {
   // the explosion is quite large … the area of effect should be abit more
   // focused". Both default to the reference behaviour, so nothing about the
   // shipped blast moves; they are the panel's two blast sliders.
-  let aoeRadiusScale = parseFloatParam(DYN_PARAMS.get('aoesize'), { min: 0.3, max: 1.5 }) ?? 1;
+  let aoeRadiusScale = parseFloatParam(DYN_PARAMS.get('aoesize'), { min: 0.3, max: 1.5 }) ?? .82;
   // 0.45 is EXPLOSION_LAUNCH.falloffFloor — the resolver's default, kept here so
   // the panel's read-back shows the value the blast actually uses.
   let aoeLaunchFloor = parseFloatParam(DYN_PARAMS.get('edgekick'), { min: 0, max: 1 }) ?? 0.45;
-  const fxSmoke = parseFloatParam(DYN_PARAMS.get('fxsmoke'), { min: 0, max: 2 }) ?? 0.38;
-  const fxLife = parseFloatParam(DYN_PARAMS.get('fxlife'), { min: 0.3, max: 3 }) ?? 1.15;
-  const fxGain = parseFloatParam(DYN_PARAMS.get('fxgain'), { min: 0, max: 4 }) ?? 1.25;
+  const fxSmoke = parseFloatParam(DYN_PARAMS.get('fxsmoke'), { min: 0, max: 2 }) ?? .76;
+  const fxLife = parseFloatParam(DYN_PARAMS.get('fxlife'), { min: 0.3, max: 3 }) ?? 1.55;
+  const fxGain = parseFloatParam(DYN_PARAMS.get('fxgain'), { min: 0, max: 4 }) ?? 3.3;
   // THE PLUME A/B. 1 (default) is the mushroom — the neck converges, the cap
   // rolls outward and flattens, the smoke spawns on a rim. 0 is the round
   // fireball this effect was before, blended term by term so ONE boot can A/B
   // the two on the same burst. Kept off the four size/colour knobs because it
   // is a SHAPE switch, and because `?explosionfx=atlas` is the reference the
   // shape is judged against: run 0, run 1, run atlas, in that order.
-  const fxPlume = parseFloatParam(DYN_PARAMS.get('fxplume'), { min: 0, max: 1 }) ?? 1;
+  const fxPlume = parseFloatParam(DYN_PARAMS.get('fxplume'), { min: 0, max: 1 }) ?? .1;
   // DEFERRED MODE: the shared chunk material carries the surface mode for
   // every detached chunk (one graph per output mode — the task-2 contract);
   // the legacy prev source is only bound in legacy mode.
@@ -5671,8 +5666,8 @@ async function main() {
    * with, so the first mesh frame is the last SDF frame — no rest-pose snap and
    * no crossfade hiding a shape change.
    *
-   * `?gibrender=assets` is the A/B toggle. The SHIPPED default stays `march`
-   * until Task 3's visual gate; a body gibbed before the load resolves falls
+   * Assets are the owner-approved default; `?gibrender=march` is the control.
+   * A body gibbed before the load resolves falls
    * back to marched pieces for that blast, never to no gore.
    */
   let gibAssetMaterial: BakedChunkMaterial | null = null;
@@ -7407,8 +7402,8 @@ async function main() {
         // A/B that does not move the number it exists to compare is not an A/B.
         plumeMix: fxPlume,
         fireCapShare: fxPlume,
-        capFlatten: 1 - (1 - 0.55) * fxPlume,
-        capFireFlatten: 1 - (1 - 0.5) * fxPlume,
+        capFlatten: parseFloatParam(DYN_PARAMS.get('capflat'), { min: 0, max: 1 }) ?? dynamiteDefaults().capflat,
+        capFireFlatten: Math.min(1, 0.5 + (parseFloatParam(DYN_PARAMS.get('capflat'), { min: 0, max: 1 }) ?? dynamiteDefaults().capflat) * 0.25),
       });
       characterEffects.scene.add(explosionVfx.object);
     } catch (e) {
