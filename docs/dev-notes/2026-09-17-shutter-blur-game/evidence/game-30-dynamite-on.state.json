@@ -1,0 +1,38 @@
+{
+  "enabled": true,
+  "ready": true,
+  "warmed": true,
+  "route": "capture-stage",
+  "exposureSeconds": 0.04444444444444444,
+  "exposureMs": 44.444444444444436,
+  "exposureLabel": "44.44 ms",
+  "maxStreakPx": 120,
+  "seedScale": 1,
+  "depthBiasM": 0.02,
+  "taps": 24,
+  "seed": {
+    "width": 400,
+    "height": 300
+  },
+  "layer": {
+    "width": 800,
+    "height": 600
+  },
+  "selectedDroplets": 53,
+  "last": {
+    "stamps": 53,
+    "texels": 5289,
+    "conflicts": 0,
+    "oppositeConflicts": 0,
+    "nearerWins": 13,
+    "maxStreakPx": 67.7431400707263,
+    "avgStreakPx": 29.081249047587203,
+    "buildMs": 0.19999992847442627
+  },
+  "passes": {
+    "sceneRenders": 0,
+    "gooChains": 1,
+    "fullscreen": 1
+  },
+  "error": null
+}

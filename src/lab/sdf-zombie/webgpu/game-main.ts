@@ -175,6 +175,14 @@ import {
 import { shouldSpill, GUT_DROPLET_SIZE, SPILL_CHANCE } from '../entrails-spawn';
 import { createBloodView } from './blood-view-gpu';
 import { createGooLayer, type GooLayer, type GooReconstruction } from './goo-layer';
+import {
+  createShutterGameLayer, readShutterGameSettings, type ShutterGameLayer,
+} from './shutter-game-layer';
+import {
+  createGibShutterLayer, readGibShutterSettings,
+  type GibShutterLayer, type GibBlurSubject,
+} from './gib-shutter-layer';
+import { createShutterPanel, shutterPanelHost, type ShutterPanel } from './shutter-panel';
 import { connectionBlobsForSim } from './blood-connections';
 import { createImpactSplashLayer, type ImpactSplashLayer } from './impact-splash';
 import { createGooPanel, type GooPanel } from './goo-panel';
@@ -185,7 +193,7 @@ import {
 } from './wound-panel';
 import { rngStreams, setRngSeed, seedFromUnit } from './rng';
 import { advance as advanceSimClock, simTimeMs, resetSimClock } from './sim-clock';
-import { chunkSettled, makeChunk, stepChunk, type ChunkBox } from '../gib-chunks';
+import { CHUNK_TUNING, chunkSettled, makeChunk, stepChunk, type ChunkBox } from '../gib-chunks';
 import { gibLaunchVelocity } from '../gib-launch';
 import { bonePartGeometry, meatPartGeometry } from './gore-part-geom';
 import {
@@ -1358,6 +1366,64 @@ async function main() {
   // default: opt in with ?impactsplash=1 or __sdfGame.setImpactSplash.
   let impactSplashEnabled = false;
   let impactSplashLayer: ImpactSplashLayer | null = null;
+
+  // SELECTIVE SHUTTER BLUR (2026-09-17). Owner accepted the lab look and asked
+  // for it in the game at the equivalent of the screenshot's 320° @ 20 fps =
+  // 44.44 ms fixed exposure. Created with the goo layer (it partitions it) and
+  // registered as post-aa's pre-post capture stage. ON by default; ?bloodblur=0
+  // or __sdfGame.setBloodBlur(false) restores the fused sharp goo exactly.
+  let shutterGame: ShutterGameLayer | null = null;
+  let shutterPanel: ShutterPanel | null = null;
+  // FLYING-GIB SHUTTER BLUR (2026-09-17, shutter task 3). The gib twin of the
+  // blood layer: selected moving gibs are lifted onto a dedicated layer, drawn
+  // alone and exposure-resolved over the clean scene. Separate on/off switch,
+  // shared exposure/max-trail controls. ON by default on this feature branch.
+  let gibShutter: GibShutterLayer | null = null;
+  /** MUTUAL OCCLUSION (task 4). When true (default) the blood resolve also
+   *  tests against the blurred-gib layer's depth, so blood behind a blurred gib
+   *  is dropped. `?giboccluder=0` / `setGibOccluder(false)` is the A/B seam
+   *  that shows the ordered-vs-resolved difference on one frozen frame. */
+  let gibOccluderEnabled = true;
+  /** Presentation identity across frames, so a freshly spawned/reused piece
+   *  gets no pre-birth streak on its first drawn frame. Keyed by the owning
+   *  list AND id (the sprite and chunk id sequences are independent). */
+  let gibBlurPrevKeys = new Set<string>();
+
+  /**
+   * This frame's gib-blur candidates. Built from the SAME lists the renderers
+   * draw: sprite/asset/carve pieces (all `spritePieces.live`) and the marched
+   * fallback chunks (`liveChunks`). Each carries its real drawn mesh, its
+   * current `Chunk` and the layer it belongs on when NOT blurred, which is what
+   * lets the layer put it back exactly. `ageSeconds` is 0 on a piece's first
+   * presented frame (spawn OR recycled id), so the exposure clamps to that
+   * frame and no streak is drawn into an emitter that did not exist.
+   */
+  function gibBlurSubjects(): GibBlurSubject[] {
+    const out: GibBlurSubject[] = [];
+    const nextKeys = new Set<string>();
+    for (const p of spritePieces.live) {
+      if (!p.mesh.visible) continue;
+      const key = `sprite:${p.id}`;
+      nextKeys.add(key);
+      out.push({
+        id: p.id, state: p.state, mesh: p.mesh,
+        baseLayer: 0,
+        ageSeconds: gibBlurPrevKeys.has(key) ? Number.POSITIVE_INFINITY : 0,
+      });
+    }
+    for (const c of liveChunks) {
+      if (!c.view.object.visible) continue;
+      const key = `chunk:${c.id}`;
+      nextKeys.add(key);
+      out.push({
+        id: c.id, state: c.state, mesh: c.view.object as unknown as THREE.Mesh,
+        baseLayer: SDF_LAYER,
+        ageSeconds: gibBlurPrevKeys.has(key) ? Number.POSITIVE_INFINITY : 0,
+      });
+    }
+    gibBlurPrevKeys = nextKeys;
+    return out;
+  }
 
   /** Create the splash layer on first enable only, sharing the flesh/goo
    *  light uniform NODES so it is lit by the same rig. Returns silently if
@@ -3891,6 +3957,7 @@ async function main() {
       gooPanel?.setVisible(!panelsHidden);
       vhsPanel?.setVisible(!panelsHidden);
       dynamitePanel?.setVisible(!panelsHidden);
+      shutterPanel?.setVisible(!panelsHidden);
     }
     // Manual reload. Dead under unlimited ammo BY CONSTRUCTION (the magazine is
     // never partial), which is why ?ammo=finite is the way to exercise it.
@@ -7635,6 +7702,108 @@ async function main() {
     gooSheetsEnabled = gooCandidateBoot.get('goosheets') === '1';
     gooLayer.setReconstruction(gooReconstruction);
 
+    // SELECTIVE SHUTTER BLUR (2026-09-17). Owner-accepted lab look, now a
+    // shipped default: fixed 320°/360/20 s (44.44 ms) exposure on airborne
+    // blood. The layer partitions THIS goo layer's density input (see
+    // GooSelection) and composites as post-aa's pre-post capture stage, so the
+    // blur runs in working-linear space before SSCS/FXAA/VHS and never touches
+    // gameplay physics. Failure is surfaced through __sdfGame.bloodBlur.error,
+    // never silently swallowed.
+    shutterGame = createShutterGameLayer({
+      renderer: handle.renderer,
+      gooLayer,
+      settings: readShutterGameSettings(location.search),
+      onError: (message) => {
+        // eslint-disable-next-line no-console
+        console.error('[shutter-game] disabled after error:', message);
+      },
+    });
+    // FLYING-GIB SHUTTER BLUR (2026-09-17, shutter task 3): the gib twin,
+    // SHARING the blood exposure contract and adding its own on/off switch.
+    // `?gibblur=0` disables only the gib layer.
+    const gibSettings = readGibShutterSettings(location.search);
+    gibSettings.exposureSeconds = shutterGame.exposureSeconds;
+    gibSettings.maxStreakPx = shutterGame.maxStreakPx;
+    gibSettings.seedScale = shutterGame.seedScale;
+    gibSettings.depthBiasM = shutterGame.depthBiasM;
+    // EXPLICIT ROUTE LIMIT (task 3). The gib layer isolates pieces by rendering
+    // the LIVE scene through a dedicated layer; in the deferred route the gib
+    // meshes are G-buffer producers with route-assigned materials, and that
+    // isolated draw is neither validated nor safe (it re-triggers the deferred
+    // march shader's pre-existing pipeline errors). Rather than silently leave
+    // moving gibs excluded-but-undrawn, the gib blur is hard-off in deferred and
+    // the gibs render sharp through their normal route. Reported, not hidden.
+    const gibRouteSupported = !deferredMode;
+    if (!gibRouteSupported && gibSettings.enabled) {
+      // eslint-disable-next-line no-console
+      console.warn('[gib-shutter] deferred route: gib motion blur stays off '
+        + '(only the legacy forward route is validated); gibs render sharp');
+    }
+    gibShutter = createGibShutterLayer({
+      renderer: handle.renderer,
+      settings: gibSettings,
+      supported: gibRouteSupported,
+      onError: (message) => {
+        // eslint-disable-next-line no-console
+        console.error('[gib-shutter] disabled after error:', message);
+      },
+    });
+    // `?giboccluder=0` disables the blood-against-blurred-gib depth test. It is
+    // the A/B control for the mutual-occlusion evidence; ON is the shipped
+    // behaviour. Parsed here (not in the layer) because it is a blood-pass
+    // concern, not a gib-layer one.
+    gibOccluderEnabled = new URLSearchParams(location.search).get('giboccluder') !== '0';
+    // ONE capture stage chains both layers: gibs first (they are opaque and
+    // write their own depth in the layer), then blood over the gib-resolved
+    // target. The blood resolve keeps occlusion against the capture's clean
+    // static depth; the gib resolve occludes against that same depth.
+    postAa.setCaptureStage((capture) => {
+      let src: THREE.RenderTarget = capture;
+      let gibDepth: THREE.DepthTexture | null = null;
+      if (gibShutter) {
+        const g = gibShutter.capture(capture, scene, camera);
+        if (g) {
+          src = g;
+          gibDepth = gibShutter.occluderDepth;
+        }
+      }
+      if (gooEnabled && shutterGame) {
+        // The blood resolve was built against the raw capture; point it at the
+        // gib result so a blurred gib is not painted over by the blood pass.
+        shutterGame.setSceneTexture(src.texture);
+        // MUTUAL OCCLUSION (task 4): the selected gibs were lifted out of the
+        // clean capture, so their depth is NOT in `capture.depthTexture`. Hand
+        // the blood resolve the gib layer's own depth so blood behind a
+        // blurred gib is dropped instead of composited over it. `null` (gib
+        // blur off / nothing selected) restores the single-depth behaviour.
+        shutterGame.setOccluderDepth(gibOccluderEnabled ? gibDepth : null);
+        const b = shutterGame.capture(capture, bloodSim, camera);
+        if (b) src = b;
+      }
+      return src === capture ? null : src;
+    });
+    // PREWARM against the real capture target: the layer/seed allocation and the
+    // resolve/selected-layer pipeline compile happen here, at boot, instead of
+    // stalling the first live blood/gib frame (measured ~0.26 s, 2026-09-17).
+    shutterGame.prewarm(postAa.captureTarget);
+    gibShutter.prewarm(postAa.captureTarget);
+    void shutterGame.precompile();
+    // Player-facing controls: separate blood/gib switches, SHARED exposure (ms)
+    // and max-trail length. Ships visible like its sibling panels; debug seams
+    // stay on the API.
+    shutterPanel = createShutterPanel(shutterPanelHost(shutterGame, gibShutter));
+    shutterPanel.setVisible(true);
+    const disposeShutter = (): void => {
+      postAa.setCaptureStage(null);
+      shutterGame?.dispose();
+      gibShutter?.dispose();
+    };
+    window.addEventListener('pagehide', disposeShutter);
+    import.meta.hot?.dispose(() => {
+      disposeShutter();
+      window.removeEventListener('pagehide', disposeShutter);
+    });
+
     // SUPPLEMENTARY IMPACT SPLASH boot flag. Read AFTER the shipping defaults
     // so it can only ever add the new crown, never move a shipped value. It
     // is independent of the goo candidates above.
@@ -9228,7 +9397,20 @@ async function main() {
         enableStrands: gooStrandsEnabled, enableSheets: gooSheetsEnabled,
       })
       : []);
+    // SHUTTER BLUR PARTITION: when on, this sync poses only the sharp
+    // remainder (pools/guts/leftover drops). The selected airborne partition is
+    // posed and shaded later by the capture stage, exactly once. When off this
+    // clears the selection, so the frame is the shipped fused goo.
+    shutterGame?.poseSharp();
     gooLayer?.sync(bloodSim, camera);
+    // GIB SHUTTER PARTITION: lift this frame's moving pieces onto the blur
+    // layer BEFORE the base scene renders (the draw callback follows this tick),
+    // so the capture's clean background has no selected gib in it. When the
+    // switch is off the list is empty and every mesh is put back where it was.
+    if (gibShutter) {
+      gibShutter.select(gibShutter.enabled ? gibBlurSubjects() : []);
+      if (!gibShutter.enabled) gibBlurPrevKeys = new Set();
+    }
     telemetry.end('goo-sync', gooTiming);
   }
 
@@ -11281,6 +11463,66 @@ function performBenchAction(a: BenchAction): void {
       bloodView.setMistVisible(true);
       gooPanel?.setVisible(on);
       return true;
+    },
+    // ---------------------------------------------------------------
+    // SELECTIVE SHUTTER BLUR (2026-09-17). The ordinary controls are on/off,
+    // exposure ms and max trail length; seed scale and depth bias are the
+    // documented debug seams. All read back the APPLIED value.
+    // ---------------------------------------------------------------
+    /** On/off. Returns the resulting state. Off restores the fused sharp goo. */
+    setBloodBlur: (on: boolean) => {
+      const next = shutterGame?.setEnabled(on) ?? false;
+      shutterPanel?.refresh();
+      return next;
+    },
+    get bloodBlurEnabled() { return shutterGame?.enabled ?? false; },
+    /** Exposure in ms — longer = longer trails. Clamped [0, 200]. Shared by
+     *  the blood AND gib layers (the panel control is one control). */
+    setBloodBlurExposure: (ms: number) => {
+      const applied = shutterGame?.setExposureMs(ms) ?? 0;
+      gibShutter?.setExposureMs(applied);
+      shutterPanel?.refresh();
+      return applied;
+    },
+    /** Max drawn trail in CONTENT pixels. Clamped [1, 400]. Shared. */
+    setBloodBlurMaxStreak: (px: number) => {
+      const applied = shutterGame?.setMaxStreakPx(px) ?? 0;
+      gibShutter?.setMaxStreakPx(applied);
+      shutterPanel?.refresh();
+      return applied;
+    },
+    /** DEBUG: seed grid scale vs the goo density dims. Clamped [0.25, 2]. */
+    setBloodBlurSeedScale: (v: number) => shutterGame?.setSeedScale(v) ?? 0,
+    /** DEBUG: destination depth bias in metres. Clamped [0, 50]. */
+    setBloodBlurDepthBias: (m: number) => shutterGame?.setDepthBiasM(m) ?? 0,
+    /** Effective values, seed/layer dims, per-frame stats and any hard error. */
+    get bloodBlur() {
+      return shutterGame
+        ? shutterGame.diagnostics()
+        : { enabled: false, unavailable: true, route: 'capture-stage' as const };
+    },
+    /** FLYING-GIB SHUTTER BLUR — separate switch, shared exposure. */
+    setGibBlur: (on: boolean) => {
+      const next = gibShutter?.setEnabled(on) ?? false;
+      shutterPanel?.refresh();
+      return next;
+    },
+    get gibBlurEnabled() { return gibShutter?.enabled ?? false; },
+    /** Mutual-occlusion A/B seam: when ON (default) the blood resolve also
+     *  occludes against the blurred-gib layer depth. Returns the applied value. */
+    setGibOccluder: (on: boolean) => { gibOccluderEnabled = !!on; return gibOccluderEnabled; },
+    get gibOccluderEnabled() { return gibOccluderEnabled; },
+    /** Live values, seed/layer dims, per-frame stats and any hard error. */
+    get gibBlur() {
+      return gibShutter
+        ? gibShutter.diagnostics()
+        : { enabled: false, unavailable: true };
+    },
+    /** Show/hide the focused shutter controls. */
+    shutterPanel: (on?: boolean) => {
+      if (on !== undefined) shutterPanel?.setVisible(on);
+      shutterPanel?.refresh();
+      return shutterPanel?.visible ?? false;
     },
     get goo() {
       return gooLayer
@@ -13492,8 +13734,14 @@ function performBenchAction(a: BenchAction): void {
      *  view, sim, settle, bake and gib machinery a severed limb uses, with
      *  a controlled size so drivers get a target whose radius they know.
      *  A severed hand-gob's 4.6 cm bounding sphere is a sniper target; this
-     *  is the same machinery at a testable size. */
-    spawnTestChunk: (x: number, y: number, z: number, radius = 0.12, stationary = false) => {
+     *  is the same machinery at a testable size.
+     *
+     *  Task-4 additions (additive): an optional `velocity` overrides the random
+     *  launch (so a rig can stage a slow SLIDE instead of a lob), and the return
+     *  value is the new piece's stable id (was `prims.length`) so a rig can
+     *  track it across the exposure/settle. The only prior consumer carried the
+     *  count into a JSON blob without asserting on it. */
+    spawnTestChunk: (x: number, y: number, z: number, radius = 0.12, stationary = false, velocity?: Vec3, spin?: Vec3) => {
       const prims: Primitive[] = [];
       const rng = rngStreams.misc;
       for (let i = 0; i < 6; i++) {
@@ -13509,12 +13757,58 @@ function performBenchAction(a: BenchAction): void {
           radius: radius * 0.55, scale: [1, 1, 1], blendK: 0.03,
         } as unknown as Primitive);
       }
+      const id = nextChunkId;
       spawnChunkPiece(
-        { limb: 'torso', origin: [x, y + radius, z] as Vec3, prims, tornAt: [], bones: [] },
+        {
+          limb: 'torso', origin: [x, y + radius, z] as Vec3, prims, tornAt: [], bones: [],
+          // An explicit spin (including [0,0,0]) overrides the random tumble, so
+          // a rig can stage a truly stationary piece that must NOT blur.
+          ...(spin ? { spinAngVel: spin } : {}),
+        },
         { uniforms: actors[0]!.view.uniforms, volumeTexture: actors[0]!.view.volumeTexture },
-        stationary ? [0, 0, 0] : undefined,
+        velocity ?? (stationary ? [0, 0, 0] : undefined),
       );
-      return prims.length;
+      return id;
+    },
+    /** PURE-SPIN FIXTURE (task 4). Spawn ONE piece at a known world point
+     *  through the REAL spawn path with a chosen angular velocity and NO net
+     *  gravity for the first frame: the upward kick cancels `CHUNK_TUNING.
+     *  gravity * (1/60)` exactly, so after ONE 1/60 step the piece has ~zero
+     *  linear velocity and sits where it was placed while still turning. That
+     *  is the fixed-centre spin the shutter resolve must smear at the EDGES and
+     *  leave STILL at the centre — translation-only blur cannot fake it.
+     *  Returns the new piece id (or -1 if the actor view is not up yet). */
+    spawnSpinFixture: (x: number, y: number, z: number, radius = 0.2, spin: Vec3 = [0, 0, 8]) => {
+      const view = actors[0]?.view;
+      if (!view) return -1;
+      const prims: Primitive[] = [];
+      const rng = rngStreams.misc;
+      for (let i = 0; i < 6; i++) {
+        const th = rng() * Math.PI * 2;
+        const ph = Math.acos(2 * rng() - 1);
+        const dx = Math.sin(ph) * Math.cos(th) * radius * 0.5;
+        const dy = Math.cos(ph) * radius * 0.5;
+        const dz = Math.sin(ph) * Math.sin(th) * radius * 0.5;
+        prims.push({
+          limb: 'torso', cluster: 0, op: 'add',
+          a: [x + dx - 0.02, y + dy, z + dz] as Vec3,
+          b: [x + dx + 0.02, y + dy, z + dz] as Vec3,
+          radius: radius * 0.55, scale: [1, 1, 1], blendK: 0.03,
+        } as unknown as Primitive);
+      }
+      const id = nextChunkId;
+      // One 1/60 s of gravity exactly cancelled: after `step(1)` the piece's
+      // velocity is ~0, so the exposure gather is spin-only.
+      const cancel: Vec3 = [0, -CHUNK_TUNING.gravity / 60, 0];
+      spawnChunkPiece(
+        {
+          limb: 'torso', origin: [x, y + radius, z] as Vec3, prims, tornAt: [], bones: [],
+          spinAngVel: spin,
+        },
+        { uniforms: view.uniforms, volumeTexture: view.volumeTexture },
+        cancel,
+      );
+      return id;
     },
     /** Settled-chunk bake (close-up task 5). ON at boot (GAME_CHUNK_BAKE);
      *  off is pixel-identical. Toggling mid-session only affects FUTURE

@@ -1,0 +1,548 @@
+{
+  "threshold": 8,
+  "scenarios": {
+    "check-reset": {
+      "files": {
+        "m44": "t2-check-reset__m44.png"
+      },
+      "vsSharp": {}
+    },
+    "det": {
+      "files": {
+        "off": "t2-det__off.png",
+        "cap200": "t2-det__cap200.png",
+        "on-a": "t2-det__on-a.png",
+        "m67": "t2-det__m67.png",
+        "on-b": "t2-det__on-b.png"
+      },
+      "vsSharp": {}
+    },
+    "detparity": {
+      "files": {
+        "sharp2": "t2-detparity__sharp2.png",
+        "zero": "t2-detparity__zero.png",
+        "sharp": "t2-detparity__sharp.png"
+      },
+      "vsSharp": {}
+    },
+    "dyn-blast": {
+      "files": {
+        "m44": "t2-dyn-blast__m44.png",
+        "sharp": "t2-dyn-blast__sharp.png",
+        "m67": "t2-dyn-blast__m67.png"
+      },
+      "vsSharp": {
+        "m44": {
+          "changedPx": 102,
+          "bbox": [
+            18,
+            16,
+            763,
+            289
+          ],
+          "bboxDims": [
+            746,
+            274
+          ],
+          "changedFrac": 0.00018
+        },
+        "m67": {
+          "changedPx": 98,
+          "bbox": [
+            18,
+            16,
+            763,
+            289
+          ],
+          "bboxDims": [
+            746,
+            274
+          ],
+          "changedFrac": 0.00017
+        },
+        "m44_vs_m67_iou": 0.6807,
+        "m67_minus_m44_changedPx": 17,
+        "strip": [
+          0,
+          0,
+          799,
+          325
+        ],
+        "stripFile": "t2strip-dyn-blast-sharp-m44-m67.png",
+        "tightCrop": [
+          0,
+          0,
+          235,
+          235
+        ],
+        "tightFile": "t2tight-dyn-blast-sharp-m44-m67.png"
+      }
+    },
+    "dyn-spray": {
+      "files": {
+        "m67": "t2-dyn-spray__m67.png",
+        "sharp": "t2-dyn-spray__sharp.png",
+        "m44": "t2-dyn-spray__m44.png"
+      },
+      "vsSharp": {
+        "m44": {
+          "changedPx": 36944,
+          "bbox": [
+            18,
+            0,
+            947,
+            599
+          ],
+          "bboxDims": [
+            930,
+            600
+          ],
+          "changedFrac": 0.06414
+        },
+        "m67": {
+          "changedPx": 40937,
+          "bbox": [
+            18,
+            0,
+            947,
+            599
+          ],
+          "bboxDims": [
+            930,
+            600
+          ],
+          "changedFrac": 0.07107
+        },
+        "m44_vs_m67_iou": 0.7985,
+        "m67_minus_m44_changedPx": 6359,
+        "strip": [
+          0,
+          0,
+          959,
+          599
+        ],
+        "stripFile": "t2strip-dyn-spray-sharp-m44-m67.png",
+        "tightCrop": [
+          394,
+          174,
+          665,
+          445
+        ],
+        "tightFile": "t2tight-dyn-spray-sharp-m44-m67.png"
+      }
+    },
+    "dyn-trail": {
+      "files": {
+        "m67": "t2-dyn-trail__m67.png",
+        "sharp": "t2-dyn-trail__sharp.png",
+        "m44": "t2-dyn-trail__m44.png"
+      },
+      "vsSharp": {
+        "m44": {
+          "changedPx": 32949,
+          "bbox": [
+            18,
+            0,
+            855,
+            599
+          ],
+          "bboxDims": [
+            838,
+            600
+          ],
+          "changedFrac": 0.0572
+        },
+        "m67": {
+          "changedPx": 38610,
+          "bbox": [
+            18,
+            0,
+            855,
+            599
+          ],
+          "bboxDims": [
+            838,
+            600
+          ],
+          "changedFrac": 0.06703
+        },
+        "m44_vs_m67_iou": 0.759,
+        "m67_minus_m44_changedPx": 7733,
+        "strip": [
+          0,
+          0,
+          891,
+          599
+        ],
+        "stripFile": "t2strip-dyn-trail-sharp-m44-m67.png",
+        "tightCrop": [
+          384,
+          214,
+          655,
+          485
+        ],
+        "tightFile": "t2tight-dyn-trail-sharp-m44-m67.png"
+      }
+    },
+    "impact": {
+      "files": {
+        "m67": "t2-impact__m67.png",
+        "sharp": "t2-impact__sharp.png",
+        "m44": "t2-impact__m44.png"
+      },
+      "vsSharp": {
+        "m44": {
+          "changedPx": 3590,
+          "bbox": [
+            18,
+            16,
+            843,
+            599
+          ],
+          "bboxDims": [
+            826,
+            584
+          ],
+          "changedFrac": 0.00623
+        },
+        "m67": {
+          "changedPx": 8722,
+          "bbox": [
+            18,
+            16,
+            875,
+            599
+          ],
+          "bboxDims": [
+            858,
+            584
+          ],
+          "changedFrac": 0.01514
+        },
+        "m44_vs_m67_iou": 0.3795,
+        "m67_minus_m44_changedPx": 5335,
+        "strip": [
+          0,
+          0,
+          911,
+          599
+        ],
+        "stripFile": "t2strip-impact-sharp-m44-m67.png",
+        "tightCrop": [
+          524,
+          364,
+          795,
+          599
+        ],
+        "tightFile": "t2tight-impact-sharp-m44-m67.png"
+      }
+    },
+    "parity": {
+      "files": {
+        "m44": "t2-parity__m44.png",
+        "zero": "t2-parity__zero.png",
+        "sharp": "t2-parity__sharp.png"
+      },
+      "vsSharp": {
+        "m44": {
+          "changedPx": 7841,
+          "bbox": [
+            18,
+            16,
+            947,
+            597
+          ],
+          "bboxDims": [
+            930,
+            582
+          ],
+          "changedFrac": 0.01361
+        }
+      }
+    },
+    "pools": {
+      "files": {
+        "m44": "t2-pools__m44.png",
+        "m100": "t2-pools__m100.png",
+        "sharp": "t2-pools__sharp.png"
+      },
+      "vsSharp": {
+        "m44": {
+          "changedPx": 53567,
+          "bbox": [
+            18,
+            16,
+            947,
+            599
+          ],
+          "bboxDims": [
+            930,
+            584
+          ],
+          "changedFrac": 0.093
+        },
+        "m100": {
+          "changedPx": 66885,
+          "bbox": [
+            18,
+            16,
+            947,
+            599
+          ],
+          "bboxDims": [
+            930,
+            584
+          ],
+          "changedFrac": 0.11612
+        }
+      }
+    },
+    "removal": {
+      "files": {
+        "m44": "t2-removal__m44.png",
+        "sharp": "t2-removal__sharp.png"
+      },
+      "vsSharp": {
+        "m44": {
+          "changedPx": 32273,
+          "bbox": [
+            18,
+            16,
+            947,
+            599
+          ],
+          "bboxDims": [
+            930,
+            584
+          ],
+          "changedFrac": 0.05603
+        }
+      }
+    },
+    "still": {
+      "files": {
+        "sharp2": "t2-still__sharp2.png",
+        "m100": "t2-still__m100.png",
+        "sharp": "t2-still__sharp.png",
+        "m44": "t2-still__m44.png"
+      },
+      "vsSharp": {
+        "m44": {
+          "changedPx": 0,
+          "bbox": null,
+          "bboxDims": null,
+          "changedFrac": 0.0
+        },
+        "m100": {
+          "changedPx": 40,
+          "bbox": [
+            33,
+            16,
+            38,
+            25
+          ],
+          "bboxDims": [
+            6,
+            10
+          ],
+          "changedFrac": 7e-05
+        }
+      }
+    },
+    "wound-44": {
+      "files": {
+        "m100": "t2-wound-44__m100.png",
+        "m44cap200": "t2-wound-44__m44cap200.png",
+        "m44": "t2-wound-44__m44.png",
+        "m67": "t2-wound-44__m67.png",
+        "sharp": "t2-wound-44__sharp.png"
+      },
+      "vsSharp": {
+        "m44": {
+          "changedPx": 55549,
+          "bbox": [
+            18,
+            0,
+            947,
+            599
+          ],
+          "bboxDims": [
+            930,
+            600
+          ],
+          "changedFrac": 0.09644
+        },
+        "m67": {
+          "changedPx": 88541,
+          "bbox": [
+            18,
+            0,
+            947,
+            599
+          ],
+          "bboxDims": [
+            930,
+            600
+          ],
+          "changedFrac": 0.15372
+        },
+        "m100": {
+          "changedPx": 99899,
+          "bbox": [
+            18,
+            0,
+            947,
+            599
+          ],
+          "bboxDims": [
+            930,
+            600
+          ],
+          "changedFrac": 0.17344
+        },
+        "m44_vs_m67_iou": 0.614,
+        "m67_minus_m44_changedPx": 33726,
+        "strip": [
+          0,
+          0,
+          959,
+          599
+        ],
+        "stripFile": "t2strip-wound-44-sharp-m44-m67.png",
+        "tightCrop": [
+          374,
+          234,
+          645,
+          505
+        ],
+        "tightFile": "t2tight-wound-44-sharp-m44-m67.png"
+      }
+    },
+    "woundclose": {
+      "files": {
+        "m44": "t2-woundclose__m44.png",
+        "m100": "t2-woundclose__m100.png",
+        "sharp": "t2-woundclose__sharp.png",
+        "m67": "t2-woundclose__m67.png"
+      },
+      "vsSharp": {
+        "m44": {
+          "changedPx": 9379,
+          "bbox": [
+            18,
+            16,
+            635,
+            599
+          ],
+          "bboxDims": [
+            618,
+            584
+          ],
+          "changedFrac": 0.01628
+        },
+        "m67": {
+          "changedPx": 10337,
+          "bbox": [
+            18,
+            16,
+            635,
+            599
+          ],
+          "bboxDims": [
+            618,
+            584
+          ],
+          "changedFrac": 0.01795
+        },
+        "m100": {
+          "changedPx": 11660,
+          "bbox": [
+            18,
+            16,
+            635,
+            599
+          ],
+          "bboxDims": [
+            618,
+            584
+          ],
+          "changedFrac": 0.02024
+        },
+        "m44_vs_m67_iou": 0.8329,
+        "m67_minus_m44_changedPx": 1378,
+        "strip": [
+          0,
+          0,
+          671,
+          599
+        ],
+        "stripFile": "t2strip-woundclose-sharp-m44-m67.png",
+        "tightCrop": [
+          404,
+          294,
+          675,
+          565
+        ],
+        "tightFile": "t2tight-woundclose-sharp-m44-m67.png"
+      }
+    }
+  },
+  "pairs": {},
+  "det": {
+    "note": "vhs=off + render clocks held; delta is the exposure resolve",
+    "onA_vs_onB_noise_changedPx": 41,
+    "onA_vs_off_changedPx": 11844,
+    "onB_vs_off_changedPx": 11835,
+    "signal_to_noise_changedPx": 288.878,
+    "bbox": [
+      33,
+      16,
+      630,
+      599
+    ],
+    "bboxDims": [
+      598,
+      584
+    ],
+    "cap200_vs_off_changedPx": 11835,
+    "m67_vs_off_changedPx": 13308,
+    "strip": [
+      0,
+      0,
+      666,
+      599
+    ],
+    "stripFile": "t2strip-det-on-a-off-on-b-m67.png",
+    "order": [
+      "on-a",
+      "off",
+      "on-b",
+      "m67"
+    ],
+    "tightCrop": [
+      404,
+      274,
+      735,
+      599
+    ],
+    "tightFile": "t2tight-det-sharp-m44-m67.png"
+  },
+  "parity": {
+    "sharp_vs_zero_changedPx": 4523,
+    "changedFrac": 0.007852,
+    "note": "shipped VHS on; residual is VHS temporal history, not the resolve"
+  },
+  "detparity": {
+    "sharp_vs_zero_changedPx": 48,
+    "sharp_vs_sharp2_noise_changedPx": 104,
+    "sharp_vs_zero_changedFrac": 8.333e-05,
+    "sharp_vs_sharp2_changedFrac": 0.00018056,
+    "note": "vhs=off; zero-exposure must render the fused sharp goo"
+  },
+  "still": {
+    "blurOn44_vs_sharp_changedPx": 0,
+    "blurOn100_vs_sharp_changedPx": 40,
+    "sharp_vs_sharp2_noise_changedPx": 40,
+    "note": "vhs=off, sim cleared: the empty fast path returns the sharp frame"
+  }
+}

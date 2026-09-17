@@ -353,6 +353,16 @@ describe('goo sync wiring (the bug that hid the whole layer)', () => {
     const src = readFileSync('src/lab/sdf-zombie/webgpu/lab-main.ts', 'utf8');
     expect(src).toMatch(/gooLayer\.sync\(bloodSim, camera\)/);
   });
+
+  it('the selection seam partitions droplets in BOTH sync fill paths', () => {
+    // Shutter integration: the sharp/selected split is only exact if every
+    // droplet fill path filters. One unfiltered loop would draw the selected
+    // blood twice (once sharp, once blurred).
+    const src = readFileSync('src/lab/sdf-zombie/webgpu/goo-layer.ts', 'utf8');
+    const filters = src.match(/if \(selection && !selection\.droplet\(d\)\) continue;/g) ?? [];
+    expect(filters.length).toBe(2);
+    expect(src).toContain('if (selection && !selection.droplet(d)) continue;');
+  });
 });
 
 describe('goo surface normals (world-oriented reconstruction)', () => {
@@ -1050,7 +1060,10 @@ describe('smooth reconstruction wiring (source tripwires)', () => {
     // they are density quads, not a second flat material. They are posed
     // after droplets/splats and inside the cap.
     expect(src).toContain('setExtraBlobs(blobs: readonly GooDensityBlob[])');
-    expect(src).toContain('const extraBudget = Math.min(extraCount, Math.max(0, particleCap - n));');
+    // The cap now also honours the shutter selection (extras belong to the
+    // selected/blurred half), so the expression gained a gate.
+    expect(src).toContain('const extraBudget = selection !== null && !selection.extras');
+    expect(src).toContain('Math.min(extraCount, Math.max(0, particleCap - n));');
     expect(src).toContain('extraHalfW[i] = b.halfW; extraHalfH[i] = b.halfH; extraRoll[i] = b.roll;');
     expect(src).toContain('get extraBlobCount() { return extraCount; }');
   });

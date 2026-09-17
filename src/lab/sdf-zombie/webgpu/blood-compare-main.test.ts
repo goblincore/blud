@@ -315,3 +315,156 @@ describe('blood comparison page — Current slug vs Impact splash shape axis', (
     expect(SHAPES.map(s => s.id)).toContain('current');
   });
 });
+
+describe('blood comparison page — shutter mode (task 1)', () => {
+  it('adds a mode axis and RETAINS the surface/shape controls', () => {
+    expect(src).toContain("row('mode'");
+    expect(src).toContain("'Surface / shape (existing)'");
+    expect(src).toContain("'Shutter (exposure)'");
+    // The existing axes must still be present and independent.
+    expect(src).toContain("row('shape'");
+    expect(src).toContain("row('filter (Current only)'");
+    expect(src).toContain('renderVariantFrame({');
+    expect(VARIANTS.length).toBe(4);
+  });
+
+  it('lists sharp + sampled + the efficient candidate and dispatches on the id (no alias)', () => {
+    expect(src).toContain('SHUTTER_REFERENCES');
+    expect(src).toContain('candidateAvailable: true');
+    // The candidate is now selectable; draw() branches on the reference id.
+    expect(src).toContain("shutterRef === 'efficient'");
+    expect(src).toContain('renderCandidateReference');
+    // No stale "disabled until task 2" tripwire remains.
+    expect(src).not.toContain('unavailable until task 2');
+  });
+
+  it('uses the fixed-second presets and shows milliseconds', () => {
+    expect(src).toContain('SHUTTER_PRESETS');
+    expect(src).toContain('exposureMs');
+    expect(src).toContain('resolveExposureSeconds');
+    expect(src).toContain('clampSampleCount');
+    // Angle math needs the EXPLICIT reference fps; never the measured frame rate.
+    expect(src).toContain('referenceFps: shutterReferenceFps');
+    expect(src).toContain("row('reference fps'");
+    expect(src).toContain("row('shutter angle'");
+  });
+
+  it('records one deterministic timeline and never re-steps the live sim', () => {
+    expect(src).toContain('recordTimeline');
+    expect(src).toContain('timelineForCurrentEvent');
+    expect(src).toContain('const scratch: BloodSim = { droplets: [], splats: [], clocks: {} };');
+    expect(src).toContain('timelineCache');
+    expect(src).toContain('advanceScenarioState');
+    expect(src).toContain('freshState');
+  });
+
+  it('shades each sample separately as premultiplied colour+coverage', () => {
+    expect(src).toContain('planShutterSamples');
+    expect(src).toContain('movingSimAt');
+    expect(src).toContain('splitSimForShutter');
+    expect(src).toContain('renderLayer');
+    expect(src).toContain('scene.overrideMaterial = depthOnly');
+    expect(src).toContain('renderSampledReference');
+    expect(src).toContain('colorWrite: false');
+    // Never accumulate density across times then threshold once.
+    expect(src).not.toContain('accumulateDensity');
+  });
+
+  it('keeps static pools/guts sharp and the background normalized', () => {
+    // Static half comes from splitSimForShutter; moving half has no splats.
+    expect(src).toContain('staticSim');
+    expect(src).toContain('refScene');
+    expect(src).toContain('refAccum');
+    expect(src).toContain('oneMinus');
+    expect(src).toContain('refScale');
+  });
+
+  it('shows sample/radius limits and the trailing interval in diagnostics', () => {
+    expect(src).toContain("row('samples (oracle)'");
+    expect(src).toContain("row('max streak px'");
+    expect(src).toContain('trailing box');
+    expect(src).toContain('streak @600 px/s');
+  });
+
+  it('adds the three repeatable shutter fixtures via production emitters', () => {
+    expect(src).toContain("label: 'bleed (slow wound dribble)'");
+    expect(src).toContain("label: 'trail (fast gib-like 6 m/s)'");
+    expect(src).toContain("label: 'crossing (opposed streams)'");
+    expect(src).toContain('emitTrails');
+    expect(src).toContain('spawnWoundDroplets');
+  });
+
+  it('reuses the wipe view for reference vs sharp and keeps pause/step/replay', () => {
+    expect(src).toContain('renderSharpReference(rtA)');
+    expect(src).toContain('renderReference(rtB)');
+    expect(src).toContain('renderSampledReference');
+    expect(src).toContain('renderCandidateReference');
+    expect(src).toContain('blitWipe');
+    // The transport rows are unchanged and shared by both modes.
+    expect(src).toContain("'Play'");
+    expect(src).toContain("'Pause'");
+    expect(src).toContain("'Step'");
+    expect(src).toContain("'Replay'");
+  });
+
+  it('implements the task-2 candidate as a bounded velocity-streak resolve', () => {
+    // The pure module owns the motion plan, seed raster and single resolve.
+    for (const needle of [
+      'planSweepStamps', 'rasterizeSweepSeed', 'createShutterResolve',
+      'seedDimsForOutput', 'SHUTTER_CANDIDATE_TAPS', 'EMPTY_SEED_STATS',
+    ]) {
+      expect(src, `${needle} must be used`).toContain(needle);
+    }
+    // Lazily built: no candidate allocation while the reference is not active.
+    expect(src).toContain('function ensureCandidate');
+    expect(src).toContain('function disposeCandidate');
+    expect(src).toContain('disposeCandidate();');
+    // Selecting the candidate with exposure OFF stays allocation-free.
+    expect(src).toContain("shutterRef === 'efficient' && currentExposureSeconds() > 0");
+    // The clean half has a SAMPLEABLE depth for the per-pixel occlusion test.
+    expect(src).toContain('refScene.depthTexture = new THREE.DepthTexture(1, 1)');
+    // Bounded work, named in the diagnostics.
+    expect(src).toContain('candidateDiag');
+    expect(src).toContain('conflict');
+  });
+
+  it('exposes the shutter API and reports the efficient candidate as unavailable', () => {
+    for (const needle of ['setMode', 'setShutter', 'shutterState', 'exposureSeconds', 'last: lastRefStats']) {
+      expect(src, `${needle} must be exposed`).toContain(needle);
+    }
+    expect(src).toContain("mode: compareMode");
+  });
+});
+
+describe('blood comparison page — task 3 bench + pass labels', () => {
+  it('installs labeled pass timing and labels the candidate passes', () => {
+    for (const needle of ['installPassTiming', 'beginPassFrame', 'setPassLabel', 'attributePassSamples']) {
+      expect(src, `${needle} must be imported/used`).toContain(needle);
+    }
+    // The candidate's passes are individually attributable.
+    for (const label of ['cand:static-scene', 'cand:selected-goo', 'cand:resolve']) {
+      expect(src, `${label} must be labeled`).toContain(label);
+    }
+    for (const label of ['oracle:static-scene', 'oracle:depth', 'oracle:sample', 'oracle:composite']) {
+      expect(src, `${label} must be labeled`).toContain(label);
+    }
+  });
+
+  it('drives the frozen frame by hand and never advances the sim in the bench', () => {
+    expect(src).toContain('async function benchShutter');
+    expect(src).toContain('handle.setLoopRunning(false)');
+    expect(src).toContain('handle.resolveGpu()');
+    // The bench reports the frozen state, not a live frame count.
+    expect(src).toContain('warmupFencedMs');
+    expect(src).toContain('coldFencedMs');
+    expect(src).toContain('cpuPrep');
+  });
+
+  it('separates presentation cadence from the fixed shutter interval', () => {
+    expect(src).toContain('driveSteps: (dtSec: number, count: number)');
+    expect(src).toContain('handle.step(dtSec)');
+    for (const needle of ['benchShutter', 'passTimingInstalled', 'present:']) {
+      expect(src, `${needle} must be exposed`).toContain(needle);
+    }
+  });
+});

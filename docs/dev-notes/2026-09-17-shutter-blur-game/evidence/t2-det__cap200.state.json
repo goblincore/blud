@@ -1,0 +1,48 @@
+{
+  "file": "t2-det__cap200",
+  "diag": {
+    "enabled": true,
+    "ready": true,
+    "warmed": true,
+    "route": "capture-stage",
+    "exposureSeconds": 0.044444444444444446,
+    "exposureMs": 44.44444444444444,
+    "exposureLabel": "44.44 ms",
+    "maxStreakPx": 200,
+    "seedScale": 1,
+    "depthBiasM": 0.02,
+    "taps": 24,
+    "seed": {
+      "width": 400,
+      "height": 300
+    },
+    "layer": {
+      "width": 800,
+      "height": 600
+    },
+    "selectedDroplets": 178,
+    "last": {
+      "stamps": 178,
+      "texels": 16972,
+      "conflicts": 0,
+      "oppositeConflicts": 0,
+      "nearerWins": 37,
+      "maxStreakPx": 84.6447105844878,
+      "avgStreakPx": 26.809175421900875,
+      "buildMs": 0.3999999761581421
+    },
+    "passes": {
+      "sceneRenders": 0,
+      "gooChains": 1,
+      "fullscreen": 1
+    },
+    "error": null
+  },
+  "bleed": {
+    "enabled": true,
+    "emitters": 6,
+    "droplets": 266,
+    "splats": 229
+  },
+  "sha256_16": "cb772e1123a90009"
+}
