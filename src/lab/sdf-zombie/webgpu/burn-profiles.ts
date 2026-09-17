@@ -32,6 +32,10 @@ export interface BurnTuning {
   glowThreshold: number;
   /** Peak heat-wobble offset, in UV units. */
   distortStrength: number;
+  /** Fraction of the surface carrying flame at once, 0..1. */
+  fireCoverage: number;
+  /** How far the flesh thins to show bone at full char, 0..1. */
+  skeletonShow: number;
 }
 
 export const BURN_TUNING: BurnTuning = Object.freeze({
@@ -40,6 +44,7 @@ export const BURN_TUNING: BurnTuning = Object.freeze({
   lightPeak: 26, lightFlicker: 0.35,
   glowGain: 0.5, glowThreshold: 0.75,
   distortStrength: 0.006,
+  fireCoverage: 0.75, skeletonShow: 0.5,
 });
 
 /** The clamp range for every field, as data.
@@ -60,6 +65,7 @@ export const BURN_BOUNDS: Readonly<Record<keyof BurnTuning, readonly [number, nu
   lightPeak: [0, 120], lightFlicker: [0, 1],
   glowGain: [0, 2], glowThreshold: [0, 4],
   distortStrength: [0, BLAST_REFRACTION.maxOffsetUv],
+  fireCoverage: [0, 1], skeletonShow: [0, 1],
 });
 
 export const burnPresets: Readonly<Record<'blood' | 'ember' | 'inferno', BurnTuning>> = Object.freeze({
@@ -67,9 +73,9 @@ export const burnPresets: Readonly<Record<'blood' | 'ember' | 'inferno', BurnTun
   // way back to it after a tuning session, not to describe a second look.
   blood: Object.freeze({ ...BURN_TUNING }),
   // Late-stage: mostly charred with fire only in the cracks.
-  ember: Object.freeze({ ...BURN_TUNING, charRate: 0.5, fireGain: 1.1, charPatch: 0.6, lightPeak: 14, glowGain: 0.35 }),
+  ember: Object.freeze({ ...BURN_TUNING, charRate: 0.5, fireGain: 1.1, charPatch: 0.6, lightPeak: 14, glowGain: 0.35, fireCoverage: 0.5, skeletonShow: 0.8 }),
   // Over the top, for judging the ceiling of the effect.
-  inferno: Object.freeze({ ...BURN_TUNING, fireGain: 2.6, noiseScale: 5, riseSpeed: 2.6, charPatch: 0.2, lightPeak: 42, glowGain: 0.8, distortStrength: 0.012 }),
+  inferno: Object.freeze({ ...BURN_TUNING, fireGain: 2.6, noiseScale: 5, riseSpeed: 2.6, charPatch: 0.2, lightPeak: 42, glowGain: 0.8, distortStrength: 0.012, fireCoverage: 0.95, skeletonShow: 0.35 }),
 });
 
 const BURN_FIELDS = Object.keys(BURN_TUNING) as (keyof BurnTuning)[];

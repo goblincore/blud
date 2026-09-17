@@ -47,6 +47,13 @@ describe('burn tuning', () => {
     }
   });
 
+  it('carries the coverage and skeleton knobs', () => {
+    expect(BURN_TUNING.fireCoverage).toBeGreaterThan(0);
+    expect(BURN_TUNING.skeletonShow).toBeGreaterThan(0);
+    expect(BURN_BOUNDS.fireCoverage).toEqual([0, 1]);
+    expect(BURN_BOUNDS.skeletonShow).toEqual([0, 1]);
+  });
+
   it('is accepted by stepBurn as a BurnRates value (BurnTuning is a structural superset)', () => {
     // The type annotation is the compile-level half of this; the assertions are
     // the runtime half, so the test fails if the relationship stops meaning

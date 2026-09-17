@@ -31,6 +31,8 @@ const LABELS: Record<keyof BurnTuning, { label: string; step: number }> = {
   glowGain: { label: 'glow', step: 0.02 },
   glowThreshold: { label: 'glow thr', step: 0.05 },
   distortStrength: { label: 'heat warp', step: 0.001 },
+  fireCoverage: { label: 'coverage', step: 0.02 },
+  skeletonShow: { label: 'skeleton', step: 0.02 },
 };
 
 export const FLAME_KEYS: readonly FlameKey[] = Object.freeze(
