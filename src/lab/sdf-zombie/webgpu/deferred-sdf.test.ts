@@ -79,7 +79,12 @@ describe('surface-entry wgslFn parse contract', () => {
     // (the plan wrote 88; the signature has 13 removable params, not 14 — the record
     //   itself is 14 vec4s, but woundCfg/lodCfg/faceCfg3 stay as per-type vec4 params).
     // crowd stage a task 5: +instCentre +instHalf (the instanced proxy box).
-    expect(legacy.length).toBe(91); // plus sampled-skeleton atlas and metadata textures; +1 meatCfg (2026-09-12)
+    // +5 burning body (burnCfg, burnNoiseScale, burnRiseSpeed, burnCharPatch,
+    // burnFireGain) after instHalf — flame lab task 5, POSITIONALLY LAST to
+    // match createMarchMaterial's binding tail. marchSurface inherits the tail
+    // through the shared MARCH_BODY_PARAMS, so the equality pin below keeps
+    // the one-binding-block contract on the deferred path too.
+    expect(legacy.length).toBe(96); // plus sampled-skeleton atlas and metadata textures; +1 meatCfg (2026-09-12)
     expect(legacy).toContain('faceGlowRedOnly');
     expect(surface).toEqual(legacy);
   });

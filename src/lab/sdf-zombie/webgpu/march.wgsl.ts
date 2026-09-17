@@ -8,7 +8,7 @@ import { MAX_PRIMS, MAX_CLUSTERS, BONE_SEG_MAX } from '../validate';
 import { HEAD_EXTERIOR_GORE_KEEP } from '../gib-look-tuning';
 import { REC_VEC4S, REC_COUNTS, REC_COUNTS2, REC_WOUND_BOUND, REC_ANCHOR_BAND, REC_WIND_ALIVE, REC_MELT,
   REC_FLASH, REC_NOISE_YAW, REC_HEAD_WCOUNT, REC_HEAD_QUAT, REC_VOL_POSE0, REC_VOL_POSE1,
-  REC_CENTRE_SEED, REC_HALF_REV, REC_GORE, MAX_CROWD_INSTANCES } from './crowd-records';
+  REC_CENTRE_SEED, REC_HALF_REV, REC_GORE, REC_BURN, MAX_CROWD_INSTANCES } from './crowd-records';
 
 /** Extra metres added to the per-ray tile sphere test (tileCfg.x == 2) so the
  *  off-ray shading probes — calcNormal's 0.0015 eps and the AO probe at
@@ -1509,7 +1509,14 @@ var<private> gInstRevision: f32 = 0.0;
 // RUPTURE GORE (body-to-gib task 3). 0 outside a crowd draw (so the per-view
 // lodCfg.w remains authoritative there); the doomed body's ramp rides its own
 // record because the crowd shares one material and one lodCfg uniform.
-var<private> gInstGore: f32 = 0.0;`;
+var<private> gInstGore: f32 = 0.0;
+// BURNING BODY (flame lab): the record's (burn, burnSec, char, spare). 0 outside
+// a crowd draw, where the per-view burnCfg is authoritative -- same split as
+// gInstGore above.
+var<private> gInstBurn: vec4<f32> = vec4<f32>(0.0);
+// The surface fire's emissive contribution, written in the surface prep and
+// read by the lighting tail, which is a separate WGSL export.
+var<private> gBurnEmit: vec3<f32> = vec3<f32>(0.0);`;
 
 // Per-instance state, loaded from the record buffer by slot. Everything that
 // used to be a per-body uniform parameter is a private global now, so the
@@ -1556,6 +1563,7 @@ export const INSTANCE_STATE = /* wgsl */ `fn loadInstance(inst: ptr<storage, arr
   gInstHalf = hr.xyz;
   gInstRevision = hr.w;
   gInstGore = (*inst)[base + ${REC_GORE}].x;
+  gInstBurn = (*inst)[base + ${REC_BURN}];
 }
 `;
 
@@ -2542,7 +2550,15 @@ export const MARCH_BODY_PARAMS = /* wgsl */ `(
   // box; a per-body material binds zero vec3s and instCfg.y 0 selects the
   // record instead. NO PARENS and NO COLONS in this comment either.
   instCentre: vec3<f32>,
-  instHalf: vec3<f32>
+  instHalf: vec3<f32>,
+  // Burning body - flame lab - bound POSITIONALLY LAST in the same commit as
+  // the WGSL tail. burnCfg x is the per-view burn ramp and 0 keeps every
+  // surface bit-identical. NO PARENS and NO COLONS in this comment either.
+  burnCfg: vec4<f32>,
+  burnNoiseScale: f32,
+  burnRiseSpeed: f32,
+  burnCharPatch: f32,
+  burnFireGain: f32
 ) -> vec4<f32> {
 `;
 

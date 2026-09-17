@@ -32,6 +32,8 @@ import {
 } from './march.wgsl';
 import { MAX_WOUNDS } from '../damage';
 import { REC_VEC4S, REC_ANCHOR_BAND, REC_COUNTS } from './crowd-records';
+// @ts-expect-error — node:fs available in vitest via happy-dom/node
+import { readFileSync } from 'node:fs';
 import { MAX_CLUSTERS, BONE_SEG_MAX } from '../validate';
 // Raw source import: the row-table docstrings are TS comments, invisible to
 // every exported WGSL string, and the Done-when "docstring no longer lies"
@@ -683,6 +685,22 @@ describe('ported features reach the entry point', () => {
     // stop threshold must carry the amp; at amp 0 it is the old bound again.
     expect(CONE_MARCH).toContain('if (d < r + 0.0012 + woundCfg2.z) { return t; }');
   });
+
+  it('loads the per-instance burn ramp and declares the emissive carrier', () => {
+    // Mirrors the gInstGore contract: the record's ramp is combined with the
+    // per-view uniform by max(), so single-body draws (burnCfg) and crowd draws
+    // (REC_BURN) both work with one shader. The two private vars are asserted
+    // against the MODULE SOURCE, because which exported chunk holds a
+    // declaration is an implementation detail -- that it exists exactly once is
+    // not.
+    expect(INSTANCE_STATE).toContain('gInstBurn = (*inst)[base + ');
+    const moduleSrc = readFileSync('src/lab/sdf-zombie/webgpu/march.wgsl.ts', 'utf8');
+    expect(moduleSrc.split('var<private> gInstBurn: vec4<f32>').length).toBe(2);
+    expect(moduleSrc.split('var<private> gBurnEmit: vec3<f32>').length).toBe(2);
+    const params = MARCH_BODY_PARAMS.replace(/\s+/g, ' ');
+    expect(params).toContain('burnCfg: vec4<f32>,');
+    expect(params).toMatch(/burnFireGain: f32,?\s*\)/);
+  });
 });
 
 describe('wound soft shadow (iq rsmshadows, wound-zone gated)', () => {
@@ -797,14 +815,18 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     // +1 meatCfg (soldier wound MEAT DETAIL, wound panel MEAT group, 2026-09-12), after surfCfg3.
     // crowd stage a: 13 per-instance params move into the record, +inst +instCfg.
     // crowd stage a task 5: +instCentre +instHalf (the instanced proxy box).
-    expect(names.length).toBe(91);
+    // +5 burning body (burnCfg, burnNoiseScale, burnRiseSpeed, burnCharPatch,
+    // burnFireGain) after instHalf — flame lab task 5, POSITIONALLY LAST to
+    // match createMarchMaterial's binding tail.
+    expect(names.length).toBe(96);
     expect(names).toContain('faceGlowRedOnly');
-    expect(names.slice(-21)).toEqual([
+    expect(names.slice(-26)).toEqual([
       'depthPreTex', 'depthPreCfg', 'normalGradientCfg',
       'probeTex', 'probeMin', 'probeInvExtent', 'probeDims', 'probeCfg',
       'bounceSpotPos', 'bounceSpotNormal', 'bounceSpotRadiance', 'bounceSpotCfg',
       'probeDyn', 'probeDynCfg',
       'lastTex', 'lastInvVp', 'temporalCfg', 'inst', 'instCfg', 'instCentre', 'instHalf',
+      'burnCfg', 'burnNoiseScale', 'burnRiseSpeed', 'burnCharPatch', 'burnFireGain',
     ]);
     // The temporal start folds in AFTER preStart, with bodyEntry as the
     // sixth lower-bound term (see the other pin above for the argument).
@@ -830,10 +852,14 @@ describe('level shadows on bodies (perf round 2 task 7)', () => {
     // crowd stage a: the record pointer and its config are the two new
     // positional tails, in signature order (the JS binding object matches).
     // crowd stage a task 5: instCentre/instHalf follow them (the proxy box).
-    expect(names.indexOf('instCfg')).toBe(names.length - 3);
-    expect(names.indexOf('inst')).toBe(names.length - 4);
-    expect(names.indexOf('instCentre')).toBe(names.length - 2);
-    expect(names.indexOf('instHalf')).toBe(names.length - 1);
+    // flame lab task 5: the burn tail (5 slots) follows THEM — burn is per-view,
+    // so the per-instance params stay directly ahead of it.
+    expect(names.indexOf('instCfg')).toBe(names.length - 8);
+    expect(names.indexOf('inst')).toBe(names.length - 9);
+    expect(names.indexOf('instCentre')).toBe(names.length - 7);
+    expect(names.indexOf('instHalf')).toBe(names.length - 6);
+    expect(names.indexOf('burnCfg')).toBe(names.length - 5);
+    expect(names.indexOf('burnFireGain')).toBe(names.length - 1);
   });
 });
 
@@ -2597,7 +2623,7 @@ describe('crowd instance state', () => {
     // Strip comments first: the crowd proxy-box comment sits between instCfg
     // and instCentre, and the wgslFn parser sees it as ordinary text.
     const sig = MARCH_BODY_PARAMS.replace(/\/\/[^\n]*/g, ' ').replace(/\s+/g, ' ');
-    expect(sig).toMatch(/inst: ptr<storage, array<vec4<f32>>, read>, instCfg: vec4<f32>, instCentre: vec3<f32>, instHalf: vec3<f32>\s*\)/);
+    expect(sig).toMatch(/inst: ptr<storage, array<vec4<f32>>, read>, instCfg: vec4<f32>, instCentre: vec3<f32>, instHalf: vec3<f32>, burnCfg: vec4<f32>, burnNoiseScale: f32, burnRiseSpeed: f32, burnCharPatch: f32, burnFireGain: f32\s*\)/);
   });
   it('bands the damage folds', () => {
     expect(APPLY_CARVES).toContain('fn applyCarves(dIn: f32, p: vec3<f32>, data: texture_2d<f32>, counts: vec4<f32>, band: i32)');
