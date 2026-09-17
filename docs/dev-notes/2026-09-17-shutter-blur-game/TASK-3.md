@@ -2,7 +2,7 @@
 
 Branch: `codex/shutter-blur-game-task-3` (isolated dispatch worktree)
 Base: Task-2 tip `e20cb8f9` (`f4588548` in-game evidence + boot prewarm)
-Code tip: `db32c0d0`
+Code tip: `24cc679a` (`db32c0d0` implementation + the explicit 30/60/120 test)
 Scope: extend the accepted selective shutter blur from airborne blood to
 **flying gibs**, with tumbling rotation, a separate default-on Gib motion blur
 switch sharing the blood exposure/max-trail controls, real scene separation,
@@ -49,7 +49,7 @@ the same `120` content-px initial streak cap (finite `400` cap).
 | `src/lab/sdf-zombie/webgpu/shutter-panel.ts` | Separate **Gib motion blur** checkbox; exposure/max-trail setters drive both layers; live read-back; host takes the optional gib layer. |
 | `src/lab/sdf-zombie/webgpu/shutter-blur.ts` | Resolve gains `setSceneTexture(tex)` so the blood pass can read the gib result without a material rebuild. |
 | `src/lab/sdf-zombie/webgpu/shutter-game-layer.ts` | Forwards `setSceneTexture`. |
-| `gib-motion-blur.test.ts` (17), `gib-shutter-layer.test.ts` (11) | **New** focused tests (28). |
+| `gib-motion-blur.test.ts` (18), `gib-shutter-layer.test.ts` (11) | **New** focused tests (29). |
 | `scripts/sdf-shutter-game-task3.mjs` | **New** in-game rig: own vite + headless Chrome, frozen A/B captures, per-shot state JSON, census, fallback/mode legs, clip, cost bench. |
 | `scripts/shutter-game-task3-evidence.py` | **New** pixel-diff metrics + tight 3-up crops + deterministic noise floor. |
 
@@ -247,7 +247,7 @@ real crowd blast with both switches on at 44.44 ms. Raw per-frame dir trimmed.
 npx tsc --noEmit                                                    -> exit 0
 npm run build                                                       -> exit 0 (vite build 3.09 s)
 npx vitest run shutter- gib-motion-blur gib-shutter-layer goo-layer post-aa gib-sprite-pieces
-  -> 10 files / 298 tests passed (17 + 11 new)
+  -> 10 files / 299 tests passed (18 + 11 new)
 node scripts/sdf-shutter-game-task3.mjs 5493 9493 <evidence>        -> all legs, no legError
 python3 scripts/shutter-game-task3-evidence.py <evidence>           -> task3-image-diff.json + tight crops
 ```
