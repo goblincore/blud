@@ -2,6 +2,7 @@
 
 Branch: `codex/shutter-blur-game-task-1` (isolated dispatch worktree)
 Base: `85a6525028a0eb67de2ac47f2397931c76d5e2d8` (task-3 tip, merged lab work)
+Code tip: `23a0b02ccf0bfd40f4091a045392c40c5a31b6b5`
 Scope: integrate the owner-accepted efficient shutter candidate into the active
 SDF game (`/sdf-game.html`), ON by default at the accepted exposure, with
 focused player/dev controls, tests, tsc/build and a real WebGPU smoke.
