@@ -5,6 +5,8 @@
 // Pattern copied from impact-splash-profiles.ts: flat numbers, named presets,
 // one clamp that non-finite input cannot get through.
 
+import { BLAST_REFRACTION } from '../blast-refraction';
+
 export interface BurnTuning {
   /** Seconds from ignition to fully alight. */
   igniteSec: number;
@@ -32,38 +34,54 @@ export interface BurnTuning {
   distortStrength: number;
 }
 
-export const BURN_TUNING: BurnTuning = {
+export const BURN_TUNING: BurnTuning = Object.freeze({
   igniteSec: 0.45, extinguishSec: 0.8, charRate: 0.22,
   fireGain: 1.6, noiseScale: 7, riseSpeed: 1.8, charPatch: 0.35,
   lightPeak: 26, lightFlicker: 0.35,
   glowGain: 0.5, glowThreshold: 0.75,
   distortStrength: 0.006,
-};
+});
 
-export const burnPresets: Record<'blood' | 'ember' | 'inferno', BurnTuning> = {
-  // Closest to the NotBlood burning-run frames: bright, busy, mostly fire.
-  blood: { ...BURN_TUNING },
+/** The clamp range for every field, as data.
+ *
+ *  These bounds are the load-bearing part of this module: the panel's sliders
+ *  read their ranges from here (so the two can't drift), and the table-driven
+ *  test walks every field at both rails, which a hand-written clamp list makes
+ *  easy to leave half-covered.
+ *
+ *  `igniteSec`'s floor is above the caller's dt clamp (1/30 s) on purpose —
+ *  burn-state.ts's char trapezoid is only exact while no single step overshoots
+ *  the burn = 1 clamp, so lowering this floor breaks an invariant documented in
+ *  that file. `distortStrength`'s ceiling is BLAST_REFRACTION.maxOffsetUv, the
+ *  hard clamp post-aa's warp applies anyway. */
+export const BURN_BOUNDS: Readonly<Record<keyof BurnTuning, readonly [number, number]>> = Object.freeze({
+  igniteSec: [0.05, 4], extinguishSec: [0.05, 4], charRate: [0, 2],
+  fireGain: [0, 4], noiseScale: [0.5, 40], riseSpeed: [0, 8], charPatch: [0, 1],
+  lightPeak: [0, 120], lightFlicker: [0, 1],
+  glowGain: [0, 2], glowThreshold: [0, 4],
+  distortStrength: [0, BLAST_REFRACTION.maxOffsetUv],
+});
+
+export const burnPresets: Readonly<Record<'blood' | 'ember' | 'inferno', BurnTuning>> = Object.freeze({
+  // The default look, by definition — `blood` exists so the panel can offer a
+  // way back to it after a tuning session, not to describe a second look.
+  blood: Object.freeze({ ...BURN_TUNING }),
   // Late-stage: mostly charred with fire only in the cracks.
-  ember: { ...BURN_TUNING, charRate: 0.5, fireGain: 1.1, charPatch: 0.6, lightPeak: 14, glowGain: 0.35 },
+  ember: Object.freeze({ ...BURN_TUNING, charRate: 0.5, fireGain: 1.1, charPatch: 0.6, lightPeak: 14, glowGain: 0.35 }),
   // Over the top, for judging the ceiling of the effect.
-  inferno: { ...BURN_TUNING, fireGain: 2.6, noiseScale: 5, riseSpeed: 2.6, charPatch: 0.2, lightPeak: 42, glowGain: 0.8, distortStrength: 0.012 },
-};
+  inferno: Object.freeze({ ...BURN_TUNING, fireGain: 2.6, noiseScale: 5, riseSpeed: 2.6, charPatch: 0.2, lightPeak: 42, glowGain: 0.8, distortStrength: 0.012 }),
+});
+
+const BURN_FIELDS = Object.keys(BURN_TUNING) as (keyof BurnTuning)[];
 
 export function resolveBurnTuning(p: Partial<BurnTuning> = {}): BurnTuning {
-  const bounded = (v: number | undefined, fallback: number, min: number, max: number) =>
-    v !== undefined && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback;
-  return {
-    igniteSec: bounded(p.igniteSec, BURN_TUNING.igniteSec, 0.05, 4),
-    extinguishSec: bounded(p.extinguishSec, BURN_TUNING.extinguishSec, 0.05, 4),
-    charRate: bounded(p.charRate, BURN_TUNING.charRate, 0, 2),
-    fireGain: bounded(p.fireGain, BURN_TUNING.fireGain, 0, 4),
-    noiseScale: bounded(p.noiseScale, BURN_TUNING.noiseScale, 0.5, 40),
-    riseSpeed: bounded(p.riseSpeed, BURN_TUNING.riseSpeed, 0, 8),
-    charPatch: bounded(p.charPatch, BURN_TUNING.charPatch, 0, 1),
-    lightPeak: bounded(p.lightPeak, BURN_TUNING.lightPeak, 0, 120),
-    lightFlicker: bounded(p.lightFlicker, BURN_TUNING.lightFlicker, 0, 1),
-    glowGain: bounded(p.glowGain, BURN_TUNING.glowGain, 0, 2),
-    glowThreshold: bounded(p.glowThreshold, BURN_TUNING.glowThreshold, 0, 4),
-    distortStrength: bounded(p.distortStrength, BURN_TUNING.distortStrength, 0, 0.035),
-  };
+  const out = {} as BurnTuning;
+  for (const key of BURN_FIELDS) {
+    const [min, max] = BURN_BOUNDS[key];
+    const v = p[key];
+    out[key] = v !== undefined && Number.isFinite(v)
+      ? Math.min(max, Math.max(min, v))
+      : BURN_TUNING[key];
+  }
+  return out;
 }

@@ -1168,7 +1168,7 @@ describe('flame panel', () => {
     }
   });
 
-  it('slider ranges cannot ask for a value the clamp rejects', () => {
+  it('slider ranges are the clamp bounds themselves, at both rails', () => {
     for (const k of FLAME_KEYS) {
       const lo = resolveBurnTuning({ [k.key]: k.min } as never);
       const hi = resolveBurnTuning({ [k.key]: k.max } as never);
@@ -1206,30 +1206,39 @@ Create `src/lab/sdf-zombie/webgpu/flame-panel.ts`:
 // setter call whose keys are the same names -- which is what stops a tuning
 // session ending in numbers nothing reads (dynamite-panel.ts:190 has the scars).
 import { createPanelShell, type PanelShell } from './panel-chrome';
-import { BURN_TUNING, burnPresets, type BurnTuning } from './burn-profiles';
+import { BURN_BOUNDS, burnPresets, type BurnTuning } from './burn-profiles';
 
 export interface FlameKey {
   key: keyof BurnTuning;
   label: string;
+  /** Read from BURN_BOUNDS, never restated — the clamp is the authority. */
   min: number;
   max: number;
   step: number;
 }
 
-export const FLAME_KEYS: readonly FlameKey[] = Object.freeze([
-  { key: 'igniteSec', label: 'ignite s', min: 0.05, max: 4, step: 0.05 },
-  { key: 'extinguishSec', label: 'out s', min: 0.05, max: 4, step: 0.05 },
-  { key: 'charRate', label: 'char /s', min: 0, max: 2, step: 0.02 },
-  { key: 'fireGain', label: 'fire gain', min: 0, max: 4, step: 0.05 },
-  { key: 'noiseScale', label: 'noise scale', min: 0.5, max: 40, step: 0.5 },
-  { key: 'riseSpeed', label: 'rise', min: 0, max: 8, step: 0.1 },
-  { key: 'charPatch', label: 'char patch', min: 0, max: 1, step: 0.02 },
-  { key: 'lightPeak', label: 'light', min: 0, max: 120, step: 1 },
-  { key: 'lightFlicker', label: 'flicker', min: 0, max: 1, step: 0.02 },
-  { key: 'glowGain', label: 'glow', min: 0, max: 2, step: 0.02 },
-  { key: 'glowThreshold', label: 'glow thr', min: 0, max: 4, step: 0.05 },
-  { key: 'distortStrength', label: 'heat warp', min: 0, max: 0.035, step: 0.001 },
-]);
+/** Label and slider step per field; the RANGE comes from BURN_BOUNDS, so a
+ *  retuned clamp moves the slider with it and the two cannot drift. */
+const LABELS: Record<keyof BurnTuning, { label: string; step: number }> = {
+  igniteSec: { label: 'ignite s', step: 0.05 },
+  extinguishSec: { label: 'out s', step: 0.05 },
+  charRate: { label: 'char /s', step: 0.02 },
+  fireGain: { label: 'fire gain', step: 0.05 },
+  noiseScale: { label: 'noise scale', step: 0.5 },
+  riseSpeed: { label: 'rise', step: 0.1 },
+  charPatch: { label: 'char patch', step: 0.02 },
+  lightPeak: { label: 'light', step: 1 },
+  lightFlicker: { label: 'flicker', step: 0.02 },
+  glowGain: { label: 'glow', step: 0.02 },
+  glowThreshold: { label: 'glow thr', step: 0.05 },
+  distortStrength: { label: 'heat warp', step: 0.001 },
+};
+
+export const FLAME_KEYS: readonly FlameKey[] = Object.freeze(
+  (Object.keys(LABELS) as (keyof BurnTuning)[]).map((key) => ({
+    key, ...LABELS[key], min: BURN_BOUNDS[key][0], max: BURN_BOUNDS[key][1],
+  })),
+);
 
 export function copyText(t: BurnTuning): string {
   const body = FLAME_KEYS.map(k => `${k.key}: ${Number(t[k.key].toFixed(4))}`).join(', ');
